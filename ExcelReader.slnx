@@ -1,0 +1,8 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/ExcelReader.Core/ExcelReader.Core.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/ExcelReader.Tests/ExcelReader.Tests.csproj" />
+  </Folder>
+</Solution>
