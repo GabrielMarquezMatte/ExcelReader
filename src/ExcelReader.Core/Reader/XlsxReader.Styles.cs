@@ -10,7 +10,7 @@ namespace ExcelReader.Core.Reader
 
         // Builds the cellXfs-index -> isDate table from xl/styles.xml. A style is a date when its
         // numFmtId is a builtin date/time format or a custom <numFmt> whose code reads as a date.
-        private static bool[] ParseStyleDateFlags(ReadOnlyMemory<byte> src)
+        private static bool[] ParseStyleDateFlags(ReadOnlySpan<byte> src)
         {
             if (src.IsEmpty)
             {
@@ -21,21 +21,21 @@ namespace ExcelReader.Core.Reader
             Dictionary<int, bool> custom = new(capacity: 16);
             foreach (var tag in Tags(src, _numFmtTag))
             {
-                int id = ParseIntOr(XlsxXml.Attr(tag.Span, " numFmtId=\""u8), -1);
+                int id = ParseIntOr(XlsxXml.Attr(tag, " numFmtId=\""u8), -1);
                 if (id >= 0)
                 {
-                    custom[id] = LooksLikeDateFormat(Decode(XlsxXml.Attr(tag.Span, " formatCode=\""u8)));
+                    custom[id] = LooksLikeDateFormat(Decode(XlsxXml.Attr(tag, " formatCode=\""u8)));
                 }
             }
 
             // Only the <xf> entries inside <cellXfs> are cell styles; <cellStyleXfs> is the master table.
-            int region = IdxOf(src.Span, 0, "<cellXfs"u8);
+            int region = IdxOf(src, 0, "<cellXfs"u8);
             if (region < 0)
             {
                 return [];
             }
-            int open = IdxOf(src.Span, region, (byte)'>');
-            int end = IdxOf(src.Span, open, "</cellXfs>"u8);
+            int open = IdxOf(src, region, (byte)'>');
+            int end = IdxOf(src, open, "</cellXfs>"u8);
             if (open < 0 || end < 0)
             {
                 return [];
@@ -43,7 +43,7 @@ namespace ExcelReader.Core.Reader
             List<bool> flags = new(capacity: 16);
             foreach (var xf in Tags(src.Slice(open + 1, end - open - 1), _xfTag))
             {
-                int numFmtId = ParseIntOr(XlsxXml.Attr(xf.Span, " numFmtId=\""u8), 0);
+                int numFmtId = ParseIntOr(XlsxXml.Attr(xf, " numFmtId=\""u8), 0);
                 flags.Add(custom.TryGetValue(numFmtId, out bool d) ? d : IsBuiltinDateFormat(numFmtId));
             }
             return flags.ToArray();
