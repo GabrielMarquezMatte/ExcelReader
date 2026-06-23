@@ -1,10 +1,12 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
+using System.Runtime.InteropServices;
 using System.Text;
 using ExcelReader.Core.Enums;
 
 namespace ExcelReader.Core.ValueObjects
 {
+    [StructLayout(LayoutKind.Auto)]
     public readonly ref struct Cell
     {
         public CellType Type { get; }

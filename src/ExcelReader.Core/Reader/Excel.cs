@@ -18,8 +18,8 @@ namespace ExcelReader.Core.Reader
             Justification = "Stream ownership transfers to CreateAsync, which disposes it on failure and via the reader on success.")]
         public static ValueTask<XlsxReader> FromFileAsync(string path, CancellationToken ct = default)
         {
-            var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read,
-                bufferSize: 4096, useAsync: true);
+            FileStream stream = new(path, FileMode.Open, FileAccess.Read, FileShare.Read, bufferSize: 65536,
+                                    options: FileOptions.Asynchronous | FileOptions.SequentialScan);
             return XlsxReader.CreateAsync(stream, leaveOpen: false, ct);
         }
 
