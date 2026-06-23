@@ -1,3 +1,5 @@
+using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 using System.Text;
 
 namespace ExcelReader.Core.Reader
@@ -24,16 +26,19 @@ namespace ExcelReader.Core.Reader
         // Column reference letters (the "B" in "B2") -> 0-based column index. "" -> -1.
         public static int ColumnIndex(ReadOnlySpan<byte> cellRef)
         {
+            ref var c0 = ref MemoryMarshal.GetReference(cellRef);
             int col = 0;
             int i = 0;
-            for (; i < cellRef.Length; i++)
+            var length = cellRef.Length;
+            for (; i < length; i++)
             {
-                byte c = cellRef[i];
-                if (c is < (byte)'A' or > (byte)'Z')
+                var c = Unsafe.Add(ref c0, i);
+                uint val = (uint)(c - 'A');
+                if (val > 25)
                 {
                     break;
                 }
-                col = (col * 26) + c - 'A' + 1;
+                col = (col * 26) + (int)val + 1;
             }
             return i == 0 ? -1 : col - 1;
         }
@@ -124,55 +129,49 @@ namespace ExcelReader.Core.Reader
         // `dest` must be at least `si.Length` bytes — decoded text is never longer than its source XML.
         internal static int WriteTextRuns(ReadOnlySpan<byte> si, Span<byte> dest)
         {
-            int p = 0;
-            int w = 0;
+            int totalWritten = 0;
+            ReadOnlySpan<byte> remaining = si;
+            Span<byte> destSlice = dest;
             while (true)
             {
-                int t = si[p..].IndexOf("<t"u8);
-                if (t < 0)
+                var tIndex = remaining.IndexOf("<t"u8);
+                if (tIndex < 0)
                 {
                     break;
                 }
-                t += p;
-                int open = si[t..].IndexOf((byte)'>');
-                if (open < 0)
+                remaining = remaining[(tIndex + 2)..]; // Skip past "<t"
+                var openIndex = remaining.IndexOf((byte)'>');
+                if (openIndex < 0)
                 {
                     break;
                 }
-                open += t;
-                if (si[open - 1] == '/')
+                if (openIndex > 0 && remaining[openIndex - 1] == '/')
                 {
-                    p = open + 1;
+                    remaining = remaining[(openIndex + 1)..]; // Skip past the self-closing tag
                     continue;
                 }
-                int close = si[open..].IndexOf("</t>"u8);
-                if (close < 0)
+                remaining = remaining[(openIndex + 1)..]; // Skip past the opening tag
+                var closeIndex = remaining.IndexOf("</t>"u8);
+                if (closeIndex < 0)
                 {
                     break;
                 }
-                close += open;
-                w += Decode(si.Slice(open + 1, close - open - 1), dest[w..]);
-                p = close + 4;
+                var innerText = remaining[..closeIndex];
+                var written = Decode(innerText, destSlice);
+                totalWritten += written;
+                destSlice = destSlice[written..];
+                remaining = remaining[(closeIndex + 4)..]; // Skip past the closing tag
             }
-            return w;
+            return totalWritten;
         }
-
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static int HexVal(byte d)
         {
-            if (d is >= (byte)'0' and <= (byte)'9')
-            {
-                return d - '0';
-            }
-            if (d is >= (byte)'a' and <= (byte)'f')
-            {
-                return d - 'a' + 10;
-            }
-            if (d is >= (byte)'A' and <= (byte)'F')
-            {
-                return d - 'A' + 10;
-            }
-
-            return -1;
+            var value = (d & 0xF) + (9 * (d >> 6));
+            var is_num = (d - '0') <= 9;
+            var lower = (d | 0x20) - 'a';
+            var is_alpha = lower <= 5;
+            return (is_num || is_alpha) ? value : -1;
         }
 
     }

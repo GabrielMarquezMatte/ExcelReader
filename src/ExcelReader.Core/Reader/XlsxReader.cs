@@ -103,7 +103,7 @@ namespace ExcelReader.Core.Reader
         {
             for (int i = 0; i < _sheets.Length; i++)
             {
-                if (name.SequenceEqual(_sheets[i].Name))
+                if (name.Equals(_sheets[i].Name, StringComparison.OrdinalIgnoreCase))
                 {
                     _current = i;
                     return true;
