@@ -88,7 +88,35 @@ namespace ExcelReader.Tests
             Assert.Equal("a & b <tag> A", row[0].GetString());
         }
 
-        private static MemoryStream BuildWorkbook(string sheetRows, string? sharedStrings = null)
+        [Fact]
+        public void DetectsDateStylesAndConvertsSerial()
+        {
+            // s="1" -> cellXfs[1] -> builtin numFmtId 14 (date); s="2" -> custom 164 (date); s="0" -> General.
+            const string styles =
+                """<styleSheet><numFmts count="1"><numFmt numFmtId="164" formatCode="yyyy-mm-dd hh:mm"/></numFmts>""" +
+                """<cellXfs count="3"><xf numFmtId="0"/><xf numFmtId="14"/><xf numFmtId="164"/></cellXfs></styleSheet>""";
+            using var ms = BuildWorkbook(
+                """<row r="1"><c r="A1" s="1"><v>45292</v></c><c r="B1" s="2"><v>45292.5</v></c><c r="C1" s="0"><v>45292</v></c></row>""",
+                styles: styles);
+
+            using var reader = Excel.From(ms);
+            using var e = reader.GetEnumerator();
+            Assert.True(e.MoveNext());
+            var row = e.Current;
+
+            Assert.Equal(CellType.Date, row[0].Type);
+            Assert.True(row[0].TryGetDateTime(out var d0));
+            Assert.Equal(new DateTime(2024, 1, 1, 0, 0, 0, DateTimeKind.Unspecified), d0);
+
+            Assert.Equal(CellType.Date, row[1].Type);
+            Assert.True(row[1].TryGetDateTime(out var d1));
+            Assert.Equal(new DateTime(2024, 1, 1, 12, 0, 0, DateTimeKind.Unspecified), d1);
+
+            // Same serial, no date style -> plain number.
+            Assert.Equal(CellType.Number, row[2].Type);
+        }
+
+        private static MemoryStream BuildWorkbook(string sheetRows, string? sharedStrings = null, string? styles = null)
         {
             const string main = "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
             const string rel = "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
@@ -106,6 +134,10 @@ namespace ExcelReader.Tests
                 if (sharedStrings is not null)
                 {
                     Write(zip, "xl/sharedStrings.xml", $"""<sst xmlns="{main}">{sharedStrings}</sst>""");
+                }
+                if (styles is not null)
+                {
+                    Write(zip, "xl/styles.xml", $"""<?xml version="1.0"?>{styles.Replace("<styleSheet>", $"<styleSheet xmlns=\"{main}\">", StringComparison.Ordinal)}""");
                 }
             }
             ms.Position = 0;
