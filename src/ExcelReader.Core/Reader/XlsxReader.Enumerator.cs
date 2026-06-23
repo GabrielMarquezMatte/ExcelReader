@@ -487,46 +487,72 @@ namespace ExcelReader.Core.Reader
                 }
             }
 
-            // Async twins of the search/refill primitives. Each searches the buffered window first and
-            // only awaits a refill on a miss, so no span is ever held across the await.
+            // Async twins of the search/refill primitives. Each is split so the common case (the target is
+            // already in the buffered window) returns a completed task with no async state machine, and
+            // only a real refill on a buffer miss takes the awaiting slow path. No span crosses an await.
 
-            private async ValueTask<int> IndexOfAsync(byte b)
+            private ValueTask<int> IndexOfAsync(byte b)
             {
-                while (true)
+                int rel = _buf.AsSpan(_pos, _len - _pos).IndexOf(b);
+                if (rel >= 0)
                 {
+                    return new ValueTask<int>(_pos + rel);
+                }
+                return _eof ? new ValueTask<int>(-1) : IndexOfSlowAsync(b);
+            }
+
+            private async ValueTask<int> IndexOfSlowAsync(byte b)
+            {
+                do
+                {
+                    await FillAsync().ConfigureAwait(false);
                     int rel = _buf.AsSpan(_pos, _len - _pos).IndexOf(b);
                     if (rel >= 0)
                     {
                         return _pos + rel;
                     }
-                    if (_eof)
-                    {
-                        return -1;
-                    }
-                    await FillAsync().ConfigureAwait(false);
                 }
+                while (!_eof);
+                return -1;
             }
 
             // Only one multi-byte terminator is searched on the async path, so it's hardcoded rather than
             // taking a ReadOnlySpan<byte> (which can't be an async method parameter).
-            private async ValueTask<int> IndexOfCloseCellAsync()
+            private ValueTask<int> IndexOfCloseCellAsync()
             {
-                while (true)
+                int rel = _buf.AsSpan(_pos, _len - _pos).IndexOf("</c>"u8);
+                if (rel >= 0)
                 {
+                    return new ValueTask<int>(_pos + rel);
+                }
+                return _eof ? new ValueTask<int>(-1) : IndexOfCloseCellSlowAsync();
+            }
+
+            private async ValueTask<int> IndexOfCloseCellSlowAsync()
+            {
+                do
+                {
+                    await FillAsync().ConfigureAwait(false);
                     int rel = _buf.AsSpan(_pos, _len - _pos).IndexOf("</c>"u8);
                     if (rel >= 0)
                     {
                         return _pos + rel;
                     }
-                    if (_eof)
-                    {
-                        return -1;
-                    }
-                    await FillAsync().ConfigureAwait(false);
                 }
+                while (!_eof);
+                return -1;
             }
 
-            private async ValueTask EnsureAsync(int n)
+            private ValueTask EnsureAsync(int n)
+            {
+                if (_len - _pos >= n || _eof)
+                {
+                    return ValueTask.CompletedTask;
+                }
+                return EnsureSlowAsync(n);
+            }
+
+            private async ValueTask EnsureSlowAsync(int n)
             {
                 while (_len - _pos < n && !_eof)
                 {
