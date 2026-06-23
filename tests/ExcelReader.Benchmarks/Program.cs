@@ -159,6 +159,7 @@ namespace ExcelReader.Benchmarks
         private const string Main = "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
         private const string Rel = "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
         private const string PkgRel = "http://schemas.openxmlformats.org/package/2006/relationships";
+        private const string CT = "http://schemas.openxmlformats.org/package/2006/content-types";
 
         public static byte[] Build(int rows)
         {
@@ -192,10 +193,25 @@ namespace ExcelReader.Benchmarks
             using var ms = new MemoryStream();
             using (var zip = new ZipArchive(ms, ZipArchiveMode.Create, leaveOpen: true))
             {
+                Write(zip, "[Content_Types].xml",
+                    $"<Types xmlns=\"{CT}\">" +
+                    $"<Default Extension=\"rels\" ContentType=\"application/vnd.openxmlformats-package.relationships+xml\"/>" +
+                    $"<Default Extension=\"xml\" ContentType=\"application/xml\"/>" +
+                    $"<Override PartName=\"/xl/workbook.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml\"/>" +
+                    $"<Override PartName=\"/xl/worksheets/sheet1.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml\"/>" +
+                    $"<Override PartName=\"/xl/sharedStrings.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.sharedStrings+xml\"/>" +
+                    $"<Override PartName=\"/xl/styles.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml\"/>" +
+                    $"</Types>");
+                Write(zip, "_rels/.rels",
+                    $"<Relationships xmlns=\"{PkgRel}\"><Relationship Id=\"rId0\" Type=\"{Rel}/officeDocument\" Target=\"xl/workbook.xml\"/></Relationships>");
                 Write(zip, "xl/workbook.xml",
                     $"<workbook xmlns=\"{Main}\" xmlns:r=\"{Rel}\"><sheets><sheet name=\"S1\" sheetId=\"1\" r:id=\"rId1\"/></sheets></workbook>");
                 Write(zip, "xl/_rels/workbook.xml.rels",
-                    $"<Relationships xmlns=\"{PkgRel}\"><Relationship Id=\"rId1\" Type=\"x\" Target=\"worksheets/sheet1.xml\"/></Relationships>");
+                    $"<Relationships xmlns=\"{PkgRel}\">" +
+                    $"<Relationship Id=\"rId1\" Type=\"{Rel}/worksheet\" Target=\"worksheets/sheet1.xml\"/>" +
+                    $"<Relationship Id=\"rId2\" Type=\"{Rel}/sharedStrings\" Target=\"sharedStrings.xml\"/>" +
+                    $"<Relationship Id=\"rId3\" Type=\"{Rel}/styles\" Target=\"styles.xml\"/>" +
+                    $"</Relationships>");
                 Write(zip, "xl/worksheets/sheet1.xml", sheet.ToString());
                 Write(zip, "xl/sharedStrings.xml", shared.ToString());
                 Write(zip, "xl/styles.xml", styles);
