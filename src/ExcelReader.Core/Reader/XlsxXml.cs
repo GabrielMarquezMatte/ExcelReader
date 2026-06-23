@@ -114,6 +114,44 @@ namespace ExcelReader.Core.Reader
             return raw.Length;
         }
 
+        // Scans every <t>...</t> run inside `si`, entity-decodes each one, and writes the result
+        // into `dest` starting at offset 0. Returns total bytes written.
+        // `dest` must be at least `si.Length` bytes — decoded text is never longer than its source XML.
+        internal static int WriteTextRuns(ReadOnlySpan<byte> si, Span<byte> dest)
+        {
+            int p = 0;
+            int w = 0;
+            while (true)
+            {
+                int t = si[p..].IndexOf("<t"u8);
+                if (t < 0)
+                {
+                    break;
+                }
+                t += p;
+                int open = si[t..].IndexOf((byte)'>');
+                if (open < 0)
+                {
+                    break;
+                }
+                open += t;
+                if (si[open - 1] == '/')
+                {
+                    p = open + 1;
+                    continue;
+                }
+                int close = si[open..].IndexOf("</t>"u8);
+                if (close < 0)
+                {
+                    break;
+                }
+                close += open;
+                w += Decode(si.Slice(open + 1, close - open - 1), dest[w..]);
+                p = close + 4;
+            }
+            return w;
+        }
+
         private static int HexVal(byte d)
         {
             if (d is >= (byte)'0' and <= (byte)'9')

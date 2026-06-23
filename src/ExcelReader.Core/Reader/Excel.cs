@@ -1,11 +1,15 @@
 namespace ExcelReader.Core.Reader
 {
-    // SEP-style entry point: Excel.Reader().FromFile(path) / .From(stream).
     public static class Excel
     {
-        public static ExcelReaderOptions Reader()
+        public static XlsxReader FromFile(string path)
         {
-            return default;
+            return new XlsxReader(File.OpenRead(path), leaveOpen: false);
+        }
+
+        public static XlsxReader From(Stream stream, bool leaveOpen = true)
+        {
+            return new XlsxReader(stream, leaveOpen);
         }
     }
 }
