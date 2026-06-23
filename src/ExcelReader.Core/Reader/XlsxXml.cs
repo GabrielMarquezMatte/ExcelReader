@@ -44,23 +44,28 @@ namespace ExcelReader.Core.Reader
         public static int Decode(ReadOnlySpan<byte> src, Span<byte> dest)
         {
             int w = 0;
-            for (int i = 0; i < src.Length;)
+            while (!src.IsEmpty)
             {
-                byte c = src[i];
-                if (c != '&')
+                // The literal run up to the next '&' is bulk-copied; IndexOf and CopyTo are both
+                // SIMD-vectorized, so entity-free text (the common case) costs one scan + one copy.
+                int amp = src.IndexOf((byte)'&');
+                if (amp < 0)
                 {
-                    dest[w++] = c;
-                    i++;
-                    continue;
+                    src.CopyTo(dest[w..]);
+                    return w + src.Length;
                 }
-                int semi = src[i..].IndexOf((byte)';');
+                src[..amp].CopyTo(dest[w..]);
+                w += amp;
+                src = src[amp..]; // src[0] is now '&'
+
+                int semi = src.IndexOf((byte)';');
                 if (semi < 0)
                 {
-                    dest[w++] = c;
-                    i++;
-                    continue;
+                    // No terminator anywhere in what remains, so no entity can follow — copy it all.
+                    src.CopyTo(dest[w..]);
+                    return w + src.Length;
                 }
-                var ent = src.Slice(i + 1, semi - 1);
+                var ent = src[1..semi];
                 if (ent.SequenceEqual("amp"u8)) { dest[w++] = (byte)'&'; }
                 else if (ent.SequenceEqual("lt"u8)) { dest[w++] = (byte)'<'; }
                 else if (ent.SequenceEqual("gt"u8)) { dest[w++] = (byte)'>'; }
@@ -68,15 +73,15 @@ namespace ExcelReader.Core.Reader
                 else if (ent.SequenceEqual("apos"u8)) { dest[w++] = (byte)'\''; }
                 else if (ent.Length > 1 && ent[0] == '#')
                 {
-                    w += DecodeNumeric(ent[1..], dest[w..], src.Slice(i, semi + 1));
+                    w += DecodeNumeric(ent[1..], dest[w..], src[..(semi + 1)]);
                 }
                 else
                 {
                     // Unknown entity: copy the raw "&...;" through unchanged.
-                    src.Slice(i, semi + 1).CopyTo(dest[w..]);
+                    src[..(semi + 1)].CopyTo(dest[w..]);
                     w += semi + 1;
                 }
-                i += semi + 1;
+                src = src[(semi + 1)..];
             }
             return w;
         }
