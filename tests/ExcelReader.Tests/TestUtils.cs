@@ -9,15 +9,16 @@ namespace ExcelReader.Tests
         private const string Rel = "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
         private const string PkgRel = "http://schemas.openxmlformats.org/package/2006/relationships";
 
-        internal static MemoryStream Build(string sheetRows, string? sharedStrings = null, string? styles = null)
+        internal static MemoryStream Build(string sheetRows, string? sharedStrings = null, string? styles = null, bool date1904 = false)
         {
-            return BuildMultiSheet([("S1", sheetRows)], sharedStrings, styles);
+            return BuildMultiSheet([("S1", sheetRows)], sharedStrings, styles, date1904);
         }
 
         internal static MemoryStream BuildMultiSheet(
             (string Name, string Rows)[] sheets,
             string? sharedStrings = null,
-            string? styles = null)
+            string? styles = null,
+            bool date1904 = false)
         {
             var sheetXml = new string[sheets.Length];
             var relXml = new string[sheets.Length];
@@ -33,8 +34,9 @@ namespace ExcelReader.Tests
                     Write(zip, $"xl/worksheets/sheet{id}.xml",
                         $"""<worksheet xmlns="{Main}"><sheetData>{rows}</sheetData></worksheet>""");
                 }
+                string workbookPr = date1904 ? """<workbookPr date1904="1"/>""" : "";
                 Write(zip, "xl/workbook.xml",
-                    $"""<workbook xmlns="{Main}" xmlns:r="{Rel}"><sheets>{string.Concat(sheetXml)}</sheets></workbook>""");
+                    $"""<workbook xmlns="{Main}" xmlns:r="{Rel}">{workbookPr}<sheets>{string.Concat(sheetXml)}</sheets></workbook>""");
                 Write(zip, "xl/_rels/workbook.xml.rels",
                     $"""<Relationships xmlns="{PkgRel}">{string.Concat(relXml)}</Relationships>""");
                 if (sharedStrings is not null)

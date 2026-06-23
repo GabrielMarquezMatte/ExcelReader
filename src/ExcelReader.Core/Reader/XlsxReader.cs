@@ -11,6 +11,7 @@ namespace ExcelReader.Core.Reader
         private readonly ZipArchive _zip;
         private readonly (string Name, string Path)[] _sheets;
         private readonly bool[] _styleIsDate; // cellXfs index -> true when that style renders as a date/time
+        private readonly bool _date1904;
         private int _current;
 
         private byte[] _sharedFlat = [];      // pooled; all decoded shared-string bytes concatenated
@@ -28,12 +29,14 @@ namespace ExcelReader.Core.Reader
             _zip = new ZipArchive(stream, ZipArchiveMode.Read, leaveOpen: true);
             try
             {
-                _sheets = ParseSheets(Bytes(_zip, "xl/workbook.xml"), Bytes(_zip, "xl/_rels/workbook.xml.rels"));
+                var wbBytes = Bytes(_zip, "xl/workbook.xml");
+                _sheets = ParseSheets(wbBytes, Bytes(_zip, "xl/_rels/workbook.xml.rels"));
                 if (_sheets.Length == 0)
                 {
                     throw new InvalidDataException("The workbook contains no sheets.");
                 }
                 _styleIsDate = ParseStyleDateFlags(Bytes(_zip, "xl/styles.xml"));
+                _date1904 = ParseDate1904(wbBytes);
             }
             catch
             {
@@ -47,13 +50,14 @@ namespace ExcelReader.Core.Reader
         }
 
         private XlsxReader(Stream stream, bool leaveOpen, ZipArchive zip,
-            (string Name, string Path)[] sheets, bool[] styleIsDate)
+            (string Name, string Path)[] sheets, bool[] styleIsDate, bool date1904)
         {
             _stream = stream;
             _leaveOpen = leaveOpen;
             _zip = zip;
             _sheets = sheets;
             _styleIsDate = styleIsDate;
+            _date1904 = date1904;
         }
 
         // Async open: central directory and parts are read with the .NET 10 async zip APIs.
@@ -73,7 +77,8 @@ namespace ExcelReader.Core.Reader
                     throw new InvalidDataException("The workbook contains no sheets.");
                 }
                 var styleIsDate = ParseStyleDateFlags(await BytesAsync(zip, "xl/styles.xml", ct).ConfigureAwait(false));
-                return new XlsxReader(stream, leaveOpen, zip, sheets, styleIsDate);
+                bool date1904 = ParseDate1904(wb);
+                return new XlsxReader(stream, leaveOpen, zip, sheets, styleIsDate, date1904);
             }
             catch
             {
@@ -91,6 +96,7 @@ namespace ExcelReader.Core.Reader
 
         public string SheetName => _sheets[_current].Name;
         public int SheetCount => _sheets.Length;
+        public bool IsDate1904 => _date1904;
 
         // A numeric cell whose style index maps to a date/time format is reported as CellType.Date.
         internal bool IsDateStyle(int style)

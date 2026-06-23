@@ -168,10 +168,10 @@ namespace ExcelReader.Core.Reader
         private static int HexVal(byte d)
         {
             var value = (d & 0xF) + (9 * (d >> 6));
-            var is_num = (d - '0') <= 9;
+            var isNum = (d - '0') <= 9u;
             var lower = (d | 0x20) - 'a';
-            var is_alpha = lower <= 5;
-            return (is_num || is_alpha) ? value : -1;
+            var isAlpha = lower <= 5u;
+            return (isNum || isAlpha) ? value : -1;
         }
 
     }

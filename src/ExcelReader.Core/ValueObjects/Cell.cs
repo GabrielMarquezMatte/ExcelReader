@@ -28,17 +28,30 @@ namespace ExcelReader.Core.ValueObjects
             return T.TryParse(Value, provider, out result);
         }
 
-        // Interprets the cell's numeric value as an Excel serial date (1900 system, via DateTime.FromOADate).
+        // Interprets the cell's numeric value as an Excel serial date (1900 date system).
         // Works on any cell whose value parses as a number — Type == Date signals the source style was a
-        // date/time format. ponytail: 1900 date system only; add the +1462-day date1904 offset if a
-        // Mac-authored 1904 workbook turns up.
+        // date/time format. For Mac-authored workbooks with XlsxReader.IsDate1904 == true, use the
+        // overload that accepts isDate1904 so the 1462-day epoch offset is applied.
         public bool TryGetDateTime(out DateTime result)
         {
-            // FromOADate's valid serial range; outside it the conversion would throw.
-            if (double.TryParse(Value, CultureInfo.InvariantCulture, out double serial)
-                && serial is > -657435.0 and < 2958466.0)
+            return TryGetDateTime(isDate1904: false, out result);
+        }
+
+        // Interprets the cell's numeric value as an Excel serial date.
+        // Pass isDate1904: true (from XlsxReader.IsDate1904) to shift the 1904 epoch to
+        // DateTime.FromOADate's 1900 epoch (+1462 days: Jan 1 1904 = OADate 1462).
+        public bool TryGetDateTime(bool isDate1904, out DateTime result)
+        {
+            if (!double.TryParse(Value, CultureInfo.InvariantCulture, out double serial))
             {
-                result = DateTime.FromOADate(serial);
+                result = default;
+                return false;
+            }
+            double oadate = isDate1904 ? serial + 1462.0 : serial;
+            // FromOADate throws outside this range; guard first.
+            if (oadate is > -657435.0 and < 2958466.0)
+            {
+                result = DateTime.FromOADate(oadate);
                 return true;
             }
             result = default;
