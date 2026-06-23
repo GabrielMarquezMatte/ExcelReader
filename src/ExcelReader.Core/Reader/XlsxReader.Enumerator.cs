@@ -71,8 +71,7 @@ namespace ExcelReader.Core.Reader
                         case HeadKind.End:
                             return false;
                         case HeadKind.Row:
-                            BeginRow(out bool selfClose);
-                            if (!selfClose)
+                            if (!BeginRow())
                             {
                                 ParseRow();
                             }
@@ -105,8 +104,7 @@ namespace ExcelReader.Core.Reader
                         case HeadKind.End:
                             return false;
                         case HeadKind.Row:
-                            BeginRow(out bool selfClose);
-                            if (!selfClose)
+                            if (!BeginRow())
                             {
                                 await ParseRowAsync().ConfigureAwait(false);
                             }
@@ -124,14 +122,14 @@ namespace ExcelReader.Core.Reader
             }
 
             // Consumes the <row ...> open tag and resets per-row state. Call only after ClassifyHead()==Row.
-            private void BeginRow(out bool selfClose)
+            private bool BeginRow()
             {
                 int gt = IndexOf((byte)'>'); // open tag already fully buffered by the Ensure(12) above
-                selfClose = _buf[gt - 1] == '/';
                 _pos = gt + 1;
                 _cellCount = 0;
                 _valLen = 0;
                 _nextCol = 0;
+                return _buf[gt - 1] == '/';
             }
 
             private void ParseRow()

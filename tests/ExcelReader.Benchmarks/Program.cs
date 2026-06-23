@@ -10,9 +10,9 @@ namespace ExcelReader.Benchmarks
 {
     internal static class Program
     {
-        public static void Main()
+        public static void Main(string[] args)
         {
-            BenchmarkRunner.Run<ReadBenchmark>();
+            BenchmarkRunner.Run<ReadBenchmark>(args: args);
         }
 
     }
