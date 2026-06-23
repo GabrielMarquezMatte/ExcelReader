@@ -130,7 +130,7 @@ namespace ExcelReader.Core.Reader
         {
             if (target.StartsWith('/'))
             {
-                return target.TrimStart('/');
+                return target[1..];
             }
             if (target.StartsWith("xl/", StringComparison.Ordinal))
             {
@@ -177,7 +177,7 @@ namespace ExcelReader.Core.Reader
                     {
                         break;
                     }
-                    flat = AppendRuns(src.AsSpan(open + 1, end - open - 1), flat);
+                    flat += XlsxXml.WriteTextRuns(src.AsSpan(open + 1, end - open - 1), _sharedFlat.AsSpan(flat));
                     p = end + 5;
                 }
                 else
@@ -190,52 +190,11 @@ namespace ExcelReader.Core.Reader
             _sharedCount = offsets.Count - 1;
         }
 
-        // Concatenate every <t>..</t> run's decoded text inside a shared-string item into the flat buffer.
-        private int AppendRuns(ReadOnlySpan<byte> si, int flat)
-        {
-            int p = 0;
-            while (true)
-            {
-                int t = si[p..].IndexOf("<t"u8);
-                if (t < 0)
-                {
-                    break;
-                }
-                t += p;
-                int open = si[t..].IndexOf((byte)'>');
-                if (open < 0)
-                {
-                    break;
-                }
-                open += t;
-                if (si[open - 1] == '/') // <t/>
-                {
-                    p = open + 1;
-                    continue;
-                }
-                int close = si[open..].IndexOf("</t>"u8);
-                if (close < 0)
-                {
-                    break;
-                }
-                close += open;
-                var text = si.Slice(open + 1, close - open - 1);
-                flat += XlsxXml.Decode(text, _sharedFlat.AsSpan(flat));
-                p = close + 4;
-            }
-            return flat;
-        }
-
         private static byte[] ReadAll(ZipArchiveEntry entry)
         {
             var buf = new byte[entry.Length];
             using var s = entry.Open();
-            int off = 0;
-            int n;
-            while (off < buf.Length && (n = s.Read(buf, off, buf.Length - off)) > 0)
-            {
-                off += n;
-            }
+            s.ReadExactly(buf);
             return buf;
         }
 
@@ -464,63 +423,24 @@ namespace ExcelReader.Core.Reader
                     return;
                 }
 
-                // Everything else: copy the (entity-decoded) text into the row buffer.
                 int vStart = _valLen;
                 if (kind == Kind.Inline)
                 {
-                    AppendInlineRuns(inner);
-                    AddCell(col, vStart, _valLen - vStart, TypeOf(kind), style, fromShared: false);
+                    EnsureValsCapacity(_valLen + inner.Length);
+                    _valLen += XlsxXml.WriteTextRuns(inner, _vals.AsSpan(_valLen));
+                    AddCell(col, vStart, _valLen - vStart, CellType.ExcelString, style, fromShared: false);
                     return;
                 }
-                AppendDecoded(ElementText(inner, "<v>"u8, "</v>"u8));
-                AddCell(col, vStart, _valLen - vStart, TypeOf(kind), style, fromShared: false);
-            }
 
-            private static CellType TypeOf(Kind kind)
-            {
-                return kind switch
+                CellType cellType = kind switch
                 {
-                    Kind.Inline => CellType.ExcelString,
                     Kind.Bool => CellType.Boolean,
                     Kind.Error => CellType.Error,
                     Kind.Formula => CellType.Formula,
                     _ => CellType.Number,
                 };
-            }
-
-            // Inline strings can carry multiple <t> runs (<is><r><t>..</t></r>...); concatenate them.
-
-            private void AppendInlineRuns(ReadOnlySpan<byte> inner)
-            {
-                int p = 0;
-                while (true)
-                {
-                    int t = inner[p..].IndexOf("<t"u8);
-                    if (t < 0)
-                    {
-                        return;
-                    }
-                    t += p;
-                    int open = inner[t..].IndexOf((byte)'>');
-                    if (open < 0)
-                    {
-                        return;
-                    }
-                    open += t;
-                    if (inner[open - 1] == '/')
-                    {
-                        p = open + 1;
-                        continue;
-                    }
-                    int close = inner[open..].IndexOf("</t>"u8);
-                    if (close < 0)
-                    {
-                        return;
-                    }
-                    close += open;
-                    AppendDecoded(inner.Slice(open + 1, close - open - 1));
-                    p = close + 4;
-                }
+                AppendDecoded(ElementText(inner, "<v>"u8, "</v>"u8));
+                AddCell(col, vStart, _valLen - vStart, cellType, style, fromShared: false);
             }
 
             private static ReadOnlySpan<byte> ElementText(ReadOnlySpan<byte> inner, ReadOnlySpan<byte> openTag, ReadOnlySpan<byte> closeTag)
@@ -571,12 +491,7 @@ namespace ExcelReader.Core.Reader
                 {
                     return;
                 }
-                int size = _vals.Length;
-                while (size < needed)
-                {
-                    size *= 2;
-                }
-                var bigger = ArrayPool<byte>.Shared.Rent(size);
+                var bigger = ArrayPool<byte>.Shared.Rent(Math.Max(_vals.Length * 2, needed));
                 Array.Copy(_vals, bigger, _valLen);
                 ArrayPool<byte>.Shared.Return(_vals);
                 _vals = bigger;

@@ -11,7 +11,7 @@ namespace ExcelReader.Tests
         public void ReadsSharedStringsStylesAndNumbers()
         {
             string path = Path.Combine(AppContext.BaseDirectory, "data", "sample.xlsx");
-            using var reader = Excel.Reader().FromFile(path);
+            using var reader = Excel.FromFile(path);
 
             int r = 0;
             foreach (var row in reader)
@@ -49,7 +49,7 @@ namespace ExcelReader.Tests
                 $"""<row r="1"><c r="A1"><v>10</v></c><c r="C1"><v>30</v></c></row>""" +
                 $"""<row r="2"><c r="A2" t="inlineStr"><is><t>{big}</t></is></c></row>""");
 
-            using var reader = Excel.Reader().From(ms);
+            using var reader = Excel.From(ms);
             int r = 0;
             foreach (var row in reader)
             {
@@ -78,7 +78,7 @@ namespace ExcelReader.Tests
                 """<row r="1"><c r="A1" t="s"><v>0</v></c></row>""",
                 sharedStrings: "<si><t>a &amp; b &lt;tag&gt; &#65;</t></si>");
 
-            using var reader = Excel.Reader().From(ms);
+            using var reader = Excel.From(ms);
             using var enumerator = reader.GetEnumerator();
             if (!enumerator.MoveNext())
             {
