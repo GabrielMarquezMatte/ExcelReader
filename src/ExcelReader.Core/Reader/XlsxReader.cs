@@ -6,32 +6,6 @@ using ExcelReader.Core.ValueObjects;
 
 namespace ExcelReader.Core.Reader
 {
-    // SEP-style entry point: Excel.Reader().FromFile(path) / .From(stream).
-    public static class Excel
-    {
-        public static ExcelReaderOptions Reader()
-        {
-            return default;
-        }
-
-    }
-
-    // Options are an explicit extension point — empty for now (no settings to configure yet).
-    public readonly record struct ExcelReaderOptions
-    {
-        public XlsxReader FromFile(string path)
-        {
-            return new(File.OpenRead(path), leaveOpen: false);
-        }
-
-
-        public XlsxReader From(Stream stream, bool leaveOpen = true)
-        {
-            return new(stream, leaveOpen);
-        }
-
-    }
-
     public sealed class XlsxReader : IDisposable
     {
         private readonly Stream _stream;
@@ -452,95 +426,70 @@ namespace ExcelReader.Core.Reader
 
             private enum Kind { Number, Shared, Inline, Bool, Error, Formula }
 
+            // "" / "n" -> Number; "s" shared; "inlineStr" inline; "b" bool; "e" error; "str" formula result.
             private static Kind ClassifyKind(ReadOnlySpan<byte> t)
             {
-                if (t.IsEmpty)
-                {
-                    return Kind.Number; // "n" and anything unexpected
-                }
                 if (t.SequenceEqual("s"u8))
                 {
-                    return Kind.Shared; // "n" and anything unexpected
+                    return Kind.Shared;
                 }
                 if (t.SequenceEqual("inlineStr"u8))
                 {
-                    return Kind.Inline; // "n" and anything unexpected
+                    return Kind.Inline;
                 }
                 if (t.SequenceEqual("b"u8))
                 {
-                    return Kind.Bool; // "n" and anything unexpected
+                    return Kind.Bool;
                 }
                 if (t.SequenceEqual("e"u8))
                 {
-                    return Kind.Error; // "n" and anything unexpected
+                    return Kind.Error;
                 }
                 if (t.SequenceEqual("str"u8))
                 {
-                    return Kind.Formula; // "n" and anything unexpected
+                    return Kind.Formula;
                 }
-                return Kind.Number; // "n" and anything unexpected
+
+                return Kind.Number;
             }
 
 
             private void EmitCell(Kind kind, ReadOnlySpan<byte> inner, int col, int style)
             {
+                // Shared strings: <v> holds an index; point the cell at that slice of the shared buffer.
                 if (kind == Kind.Shared)
                 {
-                    var raw = ElementText(inner, "<v>"u8, "</v>"u8);
-                    int idx = ParseInt(raw);
-                    var (start, len) = _reader.SharedAt(idx);
-                    AddCell(new CellDesc
-                    {
-                        Column = col,
-                        Start = start,
-                        Length = len,
-                        Type = CellType.ExcelString,
-                        Style = style,
-                        FromShared = true,
-                    });
+                    var (start, len) = _reader.SharedAt(ParseInt(ElementText(inner, "<v>"u8, "</v>"u8)));
+                    AddCell(col, start, len, CellType.ExcelString, style, fromShared: true);
                     return;
                 }
 
-                CellType type;
-                ReadOnlySpan<byte> text;
-                if (kind == Kind.Inline)
-                {
-                    type = CellType.ExcelString;
-                    text = default; // handled by run-append below
-                }
-                else
-                {
-                    type = kind switch
-                    {
-                        Kind.Bool => CellType.Boolean,
-                        Kind.Error => CellType.Error,
-                        Kind.Formula => CellType.Formula,
-                        _ => CellType.Number,
-                    };
-                    text = ElementText(inner, "<v>"u8, "</v>"u8);
-                }
-
+                // Everything else: copy the (entity-decoded) text into the row buffer.
                 int vStart = _valLen;
                 if (kind == Kind.Inline)
                 {
                     AppendInlineRuns(inner);
+                    AddCell(col, vStart, _valLen - vStart, TypeOf(kind), style, fromShared: false);
+                    return;
                 }
-                else
+                AppendDecoded(ElementText(inner, "<v>"u8, "</v>"u8));
+                AddCell(col, vStart, _valLen - vStart, TypeOf(kind), style, fromShared: false);
+            }
+
+            private static CellType TypeOf(Kind kind)
+            {
+                return kind switch
                 {
-                    AppendDecoded(text);
-                }
-                AddCell(new CellDesc
-                {
-                    Column = col,
-                    Start = vStart,
-                    Length = _valLen - vStart,
-                    Type = type,
-                    Style = style,
-                    FromShared = false,
-                });
+                    Kind.Inline => CellType.ExcelString,
+                    Kind.Bool => CellType.Boolean,
+                    Kind.Error => CellType.Error,
+                    Kind.Formula => CellType.Formula,
+                    _ => CellType.Number,
+                };
             }
 
             // Inline strings can carry multiple <t> runs (<is><r><t>..</t></r>...); concatenate them.
+
             private void AppendInlineRuns(ReadOnlySpan<byte> inner)
             {
                 int p = 0;
@@ -596,7 +545,7 @@ namespace ExcelReader.Core.Reader
                 _valLen += XlsxXml.Decode(src, _vals.AsSpan(_valLen));
             }
 
-            private void AddCell(CellDesc cell)
+            private void AddCell(int col, int start, int len, CellType type, int style, bool fromShared)
             {
                 if (_cellCount == _cells.Length)
                 {
@@ -605,7 +554,15 @@ namespace ExcelReader.Core.Reader
                     ArrayPool<CellDesc>.Shared.Return(_cells);
                     _cells = bigger;
                 }
-                _cells[_cellCount++] = cell;
+                _cells[_cellCount++] = new CellDesc
+                {
+                    Column = col,
+                    Start = start,
+                    Length = len,
+                    Type = type,
+                    Style = style,
+                    FromShared = fromShared,
+                };
             }
 
             private void EnsureValsCapacity(int needed)
@@ -636,52 +593,40 @@ namespace ExcelReader.Core.Reader
             }
 
             // --- buffer management ---
-
+            // After every Fill the window [_pos.._len) is rescanned from the start; that re-reads a few
+            // bytes but keeps the search loops trivial and handles delimiters split across a refill for free.
 
             private int IndexOf(byte b)
             {
-                int from = _pos;
                 while (true)
                 {
-                    int rel = _buf.AsSpan(from, _len - from).IndexOf(b);
+                    int rel = _buf.AsSpan(_pos, _len - _pos).IndexOf(b);
                     if (rel >= 0)
                     {
-                        return from + rel;
+                        return _pos + rel;
                     }
                     if (_eof)
                     {
                         return -1;
                     }
-                    int scanned = _len;
-                    int posBefore = _pos;
-                    MakeRoom();
-                    int delta = posBefore - _pos;
-                    from = scanned - delta;
-                    ReadMore();
+                    Fill();
                 }
             }
 
             private int IndexOfSeq(ReadOnlySpan<byte> seq)
             {
-                int from = _pos;
                 while (true)
                 {
-                    int rel = _buf.AsSpan(from, _len - from).IndexOf(seq);
+                    int rel = _buf.AsSpan(_pos, _len - _pos).IndexOf(seq);
                     if (rel >= 0)
                     {
-                        return from + rel;
+                        return _pos + rel;
                     }
                     if (_eof)
                     {
                         return -1;
                     }
-                    int scanned = _len;
-                    int posBefore = _pos;
-                    MakeRoom();
-                    int delta = posBefore - _pos;
-                    // back up so a sequence split across the refill boundary is still found
-                    from = Math.Max(_pos, scanned - delta - (seq.Length - 1));
-                    ReadMore();
+                    Fill();
                 }
             }
 
@@ -689,30 +634,26 @@ namespace ExcelReader.Core.Reader
             {
                 while (_len - _pos < n && !_eof)
                 {
-                    MakeRoom();
-                    ReadMore();
+                    Fill();
                 }
             }
 
-            private void MakeRoom()
+            // Make room for more bytes (compact consumed prefix, else grow), then read once.
+            private void Fill()
             {
                 if (_pos > 0)
                 {
-                    Array.Copy(_buf, _pos, _buf, 0, _len - _pos);
+                    _buf.AsSpan(_pos, _len - _pos).CopyTo(_buf);
                     _len -= _pos;
                     _pos = 0;
                 }
                 else if (_len == _buf.Length)
                 {
                     var bigger = ArrayPool<byte>.Shared.Rent(_buf.Length * 2);
-                    Array.Copy(_buf, bigger, _len);
+                    _buf.AsSpan(0, _len).CopyTo(bigger);
                     ArrayPool<byte>.Shared.Return(_buf);
                     _buf = bigger;
                 }
-            }
-
-            private void ReadMore()
-            {
                 int n = _sheet!.Read(_buf, _len, _buf.Length - _len);
                 if (n == 0)
                 {
