@@ -4,5 +4,6 @@
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/ExcelReader.Tests/ExcelReader.Tests.csproj" />
+    <Project Path="tests/ExcelReader.Benchmarks/ExcelReader.Benchmarks.csproj" />
   </Folder>
 </Solution>

@@ -1,5 +1,6 @@
 using System.Buffers;
 using System.Buffers.Text;
+using System.Diagnostics.CodeAnalysis;
 using System.IO.Compression;
 using ExcelReader.Core.Enums;
 using ExcelReader.Core.ValueObjects;
@@ -12,6 +13,7 @@ namespace ExcelReader.Core.Reader
         private readonly bool _leaveOpen;
         private readonly ZipArchive _zip;
         private readonly (string Name, string Path)[] _sheets;
+        private readonly bool[] _styleIsDate; // cellXfs index -> true when that style renders as a date/time
         private int _current;
 
         private byte[] _sharedFlat = [];      // pooled; all decoded shared-string bytes concatenated
@@ -29,10 +31,18 @@ namespace ExcelReader.Core.Reader
             {
                 throw new InvalidDataException("The workbook contains no sheets.");
             }
+            _styleIsDate = LoadStyleDateFlags(_zip);
         }
 
         public string SheetName => _sheets[_current].Name;
         public int SheetCount => _sheets.Length;
+
+        // A numeric cell whose style index maps to a date/time format is reported as CellType.Date.
+        internal bool IsDateStyle(int style)
+        {
+            return (uint)style < (uint)_styleIsDate.Length && _styleIsDate[style];
+        }
+
 
         public bool TryMoveToSheet(string name)
         {
@@ -97,7 +107,7 @@ namespace ExcelReader.Core.Reader
                 return [];
             }
             // rId -> target part path
-            var rels = new Dictionary<string, string>(StringComparer.Ordinal);
+            Dictionary<string, string> rels = new(StringComparer.Ordinal);
             var relsEntry = zip.GetEntry("xl/_rels/workbook.xml.rels");
             if (relsEntry is not null)
             {
@@ -137,6 +147,95 @@ namespace ExcelReader.Core.Reader
                 return target;
             }
             return "xl/" + target;
+        }
+
+        // Builds the cellXfs-index -> isDate table from xl/styles.xml. A style is a date when its
+        // numFmtId is a builtin date/time format or a custom <numFmt> whose code reads as a date.
+        // ponytail: 1900 date system only (see Cell.TryGetDateTime). Add date1904 handling if needed.
+        private static bool[] LoadStyleDateFlags(ZipArchive zip)
+        {
+            var entry = zip.GetEntry("xl/styles.xml");
+            if (entry is null)
+            {
+                return [];
+            }
+            var src = ReadAll(entry);
+
+            // Custom formats: numFmtId -> isDate(formatCode). Builtin ids (<164) handled by IsBuiltinDate.
+            var custom = new Dictionary<int, bool>();
+            foreach (var tag in Tags(src, "<numFmt "u8.ToArray()))
+            {
+                int id = ParseIntOr(XlsxXml.Attr(tag, " numFmtId=\""u8), -1);
+                if (id >= 0)
+                {
+                    custom[id] = LooksLikeDateFormat(Decode(XlsxXml.Attr(tag, " formatCode=\""u8)));
+                }
+            }
+
+            // Only the <xf> entries inside <cellXfs> are cell styles; <cellStyleXfs> is the master table.
+            int region = IdxOf(src, 0, "<cellXfs"u8);
+            if (region < 0)
+            {
+                return [];
+            }
+            int open = IdxOf(src, region, (byte)'>');
+            int end = IdxOf(src, open, "</cellXfs>"u8);
+            if (open < 0 || end < 0)
+            {
+                return [];
+            }
+            var flags = new List<bool>();
+            foreach (var xf in Tags(src[(open + 1)..end], "<xf "u8.ToArray()))
+            {
+                int numFmtId = ParseIntOr(XlsxXml.Attr(xf, " numFmtId=\""u8), 0);
+                flags.Add(custom.TryGetValue(numFmtId, out bool d) ? d : IsBuiltinDateFormat(numFmtId));
+            }
+            return [.. flags];
+        }
+
+        // Builtin SpreadsheetML date/time numFmtIds (ECMA-376 §18.8.30, incl. locale variants).
+        private static bool IsBuiltinDateFormat(int id)
+        {
+            return id is (>= 14 and <= 22) or (>= 27 and <= 36) or (>= 45 and <= 47) or (>= 50 and <= 58) or (>= 71 and <= 81);
+        }
+
+        // True if a format code contains a date/time token (y/m/d/h/s) outside quoted text, [bracketed]
+        // sections, and \-escapes. ponytail: heuristic, not a full format parser — upgrade if a format
+        // with date letters only inside literals is misclassified.
+
+        private static bool LooksLikeDateFormat(string code)
+        {
+            int i = 0;
+            while (i < code.Length)
+            {
+                switch (code[i])
+                {
+                    case '"':
+                        i = code.IndexOf('"', i + 1);
+                        if (i < 0) { return false; }
+                        i++;
+                        break;
+                    case '[':
+                        i = code.IndexOf(']', i + 1);
+                        if (i < 0) { return false; }
+                        i++;
+                        break;
+                    case '\\':
+                        i += 2; // skip the escaped char
+                        break;
+                    case 'y' or 'Y' or 'm' or 'M' or 'd' or 'D' or 'h' or 'H' or 's' or 'S':
+                        return true;
+                    default:
+                        i++;
+                        break;
+                }
+            }
+            return false;
+        }
+
+        private static int ParseIntOr(ReadOnlySpan<byte> src, int fallback)
+        {
+            return Utf8Parser.TryParse(src, out int v, out _) ? v : fallback;
         }
 
 
@@ -244,13 +343,20 @@ namespace ExcelReader.Core.Reader
 
         // Forward-only, low-memory worksheet scanner. Streams the sheet through a refillable pooled
         // buffer; a single <c>...</c> element is guaranteed contiguous (the buffer grows if needed).
+        [SuppressMessage("Design", "CA1034:Nested types should not be visible",
+            Justification = "Public nested ref-struct enumerator is the standard foreach pattern.")]
         public ref struct Enumerator : IDisposable
         {
             private const int InitialBuf = 64 * 1024;
             private const int InitialVals = 4 * 1024;
             private const int InitialCells = 32;
 
+            // Borrowed: the reader outlives the enumerator and owns its own disposal — do not dispose here.
+            [SuppressMessage("Usage", "CA2213:Disposable fields should be disposed", Justification = "Borrowed, not owned.")]
+            [SuppressMessage("SharpSource", "SS066:Disposable field is not disposed", Justification = "Borrowed, not owned.")]
             private readonly XlsxReader _reader;
+            // Owned: opened by GetEnumerator for this enumerator alone; disposed in Dispose.
+            [SuppressMessage("SharpSource", "SS066:Disposable field is not disposed", Justification = "Disposed in Dispose().")]
             private Stream? _sheet;
             private byte[] _buf;
             private int _pos;
@@ -437,7 +543,7 @@ namespace ExcelReader.Core.Reader
                     Kind.Bool => CellType.Boolean,
                     Kind.Error => CellType.Error,
                     Kind.Formula => CellType.Formula,
-                    _ => CellType.Number,
+                    _ => _reader.IsDateStyle(style) ? CellType.Date : CellType.Number,
                 };
                 AppendDecoded(ElementText(inner, "<v>"u8, "</v>"u8));
                 AddCell(col, vStart, _valLen - vStart, cellType, style, fromShared: false);
@@ -580,6 +686,8 @@ namespace ExcelReader.Core.Reader
                 }
             }
 
+            [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP007:Don't dispose injected",
+                Justification = "_sheet is opened for this enumerator and owned by it.")]
             public void Dispose()
             {
                 _sheet?.Dispose();

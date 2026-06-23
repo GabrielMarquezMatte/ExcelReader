@@ -5,6 +5,7 @@ namespace ExcelReader.Core.Enums
         Empty,
         ExcelString,
         Number,
+        Date,
         Boolean,
         Formula,
         Error,
