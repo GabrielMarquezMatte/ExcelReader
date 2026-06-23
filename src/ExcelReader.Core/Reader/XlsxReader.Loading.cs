@@ -10,17 +10,17 @@ namespace ExcelReader.Core.Reader
         private static readonly byte[] _relationshipTag = "<Relationship"u8.ToArray();
         private static readonly byte[] _sheetTag = "<sheet "u8.ToArray();
 
-        private static (string Name, string Path)[] ParseSheets(byte[]? wbBytes, byte[]? relsBytes)
+        private static (string Name, string Path)[] ParseSheets(ReadOnlyMemory<byte> wbBytes, ReadOnlyMemory<byte> relsBytes)
         {
-            if (wbBytes is null)
+            if (wbBytes.IsEmpty)
             {
                 return [];
             }
             // rId -> target part path
             Dictionary<string, string> rels = new(StringComparer.Ordinal);
-            if (relsBytes is not null)
+            if (!relsBytes.IsEmpty)
             {
-                foreach (var tag in Tags(relsBytes.AsMemory(), _relationshipTag))
+                foreach (var tag in Tags(relsBytes, _relationshipTag))
                 {
                     var id = Decode(XlsxXml.Attr(tag.Span, " Id=\""u8));
                     var target = Decode(XlsxXml.Attr(tag.Span, " Target=\""u8));
@@ -31,7 +31,7 @@ namespace ExcelReader.Core.Reader
                 }
             }
             var sheets = new List<(string, string)>();
-            foreach (var tag in Tags(wbBytes.AsMemory(), _sheetTag))
+            foreach (var tag in Tags(wbBytes, _sheetTag))
             {
                 var name = Decode(XlsxXml.Attr(tag.Span, " name=\""u8));
                 var rid = Decode(XlsxXml.Attr(tag.Span, " r:id=\""u8));
@@ -57,9 +57,9 @@ namespace ExcelReader.Core.Reader
         }
 
         // Returns true when xl/workbook.xml contains <workbookPr date1904="1"> (the Mac epoch).
-        private static bool ParseDate1904(byte[]? src)
+        private static bool ParseDate1904(ReadOnlySpan<byte> src)
         {
-            if (src is null)
+            if (src.IsEmpty)
             {
                 return false;
             }
@@ -73,7 +73,7 @@ namespace ExcelReader.Core.Reader
             {
                 return false;
             }
-            var attr = XlsxXml.Attr(src.AsSpan(pos, end - pos + 1), " date1904=\""u8);
+            var attr = XlsxXml.Attr(src.Slice(pos, end - pos + 1), " date1904=\""u8);
             return attr.SequenceEqual("1"u8) || attr.SequenceEqual("true"u8);
         }
 
@@ -105,7 +105,7 @@ namespace ExcelReader.Core.Reader
             }
         }
 
-        private void ParseShared(byte[] src)
+        private void ParseShared(ReadOnlySpan<byte> src)
         {
             // Decoded text is never longer than its XML, so src.Length bounds the flat buffer.
             _sharedFlat = ArrayPool<byte>.Shared.Rent(Math.Max(1, src.Length));
@@ -118,7 +118,7 @@ namespace ExcelReader.Core.Reader
                 int sstEnd = IdxOf(src, sstPos, (byte)'>');
                 if (sstEnd > sstPos)
                 {
-                    uniqueCount = ParseIntOr(XlsxXml.Attr(src.AsSpan(sstPos, sstEnd - sstPos), " uniqueCount=\""u8), 0);
+                    uniqueCount = ParseIntOr(XlsxXml.Attr(src[sstPos..sstEnd], " uniqueCount=\""u8), 0);
                 }
             }
 
@@ -144,7 +144,7 @@ namespace ExcelReader.Core.Reader
                     {
                         break;
                     }
-                    flat += XlsxXml.WriteTextRuns(src.AsSpan(open + 1, end - open - 1), _sharedFlat.AsSpan(flat));
+                    flat += XlsxXml.WriteTextRuns(src.Slice(open + 1, end - open - 1), _sharedFlat.AsSpan(flat));
                     p = end + 5;
                 }
                 else

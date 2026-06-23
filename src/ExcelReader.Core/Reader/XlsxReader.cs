@@ -30,13 +30,13 @@ namespace ExcelReader.Core.Reader
             try
             {
                 var wbBytes = Bytes(_zip, "xl/workbook.xml");
-                _sheets = ParseSheets(wbBytes, Bytes(_zip, "xl/_rels/workbook.xml.rels"));
+                _sheets = ParseSheets(wbBytes ?? [], Bytes(_zip, "xl/_rels/workbook.xml.rels") ?? []);
                 if (_sheets.Length == 0)
                 {
                     throw new InvalidDataException("The workbook contains no sheets.");
                 }
-                _styleIsDate = ParseStyleDateFlags(Bytes(_zip, "xl/styles.xml"));
-                _date1904 = ParseDate1904(wbBytes);
+                _styleIsDate = ParseStyleDateFlags(Bytes(_zip, "xl/styles.xml") ?? []);
+                _date1904 = ParseDate1904(wbBytes ?? []);
             }
             catch
             {
@@ -71,13 +71,13 @@ namespace ExcelReader.Core.Reader
                 zip = await ZipArchive.CreateAsync(stream, ZipArchiveMode.Read, leaveOpen: true, entryNameEncoding: null, ct).ConfigureAwait(false);
                 var wb = await BytesAsync(zip, "xl/workbook.xml", ct).ConfigureAwait(false);
                 var rels = await BytesAsync(zip, "xl/_rels/workbook.xml.rels", ct).ConfigureAwait(false);
-                var sheets = ParseSheets(wb, rels);
+                var sheets = ParseSheets(wb ?? [], rels ?? []);
                 if (sheets.Length == 0)
                 {
                     throw new InvalidDataException("The workbook contains no sheets.");
                 }
-                var styleIsDate = ParseStyleDateFlags(await BytesAsync(zip, "xl/styles.xml", ct).ConfigureAwait(false));
-                bool date1904 = ParseDate1904(wb);
+                var styleIsDate = ParseStyleDateFlags(await BytesAsync(zip, "xl/styles.xml", ct).ConfigureAwait(false) ?? []);
+                bool date1904 = ParseDate1904(wb ?? []);
                 return new XlsxReader(stream, leaveOpen, zip, sheets, styleIsDate, date1904);
             }
             catch
