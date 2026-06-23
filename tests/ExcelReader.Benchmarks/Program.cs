@@ -62,6 +62,40 @@ namespace ExcelReader.Benchmarks
             }
             return acc;
         }
+
+        // Same pass over the streaming async enumerator — quantifies the overhead of the async I/O path.
+        [Benchmark]
+        public async Task<long> ReadAllCellsAsync()
+        {
+            await using var ms = new MemoryStream(_workbook, writable: false);
+            await using var reader = await Excel.FromAsync(ms);
+            await using var e = await reader.GetAsyncEnumeratorAsync();
+
+            long acc = 0;
+            while (await e.MoveNextAsync())
+            {
+                var row = e.Current;
+                for (int c = 0; c < row.ColumnCount; c++)
+                {
+                    var cell = row[c];
+                    switch (cell.Type)
+                    {
+                        case CellType.ExcelString:
+                            acc += cell.Value.Length;
+                            break;
+                        case CellType.Number:
+                            if (cell.TryParse<double>(null, out double n)) { acc += (long)n; }
+                            break;
+                        case CellType.Date:
+                            if (cell.TryGetDateTime(out var d)) { acc += d.Ticks; }
+                            break;
+                        default:
+                            break;
+                    }
+                }
+            }
+            return acc;
+        }
     }
 
     // Generates a self-contained .xlsx in memory: a header row of shared strings plus `rows` data rows
