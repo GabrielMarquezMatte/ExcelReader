@@ -23,20 +23,19 @@ namespace ExcelReader.Core.Reader
                 foreach (var tag in Tags(relsBytes, _relationshipTag))
                 {
                     var id = Decode(XlsxXml.Attr(tag, " Id=\""u8));
-                    var target = Decode(XlsxXml.Attr(tag, " Target=\""u8));
                     if (id.Length > 0)
                     {
-                        rels[id] = target;
+                        rels[id] = Decode(XlsxXml.Attr(tag, " Target=\""u8));
                     }
                 }
             }
             var sheets = new List<(string, string)>();
             foreach (var tag in Tags(wbBytes, _sheetTag))
             {
-                var name = Decode(XlsxXml.Attr(tag, " name=\""u8));
                 var rid = Decode(XlsxXml.Attr(tag, " r:id=\""u8));
                 if (rels.TryGetValue(rid, out var target))
                 {
+                    var name = Decode(XlsxXml.Attr(tag, " name=\""u8));
                     sheets.Add((name, NormalizePart(target)));
                 }
             }
@@ -53,7 +52,7 @@ namespace ExcelReader.Core.Reader
             {
                 return new string(target);
             }
-            return string.Concat("xl/", target);
+            return $"xl/{target}";
         }
 
         // Returns true when xl/workbook.xml contains <workbookPr date1904="1"> (the Mac epoch).
