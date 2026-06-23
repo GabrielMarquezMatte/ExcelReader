@@ -10,7 +10,6 @@ namespace ExcelReader.Core.Reader
 
         // Builds the cellXfs-index -> isDate table from xl/styles.xml. A style is a date when its
         // numFmtId is a builtin date/time format or a custom <numFmt> whose code reads as a date.
-        // ponytail: 1900 date system only (see Cell.TryGetDateTime). Add date1904 handling if needed.
         private static bool[] ParseStyleDateFlags(byte[]? src)
         {
             if (src is null)

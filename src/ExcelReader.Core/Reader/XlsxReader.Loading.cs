@@ -56,6 +56,27 @@ namespace ExcelReader.Core.Reader
             return string.Concat("xl/", target);
         }
 
+        // Returns true when xl/workbook.xml contains <workbookPr date1904="1"> (the Mac epoch).
+        private static bool ParseDate1904(byte[]? src)
+        {
+            if (src is null)
+            {
+                return false;
+            }
+            int pos = IdxOf(src, 0, "<workbookPr"u8);
+            if (pos < 0)
+            {
+                return false;
+            }
+            int end = IdxOf(src, pos, (byte)'>');
+            if (end < 0)
+            {
+                return false;
+            }
+            var attr = XlsxXml.Attr(src.AsSpan(pos, end - pos + 1), " date1904=\""u8);
+            return attr.SequenceEqual("1"u8) || attr.SequenceEqual("true"u8);
+        }
+
         private void EnsureSharedLoaded()
         {
             if (_sharedLoaded)

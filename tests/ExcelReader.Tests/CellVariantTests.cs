@@ -237,5 +237,36 @@ namespace ExcelReader.Tests
             Assert.True(e.Current[0].TryParse(null, out long l));
             Assert.Equal(long.MaxValue, l);
         }
+
+        [Fact]
+        public void Date1904WorkbookReadsCorrectDates()
+        {
+            // 1904 system: serial 0 = Jan 1 1904, serial 1 = Jan 2 1904.
+            // IsDate1904 must be true; TryGetDateTime(true) shifts by +1462 days to reach the OADate epoch.
+            const string styles =
+                """<styleSheet><cellXfs count="2"><xf numFmtId="0"/><xf numFmtId="14"/></cellXfs></styleSheet>""";
+            using var ms = WorkbookBuilder.Build(
+                """<row r="1"><c r="A1" s="1"><v>0</v></c><c r="B1" s="1"><v>1</v></c></row>""",
+                styles: styles,
+                date1904: true);
+            using var reader = Excel.From(ms);
+            Assert.True(reader.IsDate1904);
+            using var e = reader.GetEnumerator();
+            Assert.True(e.MoveNext());
+            var row = e.Current;
+            Assert.Equal(CellType.Date, row[0].Type);
+            Assert.True(row[0].TryGetDateTime(reader.IsDate1904, out var d0));
+            Assert.Equal(new DateTime(1904, 1, 1, 0, 0, 0, DateTimeKind.Unspecified), d0);
+            Assert.True(row[1].TryGetDateTime(reader.IsDate1904, out var d1));
+            Assert.Equal(new DateTime(1904, 1, 2, 0, 0, 0, DateTimeKind.Unspecified), d1);
+        }
+
+        [Fact]
+        public void IsDate1904FalseForStandard1900Workbook()
+        {
+            using var ms = WorkbookBuilder.Build("");
+            using var reader = Excel.From(ms);
+            Assert.False(reader.IsDate1904);
+        }
     }
 }
