@@ -1,5 +1,4 @@
 using System.Buffers;
-using System.Collections;
 using System.Diagnostics.CodeAnalysis;
 using System.IO.Compression;
 
@@ -11,7 +10,7 @@ namespace ExcelReader.Core.Reader
         private readonly bool _leaveOpen;
         private readonly ZipArchive _zip;
         private readonly (string Name, string Path)[] _sheets;
-        private readonly BitArray _styleIsDate; // cellXfs index -> true when that style renders as a date/time
+        private readonly bool[] _styleIsDate; // cellXfs index -> true when that style renders as a date/time
         private int _current;
 
         private byte[] _sharedFlat = [];      // pooled; all decoded shared-string bytes concatenated
@@ -48,7 +47,7 @@ namespace ExcelReader.Core.Reader
         }
 
         private XlsxReader(Stream stream, bool leaveOpen, ZipArchive zip,
-            (string Name, string Path)[] sheets, BitArray styleIsDate)
+            (string Name, string Path)[] sheets, bool[] styleIsDate)
         {
             _stream = stream;
             _leaveOpen = leaveOpen;
@@ -100,11 +99,11 @@ namespace ExcelReader.Core.Reader
         }
 
 
-        public bool TryMoveToSheet(string name)
+        public bool TryMoveToSheet(ReadOnlySpan<char> name)
         {
             for (int i = 0; i < _sheets.Length; i++)
             {
-                if (string.Equals(_sheets[i].Name, name, StringComparison.Ordinal))
+                if (name.SequenceEqual(_sheets[i].Name))
                 {
                     _current = i;
                     return true;
