@@ -7,6 +7,9 @@ namespace ExcelReader.Core.Reader
     {
         // --- workbook / shared-strings loading (one-time, small except sharedStrings) ---
 
+        private static readonly byte[] _relationshipTag = "<Relationship"u8.ToArray();
+        private static readonly byte[] _sheetTag = "<sheet "u8.ToArray();
+
         private static (string Name, string Path)[] ParseSheets(byte[]? wbBytes, byte[]? relsBytes)
         {
             if (wbBytes is null)
@@ -17,10 +20,10 @@ namespace ExcelReader.Core.Reader
             Dictionary<string, string> rels = new(StringComparer.Ordinal);
             if (relsBytes is not null)
             {
-                foreach (var tag in Tags(relsBytes, "<Relationship"u8.ToArray()))
+                foreach (var tag in Tags(relsBytes.AsMemory(), _relationshipTag))
                 {
-                    var id = Decode(XlsxXml.Attr(tag, " Id=\""u8));
-                    var target = Decode(XlsxXml.Attr(tag, " Target=\""u8));
+                    var id = Decode(XlsxXml.Attr(tag.Span, " Id=\""u8));
+                    var target = Decode(XlsxXml.Attr(tag.Span, " Target=\""u8));
                     if (id.Length > 0)
                     {
                         rels[id] = target;
@@ -28,10 +31,10 @@ namespace ExcelReader.Core.Reader
                 }
             }
             var sheets = new List<(string, string)>();
-            foreach (var tag in Tags(wbBytes, "<sheet "u8.ToArray()))
+            foreach (var tag in Tags(wbBytes.AsMemory(), _sheetTag))
             {
-                var name = Decode(XlsxXml.Attr(tag, " name=\""u8));
-                var rid = Decode(XlsxXml.Attr(tag, " r:id=\""u8));
+                var name = Decode(XlsxXml.Attr(tag.Span, " name=\""u8));
+                var rid = Decode(XlsxXml.Attr(tag.Span, " r:id=\""u8));
                 if (rels.TryGetValue(rid, out var target))
                 {
                     sheets.Add((name, NormalizePart(target)));
@@ -40,17 +43,17 @@ namespace ExcelReader.Core.Reader
             return [.. sheets];
         }
 
-        private static string NormalizePart(string target)
+        private static string NormalizePart(ReadOnlySpan<char> target)
         {
-            if (target.StartsWith('/'))
+            if (target.Length > 0 && target[0] == '/')
             {
-                return target[1..];
+                return new string(target[1..]);
             }
-            if (target.StartsWith("xl/", StringComparison.Ordinal))
+            if (target.StartsWith("xl/"))
             {
-                return target;
+                return new string(target);
             }
-            return "xl/" + target;
+            return string.Concat("xl/", target);
         }
 
         private void EnsureSharedLoaded()
@@ -85,7 +88,20 @@ namespace ExcelReader.Core.Reader
         {
             // Decoded text is never longer than its XML, so src.Length bounds the flat buffer.
             _sharedFlat = ArrayPool<byte>.Shared.Rent(Math.Max(1, src.Length));
-            var offsets = new List<int> { 0 };
+
+            // Pre-size offsets from <sst uniqueCount="N"> to avoid repeated List growth.
+            int uniqueCount = 0;
+            int sstPos = IdxOf(src, 0, "<sst"u8);
+            if (sstPos >= 0)
+            {
+                int sstEnd = IdxOf(src, sstPos, (byte)'>');
+                if (sstEnd > sstPos)
+                {
+                    uniqueCount = ParseIntOr(XlsxXml.Attr(src.AsSpan(sstPos, sstEnd - sstPos), " uniqueCount=\""u8), 0);
+                }
+            }
+
+            var offsets = new List<int>(uniqueCount + 1) { 0 };
             int flat = 0;
             int p = 0;
             while (true)
@@ -176,22 +192,23 @@ namespace ExcelReader.Core.Reader
         }
 
         // Yields each open-tag span (including '<' and '>') whose start matches `prefix`, over a full buffer.
-        private static IEnumerable<byte[]> Tags(byte[] buf, byte[] prefix)
+        // Returns ReadOnlyMemory<byte> slices — no per-tag allocation.
+        private static IEnumerable<ReadOnlyMemory<byte>> Tags(ReadOnlyMemory<byte> buf, byte[] prefix)
         {
             int pos = 0;
             while (true)
             {
-                int start = IdxOf(buf, pos, prefix);
+                int start = IdxOf(buf.Span, pos, prefix);
                 if (start < 0)
                 {
                     yield break;
                 }
-                int end = IdxOf(buf, start, (byte)'>');
+                int end = IdxOf(buf.Span, start, (byte)'>');
                 if (end < 0)
                 {
                     yield break;
                 }
-                yield return buf[start..(end + 1)];
+                yield return buf.Slice(start, end - start + 1);
                 pos = end + 1;
             }
         }

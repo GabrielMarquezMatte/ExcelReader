@@ -5,6 +5,8 @@ using BenchmarkDotNet.Attributes;
 using BenchmarkDotNet.Running;
 using ExcelReader.Core.Enums;
 using ExcelReader.Core.Reader;
+using MiniExcelLibs;
+using Sylvan.Data.Excel;
 
 namespace ExcelReader.Benchmarks
 {
@@ -14,8 +16,8 @@ namespace ExcelReader.Benchmarks
         {
             BenchmarkRunner.Run<ReadBenchmark>(args: args);
         }
-
     }
+
     [MemoryDiagnoser]
     public class ReadBenchmark
     {
@@ -30,14 +32,11 @@ namespace ExcelReader.Benchmarks
             _workbook = WorkbookGenerator.Build(Rows);
         }
 
-        // Full read pass: iterate every row/cell and touch each value the way a consumer would.
-
-        [Benchmark]
-        public long ReadAllCells()
+        [Benchmark(Baseline = true)]
+        public long ExcelReader()
         {
             using var ms = new MemoryStream(_workbook, writable: false);
             using var reader = Excel.From(ms);
-
             long acc = 0;
             foreach (var row in reader)
             {
@@ -63,14 +62,12 @@ namespace ExcelReader.Benchmarks
             return acc;
         }
 
-        // Same pass over the streaming async enumerator — quantifies the overhead of the async I/O path.
         [Benchmark]
-        public async Task<long> ReadAllCellsAsync()
+        public async Task<long> ExcelReaderAsync()
         {
             await using var ms = new MemoryStream(_workbook, writable: false);
             await using var reader = await Excel.FromAsync(ms);
             await using var e = await reader.GetAsyncEnumeratorAsync();
-
             long acc = 0;
             while (await e.MoveNextAsync())
             {
@@ -96,10 +93,67 @@ namespace ExcelReader.Benchmarks
             }
             return acc;
         }
+
+        [Benchmark]
+        public long MiniExcel()
+        {
+            using var ms = new MemoryStream(_workbook, writable: false);
+            long acc = 0;
+            foreach (var row in ms.Query(useHeaderRow: false, excelType: ExcelType.XLSX))
+            {
+                var r = (IDictionary<string, object?>)row;
+                foreach (var val in r.Values)
+                {
+                    switch (val)
+                    {
+                        case string s: acc += s.Length; break;
+                        case double d: acc += (long)d; break;
+                        case DateTime dt: acc += dt.Ticks; break;
+                    }
+                }
+            }
+            return acc;
+        }
+
+        [Benchmark]
+        public long Sylvan()
+        {
+            using var ms = new MemoryStream(_workbook, writable: false);
+            using var reader = ExcelDataReader.Create(ms, ExcelWorkbookType.ExcelXml, new ExcelDataReaderOptions());
+            long acc = 0;
+            do
+            {
+                while (reader.Read())
+                {
+                    for (int i = 0; i < reader.FieldCount; i++)
+                    {
+                        if (reader.IsDBNull(i)) { continue; }
+                        switch (reader.GetExcelDataType(i))
+                        {
+                            case ExcelDataType.String:
+                                acc += reader.GetString(i).Length;
+                                break;
+                            case ExcelDataType.Numeric:
+                                acc += (long)reader.GetDouble(i);
+                                break;
+                            case ExcelDataType.DateTime:
+                                acc += reader.GetDateTime(i).Ticks;
+                                break;
+                            case ExcelDataType.Boolean:
+                            case ExcelDataType.Error:
+                            case ExcelDataType.Null:
+                                break;
+                        }
+                    }
+                }
+            }
+            while (reader.NextResult());
+            return acc;
+        }
     }
 
-    // Generates a self-contained .xlsx in memory: a header row of shared strings plus `rows` data rows
-    // of [shared string, integer, date, float] — enough variety to exercise all the reader's value paths.
+    // Generates a self-contained .xlsx in memory: `rows` data rows of
+    // [shared string, integer, date, float] — exercises all reader value paths.
     internal static class WorkbookGenerator
     {
         private const string Main = "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
@@ -157,4 +211,3 @@ namespace ExcelReader.Benchmarks
         }
     }
 }
-

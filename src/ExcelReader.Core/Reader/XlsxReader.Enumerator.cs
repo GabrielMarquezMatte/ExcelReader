@@ -293,28 +293,19 @@ namespace ExcelReader.Core.Reader
             // "" / "n" -> Number; "s" shared; "inlineStr" inline; "b" bool; "e" error; "str" formula result.
             private static Kind ClassifyKind(ReadOnlySpan<byte> t)
             {
-                if (t.SequenceEqual("s"u8))
+                return t.Length switch
                 {
-                    return Kind.Shared;
-                }
-                if (t.SequenceEqual("inlineStr"u8))
-                {
-                    return Kind.Inline;
-                }
-                if (t.SequenceEqual("b"u8))
-                {
-                    return Kind.Bool;
-                }
-                if (t.SequenceEqual("e"u8))
-                {
-                    return Kind.Error;
-                }
-                if (t.SequenceEqual("str"u8))
-                {
-                    return Kind.Formula;
-                }
-
-                return Kind.Number;
+                    1 => t[0] switch
+                    {
+                        (byte)'s' => Kind.Shared,
+                        (byte)'b' => Kind.Bool,
+                        (byte)'e' => Kind.Error,
+                        _ => Kind.Number,
+                    },
+                    3 => Kind.Formula,   // "str"
+                    9 => Kind.Inline,    // "inlineStr"
+                    _ => Kind.Number,
+                };
             }
 
 
@@ -458,8 +449,8 @@ namespace ExcelReader.Core.Reader
                 }
             }
 
-            // Make room for more bytes (compact consumed prefix, else grow), then read once.
-            private void Fill()
+            // Make room for more bytes: compact consumed prefix, or grow the buffer.
+            private void PrepareBuffer()
             {
                 if (_pos > 0)
                 {
@@ -474,6 +465,11 @@ namespace ExcelReader.Core.Reader
                     ArrayPool<byte>.Shared.Return(_buf);
                     _buf = bigger;
                 }
+            }
+
+            private void Fill()
+            {
+                PrepareBuffer();
                 int n = _sheet!.Read(_buf, _len, _buf.Length - _len);
                 if (n == 0)
                 {
@@ -560,19 +556,7 @@ namespace ExcelReader.Core.Reader
 
             private async ValueTask FillAsync()
             {
-                if (_pos > 0)
-                {
-                    _buf.AsSpan(_pos, _len - _pos).CopyTo(_buf);
-                    _len -= _pos;
-                    _pos = 0;
-                }
-                else if (_len == _buf.Length)
-                {
-                    var bigger = ArrayPool<byte>.Shared.Rent(_buf.Length * 2);
-                    _buf.AsSpan(0, _len).CopyTo(bigger);
-                    ArrayPool<byte>.Shared.Return(_buf);
-                    _buf = bigger;
-                }
+                PrepareBuffer();
                 int n = await _sheet!.ReadAsync(_buf.AsMemory(_len, _buf.Length - _len), _ct).ConfigureAwait(false);
                 if (n == 0)
                 {

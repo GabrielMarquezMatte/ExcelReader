@@ -1,28 +1,31 @@
+using System.Buffers;
 using System.Buffers.Text;
-using System.Collections;
 
 namespace ExcelReader.Core.Reader
 {
     public sealed partial class XlsxReader
     {
+        private static readonly byte[] _numFmtTag = "<numFmt "u8.ToArray();
+        private static readonly byte[] _xfTag = "<xf "u8.ToArray();
+
         // Builds the cellXfs-index -> isDate table from xl/styles.xml. A style is a date when its
         // numFmtId is a builtin date/time format or a custom <numFmt> whose code reads as a date.
         // ponytail: 1900 date system only (see Cell.TryGetDateTime). Add date1904 handling if needed.
-        private static BitArray ParseStyleDateFlags(byte[]? src)
+        private static bool[] ParseStyleDateFlags(byte[]? src)
         {
             if (src is null)
             {
-                return new BitArray(0);
+                return [];
             }
 
             // Custom formats: numFmtId -> isDate(formatCode). Builtin ids (<164) handled by IsBuiltinDate.
             Dictionary<int, bool> custom = new(capacity: 16);
-            foreach (var tag in Tags(src, "<numFmt "u8.ToArray()))
+            foreach (var tag in Tags(src.AsMemory(), _numFmtTag))
             {
-                int id = ParseIntOr(XlsxXml.Attr(tag, " numFmtId=\""u8), -1);
+                int id = ParseIntOr(XlsxXml.Attr(tag.Span, " numFmtId=\""u8), -1);
                 if (id >= 0)
                 {
-                    custom[id] = LooksLikeDateFormat(Decode(XlsxXml.Attr(tag, " formatCode=\""u8)));
+                    custom[id] = LooksLikeDateFormat(Decode(XlsxXml.Attr(tag.Span, " formatCode=\""u8)));
                 }
             }
 
@@ -30,21 +33,21 @@ namespace ExcelReader.Core.Reader
             int region = IdxOf(src, 0, "<cellXfs"u8);
             if (region < 0)
             {
-                return new BitArray(0);
+                return [];
             }
             int open = IdxOf(src, region, (byte)'>');
             int end = IdxOf(src, open, "</cellXfs>"u8);
             if (open < 0 || end < 0)
             {
-                return new BitArray(0);
+                return [];
             }
             List<bool> flags = new(capacity: 16);
-            foreach (var xf in Tags(src[(open + 1)..end], "<xf "u8.ToArray()))
+            foreach (var xf in Tags(src.AsMemory(open + 1, end - open - 1), _xfTag))
             {
-                int numFmtId = ParseIntOr(XlsxXml.Attr(xf, " numFmtId=\""u8), 0);
+                int numFmtId = ParseIntOr(XlsxXml.Attr(xf.Span, " numFmtId=\""u8), 0);
                 flags.Add(custom.TryGetValue(numFmtId, out bool d) ? d : IsBuiltinDateFormat(numFmtId));
             }
-            return new BitArray(flags.ToArray());
+            return flags.ToArray();
         }
 
         // Builtin SpreadsheetML date/time numFmtIds (ECMA-376 §18.8.30, incl. locale variants).
@@ -56,24 +59,40 @@ namespace ExcelReader.Core.Reader
         // True if a format code contains a date/time token (y/m/d/h/s) outside quoted text, [bracketed]
         // sections, and \-escapes. ponytail: heuristic, not a full format parser — upgrade if a format
         // with date letters only inside literals is misclassified.
+        private static readonly SearchValues<char> _dateLetters = SearchValues.Create("yYmMdDhHsS");
 
-        private static bool LooksLikeDateFormat(string code)
+        private static bool LooksLikeDateFormat(ReadOnlySpan<char> code)
         {
+            // Fast SIMD exit: if none of the date letters appear, skip the full parse.
+            if (code.IndexOfAny(_dateLetters) < 0)
+            {
+                return false;
+            }
             int i = 0;
             while (i < code.Length)
             {
                 switch (code[i])
                 {
                     case '"':
-                        i = code.IndexOf('"', i + 1);
-                        if (i < 0) { return false; }
-                        i++;
-                        break;
+                        {
+                            int q = code[(i + 1)..].IndexOf('"');
+                            if (q < 0)
+                            {
+                                return false;
+                            }
+                            i = i + 2 + q;
+                            break;
+                        }
                     case '[':
-                        i = code.IndexOf(']', i + 1);
-                        if (i < 0) { return false; }
-                        i++;
-                        break;
+                        {
+                            int q = code[(i + 1)..].IndexOf(']');
+                            if (q < 0)
+                            {
+                                return false;
+                            }
+                            i = i + 2 + q;
+                            break;
+                        }
                     case '\\':
                         i += 2; // skip the escaped char
                         break;
