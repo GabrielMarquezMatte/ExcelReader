@@ -116,6 +116,60 @@ namespace ExcelReader.Tests
             Assert.Equal(CellType.Number, row[2].Type);
         }
 
+        [Fact]
+        public async Task AsyncReadsSampleFileLikeSyncPath()
+        {
+            var ct = TestContext.Current.CancellationToken;
+            string path = Path.Combine(AppContext.BaseDirectory, "data", "sample.xlsx");
+            await using var reader = await Excel.FromFileAsync(path, ct);
+            await using var e = await reader.GetAsyncEnumeratorAsync(ct);
+
+            int r = 0;
+            while (await e.MoveNextAsync())
+            {
+                var row = e.Current;
+                if (r == 0)
+                {
+                    Assert.Equal("file", row[0].GetString());
+                    Assert.Equal("lines_deleted", row[3].GetString());
+                }
+                else if (r == 1)
+                {
+                    Assert.Equal("global.json", row[0].GetString());
+                    Assert.True(row[1].TryParse(null, out int n));
+                    Assert.Equal(2, n);
+                }
+                r++;
+            }
+            Assert.Equal(3, r);
+        }
+
+        [Fact]
+        public async Task AsyncHandlesBufferGrowthAndDates()
+        {
+            // Inline string far larger than the 64 KB scan buffer exercises FillAsync compaction/grow and
+            // the cross-refill </c> search on the async path; the date cell exercises style detection.
+            var ct = TestContext.Current.CancellationToken;
+            string big = new('x', 100_000);
+            await using var ms = BuildWorkbook(
+                """<row r="1"><c r="A1" s="1"><v>45292</v></c></row>""" +
+                $"""<row r="2"><c r="A2" t="inlineStr"><is><t>{big}</t></is></c></row>""",
+                styles: """<styleSheet><cellXfs count="2"><xf numFmtId="0"/><xf numFmtId="14"/></cellXfs></styleSheet>""");
+
+            await using var reader = await Excel.FromAsync(ms, ct: ct);
+            await using var e = await reader.GetAsyncEnumeratorAsync(ct);
+
+            Assert.True(await e.MoveNextAsync());
+            Assert.Equal(CellType.Date, e.Current[0].Type);
+            Assert.True(e.Current[0].TryGetDateTime(out var d));
+            Assert.Equal(new DateTime(2024, 1, 1, 0, 0, 0, DateTimeKind.Unspecified), d);
+
+            Assert.True(await e.MoveNextAsync());
+            Assert.Equal(big.Length, e.Current[0].GetString().Length);
+
+            Assert.False(await e.MoveNextAsync());
+        }
+
         private static MemoryStream BuildWorkbook(string sheetRows, string? sharedStrings = null, string? styles = null)
         {
             const string main = "http://schemas.openxmlformats.org/spreadsheetml/2006/main";

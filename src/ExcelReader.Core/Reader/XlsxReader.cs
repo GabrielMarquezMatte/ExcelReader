@@ -1,5 +1,6 @@
 using System.Buffers;
 using System.Buffers.Text;
+using System.Collections;
 using System.Diagnostics.CodeAnalysis;
 using System.IO.Compression;
 using ExcelReader.Core.Enums;
@@ -7,13 +8,13 @@ using ExcelReader.Core.ValueObjects;
 
 namespace ExcelReader.Core.Reader
 {
-    public sealed class XlsxReader : IDisposable
+    public sealed class XlsxReader : IDisposable, IAsyncDisposable
     {
         private readonly Stream _stream;
         private readonly bool _leaveOpen;
         private readonly ZipArchive _zip;
         private readonly (string Name, string Path)[] _sheets;
-        private readonly bool[] _styleIsDate; // cellXfs index -> true when that style renders as a date/time
+        private readonly BitArray _styleIsDate; // cellXfs index -> true when that style renders as a date/time
         private int _current;
 
         private byte[] _sharedFlat = [];      // pooled; all decoded shared-string bytes concatenated
@@ -21,17 +22,75 @@ namespace ExcelReader.Core.Reader
         private int _sharedCount;
         private bool _sharedLoaded;
 
+        // Sync open: reads the central directory and workbook/styles parts synchronously.
+        [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP003:Dispose previous before re-assigning",
+            Justification = "Readonly field, first and only assignment in this constructor.")]
         internal XlsxReader(Stream stream, bool leaveOpen)
         {
             _stream = stream;
             _leaveOpen = leaveOpen;
             _zip = new ZipArchive(stream, ZipArchiveMode.Read, leaveOpen: true);
-            _sheets = LoadSheets(_zip);
-            if (_sheets.Length == 0)
+            try
             {
-                throw new InvalidDataException("The workbook contains no sheets.");
+                _sheets = ParseSheets(Bytes(_zip, "xl/workbook.xml"), Bytes(_zip, "xl/_rels/workbook.xml.rels"));
+                if (_sheets.Length == 0)
+                {
+                    throw new InvalidDataException("The workbook contains no sheets.");
+                }
+                _styleIsDate = ParseStyleDateFlags(Bytes(_zip, "xl/styles.xml"));
             }
-            _styleIsDate = LoadStyleDateFlags(_zip);
+            catch
+            {
+                _zip.Dispose();
+                if (!leaveOpen)
+                {
+                    stream.Dispose();
+                }
+                throw;
+            }
+        }
+
+        private XlsxReader(Stream stream, bool leaveOpen, ZipArchive zip,
+            (string Name, string Path)[] sheets, BitArray styleIsDate)
+        {
+            _stream = stream;
+            _leaveOpen = leaveOpen;
+            _zip = zip;
+            _sheets = sheets;
+            _styleIsDate = styleIsDate;
+        }
+
+        // Async open: central directory and parts are read with the .NET 10 async zip APIs.
+        [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP001:Dispose created",
+            Justification = "zip ownership transfers to the returned reader; disposed there or in the catch.")]
+        internal static async ValueTask<XlsxReader> CreateAsync(Stream stream, bool leaveOpen, CancellationToken ct)
+        {
+            ZipArchive? zip = null;
+            try
+            {
+                zip = await ZipArchive.CreateAsync(stream, ZipArchiveMode.Read, leaveOpen: true, entryNameEncoding: null, ct).ConfigureAwait(false);
+                var wb = await BytesAsync(zip, "xl/workbook.xml", ct).ConfigureAwait(false);
+                var rels = await BytesAsync(zip, "xl/_rels/workbook.xml.rels", ct).ConfigureAwait(false);
+                var sheets = ParseSheets(wb, rels);
+                if (sheets.Length == 0)
+                {
+                    throw new InvalidDataException("The workbook contains no sheets.");
+                }
+                var styleIsDate = ParseStyleDateFlags(await BytesAsync(zip, "xl/styles.xml", ct).ConfigureAwait(false));
+                return new XlsxReader(stream, leaveOpen, zip, sheets, styleIsDate);
+            }
+            catch
+            {
+                if (zip is not null)
+                {
+                    await zip.DisposeAsync().ConfigureAwait(false);
+                }
+                if (!leaveOpen)
+                {
+                    await stream.DisposeAsync().ConfigureAwait(false);
+                }
+                throw;
+            }
         }
 
         public string SheetName => _sheets[_current].Name;
@@ -64,12 +123,31 @@ namespace ExcelReader.Core.Reader
             _current = index;
         }
 
+        [SuppressMessage("Performance", "HLQ006:GetEnumerator should return a value type",
+            Justification = "Enumerator is a class so the same type can also expose MoveNextAsync for the async path.")]
         public Enumerator GetEnumerator()
         {
             EnsureSharedLoaded();
             var entry = _zip.GetEntry(_sheets[_current].Path)
                 ?? throw new InvalidDataException($"Worksheet part not found: {_sheets[_current].Path}");
             return new Enumerator(this, entry.Open());
+        }
+
+        /// <summary>
+        /// Streaming async enumerator over the current sheet. Use with a manual loop — <c>Current</c>
+        /// is a ref struct (<c>Row</c>), so <c>await foreach</c> cannot bind it:
+        /// <code>
+        /// await using var e = await reader.GetAsyncEnumeratorAsync(ct);
+        /// while (await e.MoveNextAsync()) { var row = e.Current; /* ... */ }
+        /// </code>
+        /// </summary>
+        public async ValueTask<Enumerator> GetAsyncEnumeratorAsync(CancellationToken ct = default)
+        {
+            await EnsureSharedLoadedAsync(ct).ConfigureAwait(false);
+            var entry = _zip.GetEntry(_sheets[_current].Path)
+                ?? throw new InvalidDataException($"Worksheet part not found: {_sheets[_current].Path}");
+            var sheet = await entry.OpenAsync(ct).ConfigureAwait(false);
+            return new Enumerator(this, sheet, ct);
         }
 
         internal ReadOnlySpan<byte> SharedSpan => _sharedFlat;
@@ -97,22 +175,33 @@ namespace ExcelReader.Core.Reader
             }
         }
 
+        public async ValueTask DisposeAsync()
+        {
+            if (_sharedFlat.Length > 0)
+            {
+                ArrayPool<byte>.Shared.Return(_sharedFlat);
+                _sharedFlat = [];
+            }
+            await _zip.DisposeAsync().ConfigureAwait(false);
+            if (!_leaveOpen)
+            {
+                await _stream.DisposeAsync().ConfigureAwait(false);
+            }
+        }
+
         // --- workbook / shared-strings loading (one-time, small except sharedStrings) ---
 
-        private static (string Name, string Path)[] LoadSheets(ZipArchive zip)
+        private static (string Name, string Path)[] ParseSheets(byte[]? wbBytes, byte[]? relsBytes)
         {
-            var wb = zip.GetEntry("xl/workbook.xml");
-            if (wb is null)
+            if (wbBytes is null)
             {
                 return [];
             }
             // rId -> target part path
             Dictionary<string, string> rels = new(StringComparer.Ordinal);
-            var relsEntry = zip.GetEntry("xl/_rels/workbook.xml.rels");
-            if (relsEntry is not null)
+            if (relsBytes is not null)
             {
-                var rb = ReadAll(relsEntry);
-                foreach (var tag in Tags(rb, "<Relationship"u8.ToArray()))
+                foreach (var tag in Tags(relsBytes, "<Relationship"u8.ToArray()))
                 {
                     var id = Decode(XlsxXml.Attr(tag, " Id=\""u8));
                     var target = Decode(XlsxXml.Attr(tag, " Target=\""u8));
@@ -122,7 +211,6 @@ namespace ExcelReader.Core.Reader
                     }
                 }
             }
-            var wbBytes = ReadAll(wb);
             var sheets = new List<(string, string)>();
             foreach (var tag in Tags(wbBytes, "<sheet "u8.ToArray()))
             {
@@ -152,17 +240,15 @@ namespace ExcelReader.Core.Reader
         // Builds the cellXfs-index -> isDate table from xl/styles.xml. A style is a date when its
         // numFmtId is a builtin date/time format or a custom <numFmt> whose code reads as a date.
         // ponytail: 1900 date system only (see Cell.TryGetDateTime). Add date1904 handling if needed.
-        private static bool[] LoadStyleDateFlags(ZipArchive zip)
+        private static BitArray ParseStyleDateFlags(byte[]? src)
         {
-            var entry = zip.GetEntry("xl/styles.xml");
-            if (entry is null)
+            if (src is null)
             {
-                return [];
+                return new BitArray(0);
             }
-            var src = ReadAll(entry);
 
             // Custom formats: numFmtId -> isDate(formatCode). Builtin ids (<164) handled by IsBuiltinDate.
-            var custom = new Dictionary<int, bool>();
+            Dictionary<int, bool> custom = new(capacity: 16);
             foreach (var tag in Tags(src, "<numFmt "u8.ToArray()))
             {
                 int id = ParseIntOr(XlsxXml.Attr(tag, " numFmtId=\""u8), -1);
@@ -176,21 +262,21 @@ namespace ExcelReader.Core.Reader
             int region = IdxOf(src, 0, "<cellXfs"u8);
             if (region < 0)
             {
-                return [];
+                return new BitArray(0);
             }
             int open = IdxOf(src, region, (byte)'>');
             int end = IdxOf(src, open, "</cellXfs>"u8);
             if (open < 0 || end < 0)
             {
-                return [];
+                return new BitArray(0);
             }
-            var flags = new List<bool>();
+            List<bool> flags = new(capacity: 16);
             foreach (var xf in Tags(src[(open + 1)..end], "<xf "u8.ToArray()))
             {
                 int numFmtId = ParseIntOr(XlsxXml.Attr(xf, " numFmtId=\""u8), 0);
                 flags.Add(custom.TryGetValue(numFmtId, out bool d) ? d : IsBuiltinDateFormat(numFmtId));
             }
-            return [.. flags];
+            return new BitArray(flags.ToArray());
         }
 
         // Builtin SpreadsheetML date/time numFmtIds (ECMA-376 §18.8.30, incl. locale variants).
@@ -247,11 +333,28 @@ namespace ExcelReader.Core.Reader
             }
             _sharedLoaded = true;
             var entry = _zip.GetEntry("xl/sharedStrings.xml");
-            if (entry is null)
+            if (entry is not null)
+            {
+                ParseShared(ReadAll(entry));
+            }
+        }
+
+        private async ValueTask EnsureSharedLoadedAsync(CancellationToken ct)
+        {
+            if (_sharedLoaded)
             {
                 return;
             }
-            var src = ReadAll(entry);
+            _sharedLoaded = true;
+            var entry = _zip.GetEntry("xl/sharedStrings.xml");
+            if (entry is not null)
+            {
+                ParseShared(await ReadAllAsync(entry, ct).ConfigureAwait(false));
+            }
+        }
+
+        private void ParseShared(byte[] src)
+        {
             // Decoded text is never longer than its XML, so src.Length bounds the flat buffer.
             _sharedFlat = ArrayPool<byte>.Shared.Rent(Math.Max(1, src.Length));
             var offsets = new List<int> { 0 };
@@ -289,11 +392,35 @@ namespace ExcelReader.Core.Reader
             _sharedCount = offsets.Count - 1;
         }
 
+        // Whole-part bytes, or null when the part is absent. Sync and async variants share every parser.
+        private static byte[]? Bytes(ZipArchive zip, string name)
+        {
+            var entry = zip.GetEntry(name);
+            return entry is null ? null : ReadAll(entry);
+        }
+
+        private static async ValueTask<byte[]?> BytesAsync(ZipArchive zip, string name, CancellationToken ct)
+        {
+            var entry = zip.GetEntry(name);
+            return entry is null ? null : await ReadAllAsync(entry, ct).ConfigureAwait(false);
+        }
+
         private static byte[] ReadAll(ZipArchiveEntry entry)
         {
             var buf = new byte[entry.Length];
             using var s = entry.Open();
             s.ReadExactly(buf);
+            return buf;
+        }
+
+        private static async ValueTask<byte[]> ReadAllAsync(ZipArchiveEntry entry, CancellationToken ct)
+        {
+            var buf = new byte[entry.Length];
+            var s = await entry.OpenAsync(ct).ConfigureAwait(false);
+            await using (s.ConfigureAwait(false))
+            {
+                await s.ReadExactlyAsync(buf.AsMemory(), ct).ConfigureAwait(false);
+            }
             return buf;
         }
 
@@ -344,8 +471,8 @@ namespace ExcelReader.Core.Reader
         // Forward-only, low-memory worksheet scanner. Streams the sheet through a refillable pooled
         // buffer; a single <c>...</c> element is guaranteed contiguous (the buffer grows if needed).
         [SuppressMessage("Design", "CA1034:Nested types should not be visible",
-            Justification = "Public nested ref-struct enumerator is the standard foreach pattern.")]
-        public ref struct Enumerator : IDisposable
+            Justification = "Public nested enumerator is the standard foreach pattern.")]
+        public sealed class Enumerator : IDisposable, IAsyncDisposable
         {
             private const int InitialBuf = 64 * 1024;
             private const int InitialVals = 4 * 1024;
@@ -355,7 +482,8 @@ namespace ExcelReader.Core.Reader
             [SuppressMessage("Usage", "CA2213:Disposable fields should be disposed", Justification = "Borrowed, not owned.")]
             [SuppressMessage("SharpSource", "SS066:Disposable field is not disposed", Justification = "Borrowed, not owned.")]
             private readonly XlsxReader _reader;
-            // Owned: opened by GetEnumerator for this enumerator alone; disposed in Dispose.
+            private readonly CancellationToken _ct; // honored only by the async path
+            // Owned: opened by Get(Async)Enumerator for this enumerator alone; disposed in Dispose(Async).
             [SuppressMessage("SharpSource", "SS066:Disposable field is not disposed", Justification = "Disposed in Dispose().")]
             private Stream? _sheet;
             private byte[] _buf;
@@ -369,17 +497,23 @@ namespace ExcelReader.Core.Reader
             private int _cellCount;
             private int _nextCol;
 
-            internal Enumerator(XlsxReader reader, Stream sheet)
+            internal Enumerator(XlsxReader reader, Stream sheet, CancellationToken ct = default)
             {
                 _reader = reader;
                 _sheet = sheet;
+                _ct = ct;
                 _buf = ArrayPool<byte>.Shared.Rent(InitialBuf);
                 _vals = ArrayPool<byte>.Shared.Rent(InitialVals);
                 _cells = ArrayPool<CellDesc>.Shared.Rent(InitialCells);
             }
 
-            public readonly Row Current =>
+            public Row Current =>
                 new(_cells.AsSpan(0, _cellCount), _vals.AsSpan(0, _valLen), _reader.SharedSpan);
+
+            // The sync and async row scanners share every span-touching helper below (ClassifyHead,
+            // ClassifyRowHead, ReadCellOpenTag, EmitCell). The two families differ only in whether the
+            // buffer refill (Fill / FillAsync) and the byte searches await — so the span work is factored
+            // into sync helpers that never hold a span across an await.
 
             public bool MoveNext()
             {
@@ -392,32 +526,72 @@ namespace ExcelReader.Core.Reader
                     }
                     _pos = lt;
                     Ensure(12);
-                    var head = _buf.AsSpan(_pos, Math.Min(12, _len - _pos));
-                    if (head.StartsWith("</sheetData"u8) || head.StartsWith("</worksheet"u8))
+                    switch (ClassifyHead())
                     {
-                        return false;
+                        case HeadKind.End:
+                            return false;
+                        case HeadKind.Row:
+                            BeginRow(out bool selfClose);
+                            if (!selfClose)
+                            {
+                                ParseRow();
+                            }
+                            return true;
+                        default:
+                            int skip = IndexOf((byte)'>');
+                            if (skip < 0)
+                            {
+                                return false;
+                            }
+                            _pos = skip + 1;
+                            break;
                     }
-                    if (head.StartsWith("<row"u8) && (head.Length < 5 || IsBoundary(head[4])))
-                    {
-                        int gt = IndexOf((byte)'>');
-                        bool selfClose = _buf[gt - 1] == '/';
-                        _pos = gt + 1;
-                        _cellCount = 0;
-                        _valLen = 0;
-                        _nextCol = 0;
-                        if (!selfClose)
-                        {
-                            ParseRow();
-                        }
-                        return true;
-                    }
-                    int skip = IndexOf((byte)'>');
-                    if (skip < 0)
-                    {
-                        return false;
-                    }
-                    _pos = skip + 1;
                 }
+            }
+
+            public async ValueTask<bool> MoveNextAsync()
+            {
+                while (true)
+                {
+                    int lt = await IndexOfAsync((byte)'<').ConfigureAwait(false);
+                    if (lt < 0)
+                    {
+                        return false;
+                    }
+                    _pos = lt;
+                    await EnsureAsync(12).ConfigureAwait(false);
+                    switch (ClassifyHead())
+                    {
+                        case HeadKind.End:
+                            return false;
+                        case HeadKind.Row:
+                            BeginRow(out bool selfClose);
+                            if (!selfClose)
+                            {
+                                await ParseRowAsync().ConfigureAwait(false);
+                            }
+                            return true;
+                        default:
+                            int skip = await IndexOfAsync((byte)'>').ConfigureAwait(false);
+                            if (skip < 0)
+                            {
+                                return false;
+                            }
+                            _pos = skip + 1;
+                            break;
+                    }
+                }
+            }
+
+            // Consumes the <row ...> open tag and resets per-row state. Call only after ClassifyHead()==Row.
+            private void BeginRow(out bool selfClose)
+            {
+                int gt = IndexOf((byte)'>'); // open tag already fully buffered by the Ensure(12) above
+                selfClose = _buf[gt - 1] == '/';
+                _pos = gt + 1;
+                _cellCount = 0;
+                _valLen = 0;
+                _nextCol = 0;
             }
 
             private void ParseRow()
@@ -431,25 +605,55 @@ namespace ExcelReader.Core.Reader
                     }
                     _pos = lt;
                     Ensure(6);
-                    var head = _buf.AsSpan(_pos, Math.Min(6, _len - _pos));
-                    if (head.StartsWith("</row"u8))
+                    switch (ClassifyRowHead())
                     {
-                        int gt = IndexOf((byte)'>');
-                        _pos = gt < 0 ? _len : gt + 1;
+                        case RowHead.EndRow:
+                            int gt = IndexOf((byte)'>');
+                            _pos = gt < 0 ? _len : gt + 1;
+                            return;
+                        case RowHead.Cell:
+                            ParseCell();
+                            break;
+                        default:
+                            int skip = IndexOf((byte)'>');
+                            if (skip < 0)
+                            {
+                                return;
+                            }
+                            _pos = skip + 1;
+                            break;
+                    }
+                }
+            }
+
+            private async ValueTask ParseRowAsync()
+            {
+                while (true)
+                {
+                    int lt = await IndexOfAsync((byte)'<').ConfigureAwait(false);
+                    if (lt < 0)
+                    {
                         return;
                     }
-                    if (head.StartsWith("<c"u8) && (head.Length < 3 || IsBoundary(head[2])))
+                    _pos = lt;
+                    await EnsureAsync(6).ConfigureAwait(false);
+                    switch (ClassifyRowHead())
                     {
-                        ParseCell();
-                    }
-                    else
-                    {
-                        int gt = IndexOf((byte)'>');
-                        if (gt < 0)
-                        {
+                        case RowHead.EndRow:
+                            int gt = await IndexOfAsync((byte)'>').ConfigureAwait(false);
+                            _pos = gt < 0 ? _len : gt + 1;
                             return;
-                        }
-                        _pos = gt + 1;
+                        case RowHead.Cell:
+                            await ParseCellAsync().ConfigureAwait(false);
+                            break;
+                        default:
+                            int skip = await IndexOfAsync((byte)'>').ConfigureAwait(false);
+                            if (skip < 0)
+                            {
+                                return;
+                            }
+                            _pos = skip + 1;
+                            break;
                     }
                 }
             }
@@ -457,6 +661,77 @@ namespace ExcelReader.Core.Reader
             private void ParseCell()
             {
                 int gt = IndexOf((byte)'>'); // end of the <c ...> open tag (buffered, no shift yet)
+                var header = ReadCellOpenTag(gt);
+                if (header.SelfClose)
+                {
+                    return; // empty cell — store nothing; _pos already past the tag
+                }
+                int cEnd = IndexOfSeq("</c>"u8); // ensures whole cell contiguous; shifts _pos consistently
+                if (cEnd < 0)
+                {
+                    _pos = _len;
+                    return;
+                }
+                EmitCell(header.Kind, _buf.AsSpan(_pos, cEnd - _pos), header.Col, header.Style);
+                _pos = cEnd + 4;
+            }
+
+            private async ValueTask ParseCellAsync()
+            {
+                int gt = await IndexOfAsync((byte)'>').ConfigureAwait(false);
+                var header = ReadCellOpenTag(gt); // sync: no span survives into the next await
+                if (header.SelfClose)
+                {
+                    return;
+                }
+                int cEnd = await IndexOfCloseCellAsync().ConfigureAwait(false);
+                if (cEnd < 0)
+                {
+                    _pos = _len;
+                    return;
+                }
+                EmitCell(header.Kind, _buf.AsSpan(_pos, cEnd - _pos), header.Col, header.Style);
+                _pos = cEnd + 4;
+            }
+
+            private enum HeadKind { End, Row, Skip }
+
+            private HeadKind ClassifyHead()
+            {
+                var head = _buf.AsSpan(_pos, Math.Min(12, _len - _pos));
+                if (head.StartsWith("</sheetData"u8) || head.StartsWith("</worksheet"u8))
+                {
+                    return HeadKind.End;
+                }
+                if (head.StartsWith("<row"u8) && (head.Length < 5 || IsBoundary(head[4])))
+                {
+                    return HeadKind.Row;
+                }
+                return HeadKind.Skip;
+            }
+
+            private enum RowHead { EndRow, Cell, Other }
+
+            private RowHead ClassifyRowHead()
+            {
+                var head = _buf.AsSpan(_pos, Math.Min(6, _len - _pos));
+                if (head.StartsWith("</row"u8))
+                {
+                    return RowHead.EndRow;
+                }
+                if (head.StartsWith("<c"u8) && (head.Length < 3 || IsBoundary(head[2])))
+                {
+                    return RowHead.Cell;
+                }
+                return RowHead.Other;
+            }
+
+            private readonly record struct CellHeader(int Col, int Style, Kind Kind, bool SelfClose);
+
+            // Parses the <c ...> open tag ending at `gt`, advances _pos past it, and returns the extracted
+            // (non-span) attributes. Holds spans only within this synchronous call, so callers may await after.
+            private CellHeader ReadCellOpenTag(int gt)
+            {
                 var open = _buf.AsSpan(_pos, gt - _pos + 1);
                 var rRef = XlsxXml.Attr(open, " r=\""u8);
                 var sVal = XlsxXml.Attr(open, " s=\""u8);
@@ -469,24 +744,10 @@ namespace ExcelReader.Core.Reader
                 }
                 _nextCol = col + 1;
                 int style = ParseInt(sVal);
-                var kind = ClassifyKind(tVal); // capture before any refill invalidates `open`/`tVal`
+                var kind = ClassifyKind(tVal);
                 bool selfClose = _buf[gt - 1] == '/';
-                if (selfClose)
-                {
-                    _pos = gt + 1; // empty cell — store nothing
-                    return;
-                }
-
-                _pos = gt + 1; // consume open tag; _pos now at inner start
-                int cEnd = IndexOfSeq("</c>"u8); // ensures whole cell contiguous; shifts _pos consistently
-                if (cEnd < 0)
-                {
-                    _pos = _len;
-                    return;
-                }
-                var inner = _buf.AsSpan(_pos, cEnd - _pos);
-                EmitCell(kind, inner, col, style);
-                _pos = cEnd + 4;
+                _pos = gt + 1; // consume open tag; _pos now at inner start (or next element if self-closed)
+                return new CellHeader(col, style, kind, selfClose);
             }
 
             private enum Kind { Number, Shared, Inline, Bool, Error, Formula }
@@ -686,12 +947,102 @@ namespace ExcelReader.Core.Reader
                 }
             }
 
+            // Async twins of the search/refill primitives. Each searches the buffered window first and
+            // only awaits a refill on a miss, so no span is ever held across the await.
+
+            private async ValueTask<int> IndexOfAsync(byte b)
+            {
+                while (true)
+                {
+                    int rel = _buf.AsSpan(_pos, _len - _pos).IndexOf(b);
+                    if (rel >= 0)
+                    {
+                        return _pos + rel;
+                    }
+                    if (_eof)
+                    {
+                        return -1;
+                    }
+                    await FillAsync().ConfigureAwait(false);
+                }
+            }
+
+            // Only one multi-byte terminator is searched on the async path, so it's hardcoded rather than
+            // taking a ReadOnlySpan<byte> (which can't be an async method parameter).
+            private async ValueTask<int> IndexOfCloseCellAsync()
+            {
+                while (true)
+                {
+                    int rel = _buf.AsSpan(_pos, _len - _pos).IndexOf("</c>"u8);
+                    if (rel >= 0)
+                    {
+                        return _pos + rel;
+                    }
+                    if (_eof)
+                    {
+                        return -1;
+                    }
+                    await FillAsync().ConfigureAwait(false);
+                }
+            }
+
+            private async ValueTask EnsureAsync(int n)
+            {
+                while (_len - _pos < n && !_eof)
+                {
+                    await FillAsync().ConfigureAwait(false);
+                }
+            }
+
+            private async ValueTask FillAsync()
+            {
+                if (_pos > 0)
+                {
+                    _buf.AsSpan(_pos, _len - _pos).CopyTo(_buf);
+                    _len -= _pos;
+                    _pos = 0;
+                }
+                else if (_len == _buf.Length)
+                {
+                    var bigger = ArrayPool<byte>.Shared.Rent(_buf.Length * 2);
+                    _buf.AsSpan(0, _len).CopyTo(bigger);
+                    ArrayPool<byte>.Shared.Return(_buf);
+                    _buf = bigger;
+                }
+                int n = await _sheet!.ReadAsync(_buf.AsMemory(_len, _buf.Length - _len), _ct).ConfigureAwait(false);
+                if (n == 0)
+                {
+                    _eof = true;
+                }
+                else
+                {
+                    _len += n;
+                }
+            }
+
             [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP007:Don't dispose injected",
                 Justification = "_sheet is opened for this enumerator and owned by it.")]
             public void Dispose()
             {
                 _sheet?.Dispose();
                 _sheet = null;
+                ReturnBuffers();
+            }
+
+            [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP007:Don't dispose injected",
+                Justification = "_sheet is opened for this enumerator and owned by it.")]
+            public async ValueTask DisposeAsync()
+            {
+                if (_sheet is not null)
+                {
+                    await _sheet.DisposeAsync().ConfigureAwait(false);
+                    _sheet = null;
+                }
+                ReturnBuffers();
+            }
+
+            private void ReturnBuffers()
+            {
                 if (_buf.Length > 0)
                 {
                     ArrayPool<byte>.Shared.Return(_buf);

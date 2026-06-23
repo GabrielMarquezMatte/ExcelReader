@@ -7,6 +7,8 @@
     <RootNamespace>ExcelReader.Tests</RootNamespace>
     <TargetFramework>net10.0</TargetFramework>
     <TestingPlatformDotnetTestSupport>true</TestingPlatformDotnetTestSupport>
+    <!-- CA2007: ConfigureAwait is not needed in test code (no captured sync context). -->
+    <NoWarn>$(NoWarn);CA2007</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>
