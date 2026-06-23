@@ -89,6 +89,22 @@ namespace ExcelReader.Tests
         }
 
         [Fact]
+        public void DecodePassesThroughLoneAmpersandAndUnknownEntities()
+        {
+            // Exercises Decode's bulk-copy paths: a '&' with no terminator, and an unrecognized entity.
+            using var ms = BuildWorkbook(
+                """<row r="1"><c r="A1" t="s"><v>0</v></c><c r="B1" t="s"><v>1</v></c></row>""",
+                sharedStrings: "<si><t>a&b</t></si><si><t>x&foo;y</t></si>");
+
+            using var reader = Excel.From(ms);
+            using var e = reader.GetEnumerator();
+            Assert.True(e.MoveNext());
+            var row = e.Current;
+            Assert.Equal("a&b", row[0].GetString());
+            Assert.Equal("x&foo;y", row[1].GetString());
+        }
+
+        [Fact]
         public void DetectsDateStylesAndConvertsSerial()
         {
             // s="1" -> cellXfs[1] -> builtin numFmtId 14 (date); s="2" -> custom 164 (date); s="0" -> General.
