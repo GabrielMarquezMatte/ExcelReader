@@ -1,4 +1,5 @@
 using System.Diagnostics.CodeAnalysis;
+using System.Globalization;
 using System.IO.Compression;
 using System.Text;
 using ExcelReader.Core.Writer.Internal;
@@ -15,6 +16,9 @@ namespace ExcelReader.Core.Writer
         private readonly ZipArchive _zip;
         private readonly string _name;
         private readonly int _sheetId;
+        private readonly CompressionLevel _compression;
+        // Reused per row to format "<row r="N">" without allocating: 8 prefix + 7 digits + 2 suffix.
+        private readonly char[] _rowOpenBuf = new char[24];
         [SuppressMessage("SharpSource", "SS066:DisposableFieldIsNotDisposed",
             Justification = "StreamWriter is explicitly disposed in EndAsync via DisposeAsync.")]
         private StreamWriter? _xml;
@@ -22,12 +26,13 @@ namespace ExcelReader.Core.Writer
         private WriterState _state = WriterState.Created;
         private bool _rowActive;
 
-        internal SheetWriter(WorkbookWriter owner, ZipArchive zip, string name, int sheetId)
+        internal SheetWriter(WorkbookWriter owner, ZipArchive zip, string name, int sheetId, CompressionLevel compression)
         {
             _owner = owner;
             _zip = zip;
             _name = name;
             _sheetId = sheetId;
+            _compression = compression;
         }
 
         internal string Name => _name;
@@ -51,7 +56,7 @@ namespace ExcelReader.Core.Writer
                 throw new InvalidOperationException("SheetWriter has already been started.");
             }
             ct.ThrowIfCancellationRequested();
-            ZipArchiveEntry entry = _zip.CreateEntry($"xl/worksheets/sheet{_sheetId}.xml", CompressionLevel.Optimal);
+            ZipArchiveEntry entry = _zip.CreateEntry($"xl/worksheets/sheet{_sheetId}.xml", _compression);
             Stream stream = entry.Open();
             _xml = new StreamWriter(stream, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false), leaveOpen: false);
             await _xml.WriteAsync(
@@ -75,7 +80,13 @@ namespace ExcelReader.Core.Writer
             ct.ThrowIfCancellationRequested();
             _rowNumber++;
             _rowActive = true;
-            await _xml!.WriteAsync($"<row r=\"{_rowNumber}\">").ConfigureAwait(false);
+            "<row r=\"".CopyTo(_rowOpenBuf);
+            int len = 8;
+            _rowNumber.TryFormat(_rowOpenBuf.AsSpan(len), out int digits, default, CultureInfo.InvariantCulture);
+            len += digits;
+            _rowOpenBuf[len++] = '"';
+            _rowOpenBuf[len++] = '>';
+            await _xml!.WriteAsync(_rowOpenBuf.AsMemory(0, len), ct).ConfigureAwait(false);
             return new RowWriter(this, _xml!, _rowNumber);
         }
 

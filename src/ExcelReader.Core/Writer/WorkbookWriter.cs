@@ -13,17 +13,19 @@ namespace ExcelReader.Core.Writer
         private readonly ZipArchive _zip;
         private readonly Stream _stream;
         private readonly bool _leaveOpen;
+        private readonly CompressionLevel _compression;
         private readonly List<(string Name, int SheetId)> _sheets = [];
         private WriterState _state = WriterState.Created;
         private bool _sheetActive;
         private SheetWriter? _activeSheet;
         private bool _disposed;
 
-        private WorkbookWriter(ZipArchive zip, Stream stream, bool leaveOpen)
+        private WorkbookWriter(ZipArchive zip, Stream stream, bool leaveOpen, CompressionLevel compression)
         {
             _zip = zip;
             _stream = stream;
             _leaveOpen = leaveOpen;
+            _compression = compression;
         }
 
         [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP001:Dispose created",
@@ -31,12 +33,13 @@ namespace ExcelReader.Core.Writer
         [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
             Justification = "WorkbookWriter takes ownership of ZipArchive and disposes it in DisposeAsync/EndAsync.")]
         public static ValueTask<WorkbookWriter> CreateAsync(
-            Stream stream, bool leaveOpen = false, CancellationToken ct = default)
+            Stream stream, bool leaveOpen = false,
+            CompressionLevel compression = CompressionLevel.Fastest, CancellationToken ct = default)
         {
             ArgumentNullException.ThrowIfNull(stream);
             ct.ThrowIfCancellationRequested();
             ZipArchive zip = new(stream, ZipArchiveMode.Create, leaveOpen: true);
-            return ValueTask.FromResult(new WorkbookWriter(zip, stream, leaveOpen));
+            return ValueTask.FromResult(new WorkbookWriter(zip, stream, leaveOpen, compression));
         }
 
         public ValueTask StartAsync(CancellationToken ct = default)
@@ -65,7 +68,7 @@ namespace ExcelReader.Core.Writer
             }
             _sheetActive = true;
             int sheetId = _sheets.Count + 1;
-            _activeSheet = new SheetWriter(this, _zip, name, sheetId);
+            _activeSheet = new SheetWriter(this, _zip, name, sheetId, _compression);
             return _activeSheet;
         }
 
@@ -141,7 +144,7 @@ namespace ExcelReader.Core.Writer
             Justification = "See AsyncFixer02 justification above.")]
         private async ValueTask WriteRootRelsAsync(CancellationToken ct)
         {
-            ZipArchiveEntry entry = _zip.CreateEntry("_rels/.rels", CompressionLevel.Optimal);
+            ZipArchiveEntry entry = _zip.CreateEntry("_rels/.rels", _compression);
             Stream stream = entry.Open();
             using StreamWriter xml = new(stream, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false), leaveOpen: false);
             await xml.WriteAsync(
@@ -168,7 +171,7 @@ namespace ExcelReader.Core.Writer
             Justification = "See AsyncFixer02 justification above.")]
         private async ValueTask WriteStylesAsync(CancellationToken ct)
         {
-            ZipArchiveEntry entry = _zip.CreateEntry("xl/styles.xml", CompressionLevel.Optimal);
+            ZipArchiveEntry entry = _zip.CreateEntry("xl/styles.xml", _compression);
             Stream stream = entry.Open();
             using StreamWriter xml = new(stream, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false), leaveOpen: false);
             await xml.WriteAsync(
@@ -201,7 +204,7 @@ namespace ExcelReader.Core.Writer
             Justification = "See AsyncFixer02 justification above.")]
         private async ValueTask WriteWorkbookAsync(CancellationToken ct)
         {
-            ZipArchiveEntry entry = _zip.CreateEntry("xl/workbook.xml", CompressionLevel.Optimal);
+            ZipArchiveEntry entry = _zip.CreateEntry("xl/workbook.xml", _compression);
             Stream stream = entry.Open();
             using StreamWriter xml = new(stream, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false), leaveOpen: false);
             StringBuilder sb = new();
@@ -231,7 +234,7 @@ namespace ExcelReader.Core.Writer
             Justification = "See AsyncFixer02 justification above.")]
         private async ValueTask WriteWorkbookRelsAsync(CancellationToken ct)
         {
-            ZipArchiveEntry entry = _zip.CreateEntry("xl/_rels/workbook.xml.rels", CompressionLevel.Optimal);
+            ZipArchiveEntry entry = _zip.CreateEntry("xl/_rels/workbook.xml.rels", _compression);
             Stream stream = entry.Open();
             using StreamWriter xml = new(stream, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false), leaveOpen: false);
             StringBuilder sb = new();
@@ -261,7 +264,7 @@ namespace ExcelReader.Core.Writer
             Justification = "See AsyncFixer02 justification above.")]
         private async ValueTask WriteContentTypesAsync(CancellationToken ct)
         {
-            ZipArchiveEntry entry = _zip.CreateEntry("[Content_Types].xml", CompressionLevel.Optimal);
+            ZipArchiveEntry entry = _zip.CreateEntry("[Content_Types].xml", _compression);
             Stream stream = entry.Open();
             using StreamWriter xml = new(stream, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false), leaveOpen: false);
             StringBuilder sb = new();
