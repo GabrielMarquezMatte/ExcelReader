@@ -1,0 +1,104 @@
+name: Benchmarks -> PR Comment
+
+on:
+  pull_request:
+    branches: [master, develop]
+    types: [opened, synchronize, reopened]
+
+concurrency:
+  group: benchmark-pr-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  benchmark:
+    name: Run (${{ matrix.group.name }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        group:
+          - name: read
+            filter: ExcelReader.Benchmarks.ReadBenchmark.*
+          - name: parse
+            filter: ExcelReader.Benchmarks.ParseBenchmark.*
+          - name: write
+            filter: ExcelReader.Benchmarks.WriteBenchmark.*
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Cache NuGet packages
+        uses: actions/cache@v5
+        with:
+          path: ~/.nuget/packages
+          key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj', '**/Directory.Build.props') }}
+          restore-keys: |
+            ${{ runner.os }}-nuget-
+
+      - name: Restore
+        run: dotnet restore tests/ExcelReader.Benchmarks/ExcelReader.Benchmarks.csproj
+
+      - name: Build (Release)
+        run: dotnet build tests/ExcelReader.Benchmarks/ExcelReader.Benchmarks.csproj --configuration Release --no-restore
+
+      - name: Run benchmarks
+        run: |
+          IFS=' ' read -ra patterns <<< '${{ matrix.group.filter }}'
+          dotnet run --project tests/ExcelReader.Benchmarks/ExcelReader.Benchmarks.csproj \
+            --configuration Release --no-build \
+            -- --filter "${patterns[@]}" --warmupCount 1 --iterationCount 5
+
+      - name: Upload markdown results
+        uses: actions/upload-artifact@v7
+        with:
+          name: bench-md-${{ matrix.group.name }}
+          path: BenchmarkDotNet.Artifacts/results/*-report-github.md
+          retention-days: 1
+
+  comment:
+    name: Post PR Comment
+    needs: benchmark
+    if: always() && needs.benchmark.result != 'cancelled'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download all markdown results
+        uses: actions/download-artifact@v8
+        with:
+          pattern: bench-md-*
+          merge-multiple: true
+          path: results/
+
+      - name: Build comment body
+        id: build
+        run: |
+          {
+            echo 'body<<BENCHMARK_EOF'
+            echo '## Benchmark Results'
+            echo ''
+            echo '_Measured on `ubuntu-latest` (GitHub Actions). Runner noise may affect absolute numbers; use these for relative comparisons within a PR._'
+            echo ''
+            for f in results/*-report-github.md; do
+              [ -f "$f" ] || continue
+              name=$(basename "$f" -report-github.md)
+              echo "### $name"
+              echo ''
+              cat "$f"
+              echo ''
+            done
+            echo 'BENCHMARK_EOF'
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Post (or update) PR comment
+        uses: marocchino/sticky-pull-request-comment@v3
+        with:
+          header: benchmarks
+          message: ${{ steps.build.outputs.body }}

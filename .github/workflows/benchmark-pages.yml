@@ -1,0 +1,98 @@
+name: Benchmarks -> GitHub Pages
+
+on:
+  push:
+    branches: [master]
+
+concurrency:
+  group: benchmark-pages
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+jobs:
+  benchmark:
+    name: Run (${{ matrix.group.name }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        group:
+          - name: read
+            filter: ExcelReader.Benchmarks.ReadBenchmark.*
+          - name: parse
+            filter: ExcelReader.Benchmarks.ParseBenchmark.*
+          - name: write
+            filter: ExcelReader.Benchmarks.WriteBenchmark.*
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Cache NuGet packages
+        uses: actions/cache@v5
+        with:
+          path: ~/.nuget/packages
+          key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj', '**/Directory.Build.props') }}
+          restore-keys: |
+            ${{ runner.os }}-nuget-
+
+      - name: Restore
+        run: dotnet restore tests/ExcelReader.Benchmarks/ExcelReader.Benchmarks.csproj
+
+      - name: Build (Release)
+        run: dotnet build tests/ExcelReader.Benchmarks/ExcelReader.Benchmarks.csproj --configuration Release --no-restore
+
+      - name: Run benchmarks
+        run: |
+          IFS=' ' read -ra patterns <<< '${{ matrix.group.filter }}'
+          dotnet run --project tests/ExcelReader.Benchmarks/ExcelReader.Benchmarks.csproj \
+            --configuration Release --no-build \
+            -- --filter "${patterns[@]}" --warmupCount 3 --iterationCount 10
+
+      - name: Upload JSON results
+        uses: actions/upload-artifact@v7
+        with:
+          name: bench-json-${{ matrix.group.name }}
+          path: BenchmarkDotNet.Artifacts/results/*-report-full.json
+          retention-days: 1
+
+  publish:
+    name: Publish to Pages
+    needs: benchmark
+    if: always() && needs.benchmark.result != 'cancelled'
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Download all JSON results
+        uses: actions/download-artifact@v8
+        with:
+          pattern: bench-json-*
+          merge-multiple: true
+          path: results/
+
+      - name: Combine JSON files
+        run: |
+          jq -s '{
+            "Title": "ExcelReader Benchmarks",
+            "Benchmarks": [.[].Benchmarks[]]
+          }' results/*.json > combined-report.json
+
+      - name: Publish to GitHub Pages
+        uses: benchmark-action/github-action-benchmark@v1
+        with:
+          tool: benchmarkdotnet
+          output-file-path: combined-report.json
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          auto-push: true
+          gh-pages-branch: gh-pages
+          benchmark-data-dir-path: dev/bench
+          alert-threshold: '150%'
+          comment-on-alert: true
+          fail-on-alert: false

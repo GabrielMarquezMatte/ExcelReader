@@ -1,0 +1,97 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [ master ]
+  push:
+    branches: [ master ]
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Build & Test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Cache NuGet packages
+        uses: actions/cache@v5
+        with:
+          path: ~/.nuget/packages
+          key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj', '**/Directory.Build.props') }}
+          restore-keys: |
+            ${{ runner.os }}-nuget-
+
+      - name: Restore
+        run: dotnet restore ExcelReader.slnx
+
+      - name: Build (Release)
+        run: dotnet build ExcelReader.slnx --configuration Release --no-restore -p:DeterministicSourcePaths=false
+
+      - name: Test (Release) + collect coverage
+        run: >-
+          dotnet test --project tests/ExcelReader.Tests/ExcelReader.Tests.csproj
+          --results-directory ./TestResults
+          --configuration Release
+          --verbosity normal
+          --no-build
+          --
+          --report-xunit-trx
+          --coverage
+          --coverage-output-format cobertura
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: test-results-${{ matrix.os }}
+          path: ./TestResults/**/*.trx
+          if-no-files-found: ignore
+
+      - name: Upload coverage to Codecov
+        if: matrix.os == 'ubuntu-latest'
+        uses: codecov/codecov-action@v7
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: ./TestResults/*.cobertura.xml
+          fail_ci_if_error: false
+
+  audit:
+    name: Dependency audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Restore
+        run: dotnet restore ExcelReader.slnx
+
+      - name: Check for vulnerable packages
+        run: |
+          echo "Scanning for known-vulnerable packages..."
+          output=$(dotnet list ExcelReader.slnx package --vulnerable --include-transitive)
+          echo "$output"
+          if echo "$output" | grep -q -E '\b(High|Critical)\b'; then
+            echo "::error::High or Critical severity vulnerability found in dependencies."
+            exit 1
+          fi
