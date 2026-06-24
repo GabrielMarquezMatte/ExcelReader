@@ -1,0 +1,40 @@
+version: 2
+updates:
+  - package-ecosystem: nuget
+    directory: "/"
+    target-branch: develop
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 10
+    groups:
+      analyzers:
+        patterns:
+          - "*Analyzer*"
+          - "*.Analyzers"
+          - "SonarAnalyzer.*"
+          - "Roslynator.*"
+          - "Meziantou.Analyzer"
+          - "SharpSource"
+          - "AsyncFixer"
+      test:
+        patterns:
+          - "xunit*"
+          - "Microsoft.NET.Test.Sdk"
+          - "coverlet.*"
+      benchmarks:
+        patterns:
+          - "BenchmarkDotNet"
+          - "MiniExcel"
+          - "Sylvan.*"
+    labels:
+      - dependencies
+
+  - package-ecosystem: github-actions
+    directory: "/"
+    target-branch: develop
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+      - ci
