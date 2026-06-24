@@ -3,8 +3,12 @@ using System.Diagnostics.CodeAnalysis;
 
 namespace ExcelReader.Core.Reader
 {
+    // Parses the OLE/CFB container metadata (header, FAT, directory, mini-FAT/stream) by seeking
+    // a seekable source, never materializing the whole file. The Workbook stream is then handed
+    // back as a WorkbookStream that reads its sectors on demand. Non-seekable sources are buffered
+    // into a MemoryStream first (rare fallback, same cost as before).
     [ExcludeFromCodeCoverage(Justification = "Covered through XlsReader integration tests; most uncovered paths are corrupt-OLE guard rails.")]
-    internal sealed class XlsCompoundFile
+    internal static class XlsCompoundFile
     {
         private const int HeaderSize = 512;
         private const int EndOfChain = unchecked((int)0xFFFFFFFE);
@@ -12,255 +16,205 @@ namespace ExcelReader.Core.Reader
         private const int FreeSector = unchecked((int)0xFFFFFFFF);
         private static readonly byte[] _signature = [0xD0, 0xCF, 0x11, 0xE0, 0xA1, 0xB1, 0x1A, 0xE1];
 
-        private readonly byte[] _bytes;
-        private readonly int _sectorSize;
-        private readonly int _miniSectorSize;
-        private readonly int _miniCutoff;
-        private readonly int[] _fat;
-        private readonly int[] _miniFat;
-        private readonly DirectoryEntry[] _entries;
-        private readonly byte[] _miniStream;
-
-        private XlsCompoundFile(
-            byte[] bytes,
-            int sectorSize,
-            int miniSectorSize,
-            int miniCutoff,
-            int[] fat,
-            int[] miniFat,
-            DirectoryEntry[] entries,
-            byte[] miniStream)
+        internal static WorkbookStream OpenWorkbook(Stream stream, bool leaveOpen)
         {
-            _bytes = bytes;
-            _sectorSize = sectorSize;
-            _miniSectorSize = miniSectorSize;
-            _miniCutoff = miniCutoff;
-            _fat = fat;
-            _miniFat = miniFat;
-            _entries = entries;
-            _miniStream = miniStream;
-        }
-
-        internal static XlsCompoundFile Open(Stream stream, bool leaveOpen)
-        {
+            (Stream source, bool ownsSource) = EnsureSeekable(stream, leaveOpen);
             try
             {
-                if (TryGetExactLength(stream, out int length))
-                {
-                    byte[] buffer = new byte[length];
-                    stream.ReadExactly(buffer);
-                    return Open(buffer);
-                }
-                using MemoryStream ms = new();
-                stream.CopyTo(ms);
-                return Open(ms.ToArray());
+                return BuildWorkbook(source, ownsSource);
             }
-            finally
+            catch
             {
-                if (!leaveOpen)
+                if (ownsSource)
                 {
-                    stream.Dispose();
+                    source.Dispose();
                 }
+                throw;
             }
         }
 
-        internal static async ValueTask<XlsCompoundFile> OpenAsync(Stream stream, bool leaveOpen, CancellationToken ct)
+        internal static async ValueTask<WorkbookStream> OpenWorkbookAsync(Stream stream, bool leaveOpen, CancellationToken ct)
         {
+            (Stream source, bool ownsSource) = await EnsureSeekableAsync(stream, leaveOpen, ct).ConfigureAwait(false);
             try
             {
-                if (TryGetExactLength(stream, out int length))
-                {
-                    byte[] buffer = new byte[length];
-                    await stream.ReadExactlyAsync(buffer, ct).ConfigureAwait(false);
-                    return Open(buffer);
-                }
-                MemoryStream ms = new();
-                await using (ms.ConfigureAwait(false))
-                {
-                    await stream.CopyToAsync(ms, ct).ConfigureAwait(false);
-                    return Open(ms.ToArray());
-                }
+                return BuildWorkbook(source, ownsSource);
             }
-            finally
+            catch
             {
-                if (!leaveOpen)
+                if (ownsSource)
                 {
-                    await stream.DisposeAsync().ConfigureAwait(false);
+                    await source.DisposeAsync().ConfigureAwait(false);
                 }
+                throw;
             }
         }
 
-        private static bool TryGetExactLength(Stream stream, out int length)
+        private static (Stream Source, bool OwnsSource) EnsureSeekable(Stream stream, bool leaveOpen)
         {
-            length = 0;
-            if (!stream.CanSeek)
+            if (stream.CanSeek)
             {
-                return false;
+                return (stream, !leaveOpen);
             }
-            long remaining = stream.Length - stream.Position;
-            if (remaining is <= 0 or > int.MaxValue)
+            MemoryStream ms = new();
+            stream.CopyTo(ms);
+            if (!leaveOpen)
             {
-                return false;
+                stream.Dispose();
             }
-            length = (int)remaining;
-            return true;
+            ms.Position = 0;
+            return (ms, true);
         }
 
-        private static XlsCompoundFile Open(byte[] bytes)
+        private static async ValueTask<(Stream Source, bool OwnsSource)> EnsureSeekableAsync(Stream stream, bool leaveOpen, CancellationToken ct)
         {
-            if (bytes.Length < HeaderSize || !bytes.AsSpan(0, _signature.Length).SequenceEqual(_signature))
+            if (stream.CanSeek)
+            {
+                return (stream, !leaveOpen);
+            }
+            MemoryStream ms = new();
+            await stream.CopyToAsync(ms, ct).ConfigureAwait(false);
+            if (!leaveOpen)
+            {
+                await stream.DisposeAsync().ConfigureAwait(false);
+            }
+            ms.Position = 0;
+            return (ms, true);
+        }
+
+        private static WorkbookStream BuildWorkbook(Stream source, bool ownsSource)
+        {
+            if (source.Length < HeaderSize)
+            {
+                throw new InvalidDataException("The stream is not an OLE compound document.");
+            }
+            byte[] header = new byte[HeaderSize];
+            ReadAt(source, 0, header);
+            if (!header.AsSpan(0, _signature.Length).SequenceEqual(_signature))
             {
                 throw new InvalidDataException("The stream is not an OLE compound document.");
             }
 
-            int sectorSize = 1 << ReadU16(bytes, 0x1E);
-            int miniSectorSize = 1 << ReadU16(bytes, 0x20);
-            int fatSectorCount = ReadI32(bytes, 0x2C);
-            int firstDirectorySector = ReadI32(bytes, 0x30);
-            int miniCutoff = ReadI32(bytes, 0x38);
-            int firstMiniFatSector = ReadI32(bytes, 0x3C);
-            int miniFatSectorCount = ReadI32(bytes, 0x40);
-            int firstDifatSector = ReadI32(bytes, 0x44);
-            int difatSectorCount = ReadI32(bytes, 0x48);
+            int sectorSize = 1 << ReadU16(header, 0x1E);
+            int miniSectorSize = 1 << ReadU16(header, 0x20);
+            int fatSectorCount = ReadI32(header, 0x2C);
+            int firstDirectorySector = ReadI32(header, 0x30);
+            int miniCutoff = ReadI32(header, 0x38);
+            int firstMiniFatSector = ReadI32(header, 0x3C);
+            int miniFatSectorCount = ReadI32(header, 0x40);
+            int firstDifatSector = ReadI32(header, 0x44);
+            int difatSectorCount = ReadI32(header, 0x48);
 
             if (sectorSize < HeaderSize || sectorSize > 4096 || miniSectorSize <= 0)
             {
                 throw new InvalidDataException("Unsupported OLE sector size.");
             }
 
-            int[] fatSectorIds = ReadDifat(bytes, sectorSize, fatSectorCount, firstDifatSector, difatSectorCount);
-            int[] fat = ReadFat(bytes, sectorSize, fatSectorIds);
-            byte[] directoryStream = ReadRegularStream(bytes, sectorSize, fat, firstDirectorySector, int.MaxValue);
-            DirectoryEntry[] entries = ReadDirectory(directoryStream);
+            int[] fatSectorIds = ReadDifat(source, header, sectorSize, fatSectorCount, firstDifatSector, difatSectorCount);
+            int[] fat = ReadFat(source, sectorSize, fatSectorIds);
+            byte[] directory = ReadChainBytes(source, sectorSize, fat, firstDirectorySector, -1);
+            DirectoryEntry[] entries = ReadDirectory(directory);
             if (entries.Length == 0)
             {
                 throw new InvalidDataException("The OLE directory is empty.");
             }
 
-            int[] miniFat = firstMiniFatSector >= 0 && miniFatSectorCount > 0
-                ? ReadMiniFat(bytes, sectorSize, fat, firstMiniFatSector, miniFatSectorCount)
-                : [];
-            byte[] miniStream = entries[0].StartSector >= 0 && entries[0].Size > 0
-                ? ReadRegularStream(bytes, sectorSize, fat, entries[0].StartSector, entries[0].Size)
-                : [];
+            DirectoryEntry workbook = FindWorkbook(entries);
 
-            return new XlsCompoundFile(bytes, sectorSize, miniSectorSize, miniCutoff, fat, miniFat, entries, miniStream);
+            // Mini-stream workbooks (tiny, rare) are materialized; everything else streams.
+            if (workbook.Size < miniCutoff && workbook.StartSector >= 0)
+            {
+                int[] miniFat = firstMiniFatSector >= 0 && miniFatSectorCount > 0
+                    ? ReadIntSectors(source, sectorSize, fat, firstMiniFatSector, miniFatSectorCount)
+                    : [];
+                byte[] miniStream = entries[0].StartSector >= 0 && entries[0].Size > 0
+                    ? ReadChainBytes(source, sectorSize, fat, entries[0].StartSector, (int)entries[0].Size)
+                    : [];
+                if (miniFat.Length == 0 || miniStream.Length == 0)
+                {
+                    throw new InvalidDataException("The OLE mini stream is missing.");
+                }
+                byte[] data = ReadMiniStream(miniStream, miniFat, miniSectorSize, workbook.StartSector, (int)workbook.Size);
+                if (ownsSource)
+                {
+                    source.Dispose();
+                }
+                return WorkbookStream.InMemory(data);
+            }
+
+            int[] chain = BuildChain(fat, workbook.StartSector, SectorCount(workbook.Size, sectorSize));
+            return WorkbookStream.Streamed(source, ownsSource, chain, sectorSize, workbook.Size);
         }
 
-        internal ReadOnlyMemory<byte> ReadWorkbookStream()
+        private static DirectoryEntry FindWorkbook(DirectoryEntry[] entries)
         {
-            foreach (ref readonly var entry in _entries.AsSpan())
+            foreach (ref readonly var entry in entries.AsSpan())
             {
                 if (entry.ObjectType == 2 &&
                     (entry.Name.Equals("Workbook", StringComparison.OrdinalIgnoreCase) ||
                      entry.Name.Equals("Book", StringComparison.OrdinalIgnoreCase)))
                 {
-                    return ReadStream(entry);
+                    return entry;
                 }
             }
             throw new InvalidDataException("The OLE document does not contain a Workbook stream.");
         }
 
-        private ReadOnlyMemory<byte> ReadStream(DirectoryEntry entry)
+        private static int SectorCount(long size, int sectorSize)
         {
-            if (entry.Size < _miniCutoff && entry.StartSector >= 0)
-            {
-                if (_miniFat.Length == 0 || _miniStream.Length == 0)
-                {
-                    throw new InvalidDataException("The OLE mini stream is missing.");
-                }
-                return ReadMiniStream(entry.StartSector, entry.Size);
-            }
-            // Sequential FAT chain (the common case): hand back a window into the file buffer
-            // instead of copying the whole stream out — saves a multi-MB allocation + copy.
-            if (TryContiguousSlice(entry.StartSector, entry.Size, out ReadOnlyMemory<byte> slice))
-            {
-                return slice;
-            }
-            return ReadRegularStream(_bytes, _sectorSize, _fat, entry.StartSector, entry.Size);
+            return (int)((size + sectorSize - 1) / sectorSize);
         }
 
-        private bool TryContiguousSlice(int startSector, long size, out ReadOnlyMemory<byte> slice)
+        private static int[] BuildChain(int[] fat, int startSector, int sectorCount)
         {
-            slice = default;
-            if (startSector < 0 || size <= 0)
-            {
-                return false;
-            }
-            int sectorCount = (int)((size + _sectorSize - 1) / _sectorSize);
-            for (int i = 0; i < sectorCount - 1; i++)
-            {
-                int sector = startSector + i;
-                if ((uint)sector >= (uint)_fat.Length || _fat[sector] != sector + 1)
-                {
-                    return false;
-                }
-            }
-            int last = startSector + sectorCount - 1;
-            if ((uint)last >= (uint)_fat.Length || _fat[last] != EndOfChain)
-            {
-                return false;
-            }
-            long start = HeaderSize + (long)startSector * _sectorSize;
-            if (start + size > _bytes.Length)
-            {
-                return false;
-            }
-            slice = _bytes.AsMemory((int)start, (int)size);
-            return true;
-        }
-
-        private byte[] ReadMiniStream(int startSector, long size)
-        {
-            byte[] result = new byte[(int)size];
+            int[] chain = new int[sectorCount];
             int sector = startSector;
-            int written = 0;
-            while (sector >= 0 && sector != EndOfChain && written < result.Length)
+            for (int i = 0; i < sectorCount; i++)
             {
-                int offset = checked(sector * _miniSectorSize);
-                if ((uint)offset >= (uint)_miniStream.Length)
+                if (sector is < 0 or EndOfChain)
                 {
-                    throw new InvalidDataException("Invalid OLE mini sector chain.");
+                    throw new InvalidDataException("The OLE Workbook chain ended early.");
                 }
-                int take = Math.Min(_miniSectorSize, result.Length - written);
-                _miniStream.AsSpan(offset, take).CopyTo(result.AsSpan(written));
-                written += take;
-                if ((uint)sector >= (uint)_miniFat.Length)
-                {
-                    throw new InvalidDataException("Invalid OLE mini FAT chain.");
-                }
-                sector = _miniFat[sector];
+                chain[i] = sector;
+                sector = NextSector(fat, sector);
             }
-            return result;
+            return chain;
         }
 
-        private static int[] ReadDifat(ReadOnlySpan<byte> bytes, int sectorSize, int fatSectorCount, int firstDifatSector, int difatSectorCount)
+        private static void ReadAt(Stream source, long offset, Span<byte> dest)
+        {
+            source.Seek(offset, SeekOrigin.Begin);
+            source.ReadExactly(dest);
+        }
+
+        private static int[] ReadDifat(Stream source, byte[] header, int sectorSize, int fatSectorCount, int firstDifatSector, int difatSectorCount)
         {
             int[] fatSectors = new int[fatSectorCount];
             int count = 0;
             for (int i = 0x4C; i < HeaderSize && count < fatSectors.Length; i += 4)
             {
-                int sector = ReadI32(bytes, i);
+                int sector = ReadI32(header, i);
                 if (sector is >= 0 and not FreeSector)
                 {
                     fatSectors[count++] = sector;
                 }
             }
 
+            byte[] difatSector = new byte[sectorSize];
             int difat = firstDifatSector;
             for (int i = 0; i < difatSectorCount && difat >= 0 && count < fatSectors.Length; i++)
             {
-                int offset = SectorOffset(difat, sectorSize, bytes.Length);
+                ReadAt(source, SectorOffset(difat, sectorSize), difatSector);
                 int entries = (sectorSize / 4) - 1;
                 for (int j = 0; j < entries && count < fatSectors.Length; j++)
                 {
-                    int sector = ReadI32(bytes, offset + (j * 4));
+                    int sector = ReadI32(difatSector, j * 4);
                     if (sector is >= 0 and not FreeSector)
                     {
                         fatSectors[count++] = sector;
                     }
                 }
-                difat = ReadI32(bytes, offset + (entries * 4));
+                difat = ReadI32(difatSector, entries * 4);
             }
 
             if (count != fatSectors.Length)
@@ -270,68 +224,78 @@ namespace ExcelReader.Core.Reader
             return fatSectors;
         }
 
-        private static int[] ReadFat(byte[] bytes, int sectorSize, int[] fatSectorIds)
+        private static int[] ReadFat(Stream source, int sectorSize, int[] fatSectorIds)
         {
             int entriesPerSector = sectorSize / 4;
             int[] fat = new int[fatSectorIds.Length * entriesPerSector];
+            byte[] sectorBuf = new byte[sectorSize];
             int index = 0;
             foreach (int sector in fatSectorIds)
             {
-                int offset = SectorOffset(sector, sectorSize, bytes.Length);
+                ReadAt(source, SectorOffset(sector, sectorSize), sectorBuf);
                 for (int i = 0; i < entriesPerSector; i++)
                 {
-                    fat[index++] = ReadI32(bytes, offset + (i * 4));
+                    fat[index++] = ReadI32(sectorBuf, i * 4);
                 }
             }
             return fat;
         }
 
-        private static int[] ReadMiniFat(byte[] bytes, int sectorSize, int[] fat, int firstSector, int sectorCount)
-        {
-            byte[] data = ReadRegularStream(bytes, sectorSize, fat, firstSector, checked(sectorCount * sectorSize));
-            int[] miniFat = new int[data.Length / 4];
-            for (int i = 0; i < miniFat.Length; i++)
-            {
-                miniFat[i] = ReadI32(data, i * 4);
-            }
-            return miniFat;
-        }
-
-        private static byte[] ReadRegularStream(byte[] bytes, int sectorSize, int[] fat, int startSector, long size)
+        // Reads a FAT-chained stream into a byte[]. byteLimit < 0 means "until end of chain".
+        private static byte[] ReadChainBytes(Stream source, int sectorSize, int[] fat, int startSector, int byteLimit)
         {
             if (startSector < 0)
             {
                 return [];
             }
-
-            // Known size (the common case: workbook, mini-FAT): fill an exact array
-            // directly via spans, skipping the MemoryStream's internal buffer + ToArray copy.
-            if (size != int.MaxValue)
-            {
-                byte[] result = new byte[(int)size];
-                int sector = startSector;
-                int written = 0;
-                while (sector >= 0 && sector != EndOfChain && written < result.Length)
-                {
-                    int offset = SectorOffset(sector, sectorSize, bytes.Length);
-                    int take = Math.Min(sectorSize, result.Length - written);
-                    bytes.AsSpan(offset, take).CopyTo(result.AsSpan(written));
-                    written += take;
-                    sector = NextSector(fat, sector);
-                }
-                return result;
-            }
-
-            // Unknown size (directory stream): grow a MemoryStream.
             using MemoryStream ms = new();
-            int dirSector = startSector;
-            while (dirSector is >= 0 and not EndOfChain)
+            byte[] sectorBuf = new byte[sectorSize];
+            int sector = startSector;
+            int written = 0;
+            while (sector is >= 0 and not EndOfChain && (byteLimit < 0 || written < byteLimit))
             {
-                int offset = SectorOffset(dirSector, sectorSize, bytes.Length);
-                ms.Write(bytes, offset, sectorSize);
-                dirSector = NextSector(fat, dirSector);
+                ReadAt(source, SectorOffset(sector, sectorSize), sectorBuf);
+                int take = byteLimit < 0 ? sectorSize : Math.Min(sectorSize, byteLimit - written);
+                ms.Write(sectorBuf, 0, take);
+                written += take;
+                sector = NextSector(fat, sector);
             }
             return ms.ToArray();
+        }
+
+        private static int[] ReadIntSectors(Stream source, int sectorSize, int[] fat, int firstSector, int sectorCount)
+        {
+            byte[] data = ReadChainBytes(source, sectorSize, fat, firstSector, checked(sectorCount * sectorSize));
+            int[] result = new int[data.Length / 4];
+            for (int i = 0; i < result.Length; i++)
+            {
+                result[i] = ReadI32(data, i * 4);
+            }
+            return result;
+        }
+
+        private static byte[] ReadMiniStream(byte[] miniStream, int[] miniFat, int miniSectorSize, int startSector, int size)
+        {
+            byte[] result = new byte[size];
+            int sector = startSector;
+            int written = 0;
+            while (sector is >= 0 and not EndOfChain && written < result.Length)
+            {
+                int offset = checked(sector * miniSectorSize);
+                if ((uint)offset >= (uint)miniStream.Length)
+                {
+                    throw new InvalidDataException("Invalid OLE mini sector chain.");
+                }
+                int take = Math.Min(miniSectorSize, result.Length - written);
+                miniStream.AsSpan(offset, take).CopyTo(result.AsSpan(written));
+                written += take;
+                if ((uint)sector >= (uint)miniFat.Length)
+                {
+                    throw new InvalidDataException("Invalid OLE mini FAT chain.");
+                }
+                sector = miniFat[sector];
+            }
+            return result;
         }
 
         private static int NextSector(int[] fat, int sector)
@@ -370,14 +334,13 @@ namespace ExcelReader.Core.Reader
             return entries;
         }
 
-        private static int SectorOffset(int sector, int sectorSize, int length)
+        private static long SectorOffset(int sector, int sectorSize)
         {
-            long offset = HeaderSize + ((long)sector * sectorSize);
-            if (sector < 0 || offset < 0 || offset + sectorSize > length)
+            if (sector < 0)
             {
                 throw new InvalidDataException("Invalid OLE sector offset.");
             }
-            return (int)offset;
+            return HeaderSize + ((long)sector * sectorSize);
         }
 
         private static ushort ReadU16(ReadOnlySpan<byte> src, int offset)

@@ -1,13 +1,12 @@
 using System.Buffers;
 using System.Buffers.Binary;
 using System.Diagnostics.CodeAnalysis;
-using System.Runtime.InteropServices;
 
 namespace ExcelReader.Core.Reader
 {
     public sealed partial class XlsReader : IDisposable, IAsyncDisposable
     {
-        private ReadOnlyMemory<byte> _workbook;
+        private readonly WorkbookStream _workbook;
         private readonly (string Name, int Offset)[] _sheets;
         private readonly bool[] _styleIsDate;
         private readonly bool _date1904;
@@ -16,24 +15,35 @@ namespace ExcelReader.Core.Reader
         private int _current;
 
         internal XlsReader(Stream stream, bool leaveOpen)
-            : this(XlsCompoundFile.Open(stream, leaveOpen).ReadWorkbookStream())
+            : this(XlsCompoundFile.OpenWorkbook(stream, leaveOpen))
         {
         }
 
-        private XlsReader(ReadOnlyMemory<byte> workbook)
+        private XlsReader(WorkbookStream workbook)
         {
             _workbook = workbook;
-            ParseWorkbookGlobals(workbook.Span, out _sheets, out _styleIsDate, out _date1904, out _sharedFlat, out _sharedOffsets);
+            using (BiffCursor cursor = workbook.OpenCursor())
+            {
+                ParseWorkbookGlobals(cursor, out _sheets, out _styleIsDate, out _date1904, out _sharedFlat, out _sharedOffsets);
+            }
             if (_sheets.Length == 0)
             {
+                workbook.Dispose();
                 throw new InvalidDataException("The workbook contains no sheets.");
             }
         }
 
         internal static async ValueTask<XlsReader> CreateAsync(Stream stream, bool leaveOpen, CancellationToken ct)
         {
-            XlsCompoundFile ole = await XlsCompoundFile.OpenAsync(stream, leaveOpen, ct).ConfigureAwait(false);
-            return new XlsReader(ole.ReadWorkbookStream());
+            WorkbookStream workbook = await XlsCompoundFile.OpenWorkbookAsync(stream, leaveOpen, ct).ConfigureAwait(false);
+            return new XlsReader(workbook);
+        }
+
+        internal BiffCursor OpenCursor(int offset)
+        {
+            BiffCursor cursor = _workbook.OpenCursor();
+            cursor.Position = offset;
+            return cursor;
         }
 
         public string SheetName => _sheets[_current].Name;
@@ -91,7 +101,7 @@ namespace ExcelReader.Core.Reader
 
         public void Dispose()
         {
-            _workbook = default;
+            _workbook.Dispose();
             _sharedFlat = [];
             _sharedOffsets = [0];
         }
@@ -103,7 +113,7 @@ namespace ExcelReader.Core.Reader
         }
 
         private static void ParseWorkbookGlobals(
-            ReadOnlySpan<byte> workbook,
+            BiffCursor cursor,
             out (string Name, int Offset)[] sheets,
             out bool[] styleIsDate,
             out bool date1904,
@@ -113,14 +123,12 @@ namespace ExcelReader.Core.Reader
             List<(string Name, int Offset)> sheetList = [];
             Dictionary<int, bool> customFormats = new(capacity: 16);
             List<bool> styleFlags = [];
-            List<SstSpan> sstSpans = [];
             date1904 = false;
             sharedFlat = [];
             sharedOffsets = [0];
 
-            int pos = 0;
             bool sawGlobalsBof = false;
-            while (TryReadRecord(workbook, ref pos, out int id, out ReadOnlySpan<byte> data))
+            while (cursor.TryReadRecord(out int id, out ReadOnlySpan<byte> data))
             {
                 if (id == Rec.Bof)
                 {
@@ -147,14 +155,7 @@ namespace ExcelReader.Core.Reader
                         }
                         break;
                     case Rec.Sst:
-                        // Store offsets into the retained workbook buffer instead of copying
-                        // each record; the 8-byte SST header is folded into the start offset.
-                        sstSpans.Add(new SstSpan(pos - data.Length + 8, data.Length - 8));
-                        while (PeekRecordId(workbook, pos) == Rec.Continue && TryReadRecord(workbook, ref pos, out _, out ReadOnlySpan<byte> cont))
-                        {
-                            sstSpans.Add(new SstSpan(pos - cont.Length, cont.Length));
-                        }
-                        ParseSharedStrings(workbook, sstSpans, out sharedFlat, out sharedOffsets);
+                        DecodeSstFromCursor(cursor, data, out sharedFlat, out sharedOffsets);
                         break;
                     case Rec.Format:
                         if (TryParseFormat(data, out int formatId, out string format))
@@ -220,31 +221,26 @@ namespace ExcelReader.Core.Reader
             return true;
         }
 
-        private static void ParseSharedStrings(ReadOnlySpan<byte> workbook, List<SstSpan> spans, out byte[] sharedFlat, out int[] sharedOffsets)
+        // The SST payload (first record minus its 8-byte header) plus any CONTINUE records must be
+        // contiguous because strings can straddle record boundaries. Gather into a pooled buffer
+        // off the cursor, then decode into the retained flat buffer.
+        private static void DecodeSstFromCursor(BiffCursor cursor, ReadOnlySpan<byte> first, out byte[] sharedFlat, out int[] sharedOffsets)
         {
-            // Single record (the common case): decode straight from the workbook, no concat copy.
-            if (spans.Count == 1)
+            byte[] buffer = ArrayPool<byte>.Shared.Rent(Math.Max(256, first.Length));
+            int len = 0;
+            if (first.Length > 8)
             {
-                DecodeSharedStrings(workbook.Slice(spans[0].Start, spans[0].Length), out sharedFlat, out sharedOffsets);
-                return;
+                first[8..].CopyTo(buffer);
+                len = first.Length - 8;
             }
-
-            // Multiple records: strings may straddle CONTINUE boundaries, so the record
-            // payloads must be contiguous. Use a pooled scratch buffer for the concat.
-            int total = 0;
-            for (int i = 0; i < spans.Count; i++)
+            while (cursor.PeekId() == Rec.Continue && cursor.TryReadRecord(out _, out ReadOnlySpan<byte> cont))
             {
-                total += spans[i].Length;
+                EnsureCapacity(ref buffer, len + cont.Length);
+                cont.CopyTo(buffer.AsSpan(len));
+                len += cont.Length;
             }
-            byte[] sst = ArrayPool<byte>.Shared.Rent(total);
-            int written = 0;
-            for (int i = 0; i < spans.Count; i++)
-            {
-                workbook.Slice(spans[i].Start, spans[i].Length).CopyTo(sst.AsSpan(written));
-                written += spans[i].Length;
-            }
-            DecodeSharedStrings(sst.AsSpan(0, total), out sharedFlat, out sharedOffsets);
-            ArrayPool<byte>.Shared.Return(sst);
+            DecodeSharedStrings(buffer.AsSpan(0, len), out sharedFlat, out sharedOffsets);
+            ArrayPool<byte>.Shared.Return(buffer);
         }
 
         private static void DecodeSharedStrings(ReadOnlySpan<byte> sst, out byte[] sharedFlat, out int[] sharedOffsets)
@@ -288,31 +284,6 @@ namespace ExcelReader.Core.Reader
             sharedOffsets = [.. offsets];
         }
 
-        private static bool TryReadRecord(ReadOnlySpan<byte> src, ref int pos, out int id, out ReadOnlySpan<byte> data)
-        {
-            id = 0;
-            data = default;
-            if (pos + 4 > src.Length)
-            {
-                return false;
-            }
-            id = ReadU16(src, pos);
-            int len = ReadU16(src, pos + 2);
-            pos += 4;
-            if (pos + len > src.Length)
-            {
-                return false;
-            }
-            data = src.Slice(pos, len);
-            pos += len;
-            return true;
-        }
-
-        private static int PeekRecordId(ReadOnlySpan<byte> src, int pos)
-        {
-            return pos + 4 <= src.Length ? ReadU16(src, pos) : -1;
-        }
-
         private static ushort ReadU16(ReadOnlySpan<byte> src, int offset)
         {
             return BinaryPrimitives.ReadUInt16LittleEndian(src.Slice(offset, 2));
@@ -339,8 +310,6 @@ namespace ExcelReader.Core.Reader
             ArrayPool<byte>.Shared.Return(buffer);
             buffer = bigger;
         }
-        [StructLayout(LayoutKind.Auto)]
-        private readonly record struct SstSpan(int Start, int Length);
 
         private const int Biff8Version = 0x0600;
         private const int SubstreamGlobals = 0x0005;
