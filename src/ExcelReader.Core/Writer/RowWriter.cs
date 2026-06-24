@@ -27,97 +27,79 @@ namespace ExcelReader.Core.Writer
             ObjectDisposedException.ThrowIf(_disposed, this);
         }
 
-        public ValueTask WriteAsync(string? value, CancellationToken ct = default)
+        public void Write(string? value)
         {
             ThrowIfDisposed();
-            ct.ThrowIfCancellationRequested();
             if (value is null)
             {
                 CellFormatter.WriteEmpty(_xml, _columnIndex, _rowNumber);
+                _columnIndex++;
+                return;
             }
-            else
-            {
-                CellFormatter.WriteString(_xml, value, _columnIndex, _rowNumber);
-            }
+            CellFormatter.WriteString(_xml, value, _columnIndex, _rowNumber);
             _columnIndex++;
-            return ValueTask.CompletedTask;
         }
 
-        public ValueTask WriteAsync(bool value, CancellationToken ct = default)
+        public void Write(bool value)
         {
             ThrowIfDisposed();
-            ct.ThrowIfCancellationRequested();
             CellFormatter.WriteBool(_xml, value, _columnIndex, _rowNumber);
             _columnIndex++;
-            return ValueTask.CompletedTask;
         }
 
-        public ValueTask WriteAsync(bool? value, CancellationToken ct = default)
+        public void Write(bool? value)
         {
             ThrowIfDisposed();
-            ct.ThrowIfCancellationRequested();
             if (value is null)
             {
                 CellFormatter.WriteEmpty(_xml, _columnIndex, _rowNumber);
+                _columnIndex++;
+                return;
             }
-            else
-            {
-                CellFormatter.WriteBool(_xml, value.Value, _columnIndex, _rowNumber);
-            }
+            CellFormatter.WriteBool(_xml, value.Value, _columnIndex, _rowNumber);
             _columnIndex++;
-            return ValueTask.CompletedTask;
         }
 
-        public ValueTask WriteAsync(DateTime value, CancellationToken ct = default)
+        public void Write(DateTime value)
         {
             ThrowIfDisposed();
-            ct.ThrowIfCancellationRequested();
             CellFormatter.WriteDateTime(_xml, value, _columnIndex, _rowNumber);
             _columnIndex++;
-            return ValueTask.CompletedTask;
         }
 
-        public ValueTask WriteAsync(DateTime? value, CancellationToken ct = default)
+        public void Write(DateTime? value)
         {
             ThrowIfDisposed();
-            ct.ThrowIfCancellationRequested();
             if (value is null)
             {
                 CellFormatter.WriteEmpty(_xml, _columnIndex, _rowNumber);
+                _columnIndex++;
+                return;
             }
-            else
-            {
-                CellFormatter.WriteDateTime(_xml, value.Value, _columnIndex, _rowNumber);
-            }
+            CellFormatter.WriteDateTime(_xml, value.Value, _columnIndex, _rowNumber);
             _columnIndex++;
-            return ValueTask.CompletedTask;
         }
 
-        public ValueTask WriteAsync<T>(T value, CancellationToken ct = default)
+        public void Write<T>(T value)
             where T : ISpanFormattable
         {
             ThrowIfDisposed();
-            ct.ThrowIfCancellationRequested();
             CellFormatter.WriteNumber(_xml, value, _columnIndex, _rowNumber);
             _columnIndex++;
-            return ValueTask.CompletedTask;
         }
 
-        public ValueTask WriteAsync<T>(T? value, CancellationToken ct = default)
+        public void Write<T>(T? value)
             where T : struct, ISpanFormattable
         {
             ThrowIfDisposed();
-            ct.ThrowIfCancellationRequested();
             if (value is null)
             {
                 CellFormatter.WriteEmpty(_xml, _columnIndex, _rowNumber);
+                _columnIndex++;
+                return;
             }
-            else
-            {
-                CellFormatter.WriteNumber(_xml, value.Value, _columnIndex, _rowNumber);
-            }
+            CellFormatter.WriteNumber(_xml, value.Value, _columnIndex, _rowNumber);
             _columnIndex++;
-            return ValueTask.CompletedTask;
         }
 
         public void Skip(int count = 1)
