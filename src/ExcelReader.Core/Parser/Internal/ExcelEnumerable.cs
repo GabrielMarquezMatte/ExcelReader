@@ -42,13 +42,9 @@ namespace ExcelReader.Core.Parser.Internal
             [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP006:Implement IDisposable",
                 Justification = "Struct implements IDisposable; rows disposed in Dispose().")]
             private XlsxReader.Enumerator _rows;
-            private readonly TypeMapInfo<T> _typeInfo;
-            private readonly StringComparer _comparer;
             private readonly int _headerRow;
-            private readonly bool _isDate1904;
+            private RowProjector<T> _projector;
             private int _rowNumber;
-            private ColumnParser<T>?[]? _columnParsers;
-            private int _maxColumn;
             private T _current = default!;
 
             internal Enumerator(
@@ -59,27 +55,13 @@ namespace ExcelReader.Core.Parser.Internal
                 bool isDate1904)
             {
                 _rows = rows;
-                _typeInfo = typeInfo;
-                _comparer = comparer;
                 _headerRow = headerRow;
-                _isDate1904 = isDate1904;
+                _projector = new RowProjector<T>(typeInfo, comparer, isDate1904);
             }
 
-            public T Current
-            {
-                get
-                {
-                    return _current;
-                }
-            }
+            public readonly T Current => _current;
 
-            object? IEnumerator.Current
-            {
-                get
-                {
-                    return _current;
-                }
-            }
+            readonly object? IEnumerator.Current => _current;
 
             public bool MoveNext()
             {
@@ -93,57 +75,23 @@ namespace ExcelReader.Core.Parser.Internal
                     }
                     if (_rowNumber == _headerRow)
                     {
-                        BuildColumnMap(in row);
+                        _projector.BuildColumnMap(in row);
                         continue;
                     }
-                    if (_columnParsers is null)
+                    if (!_projector.IsMapped)
                     {
                         return false;
                     }
                     _current = new T();
-                    ParseCurrentRow(in row);
+                    _projector.ParseCurrentRow(in row, ref _current);
                     return true;
                 }
                 return false;
             }
 
-            private void BuildColumnMap(in Row row)
-            {
-                _maxColumn = row.ColumnCount;
-                _columnParsers = new ColumnParser<T>?[_maxColumn];
-                for (int col = 0; col < _maxColumn; col++)
-                {
-                    Cell cell = row[col];
-                    string header = cell.GetString();
-                    if (string.IsNullOrEmpty(header))
-                    {
-                        continue;
-                    }
-                    int index = _typeInfo.FindIndex(header, _comparer);
-                    if (index >= 0)
-                    {
-                        _columnParsers[col] = _typeInfo.Parsers[index];
-                    }
-                }
-            }
-
-            private void ParseCurrentRow(in Row row)
-            {
-                int bound = Math.Min(_maxColumn, row.ColumnCount);
-                for (int col = 0; col < bound; col++)
-                {
-                    ColumnParser<T>? parser = _columnParsers![col];
-                    if (parser is null)
-                    {
-                        continue;
-                    }
-                    parser(ref _current, in row, col, _isDate1904);
-                }
-            }
-
             [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP007:Don't dispose injected",
                 Justification = "The enumerator owns _rows — it was created by GetEnumerator, not injected from outside.")]
-            public void Dispose()
+            public readonly void Dispose()
             {
                 _rows.Dispose();
             }
