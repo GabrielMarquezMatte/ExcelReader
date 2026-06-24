@@ -147,7 +147,7 @@ namespace ExcelReader.Core.Reader
             return new XlsCompoundFile(bytes, sectorSize, miniSectorSize, miniCutoff, fat, miniFat, entries, miniStream);
         }
 
-        internal byte[] ReadWorkbookStream()
+        internal ReadOnlyMemory<byte> ReadWorkbookStream()
         {
             foreach (ref readonly var entry in _entries.AsSpan())
             {
@@ -161,7 +161,7 @@ namespace ExcelReader.Core.Reader
             throw new InvalidDataException("The OLE document does not contain a Workbook stream.");
         }
 
-        private byte[] ReadStream(DirectoryEntry entry)
+        private ReadOnlyMemory<byte> ReadStream(DirectoryEntry entry)
         {
             if (entry.Size < _miniCutoff && entry.StartSector >= 0)
             {
@@ -171,7 +171,43 @@ namespace ExcelReader.Core.Reader
                 }
                 return ReadMiniStream(entry.StartSector, entry.Size);
             }
+            // Sequential FAT chain (the common case): hand back a window into the file buffer
+            // instead of copying the whole stream out — saves a multi-MB allocation + copy.
+            if (TryContiguousSlice(entry.StartSector, entry.Size, out ReadOnlyMemory<byte> slice))
+            {
+                return slice;
+            }
             return ReadRegularStream(_bytes, _sectorSize, _fat, entry.StartSector, entry.Size);
+        }
+
+        private bool TryContiguousSlice(int startSector, long size, out ReadOnlyMemory<byte> slice)
+        {
+            slice = default;
+            if (startSector < 0 || size <= 0)
+            {
+                return false;
+            }
+            int sectorCount = (int)((size + _sectorSize - 1) / _sectorSize);
+            for (int i = 0; i < sectorCount - 1; i++)
+            {
+                int sector = startSector + i;
+                if ((uint)sector >= (uint)_fat.Length || _fat[sector] != sector + 1)
+                {
+                    return false;
+                }
+            }
+            int last = startSector + sectorCount - 1;
+            if ((uint)last >= (uint)_fat.Length || _fat[last] != EndOfChain)
+            {
+                return false;
+            }
+            long start = HeaderSize + (long)startSector * _sectorSize;
+            if (start + size > _bytes.Length)
+            {
+                return false;
+            }
+            slice = _bytes.AsMemory((int)start, (int)size);
+            return true;
         }
 
         private byte[] ReadMiniStream(int startSector, long size)

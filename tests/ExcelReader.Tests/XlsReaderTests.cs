@@ -514,6 +514,31 @@ namespace ExcelReader.Tests
             Assert.Equal(dataRows, read);
         }
 
+        [Fact]
+        public void NumericCellsExposeRawDoubleMatchingFormattedText()
+        {
+            using var ms = XlsWorkbookBuilder.Build(
+                sheets: [("S1", [[12.5, 42, new XlsRkInt(123), -7.25]])]);
+            using var reader = Excel.FromXls(ms);
+
+            using var e = reader.GetEnumerator();
+            Assert.True(e.MoveNext());
+            var row = e.Current;
+
+            ReadOnlySpan<double> expected = [12.5, 42, 123, -7.25];
+            for (int c = 0; c < expected.Length; c++)
+            {
+                // Raw fast path returns the exact stored double...
+                Assert.True(row[c].TryGetDouble(out double raw));
+                Assert.Equal(expected[c], raw);
+                Assert.True(row[c].TryParse<double>(System.Globalization.CultureInfo.InvariantCulture, out double parsed));
+                Assert.Equal(expected[c], parsed);
+                // ...and the text representation stays consistent with parsing it back.
+                Assert.True(double.TryParse(row[c].GetString(), System.Globalization.CultureInfo.InvariantCulture, out double fromText));
+                Assert.Equal(expected[c], fromText);
+            }
+        }
+
         private const int SectorSize = 512;
 
         private static void RowAssert(ExcelReader.Core.ValueObjects.Row row, string[] values)

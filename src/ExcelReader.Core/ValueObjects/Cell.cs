@@ -1,5 +1,6 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Text;
 using ExcelReader.Core.Enums;
@@ -9,6 +10,9 @@ namespace ExcelReader.Core.ValueObjects
     [StructLayout(LayoutKind.Auto)]
     public readonly ref struct Cell
     {
+        private readonly double _number;
+        private readonly bool _hasNumber;
+
         public CellType Type { get; }
         // UTF-8 bytes of the cell's text: resolved shared-string text, or the raw <v> for numbers/bools/etc.
         public ReadOnlySpan<byte> Value { get; }
@@ -17,14 +21,50 @@ namespace ExcelReader.Core.ValueObjects
         public int StyleIndex { get; }
 
         public Cell(CellType type, ReadOnlySpan<byte> value, int styleIndex = 0)
+            : this(type, value, 0, hasNumber: false, styleIndex)
+        {
+        }
+
+        internal Cell(CellType type, ReadOnlySpan<byte> value, double number, bool hasNumber, int styleIndex)
         {
             Type = type;
             Value = value;
+            _number = number;
+            _hasNumber = hasNumber;
             StyleIndex = styleIndex;
+        }
+
+        // Numeric cells from binary formats (XLS) carry the raw double, so this avoids the
+        // format-then-parse round trip. Text-backed cells (XLSX, strings) parse Value as a fallback.
+        public bool TryGetDouble(out double value)
+        {
+            if (_hasNumber)
+            {
+                value = _number;
+                return true;
+            }
+            return double.TryParse(Value, CultureInfo.InvariantCulture, out value);
         }
 
         public bool TryParse<T>(IFormatProvider? provider, [MaybeNullWhen(false)] out T result) where T : IUtf8SpanParsable<T>
         {
+            // Fast path for binary doubles: hand back the stored value without round-tripping
+            // through text. Guards are JIT constants, so non-matching T compiles them away.
+            if (_hasNumber)
+            {
+                if (typeof(T) == typeof(double))
+                {
+                    double d = _number;
+                    result = Unsafe.As<double, T>(ref d);
+                    return true;
+                }
+                if (typeof(T) == typeof(float))
+                {
+                    float f = (float)_number;
+                    result = Unsafe.As<float, T>(ref f);
+                    return true;
+                }
+            }
             return T.TryParse(Value, provider, out result);
         }
 
@@ -42,7 +82,7 @@ namespace ExcelReader.Core.ValueObjects
         // DateTime.FromOADate's 1900 epoch (+1462 days: Jan 1 1904 = OADate 1462).
         public bool TryGetDateTime(bool isDate1904, out DateTime result)
         {
-            if (!double.TryParse(Value, CultureInfo.InvariantCulture, out double serial))
+            if (!TryGetDouble(out double serial))
             {
                 result = default;
                 return false;
