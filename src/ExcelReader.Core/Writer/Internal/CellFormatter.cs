@@ -63,7 +63,7 @@ namespace ExcelReader.Core.Writer.Internal
             xml.Write("</v></c>");
         }
 
-        private static void WriteEscaped(StreamWriter xml, string value)
+        private static void WriteEscaped(StreamWriter xml, ReadOnlySpan<char> value)
         {
             int start = 0;
             for (int i = 0; i < value.Length; i++)
@@ -83,14 +83,14 @@ namespace ExcelReader.Core.Writer.Internal
                 }
                 if (i > start)
                 {
-                    xml.Write(value.AsSpan(start, i - start));
+                    xml.Write(value[start..i]);
                 }
                 xml.Write(escape);
                 start = i + 1;
             }
             if (start < value.Length)
             {
-                xml.Write(value.AsSpan(start));
+                xml.Write(value[start..]);
             }
         }
     }

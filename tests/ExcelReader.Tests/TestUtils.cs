@@ -1,8 +1,71 @@
 using System.IO.Compression;
 using System.Text;
+using ExcelReader.Core.Writer;
 
 namespace ExcelReader.Tests
 {
+    // Marks a skipped (empty) column gap inside a TypedWorkbook row.
+    // A record class (not struct) so `new Gap()` honors the Count = 1 default.
+    internal sealed record Gap(int Count = 1);
+
+    // Builds workbooks via the real WorkbookWriter from typed cell values.
+    // Use for reader/parser fixtures expressible as inline strings, numbers,
+    // dates (builtin numFmt 14), and bools. For shared strings, custom number
+    // formats, the 1904 date system, or error/formula cells, use WorkbookBuilder
+    // (raw XML) instead — WorkbookWriter cannot emit those.
+    internal static class TypedWorkbook
+    {
+        // Single sheet "S1"; each row is an array of cell values.
+        internal static Task<MemoryStream> BuildAsync(params object?[][] rows)
+        {
+            return BuildMultiSheetAsync(("S1", rows));
+        }
+
+        internal static async Task<MemoryStream> BuildMultiSheetAsync(
+            params (string Name, object?[][] Rows)[] sheets)
+        {
+            var ms = new MemoryStream();
+            await using (WorkbookWriter wb = await WorkbookWriter.CreateAsync(ms, leaveOpen: true))
+            {
+                await wb.StartAsync();
+                foreach ((string name, object?[][] rows) in sheets)
+                {
+                    SheetWriter sheet = wb.AddSheet(name);
+                    await sheet.StartAsync();
+                    foreach (object?[] row in rows)
+                    {
+                        await using RowWriter rw = await sheet.StartRowAsync();
+                        foreach (object? cell in row)
+                        {
+                            WriteCell(rw, cell);
+                        }
+                    }
+                    await sheet.EndAsync();
+                }
+                await wb.EndAsync();
+            }
+            ms.Position = 0;
+            return ms;
+        }
+
+        private static void WriteCell(RowWriter rw, object? cell)
+        {
+            switch (cell)
+            {
+                case null: rw.Write((string?)null); break;
+                case string s: rw.Write(s); break;
+                case bool b: rw.Write(b); break;
+                case int i: rw.Write(i); break;
+                case long l: rw.Write(l); break;
+                case double d: rw.Write(d); break;
+                case decimal m: rw.Write(m); break;
+                case DateTime dt: rw.Write(dt); break;
+                case Gap g: rw.Skip(g.Count); break;
+                default: throw new NotSupportedException($"Unsupported cell value type: {cell.GetType()}");
+            }
+        }
+    }
+
     internal static class WorkbookBuilder
     {
         private const string Main = "http://schemas.openxmlformats.org/spreadsheetml/2006/main";

@@ -131,14 +131,12 @@ namespace ExcelReader.Core.Parser.Internal
             };
         }
 
-        [SuppressMessage("Blocker Code Smell", "S3011:Reflection should not be used to increase accessibility of classes, methods, or fields",
-            Justification = "Called via MakeGenericMethod dispatch; private access is intentional and type-safe.")]
         private static ColumnParser<T> BuildParsableCore<T, TProp>(PropertyInfo prop)
             where T : new()
             where TProp : IUtf8SpanParsable<TProp>
         {
             RefAction<T, TProp> setter = CompileSetter<T, TProp>(prop);
-            return (ref model, in row, col, isDate1904) =>
+            return (ref model, in row, col, _) =>
             {
                 Cell cell = row[col];
                 if (cell.Type == CellType.Empty)
