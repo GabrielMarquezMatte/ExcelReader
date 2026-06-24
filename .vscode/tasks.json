@@ -1,0 +1,17 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "build",
+            "command": "dotnet",
+            "type": "process",
+            "args": [
+                "build",
+                "${workspaceFolder}/tests/ExcelReader.Benchmarks/ExcelReader.Benchmarks.csproj"
+            ],
+            "problemMatcher": "$msCompile",
+            "group": "build",
+            "detail": "Build task for ExcelReader.Benchmarks project"
+        }
+    ]
+}

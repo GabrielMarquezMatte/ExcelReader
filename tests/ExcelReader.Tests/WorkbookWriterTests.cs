@@ -62,11 +62,15 @@ namespace ExcelReader.Tests
                 SheetWriter sheet = wb.AddSheet("Sheet1");
                 await sheet.StartAsync();
 
-                await using RowWriter header = await sheet.StartRowAsync();
-                await header.WriteAsync("Name");
+                await using (RowWriter header = await sheet.StartRowAsync())
+                {
+                    await header.WriteAsync("Name");
+                }
 
-                await using RowWriter row = await sheet.StartRowAsync();
-                await row.WriteAsync("Alice");
+                await using (RowWriter row = await sheet.StartRowAsync())
+                {
+                    await row.WriteAsync("Alice");
+                }
 
                 await sheet.EndAsync();
             });
@@ -87,19 +91,23 @@ namespace ExcelReader.Tests
                 SheetWriter sheet = wb.AddSheet("Sheet1");
                 await sheet.StartAsync();
 
-                await using RowWriter header = await sheet.StartRowAsync();
-                await header.WriteAsync("Age");
-                await header.WriteAsync("Score");
-                await header.WriteAsync("Balance");
-                await header.WriteAsync("Active");
-                await header.WriteAsync("BirthDate");
+                await using (RowWriter header = await sheet.StartRowAsync())
+                {
+                    await header.WriteAsync("Age");
+                    await header.WriteAsync("Score");
+                    await header.WriteAsync("Balance");
+                    await header.WriteAsync("Active");
+                    await header.WriteAsync("BirthDate");
+                }
 
-                await using RowWriter row = await sheet.StartRowAsync();
-                await row.WriteAsync(42);
-                await row.WriteAsync(3.14);
-                await row.WriteAsync(9999.99m);
-                await row.WriteAsync(true);
-                await row.WriteAsync(birth);
+                await using (RowWriter row = await sheet.StartRowAsync())
+                {
+                    await row.WriteAsync(42);
+                    await row.WriteAsync(3.14);
+                    await row.WriteAsync(9999.99m);
+                    await row.WriteAsync(true);
+                    await row.WriteAsync(birth);
+                }
 
                 await sheet.EndAsync();
             });
@@ -122,11 +130,15 @@ namespace ExcelReader.Tests
                 SheetWriter sheet = wb.AddSheet("Sheet1");
                 await sheet.StartAsync();
 
-                await using RowWriter header = await sheet.StartRowAsync();
-                await header.WriteAsync("Active");
+                await using (RowWriter header = await sheet.StartRowAsync())
+                {
+                    await header.WriteAsync("Active");
+                }
 
-                await using RowWriter row = await sheet.StartRowAsync();
-                await row.WriteAsync(false);
+                await using (RowWriter row = await sheet.StartRowAsync())
+                {
+                    await row.WriteAsync(false);
+                }
 
                 await sheet.EndAsync();
             });
@@ -145,11 +157,15 @@ namespace ExcelReader.Tests
                 SheetWriter sheet = wb.AddSheet("Sheet1");
                 await sheet.StartAsync();
 
-                await using RowWriter header = await sheet.StartRowAsync();
-                await header.WriteAsync("Name");
+                await using (RowWriter header = await sheet.StartRowAsync())
+                {
+                    await header.WriteAsync("Name");
+                }
 
-                await using RowWriter row = await sheet.StartRowAsync();
-                await row.WriteAsync((string?)null);
+                await using (RowWriter row = await sheet.StartRowAsync())
+                {
+                    await row.WriteAsync((string?)null);
+                }
 
                 await sheet.EndAsync();
             });
@@ -168,13 +184,17 @@ namespace ExcelReader.Tests
                 SheetWriter sheet = wb.AddSheet("Sheet1");
                 await sheet.StartAsync();
 
-                await using RowWriter header = await sheet.StartRowAsync();
-                await header.WriteAsync("Quantity");
-                await header.WriteAsync("EventDate");
+                await using (RowWriter header = await sheet.StartRowAsync())
+                {
+                    await header.WriteAsync("Quantity");
+                    await header.WriteAsync("EventDate");
+                }
 
-                await using RowWriter row = await sheet.StartRowAsync();
-                await row.WriteAsync((int?)77);
-                await row.WriteAsync((DateTime?)null);
+                await using (RowWriter row = await sheet.StartRowAsync())
+                {
+                    await row.WriteAsync((int?)77);
+                    await row.WriteAsync((DateTime?)null);
+                }
 
                 await sheet.EndAsync();
             });
@@ -196,13 +216,17 @@ namespace ExcelReader.Tests
                 SheetWriter sheet = wb.AddSheet("Sheet1");
                 await sheet.StartAsync();
 
-                await using RowWriter header = await sheet.StartRowAsync();
-                await header.WriteAsync("Quantity");
-                await header.WriteAsync("EventDate");
+                await using (RowWriter header = await sheet.StartRowAsync())
+                {
+                    await header.WriteAsync("Quantity");
+                    await header.WriteAsync("EventDate");
+                }
 
-                await using RowWriter row = await sheet.StartRowAsync();
-                await row.WriteAsync((int?)null);
-                await row.WriteAsync((DateTime?)dt);
+                await using (RowWriter row = await sheet.StartRowAsync())
+                {
+                    await row.WriteAsync((int?)null);
+                    await row.WriteAsync((DateTime?)dt);
+                }
 
                 await sheet.EndAsync();
             });
@@ -225,8 +249,10 @@ namespace ExcelReader.Tests
                 SheetWriter sheet = wb.AddSheet("Sheet1");
                 await sheet.StartAsync();
 
-                await using RowWriter header = await sheet.StartRowAsync();
-                await header.WriteAsync("Name");
+                await using (RowWriter header = await sheet.StartRowAsync())
+                {
+                    await header.WriteAsync("Name");
+                }
 
                 foreach (string name in new[] { "Alice", "Bob", "Carol", "Dave", "Eve" })
                 {
@@ -256,18 +282,26 @@ namespace ExcelReader.Tests
             {
                 SheetWriter sheet1 = wb.AddSheet("Alpha");
                 await sheet1.StartAsync();
-                await using RowWriter h1 = await sheet1.StartRowAsync();
-                await h1.WriteAsync("Value");
-                await using RowWriter r1 = await sheet1.StartRowAsync();
-                await r1.WriteAsync("FromAlpha");
+                await using (RowWriter h1 = await sheet1.StartRowAsync())
+                {
+                    await h1.WriteAsync("Value");
+                }
+                await using (RowWriter r1 = await sheet1.StartRowAsync())
+                {
+                    await r1.WriteAsync("FromAlpha");
+                }
                 await sheet1.EndAsync();
 
                 SheetWriter sheet2 = wb.AddSheet("Beta");
                 await sheet2.StartAsync();
-                await using RowWriter h2 = await sheet2.StartRowAsync();
-                await h2.WriteAsync("Value");
-                await using RowWriter r2 = await sheet2.StartRowAsync();
-                await r2.WriteAsync("FromBeta");
+                await using (RowWriter h2 = await sheet2.StartRowAsync())
+                {
+                    await h2.WriteAsync("Value");
+                }
+                await using (RowWriter r2 = await sheet2.StartRowAsync())
+                {
+                    await r2.WriteAsync("FromBeta");
+                }
                 await sheet2.EndAsync();
             });
 
@@ -294,15 +328,19 @@ namespace ExcelReader.Tests
                 SheetWriter sheet = wb.AddSheet("Sheet1");
                 await sheet.StartAsync();
 
-                await using RowWriter header = await sheet.StartRowAsync();
-                await header.WriteAsync("A");
-                header.Skip(1);
-                await header.WriteAsync("C");
+                await using (RowWriter header = await sheet.StartRowAsync())
+                {
+                    await header.WriteAsync("A");
+                    header.Skip(1);
+                    await header.WriteAsync("C");
+                }
 
-                await using RowWriter row = await sheet.StartRowAsync();
-                await row.WriteAsync("aaa");
-                row.Skip(1);
-                await row.WriteAsync("ccc");
+                await using (RowWriter row = await sheet.StartRowAsync())
+                {
+                    await row.WriteAsync("aaa");
+                    row.Skip(1);
+                    await row.WriteAsync("ccc");
+                }
 
                 await sheet.EndAsync();
             });
@@ -324,11 +362,15 @@ namespace ExcelReader.Tests
                 SheetWriter sheet = wb.AddSheet("Sheet1");
                 await sheet.StartAsync();
 
-                await using RowWriter header = await sheet.StartRowAsync();
-                await header.WriteAsync("Name");
+                await using (RowWriter header = await sheet.StartRowAsync())
+                {
+                    await header.WriteAsync("Name");
+                }
 
-                await using RowWriter row = await sheet.StartRowAsync();
-                await row.WriteAsync("<Alice & \"Bob\">");
+                await using (RowWriter row = await sheet.StartRowAsync())
+                {
+                    await row.WriteAsync("<Alice & \"Bob\">");
+                }
 
                 await sheet.EndAsync();
             });
@@ -351,11 +393,15 @@ namespace ExcelReader.Tests
             SheetWriter sheet = wb.AddSheet("Sheet1");
             await sheet.StartAsync();
 
-            await using RowWriter header = await sheet.StartRowAsync();
-            await header.WriteAsync("Name");
+            await using (RowWriter header = await sheet.StartRowAsync())
+            {
+                await header.WriteAsync("Name");
+            }
 
-            await using RowWriter row = await sheet.StartRowAsync();
-            await row.WriteAsync("Auto");
+            await using (RowWriter row = await sheet.StartRowAsync())
+            {
+                await row.WriteAsync("Auto");
+            }
 
             // Do NOT call EndAsync — rely on DisposeAsync chain
             await wb.DisposeAsync();
@@ -377,14 +423,20 @@ namespace ExcelReader.Tests
                 SheetWriter sheet = wb.AddSheet("Sheet1");
                 await sheet.StartAsync();
 
-                await using RowWriter skip = await sheet.StartRowAsync();
-                await skip.WriteAsync("ignored");
+                await using (RowWriter skip = await sheet.StartRowAsync())
+                {
+                    await skip.WriteAsync("ignored");
+                }
 
-                await using RowWriter header = await sheet.StartRowAsync();
-                await header.WriteAsync("Name");
+                await using (RowWriter header = await sheet.StartRowAsync())
+                {
+                    await header.WriteAsync("Name");
+                }
 
-                await using RowWriter row = await sheet.StartRowAsync();
-                await row.WriteAsync("HeaderRow2");
+                await using (RowWriter row = await sheet.StartRowAsync())
+                {
+                    await row.WriteAsync("HeaderRow2");
+                }
 
                 await sheet.EndAsync();
             });
@@ -475,8 +527,10 @@ namespace ExcelReader.Tests
                 SheetWriter sheet = wb.AddSheet("Sheet1");
                 await sheet.StartAsync();
 
-                await using RowWriter header = await sheet.StartRowAsync();
-                await header.WriteAsync("Age");
+                await using (RowWriter header = await sheet.StartRowAsync())
+                {
+                    await header.WriteAsync("Age");
+                }
 
                 for (int i = 0; i < rowCount; i++)
                 {

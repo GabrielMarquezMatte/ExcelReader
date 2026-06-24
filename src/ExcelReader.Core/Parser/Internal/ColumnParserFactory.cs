@@ -1,4 +1,5 @@
 using System.Diagnostics.CodeAnalysis;
+using System.Globalization;
 using System.Linq.Expressions;
 using System.Reflection;
 using ExcelReader.Core.Enums;
@@ -84,7 +85,7 @@ namespace ExcelReader.Core.Parser.Internal
         private static ColumnParser<T> BuildStringParser<T>(PropertyInfo prop) where T : new()
         {
             RefAction<T, string> setter = CompileSetter<T, string>(prop);
-            return (ref T model, in Row row, int col, bool isDate1904) =>
+            return (ref model, in row, col, isDate1904) =>
             {
                 Cell cell = row[col];
                 if (cell.Type == CellType.Empty)
@@ -99,7 +100,7 @@ namespace ExcelReader.Core.Parser.Internal
         private static ColumnParser<T> BuildBoolParser<T>(PropertyInfo prop) where T : new()
         {
             RefAction<T, bool> setter = CompileSetter<T, bool>(prop);
-            return (ref T model, in Row row, int col, bool isDate1904) =>
+            return (ref model, in row, col, isDate1904) =>
             {
                 Cell cell = row[col];
                 if (cell.Type == CellType.Empty)
@@ -114,7 +115,7 @@ namespace ExcelReader.Core.Parser.Internal
         private static ColumnParser<T> BuildDateTimeParser<T>(PropertyInfo prop) where T : new()
         {
             RefAction<T, DateTime> setter = CompileSetter<T, DateTime>(prop);
-            return (ref T model, in Row row, int col, bool isDate1904) =>
+            return (ref model, in row, col, isDate1904) =>
             {
                 Cell cell = row[col];
                 if (cell.Type == CellType.Empty)
@@ -137,14 +138,14 @@ namespace ExcelReader.Core.Parser.Internal
             where TProp : IUtf8SpanParsable<TProp>
         {
             RefAction<T, TProp> setter = CompileSetter<T, TProp>(prop);
-            return (ref T model, in Row row, int col, bool isDate1904) =>
+            return (ref model, in row, col, isDate1904) =>
             {
                 Cell cell = row[col];
                 if (cell.Type == CellType.Empty)
                 {
                     return true;
                 }
-                if (!cell.TryParse<TProp>(null, out TProp? value))
+                if (!cell.TryParse<TProp>(CultureInfo.InvariantCulture, out TProp? value))
                 {
                     return false;
                 }
@@ -156,7 +157,7 @@ namespace ExcelReader.Core.Parser.Internal
         private static ColumnParser<T> BuildNullableBoolParser<T>(PropertyInfo prop) where T : new()
         {
             RefAction<T, bool?> setter = CompileSetter<T, bool?>(prop);
-            return (ref T model, in Row row, int col, bool isDate1904) =>
+            return (ref model, in row, col, _) =>
             {
                 Cell cell = row[col];
                 if (cell.Type == CellType.Empty)
@@ -171,7 +172,7 @@ namespace ExcelReader.Core.Parser.Internal
         private static ColumnParser<T> BuildNullableDateTimeParser<T>(PropertyInfo prop) where T : new()
         {
             RefAction<T, DateTime?> setter = CompileSetter<T, DateTime?>(prop);
-            return (ref T model, in Row row, int col, bool isDate1904) =>
+            return (ref model, in row, col, isDate1904) =>
             {
                 Cell cell = row[col];
                 if (cell.Type == CellType.Empty)
@@ -194,14 +195,14 @@ namespace ExcelReader.Core.Parser.Internal
             where TProp : struct, IUtf8SpanParsable<TProp>
         {
             RefAction<T, TProp?> setter = CompileSetter<T, TProp?>(prop);
-            return (ref T model, in Row row, int col, bool isDate1904) =>
+            return (ref model, in row, col, _) =>
             {
                 Cell cell = row[col];
                 if (cell.Type == CellType.Empty)
                 {
                     return true;
                 }
-                if (!cell.TryParse<TProp>(null, out TProp parsed))
+                if (!cell.TryParse(CultureInfo.InvariantCulture, out TProp parsed))
                 {
                     return false;
                 }
