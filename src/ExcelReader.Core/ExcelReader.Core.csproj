@@ -4,6 +4,41 @@
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+
+    <!-- Ship XML docs (members without a doc comment do not warn). -->
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
   </PropertyGroup>
+
+  <!-- NuGet package metadata -->
+  <PropertyGroup>
+    <PackageId>ExcelReader.NET</PackageId>
+    <Version>1.0.0</Version>
+    <Authors>Gabriel Matte</Authors>
+    <Title>ExcelReader</Title>
+    <Description>High-performance, low-allocation XLSX reading, typed row parsing, and minimal workbook writing for .NET.</Description>
+    <PackageTags>excel;xlsx;reader;writer;parser;spreadsheet;streaming;performance;low-allocation</PackageTags>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageProjectUrl>https://github.com/GabrielMarquezMatte/ExcelReader</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/GabrielMarquezMatte/ExcelReader</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageReleaseNotes>See the changelog: https://github.com/GabrielMarquezMatte/ExcelReader/releases</PackageReleaseNotes>
+    <Copyright>Copyright (c) Gabriel Matte</Copyright>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+    <DebugType>portable</DebugType>
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
+    <EmbedUntrackedSources>true</EmbedUntrackedSources>
+    <Deterministic>true</Deterministic>
+    <ContinuousIntegrationBuild Condition="'$(GITHUB_ACTIONS)' == 'true'">true</ContinuousIntegrationBuild>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="..\..\README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
 
 </Project>
