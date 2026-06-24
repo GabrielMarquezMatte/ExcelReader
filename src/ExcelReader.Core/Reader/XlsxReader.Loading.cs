@@ -109,7 +109,7 @@ namespace ExcelReader.Core.Reader
             // Decoded text is never longer than its XML, so src.Length bounds the flat buffer.
             _sharedFlat = ArrayPool<byte>.Shared.Rent(Math.Max(1, src.Length));
 
-            // Pre-size offsets from <sst uniqueCount="N"> to avoid repeated List growth.
+            // Pre-size offsets from <sst uniqueCount="N">; exact counts avoid a final array copy.
             int uniqueCount = 0;
             int sstPos = IdxOf(src, 0, "<sst"u8);
             if (sstPos >= 0)
@@ -121,7 +121,8 @@ namespace ExcelReader.Core.Reader
                 }
             }
 
-            var offsets = new List<int>(uniqueCount + 1) { 0 };
+            int[] offsets = new int[uniqueCount > 0 ? uniqueCount + 1 : 16];
+            int offsetCount = 1;
             int flat = 0;
             int p = 0;
             while (true)
@@ -150,9 +151,22 @@ namespace ExcelReader.Core.Reader
                 {
                     p = open + 1;
                 }
-                offsets.Add(flat);
+                AddSharedOffset(ref offsets, ref offsetCount, flat);
             }
-            _sharedOffsets = [.. offsets];
+            if (offsetCount != offsets.Length)
+            {
+                Array.Resize(ref offsets, offsetCount);
+            }
+            _sharedOffsets = offsets;
+        }
+
+        private static void AddSharedOffset(ref int[] offsets, ref int count, int value)
+        {
+            if (count == offsets.Length)
+            {
+                Array.Resize(ref offsets, offsets.Length * 2);
+            }
+            offsets[count++] = value;
         }
 
         // Whole-part bytes, or null when the part is absent. Sync and async variants share every parser.

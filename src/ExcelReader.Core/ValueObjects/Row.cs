@@ -98,7 +98,7 @@ namespace ExcelReader.Core.ValueObjects
             _index = -1;
         }
 
-        public RowCell Current
+        public readonly RowCell Current
         {
             get
             {

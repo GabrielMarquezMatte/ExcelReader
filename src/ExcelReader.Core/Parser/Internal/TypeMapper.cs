@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Reflection;
 using System.Runtime.ExceptionServices;
 
@@ -32,8 +33,7 @@ namespace ExcelReader.Core.Parser.Internal
             PropertyInfo[] properties = typeof(T)
                 .GetProperties(BindingFlags.Public | BindingFlags.Instance);
 
-            var names = new List<string>(properties.Length);
-            var parsers = new List<ColumnParser<T>>(properties.Length);
+            var propertyMaps = new List<PropertyMap<T>>(properties.Length);
 
             foreach (PropertyInfo prop in properties)
             {
@@ -41,43 +41,81 @@ namespace ExcelReader.Core.Parser.Internal
                 {
                     continue;
                 }
-                ColumnParser<T>? parser = ColumnParserFactory.Build<T>(prop);
+                var parser = ColumnParserFactory.Build<T>(prop);
                 if (parser is null)
                 {
                     continue;
                 }
-                ExcelColumnAttribute? attr = prop.GetCustomAttribute<ExcelColumnAttribute>();
-                string name = attr is not null ? attr.Name : prop.Name;
-                names.Add(name);
-                parsers.Add(parser);
+                ExcelColumnAttribute[] attrs = [.. prop.GetCustomAttributes<ExcelColumnAttribute>()];
+                string[] names = attrs.Length == 0
+                    ? [prop.Name]
+                    : [.. attrs.Select(static attr => attr.Name)];
+                propertyMaps.Add(new PropertyMap<T>(names, parser));
             }
 
-            return new TypeMapInfo<T>([.. names], [.. parsers]);
+            return new TypeMapInfo<T>([.. propertyMaps]);
         }
     }
 
     internal readonly struct TypeMapInfo<T> where T : new()
     {
-        internal readonly string[] Names;
-        internal readonly ColumnParser<T>[] Parsers;
+        private readonly PropertyMap<T>[] _properties;
+        private readonly ConcurrentDictionary<StringComparer, Dictionary<string, HeaderMatch<T>>> _lookupCache;
 
-        internal TypeMapInfo(string[] names, ColumnParser<T>[] parsers)
+        internal TypeMapInfo(PropertyMap<T>[] properties)
         {
-            Names = names;
-            Parsers = parsers;
+            _properties = properties;
+            _lookupCache = new ConcurrentDictionary<StringComparer, Dictionary<string, HeaderMatch<T>>>();
         }
 
-        // Linear scan — property counts are small; avoids allocating a dictionary per config.
-        internal int FindIndex(string headerName, StringComparer comparer)
+        internal int PropertyCount => _properties.Length;
+
+        internal bool TryFindHeader(string headerName, StringComparer comparer, out HeaderMatch<T> match)
         {
-            for (int i = 0; i < Names.Length; i++)
+            var lookup = _lookupCache.GetOrAdd(comparer, BuildLookup);
+            return lookup.TryGetValue(headerName, out match);
+        }
+
+        private Dictionary<string, HeaderMatch<T>> BuildLookup(StringComparer comparer)
+        {
+            Dictionary<string, HeaderMatch<T>> lookup = new(comparer);
+            for (int propertyIndex = 0; propertyIndex < _properties.Length; propertyIndex++)
             {
-                if (comparer.Equals(Names[i], headerName))
+                PropertyMap<T> property = _properties[propertyIndex];
+                for (int aliasIndex = 0; aliasIndex < property.Names.Length; aliasIndex++)
                 {
-                    return i;
+                    lookup.TryAdd(
+                        property.Names[aliasIndex],
+                        new(propertyIndex, aliasIndex, property.Parser));
                 }
             }
-            return -1;
+            return lookup;
         }
+    }
+
+    internal readonly struct PropertyMap<T> where T : new()
+    {
+        internal PropertyMap(string[] names, ColumnParser<T> parser)
+        {
+            Names = names;
+            Parser = parser;
+        }
+
+        internal string[] Names { get; }
+        internal ColumnParser<T> Parser { get; }
+    }
+
+    internal readonly struct HeaderMatch<T> where T : new()
+    {
+        internal HeaderMatch(int propertyIndex, int aliasIndex, ColumnParser<T> parser)
+        {
+            PropertyIndex = propertyIndex;
+            AliasIndex = aliasIndex;
+            Parser = parser;
+        }
+
+        internal int PropertyIndex { get; }
+        internal int AliasIndex { get; }
+        internal ColumnParser<T> Parser { get; }
     }
 }
