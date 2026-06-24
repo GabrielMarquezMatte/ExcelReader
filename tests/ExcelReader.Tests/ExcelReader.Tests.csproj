@@ -3,10 +3,13 @@
   <PropertyGroup>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
     <OutputType>Exe</OutputType>
     <RootNamespace>ExcelReader.Tests</RootNamespace>
     <TargetFramework>net10.0</TargetFramework>
     <TestingPlatformDotnetTestSupport>true</TestingPlatformDotnetTestSupport>
+    <UseMicrosoftTestingPlatformRunner>true</UseMicrosoftTestingPlatformRunner>
+    <EmitCompilerGeneratedFiles>true</EmitCompilerGeneratedFiles>
     <!-- CA2007: ConfigureAwait is not needed in test code (no captured sync context). -->
     <!-- CA1849/S6966/SS033/SS059: tests deliberately exercise the sync reader/dispose
          paths; "use the async overload" is noise here. Core keeps these rules active. -->
@@ -23,6 +26,12 @@
   </ItemGroup>
 
   <ItemGroup>
+    <PackageReference Include="Microsoft.Testing.Extensions.CodeCoverage" Version="18.8.0" />
+    <PackageReference Include="Microsoft.Testing.Extensions.TrxReport" Version="2.2.3" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="3.1.5">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
     <PackageReference Include="xunit.v3.mtp-v2" Version="3.2.2" />
   </ItemGroup>
 
