@@ -1,0 +1,75 @@
+name: Release
+
+on:
+  push:
+    tags: [ 'v*' ]
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish:
+    name: Pack & Publish to NuGet
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Cache NuGet packages
+        uses: actions/cache@v5
+        with:
+          path: ~/.nuget/packages
+          key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj', '**/Directory.Build.props') }}
+          restore-keys: |
+            ${{ runner.os }}-nuget-
+
+      - name: Derive version from tag
+        id: version
+        run: echo "value=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Restore
+        run: dotnet restore ExcelReader.slnx
+
+      - name: Build (Release)
+        run: dotnet build ExcelReader.slnx --configuration Release --no-restore -p:Version=${{ steps.version.outputs.value }}
+
+      - name: Test (Release)
+        run: dotnet test --project tests/ExcelReader.Tests/ExcelReader.Tests.csproj --configuration Release --no-build
+
+      - name: Pack
+        run: >-
+          dotnet pack src/ExcelReader.Core/ExcelReader.Core.csproj
+          --configuration Release
+          --no-restore
+          -p:Version=${{ steps.version.outputs.value }}
+          --output ./artifacts
+
+      - name: NuGet login (Trusted Publishing / OIDC)
+        uses: NuGet/login@v1
+        id: nuget-login
+        with:
+          user: ${{ vars.NUGET_USER }}
+
+      - name: Push to NuGet
+        run: >-
+          dotnet nuget push "./artifacts/*.nupkg"
+          --api-key "${{ steps.nuget-login.outputs.NUGET_API_KEY }}"
+          --source https://api.nuget.org/v3/index.json
+          --skip-duplicate
+
+      - name: Upload package artifacts
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: nuget-packages
+          path: ./artifacts/*
+          if-no-files-found: warn
