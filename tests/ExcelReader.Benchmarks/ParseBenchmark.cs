@@ -2,6 +2,8 @@ using BenchmarkDotNet.Attributes;
 using ExcelReader.Core.Parser;
 using ExcelReader.Core.Reader;
 using MiniExcelLibs;
+using Sylvan.Data;
+using Sylvan.Data.Excel;
 
 namespace ExcelReader.Benchmarks
 {
@@ -59,6 +61,32 @@ namespace ExcelReader.Benchmarks
             using var ms = new MemoryStream(_workbook, writable: false);
             long acc = 0;
             foreach (Record rec in ms.Query<Record>(excelType: ExcelType.XLSX))
+            {
+                acc += Accumulate(rec);
+            }
+            return acc;
+        }
+
+        [Benchmark]
+        public long Sylvan()
+        {
+            using var ms = new MemoryStream(_workbook, writable: false);
+            using var reader = ExcelDataReader.Create(ms, ExcelWorkbookType.ExcelXml, new ExcelDataReaderOptions());
+            long acc = 0;
+            foreach (Record rec in reader.GetRecords<Record>())
+            {
+                acc += Accumulate(rec);
+            }
+            return acc;
+        }
+
+        [Benchmark]
+        public async Task<long> SylvanAsync()
+        {
+            await using var ms = new MemoryStream(_workbook, writable: false);
+            await using var reader = await ExcelDataReader.CreateAsync(ms, ExcelWorkbookType.ExcelXml, new ExcelDataReaderOptions()).ConfigureAwait(false);
+            long acc = 0;
+            await foreach (Record rec in reader.GetRecordsAsync<Record>())
             {
                 acc += Accumulate(rec);
             }
