@@ -7,12 +7,11 @@ namespace ExcelReader.Core.Parser.Internal
     internal delegate void RefAction<TModel, in TProperty>(ref TModel model, TProperty value)
         where TModel : allows ref struct;
 
-    // Column-level TryParse: accesses row[columnIndex] internally.
+    // Column-level TryParse over a cell already matched to the target column.
     // Returns false on parse failure; true on success or empty cell (keep default).
     internal delegate bool ColumnParser<TModel>(
         ref TModel model,
-        in Row row,
-        int columnIndex,
+        in Cell cell,
         bool isDate1904)
         where TModel : allows ref struct;
 }

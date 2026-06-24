@@ -7,8 +7,7 @@ namespace ExcelReader.Core.Parser.Internal
         private readonly TypeMapInfo<T> _typeInfo;
         private readonly StringComparer _comparer;
         private readonly bool _isDate1904;
-        private ColumnParser<T>?[]? _columnParsers;
-        private int _maxColumn;
+        private ColumnBinding<T>[]? _bindings;
 
         internal RowProjector(TypeMapInfo<T> typeInfo, StringComparer comparer, bool isDate1904)
         {
@@ -17,40 +16,92 @@ namespace ExcelReader.Core.Parser.Internal
             _isDate1904 = isDate1904;
         }
 
-        internal readonly bool IsMapped => _columnParsers is not null;
+        internal readonly bool IsMapped => _bindings is not null;
 
         internal void BuildColumnMap(in Row row)
         {
-            _maxColumn = row.ColumnCount;
-            _columnParsers = new ColumnParser<T>?[_maxColumn];
-            for (int col = 0; col < _maxColumn; col++)
+            int propertyCount = _typeInfo.PropertyCount;
+            int[] columns = new int[propertyCount];
+            int[] aliasIndexes = new int[propertyCount];
+            var parsers = new ColumnParser<T>?[propertyCount];
+            Array.Fill(aliasIndexes, int.MaxValue);
+
+            int bindingCount = 0;
+            foreach (RowCell rowCell in row.Cells)
             {
-                Cell cell = row[col];
+                Cell cell = rowCell.Value;
                 string header = cell.GetString();
                 if (string.IsNullOrEmpty(header))
                 {
                     continue;
                 }
-                int index = _typeInfo.FindIndex(header, _comparer);
-                if (index >= 0)
+                if (!_typeInfo.TryFindHeader(header, _comparer, out HeaderMatch<T> match))
                 {
-                    _columnParsers[col] = _typeInfo.Parsers[index];
+                    continue;
+                }
+                if (match.AliasIndex >= aliasIndexes[match.PropertyIndex])
+                {
+                    continue;
+                }
+                if (aliasIndexes[match.PropertyIndex] == int.MaxValue)
+                {
+                    bindingCount++;
+                }
+                columns[match.PropertyIndex] = rowCell.ColumnIndex;
+                parsers[match.PropertyIndex] = match.Parser;
+                aliasIndexes[match.PropertyIndex] = match.AliasIndex;
+            }
+
+            var bindings = new ColumnBinding<T>[bindingCount];
+            int index = 0;
+            for (int i = 0; i < parsers.Length; i++)
+            {
+                ColumnParser<T>? parser = parsers[i];
+                if (parser is not null)
+                {
+                    bindings[index++] = new ColumnBinding<T>(columns[i], parser);
                 }
             }
+            Array.Sort(bindings, static (left, right) => left.Column.CompareTo(right.Column));
+            _bindings = bindings;
         }
 
         internal readonly void ParseCurrentRow(in Row row, ref T model)
         {
-            int bound = Math.Min(_maxColumn, row.ColumnCount);
-            for (int col = 0; col < bound; col++)
+            ColumnBinding<T>[] bindings = _bindings!;
+            int bindingIndex = 0;
+            foreach (RowCell rowCell in row.Cells)
             {
-                ColumnParser<T>? parser = _columnParsers![col];
-                if (parser is null)
+                int column = rowCell.ColumnIndex;
+                while (bindingIndex < bindings.Length && bindings[bindingIndex].Column < column)
                 {
-                    continue;
+                    bindingIndex++;
                 }
-                parser(ref model, in row, col, _isDate1904);
+                if (bindingIndex == bindings.Length)
+                {
+                    return;
+                }
+                ColumnBinding<T> binding = bindings[bindingIndex];
+                if (binding.Column == column)
+                {
+                    Cell cell = rowCell.Value;
+                    binding.Parser(ref model, in cell, _isDate1904);
+                    bindingIndex++;
+                }
             }
+        }
+
+        private readonly struct ColumnBinding<TModel>
+            where TModel : new()
+        {
+            internal ColumnBinding(int column, ColumnParser<TModel> parser)
+            {
+                Column = column;
+                Parser = parser;
+            }
+
+            internal int Column { get; }
+            internal ColumnParser<TModel> Parser { get; }
         }
     }
 }
