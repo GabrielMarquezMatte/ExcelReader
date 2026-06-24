@@ -1,6 +1,6 @@
 namespace ExcelReader.Core.Parser
 {
-    [AttributeUsage(AttributeTargets.Property, AllowMultiple = false, Inherited = true)]
+    [AttributeUsage(AttributeTargets.Property, AllowMultiple = true, Inherited = true)]
     public sealed class ExcelColumnAttribute : Attribute
     {
         public string Name { get; }

@@ -24,6 +24,13 @@ namespace ExcelReader.Tests
             public int Count { get; set; }
         }
 
+        private sealed class MultiAttributeRow
+        {
+            [ExcelColumn("Preferred Name")]
+            [ExcelColumn("Legacy Name")]
+            public string? Name { get; set; }
+        }
+
         private struct MeasurementRow
         {
             public double X { get; set; }
@@ -157,6 +164,40 @@ namespace ExcelReader.Tests
             var result = new ExcelParser<AttributeRow>().Parse(reader).ToList();
             Assert.Single(result);
             Assert.Equal(7, result[0].Count);
+        }
+
+        [Fact]
+        public async Task MultipleExcelColumnAttributesCanMatchFallbackAlias()
+        {
+            await using var ms = await TypedWorkbook.BuildAsync(["Legacy Name"], ["Jane"]);
+            await using var reader = await Excel.FromAsync(ms, ct: TestContext.Current.CancellationToken);
+            var result = new ExcelParser<MultiAttributeRow>().Parse(reader).ToList();
+            Assert.Single(result);
+            Assert.Equal("Jane", result[0].Name);
+        }
+
+        [Fact]
+        public async Task MultipleExcelColumnAttributesPreferFirstMatchingAttribute()
+        {
+            await using var ms = await TypedWorkbook.BuildAsync(
+                ["Legacy Name", "Preferred Name"],
+                ["Old", "New"]);
+            await using var reader = await Excel.FromAsync(ms, ct: TestContext.Current.CancellationToken);
+            var result = new ExcelParser<MultiAttributeRow>().Parse(reader).ToList();
+            Assert.Single(result);
+            Assert.Equal("New", result[0].Name);
+        }
+
+        [Fact]
+        public async Task MultipleExcelColumnAttributesIgnoreLowerPriorityAliasAfterPreferredMatch()
+        {
+            await using var ms = await TypedWorkbook.BuildAsync(
+                ["Preferred Name", "Legacy Name"],
+                ["New", "Old"]);
+            await using var reader = await Excel.FromAsync(ms, ct: TestContext.Current.CancellationToken);
+            var result = new ExcelParser<MultiAttributeRow>().Parse(reader).ToList();
+            Assert.Single(result);
+            Assert.Equal("New", result[0].Name);
         }
 
         // --- Config: ColumnNameComparer ---
