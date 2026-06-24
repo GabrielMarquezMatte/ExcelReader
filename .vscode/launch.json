@@ -1,0 +1,35 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "ExcelReader.Benchmarks",
+            "type": "coreclr",
+            "request": "launch",
+            "preLaunchTask": "build",
+            "program": "${workspaceFolder}/tests/ExcelReader.Benchmarks/bin/Debug/net10.0/ExcelReader.Benchmarks.dll",
+            "args": [],
+            "cwd": "${workspaceFolder}/tests/ExcelReader.Benchmarks",
+            "stopAtEntry": false,
+            "serverReadyAction": {
+                "action": "openExternally",
+                "pattern": "\\bNow listening on:\\s+(https?://\\S+)",
+                "uriFormat": "%s/swagger/index.html"
+            },
+            "env": {
+                "ASPNETCORE_ENVIRONMENT": "Development"
+            },
+            "sourceFileMap": {
+                "/Views": "${workspaceFolder}/Views"
+            },
+            "console": "integratedTerminal",
+            "checkForDevCert": true,
+            "targetArchitecture": "x86_64",
+            "logging": {
+                "moduleLoad": false,
+                "consoleUsageMessage": true,
+            },
+            "justMyCode": true,
+            "suppressJITOptimizations": false
+        }
+    ]
+}

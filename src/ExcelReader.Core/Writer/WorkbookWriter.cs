@@ -16,6 +16,7 @@ namespace ExcelReader.Core.Writer
         private readonly List<(string Name, int SheetId)> _sheets = [];
         private WriterState _state = WriterState.Created;
         private bool _sheetActive;
+        private SheetWriter? _activeSheet;
         private bool _disposed;
 
         private WorkbookWriter(ZipArchive zip, Stream stream, bool leaveOpen)
@@ -64,7 +65,8 @@ namespace ExcelReader.Core.Writer
             }
             _sheetActive = true;
             int sheetId = _sheets.Count + 1;
-            return new SheetWriter(this, _zip, name, sheetId);
+            _activeSheet = new SheetWriter(this, _zip, name, sheetId);
+            return _activeSheet;
         }
 
         internal void RegisterSheet(string name, int sheetId)
@@ -75,6 +77,7 @@ namespace ExcelReader.Core.Writer
         internal void NotifySheetEnded()
         {
             _sheetActive = false;
+            _activeSheet = null;
         }
 
         public async ValueTask EndAsync(CancellationToken ct = default)
@@ -86,6 +89,10 @@ namespace ExcelReader.Core.Writer
             }
             ct.ThrowIfCancellationRequested();
             _state = WriterState.Ended;
+            if (_activeSheet is not null)
+            {
+                await _activeSheet.DisposeAsync().ConfigureAwait(false);
+            }
             await WriteStylesAsync(ct).ConfigureAwait(false);
             await WriteWorkbookAsync(ct).ConfigureAwait(false);
             await WriteWorkbookRelsAsync(ct).ConfigureAwait(false);
