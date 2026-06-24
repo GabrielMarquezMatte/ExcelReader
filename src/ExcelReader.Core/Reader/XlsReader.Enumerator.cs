@@ -68,8 +68,8 @@ namespace ExcelReader.Core.Reader
                 while (_pos + 4 <= workbook.Length)
                 {
                     int recordStart = _pos;
-                    int id = ReadU16Inner(workbook, _pos);
-                    int len = ReadU16Inner(workbook, _pos + 2);
+                    int id = ReadU16(workbook, _pos);
+                    int len = ReadU16(workbook, _pos + 2);
                     _pos += 4;
                     if (_pos + len > workbook.Length)
                     {
@@ -81,7 +81,7 @@ namespace ExcelReader.Core.Reader
 
                     if (id == Rec.Bof)
                     {
-                        if (data.Length < 4 || ReadU16Inner(data, 0) != Biff8Version || ReadU16Inner(data, 2) != SubstreamWorksheet)
+                        if (data.Length < 4 || ReadU16(data, 0) != Biff8Version || ReadU16(data, 2) != SubstreamWorksheet)
                         {
                             throw new NotSupportedException("Only BIFF8 worksheet streams are supported.");
                         }
@@ -150,7 +150,7 @@ namespace ExcelReader.Core.Reader
                     case Rec.Formula:
                     case Rec.Blank:
                     case Rec.MulBlank:
-                        row = ReadU16Inner(data, 0);
+                        row = ReadU16(data, 0);
                         return true;
                     default:
                         return false;
@@ -167,22 +167,22 @@ namespace ExcelReader.Core.Reader
                     case Rec.LabelSst:
                         if (data.Length >= 10)
                         {
-                            int col = ReadU16Inner(data, 2);
-                            int style = ReadU16Inner(data, 4);
-                            var (start, len) = _reader.SharedAt(ReadI32Inner(data, 6));
+                            int col = ReadU16(data, 2);
+                            int style = ReadU16(data, 4);
+                            var (start, len) = _reader.SharedAt(ReadI32(data, 6));
                             AddCell(col, start, len, CellType.ExcelString, style, fromShared: true);
                         }
                         break;
                     case Rec.Number:
                         if (data.Length >= 14)
                         {
-                            AddDouble(ReadU16Inner(data, 2), ReadU16Inner(data, 4), BinaryPrimitives.ReadDoubleLittleEndian(data.Slice(6, 8)));
+                            AddDouble(ReadU16(data, 2), ReadU16(data, 4), BinaryPrimitives.ReadDoubleLittleEndian(data.Slice(6, 8)));
                         }
                         break;
                     case Rec.Rk:
                         if (data.Length >= 10)
                         {
-                            AddDouble(ReadU16Inner(data, 2), ReadU16Inner(data, 4), DecodeRk(ReadU32(data, 6)));
+                            AddDouble(ReadU16(data, 2), ReadU16(data, 4), DecodeRk(ReadU32(data, 6)));
                         }
                         break;
                     case Rec.MulRk:
@@ -194,9 +194,7 @@ namespace ExcelReader.Core.Reader
                     case Rec.Formula:
                         ParseFormula(data);
                         break;
-                    default:
-                        // Blank / MulBlank and any other record contribute no value.
-                        break;
+                    // Blank / MulBlank and unknown records contribute no value.
                 }
             }
 
@@ -206,9 +204,9 @@ namespace ExcelReader.Core.Reader
                 {
                     return;
                 }
-                int col = ReadU16Inner(data, 2);
-                int style = ReadU16Inner(data, 4);
-                int chars = ReadU16Inner(data, 6);
+                int col = ReadU16(data, 2);
+                int style = ReadU16(data, 4);
+                int chars = ReadU16(data, 6);
                 byte flags = data[8];
                 const int start = 9;
                 int byteCount = (flags & 1) == 0 ? chars : chars * 2;
@@ -228,11 +226,11 @@ namespace ExcelReader.Core.Reader
                 {
                     return;
                 }
-                int col = ReadU16Inner(data, 2);
+                int col = ReadU16(data, 2);
                 int end = data.Length - 2;
                 for (int pos = 4; pos + 6 <= end; pos += 6, col++)
                 {
-                    AddDouble(col, ReadU16Inner(data, pos), DecodeRk(ReadU32(data, pos + 2)));
+                    AddDouble(col, ReadU16(data, pos), DecodeRk(ReadU32(data, pos + 2)));
                 }
             }
 
@@ -242,8 +240,8 @@ namespace ExcelReader.Core.Reader
                 {
                     return;
                 }
-                int col = ReadU16Inner(data, 2);
-                int style = ReadU16Inner(data, 4);
+                int col = ReadU16(data, 2);
+                int style = ReadU16(data, 4);
                 byte value = data[6];
                 bool isError = data[7] != 0;
                 int start = _valLen;
@@ -266,8 +264,8 @@ namespace ExcelReader.Core.Reader
                 {
                     return;
                 }
-                int col = ReadU16Inner(data, 2);
-                int style = ReadU16Inner(data, 4);
+                int col = ReadU16(data, 2);
+                int style = ReadU16(data, 4);
                 ReadOnlySpan<byte> result = data.Slice(6, 8);
                 int start = _valLen;
                 if (result[6] == 0xFF && result[7] == 0xFF)
@@ -372,21 +370,6 @@ namespace ExcelReader.Core.Reader
                     value = BitConverter.Int64BitsToDouble(unchecked((long)raw));
                 }
                 return (rk & 0x01) != 0 ? value / 100.0 : value;
-            }
-
-            private static ushort ReadU16Inner(ReadOnlySpan<byte> src, int offset)
-            {
-                return BinaryPrimitives.ReadUInt16LittleEndian(src.Slice(offset, 2));
-            }
-
-            private static uint ReadU32(ReadOnlySpan<byte> src, int offset)
-            {
-                return BinaryPrimitives.ReadUInt32LittleEndian(src.Slice(offset, 4));
-            }
-
-            private static int ReadI32Inner(ReadOnlySpan<byte> src, int offset)
-            {
-                return BinaryPrimitives.ReadInt32LittleEndian(src.Slice(offset, 4));
             }
 
             public void Dispose()
