@@ -31,14 +31,11 @@ namespace ExcelReader.Core.Parser.Internal
             [SuppressMessage("SharpSource", "SS066:DisposableFieldIsNotDisposed",
                 Justification = "XlsxReader is injected and not owned by this enumerator; caller manages its lifetime.")]
             private readonly XlsxReader _reader;
-            private readonly TypeMapInfo<T> _typeInfo;
-            private readonly StringComparer _comparer;
             private readonly int _headerRow;
             private readonly CancellationToken _ct;
+            private RowProjector<T> _projector;
             private XlsxReader.Enumerator? _rows;
             private int _rowNumber;
-            private ColumnParser<T>?[]? _columnParsers;
-            private int _maxColumn;
             private T _current = default!;
 
             internal AsyncEnumerator(
@@ -49,10 +46,9 @@ namespace ExcelReader.Core.Parser.Internal
                 CancellationToken ct)
             {
                 _reader = reader;
-                _typeInfo = typeInfo;
-                _comparer = comparer;
                 _headerRow = headerRow;
                 _ct = ct;
+                _projector = new RowProjector<T>(typeInfo, comparer, reader.IsDate1904);
             }
 
             public T Current => _current;
@@ -93,51 +89,16 @@ namespace ExcelReader.Core.Parser.Internal
                 }
                 if (_rowNumber == _headerRow)
                 {
-                    BuildColumnMap(in row);
+                    _projector.BuildColumnMap(in row);
                     return false;
                 }
-                if (_columnParsers is null)
+                if (!_projector.IsMapped)
                 {
                     return false;
                 }
                 _current = new T();
-                ParseCurrentRow(in row);
+                _projector.ParseCurrentRow(in row, ref _current);
                 return true;
-            }
-
-            private void BuildColumnMap(in Row row)
-            {
-                _maxColumn = row.ColumnCount;
-                _columnParsers = new ColumnParser<T>?[_maxColumn];
-                for (int col = 0; col < _maxColumn; col++)
-                {
-                    Cell cell = row[col];
-                    string header = cell.GetString();
-                    if (string.IsNullOrEmpty(header))
-                    {
-                        continue;
-                    }
-                    int index = _typeInfo.FindIndex(header, _comparer);
-                    if (index >= 0)
-                    {
-                        _columnParsers[col] = _typeInfo.Parsers[index];
-                    }
-                }
-            }
-
-            private void ParseCurrentRow(in Row row)
-            {
-                bool isDate1904 = _reader.IsDate1904;
-                int bound = Math.Min(_maxColumn, row.ColumnCount);
-                for (int col = 0; col < bound; col++)
-                {
-                    ColumnParser<T>? parser = _columnParsers![col];
-                    if (parser is null)
-                    {
-                        continue;
-                    }
-                    parser(ref _current, in row, col, isDate1904);
-                }
             }
 
             public ValueTask DisposeAsync()
