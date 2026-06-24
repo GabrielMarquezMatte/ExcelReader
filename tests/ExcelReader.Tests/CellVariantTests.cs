@@ -7,13 +7,12 @@ namespace ExcelReader.Tests
     public class CellVariantTests
     {
         [Fact]
-        public void BooleanCellHasBooleanType()
+        public async Task BooleanCellHasBooleanType()
         {
-            using var ms = WorkbookBuilder.Build(
-                """<row r="1"><c r="A1" t="b"><v>1</v></c><c r="B1" t="b"><v>0</v></c></row>""");
-            using var reader = Excel.From(ms);
-            using var e = reader.GetEnumerator();
-            Assert.True(e.MoveNext());
+            await using var ms = await TypedWorkbook.BuildAsync([true, false]);
+            await using var reader = await Excel.FromAsync(ms, ct: TestContext.Current.CancellationToken);
+            await using var e = reader.GetEnumerator();
+            Assert.True(await e.MoveNextAsync());
             var row = e.Current;
             Assert.Equal(CellType.Boolean, row[0].Type);
             Assert.Equal("1", row[0].GetString());
@@ -24,6 +23,7 @@ namespace ExcelReader.Tests
         [Fact]
         public void ErrorCellHasErrorType()
         {
+            // Error cells (t="e") are a raw-XML feature WorkbookWriter does not emit.
             using var ms = WorkbookBuilder.Build(
                 """<row r="1"><c r="A1" t="e"><v>#DIV/0!</v></c></row>""");
             using var reader = Excel.From(ms);
@@ -36,6 +36,7 @@ namespace ExcelReader.Tests
         [Fact]
         public void FormulaCellHasFormulaType()
         {
+            // Formula string cells (t="str") are a raw-XML feature WorkbookWriter does not emit.
             using var ms = WorkbookBuilder.Build(
                 """<row r="1"><c r="A1" t="str"><v>Hello</v></c></row>""");
             using var reader = Excel.From(ms);
@@ -46,10 +47,10 @@ namespace ExcelReader.Tests
         }
 
         [Fact]
-        public void EmptyWorksheetYieldsNoRows()
+        public async Task EmptyWorksheetYieldsNoRows()
         {
-            using var ms = WorkbookBuilder.Build("");
-            using var reader = Excel.From(ms);
+            await using var ms = await TypedWorkbook.BuildAsync();
+            await using var reader = await Excel.FromAsync(ms, ct: TestContext.Current.CancellationToken);
             int count = 0;
             foreach (var _ in reader)
             {
@@ -61,6 +62,7 @@ namespace ExcelReader.Tests
         [Fact]
         public void SelfClosingRowYieldsZeroColumnCount()
         {
+            // Self-closing <row/> is a raw-XML shape WorkbookWriter never produces.
             using var ms = WorkbookBuilder.Build("""<row r="1"/>""");
             using var reader = Excel.From(ms);
             using var e = reader.GetEnumerator();
@@ -71,6 +73,7 @@ namespace ExcelReader.Tests
         [Fact]
         public void DecodesQuotAndAposEntities()
         {
+            // Shared strings are a raw-XML feature WorkbookWriter does not emit.
             using var ms = WorkbookBuilder.Build(
                 """<row r="1"><c r="A1" t="s"><v>0</v></c><c r="B1" t="s"><v>1</v></c></row>""",
                 sharedStrings: """<si><t>say &quot;hi&quot;</t></si><si><t>it&apos;s</t></si>""");
@@ -154,33 +157,31 @@ namespace ExcelReader.Tests
         }
 
         [Fact]
-        public void TryGetDateTimeOnInlineStringReturnsFalse()
+        public async Task TryGetDateTimeOnInlineStringReturnsFalse()
         {
-            using var ms = WorkbookBuilder.Build(
-                """<row r="1"><c r="A1" t="inlineStr"><is><t>not-a-date</t></is></c></row>""");
-            using var reader = Excel.From(ms);
-            using var e = reader.GetEnumerator();
-            Assert.True(e.MoveNext());
+            await using var ms = await TypedWorkbook.BuildAsync(["not-a-date"]);
+            await using var reader = await Excel.FromAsync(ms, ct: TestContext.Current.CancellationToken);
+            await using var e = reader.GetEnumerator();
+            Assert.True(await e.MoveNextAsync());
             Assert.False(e.Current[0].TryGetDateTime(out _));
         }
 
         [Fact]
-        public void TryGetDateTimeOutOfRangeSerialReturnsFalse()
+        public async Task TryGetDateTimeOutOfRangeSerialReturnsFalse()
         {
             // 3000000 exceeds the OADate upper bound of 2958466.
-            using var ms = WorkbookBuilder.Build(
-                """<row r="1"><c r="A1"><v>3000000</v></c></row>""");
-            using var reader = Excel.From(ms);
-            using var e = reader.GetEnumerator();
-            Assert.True(e.MoveNext());
+            await using var ms = await TypedWorkbook.BuildAsync([3000000]);
+            await using var reader = await Excel.FromAsync(ms, ct: TestContext.Current.CancellationToken);
+            await using var e = reader.GetEnumerator();
+            Assert.True(await e.MoveNextAsync());
             Assert.False(e.Current[0].TryGetDateTime(out _));
         }
 
         [Fact]
-        public void LeaveOpenFalseClosesStreamOnDispose()
+        public async Task LeaveOpenFalseClosesStreamOnDispose()
         {
-            using var ms = WorkbookBuilder.Build("");
-            using (var reader = Excel.From(ms, leaveOpen: false))
+            await using var ms = await TypedWorkbook.BuildAsync();
+            await using (var reader = await Excel.FromAsync(ms, leaveOpen: false, ct: TestContext.Current.CancellationToken))
             {
                 Assert.Equal(1, reader.SheetCount);
             }
@@ -188,10 +189,10 @@ namespace ExcelReader.Tests
         }
 
         [Fact]
-        public void LeaveOpenTrueKeepsStreamOpenAfterDispose()
+        public async Task LeaveOpenTrueKeepsStreamOpenAfterDispose()
         {
-            using var ms = WorkbookBuilder.Build("");
-            using (var reader = Excel.From(ms, leaveOpen: true))
+            await using var ms = await TypedWorkbook.BuildAsync();
+            await using (var reader = await Excel.FromAsync(ms, leaveOpen: true, ct: TestContext.Current.CancellationToken))
             {
                 Assert.Equal(1, reader.SheetCount);
             }
@@ -199,14 +200,13 @@ namespace ExcelReader.Tests
         }
 
         [Fact]
-        public void LargeColumnReferenceAAIsColumn26()
+        public async Task LargeColumnReferenceAAIsColumn26()
         {
             // AA in base-26: 1*26 + 1 = 27 → zero-based index 26.
-            using var ms = WorkbookBuilder.Build(
-                """<row r="1"><c r="AA1"><v>99</v></c></row>""");
-            using var reader = Excel.From(ms);
-            using var e = reader.GetEnumerator();
-            Assert.True(e.MoveNext());
+            await using var ms = await TypedWorkbook.BuildAsync([new Gap(26), 99]);
+            await using var reader = await Excel.FromAsync(ms, ct: TestContext.Current.CancellationToken);
+            await using var e = reader.GetEnumerator();
+            Assert.True(await e.MoveNextAsync());
             var row = e.Current;
             Assert.Equal(CellType.Empty, row[0].Type);
             Assert.Equal(CellType.Number, row[26].Type);
@@ -215,25 +215,23 @@ namespace ExcelReader.Tests
         }
 
         [Fact]
-        public void TryParseDoubleSucceeds()
+        public async Task TryParseDoubleSucceeds()
         {
-            using var ms = WorkbookBuilder.Build(
-                """<row r="1"><c r="A1"><v>3.14</v></c></row>""");
-            using var reader = Excel.From(ms);
-            using var e = reader.GetEnumerator();
-            Assert.True(e.MoveNext());
+            await using var ms = await TypedWorkbook.BuildAsync([3.14]);
+            await using var reader = await Excel.FromAsync(ms, ct: TestContext.Current.CancellationToken);
+            await using var e = reader.GetEnumerator();
+            Assert.True(await e.MoveNextAsync());
             Assert.True(e.Current[0].TryParse(CultureInfo.InvariantCulture, out double d));
             Assert.Equal(3.14, d);
         }
 
         [Fact]
-        public void TryParseLongSucceeds()
+        public async Task TryParseLongSucceeds()
         {
-            using var ms = WorkbookBuilder.Build(
-                $"""<row r="1"><c r="A1"><v>{long.MaxValue}</v></c></row>""");
-            using var reader = Excel.From(ms);
-            using var e = reader.GetEnumerator();
-            Assert.True(e.MoveNext());
+            await using var ms = await TypedWorkbook.BuildAsync([long.MaxValue]);
+            await using var reader = await Excel.FromAsync(ms, ct: TestContext.Current.CancellationToken);
+            await using var e = reader.GetEnumerator();
+            Assert.True(await e.MoveNextAsync());
             Assert.True(e.Current[0].TryParse(null, out long l));
             Assert.Equal(long.MaxValue, l);
         }
@@ -242,6 +240,7 @@ namespace ExcelReader.Tests
         public void Date1904WorkbookReadsCorrectDates()
         {
             // 1904 system: serial 0 = Jan 1 1904, serial 1 = Jan 2 1904.
+            // WorkbookWriter only emits the 1900 system, so this fixture stays raw XML.
             // IsDate1904 must be true; TryGetDateTime(true) shifts by +1462 days to reach the OADate epoch.
             const string styles =
                 """<styleSheet><cellXfs count="2"><xf numFmtId="0"/><xf numFmtId="14"/></cellXfs></styleSheet>""";
@@ -262,10 +261,10 @@ namespace ExcelReader.Tests
         }
 
         [Fact]
-        public void IsDate1904FalseForStandard1900Workbook()
+        public async Task IsDate1904FalseForStandard1900Workbook()
         {
-            using var ms = WorkbookBuilder.Build("");
-            using var reader = Excel.From(ms);
+            await using var ms = await TypedWorkbook.BuildAsync();
+            await using var reader = Excel.From(ms);
             Assert.False(reader.IsDate1904);
         }
     }

@@ -8,7 +8,9 @@
     <TargetFramework>net10.0</TargetFramework>
     <TestingPlatformDotnetTestSupport>true</TestingPlatformDotnetTestSupport>
     <!-- CA2007: ConfigureAwait is not needed in test code (no captured sync context). -->
-    <NoWarn>$(NoWarn);CA2007</NoWarn>
+    <!-- CA1849/S6966/SS033/SS059: tests deliberately exercise the sync reader/dispose
+         paths; "use the async overload" is noise here. Core keeps these rules active. -->
+    <NoWarn>$(NoWarn);CA2007;CA1849;S6966;SS033;SS059;HLQ005;S3459;S1144;MA0004</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>

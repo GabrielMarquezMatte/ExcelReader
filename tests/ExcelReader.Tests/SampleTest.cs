@@ -38,16 +38,16 @@ namespace ExcelReader.Tests
         }
 
         [Fact]
-        public void HandlesSparseCellsAndBufferGrowth()
+        public async Task HandlesSparseCellsAndBufferGrowth()
         {
             // A row with a gap (no B), and an inline string far larger than the 64 KB scan buffer
             // to exercise compaction/grow and the cross-boundary </c> search.
             string big = new('x', 100_000);
-            using var ms = WorkbookBuilder.Build(
-                $"""<row r="1"><c r="A1"><v>10</v></c><c r="C1"><v>30</v></c></row>""" +
-                $"""<row r="2"><c r="A2" t="inlineStr"><is><t>{big}</t></is></c></row>""");
+            await using var ms = await TypedWorkbook.BuildAsync(
+                [10, new Gap(), 30],
+                [big]);
 
-            using var reader = Excel.From(ms);
+            await using var reader = await Excel.FromAsync(ms, ct: TestContext.Current.CancellationToken);
             int r = 0;
             foreach (var row in reader)
             {
@@ -72,6 +72,7 @@ namespace ExcelReader.Tests
         [Fact]
         public void DecodesXmlEntitiesInSharedStrings()
         {
+            // Shared strings are a raw-XML feature WorkbookWriter does not emit.
             using var ms = WorkbookBuilder.Build(
                 """<row r="1"><c r="A1" t="s"><v>0</v></c></row>""",
                 sharedStrings: "<si><t>a &amp; b &lt;tag&gt; &#65;</t></si>");
@@ -106,6 +107,7 @@ namespace ExcelReader.Tests
         public void DetectsDateStylesAndConvertsSerial()
         {
             // s="1" -> cellXfs[1] -> builtin numFmtId 14 (date); s="2" -> custom 164 (date); s="0" -> General.
+            // Custom number formats are a raw-XML feature WorkbookWriter does not emit.
             const string styles =
                 """<styleSheet><numFmts count="1"><numFmt numFmtId="164" formatCode="yyyy-mm-dd hh:mm"/></numFmts>""" +
                 """<cellXfs count="3"><xf numFmtId="0"/><xf numFmtId="14"/><xf numFmtId="164"/></cellXfs></styleSheet>""";
@@ -165,10 +167,9 @@ namespace ExcelReader.Tests
             // the cross-refill </c> search on the async path; the date cell exercises style detection.
             var ct = TestContext.Current.CancellationToken;
             string big = new('x', 100_000);
-            await using var ms = WorkbookBuilder.Build(
-                """<row r="1"><c r="A1" s="1"><v>45292</v></c></row>""" +
-                $"""<row r="2"><c r="A2" t="inlineStr"><is><t>{big}</t></is></c></row>""",
-                styles: """<styleSheet><cellXfs count="2"><xf numFmtId="0"/><xf numFmtId="14"/></cellXfs></styleSheet>""");
+            await using var ms = await TypedWorkbook.BuildAsync(
+                [DateTime.FromOADate(45292)],
+                [big]);
 
             await using var reader = await Excel.FromAsync(ms, ct: ct);
             await using var e = await reader.GetAsyncEnumeratorAsync(ct);
@@ -183,6 +184,5 @@ namespace ExcelReader.Tests
 
             Assert.False(await e.MoveNextAsync());
         }
-
     }
 }
