@@ -30,9 +30,9 @@ namespace ExcelReader.Benchmarks
             long acc = 0;
             foreach (var row in reader)
             {
-                for (int c = 0; c < row.ColumnCount; c++)
+                foreach (var rowCell in row.Cells)
                 {
-                    var cell = row[c];
+                    var cell = rowCell.Value;
                     switch (cell.Type)
                     {
                         case CellType.ExcelString:
@@ -62,9 +62,9 @@ namespace ExcelReader.Benchmarks
             while (await e.MoveNextAsync())
             {
                 var row = e.Current;
-                for (int c = 0; c < row.ColumnCount; c++)
+                foreach (var rowCell in row.Cells)
                 {
-                    var cell = row[c];
+                    var cell = rowCell.Value;
                     switch (cell.Type)
                     {
                         case CellType.ExcelString:
