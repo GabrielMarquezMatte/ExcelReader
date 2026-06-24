@@ -4,26 +4,27 @@ namespace ExcelReader.Core.Writer.Internal
 {
     internal static class CellFormatter
     {
-        private static string BuildRef(int columnIndex, int rowNumber)
+        // Writes the cell reference (e.g. "B7") directly to the writer.
+        // Max XLSX cell is XFD1048576 -> 3 column letters + 7 row digits.
+        private static void WriteRef(StreamWriter xml, int columnIndex, int rowNumber)
         {
-            Span<char> colBuf = stackalloc char[3];
-            int colLen = ColumnName.Write(colBuf, columnIndex);
-            Span<char> rowBuf = stackalloc char[7];
-            rowNumber.TryFormat(rowBuf, out int rowLen, default, CultureInfo.InvariantCulture);
-            return string.Concat(colBuf[..colLen], rowBuf[..rowLen]);
+            Span<char> buf = stackalloc char[10];
+            int len = ColumnName.Write(buf, columnIndex);
+            rowNumber.TryFormat(buf[len..], out int rowLen, default, CultureInfo.InvariantCulture);
+            xml.Write(buf[..(len + rowLen)]);
         }
 
         internal static void WriteEmpty(StreamWriter xml, int columnIndex, int rowNumber)
         {
             xml.Write("<c r=\"");
-            xml.Write(BuildRef(columnIndex, rowNumber));
+            WriteRef(xml, columnIndex, rowNumber);
             xml.Write("\"/>");
         }
 
         internal static void WriteString(StreamWriter xml, string value, int columnIndex, int rowNumber)
         {
             xml.Write("<c r=\"");
-            xml.Write(BuildRef(columnIndex, rowNumber));
+            WriteRef(xml, columnIndex, rowNumber);
             xml.Write("\" t=\"inlineStr\"><is><t>");
             WriteEscaped(xml, value);
             xml.Write("</t></is></c>");
@@ -32,7 +33,7 @@ namespace ExcelReader.Core.Writer.Internal
         internal static void WriteBool(StreamWriter xml, bool value, int columnIndex, int rowNumber)
         {
             xml.Write("<c r=\"");
-            xml.Write(BuildRef(columnIndex, rowNumber));
+            WriteRef(xml, columnIndex, rowNumber);
             xml.Write("\" t=\"b\"><v>");
             xml.Write(value ? '1' : '0');
             xml.Write("</v></c>");
@@ -41,7 +42,7 @@ namespace ExcelReader.Core.Writer.Internal
         internal static void WriteDateTime(StreamWriter xml, DateTime value, int columnIndex, int rowNumber)
         {
             xml.Write("<c r=\"");
-            xml.Write(BuildRef(columnIndex, rowNumber));
+            WriteRef(xml, columnIndex, rowNumber);
             xml.Write("\" s=\"1\"><v>");
             double oaDate = value.ToOADate();
             Span<char> buf = stackalloc char[32];
@@ -54,7 +55,7 @@ namespace ExcelReader.Core.Writer.Internal
             where T : ISpanFormattable
         {
             xml.Write("<c r=\"");
-            xml.Write(BuildRef(columnIndex, rowNumber));
+            WriteRef(xml, columnIndex, rowNumber);
             xml.Write("\"><v>");
             Span<char> buf = stackalloc char[64];
             value.TryFormat(buf, out int written, default, CultureInfo.InvariantCulture);

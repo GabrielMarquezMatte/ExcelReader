@@ -55,13 +55,7 @@ namespace ExcelReader.Core.Parser.Internal
                 _ct = ct;
             }
 
-            public T Current
-            {
-                get
-                {
-                    return _current;
-                }
-            }
+            public T Current => _current;
 
             public ValueTask<bool> MoveNextAsync()
             {
@@ -72,10 +66,7 @@ namespace ExcelReader.Core.Parser.Internal
             // Ref struct access is delegated to ProcessCurrentRow (sync helper).
             private async ValueTask<bool> AdvanceAsync()
             {
-                if (_rows is null)
-                {
-                    _rows = await _reader.GetAsyncEnumeratorAsync(_ct).ConfigureAwait(false);
-                }
+                _rows ??= await _reader.GetAsyncEnumeratorAsync(_ct).ConfigureAwait(false);
                 while (true)
                 {
                     bool hasMore = await _rows.MoveNextAsync().ConfigureAwait(false);
