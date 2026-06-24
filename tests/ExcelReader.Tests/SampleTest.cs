@@ -70,6 +70,32 @@ namespace ExcelReader.Tests
         }
 
         [Fact]
+        public void CellsEnumeratesOnlyPopulatedCellsInColumnOrder()
+        {
+            using var ms = WorkbookBuilder.Build(
+                """<row r="1"><c r="A1"><v>10</v></c><c r="AA1"><v>30</v></c></row>""");
+
+            using var reader = Excel.From(ms);
+            using var e = reader.GetEnumerator();
+            Assert.True(e.MoveNext());
+
+            var row = e.Current;
+            Assert.Equal(27, row.ColumnCount);
+
+            var columns = new List<int>();
+            var values = new List<int>();
+            foreach (var rowCell in row.Cells)
+            {
+                columns.Add(rowCell.ColumnIndex);
+                Assert.True(rowCell.Value.TryParse(null, out int value));
+                values.Add(value);
+            }
+
+            Assert.Equal([0, 26], columns);
+            Assert.Equal([10, 30], values);
+        }
+
+        [Fact]
         public void DecodesXmlEntitiesInSharedStrings()
         {
             // Shared strings are a raw-XML feature WorkbookWriter does not emit.
