@@ -64,7 +64,7 @@ namespace ExcelReader.Core.Reader
                 }
 
                 ResetRow();
-                ReadOnlySpan<byte> workbook = _reader._workbook;
+                ReadOnlySpan<byte> workbook = _reader._workbook.Span;
                 while (_pos + 4 <= workbook.Length)
                 {
                     int recordStart = _pos;
@@ -299,7 +299,7 @@ namespace ExcelReader.Core.Reader
                 }
                 _valLen += written;
                 CellType type = forced ?? (_reader.IsDateStyle(style) ? CellType.Date : CellType.Number);
-                AddCell(col, start, written, type, style, fromShared: false);
+                AddCell(col, start, written, type, style, fromShared: false, number: value, hasNumber: true);
             }
 
             private void AppendError(byte error)
@@ -320,7 +320,7 @@ namespace ExcelReader.Core.Reader
                 _valLen += text.Length;
             }
 
-            private void AddCell(int col, int start, int len, CellType type, int style, bool fromShared)
+            private void AddCell(int col, int start, int len, CellType type, int style, bool fromShared, double number = 0, bool hasNumber = false)
             {
                 if (_cellCount == _cells.Length)
                 {
@@ -342,6 +342,8 @@ namespace ExcelReader.Core.Reader
                     Type = type,
                     Style = style,
                     FromShared = fromShared,
+                    Number = number,
+                    HasNumber = hasNumber,
                 };
             }
 

@@ -32,7 +32,7 @@ namespace ExcelReader.Core.ValueObjects
                 }
                 ref readonly var d = ref _cells[i];
                 var buf = d.FromShared ? _shared : _rowValues;
-                return new Cell(d.Type, buf.Slice(d.Start, d.Length), d.Style);
+                return new Cell(d.Type, buf.Slice(d.Start, d.Length), d.Number, d.HasNumber, d.Style);
             }
         }
 
@@ -104,7 +104,7 @@ namespace ExcelReader.Core.ValueObjects
             {
                 ref readonly var d = ref _cells[_index];
                 var buf = d.FromShared ? _shared : _rowValues;
-                return new RowCell(d.Column, new Cell(d.Type, buf.Slice(d.Start, d.Length), d.Style));
+                return new RowCell(d.Column, new Cell(d.Type, buf.Slice(d.Start, d.Length), d.Number, d.HasNumber, d.Style));
             }
         }
 

@@ -7,7 +7,7 @@ namespace ExcelReader.Core.Reader
 {
     public sealed partial class XlsReader : IDisposable, IAsyncDisposable
     {
-        private readonly byte[] _workbook;
+        private ReadOnlyMemory<byte> _workbook;
         private readonly (string Name, int Offset)[] _sheets;
         private readonly bool[] _styleIsDate;
         private readonly bool _date1904;
@@ -20,10 +20,10 @@ namespace ExcelReader.Core.Reader
         {
         }
 
-        private XlsReader(byte[] workbook)
+        private XlsReader(ReadOnlyMemory<byte> workbook)
         {
             _workbook = workbook;
-            ParseWorkbookGlobals(workbook, out _sheets, out _styleIsDate, out _date1904, out _sharedFlat, out _sharedOffsets);
+            ParseWorkbookGlobals(workbook.Span, out _sheets, out _styleIsDate, out _date1904, out _sharedFlat, out _sharedOffsets);
             if (_sheets.Length == 0)
             {
                 throw new InvalidDataException("The workbook contains no sheets.");
@@ -91,6 +91,7 @@ namespace ExcelReader.Core.Reader
 
         public void Dispose()
         {
+            _workbook = default;
             _sharedFlat = [];
             _sharedOffsets = [0];
         }
