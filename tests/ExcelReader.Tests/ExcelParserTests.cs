@@ -188,6 +188,18 @@ namespace ExcelReader.Tests
             Assert.Equal("New", result[0].Name);
         }
 
+        [Fact]
+        public async Task MultipleExcelColumnAttributesIgnoreLowerPriorityAliasAfterPreferredMatch()
+        {
+            await using var ms = await TypedWorkbook.BuildAsync(
+                ["Preferred Name", "Legacy Name"],
+                ["New", "Old"]);
+            await using var reader = await Excel.FromAsync(ms, ct: TestContext.Current.CancellationToken);
+            var result = new ExcelParser<MultiAttributeRow>().Parse(reader).ToList();
+            Assert.Single(result);
+            Assert.Equal("New", result[0].Name);
+        }
+
         // --- Config: ColumnNameComparer ---
 
         [Fact]
