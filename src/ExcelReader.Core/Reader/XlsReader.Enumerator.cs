@@ -20,7 +20,7 @@ namespace ExcelReader.Core.Reader
                 Justification = "Borrowed reader; caller owns its lifetime.")]
             private readonly XlsReader _reader;
             private readonly CancellationToken _ct;
-            private int _pos;
+            private readonly BiffCursor _cursor;
             private bool _ended;
             private byte[] _vals;
             private int _valLen;
@@ -34,7 +34,7 @@ namespace ExcelReader.Core.Reader
             {
                 _reader = reader;
                 _ct = ct;
-                _pos = sheetOffset;
+                _cursor = reader.OpenCursor(sheetOffset);
                 _row = -1;
                 _lastCol = -1;
                 _sorted = true;
@@ -64,20 +64,15 @@ namespace ExcelReader.Core.Reader
                 }
 
                 ResetRow();
-                ReadOnlySpan<byte> workbook = _reader._workbook.Span;
-                while (_pos + 4 <= workbook.Length)
+                BiffCursor cursor = _cursor;
+                while (true)
                 {
-                    int recordStart = _pos;
-                    int id = ReadU16(workbook, _pos);
-                    int len = ReadU16(workbook, _pos + 2);
-                    _pos += 4;
-                    if (_pos + len > workbook.Length)
+                    long recordStart = cursor.Position;
+                    if (!cursor.TryReadRecord(out int id, out ReadOnlySpan<byte> data))
                     {
                         _ended = true;
                         return FinishRow();
                     }
-                    ReadOnlySpan<byte> data = workbook.Slice(_pos, len);
-                    _pos += len;
 
                     if (id == Rec.Bof)
                     {
@@ -102,15 +97,12 @@ namespace ExcelReader.Core.Reader
                     }
                     else if (row != _row)
                     {
-                        _pos = recordStart;
+                        cursor.Position = recordStart;
                         return FinishRow();
                     }
 
                     ParseCellRecord(id, data);
                 }
-
-                _ended = true;
-                return FinishRow();
             }
 
             private bool FinishRow()
@@ -382,6 +374,7 @@ namespace ExcelReader.Core.Reader
 
             private void ReturnBuffers()
             {
+                _cursor.Dispose();
                 if (_vals.Length > 0)
                 {
                     ArrayPool<byte>.Shared.Return(_vals);

@@ -14,6 +14,10 @@ namespace ExcelReader.Core.Reader
             return new XlsxReader(stream, leaveOpen);
         }
 
+        [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP001:Dispose created",
+            Justification = "Stream ownership transfers to XlsReader, which streams from it and disposes it on Dispose (and on construction failure).")]
+        [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
+            Justification = "Stream ownership transfers to XlsReader, which streams from it and disposes it on Dispose (and on construction failure).")]
         public static XlsReader FromXlsFile(string path)
         {
             return new XlsReader(File.OpenRead(path), leaveOpen: false);
