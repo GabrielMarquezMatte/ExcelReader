@@ -1,0 +1,105 @@
+using System.Collections;
+using System.Diagnostics.CodeAnalysis;
+using ExcelReader.Core.Reader;
+using ExcelReader.Core.ValueObjects;
+
+namespace ExcelReader.Core.Parser.Internal
+{
+    [SuppressMessage("Design", "CA1034:Nested types should not be visible",
+        Justification = "Public nested struct Enumerator is the standard foreach pattern.")]
+    public sealed class XlsExcelEnumerable<T> : IEnumerable<T> where T : new()
+    {
+        private readonly XlsReader _reader;
+        private readonly ExcelParserConfig _config;
+
+        internal XlsExcelEnumerable(XlsReader reader, ExcelParserConfig config)
+        {
+            _reader = reader;
+            _config = config;
+        }
+
+        [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP015:Member should not return created and cached instance",
+            Justification = "Each call creates a fresh enumerator; no caching.")]
+        public Enumerator GetEnumerator()
+        {
+            TypeMapInfo<T> info = TypeMapper<T>.GetInfo();
+            XlsReader.Enumerator rows = _reader.GetEnumerator();
+            return new Enumerator(rows, info, _config.ColumnNameComparer, _config.HeaderRow, _reader.IsDate1904);
+        }
+
+        IEnumerator<T> IEnumerable<T>.GetEnumerator()
+        {
+            return GetEnumerator();
+        }
+
+        IEnumerator IEnumerable.GetEnumerator()
+        {
+            return GetEnumerator();
+        }
+
+        public struct Enumerator : IEnumerator<T>
+        {
+            [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP006:Implement IDisposable",
+                Justification = "Struct implements IDisposable; rows disposed in Dispose().")]
+            private readonly XlsReader.Enumerator _rows;
+            private readonly int _headerRow;
+            private RowProjector<T> _projector;
+            private int _rowNumber;
+            private T _current = default!;
+
+            internal Enumerator(
+                XlsReader.Enumerator rows,
+                TypeMapInfo<T> typeInfo,
+                StringComparer comparer,
+                int headerRow,
+                bool isDate1904)
+            {
+                _rows = rows;
+                _headerRow = headerRow;
+                _projector = new RowProjector<T>(typeInfo, comparer, isDate1904);
+            }
+
+            public readonly T Current => _current;
+
+            readonly object? IEnumerator.Current => _current;
+
+            public bool MoveNext()
+            {
+                while (_rows.MoveNext())
+                {
+                    _rowNumber++;
+                    Row row = _rows.Current;
+                    if (_rowNumber < _headerRow)
+                    {
+                        continue;
+                    }
+                    if (_rowNumber == _headerRow)
+                    {
+                        _projector.BuildColumnMap(in row);
+                        continue;
+                    }
+                    if (!_projector.IsMapped)
+                    {
+                        return false;
+                    }
+                    _current = new T();
+                    _projector.ParseCurrentRow(in row, ref _current);
+                    return true;
+                }
+                return false;
+            }
+
+            [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP007:Don't dispose injected",
+                Justification = "The enumerator owns _rows — it was created by GetEnumerator, not injected from outside.")]
+            public readonly void Dispose()
+            {
+                _rows.Dispose();
+            }
+
+            public readonly void Reset()
+            {
+                throw new NotSupportedException();
+            }
+        }
+    }
+}

@@ -13,14 +13,14 @@ namespace ExcelReader.Core.Writer.Internal
             if (columnIndex < 702) // 26 + 26*26
             {
                 columnIndex -= 26;
-                destination[0] = (char)('A' + columnIndex / 26);
-                destination[1] = (char)('A' + columnIndex % 26);
+                destination[0] = (char)('A' + (columnIndex / 26));
+                destination[1] = (char)('A' + (columnIndex % 26));
                 return 2;
             }
             columnIndex -= 702;
-            destination[0] = (char)('A' + columnIndex / 676);
-            destination[1] = (char)('A' + (columnIndex / 26) % 26);
-            destination[2] = (char)('A' + columnIndex % 26);
+            destination[0] = (char)('A' + (columnIndex / 676));
+            destination[1] = (char)('A' + (columnIndex / 26 % 26));
+            destination[2] = (char)('A' + (columnIndex % 26));
             return 3;
         }
     }

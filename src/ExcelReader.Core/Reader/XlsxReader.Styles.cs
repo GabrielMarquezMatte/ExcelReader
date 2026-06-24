@@ -5,9 +5,6 @@ namespace ExcelReader.Core.Reader
 {
     public sealed partial class XlsxReader
     {
-        private static readonly byte[] _numFmtTag = "<numFmt "u8.ToArray();
-        private static readonly byte[] _xfTag = "<xf "u8.ToArray();
-
         // Builds the cellXfs-index -> isDate table from xl/styles.xml. A style is a date when its
         // numFmtId is a builtin date/time format or a custom <numFmt> whose code reads as a date.
         private static bool[] ParseStyleDateFlags(ReadOnlySpan<byte> src)
@@ -19,7 +16,7 @@ namespace ExcelReader.Core.Reader
 
             // Custom formats: numFmtId -> isDate(formatCode). Builtin ids (<164) handled by IsBuiltinDate.
             Dictionary<int, bool> custom = new(capacity: 16);
-            foreach (var tag in Tags(src, _numFmtTag))
+            foreach (var tag in Tags(src, "<numFmt "u8))
             {
                 int id = ParseIntOr(XlsxXml.Attr(tag, " numFmtId=\""u8), -1);
                 if (id >= 0)
@@ -41,12 +38,12 @@ namespace ExcelReader.Core.Reader
                 return [];
             }
             List<bool> flags = new(capacity: 16);
-            foreach (var xf in Tags(src.Slice(open + 1, end - open - 1), _xfTag))
+            foreach (var xf in Tags(src.Slice(open + 1, end - open - 1), "<xf "u8))
             {
                 int numFmtId = ParseIntOr(XlsxXml.Attr(xf, " numFmtId=\""u8), 0);
                 flags.Add(custom.TryGetValue(numFmtId, out bool d) ? d : IsBuiltinDateFormat(numFmtId));
             }
-            return flags.ToArray();
+            return [.. flags];
         }
 
         // Builtin SpreadsheetML date/time numFmtIds (ECMA-376 §18.8.30, incl. locale variants).
