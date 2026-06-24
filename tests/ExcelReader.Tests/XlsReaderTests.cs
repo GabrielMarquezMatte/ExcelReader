@@ -480,6 +480,42 @@ namespace ExcelReader.Tests
             Assert.False(e.MoveNext());
         }
 
+        [Fact]
+        public void ReadsManyRowsSpanningMultipleSectorsWithExactCount()
+        {
+            const int dataRows = 700;
+            object?[][] rows = new object?[dataRows + 1][];
+            rows[0] = ["Name", "Age", "Score"];
+            for (int r = 0; r < dataRows; r++)
+            {
+                rows[r + 1] = [$"row{r}", r, r * 1.5];
+            }
+
+            using var ms = XlsWorkbookBuilder.Build(sheets: [("S1", rows)]);
+            Assert.True(ms.Length > SectorSize * 4, "workbook should span several OLE sectors");
+            using var reader = Excel.FromXls(ms);
+
+            using var e = reader.GetEnumerator();
+            Assert.True(e.MoveNext());
+            RowAssert(e.Current, ["Name", "Age", "Score"]);
+
+            int read = 0;
+            while (e.MoveNext())
+            {
+                var row = e.Current;
+                Assert.Equal(3, row.ColumnCount);
+                Assert.Equal($"row{read}", row[0].GetString());
+                Assert.True(row[1].TryParse<int>(null, out int age));
+                Assert.Equal(read, age);
+                Assert.True(row[2].TryParse<double>(System.Globalization.CultureInfo.InvariantCulture, out double score));
+                Assert.Equal(read * 1.5, score);
+                read++;
+            }
+            Assert.Equal(dataRows, read);
+        }
+
+        private const int SectorSize = 512;
+
         private static void RowAssert(ExcelReader.Core.ValueObjects.Row row, string[] values)
         {
             Assert.Equal(values.Length, row.ColumnCount);

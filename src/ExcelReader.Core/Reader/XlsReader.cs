@@ -322,6 +322,11 @@ namespace ExcelReader.Core.Reader
             return BinaryPrimitives.ReadInt32LittleEndian(src.Slice(offset, 4));
         }
 
+        private static uint ReadU32(ReadOnlySpan<byte> src, int offset)
+        {
+            return BinaryPrimitives.ReadUInt32LittleEndian(src.Slice(offset, 4));
+        }
+
         private static void EnsureCapacity(ref byte[] buffer, int needed)
         {
             if (needed <= buffer.Length)
