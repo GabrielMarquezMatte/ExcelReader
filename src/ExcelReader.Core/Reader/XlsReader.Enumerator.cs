@@ -291,15 +291,10 @@ namespace ExcelReader.Core.Reader
 
             private void AddDouble(int col, int style, double value, CellType? forced = null)
             {
-                int start = _valLen;
-                EnsureValsCapacity(_valLen + 32);
-                if (!Utf8Formatter.TryFormat(value, _vals.AsSpan(_valLen), out int written))
-                {
-                    return;
-                }
-                _valLen += written;
+                // Store the raw double only — no eager formatting. Cell formats lazily if a caller
+                // asks for text (GetString/Value); numeric consumers read the double directly.
                 CellType type = forced ?? (_reader.IsDateStyle(style) ? CellType.Date : CellType.Number);
-                AddCell(col, start, written, type, style, fromShared: false, number: value, hasNumber: true);
+                AddCell(col, _valLen, 0, type, style, fromShared: false, number: value, hasNumber: true);
             }
 
             private void AppendError(byte error)
