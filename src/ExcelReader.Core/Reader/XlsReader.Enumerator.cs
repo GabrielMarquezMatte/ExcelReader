@@ -79,15 +79,15 @@ namespace ExcelReader.Core.Reader
                     ReadOnlySpan<byte> data = workbook.Slice(_pos, len);
                     _pos += len;
 
-                    if (id == 0x0809)
+                    if (id == Rec.Bof)
                     {
-                        if (data.Length < 4 || ReadU16Inner(data, 0) != 0x0600 || ReadU16Inner(data, 2) != 0x0010)
+                        if (data.Length < 4 || ReadU16Inner(data, 0) != Biff8Version || ReadU16Inner(data, 2) != SubstreamWorksheet)
                         {
                             throw new NotSupportedException("Only BIFF8 worksheet streams are supported.");
                         }
                         continue;
                     }
-                    if (id == 0x000A)
+                    if (id == Rec.Eof)
                     {
                         _ended = true;
                         return FinishRow();
@@ -141,15 +141,15 @@ namespace ExcelReader.Core.Reader
                 }
                 switch (id)
                 {
-                    case 0x0204: // Label
-                    case 0x00FD: // LabelSst
-                    case 0x0203: // Number
-                    case 0x027E: // RK
-                    case 0x00BD: // MulRK
-                    case 0x0205: // BoolErr
-                    case 0x0006: // Formula
-                    case 0x0201: // Blank
-                    case 0x00BE: // MulBlank
+                    case Rec.Label:
+                    case Rec.LabelSst:
+                    case Rec.Number:
+                    case Rec.Rk:
+                    case Rec.MulRk:
+                    case Rec.BoolErr:
+                    case Rec.Formula:
+                    case Rec.Blank:
+                    case Rec.MulBlank:
                         row = ReadU16Inner(data, 0);
                         return true;
                     default:
@@ -161,10 +161,10 @@ namespace ExcelReader.Core.Reader
             {
                 switch (id)
                 {
-                    case 0x0204:
+                    case Rec.Label:
                         ParseLabel(data);
                         break;
-                    case 0x00FD:
+                    case Rec.LabelSst:
                         if (data.Length >= 10)
                         {
                             int col = ReadU16Inner(data, 2);
@@ -173,33 +173,30 @@ namespace ExcelReader.Core.Reader
                             AddCell(col, start, len, CellType.ExcelString, style, fromShared: true);
                         }
                         break;
-                    case 0x0203:
+                    case Rec.Number:
                         if (data.Length >= 14)
                         {
                             AddDouble(ReadU16Inner(data, 2), ReadU16Inner(data, 4), BinaryPrimitives.ReadDoubleLittleEndian(data.Slice(6, 8)));
                         }
                         break;
-                    case 0x027E:
+                    case Rec.Rk:
                         if (data.Length >= 10)
                         {
                             AddDouble(ReadU16Inner(data, 2), ReadU16Inner(data, 4), DecodeRk(ReadU32(data, 6)));
                         }
                         break;
-                    case 0x00BD:
+                    case Rec.MulRk:
                         ParseMulRk(data);
                         break;
-                    case 0x0205:
+                    case Rec.BoolErr:
                         ParseBoolErr(data);
                         break;
-                    case 0x0006:
+                    case Rec.Formula:
                         ParseFormula(data);
                         break;
-                    case 0x0201:
-                    case 0x00BE:
-                        break;
                     default:
+                        // Blank / MulBlank and any other record contribute no value.
                         break;
-
                 }
             }
 

@@ -121,47 +121,47 @@ namespace ExcelReader.Core.Reader
             bool sawGlobalsBof = false;
             while (TryReadRecord(workbook, ref pos, out int id, out ReadOnlySpan<byte> data))
             {
-                if (id == 0x0809)
+                if (id == Rec.Bof)
                 {
-                    if (data.Length < 4 || ReadU16(data, 0) != 0x0600)
+                    if (data.Length < 4 || ReadU16(data, 0) != Biff8Version)
                     {
                         throw new NotSupportedException("Only BIFF8 .xls workbooks are supported.");
                     }
-                    sawGlobalsBof = ReadU16(data, 2) == 0x0005;
+                    sawGlobalsBof = ReadU16(data, 2) == SubstreamGlobals;
                     continue;
                 }
-                if (id == 0x000A && sawGlobalsBof)
+                if (id == Rec.Eof && sawGlobalsBof)
                 {
                     break;
                 }
                 switch (id)
                 {
-                    case 0x0022:
+                    case Rec.Date1904:
                         date1904 = data.Length >= 2 && ReadU16(data, 0) != 0;
                         break;
-                    case 0x0085:
+                    case Rec.BoundSheet:
                         if (TryParseBoundSheet(data, out var sheet))
                         {
                             sheetList.Add(sheet);
                         }
                         break;
-                    case 0x00FC:
+                    case Rec.Sst:
                         // Store offsets into the retained workbook buffer instead of copying
                         // each record; the 8-byte SST header is folded into the start offset.
                         sstSpans.Add(new SstSpan(pos - data.Length + 8, data.Length - 8));
-                        while (PeekRecordId(workbook, pos) == 0x003C && TryReadRecord(workbook, ref pos, out _, out ReadOnlySpan<byte> cont))
+                        while (PeekRecordId(workbook, pos) == Rec.Continue && TryReadRecord(workbook, ref pos, out _, out ReadOnlySpan<byte> cont))
                         {
                             sstSpans.Add(new SstSpan(pos - cont.Length, cont.Length));
                         }
                         ParseSharedStrings(workbook, sstSpans, out sharedFlat, out sharedOffsets);
                         break;
-                    case 0x041E:
+                    case Rec.Format:
                         if (TryParseFormat(data, out int formatId, out string format))
                         {
                             customFormats[formatId] = LooksLikeDateFormat(format);
                         }
                         break;
-                    case 0x00E0:
+                    case Rec.Xf:
                         if (data.Length >= 4)
                         {
                             int formatIndex = ReadU16(data, 2);
@@ -170,7 +170,7 @@ namespace ExcelReader.Core.Reader
                                 : IsBuiltinDateFormat(formatIndex));
                         }
                         break;
-                    case 0x002F:
+                    case Rec.FilePass:
                         throw new NotSupportedException("Encrypted .xls workbooks are not supported.");
                 }
             }
@@ -182,23 +182,11 @@ namespace ExcelReader.Core.Reader
         private static bool TryParseBoundSheet(ReadOnlySpan<byte> data, out (string Name, int Offset) sheet)
         {
             sheet = default;
-            if (data.Length < 8)
+            if (data.Length < 8 || !TryDecodeBiffString(data, start: 8, charCount: data[6], flags: data[7], out string name))
             {
                 return false;
             }
-            int offset = ReadI32(data, 0);
-            int charCount = data[6];
-            byte flags = data[7];
-            const int start = 8;
-            int byteCount = (flags & 1) == 0 ? charCount : charCount * 2;
-            if (start + byteCount > data.Length)
-            {
-                return false;
-            }
-            string name = (flags & 1) == 0
-                ? DecodeCompressedString(data.Slice(start, byteCount), charCount)
-                : System.Text.Encoding.Unicode.GetString(data.Slice(start, byteCount));
-            sheet = (name, offset);
+            sheet = (name, ReadI32(data, 0));
             return true;
         }
 
@@ -206,22 +194,28 @@ namespace ExcelReader.Core.Reader
         {
             formatId = 0;
             format = string.Empty;
-            if (data.Length < 5)
+            if (data.Length < 5 || !TryDecodeBiffString(data, start: 5, charCount: ReadU16(data, 2), flags: data[4], out format))
             {
                 return false;
             }
             formatId = ReadU16(data, 0);
-            int chars = ReadU16(data, 2);
-            byte flags = data[4];
-            const int start = 5;
-            int bytes = (flags & 1) == 0 ? chars : chars * 2;
-            if (start + bytes > data.Length)
+            return true;
+        }
+
+        // BIFF8 string: bit 0 of the flags byte picks compressed (1 byte/char) vs UTF-16.
+        private static bool TryDecodeBiffString(ReadOnlySpan<byte> data, int start, int charCount, byte flags, out string value)
+        {
+            bool compressed = (flags & 1) == 0;
+            int byteCount = compressed ? charCount : charCount * 2;
+            if (start + byteCount > data.Length)
             {
+                value = string.Empty;
                 return false;
             }
-            format = (flags & 1) == 0
-                ? DecodeCompressedString(data.Slice(start, bytes), chars)
-                : System.Text.Encoding.Unicode.GetString(data.Slice(start, bytes));
+            ReadOnlySpan<byte> raw = data.Slice(start, byteCount);
+            value = compressed
+                ? DecodeCompressedString(raw, charCount)
+                : System.Text.Encoding.Unicode.GetString(raw);
             return true;
         }
 
@@ -341,5 +335,32 @@ namespace ExcelReader.Core.Reader
         }
         [StructLayout(LayoutKind.Auto)]
         private readonly record struct SstSpan(int Start, int Length);
+
+        private const int Biff8Version = 0x0600;
+        private const int SubstreamGlobals = 0x0005;
+        private const int SubstreamWorksheet = 0x0010;
+
+        // BIFF8 record type IDs (see [MS-XLS]).
+        private static class Rec
+        {
+            internal const int Bof = 0x0809;
+            internal const int Eof = 0x000A;
+            internal const int Date1904 = 0x0022;
+            internal const int BoundSheet = 0x0085;
+            internal const int Sst = 0x00FC;
+            internal const int Continue = 0x003C;
+            internal const int Format = 0x041E;
+            internal const int Xf = 0x00E0;
+            internal const int FilePass = 0x002F;
+            internal const int Label = 0x0204;
+            internal const int LabelSst = 0x00FD;
+            internal const int Number = 0x0203;
+            internal const int Rk = 0x027E;
+            internal const int MulRk = 0x00BD;
+            internal const int BoolErr = 0x0205;
+            internal const int Formula = 0x0006;
+            internal const int Blank = 0x0201;
+            internal const int MulBlank = 0x00BE;
+        }
     }
 }
