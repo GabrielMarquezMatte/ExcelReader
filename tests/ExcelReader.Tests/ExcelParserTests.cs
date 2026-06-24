@@ -521,7 +521,7 @@ namespace ExcelReader.Tests
 
             await using (var reader = Excel.From(ms))
             {
-                syncResult = new ExcelParser<PersonRow>().Parse(reader).ToList();
+                syncResult = [.. new ExcelParser<PersonRow>().Parse(reader)];
             }
 
             ms.Position = 0;
