@@ -7,6 +7,7 @@ namespace ExcelReader.Core.Writer
     {
         private const int MaxRow = 65535;
         private const int MaxColumn = 255;
+        private const int MaxSheetNameLength = 31;
 
         // Fixed framing added around the cell records when the substream is assembled.
         private const int FramingBytes = 20 + 18 + 4; // BOF + DIMENSION + EOF
@@ -15,18 +16,23 @@ namespace ExcelReader.Core.Writer
             Justification = "XlsWorkbookWriter is borrowed; its lifetime is managed by the caller.")]
         private readonly XlsWorkbookWriter _owner;
         private readonly bool _date1904;
+        private readonly bool _isContinuation;
+        private readonly string _baseName;
         private readonly BiffBuffer _cells = new();
+        private XlsSheetWriter? _continuation;
         private int _maxRow = -1;
         private int _maxCol = -1;
         private int _rowNumber = -1;
         private WriterState _state = WriterState.Created;
         private bool _rowActive;
 
-        internal XlsSheetWriter(XlsWorkbookWriter owner, string name, bool date1904)
+        internal XlsSheetWriter(XlsWorkbookWriter owner, string name, bool date1904, bool isContinuation = false, string? baseName = null)
         {
             _owner = owner;
             Name = name;
             _date1904 = date1904;
+            _isContinuation = isContinuation;
+            _baseName = baseName ?? name;
         }
 
         internal string Name { get; }
@@ -63,7 +69,9 @@ namespace ExcelReader.Core.Writer
             _rowNumber++;
             if (_rowNumber > MaxRow)
             {
-                throw new InvalidOperationException($"BIFF8 worksheets are limited to {MaxRow + 1} rows.");
+                // ponytail: auto-split into continuation sheets; BIFF8 row index is 16-bit so each sheet holds 65536 rows
+                _continuation ??= CreateContinuation();
+                return _continuation.StartRow();
             }
             _rowActive = true;
             return new XlsRowWriter(this, _rowNumber);
@@ -126,6 +134,17 @@ namespace ExcelReader.Core.Writer
             }
         }
 
+        private XlsSheetWriter CreateContinuation()
+        {
+            string suffix = $" ({_owner.SheetCount + 1})";
+            string contName = _baseName.Length + suffix.Length <= MaxSheetNameLength
+                ? _baseName + suffix
+                : _baseName[..(MaxSheetNameLength - suffix.Length)] + suffix;
+            var cont = new XlsSheetWriter(_owner, contName, _date1904, isContinuation: true, baseName: _baseName);
+            cont.Start();
+            return cont;
+        }
+
         public void End()
         {
             ObjectDisposedException.ThrowIf(_state == WriterState.Ended, this);
@@ -134,7 +153,11 @@ namespace ExcelReader.Core.Writer
                 throw new InvalidOperationException("XlsSheetWriter must be started before ending.");
             }
             _state = WriterState.Ended;
-            _owner.NotifySheetEnded();
+            _continuation?.End();
+            if (!_isContinuation)
+            {
+                _owner.NotifySheetEnded();
+            }
         }
 
         public void Dispose()

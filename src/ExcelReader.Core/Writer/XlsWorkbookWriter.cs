@@ -6,7 +6,8 @@ namespace ExcelReader.Core.Writer
     // Writes a BIFF8 (.xls) workbook in the same shape as WorkbookWriter (XLSX). Unlike the ZIP
     // writer, records are buffered in memory and the OLE container is assembled in EndAsync: the
     // BoundSheet offsets in the globals and the OLE FAT both need stream sizes known only at the
-    // end. Safe because BIFF8 is capped at 65,536 rows x 256 columns.
+    // end. Rows beyond the BIFF8 per-sheet cap (65,536) overflow into auto-generated continuation
+    // sheets, so memory scales with total row count rather than being bounded per-sheet.
     public sealed class XlsWorkbookWriter : IAsyncDisposable
     {
         private const int MaxSheetNameLength = 31;
@@ -60,6 +61,8 @@ namespace ExcelReader.Core.Writer
             _activeSheet = new XlsSheetWriter(this, name, _date1904);
             return _activeSheet;
         }
+
+        internal int SheetCount => _sheets.Count;
 
         internal void RegisterSheet(XlsSheetWriter sheet)
         {
