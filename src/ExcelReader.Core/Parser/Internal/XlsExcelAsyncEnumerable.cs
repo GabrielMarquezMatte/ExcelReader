@@ -60,7 +60,7 @@ namespace ExcelReader.Core.Parser.Internal
 
             private async ValueTask<bool> AdvanceAsync()
             {
-                _rows ??= await _reader.GetAsyncEnumeratorAsync(_ct).ConfigureAwait(false);
+                _rows ??= _reader.GetAsyncEnumerator(_ct);
                 while (true)
                 {
                     bool hasMore = await _rows.MoveNextAsync().ConfigureAwait(false);

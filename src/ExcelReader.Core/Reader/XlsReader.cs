@@ -93,10 +93,10 @@ namespace ExcelReader.Core.Reader
             return new Enumerator(this, _sheets[_current].Offset);
         }
 
-        public ValueTask<Enumerator> GetAsyncEnumeratorAsync(CancellationToken ct = default)
+        public Enumerator GetAsyncEnumerator(CancellationToken ct = default)
         {
             ct.ThrowIfCancellationRequested();
-            return new ValueTask<Enumerator>(new Enumerator(this, _sheets[_current].Offset, ct));
+            return new Enumerator(this, _sheets[_current].Offset, ct);
         }
 
         public void Dispose()
