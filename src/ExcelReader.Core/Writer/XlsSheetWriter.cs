@@ -3,7 +3,7 @@ using ExcelReader.Core.Writer.Internal;
 
 namespace ExcelReader.Core.Writer
 {
-    public sealed class XlsSheetWriter : IAsyncDisposable
+    public sealed class XlsSheetWriter : IDisposable
     {
         private const int MaxRow = 65535;
         private const int MaxColumn = 255;
@@ -38,20 +38,18 @@ namespace ExcelReader.Core.Writer
         internal int ColCount => _maxCol + 1;
         internal ReadOnlyMemory<byte> CellsMemory => _cells.Memory;
 
-        public ValueTask StartAsync(CancellationToken ct = default)
+        public void Start()
         {
             ObjectDisposedException.ThrowIf(_state == WriterState.Ended, this);
             if (_state != WriterState.Created)
             {
                 throw new InvalidOperationException("XlsSheetWriter has already been started.");
             }
-            ct.ThrowIfCancellationRequested();
             _state = WriterState.Started;
             _owner.RegisterSheet(this);
-            return ValueTask.CompletedTask;
         }
 
-        public ValueTask<XlsRowWriter> StartRowAsync(CancellationToken ct = default)
+        public XlsRowWriter StartRow()
         {
             ObjectDisposedException.ThrowIf(_state == WriterState.Ended, this);
             if (_state != WriterState.Started)
@@ -62,14 +60,13 @@ namespace ExcelReader.Core.Writer
             {
                 throw new InvalidOperationException("The previous XlsRowWriter must be disposed before starting a new row.");
             }
-            ct.ThrowIfCancellationRequested();
             _rowNumber++;
             if (_rowNumber > MaxRow)
             {
                 throw new InvalidOperationException($"BIFF8 worksheets are limited to {MaxRow + 1} rows.");
             }
             _rowActive = true;
-            return new ValueTask<XlsRowWriter>(new XlsRowWriter(this, _rowNumber));
+            return new XlsRowWriter(this, _rowNumber);
         }
 
         internal void NotifyRowEnded()
@@ -129,26 +126,23 @@ namespace ExcelReader.Core.Writer
             }
         }
 
-        public ValueTask EndAsync(CancellationToken ct = default)
+        public void End()
         {
             ObjectDisposedException.ThrowIf(_state == WriterState.Ended, this);
             if (_state != WriterState.Started)
             {
                 throw new InvalidOperationException("XlsSheetWriter must be started before ending.");
             }
-            ct.ThrowIfCancellationRequested();
             _state = WriterState.Ended;
             _owner.NotifySheetEnded();
-            return ValueTask.CompletedTask;
         }
 
-        public ValueTask DisposeAsync()
+        public void Dispose()
         {
             if (_state == WriterState.Started)
             {
-                return EndAsync();
+                End();
             }
-            return ValueTask.CompletedTask;
         }
     }
 }

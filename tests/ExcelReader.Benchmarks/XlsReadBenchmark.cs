@@ -56,7 +56,7 @@ namespace ExcelReader.Benchmarks
         {
             await using var ms = new MemoryStream(_workbook, writable: false);
             await using var reader = await Excel.FromXlsAsync(ms);
-            await using var e = await reader.GetAsyncEnumeratorAsync();
+            await using var e = reader.GetAsyncEnumerator();
             long acc = 0;
             while (await e.MoveNextAsync())
             {

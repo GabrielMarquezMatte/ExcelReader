@@ -24,12 +24,12 @@ namespace ExcelReader.Benchmarks
         public async Task<long> XlsWriter()
         {
             await using var ms = new MemoryStream();
-            await using (XlsWorkbookWriter wb = await XlsWorkbookWriter.CreateAsync(ms, leaveOpen: true))
+            await using (XlsWorkbookWriter wb = XlsWorkbookWriter.Create(ms, leaveOpen: true))
             {
-                await wb.StartAsync();
+                wb.Start();
                 XlsSheetWriter sheet = wb.AddSheet("S1");
-                await sheet.StartAsync();
-                await using (XlsRowWriter header = await sheet.StartRowAsync())
+                sheet.Start();
+                using (XlsRowWriter header = sheet.StartRow())
                 {
                     header.Write("Name");
                     header.Write("Id");
@@ -39,13 +39,13 @@ namespace ExcelReader.Benchmarks
                 for (int i = 0; i < _records.Count; i++)
                 {
                     Record rec = _records[i];
-                    await using XlsRowWriter row = await sheet.StartRowAsync();
+                    using XlsRowWriter row = sheet.StartRow();
                     row.Write(rec.Name);
                     row.Write(rec.Id);
                     row.Write(rec.Date);
                     row.Write(rec.Value);
                 }
-                await sheet.EndAsync();
+                sheet.End();
                 await wb.EndAsync();
             }
             return ms.Length;

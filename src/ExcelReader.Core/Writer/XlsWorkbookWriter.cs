@@ -10,7 +10,6 @@ namespace ExcelReader.Core.Writer
     public sealed class XlsWorkbookWriter : IAsyncDisposable
     {
         private const int MaxSheetNameLength = 31;
-
         private readonly Stream _stream;
         private readonly bool _leaveOpen;
         private readonly bool _date1904;
@@ -26,24 +25,20 @@ namespace ExcelReader.Core.Writer
             _date1904 = date1904;
         }
 
-        public static ValueTask<XlsWorkbookWriter> CreateAsync(
-            Stream stream, bool leaveOpen = false, bool date1904 = false, CancellationToken ct = default)
+        public static XlsWorkbookWriter Create(Stream stream, bool leaveOpen = false, bool date1904 = false)
         {
             ArgumentNullException.ThrowIfNull(stream);
-            ct.ThrowIfCancellationRequested();
-            return ValueTask.FromResult(new XlsWorkbookWriter(stream, leaveOpen, date1904));
+            return new XlsWorkbookWriter(stream, leaveOpen, date1904);
         }
 
-        public ValueTask StartAsync(CancellationToken ct = default)
+        public void Start()
         {
             ObjectDisposedException.ThrowIf(_state == WriterState.Ended, this);
             if (_state != WriterState.Created)
             {
                 throw new InvalidOperationException("XlsWorkbookWriter has already been started.");
             }
-            ct.ThrowIfCancellationRequested();
             _state = WriterState.Started;
-            return ValueTask.CompletedTask;
         }
 
         public XlsSheetWriter AddSheet(string name)
@@ -73,6 +68,7 @@ namespace ExcelReader.Core.Writer
 
         internal void NotifySheetEnded()
         {
+            _activeSheet?.Dispose();
             _activeSheet = null;
         }
 
@@ -85,10 +81,7 @@ namespace ExcelReader.Core.Writer
             }
             ct.ThrowIfCancellationRequested();
             _state = WriterState.Ended;
-            if (_activeSheet is not null)
-            {
-                await _activeSheet.DisposeAsync().ConfigureAwait(false);
-            }
+            _activeSheet?.Dispose();
             if (_sheets.Count == 0)
             {
                 throw new InvalidOperationException("A workbook must contain at least one sheet.");
@@ -143,10 +136,10 @@ namespace ExcelReader.Core.Writer
             }
         }
 
-        public ValueTask FlushAsync(CancellationToken ct = default)
+        public Task FlushAsync(CancellationToken ct = default)
         {
             ct.ThrowIfCancellationRequested();
-            return new ValueTask(_stream.FlushAsync(ct));
+            return _stream.FlushAsync(ct);
         }
 
         public async ValueTask DisposeAsync()

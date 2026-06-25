@@ -3,7 +3,7 @@ using System.Globalization;
 
 namespace ExcelReader.Core.Writer
 {
-    public sealed class XlsRowWriter : IAsyncDisposable
+    public sealed class XlsRowWriter : IDisposable
     {
         [SuppressMessage("SharpSource", "SS066:DisposableFieldIsNotDisposed",
             Justification = "XlsSheetWriter is borrowed; its lifetime is managed by the caller.")]
@@ -113,14 +113,13 @@ namespace ExcelReader.Core.Writer
             ObjectDisposedException.ThrowIf(_disposed, this);
         }
 
-        public ValueTask DisposeAsync()
+        public void Dispose()
         {
             if (!_disposed)
             {
                 _disposed = true;
                 _owner.NotifyRowEnded();
             }
-            return ValueTask.CompletedTask;
         }
     }
 }

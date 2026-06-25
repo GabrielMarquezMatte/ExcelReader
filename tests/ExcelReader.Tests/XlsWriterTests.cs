@@ -10,13 +10,13 @@ namespace ExcelReader.Tests
         private static readonly CultureInfo Inv = CultureInfo.InvariantCulture;
 
         private static async Task<byte[]> WriteAsync(
-            Func<XlsWorkbookWriter, Task> build, bool date1904 = false, CancellationToken ct = default)
+            Action<XlsWorkbookWriter> build, bool date1904 = false, CancellationToken ct = default)
         {
             var ms = new MemoryStream();
-            await using (var wb = await XlsWorkbookWriter.CreateAsync(ms, leaveOpen: true, date1904: date1904, ct: ct))
+            await using (var wb = XlsWorkbookWriter.Create(ms, leaveOpen: true, date1904: date1904))
             {
-                await wb.StartAsync(ct);
-                await build(wb);
+                wb.Start();
+                build(wb);
                 await wb.EndAsync(ct);
             }
             return ms.ToArray();
@@ -27,11 +27,11 @@ namespace ExcelReader.Tests
         {
             CancellationToken ct = TestContext.Current.CancellationToken;
             var date = new DateTime(2024, 5, 6, 0, 0, 0, DateTimeKind.Unspecified);
-            byte[] bytes = await WriteAsync(async wb =>
+            byte[] bytes = await WriteAsync(wb =>
             {
                 var s = wb.AddSheet("Plan1");
-                await s.StartAsync(ct);
-                await using (var r = await s.StartRowAsync(ct))
+                s.Start();
+                using (var r = s.StartRow())
                 {
                     r.Write("João");      // compressed Latin-1
                     r.Write(42);          // int via generic
@@ -39,7 +39,7 @@ namespace ExcelReader.Tests
                     r.Write(true);        // bool
                     r.Write(date);        // date
                 }
-                await s.EndAsync(ct);
+                s.End();
             }, ct: ct);
 
             using var reader = Excel.FromXls(new MemoryStream(bytes));
@@ -63,18 +63,18 @@ namespace ExcelReader.Tests
         public async Task NullsAndSkipLeaveCellsEmpty()
         {
             CancellationToken ct = TestContext.Current.CancellationToken;
-            byte[] bytes = await WriteAsync(async wb =>
+            byte[] bytes = await WriteAsync(wb =>
             {
                 var s = wb.AddSheet("S1");
-                await s.StartAsync(ct);
-                await using (var r = await s.StartRowAsync(ct))
+                s.Start();
+                using (var r = s.StartRow())
                 {
                     r.Write("A");
                     r.Write((string?)null);  // empty
                     r.Skip();                // empty
                     r.Write("D");
                 }
-                await s.EndAsync(ct);
+                s.End();
             }, ct: ct);
 
             using var reader = Excel.FromXls(new MemoryStream(bytes));
@@ -91,17 +91,17 @@ namespace ExcelReader.Tests
         public async Task WritesMultipleSheetsWithCorrectOffsets()
         {
             CancellationToken ct = TestContext.Current.CancellationToken;
-            byte[] bytes = await WriteAsync(async wb =>
+            byte[] bytes = await WriteAsync(wb =>
             {
                 var first = wb.AddSheet("First");
-                await first.StartAsync(ct);
-                await using (var r = await first.StartRowAsync(ct)) { r.Write("one"); }
-                await first.EndAsync(ct);
+                first.Start();
+                using (var r = first.StartRow()) { r.Write("one"); }
+                first.End();
 
                 var second = wb.AddSheet("Ωmega");
-                await second.StartAsync(ct);
-                await using (var r = await second.StartRowAsync(ct)) { r.Write("two"); }
-                await second.EndAsync(ct);
+                second.Start();
+                using (var r = second.StartRow()) { r.Write("two"); }
+                second.End();
             }, ct: ct);
 
             using var reader = Excel.FromXls(new MemoryStream(bytes));
@@ -120,18 +120,18 @@ namespace ExcelReader.Tests
         {
             CancellationToken ct = TestContext.Current.CancellationToken;
             const int rows = 1000;
-            byte[] bytes = await WriteAsync(async wb =>
+            byte[] bytes = await WriteAsync(wb =>
             {
                 var s = wb.AddSheet("Big");
-                await s.StartAsync(ct);
+                s.Start();
                 for (int i = 0; i < rows; i++)
                 {
-                    await using var r = await s.StartRowAsync(ct);
+                    using var r = s.StartRow();
                     r.Write($"r{i}");
                     r.Write(i);
                     r.Write(i * 0.25);
                 }
-                await s.EndAsync(ct);
+                s.End();
             }, ct: ct);
 
             Assert.True(bytes.Length > 512 * 4, "workbook should span several OLE sectors");
@@ -156,12 +156,12 @@ namespace ExcelReader.Tests
         {
             CancellationToken ct = TestContext.Current.CancellationToken;
             var date = new DateTime(1990, 7, 15, 0, 0, 0, DateTimeKind.Unspecified);
-            byte[] bytes = await WriteAsync(async wb =>
+            byte[] bytes = await WriteAsync(wb =>
             {
                 var s = wb.AddSheet("S1");
-                await s.StartAsync(ct);
-                await using (var r = await s.StartRowAsync(ct)) { r.Write(date); }
-                await s.EndAsync(ct);
+                s.Start();
+                using (var r = s.StartRow()) { r.Write(date); }
+                s.End();
             }, date1904: true, ct: ct);
 
             using var reader = Excel.FromXls(new MemoryStream(bytes));
@@ -177,11 +177,11 @@ namespace ExcelReader.Tests
         {
             CancellationToken ct = TestContext.Current.CancellationToken;
             var ms = new MemoryStream();
-            await using var wb = await XlsWorkbookWriter.CreateAsync(ms, leaveOpen: true, ct: ct);
-            await wb.StartAsync(ct);
+            await using var wb = XlsWorkbookWriter.Create(ms, leaveOpen: true);
+            wb.Start();
             var s = wb.AddSheet("S1");
-            await s.StartAsync(ct);
-            await using var r = await s.StartRowAsync(ct);
+            s.Start();
+            using var r = s.StartRow();
             r.Skip(256); // column index 256 (0-based) is out of range
             Assert.Throws<InvalidOperationException>(() => r.Write("x"));
         }
@@ -189,21 +189,19 @@ namespace ExcelReader.Tests
         [Fact]
         public async Task SheetNameTooLongThrows()
         {
-            CancellationToken ct = TestContext.Current.CancellationToken;
             var ms = new MemoryStream();
-            await using var wb = await XlsWorkbookWriter.CreateAsync(ms, leaveOpen: true, ct: ct);
-            await wb.StartAsync(ct);
+            await using var wb = XlsWorkbookWriter.Create(ms, leaveOpen: true);
+            wb.Start();
             Assert.Throws<ArgumentException>(() => wb.AddSheet(new string('x', 32)));
         }
 
         [Fact]
         public async Task EmptyWorkbookThrows()
         {
-            CancellationToken ct = TestContext.Current.CancellationToken;
             var ms = new MemoryStream();
-            await using var wb = await XlsWorkbookWriter.CreateAsync(ms, leaveOpen: true, ct: ct);
-            await wb.StartAsync(ct);
-            await Assert.ThrowsAsync<InvalidOperationException>(async () => await wb.EndAsync(ct));
+            await using var wb = XlsWorkbookWriter.Create(ms, leaveOpen: true);
+            wb.Start();
+            await Assert.ThrowsAsync<InvalidOperationException>(async () => await wb.EndAsync(TestContext.Current.CancellationToken));
         }
     }
 }
