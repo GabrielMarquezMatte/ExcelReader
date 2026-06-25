@@ -203,5 +203,35 @@ namespace ExcelReader.Tests
             wb.Start();
             await Assert.ThrowsAsync<InvalidOperationException>(async () => await wb.EndAsync(TestContext.Current.CancellationToken));
         }
+
+        [Fact]
+        public async Task RowOverflowAutoSplitsIntoNewSheet()
+        {
+            CancellationToken ct = TestContext.Current.CancellationToken;
+            const int rows = 65537; // one past the BIFF8 per-sheet cap (65536)
+            byte[] bytes = await WriteAsync(wb =>
+            {
+                var s = wb.AddSheet("S");
+                s.Start();
+                for (int i = 0; i < rows; i++)
+                {
+                    using var r = s.StartRow();
+                    r.Write(i);
+                }
+                s.End();
+            }, ct: ct);
+
+            using var reader = Excel.FromXls(new MemoryStream(bytes));
+            Assert.Equal(2, reader.SheetCount);
+
+            int totalRows = 0;
+            for (int sheet = 0; sheet < reader.SheetCount; sheet++)
+            {
+                reader.MoveToSheet(sheet);
+                using var e = reader.GetEnumerator();
+                while (e.MoveNext()) totalRows++;
+            }
+            Assert.Equal(rows, totalRows);
+        }
     }
 }
