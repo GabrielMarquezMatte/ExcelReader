@@ -13,5 +13,10 @@ namespace ExcelReader.Core.ValueObjects
         public CellType Type { get; init; }
         public int Style { get; init; }
         public bool FromShared { get; init; }
+        // Raw numeric value, set when the source stored a binary double (XLS Number/RK/Date/Formula).
+        // Lets consumers skip the format-on-read / parse-on-consume round trip. Start/Length still
+        // point at the formatted text, so Value/GetString stay byte-identical.
+        public double Number { get; init; }
+        public bool HasNumber { get; init; }
     }
 }

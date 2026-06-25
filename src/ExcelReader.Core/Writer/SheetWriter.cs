@@ -14,8 +14,6 @@ namespace ExcelReader.Core.Writer
         [SuppressMessage("SharpSource", "SS066:DisposableFieldIsNotDisposed",
             Justification = "ZipArchive is borrowed from WorkbookWriter; its lifetime exceeds this sheet.")]
         private readonly ZipArchive _zip;
-        private readonly string _name;
-        private readonly int _sheetId;
         private readonly CompressionLevel _compression;
         // Reused per row to format "<row r="N">" without allocating: 8 prefix + 7 digits + 2 suffix.
         private readonly char[] _rowOpenBuf = new char[24];
@@ -30,13 +28,13 @@ namespace ExcelReader.Core.Writer
         {
             _owner = owner;
             _zip = zip;
-            _name = name;
-            _sheetId = sheetId;
+            Name = name;
+            SheetId = sheetId;
             _compression = compression;
         }
 
-        internal string Name => _name;
-        internal int SheetId => _sheetId;
+        internal string Name { get; }
+        internal int SheetId { get; }
 
         [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP003:Dispose previous before re-assigning",
             Justification = "_xml is always null when StartAsync is called (state machine guarantees Created state).")]
@@ -56,14 +54,14 @@ namespace ExcelReader.Core.Writer
                 throw new InvalidOperationException("SheetWriter has already been started.");
             }
             ct.ThrowIfCancellationRequested();
-            ZipArchiveEntry entry = _zip.CreateEntry($"xl/worksheets/sheet{_sheetId}.xml", _compression);
-            Stream stream = entry.Open();
+            ZipArchiveEntry entry = _zip.CreateEntry($"xl/worksheets/sheet{SheetId}.xml", _compression);
+            Stream stream = await entry.OpenAsync(ct).ConfigureAwait(false);
             _xml = new StreamWriter(stream, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false), leaveOpen: false);
             await _xml.WriteAsync(
                 "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>" +
                 $"<worksheet xmlns=\"{XlsxConstants.MainNs}\"><sheetData>").ConfigureAwait(false);
             _state = WriterState.Started;
-            _owner.RegisterSheet(_name, _sheetId);
+            _owner.RegisterSheet(Name, SheetId);
         }
 
         public async ValueTask<RowWriter> StartRowAsync(CancellationToken ct = default)
@@ -116,7 +114,7 @@ namespace ExcelReader.Core.Writer
             _state = WriterState.Ended;
             await _xml!.WriteAsync("</sheetData></worksheet>").ConfigureAwait(false);
             await _xml.FlushAsync(ct).ConfigureAwait(false);
-            _xml.Dispose();
+            await _xml.DisposeAsync().ConfigureAwait(false);
             _xml = null;
             _owner.NotifySheetEnded();
         }

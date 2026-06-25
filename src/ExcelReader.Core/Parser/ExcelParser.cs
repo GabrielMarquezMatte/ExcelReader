@@ -22,10 +22,22 @@ namespace ExcelReader.Core.Parser
             return new ExcelEnumerable<T>(reader, _config);
         }
 
+        public XlsExcelEnumerable<T> Parse(XlsReader reader)
+        {
+            ArgumentNullException.ThrowIfNull(reader);
+            return new XlsExcelEnumerable<T>(reader, _config);
+        }
+
         public ExcelAsyncEnumerable<T> ParseAsync(XlsxReader reader, CancellationToken ct = default)
         {
             ArgumentNullException.ThrowIfNull(reader);
             return new ExcelAsyncEnumerable<T>(reader, _config, ct);
+        }
+
+        public XlsExcelAsyncEnumerable<T> ParseAsync(XlsReader reader, CancellationToken ct = default)
+        {
+            ArgumentNullException.ThrowIfNull(reader);
+            return new XlsExcelAsyncEnumerable<T>(reader, _config, ct);
         }
     }
 }
