@@ -31,7 +31,7 @@ namespace ExcelReader.Tests
             var row = e.Current;
             Assert.Equal("João", row[0].GetString());
             Assert.Equal(CellType.Number, row[1].Type);
-            Assert.True(row[1].TryParse<int>(null, out int age));
+            Assert.True(row[1].TryParse(null, out int age));
             Assert.Equal(42, age);
             Assert.Equal(CellType.Boolean, row[2].Type);
             Assert.Equal("1", row[2].GetString());
@@ -505,9 +505,9 @@ namespace ExcelReader.Tests
                 var row = e.Current;
                 Assert.Equal(3, row.ColumnCount);
                 Assert.Equal($"row{read}", row[0].GetString());
-                Assert.True(row[1].TryParse<int>(null, out int age));
+                Assert.True(row[1].TryParse(null, out int age));
                 Assert.Equal(read, age);
-                Assert.True(row[2].TryParse<double>(System.Globalization.CultureInfo.InvariantCulture, out double score));
+                Assert.True(row[2].TryParse(System.Globalization.CultureInfo.InvariantCulture, out double score));
                 Assert.Equal(read * 1.5, score);
                 read++;
             }
@@ -531,7 +531,7 @@ namespace ExcelReader.Tests
                 // Raw fast path returns the exact stored double...
                 Assert.True(row[c].TryGetDouble(out double raw));
                 Assert.Equal(expected[c], raw);
-                Assert.True(row[c].TryParse<double>(System.Globalization.CultureInfo.InvariantCulture, out double parsed));
+                Assert.True(row[c].TryParse(System.Globalization.CultureInfo.InvariantCulture, out double parsed));
                 Assert.Equal(expected[c], parsed);
                 // ...and the text representation stays consistent with parsing it back.
                 Assert.True(double.TryParse(row[c].GetString(), System.Globalization.CultureInfo.InvariantCulture, out double fromText));
@@ -541,7 +541,7 @@ namespace ExcelReader.Tests
 
         private const int SectorSize = 512;
 
-        private static void RowAssert(ExcelReader.Core.ValueObjects.Row row, string[] values)
+        private static void RowAssert(Core.ValueObjects.Row row, string[] values)
         {
             Assert.Equal(values.Length, row.ColumnCount);
             for (int i = 0; i < values.Length; i++)
