@@ -8,66 +8,77 @@ namespace ExcelReader.Core.Writer.Internal
     // the length once the payload is written, so records can be built field-by-field in place.
     internal sealed class BiffBuffer : IDisposable
     {
+        // A single sheet's cell buffer routinely exceeds ArrayPool.Shared's 1 MB cap (a 50k-row
+        // sheet is ~4 MB), so those rents would never be recycled — every doubling leaks to the GC
+        // as LOH garbage. A dedicated pool with a higher cap reuses them across sheets/workbooks.
+        // ponytail: 32 MB cap; sheets past that fall back to plain allocs (same as Shared did).
+        private static readonly ArrayPool<byte> Pool = ArrayPool<byte>.Create(32 * 1024 * 1024, 16);
+
         private byte[] _buffer;
-        private int _length;
 
         internal BiffBuffer(int initialCapacity = 4096)
         {
-            _buffer = ArrayPool<byte>.Shared.Rent(initialCapacity);
+            _buffer = Pool.Rent(initialCapacity);
         }
 
-        internal int Length => _length;
+        internal int Length { get; private set; }
 
-        internal ReadOnlySpan<byte> Span => _buffer.AsSpan(0, _length);
+        internal ReadOnlySpan<byte> Span => _buffer.AsSpan(0, Length);
 
-        internal ReadOnlyMemory<byte> Memory => _buffer.AsMemory(0, _length);
+        internal ReadOnlyMemory<byte> Memory => _buffer.AsMemory(0, Length);
+
+        // Rewinds to empty, keeping the rented buffer for reuse.
+        internal void Reset()
+        {
+            Length = 0;
+        }
 
         internal void WriteByte(byte value)
         {
             Ensure(1);
-            _buffer[_length++] = value;
+            _buffer[Length++] = value;
         }
 
         internal void WriteU16(int value)
         {
             Ensure(2);
-            BinaryPrimitives.WriteUInt16LittleEndian(_buffer.AsSpan(_length), (ushort)value);
-            _length += 2;
+            BinaryPrimitives.WriteUInt16LittleEndian(_buffer.AsSpan(Length), (ushort)value);
+            Length += 2;
         }
 
         internal void WriteI32(int value)
         {
             Ensure(4);
-            BinaryPrimitives.WriteInt32LittleEndian(_buffer.AsSpan(_length), value);
-            _length += 4;
+            BinaryPrimitives.WriteInt32LittleEndian(_buffer.AsSpan(Length), value);
+            Length += 4;
         }
 
         internal void WriteU32(uint value)
         {
             Ensure(4);
-            BinaryPrimitives.WriteUInt32LittleEndian(_buffer.AsSpan(_length), value);
-            _length += 4;
+            BinaryPrimitives.WriteUInt32LittleEndian(_buffer.AsSpan(Length), value);
+            Length += 4;
         }
 
         internal void WriteDouble(double value)
         {
             Ensure(8);
-            BinaryPrimitives.WriteDoubleLittleEndian(_buffer.AsSpan(_length), value);
-            _length += 8;
+            BinaryPrimitives.WriteDoubleLittleEndian(_buffer.AsSpan(Length), value);
+            Length += 8;
         }
 
         internal void Write(ReadOnlySpan<byte> bytes)
         {
             Ensure(bytes.Length);
-            bytes.CopyTo(_buffer.AsSpan(_length));
-            _length += bytes.Length;
+            bytes.CopyTo(_buffer.AsSpan(Length));
+            Length += bytes.Length;
         }
 
         // Writes the record id + a 2-byte length placeholder; returns the placeholder offset.
         internal int BeginRecord(int id)
         {
             WriteU16(id);
-            int lengthPos = _length;
+            int lengthPos = Length;
             WriteU16(0);
             return lengthPos;
         }
@@ -81,7 +92,7 @@ namespace ExcelReader.Core.Writer.Internal
         // Back-patches the length written by BeginRecord with the actual payload size.
         internal void EndRecord(int lengthPos)
         {
-            int payload = _length - lengthPos - 2;
+            int payload = Length - lengthPos - 2;
             if ((uint)payload > BiffRecord.MaxPayload)
             {
                 throw new InvalidOperationException($"BIFF record payload {payload} exceeds the {BiffRecord.MaxPayload}-byte limit.");
@@ -91,14 +102,14 @@ namespace ExcelReader.Core.Writer.Internal
 
         private void Ensure(int extra)
         {
-            int needed = _length + extra;
+            int needed = Length + extra;
             if (needed <= _buffer.Length)
             {
                 return;
             }
-            byte[] bigger = ArrayPool<byte>.Shared.Rent(Math.Max(_buffer.Length * 2, needed));
-            _buffer.AsSpan(0, _length).CopyTo(bigger);
-            ArrayPool<byte>.Shared.Return(_buffer);
+            byte[] bigger = Pool.Rent(Math.Max(_buffer.Length * 2, needed));
+            _buffer.AsSpan(0, Length).CopyTo(bigger);
+            Pool.Return(_buffer);
             _buffer = bigger;
         }
 
@@ -106,9 +117,9 @@ namespace ExcelReader.Core.Writer.Internal
         {
             if (_buffer.Length > 0)
             {
-                ArrayPool<byte>.Shared.Return(_buffer);
+                Pool.Return(_buffer);
                 _buffer = [];
-                _length = 0;
+                Length = 0;
             }
         }
     }

@@ -18,11 +18,13 @@ namespace ExcelReader.Core.Writer.Internal
         private const int FatEntriesPerSector = SectorSize / 4; // 128
         private const int MaxHeaderDifat = (HeaderSize - 0x4C) / 4; // 109
 
-        internal static async ValueTask WriteAsync(Stream destination, ReadOnlyMemory<byte> workbook, CancellationToken ct)
+        // Writes the OLE container around a workbook stream of exactly workbookSize bytes. The body
+        // is streamed by writeBody directly to destination — no combined buffer is materialized.
+        internal static async ValueTask WriteAsync(Stream destination, int workbookSize, Func<Stream, CancellationToken, ValueTask> writeBody, CancellationToken ct)
         {
             // Pad to a whole number of sectors and keep the stored size at/above the mini cutoff
             // so the reader treats it as a regular stream.
-            int storedSize = Math.Max(RoundUp(workbook.Length, SectorSize), MiniCutoff);
+            int storedSize = Math.Max(RoundUp(workbookSize, SectorSize), MiniCutoff);
             int workbookSectors = storedSize / SectorSize;
 
             // The FAT must cover its own sectors plus the directory and workbook sectors. Each FAT
@@ -43,8 +45,8 @@ namespace ExcelReader.Core.Writer.Internal
             await destination.WriteAsync(header, ct).ConfigureAwait(false);
             await destination.WriteAsync(fat, ct).ConfigureAwait(false);
             await destination.WriteAsync(directory, ct).ConfigureAwait(false);
-            await destination.WriteAsync(workbook, ct).ConfigureAwait(false);
-            int padding = storedSize - workbook.Length;
+            await writeBody(destination, ct).ConfigureAwait(false);
+            int padding = storedSize - workbookSize;
             if (padding > 0)
             {
                 await destination.WriteAsync(new byte[padding], ct).ConfigureAwait(false);

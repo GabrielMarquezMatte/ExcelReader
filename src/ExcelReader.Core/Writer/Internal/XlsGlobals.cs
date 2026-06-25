@@ -11,7 +11,7 @@ namespace ExcelReader.Core.Writer.Internal
         private const int BuiltinDateFormat = 14;
 
         // Returns the buffer position of each BoundSheet's lbPlyPos field, in sheet order.
-        internal static int[] Write(BiffBuffer buffer, IReadOnlyList<string> sheetNames, bool date1904)
+        internal static int[] Write(BiffBuffer buffer, ReadOnlySpan<string> sheetNames, bool date1904)
         {
             BiffRecordWriter.WriteBof(buffer, BiffRecord.SubstreamGlobals);
             BiffRecordWriter.WriteCodePage(buffer, 1200); // UTF-16
@@ -22,8 +22,8 @@ namespace ExcelReader.Core.Writer.Internal
             BiffRecordWriter.WriteXf(buffer, formatIndex: 0);
             BiffRecordWriter.WriteXf(buffer, formatIndex: BuiltinDateFormat);
 
-            int[] offsetPositions = new int[sheetNames.Count];
-            for (int i = 0; i < sheetNames.Count; i++)
+            int[] offsetPositions = new int[sheetNames.Length];
+            for (int i = 0; i < sheetNames.Length; i++)
             {
                 // lbPlyPos is the first payload field, i.e. 4 bytes past the record header.
                 offsetPositions[i] = buffer.Length + 4;
