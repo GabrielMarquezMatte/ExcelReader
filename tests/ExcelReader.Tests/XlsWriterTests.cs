@@ -47,9 +47,9 @@ namespace ExcelReader.Tests
             Assert.True(e.MoveNext());
             var row = e.Current;
             Assert.Equal("João", row[0].GetString());
-            Assert.True(row[1].TryParse<int>(Inv, out int age));
+            Assert.True(row[1].TryParse(Inv, out int age));
             Assert.Equal(42, age);
-            Assert.True(row[2].TryParse<double>(Inv, out double price));
+            Assert.True(row[2].TryParse(Inv, out double price));
             Assert.Equal(3.5, price);
             Assert.Equal(CellType.Boolean, row[3].Type);
             Assert.Equal("1", row[3].GetString());
@@ -142,9 +142,9 @@ namespace ExcelReader.Tests
             {
                 var row = e.Current;
                 Assert.Equal($"r{read}", row[0].GetString());
-                Assert.True(row[1].TryParse<int>(Inv, out int n));
+                Assert.True(row[1].TryParse(Inv, out int n));
                 Assert.Equal(read, n);
-                Assert.True(row[2].TryParse<double>(Inv, out double d));
+                Assert.True(row[2].TryParse(Inv, out double d));
                 Assert.Equal(read * 0.25, d);
                 read++;
             }
