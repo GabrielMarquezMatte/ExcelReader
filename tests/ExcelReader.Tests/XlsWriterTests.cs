@@ -45,16 +45,15 @@ namespace ExcelReader.Tests
             using var reader = Excel.FromXls(new MemoryStream(bytes));
             using var e = reader.GetEnumerator();
             Assert.True(e.MoveNext());
-            var row = e.Current;
-            Assert.Equal("João", row[0].GetString());
-            Assert.True(row[1].TryParse(Inv, out int age));
+            Assert.Equal("João", e.Current[0].GetString());
+            Assert.True(e.Current[1].TryParse(Inv, out int age));
             Assert.Equal(42, age);
-            Assert.True(row[2].TryParse(Inv, out double price));
+            Assert.True(e.Current[2].TryParse(Inv, out double price));
             Assert.Equal(3.5, price);
-            Assert.Equal(CellType.Boolean, row[3].Type);
-            Assert.Equal("1", row[3].GetString());
-            Assert.Equal(CellType.Date, row[4].Type);
-            Assert.True(row[4].TryGetDateTime(out DateTime parsed));
+            Assert.Equal(CellType.Boolean, e.Current[3].Type);
+            Assert.Equal("1", e.Current[3].GetString());
+            Assert.Equal(CellType.Date, e.Current[4].Type);
+            Assert.True(e.Current[4].TryGetDateTime(out DateTime parsed));
             Assert.Equal(date, parsed);
             Assert.False(e.MoveNext());
         }
@@ -80,11 +79,10 @@ namespace ExcelReader.Tests
             using var reader = Excel.FromXls(new MemoryStream(bytes));
             using var e = reader.GetEnumerator();
             Assert.True(e.MoveNext());
-            var row = e.Current;
-            Assert.Equal("A", row[0].GetString());
-            Assert.Equal(CellType.Empty, row[1].Type);
-            Assert.Equal(CellType.Empty, row[2].Type);
-            Assert.Equal("D", row[3].GetString());
+            Assert.Equal("A", e.Current[0].GetString());
+            Assert.Equal(CellType.Empty, e.Current[1].Type);
+            Assert.Equal(CellType.Empty, e.Current[2].Type);
+            Assert.Equal("D", e.Current[3].GetString());
         }
 
         [Fact]
@@ -140,11 +138,10 @@ namespace ExcelReader.Tests
             int read = 0;
             while (e.MoveNext())
             {
-                var row = e.Current;
-                Assert.Equal($"r{read}", row[0].GetString());
-                Assert.True(row[1].TryParse(Inv, out int n));
+                Assert.Equal($"r{read}", e.Current[0].GetString());
+                Assert.True(e.Current[1].TryParse(Inv, out int n));
                 Assert.Equal(read, n);
-                Assert.True(row[2].TryParse(Inv, out double d));
+                Assert.True(e.Current[2].TryParse(Inv, out double d));
                 Assert.Equal(read * 0.25, d);
                 read++;
             }

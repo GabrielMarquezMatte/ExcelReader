@@ -386,11 +386,10 @@ namespace ExcelReader.Tests
             using XlsxReader reader = Excel.From(ms);
             using XlsxReader.Enumerator e = reader.GetEnumerator();
             Assert.True(e.MoveNext());
-            Row parsed = e.Current;
 
-            Assert.Equal(CellType.Empty, parsed[0].Type);
-            Assert.Equal("1", parsed[1].GetString());
-            Assert.Equal("123", parsed[702].GetString());
+            Assert.Equal(CellType.Empty, e.Current[0].Type);
+            Assert.Equal("1", e.Current[1].GetString());
+            Assert.Equal("123", e.Current[702].GetString());
             Assert.False(e.MoveNext());
         }
 
