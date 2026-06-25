@@ -32,7 +32,7 @@ namespace ExcelReader.Core.ValueObjects
                 }
                 ref readonly var d = ref _cells[i];
                 var buf = d.FromShared ? _shared : _rowValues;
-                return new Cell(d.Type, buf.Slice(d.Start, d.Length), d.Style);
+                return new Cell(d.Type, buf.Slice(d.Start, d.Length), d.Number, d.HasNumber, d.Style);
             }
         }
 
@@ -49,74 +49,6 @@ namespace ExcelReader.Core.ValueObjects
                 else { hi = mid - 1; }
             }
             return -1;
-        }
-    }
-
-    public readonly ref struct RowCell
-    {
-        public RowCell(int columnIndex, Cell value)
-        {
-            ColumnIndex = columnIndex;
-            Value = value;
-        }
-
-        public int ColumnIndex { get; }
-        public Cell Value { get; }
-    }
-
-    public readonly ref struct RowCells
-    {
-        private readonly ReadOnlySpan<CellDesc> _cells;
-        private readonly ReadOnlySpan<byte> _rowValues;
-        private readonly ReadOnlySpan<byte> _shared;
-
-        internal RowCells(ReadOnlySpan<CellDesc> cells, ReadOnlySpan<byte> rowValues, ReadOnlySpan<byte> shared)
-        {
-            _cells = cells;
-            _rowValues = rowValues;
-            _shared = shared;
-        }
-
-        public RowCellEnumerator GetEnumerator()
-        {
-            return new RowCellEnumerator(_cells, _rowValues, _shared);
-        }
-    }
-
-    public ref struct RowCellEnumerator
-    {
-        private readonly ReadOnlySpan<CellDesc> _cells;
-        private readonly ReadOnlySpan<byte> _rowValues;
-        private readonly ReadOnlySpan<byte> _shared;
-        private int _index;
-
-        internal RowCellEnumerator(ReadOnlySpan<CellDesc> cells, ReadOnlySpan<byte> rowValues, ReadOnlySpan<byte> shared)
-        {
-            _cells = cells;
-            _rowValues = rowValues;
-            _shared = shared;
-            _index = -1;
-        }
-
-        public readonly RowCell Current
-        {
-            get
-            {
-                ref readonly var d = ref _cells[_index];
-                var buf = d.FromShared ? _shared : _rowValues;
-                return new RowCell(d.Column, new Cell(d.Type, buf.Slice(d.Start, d.Length), d.Style));
-            }
-        }
-
-        public bool MoveNext()
-        {
-            int next = _index + 1;
-            if (next >= _cells.Length)
-            {
-                return false;
-            }
-            _index = next;
-            return true;
         }
     }
 }

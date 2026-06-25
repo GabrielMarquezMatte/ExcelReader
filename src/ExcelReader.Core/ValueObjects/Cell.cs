@@ -1,5 +1,7 @@
+using System.Buffers.Text;
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Text;
 using ExcelReader.Core.Enums;
@@ -9,23 +11,70 @@ namespace ExcelReader.Core.ValueObjects
     [StructLayout(LayoutKind.Auto)]
     public readonly ref struct Cell
     {
+        private readonly double _number;
+        private readonly bool _hasNumber;
+
         public CellType Type { get; }
-        // UTF-8 bytes of the cell's text: resolved shared-string text, or the raw <v> for numbers/bools/etc.
+        // UTF-8 text bytes: shared-string text, or the raw <v> for bools/errors/XLSX numbers.
+        // EMPTY for binary-numeric cells (XLS Number/RK/Date/Formula), which carry the raw double
+        // instead — read those via TryGetDouble/TryParse, or TryFormat/GetString for text.
         public ReadOnlySpan<byte> Value { get; }
         // The `s` style index from the worksheet (0 when absent). Escape hatch for date detection,
         // which is deferred: dates arrive as Number, and the caller maps StyleIndex -> format itself.
         public int StyleIndex { get; }
 
         public Cell(CellType type, ReadOnlySpan<byte> value, int styleIndex = 0)
+            : this(type, value, 0, hasNumber: false, styleIndex)
+        {
+        }
+
+        internal Cell(CellType type, ReadOnlySpan<byte> value, double number, bool hasNumber, int styleIndex)
         {
             Type = type;
             Value = value;
+            _number = number;
+            _hasNumber = hasNumber;
             StyleIndex = styleIndex;
+        }
+
+        // Numeric cells from binary formats (XLS) carry the raw double, so this avoids the
+        // format-then-parse round trip. Text-backed cells (XLSX, strings) parse Value as a fallback.
+        public bool TryGetDouble(out double value)
+        {
+            if (_hasNumber)
+            {
+                value = _number;
+                return true;
+            }
+            return double.TryParse(Value, CultureInfo.InvariantCulture, out value);
         }
 
         public bool TryParse<T>(IFormatProvider? provider, [MaybeNullWhen(false)] out T result) where T : IUtf8SpanParsable<T>
         {
-            return T.TryParse(Value, provider, out result);
+            // Fast path for binary doubles: hand back the stored value without round-tripping
+            // through text. Guards are JIT constants, so non-matching T compiles them away.
+            if (!_hasNumber)
+            {
+                return T.TryParse(Value, provider, out result);
+            }
+            if (typeof(T) == typeof(double))
+            {
+                double d = _number;
+                result = Unsafe.As<double, T>(ref d);
+                return true;
+            }
+            if (typeof(T) == typeof(float))
+            {
+                float f = (float)_number;
+                result = Unsafe.As<float, T>(ref f);
+                return true;
+            }
+            // Other numeric targets (int, long, decimal, ...): format once and parse, which
+            // exactly matches "parse the formatted text" — e.g. int.TryParse fails on "12.5".
+            Span<byte> buffer = stackalloc byte[32];
+            return Utf8Formatter.TryFormat(_number, buffer, out int written)
+                ? T.TryParse(buffer[..written], provider, out result)
+                : T.TryParse(Value, provider, out result);
         }
 
         // Interprets the cell's numeric value as an Excel serial date (1900 date system).
@@ -42,7 +91,7 @@ namespace ExcelReader.Core.ValueObjects
         // DateTime.FromOADate's 1900 epoch (+1462 days: Jan 1 1904 = OADate 1462).
         public bool TryGetDateTime(bool isDate1904, out DateTime result)
         {
-            if (!double.TryParse(Value, CultureInfo.InvariantCulture, out double serial))
+            if (!TryGetDouble(out double serial))
             {
                 result = default;
                 return false;
@@ -58,9 +107,33 @@ namespace ExcelReader.Core.ValueObjects
             return false;
         }
 
+        // Writes the cell's text into destination as UTF-8; false if it doesn't fit.
+        // Zero-allocation way to get the text of a binary-numeric cell.
+        public bool TryFormat(Span<byte> destination, out int bytesWritten)
+        {
+            if (_hasNumber)
+            {
+                return Utf8Formatter.TryFormat(_number, destination, out bytesWritten);
+            }
+            if (Value.TryCopyTo(destination))
+            {
+                bytesWritten = Value.Length;
+                return true;
+            }
+            bytesWritten = 0;
+            return false;
+        }
+
         // Allocates — only call when you actually need a string.
         public string GetString()
         {
+            if (_hasNumber)
+            {
+                Span<byte> buffer = stackalloc byte[32];
+                return Utf8Formatter.TryFormat(_number, buffer, out int written)
+                    ? Encoding.UTF8.GetString(buffer[..written])
+                    : string.Empty;
+            }
             return Encoding.UTF8.GetString(Value);
         }
 
