@@ -100,7 +100,11 @@ namespace ExcelReader.Core.Writer
             await WriteWorkbookAsync(ct).ConfigureAwait(false);
             await WriteWorkbookRelsAsync(ct).ConfigureAwait(false);
             await WriteContentTypesAsync(ct).ConfigureAwait(false);
+#if NET10_0_OR_GREATER
             await _zip.DisposeAsync().ConfigureAwait(false);
+#else
+            _zip.Dispose();
+#endif
         }
 
         public ValueTask FlushAsync(CancellationToken ct = default)
@@ -122,7 +126,11 @@ namespace ExcelReader.Core.Writer
             }
             else if (_state == WriterState.Created)
             {
+#if NET10_0_OR_GREATER
                 await _zip.DisposeAsync().ConfigureAwait(false);
+#else
+                _zip.Dispose();
+#endif
             }
             if (!_leaveOpen)
             {
@@ -210,7 +218,12 @@ namespace ExcelReader.Core.Writer
         private async ValueTask WriteEntryAsync(string entryName, string content, CancellationToken ct)
         {
             ZipArchiveEntry entry = _zip.CreateEntry(entryName, _compression);
+#if NET10_0_OR_GREATER
             Stream stream = await entry.OpenAsync(ct).ConfigureAwait(false);
+#else
+            ct.ThrowIfCancellationRequested();
+            Stream stream = entry.Open();
+#endif
             StreamWriter xml = new(stream, _utf8NoBom, leaveOpen: false);
             await using (xml.ConfigureAwait(false))
             {

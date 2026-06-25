@@ -55,7 +55,12 @@ namespace ExcelReader.Core.Writer
             }
             ct.ThrowIfCancellationRequested();
             ZipArchiveEntry entry = _zip.CreateEntry($"xl/worksheets/sheet{SheetId}.xml", _compression);
+#if NET10_0_OR_GREATER
             Stream stream = await entry.OpenAsync(ct).ConfigureAwait(false);
+#else
+            ct.ThrowIfCancellationRequested();
+            Stream stream = entry.Open();
+#endif
             _xml = new StreamWriter(stream, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false), leaveOpen: false);
             await _xml.WriteAsync(
                 "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>" +
