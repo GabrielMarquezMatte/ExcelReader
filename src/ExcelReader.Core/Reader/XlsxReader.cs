@@ -67,7 +67,12 @@ namespace ExcelReader.Core.Reader
             ZipArchive? zip = null;
             try
             {
+#if NET10_0_OR_GREATER
                 zip = await ZipArchive.CreateAsync(stream, ZipArchiveMode.Read, leaveOpen: true, entryNameEncoding: null, ct).ConfigureAwait(false);
+#else
+                ct.ThrowIfCancellationRequested();
+                zip = new ZipArchive(stream, ZipArchiveMode.Read, leaveOpen: true);
+#endif
                 var wb = await BytesAsync(zip, "xl/workbook.xml", ct).ConfigureAwait(false);
                 var rels = await BytesAsync(zip, "xl/_rels/workbook.xml.rels", ct).ConfigureAwait(false);
                 var sheets = ParseSheets(wb, rels);
@@ -83,7 +88,11 @@ namespace ExcelReader.Core.Reader
             {
                 if (zip is not null)
                 {
+#if NET10_0_OR_GREATER
                     await zip.DisposeAsync().ConfigureAwait(false);
+#else
+                    zip.Dispose();
+#endif
                 }
                 if (!leaveOpen)
                 {
@@ -147,7 +156,12 @@ namespace ExcelReader.Core.Reader
             await EnsureSharedLoadedAsync(ct).ConfigureAwait(false);
             var entry = _zip.GetEntry(_sheets[_current].Path)
                 ?? throw new InvalidDataException($"Worksheet part not found: {_sheets[_current].Path}");
+#if NET10_0_OR_GREATER
             var sheet = await entry.OpenAsync(ct).ConfigureAwait(false);
+#else
+            ct.ThrowIfCancellationRequested();
+            var sheet = entry.Open();
+#endif
             return new Enumerator(this, sheet, ct);
         }
 
@@ -183,7 +197,11 @@ namespace ExcelReader.Core.Reader
                 ArrayPool<byte>.Shared.Return(_sharedFlat);
                 _sharedFlat = [];
             }
+#if NET10_0_OR_GREATER
             await _zip.DisposeAsync().ConfigureAwait(false);
+#else
+            _zip.Dispose();
+#endif
             if (!_leaveOpen)
             {
                 await _stream.DisposeAsync().ConfigureAwait(false);

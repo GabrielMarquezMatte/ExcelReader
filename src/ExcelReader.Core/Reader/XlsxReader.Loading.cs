@@ -1,5 +1,6 @@
 using System.Buffers;
 using System.IO.Compression;
+using System.Text;
 
 namespace ExcelReader.Core.Reader
 {
@@ -190,6 +191,7 @@ namespace ExcelReader.Core.Reader
             return buf;
         }
 
+#if NET10_0_OR_GREATER
         private static async ValueTask<byte[]> ReadAllAsync(ZipArchiveEntry entry, CancellationToken ct)
         {
             var buf = new byte[entry.Length];
@@ -200,6 +202,13 @@ namespace ExcelReader.Core.Reader
             }
             return buf;
         }
+#else
+        private static ValueTask<byte[]> ReadAllAsync(ZipArchiveEntry entry, CancellationToken ct)
+        {
+            ct.ThrowIfCancellationRequested();
+            return new ValueTask<byte[]>(ReadAll(entry));
+        }
+#endif
 
         private static string Decode(ReadOnlySpan<byte> src)
         {
@@ -211,13 +220,13 @@ namespace ExcelReader.Core.Reader
             {
                 Span<byte> dest = stackalloc byte[src.Length];
                 int w = XlsxXml.Decode(src, dest);
-                return System.Text.Encoding.UTF8.GetString(dest[..w]);
+                return Encoding.UTF8.GetString(dest[..w]);
             }
             var destBuffer = ArrayPool<byte>.Shared.Rent(src.Length);
             try
             {
                 int w = XlsxXml.Decode(src, destBuffer);
-                return System.Text.Encoding.UTF8.GetString(destBuffer.AsSpan(0, w));
+                return Encoding.UTF8.GetString(destBuffer.AsSpan(0, w));
             }
             finally
             {

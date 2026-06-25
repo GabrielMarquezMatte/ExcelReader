@@ -39,7 +39,7 @@ namespace ExcelReader.Benchmarks
                             acc += cell.Value.Length;
                             break;
                         case CellType.Number:
-                            if (cell.TryParse<double>(null, out double n)) { acc += (long)n; }
+                            if (cell.TryParse(null, out double n)) { acc += (long)n; }
                             break;
                         case CellType.Date:
                             if (cell.TryGetDateTime(out var d)) { acc += d.Ticks; }
@@ -71,7 +71,7 @@ namespace ExcelReader.Benchmarks
                             acc += cell.Value.Length;
                             break;
                         case CellType.Number:
-                            if (cell.TryParse<double>(null, out double n)) { acc += (long)n; }
+                            if (cell.TryParse(null, out double n)) { acc += (long)n; }
                             break;
                         case CellType.Date:
                             if (cell.TryGetDateTime(out var d)) { acc += d.Ticks; }

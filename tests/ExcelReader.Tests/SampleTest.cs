@@ -48,21 +48,22 @@ namespace ExcelReader.Tests
                 [big]);
 
             await using var reader = await Excel.FromAsync(ms, ct: TestContext.Current.CancellationToken);
+            await using var enumerator = await reader.GetAsyncEnumeratorAsync(TestContext.Current.CancellationToken);
             int r = 0;
-            foreach (var row in reader)
+            while (await enumerator.MoveNextAsync())
             {
                 if (r == 0)
                 {
-                    Assert.Equal(3, row.ColumnCount);
-                    Assert.True(row[0].TryParse(null, out int a));
+                    Assert.Equal(3, enumerator.Current.ColumnCount);
+                    Assert.True(enumerator.Current[0].TryParse(null, out int a));
                     Assert.Equal(10, a);
-                    Assert.Equal(CellType.Empty, row[1].Type); // the gap
-                    Assert.True(row[2].TryParse(null, out int c));
+                    Assert.Equal(CellType.Empty, enumerator.Current[1].Type); // the gap
+                    Assert.True(enumerator.Current[2].TryParse(null, out int c));
                     Assert.Equal(30, c);
                 }
                 else if (r == 1)
                 {
-                    Assert.Equal(big.Length, row[0].GetString().Length);
+                    Assert.Equal(big.Length, enumerator.Current[0].GetString().Length);
                 }
                 r++;
             }
@@ -169,16 +170,15 @@ namespace ExcelReader.Tests
             int r = 0;
             while (await e.MoveNextAsync())
             {
-                var row = e.Current;
                 if (r == 0)
                 {
-                    Assert.Equal("file", row[0].GetString());
-                    Assert.Equal("lines_deleted", row[3].GetString());
+                    Assert.Equal("file", e.Current[0].GetString());
+                    Assert.Equal("lines_deleted", e.Current[3].GetString());
                 }
                 else if (r == 1)
                 {
-                    Assert.Equal("global.json", row[0].GetString());
-                    Assert.True(row[1].TryParse(null, out int n));
+                    Assert.Equal("global.json", e.Current[0].GetString());
+                    Assert.True(e.Current[1].TryParse(null, out int n));
                     Assert.Equal(2, n);
                 }
                 r++;
