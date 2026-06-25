@@ -34,6 +34,10 @@ namespace ExcelReader.Core.Writer
         // Full substream byte length once framed — used to compute BoundSheet offsets.
         internal int SubstreamLength => FramingBytes + _cells.Length;
 
+        internal int RowCount => _maxRow + 1;
+        internal int ColCount => _maxCol + 1;
+        internal ReadOnlyMemory<byte> CellsMemory => _cells.Memory;
+
         public ValueTask StartAsync(CancellationToken ct = default)
         {
             ObjectDisposedException.ThrowIf(_state == WriterState.Ended, this);
@@ -104,15 +108,6 @@ namespace ExcelReader.Core.Writer
             ValidateColumn(col);
             BiffRecordWriter.WriteBool(_cells, row, col, XlsGlobals.GeneralXf, value);
             Track(row, col);
-        }
-
-        // Writes the full worksheet substream (BOF + DIMENSION + cells + EOF) into the destination.
-        internal void BuildSubstream(BiffBuffer destination)
-        {
-            BiffRecordWriter.WriteBof(destination, BiffRecord.SubstreamWorksheet);
-            BiffRecordWriter.WriteDimension(destination, _maxRow + 1, _maxCol + 1);
-            destination.Write(_cells.Span);
-            BiffRecordWriter.WriteEof(destination);
         }
 
         internal void ReleaseBuffer()

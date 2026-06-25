@@ -1,3 +1,4 @@
+using System.Runtime.InteropServices;
 using ExcelReader.Core.Writer.Internal;
 
 namespace ExcelReader.Core.Writer
@@ -93,7 +94,10 @@ namespace ExcelReader.Core.Writer
                 throw new InvalidOperationException("A workbook must contain at least one sheet.");
             }
 
-            BiffBuffer workbook = new(8192);
+            // Globals are small (BOF/CODEPAGE/XFs/BoundSheets/EOF); only this buffer plus each
+            // sheet's already-accumulated cell buffer live at finalize — no combined workbook copy.
+            BiffBuffer globals = new(1024);
+            BiffBuffer frame = new(64);
             try
             {
                 string[] names = new string[_sheets.Count];
@@ -102,20 +106,37 @@ namespace ExcelReader.Core.Writer
                     names[i] = _sheets[i].Name;
                 }
 
-                int[] offsetPositions = XlsGlobals.Write(workbook, names, _date1904);
+                int[] offsetPositions = XlsGlobals.Write(globals, names, _date1904);
+                int offset = globals.Length;
+                int workbookSize = offset;
                 for (int i = 0; i < _sheets.Count; i++)
                 {
-                    // The sheet substream begins at the current end of the buffer.
-                    workbook.PatchI32(offsetPositions[i], workbook.Length);
-                    _sheets[i].BuildSubstream(workbook);
+                    globals.PatchI32(offsetPositions[i], offset);
+                    offset += _sheets[i].SubstreamLength;
+                    workbookSize += _sheets[i].SubstreamLength;
                 }
 
-                await OleCompoundWriter.WriteAsync(_stream, workbook.Memory, ct).ConfigureAwait(false);
+                await OleCompoundWriter.WriteAsync(_stream, workbookSize, async (dest, canc) =>
+                {
+                    await dest.WriteAsync(globals.Memory, canc).ConfigureAwait(false);
+                    foreach (XlsSheetWriter sheet in _sheets)
+                    {
+                        frame.Reset();
+                        BiffRecordWriter.WriteBof(frame, BiffRecord.SubstreamWorksheet);
+                        BiffRecordWriter.WriteDimension(frame, sheet.RowCount, sheet.ColCount);
+                        await dest.WriteAsync(frame.Memory, canc).ConfigureAwait(false);
+                        await dest.WriteAsync(sheet.CellsMemory, canc).ConfigureAwait(false);
+                        frame.Reset();
+                        BiffRecordWriter.WriteEof(frame);
+                        await dest.WriteAsync(frame.Memory, canc).ConfigureAwait(false);
+                    }
+                }, ct).ConfigureAwait(false);
             }
             finally
             {
-                workbook.Dispose();
-                foreach (XlsSheetWriter sheet in _sheets)
+                globals.Dispose();
+                frame.Dispose();
+                foreach (ref readonly var sheet in CollectionsMarshal.AsSpan(_sheets))
                 {
                     sheet.ReleaseBuffer();
                 }
