@@ -13,11 +13,10 @@ namespace ExcelReader.Tests
             await using var reader = await Excel.FromAsync(ms, ct: TestContext.Current.CancellationToken);
             await using var e = reader.GetEnumerator();
             Assert.True(await e.MoveNextAsync());
-            var row = e.Current;
-            Assert.Equal(CellType.Boolean, row[0].Type);
-            Assert.Equal("1", row[0].GetString());
-            Assert.Equal(CellType.Boolean, row[1].Type);
-            Assert.Equal("0", row[1].GetString());
+            Assert.Equal(CellType.Boolean, e.Current[0].Type);
+            Assert.Equal("1", e.Current[0].GetString());
+            Assert.Equal(CellType.Boolean, e.Current[1].Type);
+            Assert.Equal("0", e.Current[1].GetString());
         }
 
         [Fact]
@@ -51,8 +50,9 @@ namespace ExcelReader.Tests
         {
             await using var ms = await TypedWorkbook.BuildAsync();
             await using var reader = await Excel.FromAsync(ms, ct: TestContext.Current.CancellationToken);
+            await using var enumerator = await reader.GetAsyncEnumeratorAsync(TestContext.Current.CancellationToken);
             int count = 0;
-            foreach (var _ in reader)
+            while (await enumerator.MoveNextAsync())
             {
                 count++;
             }
@@ -207,10 +207,9 @@ namespace ExcelReader.Tests
             await using var reader = await Excel.FromAsync(ms, ct: TestContext.Current.CancellationToken);
             await using var e = reader.GetEnumerator();
             Assert.True(await e.MoveNextAsync());
-            var row = e.Current;
-            Assert.Equal(CellType.Empty, row[0].Type);
-            Assert.Equal(CellType.Number, row[26].Type);
-            Assert.True(row[26].TryParse(null, out int v));
+            Assert.Equal(CellType.Empty, e.Current[0].Type);
+            Assert.Equal(CellType.Number, e.Current[26].Type);
+            Assert.True(e.Current[26].TryParse(null, out int v));
             Assert.Equal(99, v);
         }
 
