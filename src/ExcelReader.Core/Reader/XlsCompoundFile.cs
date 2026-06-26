@@ -137,7 +137,9 @@ namespace ExcelReader.Core.Reader
                 byte[] data = ReadMiniStream(miniStream, miniFat, miniSectorSize, workbook.StartSector, (int)workbook.Size);
                 if (ownsSource)
                 {
+#pragma warning disable IDISP007 // Disposed only when this method owns the source; the in-memory workbook no longer needs it.
                     source.Dispose();
+#pragma warning restore IDISP007
                 }
                 return WorkbookStream.InMemory(data);
             }
@@ -165,6 +167,8 @@ namespace ExcelReader.Core.Reader
             return (int)((size + sectorSize - 1) / sectorSize);
         }
 
+        [SuppressMessage("Performance", "HLQ013:Consider using 'foreach' loop instead of 'for' loop",
+            Justification = "Not an iteration over fat; follows the sector linked-list, writing each hop into chain[i].")]
         private static int[] BuildChain(int[] fat, int startSector, int sectorCount)
         {
             int[] chain = new int[sectorCount];

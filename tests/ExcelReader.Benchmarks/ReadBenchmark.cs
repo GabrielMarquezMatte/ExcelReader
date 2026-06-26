@@ -15,11 +15,13 @@ namespace ExcelReader.Benchmarks
         public int Rows { get; set; }
 
         private byte[] _workbook = [];
+        private byte[] _xlsbWorkbook = [];
 
         [GlobalSetup]
         public async Task SetupAsync()
         {
             _workbook = await WorkbookGenerator.BuildAsync(Rows);
+            _xlsbWorkbook = await WorkbookGenerator.BuildXlsbAsync(Rows);
         }
 
         [Benchmark(Baseline = true)]
@@ -57,6 +59,69 @@ namespace ExcelReader.Benchmarks
         {
             await using var ms = new MemoryStream(_workbook, writable: false);
             await using var reader = await Excel.FromAsync(ms);
+            await using var e = await reader.GetAsyncEnumeratorAsync();
+            long acc = 0;
+            while (await e.MoveNextAsync())
+            {
+                var row = e.Current;
+                foreach (var rowCell in row.Cells)
+                {
+                    var cell = rowCell.Value;
+                    switch (cell.Type)
+                    {
+                        case CellType.ExcelString:
+                            acc += cell.Value.Length;
+                            break;
+                        case CellType.Number:
+                            if (cell.TryParse(null, out double n)) { acc += (long)n; }
+                            break;
+                        case CellType.Date:
+                            if (cell.TryGetDateTime(out var d)) { acc += d.Ticks; }
+                            break;
+                        default:
+                            break;
+                    }
+                }
+            }
+            return acc;
+        }
+
+
+        [Benchmark]
+        public long ExcelReaderXlsb()
+        {
+            using var ms = new MemoryStream(_xlsbWorkbook, writable: false);
+            using var reader = Excel.FromXlsb(ms);
+            long acc = 0;
+            foreach (var row in reader)
+            {
+                foreach (var rowCell in row.Cells)
+                {
+                    var cell = rowCell.Value;
+                    switch (cell.Type)
+                    {
+                        case CellType.ExcelString:
+                            acc += cell.Value.Length;
+                            break;
+                        case CellType.Number:
+                            if (cell.TryParse(null, out double n)) { acc += (long)n; }
+                            break;
+                        case CellType.Date:
+                            if (cell.TryGetDateTime(out var d)) { acc += d.Ticks; }
+                            break;
+                        default:
+                            break;
+                    }
+                }
+            }
+            return acc;
+        }
+
+        [Benchmark]
+        public async Task<long> ExcelReaderXlsbAsync()
+        {
+            await using var ms = new MemoryStream(_xlsbWorkbook, writable: false);
+            await using var reader = await Excel.FromXlsbAsync(ms);
             await using var e = await reader.GetAsyncEnumeratorAsync();
             long acc = 0;
             while (await e.MoveNextAsync())

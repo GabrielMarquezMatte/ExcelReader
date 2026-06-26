@@ -15,5 +15,6 @@ namespace ExcelReader.Core.Writer.Internal
         internal const string WorkbookRelType = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument";
         internal const string WorksheetRelType = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet";
         internal const string StylesRelType = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles";
+        internal const string SharedStringsRelType = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/sharedStrings";
     }
 }

@@ -5,17 +5,30 @@ using ExcelReader.Core.ValueObjects;
 
 namespace ExcelReader.Core.Parser.Internal
 {
+    public sealed class ExcelEnumerable<T> : ExcelEnumerable<T, XlsxReader, XlsxReader.Enumerator> where T : new()
+    {
+        internal ExcelEnumerable(XlsxReader reader, ExcelParserConfig config, CancellationToken ct = default)
+            : base(reader, config, ct)
+        {
+        }
+    }
+
     [SuppressMessage("Design", "CA1034:Nested types should not be visible",
         Justification = "Public nested struct Enumerator is the standard foreach pattern.")]
-    public sealed class ExcelEnumerable<T> : IEnumerable<T> where T : new()
+    public class ExcelEnumerable<T, TReader, TEnumerator> : IEnumerable<T>, IAsyncEnumerable<T>
+        where T : new()
+        where TReader : IExcelRowReader<TEnumerator>
+        where TEnumerator : IExcelRowEnumerator
     {
-        private readonly XlsxReader _reader;
+        private readonly TReader _reader;
         private readonly ExcelParserConfig _config;
+        private readonly CancellationToken _ct;
 
-        internal ExcelEnumerable(XlsxReader reader, ExcelParserConfig config)
+        internal ExcelEnumerable(TReader reader, ExcelParserConfig config, CancellationToken ct = default)
         {
             _reader = reader;
             _config = config;
+            _ct = ct;
         }
 
         [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP015:Member should not return created and cached instance",
@@ -23,7 +36,7 @@ namespace ExcelReader.Core.Parser.Internal
         public Enumerator GetEnumerator()
         {
             TypeMapInfo<T> info = TypeMapper<T>.GetInfo();
-            XlsxReader.Enumerator rows = _reader.GetEnumerator();
+            TEnumerator rows = _reader.GetEnumerator();
             return new Enumerator(rows, info, _config.ColumnNameComparer, _config.HeaderRow, _reader.IsDate1904);
         }
 
@@ -37,26 +50,32 @@ namespace ExcelReader.Core.Parser.Internal
             return GetEnumerator();
         }
 
+        [SuppressMessage("Performance", "HLQ006:GetAsyncEnumerator should return a value type",
+            Justification = "Async enumerator requires a class to host the async state machine.")]
+        public IAsyncEnumerator<T> GetAsyncEnumerator(CancellationToken cancellationToken = default)
+        {
+            TypeMapInfo<T> info = TypeMapper<T>.GetInfo();
+            CancellationToken effective = cancellationToken.CanBeCanceled ? cancellationToken : _ct;
+            return new AsyncEnumerator(_reader, info, _config.ColumnNameComparer, _config.HeaderRow, effective);
+        }
+
         public struct Enumerator : IEnumerator<T>
         {
             [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP006:Implement IDisposable",
                 Justification = "Struct implements IDisposable; rows disposed in Dispose().")]
-            private XlsxReader.Enumerator _rows;
-            private readonly int _headerRow;
+            private readonly TEnumerator _rows;
             private RowProjector<T> _projector;
-            private int _rowNumber;
             private T _current = default!;
 
             internal Enumerator(
-                XlsxReader.Enumerator rows,
+                TEnumerator rows,
                 TypeMapInfo<T> typeInfo,
                 StringComparer comparer,
                 int headerRow,
                 bool isDate1904)
             {
                 _rows = rows;
-                _headerRow = headerRow;
-                _projector = new RowProjector<T>(typeInfo, comparer, isDate1904);
+                _projector = new RowProjector<T>(typeInfo, comparer, headerRow, isDate1904);
             }
 
             public readonly T Current => _current;
@@ -67,30 +86,22 @@ namespace ExcelReader.Core.Parser.Internal
             {
                 while (_rows.MoveNext())
                 {
-                    _rowNumber++;
                     Row row = _rows.Current;
-                    if (_rowNumber < _headerRow)
+                    switch (_projector.Advance(in row, ref _current))
                     {
-                        continue;
+                        case ProjectionStep.Yield:
+                            return true;
+                        case ProjectionStep.Stop:
+                            return false;
+                        case ProjectionStep.Skip:
+                            break;
                     }
-                    if (_rowNumber == _headerRow)
-                    {
-                        _projector.BuildColumnMap(in row);
-                        continue;
-                    }
-                    if (!_projector.IsMapped)
-                    {
-                        return false;
-                    }
-                    _current = new T();
-                    _projector.ParseCurrentRow(in row, ref _current);
-                    return true;
                 }
                 return false;
             }
 
             [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP007:Don't dispose injected",
-                Justification = "The enumerator owns _rows — it was created by GetEnumerator, not injected from outside.")]
+                Justification = "The enumerator owns _rows; it was created by GetEnumerator, not injected from outside.")]
             public readonly void Dispose()
             {
                 _rows.Dispose();
@@ -99,6 +110,67 @@ namespace ExcelReader.Core.Parser.Internal
             public void Reset()
             {
                 throw new NotSupportedException();
+            }
+        }
+
+        private sealed class AsyncEnumerator : IAsyncEnumerator<T>
+        {
+            private readonly TReader _reader;
+            private readonly CancellationToken _ct;
+            private RowProjector<T> _projector;
+            private TEnumerator? _rows;
+            private T _current = default!;
+
+            internal AsyncEnumerator(
+                TReader reader,
+                TypeMapInfo<T> typeInfo,
+                StringComparer comparer,
+                int headerRow,
+                CancellationToken ct)
+            {
+                _reader = reader;
+                _ct = ct;
+                _projector = new RowProjector<T>(typeInfo, comparer, headerRow, reader.IsDate1904);
+            }
+
+            public T Current => _current;
+
+            public ValueTask<bool> MoveNextAsync()
+            {
+                return AdvanceAsync();
+            }
+
+            private async ValueTask<bool> AdvanceAsync()
+            {
+                _rows ??= await _reader.GetAsyncEnumeratorAsync(_ct).ConfigureAwait(false);
+                while (await _rows.MoveNextAsync().ConfigureAwait(false))
+                {
+                    switch (Project())
+                    {
+                        case ProjectionStep.Yield:
+                            return true;
+                        case ProjectionStep.Stop:
+                            return false;
+                        case ProjectionStep.Skip:
+                            break;
+                    }
+                }
+                return false;
+            }
+
+            private ProjectionStep Project()
+            {
+                Row row = _rows!.Current;
+                return _projector.Advance(in row, ref _current);
+            }
+
+            public ValueTask DisposeAsync()
+            {
+                if (_rows is null)
+                {
+                    return ValueTask.CompletedTask;
+                }
+                return _rows.DisposeAsync();
             }
         }
     }
