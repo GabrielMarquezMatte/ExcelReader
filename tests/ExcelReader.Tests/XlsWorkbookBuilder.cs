@@ -107,6 +107,33 @@ namespace ExcelReader.Tests
             return BuildOle(workbook.ToArray());
         }
 
+        // OLE header/layout offsets, matching Header() and BuildOle() below. Used by error-path
+        // tests to corrupt one field of an otherwise-valid container.
+        internal const int SectorShiftOffset = 0x1E;     // log2(sector size); valid is 9 -> 512
+        internal const int FatSectorCountOffset = 0x2C;  // header DIFAT lists this many FAT sectors
+        internal const int SignatureOffset = 0x00;
+        // Directory is sector 1: header (512) + FAT sector (512) = byte 1024. The Workbook entry
+        // is the second 128-byte directory entry, so its UTF-16 name starts at 1024 + 128.
+        internal const int WorkbookEntryNameOffset = 1024 + 128;
+
+        // A valid single-sheet workbook with `replacement` overwritten at `offset`.
+        internal static MemoryStream BuildPatched(int offset, params byte[] replacement)
+        {
+            byte[] bytes = Build(sheets: [("S1", [["A"]])]).ToArray();
+            replacement.CopyTo(bytes, offset);
+            return new MemoryStream(bytes);
+        }
+
+        internal static byte[] LE32(int value)
+        {
+            return I32(value);
+        }
+
+        internal static byte[] LE16(int value)
+        {
+            return U16(value);
+        }
+
         internal static byte[] RawLabel(int row, int col, string value)
         {
             return [.. U16(row), .. U16(col), .. U16(0), .. BiffString(value)];
