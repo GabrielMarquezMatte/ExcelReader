@@ -12,6 +12,8 @@ namespace ExcelReader.Core.Reader
     {
         private const int HeaderSize = 512;
 
+        [SuppressMessage("SharpSource", "SS066:DisposableFieldIsNotDisposed",
+            Justification = "Disposed in Dispose() when _ownsSource; otherwise the caller owns it.")]
         private readonly Stream? _source;
         private readonly bool _ownsSource;
         private readonly int[] _chain;        // physical sector numbers, in order
@@ -64,6 +66,8 @@ namespace ExcelReader.Core.Reader
             _source.ReadExactly(dest);
         }
 
+        [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP007:Don't dispose injected",
+            Justification = "Only disposed when _ownsSource — this type took ownership of the source in that case.")]
         public void Dispose()
         {
             if (_ownsSource)

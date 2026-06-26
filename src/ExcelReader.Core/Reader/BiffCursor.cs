@@ -8,6 +8,8 @@ namespace ExcelReader.Core.Reader
     // every sector load. Not thread-safe across cursors used concurrently from multiple threads.
     internal sealed class BiffCursor : IDisposable
     {
+        [System.Diagnostics.CodeAnalysis.SuppressMessage("SharpSource", "SS066:DisposableFieldIsNotDisposed",
+            Justification = "Borrowed WorkbookStream; its lifetime is owned by XlsReader, not this cursor.")]
         private readonly WorkbookStream _wb;
         private readonly int _sectorSize;
         private readonly byte[]? _sector;     // current sector (streamed mode only)

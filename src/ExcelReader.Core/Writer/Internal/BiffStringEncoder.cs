@@ -1,3 +1,5 @@
+using System.Diagnostics.CodeAnalysis;
+
 namespace ExcelReader.Core.Writer.Internal
 {
     // Encodes .NET strings as BIFF8 unicode strings. Bit 0 of the flags byte selects compressed
@@ -22,6 +24,8 @@ namespace ExcelReader.Core.Writer.Internal
             WriteFlagsAndChars(buffer, value, compressed);
         }
 
+        [SuppressMessage("Performance", "HLQ004:The enumerator returns a reference to the item",
+            Justification = "Iterating char by value; 'ref readonly char' gains nothing for a 2-byte primitive.")]
         private static void WriteFlagsAndChars(BiffBuffer buffer, ReadOnlySpan<char> value, bool compressed)
         {
             buffer.WriteByte((byte)(compressed ? 0 : 1));
@@ -41,6 +45,8 @@ namespace ExcelReader.Core.Writer.Internal
             }
         }
 
+        [SuppressMessage("Performance", "HLQ004:The enumerator returns a reference to the item",
+            Justification = "Iterating char by value; 'ref readonly char' gains nothing for a 2-byte primitive.")]
         private static bool CanCompress(ReadOnlySpan<char> value)
         {
             foreach (char c in value)
