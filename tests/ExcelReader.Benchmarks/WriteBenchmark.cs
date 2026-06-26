@@ -1,6 +1,7 @@
 using BenchmarkDotNet.Attributes;
 using ExcelReader.Core.Writer;
 using MiniExcelLibs;
+using SpreadCheetah;
 
 namespace ExcelReader.Benchmarks
 {
@@ -80,6 +81,29 @@ namespace ExcelReader.Benchmarks
         {
             await using var ms = new MemoryStream();
             await ms.SaveAsAsync(_records, excelType: ExcelType.XLSX).ConfigureAwait(false);
+            return ms.Length;
+        }
+
+        [Benchmark]
+        public async Task<long> SpreadCheetah()
+        {
+            await using var ms = new MemoryStream();
+            await using (var writer = await Spreadsheet.CreateNewAsync(ms))
+            {
+                await writer.StartWorksheetAsync("S1").ConfigureAwait(false);
+                await writer.AddHeaderRowAsync(["Name", "Id", "Date", "Value"]).ConfigureAwait(false);
+                foreach(var rec in _records)
+                {
+                    Cell[] row = [
+                        new(rec.Name),
+                        new(rec.Id),
+                        new(rec.Date),
+                        new(rec.Value),
+                    ];
+                    await writer.AddRowAsync(row).ConfigureAwait(false);
+                }
+                await writer.FinishAsync().ConfigureAwait(false);
+            }
             return ms.Length;
         }
     }

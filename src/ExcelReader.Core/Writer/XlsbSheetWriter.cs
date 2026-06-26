@@ -11,7 +11,6 @@ namespace ExcelReader.Core.Writer
         private readonly XlsbWorkbookWriter _owner;
         private readonly bool _date1904;
         private readonly BiffBuffer _records = new(4096);
-        private int _rowNumber;
         private WriterState _state = WriterState.Created;
         private bool _rowActive;
         private bool _registered;
@@ -54,7 +53,6 @@ namespace ExcelReader.Core.Writer
             ct.ThrowIfCancellationRequested();
             Biff12RecordWriter.WriteRecord(_records, Brt.RowHdr);
             _rowActive = true;
-            _rowNumber++;
             return ValueTask.FromResult(new XlsbRowWriter(this, _records, _date1904));
         }
 
