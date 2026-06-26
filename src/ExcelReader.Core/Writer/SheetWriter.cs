@@ -17,6 +17,7 @@ namespace ExcelReader.Core.Writer
         private readonly CompressionLevel _compression;
         // Reused per row to format "<row r="N">" without allocating: 8 prefix + 7 digits + 2 suffix.
         private readonly char[] _rowOpenBuf = new char[24];
+        private readonly StringBuilder _rowBuilder = new(512);
         [SuppressMessage("SharpSource", "SS066:DisposableFieldIsNotDisposed",
             Justification = "StreamWriter is explicitly disposed in EndAsync via DisposeAsync.")]
         private StreamWriter? _xml;
@@ -69,7 +70,7 @@ namespace ExcelReader.Core.Writer
             _owner.RegisterSheet(Name, SheetId);
         }
 
-        public async ValueTask<RowWriter> StartRowAsync(CancellationToken ct = default)
+        public ValueTask<RowWriter> StartRowAsync(CancellationToken ct = default)
         {
             ObjectDisposedException.ThrowIf(_state == WriterState.Ended, this);
             if (_state != WriterState.Started)
@@ -83,14 +84,15 @@ namespace ExcelReader.Core.Writer
             ct.ThrowIfCancellationRequested();
             _rowNumber++;
             _rowActive = true;
+            _rowBuilder.Clear();
             "<row r=\"".CopyTo(_rowOpenBuf);
             int len = 8;
             _rowNumber.TryFormat(_rowOpenBuf.AsSpan(len), out int digits, default, CultureInfo.InvariantCulture);
             len += digits;
             _rowOpenBuf[len++] = '"';
             _rowOpenBuf[len++] = '>';
-            await _xml!.WriteAsync(_rowOpenBuf.AsMemory(0, len), ct).ConfigureAwait(false);
-            return new RowWriter(this, _xml!, _rowNumber);
+            _rowBuilder.Append(_rowOpenBuf.AsSpan(0, len));
+            return ValueTask.FromResult(new RowWriter(this, _xml!, _rowBuilder, _rowNumber));
         }
 
         internal void NotifyRowEnded()

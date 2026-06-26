@@ -1,3 +1,5 @@
+using System.Globalization;
+using ExcelReader.Core.Enums;
 using ExcelReader.Core.Parser;
 using ExcelReader.Core.Reader;
 using ExcelReader.Core.Writer;
@@ -133,6 +135,50 @@ namespace ExcelReader.Tests
             Assert.True(e.MoveNext());
             Assert.True(e.Current[0].TryGetDateTime(reader.IsDate1904, out DateTime parsed));
             Assert.Equal(date, parsed);
+        }
+
+        [Fact]
+        public async Task NumericOverloadsRoundTrip()
+        {
+            await using var ms = await WriteAsync(async wb =>
+            {
+                XlsbSheetWriter sheet = wb.AddSheet("Numbers");
+                await sheet.StartAsync(TestContext.Current.CancellationToken);
+                await using (XlsbRowWriter row = await sheet.StartRowAsync(TestContext.Current.CancellationToken))
+                {
+                    row.Write(123);
+                    row.Write(1234567890123L);
+                    row.Write(1.5f);
+                    row.Write(2.75d);
+                    row.Write(12.5m);
+                    row.Write((int?)null);
+                    row.Write((long?)7L);
+                    row.Write((double?)null);
+                    row.Write((decimal?)8.25m);
+                }
+                await sheet.EndAsync(TestContext.Current.CancellationToken);
+            });
+
+            await using var reader = Excel.FromXlsb(ms);
+            using XlsbReader.Enumerator e = reader.GetEnumerator();
+            Assert.True(e.MoveNext());
+            Assert.True(e.Current[0].TryParse(null, out int intValue));
+            Assert.Equal(123, intValue);
+            Assert.True(e.Current[1].TryParse(null, out long longValue));
+            Assert.Equal(1234567890123L, longValue);
+            Assert.True(e.Current[2].TryParse(null, out double floatValue));
+            Assert.Equal(1.5, floatValue);
+            Assert.True(e.Current[3].TryParse(null, out double doubleValue));
+            Assert.Equal(2.75, doubleValue);
+            Assert.True(e.Current[4].TryParse(CultureInfo.InvariantCulture, out decimal decimalValue));
+            Assert.Equal(12.5m, decimalValue);
+            Assert.Equal(CellType.Empty, e.Current[5].Type);
+            Assert.True(e.Current[6].TryParse(null, out long nullableLong));
+            Assert.Equal(7L, nullableLong);
+            Assert.Equal(CellType.Empty, e.Current[7].Type);
+            Assert.True(e.Current[8].TryParse(CultureInfo.InvariantCulture, out decimal nullableDecimal));
+            Assert.Equal(8.25m, nullableDecimal);
+            Assert.False(e.MoveNext());
         }
     }
 }

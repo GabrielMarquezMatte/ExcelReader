@@ -74,6 +74,18 @@ namespace ExcelReader.Core.Writer.Internal
             Length += bytes.Length;
         }
 
+        internal void WriteUtf16(ReadOnlySpan<char> chars)
+        {
+            int byteCount = checked(chars.Length * sizeof(char));
+            Ensure(byteCount);
+            Span<byte> dest = _buffer.AsSpan(Length, byteCount);
+            for (int i = 0; i < chars.Length; i++)
+            {
+                BinaryPrimitives.WriteUInt16LittleEndian(dest[(i * sizeof(char))..], chars[i]);
+            }
+            Length += byteCount;
+        }
+
         // Writes the record id + a 2-byte length placeholder; returns the placeholder offset.
         internal int BeginRecord(int id)
         {
