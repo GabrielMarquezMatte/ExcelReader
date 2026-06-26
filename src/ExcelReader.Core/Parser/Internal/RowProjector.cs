@@ -9,16 +9,18 @@ namespace ExcelReader.Core.Parser.Internal
         private readonly HeaderNormalization _normalization;
         private readonly int _headerRow;
         private readonly bool _isDate1904;
+        private readonly IFormatProvider _provider;
         private ColumnBinding<T>[]? _bindings;
         private int _rowNumber;
 
-        internal RowProjector(TypeMapInfo<T> typeInfo, StringComparer comparer, HeaderNormalization normalization, int headerRow, bool isDate1904)
+        internal RowProjector(TypeMapInfo<T> typeInfo, StringComparer comparer, HeaderNormalization normalization, int headerRow, bool isDate1904, IFormatProvider provider)
         {
             _typeInfo = typeInfo;
             _comparer = comparer;
             _normalization = normalization;
             _headerRow = headerRow;
             _isDate1904 = isDate1904;
+            _provider = provider;
         }
 
         // The per-row state machine shared by every enumerator (sync/async, xlsx/xls): skip rows before
@@ -111,7 +113,7 @@ namespace ExcelReader.Core.Parser.Internal
                 if (binding.Column == column)
                 {
                     Cell cell = rowCell.Value;
-                    binding.Parser(ref model, in cell, _isDate1904);
+                    binding.Parser(ref model, in cell, _isDate1904, _provider);
                     bindingIndex++;
                 }
             }
