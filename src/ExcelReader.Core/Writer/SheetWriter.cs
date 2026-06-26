@@ -6,7 +6,7 @@ using ExcelReader.Core.Writer.Internal;
 
 namespace ExcelReader.Core.Writer
 {
-    public sealed class SheetWriter : IAsyncDisposable
+    public sealed class SheetWriter : ISheetWriter<RowWriter>
     {
         [SuppressMessage("SharpSource", "SS066:DisposableFieldIsNotDisposed",
             Justification = "WorkbookWriter is borrowed; its lifetime is managed by the caller.")]

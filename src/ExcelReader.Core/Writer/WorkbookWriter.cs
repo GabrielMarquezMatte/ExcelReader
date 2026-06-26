@@ -6,7 +6,7 @@ using ExcelReader.Core.Writer.Internal;
 
 namespace ExcelReader.Core.Writer
 {
-    public sealed class WorkbookWriter : IAsyncDisposable
+    public sealed class WorkbookWriter : IWorkbookWriter<SheetWriter>
     {
         private static readonly UTF8Encoding _utf8NoBom = new(encoderShouldEmitUTF8Identifier: false);
 
