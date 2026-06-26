@@ -7,7 +7,7 @@ namespace ExcelReader.Core.Parser.Internal
 {
     [SuppressMessage("Design", "CA1034:Nested types should not be visible",
         Justification = "Public nested struct Enumerator is the standard foreach pattern.")]
-    public sealed class XlsExcelEnumerable<T> : IEnumerable<T>, IAsyncEnumerable<T> where T : new()
+    public sealed class XlsExcelEnumerable<T> : IEnumerable<T>, IAsyncEnumerable<T>
     {
         private readonly XlsReader _reader;
         private readonly ExcelParserConfig _config;

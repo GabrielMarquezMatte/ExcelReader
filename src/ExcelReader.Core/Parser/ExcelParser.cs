@@ -4,7 +4,7 @@ using ExcelReader.Core.Reader;
 
 namespace ExcelReader.Core.Parser
 {
-    public sealed class ExcelParser<T> where T : new()
+    public sealed class ExcelParser<T>
     {
         private readonly ExcelParserConfig _config;
 

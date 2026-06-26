@@ -5,7 +5,7 @@ using ExcelReader.Core.ValueObjects;
 
 namespace ExcelReader.Core.Parser.Internal
 {
-    public sealed class ExcelEnumerable<T> : ExcelEnumerable<T, XlsxReader, XlsxReader.Enumerator> where T : new()
+    public sealed class ExcelEnumerable<T> : ExcelEnumerable<T, XlsxReader, XlsxReader.Enumerator>
     {
         internal ExcelEnumerable(XlsxReader reader, ExcelParserConfig config, CancellationToken ct = default)
             : base(reader, config, ct)
@@ -16,7 +16,6 @@ namespace ExcelReader.Core.Parser.Internal
     [SuppressMessage("Design", "CA1034:Nested types should not be visible",
         Justification = "Public nested struct Enumerator is the standard foreach pattern.")]
     public class ExcelEnumerable<T, TReader, TEnumerator> : IEnumerable<T>, IAsyncEnumerable<T>
-        where T : new()
         where TReader : IExcelRowReader<TEnumerator>
         where TEnumerator : IExcelRowEnumerator
     {
