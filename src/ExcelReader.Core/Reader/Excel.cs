@@ -1,4 +1,5 @@
 using System.Diagnostics.CodeAnalysis;
+using System.IO.Compression;
 
 namespace ExcelReader.Core.Reader
 {
@@ -26,6 +27,20 @@ namespace ExcelReader.Core.Reader
         public static XlsReader FromXls(Stream stream, bool leaveOpen = true)
         {
             return new XlsReader(stream, leaveOpen);
+        }
+
+        [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP001:Dispose created",
+            Justification = "Stream ownership transfers to XlsbReader on success, disposed on failure.")]
+        [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
+            Justification = "Stream ownership transfers to XlsbReader on success, disposed on failure.")]
+        public static XlsbReader FromXlsbFile(string path)
+        {
+            return new XlsbReader(File.OpenRead(path), leaveOpen: false);
+        }
+
+        public static XlsbReader FromXlsb(Stream stream, bool leaveOpen = true)
+        {
+            return new XlsbReader(stream, leaveOpen);
         }
 
         [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP001:Dispose created",
@@ -58,12 +73,27 @@ namespace ExcelReader.Core.Reader
             return XlsReader.CreateAsync(stream, leaveOpen, ct);
         }
 
-        // The leading bytes that distinguish the two container formats: XLSX is a ZIP
-        // ("PK\x03\x04"), XLS is an OLE2/CFB compound document.
+        [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP001:Dispose created",
+            Justification = "Stream ownership transfers to CreateAsync, which disposes it on failure and via the reader on success.")]
+        public static ValueTask<XlsbReader> FromXlsbFileAsync(string path, CancellationToken ct = default)
+        {
+            FileStream stream = new(path, FileMode.Open, FileAccess.Read, FileShare.Read, bufferSize: 65536,
+                                    options: FileOptions.Asynchronous | FileOptions.SequentialScan);
+            return XlsbReader.CreateAsync(stream, leaveOpen: false, ct);
+        }
+
+        public static ValueTask<XlsbReader> FromXlsbAsync(Stream stream, bool leaveOpen = true, CancellationToken ct = default)
+        {
+            return XlsbReader.CreateAsync(stream, leaveOpen, ct);
+        }
+
+        // The leading bytes that distinguish container formats: XLSX and XLSB are ZIP ("PK\x03\x04"),
+        // XLS is an OLE2/CFB compound document. XLSB is distinguished from XLSX by the presence of
+        // "xl/workbook.bin" in the ZIP central directory.
         private static ReadOnlySpan<byte> ZipSignature => [0x50, 0x4B, 0x03, 0x04];
         private static ReadOnlySpan<byte> OleSignature => [0xD0, 0xCF, 0x11, 0xE0, 0xA1, 0xB1, 0x1A, 0xE1];
 
-        private enum Format { Xlsx, Xls }
+        private enum Format { Xlsx, Xls, Xlsb }
 
         // Opens a workbook of either format, choosing the reader from the file's signature.
         // The returned reader iterates rows through its concrete type (XlsxReader / XlsReader)
@@ -115,11 +145,13 @@ namespace ExcelReader.Core.Reader
                 }
                 throw;
             }
-            if (format == Format.Xls)
+            return format switch
             {
-                return new XlsReader(stream, leaveOpen);
-            }
-            return new XlsxReader(stream, leaveOpen);
+                Format.Xls => new XlsReader(stream, leaveOpen),
+                Format.Xlsb => new XlsbReader(stream, leaveOpen),
+                Format.Xlsx => new XlsxReader(stream, leaveOpen),
+                _ => throw new System.Diagnostics.UnreachableException(),
+            };
         }
 
         private static async ValueTask<IExcelReader> OpenSeekableAsync(Stream stream, bool leaveOpen, CancellationToken ct)
@@ -137,16 +169,19 @@ namespace ExcelReader.Core.Reader
                 }
                 throw;
             }
-            if (format == Format.Xls)
+            return format switch
             {
-                return await XlsReader.CreateAsync(stream, leaveOpen, ct).ConfigureAwait(false);
-            }
-            return await XlsxReader.CreateAsync(stream, leaveOpen, ct).ConfigureAwait(false);
+                Format.Xls => await XlsReader.CreateAsync(stream, leaveOpen, ct).ConfigureAwait(false),
+                Format.Xlsb => await XlsbReader.CreateAsync(stream, leaveOpen, ct).ConfigureAwait(false),
+                Format.Xlsx => await XlsxReader.CreateAsync(stream, leaveOpen, ct).ConfigureAwait(false),
+                _ => throw new System.Diagnostics.UnreachableException(),
+            };
         }
 
-        // Detection peeks the signature then rewinds, so the chosen reader sees the stream
-        // at its original position. XLSX already needs a seekable source (ZipArchive seeks the
-        // central directory), so requiring seek here costs nothing and keeps the peek cheap.
+        // Detection peeks the 8-byte signature then rewinds. For ZIP streams, opens a temporary
+        // ZipArchive to distinguish XLSB ("xl/workbook.bin" present) from XLSX (XML workbook).
+        // Both XLSX and XLSB readers need a seekable source anyway (ZipArchive seeks the central
+        // directory), so requiring seek here costs nothing and keeps the peek cheap.
         private static Format DetectSeekable(Stream stream)
         {
             RequireSeekable(stream);
@@ -154,7 +189,20 @@ namespace ExcelReader.Core.Reader
             Span<byte> header = stackalloc byte[8];
             int read = stream.ReadAtLeast(header, header.Length, throwOnEndOfStream: false);
             stream.Position = start;
-            return Detect(header[..read]);
+            ReadOnlySpan<byte> sig = header[..read];
+            if (sig.StartsWith(OleSignature))
+            {
+                return Format.Xls;
+            }
+            if (!sig.StartsWith(ZipSignature))
+            {
+                throw new InvalidDataException("Unrecognized file format; expected an XLSX/XLSB (ZIP) or XLS (OLE2) workbook.");
+            }
+            // Peek the central directory to distinguish XLSB from XLSX.
+            using var zipPeek = new ZipArchive(stream, ZipArchiveMode.Read, leaveOpen: true);
+            bool isXlsb = zipPeek.GetEntry("xl/workbook.bin") is not null;
+            stream.Position = start;
+            return isXlsb ? Format.Xlsb : Format.Xlsx;
         }
 
         private static async ValueTask<Format> DetectSeekableAsync(Stream stream, CancellationToken ct)
@@ -164,7 +212,28 @@ namespace ExcelReader.Core.Reader
             byte[] header = new byte[8];
             int read = await stream.ReadAtLeastAsync(header, header.Length, throwOnEndOfStream: false, ct).ConfigureAwait(false);
             stream.Position = start;
-            return Detect(header.AsSpan(0, read));
+            ReadOnlySpan<byte> sig = header.AsSpan(0, read);
+            if (sig.StartsWith(OleSignature))
+            {
+                return Format.Xls;
+            }
+            if (!sig.StartsWith(ZipSignature))
+            {
+                throw new InvalidDataException("Unrecognized file format; expected an XLSX/XLSB (ZIP) or XLS (OLE2) workbook.");
+            }
+            // Central directory read: open a temporary archive to peek entry names, then rewind.
+            // Declared outside await using so the ZipArchive variable is accessible inside the block.
+            var zipPeek = new ZipArchive(stream, ZipArchiveMode.Read, leaveOpen: true);
+#if NET10_0_OR_GREATER
+            await using (zipPeek.ConfigureAwait(false))
+#else
+            using (zipPeek)
+#endif
+            {
+                bool isXlsb = zipPeek.GetEntry("xl/workbook.bin") is not null;
+                stream.Position = start;
+                return isXlsb ? Format.Xlsb : Format.Xlsx;
+            }
         }
 
         private static void RequireSeekable(Stream stream)
@@ -172,22 +241,9 @@ namespace ExcelReader.Core.Reader
             if (!stream.CanSeek)
             {
                 throw new ArgumentException(
-                    "Open requires a seekable stream so the format signature can be detected. Buffer the stream first, or call From/FromXls directly.",
+                    "Open requires a seekable stream so the format signature can be detected. Buffer the stream first, or call From/FromXls/FromXlsb directly.",
                     nameof(stream));
             }
-        }
-
-        private static Format Detect(ReadOnlySpan<byte> header)
-        {
-            if (header.StartsWith(ZipSignature))
-            {
-                return Format.Xlsx;
-            }
-            if (header.StartsWith(OleSignature))
-            {
-                return Format.Xls;
-            }
-            throw new InvalidDataException("Unrecognized file format; expected an XLSX (ZIP) or XLS (OLE2) workbook.");
         }
     }
 }
