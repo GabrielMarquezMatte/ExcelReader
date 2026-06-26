@@ -34,10 +34,10 @@ namespace ExcelReader.Core.Parser
             return new ExcelAsyncEnumerable<T>(reader, _config, ct);
         }
 
-        public XlsExcelAsyncEnumerable<T> ParseAsync(XlsReader reader, CancellationToken ct = default)
+        public XlsExcelEnumerable<T> ParseAsync(XlsReader reader, CancellationToken ct = default)
         {
             ArgumentNullException.ThrowIfNull(reader);
-            return new XlsExcelAsyncEnumerable<T>(reader, _config, ct);
+            return new XlsExcelEnumerable<T>(reader, _config, ct);
         }
     }
 }

@@ -7,15 +7,17 @@ namespace ExcelReader.Core.Parser.Internal
 {
     [SuppressMessage("Design", "CA1034:Nested types should not be visible",
         Justification = "Public nested struct Enumerator is the standard foreach pattern.")]
-    public sealed class XlsExcelEnumerable<T> : IEnumerable<T> where T : new()
+    public sealed class XlsExcelEnumerable<T> : IEnumerable<T>, IAsyncEnumerable<T> where T : new()
     {
         private readonly XlsReader _reader;
         private readonly ExcelParserConfig _config;
+        private readonly CancellationToken _ct;
 
-        internal XlsExcelEnumerable(XlsReader reader, ExcelParserConfig config)
+        internal XlsExcelEnumerable(XlsReader reader, ExcelParserConfig config, CancellationToken ct = default)
         {
             _reader = reader;
             _config = config;
+            _ct = ct;
         }
 
         [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP015:Member should not return created and cached instance",
@@ -37,10 +39,25 @@ namespace ExcelReader.Core.Parser.Internal
             return GetEnumerator();
         }
 
-        public struct Enumerator : IEnumerator<T>
+        public Enumerator GetAsyncEnumerator(CancellationToken cancellationToken = default)
         {
-            [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP006:Implement IDisposable",
-                Justification = "Struct implements IDisposable; rows disposed in Dispose().")]
+            TypeMapInfo<T> info = TypeMapper<T>.GetInfo();
+            CancellationToken effective = cancellationToken.CanBeCanceled ? cancellationToken : _ct;
+            XlsReader.Enumerator rows = _reader.GetAsyncEnumerator(effective);
+            return new Enumerator(rows, info, _config.ColumnNameComparer, _config.HeaderRow, _reader.IsDate1904);
+        }
+
+        [SuppressMessage("Performance", "HLQ006:GetAsyncEnumerator should return a value type",
+            Justification = "Struct enumerator is boxed once on return; caller sees IAsyncEnumerator<T> which communicates disposal.")]
+        [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP015:Member should not return created and cached instance",
+            Justification = "Each call creates a fresh enumerator; no caching.")]
+        IAsyncEnumerator<T> IAsyncEnumerable<T>.GetAsyncEnumerator(CancellationToken cancellationToken = default)
+        {
+            return GetAsyncEnumerator(cancellationToken);
+        }
+
+        public struct Enumerator : IEnumerator<T>, IAsyncEnumerator<T>
+        {
             private readonly XlsReader.Enumerator _rows;
             private readonly int _headerRow;
             private RowProjector<T> _projector;
@@ -60,7 +77,6 @@ namespace ExcelReader.Core.Parser.Internal
             }
 
             public readonly T Current => _current;
-
             readonly object? IEnumerator.Current => _current;
 
             public bool MoveNext()
@@ -89,11 +105,21 @@ namespace ExcelReader.Core.Parser.Internal
                 return false;
             }
 
+            public ValueTask<bool> MoveNextAsync()
+            {
+                return new ValueTask<bool>(MoveNext());
+            }
+
             [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP007:Don't dispose injected",
                 Justification = "The enumerator owns _rows — it was created by GetEnumerator, not injected from outside.")]
             public readonly void Dispose()
             {
                 _rows.Dispose();
+            }
+
+            public readonly ValueTask DisposeAsync()
+            {
+                return _rows.DisposeAsync();
             }
 
             public readonly void Reset()
