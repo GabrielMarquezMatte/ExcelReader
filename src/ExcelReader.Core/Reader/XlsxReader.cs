@@ -4,7 +4,7 @@ using System.IO.Compression;
 
 namespace ExcelReader.Core.Reader
 {
-    public sealed partial class XlsxReader : IExcelReader
+    public sealed partial class XlsxReader : IExcelReader, IExcelRowReader<XlsxReader.Enumerator>
     {
         private readonly Stream _stream;
         private readonly bool _leaveOpen;
