@@ -180,5 +180,83 @@ namespace ExcelReader.Tests
             Assert.Equal(8.25m, nullableDecimal);
             Assert.False(e.MoveNext());
         }
+
+        [Fact]
+        public async Task BulkXlsbCellRowRoundTrip()
+        {
+            var birth = new DateTime(1990, 6, 15, 0, 0, 0, DateTimeKind.Unspecified);
+            await using var ms = await WriteAsync(async wb =>
+            {
+                XlsbSheetWriter sheet = wb.AddSheet("Sheet1");
+                await sheet.StartAsync(TestContext.Current.CancellationToken);
+                XlsbCell[] header =
+                [
+                    XlsbCell.Create("Name"),
+                    XlsbCell.Create("Age"),
+                    XlsbCell.Create("Active"),
+                    XlsbCell.Create("BirthDate"),
+                ];
+                XlsbCell[] row =
+                [
+                    XlsbCell.Create("Alice"),
+                    XlsbCell.Create(42),
+                    XlsbCell.Create(true),
+                    XlsbCell.Create(birth),
+                ];
+                sheet.WriteRow(header);
+                sheet.WriteRow(row);
+                await sheet.EndAsync(TestContext.Current.CancellationToken);
+            });
+
+            await using var reader = Excel.FromXlsb(ms);
+            var rows = new ExcelParser<PersonRow>().Parse(reader).ToList();
+            Assert.Single(rows);
+            Assert.Equal("Alice", rows[0].Name);
+            Assert.Equal(42, rows[0].Age);
+            Assert.True(rows[0].Active);
+            Assert.Equal(birth, rows[0].BirthDate);
+        }
+
+        [Fact]
+        public async Task BulkXlsbCellRowPreservesEmptyCells()
+        {
+            await using var ms = await WriteAsync(async wb =>
+            {
+                XlsbSheetWriter sheet = wb.AddSheet("Sheet1");
+                await sheet.StartAsync(TestContext.Current.CancellationToken);
+                XlsbCell[] header = [XlsbCell.Create("A"), XlsbCell.Empty, XlsbCell.Create("C")];
+                XlsbCell[] row = [XlsbCell.Create("aaa"), XlsbCell.Create((string?)null), XlsbCell.Create("ccc")];
+                sheet.WriteRow(header);
+                sheet.WriteRow(row);
+                await sheet.EndAsync(TestContext.Current.CancellationToken);
+            });
+
+            await using var reader = Excel.FromXlsb(ms);
+            var rows = new ExcelParser<SparseRow>().Parse(reader).ToList();
+            Assert.Single(rows);
+            Assert.Equal("aaa", rows[0].A);
+            Assert.Equal("ccc", rows[0].C);
+        }
+
+        [Fact]
+        public async Task BulkXlsbCellDate1904RoundTrips()
+        {
+            var date = new DateTime(1904, 1, 2, 0, 0, 0, DateTimeKind.Unspecified);
+            await using var ms = await WriteAsync(async wb =>
+            {
+                XlsbSheetWriter sheet = wb.AddSheet("Sheet1");
+                await sheet.StartAsync(TestContext.Current.CancellationToken);
+                XlsbCell[] row = [XlsbCell.Create(date)];
+                sheet.WriteRow(row);
+                await sheet.EndAsync(TestContext.Current.CancellationToken);
+            }, date1904: true);
+
+            await using var reader = Excel.FromXlsb(ms);
+            Assert.True(reader.IsDate1904);
+            using XlsbReader.Enumerator e = reader.GetEnumerator();
+            Assert.True(e.MoveNext());
+            Assert.True(e.Current[0].TryGetDateTime(reader.IsDate1904, out DateTime parsed));
+            Assert.Equal(date, parsed);
+        }
     }
 }

@@ -1,5 +1,4 @@
 using System.Diagnostics.CodeAnalysis;
-using System.Text;
 using ExcelReader.Core.Writer.Internal;
 
 namespace ExcelReader.Core.Writer
@@ -10,18 +9,16 @@ namespace ExcelReader.Core.Writer
             Justification = "SheetWriter is borrowed; its lifetime is managed by the caller.")]
         private readonly SheetWriter _owner;
         [SuppressMessage("SharpSource", "SS066:DisposableFieldIsNotDisposed",
-            Justification = "StreamWriter is owned by SheetWriter; RowWriter borrows it.")]
-        private readonly StreamWriter _xml;
-        private readonly StringBuilder _row;
+            Justification = "BiffBuffer is owned by SheetWriter; RowWriter borrows it.")]
+        private readonly BiffBuffer _row;
         private readonly int _rowNumber;
         private int _columnIndex;
         private bool _useCellReferences;
         private bool _disposed;
 
-        internal RowWriter(SheetWriter owner, StreamWriter xml, StringBuilder row, int rowNumber)
+        internal RowWriter(SheetWriter owner, BiffBuffer row, int rowNumber)
         {
             _owner = owner;
-            _xml = xml;
             _row = row;
             _rowNumber = rowNumber;
         }
@@ -81,6 +78,82 @@ namespace ExcelReader.Core.Writer
             _columnIndex++;
         }
 
+        public void Write(int value)
+        {
+            ThrowIfDisposed();
+            CellFormatter.WriteNumber(_row, value, _columnIndex, _rowNumber, _useCellReferences);
+            _columnIndex++;
+        }
+
+        public void Write(int? value)
+        {
+            ThrowIfDisposed();
+            if (value is null)
+            {
+                WriteEmptyCell();
+                return;
+            }
+            CellFormatter.WriteNumber(_row, value.Value, _columnIndex, _rowNumber, _useCellReferences);
+            _columnIndex++;
+        }
+
+        public void Write(long value)
+        {
+            ThrowIfDisposed();
+            CellFormatter.WriteNumber(_row, value, _columnIndex, _rowNumber, _useCellReferences);
+            _columnIndex++;
+        }
+
+        public void Write(long? value)
+        {
+            ThrowIfDisposed();
+            if (value is null)
+            {
+                WriteEmptyCell();
+                return;
+            }
+            CellFormatter.WriteNumber(_row, value.Value, _columnIndex, _rowNumber, _useCellReferences);
+            _columnIndex++;
+        }
+
+        public void Write(double value)
+        {
+            ThrowIfDisposed();
+            CellFormatter.WriteNumber(_row, value, _columnIndex, _rowNumber, _useCellReferences);
+            _columnIndex++;
+        }
+
+        public void Write(double? value)
+        {
+            ThrowIfDisposed();
+            if (value is null)
+            {
+                WriteEmptyCell();
+                return;
+            }
+            CellFormatter.WriteNumber(_row, value.Value, _columnIndex, _rowNumber, _useCellReferences);
+            _columnIndex++;
+        }
+
+        public void Write(decimal value)
+        {
+            ThrowIfDisposed();
+            CellFormatter.WriteNumber(_row, value, _columnIndex, _rowNumber, _useCellReferences);
+            _columnIndex++;
+        }
+
+        public void Write(decimal? value)
+        {
+            ThrowIfDisposed();
+            if (value is null)
+            {
+                WriteEmptyCell();
+                return;
+            }
+            CellFormatter.WriteNumber(_row, value.Value, _columnIndex, _rowNumber, _useCellReferences);
+            _columnIndex++;
+        }
+
         public void Write<T>(T value)
             where T : ISpanFormattable
         {
@@ -132,9 +205,7 @@ namespace ExcelReader.Core.Writer
                 return ValueTask.CompletedTask;
             }
             _disposed = true;
-            _row.Append("</row>");
-            _xml.Write(_row);
-            _owner.NotifyRowEnded();
+            _owner.EndBufferedRow();
             return ValueTask.CompletedTask;
         }
     }

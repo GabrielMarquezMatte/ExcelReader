@@ -205,7 +205,7 @@ namespace ExcelReader.Core.Writer
             _columnIndex++;
         }
 
-        private static double ToDouble<T>(T value)
+        internal static double ToDouble<T>(T value)
             where T : ISpanFormattable
         {
             switch (value)
