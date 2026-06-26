@@ -73,6 +73,20 @@ namespace ExcelReader.Benchmarks
             }
         }
 
+        internal static void WriteXlsbRecords(XlsbSheetWriter sheet, List<Record> records)
+        {
+            XlsbCell[] row = new XlsbCell[4];
+            for (int i = 0; i < records.Count; i++)
+            {
+                Record rec = records[i];
+                row[0] = XlsbCell.Create(rec.Name);
+                row[1] = XlsbCell.Create(rec.Id);
+                row[2] = XlsbCell.Create(rec.Date);
+                row[3] = XlsbCell.Create(rec.Value);
+                sheet.WriteRow(row);
+            }
+        }
+
         private static async Task<byte[]> BuildAsync<TWorkbook, TSheet, TRow>(
             int rows,
             Func<MemoryStream, ValueTask<TWorkbook>> create)

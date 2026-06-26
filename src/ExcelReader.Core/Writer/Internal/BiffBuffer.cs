@@ -1,5 +1,6 @@
 using System.Buffers;
 using System.Buffers.Binary;
+using System.Text;
 
 namespace ExcelReader.Core.Writer.Internal
 {
@@ -72,6 +73,13 @@ namespace ExcelReader.Core.Writer.Internal
             Ensure(bytes.Length);
             bytes.CopyTo(_buffer.AsSpan(Length));
             Length += bytes.Length;
+        }
+
+        internal void WriteUtf8(ReadOnlySpan<char> chars)
+        {
+            int byteCount = Encoding.UTF8.GetByteCount(chars);
+            Ensure(byteCount);
+            Length += Encoding.UTF8.GetBytes(chars, _buffer.AsSpan(Length, byteCount));
         }
 
         internal void WriteUtf16(ReadOnlySpan<char> chars)

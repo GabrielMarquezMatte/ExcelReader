@@ -62,14 +62,15 @@ namespace ExcelReader.Benchmarks
                 await wb.StartAsync();
                 XlsbSheetWriter sheet = wb.AddSheet("S1");
                 await sheet.StartAsync();
-                await using (XlsbRowWriter header = await sheet.StartRowAsync())
-                {
-                    header.Write("Name");
-                    header.Write("Id");
-                    header.Write("Date");
-                    header.Write("Value");
-                }
-                await WorkbookGenerator.WriteRecordsAsync(sheet, _records);
+                ReadOnlySpan<XlsbCell> header =
+                [
+                    XlsbCell.Create("Name"),
+                    XlsbCell.Create("Id"),
+                    XlsbCell.Create("Date"),
+                    XlsbCell.Create("Value"),
+                ];
+                sheet.WriteRow(header);
+                WorkbookGenerator.WriteXlsbRecords(sheet, _records);
                 await sheet.EndAsync();
                 await wb.EndAsync();
             }

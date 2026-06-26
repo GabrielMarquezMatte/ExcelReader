@@ -61,19 +61,29 @@ namespace ExcelReader.Core.Writer
 
         public ValueTask<XlsbRowWriter> StartRowAsync(CancellationToken ct = default)
         {
-            ObjectDisposedException.ThrowIf(_state == WriterState.Ended, this);
-            if (_state != WriterState.Started)
-            {
-                throw new InvalidOperationException("XlsbSheetWriter must be started before adding rows.");
-            }
-            if (_rowActive)
-            {
-                throw new InvalidOperationException("The previous XlsbRowWriter must be disposed before starting a new row.");
-            }
-            ct.ThrowIfCancellationRequested();
-            WriteRecord(Brt.RowHdr);
-            _rowActive = true;
+            BeginRow();
             return ValueTask.FromResult(new XlsbRowWriter(this, _date1904));
+        }
+
+        public void WriteRow(ReadOnlySpan<XlsbCell> values)
+        {
+            BeginRow();
+            for (int i = 0; i < values.Length; i++)
+            {
+                WriteCell(i, values[i]);
+            }
+            _rowActive = false;
+        }
+
+        public void WriteRow<T>(ReadOnlySpan<T> values)
+            where T : ISpanFormattable
+        {
+            BeginRow();
+            for (int i = 0; i < values.Length; i++)
+            {
+                WriteDoubleCell(i, XlsbRowWriter.ToDouble(values[i]), style: 0);
+            }
+            _rowActive = false;
         }
 
         internal void NotifyRowEnded()
@@ -191,6 +201,81 @@ namespace ExcelReader.Core.Writer
             _buffersDisposed = true;
             _records.Dispose();
             _payload.Dispose();
+        }
+
+        private void BeginRow()
+        {
+            ObjectDisposedException.ThrowIf(_state == WriterState.Ended, this);
+            if (_state != WriterState.Started)
+            {
+                throw new InvalidOperationException("XlsbSheetWriter must be started before adding rows.");
+            }
+            if (_rowActive)
+            {
+                throw new InvalidOperationException("The previous XlsbRowWriter must be disposed before starting a new row.");
+            }
+            WriteRecord(Brt.RowHdr);
+            _rowActive = true;
+        }
+
+        private void WriteCell(int columnIndex, XlsbCell cell)
+        {
+            switch (cell.Kind)
+            {
+                case XlsbCellKind.Empty:
+                    break;
+                case XlsbCellKind.String:
+                    WriteStringCell(columnIndex, cell.Text);
+                    break;
+                case XlsbCellKind.Boolean:
+                    WriteBoolCell(columnIndex, cell.Boolean);
+                    break;
+                case XlsbCellKind.Number:
+                    WriteDoubleCell(columnIndex, cell.Number, style: 0);
+                    break;
+                case XlsbCellKind.Date:
+                    WriteDateSerialCell(columnIndex, cell.Number);
+                    break;
+                default:
+                    throw new InvalidOperationException($"Unsupported XLSB cell kind: {cell.Kind}.");
+            }
+        }
+
+        private void WriteStringCell(int columnIndex, string? value)
+        {
+            if (value is null)
+            {
+                return;
+            }
+            _payload.Reset();
+            Biff12RecordWriter.WriteCellHeader(_payload, columnIndex, 0);
+            Biff12RecordWriter.WriteWideString(_payload, value);
+            WriteRecord(Brt.CellSt, _payload.Span);
+        }
+
+        private void WriteBoolCell(int columnIndex, bool value)
+        {
+            _payload.Reset();
+            Biff12RecordWriter.WriteCellHeader(_payload, columnIndex, 0);
+            _payload.WriteByte(value ? (byte)1 : (byte)0);
+            WriteRecord(Brt.CellBool, _payload.Span);
+        }
+
+        private void WriteDateSerialCell(int columnIndex, double serial)
+        {
+            if (_date1904)
+            {
+                serial -= 1462.0;
+            }
+            WriteDoubleCell(columnIndex, serial, style: 1);
+        }
+
+        private void WriteDoubleCell(int columnIndex, double value, int style)
+        {
+            _payload.Reset();
+            Biff12RecordWriter.WriteCellHeader(_payload, columnIndex, style);
+            _payload.WriteDouble(value);
+            WriteRecord(Brt.CellReal, _payload.Span);
         }
     }
 }

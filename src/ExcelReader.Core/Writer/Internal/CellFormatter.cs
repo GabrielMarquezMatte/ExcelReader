@@ -1,5 +1,6 @@
+using System.Buffers;
+using System.Buffers.Text;
 using System.Globalization;
-using System.Text;
 
 namespace ExcelReader.Core.Writer.Internal
 {
@@ -7,98 +8,156 @@ namespace ExcelReader.Core.Writer.Internal
     {
         // Writes the cell reference (e.g. "B7") directly to the writer.
         // Max XLSX cell is XFD1048576 -> 3 column letters + 7 row digits.
-        private static void WriteRef(StringBuilder xml, int columnIndex, int rowNumber)
+        private static void WriteRef(BiffBuffer xml, int columnIndex, int rowNumber)
         {
-            Span<char> buf = stackalloc char[10];
+            Span<byte> buf = stackalloc byte[10];
             int len = ColumnName.Write(buf, columnIndex);
-            rowNumber.TryFormat(buf[len..], out int rowLen, default, CultureInfo.InvariantCulture);
-            xml.Append(buf[..(len + rowLen)]);
+            Utf8Formatter.TryFormat(rowNumber, buf[len..], out int rowLen);
+            xml.Write(buf[..(len + rowLen)]);
         }
 
-        private static void WriteCellOpen(StringBuilder xml, int columnIndex, int rowNumber, bool includeReference)
+        private static void WriteCellOpen(BiffBuffer xml, int columnIndex, int rowNumber, bool includeReference)
         {
-            xml.Append("<c");
+            xml.Write("<c"u8);
             if (!includeReference)
             {
                 return;
             }
-            xml.Append(" r=\"");
+            xml.Write(" r=\""u8);
             WriteRef(xml, columnIndex, rowNumber);
-            xml.Append('"');
+            xml.WriteByte((byte)'"');
         }
 
-        internal static void WriteEmpty(StringBuilder xml, int columnIndex, int rowNumber, bool includeReference)
+        internal static void WriteEmpty(BiffBuffer xml, int columnIndex, int rowNumber, bool includeReference)
         {
             WriteCellOpen(xml, columnIndex, rowNumber, includeReference);
-            xml.Append("/>");
+            xml.Write("/>"u8);
         }
 
-        internal static void WriteString(StringBuilder xml, string value, int columnIndex, int rowNumber, bool includeReference)
+        internal static void WriteString(BiffBuffer xml, string value, int columnIndex, int rowNumber, bool includeReference)
         {
             WriteCellOpen(xml, columnIndex, rowNumber, includeReference);
-            xml.Append(" t=\"inlineStr\"><is><t>");
+            xml.Write(" t=\"inlineStr\"><is><t>"u8);
             WriteEscaped(xml, value);
-            xml.Append("</t></is></c>");
+            xml.Write("</t></is></c>"u8);
         }
 
-        internal static void WriteBool(StringBuilder xml, bool value, int columnIndex, int rowNumber, bool includeReference)
+        internal static void WriteBool(BiffBuffer xml, bool value, int columnIndex, int rowNumber, bool includeReference)
         {
             WriteCellOpen(xml, columnIndex, rowNumber, includeReference);
-            xml.Append(" t=\"b\"><v>");
-            xml.Append(value ? '1' : '0');
-            xml.Append("</v></c>");
+            xml.Write(" t=\"b\"><v>"u8);
+            xml.WriteByte(value ? (byte)'1' : (byte)'0');
+            xml.Write("</v></c>"u8);
         }
 
-        internal static void WriteDateTime(StringBuilder xml, DateTime value, int columnIndex, int rowNumber, bool includeReference)
+        internal static void WriteDateTime(BiffBuffer xml, DateTime value, int columnIndex, int rowNumber, bool includeReference)
         {
             WriteCellOpen(xml, columnIndex, rowNumber, includeReference);
-            xml.Append(" s=\"1\"><v>");
+            xml.Write(" s=\"1\"><v>"u8);
             double oaDate = value.ToOADate();
-            Span<char> buf = stackalloc char[32];
-            oaDate.TryFormat(buf, out int written, "G17", CultureInfo.InvariantCulture);
-            xml.Append(buf[..written]);
-            xml.Append("</v></c>");
+            WriteDoubleValue(xml, oaDate);
+            xml.Write("</v></c>"u8);
         }
 
-        internal static void WriteNumber<T>(StringBuilder xml, T value, int columnIndex, int rowNumber, bool includeReference)
+        internal static void WriteNumber<T>(BiffBuffer xml, T value, int columnIndex, int rowNumber, bool includeReference)
             where T : ISpanFormattable
         {
             WriteCellOpen(xml, columnIndex, rowNumber, includeReference);
-            xml.Append("><v>");
+            xml.Write("><v>"u8);
             Span<char> buf = stackalloc char[64];
             value.TryFormat(buf, out int written, default, CultureInfo.InvariantCulture);
-            xml.Append(buf[..written]);
-            xml.Append("</v></c>");
+            xml.WriteUtf8(buf[..written]);
+            xml.Write("</v></c>"u8);
         }
 
-        private static void WriteEscaped(StringBuilder xml, ReadOnlySpan<char> value)
+        internal static void WriteNumber(BiffBuffer xml, int value, int columnIndex, int rowNumber, bool includeReference)
+        {
+            WriteCellOpen(xml, columnIndex, rowNumber, includeReference);
+            xml.Write("><v>"u8);
+            WriteIntValue(xml, value);
+            xml.Write("</v></c>"u8);
+        }
+
+        internal static void WriteNumber(BiffBuffer xml, long value, int columnIndex, int rowNumber, bool includeReference)
+        {
+            WriteCellOpen(xml, columnIndex, rowNumber, includeReference);
+            xml.Write("><v>"u8);
+            WriteLongValue(xml, value);
+            xml.Write("</v></c>"u8);
+        }
+
+        internal static void WriteNumber(BiffBuffer xml, double value, int columnIndex, int rowNumber, bool includeReference)
+        {
+            WriteCellOpen(xml, columnIndex, rowNumber, includeReference);
+            xml.Write("><v>"u8);
+            WriteDoubleValue(xml, value);
+            xml.Write("</v></c>"u8);
+        }
+
+        internal static void WriteNumber(BiffBuffer xml, decimal value, int columnIndex, int rowNumber, bool includeReference)
+        {
+            WriteCellOpen(xml, columnIndex, rowNumber, includeReference);
+            xml.Write("><v>"u8);
+            WriteDecimalValue(xml, value);
+            xml.Write("</v></c>"u8);
+        }
+
+        private static void WriteIntValue(BiffBuffer xml, int value)
+        {
+            Span<byte> buf = stackalloc byte[16];
+            Utf8Formatter.TryFormat(value, buf, out int written);
+            xml.Write(buf[..written]);
+        }
+
+        private static void WriteLongValue(BiffBuffer xml, long value)
+        {
+            Span<byte> buf = stackalloc byte[32];
+            Utf8Formatter.TryFormat(value, buf, out int written);
+            xml.Write(buf[..written]);
+        }
+
+        private static void WriteDoubleValue(BiffBuffer xml, double value)
+        {
+            Span<byte> buf = stackalloc byte[32];
+            Utf8Formatter.TryFormat(value, buf, out int written, new StandardFormat('G', 17));
+            xml.Write(buf[..written]);
+        }
+
+        private static void WriteDecimalValue(BiffBuffer xml, decimal value)
+        {
+            Span<byte> buf = stackalloc byte[64];
+            Utf8Formatter.TryFormat(value, buf, out int written);
+            xml.Write(buf[..written]);
+        }
+
+        private static void WriteEscaped(BiffBuffer xml, ReadOnlySpan<char> value)
         {
             int start = 0;
             for (int i = 0; i < value.Length; i++)
             {
-                string? escape = value[i] switch
+                ReadOnlySpan<byte> escape = value[i] switch
                 {
-                    '&' => "&amp;",
-                    '<' => "&lt;",
-                    '>' => "&gt;",
-                    '"' => "&quot;",
-                    '\'' => "&apos;",
-                    _ => null,
+                    '&' => "&amp;"u8,
+                    '<' => "&lt;"u8,
+                    '>' => "&gt;"u8,
+                    '"' => "&quot;"u8,
+                    '\'' => "&apos;"u8,
+                    _ => default,
                 };
-                if (escape is null)
+                if (escape.IsEmpty)
                 {
                     continue;
                 }
                 if (i > start)
                 {
-                    xml.Append(value[start..i]);
+                    xml.WriteUtf8(value[start..i]);
                 }
-                xml.Append(escape);
+                xml.Write(escape);
                 start = i + 1;
             }
             if (start < value.Length)
             {
-                xml.Append(value[start..]);
+                xml.WriteUtf8(value[start..]);
             }
         }
     }
