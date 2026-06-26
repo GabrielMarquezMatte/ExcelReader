@@ -33,6 +33,14 @@ namespace ExcelReader.Core.Parser
             return new XlsExcelEnumerable<T>(reader, _config);
         }
 
+        [SuppressMessage("Usage", "VSTHRD200:Use \"Async\" suffix for async methods",
+            Justification = "Synchronous entry point; the enumerable also implements IAsyncEnumerable, but ParseAsync is the async counterpart.")]
+        public XlsbExcelEnumerable<T> Parse(XlsbReader reader)
+        {
+            ArgumentNullException.ThrowIfNull(reader);
+            return new XlsbExcelEnumerable<T>(reader, _config);
+        }
+
         public ExcelEnumerable<T> ParseAsync(XlsxReader reader, CancellationToken ct = default)
         {
             ArgumentNullException.ThrowIfNull(reader);
@@ -43,6 +51,12 @@ namespace ExcelReader.Core.Parser
         {
             ArgumentNullException.ThrowIfNull(reader);
             return new XlsExcelEnumerable<T>(reader, _config, ct);
+        }
+
+        public XlsbExcelEnumerable<T> ParseAsync(XlsbReader reader, CancellationToken ct = default)
+        {
+            ArgumentNullException.ThrowIfNull(reader);
+            return new XlsbExcelEnumerable<T>(reader, _config, ct);
         }
     }
 }
