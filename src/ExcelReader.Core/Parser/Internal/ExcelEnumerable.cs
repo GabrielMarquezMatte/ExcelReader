@@ -5,15 +5,26 @@ using ExcelReader.Core.ValueObjects;
 
 namespace ExcelReader.Core.Parser.Internal
 {
+    public sealed class ExcelEnumerable<T> : ExcelEnumerable<T, XlsxReader, XlsxReader.Enumerator> where T : new()
+    {
+        internal ExcelEnumerable(XlsxReader reader, ExcelParserConfig config, CancellationToken ct = default)
+            : base(reader, config, ct)
+        {
+        }
+    }
+
     [SuppressMessage("Design", "CA1034:Nested types should not be visible",
         Justification = "Public nested struct Enumerator is the standard foreach pattern.")]
-    public sealed class ExcelEnumerable<T> : IEnumerable<T>, IAsyncEnumerable<T> where T : new()
+    public class ExcelEnumerable<T, TReader, TEnumerator> : IEnumerable<T>, IAsyncEnumerable<T>
+        where T : new()
+        where TReader : IExcelRowReader<TEnumerator>
+        where TEnumerator : IExcelRowEnumerator
     {
-        private readonly XlsxReader _reader;
+        private readonly TReader _reader;
         private readonly ExcelParserConfig _config;
         private readonly CancellationToken _ct;
 
-        internal ExcelEnumerable(XlsxReader reader, ExcelParserConfig config, CancellationToken ct = default)
+        internal ExcelEnumerable(TReader reader, ExcelParserConfig config, CancellationToken ct = default)
         {
             _reader = reader;
             _config = config;
@@ -25,7 +36,7 @@ namespace ExcelReader.Core.Parser.Internal
         public Enumerator GetEnumerator()
         {
             TypeMapInfo<T> info = TypeMapper<T>.GetInfo();
-            XlsxReader.Enumerator rows = _reader.GetEnumerator();
+            TEnumerator rows = _reader.GetEnumerator();
             return new Enumerator(rows, info, _config.ColumnNameComparer, _config.HeaderRow, _reader.IsDate1904);
         }
 
@@ -39,8 +50,6 @@ namespace ExcelReader.Core.Parser.Internal
             return GetEnumerator();
         }
 
-        // Unlike the .xls path, the xlsx row enumerator awaits real stream I/O, so the async enumerator
-        // must be a class hosting the state machine — it cannot share the sync struct Enumerator.
         [SuppressMessage("Performance", "HLQ006:GetAsyncEnumerator should return a value type",
             Justification = "Async enumerator requires a class to host the async state machine.")]
         public IAsyncEnumerator<T> GetAsyncEnumerator(CancellationToken cancellationToken = default)
@@ -54,12 +63,12 @@ namespace ExcelReader.Core.Parser.Internal
         {
             [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP006:Implement IDisposable",
                 Justification = "Struct implements IDisposable; rows disposed in Dispose().")]
-            private readonly XlsxReader.Enumerator _rows;
+            private readonly TEnumerator _rows;
             private RowProjector<T> _projector;
             private T _current = default!;
 
             internal Enumerator(
-                XlsxReader.Enumerator rows,
+                TEnumerator rows,
                 TypeMapInfo<T> typeInfo,
                 StringComparer comparer,
                 int headerRow,
@@ -92,7 +101,7 @@ namespace ExcelReader.Core.Parser.Internal
             }
 
             [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP007:Don't dispose injected",
-                Justification = "The enumerator owns _rows — it was created by GetEnumerator, not injected from outside.")]
+                Justification = "The enumerator owns _rows; it was created by GetEnumerator, not injected from outside.")]
             public readonly void Dispose()
             {
                 _rows.Dispose();
@@ -106,16 +115,14 @@ namespace ExcelReader.Core.Parser.Internal
 
         private sealed class AsyncEnumerator : IAsyncEnumerator<T>
         {
-            [SuppressMessage("SharpSource", "SS066:DisposableFieldIsNotDisposed",
-                Justification = "XlsxReader is injected and not owned by this enumerator; caller manages its lifetime.")]
-            private readonly XlsxReader _reader;
+            private readonly TReader _reader;
             private readonly CancellationToken _ct;
             private RowProjector<T> _projector;
-            private XlsxReader.Enumerator? _rows;
+            private TEnumerator? _rows;
             private T _current = default!;
 
             internal AsyncEnumerator(
-                XlsxReader reader,
+                TReader reader,
                 TypeMapInfo<T> typeInfo,
                 StringComparer comparer,
                 int headerRow,
@@ -133,8 +140,6 @@ namespace ExcelReader.Core.Parser.Internal
                 return AdvanceAsync();
             }
 
-            // async only awaits — no ref struct locals here.
-            // Ref struct access is delegated to Project (sync helper).
             private async ValueTask<bool> AdvanceAsync()
             {
                 _rows ??= await _reader.GetAsyncEnumeratorAsync(_ct).ConfigureAwait(false);
@@ -153,8 +158,6 @@ namespace ExcelReader.Core.Parser.Internal
                 return false;
             }
 
-            // Sync helper — ref struct locals are legal here.
-            // Called synchronously between awaits; Row spans are valid for this call's duration.
             private ProjectionStep Project()
             {
                 Row row = _rows!.Current;
