@@ -1,6 +1,6 @@
 namespace ExcelReader.Core.Parser.Internal
 {
-    internal readonly struct HeaderMatch<T> where T : new()
+    internal readonly struct HeaderMatch<T>
     {
         internal HeaderMatch(int propertyIndex, int aliasIndex, ColumnParser<T> parser)
         {
