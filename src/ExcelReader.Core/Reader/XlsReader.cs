@@ -4,7 +4,7 @@ using System.Diagnostics.CodeAnalysis;
 
 namespace ExcelReader.Core.Reader
 {
-    public sealed partial class XlsReader : IExcelReader
+    public sealed partial class XlsReader : IExcelReader, IExcelRowReader, IExcelRowReader<XlsReader.Enumerator>
     {
         private readonly WorkbookStream _workbook;
         private readonly (string Name, int Offset)[] _sheets;
@@ -95,12 +95,28 @@ namespace ExcelReader.Core.Reader
             return new Enumerator(this, _sheets[_current].Offset);
         }
 
+        IExcelRowEnumerator IExcelRowReader.GetEnumerator()
+        {
+            return GetEnumerator();
+        }
+
         [SuppressMessage("Performance", "HLQ006:GetAsyncEnumerator should return a value type",
             Justification = "Enumerator is a class so the same type can also expose MoveNextAsync for parity with XlsxReader.")]
         public Enumerator GetAsyncEnumerator(CancellationToken ct = default)
         {
             ct.ThrowIfCancellationRequested();
             return new Enumerator(this, _sheets[_current].Offset, ct);
+        }
+
+        public ValueTask<Enumerator> GetAsyncEnumeratorAsync(CancellationToken ct = default)
+        {
+            ct.ThrowIfCancellationRequested();
+            return new ValueTask<Enumerator>(new Enumerator(this, _sheets[_current].Offset, ct));
+        }
+
+        ValueTask<IExcelRowEnumerator> IExcelRowReader.GetAsyncEnumeratorAsync(CancellationToken ct)
+        {
+            return new ValueTask<IExcelRowEnumerator>(GetAsyncEnumerator(ct));
         }
 
         public void Dispose()
