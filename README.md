@@ -124,7 +124,7 @@ while (await rows.MoveNextAsync())
 
 ## Parse typed rows
 
-Use `[ExcelColumn]` when the spreadsheet header does not match the property name.
+`ExcelParser<T>` maps worksheet columns to the public settable properties of `T`. Columns match on the property name, or on `[ExcelColumn("header")]` aliases — repeat the attribute to accept several headers. The first row is the header by default.
 
 ```csharp
 using ExcelReader.Core.Parser;
@@ -147,6 +147,82 @@ foreach (var item in parser.Parse(reader))
     Console.WriteLine($"{item.File}: +{item.LinesAdded}");
 }
 ```
+
+Built-in property types: `string`, `bool`, `DateTime`, `DateOnly`, `Guid`, every integral and floating type plus `decimal`, and `enum`s (matched by member name or numeric value). Each also works as a `Nullable<T>`. Empty cells leave the property at its default; an unparseable cell is skipped (keeps the default) unless the column is required. `T` needs no parameterless-constructor constraint, so models with `required` members are supported.
+
+`Parse` and `ParseAsync` also accept the `IExcelRowReader` from `Excel.Open`, so you can parse without knowing the concrete format:
+
+```csharp
+using IExcelRowReader reader = Excel.Open("changes.xlsx"); // or .xlsb / .xls
+foreach (var item in new ExcelParser<ChangeRow>().Parse(reader)) { /* ... */ }
+```
+
+## Parser configuration
+
+Pass an `ExcelParserConfig` to control header handling and culture:
+
+```csharp
+using System.Globalization;
+using ExcelReader.Core.Parser;
+
+var config = new ExcelParserConfig
+{
+    HeaderRow = 1,                                   // 1-based row holding the headers
+    ColumnNameComparer = StringComparer.OrdinalIgnoreCase,
+    HeaderNormalization = HeaderNormalization.Trim | HeaderNormalization.CollapseSpaces,
+    Culture = CultureInfo.GetCultureInfo("pt-BR"),   // parse "1.234,56" as 1234.56m
+};
+
+var parser = new ExcelParser<ChangeRow>(config);
+```
+
+`Culture` applies when parsing text-backed numeric/`Guid` cells (XLSX inline and shared strings); binary numeric cells (XLS/XLSB) carry a raw value and ignore it. `HeaderNormalization` flags (`Trim`, `CollapseSpaces`, `RemoveDiacritics`) are applied to both the sheet headers and the property names before matching.
+
+## Required columns
+
+Mark a property `[ExcelRequired]` to assert its column exists and carries a value:
+
+```csharp
+public sealed class Order
+{
+    [ExcelRequired]
+    public int Id { get; set; }
+
+    [ExcelRequired(AllowEmpty = true)]   // column must exist; blank cells allowed
+    public string? Note { get; set; }
+}
+```
+
+- A missing required header throws when the header row is read, listing every missing column.
+- By default each data row must have a non-empty cell; the first blank throws, naming the column and row number. `AllowEmpty = true` relaxes this to column presence only.
+- The check covers presence, not parseability — a present-but-malformed value does not throw here.
+
+## Custom converters
+
+For types the built-in parsers do not handle — money strings, custom formats, domain value objects — implement `IExcelCellConverter<T>` and attach it with `[ExcelConverter]`. `T` must be the property's exact type. One instance is created and reused across all rows, so converters must be stateless.
+
+```csharp
+using System.Globalization;
+using ExcelReader.Core.Parser;
+using ExcelReader.Core.ValueObjects;
+
+public sealed class BrlMoneyConverter : IExcelCellConverter<decimal>
+{
+    public bool TryConvert(in Cell cell, bool isDate1904, IFormatProvider provider, out decimal value)
+    {
+        string text = cell.GetString().Replace("R$", "", StringComparison.Ordinal).Trim();
+        return decimal.TryParse(text, NumberStyles.Currency, CultureInfo.GetCultureInfo("pt-BR"), out value);
+    }
+}
+
+public sealed class Invoice
+{
+    [ExcelConverter(typeof(BrlMoneyConverter))]
+    public decimal Total { get; set; }
+}
+```
+
+Return `false` to signal a parse failure (the property keeps its default). Empty cells are skipped before the converter runs.
 
 ## Write XLSX workbooks
 
