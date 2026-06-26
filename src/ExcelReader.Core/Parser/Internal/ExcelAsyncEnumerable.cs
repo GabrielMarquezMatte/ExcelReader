@@ -31,11 +31,9 @@ namespace ExcelReader.Core.Parser.Internal
             [SuppressMessage("SharpSource", "SS066:DisposableFieldIsNotDisposed",
                 Justification = "XlsxReader is injected and not owned by this enumerator; caller manages its lifetime.")]
             private readonly XlsxReader _reader;
-            private readonly int _headerRow;
             private readonly CancellationToken _ct;
             private RowProjector<T> _projector;
             private XlsxReader.Enumerator? _rows;
-            private int _rowNumber;
             private T _current = default!;
 
             internal AsyncEnumerator(
@@ -46,9 +44,8 @@ namespace ExcelReader.Core.Parser.Internal
                 CancellationToken ct)
             {
                 _reader = reader;
-                _headerRow = headerRow;
                 _ct = ct;
-                _projector = new RowProjector<T>(typeInfo, comparer, reader.IsDate1904);
+                _projector = new RowProjector<T>(typeInfo, comparer, headerRow, reader.IsDate1904);
             }
 
             public T Current => _current;
@@ -59,46 +56,31 @@ namespace ExcelReader.Core.Parser.Internal
             }
 
             // async only awaits — no ref struct locals here.
-            // Ref struct access is delegated to ProcessCurrentRow (sync helper).
+            // Ref struct access is delegated to Project (sync helper).
             private async ValueTask<bool> AdvanceAsync()
             {
                 _rows ??= await _reader.GetAsyncEnumeratorAsync(_ct).ConfigureAwait(false);
-                while (true)
+                while (await _rows.MoveNextAsync().ConfigureAwait(false))
                 {
-                    bool hasMore = await _rows.MoveNextAsync().ConfigureAwait(false);
-                    if (!hasMore)
+                    switch (Project())
                     {
-                        return false;
-                    }
-                    _rowNumber++;
-                    if (ProcessCurrentRow())
-                    {
-                        return true;
+                        case ProjectionStep.Yield:
+                            return true;
+                        case ProjectionStep.Stop:
+                            return false;
+                        case ProjectionStep.Skip:
+                            break;
                     }
                 }
+                return false;
             }
 
             // Sync helper — ref struct locals are legal here.
             // Called synchronously between awaits; Row spans are valid for this call's duration.
-            private bool ProcessCurrentRow()
+            private ProjectionStep Project()
             {
                 Row row = _rows!.Current;
-                if (_rowNumber < _headerRow)
-                {
-                    return false;
-                }
-                if (_rowNumber == _headerRow)
-                {
-                    _projector.BuildColumnMap(in row);
-                    return false;
-                }
-                if (!_projector.IsMapped)
-                {
-                    return false;
-                }
-                _current = new T();
-                _projector.ParseCurrentRow(in row, ref _current);
-                return true;
+                return _projector.Advance(in row, ref _current);
             }
 
             public ValueTask DisposeAsync()

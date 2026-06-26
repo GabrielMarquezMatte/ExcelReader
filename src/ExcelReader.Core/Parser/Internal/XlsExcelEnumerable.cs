@@ -59,9 +59,7 @@ namespace ExcelReader.Core.Parser.Internal
         public struct Enumerator : IEnumerator<T>, IAsyncEnumerator<T>
         {
             private readonly XlsReader.Enumerator _rows;
-            private readonly int _headerRow;
             private RowProjector<T> _projector;
-            private int _rowNumber;
             private T _current = default!;
 
             internal Enumerator(
@@ -72,8 +70,7 @@ namespace ExcelReader.Core.Parser.Internal
                 bool isDate1904)
             {
                 _rows = rows;
-                _headerRow = headerRow;
-                _projector = new RowProjector<T>(typeInfo, comparer, isDate1904);
+                _projector = new RowProjector<T>(typeInfo, comparer, headerRow, isDate1904);
             }
 
             public readonly T Current => _current;
@@ -83,24 +80,16 @@ namespace ExcelReader.Core.Parser.Internal
             {
                 while (_rows.MoveNext())
                 {
-                    _rowNumber++;
                     Row row = _rows.Current;
-                    if (_rowNumber < _headerRow)
+                    switch (_projector.Advance(in row, ref _current))
                     {
-                        continue;
+                        case ProjectionStep.Yield:
+                            return true;
+                        case ProjectionStep.Stop:
+                            return false;
+                        case ProjectionStep.Skip:
+                            break;
                     }
-                    if (_rowNumber == _headerRow)
-                    {
-                        _projector.BuildColumnMap(in row);
-                        continue;
-                    }
-                    if (!_projector.IsMapped)
-                    {
-                        return false;
-                    }
-                    _current = new T();
-                    _projector.ParseCurrentRow(in row, ref _current);
-                    return true;
                 }
                 return false;
             }
