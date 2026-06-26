@@ -47,11 +47,9 @@ namespace ExcelReader.Core.Parser.Internal
             return new Enumerator(rows, info, _config.ColumnNameComparer, _config.HeaderRow, _reader.IsDate1904);
         }
 
-        [SuppressMessage("Performance", "HLQ006:GetAsyncEnumerator should return a value type",
-            Justification = "Struct enumerator is boxed once on return; caller sees IAsyncEnumerator<T> which communicates disposal.")]
-        [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP015:Member should not return created and cached instance",
-            Justification = "Each call creates a fresh enumerator; no caching.")]
-        IAsyncEnumerator<T> IAsyncEnumerable<T>.GetAsyncEnumerator(CancellationToken cancellationToken = default)
+        [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP005:Return type should indicate that the value should be disposed",
+            Justification = "Returns a fresh enumerator the await-foreach pattern disposes; the struct overload it forwards to does not surface IAsyncDisposable.")]
+        IAsyncEnumerator<T> IAsyncEnumerable<T>.GetAsyncEnumerator(CancellationToken cancellationToken)
         {
             return GetAsyncEnumerator(cancellationToken);
         }
@@ -106,6 +104,8 @@ namespace ExcelReader.Core.Parser.Internal
                 _rows.Dispose();
             }
 
+            [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP007:Don't dispose injected",
+                Justification = "The enumerator owns _rows — it was created by GetAsyncEnumerator, not injected from outside.")]
             public readonly ValueTask DisposeAsync()
             {
                 return _rows.DisposeAsync();
