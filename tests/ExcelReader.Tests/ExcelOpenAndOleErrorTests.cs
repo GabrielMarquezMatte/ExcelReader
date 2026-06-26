@@ -1,5 +1,3 @@
-using System.IO.Compression;
-using System.Text;
 using ExcelReader.Core.Reader;
 
 namespace ExcelReader.Tests
@@ -13,7 +11,7 @@ namespace ExcelReader.Tests
         {
             using MemoryStream ms = WorkbookBuilder.Build(
                 """<row r="1"><c r="A1" t="inlineStr"><is><t>Hello</t></is></c></row>""");
-            using IExcelReader reader = Excel.Open(ms);
+            using var reader = Excel.Open(ms);
 
             XlsxReader xlsx = Assert.IsType<XlsxReader>(reader);
             using XlsxReader.Enumerator e = xlsx.GetEnumerator();
@@ -25,7 +23,7 @@ namespace ExcelReader.Tests
         public void OpenDetectsXlsFromStream()
         {
             using MemoryStream ms = XlsWorkbookBuilder.Build(sheets: [("S1", [["A"]])]);
-            using IExcelReader reader = Excel.Open(ms);
+            using var reader = Excel.Open(ms);
 
             XlsReader xls = Assert.IsType<XlsReader>(reader);
             using XlsReader.Enumerator e = xls.GetEnumerator();
@@ -38,13 +36,13 @@ namespace ExcelReader.Tests
         {
             await using MemoryStream xlsxBytes = WorkbookBuilder.Build(
                 """<row r="1"><c r="A1"><v>1</v></c></row>""");
-            await using (IExcelReader xlsx = await Excel.OpenAsync(xlsxBytes, ct: TestContext.Current.CancellationToken))
+            await using (var xlsx = await Excel.OpenAsync(xlsxBytes, ct: TestContext.Current.CancellationToken))
             {
                 Assert.IsType<XlsxReader>(xlsx);
             }
 
             await using MemoryStream xlsBytes = XlsWorkbookBuilder.Build(sheets: [("S1", [["A"]])]);
-            await using IExcelReader xls = await Excel.OpenAsync(xlsBytes, ct: TestContext.Current.CancellationToken);
+            await using var xls = await Excel.OpenAsync(xlsBytes, ct: TestContext.Current.CancellationToken);
             Assert.IsType<XlsReader>(xls);
         }
 
@@ -55,11 +53,11 @@ namespace ExcelReader.Tests
             string xlsPath = WriteTemp(".xls", XlsWorkbookBuilder.Build(sheets: [("S1", [["A"]])]));
             try
             {
-                using (IExcelReader xlsx = Excel.Open(xlsxPath))
+                using (var xlsx = Excel.Open(xlsxPath))
                 {
                     Assert.IsType<XlsxReader>(xlsx);
                 }
-                using IExcelReader xls = Excel.Open(xlsPath);
+                using var xls = Excel.Open(xlsPath);
                 Assert.IsType<XlsReader>(xls);
             }
             finally
@@ -75,7 +73,7 @@ namespace ExcelReader.Tests
             string path = WriteTemp(".xls", XlsWorkbookBuilder.Build(sheets: [("S1", [["A"]])]));
             try
             {
-                await using IExcelReader reader = await Excel.OpenAsync(path, TestContext.Current.CancellationToken);
+                await using var reader = await Excel.OpenAsync(path, TestContext.Current.CancellationToken);
                 Assert.IsType<XlsReader>(reader);
             }
             finally
@@ -120,7 +118,7 @@ namespace ExcelReader.Tests
             using MemoryStream ms = WorkbookBuilder.Build("""<row r="1"><c r="A1"><v>7</v></c></row>""");
             // A non-zero start position must be restored so the reader sees the whole stream.
             ms.Position = 0;
-            using IExcelReader reader = Excel.Open(ms, leaveOpen: true);
+            using var reader = Excel.Open(ms, leaveOpen: true);
             using XlsxReader.Enumerator e = ((XlsxReader)reader).GetEnumerator();
             Assert.True(e.MoveNext());
             Assert.Equal("7", e.Current[0].GetString());
