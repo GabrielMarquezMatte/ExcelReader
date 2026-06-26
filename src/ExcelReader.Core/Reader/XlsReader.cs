@@ -164,7 +164,7 @@ namespace ExcelReader.Core.Reader
                     case Rec.Format:
                         if (TryParseFormat(data, out int formatId, out string format))
                         {
-                            customFormats[formatId] = LooksLikeDateFormat(format);
+                            customFormats[formatId] = NumberFormat.LooksLikeDate(format);
                         }
                         break;
                     case Rec.Xf:
@@ -173,7 +173,7 @@ namespace ExcelReader.Core.Reader
                             int formatIndex = ReadU16(data, 2);
                             styleFlags.Add(customFormats.TryGetValue(formatIndex, out bool custom)
                                 ? custom
-                                : IsBuiltinDateFormat(formatIndex));
+                                : NumberFormat.IsBuiltinDate(formatIndex));
                         }
                         break;
                     case Rec.FilePass:
