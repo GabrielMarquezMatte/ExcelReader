@@ -18,5 +18,6 @@ namespace ExcelReader.Core.Reader
         internal const int BundleSh = 156;
         internal const int BeginCellXFs = 617;
         internal const int EndCellXFs = 618;
+        internal const int EndSheetData = 92;
     }
 }
