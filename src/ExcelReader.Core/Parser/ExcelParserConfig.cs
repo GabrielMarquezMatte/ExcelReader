@@ -4,5 +4,6 @@ namespace ExcelReader.Core.Parser
     {
         public int HeaderRow { get; init; } = 1;
         public StringComparer ColumnNameComparer { get; init; } = StringComparer.OrdinalIgnoreCase;
+        public HeaderNormalization HeaderNormalization { get; init; } = HeaderNormalization.Trim;
     }
 }

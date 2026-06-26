@@ -6,15 +6,17 @@ namespace ExcelReader.Core.Parser.Internal
     {
         private readonly TypeMapInfo<T> _typeInfo;
         private readonly StringComparer _comparer;
+        private readonly HeaderNormalization _normalization;
         private readonly int _headerRow;
         private readonly bool _isDate1904;
         private ColumnBinding<T>[]? _bindings;
         private int _rowNumber;
 
-        internal RowProjector(TypeMapInfo<T> typeInfo, StringComparer comparer, int headerRow, bool isDate1904)
+        internal RowProjector(TypeMapInfo<T> typeInfo, StringComparer comparer, HeaderNormalization normalization, int headerRow, bool isDate1904)
         {
             _typeInfo = typeInfo;
             _comparer = comparer;
+            _normalization = normalization;
             _headerRow = headerRow;
             _isDate1904 = isDate1904;
         }
@@ -54,12 +56,12 @@ namespace ExcelReader.Core.Parser.Internal
             foreach (RowCell rowCell in row.Cells)
             {
                 Cell cell = rowCell.Value;
-                string header = cell.GetString();
+                string header = _normalization.Apply(cell.GetString());
                 if (string.IsNullOrEmpty(header))
                 {
                     continue;
                 }
-                if (!_typeInfo.TryFindHeader(header, _comparer, out HeaderMatch<T> match))
+                if (!_typeInfo.TryFindHeader(header, _comparer, _normalization, out HeaderMatch<T> match))
                 {
                     continue;
                 }
