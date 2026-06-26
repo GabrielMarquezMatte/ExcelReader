@@ -70,7 +70,7 @@ namespace ExcelReader.Tests
         [Fact]
         public void CellRkDecodesNumber()
         {
-            uint rk = (42u << 2) | 0x02; // integer 42
+            const uint rk = (42u << 2) | 0x02; // integer 42
             byte[] sheet =
             [
                 .. B.Record(Brt.RowHdr),

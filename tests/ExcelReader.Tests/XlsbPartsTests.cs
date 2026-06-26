@@ -44,7 +44,7 @@ namespace ExcelReader.Tests
         [Fact]
         public void RkAppliesDivideByHundred()
         {
-            uint rk = (12345u << 2) | 0x03; // fInt | fX100
+            const uint rk = (12345u << 2) | 0x03; // fInt | fX100
             Assert.Equal(123.45, Biff12.Rk(rk));
         }
 
