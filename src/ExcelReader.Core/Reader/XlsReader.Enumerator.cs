@@ -1,6 +1,5 @@
 using System.Buffers;
 using System.Buffers.Binary;
-using System.Buffers.Text;
 using System.Diagnostics.CodeAnalysis;
 using ExcelReader.Core.Enums;
 using ExcelReader.Core.ValueObjects;
@@ -11,7 +10,7 @@ namespace ExcelReader.Core.Reader
     {
         [SuppressMessage("Design", "CA1034:Nested types should not be visible",
             Justification = "Public nested enumerator is the standard foreach pattern.")]
-        public sealed class Enumerator : IDisposable, IAsyncDisposable
+        public sealed class Enumerator : IExcelRowEnumerator
         {
             private const int InitialVals = 4 * 1024;
             private const int InitialCells = 32;

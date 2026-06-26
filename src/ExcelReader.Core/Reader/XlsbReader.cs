@@ -6,7 +6,7 @@ namespace ExcelReader.Core.Reader
     // BIFF12 (.xlsb) reader. Uses the same ZIP/OPC container as .xlsx but worksheet parts are
     // binary BIFF12 records. The workbook, styles, and shared-string parts are read once at open
     // time (they're small); worksheets are streamed on demand by the enumerator.
-    public sealed partial class XlsbReader : IExcelReader, IExcelRowReader<XlsbReader.Enumerator>
+    public sealed partial class XlsbReader : IExcelReader, IExcelRowReader, IExcelRowReader<XlsbReader.Enumerator>
     {
         // Shared-string pool: string i = _sharedFlat[_sharedOffsets[i].._sharedOffsets[i+1]].
         private readonly byte[] _sharedFlat = [];
@@ -148,8 +148,10 @@ namespace ExcelReader.Core.Reader
 
         internal ReadOnlySpan<byte> SharedSpan => _sharedFlat;
 
-        internal bool IsDateStyle(int style) =>
-            (uint)style < (uint)_styleIsDate.Length && _styleIsDate[style];
+        internal bool IsDateStyle(int style)
+        {
+            return (uint)style < (uint)_styleIsDate.Length && _styleIsDate[style];
+        }
 
         internal (int Start, int Length) SharedAt(int index)
         {
@@ -169,6 +171,11 @@ namespace ExcelReader.Core.Reader
             return new Enumerator(this, entry.Open());
         }
 
+        IExcelRowEnumerator IExcelRowReader.GetEnumerator()
+        {
+            return GetEnumerator();
+        }
+
         public async ValueTask<Enumerator> GetAsyncEnumeratorAsync(CancellationToken ct = default)
         {
             var entry = _zip!.GetEntry(_sheets![_current].Path)
@@ -182,11 +189,21 @@ namespace ExcelReader.Core.Reader
             return new Enumerator(this, sheet, ct);
         }
 
-        // Internal entry points used by Phase 3 tests — accept a pre-opened stream directly.
-        internal Enumerator GetEnumerator(Stream sheetStream) => new(this, sheetStream);
+        async ValueTask<IExcelRowEnumerator> IExcelRowReader.GetAsyncEnumeratorAsync(CancellationToken ct)
+        {
+            return await GetAsyncEnumeratorAsync(ct).ConfigureAwait(false);
+        }
 
-        internal Enumerator GetAsyncEnumerator(Stream sheetStream, CancellationToken ct = default) =>
-            new(this, sheetStream, ct);
+        // Internal entry points used by Phase 3 tests — accept a pre-opened stream directly.
+        internal Enumerator GetEnumerator(Stream sheetStream)
+        {
+            return new(this, sheetStream);
+        }
+
+        internal Enumerator GetAsyncEnumerator(Stream sheetStream, CancellationToken ct = default)
+        {
+            return new(this, sheetStream, ct);
+        }
 
         // --- Dispose ---
 

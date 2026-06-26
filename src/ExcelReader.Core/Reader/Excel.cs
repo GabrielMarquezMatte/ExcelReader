@@ -102,13 +102,13 @@ namespace ExcelReader.Core.Reader
             Justification = "Stream ownership transfers to OpenSeekable, which disposes it on failure and via the reader on success.")]
         [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
             Justification = "Stream ownership transfers to OpenSeekable, which disposes it on failure and via the reader on success.")]
-        public static IExcelReader Open(string path)
+        public static IExcelRowReader Open(string path)
         {
             ArgumentNullException.ThrowIfNull(path);
             return OpenSeekable(File.OpenRead(path), leaveOpen: false);
         }
 
-        public static IExcelReader Open(Stream stream, bool leaveOpen = true)
+        public static IExcelRowReader Open(Stream stream, bool leaveOpen = true)
         {
             ArgumentNullException.ThrowIfNull(stream);
             return OpenSeekable(stream, leaveOpen);
@@ -116,7 +116,7 @@ namespace ExcelReader.Core.Reader
 
         [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP001:Dispose created",
             Justification = "Stream ownership transfers to OpenSeekableAsync, which disposes it on failure and via the reader on success.")]
-        public static ValueTask<IExcelReader> OpenAsync(string path, CancellationToken ct = default)
+        public static ValueTask<IExcelRowReader> OpenAsync(string path, CancellationToken ct = default)
         {
             ArgumentNullException.ThrowIfNull(path);
             FileStream stream = new(path, FileMode.Open, FileAccess.Read, FileShare.Read, bufferSize: 65536,
@@ -124,13 +124,13 @@ namespace ExcelReader.Core.Reader
             return OpenSeekableAsync(stream, leaveOpen: false, ct);
         }
 
-        public static ValueTask<IExcelReader> OpenAsync(Stream stream, bool leaveOpen = true, CancellationToken ct = default)
+        public static ValueTask<IExcelRowReader> OpenAsync(Stream stream, bool leaveOpen = true, CancellationToken ct = default)
         {
             ArgumentNullException.ThrowIfNull(stream);
             return OpenSeekableAsync(stream, leaveOpen, ct);
         }
 
-        private static IExcelReader OpenSeekable(Stream stream, bool leaveOpen)
+        private static IExcelRowReader OpenSeekable(Stream stream, bool leaveOpen)
         {
             Format format;
             try
@@ -154,7 +154,7 @@ namespace ExcelReader.Core.Reader
             };
         }
 
-        private static async ValueTask<IExcelReader> OpenSeekableAsync(Stream stream, bool leaveOpen, CancellationToken ct)
+        private static async ValueTask<IExcelRowReader> OpenSeekableAsync(Stream stream, bool leaveOpen, CancellationToken ct)
         {
             Format format;
             try
