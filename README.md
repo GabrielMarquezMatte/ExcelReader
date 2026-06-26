@@ -73,6 +73,35 @@ foreach (var row in reader)
 }
 ```
 
+## Open by auto-detecting the format
+
+`Excel.Open` picks the reader from the file signature (XLSX is a ZIP, XLS is an OLE2 document) and returns an `IExcelReader`. Pattern-match to the concrete reader to enumerate rows.
+
+```csharp
+using ExcelReader.Core.Reader;
+
+using IExcelReader reader = Excel.Open("report.xlsx"); // or report.xls
+
+if (reader is XlsxReader xlsx)
+{
+    using var rows = xlsx.GetEnumerator();
+    while (rows.MoveNext())
+    {
+        Console.WriteLine(rows.Current[0].GetString());
+    }
+}
+else if (reader is XlsReader xls)
+{
+    using var rows = xls.GetEnumerator();
+    while (rows.MoveNext())
+    {
+        Console.WriteLine(rows.Current[0].GetString());
+    }
+}
+```
+
+`OpenAsync` is the async counterpart. Both require a seekable stream (or a file path) so the signature can be read without consuming the input.
+
 ## Read asynchronously
 
 `Row` and `Cell` are `ref struct` types, so async reading uses a manual loop instead of `await foreach`.
