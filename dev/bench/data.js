@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1782452802019,
+  "lastUpdate": 1782482387741,
   "repoUrl": "https://github.com/GabrielMarquezMatte/ExcelReader",
   "entries": {
     "Benchmark": [
@@ -660,6 +660,156 @@ window.BENCHMARK_DATA = {
             "value": 48679975.36363636,
             "unit": "ns",
             "range": "± 161431.13633437257"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "gabrielandremarquez.matte@gmail.com",
+            "name": "Gabriel Matte",
+            "username": "GabrielMarquezMatte"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "41f2c776558386a7573600952d82bd6aa2753146",
+          "message": "Merge pull request #11 from GabrielMarquezMatte/develop\n\nRefactor Excel reader interfaces to unify row reading; update Open me…",
+          "timestamp": "2026-06-26T10:57:39-03:00",
+          "tree_id": "55e16c5e48a0780900d80e5e712e386037bfee7d",
+          "url": "https://github.com/GabrielMarquezMatte/ExcelReader/commit/41f2c776558386a7573600952d82bd6aa2753146"
+        },
+        "date": 1782482386807,
+        "tool": "benchmarkdotnet",
+        "benches": [
+          {
+            "name": "ExcelReader.Benchmarks.ParseBenchmark.ExcelParserSync(Rows: 50000)",
+            "value": 40551964.12820513,
+            "unit": "ns",
+            "range": "± 143835.03943886672"
+          },
+          {
+            "name": "ExcelReader.Benchmarks.ParseBenchmark.ExcelParserAsync(Rows: 50000)",
+            "value": 47440548.5625,
+            "unit": "ns",
+            "range": "± 102189.23541346414"
+          },
+          {
+            "name": "ExcelReader.Benchmarks.ParseBenchmark.ExcelParserXlsbSync(Rows: 50000)",
+            "value": 12443221.26953125,
+            "unit": "ns",
+            "range": "± 9686.163060370374"
+          },
+          {
+            "name": "ExcelReader.Benchmarks.ParseBenchmark.ExcelParserXlsbAsync(Rows: 50000)",
+            "value": 15341451.946875,
+            "unit": "ns",
+            "range": "± 34879.99004038802"
+          },
+          {
+            "name": "ExcelReader.Benchmarks.ParseBenchmark.MiniExcel(Rows: 50000)",
+            "value": 335395057.3333333,
+            "unit": "ns",
+            "range": "± 8020080.934022206"
+          },
+          {
+            "name": "ExcelReader.Benchmarks.ParseBenchmark.Sylvan(Rows: 50000)",
+            "value": 106312771.33333333,
+            "unit": "ns",
+            "range": "± 291756.7482702842"
+          },
+          {
+            "name": "ExcelReader.Benchmarks.ParseBenchmark.SylvanAsync(Rows: 50000)",
+            "value": 109453593,
+            "unit": "ns",
+            "range": "± 521587.2228526528"
+          },
+          {
+            "name": "ExcelReader.Benchmarks.ReadBenchmark.ExcelReader(Rows: 50000)",
+            "value": 37720431.53968254,
+            "unit": "ns",
+            "range": "± 245135.87789408187"
+          },
+          {
+            "name": "ExcelReader.Benchmarks.ReadBenchmark.ExcelReaderAsync(Rows: 50000)",
+            "value": 42527012.322916664,
+            "unit": "ns",
+            "range": "± 32119.211472574647"
+          },
+          {
+            "name": "ExcelReader.Benchmarks.ReadBenchmark.ExcelReaderXlsb(Rows: 50000)",
+            "value": 5396009.6875,
+            "unit": "ns",
+            "range": "± 6048.151483748972"
+          },
+          {
+            "name": "ExcelReader.Benchmarks.ReadBenchmark.ExcelReaderXlsbAsync(Rows: 50000)",
+            "value": 6495273.917534722,
+            "unit": "ns",
+            "range": "± 9368.233771907775"
+          },
+          {
+            "name": "ExcelReader.Benchmarks.ReadBenchmark.MiniExcel(Rows: 50000)",
+            "value": 306450927.7,
+            "unit": "ns",
+            "range": "± 1985073.9225713178"
+          },
+          {
+            "name": "ExcelReader.Benchmarks.ReadBenchmark.Sylvan(Rows: 50000)",
+            "value": 70057069.66666667,
+            "unit": "ns",
+            "range": "± 177276.87843667035"
+          },
+          {
+            "name": "ExcelReader.Benchmarks.WriteBenchmark.ExcelReaderWriter(Rows: 50000)",
+            "value": 47865035.818181805,
+            "unit": "ns",
+            "range": "± 131336.53724313245"
+          },
+          {
+            "name": "ExcelReader.Benchmarks.WriteBenchmark.ExcelReaderXlsbWriter(Rows: 50000)",
+            "value": 17042977.440625,
+            "unit": "ns",
+            "range": "± 53330.10985727876"
+          },
+          {
+            "name": "ExcelReader.Benchmarks.WriteBenchmark.MiniExcel(Rows: 50000)",
+            "value": 105120572.125,
+            "unit": "ns",
+            "range": "± 710882.107074109"
+          },
+          {
+            "name": "ExcelReader.Benchmarks.XlsReadBenchmark.ExcelReader(Rows: 50000)",
+            "value": 6725029.785590278,
+            "unit": "ns",
+            "range": "± 8663.466847301199"
+          },
+          {
+            "name": "ExcelReader.Benchmarks.XlsReadBenchmark.ExcelReaderAsync(Rows: 50000)",
+            "value": 6794589.04921875,
+            "unit": "ns",
+            "range": "± 14716.477187804163"
+          },
+          {
+            "name": "ExcelReader.Benchmarks.XlsReadBenchmark.Sylvan(Rows: 50000)",
+            "value": 8616811.373263888,
+            "unit": "ns",
+            "range": "± 31109.52296746073"
+          },
+          {
+            "name": "ExcelReader.Benchmarks.XlsWriteBenchmark.XlsWriter(Rows: 50000)",
+            "value": 12061200.496875,
+            "unit": "ns",
+            "range": "± 154388.79870342903"
+          },
+          {
+            "name": "ExcelReader.Benchmarks.XlsWriteBenchmark.XlsxWriter(Rows: 50000)",
+            "value": 48587559.93636364,
+            "unit": "ns",
+            "range": "± 187265.70008559787"
           }
         ]
       }
