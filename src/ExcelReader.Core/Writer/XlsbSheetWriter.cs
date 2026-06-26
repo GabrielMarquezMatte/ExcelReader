@@ -7,7 +7,7 @@ namespace ExcelReader.Core.Writer
 {
     public sealed class XlsbSheetWriter : ISheetWriter<XlsbRowWriter>
     {
-        private const int FlushThreshold = 256 * 1024;
+        private const int SpillThreshold = 8 * 1024 * 1024;
 
         [SuppressMessage("SharpSource", "SS066:DisposableFieldIsNotDisposed",
             Justification = "XlsbWorkbookWriter is borrowed; its lifetime is managed by the caller.")]
@@ -17,7 +17,7 @@ namespace ExcelReader.Core.Writer
         private readonly ZipArchive _zip;
         private readonly bool _date1904;
         private readonly CompressionLevel _compression;
-        private readonly BiffBuffer _records = new(FlushThreshold);
+        private readonly BiffBuffer _records = new(4096);
         private readonly BiffBuffer _payload = new(256);
         [SuppressMessage("SharpSource", "SS066:DisposableFieldIsNotDisposed",
             Justification = "Stream is explicitly disposed in EndAsync or DisposeAsync.")]
@@ -47,7 +47,7 @@ namespace ExcelReader.Core.Writer
         internal int SheetId { get; }
         internal BiffBuffer Payload => _payload;
 
-        public async ValueTask StartAsync(CancellationToken ct = default)
+        public ValueTask StartAsync(CancellationToken ct = default)
         {
             ObjectDisposedException.ThrowIf(_state == WriterState.Ended, this);
             if (_state != WriterState.Created)
@@ -55,13 +55,8 @@ namespace ExcelReader.Core.Writer
                 throw new InvalidOperationException("XlsbSheetWriter has already been started.");
             }
             ct.ThrowIfCancellationRequested();
-            ZipArchiveEntry entry = _zip.CreateEntry($"xl/worksheets/sheet{SheetId}.bin", _compression);
-#if NET10_0_OR_GREATER
-            _stream = await entry.OpenAsync(ct).ConfigureAwait(false);
-#else
-            _stream = entry.Open();
-#endif
             _state = WriterState.Started;
+            return ValueTask.CompletedTask;
         }
 
         public ValueTask<XlsbRowWriter> StartRowAsync(CancellationToken ct = default)
@@ -104,9 +99,16 @@ namespace ExcelReader.Core.Writer
             ct.ThrowIfCancellationRequested();
             _state = WriterState.Ended;
             WriteRecord(Brt.EndSheetData);
-            FlushRecords();
-            await _stream!.DisposeAsync().ConfigureAwait(false);
-            _stream = null;
+            if (_stream is null)
+            {
+                await WriteBufferedSheetAsync(ct).ConfigureAwait(false);
+            }
+            else
+            {
+                FlushRecords();
+                await _stream.DisposeAsync().ConfigureAwait(false);
+                _stream = null;
+            }
             ReleaseBuffers();
             if (!_registered)
             {
@@ -135,10 +137,24 @@ namespace ExcelReader.Core.Writer
         internal void WriteRecord(int id, ReadOnlySpan<byte> payload = default)
         {
             Biff12RecordWriter.WriteRecord(_records, id, payload);
-            if (_records.Length >= FlushThreshold)
+            if (_records.Length >= SpillThreshold)
             {
                 FlushRecords();
             }
+        }
+
+        [SuppressMessage("Reliability", "CA1849:Call async methods when in an async method",
+            Justification = "Opening the entry from the synchronous row-writing hot path avoids an async API on every cell.")]
+        [SuppressMessage("SharpSource", "SS033:Async overload available",
+            Justification = "See CA1849 justification above.")]
+        private void EnsureStream()
+        {
+            if (_stream is not null)
+            {
+                return;
+            }
+            ZipArchiveEntry entry = _zip.CreateEntry($"xl/worksheets/sheet{SheetId}.bin", _compression);
+            _stream = entry.Open();
         }
 
         private void FlushRecords()
@@ -147,8 +163,23 @@ namespace ExcelReader.Core.Writer
             {
                 return;
             }
+            EnsureStream();
             _stream!.Write(_records.Span);
             _records.Reset();
+        }
+
+        private async ValueTask WriteBufferedSheetAsync(CancellationToken ct)
+        {
+            ZipArchiveEntry entry = _zip.CreateEntry($"xl/worksheets/sheet{SheetId}.bin", _compression);
+#if NET10_0_OR_GREATER
+            Stream stream = await entry.OpenAsync(ct).ConfigureAwait(false);
+#else
+            Stream stream = entry.Open();
+#endif
+            await using (stream.ConfigureAwait(false))
+            {
+                await stream.WriteAsync(_records.Memory, ct).ConfigureAwait(false);
+            }
         }
 
         private void ReleaseBuffers()
