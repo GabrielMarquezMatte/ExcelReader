@@ -8,9 +8,9 @@
 [![License](https://img.shields.io/github/license/GabrielMarquezMatte/ExcelReader.svg)](LICENSE)
 [![Benchmarks](https://img.shields.io/badge/benchmarks-GitHub%20Pages-informational)](https://gabrielmarquezmatte.github.io/ExcelReader/dev/bench/)
 
-High-performance Excel reading and writing for .NET 10. Reads `.xlsx` and `.xls`; writes both formats.
+High-performance Excel reading and writing for .NET 10. Reads `.xlsx`, `.xlsb`, and `.xls`; writes all three formats.
 
-ExcelReader is built for streaming spreadsheet workloads where low allocations matter. It reads worksheet rows as lightweight `ref struct` values, resolves shared strings, recognizes date styles, handles sparse cells, and includes writers for producing `.xlsx` (Open XML) and `.xls` (BIFF8) workbooks.
+ExcelReader is built for streaming spreadsheet workloads where low allocations matter. It reads worksheet rows as lightweight `ref struct` values, resolves shared strings, recognizes date styles, handles sparse cells, and includes writers for producing `.xlsx` (Open XML), `.xlsb` (BIFF12), and `.xls` (BIFF8) workbooks.
 
 ## Benchmarks
 
@@ -22,20 +22,33 @@ Compares ExcelReader against established XLSX libraries on the same generated wo
 
 | Scenario | ExcelReader | MiniExcel | Sylvan |
 |---|---:|---:|---:|
-| Cell-by-cell read | 24.88 ms, 13.41 KB | 198.03 ms, 375.74 MB | 42.84 ms, 347.42 KB |
-| Typed row parsing | 29.34 ms, 3.87 MB | 228.63 ms, 400.05 MB | 70.67 ms, 10.49 MB |
-| Workbook writing | 35.02 ms, 6.34 MB | 288.16 ms, 85.14 MB | — |
+| Cell-by-cell read | 27.22 ms, 12.16 KB | 218.78 ms, 421,145.96 KB | 48.00 ms, 1,953.8 KB |
+| Typed row parsing | 30.12 ms, 3.87 MB | 220.73 ms, 400.05 MB | 72.52 ms, 10.49 MB |
+| Workbook writing | 34.68 ms, 6.34 MB | 372.73 ms, 85.14 MB | — |
 
 ExcelReader is ~8x faster than MiniExcel for reads and writes. Compared with Sylvan, ~1.7x faster for raw reads and ~2.4x faster for typed parsing, with substantially lower allocations.
+
+### XLSB (BIFF12)
+
+| Scenario | ExcelReader |
+|---|---:|
+| Cell-by-cell read | 3.914 ms, 12.21 KB |
+| Cell-by-cell read async | 4.628 ms, 14.65 KB |
+| Typed row parsing | 9.110 ms, 3.88 MB |
+| Typed row parsing async | 11.536 ms, 3.88 MB |
+| Workbook writing | 12.88 ms, 9.37 MB |
+
+XLSB is the fastest path in these results: raw reads are ~7x faster than XLSX reads, typed parsing is ~3.3x faster than XLSX parsing, and writing is ~2.7x faster than XLSX writing.
 
 ### XLS (BIFF8)
 
 | Scenario | ExcelReader | Sylvan |
 |---|---:|---:|
-| Cell-by-cell read | 4.775 ms, 61.34 KB | 5.469 ms, 1,717.98 KB |
-| Workbook writing | 7.004 ms, 1.92 MB | — |
+| Cell-by-cell read | 4.703 ms, 61.3 KB | 5.540 ms, 1,717.73 KB |
+| Cell-by-cell read async | 4.748 ms, 61.37 KB | — |
+| Workbook writing | 8.839 ms, 12.37 MB | — |
 
-XLS reading allocates ~28x less than Sylvan at comparable speed. The XLS writer is **5x faster** than the XLSX writer (7.00 ms vs 34.73 ms) and allocates **3.3x less** (1.92 MB vs 6.34 MB).
+XLS reading allocates ~28x less than Sylvan at comparable speed. The XLS writer is ~3.9x faster than the XLSX writer (8.839 ms vs 34.463 ms), but allocates more in this benchmark.
 
 Run the benchmarks locally:
 
@@ -75,16 +88,24 @@ foreach (var row in reader)
 
 ## Open by auto-detecting the format
 
-`Excel.Open` picks the reader from the file signature (XLSX is a ZIP, XLS is an OLE2 document) and returns an `IExcelReader`. Pattern-match to the concrete reader to enumerate rows.
+`Excel.Open` picks the reader from the file signature (XLSX/XLSB are ZIP packages, XLS is an OLE2 document) and returns an `IExcelReader`. Pattern-match to the concrete reader to enumerate rows.
 
 ```csharp
 using ExcelReader.Core.Reader;
 
-using IExcelReader reader = Excel.Open("report.xlsx"); // or report.xls
+using IExcelReader reader = Excel.Open("report.xlsx"); // or report.xlsb / report.xls
 
 if (reader is XlsxReader xlsx)
 {
     using var rows = xlsx.GetEnumerator();
+    while (rows.MoveNext())
+    {
+        Console.WriteLine(rows.Current[0].GetString());
+    }
+}
+else if (reader is XlsbReader xlsb)
+{
+    using var rows = xlsb.GetEnumerator();
     while (rows.MoveNext())
     {
         Console.WriteLine(rows.Current[0].GetString());
@@ -176,6 +197,32 @@ await using (var sheet = workbook.AddSheet("Summary"))
 await workbook.EndAsync();
 ```
 
+## Read and write XLSB workbooks (BIFF12)
+
+Use `Excel.FromXlsbFile`, `Excel.FromXlsb`, `Excel.FromXlsbFileAsync`, or `Excel.FromXlsbAsync` to open XLSB directly. For writing, use `XlsbWorkbookWriter`, `XlsbSheetWriter`, and `XlsbRowWriter`.
+
+```csharp
+using ExcelReader.Core.Writer;
+
+await using var stream = File.Create("out.xlsb");
+await using var workbook = await XlsbWorkbookWriter.CreateAsync(stream);
+
+await workbook.StartAsync();
+await using (XlsbSheetWriter sheet = workbook.AddSheet("Summary"))
+{
+    await sheet.StartAsync();
+
+    await using (XlsbRowWriter row = await sheet.StartRowAsync())
+    {
+        row.Write("Name");
+        row.Write("Total");
+        row.Write("Created");
+    }
+}
+
+await workbook.EndAsync();
+```
+
 ## Write XLS workbooks (BIFF8)
 
 `XlsWorkbookWriter` emits a binary BIFF8 `.xls` file. The sheet and row APIs are synchronous; only the final `EndAsync` (which assembles and flushes the OLE container) is async. BIFF8 is capped at 65,536 rows × 256 columns per sheet.
@@ -211,11 +258,12 @@ await workbook.EndAsync();
 
 ## Notes
 
-- Reads `.xlsx` and `.xls` (BIFF8) files; writes both formats.
+- Reads and writes `.xlsx`, `.xlsb` (BIFF12), and `.xls` (BIFF8) files.
 - Reads one sheet at a time; use `MoveToSheet(index)` or `TryMoveToSheet(name)` to switch sheets.
 - Missing cells in sparse rows are exposed as empty cells.
 - String conversion allocates only when you call `GetString()`.
 - The XLSX writer emits a compact workbook with strings, numbers, booleans, dates, and blank cells.
+- The XLSB writer emits BIFF12 workbook parts inside the standard XLSB ZIP package.
 - The XLS writer buffers records in memory and assembles the OLE container at `EndAsync`; choose it when write throughput matters more than peak allocation.
 
 ## Build
