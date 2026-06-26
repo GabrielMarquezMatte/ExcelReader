@@ -4,7 +4,7 @@ using System.Diagnostics.CodeAnalysis;
 
 namespace ExcelReader.Core.Reader
 {
-    public sealed partial class XlsReader : IDisposable, IAsyncDisposable
+    public sealed partial class XlsReader : IExcelReader
     {
         private readonly WorkbookStream _workbook;
         private readonly (string Name, int Offset)[] _sheets;
@@ -28,7 +28,9 @@ namespace ExcelReader.Core.Reader
             }
             if (_sheets.Length == 0)
             {
+#pragma warning disable IDISP007 // Ownership of the WorkbookStream transferred to this reader; dispose it on the no-sheets failure path.
                 workbook.Dispose();
+#pragma warning restore IDISP007
                 throw new InvalidDataException("The workbook contains no sheets.");
             }
         }
@@ -93,6 +95,8 @@ namespace ExcelReader.Core.Reader
             return new Enumerator(this, _sheets[_current].Offset);
         }
 
+        [SuppressMessage("Performance", "HLQ006:GetAsyncEnumerator should return a value type",
+            Justification = "Enumerator is a class so the same type can also expose MoveNextAsync for parity with XlsxReader.")]
         public Enumerator GetAsyncEnumerator(CancellationToken ct = default)
         {
             ct.ThrowIfCancellationRequested();
@@ -160,7 +164,7 @@ namespace ExcelReader.Core.Reader
                     case Rec.Format:
                         if (TryParseFormat(data, out int formatId, out string format))
                         {
-                            customFormats[formatId] = LooksLikeDateFormat(format);
+                            customFormats[formatId] = NumberFormat.LooksLikeDate(format);
                         }
                         break;
                     case Rec.Xf:
@@ -169,7 +173,7 @@ namespace ExcelReader.Core.Reader
                             int formatIndex = ReadU16(data, 2);
                             styleFlags.Add(customFormats.TryGetValue(formatIndex, out bool custom)
                                 ? custom
-                                : IsBuiltinDateFormat(formatIndex));
+                                : NumberFormat.IsBuiltinDate(formatIndex));
                         }
                         break;
                     case Rec.FilePass:

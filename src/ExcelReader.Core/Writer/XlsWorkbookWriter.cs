@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Runtime.InteropServices;
 using ExcelReader.Core.Writer.Internal;
 
@@ -16,6 +17,8 @@ namespace ExcelReader.Core.Writer
         private readonly bool _date1904;
         private readonly List<XlsSheetWriter> _sheets = [];
         private WriterState _state = WriterState.Created;
+        [SuppressMessage("SharpSource", "SS066:DisposableFieldIsNotDisposed",
+            Justification = "Disposed in NotifySheetEnded and EndAsync once its records are flushed.")]
         private XlsSheetWriter? _activeSheet;
         private bool _disposed;
 
@@ -58,7 +61,9 @@ namespace ExcelReader.Core.Writer
             {
                 throw new InvalidOperationException("The previous XlsSheetWriter must be ended before adding a new sheet.");
             }
+#pragma warning disable IDISP003 // The guard above guarantees _activeSheet is null here — there is no previous to dispose.
             _activeSheet = new XlsSheetWriter(this, name, _date1904);
+#pragma warning restore IDISP003
             return _activeSheet;
         }
 
@@ -115,6 +120,7 @@ namespace ExcelReader.Core.Writer
                 await OleCompoundWriter.WriteAsync(_stream, workbookSize, async (dest, canc) =>
                 {
                     await dest.WriteAsync(globals.Memory, canc).ConfigureAwait(false);
+#pragma warning disable HLQ012 // Loop body awaits; a CollectionsMarshal.AsSpan view cannot live across an await.
                     foreach (XlsSheetWriter sheet in _sheets)
                     {
                         frame.Reset();
@@ -126,6 +132,7 @@ namespace ExcelReader.Core.Writer
                         BiffRecordWriter.WriteEof(frame);
                         await dest.WriteAsync(frame.Memory, canc).ConfigureAwait(false);
                     }
+#pragma warning restore HLQ012
                 }, ct).ConfigureAwait(false);
             }
             finally

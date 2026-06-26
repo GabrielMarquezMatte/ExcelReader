@@ -12,7 +12,7 @@ namespace ExcelReader.Core.Reader
         // buffer; a single <c>...</c> element is guaranteed contiguous (the buffer grows if needed).
         [SuppressMessage("Design", "CA1034:Nested types should not be visible",
             Justification = "Public nested enumerator is the standard foreach pattern.")]
-        public sealed class Enumerator : IDisposable, IAsyncDisposable
+        public sealed class Enumerator : IExcelRowEnumerator
         {
             private const int InitialBuf = 64 * 1024;
             private const int InitialVals = 4 * 1024;

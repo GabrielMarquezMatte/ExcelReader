@@ -42,4 +42,9 @@
     <None Include="..\..\README.md" Pack="true" PackagePath="\" />
   </ItemGroup>
 
+  <!-- Binary parsers (BIFF12 framing, etc.) are internal but warrant isolated unit tests. -->
+  <ItemGroup>
+    <InternalsVisibleTo Include="ExcelReader.Tests" />
+  </ItemGroup>
+
 </Project>

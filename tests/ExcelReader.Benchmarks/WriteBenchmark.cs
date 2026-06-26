@@ -51,6 +51,30 @@ namespace ExcelReader.Benchmarks
             return ms.Length;
         }
 
+
+        [Benchmark]
+        public async Task<long> ExcelReaderXlsbWriter()
+        {
+            await using var ms = new MemoryStream();
+            await using (XlsbWorkbookWriter wb = await XlsbWorkbookWriter.CreateAsync(ms, leaveOpen: true))
+            {
+                await wb.StartAsync();
+                XlsbSheetWriter sheet = wb.AddSheet("S1");
+                await sheet.StartAsync();
+                await using (XlsbRowWriter header = await sheet.StartRowAsync())
+                {
+                    header.Write("Name");
+                    header.Write("Id");
+                    header.Write("Date");
+                    header.Write("Value");
+                }
+                await WorkbookGenerator.WriteRecordsAsync(sheet, _records);
+                await sheet.EndAsync();
+                await wb.EndAsync();
+            }
+            return ms.Length;
+        }
+
         [Benchmark]
         public async Task<long> MiniExcel()
         {

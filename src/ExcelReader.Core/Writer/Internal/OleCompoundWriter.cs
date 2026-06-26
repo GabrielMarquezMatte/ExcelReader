@@ -105,9 +105,15 @@ namespace ExcelReader.Core.Writer.Internal
             fat.AsSpan().Fill(0xFF); // FreeSector everywhere by default
 
             for (int i = 0; i < fatCount; i++)
+            {
                 WriteI32(fat, i * 4, FatSectorMarker);
+            }
+
             for (int i = 0; i < difatCount; i++)
+            {
                 WriteI32(fat, (fatCount + i) * 4, DifatSectorMarker);
+            }
+
             WriteI32(fat, directorySector * 4, EndOfChain);
             for (int i = 0; i < workbookSectors; i++)
             {
@@ -158,7 +164,10 @@ namespace ExcelReader.Core.Writer.Internal
             BinaryPrimitives.WriteInt64LittleEndian(entry[120..], size);
         }
 
-        private static int CeilingDiv(int n, int d) => (n + d - 1) / d;
+        private static int CeilingDiv(int n, int d)
+        {
+            return (n + d - 1) / d;
+        }
 
         private static int RoundUp(int value, int multiple)
         {

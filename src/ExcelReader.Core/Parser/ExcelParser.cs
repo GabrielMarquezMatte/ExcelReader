@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using ExcelReader.Core.Parser.Internal;
 using ExcelReader.Core.Reader;
 
@@ -16,28 +17,46 @@ namespace ExcelReader.Core.Parser
             _config = config ?? new ExcelParserConfig();
         }
 
+        [SuppressMessage("Usage", "VSTHRD200:Use \"Async\" suffix for async methods",
+            Justification = "Synchronous entry point; the enumerable also implements IAsyncEnumerable, but ParseAsync is the async counterpart.")]
         public ExcelEnumerable<T> Parse(XlsxReader reader)
         {
             ArgumentNullException.ThrowIfNull(reader);
             return new ExcelEnumerable<T>(reader, _config);
         }
 
+        [SuppressMessage("Usage", "VSTHRD200:Use \"Async\" suffix for async methods",
+            Justification = "Synchronous entry point; the enumerable also implements IAsyncEnumerable, but ParseAsync is the async counterpart.")]
         public XlsExcelEnumerable<T> Parse(XlsReader reader)
         {
             ArgumentNullException.ThrowIfNull(reader);
             return new XlsExcelEnumerable<T>(reader, _config);
         }
 
-        public ExcelAsyncEnumerable<T> ParseAsync(XlsxReader reader, CancellationToken ct = default)
+        [SuppressMessage("Usage", "VSTHRD200:Use \"Async\" suffix for async methods",
+            Justification = "Synchronous entry point; the enumerable also implements IAsyncEnumerable, but ParseAsync is the async counterpart.")]
+        public ExcelEnumerable<T, XlsbReader, XlsbReader.Enumerator> Parse(XlsbReader reader)
         {
             ArgumentNullException.ThrowIfNull(reader);
-            return new ExcelAsyncEnumerable<T>(reader, _config, ct);
+            return new ExcelEnumerable<T, XlsbReader, XlsbReader.Enumerator>(reader, _config);
         }
 
-        public XlsExcelAsyncEnumerable<T> ParseAsync(XlsReader reader, CancellationToken ct = default)
+        public ExcelEnumerable<T> ParseAsync(XlsxReader reader, CancellationToken ct = default)
         {
             ArgumentNullException.ThrowIfNull(reader);
-            return new XlsExcelAsyncEnumerable<T>(reader, _config, ct);
+            return new ExcelEnumerable<T>(reader, _config, ct);
+        }
+
+        public XlsExcelEnumerable<T> ParseAsync(XlsReader reader, CancellationToken ct = default)
+        {
+            ArgumentNullException.ThrowIfNull(reader);
+            return new XlsExcelEnumerable<T>(reader, _config, ct);
+        }
+
+        public ExcelEnumerable<T, XlsbReader, XlsbReader.Enumerator> ParseAsync(XlsbReader reader, CancellationToken ct = default)
+        {
+            ArgumentNullException.ThrowIfNull(reader);
+            return new ExcelEnumerable<T, XlsbReader, XlsbReader.Enumerator>(reader, _config, ct);
         }
     }
 }
