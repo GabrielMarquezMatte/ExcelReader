@@ -7,6 +7,8 @@ namespace ExcelReader.Core.Writer
 {
     public sealed class XlsbSheetWriter : ISheetWriter<XlsbRowWriter>
     {
+        private const int FlushThreshold = 256 * 1024;
+
         [SuppressMessage("SharpSource", "SS066:DisposableFieldIsNotDisposed",
             Justification = "XlsbWorkbookWriter is borrowed; its lifetime is managed by the caller.")]
         private readonly XlsbWorkbookWriter _owner;
@@ -15,7 +17,7 @@ namespace ExcelReader.Core.Writer
         private readonly ZipArchive _zip;
         private readonly bool _date1904;
         private readonly CompressionLevel _compression;
-        private readonly BiffBuffer _record = new(512);
+        private readonly BiffBuffer _records = new(FlushThreshold);
         private readonly BiffBuffer _payload = new(256);
         [SuppressMessage("SharpSource", "SS066:DisposableFieldIsNotDisposed",
             Justification = "Stream is explicitly disposed in EndAsync or DisposeAsync.")]
@@ -102,6 +104,7 @@ namespace ExcelReader.Core.Writer
             ct.ThrowIfCancellationRequested();
             _state = WriterState.Ended;
             WriteRecord(Brt.EndSheetData);
+            FlushRecords();
             await _stream!.DisposeAsync().ConfigureAwait(false);
             _stream = null;
             ReleaseBuffers();
@@ -131,9 +134,21 @@ namespace ExcelReader.Core.Writer
             Justification = "See CA1849 justification above.")]
         internal void WriteRecord(int id, ReadOnlySpan<byte> payload = default)
         {
-            _record.Reset();
-            Biff12RecordWriter.WriteRecord(_record, id, payload);
-            _stream!.Write(_record.Span);
+            Biff12RecordWriter.WriteRecord(_records, id, payload);
+            if (_records.Length >= FlushThreshold)
+            {
+                FlushRecords();
+            }
+        }
+
+        private void FlushRecords()
+        {
+            if (_records.Length == 0)
+            {
+                return;
+            }
+            _stream!.Write(_records.Span);
+            _records.Reset();
         }
 
         private void ReleaseBuffers()
@@ -143,7 +158,7 @@ namespace ExcelReader.Core.Writer
                 return;
             }
             _buffersDisposed = true;
-            _record.Dispose();
+            _records.Dispose();
             _payload.Dispose();
         }
     }
