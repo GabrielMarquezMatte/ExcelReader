@@ -37,7 +37,7 @@ namespace ExcelReader.Core.Parser.Internal
         {
             TypeMapInfo<T> info = TypeMapper<T>.GetInfo();
             TEnumerator rows = _reader.GetEnumerator();
-            return new Enumerator(rows, info, _config.ColumnNameComparer, _config.HeaderRow, _reader.IsDate1904);
+            return new Enumerator(rows, info, _config.ColumnNameComparer, _config.HeaderNormalization, _config.HeaderRow, _reader.IsDate1904);
         }
 
         IEnumerator<T> IEnumerable<T>.GetEnumerator()
@@ -56,7 +56,7 @@ namespace ExcelReader.Core.Parser.Internal
         {
             TypeMapInfo<T> info = TypeMapper<T>.GetInfo();
             CancellationToken effective = cancellationToken.CanBeCanceled ? cancellationToken : _ct;
-            return new AsyncEnumerator(_reader, info, _config.ColumnNameComparer, _config.HeaderRow, effective);
+            return new AsyncEnumerator(_reader, info, _config.ColumnNameComparer, _config.HeaderNormalization, _config.HeaderRow, effective);
         }
 
         public struct Enumerator : IEnumerator<T>
@@ -71,11 +71,12 @@ namespace ExcelReader.Core.Parser.Internal
                 TEnumerator rows,
                 TypeMapInfo<T> typeInfo,
                 StringComparer comparer,
+                HeaderNormalization normalization,
                 int headerRow,
                 bool isDate1904)
             {
                 _rows = rows;
-                _projector = new RowProjector<T>(typeInfo, comparer, headerRow, isDate1904);
+                _projector = new RowProjector<T>(typeInfo, comparer, normalization, headerRow, isDate1904);
             }
 
             public readonly T Current => _current;
@@ -125,12 +126,13 @@ namespace ExcelReader.Core.Parser.Internal
                 TReader reader,
                 TypeMapInfo<T> typeInfo,
                 StringComparer comparer,
+                HeaderNormalization normalization,
                 int headerRow,
                 CancellationToken ct)
             {
                 _reader = reader;
                 _ct = ct;
-                _projector = new RowProjector<T>(typeInfo, comparer, headerRow, reader.IsDate1904);
+                _projector = new RowProjector<T>(typeInfo, comparer, normalization, headerRow, reader.IsDate1904);
             }
 
             public T Current => _current;

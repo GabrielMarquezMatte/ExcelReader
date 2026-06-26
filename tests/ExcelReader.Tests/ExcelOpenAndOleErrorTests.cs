@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using ExcelReader.Core.Reader;
 
 namespace ExcelReader.Tests
@@ -230,16 +231,19 @@ namespace ExcelReader.Tests
                 get { return false; }
             }
 
+            [ExcludeFromCodeCoverage]
             public override bool CanWrite
             {
                 get { return false; }
             }
 
+            [ExcludeFromCodeCoverage]
             public override long Length
             {
                 get { throw new NotSupportedException(); }
             }
 
+            [ExcludeFromCodeCoverage]
             public override long Position
             {
                 get { return _inner.Position; }
@@ -251,20 +255,24 @@ namespace ExcelReader.Tests
                 return _inner.Read(buffer, offset, count);
             }
 
+            [ExcludeFromCodeCoverage]
             public override void Flush()
             {
             }
 
+            [ExcludeFromCodeCoverage]
             public override long Seek(long offset, SeekOrigin origin)
             {
                 throw new NotSupportedException();
             }
 
+            [ExcludeFromCodeCoverage]
             public override void SetLength(long value)
             {
                 throw new NotSupportedException();
             }
 
+            [ExcludeFromCodeCoverage]
             public override void Write(byte[] buffer, int offset, int count)
             {
                 throw new NotSupportedException();

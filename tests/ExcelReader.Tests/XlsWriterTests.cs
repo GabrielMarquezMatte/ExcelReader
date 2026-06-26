@@ -202,6 +202,50 @@ namespace ExcelReader.Tests
         }
 
         [Fact]
+        public async Task LargeWorkbookForcesDifatSectors()
+        {
+            // The OLE container only allocates DIFAT sectors once the FAT exceeds the 109 entries that
+            // fit in the header — that needs a workbook stream past ~7.1 MB (>~13,900 512-byte sectors).
+            // 64000 rows x 8 NUMBER cells (18 bytes each) ≈ 9.2 MB, comfortably over the threshold.
+            CancellationToken ct = TestContext.Current.CancellationToken;
+            const int rows = 64000;
+            const int cols = 8;
+            byte[] bytes = await WriteAsync(wb =>
+            {
+                var s = wb.AddSheet("Big");
+                s.Start();
+                for (int i = 0; i < rows; i++)
+                {
+                    using var r = s.StartRow();
+                    r.Write(i);
+                    for (int c = 1; c < cols; c++)
+                    {
+                        r.Write(i + (c * 0.5));
+                    }
+                }
+                s.End();
+            }, ct: ct);
+
+            Assert.True(bytes.Length > 7 * 1024 * 1024, "workbook must exceed the DIFAT threshold");
+
+            using var reader = Excel.FromXls(new MemoryStream(bytes));
+            using var e = reader.GetEnumerator();
+            int read = 0;
+            while (e.MoveNext())
+            {
+                if (read == 0 || read == rows - 1)
+                {
+                    Assert.True(e.Current[0].TryParse(Inv, out int first));
+                    Assert.Equal(read, first);
+                    Assert.True(e.Current[cols - 1].TryParse(Inv, out double last));
+                    Assert.Equal(read + ((cols - 1) * 0.5), last);
+                }
+                read++;
+            }
+            Assert.Equal(rows, read);
+        }
+
+        [Fact]
         public async Task RowOverflowAutoSplitsIntoNewSheet()
         {
             CancellationToken ct = TestContext.Current.CancellationToken;
