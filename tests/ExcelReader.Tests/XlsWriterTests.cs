@@ -226,7 +226,10 @@ namespace ExcelReader.Tests
             {
                 reader.MoveToSheet(sheet);
                 using var e = reader.GetEnumerator();
-                while (e.MoveNext()) totalRows++;
+                while (e.MoveNext())
+                {
+                    totalRows++;
+                }
             }
             Assert.Equal(rows, totalRows);
         }

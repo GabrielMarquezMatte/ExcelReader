@@ -51,6 +51,38 @@ namespace ExcelReader.Tests
             return [.. U16(0), .. U16(numFmtId), .. new byte[12]];
         }
 
+        // Cell record payloads: col(u32) + styleAndFlags(u32) + value.
+        internal static byte[] CellRk(int col, int style, uint rk)
+        {
+            return [.. U32((uint)col), .. U32((uint)style), .. U32(rk)];
+        }
+
+        internal static byte[] CellReal(int col, int style, double value)
+        {
+            return [.. U32((uint)col), .. U32((uint)style), .. F64(value)];
+        }
+
+        internal static byte[] CellIsst(int col, int style, uint isst)
+        {
+            return [.. U32((uint)col), .. U32((uint)style), .. U32(isst)];
+        }
+
+        internal static byte[] CellSt(int col, int style, string value)
+        {
+            return [.. U32((uint)col), .. U32((uint)style), .. WideString(value)];
+        }
+
+        internal static byte[] CellBool(int col, int style, bool value)
+        {
+            return [.. U32((uint)col), .. U32((uint)style), value ? (byte)1 : (byte)0];
+        }
+
+        internal static byte[] CellError(int col, int style, byte error)
+        {
+            return [.. U32((uint)col), .. U32((uint)style), error];
+        }
+
+
         private static byte[] Id(int id)
         {
             if (id < 0x80)
