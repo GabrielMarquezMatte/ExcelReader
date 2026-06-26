@@ -2,23 +2,56 @@ using ExcelReader.Core.ValueObjects;
 
 namespace ExcelReader.Core.Parser.Internal
 {
+    // Outcome of feeding one source row to the projector: skip it (header/pre-header rows),
+    // yield the projected model, or stop iterating (bindings never built).
+    internal enum ProjectionStep
+    {
+        Skip,
+        Yield,
+        Stop,
+    }
+
     internal struct RowProjector<T> where T : new()
     {
         private readonly TypeMapInfo<T> _typeInfo;
         private readonly StringComparer _comparer;
+        private readonly int _headerRow;
         private readonly bool _isDate1904;
         private ColumnBinding<T>[]? _bindings;
+        private int _rowNumber;
 
-        internal RowProjector(TypeMapInfo<T> typeInfo, StringComparer comparer, bool isDate1904)
+        internal RowProjector(TypeMapInfo<T> typeInfo, StringComparer comparer, int headerRow, bool isDate1904)
         {
             _typeInfo = typeInfo;
             _comparer = comparer;
+            _headerRow = headerRow;
             _isDate1904 = isDate1904;
         }
 
-        internal readonly bool IsMapped => _bindings is not null;
+        // The per-row state machine shared by every enumerator (sync/async, xlsx/xls): skip rows before
+        // the header, build the column map at the header row, then project each subsequent row.
+        internal ProjectionStep Advance(in Row row, ref T model)
+        {
+            _rowNumber++;
+            if (_rowNumber < _headerRow)
+            {
+                return ProjectionStep.Skip;
+            }
+            if (_rowNumber == _headerRow)
+            {
+                BuildColumnMap(in row);
+                return ProjectionStep.Skip;
+            }
+            if (_bindings is null)
+            {
+                return ProjectionStep.Stop;
+            }
+            model = new T();
+            ParseCurrentRow(in row, ref model);
+            return ProjectionStep.Yield;
+        }
 
-        internal void BuildColumnMap(in Row row)
+        private void BuildColumnMap(in Row row)
         {
             int propertyCount = _typeInfo.PropertyCount;
             int[] columns = new int[propertyCount];
@@ -66,7 +99,7 @@ namespace ExcelReader.Core.Parser.Internal
             _bindings = bindings;
         }
 
-        internal readonly void ParseCurrentRow(in Row row, ref T model)
+        private readonly void ParseCurrentRow(in Row row, ref T model)
         {
             ColumnBinding<T>[] bindings = _bindings!;
             int bindingIndex = 0;
