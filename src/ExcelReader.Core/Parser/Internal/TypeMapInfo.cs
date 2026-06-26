@@ -2,35 +2,68 @@ using System.Collections.Concurrent;
 
 namespace ExcelReader.Core.Parser.Internal
 {
-    internal readonly struct TypeMapInfo<T> where T : new()
+    internal readonly struct TypeMapInfo<T>
     {
         private readonly PropertyMap<T>[] _properties;
-        private readonly ConcurrentDictionary<StringComparer, Dictionary<string, HeaderMatch<T>>> _lookupCache;
+        private readonly Func<T> _factory;
+        private readonly ConcurrentDictionary<(StringComparer, HeaderNormalization), Dictionary<string, HeaderMatch<T>>> _lookupCache;
 
-        internal TypeMapInfo(PropertyMap<T>[] properties)
+        internal TypeMapInfo(PropertyMap<T>[] properties, Func<T> factory)
         {
             _properties = properties;
-            _lookupCache = new ConcurrentDictionary<StringComparer, Dictionary<string, HeaderMatch<T>>>();
+            _factory = factory;
+            _lookupCache = new ConcurrentDictionary<(StringComparer, HeaderNormalization), Dictionary<string, HeaderMatch<T>>>();
         }
 
         internal int PropertyCount => _properties.Length;
 
-        internal bool TryFindHeader(string headerName, StringComparer comparer, out HeaderMatch<T> match)
+        // Creates a fresh model instance per row without a `where T : new()` constraint, so types with
+        // required members (which the new() constraint forbids) can still be parsed.
+        internal T CreateInstance() => _factory();
+
+        internal bool RequiresValue(int propertyIndex) => _properties[propertyIndex].RequireValue;
+
+        internal string DisplayName(int propertyIndex) => _properties[propertyIndex].Names[0];
+
+        // Throws if any [ExcelRequired] property was left unmatched after the header row was mapped.
+        // unmatched[i] is int.MaxValue when property i found no header column (RowProjector's sentinel).
+        internal void ValidateRequiredColumns(int[] unmatched)
         {
-            var lookup = _lookupCache.GetOrAdd(comparer, BuildLookup);
+            List<string>? missing = null;
+            for (int i = 0; i < _properties.Length; i++)
+            {
+                if (_properties[i].IsRequired && unmatched[i] == int.MaxValue)
+                {
+                    (missing ??= []).Add(_properties[i].Names[0]);
+                }
+            }
+            if (missing is not null)
+            {
+                throw new InvalidOperationException(
+                    $"Required column(s) not found in the header row: {string.Join(", ", missing)}.");
+            }
+        }
+
+        internal bool TryFindHeader(string headerName, StringComparer comparer, HeaderNormalization normalization, out HeaderMatch<T> match)
+        {
+            PropertyMap<T>[] properties = _properties;
+            var lookup = _lookupCache.GetOrAdd(
+                (comparer, normalization),
+                static (key, props) => BuildLookup(props, key.Item1, key.Item2),
+                properties);
             return lookup.TryGetValue(headerName, out match);
         }
 
-        private Dictionary<string, HeaderMatch<T>> BuildLookup(StringComparer comparer)
+        private static Dictionary<string, HeaderMatch<T>> BuildLookup(PropertyMap<T>[] properties, StringComparer comparer, HeaderNormalization normalization)
         {
             Dictionary<string, HeaderMatch<T>> lookup = new(comparer);
-            for (int propertyIndex = 0; propertyIndex < _properties.Length; propertyIndex++)
+            for (int propertyIndex = 0; propertyIndex < properties.Length; propertyIndex++)
             {
-                PropertyMap<T> property = _properties[propertyIndex];
+                PropertyMap<T> property = properties[propertyIndex];
                 for (int aliasIndex = 0; aliasIndex < property.Names.Length; aliasIndex++)
                 {
                     lookup.TryAdd(
-                        property.Names[aliasIndex],
+                        normalization.Apply(property.Names[aliasIndex]),
                         new(propertyIndex, aliasIndex, property.Parser));
                 }
             }

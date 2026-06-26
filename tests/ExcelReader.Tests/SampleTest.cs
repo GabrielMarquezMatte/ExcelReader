@@ -106,10 +106,7 @@ namespace ExcelReader.Tests
 
             using var reader = Excel.From(ms);
             using var enumerator = reader.GetEnumerator();
-            if (!enumerator.MoveNext())
-            {
-                Assert.Fail("Expected at least one row");
-            }
+            Assert.True(enumerator.MoveNext(), "Expected at least one row");
             var row = enumerator.Current;
             Assert.Equal("a & b <tag> A", row[0].GetString());
         }

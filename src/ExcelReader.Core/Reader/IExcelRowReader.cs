@@ -10,11 +10,10 @@ namespace ExcelReader.Core.Reader
         ValueTask<TEnumerator> GetAsyncEnumeratorAsync(CancellationToken ct = default);
     }
 
-    public interface IExcelRowReader : IDisposable, IAsyncDisposable
+    // The non-generic reader is the generic one specialized to the interface enumerator, plus
+    // disposal. Unifying them lets the typed parser drive a format-agnostic reader (Excel.Open).
+    public interface IExcelRowReader : IExcelRowReader<IExcelRowEnumerator>, IDisposable, IAsyncDisposable
     {
-        bool IsDate1904 { get; }
-        IExcelRowEnumerator GetEnumerator();
-        ValueTask<IExcelRowEnumerator> GetAsyncEnumeratorAsync(CancellationToken ct = default);
     }
 
     public interface IExcelRowEnumerator : IDisposable, IAsyncDisposable

@@ -5,7 +5,7 @@ using ExcelReader.Core.ValueObjects;
 
 namespace ExcelReader.Core.Parser.Internal
 {
-    public sealed class ExcelEnumerable<T> : ExcelEnumerable<T, XlsxReader, XlsxReader.Enumerator> where T : new()
+    public sealed class ExcelEnumerable<T> : ExcelEnumerable<T, XlsxReader, XlsxReader.Enumerator>
     {
         internal ExcelEnumerable(XlsxReader reader, ExcelParserConfig config, CancellationToken ct = default)
             : base(reader, config, ct)
@@ -16,7 +16,6 @@ namespace ExcelReader.Core.Parser.Internal
     [SuppressMessage("Design", "CA1034:Nested types should not be visible",
         Justification = "Public nested struct Enumerator is the standard foreach pattern.")]
     public class ExcelEnumerable<T, TReader, TEnumerator> : IEnumerable<T>, IAsyncEnumerable<T>
-        where T : new()
         where TReader : IExcelRowReader<TEnumerator>
         where TEnumerator : IExcelRowEnumerator
     {
@@ -37,7 +36,7 @@ namespace ExcelReader.Core.Parser.Internal
         {
             TypeMapInfo<T> info = TypeMapper<T>.GetInfo();
             TEnumerator rows = _reader.GetEnumerator();
-            return new Enumerator(rows, info, _config.ColumnNameComparer, _config.HeaderRow, _reader.IsDate1904);
+            return new Enumerator(rows, info, _config.ColumnNameComparer, _config.HeaderNormalization, _config.HeaderRow, _reader.IsDate1904, _config.Culture);
         }
 
         IEnumerator<T> IEnumerable<T>.GetEnumerator()
@@ -56,7 +55,7 @@ namespace ExcelReader.Core.Parser.Internal
         {
             TypeMapInfo<T> info = TypeMapper<T>.GetInfo();
             CancellationToken effective = cancellationToken.CanBeCanceled ? cancellationToken : _ct;
-            return new AsyncEnumerator(_reader, info, _config.ColumnNameComparer, _config.HeaderRow, effective);
+            return new AsyncEnumerator(_reader, info, _config.ColumnNameComparer, _config.HeaderNormalization, _config.HeaderRow, effective, _config.Culture);
         }
 
         public struct Enumerator : IEnumerator<T>
@@ -71,11 +70,13 @@ namespace ExcelReader.Core.Parser.Internal
                 TEnumerator rows,
                 TypeMapInfo<T> typeInfo,
                 StringComparer comparer,
+                HeaderNormalization normalization,
                 int headerRow,
-                bool isDate1904)
+                bool isDate1904,
+                IFormatProvider provider)
             {
                 _rows = rows;
-                _projector = new RowProjector<T>(typeInfo, comparer, headerRow, isDate1904);
+                _projector = new RowProjector<T>(typeInfo, comparer, normalization, headerRow, isDate1904, provider);
             }
 
             public readonly T Current => _current;
@@ -125,12 +126,14 @@ namespace ExcelReader.Core.Parser.Internal
                 TReader reader,
                 TypeMapInfo<T> typeInfo,
                 StringComparer comparer,
+                HeaderNormalization normalization,
                 int headerRow,
-                CancellationToken ct)
+                CancellationToken ct,
+                IFormatProvider provider)
             {
                 _reader = reader;
                 _ct = ct;
-                _projector = new RowProjector<T>(typeInfo, comparer, headerRow, reader.IsDate1904);
+                _projector = new RowProjector<T>(typeInfo, comparer, normalization, headerRow, reader.IsDate1904, provider);
             }
 
             public T Current => _current;
