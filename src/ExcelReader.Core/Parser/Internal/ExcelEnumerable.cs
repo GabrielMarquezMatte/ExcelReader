@@ -41,7 +41,7 @@ namespace ExcelReader.Core.Parser.Internal
         {
             [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP006:Implement IDisposable",
                 Justification = "Struct implements IDisposable; rows disposed in Dispose().")]
-            private XlsxReader.Enumerator _rows;
+            private readonly XlsxReader.Enumerator _rows;
             private readonly int _headerRow;
             private RowProjector<T> _projector;
             private int _rowNumber;

@@ -4,7 +4,7 @@ using System.Diagnostics.CodeAnalysis;
 
 namespace ExcelReader.Core.Reader
 {
-    public sealed partial class XlsReader : IDisposable, IAsyncDisposable
+    public sealed partial class XlsReader : IExcelReader
     {
         private readonly WorkbookStream _workbook;
         private readonly (string Name, int Offset)[] _sheets;
