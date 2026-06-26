@@ -95,7 +95,7 @@ namespace ExcelReader.Core.Reader
             return new Enumerator(this, _sheets[_current].Offset);
         }
 
-        IExcelRowEnumerator IExcelRowReader.GetEnumerator()
+        IExcelRowEnumerator IExcelRowReader<IExcelRowEnumerator>.GetEnumerator()
         {
             return GetEnumerator();
         }
@@ -114,7 +114,7 @@ namespace ExcelReader.Core.Reader
             return new ValueTask<Enumerator>(new Enumerator(this, _sheets[_current].Offset, ct));
         }
 
-        ValueTask<IExcelRowEnumerator> IExcelRowReader.GetAsyncEnumeratorAsync(CancellationToken ct)
+        ValueTask<IExcelRowEnumerator> IExcelRowReader<IExcelRowEnumerator>.GetAsyncEnumeratorAsync(CancellationToken ct)
         {
             return new ValueTask<IExcelRowEnumerator>(GetAsyncEnumerator(ct));
         }

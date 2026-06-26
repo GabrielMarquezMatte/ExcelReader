@@ -41,6 +41,16 @@ namespace ExcelReader.Core.Parser
             return new ExcelEnumerable<T, XlsbReader, XlsbReader.Enumerator>(reader, _config);
         }
 
+        // Format-agnostic entry point for the reader returned by Excel.Open, so callers need not
+        // pattern-match the concrete reader type. Dispatches through the interface enumerator.
+        [SuppressMessage("Usage", "VSTHRD200:Use \"Async\" suffix for async methods",
+            Justification = "Synchronous entry point; the enumerable also implements IAsyncEnumerable, but ParseAsync is the async counterpart.")]
+        public ExcelEnumerable<T, IExcelRowReader, IExcelRowEnumerator> Parse(IExcelRowReader reader)
+        {
+            ArgumentNullException.ThrowIfNull(reader);
+            return new ExcelEnumerable<T, IExcelRowReader, IExcelRowEnumerator>(reader, _config);
+        }
+
         public ExcelEnumerable<T> ParseAsync(XlsxReader reader, CancellationToken ct = default)
         {
             ArgumentNullException.ThrowIfNull(reader);
@@ -57,6 +67,12 @@ namespace ExcelReader.Core.Parser
         {
             ArgumentNullException.ThrowIfNull(reader);
             return new ExcelEnumerable<T, XlsbReader, XlsbReader.Enumerator>(reader, _config, ct);
+        }
+
+        public ExcelEnumerable<T, IExcelRowReader, IExcelRowEnumerator> ParseAsync(IExcelRowReader reader, CancellationToken ct = default)
+        {
+            ArgumentNullException.ThrowIfNull(reader);
+            return new ExcelEnumerable<T, IExcelRowReader, IExcelRowEnumerator>(reader, _config, ct);
         }
     }
 }

@@ -26,7 +26,7 @@ namespace ExcelReader.Core.Parser.Internal
         {
             TypeMapInfo<T> info = TypeMapper<T>.GetInfo();
             XlsReader.Enumerator rows = _reader.GetEnumerator();
-            return new Enumerator(rows, info, _config.ColumnNameComparer, _config.HeaderNormalization, _config.HeaderRow, _reader.IsDate1904);
+            return new Enumerator(rows, info, _config.ColumnNameComparer, _config.HeaderNormalization, _config.HeaderRow, _reader.IsDate1904, _config.Culture);
         }
 
         IEnumerator<T> IEnumerable<T>.GetEnumerator()
@@ -44,7 +44,7 @@ namespace ExcelReader.Core.Parser.Internal
             TypeMapInfo<T> info = TypeMapper<T>.GetInfo();
             CancellationToken effective = cancellationToken.CanBeCanceled ? cancellationToken : _ct;
             XlsReader.Enumerator rows = _reader.GetAsyncEnumerator(effective);
-            return new Enumerator(rows, info, _config.ColumnNameComparer, _config.HeaderNormalization, _config.HeaderRow, _reader.IsDate1904);
+            return new Enumerator(rows, info, _config.ColumnNameComparer, _config.HeaderNormalization, _config.HeaderRow, _reader.IsDate1904, _config.Culture);
         }
 
         [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP005:Return type should indicate that the value should be disposed",
@@ -66,10 +66,11 @@ namespace ExcelReader.Core.Parser.Internal
                 StringComparer comparer,
                 HeaderNormalization normalization,
                 int headerRow,
-                bool isDate1904)
+                bool isDate1904,
+                IFormatProvider provider)
             {
                 _rows = rows;
-                _projector = new RowProjector<T>(typeInfo, comparer, normalization, headerRow, isDate1904);
+                _projector = new RowProjector<T>(typeInfo, comparer, normalization, headerRow, isDate1904, provider);
             }
 
             public readonly T Current => _current;
