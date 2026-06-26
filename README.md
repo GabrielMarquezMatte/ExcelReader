@@ -88,38 +88,20 @@ foreach (var row in reader)
 
 ## Open by auto-detecting the format
 
-`Excel.Open` picks the reader from the file signature (XLSX/XLSB are ZIP packages, XLS is an OLE2 document) and returns an `IExcelReader`. Pattern-match to the concrete reader to enumerate rows.
+`Excel.Open` picks the reader from the file signature (XLSX/XLSB are ZIP packages, XLS is an OLE2 document) and returns an `IExcelRowReader`. The interface exposes `GetEnumerator()` directly, so no pattern-match is needed for basic row iteration.
 
 ```csharp
 using ExcelReader.Core.Reader;
 
-using IExcelReader reader = Excel.Open("report.xlsx"); // or report.xlsb / report.xls
+using IExcelRowReader reader = Excel.Open("report.xlsx"); // or report.xlsb / report.xls
 
-if (reader is XlsxReader xlsx)
+foreach (var row in reader)
 {
-    using var rows = xlsx.GetEnumerator();
-    while (rows.MoveNext())
-    {
-        Console.WriteLine(rows.Current[0].GetString());
-    }
-}
-else if (reader is XlsbReader xlsb)
-{
-    using var rows = xlsb.GetEnumerator();
-    while (rows.MoveNext())
-    {
-        Console.WriteLine(rows.Current[0].GetString());
-    }
-}
-else if (reader is XlsReader xls)
-{
-    using var rows = xls.GetEnumerator();
-    while (rows.MoveNext())
-    {
-        Console.WriteLine(rows.Current[0].GetString());
-    }
+    Console.WriteLine(row[0].GetString());
 }
 ```
+
+Pattern-match to the concrete type (`XlsxReader`, `XlsbReader`, `XlsReader`) only when you need format-specific methods such as `MoveToSheet`.
 
 `OpenAsync` is the async counterpart. Both require a seekable stream (or a file path) so the signature can be read without consuming the input.
 

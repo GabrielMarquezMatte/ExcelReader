@@ -4,7 +4,7 @@ using System.IO.Compression;
 
 namespace ExcelReader.Core.Reader
 {
-    public sealed partial class XlsxReader : IExcelReader, IExcelRowReader<XlsxReader.Enumerator>
+    public sealed partial class XlsxReader : IExcelReader, IExcelRowReader, IExcelRowReader<XlsxReader.Enumerator>
     {
         private readonly Stream _stream;
         private readonly bool _leaveOpen;
@@ -143,6 +143,11 @@ namespace ExcelReader.Core.Reader
             return new Enumerator(this, entry.Open());
         }
 
+        IExcelRowEnumerator IExcelRowReader.GetEnumerator()
+        {
+            return GetEnumerator();
+        }
+
         /// <summary>
         /// Streaming async enumerator over the current sheet. Use with a manual loop — <c>Current</c>
         /// is a ref struct (<c>Row</c>), so <c>await foreach</c> cannot bind it:
@@ -163,6 +168,11 @@ namespace ExcelReader.Core.Reader
             var sheet = entry.Open();
 #endif
             return new Enumerator(this, sheet, ct);
+        }
+
+        async ValueTask<IExcelRowEnumerator> IExcelRowReader.GetAsyncEnumeratorAsync(CancellationToken ct)
+        {
+            return await GetAsyncEnumeratorAsync(ct).ConfigureAwait(false);
         }
 
         internal ReadOnlySpan<byte> SharedSpan => _sharedFlat;

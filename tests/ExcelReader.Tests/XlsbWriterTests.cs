@@ -79,7 +79,7 @@ namespace ExcelReader.Tests
                 await sheet.EndAsync(TestContext.Current.CancellationToken);
             });
 
-            await using IExcelReader reader = Excel.Open(ms);
+            await using var reader = Excel.Open(ms);
             Assert.IsType<XlsbReader>(reader);
         }
 

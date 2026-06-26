@@ -10,6 +10,13 @@ namespace ExcelReader.Core.Reader
         ValueTask<TEnumerator> GetAsyncEnumeratorAsync(CancellationToken ct = default);
     }
 
+    public interface IExcelRowReader : IDisposable, IAsyncDisposable
+    {
+        bool IsDate1904 { get; }
+        IExcelRowEnumerator GetEnumerator();
+        ValueTask<IExcelRowEnumerator> GetAsyncEnumeratorAsync(CancellationToken ct = default);
+    }
+
     public interface IExcelRowEnumerator : IDisposable, IAsyncDisposable
     {
         Row Current { get; }
