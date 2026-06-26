@@ -78,7 +78,7 @@ namespace ExcelReader.Core.Writer
                 throw new InvalidOperationException("The previous XlsbSheetWriter must be ended before adding a new sheet.");
             }
             int sheetId = _sheets.Count + 1;
-            _activeSheet = new XlsbSheetWriter(this, name, sheetId, _date1904);
+            _activeSheet = new XlsbSheetWriter(this, _zip, name, sheetId, _date1904, _compression);
             return _activeSheet;
         }
 
@@ -115,20 +115,12 @@ namespace ExcelReader.Core.Writer
             await WriteWorkbookRelsAsync(ct).ConfigureAwait(false);
             await WriteStylesAsync(ct).ConfigureAwait(false);
             await WriteEntryAsync("xl/sharedStrings.bin", ReadOnlyMemory<byte>.Empty, ct).ConfigureAwait(false);
-            foreach (XlsbSheetWriter sheet in _sheets)
-            {
-                await WriteEntryAsync($"xl/worksheets/sheet{sheet.SheetId}.bin", sheet.Memory, ct).ConfigureAwait(false);
-            }
             await WriteContentTypesAsync(ct).ConfigureAwait(false);
 #if NET10_0_OR_GREATER
             await _zip.DisposeAsync().ConfigureAwait(false);
 #else
             _zip.Dispose();
 #endif
-            foreach (ref readonly var sheet in CollectionsMarshal.AsSpan(_sheets))
-            {
-                sheet.ReleaseBuffer();
-            }
         }
 
         public ValueTask FlushAsync(CancellationToken ct = default)
@@ -230,7 +222,8 @@ namespace ExcelReader.Core.Writer
             payload.Reset();
             payload.WriteU16(0);
             payload.WriteU16(numFmtId);
-            payload.Write(new byte[12]);
+            ReadOnlySpan<byte> flags = stackalloc byte[12];
+            payload.Write(flags);
             Biff12RecordWriter.WriteRecord(data, Brt.Xf, payload.Span);
         }
 

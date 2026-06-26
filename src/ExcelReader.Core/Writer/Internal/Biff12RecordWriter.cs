@@ -1,5 +1,3 @@
-using System.Text;
-
 namespace ExcelReader.Core.Writer.Internal
 {
     internal static class Biff12RecordWriter
@@ -16,7 +14,7 @@ namespace ExcelReader.Core.Writer.Internal
             dest.WriteU32((uint)value.Length);
             if (!value.IsEmpty)
             {
-                dest.Write(Encoding.Unicode.GetBytes(value.ToString()));
+                dest.WriteUtf16(value);
             }
         }
 

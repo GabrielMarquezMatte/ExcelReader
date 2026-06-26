@@ -1,4 +1,5 @@
 using System.Diagnostics.CodeAnalysis;
+using System.Text;
 using ExcelReader.Core.Writer.Internal;
 
 namespace ExcelReader.Core.Writer
@@ -11,15 +12,17 @@ namespace ExcelReader.Core.Writer
         [SuppressMessage("SharpSource", "SS066:DisposableFieldIsNotDisposed",
             Justification = "StreamWriter is owned by SheetWriter; RowWriter borrows it.")]
         private readonly StreamWriter _xml;
+        private readonly StringBuilder _row;
         private readonly int _rowNumber;
         private int _columnIndex;
         private bool _useCellReferences;
         private bool _disposed;
 
-        internal RowWriter(SheetWriter owner, StreamWriter xml, int rowNumber)
+        internal RowWriter(SheetWriter owner, StreamWriter xml, StringBuilder row, int rowNumber)
         {
             _owner = owner;
             _xml = xml;
+            _row = row;
             _rowNumber = rowNumber;
         }
 
@@ -36,14 +39,14 @@ namespace ExcelReader.Core.Writer
                 WriteEmptyCell();
                 return;
             }
-            CellFormatter.WriteString(_xml, value, _columnIndex, _rowNumber, _useCellReferences);
+            CellFormatter.WriteString(_row, value, _columnIndex, _rowNumber, _useCellReferences);
             _columnIndex++;
         }
 
         public void Write(bool value)
         {
             ThrowIfDisposed();
-            CellFormatter.WriteBool(_xml, value, _columnIndex, _rowNumber, _useCellReferences);
+            CellFormatter.WriteBool(_row, value, _columnIndex, _rowNumber, _useCellReferences);
             _columnIndex++;
         }
 
@@ -55,14 +58,14 @@ namespace ExcelReader.Core.Writer
                 WriteEmptyCell();
                 return;
             }
-            CellFormatter.WriteBool(_xml, value.Value, _columnIndex, _rowNumber, _useCellReferences);
+            CellFormatter.WriteBool(_row, value.Value, _columnIndex, _rowNumber, _useCellReferences);
             _columnIndex++;
         }
 
         public void Write(DateTime value)
         {
             ThrowIfDisposed();
-            CellFormatter.WriteDateTime(_xml, value, _columnIndex, _rowNumber, _useCellReferences);
+            CellFormatter.WriteDateTime(_row, value, _columnIndex, _rowNumber, _useCellReferences);
             _columnIndex++;
         }
 
@@ -74,7 +77,7 @@ namespace ExcelReader.Core.Writer
                 WriteEmptyCell();
                 return;
             }
-            CellFormatter.WriteDateTime(_xml, value.Value, _columnIndex, _rowNumber, _useCellReferences);
+            CellFormatter.WriteDateTime(_row, value.Value, _columnIndex, _rowNumber, _useCellReferences);
             _columnIndex++;
         }
 
@@ -82,7 +85,7 @@ namespace ExcelReader.Core.Writer
             where T : ISpanFormattable
         {
             ThrowIfDisposed();
-            CellFormatter.WriteNumber(_xml, value, _columnIndex, _rowNumber, _useCellReferences);
+            CellFormatter.WriteNumber(_row, value, _columnIndex, _rowNumber, _useCellReferences);
             _columnIndex++;
         }
 
@@ -95,7 +98,7 @@ namespace ExcelReader.Core.Writer
                 WriteEmptyCell();
                 return;
             }
-            CellFormatter.WriteNumber(_xml, value.Value, _columnIndex, _rowNumber, _useCellReferences);
+            CellFormatter.WriteNumber(_row, value.Value, _columnIndex, _rowNumber, _useCellReferences);
             _columnIndex++;
         }
 
@@ -112,19 +115,27 @@ namespace ExcelReader.Core.Writer
         private void WriteEmptyCell()
         {
             _useCellReferences = true;
-            CellFormatter.WriteEmpty(_xml, _columnIndex, _rowNumber, includeReference: true);
+            CellFormatter.WriteEmpty(_row, _columnIndex, _rowNumber, includeReference: true);
             _columnIndex++;
         }
 
-        public async ValueTask DisposeAsync()
+        [SuppressMessage("Reliability", "CA1849:Call async methods when in an async method",
+            Justification = "Rows are buffered in memory and flushed synchronously to avoid per-row async state machines.")]
+        [SuppressMessage("VisualStudio.Threading", "VSTHRD103:Dispose synchronously blocks",
+            Justification = "See CA1849 justification above.")]
+        [SuppressMessage("SharpSource", "SS033:Async overload available",
+            Justification = "See CA1849 justification above.")]
+        public ValueTask DisposeAsync()
         {
             if (_disposed)
             {
-                return;
+                return ValueTask.CompletedTask;
             }
             _disposed = true;
-            await _xml.WriteAsync("</row>").ConfigureAwait(false);
+            _row.Append("</row>");
+            _xml.Write(_row);
             _owner.NotifyRowEnded();
+            return ValueTask.CompletedTask;
         }
     }
 }

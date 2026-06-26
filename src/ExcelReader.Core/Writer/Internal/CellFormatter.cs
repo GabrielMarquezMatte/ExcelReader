@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Text;
 
 namespace ExcelReader.Core.Writer.Internal
 {
@@ -6,71 +7,71 @@ namespace ExcelReader.Core.Writer.Internal
     {
         // Writes the cell reference (e.g. "B7") directly to the writer.
         // Max XLSX cell is XFD1048576 -> 3 column letters + 7 row digits.
-        private static void WriteRef(StreamWriter xml, int columnIndex, int rowNumber)
+        private static void WriteRef(StringBuilder xml, int columnIndex, int rowNumber)
         {
             Span<char> buf = stackalloc char[10];
             int len = ColumnName.Write(buf, columnIndex);
             rowNumber.TryFormat(buf[len..], out int rowLen, default, CultureInfo.InvariantCulture);
-            xml.Write(buf[..(len + rowLen)]);
+            xml.Append(buf[..(len + rowLen)]);
         }
 
-        private static void WriteCellOpen(StreamWriter xml, int columnIndex, int rowNumber, bool includeReference)
+        private static void WriteCellOpen(StringBuilder xml, int columnIndex, int rowNumber, bool includeReference)
         {
-            xml.Write("<c");
+            xml.Append("<c");
             if (!includeReference)
             {
                 return;
             }
-            xml.Write(" r=\"");
+            xml.Append(" r=\"");
             WriteRef(xml, columnIndex, rowNumber);
-            xml.Write('"');
+            xml.Append('"');
         }
 
-        internal static void WriteEmpty(StreamWriter xml, int columnIndex, int rowNumber, bool includeReference)
+        internal static void WriteEmpty(StringBuilder xml, int columnIndex, int rowNumber, bool includeReference)
         {
             WriteCellOpen(xml, columnIndex, rowNumber, includeReference);
-            xml.Write("/>");
+            xml.Append("/>");
         }
 
-        internal static void WriteString(StreamWriter xml, string value, int columnIndex, int rowNumber, bool includeReference)
+        internal static void WriteString(StringBuilder xml, string value, int columnIndex, int rowNumber, bool includeReference)
         {
             WriteCellOpen(xml, columnIndex, rowNumber, includeReference);
-            xml.Write(" t=\"inlineStr\"><is><t>");
+            xml.Append(" t=\"inlineStr\"><is><t>");
             WriteEscaped(xml, value);
-            xml.Write("</t></is></c>");
+            xml.Append("</t></is></c>");
         }
 
-        internal static void WriteBool(StreamWriter xml, bool value, int columnIndex, int rowNumber, bool includeReference)
+        internal static void WriteBool(StringBuilder xml, bool value, int columnIndex, int rowNumber, bool includeReference)
         {
             WriteCellOpen(xml, columnIndex, rowNumber, includeReference);
-            xml.Write(" t=\"b\"><v>");
-            xml.Write(value ? '1' : '0');
-            xml.Write("</v></c>");
+            xml.Append(" t=\"b\"><v>");
+            xml.Append(value ? '1' : '0');
+            xml.Append("</v></c>");
         }
 
-        internal static void WriteDateTime(StreamWriter xml, DateTime value, int columnIndex, int rowNumber, bool includeReference)
+        internal static void WriteDateTime(StringBuilder xml, DateTime value, int columnIndex, int rowNumber, bool includeReference)
         {
             WriteCellOpen(xml, columnIndex, rowNumber, includeReference);
-            xml.Write(" s=\"1\"><v>");
+            xml.Append(" s=\"1\"><v>");
             double oaDate = value.ToOADate();
             Span<char> buf = stackalloc char[32];
             oaDate.TryFormat(buf, out int written, "G17", CultureInfo.InvariantCulture);
-            xml.Write(buf[..written]);
-            xml.Write("</v></c>");
+            xml.Append(buf[..written]);
+            xml.Append("</v></c>");
         }
 
-        internal static void WriteNumber<T>(StreamWriter xml, T value, int columnIndex, int rowNumber, bool includeReference)
+        internal static void WriteNumber<T>(StringBuilder xml, T value, int columnIndex, int rowNumber, bool includeReference)
             where T : ISpanFormattable
         {
             WriteCellOpen(xml, columnIndex, rowNumber, includeReference);
-            xml.Write("><v>");
+            xml.Append("><v>");
             Span<char> buf = stackalloc char[64];
             value.TryFormat(buf, out int written, default, CultureInfo.InvariantCulture);
-            xml.Write(buf[..written]);
-            xml.Write("</v></c>");
+            xml.Append(buf[..written]);
+            xml.Append("</v></c>");
         }
 
-        private static void WriteEscaped(StreamWriter xml, ReadOnlySpan<char> value)
+        private static void WriteEscaped(StringBuilder xml, ReadOnlySpan<char> value)
         {
             int start = 0;
             for (int i = 0; i < value.Length; i++)
@@ -90,14 +91,14 @@ namespace ExcelReader.Core.Writer.Internal
                 }
                 if (i > start)
                 {
-                    xml.Write(value[start..i]);
+                    xml.Append(value[start..i]);
                 }
-                xml.Write(escape);
+                xml.Append(escape);
                 start = i + 1;
             }
             if (start < value.Length)
             {
-                xml.Write(value[start..]);
+                xml.Append(value[start..]);
             }
         }
     }

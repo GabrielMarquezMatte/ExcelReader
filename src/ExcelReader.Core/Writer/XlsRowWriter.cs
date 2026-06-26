@@ -62,10 +62,88 @@ namespace ExcelReader.Core.Writer
             _columnIndex++;
         }
 
+        public void Write(int value)
+        {
+            ThrowIfDisposed();
+            _owner.EmitNumber(_rowNumber, _columnIndex, value);
+            _columnIndex++;
+        }
+
+        public void Write(int? value)
+        {
+            ThrowIfDisposed();
+            if (value is not null)
+            {
+                _owner.EmitNumber(_rowNumber, _columnIndex, value.Value);
+            }
+            _columnIndex++;
+        }
+
+        public void Write(long value)
+        {
+            ThrowIfDisposed();
+            _owner.EmitNumber(_rowNumber, _columnIndex, value);
+            _columnIndex++;
+        }
+
+        public void Write(long? value)
+        {
+            ThrowIfDisposed();
+            if (value is not null)
+            {
+                _owner.EmitNumber(_rowNumber, _columnIndex, value.Value);
+            }
+            _columnIndex++;
+        }
+
+        public void Write(float value)
+        {
+            ThrowIfDisposed();
+            _owner.EmitNumber(_rowNumber, _columnIndex, value);
+            _columnIndex++;
+        }
+
+        public void Write(float? value)
+        {
+            ThrowIfDisposed();
+            if (value is not null)
+            {
+                _owner.EmitNumber(_rowNumber, _columnIndex, value.Value);
+            }
+            _columnIndex++;
+        }
+
         public void Write(double value)
         {
             ThrowIfDisposed();
             _owner.EmitNumber(_rowNumber, _columnIndex, value);
+            _columnIndex++;
+        }
+
+        public void Write(double? value)
+        {
+            ThrowIfDisposed();
+            if (value is not null)
+            {
+                _owner.EmitNumber(_rowNumber, _columnIndex, value.Value);
+            }
+            _columnIndex++;
+        }
+
+        public void Write(decimal value)
+        {
+            ThrowIfDisposed();
+            _owner.EmitNumber(_rowNumber, _columnIndex, (double)value);
+            _columnIndex++;
+        }
+
+        public void Write(decimal? value)
+        {
+            ThrowIfDisposed();
+            if (value is not null)
+            {
+                _owner.EmitNumber(_rowNumber, _columnIndex, (double)value.Value);
+            }
             _columnIndex++;
         }
 
@@ -99,6 +177,31 @@ namespace ExcelReader.Core.Writer
         private static double ToDouble<T>(T value)
             where T : ISpanFormattable
         {
+            switch (value)
+            {
+                case double d:
+                    return d;
+                case float f:
+                    return f;
+                case decimal m:
+                    return (double)m;
+                case int i:
+                    return i;
+                case long l:
+                    return l;
+                case short s:
+                    return s;
+                case byte b:
+                    return b;
+                case uint ui:
+                    return ui;
+                case ulong ul:
+                    return ul;
+                case ushort us:
+                    return us;
+                case sbyte sb:
+                    return sb;
+            }
             Span<char> buffer = stackalloc char[64];
             if (value.TryFormat(buffer, out int written, default, CultureInfo.InvariantCulture)
                 && double.TryParse(buffer[..written], CultureInfo.InvariantCulture, out double result))
