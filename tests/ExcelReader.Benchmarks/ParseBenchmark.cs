@@ -16,11 +16,13 @@ namespace ExcelReader.Benchmarks
         public int Rows { get; set; }
 
         private byte[] _workbook = [];
+        private byte[] _xlsbWorkbook = [];
 
         [GlobalSetup]
         public async Task SetupAsync()
         {
             _workbook = await WorkbookGenerator.BuildTypedAsync(Rows);
+            _xlsbWorkbook = await WorkbookGenerator.BuildTypedXlsbAsync(Rows);
         }
 
         private static long Accumulate(Record rec)
@@ -47,6 +49,33 @@ namespace ExcelReader.Benchmarks
         {
             await using var ms = new MemoryStream(_workbook, writable: false);
             await using var reader = await Excel.FromAsync(ms);
+            long acc = 0;
+            await foreach (Record rec in new ExcelParser<Record>().ParseAsync(reader))
+            {
+                acc += Accumulate(rec);
+            }
+            return acc;
+        }
+
+
+        [Benchmark]
+        public long ExcelParserXlsbSync()
+        {
+            using var ms = new MemoryStream(_xlsbWorkbook, writable: false);
+            using var reader = Excel.FromXlsb(ms);
+            long acc = 0;
+            foreach (Record rec in new ExcelParser<Record>().Parse(reader))
+            {
+                acc += Accumulate(rec);
+            }
+            return acc;
+        }
+
+        [Benchmark]
+        public async Task<long> ExcelParserXlsbAsync()
+        {
+            await using var ms = new MemoryStream(_xlsbWorkbook, writable: false);
+            await using var reader = await Excel.FromXlsbAsync(ms);
             long acc = 0;
             await foreach (Record rec in new ExcelParser<Record>().ParseAsync(reader))
             {
