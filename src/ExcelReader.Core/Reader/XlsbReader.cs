@@ -267,8 +267,11 @@ namespace ExcelReader.Core.Reader
             }
 #else
             ct.ThrowIfCancellationRequested();
-            using var s = entry.Open();
-            await s.ReadExactlyAsync(buf.AsMemory(), ct).ConfigureAwait(false);
+            var s = entry.Open();
+            await using (s.ConfigureAwait(false))
+            {
+                await s.ReadExactlyAsync(buf.AsMemory(), ct).ConfigureAwait(false);
+            }
 #endif
             return buf;
         }

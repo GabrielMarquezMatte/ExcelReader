@@ -13,6 +13,7 @@ namespace ExcelReader.Core.Writer
         private readonly StreamWriter _xml;
         private readonly int _rowNumber;
         private int _columnIndex;
+        private bool _useCellReferences;
         private bool _disposed;
 
         internal RowWriter(SheetWriter owner, StreamWriter xml, int rowNumber)
@@ -32,18 +33,17 @@ namespace ExcelReader.Core.Writer
             ThrowIfDisposed();
             if (value is null)
             {
-                CellFormatter.WriteEmpty(_xml, _columnIndex, _rowNumber);
-                _columnIndex++;
+                WriteEmptyCell();
                 return;
             }
-            CellFormatter.WriteString(_xml, value, _columnIndex, _rowNumber);
+            CellFormatter.WriteString(_xml, value, _columnIndex, _rowNumber, _useCellReferences);
             _columnIndex++;
         }
 
         public void Write(bool value)
         {
             ThrowIfDisposed();
-            CellFormatter.WriteBool(_xml, value, _columnIndex, _rowNumber);
+            CellFormatter.WriteBool(_xml, value, _columnIndex, _rowNumber, _useCellReferences);
             _columnIndex++;
         }
 
@@ -52,18 +52,17 @@ namespace ExcelReader.Core.Writer
             ThrowIfDisposed();
             if (value is null)
             {
-                CellFormatter.WriteEmpty(_xml, _columnIndex, _rowNumber);
-                _columnIndex++;
+                WriteEmptyCell();
                 return;
             }
-            CellFormatter.WriteBool(_xml, value.Value, _columnIndex, _rowNumber);
+            CellFormatter.WriteBool(_xml, value.Value, _columnIndex, _rowNumber, _useCellReferences);
             _columnIndex++;
         }
 
         public void Write(DateTime value)
         {
             ThrowIfDisposed();
-            CellFormatter.WriteDateTime(_xml, value, _columnIndex, _rowNumber);
+            CellFormatter.WriteDateTime(_xml, value, _columnIndex, _rowNumber, _useCellReferences);
             _columnIndex++;
         }
 
@@ -72,11 +71,10 @@ namespace ExcelReader.Core.Writer
             ThrowIfDisposed();
             if (value is null)
             {
-                CellFormatter.WriteEmpty(_xml, _columnIndex, _rowNumber);
-                _columnIndex++;
+                WriteEmptyCell();
                 return;
             }
-            CellFormatter.WriteDateTime(_xml, value.Value, _columnIndex, _rowNumber);
+            CellFormatter.WriteDateTime(_xml, value.Value, _columnIndex, _rowNumber, _useCellReferences);
             _columnIndex++;
         }
 
@@ -84,7 +82,7 @@ namespace ExcelReader.Core.Writer
             where T : ISpanFormattable
         {
             ThrowIfDisposed();
-            CellFormatter.WriteNumber(_xml, value, _columnIndex, _rowNumber);
+            CellFormatter.WriteNumber(_xml, value, _columnIndex, _rowNumber, _useCellReferences);
             _columnIndex++;
         }
 
@@ -94,18 +92,28 @@ namespace ExcelReader.Core.Writer
             ThrowIfDisposed();
             if (value is null)
             {
-                CellFormatter.WriteEmpty(_xml, _columnIndex, _rowNumber);
-                _columnIndex++;
+                WriteEmptyCell();
                 return;
             }
-            CellFormatter.WriteNumber(_xml, value.Value, _columnIndex, _rowNumber);
+            CellFormatter.WriteNumber(_xml, value.Value, _columnIndex, _rowNumber, _useCellReferences);
             _columnIndex++;
         }
 
         public void Skip(int count = 1)
         {
             ThrowIfDisposed();
+            if (count > 0)
+            {
+                _useCellReferences = true;
+            }
             _columnIndex += count;
+        }
+
+        private void WriteEmptyCell()
+        {
+            _useCellReferences = true;
+            CellFormatter.WriteEmpty(_xml, _columnIndex, _rowNumber, includeReference: true);
+            _columnIndex++;
         }
 
         public async ValueTask DisposeAsync()
