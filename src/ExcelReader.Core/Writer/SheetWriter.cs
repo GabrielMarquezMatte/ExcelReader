@@ -88,7 +88,7 @@ namespace ExcelReader.Core.Writer
             return ValueTask.FromResult(_rowWriter);
         }
 
-        public ValueTask WriteRow<T>(ReadOnlySpan<T> values, CancellationToken ct = default)
+        public void WriteRow<T>(ReadOnlySpan<T> values, CancellationToken ct = default)
             where T : ISpanFormattable
         {
             int rowNumber = BeginRow(ct);
@@ -97,7 +97,6 @@ namespace ExcelReader.Core.Writer
                 CellFormatter.WriteNumber(_rowBuffer, values[i], i, rowNumber, includeReference: false);
             }
             EndBufferedRow();
-            return ValueTask.CompletedTask;
         }
 
         internal void NotifyRowEnded()
