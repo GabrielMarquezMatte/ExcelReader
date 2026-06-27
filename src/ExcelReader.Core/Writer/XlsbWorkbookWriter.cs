@@ -1,6 +1,7 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.IO.Compression;
+using System.Runtime.InteropServices;
 using System.Text;
 using ExcelReader.Core.Reader;
 using ExcelReader.Core.Writer.Internal;
@@ -77,7 +78,7 @@ namespace ExcelReader.Core.Writer
                 throw new InvalidOperationException("The previous XlsbSheetWriter must be ended before adding a new sheet.");
             }
             int sheetId = _sheets.Count + 1;
-            _activeSheet = new XlsbSheetWriter(this, name, sheetId, _date1904);
+            _activeSheet = new XlsbSheetWriter(this, _zip, name, sheetId, _date1904, _compression);
             return _activeSheet;
         }
 
@@ -114,20 +115,12 @@ namespace ExcelReader.Core.Writer
             await WriteWorkbookRelsAsync(ct).ConfigureAwait(false);
             await WriteStylesAsync(ct).ConfigureAwait(false);
             await WriteEntryAsync("xl/sharedStrings.bin", ReadOnlyMemory<byte>.Empty, ct).ConfigureAwait(false);
-            foreach (XlsbSheetWriter sheet in _sheets)
-            {
-                await WriteEntryAsync($"xl/worksheets/sheet{sheet.SheetId}.bin", sheet.Memory, ct).ConfigureAwait(false);
-            }
             await WriteContentTypesAsync(ct).ConfigureAwait(false);
 #if NET10_0_OR_GREATER
             await _zip.DisposeAsync().ConfigureAwait(false);
 #else
             _zip.Dispose();
 #endif
-            foreach (XlsbSheetWriter sheet in _sheets)
-            {
-                sheet.ReleaseBuffer();
-            }
         }
 
         public ValueTask FlushAsync(CancellationToken ct = default)
@@ -186,7 +179,7 @@ namespace ExcelReader.Core.Writer
             Biff12RecordWriter.WriteWideString(payload, string.Empty);
             Biff12RecordWriter.WriteRecord(data, Brt.WbProp, payload.Span);
 
-            foreach (XlsbSheetWriter sheet in _sheets)
+            foreach (ref readonly var sheet in CollectionsMarshal.AsSpan(_sheets))
             {
                 payload.Reset();
                 payload.WriteU32(0);
@@ -205,7 +198,7 @@ namespace ExcelReader.Core.Writer
             sb.Append(CultureInfo.InvariantCulture, $"<Relationships xmlns=\"{XlsxConstants.PackageRelationshipsNs}\">");
             sb.Append(CultureInfo.InvariantCulture, $"<Relationship Id=\"rIdStyles\" Type=\"{XlsxConstants.StylesRelType}\" Target=\"styles.bin\"/>");
             sb.Append(CultureInfo.InvariantCulture, $"<Relationship Id=\"rIdShared\" Type=\"{XlsxConstants.SharedStringsRelType}\" Target=\"sharedStrings.bin\"/>");
-            foreach (XlsbSheetWriter sheet in _sheets)
+            foreach (ref readonly var sheet in CollectionsMarshal.AsSpan(_sheets))
             {
                 sb.Append(CultureInfo.InvariantCulture, $"<Relationship Id=\"rId{sheet.SheetId}\" Type=\"{XlsxConstants.WorksheetRelType}\" Target=\"worksheets/sheet{sheet.SheetId}.bin\"/>");
             }
@@ -229,7 +222,8 @@ namespace ExcelReader.Core.Writer
             payload.Reset();
             payload.WriteU16(0);
             payload.WriteU16(numFmtId);
-            payload.Write(new byte[12]);
+            ReadOnlySpan<byte> flags = stackalloc byte[12];
+            payload.Write(flags);
             Biff12RecordWriter.WriteRecord(data, Brt.Xf, payload.Span);
         }
 
@@ -243,7 +237,7 @@ namespace ExcelReader.Core.Writer
             sb.Append("<Override PartName=\"/xl/workbook.bin\" ContentType=\"application/vnd.ms-excel.sheet.binary.macroEnabled.main\"/>");
             sb.Append("<Override PartName=\"/xl/styles.bin\" ContentType=\"application/vnd.ms-excel.styles\"/>");
             sb.Append("<Override PartName=\"/xl/sharedStrings.bin\" ContentType=\"application/vnd.ms-excel.sharedStrings\"/>");
-            foreach (XlsbSheetWriter sheet in _sheets)
+            foreach (ref readonly var sheet in CollectionsMarshal.AsSpan(_sheets))
             {
                 sb.Append(CultureInfo.InvariantCulture, $"<Override PartName=\"/xl/worksheets/sheet{sheet.SheetId}.bin\" ContentType=\"application/vnd.ms-excel.worksheet\"/>");
             }
@@ -254,9 +248,14 @@ namespace ExcelReader.Core.Writer
         private async ValueTask WriteEntryAsync(string entryName, string content, CancellationToken ct)
         {
             ZipArchiveEntry entry = _zip.CreateEntry(entryName, _compression);
+#if NET10_0_OR_GREATER
+            var stream = await entry.OpenAsync(ct).ConfigureAwait(false);
+#else
             Stream stream = entry.Open();
+#endif
+            StreamWriter writer = new(stream, Utf8NoBom, leaveOpen: false);
             await using (stream.ConfigureAwait(false))
-            await using (StreamWriter writer = new(stream, Utf8NoBom, leaveOpen: false))
+            await using (writer.ConfigureAwait(false))
             {
                 await writer.WriteAsync(content).ConfigureAwait(false);
                 await writer.FlushAsync(ct).ConfigureAwait(false);
@@ -266,7 +265,11 @@ namespace ExcelReader.Core.Writer
         private async ValueTask WriteEntryAsync(string entryName, ReadOnlyMemory<byte> content, CancellationToken ct)
         {
             ZipArchiveEntry entry = _zip.CreateEntry(entryName, _compression);
-            Stream stream = entry.Open();
+#if NET10_0_OR_GREATER
+            var stream = await entry.OpenAsync(ct).ConfigureAwait(false);
+#else
+            var stream = entry.Open();
+#endif
             await using (stream.ConfigureAwait(false))
             {
                 await stream.WriteAsync(content, ct).ConfigureAwait(false);

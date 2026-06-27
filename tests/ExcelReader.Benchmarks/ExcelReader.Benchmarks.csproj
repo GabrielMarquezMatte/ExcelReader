@@ -16,6 +16,7 @@
   <ItemGroup>
     <PackageReference Include="BenchmarkDotNet" Version="0.15.8" />
     <PackageReference Include="MiniExcel" Version="*" />
+    <PackageReference Include="SpreadCheetah" Version="1.27.0" />
     <PackageReference Include="Sylvan.Data" Version="0.2.17" />
     <PackageReference Include="Sylvan.Data.Excel" Version="*" />
   </ItemGroup>

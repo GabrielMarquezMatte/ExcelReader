@@ -20,35 +20,37 @@ Benchmarks were run with BenchmarkDotNet v0.15.8 on Windows 10, AMD Ryzen 7 5700
 
 Compares ExcelReader against established XLSX libraries on the same generated workbook shape.
 
-| Scenario | ExcelReader | MiniExcel | Sylvan |
-|---|---:|---:|---:|
-| Cell-by-cell read | 27.22 ms, 12.16 KB | 218.78 ms, 421,145.96 KB | 48.00 ms, 1,953.8 KB |
-| Typed row parsing | 30.12 ms, 3.87 MB | 220.73 ms, 400.05 MB | 72.52 ms, 10.49 MB |
-| Workbook writing | 34.68 ms, 6.34 MB | 372.73 ms, 85.14 MB | — |
+| Scenario | ExcelReader | MiniExcel | Sylvan | SpreadCheetah |
+|---|---:|---:|---:|---:|
+| Cell-by-cell read | 18.45 ms, 14.07 KB | 150.23 ms, 209.74 MB | 39.73 ms, 1.89 MB | — |
+| Cell-by-cell read async | 20.27 ms, 16.09 KB | — | — | — |
+| Typed row parsing | 20.14 ms, 3.88 MB | 160.83 ms, 199.31 MB | 59.22 ms, 10.47 MB | — |
+| Typed row parsing async | 22.40 ms, 3.88 MB | — | 60.65 ms, 10.48 MB | — |
+| Workbook writing | 16.66 ms, 2.11 MB | 287.96 ms, 85.14 MB | — | 14.47 ms, 12.32 MB |
 
-ExcelReader is ~8x faster than MiniExcel for reads and writes. Compared with Sylvan, ~1.7x faster for raw reads and ~2.4x faster for typed parsing, with substantially lower allocations.
+ExcelReader is ~8x faster than MiniExcel for reads and ~17x faster for writes. Compared with Sylvan, it is ~2.2x faster for raw reads and ~2.9x faster for typed parsing, with substantially lower allocations. For writing, SpreadCheetah is ~1.2x faster but allocates ~5.8x more memory; the XLSB writer beats both on speed and allocation (see below).
 
 ### XLSB (BIFF12)
 
 | Scenario | ExcelReader |
 |---|---:|
-| Cell-by-cell read | 3.914 ms, 12.21 KB |
-| Cell-by-cell read async | 4.628 ms, 14.65 KB |
-| Typed row parsing | 9.110 ms, 3.88 MB |
-| Typed row parsing async | 11.536 ms, 3.88 MB |
-| Workbook writing | 12.88 ms, 9.37 MB |
+| Cell-by-cell read | 3.87 ms, 13.93 KB |
+| Cell-by-cell read async | 4.57 ms, 16.37 KB |
+| Typed row parsing | 8.92 ms, 3.88 MB |
+| Typed row parsing async | 10.44 ms, 3.88 MB |
+| Workbook writing | 8.53 ms, 2.04 MB |
 
-XLSB is the fastest path in these results: raw reads are ~7x faster than XLSX reads, typed parsing is ~3.3x faster than XLSX parsing, and writing is ~2.7x faster than XLSX writing.
+XLSB is the fastest path in these results: raw reads are ~4.8x faster than XLSX reads, typed parsing is ~2.3x faster than XLSX parsing, and writing is ~2x faster than XLSX writing. The XLSB writer is also ~1.7x faster than SpreadCheetah while allocating ~83% less memory.
 
 ### XLS (BIFF8)
 
 | Scenario | ExcelReader | Sylvan |
 |---|---:|---:|
-| Cell-by-cell read | 4.703 ms, 61.3 KB | 5.540 ms, 1,717.73 KB |
-| Cell-by-cell read async | 4.748 ms, 61.37 KB | — |
-| Workbook writing | 8.839 ms, 12.37 MB | — |
+| Cell-by-cell read | 4.71 ms, 61.3 KB | 5.28 ms, 1,717.73 KB |
+| Cell-by-cell read async | 4.76 ms, 61.38 KB | — |
+| Workbook writing | 6.46 ms, 12.37 MB | — |
 
-XLS reading allocates ~28x less than Sylvan at comparable speed. The XLS writer is ~3.9x faster than the XLSX writer (8.839 ms vs 34.463 ms), but allocates more in this benchmark.
+XLS reading allocates ~28x less than Sylvan at comparable speed. The XLS writer is ~2.6x faster than the XLSX writer (6.46 ms vs 16.78 ms), but allocates more in this benchmark.
 
 Run the benchmarks locally:
 
@@ -108,6 +110,7 @@ Pattern-match to the concrete type (`XlsxReader`, `XlsbReader`, `XlsReader`) onl
 ## Read asynchronously
 
 `Row` and `Cell` are `ref struct` types, so async reading uses a manual loop instead of `await foreach`.
+For XLSX files, the async reader buffers one row at a time and uses the same row parser as the sync reader, so sync and async reads stay behaviorally aligned while awaits happen only when more bytes are needed.
 
 ```csharp
 using ExcelReader.Core.Reader;
@@ -320,6 +323,8 @@ await workbook.EndAsync();
 - Reads one sheet at a time; use `MoveToSheet(index)` or `TryMoveToSheet(name)` to switch sheets.
 - Missing cells in sparse rows are exposed as empty cells.
 - String conversion allocates only when you call `GetString()`.
+- The XLSX scanner accepts the SpreadsheetML shapes commonly emitted by non-Excel producers, including single-quoted attributes, comments in `sheetData`, and CDATA text runs.
+- Readers bound untrusted input by default: 512 MB total decompressed ZIP data, 32 MB per cell/row value buffer, and 128 MB for shared strings. Pass `ExcelReaderOptions` to the `Excel.From*`/`Excel.Open*` factories to tune these limits; set a limit to `0` to opt out and restore unlimited behavior for that limit.
 - The XLSX writer emits a compact workbook with strings, numbers, booleans, dates, and blank cells.
 - The XLSB writer emits BIFF12 workbook parts inside the standard XLSB ZIP package.
 - The XLS writer buffers records in memory and assembles the OLE container at `EndAsync`; choose it when write throughput matters more than peak allocation.

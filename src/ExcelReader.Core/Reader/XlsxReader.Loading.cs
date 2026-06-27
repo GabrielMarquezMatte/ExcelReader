@@ -1,5 +1,4 @@
 using System.Buffers;
-using System.IO.Compression;
 using System.Text;
 
 namespace ExcelReader.Core.Reader
@@ -87,7 +86,11 @@ namespace ExcelReader.Core.Reader
             var entry = _zip.GetEntry("xl/sharedStrings.xml");
             if (entry is not null)
             {
-                ParseShared(ReadAll(entry));
+                ParseShared(ZipEntryBytes.Read(
+                    entry,
+                    _decompressedBytes,
+                    nameof(ExcelReaderOptions.MaxSharedStringBytes),
+                    _options.MaxSharedStringBytes));
             }
         }
 
@@ -101,12 +104,18 @@ namespace ExcelReader.Core.Reader
             var entry = _zip.GetEntry("xl/sharedStrings.xml");
             if (entry is not null)
             {
-                ParseShared(await ReadAllAsync(entry, ct).ConfigureAwait(false));
+                ParseShared(await ZipEntryBytes.ReadAsync(
+                    entry,
+                    _decompressedBytes,
+                    ct,
+                    nameof(ExcelReaderOptions.MaxSharedStringBytes),
+                    _options.MaxSharedStringBytes).ConfigureAwait(false));
             }
         }
 
         private void ParseShared(ReadOnlySpan<byte> src)
         {
+            LimitChecks.ThrowIfOverSharedStringLimit(_options, src.Length);
             // Decoded text is never longer than its XML, so src.Length bounds the flat buffer.
             _sharedFlat = ArrayPool<byte>.Shared.Rent(Math.Max(1, src.Length));
 
@@ -169,46 +178,6 @@ namespace ExcelReader.Core.Reader
             }
             offsets[count++] = value;
         }
-
-        // Whole-part bytes, or null when the part is absent. Sync and async variants share every parser.
-        private static byte[] Bytes(ZipArchive zip, string name)
-        {
-            var entry = zip.GetEntry(name);
-            return entry is null ? [] : ReadAll(entry);
-        }
-
-        private static async ValueTask<byte[]> BytesAsync(ZipArchive zip, string name, CancellationToken ct)
-        {
-            var entry = zip.GetEntry(name);
-            return entry is null ? [] : await ReadAllAsync(entry, ct).ConfigureAwait(false);
-        }
-
-        private static byte[] ReadAll(ZipArchiveEntry entry)
-        {
-            var buf = new byte[entry.Length];
-            using var s = entry.Open();
-            s.ReadExactly(buf);
-            return buf;
-        }
-
-#if NET10_0_OR_GREATER
-        private static async ValueTask<byte[]> ReadAllAsync(ZipArchiveEntry entry, CancellationToken ct)
-        {
-            var buf = new byte[entry.Length];
-            var s = await entry.OpenAsync(ct).ConfigureAwait(false);
-            await using (s.ConfigureAwait(false))
-            {
-                await s.ReadExactlyAsync(buf.AsMemory(), ct).ConfigureAwait(false);
-            }
-            return buf;
-        }
-#else
-        private static ValueTask<byte[]> ReadAllAsync(ZipArchiveEntry entry, CancellationToken ct)
-        {
-            ct.ThrowIfCancellationRequested();
-            return new ValueTask<byte[]>(ReadAll(entry));
-        }
-#endif
 
         private static string Decode(ReadOnlySpan<byte> src)
         {

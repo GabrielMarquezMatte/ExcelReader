@@ -1,5 +1,6 @@
 using System.Buffers;
 using System.Buffers.Binary;
+using System.Text;
 
 namespace ExcelReader.Core.Writer.Internal
 {
@@ -72,6 +73,39 @@ namespace ExcelReader.Core.Writer.Internal
             Ensure(bytes.Length);
             bytes.CopyTo(_buffer.AsSpan(Length));
             Length += bytes.Length;
+        }
+
+        // Reserves at least `sizeHint` free bytes and hands back the writable tail so callers can
+        // format directly into the buffer (e.g. Utf8Formatter), then commit with Advance — saves the
+        // temp-span + copy that Write would otherwise need.
+        internal Span<byte> GetSpan(int sizeHint)
+        {
+            Ensure(sizeHint);
+            return _buffer.AsSpan(Length);
+        }
+
+        internal void Advance(int count)
+        {
+            Length += count;
+        }
+
+        internal void WriteUtf8(ReadOnlySpan<char> chars)
+        {
+            // Single pass: reserve the UTF-8 worst case (3 bytes per UTF-16 code unit) and encode once.
+            Ensure(checked(chars.Length * 3));
+            Length += Encoding.UTF8.GetBytes(chars, _buffer.AsSpan(Length));
+        }
+
+        internal void WriteUtf16(ReadOnlySpan<char> chars)
+        {
+            int byteCount = checked(chars.Length * sizeof(char));
+            Ensure(byteCount);
+            Span<byte> dest = _buffer.AsSpan(Length, byteCount);
+            for (int i = 0; i < chars.Length; i++)
+            {
+                BinaryPrimitives.WriteUInt16LittleEndian(dest[(i * sizeof(char))..], chars[i]);
+            }
+            Length += byteCount;
         }
 
         // Writes the record id + a 2-byte length placeholder; returns the placeholder offset.

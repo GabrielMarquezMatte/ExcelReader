@@ -1,7 +1,6 @@
+using System.Buffers.Text;
 using System.Diagnostics.CodeAnalysis;
-using System.Globalization;
 using System.IO.Compression;
-using System.Text;
 using ExcelReader.Core.Writer.Internal;
 
 namespace ExcelReader.Core.Writer
@@ -15,11 +14,14 @@ namespace ExcelReader.Core.Writer
             Justification = "ZipArchive is borrowed from WorkbookWriter; its lifetime exceeds this sheet.")]
         private readonly ZipArchive _zip;
         private readonly CompressionLevel _compression;
-        // Reused per row to format "<row r="N">" without allocating: 8 prefix + 7 digits + 2 suffix.
-        private readonly char[] _rowOpenBuf = new char[24];
+        private readonly BiffBuffer _rowBuffer = new(512);
+        // ponytail: flush to the deflate stream once buffered rows pass 1 MB; bounds memory on huge
+        // sheets while turning ~50k tiny per-row Writes into a handful of big ones.
+        private const int FlushThreshold = 1024 * 1024;
+        private RowWriter? _rowWriter;
         [SuppressMessage("SharpSource", "SS066:DisposableFieldIsNotDisposed",
-            Justification = "StreamWriter is explicitly disposed in EndAsync via DisposeAsync.")]
-        private StreamWriter? _xml;
+            Justification = "Stream is explicitly disposed in EndAsync via DisposeAsync.")]
+        private Stream? _stream;
         private int _rowNumber;
         private WriterState _state = WriterState.Created;
         private bool _rowActive;
@@ -37,7 +39,7 @@ namespace ExcelReader.Core.Writer
         internal int SheetId { get; }
 
         [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP003:Dispose previous before re-assigning",
-            Justification = "_xml is always null when StartAsync is called (state machine guarantees Created state).")]
+            Justification = "_stream is always null when StartAsync is called (state machine guarantees Created state).")]
         [SuppressMessage("AsyncFixer", "AsyncFixer02:Long-running or blocking operation invoked inside an async method",
             Justification = "ZipArchiveEntry.Open() is used intentionally; OpenAsync entry-tracking semantics differ in .NET 10.")]
         [SuppressMessage("Reliability", "CA1849:Call async methods when in an async method",
@@ -61,36 +63,35 @@ namespace ExcelReader.Core.Writer
             ct.ThrowIfCancellationRequested();
             Stream stream = entry.Open();
 #endif
-            _xml = new StreamWriter(stream, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false), leaveOpen: false);
-            await _xml.WriteAsync(
+            _stream = stream;
+            _rowBuffer.Reset();
+            _rowBuffer.WriteUtf8(
                 "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>" +
-                $"<worksheet xmlns=\"{XlsxConstants.MainNs}\"><sheetData>").ConfigureAwait(false);
+                $"<worksheet xmlns=\"{XlsxConstants.MainNs}\"><sheetData>");
+            await _stream.WriteAsync(_rowBuffer.Memory, ct).ConfigureAwait(false);
+            _rowBuffer.Reset();
             _state = WriterState.Started;
             _owner.RegisterSheet(Name, SheetId);
         }
 
-        public async ValueTask<RowWriter> StartRowAsync(CancellationToken ct = default)
+        public ValueTask<RowWriter> StartRowAsync(CancellationToken ct = default)
         {
-            ObjectDisposedException.ThrowIf(_state == WriterState.Ended, this);
-            if (_state != WriterState.Started)
+            int rowNumber = BeginRow(ct);
+            _rowWriter ??= new RowWriter(this, _rowBuffer);
+            _rowWriter.Reset(rowNumber);
+            return ValueTask.FromResult(_rowWriter);
+        }
+
+        public ValueTask WriteRow<T>(ReadOnlySpan<T> values, CancellationToken ct = default)
+            where T : ISpanFormattable
+        {
+            int rowNumber = BeginRow(ct);
+            for (int i = 0; i < values.Length; i++)
             {
-                throw new InvalidOperationException("SheetWriter must be started before adding rows.");
+                CellFormatter.WriteNumber(_rowBuffer, values[i], i, rowNumber, includeReference: false);
             }
-            if (_rowActive)
-            {
-                throw new InvalidOperationException("The previous RowWriter must be disposed before starting a new row.");
-            }
-            ct.ThrowIfCancellationRequested();
-            _rowNumber++;
-            _rowActive = true;
-            "<row r=\"".CopyTo(_rowOpenBuf);
-            int len = 8;
-            _rowNumber.TryFormat(_rowOpenBuf.AsSpan(len), out int digits, default, CultureInfo.InvariantCulture);
-            len += digits;
-            _rowOpenBuf[len++] = '"';
-            _rowOpenBuf[len++] = '>';
-            await _xml!.WriteAsync(_rowOpenBuf.AsMemory(0, len), ct).ConfigureAwait(false);
-            return new RowWriter(this, _xml!, _rowNumber);
+            EndBufferedRow();
+            return ValueTask.CompletedTask;
         }
 
         internal void NotifyRowEnded()
@@ -117,10 +118,12 @@ namespace ExcelReader.Core.Writer
             }
             ct.ThrowIfCancellationRequested();
             _state = WriterState.Ended;
-            await _xml!.WriteAsync("</sheetData></worksheet>").ConfigureAwait(false);
-            await _xml.FlushAsync(ct).ConfigureAwait(false);
-            await _xml.DisposeAsync().ConfigureAwait(false);
-            _xml = null;
+            _rowBuffer.Write("</sheetData></worksheet>"u8);
+            await _stream!.WriteAsync(_rowBuffer.Memory, ct).ConfigureAwait(false);
+            await _stream.FlushAsync(ct).ConfigureAwait(false);
+            await _stream.DisposeAsync().ConfigureAwait(false);
+            _stream = null;
+            _rowBuffer.Dispose();
             _owner.NotifySheetEnded();
         }
 
@@ -130,6 +133,44 @@ namespace ExcelReader.Core.Writer
             {
                 await EndAsync().ConfigureAwait(false);
             }
+            else if (_state == WriterState.Created)
+            {
+                _state = WriterState.Ended;
+                _rowBuffer.Dispose();
+            }
+        }
+
+        private int BeginRow(CancellationToken ct)
+        {
+            ObjectDisposedException.ThrowIf(_state == WriterState.Ended, this);
+            if (_state != WriterState.Started)
+            {
+                throw new InvalidOperationException("SheetWriter must be started before adding rows.");
+            }
+            if (_rowActive)
+            {
+                throw new InvalidOperationException("The previous RowWriter must be disposed before starting a new row.");
+            }
+            ct.ThrowIfCancellationRequested();
+            _rowNumber++;
+            _rowActive = true;
+            _rowBuffer.Write("<row r=\""u8);
+            Span<byte> rowDigits = stackalloc byte[8];
+            Utf8Formatter.TryFormat(_rowNumber, rowDigits, out int written);
+            _rowBuffer.Write(rowDigits[..written]);
+            _rowBuffer.Write("\">"u8);
+            return _rowNumber;
+        }
+
+        internal void EndBufferedRow()
+        {
+            _rowBuffer.Write("</row>"u8);
+            if (_rowBuffer.Length >= FlushThreshold)
+            {
+                _stream!.Write(_rowBuffer.Span);
+                _rowBuffer.Reset();
+            }
+            _rowActive = false;
         }
     }
 }

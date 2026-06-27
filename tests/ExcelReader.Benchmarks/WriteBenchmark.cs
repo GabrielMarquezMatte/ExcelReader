@@ -1,6 +1,7 @@
 using BenchmarkDotNet.Attributes;
 using ExcelReader.Core.Writer;
 using MiniExcelLibs;
+using SpreadCheetah;
 
 namespace ExcelReader.Benchmarks
 {
@@ -61,14 +62,15 @@ namespace ExcelReader.Benchmarks
                 await wb.StartAsync();
                 XlsbSheetWriter sheet = wb.AddSheet("S1");
                 await sheet.StartAsync();
-                await using (XlsbRowWriter header = await sheet.StartRowAsync())
-                {
-                    header.Write("Name");
-                    header.Write("Id");
-                    header.Write("Date");
-                    header.Write("Value");
-                }
-                await WorkbookGenerator.WriteRecordsAsync(sheet, _records);
+                ReadOnlySpan<XlsbCell> header =
+                [
+                    XlsbCell.Create("Name"),
+                    XlsbCell.Create("Id"),
+                    XlsbCell.Create("Date"),
+                    XlsbCell.Create("Value"),
+                ];
+                sheet.WriteRow(header);
+                WorkbookGenerator.WriteXlsbRecords(sheet, _records);
                 await sheet.EndAsync();
                 await wb.EndAsync();
             }
@@ -80,6 +82,29 @@ namespace ExcelReader.Benchmarks
         {
             await using var ms = new MemoryStream();
             await ms.SaveAsAsync(_records, excelType: ExcelType.XLSX).ConfigureAwait(false);
+            return ms.Length;
+        }
+
+        [Benchmark]
+        public async Task<long> SpreadCheetah()
+        {
+            await using var ms = new MemoryStream();
+            await using (var writer = await Spreadsheet.CreateNewAsync(ms))
+            {
+                await writer.StartWorksheetAsync("S1").ConfigureAwait(false);
+                await writer.AddHeaderRowAsync(["Name", "Id", "Date", "Value"]).ConfigureAwait(false);
+                foreach(var rec in _records)
+                {
+                    Cell[] row = [
+                        new(rec.Name),
+                        new(rec.Id),
+                        new(rec.Date),
+                        new(rec.Value),
+                    ];
+                    await writer.AddRowAsync(row).ConfigureAwait(false);
+                }
+                await writer.FinishAsync().ConfigureAwait(false);
+            }
             return ms.Length;
         }
     }
