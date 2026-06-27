@@ -44,6 +44,13 @@ namespace ExcelReader.Core.Writer
                 WriteEmptyCell();
                 return;
             }
+            if (_owner.UseSharedStrings)
+            {
+                int index = _owner.GetSharedStringIndex(value);
+                CellFormatter.WriteSharedString(_row, index, _columnIndex, _rowNumber, _useCellReferences);
+                _columnIndex++;
+                return;
+            }
             CellFormatter.WriteString(_row, value, _columnIndex, _rowNumber, _useCellReferences);
             _columnIndex++;
         }

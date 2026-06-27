@@ -37,6 +37,12 @@ namespace ExcelReader.Core.Writer
 
         internal string Name { get; }
         internal int SheetId { get; }
+        internal bool UseSharedStrings => _owner.UseSharedStrings;
+
+        internal int GetSharedStringIndex(string value)
+        {
+            return _owner.GetSharedStringIndex(value);
+        }
 
         [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP003:Dispose previous before re-assigning",
             Justification = "_stream is always null when StartAsync is called (state machine guarantees Created state).")]

@@ -41,6 +41,14 @@ namespace ExcelReader.Core.Writer.Internal
             xml.Write("</t></is></c>"u8);
         }
 
+        internal static void WriteSharedString(BiffBuffer xml, int sharedStringIndex, int columnIndex, int rowNumber, bool includeReference)
+        {
+            WriteCellOpen(xml, columnIndex, rowNumber, includeReference);
+            xml.Write(" t=\"s\"><v>"u8);
+            WriteValue(xml, sharedStringIndex, sizeHint: 16);
+            xml.Write("</v></c>"u8);
+        }
+
         internal static void WriteBool(BiffBuffer xml, bool value, int columnIndex, int rowNumber, bool includeReference)
         {
             WriteCellOpen(xml, columnIndex, rowNumber, includeReference);
@@ -109,7 +117,7 @@ namespace ExcelReader.Core.Writer.Internal
             xml.Advance(written);
         }
 
-        private static void WriteEscaped(BiffBuffer xml, ReadOnlySpan<char> value)
+        internal static void WriteEscaped(BiffBuffer xml, ReadOnlySpan<char> value)
         {
             int start = 0;
             for (int i = 0; i < value.Length; i++)

@@ -14,32 +14,39 @@ namespace ExcelReader.Core.Writer
         private readonly Stream _stream;
         private readonly bool _leaveOpen;
         private readonly CompressionLevel _compression;
+        private readonly SharedStringTable? _sharedStrings;
         private readonly List<(string Name, int SheetId)> _sheets = [];
         private WriterState _state = WriterState.Created;
         private bool _sheetActive;
         private SheetWriter? _activeSheet;
         private bool _disposed;
 
-        private WorkbookWriter(ZipArchive zip, Stream stream, bool leaveOpen, CompressionLevel compression)
+        private WorkbookWriter(ZipArchive zip, Stream stream, bool leaveOpen, bool useSharedStrings, CompressionLevel compression)
         {
             _zip = zip;
             _stream = stream;
             _leaveOpen = leaveOpen;
+            UseSharedStrings = useSharedStrings;
             _compression = compression;
+            _sharedStrings = useSharedStrings ? new SharedStringTable() : null;
         }
 
         [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP001:Dispose created",
             Justification = "Factory method transfers ZipArchive ownership to WorkbookWriter; caller disposes via DisposeAsync.")]
         [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
             Justification = "WorkbookWriter takes ownership of ZipArchive and disposes it in DisposeAsync/EndAsync.")]
+        [SuppressMessage("Design", "CA1068:CancellationToken parameters must come last",
+            Justification = "useSharedStrings was added after existing optional parameters to preserve positional source compatibility.")]
         public static ValueTask<WorkbookWriter> CreateAsync(
             Stream stream, bool leaveOpen = false,
-            CompressionLevel compression = CompressionLevel.Fastest, CancellationToken ct = default)
+            CompressionLevel compression = CompressionLevel.Fastest,
+            CancellationToken ct = default,
+            bool useSharedStrings = false)
         {
             ArgumentNullException.ThrowIfNull(stream);
             ct.ThrowIfCancellationRequested();
             ZipArchive zip = new(stream, ZipArchiveMode.Create, leaveOpen: true);
-            return ValueTask.FromResult(new WorkbookWriter(zip, stream, leaveOpen, compression));
+            return ValueTask.FromResult(new WorkbookWriter(zip, stream, leaveOpen, useSharedStrings, compression));
         }
 
         public ValueTask StartAsync(CancellationToken ct = default)
@@ -83,6 +90,13 @@ namespace ExcelReader.Core.Writer
             _activeSheet = null;
         }
 
+        internal bool UseSharedStrings { get; }
+
+        internal int GetSharedStringIndex(string value)
+        {
+            return _sharedStrings!.GetOrAdd(value);
+        }
+
         public async ValueTask EndAsync(CancellationToken ct = default)
         {
             ObjectDisposedException.ThrowIf(_state == WriterState.Ended, this);
@@ -97,6 +111,10 @@ namespace ExcelReader.Core.Writer
                 await _activeSheet.DisposeAsync().ConfigureAwait(false);
             }
             await WriteStylesAsync(ct).ConfigureAwait(false);
+            if (_sharedStrings is not null)
+            {
+                await WriteSharedStringsAsync(ct).ConfigureAwait(false);
+            }
             await WriteWorkbookAsync(ct).ConfigureAwait(false);
             await WriteWorkbookRelsAsync(ct).ConfigureAwait(false);
             await WriteContentTypesAsync(ct).ConfigureAwait(false);
@@ -168,6 +186,11 @@ namespace ExcelReader.Core.Writer
                 ct);
         }
 
+        private ValueTask WriteSharedStringsAsync(CancellationToken ct)
+        {
+            return WriteEntryAsync("xl/sharedStrings.xml", _sharedStrings!.ToXlsxXml(), ct);
+        }
+
         private ValueTask WriteWorkbookAsync(CancellationToken ct)
         {
             StringBuilder sb = new();
@@ -188,6 +211,10 @@ namespace ExcelReader.Core.Writer
             sb.Append("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>");
             sb.Append($"<Relationships xmlns=\"{XlsxConstants.PackageRelationshipsNs}\">");
             sb.Append($"<Relationship Id=\"rId1\" Type=\"{XlsxConstants.StylesRelType}\" Target=\"styles.xml\"/>");
+            if (UseSharedStrings)
+            {
+                sb.Append($"<Relationship Id=\"rIdShared\" Type=\"{XlsxConstants.SharedStringsRelType}\" Target=\"sharedStrings.xml\"/>");
+            }
             foreach ((_, int sheetId) in _sheets)
             {
                 sb.Append(CultureInfo.InvariantCulture, $"<Relationship Id=\"rId{sheetId + 1}\" Type=\"{XlsxConstants.WorksheetRelType}\" Target=\"worksheets/sheet{sheetId}.xml\"/>");
@@ -205,6 +232,10 @@ namespace ExcelReader.Core.Writer
             sb.Append("<Default Extension=\"xml\" ContentType=\"application/xml\"/>");
             sb.Append($"<Override PartName=\"/xl/workbook.xml\" ContentType=\"{XlsxConstants.WorkbookContentType}\"/>");
             sb.Append($"<Override PartName=\"/xl/styles.xml\" ContentType=\"{XlsxConstants.StylesContentType}\"/>");
+            if (UseSharedStrings)
+            {
+                sb.Append($"<Override PartName=\"/xl/sharedStrings.xml\" ContentType=\"{XlsxConstants.SharedStringsContentType}\"/>");
+            }
             foreach ((_, int sheetId) in _sheets)
             {
                 sb.Append(CultureInfo.InvariantCulture, $"<Override PartName=\"/xl/worksheets/sheet{sheetId}.xml\" ContentType=\"{XlsxConstants.WorksheetContentType}\"/>");

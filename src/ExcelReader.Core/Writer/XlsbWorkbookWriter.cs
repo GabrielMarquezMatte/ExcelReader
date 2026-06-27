@@ -18,35 +18,41 @@ namespace ExcelReader.Core.Writer
         private readonly bool _leaveOpen;
         private readonly bool _date1904;
         private readonly CompressionLevel _compression;
+        private readonly SharedStringTable? _sharedStrings;
         private readonly List<XlsbSheetWriter> _sheets = [];
         private WriterState _state = WriterState.Created;
         private XlsbSheetWriter? _activeSheet;
         private bool _disposed;
 
-        private XlsbWorkbookWriter(ZipArchive zip, Stream stream, bool leaveOpen, bool date1904, CompressionLevel compression)
+        private XlsbWorkbookWriter(ZipArchive zip, Stream stream, bool leaveOpen, bool date1904, bool useSharedStrings, CompressionLevel compression)
         {
             _zip = zip;
             _stream = stream;
             _leaveOpen = leaveOpen;
             _date1904 = date1904;
+            UseSharedStrings = useSharedStrings;
             _compression = compression;
+            _sharedStrings = useSharedStrings ? new SharedStringTable() : null;
         }
 
         [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP001:Dispose created",
             Justification = "Factory method transfers ZipArchive ownership to XlsbWorkbookWriter; caller disposes via DisposeAsync.")]
         [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
             Justification = "XlsbWorkbookWriter takes ownership of ZipArchive and disposes it in DisposeAsync/EndAsync.")]
+        [SuppressMessage("Design", "CA1068:CancellationToken parameters must come last",
+            Justification = "useSharedStrings was added after existing optional parameters to preserve positional source compatibility.")]
         public static ValueTask<XlsbWorkbookWriter> CreateAsync(
             Stream stream,
             bool leaveOpen = false,
             bool date1904 = false,
             CompressionLevel compression = CompressionLevel.Fastest,
-            CancellationToken ct = default)
+            CancellationToken ct = default,
+            bool useSharedStrings = false)
         {
             ArgumentNullException.ThrowIfNull(stream);
             ct.ThrowIfCancellationRequested();
             ZipArchive zip = new(stream, ZipArchiveMode.Create, leaveOpen: true);
-            return ValueTask.FromResult(new XlsbWorkbookWriter(zip, stream, leaveOpen, date1904, compression));
+            return ValueTask.FromResult(new XlsbWorkbookWriter(zip, stream, leaveOpen, date1904, useSharedStrings, compression));
         }
 
         public ValueTask StartAsync(CancellationToken ct = default)
@@ -92,6 +98,13 @@ namespace ExcelReader.Core.Writer
             _activeSheet = null;
         }
 
+        internal bool UseSharedStrings { get; }
+
+        internal int GetSharedStringIndex(string value)
+        {
+            return _sharedStrings!.GetOrAdd(value);
+        }
+
         public async ValueTask EndAsync(CancellationToken ct = default)
         {
             ObjectDisposedException.ThrowIf(_state == WriterState.Ended, this);
@@ -114,7 +127,7 @@ namespace ExcelReader.Core.Writer
             await WriteWorkbookAsync(ct).ConfigureAwait(false);
             await WriteWorkbookRelsAsync(ct).ConfigureAwait(false);
             await WriteStylesAsync(ct).ConfigureAwait(false);
-            await WriteEntryAsync("xl/sharedStrings.bin", ReadOnlyMemory<byte>.Empty, ct).ConfigureAwait(false);
+            await WriteSharedStringsAsync(ct).ConfigureAwait(false);
             await WriteContentTypesAsync(ct).ConfigureAwait(false);
 #if NET10_0_OR_GREATER
             await _zip.DisposeAsync().ConfigureAwait(false);
@@ -215,6 +228,14 @@ namespace ExcelReader.Core.Writer
             WriteXf(data, payload, 14);
             Biff12RecordWriter.WriteRecord(data, Brt.EndCellXFs);
             await WriteEntryAsync("xl/styles.bin", data.Memory, ct).ConfigureAwait(false);
+        }
+
+        private ValueTask WriteSharedStringsAsync(CancellationToken ct)
+        {
+            ReadOnlyMemory<byte> data = _sharedStrings is null
+                ? ReadOnlyMemory<byte>.Empty
+                : _sharedStrings.ToXlsbBytes();
+            return WriteEntryAsync("xl/sharedStrings.bin", data, ct);
         }
 
         private static void WriteXf(BiffBuffer data, BiffBuffer payload, int numFmtId)
