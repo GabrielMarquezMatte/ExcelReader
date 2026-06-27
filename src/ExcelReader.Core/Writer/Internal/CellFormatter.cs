@@ -1,4 +1,3 @@
-using System.Buffers;
 using System.Buffers.Text;
 using System.Globalization;
 
@@ -104,30 +103,28 @@ namespace ExcelReader.Core.Writer.Internal
 
         private static void WriteIntValue(BiffBuffer xml, int value)
         {
-            Span<byte> buf = stackalloc byte[16];
-            Utf8Formatter.TryFormat(value, buf, out int written);
-            xml.Write(buf[..written]);
+            Utf8Formatter.TryFormat(value, xml.GetSpan(16), out int written);
+            xml.Advance(written);
         }
 
         private static void WriteLongValue(BiffBuffer xml, long value)
         {
-            Span<byte> buf = stackalloc byte[32];
-            Utf8Formatter.TryFormat(value, buf, out int written);
-            xml.Write(buf[..written]);
+            Utf8Formatter.TryFormat(value, xml.GetSpan(32), out int written);
+            xml.Advance(written);
         }
 
         private static void WriteDoubleValue(BiffBuffer xml, double value)
         {
-            Span<byte> buf = stackalloc byte[32];
-            Utf8Formatter.TryFormat(value, buf, out int written, new StandardFormat('G', 17));
-            xml.Write(buf[..written]);
+            // Default format is shortest round-trippable (.NET Core 3.0+): shorter than the old 'G17'
+            // and still exactly recovered by the reader, so cells are smaller and faster to deflate.
+            Utf8Formatter.TryFormat(value, xml.GetSpan(32), out int written);
+            xml.Advance(written);
         }
 
         private static void WriteDecimalValue(BiffBuffer xml, decimal value)
         {
-            Span<byte> buf = stackalloc byte[64];
-            Utf8Formatter.TryFormat(value, buf, out int written);
-            xml.Write(buf[..written]);
+            Utf8Formatter.TryFormat(value, xml.GetSpan(64), out int written);
+            xml.Advance(written);
         }
 
         private static void WriteEscaped(BiffBuffer xml, ReadOnlySpan<char> value)
