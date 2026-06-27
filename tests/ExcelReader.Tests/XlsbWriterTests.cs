@@ -198,8 +198,8 @@ namespace ExcelReader.Tests
                     row.Write((float?)1.25f);
                     row.Write((float?)null);
                     row.Write<short>(6);
-                    row.Write<short>((short?)7);
-                    row.Write<short>((short?)null);
+                    row.Write((short?)7);
+                    row.Write<short>(null);
                     row.Skip(0);
                     row.Write<byte>(8);
                 }
@@ -359,7 +359,7 @@ namespace ExcelReader.Tests
             Assert.Equal(4.5d, XlsbCell.Create((double?)4.5d).Number);
             Assert.Equal(5.5d, XlsbCell.Create((decimal?)5.5m).Number);
             Assert.Equal(6d, XlsbCell.Create<short>(6).Number);
-            Assert.Equal(7d, XlsbCell.Create<short>((short?)7).Number);
+            Assert.Equal(7d, XlsbCell.Create((short?)7).Number);
         }
     }
 }

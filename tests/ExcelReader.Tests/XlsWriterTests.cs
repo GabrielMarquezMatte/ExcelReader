@@ -121,8 +121,8 @@ namespace ExcelReader.Tests
                     r.Write((float?)1.25f);
                     r.Write((float?)null);
                     r.Write<short>(6);
-                    r.Write<short>((short?)7);
-                    r.Write<short>((short?)null);
+                    r.Write((short?)7);
+                    r.Write<short>(null);
                     r.Skip(0);
                     r.Write<byte>(8);
                 }
@@ -264,7 +264,6 @@ namespace ExcelReader.Tests
         [Fact]
         public async Task ColumnBeyondLimitThrows()
         {
-            CancellationToken ct = TestContext.Current.CancellationToken;
             var ms = new MemoryStream();
             await using var wb = XlsWorkbookWriter.Create(ms, leaveOpen: true);
             wb.Start();
