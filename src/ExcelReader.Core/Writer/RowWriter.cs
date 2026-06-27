@@ -11,16 +11,24 @@ namespace ExcelReader.Core.Writer
         [SuppressMessage("SharpSource", "SS066:DisposableFieldIsNotDisposed",
             Justification = "BiffBuffer is owned by SheetWriter; RowWriter borrows it.")]
         private readonly BiffBuffer _row;
-        private readonly int _rowNumber;
+        private int _rowNumber;
         private int _columnIndex;
         private bool _useCellReferences;
         private bool _disposed;
 
-        internal RowWriter(SheetWriter owner, BiffBuffer row, int rowNumber)
+        internal RowWriter(SheetWriter owner, BiffBuffer row)
         {
             _owner = owner;
             _row = row;
+        }
+
+        // Reused across rows by SheetWriter: rents one instance per sheet instead of one per row.
+        internal void Reset(int rowNumber)
+        {
             _rowNumber = rowNumber;
+            _columnIndex = 0;
+            _useCellReferences = false;
+            _disposed = false;
         }
 
         private void ThrowIfDisposed()

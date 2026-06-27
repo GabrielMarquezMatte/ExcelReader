@@ -15,6 +15,10 @@ namespace ExcelReader.Core.Writer
         private readonly ZipArchive _zip;
         private readonly CompressionLevel _compression;
         private readonly BiffBuffer _rowBuffer = new(512);
+        // ponytail: flush to the deflate stream once buffered rows pass 1 MB; bounds memory on huge
+        // sheets while turning ~50k tiny per-row Writes into a handful of big ones.
+        private const int FlushThreshold = 1024 * 1024;
+        private RowWriter? _rowWriter;
         [SuppressMessage("SharpSource", "SS066:DisposableFieldIsNotDisposed",
             Justification = "Stream is explicitly disposed in EndAsync via DisposeAsync.")]
         private Stream? _stream;
@@ -72,8 +76,10 @@ namespace ExcelReader.Core.Writer
 
         public ValueTask<RowWriter> StartRowAsync(CancellationToken ct = default)
         {
-            BeginRow(ct);
-            return ValueTask.FromResult(new RowWriter(this, _rowBuffer, _rowNumber));
+            int rowNumber = BeginRow(ct);
+            _rowWriter ??= new RowWriter(this, _rowBuffer);
+            _rowWriter.Reset(rowNumber);
+            return ValueTask.FromResult(_rowWriter);
         }
 
         public ValueTask WriteRow<T>(ReadOnlySpan<T> values, CancellationToken ct = default)
@@ -112,7 +118,6 @@ namespace ExcelReader.Core.Writer
             }
             ct.ThrowIfCancellationRequested();
             _state = WriterState.Ended;
-            _rowBuffer.Reset();
             _rowBuffer.Write("</sheetData></worksheet>"u8);
             await _stream!.WriteAsync(_rowBuffer.Memory, ct).ConfigureAwait(false);
             await _stream.FlushAsync(ct).ConfigureAwait(false);
@@ -149,7 +154,6 @@ namespace ExcelReader.Core.Writer
             ct.ThrowIfCancellationRequested();
             _rowNumber++;
             _rowActive = true;
-            _rowBuffer.Reset();
             _rowBuffer.Write("<row r=\""u8);
             Span<byte> rowDigits = stackalloc byte[8];
             Utf8Formatter.TryFormat(_rowNumber, rowDigits, out int written);
@@ -161,7 +165,11 @@ namespace ExcelReader.Core.Writer
         internal void EndBufferedRow()
         {
             _rowBuffer.Write("</row>"u8);
-            _stream!.Write(_rowBuffer.Span);
+            if (_rowBuffer.Length >= FlushThreshold)
+            {
+                _stream!.Write(_rowBuffer.Span);
+                _rowBuffer.Reset();
+            }
             _rowActive = false;
         }
     }
