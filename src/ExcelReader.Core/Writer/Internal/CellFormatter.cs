@@ -53,8 +53,7 @@ namespace ExcelReader.Core.Writer.Internal
         {
             WriteCellOpen(xml, columnIndex, rowNumber, includeReference);
             xml.Write(" s=\"1\"><v>"u8);
-            double oaDate = value.ToOADate();
-            WriteDoubleValue(xml, oaDate);
+            WriteValue(xml, value.ToOADate(), sizeHint: 32);
             xml.Write("</v></c>"u8);
         }
 
@@ -73,7 +72,7 @@ namespace ExcelReader.Core.Writer.Internal
         {
             WriteCellOpen(xml, columnIndex, rowNumber, includeReference);
             xml.Write("><v>"u8);
-            WriteIntValue(xml, value);
+            WriteValue(xml, value, sizeHint: 16);
             xml.Write("</v></c>"u8);
         }
 
@@ -81,7 +80,7 @@ namespace ExcelReader.Core.Writer.Internal
         {
             WriteCellOpen(xml, columnIndex, rowNumber, includeReference);
             xml.Write("><v>"u8);
-            WriteLongValue(xml, value);
+            WriteValue(xml, value, sizeHint: 32);
             xml.Write("</v></c>"u8);
         }
 
@@ -89,7 +88,7 @@ namespace ExcelReader.Core.Writer.Internal
         {
             WriteCellOpen(xml, columnIndex, rowNumber, includeReference);
             xml.Write("><v>"u8);
-            WriteDoubleValue(xml, value);
+            WriteValue(xml, value, sizeHint: 32);
             xml.Write("</v></c>"u8);
         }
 
@@ -97,33 +96,16 @@ namespace ExcelReader.Core.Writer.Internal
         {
             WriteCellOpen(xml, columnIndex, rowNumber, includeReference);
             xml.Write("><v>"u8);
-            WriteDecimalValue(xml, value);
+            WriteValue(xml, value, sizeHint: 64);
             xml.Write("</v></c>"u8);
         }
 
-        private static void WriteIntValue(BiffBuffer xml, int value)
+        // Formats a numeric value straight into the buffer's free tail (no temp span + copy). The default
+        // format is shortest round-trippable for floating point, so cells stay small and exactly readable.
+        private static void WriteValue<T>(BiffBuffer xml, T value, int sizeHint)
+            where T : IUtf8SpanFormattable
         {
-            Utf8Formatter.TryFormat(value, xml.GetSpan(16), out int written);
-            xml.Advance(written);
-        }
-
-        private static void WriteLongValue(BiffBuffer xml, long value)
-        {
-            Utf8Formatter.TryFormat(value, xml.GetSpan(32), out int written);
-            xml.Advance(written);
-        }
-
-        private static void WriteDoubleValue(BiffBuffer xml, double value)
-        {
-            // Default format is shortest round-trippable (.NET Core 3.0+): shorter than the old 'G17'
-            // and still exactly recovered by the reader, so cells are smaller and faster to deflate.
-            Utf8Formatter.TryFormat(value, xml.GetSpan(32), out int written);
-            xml.Advance(written);
-        }
-
-        private static void WriteDecimalValue(BiffBuffer xml, decimal value)
-        {
-            Utf8Formatter.TryFormat(value, xml.GetSpan(64), out int written);
+            value.TryFormat(xml.GetSpan(sizeHint), out int written, default, CultureInfo.InvariantCulture);
             xml.Advance(written);
         }
 
