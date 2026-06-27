@@ -6,9 +6,9 @@ namespace ExcelReader.Core.Parser
     [Flags]
     public enum HeaderNormalization
     {
-        None             = 0,
-        Trim             = 1 << 0,
-        CollapseSpaces   = 1 << 1,
+        None = 0,
+        Trim = 1 << 0,
+        CollapseSpaces = 1 << 1,
         RemoveDiacritics = 1 << 2,
     }
 
@@ -31,7 +31,7 @@ namespace ExcelReader.Core.Parser
             if (norm.HasFlag(HeaderNormalization.RemoveDiacritics))
             {
                 string nfd = value.Normalize(NormalizationForm.FormD);
-                value = new string(nfd.Where(c => CharUnicodeInfo.GetUnicodeCategory(c) != UnicodeCategory.NonSpacingMark).ToArray());
+                value = new string([.. nfd.Where(c => CharUnicodeInfo.GetUnicodeCategory(c) != UnicodeCategory.NonSpacingMark)]);
             }
             return value;
         }
