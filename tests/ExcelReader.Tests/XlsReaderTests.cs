@@ -199,7 +199,7 @@ namespace ExcelReader.Tests
         {
             using var ms = XlsWorkbookBuilder.Build(
                 customDateFormat: "0.00",
-                sheets: [("S1", [["BirthDate"], [new XlsDate(new DateTime(2024, 5, 6))]])]);
+                sheets: [("S1", [["BirthDate"], [new XlsDate(new DateTime(2024, 5, 6, 0, 0, 0, DateTimeKind.Unspecified))]])]);
             using var reader = Excel.FromXls(ms);
 
             using var e = reader.GetEnumerator();
@@ -218,7 +218,7 @@ namespace ExcelReader.Tests
         {
             using var ms = XlsWorkbookBuilder.Build(
                 customDateFormat: format,
-                sheets: [("S1", [["BirthDate"], [new XlsDate(new DateTime(2024, 5, 6))]])]);
+                sheets: [("S1", [["BirthDate"], [new XlsDate(new DateTime(2024, 5, 6, 0, 0, 0, DateTimeKind.Unspecified))]])]);
             using var reader = Excel.FromXls(ms);
 
             using var e = reader.GetEnumerator();
@@ -232,7 +232,7 @@ namespace ExcelReader.Tests
         {
             using var ms = XlsWorkbookBuilder.Build(
                 customDateFormat: "yyyy Ω",
-                sheets: [("S1", [["BirthDate"], [new XlsDate(new DateTime(2024, 5, 6))]])]);
+                sheets: [("S1", [["BirthDate"], [new XlsDate(new DateTime(2024, 5, 6, 0, 0, 0, DateTimeKind.Unspecified))]])]);
             using var reader = Excel.FromXls(ms);
 
             using var e = reader.GetEnumerator();
@@ -265,7 +265,7 @@ namespace ExcelReader.Tests
             using IEnumerator<PersonRow> generic = ((IEnumerable<PersonRow>)enumerable).GetEnumerator();
             Assert.True(generic.MoveNext());
             Assert.Equal("Lua", generic.Current.Name);
-            Assert.Throws<NotSupportedException>(() => generic.Reset());
+            Assert.Throws<NotSupportedException>(generic.Reset);
 
             IEnumerator nongeneric = ((IEnumerable)enumerable).GetEnumerator();
             try
@@ -345,7 +345,11 @@ namespace ExcelReader.Tests
             IAsyncEnumerator<PersonRow> e = new ExcelParser<PersonRow>()
                 .ParseAsync(reader, TestContext.Current.CancellationToken)
                 .GetAsyncEnumerator(TestContext.Current.CancellationToken);
-            await e.DisposeAsync();
+
+            Exception? ex = await Record.ExceptionAsync(async () =>
+                await e.DisposeAsync());
+
+            Assert.Null(ex);
         }
 
         [Fact]
@@ -418,6 +422,7 @@ namespace ExcelReader.Tests
             var stream = new TrackingStream(XlsWorkbookBuilder.Build(sheets: [("S1", [["A"]])]).ToArray());
             using (Excel.FromXls(stream, leaveOpen: false))
             {
+                // nothing
             }
             Assert.True(stream.WasDisposed);
         }

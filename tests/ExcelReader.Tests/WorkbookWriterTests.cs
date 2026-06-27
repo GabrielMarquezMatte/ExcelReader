@@ -257,7 +257,7 @@ namespace ExcelReader.Tests
                     row.Write((decimal?)3.75m);
                     row.Write((decimal?)null);
                     row.Write<short>(4);
-                    row.Write<short>((short?)5);
+                    row.Write((short?)5);
                     row.Write<short>(null);
                     row.Skip(0);
                     row.Write(6);
@@ -625,7 +625,10 @@ namespace ExcelReader.Tests
             await sheet.EndAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
 
             await wb.DisposeAsync().ConfigureAwait(true);
-            await wb.DisposeAsync().ConfigureAwait(true);
+            Exception? ex = await Record.ExceptionAsync(async () =>
+                await wb.DisposeAsync().ConfigureAwait(true)).ConfigureAwait(true);
+
+            Assert.Null(ex);
         }
     }
 }
