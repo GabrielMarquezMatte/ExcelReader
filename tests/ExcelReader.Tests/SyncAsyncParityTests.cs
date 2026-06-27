@@ -88,8 +88,8 @@ namespace ExcelReader.Tests
             const string styles =
                 """<styleSheet><cellXfs count="2"><xf numFmtId="0"/><xf numFmtId="14"/></cellXfs></styleSheet>""";
             const string sharedStrings =
-                """<si><t>shared &lt;zero&gt;</t></si>""" +
-                """<si><r><t>rich</t></r><r><t> text</t></r></si>""";
+                "<si><t>shared &lt;zero&gt;</t></si>" +
+                "<si><r><t>rich</t></r><r><t> text</t></r></si>";
             const string rows =
                 """<row r="1">""" +
                 """<c r="A1" t="s"><v>0</v></c>""" +
@@ -98,12 +98,12 @@ namespace ExcelReader.Tests
                 """<c r="D1" t="b"><v>1</v></c>""" +
                 """<c r="E1" t="e"><v>#DIV/0!</v></c>""" +
                 """<c r="F1" t="str"><v>formula text</v></c>""" +
-                """</row>""" +
+                "</row>" +
                 """<row r="2">""" +
                 """<c r="A2"><v>1.25</v></c>""" +
                 """<c r="D2" t="s"><v>1</v></c>""" +
                 """<c r="H2" t="inlineStr"><is><t>tail</t></is></c>""" +
-                """</row>""";
+                "</row>";
 
             using MemoryStream ms = WorkbookBuilder.Build(rows, sharedStrings, styles);
             return ValueTask.FromResult(ms.ToArray());

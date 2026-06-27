@@ -32,7 +32,7 @@ namespace ExcelReader.Tests
             string value = new('B', 128 * 1024);
             using MemoryStream ms = WorkbookBuilder.Build(
                 """<row r="1"><c r="A1" t="s"><v>0</v></c></row>""",
-                sharedStrings: $"""<si><t>{value}</t></si>""");
+                sharedStrings: $"<si><t>{value}</t></si>");
             Assert.True(ms.Length < 10_000);
 
             var options = new ExcelReaderOptions
