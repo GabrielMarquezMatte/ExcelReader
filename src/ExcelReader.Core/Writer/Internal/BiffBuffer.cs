@@ -75,11 +75,25 @@ namespace ExcelReader.Core.Writer.Internal
             Length += bytes.Length;
         }
 
+        // Reserves at least `sizeHint` free bytes and hands back the writable tail so callers can
+        // format directly into the buffer (e.g. Utf8Formatter), then commit with Advance — saves the
+        // temp-span + copy that Write would otherwise need.
+        internal Span<byte> GetSpan(int sizeHint)
+        {
+            Ensure(sizeHint);
+            return _buffer.AsSpan(Length);
+        }
+
+        internal void Advance(int count)
+        {
+            Length += count;
+        }
+
         internal void WriteUtf8(ReadOnlySpan<char> chars)
         {
-            int byteCount = Encoding.UTF8.GetByteCount(chars);
-            Ensure(byteCount);
-            Length += Encoding.UTF8.GetBytes(chars, _buffer.AsSpan(Length, byteCount));
+            // Single pass: reserve the UTF-8 worst case (3 bytes per UTF-16 code unit) and encode once.
+            Ensure(checked(chars.Length * 3));
+            Length += Encoding.UTF8.GetBytes(chars, _buffer.AsSpan(Length));
         }
 
         internal void WriteUtf16(ReadOnlySpan<char> chars)
