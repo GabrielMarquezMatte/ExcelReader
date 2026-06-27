@@ -78,12 +78,10 @@ namespace ExcelReader.Core.Reader
                             }
                             return true;
                         default:
-                            int skip = IndexOf((byte)'>');
-                            if (skip < 0)
+                            if (!SkipMarkup())
                             {
                                 return false;
                             }
-                            _pos = skip + 1;
                             break;
                     }
                 }
@@ -105,18 +103,17 @@ namespace ExcelReader.Core.Reader
                         case HeadKind.End:
                             return false;
                         case HeadKind.Row:
-                            if (!BeginRow())
+                            if (!await BeginRowAsync().ConfigureAwait(false))
                             {
-                                await ParseRowAsync().ConfigureAwait(false);
+                                await EnsureRowBufferedAsync().ConfigureAwait(false);
+                                ParseRow();
                             }
                             return true;
                         default:
-                            int skip = await IndexOfAsync((byte)'>').ConfigureAwait(false);
-                            if (skip < 0)
+                            if (!await SkipMarkupAsync().ConfigureAwait(false))
                             {
                                 return false;
                             }
-                            _pos = skip + 1;
                             break;
                     }
                 }
@@ -126,11 +123,7 @@ namespace ExcelReader.Core.Reader
             private bool BeginRow()
             {
                 int gt = IndexOf((byte)'>'); // open tag already fully buffered by the Ensure(12) above
-                _pos = gt + 1;
-                _cellCount = 0;
-                _valLen = 0;
-                _nextCol = 0;
-                return _buf[gt - 1] == '/';
+                return BeginRowAt(gt);
             }
 
             private void ParseRow()
@@ -154,44 +147,10 @@ namespace ExcelReader.Core.Reader
                             ParseCell();
                             break;
                         default:
-                            int skip = IndexOf((byte)'>');
-                            if (skip < 0)
+                            if (!SkipMarkup())
                             {
                                 return;
                             }
-                            _pos = skip + 1;
-                            break;
-                    }
-                }
-            }
-
-            private async ValueTask ParseRowAsync()
-            {
-                while (true)
-                {
-                    int lt = _pos < _len && _buf[_pos] == (byte)'<' ? _pos : await IndexOfAsync((byte)'<').ConfigureAwait(false);
-                    if (lt < 0)
-                    {
-                        return;
-                    }
-                    _pos = lt;
-                    await EnsureAsync(6).ConfigureAwait(false);
-                    switch (ClassifyRowHead())
-                    {
-                        case RowHead.EndRow:
-                            int gt = await IndexOfAsync((byte)'>').ConfigureAwait(false);
-                            _pos = gt < 0 ? _len : gt + 1;
-                            return;
-                        case RowHead.Cell:
-                            await ParseCellAsync().ConfigureAwait(false);
-                            break;
-                        default:
-                            int skip = await IndexOfAsync((byte)'>').ConfigureAwait(false);
-                            if (skip < 0)
-                            {
-                                return;
-                            }
-                            _pos = skip + 1;
                             break;
                     }
                 }
@@ -206,24 +165,6 @@ namespace ExcelReader.Core.Reader
                     return; // empty cell — store nothing; _pos already past the tag
                 }
                 int cEnd = IndexOfSeq("</c>"u8); // ensures whole cell contiguous; shifts _pos consistently
-                if (cEnd < 0)
-                {
-                    _pos = _len;
-                    return;
-                }
-                EmitCell(header.Kind, _buf.AsSpan(_pos, cEnd - _pos), header.Col, header.Style);
-                _pos = cEnd + 4;
-            }
-
-            private async ValueTask ParseCellAsync()
-            {
-                int gt = await IndexOfAsync((byte)'>').ConfigureAwait(false);
-                var header = ReadCellOpenTag(gt); // sync: no span survives into the next await
-                if (header.SelfClose)
-                {
-                    return;
-                }
-                int cEnd = await IndexOfCloseCellAsync().ConfigureAwait(false);
                 if (cEnd < 0)
                 {
                     _pos = _len;
@@ -288,6 +229,41 @@ namespace ExcelReader.Core.Reader
                 return new CellHeader(col, style, kind, selfClose);
             }
 
+            private ValueTask<bool> BeginRowAsync()
+            {
+                int rel = _buf.AsSpan(_pos, _len - _pos).IndexOf((byte)'>');
+                if (rel >= 0)
+                {
+                    return new ValueTask<bool>(BeginRowAt(_pos + rel));
+                }
+                return _eof ? new ValueTask<bool>(MissingRowOpenTag()) : BeginRowSlowAsync();
+            }
+
+            private async ValueTask<bool> BeginRowSlowAsync()
+            {
+                int gt = await IndexOfSlowAsync((byte)'>').ConfigureAwait(false);
+                if (gt < 0)
+                {
+                    return MissingRowOpenTag();
+                }
+                return BeginRowAt(gt);
+            }
+
+            private bool BeginRowAt(int gt)
+            {
+                _pos = gt + 1;
+                _cellCount = 0;
+                _valLen = 0;
+                _nextCol = 0;
+                return _buf[gt - 1] == '/';
+            }
+
+            private bool MissingRowOpenTag()
+            {
+                _pos = _len;
+                return true;
+            }
+
             // Extracts the r/s/t attribute values from a `<c ...>` open tag in a single forward pass —
             // far cheaper than three separate IndexOf scans, whose per-call SIMD setup dominated for these
             // few-byte tags (and bare `<c>` number cells paid for three full misses). Any other attribute
@@ -323,12 +299,13 @@ namespace ExcelReader.Core.Reader
 
                     // Attribute value: the run between the opening and closing quote.
                     i++; // '='
-                    if (i < open.Length && open[i] == (byte)'"')
+                    if (i >= open.Length || open[i] is not ((byte)'"' or (byte)'\''))
                     {
-                        i++;
+                        continue;
                     }
+                    byte quote = open[i++];
                     int valueStart = i;
-                    while (i < open.Length && open[i] != (byte)'"')
+                    while (i < open.Length && open[i] != quote)
                     {
                         i++;
                     }
@@ -422,6 +399,56 @@ namespace ExcelReader.Core.Reader
                 }
                 EnsureValsCapacity(_valLen + src.Length);
                 _valLen += XlsxXml.Decode(src, _vals.AsSpan(_valLen));
+            }
+
+            private bool SkipMarkup()
+            {
+                Ensure(9);
+                if (_buf.AsSpan(_pos, Math.Min(4, _len - _pos)).StartsWith("<!--"u8))
+                {
+                    int end = IndexOfSeq("-->"u8);
+                    _pos = end < 0 ? _len : end + 3;
+                    return end >= 0;
+                }
+                if (_buf.AsSpan(_pos, Math.Min(9, _len - _pos)).StartsWith("<![CDATA["u8))
+                {
+                    int end = IndexOfSeq("]]>"u8);
+                    _pos = end < 0 ? _len : end + 3;
+                    return end >= 0;
+                }
+
+                int skip = IndexOf((byte)'>');
+                if (skip < 0)
+                {
+                    return false;
+                }
+                _pos = skip + 1;
+                return true;
+            }
+
+            private async ValueTask<bool> SkipMarkupAsync()
+            {
+                await EnsureAsync(9).ConfigureAwait(false);
+                if (_buf.AsSpan(_pos, Math.Min(4, _len - _pos)).StartsWith("<!--"u8))
+                {
+                    int end = await IndexOfSeqAsync(MarkupSeq.CommentEnd).ConfigureAwait(false);
+                    _pos = end < 0 ? _len : end + 3;
+                    return end >= 0;
+                }
+                if (_buf.AsSpan(_pos, Math.Min(9, _len - _pos)).StartsWith("<![CDATA["u8))
+                {
+                    int end = await IndexOfSeqAsync(MarkupSeq.CDataEnd).ConfigureAwait(false);
+                    _pos = end < 0 ? _len : end + 3;
+                    return end >= 0;
+                }
+
+                int skip = await IndexOfAsync((byte)'>').ConfigureAwait(false);
+                if (skip < 0)
+                {
+                    return false;
+                }
+                _pos = skip + 1;
+                return true;
             }
 
             private void AddCell(int col, int start, int len, CellType type, int style, bool fromShared)
@@ -573,31 +600,110 @@ namespace ExcelReader.Core.Reader
                 return -1;
             }
 
-            // Only one multi-byte terminator is searched on the async path, so it's hardcoded rather than
-            // taking a ReadOnlySpan<byte> (which can't be an async method parameter).
-            private ValueTask<int> IndexOfCloseCellAsync()
+            private ValueTask EnsureRowBufferedAsync()
             {
-                int rel = _buf.AsSpan(_pos, _len - _pos).IndexOf("</c>"u8);
-                if (rel >= 0)
-                {
-                    return new ValueTask<int>(_pos + rel);
-                }
-                return _eof ? new ValueTask<int>(-1) : IndexOfCloseCellSlowAsync();
+                return IsRowBuffered() ? ValueTask.CompletedTask : EnsureRowBufferedSlowAsync();
             }
 
-            private async ValueTask<int> IndexOfCloseCellSlowAsync()
+            private bool IsRowBuffered()
+            {
+                int rowEnd = FindSeq(MarkupSeq.RowEnd, _pos);
+                if (rowEnd < 0)
+                {
+                    if (_eof)
+                    {
+                        _pos = _len;
+                        return true;
+                    }
+                    return false;
+                }
+
+                if (_buf.AsSpan(rowEnd, _len - rowEnd).IndexOf((byte)'>') >= 0)
+                {
+                    return true;
+                }
+                if (_eof)
+                {
+                    _pos = _len;
+                    return true;
+                }
+                return false;
+            }
+
+            private async ValueTask EnsureRowBufferedSlowAsync()
+            {
+                int rowEnd = await IndexOfSeqFromAsync(MarkupSeq.RowEnd).ConfigureAwait(false);
+                if (rowEnd < 0)
+                {
+                    _pos = _len;
+                    return;
+                }
+                int gt = await IndexOfFromAsync((byte)'>', rowEnd).ConfigureAwait(false);
+                if (gt < 0)
+                {
+                    _pos = _len;
+                }
+            }
+
+            private enum MarkupSeq { CommentEnd, CDataEnd, RowEnd }
+
+            private int FindSeq(MarkupSeq seq, int start)
+            {
+                int rel = seq switch
+                {
+                    MarkupSeq.CommentEnd => _buf.AsSpan(start, _len - start).IndexOf("-->"u8),
+                    MarkupSeq.CDataEnd => _buf.AsSpan(start, _len - start).IndexOf("]]>"u8),
+                    _ => _buf.AsSpan(start, _len - start).IndexOf("</row"u8),
+                };
+                return rel < 0 ? -1 : start + rel;
+            }
+
+            private ValueTask<int> IndexOfSeqAsync(MarkupSeq seq)
+            {
+                int index = FindSeq(seq, _pos);
+                if (index >= 0)
+                {
+                    return new ValueTask<int>(index);
+                }
+                return _eof ? new ValueTask<int>(-1) : IndexOfSeqFromAsync(seq);
+            }
+
+            // PrepareBuffer compacts the window on every fill, so an absolute index captured before a
+            // fill is invalid afterward. Rescan the retained window from _pos each time — this also
+            // catches a sequence split across the previous buffer boundary.
+            private async ValueTask<int> IndexOfSeqFromAsync(MarkupSeq seq)
             {
                 do
                 {
                     await FillAsync().ConfigureAwait(false);
-                    int rel = _buf.AsSpan(_pos, _len - _pos).IndexOf("</c>"u8);
-                    if (rel >= 0)
+                    int index = FindSeq(seq, _pos);
+                    if (index >= 0)
                     {
-                        return _pos + rel;
+                        return index;
                     }
                 }
                 while (!_eof);
                 return -1;
+            }
+
+            private async ValueTask<int> IndexOfFromAsync(byte b, int start)
+            {
+                int search = Math.Max(start, _pos);
+                while (true)
+                {
+                    int rel = _buf.AsSpan(search, _len - search).IndexOf(b);
+                    if (rel >= 0)
+                    {
+                        return search + rel;
+                    }
+                    if (_eof)
+                    {
+                        return -1;
+                    }
+                    int shift = _pos;
+                    await FillAsync().ConfigureAwait(false);
+                    search = shift > 0 ? Math.Max(_pos, search - shift) : search;
+                }
             }
 
             private ValueTask EnsureAsync(int n)

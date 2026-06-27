@@ -51,17 +51,39 @@ namespace ExcelReader.Core.Reader
             int w = 0;
             while (!src.IsEmpty)
             {
-                // The literal run up to the next '&' is bulk-copied; IndexOf and CopyTo are both
-                // SIMD-vectorized, so entity-free text (the common case) costs one scan + one copy.
-                int amp = src.IndexOf((byte)'&');
-                if (amp < 0)
+                // The literal run up to the next '&' or '<' is bulk-copied; IndexOfAny and CopyTo
+                // are both SIMD-vectorized, so plain text still costs one scan + one copy.
+                int special = src.IndexOfAny((byte)'&', (byte)'<');
+                if (special < 0)
                 {
                     src.CopyTo(dest[w..]);
                     return w + src.Length;
                 }
-                src[..amp].CopyTo(dest[w..]);
-                w += amp;
-                src = src[amp..]; // src[0] is now '&'
+                src[..special].CopyTo(dest[w..]);
+                w += special;
+                src = src[special..];
+
+                if (src[0] == (byte)'<')
+                {
+                    if (!src.StartsWith("<![CDATA["u8))
+                    {
+                        dest[w++] = src[0];
+                        src = src[1..];
+                        continue;
+                    }
+
+                    src = src[9..];
+                    int end = src.IndexOf("]]>"u8);
+                    if (end < 0)
+                    {
+                        src.CopyTo(dest[w..]);
+                        return w + src.Length;
+                    }
+                    src[..end].CopyTo(dest[w..]);
+                    w += end;
+                    src = src[(end + 3)..];
+                    continue;
+                }
 
                 int semi = src.IndexOf((byte)';');
                 if (semi < 0)

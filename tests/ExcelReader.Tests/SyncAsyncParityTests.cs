@@ -13,6 +13,7 @@ namespace ExcelReader.Tests
             {
                 yield return [new ParityFixture("xlsx mixed rows", BuildMixedXlsxAsync, stream => Excel.From(stream), OpenXlsxAsync)];
                 yield return [new ParityFixture("xlsx refill boundary", BuildBoundaryXlsxAsync, stream => Excel.From(stream), OpenXlsxAsync)];
+                yield return [new ParityFixture("xlsx many rows (mid-stream refills)", BuildManyRowsXlsxAsync, stream => Excel.From(stream), OpenXlsxAsync)];
                 yield return [new ParityFixture("xls mixed rows", BuildMixedXlsAsync, stream => Excel.FromXls(stream), OpenXlsAsync)];
                 yield return [new ParityFixture("xlsb mixed rows", BuildMixedXlsbAsync, stream => Excel.FromXlsb(stream), OpenXlsbAsync)];
             }
@@ -118,6 +119,26 @@ namespace ExcelReader.Tests
                 """</t></is></c><c r="C1"><v>3</v></c></row>""";
 
             using MemoryStream ms = WorkbookBuilder.Build(rows);
+            return ValueTask.FromResult(ms.ToArray());
+        }
+
+        // Many small rows so the sheet spans several 64 KB buffer fills. Unlike the single-giant-cell
+        // boundary fixture, the refills here happen deep into the sheet (when _pos is large), which is
+        // where the async row-buffering slow path mishandled the compacted buffer.
+        private static ValueTask<byte[]> BuildManyRowsXlsxAsync(CancellationToken ct)
+        {
+            ct.ThrowIfCancellationRequested();
+            System.Text.StringBuilder sb = new(256 * 1024);
+            for (int r = 1; r <= 4000; r++)
+            {
+                sb.Append("<row r=\"").Append(r).Append("\">")
+                  .Append("<c r=\"A").Append(r).Append("\"><v>").Append(r).Append("</v></c>")
+                  .Append("<c r=\"B").Append(r).Append("\" t=\"inlineStr\"><is><t>row ").Append(r).Append("</t></is></c>")
+                  .Append("<c r=\"C").Append(r).Append("\"><v>").Append(r * 1.5).Append("</v></c>")
+                  .Append("</row>");
+            }
+
+            using MemoryStream ms = WorkbookBuilder.Build(sb.ToString());
             return ValueTask.FromResult(ms.ToArray());
         }
 
