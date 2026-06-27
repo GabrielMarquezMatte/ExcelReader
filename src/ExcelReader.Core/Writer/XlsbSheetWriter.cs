@@ -18,7 +18,6 @@ namespace ExcelReader.Core.Writer
         private readonly bool _date1904;
         private readonly CompressionLevel _compression;
         private readonly BiffBuffer _records = new(4096);
-        private readonly BiffBuffer _payload = new(256);
         [SuppressMessage("SharpSource", "SS066:DisposableFieldIsNotDisposed",
             Justification = "Stream is explicitly disposed in EndAsync or DisposeAsync.")]
         private Stream? _stream;
@@ -45,7 +44,13 @@ namespace ExcelReader.Core.Writer
 
         internal string Name { get; }
         internal int SheetId { get; }
-        internal BiffBuffer Payload => _payload;
+        internal BiffBuffer Payload { get; } = new(256);
+        internal bool UseSharedStrings => _owner.UseSharedStrings;
+
+        internal int GetSharedStringIndex(string value)
+        {
+            return _owner.GetSharedStringIndex(value);
+        }
 
         public ValueTask StartAsync(CancellationToken ct = default)
         {
@@ -200,7 +205,7 @@ namespace ExcelReader.Core.Writer
             }
             _buffersDisposed = true;
             _records.Dispose();
-            _payload.Dispose();
+            Payload.Dispose();
         }
 
         private void BeginRow()
@@ -247,18 +252,24 @@ namespace ExcelReader.Core.Writer
             {
                 return;
             }
-            _payload.Reset();
-            Biff12RecordWriter.WriteCellHeader(_payload, columnIndex, 0);
-            Biff12RecordWriter.WriteWideString(_payload, value);
-            WriteRecord(Brt.CellSt, _payload.Span);
+            Payload.Reset();
+            Biff12RecordWriter.WriteCellHeader(Payload, columnIndex, 0);
+            if (_owner.UseSharedStrings)
+            {
+                Payload.WriteU32((uint)_owner.GetSharedStringIndex(value));
+                WriteRecord(Brt.CellIsst, Payload.Span);
+                return;
+            }
+            Biff12RecordWriter.WriteWideString(Payload, value);
+            WriteRecord(Brt.CellSt, Payload.Span);
         }
 
         private void WriteBoolCell(int columnIndex, bool value)
         {
-            _payload.Reset();
-            Biff12RecordWriter.WriteCellHeader(_payload, columnIndex, 0);
-            _payload.WriteByte(value ? (byte)1 : (byte)0);
-            WriteRecord(Brt.CellBool, _payload.Span);
+            Payload.Reset();
+            Biff12RecordWriter.WriteCellHeader(Payload, columnIndex, 0);
+            Payload.WriteByte(value ? (byte)1 : (byte)0);
+            WriteRecord(Brt.CellBool, Payload.Span);
         }
 
         private void WriteDateSerialCell(int columnIndex, double serial)
@@ -272,10 +283,10 @@ namespace ExcelReader.Core.Writer
 
         private void WriteDoubleCell(int columnIndex, double value, int style)
         {
-            _payload.Reset();
-            Biff12RecordWriter.WriteCellHeader(_payload, columnIndex, style);
-            _payload.WriteDouble(value);
-            WriteRecord(Brt.CellReal, _payload.Span);
+            Payload.Reset();
+            Biff12RecordWriter.WriteCellHeader(Payload, columnIndex, style);
+            Payload.WriteDouble(value);
+            WriteRecord(Brt.CellReal, Payload.Span);
         }
     }
 }

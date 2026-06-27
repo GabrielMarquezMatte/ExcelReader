@@ -258,6 +258,13 @@ await using (var sheet = workbook.AddSheet("Summary"))
 await workbook.EndAsync();
 ```
 
+By default, the XLSX writer emits inline strings to keep memory usage flat while rows stream out.
+If your workbook repeats many strings and smaller files matter more than the extra lookup table, opt in to shared strings:
+
+```csharp
+await using var workbook = await WorkbookWriter.CreateAsync(stream, useSharedStrings: true);
+```
+
 ## Read and write XLSB workbooks (BIFF12)
 
 Use `Excel.FromXlsbFile`, `Excel.FromXlsb`, `Excel.FromXlsbFileAsync`, or `Excel.FromXlsbAsync` to open XLSB directly. For writing, use `XlsbWorkbookWriter`, `XlsbSheetWriter`, and `XlsbRowWriter`.
@@ -283,6 +290,8 @@ await using (XlsbSheetWriter sheet = workbook.AddSheet("Summary"))
 
 await workbook.EndAsync();
 ```
+
+The XLSB writer also defaults to inline string cells. Pass `useSharedStrings: true` to deduplicate repeated text into `sharedStrings.bin`.
 
 ## Write XLS workbooks (BIFF8)
 
@@ -325,8 +334,8 @@ await workbook.EndAsync();
 - String conversion allocates only when you call `GetString()`.
 - The XLSX scanner accepts the SpreadsheetML shapes commonly emitted by non-Excel producers, including single-quoted attributes, comments in `sheetData`, and CDATA text runs.
 - Readers bound untrusted input by default: 512 MB total decompressed ZIP data, 32 MB per cell/row value buffer, and 128 MB for shared strings. Pass `ExcelReaderOptions` to the `Excel.From*`/`Excel.Open*` factories to tune these limits; set a limit to `0` to opt out and restore unlimited behavior for that limit.
-- The XLSX writer emits a compact workbook with strings, numbers, booleans, dates, and blank cells.
-- The XLSB writer emits BIFF12 workbook parts inside the standard XLSB ZIP package.
+- The XLSX writer emits a compact workbook with strings, numbers, booleans, dates, and blank cells; shared strings are opt-in.
+- The XLSB writer emits BIFF12 workbook parts inside the standard XLSB ZIP package; shared strings are opt-in.
 - The XLS writer buffers records in memory and assembles the OLE container at `EndAsync`; choose it when write throughput matters more than peak allocation.
 
 ## Build

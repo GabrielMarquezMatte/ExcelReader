@@ -32,14 +32,24 @@ namespace ExcelReader.Core.Writer
         public void Write(string? value)
         {
             ThrowIfDisposed();
-            if (value is not null)
+            if (value is null)
             {
-                _payload.Reset();
-                Biff12RecordWriter.WriteCellHeader(_payload, _columnIndex, 0);
-                Biff12RecordWriter.WriteWideString(_payload, value);
-                _owner.WriteRecord(Brt.CellSt, _payload.Span);
+                _columnIndex++;
+                return;
             }
+            _payload.Reset();
+            Biff12RecordWriter.WriteCellHeader(_payload, _columnIndex, 0);
+            if (_owner.UseSharedStrings)
+            {
+                _payload.WriteU32((uint)_owner.GetSharedStringIndex(value));
+                _owner.WriteRecord(Brt.CellIsst, _payload.Span);
+                _columnIndex++;
+                return;
+            }
+            Biff12RecordWriter.WriteWideString(_payload, value);
+            _owner.WriteRecord(Brt.CellSt, _payload.Span);
             _columnIndex++;
+
         }
 
         public void Write(bool value)
