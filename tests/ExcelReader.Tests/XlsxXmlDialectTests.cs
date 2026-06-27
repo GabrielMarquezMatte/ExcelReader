@@ -9,7 +9,7 @@ namespace ExcelReader.Tests
         {
             using MemoryStream ms = WorkbookBuilder.Build(
                 """<row r="1"><c r='C1' t='s'><v>0</v></c></row>""",
-                sharedStrings: """<si><t>single quoted</t></si>""");
+                sharedStrings: "<si><t>single quoted</t></si>");
             using XlsxReader reader = Excel.From(ms);
             using XlsxReader.Enumerator e = reader.GetEnumerator();
 
@@ -64,7 +64,7 @@ namespace ExcelReader.Tests
         {
             using MemoryStream ms = WorkbookBuilder.Build(
                 """<row r="1"><c r="A1" t="s"><v>0</v></c></row>""",
-                sharedStrings: """<si><t><![CDATA[shared &amp; <tag>]]></t></si>""");
+                sharedStrings: "<si><t><![CDATA[shared &amp; <tag>]]></t></si>");
             using XlsxReader reader = Excel.From(ms);
             using XlsxReader.Enumerator e = reader.GetEnumerator();
 

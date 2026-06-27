@@ -145,7 +145,7 @@ namespace ExcelReader.Tests
             await using MemoryStream malformed = BuildRawWorkbook(
                 """<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="S1" sheetId="1" r:id="rId1"/></sheets></workbook>""",
                 """<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="x" Target="worksheets/sheet1.xml"/></Relationships>""",
-                ("xl/worksheets/sheet1.xml", """<worksheet><sheetData><dimension"""));
+                ("xl/worksheets/sheet1.xml", "<worksheet><sheetData><dimension"));
             await using XlsxReader malformedReader = await Excel.FromAsync(malformed, ct: TestContext.Current.CancellationToken);
             await using XlsxReader.Enumerator malformedRows = await malformedReader.GetAsyncEnumeratorAsync(TestContext.Current.CancellationToken);
 
@@ -283,10 +283,8 @@ namespace ExcelReader.Tests
             {
                 Assert.True(await first.MoveNextAsync());
             }
-            await using (XlsxReader.Enumerator second = await reader.GetAsyncEnumeratorAsync(TestContext.Current.CancellationToken))
-            {
-                Assert.True(await second.MoveNextAsync());
-            }
+            await using XlsxReader.Enumerator second = await reader.GetAsyncEnumeratorAsync(TestContext.Current.CancellationToken);
+            Assert.True(await second.MoveNextAsync());
         }
 
         [Fact]
