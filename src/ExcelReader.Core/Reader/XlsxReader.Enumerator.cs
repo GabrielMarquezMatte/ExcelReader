@@ -59,7 +59,8 @@ namespace ExcelReader.Core.Reader
             {
                 while (true)
                 {
-                    int lt = IndexOf((byte)'<');
+                    // Fast path: in compact output _pos already sits on the next '<', so skip the scan.
+                    int lt = _pos < _len && _buf[_pos] == (byte)'<' ? _pos : IndexOf((byte)'<');
                     if (lt < 0)
                     {
                         return false;
@@ -92,7 +93,7 @@ namespace ExcelReader.Core.Reader
             {
                 while (true)
                 {
-                    int lt = await IndexOfAsync((byte)'<').ConfigureAwait(false);
+                    int lt = _pos < _len && _buf[_pos] == (byte)'<' ? _pos : await IndexOfAsync((byte)'<').ConfigureAwait(false);
                     if (lt < 0)
                     {
                         return false;
@@ -136,7 +137,7 @@ namespace ExcelReader.Core.Reader
             {
                 while (true)
                 {
-                    int lt = IndexOf((byte)'<');
+                    int lt = _pos < _len && _buf[_pos] == (byte)'<' ? _pos : IndexOf((byte)'<');
                     if (lt < 0)
                     {
                         return;
@@ -168,7 +169,7 @@ namespace ExcelReader.Core.Reader
             {
                 while (true)
                 {
-                    int lt = await IndexOfAsync((byte)'<').ConfigureAwait(false);
+                    int lt = _pos < _len && _buf[_pos] == (byte)'<' ? _pos : await IndexOfAsync((byte)'<').ConfigureAwait(false);
                     if (lt < 0)
                     {
                         return;
@@ -271,11 +272,10 @@ namespace ExcelReader.Core.Reader
             private CellHeader ReadCellOpenTag(int gt)
             {
                 var open = _buf.AsSpan(_pos, gt - _pos + 1);
-                var rRef = XlsxXml.Attr(open, " r=\""u8);
-                var sVal = XlsxXml.Attr(open, " s=\""u8);
-                var tVal = XlsxXml.Attr(open, " t=\""u8);
+                ScanCellAttributes(open, out var rRef, out var sVal, out var tVal);
 
-                int col = rRef.IsEmpty ? _nextCol : XlsxXml.ColumnIndex(rRef);
+                // ColumnIndex returns -1 for a missing or malformed ref; fall back to the running column.
+                int col = XlsxXml.ColumnIndex(rRef);
                 if (col < 0)
                 {
                     col = _nextCol;
@@ -286,6 +286,69 @@ namespace ExcelReader.Core.Reader
                 bool selfClose = _buf[gt - 1] == '/';
                 _pos = gt + 1; // consume open tag; _pos now at inner start (or next element if self-closed)
                 return new CellHeader(col, style, kind, selfClose);
+            }
+
+            // Extracts the r/s/t attribute values from a `<c ...>` open tag in a single forward pass —
+            // far cheaper than three separate IndexOf scans, whose per-call SIMD setup dominated for these
+            // few-byte tags (and bare `<c>` number cells paid for three full misses). Any other attribute
+            // is skipped. Returned spans alias `open`, so they live only as long as the caller's buffer.
+            private static void ScanCellAttributes(
+                ReadOnlySpan<byte> open,
+                out ReadOnlySpan<byte> rRef,
+                out ReadOnlySpan<byte> sVal,
+                out ReadOnlySpan<byte> tVal)
+            {
+                rRef = sVal = tVal = default;
+                int i = 2; // past "<c"
+                while (i < open.Length && open[i] is not ((byte)'>' or (byte)'/'))
+                {
+                    if (!IsXmlSpace(open[i]))
+                    {
+                        i++;
+                        continue;
+                    }
+                    i++; // consume the whitespace separating attributes
+
+                    // Attribute name: runs up to '=' (bail out if this isn't a well-formed name="...").
+                    int nameStart = i;
+                    while (i < open.Length && open[i] is not ((byte)'=' or (byte)'>' or (byte)' '))
+                    {
+                        i++;
+                    }
+                    if (i >= open.Length || open[i] != (byte)'=')
+                    {
+                        continue;
+                    }
+                    int nameLen = i - nameStart;
+
+                    // Attribute value: the run between the opening and closing quote.
+                    i++; // '='
+                    if (i < open.Length && open[i] == (byte)'"')
+                    {
+                        i++;
+                    }
+                    int valueStart = i;
+                    while (i < open.Length && open[i] != (byte)'"')
+                    {
+                        i++;
+                    }
+                    ReadOnlySpan<byte> value = open[valueStart..i];
+                    i++; // closing quote
+
+                    // Only the single-char attributes r/s/t matter; anything else is ignored.
+                    if (nameLen != 1)
+                    {
+                        continue;
+                    }
+                    if (open[nameStart] == (byte)'r') { rRef = value; }
+                    else if (open[nameStart] == (byte)'s') { sVal = value; }
+                    else if (open[nameStart] == (byte)'t') { tVal = value; }
+                }
+            }
+
+            private static bool IsXmlSpace(byte b)
+            {
+                return b is (byte)' ' or (byte)'\t' or (byte)'\r' or (byte)'\n';
             }
 
             private enum Kind { Number, Shared, Inline, Bool, Error, Formula }

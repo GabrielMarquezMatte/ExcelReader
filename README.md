@@ -22,33 +22,33 @@ Compares ExcelReader against established XLSX libraries on the same generated wo
 
 | Scenario | ExcelReader | MiniExcel | Sylvan | SpreadCheetah |
 |---|---:|---:|---:|---:|
-| Cell-by-cell read | 23.52 ms, 12.16 KB | 150.35 ms, 210.5 MB | 40.26 ms, 1.89 MB | — |
-| Typed row parsing | 23.86 ms, 3.87 MB | 169.37 ms, 199.31 MB | 61.80 ms, 10.47 MB | — |
-| Workbook writing | 16.78 ms, 2.11 MB | 291.92 ms, 85.14 MB | — | 14.90 ms, 12.32 MB |
+| Cell-by-cell read | 19.68 ms, 12.16 KB | 155.57 ms, 210.5 MB | 39.92 ms, 1.89 MB | — |
+| Typed row parsing | 20.23 ms, 3.87 MB | 169.18 ms, 199.31 MB | 61.22 ms, 10.47 MB | — |
+| Workbook writing | 17.73 ms, 2.11 MB | 292.37 ms, 85.14 MB | — | 15.18 ms, 12.32 MB |
 
-ExcelReader is ~6x faster than MiniExcel for reads and ~17x faster for writes. Compared with Sylvan, ~1.7x faster for raw reads and ~2.6x faster for typed parsing, with substantially lower allocations. For writing, SpreadCheetah is marginally faster (~1.1x) but allocates ~6x more memory; the XLSB writer beats both on speed and allocation (see below).
+ExcelReader is ~8x faster than MiniExcel for reads and ~16x faster for writes. Compared with Sylvan, ~2x faster for raw reads and ~3x faster for typed parsing, with substantially lower allocations. For writing, SpreadCheetah is marginally faster (~1.2x) but allocates ~6x more memory; the XLSB writer beats both on speed and allocation (see below).
 
 ### XLSB (BIFF12)
 
 | Scenario | ExcelReader |
 |---|---:|
-| Cell-by-cell read | 4.00 ms, 12.21 KB |
-| Cell-by-cell read async | 4.68 ms, 14.65 KB |
-| Typed row parsing | 9.03 ms, 3.87 MB |
-| Typed row parsing async | 10.92 ms, 3.88 MB |
-| Workbook writing | 8.46 ms, 2.04 MB |
+| Cell-by-cell read | 3.99 ms, 12.21 KB |
+| Cell-by-cell read async | 4.70 ms, 14.65 KB |
+| Typed row parsing | 9.23 ms, 3.87 MB |
+| Typed row parsing async | 10.77 ms, 3.88 MB |
+| Workbook writing | 8.59 ms, 2.04 MB |
 
-XLSB is the fastest path in these results: raw reads are ~6x faster than XLSX reads, typed parsing is ~2.6x faster than XLSX parsing, and writing is ~2x faster than XLSX writing. The XLSB writer is also ~1.8x faster than SpreadCheetah while allocating ~83% less memory.
+XLSB is the fastest path in these results: raw reads are ~5x faster than XLSX reads, typed parsing is ~2x faster than XLSX parsing, and writing is ~2x faster than XLSX writing. The XLSB writer is also ~1.8x faster than SpreadCheetah while allocating ~83% less memory.
 
 ### XLS (BIFF8)
 
 | Scenario | ExcelReader | Sylvan |
 |---|---:|---:|
-| Cell-by-cell read | 4.80 ms, 61.3 KB | 5.51 ms, 1,717.73 KB |
-| Cell-by-cell read async | 4.84 ms, 61.37 KB | — |
-| Workbook writing | 6.49 ms, 12.37 MB | — |
+| Cell-by-cell read | 4.83 ms, 61.3 KB | 5.60 ms, 1,717.73 KB |
+| Cell-by-cell read async | 4.90 ms, 61.37 KB | — |
+| Workbook writing | 6.67 ms, 12.37 MB | — |
 
-XLS reading allocates ~28x less than Sylvan at comparable speed. The XLS writer is ~2.6x faster than the XLSX writer (6.49 ms vs 16.83 ms), but allocates more in this benchmark.
+XLS reading allocates ~28x less than Sylvan at comparable speed. The XLS writer is ~2.6x faster than the XLSX writer (6.67 ms vs 17.37 ms), but allocates more in this benchmark.
 
 Run the benchmarks locally:
 
