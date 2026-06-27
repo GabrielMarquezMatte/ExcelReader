@@ -342,7 +342,7 @@ namespace ExcelReader.Core.Reader
                 {
                     return;
                 }
-                byte[] bigger = ArrayPool<byte>.Shared.Rent(Math.Max(_vals.Length * 2, needed));
+                byte[] bigger = ArrayPool<byte>.Shared.Rent(LimitChecks.NextBufferSize(_reader._options, _vals.Length, needed));
                 Array.Copy(_vals, bigger, _valLen);
                 ArrayPool<byte>.Shared.Return(_vals);
                 _vals = bigger;
@@ -397,7 +397,7 @@ namespace ExcelReader.Core.Reader
                 }
                 else if (_len == _buf.Length)
                 {
-                    byte[] bigger = ArrayPool<byte>.Shared.Rent(_buf.Length * 2);
+                    byte[] bigger = ArrayPool<byte>.Shared.Rent(LimitChecks.NextBufferSize(_reader._options, _buf.Length, _buf.Length + 1));
                     _buf.AsSpan(0, _len).CopyTo(bigger);
                     ArrayPool<byte>.Shared.Return(_buf);
                     _buf = bigger;

@@ -339,7 +339,7 @@ namespace ExcelReader.Core.Reader
                 {
                     return;
                 }
-                byte[] bigger = ArrayPool<byte>.Shared.Rent(Math.Max(_vals.Length * 2, needed));
+                byte[] bigger = ArrayPool<byte>.Shared.Rent(LimitChecks.NextBufferSize(_reader._options, _vals.Length, needed));
                 Array.Copy(_vals, bigger, _valLen);
                 ArrayPool<byte>.Shared.Return(_vals);
                 _vals = bigger;
