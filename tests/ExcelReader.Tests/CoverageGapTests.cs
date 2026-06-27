@@ -310,10 +310,8 @@ namespace ExcelReader.Tests
                 wb.Start();
                 XlsSheetWriter sheet = wb.AddSheet("S1");
                 sheet.Start();
-                using (XlsRowWriter row = sheet.StartRow())
-                {
-                    row.Write("v");
-                }
+                using XlsRowWriter row = sheet.StartRow();
+                row.Write("v");
                 // No End on sheet or workbook — disposal must finalize and close the stream.
             }
             Assert.True(ms.Disposed);

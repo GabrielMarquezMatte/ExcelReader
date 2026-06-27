@@ -12,16 +12,15 @@ namespace ExcelReader.Core.Writer
         private readonly XlsbSheetWriter _owner;
         [SuppressMessage("SharpSource", "SS066:DisposableFieldIsNotDisposed",
             Justification = "BiffBuffer is owned by XlsbSheetWriter; row writer borrows it.")]
-        private readonly BiffBuffer _records;
+        private readonly BiffBuffer _payload;
         private readonly bool _date1904;
-        private readonly BiffBuffer _payload = new(256);
         private int _columnIndex;
         private bool _disposed;
 
-        internal XlsbRowWriter(XlsbSheetWriter owner, BiffBuffer records, bool date1904)
+        internal XlsbRowWriter(XlsbSheetWriter owner, bool date1904)
         {
             _owner = owner;
-            _records = records;
+            _payload = owner.Payload;
             _date1904 = date1904;
         }
 
@@ -38,7 +37,7 @@ namespace ExcelReader.Core.Writer
                 _payload.Reset();
                 Biff12RecordWriter.WriteCellHeader(_payload, _columnIndex, 0);
                 Biff12RecordWriter.WriteWideString(_payload, value);
-                Biff12RecordWriter.WriteRecord(_records, Brt.CellSt, _payload.Span);
+                _owner.WriteRecord(Brt.CellSt, _payload.Span);
             }
             _columnIndex++;
         }
@@ -49,7 +48,7 @@ namespace ExcelReader.Core.Writer
             _payload.Reset();
             Biff12RecordWriter.WriteCellHeader(_payload, _columnIndex, 0);
             _payload.WriteByte(value ? (byte)1 : (byte)0);
-            Biff12RecordWriter.WriteRecord(_records, Brt.CellBool, _payload.Span);
+            _owner.WriteRecord(Brt.CellBool, _payload.Span);
             _columnIndex++;
         }
 
@@ -86,6 +85,91 @@ namespace ExcelReader.Core.Writer
             _columnIndex++;
         }
 
+        public void Write(int value)
+        {
+            ThrowIfDisposed();
+            WriteDouble(value, style: 0);
+        }
+
+        public void Write(int? value)
+        {
+            ThrowIfDisposed();
+            if (value is not null)
+            {
+                WriteDouble(value.Value, style: 0);
+                return;
+            }
+            _columnIndex++;
+        }
+
+        public void Write(long value)
+        {
+            ThrowIfDisposed();
+            WriteDouble(value, style: 0);
+        }
+
+        public void Write(long? value)
+        {
+            ThrowIfDisposed();
+            if (value is not null)
+            {
+                WriteDouble(value.Value, style: 0);
+                return;
+            }
+            _columnIndex++;
+        }
+
+        public void Write(float value)
+        {
+            ThrowIfDisposed();
+            WriteDouble(value, style: 0);
+        }
+
+        public void Write(float? value)
+        {
+            ThrowIfDisposed();
+            if (value is not null)
+            {
+                WriteDouble(value.Value, style: 0);
+                return;
+            }
+            _columnIndex++;
+        }
+
+        public void Write(double value)
+        {
+            ThrowIfDisposed();
+            WriteDouble(value, style: 0);
+        }
+
+        public void Write(double? value)
+        {
+            ThrowIfDisposed();
+            if (value is not null)
+            {
+                WriteDouble(value.Value, style: 0);
+                return;
+            }
+            _columnIndex++;
+        }
+
+        public void Write(decimal value)
+        {
+            ThrowIfDisposed();
+            WriteDouble((double)value, style: 0);
+        }
+
+        public void Write(decimal? value)
+        {
+            ThrowIfDisposed();
+            if (value is not null)
+            {
+                WriteDouble((double)value.Value, style: 0);
+                return;
+            }
+            _columnIndex++;
+        }
+
         public void Write<T>(T value)
             where T : ISpanFormattable
         {
@@ -108,10 +192,7 @@ namespace ExcelReader.Core.Writer
         public void Skip(int count = 1)
         {
             ThrowIfDisposed();
-            if (count < 0)
-            {
-                throw new ArgumentOutOfRangeException(nameof(count));
-            }
+            ArgumentOutOfRangeException.ThrowIfNegative(count);
             _columnIndex += count;
         }
 
@@ -120,13 +201,38 @@ namespace ExcelReader.Core.Writer
             _payload.Reset();
             Biff12RecordWriter.WriteCellHeader(_payload, _columnIndex, style);
             _payload.WriteDouble(value);
-            Biff12RecordWriter.WriteRecord(_records, Brt.CellReal, _payload.Span);
+            _owner.WriteRecord(Brt.CellReal, _payload.Span);
             _columnIndex++;
         }
 
-        private static double ToDouble<T>(T value)
+        internal static double ToDouble<T>(T value)
             where T : ISpanFormattable
         {
+            switch (value)
+            {
+                case double d:
+                    return d;
+                case float f:
+                    return f;
+                case decimal m:
+                    return (double)m;
+                case int i:
+                    return i;
+                case long l:
+                    return l;
+                case short s:
+                    return s;
+                case byte b:
+                    return b;
+                case uint ui:
+                    return ui;
+                case ulong ul:
+                    return ul;
+                case ushort us:
+                    return us;
+                case sbyte sb:
+                    return sb;
+            }
             if (value is IConvertible convertible)
             {
                 return convertible.ToDouble(CultureInfo.InvariantCulture);
@@ -145,7 +251,6 @@ namespace ExcelReader.Core.Writer
                 return ValueTask.CompletedTask;
             }
             _disposed = true;
-            _payload.Dispose();
             _owner.NotifyRowEnded();
             return ValueTask.CompletedTask;
         }

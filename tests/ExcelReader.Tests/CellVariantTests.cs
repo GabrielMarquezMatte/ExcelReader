@@ -76,7 +76,7 @@ namespace ExcelReader.Tests
             // Shared strings are a raw-XML feature WorkbookWriter does not emit.
             using var ms = WorkbookBuilder.Build(
                 """<row r="1"><c r="A1" t="s"><v>0</v></c><c r="B1" t="s"><v>1</v></c></row>""",
-                sharedStrings: """<si><t>say &quot;hi&quot;</t></si><si><t>it&apos;s</t></si>""");
+                sharedStrings: "<si><t>say &quot;hi&quot;</t></si><si><t>it&apos;s</t></si>");
             using var reader = Excel.From(ms);
             using var e = reader.GetEnumerator();
             Assert.True(e.MoveNext());
@@ -91,7 +91,7 @@ namespace ExcelReader.Tests
             // &#x41; = 'A', &#X7A; = 'z' (uppercase X prefix is also accepted)
             using var ms = WorkbookBuilder.Build(
                 """<row r="1"><c r="A1" t="s"><v>0</v></c></row>""",
-                sharedStrings: """<si><t>&#x41;&#X7A;</t></si>""");
+                sharedStrings: "<si><t>&#x41;&#X7A;</t></si>");
             using var reader = Excel.From(ms);
             using var e = reader.GetEnumerator();
             Assert.True(e.MoveNext());
@@ -104,7 +104,7 @@ namespace ExcelReader.Tests
             // Two <r> runs per shared string; WriteTextRuns must concatenate both <t> values.
             using var ms = WorkbookBuilder.Build(
                 """<row r="1"><c r="A1" t="s"><v>0</v></c></row>""",
-                sharedStrings: """<si><r><rPr><b/></rPr><t>Hello</t></r><r><rPr><i/></rPr><t> World</t></r></si>""");
+                sharedStrings: "<si><r><rPr><b/></rPr><t>Hello</t></r><r><rPr><i/></rPr><t> World</t></r></si>");
             using var reader = Excel.From(ms);
             using var e = reader.GetEnumerator();
             Assert.True(e.MoveNext());

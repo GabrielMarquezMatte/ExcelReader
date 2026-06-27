@@ -3,88 +3,90 @@ using System.IO.Compression;
 
 namespace ExcelReader.Core.Reader
 {
+    [SuppressMessage("Design", "CA1068:CancellationToken parameters must come last",
+        Justification = "ExcelReaderOptions was added after existing CancellationToken parameters to preserve source compatibility.")]
     public static class Excel
     {
-        public static XlsxReader FromFile(string path)
+        public static XlsxReader FromFile(string path, ExcelReaderOptions? options = null)
         {
-            return new XlsxReader(File.OpenRead(path), leaveOpen: false);
+            return new XlsxReader(File.OpenRead(path), leaveOpen: false, options);
         }
 
-        public static XlsxReader From(Stream stream, bool leaveOpen = true)
+        public static XlsxReader From(Stream stream, bool leaveOpen = true, ExcelReaderOptions? options = null)
         {
-            return new XlsxReader(stream, leaveOpen);
+            return new XlsxReader(stream, leaveOpen, options);
         }
 
         [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP001:Dispose created",
             Justification = "Stream ownership transfers to XlsReader, which streams from it and disposes it on Dispose (and on construction failure).")]
         [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
             Justification = "Stream ownership transfers to XlsReader, which streams from it and disposes it on Dispose (and on construction failure).")]
-        public static XlsReader FromXlsFile(string path)
+        public static XlsReader FromXlsFile(string path, ExcelReaderOptions? options = null)
         {
-            return new XlsReader(File.OpenRead(path), leaveOpen: false);
+            return new XlsReader(File.OpenRead(path), leaveOpen: false, options);
         }
 
-        public static XlsReader FromXls(Stream stream, bool leaveOpen = true)
+        public static XlsReader FromXls(Stream stream, bool leaveOpen = true, ExcelReaderOptions? options = null)
         {
-            return new XlsReader(stream, leaveOpen);
+            return new XlsReader(stream, leaveOpen, options);
         }
 
         [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP001:Dispose created",
             Justification = "Stream ownership transfers to XlsbReader on success, disposed on failure.")]
         [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
             Justification = "Stream ownership transfers to XlsbReader on success, disposed on failure.")]
-        public static XlsbReader FromXlsbFile(string path)
+        public static XlsbReader FromXlsbFile(string path, ExcelReaderOptions? options = null)
         {
-            return new XlsbReader(File.OpenRead(path), leaveOpen: false);
+            return new XlsbReader(File.OpenRead(path), leaveOpen: false, options);
         }
 
-        public static XlsbReader FromXlsb(Stream stream, bool leaveOpen = true)
+        public static XlsbReader FromXlsb(Stream stream, bool leaveOpen = true, ExcelReaderOptions? options = null)
         {
-            return new XlsbReader(stream, leaveOpen);
+            return new XlsbReader(stream, leaveOpen, options);
         }
 
         [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP001:Dispose created",
             Justification = "Stream ownership transfers to CreateAsync, which disposes it on failure and via the reader on success.")]
-        public static ValueTask<XlsxReader> FromFileAsync(string path, CancellationToken ct = default)
+        public static ValueTask<XlsxReader> FromFileAsync(string path, CancellationToken ct = default, ExcelReaderOptions? options = null)
         {
             FileStream stream = new(path, FileMode.Open, FileAccess.Read, FileShare.Read, bufferSize: 65536,
                                     options: FileOptions.Asynchronous | FileOptions.SequentialScan);
-            return XlsxReader.CreateAsync(stream, leaveOpen: false, ct);
+            return XlsxReader.CreateAsync(stream, leaveOpen: false, options, ct);
         }
 
-        public static ValueTask<XlsxReader> FromAsync(Stream stream, bool leaveOpen = true, CancellationToken ct = default)
+        public static ValueTask<XlsxReader> FromAsync(Stream stream, bool leaveOpen = true, CancellationToken ct = default, ExcelReaderOptions? options = null)
         {
-            return XlsxReader.CreateAsync(stream, leaveOpen, ct);
+            return XlsxReader.CreateAsync(stream, leaveOpen, options, ct);
         }
 
         [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP001:Dispose created",
             Justification = "Stream ownership transfers to CreateAsync, which disposes it on failure and is consumed into the reader on success.")]
         [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
             Justification = "Stream ownership transfers to CreateAsync, which disposes it on failure and via the reader on success.")]
-        public static ValueTask<XlsReader> FromXlsFileAsync(string path, CancellationToken ct = default)
+        public static ValueTask<XlsReader> FromXlsFileAsync(string path, CancellationToken ct = default, ExcelReaderOptions? options = null)
         {
             FileStream stream = new(path, FileMode.Open, FileAccess.Read, FileShare.Read, bufferSize: 65536,
                                     options: FileOptions.Asynchronous | FileOptions.SequentialScan);
-            return XlsReader.CreateAsync(stream, leaveOpen: false, ct);
+            return XlsReader.CreateAsync(stream, leaveOpen: false, options, ct);
         }
 
-        public static ValueTask<XlsReader> FromXlsAsync(Stream stream, bool leaveOpen = true, CancellationToken ct = default)
+        public static ValueTask<XlsReader> FromXlsAsync(Stream stream, bool leaveOpen = true, CancellationToken ct = default, ExcelReaderOptions? options = null)
         {
-            return XlsReader.CreateAsync(stream, leaveOpen, ct);
+            return XlsReader.CreateAsync(stream, leaveOpen, options, ct);
         }
 
         [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP001:Dispose created",
             Justification = "Stream ownership transfers to CreateAsync, which disposes it on failure and via the reader on success.")]
-        public static ValueTask<XlsbReader> FromXlsbFileAsync(string path, CancellationToken ct = default)
+        public static ValueTask<XlsbReader> FromXlsbFileAsync(string path, CancellationToken ct = default, ExcelReaderOptions? options = null)
         {
             FileStream stream = new(path, FileMode.Open, FileAccess.Read, FileShare.Read, bufferSize: 65536,
                                     options: FileOptions.Asynchronous | FileOptions.SequentialScan);
-            return XlsbReader.CreateAsync(stream, leaveOpen: false, ct);
+            return XlsbReader.CreateAsync(stream, leaveOpen: false, options, ct);
         }
 
-        public static ValueTask<XlsbReader> FromXlsbAsync(Stream stream, bool leaveOpen = true, CancellationToken ct = default)
+        public static ValueTask<XlsbReader> FromXlsbAsync(Stream stream, bool leaveOpen = true, CancellationToken ct = default, ExcelReaderOptions? options = null)
         {
-            return XlsbReader.CreateAsync(stream, leaveOpen, ct);
+            return XlsbReader.CreateAsync(stream, leaveOpen, options, ct);
         }
 
         // The leading bytes that distinguish container formats: XLSX and XLSB are ZIP ("PK\x03\x04"),
@@ -102,35 +104,37 @@ namespace ExcelReader.Core.Reader
             Justification = "Stream ownership transfers to OpenSeekable, which disposes it on failure and via the reader on success.")]
         [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
             Justification = "Stream ownership transfers to OpenSeekable, which disposes it on failure and via the reader on success.")]
-        public static IExcelRowReader Open(string path)
+        public static IExcelRowReader Open(string path, ExcelReaderOptions? options = null)
         {
             ArgumentNullException.ThrowIfNull(path);
-            return OpenSeekable(File.OpenRead(path), leaveOpen: false);
+            return OpenSeekable(File.OpenRead(path), leaveOpen: false, options);
         }
 
-        public static IExcelRowReader Open(Stream stream, bool leaveOpen = true)
+        public static IExcelRowReader Open(Stream stream, bool leaveOpen = true, ExcelReaderOptions? options = null)
         {
             ArgumentNullException.ThrowIfNull(stream);
-            return OpenSeekable(stream, leaveOpen);
+            return OpenSeekable(stream, leaveOpen, options);
         }
 
         [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP001:Dispose created",
             Justification = "Stream ownership transfers to OpenSeekableAsync, which disposes it on failure and via the reader on success.")]
-        public static ValueTask<IExcelRowReader> OpenAsync(string path, CancellationToken ct = default)
+        [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
+            Justification = "Stream ownership transfers to OpenSeekableAsync, which disposes it on failure and via the reader on success.")]
+        public static ValueTask<IExcelRowReader> OpenAsync(string path, CancellationToken ct = default, ExcelReaderOptions? options = null)
         {
             ArgumentNullException.ThrowIfNull(path);
             FileStream stream = new(path, FileMode.Open, FileAccess.Read, FileShare.Read, bufferSize: 65536,
                                     options: FileOptions.Asynchronous | FileOptions.SequentialScan);
-            return OpenSeekableAsync(stream, leaveOpen: false, ct);
+            return OpenSeekableAsync(stream, leaveOpen: false, options, ct);
         }
 
-        public static ValueTask<IExcelRowReader> OpenAsync(Stream stream, bool leaveOpen = true, CancellationToken ct = default)
+        public static ValueTask<IExcelRowReader> OpenAsync(Stream stream, bool leaveOpen = true, CancellationToken ct = default, ExcelReaderOptions? options = null)
         {
             ArgumentNullException.ThrowIfNull(stream);
-            return OpenSeekableAsync(stream, leaveOpen, ct);
+            return OpenSeekableAsync(stream, leaveOpen, options, ct);
         }
 
-        private static IExcelRowReader OpenSeekable(Stream stream, bool leaveOpen)
+        private static IExcelRowReader OpenSeekable(Stream stream, bool leaveOpen, ExcelReaderOptions? options)
         {
             Format format;
             try
@@ -147,14 +151,14 @@ namespace ExcelReader.Core.Reader
             }
             return format switch
             {
-                Format.Xls => new XlsReader(stream, leaveOpen),
-                Format.Xlsb => new XlsbReader(stream, leaveOpen),
-                Format.Xlsx => new XlsxReader(stream, leaveOpen),
+                Format.Xls => new XlsReader(stream, leaveOpen, options),
+                Format.Xlsb => new XlsbReader(stream, leaveOpen, options),
+                Format.Xlsx => new XlsxReader(stream, leaveOpen, options),
                 _ => throw new System.Diagnostics.UnreachableException(),
             };
         }
 
-        private static async ValueTask<IExcelRowReader> OpenSeekableAsync(Stream stream, bool leaveOpen, CancellationToken ct)
+        private static async ValueTask<IExcelRowReader> OpenSeekableAsync(Stream stream, bool leaveOpen, ExcelReaderOptions? options, CancellationToken ct)
         {
             Format format;
             try
@@ -171,9 +175,9 @@ namespace ExcelReader.Core.Reader
             }
             return format switch
             {
-                Format.Xls => await XlsReader.CreateAsync(stream, leaveOpen, ct).ConfigureAwait(false),
-                Format.Xlsb => await XlsbReader.CreateAsync(stream, leaveOpen, ct).ConfigureAwait(false),
-                Format.Xlsx => await XlsxReader.CreateAsync(stream, leaveOpen, ct).ConfigureAwait(false),
+                Format.Xls => await XlsReader.CreateAsync(stream, leaveOpen, options, ct).ConfigureAwait(false),
+                Format.Xlsb => await XlsbReader.CreateAsync(stream, leaveOpen, options, ct).ConfigureAwait(false),
+                Format.Xlsx => await XlsxReader.CreateAsync(stream, leaveOpen, options, ct).ConfigureAwait(false),
                 _ => throw new System.Diagnostics.UnreachableException(),
             };
         }

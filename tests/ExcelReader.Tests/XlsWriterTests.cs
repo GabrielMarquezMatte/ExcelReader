@@ -59,6 +59,51 @@ namespace ExcelReader.Tests
         }
 
         [Fact]
+        public async Task NumericOverloadsRoundTrip()
+        {
+            CancellationToken ct = TestContext.Current.CancellationToken;
+            byte[] bytes = await WriteAsync(wb =>
+            {
+                var s = wb.AddSheet("Numbers");
+                s.Start();
+                using (var r = s.StartRow())
+                {
+                    r.Write(123);
+                    r.Write(1234567890123L);
+                    r.Write(1.5f);
+                    r.Write(2.75d);
+                    r.Write(12.5m);
+                    r.Write((int?)null);
+                    r.Write((long?)7L);
+                    r.Write((double?)null);
+                    r.Write((decimal?)8.25m);
+                }
+                s.End();
+            }, ct: ct);
+
+            using var reader = Excel.FromXls(new MemoryStream(bytes));
+            using var e = reader.GetEnumerator();
+            Assert.True(e.MoveNext());
+            Assert.True(e.Current[0].TryParse(Inv, out int intValue));
+            Assert.Equal(123, intValue);
+            Assert.True(e.Current[1].TryParse(Inv, out long longValue));
+            Assert.Equal(1234567890123L, longValue);
+            Assert.True(e.Current[2].TryParse(Inv, out double floatValue));
+            Assert.Equal(1.5, floatValue);
+            Assert.True(e.Current[3].TryParse(Inv, out double doubleValue));
+            Assert.Equal(2.75, doubleValue);
+            Assert.True(e.Current[4].TryParse(Inv, out decimal decimalValue));
+            Assert.Equal(12.5m, decimalValue);
+            Assert.Equal(CellType.Empty, e.Current[5].Type);
+            Assert.True(e.Current[6].TryParse(Inv, out long nullableLong));
+            Assert.Equal(7L, nullableLong);
+            Assert.Equal(CellType.Empty, e.Current[7].Type);
+            Assert.True(e.Current[8].TryParse(Inv, out decimal nullableDecimal));
+            Assert.Equal(8.25m, nullableDecimal);
+            Assert.False(e.MoveNext());
+        }
+
+        [Fact]
         public async Task NullsAndSkipLeaveCellsEmpty()
         {
             CancellationToken ct = TestContext.Current.CancellationToken;
