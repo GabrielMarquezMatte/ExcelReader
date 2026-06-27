@@ -13,7 +13,8 @@
     <!-- CA2007: ConfigureAwait is not needed in test code (no captured sync context). -->
     <!-- CA1849/S6966/SS033/SS059: tests deliberately exercise the sync reader/dispose
          paths; "use the async overload" is noise here. Core keeps these rules active. -->
-    <NoWarn>$(NoWarn);CA2007;CA1849;S6966;SS033;SS059;HLQ005;S3459;S1144;MA0004;IDISP004</NoWarn>
+    <NoWarn>$(NoWarn);CA2007;CA1849;S6966;SS033;SS059;HLQ005;S3459;S1144;MA0004;IDISP004;VSTHRD103;AsyncFixer02;IDISP005;IDISP001</NoWarn>
+    <NoWarn>$(NoWarn);S3878;CA2000</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>

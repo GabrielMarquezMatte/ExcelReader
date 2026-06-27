@@ -104,6 +104,53 @@ namespace ExcelReader.Tests
         }
 
         [Fact]
+        public async Task NullableAndGenericOverloadsRoundTrip()
+        {
+            CancellationToken ct = TestContext.Current.CancellationToken;
+            DateTime date = new(2026, 6, 27, 0, 0, 0, DateTimeKind.Unspecified);
+            byte[] bytes = await WriteAsync(wb =>
+            {
+                var s = wb.AddSheet("MoreNumbers");
+                s.Start();
+                using (var r = s.StartRow())
+                {
+                    r.Write((bool?)true);
+                    r.Write((bool?)null);
+                    r.Write((DateTime?)date);
+                    r.Write((DateTime?)null);
+                    r.Write((float?)1.25f);
+                    r.Write((float?)null);
+                    r.Write<short>(6);
+                    r.Write<short>((short?)7);
+                    r.Write<short>((short?)null);
+                    r.Skip(0);
+                    r.Write<byte>(8);
+                }
+                s.End();
+            }, ct: ct);
+
+            using var reader = Excel.FromXls(new MemoryStream(bytes));
+            using var e = reader.GetEnumerator();
+            Assert.True(e.MoveNext());
+            Assert.Equal(CellType.Boolean, e.Current[0].Type);
+            Assert.Equal(CellType.Empty, e.Current[1].Type);
+            Assert.True(e.Current[2].TryGetDateTime(out DateTime parsed));
+            Assert.Equal(date, parsed);
+            Assert.Equal(CellType.Empty, e.Current[3].Type);
+            Assert.True(e.Current[4].TryParse(Inv, out double nullableFloat));
+            Assert.Equal(1.25, nullableFloat);
+            Assert.Equal(CellType.Empty, e.Current[5].Type);
+            Assert.True(e.Current[6].TryParse(Inv, out short genericShort));
+            Assert.Equal(6, genericShort);
+            Assert.True(e.Current[7].TryParse(Inv, out short nullableShort));
+            Assert.Equal(7, nullableShort);
+            Assert.Equal(CellType.Empty, e.Current[8].Type);
+            Assert.True(e.Current[9].TryParse(Inv, out byte genericByte));
+            Assert.Equal(8, genericByte);
+            Assert.False(e.MoveNext());
+        }
+
+        [Fact]
         public async Task NullsAndSkipLeaveCellsEmpty()
         {
             CancellationToken ct = TestContext.Current.CancellationToken;

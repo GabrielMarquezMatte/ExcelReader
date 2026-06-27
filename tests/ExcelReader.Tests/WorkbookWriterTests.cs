@@ -1,4 +1,5 @@
 using System.Diagnostics.CodeAnalysis;
+using ExcelReader.Core.Enums;
 using ExcelReader.Core.Parser;
 using ExcelReader.Core.Reader;
 using ExcelReader.Core.Writer;
@@ -237,6 +238,48 @@ namespace ExcelReader.Tests
             Assert.Null(rows[0].Quantity);
             Assert.NotNull(rows[0].EventDate);
             Assert.Equal(dt.Date, rows[0].EventDate!.Value.Date);
+        }
+
+        [Fact]
+        public async Task NullableAndGenericNumericOverloadsRoundTrip()
+        {
+            await using var ms = await WriteWorkbookAsync(async wb =>
+            {
+                SheetWriter sheet = wb.AddSheet("Numbers");
+                await sheet.StartAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
+
+                await using (RowWriter row = await sheet.StartRowAsync(TestContext.Current.CancellationToken).ConfigureAwait(true))
+                {
+                    row.Write((long?)1234567890123L);
+                    row.Write((long?)null);
+                    row.Write((double?)2.5d);
+                    row.Write((double?)null);
+                    row.Write((decimal?)3.75m);
+                    row.Write((decimal?)null);
+                    row.Write<short>(4);
+                    row.Write<short>((short?)5);
+                    row.Write<short>(null);
+                    row.Skip(0);
+                    row.Write(6);
+                }
+
+                await sheet.EndAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
+            }).ConfigureAwait(true);
+
+            await using var reader = Excel.From(ms);
+            using XlsxReader.Enumerator e = reader.GetEnumerator();
+            Assert.True(e.MoveNext());
+            Assert.Equal("1234567890123", e.Current[0].GetString());
+            Assert.Equal(CellType.Empty, e.Current[1].Type);
+            Assert.Equal("2.5", e.Current[2].GetString());
+            Assert.Equal(CellType.Empty, e.Current[3].Type);
+            Assert.Equal("3.75", e.Current[4].GetString());
+            Assert.Equal(CellType.Empty, e.Current[5].Type);
+            Assert.Equal("4", e.Current[6].GetString());
+            Assert.Equal("5", e.Current[7].GetString());
+            Assert.Equal(CellType.Empty, e.Current[8].Type);
+            Assert.Equal("6", e.Current[9].GetString());
+            Assert.False(e.MoveNext());
         }
 
         private static readonly string[] stringArray = ["Alice", "Bob", "Carol", "Dave", "Eve"];

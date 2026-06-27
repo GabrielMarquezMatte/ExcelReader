@@ -376,9 +376,9 @@ namespace ExcelReader.Tests
                 Assert.Equal("iface", sync.Current[0].GetString());
             }
 
-            await using IExcelRowEnumerator async = await rowReader.GetAsyncEnumeratorAsync(TestContext.Current.CancellationToken);
-            Assert.True(await async.MoveNextAsync());
-            Assert.Equal("iface", async.Current[0].GetString());
+            await using var asyncEnumerator = await rowReader.GetAsyncEnumeratorAsync(TestContext.Current.CancellationToken);
+            Assert.True(await asyncEnumerator.MoveNextAsync());
+            Assert.Equal("iface", asyncEnumerator.Current[0].GetString());
         }
 
         [Fact]
