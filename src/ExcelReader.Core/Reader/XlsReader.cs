@@ -7,6 +7,7 @@ namespace ExcelReader.Core.Reader
     public sealed partial class XlsReader : IExcelReader, IExcelRowReader, IExcelRowReader<XlsReader.Enumerator>
     {
         private readonly WorkbookStream _workbook;
+        private readonly ExcelReaderOptions _options;
         private readonly (string Name, int Offset)[] _sheets;
         private readonly bool[] _styleIsDate;
         private readonly bool _date1904;
@@ -14,17 +15,18 @@ namespace ExcelReader.Core.Reader
         private int[] _sharedOffsets;
         private int _current;
 
-        internal XlsReader(Stream stream, bool leaveOpen)
-            : this(XlsCompoundFile.OpenWorkbook(stream, leaveOpen))
+        internal XlsReader(Stream stream, bool leaveOpen, ExcelReaderOptions? options = null)
+            : this(XlsCompoundFile.OpenWorkbook(stream, leaveOpen), options)
         {
         }
 
-        private XlsReader(WorkbookStream workbook)
+        private XlsReader(WorkbookStream workbook, ExcelReaderOptions? options = null)
         {
             _workbook = workbook;
+            _options = options ?? ExcelReaderOptions.Default;
             using (BiffCursor cursor = workbook.OpenCursor())
             {
-                ParseWorkbookGlobals(cursor, out _sheets, out _styleIsDate, out _date1904, out _sharedFlat, out _sharedOffsets);
+                ParseWorkbookGlobals(cursor, _options, out _sheets, out _styleIsDate, out _date1904, out _sharedFlat, out _sharedOffsets);
             }
             if (_sheets.Length == 0)
             {
@@ -35,10 +37,10 @@ namespace ExcelReader.Core.Reader
             }
         }
 
-        internal static async ValueTask<XlsReader> CreateAsync(Stream stream, bool leaveOpen, CancellationToken ct)
+        internal static async ValueTask<XlsReader> CreateAsync(Stream stream, bool leaveOpen, ExcelReaderOptions? options = null, CancellationToken ct = default)
         {
             WorkbookStream workbook = await XlsCompoundFile.OpenWorkbookAsync(stream, leaveOpen, ct).ConfigureAwait(false);
-            return new XlsReader(workbook);
+            return new XlsReader(workbook, options);
         }
 
         internal BiffCursor OpenCursor(int offset)
@@ -134,6 +136,7 @@ namespace ExcelReader.Core.Reader
 
         private static void ParseWorkbookGlobals(
             BiffCursor cursor,
+            ExcelReaderOptions options,
             out (string Name, int Offset)[] sheets,
             out bool[] styleIsDate,
             out bool date1904,
@@ -175,7 +178,7 @@ namespace ExcelReader.Core.Reader
                         }
                         break;
                     case Rec.Sst:
-                        DecodeSstFromCursor(cursor, data, out sharedFlat, out sharedOffsets);
+                        DecodeSstFromCursor(cursor, data, options, out sharedFlat, out sharedOffsets);
                         break;
                     case Rec.Format:
                         if (TryParseFormat(data, out int formatId, out string format))
@@ -244,27 +247,35 @@ namespace ExcelReader.Core.Reader
         // The SST payload (first record minus its 8-byte header) plus any CONTINUE records must be
         // contiguous because strings can straddle record boundaries. Gather into a pooled buffer
         // off the cursor, then decode into the retained flat buffer.
-        private static void DecodeSstFromCursor(BiffCursor cursor, ReadOnlySpan<byte> first, out byte[] sharedFlat, out int[] sharedOffsets)
+        private static void DecodeSstFromCursor(
+            BiffCursor cursor,
+            ReadOnlySpan<byte> first,
+            ExcelReaderOptions options,
+            out byte[] sharedFlat,
+            out int[] sharedOffsets)
         {
-            byte[] buffer = ArrayPool<byte>.Shared.Rent(Math.Max(256, first.Length));
+            int initialLen = first.Length > 8 ? first.Length - 8 : 0;
+            LimitChecks.ThrowIfOverSharedStringLimit(options, initialLen);
+            byte[] buffer = ArrayPool<byte>.Shared.Rent(Math.Max(256, initialLen));
             int len = 0;
             if (first.Length > 8)
             {
                 first[8..].CopyTo(buffer);
-                len = first.Length - 8;
+                len = initialLen;
             }
             while (cursor.PeekId() == Rec.Continue && cursor.TryReadRecord(out _, out ReadOnlySpan<byte> cont))
             {
-                EnsureCapacity(ref buffer, len + cont.Length);
+                EnsureSharedCapacity(options, ref buffer, len + cont.Length);
                 cont.CopyTo(buffer.AsSpan(len));
                 len += cont.Length;
             }
-            DecodeSharedStrings(buffer.AsSpan(0, len), out sharedFlat, out sharedOffsets);
+            DecodeSharedStrings(buffer.AsSpan(0, len), options, out sharedFlat, out sharedOffsets);
             ArrayPool<byte>.Shared.Return(buffer);
         }
 
-        private static void DecodeSharedStrings(ReadOnlySpan<byte> sst, out byte[] sharedFlat, out int[] sharedOffsets)
+        private static void DecodeSharedStrings(ReadOnlySpan<byte> sst, ExcelReaderOptions options, out byte[] sharedFlat, out int[] sharedOffsets)
         {
+            LimitChecks.ThrowIfOverSharedStringLimit(options, sst.Length);
             byte[] flat = ArrayPool<byte>.Shared.Rent(Math.Max(256, sst.Length * 3));
             int flatLen = 0;
             List<int> offsets = [0];
@@ -293,7 +304,7 @@ namespace ExcelReader.Core.Reader
                 {
                     break;
                 }
-                EnsureCapacity(ref flat, flatLen + (chars * 4));
+                EnsureSharedCapacity(options, ref flat, flatLen + (chars * 4));
                 flatLen += DecodeStringToUtf8(sst.Slice(pos, needed), chars, flags, flat.AsSpan(flatLen));
                 pos += needed + (richRuns * 4) + extBytes;
                 offsets.Add(flatLen);
@@ -319,12 +330,13 @@ namespace ExcelReader.Core.Reader
             return BinaryPrimitives.ReadUInt32LittleEndian(src.Slice(offset, 4));
         }
 
-        private static void EnsureCapacity(ref byte[] buffer, int needed)
+        private static void EnsureSharedCapacity(ExcelReaderOptions options, ref byte[] buffer, int needed)
         {
             if (needed <= buffer.Length)
             {
                 return;
             }
+            LimitChecks.ThrowIfOverSharedStringLimit(options, needed);
             byte[] bigger = ArrayPool<byte>.Shared.Rent(Math.Max(buffer.Length * 2, needed));
             buffer.CopyTo(bigger, 0);
             ArrayPool<byte>.Shared.Return(buffer);
