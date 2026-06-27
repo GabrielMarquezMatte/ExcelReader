@@ -143,7 +143,7 @@ namespace ExcelReader.Tests
                 ("S1", [["Tax"], ["33%"], ["bad"], [null]]));
             await using var reader = await Excel.FromAsync(ms, ct: TestContext.Current.CancellationToken);
 
-            List<NullableRow> rows = new ExcelParser<NullableRow>().Parse(reader).ToList();
+            List<NullableRow> rows = [.. new ExcelParser<NullableRow>().Parse(reader)];
 
             Assert.Equal(3, rows.Count);
             Assert.Equal(0.33, rows[0].Tax!.Value.Fraction, precision: 10);
@@ -152,7 +152,7 @@ namespace ExcelReader.Tests
         }
 
         [Fact]
-        public async Task ConverterReceivesDate1904Flag()
+        public void ConverterReceivesDate1904Flag()
         {
             // 1904 workbook: serial 0 = 1904-01-01. The converter must apply the epoch shift.
             const string styles =
