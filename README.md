@@ -108,6 +108,7 @@ Pattern-match to the concrete type (`XlsxReader`, `XlsbReader`, `XlsReader`) onl
 ## Read asynchronously
 
 `Row` and `Cell` are `ref struct` types, so async reading uses a manual loop instead of `await foreach`.
+For XLSX files, the async reader buffers one row at a time and uses the same row parser as the sync reader, so sync and async reads stay behaviorally aligned while awaits happen only when more bytes are needed.
 
 ```csharp
 using ExcelReader.Core.Reader;
@@ -320,6 +321,7 @@ await workbook.EndAsync();
 - Reads one sheet at a time; use `MoveToSheet(index)` or `TryMoveToSheet(name)` to switch sheets.
 - Missing cells in sparse rows are exposed as empty cells.
 - String conversion allocates only when you call `GetString()`.
+- The XLSX scanner accepts the SpreadsheetML shapes commonly emitted by non-Excel producers, including single-quoted attributes, comments in `sheetData`, and CDATA text runs.
 - Readers bound untrusted input by default: 512 MB total decompressed ZIP data, 32 MB per cell/row value buffer, and 128 MB for shared strings. Pass `ExcelReaderOptions` to the `Excel.From*`/`Excel.Open*` factories to tune these limits; set a limit to `0` to opt out and restore unlimited behavior for that limit.
 - The XLSX writer emits a compact workbook with strings, numbers, booleans, dates, and blank cells.
 - The XLSB writer emits BIFF12 workbook parts inside the standard XLSB ZIP package.
