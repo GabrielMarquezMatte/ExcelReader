@@ -153,6 +153,9 @@ namespace ExcelReader.Tests
             Assert.Contains(Brt.EndSheetData, sheetRecords);
             Assert.Equal(Brt.EndSheet, sheetRecords[^1]);
             Assert.DoesNotContain(Brt.LegacyEndSheetData, sheetRecords);
+            Assert.Contains(ReadRecords(ReadEntry(zip, "xl/worksheets/sheet1.bin")), record => record.Id == Brt.BeginWsView && record.Length == 30);
+            Assert.Contains(ReadRecords(ReadEntry(zip, "xl/worksheets/sheet1.bin")), record => record.Id == Brt.Pane && record.Length == 29);
+            Assert.Contains(ReadRecords(ReadEntry(zip, "xl/worksheets/sheet1.bin")), record => record.Id == Brt.RowHdr && record.Length == 25);
 
             int[] styleRecords = ReadRecordIds(ReadEntry(zip, "xl/styles.bin"));
             Assert.Equal(Brt.BeginStyleSheet, styleRecords[0]);
@@ -162,6 +165,10 @@ namespace ExcelReader.Tests
             Assert.Contains(Brt.BeginCellStyleXFs, styleRecords);
             Assert.Contains(Brt.BeginCellXFs, styleRecords);
             Assert.Equal(Brt.EndStyleSheet, styleRecords[^1]);
+            (int Id, int Length)[] styleRecordLengths = ReadRecords(ReadEntry(zip, "xl/styles.bin"));
+            Assert.Contains(styleRecordLengths, record => record.Id == 43 && record.Length == 39);
+            Assert.Contains(styleRecordLengths, record => record.Id == 45 && record.Length == 68);
+            Assert.Contains(styleRecordLengths, record => record.Id == 46 && record.Length == 51);
 
             int[] sharedRecords = ReadRecordIds(ReadEntry(zip, "xl/sharedStrings.bin"));
             Assert.Equal(Brt.BeginSst, sharedRecords[0]);
@@ -292,6 +299,17 @@ namespace ExcelReader.Tests
                 ids.Add(id);
             }
             return [.. ids];
+        }
+
+        private static (int Id, int Length)[] ReadRecords(ReadOnlySpan<byte> data)
+        {
+            var records = new List<(int Id, int Length)>();
+            var reader = new Biff12RecordReader(data);
+            while (reader.TryReadRecord(out int id, out ReadOnlySpan<byte> payload))
+            {
+                records.Add((id, payload.Length));
+            }
+            return [.. records];
         }
 
         private static uint[] ReadCellIsstIndexes(ReadOnlySpan<byte> data)
