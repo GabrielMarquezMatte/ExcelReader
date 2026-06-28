@@ -16,6 +16,7 @@ namespace ExcelReader.Core.Writer.Internal
         private const int FatSectorMarker = unchecked((int)0xFFFFFFFD);
         private const int DifatSectorMarker = unchecked((int)0xFFFFFFFC);
         private const int FreeSector = unchecked((int)0xFFFFFFFF);
+        private const int NoStream = unchecked((int)0xFFFFFFFF);
         private const int FatEntriesPerSector = SectorSize / 4;            // 128
         private const int MaxHeaderDifat = (HeaderSize - 0x4C) / 4;       // 109
         private const int DifatEntriesPerSector = FatEntriesPerSector - 1; // 127 (last slot = next DIFAT)
@@ -147,7 +148,7 @@ namespace ExcelReader.Core.Writer.Internal
         {
             byte[] directory = new byte[SectorSize];
             WriteDirectoryEntry(directory.AsSpan(0, 128), "Root Entry", objectType: 5, startSector: EndOfChain, size: 0, child: 1);
-            WriteDirectoryEntry(directory.AsSpan(128, 128), "Workbook", objectType: 2, startSector: workbookStart, size: workbookSize, child: EndOfChain);
+            WriteDirectoryEntry(directory.AsSpan(128, 128), "Workbook", objectType: 2, startSector: workbookStart, size: workbookSize, child: NoStream);
             return directory;
         }
 
@@ -157,8 +158,8 @@ namespace ExcelReader.Core.Writer.Internal
             WriteU16(entry, 64, (ushort)((name.Length + 1) * 2)); // name byte length incl terminator
             entry[66] = objectType;
             entry[67] = 1; // color = black
-            WriteI32(entry, 68, EndOfChain); // left sibling
-            WriteI32(entry, 72, EndOfChain); // right sibling
+            WriteI32(entry, 68, NoStream); // left sibling
+            WriteI32(entry, 72, NoStream); // right sibling
             WriteI32(entry, 76, child);
             WriteI32(entry, 116, startSector);
             BinaryPrimitives.WriteInt64LittleEndian(entry[120..], size);

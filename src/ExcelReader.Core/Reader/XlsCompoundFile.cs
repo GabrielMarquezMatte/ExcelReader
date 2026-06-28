@@ -1,3 +1,4 @@
+using System.Buffers;
 using System.Buffers.Binary;
 using System.Diagnostics.CodeAnalysis;
 
@@ -14,7 +15,7 @@ namespace ExcelReader.Core.Reader
         private const int EndOfChain = unchecked((int)0xFFFFFFFE);
         private const int FatSector = unchecked((int)0xFFFFFFFD);
         private const int FreeSector = unchecked((int)0xFFFFFFFF);
-        private static readonly byte[] _signature = [0xD0, 0xCF, 0x11, 0xE0, 0xA1, 0xB1, 0x1A, 0xE1];
+        private static ReadOnlySpan<byte> Signature => [0xD0, 0xCF, 0x11, 0xE0, 0xA1, 0xB1, 0x1A, 0xE1];
 
         internal static WorkbookStream OpenWorkbook(Stream stream, bool leaveOpen)
         {
@@ -88,9 +89,9 @@ namespace ExcelReader.Core.Reader
             {
                 throw new InvalidDataException("The stream is not an OLE compound document.");
             }
-            byte[] header = new byte[HeaderSize];
+            Span<byte> header = stackalloc byte[HeaderSize];
             ReadAt(source, 0, header);
-            if (!header.AsSpan(0, _signature.Length).SequenceEqual(_signature))
+            if (!header[..Signature.Length].SequenceEqual(Signature))
             {
                 throw new InvalidDataException("The stream is not an OLE compound document.");
             }
@@ -109,8 +110,8 @@ namespace ExcelReader.Core.Reader
             {
                 throw new InvalidDataException("Unsupported OLE sector size.");
             }
-
-            int[] fatSectorIds = ReadDifat(source, header, sectorSize, fatSectorCount, firstDifatSector, difatSectorCount);
+            var fatSectorIds = new int[fatSectorCount];
+            ReadDifat(source, header, sectorSize, fatSectorIds, firstDifatSector, difatSectorCount);
             int[] fat = ReadFat(source, sectorSize, fatSectorIds);
             byte[] directory = ReadChainBytes(source, sectorSize, fat, firstDirectorySector, -1);
             DirectoryEntry[] entries = ReadDirectory(directory);
@@ -148,9 +149,9 @@ namespace ExcelReader.Core.Reader
             return WorkbookStream.Streamed(source, ownsSource, chain, sectorSize, workbook.Size);
         }
 
-        private static DirectoryEntry FindWorkbook(DirectoryEntry[] entries)
+        private static DirectoryEntry FindWorkbook(ReadOnlySpan<DirectoryEntry> entries)
         {
-            foreach (ref readonly var entry in entries.AsSpan())
+            foreach (ref readonly var entry in entries)
             {
                 if (entry.ObjectType == 2 &&
                     (entry.Name.Equals("Workbook", StringComparison.OrdinalIgnoreCase) ||
@@ -169,7 +170,7 @@ namespace ExcelReader.Core.Reader
 
         [SuppressMessage("Performance", "HLQ013:Consider using 'foreach' loop instead of 'for' loop",
             Justification = "Not an iteration over fat; follows the sector linked-list, writing each hop into chain[i].")]
-        private static int[] BuildChain(int[] fat, int startSector, int sectorCount)
+        private static int[] BuildChain(ReadOnlySpan<int> fat, int startSector, int sectorCount)
         {
             int[] chain = new int[sectorCount];
             int sector = startSector;
@@ -191,9 +192,8 @@ namespace ExcelReader.Core.Reader
             source.ReadExactly(dest);
         }
 
-        private static int[] ReadDifat(Stream source, byte[] header, int sectorSize, int fatSectorCount, int firstDifatSector, int difatSectorCount)
+        private static void ReadDifat(Stream source, ReadOnlySpan<byte> header, int sectorSize, Span<int> fatSectors, int firstDifatSector, int difatSectorCount)
         {
-            int[] fatSectors = new int[fatSectorCount];
             int count = 0;
             for (int i = 0x4C; i < HeaderSize && count < fatSectors.Length; i += 4)
             {
@@ -204,70 +204,90 @@ namespace ExcelReader.Core.Reader
                 }
             }
 
-            byte[] difatSector = new byte[sectorSize];
             int difat = firstDifatSector;
-            for (int i = 0; i < difatSectorCount && difat >= 0 && count < fatSectors.Length; i++)
+            byte[] difatSector = ArrayPool<byte>.Shared.Rent(sectorSize);
+            try
             {
-                ReadAt(source, SectorOffset(difat, sectorSize), difatSector);
-                int entries = (sectorSize / 4) - 1;
-                for (int j = 0; j < entries && count < fatSectors.Length; j++)
+                for (int i = 0; i < difatSectorCount && difat >= 0 && count < fatSectors.Length; i++)
                 {
-                    int sector = ReadI32(difatSector, j * 4);
-                    if (sector is >= 0 and not FreeSector)
+                    ReadAt(source, SectorOffset(difat, sectorSize), difatSector);
+                    int entries = (sectorSize / 4) - 1;
+                    for (int j = 0; j < entries && count < fatSectors.Length; j++)
                     {
-                        fatSectors[count++] = sector;
+                        int sector = ReadI32(difatSector, j * 4);
+                        if (sector is >= 0 and not FreeSector)
+                        {
+                            fatSectors[count++] = sector;
+                        }
                     }
+                    difat = ReadI32(difatSector, entries * 4);
                 }
-                difat = ReadI32(difatSector, entries * 4);
-            }
 
-            if (count != fatSectors.Length)
-            {
-                throw new InvalidDataException("The OLE DIFAT is incomplete.");
+                if (count != fatSectors.Length)
+                {
+                    throw new InvalidDataException("The OLE DIFAT is incomplete.");
+                }
             }
-            return fatSectors;
+            finally
+            {
+                ArrayPool<byte>.Shared.Return(difatSector);
+            }
         }
 
-        private static int[] ReadFat(Stream source, int sectorSize, int[] fatSectorIds)
+        private static int[] ReadFat(Stream source, int sectorSize, ReadOnlySpan<int> fatSectorIds)
         {
             int entriesPerSector = sectorSize / 4;
             int[] fat = new int[fatSectorIds.Length * entriesPerSector];
-            byte[] sectorBuf = new byte[sectorSize];
             int index = 0;
-            foreach (int sector in fatSectorIds)
+            var sectorBuf = ArrayPool<byte>.Shared.Rent(sectorSize);
+            try
             {
-                ReadAt(source, SectorOffset(sector, sectorSize), sectorBuf);
-                for (int i = 0; i < entriesPerSector; i++)
+                foreach (ref readonly var sector in fatSectorIds)
                 {
-                    fat[index++] = ReadI32(sectorBuf, i * 4);
+                    ReadAt(source, SectorOffset(sector, sectorSize), sectorBuf);
+                    for (int i = 0; i < entriesPerSector; i++)
+                    {
+                        fat[index++] = ReadI32(sectorBuf, i * 4);
+                    }
                 }
+                return fat;
             }
-            return fat;
+            finally
+            {
+                ArrayPool<byte>.Shared.Return(sectorBuf);
+            }
         }
 
         // Reads a FAT-chained stream into a byte[]. byteLimit < 0 means "until end of chain".
-        private static byte[] ReadChainBytes(Stream source, int sectorSize, int[] fat, int startSector, int byteLimit)
+        private static byte[] ReadChainBytes(Stream source, int sectorSize, ReadOnlySpan<int> fat, int startSector, int byteLimit)
         {
             if (startSector < 0)
             {
                 return [];
             }
             using MemoryStream ms = new();
-            byte[] sectorBuf = new byte[sectorSize];
             int sector = startSector;
             int written = 0;
-            while (sector is >= 0 and not EndOfChain && (byteLimit < 0 || written < byteLimit))
+            byte[] sectorBuf = ArrayPool<byte>.Shared.Rent(sectorSize);
+            try
             {
-                ReadAt(source, SectorOffset(sector, sectorSize), sectorBuf);
-                int take = byteLimit < 0 ? sectorSize : Math.Min(sectorSize, byteLimit - written);
-                ms.Write(sectorBuf, 0, take);
-                written += take;
-                sector = NextSector(fat, sector);
+                while (sector is >= 0 and not EndOfChain && (byteLimit < 0 || written < byteLimit))
+                {
+                    ReadAt(source, SectorOffset(sector, sectorSize), sectorBuf);
+                    int take = byteLimit < 0 ? sectorSize : Math.Min(sectorSize, byteLimit - written);
+                    ms.Write(sectorBuf, 0, take);
+                    written += take;
+                    sector = NextSector(fat, sector);
+                }
+                return ms.ToArray();
             }
-            return ms.ToArray();
+            finally
+            {
+                ArrayPool<byte>.Shared.Return(sectorBuf);
+            }
         }
 
-        private static int[] ReadIntSectors(Stream source, int sectorSize, int[] fat, int firstSector, int sectorCount)
+        private static int[] ReadIntSectors(Stream source, int sectorSize, ReadOnlySpan<int> fat, int firstSector, int sectorCount)
         {
             byte[] data = ReadChainBytes(source, sectorSize, fat, firstSector, checked(sectorCount * sectorSize));
             int[] result = new int[data.Length / 4];
@@ -278,7 +298,7 @@ namespace ExcelReader.Core.Reader
             return result;
         }
 
-        private static byte[] ReadMiniStream(byte[] miniStream, int[] miniFat, int miniSectorSize, int startSector, int size)
+        private static byte[] ReadMiniStream(ReadOnlySpan<byte> miniStream, ReadOnlySpan<int> miniFat, int miniSectorSize, int startSector, int size)
         {
             byte[] result = new byte[size];
             int sector = startSector;
@@ -291,7 +311,7 @@ namespace ExcelReader.Core.Reader
                     throw new InvalidDataException("Invalid OLE mini sector chain.");
                 }
                 int take = Math.Min(miniSectorSize, result.Length - written);
-                miniStream.AsSpan(offset, take).CopyTo(result.AsSpan(written));
+                miniStream.Slice(offset, take).CopyTo(result.AsSpan(written));
                 written += take;
                 if ((uint)sector >= (uint)miniFat.Length)
                 {
@@ -302,7 +322,7 @@ namespace ExcelReader.Core.Reader
             return result;
         }
 
-        private static int NextSector(int[] fat, int sector)
+        private static int NextSector(ReadOnlySpan<int> fat, int sector)
         {
             if ((uint)sector >= (uint)fat.Length)
             {

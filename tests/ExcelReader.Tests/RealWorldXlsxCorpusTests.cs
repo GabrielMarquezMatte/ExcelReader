@@ -119,6 +119,7 @@ namespace ExcelReader.Tests
             using MemoryStream ms = WorkbookBuilder.Build(fixture.Rows, fixture.SharedStrings);
             using XlsxReader reader = Excel.From(ms);
 
+            Assert.NotEmpty(fixture.Expected);
             AssertExpected(reader.GetEnumerator(), fixture.Expected);
         }
 
@@ -131,6 +132,7 @@ namespace ExcelReader.Tests
             await using XlsxReader reader = await Excel.FromAsync(ms, ct: ct);
             await using XlsxReader.Enumerator rows = await reader.GetAsyncEnumeratorAsync(ct);
 
+            Assert.NotEmpty(fixture.Expected);
             await AssertExpectedAsync(rows, fixture.Expected);
         }
 

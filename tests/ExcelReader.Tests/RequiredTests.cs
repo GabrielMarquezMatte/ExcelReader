@@ -141,7 +141,7 @@ namespace ExcelReader.Tests
                 ("S1", [["Code"], ["A1"], [null]]));
             await using var reader = await Excel.FromAsync(ms, ct: TestContext.Current.CancellationToken);
 
-            List<PresenceOnlyRow> rows = new ExcelParser<PresenceOnlyRow>().Parse(reader).ToList();
+            List<PresenceOnlyRow> rows = [.. new ExcelParser<PresenceOnlyRow>().Parse(reader)];
 
             Assert.Equal(2, rows.Count);
             Assert.Equal("A1", rows[0].Code);

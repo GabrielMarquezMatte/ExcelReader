@@ -52,12 +52,66 @@ namespace ExcelReader.Benchmarks
             return ms.Length;
         }
 
+        [Benchmark]
+        public async Task<long> ExcelReaderWriterSharedStrings()
+        {
+            await using var ms = new MemoryStream();
+            await using (WorkbookWriter wb = await WorkbookWriter.CreateAsync(ms, leaveOpen: true, useSharedStrings: true))
+            {
+                await wb.StartAsync();
+                SheetWriter sheet = wb.AddSheet("S1");
+                await sheet.StartAsync();
+                await using (RowWriter header = await sheet.StartRowAsync())
+                {
+                    header.Write("Name");
+                    header.Write("Id");
+                    header.Write("Date");
+                    header.Write("Value");
+                }
+                for (int i = 0; i < _records.Count; i++)
+                {
+                    Record rec = _records[i];
+                    await using RowWriter row = await sheet.StartRowAsync();
+                    row.Write(rec.Name);
+                    row.Write(rec.Id);
+                    row.Write(rec.Date);
+                    row.Write(rec.Value);
+                }
+                await sheet.EndAsync();
+                await wb.EndAsync();
+            }
+            return ms.Length;
+        }
 
         [Benchmark]
         public async Task<long> ExcelReaderXlsbWriter()
         {
             await using var ms = new MemoryStream();
             await using (XlsbWorkbookWriter wb = await XlsbWorkbookWriter.CreateAsync(ms, leaveOpen: true))
+            {
+                await wb.StartAsync();
+                XlsbSheetWriter sheet = wb.AddSheet("S1");
+                await sheet.StartAsync();
+                ReadOnlySpan<XlsbCell> header =
+                [
+                    XlsbCell.Create("Name"),
+                    XlsbCell.Create("Id"),
+                    XlsbCell.Create("Date"),
+                    XlsbCell.Create("Value"),
+                ];
+                sheet.WriteRow(header);
+                WorkbookGenerator.WriteXlsbRecords(sheet, _records);
+                await sheet.EndAsync();
+                await wb.EndAsync();
+            }
+            return ms.Length;
+        }
+
+        [Benchmark]
+        public async Task<long> ExcelReaderXlsbWriterSharedStrings()
+        {
+            await using var ms = new MemoryStream();
+            await using (XlsbWorkbookWriter wb = await XlsbWorkbookWriter.CreateAsync(ms, leaveOpen: true, useSharedStrings: true))
             {
                 await wb.StartAsync();
                 XlsbSheetWriter sheet = wb.AddSheet("S1");

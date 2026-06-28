@@ -227,7 +227,11 @@ namespace ExcelReader.Tests
         {
             await using var wb = await XlsbWorkbookWriter.CreateAsync(new MemoryStream(), leaveOpen: true, ct: TestContext.Current.CancellationToken);
             await wb.StartAsync(TestContext.Current.CancellationToken);
-            await wb.FlushAsync(TestContext.Current.CancellationToken);
+
+            Exception? ex = await Record.ExceptionAsync(async () =>
+                await wb.FlushAsync(TestContext.Current.CancellationToken));
+
+            Assert.Null(ex);
         }
 
         [Fact]
@@ -298,7 +302,11 @@ namespace ExcelReader.Tests
         {
             await using var wb = XlsWorkbookWriter.Create(new MemoryStream(), leaveOpen: true);
             wb.Start();
-            await wb.FlushAsync(TestContext.Current.CancellationToken);
+
+            Exception? ex = await Record.ExceptionAsync(async () =>
+                await wb.FlushAsync(TestContext.Current.CancellationToken));
+
+            Assert.Null(ex);
         }
 
         [Fact]
@@ -323,7 +331,11 @@ namespace ExcelReader.Tests
             var wb = XlsWorkbookWriter.Create(new MemoryStream(), leaveOpen: true);
             wb.Start();
             await wb.DisposeAsync();
-            await wb.DisposeAsync(); // second dispose returns immediately
+
+            Exception? ex = await Record.ExceptionAsync(async () =>
+                await wb.DisposeAsync());
+
+            Assert.Null(ex);
         }
 
         // --- XLSB reader navigation & disposal ---
@@ -376,9 +388,9 @@ namespace ExcelReader.Tests
                 Assert.Equal("iface", sync.Current[0].GetString());
             }
 
-            await using IExcelRowEnumerator async = await rowReader.GetAsyncEnumeratorAsync(TestContext.Current.CancellationToken);
-            Assert.True(await async.MoveNextAsync());
-            Assert.Equal("iface", async.Current[0].GetString());
+            await using var asyncEnumerator = await rowReader.GetAsyncEnumeratorAsync(TestContext.Current.CancellationToken);
+            Assert.True(await asyncEnumerator.MoveNextAsync());
+            Assert.Equal("iface", asyncEnumerator.Current[0].GetString());
         }
 
         [Fact]
