@@ -54,6 +54,9 @@ namespace ExcelReader.Core.Writer.Internal
         {
             using var data = new BiffBuffer(Math.Max(128, _values.Count * 24));
             using var payload = new BiffBuffer(128);
+            payload.WriteU32((uint)Count);
+            payload.WriteU32((uint)UniqueCount);
+            Biff12RecordWriter.WriteRecord(data, Brt.BeginSst, payload.Span);
             foreach (ref readonly string value in CollectionsMarshal.AsSpan(_values))
             {
                 payload.Reset();
@@ -61,6 +64,7 @@ namespace ExcelReader.Core.Writer.Internal
                 Biff12RecordWriter.WriteWideString(payload, value);
                 Biff12RecordWriter.WriteRecord(data, Brt.SSTItem, payload.Span);
             }
+            Biff12RecordWriter.WriteRecord(data, Brt.EndSst);
             return data.Memory.ToArray();
         }
 

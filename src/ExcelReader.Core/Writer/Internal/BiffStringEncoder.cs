@@ -51,7 +51,7 @@ namespace ExcelReader.Core.Writer.Internal
         {
             foreach (char c in value)
             {
-                if (c > 0xFF || c is >= (char)0x80 and <= (char)0x9F)
+                if (c is > (char)0xFF or (>= (char)0x80 and <= (char)0x9F))
                 {
                     return false;
                 }

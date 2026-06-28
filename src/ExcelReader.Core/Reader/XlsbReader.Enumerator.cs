@@ -121,7 +121,7 @@ namespace ExcelReader.Core.Reader
                     {
                         return true;
                     }
-                    if (id == Brt.EndSheetData)
+                    if (IsEndSheetData(id))
                     {
                         break;
                     }
@@ -139,7 +139,7 @@ namespace ExcelReader.Core.Reader
                         _pendingRowHdr = true;
                         return;
                     }
-                    if (id == Brt.EndSheetData)
+                    if (IsEndSheetData(id))
                     {
                         _ended = true;
                         return;
@@ -192,7 +192,7 @@ namespace ExcelReader.Core.Reader
                     {
                         return 1;
                     }
-                    if (id == Brt.EndSheetData)
+                    if (IsEndSheetData(id))
                     {
                         _ended = true;
                         return 0;
@@ -216,7 +216,7 @@ namespace ExcelReader.Core.Reader
                         _pendingRowHdr = true;
                         return 1;
                     }
-                    if (id == Brt.EndSheetData)
+                    if (IsEndSheetData(id))
                     {
                         _ended = true;
                         return 0;
@@ -268,6 +268,11 @@ namespace ExcelReader.Core.Reader
                         break;
                     // CellBlank: no value to emit
                 }
+            }
+
+            private static bool IsEndSheetData(int id)
+            {
+                return id is Brt.EndSheetData or Brt.LegacyEndSheetData;
             }
 
             private void AddDouble(int col, int style, double value)

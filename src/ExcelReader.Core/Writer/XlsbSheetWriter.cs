@@ -25,6 +25,7 @@ namespace ExcelReader.Core.Writer
         private bool _rowActive;
         private bool _registered;
         private bool _buffersDisposed;
+        private int _rowNumber = -1;
 
         internal XlsbSheetWriter(
             XlsbWorkbookWriter owner,
@@ -61,6 +62,11 @@ namespace ExcelReader.Core.Writer
             }
             ct.ThrowIfCancellationRequested();
             _state = WriterState.Started;
+            WriteRecord(Brt.BeginSheet);
+            WriteWorksheetView();
+            WriteRecord(Brt.BeginColInfos);
+            WriteRecord(Brt.EndColInfos);
+            WriteRecord(Brt.BeginSheetData);
             return ValueTask.CompletedTask;
         }
 
@@ -114,6 +120,8 @@ namespace ExcelReader.Core.Writer
             ct.ThrowIfCancellationRequested();
             _state = WriterState.Ended;
             WriteRecord(Brt.EndSheetData);
+            WriteSheetMetadata();
+            WriteRecord(Brt.EndSheet);
             if (_stream is null)
             {
                 await WriteBufferedSheetAsync(ct).ConfigureAwait(false);
@@ -219,8 +227,50 @@ namespace ExcelReader.Core.Writer
             {
                 throw new InvalidOperationException("The previous XlsbRowWriter must be disposed before starting a new row.");
             }
-            WriteRecord(Brt.RowHdr);
+            _rowNumber++;
+            WriteRowHeader(_rowNumber);
             _rowActive = true;
+        }
+
+        private void WriteRowHeader(int rowNumber)
+        {
+            Payload.Reset();
+            Payload.WriteU32((uint)rowNumber);
+            Payload.WriteU32(0);
+            Payload.WriteU32(0);
+            Payload.WriteU32(1);
+            Payload.WriteU32(0);
+            Payload.WriteU32(16384);
+            Payload.WriteByte(0);
+            WriteRecord(Brt.RowHdr, Payload.Span);
+        }
+        private static ReadOnlySpan<byte> InitialWorksheetViewPayload => [0x9C, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x04, 0x00, 0x00, 0x00, 0x64, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00];
+        private static ReadOnlySpan<byte> SecondPayload => [0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xF0, 0x3F, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x01];
+        private void WriteWorksheetView()
+        {
+            WriteRecord(Brt.BeginWsViews);
+            Payload.Reset();
+            Payload.Write(InitialWorksheetViewPayload);
+            WriteRecord(Brt.BeginWsView, Payload.Span);
+            Payload.Reset();
+            Payload.Write(SecondPayload);
+            WriteRecord(Brt.Pane, Payload.Span);
+            WriteRecord(Brt.EndWsView);
+            WriteRecord(Brt.EndWsViews);
+        }
+        private static ReadOnlySpan<byte> SheetMetadataPayload => [0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00];
+        private static ReadOnlySpan<byte> TableStyleClientPayload => [0x04, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00];
+        private void WriteSheetMetadata()
+        {
+            Payload.Reset();
+            Payload.Write(SheetMetadataPayload);
+            WriteRecord(Brt.BeginCellMetadata, Payload.Span);
+            WriteRecord(Brt.EndCellMetadata);
+            WriteRecord(Brt.BeginTableStyles);
+            Payload.Reset();
+            Payload.Write(TableStyleClientPayload);
+            WriteRecord(Brt.TableStyleClient, Payload.Span);
+            WriteRecord(Brt.EndTableStyles);
         }
 
         private void WriteCell(int columnIndex, XlsbCell cell)
