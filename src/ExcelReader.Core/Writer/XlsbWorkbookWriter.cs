@@ -128,6 +128,7 @@ namespace ExcelReader.Core.Writer
             await WriteWorkbookRelsAsync(ct).ConfigureAwait(false);
             await WriteStylesAsync(ct).ConfigureAwait(false);
             await WriteSharedStringsAsync(ct).ConfigureAwait(false);
+            await WriteAppPropertiesAsync(ct).ConfigureAwait(false);
             await WriteContentTypesAsync(ct).ConfigureAwait(false);
 #if NET10_0_OR_GREATER
             await _zip.DisposeAsync().ConfigureAwait(false);
@@ -178,7 +179,8 @@ namespace ExcelReader.Core.Writer
         {
             const string xml = "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>" +
                 $"<Relationships xmlns=\"{XlsxConstants.PackageRelationshipsNs}\">" +
-                $"<Relationship Id=\"rId1\" Type=\"{XlsxConstants.WorkbookRelType}\" Target=\"xl/workbook.bin\"/>" +
+                "<Relationship Id=\"app\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/extended-properties\" Target=\"docProps/app.xml\"/>" +
+                $"<Relationship Id=\"wb\" Type=\"{XlsxConstants.WorkbookRelType}\" Target=\"xl/workbook.bin\"/>" +
                 "</Relationships>";
             return WriteEntryAsync("_rels/.rels", xml, ct);
         }
@@ -187,20 +189,24 @@ namespace ExcelReader.Core.Writer
         {
             using BiffBuffer payload = new(256);
             using BiffBuffer data = new(1024);
+            Biff12RecordWriter.WriteRecord(data, Brt.BeginBook);
             payload.WriteU32(_date1904 ? 1u : 0u);
             payload.WriteU32(0);
             Biff12RecordWriter.WriteWideString(payload, string.Empty);
             Biff12RecordWriter.WriteRecord(data, Brt.WbProp, payload.Span);
 
+            Biff12RecordWriter.WriteRecord(data, Brt.BeginBundleShs);
             foreach (ref readonly var sheet in CollectionsMarshal.AsSpan(_sheets))
             {
                 payload.Reset();
                 payload.WriteU32(0);
                 payload.WriteU32((uint)sheet.SheetId);
-                Biff12RecordWriter.WriteWideString(payload, $"rId{sheet.SheetId}");
+                Biff12RecordWriter.WriteWideString(payload, $"s{sheet.SheetId}");
                 Biff12RecordWriter.WriteWideString(payload, sheet.Name);
                 Biff12RecordWriter.WriteRecord(data, Brt.BundleSh, payload.Span);
             }
+            Biff12RecordWriter.WriteRecord(data, Brt.EndBundleShs);
+            Biff12RecordWriter.WriteRecord(data, Brt.EndBook);
             await WriteEntryAsync("xl/workbook.bin", data.Memory, ct).ConfigureAwait(false);
         }
 
@@ -209,11 +215,11 @@ namespace ExcelReader.Core.Writer
             StringBuilder sb = new();
             sb.Append("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>");
             sb.Append(CultureInfo.InvariantCulture, $"<Relationships xmlns=\"{XlsxConstants.PackageRelationshipsNs}\">");
-            sb.Append(CultureInfo.InvariantCulture, $"<Relationship Id=\"rIdStyles\" Type=\"{XlsxConstants.StylesRelType}\" Target=\"styles.bin\"/>");
-            sb.Append(CultureInfo.InvariantCulture, $"<Relationship Id=\"rIdShared\" Type=\"{XlsxConstants.SharedStringsRelType}\" Target=\"sharedStrings.bin\"/>");
+            sb.Append(CultureInfo.InvariantCulture, $"<Relationship Id=\"s\" Type=\"{XlsxConstants.StylesRelType}\" Target=\"styles.bin\"/>");
+            sb.Append(CultureInfo.InvariantCulture, $"<Relationship Id=\"ss\" Type=\"{XlsxConstants.SharedStringsRelType}\" Target=\"sharedStrings.bin\"/>");
             foreach (ref readonly var sheet in CollectionsMarshal.AsSpan(_sheets))
             {
-                sb.Append(CultureInfo.InvariantCulture, $"<Relationship Id=\"rId{sheet.SheetId}\" Type=\"{XlsxConstants.WorksheetRelType}\" Target=\"worksheets/sheet{sheet.SheetId}.bin\"/>");
+                sb.Append(CultureInfo.InvariantCulture, $"<Relationship Id=\"s{sheet.SheetId}\" Type=\"{XlsxConstants.WorksheetRelType}\" Target=\"worksheets/sheet{sheet.SheetId}.bin\"/>");
             }
             sb.Append("</Relationships>");
             return WriteEntryAsync("xl/_rels/workbook.bin.rels", sb.ToString(), ct);
@@ -221,30 +227,110 @@ namespace ExcelReader.Core.Writer
 
         private async ValueTask WriteStylesAsync(CancellationToken ct)
         {
-            using BiffBuffer payload = new(32);
-            using BiffBuffer data = new(128);
-            Biff12RecordWriter.WriteRecord(data, Brt.BeginCellXFs);
+            using BiffBuffer payload = new(96);
+            using BiffBuffer data = new(512);
+            Biff12RecordWriter.WriteRecord(data, Brt.BeginStyleSheet);
+            WriteCountedRecord(data, payload, Brt.BeginFmts, 0);
+            Biff12RecordWriter.WriteRecord(data, Brt.EndFmts);
+            WriteCountedRecord(data, payload, Brt.BeginFonts, 1);
+            WriteDefaultFont(data, payload);
+            Biff12RecordWriter.WriteRecord(data, Brt.EndFonts);
+            WriteCountedRecord(data, payload, Brt.BeginFills, 1);
+            WriteDefaultFill(data, payload);
+            Biff12RecordWriter.WriteRecord(data, Brt.EndFills);
+            WriteCountedRecord(data, payload, Brt.BeginBorders, 1);
+            WriteDefaultBorder(data, payload);
+            Biff12RecordWriter.WriteRecord(data, Brt.EndBorders);
+            WriteCountedRecord(data, payload, Brt.BeginCellStyleXFs, 1);
+            WriteXf(data, payload, 0, isStyleXf: true);
+            Biff12RecordWriter.WriteRecord(data, Brt.EndCellStyleXFs);
+            WriteCountedRecord(data, payload, Brt.BeginCellXFs, 2);
             WriteXf(data, payload, 0);
             WriteXf(data, payload, 14);
             Biff12RecordWriter.WriteRecord(data, Brt.EndCellXFs);
+            Biff12RecordWriter.WriteRecord(data, Brt.EndStyleSheet);
             await WriteEntryAsync("xl/styles.bin", data.Memory, ct).ConfigureAwait(false);
         }
 
         private ValueTask WriteSharedStringsAsync(CancellationToken ct)
         {
             ReadOnlyMemory<byte> data = _sharedStrings is null
-                ? ReadOnlyMemory<byte>.Empty
+                ? EmptySharedStrings()
                 : _sharedStrings.ToXlsbBytes();
             return WriteEntryAsync("xl/sharedStrings.bin", data, ct);
         }
 
-        private static void WriteXf(BiffBuffer data, BiffBuffer payload, int numFmtId)
+        private static ReadOnlyMemory<byte> EmptySharedStrings()
+        {
+            using var data = new BiffBuffer(16);
+            using var payload = new BiffBuffer(8);
+            payload.WriteU32(0);
+            payload.WriteU32(0);
+            Biff12RecordWriter.WriteRecord(data, Brt.BeginSst, payload.Span);
+            Biff12RecordWriter.WriteRecord(data, Brt.EndSst);
+            return data.Memory.ToArray();
+        }
+
+        private static void WriteCountedRecord(BiffBuffer data, BiffBuffer payload, int id, int count)
         {
             payload.Reset();
-            payload.WriteU16(0);
+            payload.WriteU32((uint)count);
+            Biff12RecordWriter.WriteRecord(data, id, payload.Span);
+        }
+        private static ReadOnlySpan<byte> DefaultFontPayload => [
+            0xDC, 0x00, 0x00, 0x00, 0x90, 0x01, 0x00, 0x00,
+            0x00, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x07, 0x00,
+            0x00, 0x00, 0x43, 0x00, 0x61, 0x00, 0x6C, 0x00,
+            0x69, 0x00, 0x62, 0x00, 0x72, 0x00
+        ];
+        private static void WriteDefaultFont(BiffBuffer data, BiffBuffer payload)
+        {
+            payload.Reset();
+            payload.Write(DefaultFontPayload);
+            Biff12RecordWriter.WriteRecord(data, 43, payload.Span);
+        }
+        private static ReadOnlySpan<byte> DefaultFillPayload => [
+            0x00, 0x00, 0x00, 0x03, 0x40, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0xFF, 0x03, 0x41, 0x00, 0x00, 0xFF,
+            0xFF, 0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00
+        ];
+        private static void WriteDefaultFill(BiffBuffer data, BiffBuffer payload)
+        {
+            payload.Reset();
+            payload.Write(DefaultFillPayload);
+            Biff12RecordWriter.WriteRecord(data, 45, payload.Span);
+        }
+        private static ReadOnlySpan<byte> DefaultBorderPayload => [
+            0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x01
+        ];
+        private static void WriteDefaultBorder(BiffBuffer data, BiffBuffer payload)
+        {
+            payload.Reset();
+            payload.Write(DefaultBorderPayload);
+            Biff12RecordWriter.WriteRecord(data, 46, payload.Span);
+        }
+
+        private ValueTask WriteAppPropertiesAsync(CancellationToken ct)
+        {
+            const string xml = "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>" +
+                "<Properties xmlns=\"http://schemas.openxmlformats.org/officeDocument/2006/extended-properties\">" +
+                "<Application>ExcelReader</Application><AppVersion>1.0000</AppVersion></Properties>";
+            return WriteEntryAsync("docProps/app.xml", xml, ct);
+        }
+
+        private static void WriteXf(BiffBuffer data, BiffBuffer payload, int numFmtId, bool isStyleXf = false)
+        {
+            payload.Reset();
+            payload.WriteU16(isStyleXf ? ushort.MaxValue : (ushort)0);
             payload.WriteU16(numFmtId);
-            ReadOnlySpan<byte> flags = stackalloc byte[12];
+            ReadOnlySpan<byte> flags = stackalloc byte[10];
             payload.Write(flags);
+            payload.WriteU16(1);
             Biff12RecordWriter.WriteRecord(data, Brt.Xf, payload.Span);
         }
 
@@ -254,10 +340,12 @@ namespace ExcelReader.Core.Writer
             sb.Append("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>");
             sb.Append(CultureInfo.InvariantCulture, $"<Types xmlns=\"{XlsxConstants.ContentTypesNs}\">");
             sb.Append(CultureInfo.InvariantCulture, $"<Default Extension=\"rels\" ContentType=\"{XlsxConstants.RelationshipsContentType}\"/>");
+            sb.Append("<Default Extension=\"xml\" ContentType=\"application/xml\"/>");
             sb.Append("<Default Extension=\"bin\" ContentType=\"application/vnd.ms-excel.sheet.binary.macroEnabled.main\"/>");
             sb.Append("<Override PartName=\"/xl/workbook.bin\" ContentType=\"application/vnd.ms-excel.sheet.binary.macroEnabled.main\"/>");
             sb.Append("<Override PartName=\"/xl/styles.bin\" ContentType=\"application/vnd.ms-excel.styles\"/>");
             sb.Append("<Override PartName=\"/xl/sharedStrings.bin\" ContentType=\"application/vnd.ms-excel.sharedStrings\"/>");
+            sb.Append("<Override PartName=\"/docProps/app.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.extended-properties+xml\"/>");
             foreach (ref readonly var sheet in CollectionsMarshal.AsSpan(_sheets))
             {
                 sb.Append(CultureInfo.InvariantCulture, $"<Override PartName=\"/xl/worksheets/sheet{sheet.SheetId}.bin\" ContentType=\"application/vnd.ms-excel.worksheet\"/>");

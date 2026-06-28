@@ -324,7 +324,7 @@ namespace ExcelReader.Tests
             int read = 0;
             while (e.MoveNext())
             {
-                if (read == 0 || read == rows - 1)
+                if (read is 0 or (rows - 1))
                 {
                     Assert.True(e.Current[0].TryParse(Inv, out int first));
                     Assert.Equal(read, first);

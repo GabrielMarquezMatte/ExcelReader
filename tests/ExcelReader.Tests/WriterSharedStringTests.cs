@@ -119,10 +119,54 @@ namespace ExcelReader.Tests
             });
 
             using var zip = new ZipArchive(workbook, ZipArchiveMode.Read, leaveOpen: true);
-            Assert.Equal(0, zip.GetEntry("xl/sharedStrings.bin")!.Length);
+            Assert.Equal([Brt.BeginSst, Brt.EndSst], ReadRecordIds(ReadEntry(zip, "xl/sharedStrings.bin")));
             byte[] sheetBytes = ReadEntry(zip, "xl/worksheets/sheet1.bin");
             Assert.Contains(ReadRecordIds(sheetBytes), id => id == Brt.CellSt);
             Assert.DoesNotContain(ReadRecordIds(sheetBytes), id => id == Brt.CellIsst);
+        }
+
+        [Fact]
+        public async Task XlsbWriterEmitsDesktopExcelRecordEnvelopes()
+        {
+            await using MemoryStream workbook = await WriteXlsbAsync(useSharedStrings: true, async wb =>
+            {
+                XlsbSheetWriter sheet = wb.AddSheet("S1");
+                await sheet.StartAsync(TestContext.Current.CancellationToken);
+                await using (XlsbRowWriter row = await sheet.StartRowAsync(TestContext.Current.CancellationToken))
+                {
+                    row.Write("value");
+                    row.Write(42);
+                }
+                await sheet.EndAsync(TestContext.Current.CancellationToken);
+            });
+
+            using var zip = new ZipArchive(workbook, ZipArchiveMode.Read, leaveOpen: true);
+
+            Assert.Equal(
+                [Brt.BeginBook, Brt.WbProp, Brt.BeginBundleShs, Brt.BundleSh, Brt.EndBundleShs, Brt.EndBook],
+                ReadRecordIds(ReadEntry(zip, "xl/workbook.bin")));
+
+            int[] sheetRecords = ReadRecordIds(ReadEntry(zip, "xl/worksheets/sheet1.bin"));
+            Assert.Equal(Brt.BeginSheet, sheetRecords[0]);
+            Assert.Contains(Brt.BeginSheetData, sheetRecords);
+            Assert.Contains(Brt.RowHdr, sheetRecords);
+            Assert.Contains(Brt.EndSheetData, sheetRecords);
+            Assert.Equal(Brt.EndSheet, sheetRecords[^1]);
+            Assert.DoesNotContain(Brt.LegacyEndSheetData, sheetRecords);
+
+            int[] styleRecords = ReadRecordIds(ReadEntry(zip, "xl/styles.bin"));
+            Assert.Equal(Brt.BeginStyleSheet, styleRecords[0]);
+            Assert.Contains(Brt.BeginFonts, styleRecords);
+            Assert.Contains(Brt.BeginFills, styleRecords);
+            Assert.Contains(Brt.BeginBorders, styleRecords);
+            Assert.Contains(Brt.BeginCellStyleXFs, styleRecords);
+            Assert.Contains(Brt.BeginCellXFs, styleRecords);
+            Assert.Equal(Brt.EndStyleSheet, styleRecords[^1]);
+
+            int[] sharedRecords = ReadRecordIds(ReadEntry(zip, "xl/sharedStrings.bin"));
+            Assert.Equal(Brt.BeginSst, sharedRecords[0]);
+            Assert.Contains(Brt.SSTItem, sharedRecords);
+            Assert.Equal(Brt.EndSst, sharedRecords[^1]);
         }
 
         [Fact]

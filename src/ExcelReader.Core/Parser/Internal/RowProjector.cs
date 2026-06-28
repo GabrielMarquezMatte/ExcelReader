@@ -14,7 +14,7 @@ namespace ExcelReader.Core.Parser.Internal
         private ColumnBinding<T>[]? _bindings;
         // Per-row scratch: _seen[i] is set when binding i saw a non-empty cell this row. Only allocated
         // and walked when at least one bound column requires a value (_requireValueCount > 0).
-        private bool[]? _seen;
+        private bool[] _seen;
         private int _requireValueCount;
         private int _rowNumber;
 
@@ -26,6 +26,7 @@ namespace ExcelReader.Core.Parser.Internal
             _headerRow = headerRow;
             _isDate1904 = isDate1904;
             _provider = provider;
+            _seen = [];
         }
 
         // The per-row state machine shared by every enumerator (sync/async, xlsx/xls): skip rows before
@@ -106,7 +107,7 @@ namespace ExcelReader.Core.Parser.Internal
             Array.Sort(bindings, static (left, right) => left.Column.CompareTo(right.Column));
             _bindings = bindings;
             _requireValueCount = requireValueCount;
-            _seen = requireValueCount > 0 ? new bool[bindings.Length] : null;
+            _seen = requireValueCount > 0 ? new bool[bindings.Length] : [];
         }
 
         private readonly void ParseCurrentRow(in Row row, ref T model)
@@ -115,7 +116,7 @@ namespace ExcelReader.Core.Parser.Internal
             bool track = _requireValueCount > 0;
             if (track)
             {
-                Array.Clear(_seen!, 0, bindings.Length);
+                Array.Clear(_seen, 0, bindings.Length);
             }
             int bindingIndex = 0;
             foreach (RowCell rowCell in row.Cells)
@@ -136,7 +137,7 @@ namespace ExcelReader.Core.Parser.Internal
                     binding.Parser(ref model, in cell, _isDate1904, _provider);
                     if (track && binding.RequireValue && cell.Type != CellType.Empty)
                     {
-                        _seen![bindingIndex] = true;
+                        _seen[bindingIndex] = true;
                     }
                     bindingIndex++;
                 }
@@ -152,7 +153,7 @@ namespace ExcelReader.Core.Parser.Internal
         {
             for (int i = 0; i < bindings.Length; i++)
             {
-                if (bindings[i].RequireValue && !_seen![i])
+                if (bindings[i].RequireValue && !_seen[i])
                 {
                     throw new InvalidOperationException(
                         $"Required column '{bindings[i].Name}' has no value in row {_rowNumber.ToString(System.Globalization.CultureInfo.InvariantCulture)}.");

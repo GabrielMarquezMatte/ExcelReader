@@ -209,6 +209,7 @@ namespace ExcelReader.Tests
             AssertZipEntries(zip,
                 "[Content_Types].xml",
                 "_rels/.rels",
+                "docProps/app.xml",
                 "xl/workbook.bin",
                 "xl/_rels/workbook.bin.rels",
                 "xl/styles.bin",
@@ -220,14 +221,14 @@ namespace ExcelReader.Tests
             Assert.True(zip.GetEntry("xl/worksheets/sheet1.bin")!.Length > 0);
 
             XDocument rootRels = ReadXml(zip, "_rels/.rels");
-            XElement rootRel = AssertSingleRelationship(rootRels, "rId1");
+            XElement rootRel = AssertSingleRelationship(rootRels, "wb");
             Assert.Equal(WorkbookRelType, rootRel.Attribute("Type")?.Value);
             Assert.Equal("xl/workbook.bin", rootRel.Attribute("Target")?.Value);
 
             XDocument workbookRels = ReadXml(zip, "xl/_rels/workbook.bin.rels");
-            AssertRelationship(workbookRels, "rIdStyles", StylesRelType, "styles.bin");
-            AssertRelationship(workbookRels, "rIdShared", SharedStringsRelType, "sharedStrings.bin");
-            AssertRelationship(workbookRels, "rId1", WorksheetRelType, "worksheets/sheet1.bin");
+            AssertRelationship(workbookRels, "s", StylesRelType, "styles.bin");
+            AssertRelationship(workbookRels, "ss", SharedStringsRelType, "sharedStrings.bin");
+            AssertRelationship(workbookRels, "s1", WorksheetRelType, "worksheets/sheet1.bin");
 
             XDocument contentTypes = ReadXml(zip, "[Content_Types].xml");
             AssertDefault(contentTypes, "rels", "application/vnd.openxmlformats-package.relationships+xml");
@@ -235,6 +236,7 @@ namespace ExcelReader.Tests
             AssertOverride(contentTypes, "/xl/workbook.bin", "application/vnd.ms-excel.sheet.binary.macroEnabled.main");
             AssertOverride(contentTypes, "/xl/styles.bin", "application/vnd.ms-excel.styles");
             AssertOverride(contentTypes, "/xl/sharedStrings.bin", "application/vnd.ms-excel.sharedStrings");
+            AssertOverride(contentTypes, "/docProps/app.xml", "application/vnd.openxmlformats-officedocument.extended-properties+xml");
             AssertOverride(contentTypes, "/xl/worksheets/sheet1.bin", "application/vnd.ms-excel.worksheet");
         }
 
@@ -264,6 +266,10 @@ namespace ExcelReader.Tests
             int directoryOffset = 512 + (firstDirectorySector * sectorSize);
             Assert.Contains("Root Entry", ReadDirectoryNames(bytes, directoryOffset, sectorSize));
             Assert.Contains("Workbook", ReadDirectoryNames(bytes, directoryOffset, sectorSize));
+            Assert.Equal(1, BitConverter.ToInt32(bytes, directoryOffset + 76));
+            Assert.Equal(unchecked((int)0xFFFFFFFF), BitConverter.ToInt32(bytes, directoryOffset + 128 + 68));
+            Assert.Equal(unchecked((int)0xFFFFFFFF), BitConverter.ToInt32(bytes, directoryOffset + 128 + 72));
+            Assert.Equal(unchecked((int)0xFFFFFFFF), BitConverter.ToInt32(bytes, directoryOffset + 128 + 76));
 
             using var reader = Excel.FromXls(new MemoryStream(bytes));
             Assert.Equal("Legacy", reader.SheetName);
