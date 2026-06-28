@@ -182,6 +182,74 @@ namespace ExcelReader.Tests
         }
 
         [Fact]
+        public async Task NullableAndGenericOverloadsRoundTrip()
+        {
+            DateTime date = new(2026, 6, 27, 0, 0, 0, DateTimeKind.Unspecified);
+            await using var ms = await WriteAsync(async wb =>
+            {
+                XlsbSheetWriter sheet = wb.AddSheet("MoreNumbers");
+                await sheet.StartAsync(TestContext.Current.CancellationToken);
+                await using (XlsbRowWriter row = await sheet.StartRowAsync(TestContext.Current.CancellationToken))
+                {
+                    row.Write((bool?)true);
+                    row.Write((bool?)null);
+                    row.Write((DateTime?)date);
+                    row.Write((DateTime?)null);
+                    row.Write((float?)1.25f);
+                    row.Write((float?)null);
+                    row.Write<short>(6);
+                    row.Write((short?)7);
+                    row.Write<short>(null);
+                    row.Skip(0);
+                    row.Write<byte>(8);
+                }
+                await sheet.EndAsync(TestContext.Current.CancellationToken);
+            });
+
+            await using var reader = Excel.FromXlsb(ms);
+            using XlsbReader.Enumerator e = reader.GetEnumerator();
+            Assert.True(e.MoveNext());
+            Assert.Equal(CellType.Boolean, e.Current[0].Type);
+            Assert.Equal(CellType.Empty, e.Current[1].Type);
+            Assert.True(e.Current[2].TryGetDateTime(out DateTime parsed));
+            Assert.Equal(date, parsed);
+            Assert.Equal(CellType.Empty, e.Current[3].Type);
+            Assert.True(e.Current[4].TryParse(null, out double nullableFloat));
+            Assert.Equal(1.25, nullableFloat);
+            Assert.Equal(CellType.Empty, e.Current[5].Type);
+            Assert.True(e.Current[6].TryParse(null, out short genericShort));
+            Assert.Equal(6, genericShort);
+            Assert.True(e.Current[7].TryParse(null, out short nullableShort));
+            Assert.Equal(7, nullableShort);
+            Assert.Equal(CellType.Empty, e.Current[8].Type);
+            Assert.True(e.Current[9].TryParse(null, out byte genericByte));
+            Assert.Equal(8, genericByte);
+            Assert.False(e.MoveNext());
+        }
+
+        [Fact]
+        public async Task NegativeSkipThrows()
+        {
+            await using var ms = await WriteAsync(async wb =>
+            {
+                XlsbSheetWriter sheet = wb.AddSheet("Sheet1");
+                await sheet.StartAsync(TestContext.Current.CancellationToken);
+                await using (XlsbRowWriter row = await sheet.StartRowAsync(TestContext.Current.CancellationToken))
+                {
+                    Assert.Throws<ArgumentOutOfRangeException>(() => row.Skip(-1));
+                    row.Write("ok");
+                }
+                await sheet.EndAsync(TestContext.Current.CancellationToken);
+            });
+
+            await using var reader = Excel.FromXlsb(ms);
+            using XlsbReader.Enumerator e = reader.GetEnumerator();
+            Assert.True(e.MoveNext());
+            Assert.Equal("ok", e.Current[0].GetString());
+            Assert.False(e.MoveNext());
+        }
+
+        [Fact]
         public async Task BulkXlsbCellRowRoundTrip()
         {
             var birth = new DateTime(1990, 6, 15, 0, 0, 0, DateTimeKind.Unspecified);
@@ -257,6 +325,41 @@ namespace ExcelReader.Tests
             Assert.True(e.MoveNext());
             Assert.True(e.Current[0].TryGetDateTime(reader.IsDate1904, out DateTime parsed));
             Assert.Equal(date, parsed);
+        }
+
+        [Fact]
+        public void XlsbCellCreateOverloadsSetExpectedKindsAndValues()
+        {
+            DateTime date = new(2026, 6, 27, 0, 0, 0, DateTimeKind.Unspecified);
+
+            Assert.Equal(XlsbCellKind.Empty, XlsbCell.Create((bool?)null).Kind);
+            Assert.Equal(XlsbCellKind.Empty, XlsbCell.Create((DateTime?)null).Kind);
+            Assert.Equal(XlsbCellKind.Empty, XlsbCell.Create((int?)null).Kind);
+            Assert.Equal(XlsbCellKind.Empty, XlsbCell.Create((long?)null).Kind);
+            Assert.Equal(XlsbCellKind.Empty, XlsbCell.Create((float?)null).Kind);
+            Assert.Equal(XlsbCellKind.Empty, XlsbCell.Create((double?)null).Kind);
+            Assert.Equal(XlsbCellKind.Empty, XlsbCell.Create((decimal?)null).Kind);
+            Assert.Equal(XlsbCellKind.Empty, XlsbCell.Create<int>(null).Kind);
+
+            XlsbCell text = XlsbCell.Create("text");
+            Assert.Equal(XlsbCellKind.String, text.Kind);
+            Assert.Equal("text", text.Text);
+
+            XlsbCell boolean = XlsbCell.Create((bool?)true);
+            Assert.Equal(XlsbCellKind.Boolean, boolean.Kind);
+            Assert.True(boolean.Boolean);
+
+            XlsbCell dateCell = XlsbCell.Create((DateTime?)date);
+            Assert.Equal(XlsbCellKind.Date, dateCell.Kind);
+            Assert.Equal(date.ToOADate(), dateCell.Number);
+
+            Assert.Equal(1, XlsbCell.Create((int?)1).Number);
+            Assert.Equal(2L, XlsbCell.Create((long?)2L).Number);
+            Assert.Equal(3.5f, XlsbCell.Create((float?)3.5f).Number);
+            Assert.Equal(4.5d, XlsbCell.Create((double?)4.5d).Number);
+            Assert.Equal(5.5d, XlsbCell.Create((decimal?)5.5m).Number);
+            Assert.Equal(6d, XlsbCell.Create<short>(6).Number);
+            Assert.Equal(7d, XlsbCell.Create((short?)7).Number);
         }
     }
 }

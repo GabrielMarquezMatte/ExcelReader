@@ -126,6 +126,7 @@ namespace ExcelReader.Core.Writer
                         frame.Reset();
                         BiffRecordWriter.WriteBof(frame, BiffRecord.SubstreamWorksheet);
                         BiffRecordWriter.WriteDimension(frame, sheet.RowCount, sheet.ColCount);
+                        BiffRecordWriter.WriteWindow2(frame);
                         await dest.WriteAsync(frame.Memory, canc).ConfigureAwait(false);
                         await dest.WriteAsync(sheet.CellsMemory, canc).ConfigureAwait(false);
                         frame.Reset();

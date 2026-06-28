@@ -37,6 +37,12 @@ namespace ExcelReader.Core.Writer
 
         internal string Name { get; }
         internal int SheetId { get; }
+        internal bool UseSharedStrings => _owner.UseSharedStrings;
+
+        internal int GetSharedStringIndex(string value)
+        {
+            return _owner.GetSharedStringIndex(value);
+        }
 
         [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP003:Dispose previous before re-assigning",
             Justification = "_stream is always null when StartAsync is called (state machine guarantees Created state).")]
@@ -82,7 +88,7 @@ namespace ExcelReader.Core.Writer
             return ValueTask.FromResult(_rowWriter);
         }
 
-        public ValueTask WriteRow<T>(ReadOnlySpan<T> values, CancellationToken ct = default)
+        public void WriteRow<T>(ReadOnlySpan<T> values, CancellationToken ct = default)
             where T : ISpanFormattable
         {
             int rowNumber = BeginRow(ct);
@@ -91,7 +97,6 @@ namespace ExcelReader.Core.Writer
                 CellFormatter.WriteNumber(_rowBuffer, values[i], i, rowNumber, includeReference: false);
             }
             EndBufferedRow();
-            return ValueTask.CompletedTask;
         }
 
         internal void NotifyRowEnded()

@@ -6,6 +6,7 @@ using ExcelReader.Core.Parser;
 using ExcelReader.Core.Reader;
 using ExcelReader.Core.ValueObjects;
 using ExcelReader.Core.Writer;
+using ExcelReader.Core.Writer.Internal;
 
 namespace ExcelReader.Tests
 {
@@ -29,6 +30,12 @@ namespace ExcelReader.Tests
             public DateTime? OptionalDate { get; set; }
         }
 
+        private sealed class DateOnlyRow
+        {
+            public DateOnly Date { get; set; }
+            public DateOnly? OptionalDate { get; set; }
+        }
+
         [Fact]
         public async Task UnsupportedParserPropertiesAreIgnored()
         {
@@ -38,7 +45,7 @@ namespace ExcelReader.Tests
             await using var reader = await Excel.FromAsync(ms, ct: TestContext.Current.CancellationToken);
             UnsupportedRow row = new ExcelParser<UnsupportedRow>().Parse(reader).Single();
 
-            Assert.NotEqual(default, row.Id);
+            Assert.NotEqual(Guid.Empty, row.Id);
             Assert.NotNull(row.OptionalId);
             Assert.Equal("kept", row.Name);
         }
@@ -64,6 +71,30 @@ namespace ExcelReader.Tests
 
             Assert.Equal(DateTime.MinValue, row.Date);
             Assert.Null(row.OptionalDate);
+        }
+
+        [Fact]
+        public async Task DateOnlyParserMapsDateCellsAndKeepsDefaultsForEmptyOrInvalidCells()
+        {
+            var date = new DateTime(2024, 6, 27, 0, 0, 0, DateTimeKind.Unspecified);
+            await using var filled = await TypedWorkbook.BuildAsync(["Date", "OptionalDate"], [date, date]);
+            await using var filledReader = await Excel.FromAsync(filled, ct: TestContext.Current.CancellationToken);
+
+            DateOnlyRow parsed = new ExcelParser<DateOnlyRow>().Parse(filledReader).Single();
+            Assert.Equal(new DateOnly(2024, 6, 27), parsed.Date);
+            Assert.Equal(new DateOnly(2024, 6, 27), parsed.OptionalDate);
+
+            await using var empty = await TypedWorkbook.BuildAsync(["Date", "OptionalDate"], [new Gap(), new Gap()]);
+            await using var emptyReader = await Excel.FromAsync(empty, ct: TestContext.Current.CancellationToken);
+            DateOnlyRow emptyParsed = new ExcelParser<DateOnlyRow>().Parse(emptyReader).Single();
+            Assert.Equal(default, emptyParsed.Date);
+            Assert.Null(emptyParsed.OptionalDate);
+
+            await using var invalid = await TypedWorkbook.BuildAsync(["Date", "OptionalDate"], ["nope", "still-nope"]);
+            await using var invalidReader = await Excel.FromAsync(invalid, ct: TestContext.Current.CancellationToken);
+            DateOnlyRow invalidParsed = new ExcelParser<DateOnlyRow>().Parse(invalidReader).Single();
+            Assert.Equal(default, invalidParsed.Date);
+            Assert.Null(invalidParsed.OptionalDate);
         }
 
         [Fact]
@@ -162,6 +193,45 @@ namespace ExcelReader.Tests
         }
 
         [Fact]
+        public async Task AsyncReaderHandlesHugeRowOpenTagAndMissingRowClose()
+        {
+            string padding = new('x', 70_000);
+            await using MemoryStream hugeOpenTag = WorkbookBuilder.Build(
+                $"""<row r="1" custom="{padding}"><c r="A1"><v>7</v></c></row>""");
+            await using XlsxReader reader = await Excel.FromAsync(hugeOpenTag, ct: TestContext.Current.CancellationToken);
+            await using XlsxReader.Enumerator rows = await reader.GetAsyncEnumeratorAsync(TestContext.Current.CancellationToken);
+
+            Assert.True(await rows.MoveNextAsync());
+            Assert.Equal("7", rows.Current[0].GetString());
+            Assert.False(await rows.MoveNextAsync());
+
+            await using MemoryStream missingClose = BuildRawWorkbook(
+                """<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="S1" sheetId="1" r:id="rId1"/></sheets></workbook>""",
+                """<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="x" Target="worksheets/sheet1.xml"/></Relationships>""",
+                ("xl/worksheets/sheet1.xml", """<worksheet><sheetData><row r="1"><c r="A1"><v>1</v></c>"""));
+            await using XlsxReader malformedReader = await Excel.FromAsync(missingClose, ct: TestContext.Current.CancellationToken);
+            await using XlsxReader.Enumerator malformedRows = await malformedReader.GetAsyncEnumeratorAsync(TestContext.Current.CancellationToken);
+
+            Assert.True(await malformedRows.MoveNextAsync());
+            Assert.False(await malformedRows.MoveNextAsync());
+        }
+
+        [Fact]
+        public async Task AsyncReaderMissingRowOpenTagReturnsEmptyRow()
+        {
+            await using MemoryStream ms = BuildRawWorkbook(
+                """<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="S1" sheetId="1" r:id="rId1"/></sheets></workbook>""",
+                """<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="x" Target="worksheets/sheet1.xml"/></Relationships>""",
+                ("xl/worksheets/sheet1.xml", "<worksheet><sheetData><row r=\"1\""));
+            await using XlsxReader reader = await Excel.FromAsync(ms, ct: TestContext.Current.CancellationToken);
+            await using XlsxReader.Enumerator rows = await reader.GetAsyncEnumeratorAsync(TestContext.Current.CancellationToken);
+
+            Assert.True(await rows.MoveNextAsync());
+            Assert.Equal(0, rows.Current.ColumnCount);
+            Assert.False(await rows.MoveNextAsync());
+        }
+
+        [Fact]
         public void ReaderSkipsUnknownTopLevelElementsAndStopsOnEnd()
         {
             using MemoryStream ms = WorkbookBuilder.Build(
@@ -175,6 +245,26 @@ namespace ExcelReader.Tests
             Assert.True(e.MoveNext());
             Assert.Equal(1, int.Parse(e.Current[0].GetString(), CultureInfo.InvariantCulture));
             Assert.False(e.MoveNext());
+        }
+
+        [Fact]
+        public void ReaderSkipsCDataBetweenRowsAndHandlesMalformedCellValues()
+        {
+            using MemoryStream ms = WorkbookBuilder.Build(
+                """
+                <row r="1"><c r="A1" t="q"><v></v></c><c><v>5</v></c></row>
+                <![CDATA[ignored > marker]]>
+                <row r="2"><c r="A2" t="inlineStr"><is><t>after</t></is></c></row>
+                """);
+            using XlsxReader reader = Excel.From(ms);
+            using XlsxReader.Enumerator rows = reader.GetEnumerator();
+
+            Assert.True(rows.MoveNext());
+            Assert.Equal(string.Empty, rows.Current[0].GetString());
+            Assert.Equal("5", rows.Current[1].GetString());
+            Assert.True(rows.MoveNext());
+            Assert.Equal("after", rows.Current[0].GetString());
+            Assert.False(rows.MoveNext());
         }
 
         [Fact]
@@ -437,6 +527,72 @@ namespace ExcelReader.Tests
 
             Assert.Equal("it's", cell.ToString());
             Assert.False(e.MoveNext());
+        }
+
+        [Fact]
+        public void XlsxXmlDecodeHandlesLiteralMarkupAndUnterminatedCData()
+        {
+            Span<byte> dest = stackalloc byte[64];
+
+            int written = XlsxXml.Decode("a <tag &unknown;"u8, dest);
+            Assert.Equal("a <tag &unknown;", Encoding.UTF8.GetString(dest[..written]));
+
+            written = XlsxXml.Decode("<![CDATA[unterminated"u8, dest);
+            Assert.Equal("unterminated", Encoding.UTF8.GetString(dest[..written]));
+        }
+
+        [Fact]
+        public void ColumnNameWritesCharAndUtf8Forms()
+        {
+            Span<char> chars = stackalloc char[3];
+            Span<byte> bytes = stackalloc byte[3];
+
+            int written = ColumnName.Write(chars, 0);
+            Assert.Equal(1, written);
+            Assert.Equal("A", new string(chars[..written]));
+
+            written = ColumnName.Write(chars, 25);
+            Assert.Equal(1, written);
+            Assert.Equal("Z", new string(chars[..written]));
+
+            written = ColumnName.Write(chars, 26);
+            Assert.Equal(2, written);
+            Assert.Equal("AA", new string(chars[..written]));
+
+            written = ColumnName.Write(chars, 701);
+            Assert.Equal(2, written);
+            Assert.Equal("ZZ", new string(chars[..written]));
+
+            written = ColumnName.Write(chars, 702);
+            Assert.Equal(3, written);
+            Assert.Equal("AAA", new string(chars[..written]));
+
+            written = ColumnName.Write(bytes, 16_383);
+            Assert.Equal(3, written);
+            Assert.Equal("XFD", Encoding.ASCII.GetString(bytes[..written]));
+        }
+
+        [Fact]
+        public void LimitChecksThrowNamedExceptions()
+        {
+            var options = new ExcelReaderOptions
+            {
+                MaxCellBytes = 4,
+                MaxSharedStringBytes = 8,
+            };
+
+            ExcelLimitExceededException cell = Assert.Throws<ExcelLimitExceededException>(() =>
+                LimitChecks.ThrowIfOverCellLimit(options, 5));
+            Assert.Equal(nameof(ExcelReaderOptions.MaxCellBytes), cell.LimitName);
+
+            ExcelLimitExceededException shared = Assert.Throws<ExcelLimitExceededException>(() =>
+                LimitChecks.ThrowIfOverSharedStringLimit(options, 9));
+            Assert.Equal(nameof(ExcelReaderOptions.MaxSharedStringBytes), shared.LimitName);
+
+            var unlimited = options with { MaxCellBytes = 0 };
+            ExcelLimitExceededException array = Assert.Throws<ExcelLimitExceededException>(() =>
+                LimitChecks.NextBufferSize(unlimited, Array.MaxLength, Array.MaxLength));
+            Assert.Equal("ArrayMaxLength", array.LimitName);
         }
 
         [Fact]

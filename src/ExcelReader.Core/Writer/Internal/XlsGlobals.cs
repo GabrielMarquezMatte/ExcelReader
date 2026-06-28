@@ -6,21 +6,40 @@ namespace ExcelReader.Core.Writer.Internal
     // sheet's stream offset is known.
     internal static class XlsGlobals
     {
-        internal const int GeneralXf = 0;
-        internal const int DateXf = 1;
+        internal const int GeneralXf = 16;
+        internal const int DateXf = 17;
         private const int BuiltinDateFormat = 14;
 
         // Returns the buffer position of each BoundSheet's lbPlyPos field, in sheet order.
         internal static int[] Write(BiffBuffer buffer, ReadOnlySpan<string> sheetNames, bool date1904)
         {
             BiffRecordWriter.WriteBof(buffer, BiffRecord.SubstreamGlobals);
+            BiffRecordWriter.WriteInterfaceHdr(buffer, 1200);
+            BiffRecordWriter.WriteMms(buffer);
+            BiffRecordWriter.WriteInterfaceEnd(buffer);
+            BiffRecordWriter.WriteWriteAccess(buffer);
             BiffRecordWriter.WriteCodePage(buffer, 1200); // UTF-16
+            BiffRecordWriter.WriteDsf(buffer);
+            BiffRecordWriter.WriteTabId(buffer, sheetNames.Length);
+            BiffRecordWriter.WriteFnGroupCount(buffer);
+            BiffRecordWriter.WriteWindow1(buffer);
+            BiffRecordWriter.WriteBackup(buffer);
+            BiffRecordWriter.WriteHideObj(buffer);
             if (date1904)
             {
                 BiffRecordWriter.WriteDate1904(buffer, date1904: true);
             }
-            BiffRecordWriter.WriteXf(buffer, formatIndex: 0);
-            BiffRecordWriter.WriteXf(buffer, formatIndex: BuiltinDateFormat);
+            BiffRecordWriter.WritePrecision(buffer);
+            BiffRecordWriter.WriteRefreshAll(buffer);
+            BiffRecordWriter.WriteBookBool(buffer);
+            BiffRecordWriter.WriteFont(buffer);
+            for (int i = 0; i < GeneralXf; i++)
+            {
+                BiffRecordWriter.WriteStyleXf(buffer, formatIndex: 0);
+            }
+            BiffRecordWriter.WriteCellXf(buffer, formatIndex: 0);
+            BiffRecordWriter.WriteCellXf(buffer, formatIndex: BuiltinDateFormat);
+            BiffRecordWriter.WriteStyle(buffer);
 
             int[] offsetPositions = new int[sheetNames.Length];
             for (int i = 0; i < sheetNames.Length; i++)

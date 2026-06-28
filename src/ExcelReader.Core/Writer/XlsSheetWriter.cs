@@ -10,7 +10,7 @@ namespace ExcelReader.Core.Writer
         private const int MaxSheetNameLength = 31;
 
         // Fixed framing added around the cell records when the substream is assembled.
-        private const int FramingBytes = 20 + 18 + 4; // BOF + DIMENSION + EOF
+        private const int FramingBytes = 20 + 18 + 22 + 4; // BOF + DIMENSION + WINDOW2 + EOF
 
         [SuppressMessage("SharpSource", "SS066:DisposableFieldIsNotDisposed",
             Justification = "XlsWorkbookWriter is borrowed; its lifetime is managed by the caller.")]

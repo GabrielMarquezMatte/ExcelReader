@@ -229,7 +229,7 @@ namespace ExcelReader.Core.Parser.Internal
                 {
                     return true;
                 }
-                if (!cell.TryParse<TProp>(provider, out TProp? value))
+                if (!cell.TryParse<TProp>(provider, out var value))
                 {
                     return false;
                 }
