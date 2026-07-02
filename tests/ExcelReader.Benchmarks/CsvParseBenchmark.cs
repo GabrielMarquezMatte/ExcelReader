@@ -2,31 +2,20 @@ using System.Globalization;
 using BenchmarkDotNet.Attributes;
 using ExcelReader.Core.Parser;
 using ExcelReader.Core.Reader;
-using ExcelReader.Core.ValueObjects;
 using nietras.SeparatedValues;
 using Sylvan.Data;
 using Sylvan.Data.Csv;
 
 namespace ExcelReader.Benchmarks
 {
-    // CSV has no native date type, so a plain DateTime column parses an Excel serial number and
-    // would keep its default on CSV text (see README "Read CSV"). CsvRecord mirrors Record but
-    // routes Date through a converter, exactly as a real caller would for a CSV date column.
+    // The CSV parser parses DateTime from the cell text natively (no converter), matching how Sep,
+    // Sylvan, and CsvHelper handle the Date column — a like-for-like comparison.
     public sealed class CsvRecord
     {
         public string? Name { get; set; }
         public int Id { get; set; }
-        [ExcelConverter(typeof(IsoDateConverter))]
         public DateTime Date { get; set; }
         public double Value { get; set; }
-    }
-
-    public sealed class IsoDateConverter : IExcelCellConverter<DateTime>
-    {
-        public bool TryConvert(in Cell cell, bool isDate1904, IFormatProvider provider, out DateTime value)
-        {
-            return DateTime.TryParse(cell.GetString(), provider, DateTimeStyles.None, out value);
-        }
     }
 
     // Maps a header + `Rows` data rows into strongly-typed CsvRecord objects, comparing

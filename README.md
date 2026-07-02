@@ -62,10 +62,10 @@ Run separately on Windows 11, Intel Core i7-1355U, .NET 10.0.9 (SDK 10.0.301) �
 |---|---:|---:|---:|---:|
 | Cell-by-cell read | 5.87 ms, 705 B | 6.11 ms, 4.83 KB | 3.87 ms, 1.69 MB | 23.85 ms, 16.27 MB |
 | Cell-by-cell read async | 8.48 ms, 1.38 KB | — | — | — |
-| Typed row parsing | 18.17 ms, 7.68 MB | 7.27 ms, 3.87 MB | 10.00 ms, 10.95 MB | 20.93 ms, 14.41 MB |
-| Typed row parsing async | 24.35 ms, 7.68 MB | — | — | — |
+| Typed row parsing | 10.87 ms, 3.86 MB | 6.85 ms, 3.87 MB | 9.63 ms, 10.95 MB | 19.76 ms, 14.41 MB |
+| Typed row parsing async | 14.34 ms, 3.86 MB | — | — | — |
 
-For raw cell-by-cell reads, ExcelReader is competitive with Sep and allocates ~7x less; Sylvan.Data.Csv is faster but allocates ~2,400x more, and CsvHelper is ~4.1x slower and allocates ~23,000x more. Typed row parsing is the one place ExcelReader is not the fastest here: `ExcelParser<T>` shares its reflection-compiled projection pipeline with the XLSX/XLSB/XLS readers rather than a CSV-specialized path, so Sep (~2.5x faster) and Sylvan (~1.8x faster) win on raw speed for typed parsing, though ExcelReader still allocates less than Sylvan/CsvHelper and beats CsvHelper on speed.
+For raw cell-by-cell reads, ExcelReader is competitive with Sep and allocates ~7x less; Sylvan.Data.Csv is faster but allocates ~2,400x more, and CsvHelper is ~4.1x slower and allocates ~23,000x more. For typed row parsing, `ExcelParser<T>.Parse(CsvReader)` uses a CSV-specialized projection (dense field binding, single-pass, native text date parsing) rather than the generic Excel pipeline: it now allocates the least of any library here (~3.86 MB, edging out Sep) and is faster than CsvHelper (~1.8x). Sep remains ~1.6x faster and Sylvan ~1.1x faster on raw parse time, but ExcelReader gives up far less than before while keeping the lowest allocation.
 
 Run the benchmarks locally:
 
@@ -370,7 +370,7 @@ var options = new CsvReaderOptions { Delimiter = (byte)';' };
 using var reader = Excel.FromCsvFile("relatorio.csv", options);
 ```
 
-Every CSV cell is text (`CellType.ExcelString`, or `CellType.Empty` for a blank field) — there is no binary numeric or date representation to fall back on, so `Cell.TryGetDateTime`/`IsDate1904` (always `false` for CSV) do not apply. A plain `DateTime`/`DateOnly` property therefore keeps its default value when parsed from CSV; use an `[ExcelConverter]` that parses the column's text format (see "Custom converters" above) for date columns.
+Every CSV cell is text (`CellType.ExcelString`, or `CellType.Empty` for a blank field); at the reader level there is no binary numeric or date representation, so `Cell.TryGetDateTime`/`IsDate1904` (always `false` for CSV) do not apply. The typed parser, however, is CSV-specialized: `ExcelParser<T>.Parse(CsvReader)` parses `DateTime`/`DateOnly` columns directly from the cell text (ISO or culture format, honoring `Culture` — e.g. pt-BR `02/07/2026`), so no `[ExcelConverter]` is needed for dates. All the usual attributes work unchanged (`[ExcelColumn]` aliases, `[ExcelRequired]`, `[ExcelConverter]`), and a converter still takes precedence over the built-in date parsing. (Holding the reader as `IExcelRowReader` instead routes through the generic Excel pipeline, where dates use serial-number semantics — prefer the concrete `Parse(CsvReader)` overload for CSV.)
 
 `Excel.Open`/`OpenAsync` do **not** auto-detect CSV — plain text has no magic-byte signature to sniff, so open CSV explicitly via `Excel.FromCsv*`.
 

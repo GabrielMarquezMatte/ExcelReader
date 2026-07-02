@@ -54,6 +54,7 @@ namespace ExcelReader.Tests
         private sealed class DateRow
         {
             public DateTime Created { get; set; }
+            public DateOnly? Day { get; set; }
         }
 
         private sealed class IsoDateConverter : IExcelCellConverter<DateTime>
@@ -169,20 +170,47 @@ namespace ExcelReader.Tests
         }
 
         [Fact]
-        public void PlainDateTimeColumnKeepsDefaultForCsvText()
+        public void PlainDateTimeAndDateOnlyColumnsParseTextNatively()
         {
-            // Known limitation (documented): DateTime/DateOnly parse an Excel serial number, not
-            // arbitrary text, so a plain CSV date column keeps its default. Use [ExcelConverter].
-            using var ms = Csv("Created\n2026-07-02\n");
+            // The CSV parser parses DateTime/DateOnly from the cell text (no [ExcelConverter] needed) —
+            // unlike the Excel readers, where those types interpret an Excel serial number.
+            using var ms = Csv("Created,Day\n2026-07-02T08:30:00,2026-07-02\n");
+            using var reader = Excel.FromCsv(ms);
+
+            DateRow row = new ExcelParser<DateRow>().Parse(reader).Single();
+
+            Assert.Equal(new DateTime(2026, 7, 2, 8, 30, 0, DateTimeKind.Unspecified), row.Created);
+            Assert.Equal(new DateOnly(2026, 7, 2), row.Day);
+        }
+
+        [Fact]
+        public void UnparseableDateColumnKeepsDefault()
+        {
+            using var ms = Csv("Created,Day\nnot-a-date,\n");
             using var reader = Excel.FromCsv(ms);
 
             DateRow row = new ExcelParser<DateRow>().Parse(reader).Single();
 
             Assert.Equal(default, row.Created);
+            Assert.Null(row.Day);
         }
 
         [Fact]
-        public void CustomConverterParsesTextDate()
+        public void DateColumnRespectsCulture()
+        {
+            // pt-BR day-first format: "02/07/2026" is 2 July, not 7 February.
+            using var ms = Csv("Created,Day\n02/07/2026,02/07/2026\n");
+            using var reader = Excel.FromCsv(ms);
+            var config = new ExcelParserConfig { Culture = CultureInfo.GetCultureInfo("pt-BR") };
+
+            DateRow row = new ExcelParser<DateRow>(config).Parse(reader).Single();
+
+            Assert.Equal(new DateTime(2026, 7, 2, 0, 0, 0, DateTimeKind.Unspecified), row.Created);
+            Assert.Equal(new DateOnly(2026, 7, 2), row.Day);
+        }
+
+        [Fact]
+        public void CustomConverterStillOverridesDateParsing()
         {
             using var ms = Csv("Created\n2026-07-02\n");
             using var reader = Excel.FromCsv(ms);
