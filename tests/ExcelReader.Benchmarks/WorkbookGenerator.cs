@@ -15,7 +15,7 @@ namespace ExcelReader.Benchmarks
     // Builds self-contained workbooks in memory via the project writers.
     internal static class WorkbookGenerator
     {
-        private static readonly string[] Pool =
+        internal static readonly string[] Pool =
             ["alpha", "beta", "gamma", "delta", "epsilon", "zeta", "eta", "theta"];
 
         // `rows` headerless data rows of [string, int, date, float] — exercises

@@ -1,6 +1,8 @@
 using System.Diagnostics.CodeAnalysis;
+using System.Globalization;
 using System.Linq.Expressions;
 using System.Reflection;
+using System.Text;
 using ExcelReader.Core.Enums;
 using ExcelReader.Core.ValueObjects;
 using FastEnumUtility;
@@ -51,10 +53,25 @@ namespace ExcelReader.Core.Parser.Internal
             typeof(Guid),
         ];
 
-        internal static ColumnParser<T>? Build<T>(PropertyInfo prop)
+        // When csvTextDates is true, DateTime and DateOnly parse the cell text (ISO or culture format)
+        // rather than an Excel serial number. Only the CSV parser opts in, because CSV has no serial
+        // date form. Every other reader leaves csvTextDates false and keeps the serial semantics.
+        internal static ColumnParser<T>? Build<T>(PropertyInfo prop, bool csvTextDates = false)
         {
             Type propType = prop.PropertyType;
             Type? innerNullable = Nullable.GetUnderlyingType(propType);
+            if (csvTextDates)
+            {
+                Type effective = innerNullable ?? propType;
+                if (effective == typeof(DateTime))
+                {
+                    return innerNullable is null ? BuildTextDateTimeParser<T>(prop) : BuildTextNullableDateTimeParser<T>(prop);
+                }
+                if (effective == typeof(DateOnly))
+                {
+                    return innerNullable is null ? BuildTextDateOnlyParser<T>(prop) : BuildTextNullableDateOnlyParser<T>(prop);
+                }
+            }
             if (innerNullable is not null)
             {
                 return BuildNullableParser<T>(prop, innerNullable);
@@ -217,6 +234,111 @@ namespace ExcelReader.Core.Parser.Internal
                 setter(ref model, DateOnly.FromDateTime(dt));
                 return true;
             };
+        }
+
+        // CSV text-date parsers: the cell holds a date string (e.g. "2026-07-02" or ISO "O" form).
+        // DateTime/DateOnly implement ISpanParsable (char) but not IUtf8SpanParsable, so decode the
+        // short field to a stack char buffer and parse culture-aware — no heap allocation.
+        private static ColumnParser<T> BuildTextDateTimeParser<T>(PropertyInfo prop)
+        {
+            RefAction<T, DateTime> setter = CompileSetter<T, DateTime>(prop);
+            return (ref model, in cell, _, provider) =>
+            {
+                if (cell.Type == CellType.Empty)
+                {
+                    return true;
+                }
+                if (!TryParseDateTimeText(in cell, provider, out DateTime dt))
+                {
+                    return false;
+                }
+                setter(ref model, dt);
+                return true;
+            };
+        }
+
+        private static ColumnParser<T> BuildTextNullableDateTimeParser<T>(PropertyInfo prop)
+        {
+            RefAction<T, DateTime?> setter = CompileSetter<T, DateTime?>(prop);
+            return (ref model, in cell, _, provider) =>
+            {
+                if (cell.Type == CellType.Empty)
+                {
+                    return true;
+                }
+                if (!TryParseDateTimeText(in cell, provider, out DateTime dt))
+                {
+                    return false;
+                }
+                setter(ref model, dt);
+                return true;
+            };
+        }
+
+        private static ColumnParser<T> BuildTextDateOnlyParser<T>(PropertyInfo prop)
+        {
+            RefAction<T, DateOnly> setter = CompileSetter<T, DateOnly>(prop);
+            return (ref model, in cell, _, provider) =>
+            {
+                if (cell.Type == CellType.Empty)
+                {
+                    return true;
+                }
+                if (!TryParseDateOnlyText(in cell, provider, out DateOnly d))
+                {
+                    return false;
+                }
+                setter(ref model, d);
+                return true;
+            };
+        }
+
+        private static ColumnParser<T> BuildTextNullableDateOnlyParser<T>(PropertyInfo prop)
+        {
+            RefAction<T, DateOnly?> setter = CompileSetter<T, DateOnly?>(prop);
+            return (ref model, in cell, _, provider) =>
+            {
+                if (cell.Type == CellType.Empty)
+                {
+                    return true;
+                }
+                if (!TryParseDateOnlyText(in cell, provider, out DateOnly d))
+                {
+                    return false;
+                }
+                setter(ref model, d);
+                return true;
+            };
+        }
+
+        // DateTime/DateOnly implement ISpanParsable (char) and IUtf8SpanFormattable, but NOT
+        // IUtf8SpanParsable (no parse-from-UTF-8) on either net8 or net10. So decode the short date
+        // field to a stack char buffer — allocation-free — and parse culture-aware (honors Culture,
+        // e.g. pt-BR "02/07/2026"). Falls back to a string for pathologically long fields.
+        private const int MaxStackDateChars = 128;
+
+        private static bool TryParseDateTimeText(in Cell cell, IFormatProvider provider, out DateTime value)
+        {
+            ReadOnlySpan<byte> utf8 = cell.Value;
+            if (utf8.Length <= MaxStackDateChars)
+            {
+                Span<char> chars = stackalloc char[MaxStackDateChars];
+                int n = Encoding.UTF8.GetChars(utf8, chars);
+                return DateTime.TryParse(chars[..n], provider, DateTimeStyles.None, out value);
+            }
+            return DateTime.TryParse(cell.GetString(), provider, DateTimeStyles.None, out value);
+        }
+
+        private static bool TryParseDateOnlyText(in Cell cell, IFormatProvider provider, out DateOnly value)
+        {
+            ReadOnlySpan<byte> utf8 = cell.Value;
+            if (utf8.Length <= MaxStackDateChars)
+            {
+                Span<char> chars = stackalloc char[MaxStackDateChars];
+                int n = Encoding.UTF8.GetChars(utf8, chars);
+                return DateOnly.TryParse(chars[..n], provider, DateTimeStyles.None, out value);
+            }
+            return DateOnly.TryParse(cell.GetString(), provider, DateTimeStyles.None, out value);
         }
 
         private static ColumnParser<T> BuildParsableCore<T, TProp>(PropertyInfo prop)

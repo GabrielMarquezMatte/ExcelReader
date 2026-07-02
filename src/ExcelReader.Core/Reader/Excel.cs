@@ -89,6 +89,34 @@ namespace ExcelReader.Core.Reader
             return XlsbReader.CreateAsync(stream, leaveOpen, options, ct);
         }
 
+        [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP001:Dispose created",
+            Justification = "Stream ownership transfers to CsvReader, which disposes it on Dispose/DisposeAsync when leaveOpen is false.")]
+        [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
+            Justification = "Stream ownership transfers to CsvReader, which disposes it on Dispose/DisposeAsync when leaveOpen is false.")]
+        public static CsvReader FromCsvFile(string path, CsvReaderOptions? options = null)
+        {
+            return new CsvReader(File.OpenRead(path), leaveOpen: false, options);
+        }
+
+        public static CsvReader FromCsv(Stream stream, bool leaveOpen = true, CsvReaderOptions? options = null)
+        {
+            return new CsvReader(stream, leaveOpen, options);
+        }
+
+        [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP001:Dispose created",
+            Justification = "Stream ownership transfers to CreateAsync, which disposes it on failure and via the reader on success.")]
+        public static ValueTask<CsvReader> FromCsvFileAsync(string path, CancellationToken ct = default, CsvReaderOptions? options = null)
+        {
+            FileStream stream = new(path, FileMode.Open, FileAccess.Read, FileShare.Read, bufferSize: 65536,
+                                    options: FileOptions.Asynchronous | FileOptions.SequentialScan);
+            return CsvReader.CreateAsync(stream, leaveOpen: false, options, ct);
+        }
+
+        public static ValueTask<CsvReader> FromCsvAsync(Stream stream, bool leaveOpen = true, CancellationToken ct = default, CsvReaderOptions? options = null)
+        {
+            return CsvReader.CreateAsync(stream, leaveOpen, options, ct);
+        }
+
         // The leading bytes that distinguish container formats: XLSX and XLSB are ZIP ("PK\x03\x04"),
         // XLS is an OLE2/CFB compound document. XLSB is distinguished from XLSX by the presence of
         // "xl/workbook.bin" in the ZIP central directory.
