@@ -58,6 +58,17 @@ namespace ExcelReader.Core.Reader
 
             public Row Current => new(_cells.AsSpan(0, _cellCount), _vals.AsSpan(0, _valLen), default);
 
+            // Dense field access for CsvEnumerable<T>: CSV cells are stored contiguously in column
+            // order (no gaps), so field i is _cells[i] — O(1), skipping Row's binary search and the
+            // RowCells re-walk the generic projector would do.
+            internal int FieldCount => _cellCount;
+
+            internal Cell FieldAt(int index)
+            {
+                ref readonly CellDesc d = ref _cells[index];
+                return new Cell(d.Type, _vals.AsSpan(d.Start, d.Length));
+            }
+
             public bool MoveNext()
             {
                 EnsureBomStripped();

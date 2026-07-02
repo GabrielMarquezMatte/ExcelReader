@@ -51,12 +51,16 @@ namespace ExcelReader.Core.Parser
             return new ExcelEnumerable<T, IExcelRowReader, IExcelRowEnumerator>(reader, _config);
         }
 
+        // CSV uses a specialized enumerable (dense field binding, single-pass projection, native text
+        // date parsing) rather than the generic ExcelEnumerable, since CSV rows have no gaps, styles,
+        // or serial dates. Holding the reader as IExcelRowReader instead routes through the generic
+        // path (serial-date semantics), so prefer this concrete overload for CSV.
         [SuppressMessage("Usage", "VSTHRD200:Use \"Async\" suffix for async methods",
             Justification = "Synchronous entry point; the enumerable also implements IAsyncEnumerable, but ParseAsync is the async counterpart.")]
-        public ExcelEnumerable<T, CsvReader, CsvReader.Enumerator> Parse(CsvReader reader)
+        public CsvEnumerable<T> Parse(CsvReader reader)
         {
             ArgumentNullException.ThrowIfNull(reader);
-            return new ExcelEnumerable<T, CsvReader, CsvReader.Enumerator>(reader, _config);
+            return new CsvEnumerable<T>(reader, _config);
         }
 
         public ExcelEnumerable<T> ParseAsync(XlsxReader reader, CancellationToken ct = default)
@@ -83,10 +87,10 @@ namespace ExcelReader.Core.Parser
             return new ExcelEnumerable<T, IExcelRowReader, IExcelRowEnumerator>(reader, _config, ct);
         }
 
-        public ExcelEnumerable<T, CsvReader, CsvReader.Enumerator> ParseAsync(CsvReader reader, CancellationToken ct = default)
+        public CsvEnumerable<T> ParseAsync(CsvReader reader, CancellationToken ct = default)
         {
             ArgumentNullException.ThrowIfNull(reader);
-            return new ExcelEnumerable<T, CsvReader, CsvReader.Enumerator>(reader, _config, ct);
+            return new CsvEnumerable<T>(reader, _config, ct);
         }
     }
 }
