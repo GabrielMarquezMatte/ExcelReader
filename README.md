@@ -8,7 +8,7 @@
 [![License](https://img.shields.io/github/license/GabrielMarquezMatte/ExcelReader.svg)](LICENSE)
 [![Benchmarks](https://img.shields.io/badge/benchmarks-GitHub%20Pages-informational)](https://gabrielmarquezmatte.github.io/ExcelReader/dev/bench/)
 
-High-performance Excel reading and writing for .NET 10. Reads `.xlsx`, `.xlsb`, and `.xls`; writes all three formats.
+High-performance Excel reading and writing for .NET 10. Reads `.xlsx`, `.xlsb`, `.xls`, and `.csv`; writes `.xlsx`, `.xlsb`, and `.xls`.
 
 ExcelReader is built for streaming spreadsheet workloads where low allocations matter. It reads worksheet rows as lightweight `ref struct` values, resolves shared strings, recognizes date styles, handles sparse cells, and includes writers for producing `.xlsx` (Open XML), `.xlsb` (BIFF12), and `.xls` (BIFF8) workbooks.
 
@@ -53,6 +53,19 @@ XLSB is the fastest path in these results: raw reads are ~4.4x faster than XLSX 
 | Workbook writing | 6.70 ms, 12.37 MB | — |
 
 XLS reading allocates ~29x less than Sylvan at comparable speed. The XLS writer is ~2.6x faster than the XLSX writer (6.70 ms vs 17.16 ms), but allocates more in this benchmark.
+
+### CSV
+
+Run separately on Windows 11, Intel Core i7-1355U, .NET 10.0.9 (SDK 10.0.301) — a different machine from the XLSX/XLSB/XLS results above, so compare ratios within this table, not absolute times across formats.
+
+| Scenario | ExcelReader | Sep | Sylvan.Data.Csv | CsvHelper |
+|---|---:|---:|---:|---:|
+| Cell-by-cell read | 5.87 ms, 705 B | 6.11 ms, 4.83 KB | 3.87 ms, 1.69 MB | 23.85 ms, 16.27 MB |
+| Cell-by-cell read async | 8.48 ms, 1.38 KB | — | — | — |
+| Typed row parsing | 10.87 ms, 3.86 MB | 6.85 ms, 3.87 MB | 9.63 ms, 10.95 MB | 19.76 ms, 14.41 MB |
+| Typed row parsing async | 14.34 ms, 3.86 MB | — | — | — |
+
+For raw cell-by-cell reads, ExcelReader is competitive with Sep and allocates ~7x less; Sylvan.Data.Csv is faster but allocates ~2,400x more, and CsvHelper is ~4.1x slower and allocates ~23,000x more. For typed row parsing, `ExcelParser<T>.Parse(CsvReader)` uses a CSV-specialized projection (dense field binding, single-pass, native text date parsing) rather than the generic Excel pipeline: it now allocates the least of any library here (~3.86 MB, edging out Sep) and is faster than CsvHelper (~1.8x). Sep remains ~1.6x faster and Sylvan ~1.1x faster on raw parse time, but ExcelReader gives up far less than before while keeping the lowest allocation.
 
 Run the benchmarks locally:
 
@@ -328,14 +341,47 @@ using (var sheet = workbook.AddSheet("Summary"))
 await workbook.EndAsync();
 ```
 
+## Read CSV
+
+`CsvReader` streams RFC 4180 CSV (quoted fields, embedded delimiters/newlines, `""`-escaped quotes) through the same `Row`/`Cell` model as the Excel readers, so `ExcelParser<T>` works on it unchanged.
+
+```csharp
+using ExcelReader.Core.Parser;
+using ExcelReader.Core.Reader;
+
+using var reader = Excel.FromCsvFile("report.csv");
+
+foreach (var row in reader)
+{
+    Console.WriteLine(row[0].GetString());
+}
+
+// Typed parsing works exactly like the Excel readers:
+foreach (var item in new ExcelParser<ChangeRow>().Parse(reader))
+{
+    Console.WriteLine($"{item.File}: +{item.LinesAdded}");
+}
+```
+
+`Excel.FromCsv`/`FromCsvFile`/`FromCsvAsync`/`FromCsvFileAsync` mirror the other formats' factory shape. Pass `CsvReaderOptions` to change the delimiter/quote character, supply a non-UTF-8 `Encoding` (transcoded to UTF-8 internally), or turn off BOM detection:
+
+```csharp
+var options = new CsvReaderOptions { Delimiter = (byte)';' };
+using var reader = Excel.FromCsvFile("relatorio.csv", options);
+```
+
+Every CSV cell is text (`CellType.ExcelString`, or `CellType.Empty` for a blank field); at the reader level there is no binary numeric or date representation, so `Cell.TryGetDateTime`/`IsDate1904` (always `false` for CSV) do not apply. The typed parser, however, is CSV-specialized: `ExcelParser<T>.Parse(CsvReader)` parses `DateTime`/`DateOnly` columns directly from the cell text (ISO or culture format, honoring `Culture` — e.g. pt-BR `02/07/2026`), so no `[ExcelConverter]` is needed for dates. All the usual attributes work unchanged (`[ExcelColumn]` aliases, `[ExcelRequired]`, `[ExcelConverter]`), and a converter still takes precedence over the built-in date parsing. (Holding the reader as `IExcelRowReader` instead routes through the generic Excel pipeline, where dates use serial-number semantics — prefer the concrete `Parse(CsvReader)` overload for CSV.)
+
+`Excel.Open`/`OpenAsync` do **not** auto-detect CSV — plain text has no magic-byte signature to sniff, so open CSV explicitly via `Excel.FromCsv*`.
+
 ## Notes
 
-- Reads and writes `.xlsx`, `.xlsb` (BIFF12), and `.xls` (BIFF8) files.
-- Reads one sheet at a time; use `MoveToSheet(index)` or `TryMoveToSheet(name)` to switch sheets.
+- Reads `.xlsx`, `.xlsb` (BIFF12), `.xls` (BIFF8), and `.csv`; writes `.xlsx`, `.xlsb`, and `.xls`.
+- Reads one sheet at a time (XLSX/XLSB/XLS); use `MoveToSheet(index)` or `TryMoveToSheet(name)` to switch sheets. CSV has no sheets.
 - Missing cells in sparse rows are exposed as empty cells.
 - String conversion allocates only when you call `GetString()`.
 - The XLSX scanner accepts the SpreadsheetML shapes commonly emitted by non-Excel producers, including single-quoted attributes, comments in `sheetData`, and CDATA text runs.
-- Readers bound untrusted input by default: 512 MB total decompressed ZIP data, 32 MB per cell/row value buffer, and 128 MB for shared strings. Pass `ExcelReaderOptions` to the `Excel.From*`/`Excel.Open*` factories to tune these limits; set a limit to `0` to opt out and restore unlimited behavior for that limit.
+- Readers bound untrusted input by default: 512 MB total decompressed ZIP data, 32 MB per cell/row value buffer, and 128 MB for shared strings. Pass `ExcelReaderOptions` to the `Excel.From*`/`Excel.Open*` factories to tune these limits; set a limit to `0` to opt out and restore unlimited behavior for that limit. `CsvReader` has its own `CsvReaderOptions.MaxCellBytes` (default 32 MB) for the same purpose.
 - The XLSX writer emits a compact workbook with strings, numbers, booleans, dates, and blank cells; shared strings are opt-in.
 - The XLSB writer emits BIFF12 workbook parts inside the standard XLSB ZIP package; shared strings are opt-in.
 - The XLS writer buffers records in memory and assembles the OLE container at `EndAsync`; choose it when write throughput matters more than peak allocation.

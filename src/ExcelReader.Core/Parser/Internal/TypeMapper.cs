@@ -7,18 +7,28 @@ namespace ExcelReader.Core.Parser.Internal
     internal static class TypeMapper<T>
     {
         private static readonly Lazy<TypeMapInfo<T>> _info =
-            new(BuildSafe, LazyThreadSafetyMode.ExecutionAndPublication);
+            new(static () => BuildSafe(csvTextDates: false), LazyThreadSafetyMode.ExecutionAndPublication);
+
+        // Separate cache for the CSV parser: identical to _info except DateTime/DateOnly parse text
+        // instead of an Excel serial number. Built lazily so non-CSV callers never pay for it.
+        private static readonly Lazy<TypeMapInfo<T>> _csvInfo =
+            new(static () => BuildSafe(csvTextDates: true), LazyThreadSafetyMode.ExecutionAndPublication);
 
         internal static TypeMapInfo<T> GetInfo()
         {
             return _info.Value;
         }
 
-        private static TypeMapInfo<T> BuildSafe()
+        internal static TypeMapInfo<T> GetCsvInfo()
+        {
+            return _csvInfo.Value;
+        }
+
+        private static TypeMapInfo<T> BuildSafe(bool csvTextDates)
         {
             try
             {
-                return Build();
+                return Build(csvTextDates);
             }
             catch (Exception ex)
             {
@@ -28,7 +38,7 @@ namespace ExcelReader.Core.Parser.Internal
             }
         }
 
-        private static TypeMapInfo<T> Build()
+        private static TypeMapInfo<T> Build(bool csvTextDates)
         {
             PropertyInfo[] properties = typeof(T)
                 .GetProperties(BindingFlags.Public | BindingFlags.Instance);
@@ -47,7 +57,7 @@ namespace ExcelReader.Core.Parser.Internal
                 ExcelConverterAttribute? converterAttr = prop.GetCustomAttribute<ExcelConverterAttribute>();
                 ColumnParser<T>? parser = converterAttr is not null
                     ? ColumnParserFactory.BuildConverter<T>(prop, converterAttr.ConverterType)
-                    : ColumnParserFactory.Build<T>(prop);
+                    : ColumnParserFactory.Build<T>(prop, csvTextDates);
                 if (parser is null)
                 {
                     if (isRequired)

@@ -15,9 +15,12 @@
 
   <ItemGroup>
     <PackageReference Include="BenchmarkDotNet" Version="0.15.8" />
+    <PackageReference Include="CsvHelper" Version="33.1.0" />
     <PackageReference Include="MiniExcel" Version="*" />
+    <PackageReference Include="Sep" Version="0.15.0" />
     <PackageReference Include="SpreadCheetah" Version="1.27.0" />
     <PackageReference Include="Sylvan.Data" Version="0.2.17" />
+    <PackageReference Include="Sylvan.Data.Csv" Version="1.4.4" />
     <PackageReference Include="Sylvan.Data.Excel" Version="*" />
   </ItemGroup>
 
