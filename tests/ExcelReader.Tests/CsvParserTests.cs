@@ -1,3 +1,4 @@
+using System.Collections;
 using System.Globalization;
 using System.Text;
 using ExcelReader.Core.Parser;
@@ -41,6 +42,13 @@ namespace ExcelReader.Tests
         {
             [ExcelColumn("First Name")]
             public string? FirstName { get; set; }
+        }
+
+        private sealed class MultiAliasRow
+        {
+            [ExcelColumn("Preferred Name")]
+            [ExcelColumn("Legacy Name")]
+            public string? Name { get; set; }
         }
 
         private sealed class RequiredRow
@@ -100,6 +108,19 @@ namespace ExcelReader.Tests
             AliasRow row = new ExcelParser<AliasRow>().Parse(reader).Single();
 
             Assert.Equal("Bob", row.FirstName);
+        }
+
+        [Fact]
+        public void HigherPriorityAliasReplacesEarlierLowerPriorityBinding()
+        {
+            // "Legacy Name" (alias index 1) binds first since it's the earlier column; "Preferred
+            // Name" (alias index 0) then takes over the property, unbinding the earlier column.
+            using var ms = Csv("Legacy Name,Preferred Name\nOld,New\n");
+            using var reader = Excel.FromCsv(ms);
+
+            MultiAliasRow row = new ExcelParser<MultiAliasRow>().Parse(reader).Single();
+
+            Assert.Equal("New", row.Name);
         }
 
         [Fact]
@@ -235,6 +256,31 @@ namespace ExcelReader.Tests
             Assert.Equal(2, rows.Count);
             Assert.Equal("Alice", rows[0].Name);
             Assert.Equal("Bob", rows[1].Name);
+        }
+
+        [Fact]
+        [System.Diagnostics.CodeAnalysis.SuppressMessage("Performance", "HLQ001:Assignment causes boxing",
+            Justification = "Deliberately exercises the boxed non-generic IEnumerable.GetEnumerator() path.")]
+        public void NonGenericEnumerableGetEnumeratorWorks()
+        {
+            using var ms = Csv("Name\nAlice\n");
+            using var reader = Excel.FromCsv(ms);
+            IEnumerable enumerable = new ExcelParser<PersonRow>().Parse(reader);
+
+            IEnumerator e = enumerable.GetEnumerator();
+
+            Assert.True(e.MoveNext());
+            Assert.Equal("Alice", Assert.IsType<PersonRow>(e.Current).Name);
+        }
+
+        [Fact]
+        public void EnumeratorResetThrows()
+        {
+            using var ms = Csv("Name\nAlice\n");
+            using var reader = Excel.FromCsv(ms);
+            using var e = new ExcelParser<PersonRow>().Parse(reader).GetEnumerator();
+
+            Assert.Throws<NotSupportedException>(e.Reset);
         }
     }
 }

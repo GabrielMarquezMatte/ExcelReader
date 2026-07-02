@@ -27,10 +27,10 @@ jobs:
             filter: ExcelReader.Benchmarks.ParseBenchmark.*
           - name: write
             filter: ExcelReader.Benchmarks.WriteBenchmark.*
-          - name: xls-read
-            filter: ExcelReader.Benchmarks.XlsReadBenchmark.*
-          - name: xls-write
-            filter: ExcelReader.Benchmarks.XlsWriteBenchmark.*
+          - name: xls
+            filter: ExcelReader.Benchmarks.Xls*
+          - name: csv
+            filter: ExcelReader.Benchmarks.Csv*
 
     steps:
       - uses: actions/checkout@v7
