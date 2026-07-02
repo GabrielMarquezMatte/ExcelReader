@@ -1,3 +1,5 @@
+using System.Diagnostics.CodeAnalysis;
+using System.Globalization;
 using System.Text;
 using ExcelReader.Core.Enums;
 using ExcelReader.Core.Reader;
@@ -352,6 +354,278 @@ namespace ExcelReader.Tests
 
             Assert.Equal(first.Count, second.Count);
             Assert.Equal(first[0], second[0]);
+        }
+
+        // --- async twins of edge cases only previously exercised on the sync path ---
+
+        [Fact]
+        public async Task EscapedQuoteIsUnescapedAsync()
+        {
+            using var ms = Csv("a,\"she said \"\"hi\"\"\",c");
+            using var reader = Excel.FromCsv(ms);
+
+            var rows = await ReadAllAsync(reader);
+
+            Assert.Equal(["a", "she said \"hi\"", "c"], Assert.Single(rows));
+        }
+
+        [Theory]
+        [InlineData("a,b\r\n1,2\r\n")]
+        [InlineData("a,b\n1,2\n")]
+        [InlineData("a,b\r1,2\r")]
+        public async Task AllLineTerminatorsAreSupportedAsync(string csv)
+        {
+            using var ms = Csv(csv);
+            using var reader = Excel.FromCsv(ms);
+
+            var rows = await ReadAllAsync(reader);
+
+            Assert.Equal(2, rows.Count);
+            Assert.Equal(["a", "b"], rows[0]);
+            Assert.Equal(["1", "2"], rows[1]);
+        }
+
+        [Fact]
+        public async Task NoTrailingNewlineStillYieldsFinalRecordAsync()
+        {
+            using var ms = Csv("a,b,c");
+            using var reader = Excel.FromCsv(ms);
+
+            var rows = await ReadAllAsync(reader);
+
+            Assert.Equal(["a", "b", "c"], Assert.Single(rows));
+        }
+
+        [Fact]
+        public async Task Utf8BomIsStrippedAsync()
+        {
+            byte[] bom = [0xEF, 0xBB, 0xBF];
+            byte[] body = Encoding.UTF8.GetBytes("a,b\n");
+            using var ms = new MemoryStream([.. bom, .. body]);
+            using var reader = Excel.FromCsv(ms);
+
+            var rows = await ReadAllAsync(reader);
+
+            Assert.Equal(["a", "b"], Assert.Single(rows));
+        }
+
+        // --- lenient handling of an unterminated quoted field ---
+
+        [Fact]
+        public void UnterminatedQuotedFieldAtEofIsReadLeniently()
+        {
+            using var ms = Csv("a,\"unterminated");
+            using var reader = Excel.FromCsv(ms);
+
+            var rows = ReadAll(reader);
+
+            Assert.Equal(["a", "unterminated"], Assert.Single(rows));
+        }
+
+        [Fact]
+        public async Task UnterminatedQuotedFieldAtEofIsReadLenientlyAsync()
+        {
+            using var ms = Csv("a,\"unterminated");
+            using var reader = Excel.FromCsv(ms);
+
+            var rows = await ReadAllAsync(reader);
+
+            Assert.Equal(["a", "unterminated"], Assert.Single(rows));
+        }
+
+        // --- options: BOM detection off, non-ASCII/non-UTF8 rejection, non-UTF8 encoding ---
+
+        [Fact]
+        public void BomDetectionCanBeDisabled()
+        {
+            byte[] bom = [0xEF, 0xBB, 0xBF];
+            byte[] body = Encoding.UTF8.GetBytes("a,b\n");
+            using var ms = new MemoryStream([.. bom, .. body]);
+            var options = new CsvReaderOptions { DetectEncodingFromByteOrderMark = false };
+            using var reader = Excel.FromCsv(ms, options: options);
+
+            var rows = ReadAll(reader);
+
+            Assert.Equal("﻿a", rows[0][0]);
+        }
+
+        [Fact]
+        public async Task BomDetectionCanBeDisabledAsync()
+        {
+            byte[] bom = [0xEF, 0xBB, 0xBF];
+            byte[] body = Encoding.UTF8.GetBytes("a,b\n");
+            using var ms = new MemoryStream([.. bom, .. body]);
+            var options = new CsvReaderOptions { DetectEncodingFromByteOrderMark = false };
+            using var reader = Excel.FromCsv(ms, options: options);
+
+            var rows = await ReadAllAsync(reader);
+
+            Assert.Equal("﻿a", rows[0][0]);
+        }
+
+        [Fact]
+        public void NonUtf8EncodingIsTranscoded()
+        {
+            byte[] latin1Bytes = Encoding.Latin1.GetBytes("nome,cidade\nGabriel,São Paulo\n");
+            using var ms = new MemoryStream(latin1Bytes);
+            var options = new CsvReaderOptions { Encoding = Encoding.Latin1 };
+            using var reader = Excel.FromCsv(ms, options: options);
+
+            var rows = ReadAll(reader);
+
+            Assert.Equal("São Paulo", rows[1][1]);
+        }
+
+        [Theory]
+        [InlineData((byte)'\r')]
+        [InlineData((byte)'\n')]
+        public void DelimiterAsLineTerminatorThrows(byte delimiter)
+        {
+            using var ms = Csv("a,b\n");
+            var options = new CsvReaderOptions { Delimiter = delimiter };
+
+            Assert.Throws<ArgumentException>(() => Excel.FromCsv(ms, options: options));
+        }
+
+        [Theory]
+        [InlineData((byte)'\r')]
+        [InlineData((byte)'\n')]
+        public void QuoteAsLineTerminatorThrows(byte quote)
+        {
+            using var ms = Csv("a,b\n");
+            var options = new CsvReaderOptions { Quote = quote };
+
+            Assert.Throws<ArgumentException>(() => Excel.FromCsv(ms, options: options));
+        }
+
+        // --- more fields than the enumerator's initial capacity (forces internal array growth) ---
+
+        [Fact]
+        public void ManyColumnsExceedingInitialCapacityAreAllRead()
+        {
+            string[] cols = [.. Enumerable.Range(0, 50).Select(static i => i.ToString(CultureInfo.InvariantCulture))];
+            using var ms = Csv(string.Join(',', cols) + "\n");
+            using var reader = Excel.FromCsv(ms);
+
+            var rows = ReadAll(reader);
+
+            Assert.Equal(cols, Assert.Single(rows));
+        }
+
+        // --- factory methods: file, async, async-file ---
+
+        [Fact]
+        public void FromCsvFileReadsFile()
+        {
+            string path = Path.GetTempFileName();
+            try
+            {
+                File.WriteAllText(path, "a,b\n1,2\n");
+                using var reader = Excel.FromCsvFile(path);
+
+                var rows = ReadAll(reader);
+
+                Assert.Equal(2, rows.Count);
+            }
+            finally
+            {
+                File.Delete(path);
+            }
+        }
+
+        [Fact]
+        public async Task FromCsvFileAsyncReadsFile()
+        {
+            string path = Path.GetTempFileName();
+            try
+            {
+                await File.WriteAllTextAsync(path, "a,b\n1,2\n", TestContext.Current.CancellationToken);
+                await using var reader = await Excel.FromCsvFileAsync(path, TestContext.Current.CancellationToken);
+
+                var rows = await ReadAllAsync(reader);
+
+                Assert.Equal(2, rows.Count);
+            }
+            finally
+            {
+                File.Delete(path);
+            }
+        }
+
+        [Fact]
+        public async Task FromCsvAsyncReadsStream()
+        {
+            using var ms = Csv("a,b\n1,2\n");
+            await using var reader = await Excel.FromCsvAsync(ms, ct: TestContext.Current.CancellationToken);
+
+            var rows = await ReadAllAsync(reader);
+
+            Assert.Equal(2, rows.Count);
+        }
+
+        // --- Dispose/DisposeAsync stream ownership ---
+
+        [Fact]
+        [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP017:Prefer using",
+            Justification = "Explicit Dispose() call is the point of this test — asserts the stream closes as a side effect.")]
+        public void DisposeClosesStreamWhenNotLeaveOpen()
+        {
+            var ms = Csv("a,b\n");
+            var reader = Excel.FromCsv(ms, leaveOpen: false);
+
+            reader.Dispose();
+
+            Assert.Throws<ObjectDisposedException>(() => ms.ReadByte());
+        }
+
+        [Fact]
+        public async Task DisposeAsyncClosesStreamWhenNotLeaveOpen()
+        {
+            var ms = Csv("a,b\n");
+            var reader = await Excel.FromCsvAsync(ms, leaveOpen: false, ct: TestContext.Current.CancellationToken);
+
+            await reader.DisposeAsync();
+
+            Assert.Throws<ObjectDisposedException>(() => ms.ReadByte());
+        }
+
+        [Fact]
+        public async Task DisposeAsyncLeavesStreamOpenWhenLeaveOpenTrue()
+        {
+            using var ms = Csv("a,b\n");
+            var reader = await Excel.FromCsvAsync(ms, leaveOpen: true, ct: TestContext.Current.CancellationToken);
+
+            await reader.DisposeAsync();
+
+            ms.ReadByte(); // must not throw
+
+            Assert.True(ms.CanRead);
+        }
+
+        // --- explicit IExcelRowReader interface members (format-agnostic consumers) ---
+
+        [Fact]
+        public void ExplicitInterfaceGetEnumeratorWorks()
+        {
+            using var ms = Csv("a,b\n");
+            using var reader = Excel.FromCsv(ms);
+            IExcelRowReader ier = reader;
+
+            using IExcelRowEnumerator e = ier.GetEnumerator();
+
+            Assert.True(e.MoveNext());
+        }
+
+        [Fact]
+        public async Task ExplicitInterfaceGetAsyncEnumeratorAsyncWorks()
+        {
+            using var ms = Csv("a,b\n");
+            using var reader = Excel.FromCsv(ms);
+            IExcelRowReader ier = reader;
+
+            await using IExcelRowEnumerator e = await ier.GetAsyncEnumeratorAsync(TestContext.Current.CancellationToken);
+
+            Assert.True(await e.MoveNextAsync());
         }
     }
 }
