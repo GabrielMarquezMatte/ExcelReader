@@ -48,7 +48,14 @@ namespace ExcelReader.Core.Parser.Internal
 
         [SuppressMessage("Performance", "HLQ006:GetAsyncEnumerator should return a value type",
             Justification = "Async enumerator requires a class to host the async state machine.")]
-        public IAsyncEnumerator<T> GetAsyncEnumerator(CancellationToken cancellationToken = default)
+        IAsyncEnumerator<T> IAsyncEnumerable<T>.GetAsyncEnumerator(CancellationToken cancellationToken)
+        {
+            TypeMapInfo<T> info = TypeMapper<T>.GetCsvInfo();
+            CancellationToken effective = cancellationToken.CanBeCanceled ? cancellationToken : _ct;
+            return new AsyncEnumerator(_reader, info, _config.ColumnNameComparer, _config.HeaderNormalization, _config.HeaderRow, _config.Culture, effective);
+        }
+
+        public AsyncEnumerator GetAsyncEnumerator(CancellationToken cancellationToken = default)
         {
             TypeMapInfo<T> info = TypeMapper<T>.GetCsvInfo();
             CancellationToken effective = cancellationToken.CanBeCanceled ? cancellationToken : _ct;
@@ -109,7 +116,7 @@ namespace ExcelReader.Core.Parser.Internal
             }
         }
 
-        private sealed class AsyncEnumerator : IAsyncEnumerator<T>
+        public sealed class AsyncEnumerator : IAsyncEnumerator<T>
         {
             // Borrowed: the caller owns the CsvReader's lifetime. Only _rows (opened here) is disposed.
             [SuppressMessage("SharpSource", "SS066:Disposable field is not disposed", Justification = "Borrowed, not owned.")]

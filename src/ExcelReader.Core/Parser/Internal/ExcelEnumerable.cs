@@ -49,9 +49,14 @@ namespace ExcelReader.Core.Parser.Internal
             return GetEnumerator();
         }
 
-        [SuppressMessage("Performance", "HLQ006:GetAsyncEnumerator should return a value type",
-            Justification = "Async enumerator requires a class to host the async state machine.")]
-        public IAsyncEnumerator<T> GetAsyncEnumerator(CancellationToken cancellationToken = default)
+        IAsyncEnumerator<T> IAsyncEnumerable<T>.GetAsyncEnumerator(CancellationToken cancellationToken)
+        {
+            TypeMapInfo<T> info = TypeMapper<T>.GetInfo();
+            CancellationToken effective = cancellationToken.CanBeCanceled ? cancellationToken : _ct;
+            return new AsyncEnumerator(_reader, info, _config.ColumnNameComparer, _config.HeaderNormalization, _config.HeaderRow, _config.Culture, effective);
+        }
+
+        public AsyncEnumerator GetAsyncEnumerator(CancellationToken cancellationToken = default)
         {
             TypeMapInfo<T> info = TypeMapper<T>.GetInfo();
             CancellationToken effective = cancellationToken.CanBeCanceled ? cancellationToken : _ct;
@@ -114,7 +119,7 @@ namespace ExcelReader.Core.Parser.Internal
             }
         }
 
-        private sealed class AsyncEnumerator : IAsyncEnumerator<T>
+        public sealed class AsyncEnumerator : IAsyncEnumerator<T>
         {
             private readonly TReader _reader;
             private readonly CancellationToken _ct;
