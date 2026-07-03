@@ -1,4 +1,6 @@
+using System.Buffers;
 using System.Buffers.Text;
+using System.Collections.Frozen;
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Linq.Expressions;
@@ -6,7 +8,6 @@ using System.Reflection;
 using System.Text;
 using ExcelReader.Core.Enums;
 using ExcelReader.Core.ValueObjects;
-using FastEnumUtility;
 
 namespace ExcelReader.Core.Parser.Internal
 {
@@ -538,8 +539,59 @@ namespace ExcelReader.Core.Parser.Internal
         }
 #endif
 
-        // Enum.TryParse accepts both member names ("Active") and their numeric form ("2"),
-        // so binary-numeric and text cells both resolve. Culture is irrelevant for enums.
+        private static class EnumCache<TEnum>
+            where TEnum : struct, Enum
+        {
+            private static readonly FrozenDictionary<string, TEnum> _nameMap = BuildNameMap();
+            private static readonly FrozenDictionary<int, TEnum> _valueMap = BuildValueMap();
+            private static FrozenDictionary<string, TEnum> BuildNameMap()
+            {
+                Dictionary<string, TEnum> map = new(StringComparer.OrdinalIgnoreCase);
+                foreach (TEnum value in Enum.GetValues<TEnum>())
+                {
+                    string name = value.ToString();
+                    var intValue = Convert.ToInt32(value, CultureInfo.InvariantCulture);
+                    map[name] = value;
+                    map[intValue.ToString(CultureInfo.InvariantCulture)] = value;
+                }
+                return map.ToFrozenDictionary(StringComparer.OrdinalIgnoreCase);
+            }
+            private static FrozenDictionary<int, TEnum> BuildValueMap()
+            {
+                Dictionary<int, TEnum> map = [];
+                foreach (TEnum value in Enum.GetValues<TEnum>())
+                {
+                    int intValue = Convert.ToInt32(value, CultureInfo.InvariantCulture);
+                    map[intValue] = value;
+                }
+                return map.ToFrozenDictionary();
+            }
+            public static bool TryParse(in Cell cell, out TEnum value)
+            {
+                if (cell.Type == CellType.Number && cell.TryGetDouble(out double d))
+                {
+                    return _valueMap.TryGetValue((int)d, out value);
+                }
+#if NET8_0
+                var name = cell.GetString();
+                return _nameMap.TryGetValue(name, out value);
+#else
+                var byteValue = cell.Value;
+                char[] chars = ArrayPool<char>.Shared.Rent(byteValue.Length);
+                try
+                {
+                    int charCount = Encoding.UTF8.GetChars(byteValue, chars);
+                    var alternateLookup = _nameMap.GetAlternateLookup<ReadOnlySpan<char>>();
+                    return alternateLookup.TryGetValue(chars.AsSpan(0, charCount), out value);
+                }
+                finally
+                {
+                    ArrayPool<char>.Shared.Return(chars);
+                }
+#endif
+            }
+        }
+
         private static ColumnParser<T> BuildEnumCore<T, TEnum>(PropertyInfo prop)
             where TEnum : struct, Enum
         {
@@ -550,9 +602,7 @@ namespace ExcelReader.Core.Parser.Internal
                 {
                     return true;
                 }
-                var valueString = cell.GetString();
-                if (!FastEnum.TryParse(valueString, ignoreCase: true, out TEnum value)
-                    && !Enum.TryParse(valueString, ignoreCase: true, out value))
+                if (!EnumCache<TEnum>.TryParse(in cell, out TEnum value))
                 {
                     return false;
                 }
@@ -571,9 +621,7 @@ namespace ExcelReader.Core.Parser.Internal
                 {
                     return true;
                 }
-                var valueString = cell.GetString();
-                if (!FastEnum.TryParse(valueString, ignoreCase: true, out TEnum parsed)
-                    && !Enum.TryParse(valueString, ignoreCase: true, out parsed))
+                if (!EnumCache<TEnum>.TryParse(in cell, out TEnum parsed))
                 {
                     return false;
                 }

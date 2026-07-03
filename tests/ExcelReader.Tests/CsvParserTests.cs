@@ -150,6 +150,21 @@ namespace ExcelReader.Tests
         }
 
         [Fact]
+        public void EnumFromNumericTextBindsByValueInCsv()
+        {
+            // Every CSV cell is text, so an enum written as its underlying number ("2") arrives as
+            // text. The enum name map registers each member's numeric string form alongside its name,
+            // so numeric-text enum columns resolve in CSV too.
+            var id = Guid.NewGuid();
+            using var ms = Csv($"Status,Id,Quantity\n2,{id},7\n");
+            using var reader = Excel.FromCsv(ms);
+
+            TypedRow row = new ExcelParser<TypedRow>().Parse(reader).Single();
+
+            Assert.Equal(Status.Closed, row.Status);
+        }
+
+        [Fact]
         public void EmptyCellLeavesNullableColumnNull()
         {
             using var ms = Csv("Status,Id,Quantity\nActive,,\n");

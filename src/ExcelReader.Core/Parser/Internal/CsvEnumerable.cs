@@ -52,7 +52,7 @@ namespace ExcelReader.Core.Parser.Internal
         {
             TypeMapInfo<T> info = TypeMapper<T>.GetCsvInfo();
             CancellationToken effective = cancellationToken.CanBeCanceled ? cancellationToken : _ct;
-            return new AsyncEnumerator(_reader, info, _config.ColumnNameComparer, _config.HeaderNormalization, _config.HeaderRow, effective, _config.Culture);
+            return new AsyncEnumerator(_reader, info, _config.ColumnNameComparer, _config.HeaderNormalization, _config.HeaderRow, _config.Culture, effective);
         }
 
         public struct Enumerator : IEnumerator<T>
@@ -125,12 +125,12 @@ namespace ExcelReader.Core.Parser.Internal
                 StringComparer comparer,
                 HeaderNormalization normalization,
                 int headerRow,
-                CancellationToken ct,
-                IFormatProvider provider)
+                IFormatProvider provider,
+                CancellationToken ct)
             {
                 _reader = reader;
-                _ct = ct;
                 _projector = new CsvRowProjector<T>(typeInfo, comparer, normalization, headerRow, provider);
+                _ct = ct;
             }
 
             public T Current => _current;

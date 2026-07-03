@@ -12,7 +12,7 @@ namespace ExcelReader.Core.Reader
             Justification = "Borrowed WorkbookStream; its lifetime is owned by XlsReader, not this cursor.")]
         private readonly WorkbookStream _wb;
         private readonly int _sectorSize;
-        private readonly byte[]? _sector;     // current sector (streamed mode only)
+        private byte[]? _sector;     // current sector (streamed mode only)
         private int _loaded = -1;             // chain index in _sector
         private byte[]? _scratch;             // assembles records that span sectors
 
@@ -20,7 +20,7 @@ namespace ExcelReader.Core.Reader
         {
             _wb = wb;
             _sectorSize = wb.SectorSize;
-            _sector = wb.IsMemory ? null : new byte[wb.SectorSize];
+            _sector = wb.IsMemory ? null : ArrayPool<byte>.Shared.Rent(wb.SectorSize);
         }
 
         internal long Position { get; set; }
@@ -109,14 +109,15 @@ namespace ExcelReader.Core.Reader
 
         private byte[] EnsureScratch(int len)
         {
-            if (_scratch is null || _scratch.Length < len)
+            if (_scratch is not null && _scratch.Length >= len)
             {
-                if (_scratch is not null)
-                {
-                    ArrayPool<byte>.Shared.Return(_scratch);
-                }
-                _scratch = ArrayPool<byte>.Shared.Rent(len);
+                return _scratch;
             }
+            if (_scratch is not null)
+            {
+                ArrayPool<byte>.Shared.Return(_scratch);
+            }
+            _scratch = ArrayPool<byte>.Shared.Rent(len);
             return _scratch;
         }
 
@@ -126,6 +127,11 @@ namespace ExcelReader.Core.Reader
             {
                 ArrayPool<byte>.Shared.Return(_scratch);
                 _scratch = null;
+            }
+            if (_sector is not null)
+            {
+                ArrayPool<byte>.Shared.Return(_sector);
+                _sector = null;
             }
         }
     }
