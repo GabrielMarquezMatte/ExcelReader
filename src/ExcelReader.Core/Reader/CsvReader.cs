@@ -3,9 +3,9 @@ using System.Text;
 
 namespace ExcelReader.Core.Reader
 {
-    // Forward-only CSV reader. Unlike the XLSX/XLSB/XLS readers there are no sheets, styles, or
-    // shared strings, so this does not implement IExcelReader — only the row-enumeration surface
-    // the typed parser (ExcelParser<T>) actually needs.
+    // Forward-only CSV reader. Unlike the XLSX/XLSB/XLS readers there are no styles or shared strings.
+    // It exposes a single, unnamed sheet so it can be driven through the same format-agnostic
+    // IExcelRowReader surface (row enumeration + trivial sheet navigation) as the Excel readers.
     public sealed partial class CsvReader : IExcelRowReader, IExcelRowReader<CsvReader.Enumerator>
     {
         [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP008:Don't assign member with injected and created disposables",
@@ -67,6 +67,22 @@ namespace ExcelReader.Core.Reader
         }
 
         public bool IsDate1904 => false;
+
+        // CSV is a single, unnamed sheet. These satisfy the IExcelReader surface so a CSV reader can be
+        // driven through the same format-agnostic IExcelRowReader loop as the Excel readers.
+        public string SheetName => "";
+        public int SheetCount => 1;
+
+        public bool TryMoveToSheet(ReadOnlySpan<char> name)
+        {
+            return name.Equals(SheetName, StringComparison.OrdinalIgnoreCase);
+        }
+
+        public void MoveToSheet(int index)
+        {
+            ArgumentOutOfRangeException.ThrowIfNegative(index);
+            ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(index, SheetCount);
+        }
 
         [SuppressMessage("Performance", "HLQ006:GetEnumerator should return a value type",
             Justification = "Enumerator is a class so the same type can also expose MoveNextAsync for the async path.")]
