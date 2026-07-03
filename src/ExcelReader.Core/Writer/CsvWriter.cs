@@ -1,5 +1,4 @@
 using System.Buffers;
-using System.Diagnostics.CodeAnalysis;
 using ExcelReader.Core.Writer.Internal;
 
 namespace ExcelReader.Core.Writer
@@ -33,8 +32,12 @@ namespace ExcelReader.Core.Writer
             _leaveOpen = leaveOpen;
             _delimiter = options.Delimiter;
             _quote = options.Quote;
-            _specialBytes = SearchValues.Create(_delimiter, _quote, (byte)'\r', (byte)'\n');
-            _specialChars = SearchValues.Create((char)_delimiter, (char)_quote, '\r', '\n');
+            // Via explicitly-typed spans so this binds to SearchValues.Create(ReadOnlySpan<T>) on both
+            // target frameworks (net8.0 has no params overload) with no intermediate array allocation.
+            ReadOnlySpan<byte> specialBytes = [_delimiter, _quote, (byte)'\r', (byte)'\n'];
+            ReadOnlySpan<char> specialChars = [(char)_delimiter, (char)_quote, '\r', '\n'];
+            _specialBytes = SearchValues.Create(specialBytes);
+            _specialChars = SearchValues.Create(specialChars);
         }
 
         public static CsvWriter Create(Stream stream, bool leaveOpen = false, CsvWriterOptions? options = null)
@@ -113,8 +116,18 @@ namespace ExcelReader.Core.Writer
             }
         }
 
-        [SuppressMessage("Reliability", "CA1849:Call async methods when in an async method",
-            Justification = "Rows are buffered in memory; the final flush is a single small synchronous write.")]
+        // Emits the terminating newline for a row left open when the writer is disposed (the caller
+        // disposed the writer without disposing the last CsvRowWriter). Buffer-only, so it is safe on
+        // both the sync and async dispose paths.
+        private void TerminateOpenRow()
+        {
+            if (_rowActive)
+            {
+                _buffer.Write("\r\n"u8);
+                _rowActive = false;
+            }
+        }
+
         public void Dispose()
         {
             if (_disposed)
@@ -122,11 +135,7 @@ namespace ExcelReader.Core.Writer
                 return;
             }
             _disposed = true;
-            if (_rowActive)
-            {
-                _buffer.Write("\r\n"u8);
-                _rowActive = false;
-            }
+            TerminateOpenRow();
             FlushCore();
             _buffer.Dispose();
             if (!_leaveOpen)
@@ -142,11 +151,7 @@ namespace ExcelReader.Core.Writer
                 return;
             }
             _disposed = true;
-            if (_rowActive)
-            {
-                _buffer.Write("\r\n"u8);
-                _rowActive = false;
-            }
+            TerminateOpenRow();
             if (_buffer.Length > 0)
             {
                 await _stream.WriteAsync(_buffer.Memory).ConfigureAwait(false);
