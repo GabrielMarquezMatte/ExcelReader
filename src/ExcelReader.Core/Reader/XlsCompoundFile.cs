@@ -110,6 +110,15 @@ namespace ExcelReader.Core.Reader
             {
                 throw new InvalidDataException("Unsupported OLE sector size.");
             }
+            // A file cannot hold more sectors than its length allows, so a FAT/DIFAT sector count above
+            // that is a crafted header. Reject it before allocating, or `new int[fatSectorCount]` below
+            // would let a bogus count force a multi-GB allocation / OOM on untrusted input.
+            long maxSectors = source.Length / sectorSize;
+            if (fatSectorCount < 0 || fatSectorCount > maxSectors ||
+                difatSectorCount < 0 || difatSectorCount > maxSectors)
+            {
+                throw new InvalidDataException("The OLE FAT sector count is out of range.");
+            }
             var fatSectorIds = new int[fatSectorCount];
             ReadDifat(source, header, sectorSize, fatSectorIds, firstDifatSector, difatSectorCount);
             int[] fat = ReadFat(source, sectorSize, fatSectorIds);

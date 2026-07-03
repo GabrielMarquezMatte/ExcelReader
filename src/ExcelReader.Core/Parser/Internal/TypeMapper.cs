@@ -51,6 +51,10 @@ namespace ExcelReader.Core.Parser.Internal
                 {
                     continue;
                 }
+                if (Attribute.IsDefined(prop, typeof(ExcelIgnoreAttribute)))
+                {
+                    continue;
+                }
                 ExcelRequiredAttribute? requiredAttr = prop.GetCustomAttribute<ExcelRequiredAttribute>();
                 bool isRequired = requiredAttr is not null;
                 bool requireValue = isRequired && !requiredAttr!.AllowEmpty;

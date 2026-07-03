@@ -11,6 +11,9 @@ namespace ExcelReader.Core.Reader
         // a single moving cursor (_pos) into _buf, refilled/compacted by Fill/PrepareBuffer, with
         // every field's bytes (unescaped as needed) copied into a persistent _vals buffer so that
         // Current stays valid across the buffer compaction that the next MoveNext may trigger.
+        // Records are parsed from buffered bytes only (TryParseRecordFromBuffer, no stream I/O)
+        // when a record is only partially buffered the parse restarts after a refill, so sync and
+        // async share one parser and the async path awaits once per refill, not per field.
         [SuppressMessage("Design", "CA1034:Nested types should not be visible",
             Justification = "Public nested enumerator is the standard foreach pattern.")]
         public sealed class Enumerator : IExcelRowEnumerator
@@ -40,7 +43,6 @@ namespace ExcelReader.Core.Reader
             private byte[] _vals;    // decoded (unescaped) bytes for every field of the current record
             private int _valLen;
             private CellDesc[] _cells;
-            private int _cellCount;
             private int _col;
 
             internal Enumerator(Stream stream, CsvReaderOptions options, CancellationToken ct = default)
@@ -56,12 +58,12 @@ namespace ExcelReader.Core.Reader
                 _cells = ArrayPool<CellDesc>.Shared.Rent(InitialCells);
             }
 
-            public Row Current => new(_cells.AsSpan(0, _cellCount), _vals.AsSpan(0, _valLen), default);
+            public Row Current => new(_cells.AsSpan(0, FieldCount), _vals.AsSpan(0, _valLen), default);
 
             // Dense field access for CsvEnumerable<T>: CSV cells are stored contiguously in column
             // order (no gaps), so field i is _cells[i] — O(1), skipping Row's binary search and the
             // RowCells re-walk the generic projector would do.
-            internal int FieldCount => _cellCount;
+            internal int FieldCount { get; private set; }
 
             internal Cell FieldAt(int index)
             {
@@ -72,132 +74,156 @@ namespace ExcelReader.Core.Reader
             public bool MoveNext()
             {
                 EnsureBomStripped();
-                Ensure(1);
-                if (_pos >= _len)
+                while (true)
                 {
-                    return false;
+                    Ensure(1);
+                    if (_pos >= _len)
+                    {
+                        return false;
+                    }
+                    BeginRecord();
+                    int start = _pos;
+                    if (TryParseRecordFromBuffer())
+                    {
+                        return true;
+                    }
+                    _pos = start;
+                    Fill();
                 }
-                BeginRecord();
-                ParseRecord();
-                return true;
             }
 
             public async ValueTask<bool> MoveNextAsync()
             {
                 await EnsureBomStrippedAsync().ConfigureAwait(false);
-                await EnsureAsync(1).ConfigureAwait(false);
-                if (_pos >= _len)
+                while (true)
                 {
-                    return false;
+                    await EnsureAsync(1).ConfigureAwait(false);
+                    if (_pos >= _len)
+                    {
+                        return false;
+                    }
+                    BeginRecord();
+                    int start = _pos;
+                    if (TryParseRecordFromBuffer())
+                    {
+                        return true;
+                    }
+                    _pos = start;
+                    await FillAsync().ConfigureAwait(false);
                 }
-                BeginRecord();
-                await ParseRecordAsync().ConfigureAwait(false);
-                return true;
             }
 
             private void BeginRecord()
             {
-                _cellCount = 0;
+                FieldCount = 0;
                 _valLen = 0;
                 _col = 0;
             }
 
-            // --- sync record/field parsing ---
+            // --- record/field parsing (buffer-only, no stream I/O) ---
 
-            private void ParseRecord()
-            {
-                bool recordEnded;
-                do
-                {
-                    recordEnded = ParseField();
-                }
-                while (!recordEnded);
-            }
+            // Outcomes of TryScanUnquotedRun.
+            private const int NeedMore = 0;
+            private const int FieldEnd = 1;
+            private const int RecordEnd = 2;
 
-            // Returns true when this field ended the record (terminator or EOF), false when a
-            // delimiter was consumed and more fields follow.
-            private bool ParseField()
+            // Parses one full record from _buf[_pos.._len]. Returns false when the record is not
+            // fully buffered yet (and not EOF); the caller restores _pos to the record start,
+            // refills, and re-parses the record from scratch (BeginRecord resets _vals/_cells).
+            // ponytail: restart-on-refill re-scans the partial record after every Fill — fine while
+            // records are far smaller than the 64KB buffer; make the parse resumable if huge records
+            // over trickling streams ever matter.
+            private bool TryParseRecordFromBuffer()
             {
-                int valStart = _valLen;
-                Ensure(1);
-                if (_pos < _len && _buf[_pos] == _quote)
+                while (true)
                 {
-                    _pos++;
-                    ParseQuotedContent();
+                    int valStart = _valLen;
+                    if (_pos < _len && _buf[_pos] == _quote)
+                    {
+                        _pos++;
+                        if (!TryParseQuotedContent())
+                        {
+                            return false;
+                        }
+                    }
+                    int term = TryScanUnquotedRun();
+                    if (term == NeedMore)
+                    {
+                        return false;
+                    }
+                    AddCell(valStart, _valLen - valStart);
+                    if (term == RecordEnd)
+                    {
+                        return true;
+                    }
                 }
-                bool recordEnded = AppendUnquotedRun();
-                AddCell(valStart, _valLen - valStart);
-                return recordEnded;
             }
 
             // _pos is right after the opening quote. Appends unescaped content ("" -> ") to _vals
             // and leaves _pos right after the closing quote (or at EOF for an unterminated field).
-            private void ParseQuotedContent()
+            // False means the closing quote (or the byte after it, needed to rule out "") is not
+            // buffered yet.
+            private bool TryParseQuotedContent()
             {
                 while (true)
                 {
                     int rel = _pos < _len ? _buf.AsSpan(_pos, _len - _pos).IndexOf(_quote) : -1;
                     if (rel < 0)
                     {
+                        if (!_eof)
+                        {
+                            return false;
+                        }
                         AppendToVals(_buf.AsSpan(_pos, _len - _pos));
                         _pos = _len;
-                        if (_eof)
-                        {
-                            return;
-                        }
-                        Fill();
-                        continue;
+                        return true; // unterminated quoted field at EOF
                     }
                     int q = _pos + rel;
+                    if (q + 1 >= _len && !_eof)
+                    {
+                        return false; // can't distinguish a closing quote from "" yet
+                    }
                     AppendToVals(_buf.AsSpan(_pos, q - _pos));
-                    _pos = q;
-                    Ensure(2);
-                    if (_pos + 1 < _len && _buf[_pos + 1] == _quote)
+                    if (q + 1 < _len && _buf[q + 1] == _quote)
                     {
                         AppendByteToVals(_quote);
-                        _pos += 2;
+                        _pos = q + 2;
                         continue;
                     }
-                    _pos++;
-                    return;
+                    _pos = q + 1;
+                    return true;
                 }
             }
 
             // Scans from _pos (either the field's start, or right after a closing quote) for the
-            // next delimiter/terminator, appending the run verbatim. Returns true if the record ended.
-            private bool AppendUnquotedRun()
+            // next delimiter/terminator, appending the run verbatim.
+            private int TryScanUnquotedRun()
             {
-                while (true)
+                int rel = _pos < _len ? _buf.AsSpan(_pos, _len - _pos).IndexOfAny(_delimiter, Cr, Lf) : -1;
+                if (rel < 0)
                 {
-                    int rel = _pos < _len ? _buf.AsSpan(_pos, _len - _pos).IndexOfAny(_delimiter, Cr, Lf) : -1;
-                    if (rel >= 0)
+                    if (!_eof)
                     {
-                        int found = _pos + rel;
-                        AppendToVals(_buf.AsSpan(_pos, found - _pos));
-                        _pos = found;
-                        byte b = _buf[_pos];
-                        if (b == _delimiter)
-                        {
-                            _pos++;
-                            return false;
-                        }
-                        if (b == Cr)
-                        {
-                            Ensure(2);
-                            _pos += _pos + 1 < _len && _buf[_pos + 1] == Lf ? 2 : 1;
-                            return true;
-                        }
-                        _pos++; // Lf
-                        return true;
+                        return NeedMore;
                     }
                     AppendToVals(_buf.AsSpan(_pos, _len - _pos));
                     _pos = _len;
-                    if (_eof)
-                    {
-                        return true;
-                    }
-                    Fill();
+                    return RecordEnd;
                 }
+                int found = _pos + rel;
+                byte b = _buf[found];
+                if (b == Cr && found + 1 >= _len && !_eof)
+                {
+                    return NeedMore; // can't tell a bare CR from CRLF yet
+                }
+                AppendToVals(_buf.AsSpan(_pos, found - _pos));
+                if (b == _delimiter)
+                {
+                    _pos = found + 1;
+                    return FieldEnd;
+                }
+                _pos = found + (b == Cr && found + 1 < _len && _buf[found + 1] == Lf ? 2 : 1);
+                return RecordEnd;
             }
 
             private void EnsureBomStripped()
@@ -215,99 +241,6 @@ namespace ExcelReader.Core.Reader
                 if (_len - _pos >= 3 && _buf[_pos] == 0xEF && _buf[_pos + 1] == 0xBB && _buf[_pos + 2] == 0xBF)
                 {
                     _pos += 3;
-                }
-            }
-
-            // --- async twins: identical structure, awaiting only at Fill/Ensure boundaries so no
-            // span is ever held across an await ---
-
-            private async ValueTask ParseRecordAsync()
-            {
-                bool recordEnded;
-                do
-                {
-                    recordEnded = await ParseFieldAsync().ConfigureAwait(false);
-                }
-                while (!recordEnded);
-            }
-
-            private async ValueTask<bool> ParseFieldAsync()
-            {
-                int valStart = _valLen;
-                await EnsureAsync(1).ConfigureAwait(false);
-                if (_pos < _len && _buf[_pos] == _quote)
-                {
-                    _pos++;
-                    await ParseQuotedContentAsync().ConfigureAwait(false);
-                }
-                bool recordEnded = await AppendUnquotedRunAsync().ConfigureAwait(false);
-                AddCell(valStart, _valLen - valStart);
-                return recordEnded;
-            }
-
-            private async ValueTask ParseQuotedContentAsync()
-            {
-                while (true)
-                {
-                    int rel = _pos < _len ? _buf.AsSpan(_pos, _len - _pos).IndexOf(_quote) : -1;
-                    if (rel < 0)
-                    {
-                        AppendToVals(_buf.AsSpan(_pos, _len - _pos));
-                        _pos = _len;
-                        if (_eof)
-                        {
-                            return;
-                        }
-                        await FillAsync().ConfigureAwait(false);
-                        continue;
-                    }
-                    int q = _pos + rel;
-                    AppendToVals(_buf.AsSpan(_pos, q - _pos));
-                    _pos = q;
-                    await EnsureAsync(2).ConfigureAwait(false);
-                    if (_pos + 1 < _len && _buf[_pos + 1] == _quote)
-                    {
-                        AppendByteToVals(_quote);
-                        _pos += 2;
-                        continue;
-                    }
-                    _pos++;
-                    return;
-                }
-            }
-
-            private async ValueTask<bool> AppendUnquotedRunAsync()
-            {
-                while (true)
-                {
-                    int rel = _pos < _len ? _buf.AsSpan(_pos, _len - _pos).IndexOfAny(_delimiter, Cr, Lf) : -1;
-                    if (rel >= 0)
-                    {
-                        int found = _pos + rel;
-                        AppendToVals(_buf.AsSpan(_pos, found - _pos));
-                        _pos = found;
-                        byte b = _buf[_pos];
-                        if (b == _delimiter)
-                        {
-                            _pos++;
-                            return false;
-                        }
-                        if (b == Cr)
-                        {
-                            await EnsureAsync(2).ConfigureAwait(false);
-                            _pos += _pos + 1 < _len && _buf[_pos + 1] == Lf ? 2 : 1;
-                            return true;
-                        }
-                        _pos++; // Lf
-                        return true;
-                    }
-                    AppendToVals(_buf.AsSpan(_pos, _len - _pos));
-                    _pos = _len;
-                    if (_eof)
-                    {
-                        return true;
-                    }
-                    await FillAsync().ConfigureAwait(false);
                 }
             }
 
@@ -363,14 +296,14 @@ namespace ExcelReader.Core.Reader
 
             private void AddCell(int start, int len)
             {
-                if (_cellCount == _cells.Length)
+                if (FieldCount == _cells.Length)
                 {
                     CellDesc[] bigger = ArrayPool<CellDesc>.Shared.Rent(_cells.Length * 2);
-                    Array.Copy(_cells, bigger, _cellCount);
+                    Array.Copy(_cells, bigger, FieldCount);
                     ArrayPool<CellDesc>.Shared.Return(_cells);
                     _cells = bigger;
                 }
-                _cells[_cellCount++] = new CellDesc
+                _cells[FieldCount++] = new CellDesc
                 {
                     Column = _col++,
                     Start = start,
