@@ -113,6 +113,24 @@ namespace ExcelReader.Core.Writer
             _columnIndex++;
         }
 
+        // TimeOnly is written as an Excel time serial (fraction of a 24h day) in a plain number cell.
+        public void Write(TimeOnly value)
+        {
+            ThrowIfDisposed();
+            WriteDouble(value.Ticks / (double)TimeSpan.TicksPerDay, style: 0);
+        }
+
+        public void Write(TimeOnly? value)
+        {
+            ThrowIfDisposed();
+            if (value is not null)
+            {
+                WriteDouble(value.Value.Ticks / (double)TimeSpan.TicksPerDay, style: 0);
+                return;
+            }
+            _columnIndex++;
+        }
+
         public void Write(int value)
         {
             ThrowIfDisposed();
