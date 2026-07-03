@@ -88,6 +88,16 @@ namespace ExcelReader.Tests
             public string? Name { get; set; }
         }
 
+        public enum Priority { Low, Medium, High }
+
+        // Non-numeric, non-primitive properties: exercise the record writer's ToString() fallback
+        // (they must land in text cells, not corrupt number cells). Both round-trip via ExcelParser.
+        private sealed class FallbackRow
+        {
+            public Priority Priority { get; set; }
+            public Guid Id { get; set; }
+        }
+
         private static async IAsyncEnumerable<T> ToAsync<T>(IEnumerable<T> items)
         {
             foreach (T item in items)
@@ -100,8 +110,8 @@ namespace ExcelReader.Tests
         public enum RecordFormat { Xlsx, Xlsb, Xls }
 
         // Runs body against a record writer for the given format, returning the finished stream.
-        private static async Task<MemoryStream> WriteRecordsAsync(
-            RecordFormat format, Func<Func<string, IEnumerable<PrimitivesRow>, ValueTask>, ValueTask> body)
+        private static async Task<MemoryStream> WriteRecordsAsync<T>(
+            RecordFormat format, Func<Func<string, IEnumerable<T>, ValueTask>, ValueTask> body)
         {
             var ms = new MemoryStream();
             var ct = TestContext.Current.CancellationToken;
@@ -142,7 +152,7 @@ namespace ExcelReader.Tests
                 new PrimitivesRow { Age = 2, Score = 2.5, Balance = 20m, Active = false, BirthDate = new DateOnly(2001, 3, 4) },
             };
 
-            await using var ms = await WriteRecordsAsync(format,
+            await using var ms = await WriteRecordsAsync<PrimitivesRow>(format,
                 write => write("People", people)).ConfigureAwait(true);
 
             await using var reader = Excel.Open(ms);
@@ -153,6 +163,49 @@ namespace ExcelReader.Tests
             Assert.Equal(20m, rows[1].Balance);
             Assert.False(rows[1].Active);
             Assert.Equal(new DateOnly(2001, 3, 4), rows[1].BirthDate);
+        }
+
+        [Theory]
+        [InlineData(RecordFormat.Xlsx)]
+        [InlineData(RecordFormat.Xlsb)]
+        [InlineData(RecordFormat.Xls)]
+        public async Task RecordWriterRoundTripsEnumAndGuidAsText(RecordFormat format)
+        {
+            var id = new Guid("11112222-3333-4444-5555-666677778888");
+            var rows = new[] { new FallbackRow { Priority = Priority.High, Id = id } };
+
+            await using var ms = await WriteRecordsAsync<FallbackRow>(format,
+                write => write("Data", rows)).ConfigureAwait(true);
+
+            await using var reader = Excel.Open(ms);
+            var parsed = new ExcelParser<FallbackRow>().Parse(reader).ToList();
+            var row = Assert.Single(parsed);
+            // If the writer had routed these through the numeric Write<U> path, the cells would be
+            // corrupt numbers and neither would parse back — so a clean round-trip proves the text fallback.
+            Assert.Equal(Priority.High, row.Priority);
+            Assert.Equal(id, row.Id);
+        }
+
+        [Fact]
+        public async Task RecordWriterWritesHeaderOnlyForEmptyRecords()
+        {
+            var ms = new MemoryStream();
+            await using (var writer = await RecordWriter.CreateXlsxAsync(ms, leaveOpen: true, ct: TestContext.Current.CancellationToken).ConfigureAwait(true))
+            {
+                await writer.WriteSheetAsync("Sheet1", Array.Empty<StringRow>(), TestContext.Current.CancellationToken).ConfigureAwait(true);
+            }
+            ms.Position = 0;
+
+            // Header row is written even with no records; the parser then yields zero data rows.
+            await using var reader = Excel.From(ms);
+            using XlsxReader.Enumerator e = reader.GetEnumerator();
+            Assert.True(e.MoveNext());
+            Assert.Equal("Name", e.Current[0].GetString());
+            Assert.False(e.MoveNext());
+
+            await using var reader2 = Excel.From(ms);
+            var parsed = new ExcelParser<StringRow>().Parse(reader2).ToList();
+            Assert.Empty(parsed);
         }
 
         [Fact]
