@@ -109,7 +109,7 @@ namespace ExcelReader.Benchmarks
         {
             using var ms = new MemoryStream(_csv, writable: false);
             using var tr = new StreamReader(ms);
-            using var csv = new global::CsvHelper.CsvReader(tr, CultureInfo.InvariantCulture);
+            using var csv = new CsvHelper.CsvReader(tr, CultureInfo.InvariantCulture);
             long acc = 0;
             foreach (CsvRecord rec in csv.GetRecords<CsvRecord>())
             {

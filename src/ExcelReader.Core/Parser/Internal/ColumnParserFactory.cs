@@ -1,3 +1,4 @@
+using System.Buffers.Text;
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Linq.Expressions;
@@ -320,6 +321,14 @@ namespace ExcelReader.Core.Parser.Internal
         private static bool TryParseDateTimeText(in Cell cell, IFormatProvider provider, out DateTime value)
         {
             ReadOnlySpan<byte> utf8 = cell.Value;
+            // Round-trip ISO 8601 ("O", no offset — 27 bytes exactly) parses straight from UTF-8,
+            // skipping the transcode and the general format-probing parser. Offset/Z forms fall
+            // through so their DateTimeKind/local-adjustment semantics stay identical to TryParse.
+            if (utf8.Length == 27 && utf8[10] == (byte)'T'
+                && Utf8Parser.TryParse(utf8, out value, out int consumed, 'O') && consumed == 27)
+            {
+                return true;
+            }
             if (utf8.Length <= MaxStackDateChars)
             {
                 Span<char> chars = stackalloc char[MaxStackDateChars];
