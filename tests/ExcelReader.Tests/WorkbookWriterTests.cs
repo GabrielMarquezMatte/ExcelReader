@@ -21,7 +21,7 @@ namespace ExcelReader.Tests
             public double Score { get; set; }
             public decimal Balance { get; set; }
             public bool Active { get; set; }
-            public DateTime BirthDate { get; set; }
+            public DateOnly BirthDate { get; set; }
         }
 
         private sealed class NullableRow
@@ -82,10 +82,166 @@ namespace ExcelReader.Tests
             Assert.Equal("Alice", rows[0].Name);
         }
 
+        private sealed class AliasedRow
+        {
+            [ExcelColumn("Full Name")]
+            public string? Name { get; set; }
+        }
+
+        private static async IAsyncEnumerable<T> ToAsync<T>(IEnumerable<T> items)
+        {
+            foreach (T item in items)
+            {
+                yield return item;
+                await Task.CompletedTask.ConfigureAwait(false);
+            }
+        }
+
+        public enum RecordFormat { Xlsx, Xlsb, Xls }
+
+        // Runs body against a record writer for the given format, returning the finished stream.
+        private static async Task<MemoryStream> WriteRecordsAsync(
+            RecordFormat format, Func<Func<string, IEnumerable<PrimitivesRow>, ValueTask>, ValueTask> body)
+        {
+            var ms = new MemoryStream();
+            var ct = TestContext.Current.CancellationToken;
+            switch (format)
+            {
+                case RecordFormat.Xlsx:
+                    await using (var w = await RecordWriter.CreateXlsxAsync(ms, leaveOpen: true, ct: ct).ConfigureAwait(true))
+                    {
+                        await body((n, r) => w.WriteSheetAsync(n, r, ct)).ConfigureAwait(true);
+                    }
+                    break;
+                case RecordFormat.Xlsb:
+                    await using (var w = await RecordWriter.CreateXlsbAsync(ms, leaveOpen: true, ct: ct).ConfigureAwait(true))
+                    {
+                        await body((n, r) => w.WriteSheetAsync(n, r, ct)).ConfigureAwait(true);
+                    }
+                    break;
+                default:
+                    await using (var w = await RecordWriter.CreateXlsAsync(ms, leaveOpen: true, ct: ct).ConfigureAwait(true))
+                    {
+                        await body((n, r) => w.WriteSheetAsync(n, r, ct)).ConfigureAwait(true);
+                    }
+                    break;
+            }
+            ms.Position = 0;
+            return ms;
+        }
+
+        [Theory]
+        [InlineData(RecordFormat.Xlsx)]
+        [InlineData(RecordFormat.Xlsb)]
+        [InlineData(RecordFormat.Xls)]
+        public async Task RecordWriterRoundTripsAllFormats(RecordFormat format)
+        {
+            var people = new[]
+            {
+                new PrimitivesRow { Age = 1, Score = 1.5, Balance = 10m, Active = true, BirthDate = new DateOnly(2000, 1, 2) },
+                new PrimitivesRow { Age = 2, Score = 2.5, Balance = 20m, Active = false, BirthDate = new DateOnly(2001, 3, 4) },
+            };
+
+            await using var ms = await WriteRecordsAsync(format,
+                write => write("People", people)).ConfigureAwait(true);
+
+            await using var reader = Excel.Open(ms);
+            var rows = new ExcelParser<PrimitivesRow>().Parse(reader).ToList();
+            Assert.Equal(2, rows.Count);
+            Assert.Equal(1, rows[0].Age);
+            Assert.Equal(2.5, rows[1].Score);
+            Assert.Equal(20m, rows[1].Balance);
+            Assert.False(rows[1].Active);
+            Assert.Equal(new DateOnly(2001, 3, 4), rows[1].BirthDate);
+        }
+
+        [Fact]
+        public async Task RecordWriterWritesHeaderAndDataAcrossSheets()
+        {
+            var people = new[]
+            {
+                new PrimitivesRow { Age = 1, Score = 1.5, Balance = 10m, Active = true, BirthDate = new DateOnly(2000, 1, 2) },
+                new PrimitivesRow { Age = 2, Score = 2.5, Balance = 20m, Active = false, BirthDate = new DateOnly(2001, 3, 4) },
+            };
+            var names = new[] { new StringRow { Name = "Alice" }, new StringRow { Name = "Bob" } };
+
+            var ms = new MemoryStream();
+            await using (var writer = await RecordWriter.CreateXlsxAsync(ms, leaveOpen: true, ct: TestContext.Current.CancellationToken).ConfigureAwait(true))
+            {
+                await writer.WriteSheetAsync("People", people, TestContext.Current.CancellationToken).ConfigureAwait(true);
+                await writer.WriteSheetAsync("Names", names, TestContext.Current.CancellationToken).ConfigureAwait(true);
+            }
+            ms.Position = 0;
+
+            await using var reader = Excel.From(ms);
+            var primitives = new ExcelParser<PrimitivesRow>().Parse(reader).ToList();
+            Assert.Equal(2, primitives.Count);
+            Assert.Equal(1, primitives[0].Age);
+            Assert.Equal(20m, primitives[1].Balance);
+            Assert.False(primitives[1].Active);
+
+            await using var reader2 = Excel.From(ms);
+            reader2.MoveToSheet(1);
+            var strings = new ExcelParser<StringRow>().Parse(reader2).ToList();
+            Assert.Equal(["Alice", "Bob"], strings.Select(r => r.Name));
+        }
+
+        [Fact]
+        public async Task RecordWriterAsyncEnumerableAndAliasHeader()
+        {
+            var names = new[] { new AliasedRow { Name = "Alice" }, new AliasedRow { Name = "Bob" } };
+
+            var ms = new MemoryStream();
+            await using (var writer = await RecordWriter.CreateXlsxAsync(ms, leaveOpen: true, ct: TestContext.Current.CancellationToken).ConfigureAwait(true))
+            {
+                await writer.WriteSheetAsync("Sheet1", ToAsync(names), TestContext.Current.CancellationToken).ConfigureAwait(true);
+            }
+            ms.Position = 0;
+
+            await using var reader = Excel.From(ms);
+            var rows = new ExcelParser<AliasedRow>().Parse(reader).ToList();
+            Assert.Equal(["Alice", "Bob"], rows.Select(r => r.Name));
+        }
+
+        [Fact]
+        public async Task RecordWriterHandlesNullableColumns()
+        {
+            var rows = new[]
+            {
+                new NullableRow { Quantity = 7, EventDate = new DateTime(2020, 5, 6, 0, 0, 0, DateTimeKind.Unspecified) },
+                new NullableRow { Quantity = null, EventDate = null },
+            };
+
+            var ms = new MemoryStream();
+            await using (var writer = await RecordWriter.CreateXlsxAsync(ms, leaveOpen: true, ct: TestContext.Current.CancellationToken).ConfigureAwait(true))
+            {
+                await writer.WriteSheetAsync("Sheet1", rows, TestContext.Current.CancellationToken).ConfigureAwait(true);
+            }
+            ms.Position = 0;
+
+            await using var reader = Excel.Open(ms);
+            var parsed = new ExcelParser<NullableRow>().Parse(reader).ToList();
+            Assert.Equal(2, parsed.Count);
+            Assert.Equal(7, parsed[0].Quantity);
+            Assert.Equal(new DateTime(2020, 5, 6, 0, 0, 0, DateTimeKind.Unspecified), parsed[0].EventDate);
+            Assert.Null(parsed[1].Quantity);
+            Assert.Null(parsed[1].EventDate);
+        }
+
+        [Fact]
+        public async Task RecordWriterRejectsDuplicateSheetName()
+        {
+            var ms = new MemoryStream();
+            await using var writer = await RecordWriter.CreateXlsxAsync(ms, leaveOpen: true, ct: TestContext.Current.CancellationToken).ConfigureAwait(true);
+            await writer.WriteSheetAsync("Sheet1", new[] { new StringRow { Name = "Alice" } }, TestContext.Current.CancellationToken).ConfigureAwait(true);
+            await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+                await writer.WriteSheetAsync("Sheet1", new[] { new StringRow { Name = "Bob" } }, TestContext.Current.CancellationToken).ConfigureAwait(true)).ConfigureAwait(true);
+        }
+
         [Fact]
         public async Task AllPrimitiveTypesRoundTrip()
         {
-            var birth = new DateTime(1990, 6, 15, 0, 0, 0, DateTimeKind.Unspecified);
+            var birth = new DateOnly(1990, 6, 15);
 
             await using var ms = await WriteWorkbookAsync(async wb =>
             {
@@ -120,7 +276,7 @@ namespace ExcelReader.Tests
             Assert.Equal(3.14, rows[0].Score, precision: 10);
             Assert.Equal(9999.99m, rows[0].Balance);
             Assert.True(rows[0].Active);
-            Assert.Equal(birth.Date, rows[0].BirthDate.Date);
+            Assert.Equal(birth, rows[0].BirthDate);
         }
 
         [Fact]

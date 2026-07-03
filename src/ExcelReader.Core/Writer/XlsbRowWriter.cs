@@ -95,6 +95,24 @@ namespace ExcelReader.Core.Writer
             _columnIndex++;
         }
 
+        // DateOnly shares the DateTime date-serial cell format (midnight), so it round-trips as a date.
+        public void Write(DateOnly value)
+        {
+            ThrowIfDisposed();
+            Write(value.ToDateTime(TimeOnly.MinValue));
+        }
+
+        public void Write(DateOnly? value)
+        {
+            ThrowIfDisposed();
+            if (value is not null)
+            {
+                Write(value.Value.ToDateTime(TimeOnly.MinValue));
+                return;
+            }
+            _columnIndex++;
+        }
+
         public void Write(int value)
         {
             ThrowIfDisposed();

@@ -9,7 +9,7 @@ namespace ExcelReader.Core.Writer
     // BoundSheet offsets in the globals and the OLE FAT both need stream sizes known only at the
     // end. Rows beyond the BIFF8 per-sheet cap (65,536) overflow into auto-generated continuation
     // sheets, so memory scales with total row count rather than being bounded per-sheet.
-    public sealed class XlsWorkbookWriter : IAsyncDisposable
+    public sealed class XlsWorkbookWriter : IWorkbookWriter<XlsSheetWriter>
     {
         private const int MaxSheetNameLength = 31;
         private readonly Stream _stream;
@@ -43,6 +43,20 @@ namespace ExcelReader.Core.Writer
                 throw new InvalidOperationException("XlsWorkbookWriter has already been started.");
             }
             _state = WriterState.Started;
+        }
+
+        // XLS assembles the OLE container synchronously in EndAsync; StartAsync just wraps Start().
+        public ValueTask StartAsync(CancellationToken ct = default)
+        {
+            ct.ThrowIfCancellationRequested();
+            Start();
+            return ValueTask.CompletedTask;
+        }
+
+        // The public FlushAsync returns Task; IWorkbookWriter wants ValueTask, so adapt explicitly.
+        ValueTask IWorkbookWriter<XlsSheetWriter>.FlushAsync(CancellationToken ct)
+        {
+            return new ValueTask(FlushAsync(ct));
         }
 
         public XlsSheetWriter AddSheet(string name)
@@ -89,7 +103,10 @@ namespace ExcelReader.Core.Writer
             }
             ct.ThrowIfCancellationRequested();
             _state = WriterState.Ended;
-            _activeSheet?.Dispose();
+            if (_activeSheet is not null)
+            {
+                await _activeSheet.DisposeAsync().ConfigureAwait(false);
+            }
             if (_sheets.Count == 0)
             {
                 throw new InvalidOperationException("A workbook must contain at least one sheet.");
