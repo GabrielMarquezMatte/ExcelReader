@@ -55,7 +55,7 @@ namespace ExcelReader.Benchmarks
         private static long AccumulateRow(Row row)
         {
             long acc = row[0].Value.Length;
-            if (row[1].TryParse<int>(CultureInfo.InvariantCulture, out int id))
+            if (row[1].TryParse(CultureInfo.InvariantCulture, out int id))
             {
                 acc += id;
             }
@@ -63,7 +63,7 @@ namespace ExcelReader.Benchmarks
             {
                 acc += date.Ticks;
             }
-            if (row[3].TryParse<double>(CultureInfo.InvariantCulture, out double value))
+            if (row[3].TryParse(CultureInfo.InvariantCulture, out double value))
             {
                 acc += (long)value;
             }
@@ -117,8 +117,8 @@ namespace ExcelReader.Benchmarks
         {
             using var ms = new MemoryStream(_csv, writable: false);
             using var tr = new StreamReader(ms);
-            var config = new global::CsvHelper.Configuration.CsvConfiguration(CultureInfo.InvariantCulture) { HasHeaderRecord = false };
-            using var csv = new global::CsvHelper.CsvReader(tr, config);
+            var config = new CsvHelper.Configuration.CsvConfiguration(CultureInfo.InvariantCulture) { HasHeaderRecord = false };
+            using var csv = new CsvHelper.CsvReader(tr, config);
             long acc = 0;
             while (csv.Read())
             {

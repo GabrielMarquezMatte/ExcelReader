@@ -6,7 +6,7 @@ namespace ExcelReader.Core.Reader
     // BIFF12 (.xlsb) reader. Uses the same ZIP/OPC container as .xlsx but worksheet parts are
     // binary BIFF12 records. The workbook, styles, and shared-string parts are read once at open
     // time (they're small); worksheets are streamed on demand by the enumerator.
-    public sealed partial class XlsbReader : IExcelReader, IExcelRowReader, IExcelRowReader<XlsbReader.Enumerator>
+    public sealed partial class XlsbReader : IExcelRowReader, IExcelRowReader<XlsbReader.Enumerator>
     {
         // Shared-string pool: string i = _sharedFlat[_sharedOffsets[i].._sharedOffsets[i+1]].
         private readonly byte[] _sharedFlat = [];

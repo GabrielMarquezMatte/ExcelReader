@@ -15,8 +15,6 @@ namespace ExcelReader.Core.Reader
         public sealed class Enumerator : IExcelRowEnumerator
         {
             private const int InitialBuf = 64 * 1024;
-            private const int InitialVals = 4 * 1024;
-            private const int InitialCells = 32;
 
             // Borrowed: the reader outlives the enumerator and owns its own disposal — do not dispose here.
             [SuppressMessage("Usage", "CA2213:Disposable fields should be disposed", Justification = "Borrowed, not owned.")]
@@ -31,10 +29,7 @@ namespace ExcelReader.Core.Reader
             private int _len;
             private bool _eof;
 
-            private byte[] _vals;     // decoded values for the current row (numbers/inline/formula text)
-            private int _valLen;
-            private CellDesc[] _cells; // current row's cells, ascending by column
-            private int _cellCount;
+            private readonly CellAccumulator _acc; // per-row decoded values + cell descriptors
             private int _nextCol;
 
             internal Enumerator(XlsxReader reader, Stream sheet, CancellationToken ct = default)
@@ -43,12 +38,11 @@ namespace ExcelReader.Core.Reader
                 _sheet = sheet;
                 _ct = ct;
                 _buf = ArrayPool<byte>.Shared.Rent(InitialBuf);
-                _vals = ArrayPool<byte>.Shared.Rent(InitialVals);
-                _cells = ArrayPool<CellDesc>.Shared.Rent(InitialCells);
+                _acc = new CellAccumulator(reader._options);
             }
 
             public Row Current =>
-                new(_cells.AsSpan(0, _cellCount), _vals.AsSpan(0, _valLen), _reader.SharedSpan);
+                new(_acc.CellSpan, _acc.ValueSpan, _reader.SharedSpan);
 
             // The sync and async row scanners share every span-touching helper below (ClassifyHead,
             // ClassifyRowHead, ReadCellOpenTag, EmitCell). The two families differ only in whether the
@@ -252,8 +246,7 @@ namespace ExcelReader.Core.Reader
             private bool BeginRowAt(int gt)
             {
                 _pos = gt + 1;
-                _cellCount = 0;
-                _valLen = 0;
+                _acc.Reset();
                 _nextCol = 0;
                 return _buf[gt - 1] == '/';
             }
@@ -355,16 +348,16 @@ namespace ExcelReader.Core.Reader
                 if (kind == Kind.Shared)
                 {
                     var (start, len) = _reader.SharedAt(ParseInt(ElementText(inner, "<v>"u8, "</v>"u8)));
-                    AddCell(col, start, len, CellType.ExcelString, style, fromShared: true);
+                    _acc.Add(col, start, len, CellType.ExcelString, style, fromShared: true);
                     return;
                 }
 
-                int vStart = _valLen;
+                int vStart = _acc.ValueLength;
                 if (kind == Kind.Inline)
                 {
-                    EnsureValsCapacity(_valLen + inner.Length);
-                    _valLen += XlsxXml.WriteTextRuns(inner, _vals.AsSpan(_valLen));
-                    AddCell(col, vStart, _valLen - vStart, CellType.ExcelString, style, fromShared: false);
+                    Span<byte> dst = _acc.ReserveValueSpan(inner.Length);
+                    _acc.Advance(XlsxXml.WriteTextRuns(inner, dst));
+                    _acc.Add(col, vStart, _acc.ValueLength - vStart, CellType.ExcelString, style, fromShared: false);
                     return;
                 }
 
@@ -376,7 +369,7 @@ namespace ExcelReader.Core.Reader
                     _ => _reader.IsDateStyle(style) ? CellType.Date : CellType.Number,
                 };
                 AppendDecoded(ElementText(inner, "<v>"u8, "</v>"u8));
-                AddCell(col, vStart, _valLen - vStart, cellType, style, fromShared: false);
+                _acc.Add(col, vStart, _acc.ValueLength - vStart, cellType, style, fromShared: false);
             }
 
             private static ReadOnlySpan<byte> ElementText(ReadOnlySpan<byte> inner, ReadOnlySpan<byte> openTag, ReadOnlySpan<byte> closeTag)
@@ -397,8 +390,8 @@ namespace ExcelReader.Core.Reader
                 {
                     return;
                 }
-                EnsureValsCapacity(_valLen + src.Length);
-                _valLen += XlsxXml.Decode(src, _vals.AsSpan(_valLen));
+                Span<byte> dst = _acc.ReserveValueSpan(src.Length);
+                _acc.Advance(XlsxXml.Decode(src, dst));
             }
 
             private bool SkipMarkup()
@@ -449,38 +442,6 @@ namespace ExcelReader.Core.Reader
                 }
                 _pos = skip + 1;
                 return true;
-            }
-
-            private void AddCell(int col, int start, int len, CellType type, int style, bool fromShared)
-            {
-                if (_cellCount == _cells.Length)
-                {
-                    var bigger = ArrayPool<CellDesc>.Shared.Rent(_cells.Length * 2);
-                    Array.Copy(_cells, bigger, _cellCount);
-                    ArrayPool<CellDesc>.Shared.Return(_cells);
-                    _cells = bigger;
-                }
-                _cells[_cellCount++] = new CellDesc
-                {
-                    Column = col,
-                    Start = start,
-                    Length = len,
-                    Type = type,
-                    Style = style,
-                    FromShared = fromShared,
-                };
-            }
-
-            private void EnsureValsCapacity(int needed)
-            {
-                if (needed <= _vals.Length)
-                {
-                    return;
-                }
-                var bigger = ArrayPool<byte>.Shared.Rent(LimitChecks.NextBufferSize(_reader._options, _vals.Length, needed));
-                Array.Copy(_vals, bigger, _valLen);
-                ArrayPool<byte>.Shared.Return(_vals);
-                _vals = bigger;
             }
 
             private static int ParseInt(ReadOnlySpan<byte> src)
@@ -765,16 +726,7 @@ namespace ExcelReader.Core.Reader
                     ArrayPool<byte>.Shared.Return(_buf);
                     _buf = [];
                 }
-                if (_vals.Length > 0)
-                {
-                    ArrayPool<byte>.Shared.Return(_vals);
-                    _vals = [];
-                }
-                if (_cells.Length > 0)
-                {
-                    ArrayPool<CellDesc>.Shared.Return(_cells);
-                    _cells = [];
-                }
+                _acc.Return();
             }
         }
     }

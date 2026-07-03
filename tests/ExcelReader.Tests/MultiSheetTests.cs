@@ -66,6 +66,45 @@ namespace ExcelReader.Tests
         }
 
         [Fact]
+        public async Task SheetNavigationWorksThroughFormatAgnosticInterface()
+        {
+            // The whole point of #1: walk every sheet via IExcelRowReader (Excel.Open) with no downcast.
+            await using var ms = await TypedWorkbook.BuildMultiSheetAsync(
+                ("A", [[11]]),
+                ("B", [[22]]));
+            await using IExcelRowReader reader = await Excel.OpenAsync(ms, ct: TestContext.Current.CancellationToken);
+
+            var names = new List<string>();
+            var firstCells = new List<int>();
+            for (int i = 0; i < reader.SheetCount; i++)
+            {
+                reader.MoveToSheet(i);
+                names.Add(reader.SheetName);
+                await using var e = reader.GetEnumerator();
+                Assert.True(await e.MoveNextAsync());
+                Assert.True(e.Current[0].TryParse(null, out int v));
+                firstCells.Add(v);
+            }
+
+            Assert.Equal(["A", "B"], names);
+            Assert.Equal([11, 22], firstCells);
+        }
+
+        [Fact]
+        public void CsvIsExposedAsSingleUnnamedSheet()
+        {
+            using var ms = new MemoryStream("h\nv\n"u8.ToArray());
+            using IExcelRowReader reader = Excel.FromCsv(ms);
+
+            Assert.Equal(1, reader.SheetCount);
+            Assert.Equal("", reader.SheetName);
+            reader.MoveToSheet(0);                                 // in range → no throw
+            Assert.Throws<ArgumentOutOfRangeException>(() => reader.MoveToSheet(1));
+            Assert.True(reader.TryMoveToSheet(""));                // matches the one unnamed sheet
+            Assert.False(reader.TryMoveToSheet("Sheet1"));         // no named sheets
+        }
+
+        [Fact]
         public async Task MultipleSheetsEachHaveDistinctData()
         {
             await using var ms = await TypedWorkbook.BuildMultiSheetAsync(

@@ -1,3 +1,6 @@
+using System.Buffers;
+using System.Buffers.Text;
+using System.Collections.Frozen;
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Linq.Expressions;
@@ -5,7 +8,6 @@ using System.Reflection;
 using System.Text;
 using ExcelReader.Core.Enums;
 using ExcelReader.Core.ValueObjects;
-using FastEnumUtility;
 
 namespace ExcelReader.Core.Parser.Internal
 {
@@ -116,6 +118,10 @@ namespace ExcelReader.Core.Parser.Internal
             {
                 return BuildDateOnlyParser<T>(prop);
             }
+            if (propType == typeof(TimeOnly))
+            {
+                return BuildTimeOnlyParser<T>(prop);
+            }
 #if NET8_0
             if (propType == typeof(Guid))
             {
@@ -156,6 +162,10 @@ namespace ExcelReader.Core.Parser.Internal
             if (innerType == typeof(DateOnly))
             {
                 return BuildNullableDateOnlyParser<T>(prop);
+            }
+            if (innerType == typeof(TimeOnly))
+            {
+                return BuildNullableTimeOnlyParser<T>(prop);
             }
             if (innerType.IsEnum)
             {
@@ -234,6 +244,55 @@ namespace ExcelReader.Core.Parser.Internal
                 setter(ref model, DateOnly.FromDateTime(dt));
                 return true;
             };
+        }
+
+        private static ColumnParser<T> BuildTimeOnlyParser<T>(PropertyInfo prop)
+        {
+            RefAction<T, TimeOnly> setter = CompileSetter<T, TimeOnly>(prop);
+            return (ref model, in cell, _, _) =>
+            {
+                if (cell.Type == CellType.Empty)
+                {
+                    return true;
+                }
+                // TryGetDouble reads the binary double (XLS/XLSB) or parses the text invariantly (XLSX),
+                // matching how the serial is written; a culture-aware parse would misread "0.5" cells.
+                if (!cell.TryGetDouble(out double serial))
+                {
+                    return false;
+                }
+                setter(ref model, TimeOnlyFromSerial(serial));
+                return true;
+            };
+        }
+
+        private static ColumnParser<T> BuildNullableTimeOnlyParser<T>(PropertyInfo prop)
+        {
+            RefAction<T, TimeOnly?> setter = CompileSetter<T, TimeOnly?>(prop);
+            return (ref model, in cell, _, _) =>
+            {
+                if (cell.Type == CellType.Empty)
+                {
+                    return true;
+                }
+                // TryGetDouble reads the binary double (XLS/XLSB) or parses the text invariantly (XLSX),
+                // matching how the serial is written; a culture-aware parse would misread "0.5" cells.
+                if (!cell.TryGetDouble(out double serial))
+                {
+                    return false;
+                }
+                setter(ref model, TimeOnlyFromSerial(serial));
+                return true;
+            };
+        }
+
+        // Excel time serial -> TimeOnly: the fractional part of the day, rounded to the nearest tick to
+        // undo the double round-trip. A value that rounds up to a whole day wraps back to midnight.
+        private static TimeOnly TimeOnlyFromSerial(double serial)
+        {
+            double fraction = serial - Math.Floor(serial);
+            long ticks = (long)Math.Round(fraction * TimeSpan.TicksPerDay, MidpointRounding.AwayFromZero);
+            return new TimeOnly(ticks == TimeSpan.TicksPerDay ? 0 : ticks);
         }
 
         // CSV text-date parsers: the cell holds a date string (e.g. "2026-07-02" or ISO "O" form).
@@ -320,6 +379,14 @@ namespace ExcelReader.Core.Parser.Internal
         private static bool TryParseDateTimeText(in Cell cell, IFormatProvider provider, out DateTime value)
         {
             ReadOnlySpan<byte> utf8 = cell.Value;
+            // Round-trip ISO 8601 ("O", no offset — 27 bytes exactly) parses straight from UTF-8,
+            // skipping the transcode and the general format-probing parser. Offset/Z forms fall
+            // through so their DateTimeKind/local-adjustment semantics stay identical to TryParse.
+            if (utf8.Length == 27 && utf8[10] == (byte)'T'
+                && Utf8Parser.TryParse(utf8, out value, out int consumed, 'O') && consumed == 27)
+            {
+                return true;
+            }
             if (utf8.Length <= MaxStackDateChars)
             {
                 Span<char> chars = stackalloc char[MaxStackDateChars];
@@ -472,8 +539,59 @@ namespace ExcelReader.Core.Parser.Internal
         }
 #endif
 
-        // Enum.TryParse accepts both member names ("Active") and their numeric form ("2"),
-        // so binary-numeric and text cells both resolve. Culture is irrelevant for enums.
+        private static class EnumCache<TEnum>
+            where TEnum : struct, Enum
+        {
+            private static readonly FrozenDictionary<string, TEnum> _nameMap = BuildNameMap();
+            private static readonly FrozenDictionary<int, TEnum> _valueMap = BuildValueMap();
+            private static FrozenDictionary<string, TEnum> BuildNameMap()
+            {
+                Dictionary<string, TEnum> map = new(StringComparer.OrdinalIgnoreCase);
+                foreach (TEnum value in Enum.GetValues<TEnum>())
+                {
+                    string name = value.ToString();
+                    var intValue = Convert.ToInt32(value, CultureInfo.InvariantCulture);
+                    map[name] = value;
+                    map[intValue.ToString(CultureInfo.InvariantCulture)] = value;
+                }
+                return map.ToFrozenDictionary(StringComparer.OrdinalIgnoreCase);
+            }
+            private static FrozenDictionary<int, TEnum> BuildValueMap()
+            {
+                Dictionary<int, TEnum> map = [];
+                foreach (TEnum value in Enum.GetValues<TEnum>())
+                {
+                    int intValue = Convert.ToInt32(value, CultureInfo.InvariantCulture);
+                    map[intValue] = value;
+                }
+                return map.ToFrozenDictionary();
+            }
+            public static bool TryParse(in Cell cell, out TEnum value)
+            {
+                if (cell.Type == CellType.Number && cell.TryGetDouble(out double d))
+                {
+                    return _valueMap.TryGetValue((int)d, out value);
+                }
+#if NET8_0
+                var name = cell.GetString();
+                return _nameMap.TryGetValue(name, out value);
+#else
+                var byteValue = cell.Value;
+                char[] chars = ArrayPool<char>.Shared.Rent(byteValue.Length);
+                try
+                {
+                    int charCount = Encoding.UTF8.GetChars(byteValue, chars);
+                    var alternateLookup = _nameMap.GetAlternateLookup<ReadOnlySpan<char>>();
+                    return alternateLookup.TryGetValue(chars.AsSpan(0, charCount), out value);
+                }
+                finally
+                {
+                    ArrayPool<char>.Shared.Return(chars);
+                }
+#endif
+            }
+        }
+
         private static ColumnParser<T> BuildEnumCore<T, TEnum>(PropertyInfo prop)
             where TEnum : struct, Enum
         {
@@ -484,9 +602,7 @@ namespace ExcelReader.Core.Parser.Internal
                 {
                     return true;
                 }
-                var valueString = cell.GetString();
-                if (!FastEnum.TryParse(valueString, ignoreCase: true, out TEnum value)
-                    && !Enum.TryParse(valueString, ignoreCase: true, out value))
+                if (!EnumCache<TEnum>.TryParse(in cell, out TEnum value))
                 {
                     return false;
                 }
@@ -505,9 +621,7 @@ namespace ExcelReader.Core.Parser.Internal
                 {
                     return true;
                 }
-                var valueString = cell.GetString();
-                if (!FastEnum.TryParse(valueString, ignoreCase: true, out TEnum parsed)
-                    && !Enum.TryParse(valueString, ignoreCase: true, out parsed))
+                if (!EnumCache<TEnum>.TryParse(in cell, out TEnum parsed))
                 {
                     return false;
                 }

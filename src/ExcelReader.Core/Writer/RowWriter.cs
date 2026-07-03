@@ -93,6 +93,47 @@ namespace ExcelReader.Core.Writer
             _columnIndex++;
         }
 
+        // DateOnly shares the DateTime date-serial cell format (midnight), so it round-trips as a date.
+        public void Write(DateOnly value)
+        {
+            ThrowIfDisposed();
+            CellFormatter.WriteDateTime(_row, value.ToDateTime(TimeOnly.MinValue), _columnIndex, _rowNumber, _useCellReferences);
+            _columnIndex++;
+        }
+
+        public void Write(DateOnly? value)
+        {
+            ThrowIfDisposed();
+            if (value is null)
+            {
+                WriteEmptyCell();
+                return;
+            }
+            CellFormatter.WriteDateTime(_row, value.Value.ToDateTime(TimeOnly.MinValue), _columnIndex, _rowNumber, _useCellReferences);
+            _columnIndex++;
+        }
+
+        // TimeOnly is written as an Excel time serial: the fraction of a 24h day, in [0,1). This is a
+        // plain number cell (no date style); ExcelParser<T> reconstructs the TimeOnly from the fraction.
+        public void Write(TimeOnly value)
+        {
+            ThrowIfDisposed();
+            CellFormatter.WriteNumber(_row, value.Ticks / (double)TimeSpan.TicksPerDay, _columnIndex, _rowNumber, _useCellReferences);
+            _columnIndex++;
+        }
+
+        public void Write(TimeOnly? value)
+        {
+            ThrowIfDisposed();
+            if (value is null)
+            {
+                WriteEmptyCell();
+                return;
+            }
+            CellFormatter.WriteNumber(_row, value.Value.Ticks / (double)TimeSpan.TicksPerDay, _columnIndex, _rowNumber, _useCellReferences);
+            _columnIndex++;
+        }
+
         public void Write(int value)
         {
             ThrowIfDisposed();

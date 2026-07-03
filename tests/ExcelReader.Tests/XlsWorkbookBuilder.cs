@@ -144,6 +144,48 @@ namespace ExcelReader.Tests
             return U16(row);
         }
 
+        // Builds a workbook whose SST is supplied pre-framed (a 0x00FC record plus any 0x003C CONTINUE
+        // records), so a test can force a shared string's character array to straddle a CONTINUE
+        // boundary. `labelSstCount` LabelSst cells (indices 0..count-1) are written to sheet "S1" so the
+        // strings are actually resolved on read. Mirrors BuildGlobals' record order (SST before BoundSheet).
+        internal static MemoryStream BuildRawSst(byte[] framedSst, int labelSstCount)
+        {
+            using MemoryStream sheet = new();
+            WriteRecord(sheet, 0x0809, [.. U16(0x0600), .. U16(0x0010), .. new byte[12]]);
+            for (int i = 0; i < labelSstCount; i++)
+            {
+                WriteRecord(sheet, 0x00FD, [.. U16(0), .. U16(i), .. U16(0), .. I32(i)]);
+            }
+            WriteRecord(sheet, 0x000A, []);
+            byte[] sheetBytes = sheet.ToArray();
+
+            int globalsLength = 82 + framedSst.Length + EncodedByteCount("S1");
+
+            using MemoryStream globals = new();
+            WriteRecord(globals, 0x0809, [.. U16(0x0600), .. U16(0x0005), .. new byte[12]]);
+            WriteRecord(globals, 0x00E0, Xf(0));
+            WriteRecord(globals, 0x00E0, Xf(14));
+            globals.Write(framedSst);
+            WriteRecord(globals, 0x0085, BoundSheet(globalsLength, "S1"));
+            WriteRecord(globals, 0x000A, []);
+
+            using MemoryStream workbook = new();
+            workbook.Write(globals.ToArray());
+            workbook.Write(sheetBytes);
+            return BuildOle(workbook.ToArray());
+        }
+
+        // Frames a 0x00FC SST record carrying `firstRegion`, then one 0x003C CONTINUE record carrying
+        // `continueRegion`. Both regions are raw string bytes; the SST's 8-byte cstTotal/cstUnique header
+        // is prepended here.
+        internal static byte[] FrameSstWithContinue(int cstTotal, int cstUnique, byte[] firstRegion, byte[] continueRegion)
+        {
+            using MemoryStream ms = new();
+            WriteRecord(ms, 0x00FC, [.. I32(cstTotal), .. I32(cstUnique), .. firstRegion]);
+            WriteRecord(ms, 0x003C, continueRegion);
+            return ms.ToArray();
+        }
+
         private static byte[] BuildGlobals(
             (string Name, object?[][] Rows)[] sheets,
             byte[][] sheetStreams,

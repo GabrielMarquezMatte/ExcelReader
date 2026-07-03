@@ -123,6 +123,24 @@ namespace ExcelReader.Tests
         }
 
         [Fact]
+        public async Task EnumFromNumericTextCellBindsByValue()
+        {
+            // A *text* cell holding the underlying number ("2", not a numeric cell) binds by value:
+            // the enum's name map registers each member's numeric string form ("2") alongside its
+            // name ("Closed"), so both resolve through the same lookup. Number cells bind by value too
+            // (see EnumColumnsParseByNameAndNumber).
+            await using var ms = await TypedWorkbook.BuildAsync(
+                ["Status", "OptionalStatus"],
+                ["2", "1"]); // numeric values written as text, not number cells
+            await using var reader = await Excel.FromAsync(ms, ct: TestContext.Current.CancellationToken);
+
+            TypedRow row = new ExcelParser<TypedRow>().Parse(reader).Single();
+
+            Assert.Equal(Status.Closed, row.Status);
+            Assert.Equal(Status.Active, row.OptionalStatus);
+        }
+
+        [Fact]
         public async Task InvalidGuidKeepsDefault()
         {
             await using var ms = await TypedWorkbook.BuildAsync(

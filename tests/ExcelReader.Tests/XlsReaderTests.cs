@@ -544,6 +544,52 @@ namespace ExcelReader.Tests
             }
         }
 
+        [Fact]
+        public void SharedStringSplitAcrossContinueBoundaryDecodesCorrectly()
+        {
+            // SST record ends mid-way through string 1's character array; the CONTINUE record resumes
+            // with a fresh grbit byte. The decoder must consume that byte, not read it as a character.
+            // string 0 = "AB" (cch=2, compressed); string 1 = "CDEF" split after "CD".
+            byte[] firstRegion =
+            [
+                0x02, 0x00, 0x00, (byte)'A', (byte)'B',       // "AB"
+                0x04, 0x00, 0x00, (byte)'C', (byte)'D',       // "CDEF" header + first two chars
+            ];
+            byte[] continueRegion = [0x00, (byte)'E', (byte)'F']; // grbit + remaining two chars
+            byte[] framed = XlsWorkbookBuilder.FrameSstWithContinue(2, 2, firstRegion, continueRegion);
+
+            using var ms = XlsWorkbookBuilder.BuildRawSst(framed, labelSstCount: 2);
+            using var reader = Excel.FromXls(ms);
+
+            using var e = reader.GetEnumerator();
+            Assert.True(e.MoveNext());
+            Assert.Equal("AB", e.Current[0].GetString());
+            Assert.Equal("CDEF", e.Current[1].GetString());   // was corrupted before the CONTINUE fix
+        }
+
+        [Fact]
+        public void AstralCharInUnicodeStringRoundTripsAsValidUtf8()
+        {
+            // A surrogate pair must encode as one 4-byte UTF-8 scalar, not two 3-byte CESU-8 sequences.
+            const string emoji = "A\U0001F600B"; // A, grinning face, B
+            using var ms = XlsWorkbookBuilder.Build(
+                sheets: [("S1", [[new XlsUnicodeString(emoji)]])]);
+            using var reader = Excel.FromXls(ms);
+
+            using var e = reader.GetEnumerator();
+            Assert.True(e.MoveNext());
+            Assert.Equal(emoji, e.Current[0].GetString());
+        }
+
+        [Fact]
+        public void CraftedFatSectorCountThrowsInsteadOfAllocating()
+        {
+            // A bogus FAT sector count in the OLE header must be rejected, not turned into new int[huge].
+            using var ms = XlsWorkbookBuilder.BuildPatched(
+                XlsWorkbookBuilder.FatSectorCountOffset, XlsWorkbookBuilder.LE32(0x40000000));
+            Assert.Throws<InvalidDataException>(() => Excel.FromXls(ms));
+        }
+
         private const int SectorSize = 512;
 
         private static void RowAssert(Core.ValueObjects.Row row, string[] values)

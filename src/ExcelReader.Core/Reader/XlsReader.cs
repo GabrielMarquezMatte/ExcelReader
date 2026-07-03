@@ -1,10 +1,11 @@
 using System.Buffers;
 using System.Buffers.Binary;
 using System.Diagnostics.CodeAnalysis;
+using System.Runtime.InteropServices;
 
 namespace ExcelReader.Core.Reader
 {
-    public sealed partial class XlsReader : IExcelReader, IExcelRowReader, IExcelRowReader<XlsReader.Enumerator>
+    public sealed partial class XlsReader : IExcelRowReader, IExcelRowReader<XlsReader.Enumerator>
     {
         private readonly WorkbookStream _workbook;
         private readonly ExcelReaderOptions _options;
@@ -263,56 +264,101 @@ namespace ExcelReader.Core.Reader
                 first[8..].CopyTo(buffer);
                 len = initialLen;
             }
+            // A string's character array can be split across a CONTINUE boundary; when it is, the record
+            // resumes with a fresh grbit (compression) byte that is NOT part of the character data
+            // ([MS-XLS] 2.5.240). Record where each CONTINUE payload begins so the decoder can consume
+            // that byte instead of misreading it as a character (which corrupts every following string).
+            List<int> boundaries = [];
             while (cursor.PeekId() == Rec.Continue && cursor.TryReadRecord(out _, out ReadOnlySpan<byte> cont))
             {
+                boundaries.Add(len);
                 EnsureSharedCapacity(options, ref buffer, len + cont.Length);
                 cont.CopyTo(buffer.AsSpan(len));
                 len += cont.Length;
             }
-            DecodeSharedStrings(buffer.AsSpan(0, len), options, out sharedFlat, out sharedOffsets);
+            DecodeSharedStrings(buffer.AsSpan(0, len), CollectionsMarshal.AsSpan(boundaries), options, out sharedFlat, out sharedOffsets);
             ArrayPool<byte>.Shared.Return(buffer);
         }
 
-        private static void DecodeSharedStrings(ReadOnlySpan<byte> sst, ExcelReaderOptions options, out byte[] sharedFlat, out int[] sharedOffsets)
+        // `boundaries` holds the offsets (into `sst`) where each CONTINUE payload starts. A boundary that
+        // falls inside a string's character array marks an inserted grbit byte to consume; one outside the
+        // array (header, formatting runs, extended data) carries no grbit and is simply read through.
+        // ponytail: handles the common char-boundary split; a split *between the two bytes* of one wide
+        // char (rare, Excel aligns to char boundaries) would still misread — upgrade to a bit-level
+        // continuation reader if such a file ever surfaces.
+        private static void DecodeSharedStrings(ReadOnlySpan<byte> sst, ReadOnlySpan<int> boundaries, ExcelReaderOptions options, out byte[] sharedFlat, out int[] sharedOffsets)
         {
             LimitChecks.ThrowIfOverSharedStringLimit(options, sst.Length);
             byte[] flat = ArrayPool<byte>.Shared.Rent(Math.Max(256, sst.Length * 3));
+            // One string's decoded UTF-16 units; each unit consumes >= 1 source byte, so sst.Length caps it.
+            char[] scratch = ArrayPool<char>.Shared.Rent(Math.Max(64, sst.Length));
             int flatLen = 0;
             List<int> offsets = [0];
             int pos = 0;
-            while (pos + 3 <= sst.Length)
+            int boundaryIdx = 0;
+            try
             {
-                int chars = ReadU16(sst, pos);
-                byte flags = sst[pos + 2];
-                pos += 3;
-                int richRuns = 0;
-                int extBytes = 0;
-                if ((flags & 0x08) != 0)
+                while (pos + 3 <= sst.Length)
                 {
-                    if (pos + 2 > sst.Length) { break; }
-                    richRuns = ReadU16(sst, pos);
-                    pos += 2;
+                    int chars = ReadU16(sst, pos);
+                    byte flags = sst[pos + 2];
+                    pos += 3;
+                    int richRuns = 0;
+                    int extBytes = 0;
+                    if ((flags & 0x08) != 0)
+                    {
+                        if (pos + 2 > sst.Length) { break; }
+                        richRuns = ReadU16(sst, pos);
+                        pos += 2;
+                    }
+                    if ((flags & 0x04) != 0)
+                    {
+                        if (pos + 4 > sst.Length) { break; }
+                        extBytes = ReadI32(sst, pos);
+                        pos += 4;
+                    }
+                    bool compressed = (flags & 1) == 0;
+                    int produced = 0;
+                    bool truncated = false;
+                    for (int c = 0; c < chars; c++)
+                    {
+                        // Drop boundaries already behind us (splits outside the character array), then
+                        // consume the grbit for a boundary that lands exactly on this character.
+                        while (boundaryIdx < boundaries.Length && boundaries[boundaryIdx] < pos) { boundaryIdx++; }
+                        if (boundaryIdx < boundaries.Length && boundaries[boundaryIdx] == pos)
+                        {
+                            if (pos >= sst.Length) { truncated = true; break; }
+                            compressed = (sst[pos] & 1) == 0;
+                            pos++;
+                            boundaryIdx++;
+                        }
+                        int step = compressed ? 1 : 2;
+                        if (pos + step > sst.Length) { truncated = true; break; }
+                        scratch[produced++] = compressed
+                            ? DecodeCp1252(sst[pos])
+                            : (char)(sst[pos] | (sst[pos + 1] << 8));
+                        pos += step;
+                    }
+                    int maxBytes = System.Text.Encoding.UTF8.GetMaxByteCount(produced);
+                    EnsureSharedCapacity(options, ref flat, flatLen + maxBytes);
+                    flatLen += System.Text.Encoding.UTF8.GetBytes(scratch.AsSpan(0, produced), flat.AsSpan(flatLen));
+                    offsets.Add(flatLen);
+                    if (truncated) { break; }
+                    // Formatting runs (4 bytes each) and extended data follow the characters, split across
+                    // boundaries without a grbit — skip them straight through, bailing on bogus lengths.
+                    long next = pos + ((long)richRuns * 4) + extBytes;
+                    if (richRuns < 0 || extBytes < 0 || next > sst.Length) { break; }
+                    pos = (int)next;
                 }
-                if ((flags & 0x04) != 0)
-                {
-                    if (pos + 4 > sst.Length) { break; }
-                    extBytes = ReadI32(sst, pos);
-                    pos += 4;
-                }
-                int needed = (flags & 1) == 0 ? chars : chars * 2;
-                if (pos + needed > sst.Length)
-                {
-                    break;
-                }
-                EnsureSharedCapacity(options, ref flat, flatLen + (chars * 4));
-                flatLen += DecodeStringToUtf8(sst.Slice(pos, needed), chars, flags, flat.AsSpan(flatLen));
-                pos += needed + (richRuns * 4) + extBytes;
-                offsets.Add(flatLen);
-            }
 
-            sharedFlat = flat.AsSpan(0, flatLen).ToArray();
-            ArrayPool<byte>.Shared.Return(flat);
-            sharedOffsets = [.. offsets];
+                sharedFlat = flat[..flatLen];
+                sharedOffsets = [.. offsets];
+            }
+            finally
+            {
+                ArrayPool<byte>.Shared.Return(flat);
+                ArrayPool<char>.Shared.Return(scratch);
+            }
         }
 
         private static ushort ReadU16(ReadOnlySpan<byte> src, int offset)
