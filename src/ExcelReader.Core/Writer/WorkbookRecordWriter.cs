@@ -134,7 +134,8 @@ namespace ExcelReader.Core.Writer
 
             foreach (PropertyInfo prop in props)
             {
-                if (prop.GetGetMethod() is null || prop.GetIndexParameters().Length > 0)
+                if (prop.GetGetMethod() is null || prop.GetIndexParameters().Length > 0
+                    || Attribute.IsDefined(prop, typeof(ExcelIgnoreAttribute)))
                 {
                     continue;
                 }
@@ -143,6 +144,14 @@ namespace ExcelReader.Core.Writer
                 headers.Add(attr?.Name ?? prop.Name);
 
                 Expression value = Expression.Property(recParam, prop);
+                // A [ExcelConverter] whose type also implements IExcelCellWriter<propType> owns the write
+                // (round-trips a custom type written here and read back via its IExcelCellConverter side).
+                Expression? converterCall = TryBuildConverterWrite(prop, rowParam, value);
+                if (converterCall is not null)
+                {
+                    body.Add(converterCall);
+                    continue;
+                }
                 MethodInfo write = RowWriteMethods.Select(prop.PropertyType, out bool asString);
                 if (asString)
                 {
@@ -171,6 +180,27 @@ namespace ExcelReader.Core.Writer
                 Expression.Call(boxed, toString),
                 Expression.Constant(null, typeof(string)));
         }
+
+        // If the property carries [ExcelConverter(T)] and T implements IExcelCellWriter<propType>, returns
+        // a call to that converter's Write (a shared singleton instance); otherwise null so the caller
+        // falls back to type-based routing (a read-only converter simply gets no write side).
+        private static MethodCallExpression? TryBuildConverterWrite(PropertyInfo prop, ParameterExpression rowParam, Expression value)
+        {
+            ExcelConverterAttribute? converter = prop.GetCustomAttribute<ExcelConverterAttribute>();
+            if (converter is null)
+            {
+                return null;
+            }
+            Type writerInterface = typeof(IExcelCellWriter<>).MakeGenericType(prop.PropertyType);
+            if (!writerInterface.IsAssignableFrom(converter.ConverterType))
+            {
+                return null;
+            }
+            object instance = Activator.CreateInstance(converter.ConverterType)
+                ?? throw new InvalidOperationException($"Converter '{converter.ConverterType}' could not be instantiated.");
+            MethodInfo writeMethod = writerInterface.GetMethod(nameof(IExcelCellWriter<>.Write))!;
+            return Expression.Call(Expression.Constant(instance, writerInterface), writeMethod, rowParam, value);
+        }
     }
 
     // T-independent reflection resolved once for the whole process (not per closed RecordColumns<T>):
@@ -179,6 +209,7 @@ namespace ExcelReader.Core.Writer
     {
         private readonly record struct MethodInfoSet(MethodInfo Str, MethodInfo Bool, MethodInfo BoolN, MethodInfo Date,
                                                      MethodInfo DateN, MethodInfo DateOnly, MethodInfo DateOnlyN,
+                                                     MethodInfo TimeOnly, MethodInfo TimeOnlyN,
                                                      MethodInfo Generic, MethodInfo GenericN);
         private static readonly HashSet<Type> Numeric =
         [
@@ -191,7 +222,7 @@ namespace ExcelReader.Core.Writer
         private static MethodInfoSet Resolve()
         {
             MethodInfo? str = null, boolean = null, booleanN = null, date = null, dateN = null,
-                dateOnly = null, dateOnlyN = null, generic = null, genericN = null;
+                dateOnly = null, dateOnlyN = null, timeOnly = null, timeOnlyN = null, generic = null, genericN = null;
             foreach (MethodInfo m in typeof(IRowWriter).GetMethods())
             {
                 if (!string.Equals(m.Name, nameof(IRowWriter.Write), StringComparison.Ordinal))
@@ -211,8 +242,10 @@ namespace ExcelReader.Core.Writer
                 else if (p == typeof(DateTime?)) { dateN = m; }
                 else if (p == typeof(DateOnly)) { dateOnly = m; }
                 else if (p == typeof(DateOnly?)) { dateOnlyN = m; }
+                else if (p == typeof(TimeOnly)) { timeOnly = m; }
+                else if (p == typeof(TimeOnly?)) { timeOnlyN = m; }
             }
-            return new(str!, boolean!, booleanN!, date!, dateN!, dateOnly!, dateOnlyN!, generic!, genericN!);
+            return new(str!, boolean!, booleanN!, date!, dateN!, dateOnly!, dateOnlyN!, timeOnly!, timeOnlyN!, generic!, genericN!);
         }
 
         // Picks the IRowWriter.Write overload for a property type; asString means the caller must first
@@ -227,6 +260,8 @@ namespace ExcelReader.Core.Writer
             if (pt == typeof(DateTime?)) { return M.DateN; }
             if (pt == typeof(DateOnly)) { return M.DateOnly; }
             if (pt == typeof(DateOnly?)) { return M.DateOnlyN; }
+            if (pt == typeof(TimeOnly)) { return M.TimeOnly; }
+            if (pt == typeof(TimeOnly?)) { return M.TimeOnlyN; }
             Type? underlying = Nullable.GetUnderlyingType(pt);
             if (underlying is null && Numeric.Contains(pt)) { return M.Generic.MakeGenericMethod(pt); }
             if (underlying is not null && Numeric.Contains(underlying)) { return M.GenericN.MakeGenericMethod(underlying); }

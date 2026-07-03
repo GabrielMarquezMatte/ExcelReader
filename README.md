@@ -344,6 +344,42 @@ using (var sheet = workbook.AddSheet("Summary"))
 await workbook.EndAsync();
 ```
 
+## Write typed records
+
+The low-level writers above give you cell-by-cell control. When you just want to dump a collection of objects to a sheet, `WorkbookRecordWriter` writes a header row followed by one row per record, mapping each public readable property to a column. It is generic over the low-level interfaces, so the same API targets XLSX, XLSB, and XLS — pick the format with a `RecordWriter.Create*` factory.
+
+```csharp
+using ExcelReader.Core.Writer;
+
+public sealed class Sale
+{
+    public string? Region { get; set; }
+    public int Units { get; set; }
+    public decimal Revenue { get; set; }
+    public DateOnly Date { get; set; }
+}
+
+var sales = new[]
+{
+    new Sale { Region = "North", Units = 42, Revenue = 1234.50m, Date = new DateOnly(2026, 1, 2) },
+    new Sale { Region = "South", Units = 17, Revenue = 512.00m,  Date = new DateOnly(2026, 1, 3) },
+};
+
+await using var stream = File.Create("sales.xlsx");
+await using var writer = await RecordWriter.CreateXlsxAsync(stream);   // or CreateXlsbAsync / CreateXlsAsync
+await writer.WriteSheetAsync("Sales", sales);
+```
+
+Each `WriteSheetAsync` call targets a new sheet (a duplicate name throws), so one workbook can hold sheets of different record types. An `IAsyncEnumerable<T>` overload streams records that are produced asynchronously. The written file round-trips straight back through `ExcelParser<T>` because the headers are the property names.
+
+Column behavior mirrors the parser attributes:
+
+- **`[ExcelColumn("Header")]`** — use a custom header instead of the property name (the first alias wins).
+- **`[ExcelIgnore]`** — exclude a property from both writing and parsing (for computed/transient members).
+- **`[ExcelConverter(typeof(MyConverter))]`** — if the converter also implements `IExcelCellWriter<T>`, it controls how the value is written, so a custom type round-trips through the same converter it reads with.
+
+`DateTime` and `DateOnly` are written as Excel date serials; `TimeOnly` as a time-of-day fraction. Numeric properties become number cells; any other type is written as its `ToString()` text.
+
 ## Read CSV
 
 `CsvReader` streams RFC 4180 CSV (quoted fields, embedded delimiters/newlines, `""`-escaped quotes) through the same `Row`/`Cell` model as the Excel readers, so `ExcelParser<T>` works on it unchanged.

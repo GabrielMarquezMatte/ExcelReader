@@ -117,6 +117,10 @@ namespace ExcelReader.Core.Parser.Internal
             {
                 return BuildDateOnlyParser<T>(prop);
             }
+            if (propType == typeof(TimeOnly))
+            {
+                return BuildTimeOnlyParser<T>(prop);
+            }
 #if NET8_0
             if (propType == typeof(Guid))
             {
@@ -157,6 +161,10 @@ namespace ExcelReader.Core.Parser.Internal
             if (innerType == typeof(DateOnly))
             {
                 return BuildNullableDateOnlyParser<T>(prop);
+            }
+            if (innerType == typeof(TimeOnly))
+            {
+                return BuildNullableTimeOnlyParser<T>(prop);
             }
             if (innerType.IsEnum)
             {
@@ -235,6 +243,55 @@ namespace ExcelReader.Core.Parser.Internal
                 setter(ref model, DateOnly.FromDateTime(dt));
                 return true;
             };
+        }
+
+        private static ColumnParser<T> BuildTimeOnlyParser<T>(PropertyInfo prop)
+        {
+            RefAction<T, TimeOnly> setter = CompileSetter<T, TimeOnly>(prop);
+            return (ref model, in cell, _, _) =>
+            {
+                if (cell.Type == CellType.Empty)
+                {
+                    return true;
+                }
+                // TryGetDouble reads the binary double (XLS/XLSB) or parses the text invariantly (XLSX),
+                // matching how the serial is written; a culture-aware parse would misread "0.5" cells.
+                if (!cell.TryGetDouble(out double serial))
+                {
+                    return false;
+                }
+                setter(ref model, TimeOnlyFromSerial(serial));
+                return true;
+            };
+        }
+
+        private static ColumnParser<T> BuildNullableTimeOnlyParser<T>(PropertyInfo prop)
+        {
+            RefAction<T, TimeOnly?> setter = CompileSetter<T, TimeOnly?>(prop);
+            return (ref model, in cell, _, _) =>
+            {
+                if (cell.Type == CellType.Empty)
+                {
+                    return true;
+                }
+                // TryGetDouble reads the binary double (XLS/XLSB) or parses the text invariantly (XLSX),
+                // matching how the serial is written; a culture-aware parse would misread "0.5" cells.
+                if (!cell.TryGetDouble(out double serial))
+                {
+                    return false;
+                }
+                setter(ref model, TimeOnlyFromSerial(serial));
+                return true;
+            };
+        }
+
+        // Excel time serial -> TimeOnly: the fractional part of the day, rounded to the nearest tick to
+        // undo the double round-trip. A value that rounds up to a whole day wraps back to midnight.
+        private static TimeOnly TimeOnlyFromSerial(double serial)
+        {
+            double fraction = serial - Math.Floor(serial);
+            long ticks = (long)Math.Round(fraction * TimeSpan.TicksPerDay, MidpointRounding.AwayFromZero);
+            return new TimeOnly(ticks == TimeSpan.TicksPerDay ? 0 : ticks);
         }
 
         // CSV text-date parsers: the cell holds a date string (e.g. "2026-07-02" or ISO "O" form).

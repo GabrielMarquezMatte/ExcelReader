@@ -2,6 +2,7 @@ using System.Diagnostics.CodeAnalysis;
 using ExcelReader.Core.Enums;
 using ExcelReader.Core.Parser;
 using ExcelReader.Core.Reader;
+using ExcelReader.Core.ValueObjects;
 using ExcelReader.Core.Writer;
 
 namespace ExcelReader.Tests
@@ -96,6 +97,49 @@ namespace ExcelReader.Tests
         {
             public Priority Priority { get; set; }
             public Guid Id { get; set; }
+        }
+
+        private sealed class TimeRow
+        {
+            public TimeOnly Open { get; set; }
+            public TimeOnly? Close { get; set; }
+        }
+
+        private sealed class IgnoreRow
+        {
+            public string? Name { get; set; }
+
+            [ExcelIgnore]
+            public int Computed { get; set; }
+        }
+
+        private readonly record struct Money(decimal Amount);
+
+        // Round-trips a custom value object: writes via IExcelCellWriter, reads via IExcelCellConverter,
+        // both bound with the same [ExcelConverter] attribute.
+        private sealed class MoneyConverter : IExcelCellConverter<Money>, IExcelCellWriter<Money>
+        {
+            public bool TryConvert(in Cell cell, bool isDate1904, IFormatProvider provider, out Money value)
+            {
+                if (cell.TryParse<decimal>(provider, out decimal amount))
+                {
+                    value = new Money(amount);
+                    return true;
+                }
+                value = default;
+                return false;
+            }
+
+            public void Write(IRowWriter row, Money value)
+            {
+                row.Write(value.Amount);
+            }
+        }
+
+        private sealed class MoneyRow
+        {
+            [ExcelConverter(typeof(MoneyConverter))]
+            public Money Price { get; set; }
         }
 
         private static async IAsyncEnumerable<T> ToAsync<T>(IEnumerable<T> items)
@@ -206,6 +250,75 @@ namespace ExcelReader.Tests
             await using var reader2 = Excel.From(ms);
             var parsed = new ExcelParser<StringRow>().Parse(reader2).ToList();
             Assert.Empty(parsed);
+        }
+
+        [Theory]
+        [InlineData(RecordFormat.Xlsx)]
+        [InlineData(RecordFormat.Xlsb)]
+        [InlineData(RecordFormat.Xls)]
+        public async Task RecordWriterRoundTripsTimeOnly(RecordFormat format)
+        {
+            var rows = new[]
+            {
+                new TimeRow { Open = new TimeOnly(9, 30, 0), Close = new TimeOnly(17, 45, 30) },
+                new TimeRow { Open = new TimeOnly(0, 0, 0), Close = null },
+            };
+
+            await using var ms = await WriteRecordsAsync<TimeRow>(format,
+                write => write("Times", rows)).ConfigureAwait(true);
+
+            await using var reader = Excel.Open(ms);
+            var parsed = new ExcelParser<TimeRow>().Parse(reader).ToList();
+            Assert.Equal(2, parsed.Count);
+            Assert.Equal(new TimeOnly(9, 30, 0), parsed[0].Open);
+            Assert.Equal(new TimeOnly(17, 45, 30), parsed[0].Close);
+            Assert.Equal(new TimeOnly(0, 0, 0), parsed[1].Open);
+            Assert.Null(parsed[1].Close);
+        }
+
+        [Fact]
+        public async Task RecordWriterSkipsIgnoredProperty()
+        {
+            var rows = new[] { new IgnoreRow { Name = "Alice", Computed = 999 } };
+
+            var ms = new MemoryStream();
+            await using (var writer = await RecordWriter.CreateXlsxAsync(ms, leaveOpen: true, ct: TestContext.Current.CancellationToken).ConfigureAwait(true))
+            {
+                await writer.WriteSheetAsync("Sheet1", rows, TestContext.Current.CancellationToken).ConfigureAwait(true);
+            }
+            ms.Position = 0;
+
+            // Only "Name" is written; the [ExcelIgnore] property produces no column.
+            await using var reader = Excel.From(ms);
+            using XlsxReader.Enumerator e = reader.GetEnumerator();
+            Assert.True(e.MoveNext());
+            Assert.Equal("Name", e.Current[0].GetString());
+            Assert.Equal(CellType.Empty, e.Current[1].Type);
+
+            await using var reader2 = Excel.From(ms);
+            var parsed = new ExcelParser<IgnoreRow>().Parse(reader2).ToList();
+            var row = Assert.Single(parsed);
+            Assert.Equal("Alice", row.Name);
+            Assert.Equal(0, row.Computed); // ignored on read as well
+        }
+
+        [Theory]
+        [InlineData(RecordFormat.Xlsx)]
+        [InlineData(RecordFormat.Xlsb)]
+        [InlineData(RecordFormat.Xls)]
+        public async Task RecordWriterUsesExcelConverterOnWrite(RecordFormat format)
+        {
+            // Exactly double-representable so the test exercises the converter, not decimal/double rounding.
+            var rows = new[] { new MoneyRow { Price = new Money(19.5m) }, new MoneyRow { Price = new Money(1234.25m) } };
+
+            await using var ms = await WriteRecordsAsync<MoneyRow>(format,
+                write => write("Prices", rows)).ConfigureAwait(true);
+
+            await using var reader = Excel.Open(ms);
+            var parsed = new ExcelParser<MoneyRow>().Parse(reader).ToList();
+            Assert.Equal(2, parsed.Count);
+            Assert.Equal(new Money(19.5m), parsed[0].Price);
+            Assert.Equal(new Money(1234.25m), parsed[1].Price);
         }
 
         [Fact]
