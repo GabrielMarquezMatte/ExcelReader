@@ -46,8 +46,5 @@
   <ItemGroup>
     <InternalsVisibleTo Include="ExcelReader.Tests" />
   </ItemGroup>
-  <ItemGroup>
-    <PackageReference Include="FastEnum" Version="2.0.6" />
-  </ItemGroup>
 
 </Project>
