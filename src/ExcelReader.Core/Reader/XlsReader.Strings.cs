@@ -40,8 +40,21 @@ namespace ExcelReader.Core.Reader
 
             for (int i = 0; i < charCount; i++)
             {
-                char ch = (char)(src[i * 2] | (src[(i * 2) + 1] << 8));
-                written += WriteUtf8(ch, dest[written..]);
+                int cp = src[i * 2] | (src[(i * 2) + 1] << 8);
+                // Combine a high+low surrogate pair into one scalar so it emits 4-byte UTF-8 rather than
+                // two 3-byte sequences (CESU-8, invalid UTF-8) — matters for astral chars like emoji.
+                if (cp is not >= 0xD800 or not <= 0xDBFF || i + 1 >= charCount)
+                {
+                    written += WriteUtf8(cp, dest[written..]);
+                    continue;
+                }
+                int lo = src[(i + 1) * 2] | (src[((i + 1) * 2) + 1] << 8);
+                if (lo is >= 0xDC00 and <= 0xDFFF)
+                {
+                    cp = 0x10000 + ((cp - 0xD800) << 10) + (lo - 0xDC00);
+                    i++;
+                }
+                written += WriteUtf8(cp, dest[written..]);
             }
             return written;
         }
@@ -51,23 +64,37 @@ namespace ExcelReader.Core.Reader
             return value is >= 0x80 and <= 0x9F ? _cp1252[value - 0x80] : (char)value;
         }
 
-        private static int WriteUtf8(char ch, Span<byte> dest)
+        // Encodes one Unicode scalar as UTF-8 (1–4 bytes). A lone surrogate becomes U+FFFD so the
+        // output is always valid UTF-8. CP1252 decoding only ever yields BMP scalars.
+        private static int WriteUtf8(int cp, Span<byte> dest)
         {
-            if (ch <= 0x7F)
+            if (cp <= 0x7F)
             {
-                dest[0] = (byte)ch;
+                dest[0] = (byte)cp;
                 return 1;
             }
-            if (ch <= 0x7FF)
+            if (cp <= 0x7FF)
             {
-                dest[0] = (byte)(0xC0 | (ch >> 6));
-                dest[1] = (byte)(0x80 | (ch & 0x3F));
+                dest[0] = (byte)(0xC0 | (cp >> 6));
+                dest[1] = (byte)(0x80 | (cp & 0x3F));
                 return 2;
             }
-            dest[0] = (byte)(0xE0 | (ch >> 12));
-            dest[1] = (byte)(0x80 | ((ch >> 6) & 0x3F));
-            dest[2] = (byte)(0x80 | (ch & 0x3F));
-            return 3;
+            if (cp <= 0xFFFF)
+            {
+                if (cp is >= 0xD800 and <= 0xDFFF)
+                {
+                    cp = 0xFFFD;
+                }
+                dest[0] = (byte)(0xE0 | (cp >> 12));
+                dest[1] = (byte)(0x80 | ((cp >> 6) & 0x3F));
+                dest[2] = (byte)(0x80 | (cp & 0x3F));
+                return 3;
+            }
+            dest[0] = (byte)(0xF0 | (cp >> 18));
+            dest[1] = (byte)(0x80 | ((cp >> 12) & 0x3F));
+            dest[2] = (byte)(0x80 | ((cp >> 6) & 0x3F));
+            dest[3] = (byte)(0x80 | (cp & 0x3F));
+            return 4;
         }
     }
 }
