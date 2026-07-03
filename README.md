@@ -121,7 +121,23 @@ foreach (var row in reader)
 }
 ```
 
-Pattern-match to the concrete type (`XlsxReader`, `XlsbReader`, `XlsReader`) only when you need format-specific methods such as `MoveToSheet`.
+Sheet navigation (`SheetCount`, `SheetName`, `MoveToSheet(index)`, `TryMoveToSheet(name)`) is available on `IExcelRowReader` itself, so you can walk every sheet without knowing the format:
+
+```csharp
+using IExcelRowReader reader = Excel.Open("report.xlsx");
+
+for (int i = 0; i < reader.SheetCount; i++)
+{
+    reader.MoveToSheet(i);
+    Console.WriteLine(reader.SheetName);
+    foreach (var row in reader)
+    {
+        Console.WriteLine(row[0].GetString());
+    }
+}
+```
+
+CSV is exposed as a single, unnamed sheet (`SheetCount == 1`, `SheetName == ""`). Pattern-match to the concrete type only for reader-specific internals beyond this surface.
 
 `OpenAsync` is the async counterpart. Both require a seekable stream (or a file path) so the signature can be read without consuming the input.
 
