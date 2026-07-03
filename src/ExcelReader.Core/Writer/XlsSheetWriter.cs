@@ -3,7 +3,7 @@ using ExcelReader.Core.Writer.Internal;
 
 namespace ExcelReader.Core.Writer
 {
-    public sealed class XlsSheetWriter : IDisposable
+    public sealed class XlsSheetWriter : IDisposable, ISheetWriter<XlsRowWriter>
     {
         private const int MaxRow = 65535;
         private const int MaxColumn = 255;
@@ -172,6 +172,37 @@ namespace ExcelReader.Core.Writer
             {
                 End();
             }
+        }
+
+        // XLS buffers everything in memory, so these wrap the synchronous path in a completed ValueTask.
+        public ValueTask StartAsync(CancellationToken ct = default)
+        {
+            ct.ThrowIfCancellationRequested();
+            Start();
+            return ValueTask.CompletedTask;
+        }
+
+        [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP004:Don't ignore created IDisposable",
+            Justification = "The row writer is returned to the caller, who disposes it to end the row.")]
+        [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
+            Justification = "The row writer is returned to the caller, who disposes it to end the row.")]
+        public ValueTask<XlsRowWriter> StartRowAsync(CancellationToken ct = default)
+        {
+            ct.ThrowIfCancellationRequested();
+            return ValueTask.FromResult(StartRow());
+        }
+
+        public ValueTask EndAsync(CancellationToken ct = default)
+        {
+            ct.ThrowIfCancellationRequested();
+            End();
+            return ValueTask.CompletedTask;
+        }
+
+        public ValueTask DisposeAsync()
+        {
+            Dispose();
+            return ValueTask.CompletedTask;
         }
     }
 }

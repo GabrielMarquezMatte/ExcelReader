@@ -3,7 +3,7 @@ using System.Globalization;
 
 namespace ExcelReader.Core.Writer
 {
-    public sealed class XlsRowWriter : IDisposable
+    public sealed class XlsRowWriter : IDisposable, IRowWriter
     {
         [SuppressMessage("SharpSource", "SS066:DisposableFieldIsNotDisposed",
             Justification = "XlsSheetWriter is borrowed; its lifetime is managed by the caller.")]
@@ -58,6 +58,24 @@ namespace ExcelReader.Core.Writer
             if (value is not null)
             {
                 _owner.EmitDate(_rowNumber, _columnIndex, value.Value);
+            }
+            _columnIndex++;
+        }
+
+        // DateOnly shares the DateTime date-serial cell format (midnight), so it round-trips as a date.
+        public void Write(DateOnly value)
+        {
+            ThrowIfDisposed();
+            _owner.EmitDate(_rowNumber, _columnIndex, value.ToDateTime(TimeOnly.MinValue));
+            _columnIndex++;
+        }
+
+        public void Write(DateOnly? value)
+        {
+            ThrowIfDisposed();
+            if (value is not null)
+            {
+                _owner.EmitDate(_rowNumber, _columnIndex, value.Value.ToDateTime(TimeOnly.MinValue));
             }
             _columnIndex++;
         }
@@ -223,6 +241,13 @@ namespace ExcelReader.Core.Writer
                 _disposed = true;
                 _owner.NotifyRowEnded();
             }
+        }
+
+        // XLS buffers everything in memory, so there is no real async work — wrap the sync path.
+        public ValueTask DisposeAsync()
+        {
+            Dispose();
+            return ValueTask.CompletedTask;
         }
     }
 }
