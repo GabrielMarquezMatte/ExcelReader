@@ -1,4 +1,3 @@
-using System.Buffers;
 using System.Buffers.Binary;
 using System.Diagnostics.CodeAnalysis;
 using ExcelReader.Core.Enums;
@@ -12,22 +11,14 @@ namespace ExcelReader.Core.Reader
             Justification = "Public nested enumerator is the standard foreach pattern.")]
         public sealed class Enumerator : IExcelRowEnumerator
         {
-            private const int InitialVals = 4 * 1024;
-            private const int InitialCells = 32;
-
             [SuppressMessage("SharpSource", "SS066:DisposableFieldIsNotDisposed",
                 Justification = "Borrowed reader; caller owns its lifetime.")]
             private readonly XlsReader _reader;
             private readonly CancellationToken _ct;
             private readonly BiffCursor _cursor;
+            private readonly CellAccumulator _acc;
             private bool _ended;
-            private byte[] _vals;
-            private int _valLen;
-            private CellDesc[] _cells;
-            private int _cellCount;
             private int _row;
-            private int _lastCol;
-            private bool _sorted;
 
             internal Enumerator(XlsReader reader, int sheetOffset, CancellationToken ct = default)
             {
@@ -35,14 +26,11 @@ namespace ExcelReader.Core.Reader
                 _ct = ct;
                 _cursor = reader.OpenCursor(sheetOffset);
                 _row = -1;
-                _lastCol = -1;
-                _sorted = true;
-                _vals = ArrayPool<byte>.Shared.Rent(InitialVals);
-                _cells = ArrayPool<CellDesc>.Shared.Rent(InitialCells);
+                _acc = new CellAccumulator(reader._options);
             }
 
             public Row Current =>
-                new(_cells.AsSpan(0, _cellCount), _vals.AsSpan(0, _valLen), _reader.SharedSpan);
+                new(_acc.CellSpan, _acc.ValueSpan, _reader.SharedSpan);
 
             public bool MoveNext()
             {
@@ -106,21 +94,14 @@ namespace ExcelReader.Core.Reader
 
             private bool FinishRow()
             {
-                if (!_sorted)
-                {
-                    Array.Sort(_cells, 0, _cellCount, CellDescColumnComparer.Instance);
-                    _sorted = true;
-                }
-                return _cellCount > 0;
+                _acc.SortByColumn();
+                return _acc.Count > 0;
             }
 
             private void ResetRow()
             {
-                _cellCount = 0;
-                _valLen = 0;
+                _acc.Reset();
                 _row = -1;
-                _lastCol = -1;
-                _sorted = true;
             }
 
             private static bool TryGetCellRow(int id, ReadOnlySpan<byte> data, out int row)
@@ -161,7 +142,7 @@ namespace ExcelReader.Core.Reader
                             int col = ReadU16(data, 2);
                             int style = ReadU16(data, 4);
                             var (start, len) = _reader.SharedAt(ReadI32(data, 6));
-                            AddCell(col, start, len, CellType.ExcelString, style, fromShared: true);
+                            _acc.Add(col, start, len, CellType.ExcelString, style, fromShared: true);
                         }
                         break;
                     case Rec.Number:
@@ -205,10 +186,10 @@ namespace ExcelReader.Core.Reader
                 {
                     return;
                 }
-                int valueStart = _valLen;
-                EnsureValsCapacity(_valLen + (chars * 4));
-                _valLen += DecodeStringToUtf8(data.Slice(start, byteCount), chars, flags, _vals.AsSpan(_valLen));
-                AddCell(col, valueStart, _valLen - valueStart, CellType.ExcelString, style, fromShared: false);
+                int valueStart = _acc.ValueLength;
+                Span<byte> dst = _acc.ReserveValueSpan(chars * 4);
+                _acc.Advance(DecodeStringToUtf8(data.Slice(start, byteCount), chars, flags, dst));
+                _acc.Add(col, valueStart, _acc.ValueLength - valueStart, CellType.ExcelString, style, fromShared: false);
             }
 
             private void ParseMulRk(ReadOnlySpan<byte> data)
@@ -235,17 +216,16 @@ namespace ExcelReader.Core.Reader
                 int style = ReadU16(data, 4);
                 byte value = data[6];
                 bool isError = data[7] != 0;
-                int start = _valLen;
+                int start = _acc.ValueLength;
                 if (isError)
                 {
-                    AppendError(value);
-                    AddCell(col, start, _valLen - start, CellType.Error, style, fromShared: false);
+                    int len = _acc.AppendErrorText(value);
+                    _acc.Add(col, start, len, CellType.Error, style, fromShared: false);
                 }
                 else
                 {
-                    EnsureValsCapacity(_valLen + 1);
-                    _vals[_valLen++] = value == 0 ? (byte)'0' : (byte)'1';
-                    AddCell(col, start, 1, CellType.Boolean, style, fromShared: false);
+                    _acc.AppendByte(value == 0 ? (byte)'0' : (byte)'1');
+                    _acc.Add(col, start, 1, CellType.Boolean, style, fromShared: false);
                 }
             }
 
@@ -258,19 +238,18 @@ namespace ExcelReader.Core.Reader
                 int col = ReadU16(data, 2);
                 int style = ReadU16(data, 4);
                 ReadOnlySpan<byte> result = data.Slice(6, 8);
-                int start = _valLen;
+                int start = _acc.ValueLength;
                 if (result[6] == 0xFF && result[7] == 0xFF)
                 {
                     switch (result[0])
                     {
                         case 1:
-                            EnsureValsCapacity(_valLen + 1);
-                            _vals[_valLen++] = result[2] == 0 ? (byte)'0' : (byte)'1';
-                            AddCell(col, start, 1, CellType.Boolean, style, fromShared: false);
+                            _acc.AppendByte(result[2] == 0 ? (byte)'0' : (byte)'1');
+                            _acc.Add(col, start, 1, CellType.Boolean, style, fromShared: false);
                             break;
                         case 2:
-                            AppendError(result[2]);
-                            AddCell(col, start, _valLen - start, CellType.Error, style, fromShared: false);
+                            int len = _acc.AppendErrorText(result[2]);
+                            _acc.Add(col, start, len, CellType.Error, style, fromShared: false);
                             break;
                         default:
                             break;
@@ -285,64 +264,7 @@ namespace ExcelReader.Core.Reader
                 // Store the raw double only — no eager formatting. Cell formats lazily if a caller
                 // asks for text (GetString/Value); numeric consumers read the double directly.
                 CellType type = forced ?? (_reader.IsDateStyle(style) ? CellType.Date : CellType.Number);
-                AddCell(col, _valLen, 0, type, style, fromShared: false, number: value, hasNumber: true);
-            }
-
-            private void AppendError(byte error)
-            {
-                ReadOnlySpan<byte> text = error switch
-                {
-                    0x00 => "#NULL!"u8,
-                    0x07 => "#DIV/0!"u8,
-                    0x0F => "#VALUE!"u8,
-                    0x17 => "#REF!"u8,
-                    0x1D => "#NAME?"u8,
-                    0x24 => "#NUM!"u8,
-                    0x2A => "#N/A"u8,
-                    _ => "#ERR"u8,
-                };
-                EnsureValsCapacity(_valLen + text.Length);
-                text.CopyTo(_vals.AsSpan(_valLen));
-                _valLen += text.Length;
-            }
-
-            private void AddCell(int col, int start, int len, CellType type, int style, bool fromShared, double number = 0, bool hasNumber = false)
-            {
-                if (_cellCount == _cells.Length)
-                {
-                    CellDesc[] bigger = ArrayPool<CellDesc>.Shared.Rent(_cells.Length * 2);
-                    Array.Copy(_cells, bigger, _cellCount);
-                    ArrayPool<CellDesc>.Shared.Return(_cells);
-                    _cells = bigger;
-                }
-                if (col < _lastCol)
-                {
-                    _sorted = false;
-                }
-                _lastCol = col;
-                _cells[_cellCount++] = new CellDesc
-                {
-                    Column = col,
-                    Start = start,
-                    Length = len,
-                    Type = type,
-                    Style = style,
-                    FromShared = fromShared,
-                    Number = number,
-                    HasNumber = hasNumber,
-                };
-            }
-
-            private void EnsureValsCapacity(int needed)
-            {
-                if (needed <= _vals.Length)
-                {
-                    return;
-                }
-                byte[] bigger = ArrayPool<byte>.Shared.Rent(LimitChecks.NextBufferSize(_reader._options, _vals.Length, needed));
-                Array.Copy(_vals, bigger, _valLen);
-                ArrayPool<byte>.Shared.Return(_vals);
-                _vals = bigger;
+                _acc.Add(col, _acc.ValueLength, 0, type, style, fromShared: false, number: value, hasNumber: true);
             }
 
             private static double DecodeRk(uint rk)
@@ -374,26 +296,7 @@ namespace ExcelReader.Core.Reader
             private void ReturnBuffers()
             {
                 _cursor.Dispose();
-                if (_vals.Length > 0)
-                {
-                    ArrayPool<byte>.Shared.Return(_vals);
-                    _vals = [];
-                }
-                if (_cells.Length > 0)
-                {
-                    ArrayPool<CellDesc>.Shared.Return(_cells);
-                    _cells = [];
-                }
-            }
-        }
-
-        private sealed class CellDescColumnComparer : IComparer<CellDesc>
-        {
-            internal static readonly CellDescColumnComparer Instance = new();
-
-            public int Compare(CellDesc x, CellDesc y)
-            {
-                return x.Column.CompareTo(y.Column);
+                _acc.Return();
             }
         }
     }
