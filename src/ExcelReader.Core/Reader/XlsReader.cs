@@ -1,7 +1,7 @@
 using System.Buffers;
-using System.Buffers.Binary;
 using System.Diagnostics.CodeAnalysis;
 using System.Runtime.InteropServices;
+using static ExcelReader.Core.Reader.Biff12;
 
 namespace ExcelReader.Core.Reader
 {
@@ -351,21 +351,6 @@ namespace ExcelReader.Core.Reader
                 ArrayPool<byte>.Shared.Return(flat);
                 ArrayPool<char>.Shared.Return(scratch);
             }
-        }
-
-        private static ushort ReadU16(ReadOnlySpan<byte> src, int offset)
-        {
-            return BinaryPrimitives.ReadUInt16LittleEndian(src.Slice(offset, 2));
-        }
-
-        private static int ReadI32(ReadOnlySpan<byte> src, int offset)
-        {
-            return BinaryPrimitives.ReadInt32LittleEndian(src.Slice(offset, 4));
-        }
-
-        private static uint ReadU32(ReadOnlySpan<byte> src, int offset)
-        {
-            return BinaryPrimitives.ReadUInt32LittleEndian(src.Slice(offset, 4));
         }
 
         private static void EnsureSharedCapacity(ExcelReaderOptions options, ref byte[] buffer, int needed)

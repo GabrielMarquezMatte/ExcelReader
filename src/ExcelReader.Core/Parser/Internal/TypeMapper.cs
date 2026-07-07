@@ -1,18 +1,19 @@
 using System.Linq.Expressions;
 using System.Reflection;
-using System.Runtime.ExceptionServices;
 
 namespace ExcelReader.Core.Parser.Internal
 {
     internal static class TypeMapper<T>
     {
+        // ExecutionAndPublication already caches a thrown build exception and re-throws it (original
+        // stack trace preserved) on every subsequent .Value access — no need to do that by hand.
         private static readonly Lazy<TypeMapInfo<T>> _info =
-            new(static () => BuildSafe(csvTextDates: false), LazyThreadSafetyMode.ExecutionAndPublication);
+            new(static () => Build(csvTextDates: false), LazyThreadSafetyMode.ExecutionAndPublication);
 
         // Separate cache for the CSV parser: identical to _info except DateTime/DateOnly parse text
         // instead of an Excel serial number. Built lazily so non-CSV callers never pay for it.
         private static readonly Lazy<TypeMapInfo<T>> _csvInfo =
-            new(static () => BuildSafe(csvTextDates: true), LazyThreadSafetyMode.ExecutionAndPublication);
+            new(static () => Build(csvTextDates: true), LazyThreadSafetyMode.ExecutionAndPublication);
 
         internal static TypeMapInfo<T> GetInfo()
         {
@@ -22,20 +23,6 @@ namespace ExcelReader.Core.Parser.Internal
         internal static TypeMapInfo<T> GetCsvInfo()
         {
             return _csvInfo.Value;
-        }
-
-        private static TypeMapInfo<T> BuildSafe(bool csvTextDates)
-        {
-            try
-            {
-                return Build(csvTextDates);
-            }
-            catch (Exception ex)
-            {
-                // Capture here so the exception is re-thrown with original stack trace on every call.
-                ExceptionDispatchInfo.Capture(ex).Throw();
-                throw; // unreachable; satisfies compiler
-            }
         }
 
         private static TypeMapInfo<T> Build(bool csvTextDates)

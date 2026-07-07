@@ -10,7 +10,6 @@ namespace ExcelReader.Core.Writer
 {
     public sealed class XlsbWorkbookWriter : IWorkbookWriter<XlsbSheetWriter>
     {
-        private static readonly UTF8Encoding Utf8NoBom = new(encoderShouldEmitUTF8Identifier: false);
         private const int MaxSheetNameLength = 31;
 
         private readonly ZipArchive _zip;
@@ -139,8 +138,7 @@ namespace ExcelReader.Core.Writer
 
         public ValueTask FlushAsync(CancellationToken ct = default)
         {
-            ct.ThrowIfCancellationRequested();
-            return new ValueTask(_stream.FlushAsync(ct));
+            return ZipEntryWriter.FlushAsync(_stream, ct);
         }
 
         public async ValueTask DisposeAsync()
@@ -362,21 +360,9 @@ namespace ExcelReader.Core.Writer
             return WriteEntryAsync("[Content_Types].xml", sb.ToString(), ct);
         }
 
-        private async ValueTask WriteEntryAsync(string entryName, string content, CancellationToken ct)
+        private ValueTask WriteEntryAsync(string entryName, string content, CancellationToken ct)
         {
-            ZipArchiveEntry entry = _zip.CreateEntry(entryName, _compression);
-#if NET10_0_OR_GREATER
-            var stream = await entry.OpenAsync(ct).ConfigureAwait(false);
-#else
-            Stream stream = entry.Open();
-#endif
-            StreamWriter writer = new(stream, Utf8NoBom, leaveOpen: false);
-            await using (stream.ConfigureAwait(false))
-            await using (writer.ConfigureAwait(false))
-            {
-                await writer.WriteAsync(content).ConfigureAwait(false);
-                await writer.FlushAsync(ct).ConfigureAwait(false);
-            }
+            return ZipEntryWriter.WriteTextAsync(_zip, entryName, content, _compression, ct);
         }
 
         private async ValueTask WriteEntryAsync(string entryName, ReadOnlyMemory<byte> content, CancellationToken ct)

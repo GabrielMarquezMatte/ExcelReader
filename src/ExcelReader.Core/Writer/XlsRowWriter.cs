@@ -1,5 +1,4 @@
 using System.Diagnostics.CodeAnalysis;
-using System.Globalization;
 
 namespace ExcelReader.Core.Writer
 {
@@ -187,7 +186,7 @@ namespace ExcelReader.Core.Writer
             where T : ISpanFormattable
         {
             ThrowIfDisposed();
-            _owner.EmitNumber(_rowNumber, _columnIndex, ToDouble(value));
+            _owner.EmitNumber(_rowNumber, _columnIndex, XlsbRowWriter.ToDouble(value));
             _columnIndex++;
         }
 
@@ -197,7 +196,7 @@ namespace ExcelReader.Core.Writer
             ThrowIfDisposed();
             if (value is not null)
             {
-                _owner.EmitNumber(_rowNumber, _columnIndex, ToDouble(value.Value));
+                _owner.EmitNumber(_rowNumber, _columnIndex, XlsbRowWriter.ToDouble(value.Value));
             }
             _columnIndex++;
         }
@@ -206,45 +205,6 @@ namespace ExcelReader.Core.Writer
         {
             ThrowIfDisposed();
             _columnIndex += count;
-        }
-
-        // XLS Number cells store a binary double; round-tripping through the invariant text form
-        // gives the exact value for the common integer/floating types.
-        private static double ToDouble<T>(T value)
-            where T : ISpanFormattable
-        {
-            switch (value)
-            {
-                case double d:
-                    return d;
-                case float f:
-                    return f;
-                case decimal m:
-                    return (double)m;
-                case int i:
-                    return i;
-                case long l:
-                    return l;
-                case short s:
-                    return s;
-                case byte b:
-                    return b;
-                case uint ui:
-                    return ui;
-                case ulong ul:
-                    return ul;
-                case ushort us:
-                    return us;
-                case sbyte sb:
-                    return sb;
-            }
-            Span<char> buffer = stackalloc char[64];
-            if (value.TryFormat(buffer, out int written, default, CultureInfo.InvariantCulture)
-                && double.TryParse(buffer[..written], CultureInfo.InvariantCulture, out double result))
-            {
-                return result;
-            }
-            return Convert.ToDouble(value, CultureInfo.InvariantCulture);
         }
 
         private void ThrowIfDisposed()

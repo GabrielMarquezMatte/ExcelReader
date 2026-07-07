@@ -17,6 +17,11 @@ namespace ExcelReader.Core.Reader
             return BinaryPrimitives.ReadUInt32LittleEndian(src.Slice(offset, 4));
         }
 
+        internal static int ReadI32(ReadOnlySpan<byte> src, int offset)
+        {
+            return BinaryPrimitives.ReadInt32LittleEndian(src.Slice(offset, 4));
+        }
+
         internal static double ReadF64(ReadOnlySpan<byte> src, int offset)
         {
             return BinaryPrimitives.ReadDoubleLittleEndian(src.Slice(offset, 8));

@@ -2,6 +2,7 @@ using System.Buffers.Binary;
 using System.Diagnostics.CodeAnalysis;
 using ExcelReader.Core.Enums;
 using ExcelReader.Core.ValueObjects;
+using static ExcelReader.Core.Reader.Biff12;
 
 namespace ExcelReader.Core.Reader
 {
@@ -154,7 +155,7 @@ namespace ExcelReader.Core.Reader
                     case Rec.Rk:
                         if (data.Length >= 10)
                         {
-                            AddDouble(ReadU16(data, 2), ReadU16(data, 4), DecodeRk(ReadU32(data, 6)));
+                            AddDouble(ReadU16(data, 2), ReadU16(data, 4), Rk(ReadU32(data, 6)));
                         }
                         break;
                     case Rec.MulRk:
@@ -202,7 +203,7 @@ namespace ExcelReader.Core.Reader
                 int end = data.Length - 2;
                 for (int pos = 4; pos + 6 <= end; pos += 6, col++)
                 {
-                    AddDouble(col, ReadU16(data, pos), DecodeRk(ReadU32(data, pos + 2)));
+                    AddDouble(col, ReadU16(data, pos), Rk(ReadU32(data, pos + 2)));
                 }
             }
 
@@ -265,21 +266,6 @@ namespace ExcelReader.Core.Reader
                 // asks for text (GetString/Value); numeric consumers read the double directly.
                 CellType type = forced ?? (_reader.IsDateStyle(style) ? CellType.Date : CellType.Number);
                 _acc.Add(col, _acc.ValueLength, 0, type, style, fromShared: false, number: value, hasNumber: true);
-            }
-
-            private static double DecodeRk(uint rk)
-            {
-                double value;
-                if ((rk & 0x02) != 0)
-                {
-                    value = unchecked((int)(rk & 0xFFFFFFFC)) >> 2;
-                }
-                else
-                {
-                    ulong raw = (ulong)(rk & 0xFFFFFFFC) << 32;
-                    value = BitConverter.Int64BitsToDouble(unchecked((long)raw));
-                }
-                return (rk & 0x01) != 0 ? value / 100.0 : value;
             }
 
             public void Dispose()
