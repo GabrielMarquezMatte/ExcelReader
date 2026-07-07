@@ -13,6 +13,10 @@ namespace ExcelReader.Core.ValueObjects
             _shared = shared;
             _index = -1;
         }
+        public readonly RowCellEnumerator GetEnumerator()
+        {
+            return this;
+        }
         public readonly RowCell Current
         {
             get
