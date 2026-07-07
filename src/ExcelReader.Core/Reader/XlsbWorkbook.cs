@@ -1,6 +1,3 @@
-using System.Buffers;
-using System.Text;
-
 namespace ExcelReader.Core.Reader
 {
     // Parses xl/workbook.bin (binary BIFF12): the sheet bundle and the date system. Sheet names come
@@ -9,7 +6,7 @@ namespace ExcelReader.Core.Reader
     {
         internal static (string Name, string Path)[] ParseSheets(ReadOnlySpan<byte> workbookBin, ReadOnlySpan<byte> relsBytes)
         {
-            Dictionary<string, string> rels = ParseRels(relsBytes);
+            Dictionary<string, string> rels = XlsxXml.ParseRelationships(relsBytes);
             List<(string, string)> sheets = [];
             var reader = new Biff12RecordReader(workbookBin);
             while (reader.TryReadRecord(out int id, out ReadOnlySpan<byte> payload))
@@ -40,7 +37,7 @@ namespace ExcelReader.Core.Reader
             }
             if (rels.TryGetValue(new string(relId), out string? target))
             {
-                sheets.Add((new string(name), NormalizePart(target)));
+                sheets.Add((new string(name), XlsxXml.NormalizePart(target)));
             }
         }
 
@@ -56,55 +53,6 @@ namespace ExcelReader.Core.Reader
                 }
             }
             return false;
-        }
-
-        private static Dictionary<string, string> ParseRels(ReadOnlySpan<byte> relsBytes)
-        {
-            Dictionary<string, string> rels = new(StringComparer.Ordinal);
-            if (relsBytes.IsEmpty)
-            {
-                return rels;
-            }
-            foreach (ReadOnlySpan<byte> tag in new TagSpanEnumerable(relsBytes, "<Relationship"u8))
-            {
-                string id = DecodeAttr(XlsxXml.Attr(tag, " Id=\""u8));
-                if (id.Length > 0)
-                {
-                    rels[id] = DecodeAttr(XlsxXml.Attr(tag, " Target=\""u8));
-                }
-            }
-            return rels;
-        }
-
-        private static string NormalizePart(ReadOnlySpan<char> target)
-        {
-            if (target.Length > 0 && target[0] == '/')
-            {
-                return new string(target[1..]);
-            }
-            if (target.StartsWith("xl/"))
-            {
-                return new string(target);
-            }
-            return $"xl/{target}";
-        }
-
-        private static string DecodeAttr(ReadOnlySpan<byte> raw)
-        {
-            if (raw.IsEmpty)
-            {
-                return string.Empty;
-            }
-            byte[] buffer = ArrayPool<byte>.Shared.Rent(raw.Length);
-            try
-            {
-                int written = XlsxXml.Decode(raw, buffer);
-                return Encoding.UTF8.GetString(buffer.AsSpan(0, written));
-            }
-            finally
-            {
-                ArrayPool<byte>.Shared.Return(buffer);
-            }
         }
     }
 }

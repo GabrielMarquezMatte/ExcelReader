@@ -1,4 +1,3 @@
-using System.Buffers;
 using System.Diagnostics.CodeAnalysis;
 using System.Text;
 using ExcelReader.Core.Enums;
@@ -15,17 +14,16 @@ namespace ExcelReader.Core.Reader
             Justification = "Public nested enumerator is the standard foreach pattern.")]
         public sealed class Enumerator : IExcelRowEnumerator
         {
-            private const int InitialBuf = 64 * 1024;
-
             [SuppressMessage("SharpSource", "SS066:Disposable field is not disposed", Justification = "Borrowed, not owned.")]
             private readonly XlsbReader _reader;
             private readonly CancellationToken _ct;
             [SuppressMessage("SharpSource", "SS066:Disposable field is not disposed", Justification = "Disposed in Dispose().")]
             private Stream? _sheet;
-            private byte[] _buf;
-            private int _pos;
-            private int _len;
-            private bool _eof;
+            private readonly BufferedStreamCursor _io;
+            private byte[] _buf => _io.Buf;
+            private int _pos { get => _io.Pos; set => _io.Pos = value; }
+            private int _len => _io.Len;
+            private bool _eof => _io.Eof;
             private bool _ended;
             // A BrtRowHdr for the NEXT row was already consumed while collecting cells for the current row.
             // On the next MoveNext call, skip the "seek to row header" step.
@@ -38,8 +36,8 @@ namespace ExcelReader.Core.Reader
                 _reader = reader;
                 _sheet = sheet;
                 _ct = ct;
-                _buf = ArrayPool<byte>.Shared.Rent(InitialBuf);
-                _acc = new CellAccumulator(reader._options);
+                _io = new BufferedStreamCursor(reader._options.MaxCellBytes, nameof(ExcelReaderOptions.MaxCellBytes));
+                _acc = new CellAccumulator(reader._options.MaxCellBytes, nameof(ExcelReaderOptions.MaxCellBytes));
             }
 
             public Row Current =>
@@ -334,50 +332,14 @@ namespace ExcelReader.Core.Reader
                 return false;
             }
 
-            // Compact consumed prefix, or grow the buffer if all bytes are unprocessed.
-            private void PrepareBuffer()
-            {
-                if (_pos > 0)
-                {
-                    _buf.AsSpan(_pos, _len - _pos).CopyTo(_buf);
-                    _len -= _pos;
-                    _pos = 0;
-                }
-                else if (_len == _buf.Length)
-                {
-                    byte[] bigger = ArrayPool<byte>.Shared.Rent(LimitChecks.NextBufferSize(_reader._options, _buf.Length, _buf.Length + 1));
-                    _buf.AsSpan(0, _len).CopyTo(bigger);
-                    ArrayPool<byte>.Shared.Return(_buf);
-                    _buf = bigger;
-                }
-            }
-
             private void Fill()
             {
-                PrepareBuffer();
-                int n = _sheet!.Read(_buf, _len, _buf.Length - _len);
-                if (n == 0)
-                {
-                    _eof = true;
-                }
-                else
-                {
-                    _len += n;
-                }
+                _io.Fill(_sheet!);
             }
 
-            private async ValueTask FillAsync()
+            private ValueTask FillAsync()
             {
-                PrepareBuffer();
-                int n = await _sheet!.ReadAsync(_buf.AsMemory(_len, _buf.Length - _len), _ct).ConfigureAwait(false);
-                if (n == 0)
-                {
-                    _eof = true;
-                }
-                else
-                {
-                    _len += n;
-                }
+                return _io.FillAsync(_sheet!, _ct);
             }
 
             [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP007:Don't dispose injected",
@@ -403,11 +365,7 @@ namespace ExcelReader.Core.Reader
 
             private void ReturnBuffers()
             {
-                if (_buf.Length > 0)
-                {
-                    ArrayPool<byte>.Shared.Return(_buf);
-                    _buf = [];
-                }
+                _io.Return();
                 _acc.Return();
             }
         }

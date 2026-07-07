@@ -17,7 +17,6 @@ namespace ExcelReader.Core.Reader
 
         private byte[] _sharedFlat = [];      // pooled; all decoded shared-string bytes concatenated
         private int[] _sharedOffsets = [0];   // string i = _sharedFlat[_offsets[i].._offsets[i+1]]
-        private int SharedCount => _sharedOffsets.Length - 1;
         private bool _sharedLoaded;
 
         // Sync open: reads the central directory and workbook/styles parts synchronously.
@@ -118,27 +117,22 @@ namespace ExcelReader.Core.Reader
         // A numeric cell whose style index maps to a date/time format is reported as CellType.Date.
         internal bool IsDateStyle(int style)
         {
-            return (uint)style < (uint)_styleIsDate.Length && _styleIsDate[style];
+            return WorkbookLookups.IsDateStyle(_styleIsDate, style);
         }
-
 
         public bool TryMoveToSheet(ReadOnlySpan<char> name)
         {
-            for (int i = 0; i < _sheets.Length; i++)
+            if (!WorkbookLookups.TryFindSheetIndex(_sheets, name, static s => s.Name, out int index))
             {
-                if (name.Equals(_sheets[i].Name, StringComparison.OrdinalIgnoreCase))
-                {
-                    _current = i;
-                    return true;
-                }
+                return false;
             }
-            return false;
+            _current = index;
+            return true;
         }
 
         public void MoveToSheet(int index)
         {
-            ArgumentOutOfRangeException.ThrowIfNegative(index);
-            ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(index, _sheets.Length);
+            WorkbookLookups.ValidateSheetIndex(index, _sheets.Length);
             _current = index;
         }
 
@@ -193,11 +187,7 @@ namespace ExcelReader.Core.Reader
 
         internal (int Start, int Length) SharedAt(int index)
         {
-            if ((uint)index >= (uint)SharedCount)
-            {
-                return (0, 0);
-            }
-            return (_sharedOffsets[index], _sharedOffsets[index + 1] - _sharedOffsets[index]);
+            return WorkbookLookups.SharedAt(_sharedOffsets, index);
         }
 
         public void Dispose()

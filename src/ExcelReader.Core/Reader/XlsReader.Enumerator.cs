@@ -26,7 +26,7 @@ namespace ExcelReader.Core.Reader
                 _ct = ct;
                 _cursor = reader.OpenCursor(sheetOffset);
                 _row = -1;
-                _acc = new CellAccumulator(reader._options);
+                _acc = new CellAccumulator(reader._options.MaxCellBytes, nameof(ExcelReaderOptions.MaxCellBytes));
             }
 
             public Row Current =>
