@@ -131,16 +131,22 @@ namespace ExcelReader.Core.Parser.Internal
                     break;
                 }
                 ColumnBinding<T> binding = bindings[bindingIndex];
-                if (binding.Column == column)
+                if (binding.Column != column)
                 {
-                    Cell cell = rowCell.Value;
-                    binding.Parser(ref model, in cell, _isDate1904, _provider);
-                    if (track && binding.RequireValue && cell.Type != CellType.Empty)
-                    {
-                        _seen[bindingIndex] = true;
-                    }
-                    bindingIndex++;
+                    continue;
                 }
+                Cell cell = rowCell.Value;
+                if (cell.Type == CellType.Empty)
+                {
+                    bindingIndex++;
+                    continue;
+                }
+                binding.Parser(ref model, in cell, _isDate1904, _provider);
+                if (track && binding.RequireValue)
+                {
+                    _seen[bindingIndex] = true;
+                }
+                bindingIndex++;
             }
             if (track)
             {

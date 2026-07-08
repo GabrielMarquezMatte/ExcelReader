@@ -51,9 +51,7 @@ namespace ExcelReader.Core.Parser.Internal
 
         IAsyncEnumerator<T> IAsyncEnumerable<T>.GetAsyncEnumerator(CancellationToken cancellationToken)
         {
-            TypeMapInfo<T> info = TypeMapper<T>.GetInfo();
-            CancellationToken effective = cancellationToken.CanBeCanceled ? cancellationToken : _ct;
-            return new AsyncEnumerator(_reader, info, _config.ColumnNameComparer, _config.HeaderNormalization, _config.HeaderRow, _config.Culture, effective);
+            return GetAsyncEnumerator(cancellationToken);
         }
 
         public AsyncEnumerator GetAsyncEnumerator(CancellationToken cancellationToken = default)

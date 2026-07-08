@@ -27,7 +27,7 @@ namespace ExcelReader.Core.Writer.Internal
         {
             // Pad to a whole number of sectors and keep the stored size at/above the mini cutoff
             // so the reader treats it as a regular stream.
-            int storedSize = Math.Max(RoundUp(workbookSize, SectorSize), MiniCutoff);
+            int storedSize = Math.Max(CeilingDiv(workbookSize, SectorSize) * SectorSize, MiniCutoff);
             int workbookSectors = storedSize / SectorSize;
 
             (int fatCount, int difatCount) = ComputeSectorCounts(workbookSectors);
@@ -168,11 +168,6 @@ namespace ExcelReader.Core.Writer.Internal
         private static int CeilingDiv(int n, int d)
         {
             return (n + d - 1) / d;
-        }
-
-        private static int RoundUp(int value, int multiple)
-        {
-            return CeilingDiv(value, multiple) * multiple;
         }
 
         private static void WriteU16(Span<byte> dest, int offset, ushort value)

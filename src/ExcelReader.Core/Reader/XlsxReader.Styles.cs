@@ -40,7 +40,7 @@ namespace ExcelReader.Core.Reader
             foreach (var xf in Tags(src.Slice(open + 1, end - open - 1), "<xf "u8))
             {
                 int numFmtId = ParseIntOr(XlsxXml.Attr(xf, " numFmtId=\""u8), 0);
-                flags.Add(custom.TryGetValue(numFmtId, out bool d) ? d : NumberFormat.IsBuiltinDate(numFmtId));
+                flags.Add(WorkbookLookups.ResolveDateFlag(custom, numFmtId));
             }
             return [.. flags];
         }
