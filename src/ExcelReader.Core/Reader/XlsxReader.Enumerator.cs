@@ -1,4 +1,3 @@
-using System.Buffers;
 using System.Buffers.Text;
 using System.Diagnostics.CodeAnalysis;
 using ExcelReader.Core.Enums;
@@ -14,8 +13,6 @@ namespace ExcelReader.Core.Reader
             Justification = "Public nested enumerator is the standard foreach pattern.")]
         public sealed class Enumerator : IExcelRowEnumerator
         {
-            private const int InitialBuf = 64 * 1024;
-
             // Borrowed: the reader outlives the enumerator and owns its own disposal — do not dispose here.
             [SuppressMessage("Usage", "CA2213:Disposable fields should be disposed", Justification = "Borrowed, not owned.")]
             [SuppressMessage("SharpSource", "SS066:Disposable field is not disposed", Justification = "Borrowed, not owned.")]
@@ -24,10 +21,11 @@ namespace ExcelReader.Core.Reader
             // Owned: opened by Get(Async)Enumerator for this enumerator alone; disposed in Dispose(Async).
             [SuppressMessage("SharpSource", "SS066:Disposable field is not disposed", Justification = "Disposed in Dispose().")]
             private Stream? _sheet;
-            private byte[] _buf;
-            private int _pos;
-            private int _len;
-            private bool _eof;
+            private readonly BufferedStreamCursor _io;
+            private byte[] _buf => _io.Buf;
+            private int _pos { get => _io.Pos; set => _io.Pos = value; }
+            private int _len => _io.Len;
+            private bool _eof => _io.Eof;
 
             private readonly CellAccumulator _acc; // per-row decoded values + cell descriptors
             private int _nextCol;
@@ -37,8 +35,8 @@ namespace ExcelReader.Core.Reader
                 _reader = reader;
                 _sheet = sheet;
                 _ct = ct;
-                _buf = ArrayPool<byte>.Shared.Rent(InitialBuf);
-                _acc = new CellAccumulator(reader._options);
+                _io = new BufferedStreamCursor(reader._options.MaxCellBytes, nameof(ExcelReaderOptions.MaxCellBytes));
+                _acc = new CellAccumulator(reader._options.MaxCellBytes, nameof(ExcelReaderOptions.MaxCellBytes));
             }
 
             public Row Current =>
@@ -471,7 +469,7 @@ namespace ExcelReader.Core.Reader
                     {
                         return -1;
                     }
-                    Fill();
+                    _io.Fill(_sheet!);
                 }
             }
 
@@ -488,48 +486,13 @@ namespace ExcelReader.Core.Reader
                     {
                         return -1;
                     }
-                    Fill();
+                    _io.Fill(_sheet!);
                 }
             }
 
             private void Ensure(int n)
             {
-                while (_len - _pos < n && !_eof)
-                {
-                    Fill();
-                }
-            }
-
-            // Make room for more bytes: compact consumed prefix, or grow the buffer.
-            private void PrepareBuffer()
-            {
-                if (_pos > 0)
-                {
-                    _buf.AsSpan(_pos, _len - _pos).CopyTo(_buf);
-                    _len -= _pos;
-                    _pos = 0;
-                }
-                else if (_len == _buf.Length)
-                {
-                    var bigger = ArrayPool<byte>.Shared.Rent(LimitChecks.NextBufferSize(_reader._options, _buf.Length, _buf.Length + 1));
-                    _buf.AsSpan(0, _len).CopyTo(bigger);
-                    ArrayPool<byte>.Shared.Return(_buf);
-                    _buf = bigger;
-                }
-            }
-
-            private void Fill()
-            {
-                PrepareBuffer();
-                int n = _sheet!.Read(_buf, _len, _buf.Length - _len);
-                if (n == 0)
-                {
-                    _eof = true;
-                }
-                else
-                {
-                    _len += n;
-                }
+                _io.Ensure(_sheet!, n);
             }
 
             // Async twins of the search/refill primitives. Each is split so the common case (the target is
@@ -669,33 +632,12 @@ namespace ExcelReader.Core.Reader
 
             private ValueTask EnsureAsync(int n)
             {
-                if (_len - _pos >= n || _eof)
-                {
-                    return ValueTask.CompletedTask;
-                }
-                return EnsureSlowAsync(n);
+                return _io.EnsureAsync(_sheet!, n, _ct);
             }
 
-            private async ValueTask EnsureSlowAsync(int n)
+            private ValueTask FillAsync()
             {
-                while (_len - _pos < n && !_eof)
-                {
-                    await FillAsync().ConfigureAwait(false);
-                }
-            }
-
-            private async ValueTask FillAsync()
-            {
-                PrepareBuffer();
-                int n = await _sheet!.ReadAsync(_buf.AsMemory(_len, _buf.Length - _len), _ct).ConfigureAwait(false);
-                if (n == 0)
-                {
-                    _eof = true;
-                }
-                else
-                {
-                    _len += n;
-                }
+                return _io.FillAsync(_sheet!, _ct);
             }
 
             [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP007:Don't dispose injected",
@@ -721,11 +663,7 @@ namespace ExcelReader.Core.Reader
 
             private void ReturnBuffers()
             {
-                if (_buf.Length > 0)
-                {
-                    ArrayPool<byte>.Shared.Return(_buf);
-                    _buf = [];
-                }
+                _io.Return();
                 _acc.Return();
             }
         }

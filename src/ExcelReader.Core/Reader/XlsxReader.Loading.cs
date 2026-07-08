@@ -1,58 +1,28 @@
 using System.Buffers;
-using System.Text;
 
 namespace ExcelReader.Core.Reader
 {
     public sealed partial class XlsxReader
     {
         // --- workbook / shared-strings loading (one-time, small except sharedStrings) ---
-
-        private static readonly byte[] _relationshipTag = "<Relationship"u8.ToArray();
-        private static readonly byte[] _sheetTag = "<sheet "u8.ToArray();
-
         private static (string Name, string Path)[] ParseSheets(ReadOnlySpan<byte> wbBytes, ReadOnlySpan<byte> relsBytes)
         {
             if (wbBytes.IsEmpty)
             {
                 return [];
             }
-            // rId -> target part path
-            Dictionary<string, string> rels = new(StringComparer.Ordinal);
-            if (!relsBytes.IsEmpty)
-            {
-                foreach (var tag in Tags(relsBytes, _relationshipTag))
-                {
-                    var id = Decode(XlsxXml.Attr(tag, " Id=\""u8));
-                    if (id.Length > 0)
-                    {
-                        rels[id] = Decode(XlsxXml.Attr(tag, " Target=\""u8));
-                    }
-                }
-            }
+            Dictionary<string, string> rels = XlsxXml.ParseRelationships(relsBytes);
             var sheets = new List<(string, string)>();
-            foreach (var tag in Tags(wbBytes, _sheetTag))
+            foreach (var tag in Tags(wbBytes, "<sheet "u8))
             {
-                var rid = Decode(XlsxXml.Attr(tag, " r:id=\""u8));
+                var rid = XlsxXml.DecodeToString(XlsxXml.Attr(tag, " r:id=\""u8));
                 if (rels.TryGetValue(rid, out var target))
                 {
-                    var name = Decode(XlsxXml.Attr(tag, " name=\""u8));
-                    sheets.Add((name, NormalizePart(target)));
+                    var name = XlsxXml.DecodeToString(XlsxXml.Attr(tag, " name=\""u8));
+                    sheets.Add((name, XlsxXml.NormalizePart(target)));
                 }
             }
             return [.. sheets];
-        }
-
-        private static string NormalizePart(ReadOnlySpan<char> target)
-        {
-            if (target.Length > 0 && target[0] == '/')
-            {
-                return new string(target[1..]);
-            }
-            if (target.StartsWith("xl/"))
-            {
-                return new string(target);
-            }
-            return $"xl/{target}";
         }
 
         // Returns true when xl/workbook.xml contains <workbookPr date1904="1"> (the Mac epoch).
@@ -177,30 +147,6 @@ namespace ExcelReader.Core.Reader
                 Array.Resize(ref offsets, offsets.Length * 2);
             }
             offsets[count++] = value;
-        }
-
-        private static string Decode(ReadOnlySpan<byte> src)
-        {
-            if (src.IsEmpty)
-            {
-                return string.Empty;
-            }
-            if (src.Length <= 256)
-            {
-                Span<byte> dest = stackalloc byte[src.Length];
-                int w = XlsxXml.Decode(src, dest);
-                return Encoding.UTF8.GetString(dest[..w]);
-            }
-            var destBuffer = ArrayPool<byte>.Shared.Rent(src.Length);
-            try
-            {
-                int w = XlsxXml.Decode(src, destBuffer);
-                return Encoding.UTF8.GetString(destBuffer.AsSpan(0, w));
-            }
-            finally
-            {
-                ArrayPool<byte>.Shared.Return(destBuffer);
-            }
         }
 
         private static int IdxOf(ReadOnlySpan<byte> s, int from, ReadOnlySpan<byte> seq)

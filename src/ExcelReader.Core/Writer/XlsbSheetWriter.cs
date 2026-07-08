@@ -73,7 +73,7 @@ namespace ExcelReader.Core.Writer
         public ValueTask<XlsbRowWriter> StartRowAsync(CancellationToken ct = default)
         {
             BeginRow();
-            return ValueTask.FromResult(new XlsbRowWriter(this, _date1904));
+            return ValueTask.FromResult(new XlsbRowWriter(this));
         }
 
         public void WriteRow(ReadOnlySpan<XlsbCell> values)
@@ -296,7 +296,9 @@ namespace ExcelReader.Core.Writer
             }
         }
 
-        private void WriteStringCell(int columnIndex, string? value)
+        // internal: shared with XlsbRowWriter, whose per-cell Write(...) overloads delegate here so
+        // the streaming and batch (WriteRow) paths emit BIFF12 cell records through one place.
+        internal void WriteStringCell(int columnIndex, string? value)
         {
             if (value is null)
             {
@@ -314,7 +316,7 @@ namespace ExcelReader.Core.Writer
             WriteRecord(Brt.CellSt, Payload.Span);
         }
 
-        private void WriteBoolCell(int columnIndex, bool value)
+        internal void WriteBoolCell(int columnIndex, bool value)
         {
             Payload.Reset();
             Biff12RecordWriter.WriteCellHeader(Payload, columnIndex, 0);
@@ -322,16 +324,12 @@ namespace ExcelReader.Core.Writer
             WriteRecord(Brt.CellBool, Payload.Span);
         }
 
-        private void WriteDateSerialCell(int columnIndex, double serial)
+        internal void WriteDateSerialCell(int columnIndex, double serial)
         {
-            if (_date1904)
-            {
-                serial -= 1462.0;
-            }
-            WriteDoubleCell(columnIndex, serial, style: 1);
+            WriteDoubleCell(columnIndex, DateSerial.ForEpoch(serial, _date1904), style: 1);
         }
 
-        private void WriteDoubleCell(int columnIndex, double value, int style)
+        internal void WriteDoubleCell(int columnIndex, double value, int style)
         {
             Payload.Reset();
             Biff12RecordWriter.WriteCellHeader(Payload, columnIndex, style);

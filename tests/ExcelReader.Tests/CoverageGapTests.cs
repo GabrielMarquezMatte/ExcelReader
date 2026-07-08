@@ -462,7 +462,7 @@ namespace ExcelReader.Tests
                 .. B.Record(Brt.RowHdr),
                 .. B.Record(Brt.CellIsst, B.CellIsst(0, 0, 5)),
             ];
-            using XlsbReader.Enumerator e = reader.GetEnumerator(new MemoryStream(sheet));
+            using XlsbReader.Enumerator e = new(reader, new MemoryStream(sheet));
             Assert.True(e.MoveNext());
             Assert.Equal(string.Empty, e.Current[0].GetString());
         }

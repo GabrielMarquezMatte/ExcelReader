@@ -1,6 +1,7 @@
 using System.Buffers;
 using System.Buffers.Binary;
 using System.Diagnostics.CodeAnalysis;
+using static ExcelReader.Core.Reader.Biff12;
 
 namespace ExcelReader.Core.Reader
 {
@@ -15,7 +16,7 @@ namespace ExcelReader.Core.Reader
         private const int EndOfChain = unchecked((int)0xFFFFFFFE);
         private const int FatSector = unchecked((int)0xFFFFFFFD);
         private const int FreeSector = unchecked((int)0xFFFFFFFF);
-        private static ReadOnlySpan<byte> Signature => [0xD0, 0xCF, 0x11, 0xE0, 0xA1, 0xB1, 0x1A, 0xE1];
+        internal static ReadOnlySpan<byte> Signature => [0xD0, 0xCF, 0x11, 0xE0, 0xA1, 0xB1, 0x1A, 0xE1];
 
         internal static WorkbookStream OpenWorkbook(Stream stream, bool leaveOpen)
         {
@@ -374,16 +375,6 @@ namespace ExcelReader.Core.Reader
                 throw new InvalidDataException("Invalid OLE sector offset.");
             }
             return HeaderSize + ((long)sector * sectorSize);
-        }
-
-        private static ushort ReadU16(ReadOnlySpan<byte> src, int offset)
-        {
-            return BinaryPrimitives.ReadUInt16LittleEndian(src.Slice(offset, 2));
-        }
-
-        private static int ReadI32(ReadOnlySpan<byte> src, int offset)
-        {
-            return BinaryPrimitives.ReadInt32LittleEndian(src.Slice(offset, 4));
         }
 
         private readonly record struct DirectoryEntry(string Name, byte ObjectType, int StartSector, long Size);

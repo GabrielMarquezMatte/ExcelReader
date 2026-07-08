@@ -87,8 +87,6 @@ namespace ExcelReader.Core.Parser.Internal
                             return true;
                         case ProjectionStep.Stop:
                             return false;
-                        case ProjectionStep.Skip:
-                            break;
                     }
                 }
                 return false;

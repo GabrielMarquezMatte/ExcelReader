@@ -98,11 +98,7 @@ namespace ExcelReader.Core.Writer
         internal void EmitDate(int row, int col, DateTime value)
         {
             ValidateColumn(col);
-            double serial = value.ToOADate();
-            if (_date1904)
-            {
-                serial -= 1462.0;
-            }
+            double serial = DateSerial.ForEpoch(value.ToOADate(), _date1904);
             BiffRecordWriter.WriteNumber(_cells, row, col, XlsGlobals.DateXf, serial);
             Track(row, col);
         }

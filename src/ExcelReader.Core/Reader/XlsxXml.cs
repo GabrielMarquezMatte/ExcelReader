@@ -1,3 +1,4 @@
+using System.Buffers;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Text;
@@ -196,5 +197,66 @@ namespace ExcelReader.Core.Reader
             return (isNum || isAlpha) ? value : -1;
         }
 
+        // Decode an XML-entity-encoded attribute/text value straight to a string. Small values (the
+        // common case: rIds, sheet names, part paths) use a stack buffer; larger ones use a pooled array.
+        internal static string DecodeToString(ReadOnlySpan<byte> src)
+        {
+            if (src.IsEmpty)
+            {
+                return string.Empty;
+            }
+            if (src.Length <= 256)
+            {
+                Span<byte> dest = stackalloc byte[src.Length];
+                int w = Decode(src, dest);
+                return Encoding.UTF8.GetString(dest[..w]);
+            }
+            byte[] buffer = ArrayPool<byte>.Shared.Rent(src.Length);
+            try
+            {
+                int w = Decode(src, buffer);
+                return Encoding.UTF8.GetString(buffer.AsSpan(0, w));
+            }
+            finally
+            {
+                ArrayPool<byte>.Shared.Return(buffer);
+            }
+        }
+
+        // "/xl/worksheets/sheet1.xml" -> "xl/worksheets/sheet1.xml"; a bare "worksheets/sheet1.xml"
+        // gets the "xl/" prefix that OPC part paths in workbook rels are always relative to.
+        internal static string NormalizePart(ReadOnlySpan<char> target)
+        {
+            if (target.Length > 0 && target[0] == '/')
+            {
+                return new string(target[1..]);
+            }
+            if (target.StartsWith("xl/"))
+            {
+                return new string(target);
+            }
+            return $"xl/{target}";
+        }
+
+        // Parses a `.rels` part (a list of <Relationship Id="rIdN" Target="..."/> elements) into an
+        // rId -> target-part-path lookup. Shared by the XLSX and XLSB loaders — both use the same OPC
+        // relationships schema.
+        internal static Dictionary<string, string> ParseRelationships(ReadOnlySpan<byte> relsBytes)
+        {
+            Dictionary<string, string> rels = new(StringComparer.Ordinal);
+            if (relsBytes.IsEmpty)
+            {
+                return rels;
+            }
+            foreach (ReadOnlySpan<byte> tag in new TagSpanEnumerable(relsBytes, "<Relationship"u8))
+            {
+                string id = DecodeToString(Attr(tag, " Id=\""u8));
+                if (id.Length > 0)
+                {
+                    rels[id] = DecodeToString(Attr(tag, " Target=\""u8));
+                }
+            }
+            return rels;
+        }
     }
 }

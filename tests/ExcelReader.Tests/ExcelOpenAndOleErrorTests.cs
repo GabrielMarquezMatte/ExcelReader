@@ -1,5 +1,7 @@
 using System.Diagnostics.CodeAnalysis;
+using ExcelReader.Core.Enums;
 using ExcelReader.Core.Reader;
+using ExcelReader.Core.Writer;
 
 namespace ExcelReader.Tests
 {
@@ -138,6 +140,131 @@ namespace ExcelReader.Tests
             {
                 File.Delete(path); // succeeds only if Open released its FileStream handle
             }
+        }
+
+        // --- Excel.DetectFileFormat / DetectFileFormatAsync ---
+
+        [Fact]
+        public void DetectFileFormatIdentifiesXlsx()
+        {
+            using MemoryStream ms = WorkbookBuilder.Build("""<row r="1"><c r="A1"><v>1</v></c></row>""");
+            Assert.Equal(ExcelFileFormat.Xlsx, Excel.DetectFileFormat(ms));
+        }
+
+        [Fact]
+        public void DetectFileFormatIdentifiesXls()
+        {
+            using MemoryStream ms = XlsWorkbookBuilder.Build(sheets: [("S1", [["A"]])]);
+            Assert.Equal(ExcelFileFormat.Xls, Excel.DetectFileFormat(ms));
+        }
+
+        [Fact]
+        public async Task DetectFileFormatIdentifiesXlsb()
+        {
+            using MemoryStream ms = await BuildXlsbAsync();
+            Assert.Equal(ExcelFileFormat.Xlsb, Excel.DetectFileFormat(ms));
+        }
+
+        [Fact]
+        public void DetectFileFormatReturnsUnknownForUnrecognizedSignature()
+        {
+            using MemoryStream ms = new([0x25, 0x50, 0x44, 0x46, 0x2D]); // "%PDF-"
+            Assert.Equal(ExcelFileFormat.Unknown, Excel.DetectFileFormat(ms));
+        }
+
+        [Fact]
+        public void DetectFileFormatReturnsUnknownForEmptyStream()
+        {
+            using MemoryStream ms = new();
+            Assert.Equal(ExcelFileFormat.Unknown, Excel.DetectFileFormat(ms));
+        }
+
+        [Fact]
+        public void DetectFileFormatThrowsOnNullStream()
+        {
+            Assert.Throws<ArgumentNullException>(() => Excel.DetectFileFormat(null!));
+        }
+
+        [Fact]
+        public void DetectFileFormatThrowsOnNonSeekableStream()
+        {
+            using MemoryStream xlsx = WorkbookBuilder.Build("""<row r="1"><c r="A1"><v>1</v></c></row>""");
+            using NonSeekableStream stream = new(xlsx.ToArray());
+            Assert.Throws<ArgumentException>(() => Excel.DetectFileFormat(stream));
+        }
+
+        [Fact]
+        public void DetectFileFormatLeavesStreamPositionUnchanged()
+        {
+            using MemoryStream ms = WorkbookBuilder.Build("""<row r="1"><c r="A1"><v>1</v></c></row>""");
+            ms.Position = 0;
+            long before = ms.Position;
+
+            Assert.Equal(ExcelFileFormat.Xlsx, Excel.DetectFileFormat(ms));
+            Assert.Equal(before, ms.Position);
+
+            // The stream must still be readable from the same position afterward.
+            using var reader = Excel.Open(ms, leaveOpen: true);
+            Assert.IsType<XlsxReader>(reader);
+        }
+
+        [Fact]
+        public async Task DetectFileFormatAsyncIdentifiesXlsx()
+        {
+            await using MemoryStream ms = WorkbookBuilder.Build("""<row r="1"><c r="A1"><v>1</v></c></row>""");
+            ExcelFileFormat format = await Excel.DetectFileFormatAsync(ms, TestContext.Current.CancellationToken);
+            Assert.Equal(ExcelFileFormat.Xlsx, format);
+        }
+
+        [Fact]
+        public async Task DetectFileFormatAsyncIdentifiesXls()
+        {
+            await using MemoryStream ms = XlsWorkbookBuilder.Build(sheets: [("S1", [["A"]])]);
+            ExcelFileFormat format = await Excel.DetectFileFormatAsync(ms, TestContext.Current.CancellationToken);
+            Assert.Equal(ExcelFileFormat.Xls, format);
+        }
+
+        [Fact]
+        public async Task DetectFileFormatAsyncIdentifiesXlsb()
+        {
+            await using MemoryStream ms = await BuildXlsbAsync();
+            ExcelFileFormat format = await Excel.DetectFileFormatAsync(ms, TestContext.Current.CancellationToken);
+            Assert.Equal(ExcelFileFormat.Xlsb, format);
+        }
+
+        [Fact]
+        public async Task DetectFileFormatAsyncReturnsUnknownForUnrecognizedSignature()
+        {
+            await using MemoryStream ms = new([0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07]);
+            ExcelFileFormat format = await Excel.DetectFileFormatAsync(ms, TestContext.Current.CancellationToken);
+            Assert.Equal(ExcelFileFormat.Unknown, format);
+        }
+
+        [Fact]
+        public Task DetectFileFormatAsyncThrowsOnNullStream()
+        {
+            return Assert.ThrowsAsync<ArgumentNullException>(() =>
+                Excel.DetectFileFormatAsync(null!, TestContext.Current.CancellationToken).AsTask());
+        }
+
+        private static async Task<MemoryStream> BuildXlsbAsync()
+        {
+            CancellationToken ct = TestContext.Current.CancellationToken;
+            MemoryStream ms = new();
+            await using (XlsbWorkbookWriter wb = await XlsbWorkbookWriter.CreateAsync(ms, leaveOpen: true, ct: ct))
+            {
+                await wb.StartAsync(ct);
+                XlsbSheetWriter sheet = wb.AddSheet("S1");
+                await sheet.StartAsync(ct);
+                await using (XlsbRowWriter row = await sheet.StartRowAsync(ct))
+                {
+                    row.Write("A");
+                }
+                await sheet.EndAsync(ct);
+                await wb.EndAsync(ct);
+            }
+            ms.Position = 0;
+            return ms;
         }
 
         // --- OLE/CFB guard rails (XlsCompoundFile), reached via Excel.FromXls ---

@@ -1,4 +1,6 @@
 using System.Buffers;
+using System.Runtime.InteropServices;
+using System.Text;
 
 namespace ExcelReader.Core.Reader
 {
@@ -26,75 +28,28 @@ namespace ExcelReader.Core.Reader
             }
         }
 
+        // BIFF8 string: bit 0 of `flags` selects compressed (1 byte/char, CP1252) vs wide (UTF-16LE).
         private static int DecodeStringToUtf8(ReadOnlySpan<byte> src, int charCount, byte flags, Span<byte> dest)
         {
-            int written = 0;
             if ((flags & 1) == 0)
             {
-                foreach (ref readonly var ch in src[..charCount])
+                int written = 0;
+                foreach (ref readonly var b in src[..charCount])
                 {
-                    written += WriteUtf8(DecodeCp1252(ch), dest[written..]);
+                    written += new Rune(DecodeCp1252(b)).EncodeToUtf8(dest[written..]);
                 }
                 return written;
             }
 
-            for (int i = 0; i < charCount; i++)
-            {
-                int cp = src[i * 2] | (src[(i * 2) + 1] << 8);
-                // Combine a high+low surrogate pair into one scalar so it emits 4-byte UTF-8 rather than
-                // two 3-byte sequences (CESU-8, invalid UTF-8) — matters for astral chars like emoji.
-                if (cp is not >= 0xD800 or not <= 0xDBFF || i + 1 >= charCount)
-                {
-                    written += WriteUtf8(cp, dest[written..]);
-                    continue;
-                }
-                int lo = src[(i + 1) * 2] | (src[((i + 1) * 2) + 1] << 8);
-                if (lo is >= 0xDC00 and <= 0xDFFF)
-                {
-                    cp = 0x10000 + ((cp - 0xD800) << 10) + (lo - 0xDC00);
-                    i++;
-                }
-                written += WriteUtf8(cp, dest[written..]);
-            }
-            return written;
+            // UTF-16LE code units read directly as chars; Encoding.UTF8.GetBytes combines surrogate
+            // pairs into 4-byte sequences and replaces any lone surrogate with U+FFFD — matters for
+            // astral chars (e.g. emoji) split across a CONTINUE boundary.
+            return Encoding.UTF8.GetBytes(MemoryMarshal.Cast<byte, char>(src[..(charCount * 2)]), dest);
         }
 
         private static char DecodeCp1252(byte value)
         {
             return value is >= 0x80 and <= 0x9F ? _cp1252[value - 0x80] : (char)value;
-        }
-
-        // Encodes one Unicode scalar as UTF-8 (1–4 bytes). A lone surrogate becomes U+FFFD so the
-        // output is always valid UTF-8. CP1252 decoding only ever yields BMP scalars.
-        private static int WriteUtf8(int cp, Span<byte> dest)
-        {
-            if (cp <= 0x7F)
-            {
-                dest[0] = (byte)cp;
-                return 1;
-            }
-            if (cp <= 0x7FF)
-            {
-                dest[0] = (byte)(0xC0 | (cp >> 6));
-                dest[1] = (byte)(0x80 | (cp & 0x3F));
-                return 2;
-            }
-            if (cp <= 0xFFFF)
-            {
-                if (cp is >= 0xD800 and <= 0xDFFF)
-                {
-                    cp = 0xFFFD;
-                }
-                dest[0] = (byte)(0xE0 | (cp >> 12));
-                dest[1] = (byte)(0x80 | ((cp >> 6) & 0x3F));
-                dest[2] = (byte)(0x80 | (cp & 0x3F));
-                return 3;
-            }
-            dest[0] = (byte)(0xF0 | (cp >> 18));
-            dest[1] = (byte)(0x80 | ((cp >> 12) & 0x3F));
-            dest[2] = (byte)(0x80 | ((cp >> 6) & 0x3F));
-            dest[3] = (byte)(0x80 | (cp & 0x3F));
-            return 4;
         }
     }
 }

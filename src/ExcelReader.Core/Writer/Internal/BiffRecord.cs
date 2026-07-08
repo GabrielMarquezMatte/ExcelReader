@@ -15,7 +15,6 @@ namespace ExcelReader.Core.Writer.Internal
         internal const int Dsf = 0x0161;
         internal const int Date1904 = 0x0022;
         internal const int Font = 0x0031;
-        internal const int Format = 0x041E;
         internal const int Xf = 0x00E0;
         internal const int Style = 0x0293;
         internal const int BoundSheet = 0x0085;
@@ -32,8 +31,6 @@ namespace ExcelReader.Core.Writer.Internal
         internal const int Number = 0x0203;
         internal const int Label = 0x0204;
         internal const int BoolErr = 0x0205;
-        internal const int Blank = 0x0201;
-        internal const int Continue = 0x003C;
 
         internal const int Biff8Version = 0x0600;
         internal const int SubstreamGlobals = 0x0005;

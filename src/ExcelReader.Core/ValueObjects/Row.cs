@@ -19,7 +19,7 @@ namespace ExcelReader.Core.ValueObjects
         public int ColumnCount => _cells.IsEmpty ? 0 : _cells[^1].Column + 1;
 
         // Populated cells only, in ascending column order. Skips gaps instead of binary-searching them.
-        public RowCells Cells => new(_cells, _rowValues, _shared);
+        public RowCellEnumerator Cells => new(_cells, _rowValues, _shared);
 
         public Cell this[int column]
         {
