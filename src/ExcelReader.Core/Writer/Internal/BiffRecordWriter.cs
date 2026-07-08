@@ -205,10 +205,36 @@ namespace ExcelReader.Core.Writer.Internal
 
         internal static void WriteLabel(BiffBuffer buffer, int row, int col, int xf, ReadOnlySpan<char> value)
         {
-            int len = buffer.BeginRecord(BiffRecord.Label);
+            bool compressed = BiffStringEncoder.CanCompress(value);
+            int charBytes = compressed ? value.Length : value.Length * 2;
+            if (9 + charBytes <= BiffRecord.MaxPayload)
+            {
+                int len = buffer.BeginRecord(BiffRecord.Label);
+                WriteCellHeader(buffer, row, col, xf);
+                buffer.WriteU16(value.Length);
+                buffer.WriteByte((byte)(compressed ? 0 : 1));
+                BiffStringEncoder.WriteChars(buffer, value, compressed);
+                buffer.EndRecord(len);
+                return;
+            }
+            int firstChars = compressed ? 8215 : 4107;
+            int lenSplit = buffer.BeginRecord(BiffRecord.Label);
             WriteCellHeader(buffer, row, col, xf);
-            BiffStringEncoder.WriteLong(buffer, value);
-            buffer.EndRecord(len);
+            buffer.WriteU16(value.Length);
+            buffer.WriteByte((byte)(compressed ? 0 : 1));
+            BiffStringEncoder.WriteChars(buffer, value[..firstChars], compressed);
+            buffer.EndRecord(lenSplit);
+            int offset = firstChars;
+            int maxContChars = compressed ? 8223 : 4111;
+            while (offset < value.Length)
+            {
+                int take = Math.Min(maxContChars, value.Length - offset);
+                int contLen = buffer.BeginRecord(0x003C); // CONTINUE record
+                buffer.WriteByte((byte)(compressed ? 0 : 1));
+                BiffStringEncoder.WriteChars(buffer, value.Slice(offset, take), compressed);
+                buffer.EndRecord(contLen);
+                offset += take;
+            }
         }
 
         internal static void WriteBool(BiffBuffer buffer, int row, int col, int xf, bool value)
