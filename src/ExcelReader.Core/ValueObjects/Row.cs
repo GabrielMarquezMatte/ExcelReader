@@ -30,9 +30,7 @@ namespace ExcelReader.Core.ValueObjects
                 {
                     return new Cell(CellType.Empty, default);
                 }
-                ref readonly var d = ref _cells[i];
-                var buf = d.FromShared ? _shared : _rowValues;
-                return new Cell(d.Type, buf.Slice(d.Start, d.Length), d.Number, d.HasNumber, d.Style);
+                return _cells[i].ToCell(_rowValues, _shared);
             }
         }
 

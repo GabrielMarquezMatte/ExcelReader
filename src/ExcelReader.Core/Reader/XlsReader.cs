@@ -105,8 +105,7 @@ namespace ExcelReader.Core.Reader
 
         public ValueTask<Enumerator> GetAsyncEnumeratorAsync(CancellationToken ct = default)
         {
-            ct.ThrowIfCancellationRequested();
-            return new ValueTask<Enumerator>(new Enumerator(this, _sheets[_current].Offset, ct));
+            return new ValueTask<Enumerator>(GetAsyncEnumerator(ct));
         }
 
         ValueTask<IExcelRowEnumerator> IExcelRowReader<IExcelRowEnumerator>.GetAsyncEnumeratorAsync(CancellationToken ct)
@@ -183,9 +182,7 @@ namespace ExcelReader.Core.Reader
                         if (data.Length >= 4)
                         {
                             int formatIndex = ReadU16(data, 2);
-                            styleFlags.Add(customFormats.TryGetValue(formatIndex, out bool custom)
-                                ? custom
-                                : NumberFormat.IsBuiltinDate(formatIndex));
+                            styleFlags.Add(WorkbookLookups.ResolveDateFlag(customFormats, formatIndex));
                         }
                         break;
                     case Rec.FilePass:

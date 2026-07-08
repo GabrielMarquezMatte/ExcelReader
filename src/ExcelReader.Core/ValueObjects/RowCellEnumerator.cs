@@ -22,8 +22,7 @@ namespace ExcelReader.Core.ValueObjects
             get
             {
                 ref readonly var d = ref _cells[_index];
-                var buf = d.FromShared ? _shared : _rowValues;
-                return new RowCell(d.Column, new Cell(d.Type, buf.Slice(d.Start, d.Length), d.Number, d.HasNumber, d.Style));
+                return new RowCell(d.Column, d.ToCell(_rowValues, _shared));
             }
         }
         public bool MoveNext()

@@ -18,5 +18,11 @@ namespace ExcelReader.Core.ValueObjects
         // point at the formatted text, so Value/GetString stay byte-identical.
         public double Number { get; init; }
         public bool HasNumber { get; init; }
+
+        internal Cell ToCell(ReadOnlySpan<byte> rowValues, ReadOnlySpan<byte> shared)
+        {
+            var buf = FromShared ? shared : rowValues;
+            return new Cell(Type, buf.Slice(Start, Length), Number, HasNumber, Style);
+        }
     }
 }

@@ -50,9 +50,7 @@ namespace ExcelReader.Core.Parser.Internal
             Justification = "Async enumerator requires a class to host the async state machine.")]
         IAsyncEnumerator<T> IAsyncEnumerable<T>.GetAsyncEnumerator(CancellationToken cancellationToken)
         {
-            TypeMapInfo<T> info = TypeMapper<T>.GetCsvInfo();
-            CancellationToken effective = cancellationToken.CanBeCanceled ? cancellationToken : _ct;
-            return new AsyncEnumerator(_reader, info, _config.ColumnNameComparer, _config.HeaderNormalization, _config.HeaderRow, _config.Culture, effective);
+            return GetAsyncEnumerator(cancellationToken);
         }
 
         public AsyncEnumerator GetAsyncEnumerator(CancellationToken cancellationToken = default)
@@ -287,7 +285,10 @@ namespace ExcelReader.Core.Parser.Internal
                     continue;
                 }
                 Cell cell = rows.FieldAt(i);
-                parser(ref model, in cell, false, _provider);
+                if (cell.Type != CellType.Empty)
+                {
+                    parser(ref model, in cell, false, _provider);
+                }
             }
 
             foreach ((int field, string name) in _requiredFields)

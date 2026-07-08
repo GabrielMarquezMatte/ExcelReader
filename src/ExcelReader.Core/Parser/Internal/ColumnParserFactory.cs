@@ -187,10 +187,6 @@ namespace ExcelReader.Core.Parser.Internal
             RefAction<T, string> setter = CompileSetter<T, string>(prop);
             return (ref model, in cell, _, _) =>
             {
-                if (cell.Type == CellType.Empty)
-                {
-                    return true;
-                }
                 setter(ref model, cell.GetString());
                 return true;
             };
@@ -201,10 +197,6 @@ namespace ExcelReader.Core.Parser.Internal
             RefAction<T, bool> setter = CompileSetter<T, bool>(prop);
             return (ref model, in cell, _, _) =>
             {
-                if (cell.Type == CellType.Empty)
-                {
-                    return true;
-                }
                 setter(ref model, IsTruthy(in cell));
                 return true;
             };
@@ -215,10 +207,6 @@ namespace ExcelReader.Core.Parser.Internal
             RefAction<T, DateTime> setter = CompileSetter<T, DateTime>(prop);
             return (ref model, in cell, isDate1904, _) =>
             {
-                if (cell.Type == CellType.Empty)
-                {
-                    return true;
-                }
                 if (!cell.TryGetDateTime(isDate1904, out DateTime dt))
                 {
                     return false;
@@ -233,10 +221,6 @@ namespace ExcelReader.Core.Parser.Internal
             RefAction<T, DateOnly> setter = CompileSetter<T, DateOnly>(prop);
             return (ref model, in cell, isDate1904, _) =>
             {
-                if (cell.Type == CellType.Empty)
-                {
-                    return true;
-                }
                 if (!cell.TryGetDateTime(isDate1904, out DateTime dt))
                 {
                     return false;
@@ -251,10 +235,6 @@ namespace ExcelReader.Core.Parser.Internal
             RefAction<T, TimeOnly> setter = CompileSetter<T, TimeOnly>(prop);
             return (ref model, in cell, _, _) =>
             {
-                if (cell.Type == CellType.Empty)
-                {
-                    return true;
-                }
                 // TryGetDouble reads the binary double (XLS/XLSB) or parses the text invariantly (XLSX),
                 // matching how the serial is written; a culture-aware parse would misread "0.5" cells.
                 if (!cell.TryGetDouble(out double serial))
@@ -271,10 +251,6 @@ namespace ExcelReader.Core.Parser.Internal
             RefAction<T, TimeOnly?> setter = CompileSetter<T, TimeOnly?>(prop);
             return (ref model, in cell, _, _) =>
             {
-                if (cell.Type == CellType.Empty)
-                {
-                    return true;
-                }
                 // TryGetDouble reads the binary double (XLS/XLSB) or parses the text invariantly (XLSX),
                 // matching how the serial is written; a culture-aware parse would misread "0.5" cells.
                 if (!cell.TryGetDouble(out double serial))
@@ -303,10 +279,6 @@ namespace ExcelReader.Core.Parser.Internal
             RefAction<T, DateTime> setter = CompileSetter<T, DateTime>(prop);
             return (ref model, in cell, _, provider) =>
             {
-                if (cell.Type == CellType.Empty)
-                {
-                    return true;
-                }
                 if (!TryParseDateTimeText(in cell, provider, out DateTime dt))
                 {
                     return false;
@@ -321,10 +293,6 @@ namespace ExcelReader.Core.Parser.Internal
             RefAction<T, DateTime?> setter = CompileSetter<T, DateTime?>(prop);
             return (ref model, in cell, _, provider) =>
             {
-                if (cell.Type == CellType.Empty)
-                {
-                    return true;
-                }
                 if (!TryParseDateTimeText(in cell, provider, out DateTime dt))
                 {
                     return false;
@@ -339,10 +307,6 @@ namespace ExcelReader.Core.Parser.Internal
             RefAction<T, DateOnly> setter = CompileSetter<T, DateOnly>(prop);
             return (ref model, in cell, _, provider) =>
             {
-                if (cell.Type == CellType.Empty)
-                {
-                    return true;
-                }
                 if (!TryParseDateOnlyText(in cell, provider, out DateOnly d))
                 {
                     return false;
@@ -357,10 +321,6 @@ namespace ExcelReader.Core.Parser.Internal
             RefAction<T, DateOnly?> setter = CompileSetter<T, DateOnly?>(prop);
             return (ref model, in cell, _, provider) =>
             {
-                if (cell.Type == CellType.Empty)
-                {
-                    return true;
-                }
                 if (!TryParseDateOnlyText(in cell, provider, out DateOnly d))
                 {
                     return false;
@@ -414,10 +374,6 @@ namespace ExcelReader.Core.Parser.Internal
             RefAction<T, TProp> setter = CompileSetter<T, TProp>(prop);
             return (ref model, in cell, _, provider) =>
             {
-                if (cell.Type == CellType.Empty)
-                {
-                    return true;
-                }
                 if (!cell.TryParse<TProp>(provider, out var value))
                 {
                     return false;
@@ -432,10 +388,6 @@ namespace ExcelReader.Core.Parser.Internal
             RefAction<T, bool?> setter = CompileSetter<T, bool?>(prop);
             return (ref model, in cell, _, _) =>
             {
-                if (cell.Type == CellType.Empty)
-                {
-                    return true;
-                }
                 setter(ref model, IsTruthy(in cell));
                 return true;
             };
@@ -446,10 +398,6 @@ namespace ExcelReader.Core.Parser.Internal
             RefAction<T, DateTime?> setter = CompileSetter<T, DateTime?>(prop);
             return (ref model, in cell, isDate1904, _) =>
             {
-                if (cell.Type == CellType.Empty)
-                {
-                    return true;
-                }
                 if (!cell.TryGetDateTime(isDate1904, out DateTime dt))
                 {
                     return false;
@@ -464,10 +412,6 @@ namespace ExcelReader.Core.Parser.Internal
             RefAction<T, DateOnly?> setter = CompileSetter<T, DateOnly?>(prop);
             return (ref model, in cell, isDate1904, _) =>
             {
-                if (cell.Type == CellType.Empty)
-                {
-                    return true;
-                }
                 if (!cell.TryGetDateTime(isDate1904, out DateTime dt))
                 {
                     return false;
@@ -485,10 +429,6 @@ namespace ExcelReader.Core.Parser.Internal
             RefAction<T, TProp?> setter = CompileSetter<T, TProp?>(prop);
             return (ref model, in cell, _, provider) =>
             {
-                if (cell.Type == CellType.Empty)
-                {
-                    return true;
-                }
                 if (!cell.TryParse(provider, out TProp parsed))
                 {
                     return false;
@@ -507,10 +447,6 @@ namespace ExcelReader.Core.Parser.Internal
             RefAction<T, Guid> setter = CompileSetter<T, Guid>(prop);
             return (ref model, in cell, _, _) =>
             {
-                if (cell.Type == CellType.Empty)
-                {
-                    return true;
-                }
                 if (!Guid.TryParse(cell.GetString(), out Guid value))
                 {
                     return false;
@@ -525,10 +461,6 @@ namespace ExcelReader.Core.Parser.Internal
             RefAction<T, Guid?> setter = CompileSetter<T, Guid?>(prop);
             return (ref model, in cell, _, _) =>
             {
-                if (cell.Type == CellType.Empty)
-                {
-                    return true;
-                }
                 if (!Guid.TryParse(cell.GetString(), out Guid value))
                 {
                     return false;
@@ -598,10 +530,6 @@ namespace ExcelReader.Core.Parser.Internal
             RefAction<T, TEnum> setter = CompileSetter<T, TEnum>(prop);
             return (ref model, in cell, _, _) =>
             {
-                if (cell.Type == CellType.Empty)
-                {
-                    return true;
-                }
                 if (!EnumCache<TEnum>.TryParse(in cell, out TEnum value))
                 {
                     return false;
@@ -617,10 +545,6 @@ namespace ExcelReader.Core.Parser.Internal
             RefAction<T, TEnum?> setter = CompileSetter<T, TEnum?>(prop);
             return (ref model, in cell, _, _) =>
             {
-                if (cell.Type == CellType.Empty)
-                {
-                    return true;
-                }
                 if (!EnumCache<TEnum>.TryParse(in cell, out TEnum parsed))
                 {
                     return false;
@@ -630,18 +554,14 @@ namespace ExcelReader.Core.Parser.Internal
             };
         }
 
-        // Empty cells are short-circuited here (keep default), matching every built-in parser, so the
-        // converter only ever sees a populated cell.
+        // Callers (RowProjector/CsvRowProjector) skip invoking any ColumnParser for an empty cell, so
+        // the converter only ever sees a populated one.
         private static ColumnParser<T> BuildConverterCore<T, TProp>(PropertyInfo prop, object converter)
         {
             var typed = (IExcelCellConverter<TProp>)converter;
             RefAction<T, TProp> setter = CompileSetter<T, TProp>(prop);
             return (ref model, in cell, isDate1904, provider) =>
             {
-                if (cell.Type == CellType.Empty)
-                {
-                    return true;
-                }
                 if (!typed.TryConvert(in cell, isDate1904, provider, out TProp value))
                 {
                     return false;
