@@ -1,4 +1,4 @@
-using System.Diagnostics.CodeAnalysis;
+using System.Buffers;
 using System.IO.Compression;
 using System.Text;
 
@@ -11,9 +11,23 @@ namespace ExcelReader.Core.Writer.Internal
     {
         private static readonly UTF8Encoding Utf8NoBom = new(encoderShouldEmitUTF8Identifier: false);
 
-        [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP001:Dispose created",
-            Justification = "Stream is disposed indirectly by StreamWriter with leaveOpen: false.")]
         internal static async ValueTask WriteTextAsync(ZipArchive zip, string entryName, string content, CompressionLevel compression, CancellationToken ct)
+        {
+            // The caller already holds the full content as one string, so encode it in a single pass
+            // instead of routing it through StreamWriter's small internal buffer.
+            byte[] rented = ArrayPool<byte>.Shared.Rent(Utf8NoBom.GetByteCount(content));
+            try
+            {
+                int written = Utf8NoBom.GetBytes(content, rented);
+                await WriteBytesAsync(zip, entryName, rented.AsMemory(0, written), compression, ct).ConfigureAwait(false);
+            }
+            finally
+            {
+                ArrayPool<byte>.Shared.Return(rented);
+            }
+        }
+
+        internal static async ValueTask WriteBytesAsync(ZipArchive zip, string entryName, ReadOnlyMemory<byte> content, CompressionLevel compression, CancellationToken ct)
         {
             ZipArchiveEntry entry = zip.CreateEntry(entryName, compression);
 #if NET10_0_OR_GREATER
@@ -22,11 +36,9 @@ namespace ExcelReader.Core.Writer.Internal
             ct.ThrowIfCancellationRequested();
             Stream stream = entry.Open();
 #endif
-            StreamWriter writer = new(stream, Utf8NoBom, leaveOpen: false);
-            await using (writer.ConfigureAwait(false))
+            await using (stream.ConfigureAwait(false))
             {
-                await writer.WriteAsync(content).ConfigureAwait(false);
-                await writer.FlushAsync(ct).ConfigureAwait(false);
+                await stream.WriteAsync(content, ct).ConfigureAwait(false);
             }
         }
 
