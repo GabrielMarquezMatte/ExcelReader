@@ -7,12 +7,13 @@ namespace ExcelReader.Core.Reader
     public sealed partial class CsvReader
     {
         // Forward-only record scanner over a pooled buffer, structured like XlsxReader.Enumerator:
-        // a single moving cursor (_pos) into _buf, refilled/compacted via BufferedStreamCursor, with
-        // every field's bytes (unescaped as needed) copied into CellAccumulator's persistent value
-        // buffer so that Current stays valid across the buffer compaction that the next MoveNext may trigger.
-        // Records are parsed from buffered bytes only (TryParseRecordFromBuffer, no stream I/O)
-        // when a record is only partially buffered the parse restarts after a refill, so sync and
-        // async share one parser and the async path awaits once per refill, not per field.
+        // a single moving cursor (_pos) into _buf, refilled/compacted via BufferedStreamCursor. Most
+        // fields (unquoted, or quoted without a doubled "") are already contiguous bytes in _buf, so
+        // cells reference that buffer directly with no copy; only fields needing unescaping fall back
+        // to CellAccumulator's value buffer, whose contents stay valid across the compaction that the
+        // next MoveNext may trigger. Records are parsed from buffered bytes only (TryParseRecordFromBuffer,
+        // no stream I/O); when a record is only partially buffered the parse restarts after a refill, so
+        // sync and async share one parser and the async path awaits once per refill, not per field.
         [SuppressMessage("Design", "CA1034:Nested types should not be visible",
             Justification = "Public nested enumerator is the standard foreach pattern.")]
         public sealed class Enumerator : IExcelRowEnumerator
@@ -39,6 +40,14 @@ namespace ExcelReader.Core.Reader
             private readonly CellAccumulator _acc; // per-record decoded values + cell descriptors
             private int _col;
 
+            // Current field's bytes, built incrementally as either a single contiguous run in _buf
+            // (the common case — zero-copy) or, once a discontiguous append is needed (a doubled ""
+            // quote, or bytes trailing a closing quote), materialized into _acc's value buffer instead.
+            private int _fBufStart;
+            private int _fBufLen;
+            private bool _fMaterialized;
+            private int _fMatStart;
+
             internal Enumerator(Stream stream, CsvReaderOptions options, CancellationToken ct = default)
             {
                 _stream = stream;
@@ -50,7 +59,11 @@ namespace ExcelReader.Core.Reader
                 _acc = new CellAccumulator(options.MaxCellBytes, nameof(CsvReaderOptions.MaxCellBytes));
             }
 
-            public Row Current => new(_acc.CellSpan, _acc.ValueSpan, default);
+            // Cells point either into _buf (the common, zero-copy case: unquoted or plain-quoted
+            // fields are already contiguous bytes read straight from the stream) or into _acc's value
+            // buffer (only for fields needing unescaping, e.g. a doubled "" quote, or malformed
+            // trailing bytes after a closing quote) — see CellDesc.FromShared / ToCell.
+            public Row Current => new(_acc.CellSpan, _buf.AsSpan(0, _len), _acc.ValueSpan);
 
             // Dense field access for CsvEnumerable<T>: CSV cells are stored contiguously in column
             // order (no gaps), so field i is _acc.CellSpan[i] — O(1), skipping Row's binary search and
@@ -60,7 +73,8 @@ namespace ExcelReader.Core.Reader
             internal Cell FieldAt(int index)
             {
                 CellDesc d = _acc.CellSpan[index];
-                return new Cell(d.Type, _acc.ValueSpan.Slice(d.Start, d.Length));
+                ReadOnlySpan<byte> buf = d.FromShared ? _acc.ValueSpan : _buf.AsSpan(0, _len);
+                return new Cell(d.Type, buf.Slice(d.Start, d.Length));
             }
 
             public bool MoveNext()
@@ -128,7 +142,7 @@ namespace ExcelReader.Core.Reader
             {
                 while (true)
                 {
-                    int valStart = _acc.ValueLength;
+                    FieldBegin();
                     if (_pos < _len && _buf[_pos] == _quote)
                     {
                         _pos++;
@@ -142,7 +156,7 @@ namespace ExcelReader.Core.Reader
                     {
                         return false;
                     }
-                    AddCell(valStart, _acc.ValueLength - valStart);
+                    CommitField();
                     if (term == RecordEnd)
                     {
                         return true;
@@ -165,7 +179,7 @@ namespace ExcelReader.Core.Reader
                         {
                             return false;
                         }
-                        AppendToVals(_buf.AsSpan(_pos, _len - _pos));
+                        FieldAppendBufRun(_pos, _len - _pos);
                         _pos = _len;
                         return true; // unterminated quoted field at EOF
                     }
@@ -174,10 +188,10 @@ namespace ExcelReader.Core.Reader
                     {
                         return false; // can't distinguish a closing quote from "" yet
                     }
-                    AppendToVals(_buf.AsSpan(_pos, q - _pos));
+                    FieldAppendBufRun(_pos, q - _pos);
                     if (q + 1 < _len && _buf[q + 1] == _quote)
                     {
-                        AppendByteToVals(_quote);
+                        FieldAppendLiteralByte(_quote);
                         _pos = q + 2;
                         continue;
                     }
@@ -197,7 +211,7 @@ namespace ExcelReader.Core.Reader
                     {
                         return NeedMore;
                     }
-                    AppendToVals(_buf.AsSpan(_pos, _len - _pos));
+                    FieldAppendBufRun(_pos, _len - _pos);
                     _pos = _len;
                     return RecordEnd;
                 }
@@ -207,7 +221,7 @@ namespace ExcelReader.Core.Reader
                 {
                     return NeedMore; // can't tell a bare CR from CRLF yet
                 }
-                AppendToVals(_buf.AsSpan(_pos, found - _pos));
+                FieldAppendBufRun(_pos, found - _pos);
                 if (b == _delimiter)
                 {
                     _pos = found + 1;
@@ -253,27 +267,78 @@ namespace ExcelReader.Core.Reader
                 }
             }
 
-            // --- value/cell accumulation (CellAccumulator, shared with the XLSX/XLSB/XLS enumerators) ---
+            // --- field building (zero-copy _buf slice, falling back to _acc's value buffer only
+            // when a field's bytes aren't contiguous in _buf — a doubled "" quote or malformed bytes
+            // trailing a closing quote) ---
 
-            private void AppendToVals(ReadOnlySpan<byte> src)
+            private void FieldBegin()
             {
-                if (src.IsEmpty)
+                _fBufStart = _pos;
+                _fBufLen = 0;
+                _fMaterialized = false;
+            }
+
+            // Appends a run of bytes already sitting at _buf[start..start+len). Stays a zero-copy
+            // slice of _buf as long as each run continues exactly where the previous one ended;
+            // any gap (or a prior literal byte append) forces materialization into _acc from then on.
+            private void FieldAppendBufRun(int start, int len)
+            {
+                if (len == 0)
                 {
                     return;
                 }
-                Span<byte> dst = _acc.ReserveValueSpan(src.Length);
-                src.CopyTo(dst);
-                _acc.Advance(src.Length);
+                if (!_fMaterialized)
+                {
+                    if (_fBufLen == 0)
+                    {
+                        _fBufStart = start;
+                        _fBufLen = len;
+                        return;
+                    }
+                    if (start == _fBufStart + _fBufLen)
+                    {
+                        _fBufLen += len;
+                        return;
+                    }
+                    Materialize();
+                }
+                Span<byte> dst = _acc.ReserveValueSpan(len);
+                _buf.AsSpan(start, len).CopyTo(dst);
+                _acc.Advance(len);
             }
 
-            private void AppendByteToVals(byte b)
+            // Appends one literal byte (the unescaped '"' from a doubled ""), which can never be a
+            // contiguous continuation of the surrounding _buf run.
+            private void FieldAppendLiteralByte(byte b)
             {
+                if (!_fMaterialized)
+                {
+                    Materialize();
+                }
                 _acc.AppendByte(b);
             }
 
-            private void AddCell(int start, int len)
+            private void Materialize()
             {
-                _acc.Add(_col++, start, len, len == 0 ? CellType.Empty : CellType.ExcelString, style: 0, fromShared: false);
+                _fMatStart = _acc.ValueLength;
+                if (_fBufLen > 0)
+                {
+                    Span<byte> dst = _acc.ReserveValueSpan(_fBufLen);
+                    _buf.AsSpan(_fBufStart, _fBufLen).CopyTo(dst);
+                    _acc.Advance(_fBufLen);
+                }
+                _fMaterialized = true;
+            }
+
+            private void CommitField()
+            {
+                if (!_fMaterialized)
+                {
+                    _acc.Add(_col++, _fBufStart, _fBufLen, _fBufLen == 0 ? CellType.Empty : CellType.ExcelString, style: 0, fromShared: false);
+                    return;
+                }
+                int len = _acc.ValueLength - _fMatStart;
+                _acc.Add(_col++, _fMatStart, len, len == 0 ? CellType.Empty : CellType.ExcelString, style: 0, fromShared: true);
             }
 
             // --- buffer management (shared with XlsxReader/XlsbReader via BufferedStreamCursor) ---

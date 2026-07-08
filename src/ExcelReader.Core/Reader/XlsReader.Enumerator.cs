@@ -222,12 +222,10 @@ namespace ExcelReader.Core.Reader
                 {
                     int len = _acc.AppendErrorText(value);
                     _acc.Add(col, start, len, CellType.Error, style, fromShared: false);
+                    return;
                 }
-                else
-                {
-                    _acc.AppendByte(value == 0 ? (byte)'0' : (byte)'1');
-                    _acc.Add(col, start, 1, CellType.Boolean, style, fromShared: false);
-                }
+                _acc.AppendByte(value == 0 ? (byte)'0' : (byte)'1');
+                _acc.Add(col, start, 1, CellType.Boolean, style, fromShared: false);
             }
 
             private void ParseFormula(ReadOnlySpan<byte> data)

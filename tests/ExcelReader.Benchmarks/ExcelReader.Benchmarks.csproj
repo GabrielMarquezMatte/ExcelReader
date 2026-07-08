@@ -24,4 +24,8 @@
     <PackageReference Include="Sylvan.Data.Excel" Version="*" />
   </ItemGroup>
 
+  <ItemGroup>
+    <None Include="Data\**" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>

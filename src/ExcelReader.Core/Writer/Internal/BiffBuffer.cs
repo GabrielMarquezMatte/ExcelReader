@@ -1,5 +1,6 @@
 using System.Buffers;
 using System.Buffers.Binary;
+using System.Runtime.InteropServices;
 using System.Text;
 
 namespace ExcelReader.Core.Writer.Internal
@@ -98,13 +99,11 @@ namespace ExcelReader.Core.Writer.Internal
 
         internal void WriteUtf16(ReadOnlySpan<char> chars)
         {
+            // chars are already UTF-16LE in memory on every supported target, so this is a bulk
+            // reinterpret-and-copy instead of a per-char BinaryPrimitives write.
             int byteCount = checked(chars.Length * sizeof(char));
             Ensure(byteCount);
-            Span<byte> dest = _buffer.AsSpan(Length, byteCount);
-            for (int i = 0; i < chars.Length; i++)
-            {
-                BinaryPrimitives.WriteUInt16LittleEndian(dest[(i * sizeof(char))..], chars[i]);
-            }
+            MemoryMarshal.AsBytes(chars).CopyTo(_buffer.AsSpan(Length, byteCount));
             Length += byteCount;
         }
 
