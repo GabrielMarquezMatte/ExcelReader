@@ -88,6 +88,23 @@ namespace ExcelReader.Core.Writer
             }
         }
 
+        internal ValueTask EndRowAsync(CancellationToken ct = default)
+        {
+            _buffer.Write("\r\n"u8);
+            _rowActive = false;
+            if (_buffer.Length >= FlushThreshold)
+            {
+                return FlushBufferAsync(ct);
+            }
+            return ValueTask.CompletedTask;
+        }
+
+        private async ValueTask FlushBufferAsync(CancellationToken ct)
+        {
+            await _stream.WriteAsync(_buffer.Memory, ct).ConfigureAwait(false);
+            _buffer.Reset();
+        }
+
         public void Flush()
         {
             ObjectDisposedException.ThrowIf(_disposed, this);

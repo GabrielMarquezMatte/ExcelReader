@@ -66,13 +66,11 @@ namespace ExcelReader.Core.Writer.Internal
         }
 
         internal static void WriteNumber<T>(BiffBuffer xml, T value, int columnIndex, int rowNumber, bool includeReference)
-            where T : ISpanFormattable
+            where T : IUtf8SpanFormattable
         {
             WriteCellOpen(xml, columnIndex, rowNumber, includeReference);
             xml.Write("><v>"u8);
-            Span<char> buf = stackalloc char[64];
-            value.TryFormat(buf, out int written, default, CultureInfo.InvariantCulture);
-            xml.WriteUtf8(buf[..written]);
+            WriteValue(xml, value, sizeHint: 64);
             xml.Write("</v></c>"u8);
         }
 
@@ -113,7 +111,12 @@ namespace ExcelReader.Core.Writer.Internal
         private static void WriteValue<T>(BiffBuffer xml, T value, int sizeHint)
             where T : IUtf8SpanFormattable
         {
-            value.TryFormat(xml.GetSpan(sizeHint), out int written, default, CultureInfo.InvariantCulture);
+            int size = sizeHint;
+            int written;
+            while (!value.TryFormat(xml.GetSpan(size), out written, default, CultureInfo.InvariantCulture))
+            {
+                size = checked(size * 2);
+            }
             xml.Advance(written);
         }
 

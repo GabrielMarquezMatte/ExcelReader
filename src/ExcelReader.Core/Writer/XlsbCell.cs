@@ -95,13 +95,13 @@ namespace ExcelReader.Core.Writer
         }
 
         public static XlsbCell Create<T>(T value)
-            where T : ISpanFormattable
+            where T : IUtf8SpanFormattable
         {
             return CreateNumber(XlsbRowWriter.ToDouble(value));
         }
 
         public static XlsbCell Create<T>(T? value)
-            where T : struct, ISpanFormattable
+            where T : struct, IUtf8SpanFormattable
         {
             return value.HasValue ? Create(value.GetValueOrDefault()) : Empty;
         }

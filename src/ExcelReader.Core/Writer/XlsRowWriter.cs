@@ -166,7 +166,7 @@ namespace ExcelReader.Core.Writer
         }
 
         public void Write<T>(T value)
-            where T : ISpanFormattable
+            where T : IUtf8SpanFormattable
         {
             ThrowIfDisposed();
             _owner.EmitNumber(_rowNumber, _columnIndex, XlsbRowWriter.ToDouble(value));
@@ -174,7 +174,7 @@ namespace ExcelReader.Core.Writer
         }
 
         public void Write<T>(T? value)
-            where T : struct, ISpanFormattable
+            where T : struct, IUtf8SpanFormattable
         {
             ThrowIfDisposed();
             if (value is not null)
