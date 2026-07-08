@@ -12,15 +12,24 @@ namespace ExcelReader.Core.Reader
             Justification = "Borrowed WorkbookStream; its lifetime is owned by XlsReader, not this cursor.")]
         private readonly WorkbookStream _wb;
         private readonly int _sectorSize;
-        private byte[]? _sector;     // current sector (streamed mode only)
-        private int _loaded = -1;             // chain index in _sector
+        private readonly int _maxSectors;
+        private byte[]? _sector;     // current sector buffer window (streamed mode only)
+        private int _loadedStart = -1;       // start chain index loaded in _sector
+        private int _loadedCount;        // number of sectors loaded in _sector
         private byte[]? _scratch;             // assembles records that span sectors
 
         internal BiffCursor(WorkbookStream wb)
         {
             _wb = wb;
             _sectorSize = wb.SectorSize;
-            _sector = wb.IsMemory ? null : ArrayPool<byte>.Shared.Rent(wb.SectorSize);
+            if (wb.IsMemory)
+            {
+                _maxSectors = 0;
+                _sector = null;
+                return;
+            }
+            _maxSectors = Math.Max(1, 65536 / wb.SectorSize);
+            _sector = ArrayPool<byte>.Shared.Rent(_maxSectors * wb.SectorSize);
         }
 
         internal long Position { get; set; }
@@ -65,11 +74,13 @@ namespace ExcelReader.Core.Reader
             {
                 return _wb.Memory(pos, len);
             }
+            int chainIndex = (int)(pos / _sectorSize);
             int within = (int)(pos % _sectorSize);
-            if (within + len <= _sectorSize)
+            LoadSector(chainIndex);
+            int offsetInSector = (chainIndex - _loadedStart) * _sectorSize + within;
+            if (offsetInSector + len <= _loadedCount * _sectorSize)
             {
-                LoadSector((int)(pos / _sectorSize));
-                return _sector.AsSpan(within, len);
+                return _sector.AsSpan(offsetInSector, len);
             }
             byte[] scratch = EnsureScratch(len);
             ReadInto(pos, scratch.AsSpan(0, len));
@@ -87,22 +98,26 @@ namespace ExcelReader.Core.Reader
             while (written < dest.Length)
             {
                 long at = pos + written;
+                int chainIndex = (int)(at / _sectorSize);
                 int within = (int)(at % _sectorSize);
-                LoadSector((int)(at / _sectorSize));
-                int take = Math.Min(_sectorSize - within, dest.Length - written);
-                _sector.AsSpan(within, take).CopyTo(dest[written..]);
+                LoadSector(chainIndex);
+                int offsetInSector = (chainIndex - _loadedStart) * _sectorSize + within;
+                int availableInSector = _loadedCount * _sectorSize - offsetInSector;
+                int take = Math.Min(availableInSector, dest.Length - written);
+                _sector.AsSpan(offsetInSector, take).CopyTo(dest[written..]);
                 written += take;
             }
         }
 
         private void LoadSector(int chainIndex)
         {
-            if (_loaded == chainIndex)
+            if (chainIndex >= _loadedStart && chainIndex < _loadedStart + _loadedCount)
             {
                 return;
             }
-            _wb.LoadSector(chainIndex, _sector);
-            _loaded = chainIndex;
+            int sectorsRead = _wb.LoadSectors(chainIndex, _sector.AsSpan(0, _maxSectors * _sectorSize));
+            _loadedStart = chainIndex;
+            _loadedCount = sectorsRead;
         }
 
         private byte[] EnsureScratch(int len)

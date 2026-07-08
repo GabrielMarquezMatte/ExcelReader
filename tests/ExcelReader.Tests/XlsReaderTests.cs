@@ -1,6 +1,7 @@
 using ExcelReader.Core.Enums;
 using ExcelReader.Core.Parser;
 using ExcelReader.Core.Reader;
+using ExcelReader.Core.Writer;
 using System.Collections;
 
 namespace ExcelReader.Tests
@@ -588,6 +589,37 @@ namespace ExcelReader.Tests
             using var ms = XlsWorkbookBuilder.BuildPatched(
                 XlsWorkbookBuilder.FatSectorCountOffset, XlsWorkbookBuilder.LE32(0x40000000));
             Assert.Throws<InvalidDataException>(() => Excel.FromXls(ms));
+        }
+
+        [Fact]
+        public async Task WritesAndReadsLongLabelSplitsAcrossContinueRecords()
+        {
+            // Create a string of 10,000 characters (exceeds 8,224 bytes MaxPayload)
+            // with some non-ASCII CP1252 characters to verify compression handles correctly.
+            string longCompressed = new string('a', 5000) + "Café" + new string('b', 5000);
+            string longWide = new string('Ω', 6000);
+
+            var ms = new MemoryStream();
+            await using (XlsWorkbookWriter wb = XlsWorkbookWriter.Create(ms, leaveOpen: true))
+            {
+                wb.Start();
+                XlsSheetWriter sheet = wb.AddSheet("S1");
+                sheet.Start();
+                using (XlsRowWriter row = sheet.StartRow())
+                {
+                    row.Write(longCompressed);
+                    row.Write(longWide);
+                }
+                sheet.End();
+                await wb.EndAsync(TestContext.Current.CancellationToken);
+            }
+
+            ms.Position = 0;
+            using var reader = Excel.FromXls(ms);
+            using var e = reader.GetEnumerator();
+            Assert.True(e.MoveNext());
+            Assert.Equal(longCompressed, e.Current[0].GetString());
+            Assert.Equal(longWide, e.Current[1].GetString());
         }
 
         private const int SectorSize = 512;
