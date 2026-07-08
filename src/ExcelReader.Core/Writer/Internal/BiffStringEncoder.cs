@@ -1,4 +1,5 @@
 using System.Diagnostics.CodeAnalysis;
+using System.Text;
 
 namespace ExcelReader.Core.Writer.Internal
 {
@@ -24,25 +25,20 @@ namespace ExcelReader.Core.Writer.Internal
             WriteFlagsAndChars(buffer, value, compressed);
         }
 
-        [SuppressMessage("Performance", "HLQ004:The enumerator returns a reference to the item",
-            Justification = "Iterating char by value; 'ref readonly char' gains nothing for a 2-byte primitive.")]
         private static void WriteFlagsAndChars(BiffBuffer buffer, ReadOnlySpan<char> value, bool compressed)
         {
             buffer.WriteByte((byte)(compressed ? 0 : 1));
-            if (compressed)
+            if (!compressed)
             {
-                foreach (char c in value)
-                {
-                    buffer.WriteByte((byte)c);
-                }
+                buffer.WriteUtf16(value);
+                return;
             }
-            else
-            {
-                foreach (char c in value)
-                {
-                    buffer.WriteU16(c);
-                }
-            }
+            // CanCompress already guarantees every char is <= 0xFF and outside 0x80-0x9F, so a
+            // narrowing cast per char is exactly what Encoding.Latin1 does — one bulk pass instead
+            // of a per-char WriteByte.
+            Span<byte> dest = buffer.GetSpan(value.Length);
+            Encoding.Latin1.GetBytes(value, dest);
+            buffer.Advance(value.Length);
         }
 
         [SuppressMessage("Performance", "HLQ004:The enumerator returns a reference to the item",

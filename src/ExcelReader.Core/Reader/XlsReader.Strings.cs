@@ -33,12 +33,22 @@ namespace ExcelReader.Core.Reader
         {
             if ((flags & 1) == 0)
             {
-                int written = 0;
-                foreach (ref readonly var b in src[..charCount])
+                // Widen CP1252 bytes to chars once, then one bulk UTF-8 transcode — same shape as
+                // DecodeSharedStrings, instead of a Rune-per-byte encode.
+                char[] rented = ArrayPool<char>.Shared.Rent(charCount);
+                try
                 {
-                    written += new Rune(DecodeCp1252(b)).EncodeToUtf8(dest[written..]);
+                    ReadOnlySpan<byte> compressed = src[..charCount];
+                    for (int i = 0; i < charCount; i++)
+                    {
+                        rented[i] = DecodeCp1252(compressed[i]);
+                    }
+                    return Encoding.UTF8.GetBytes(rented.AsSpan(0, charCount), dest);
                 }
-                return written;
+                finally
+                {
+                    ArrayPool<char>.Shared.Return(rented);
+                }
             }
 
             // UTF-16LE code units read directly as chars; Encoding.UTF8.GetBytes combines surrogate

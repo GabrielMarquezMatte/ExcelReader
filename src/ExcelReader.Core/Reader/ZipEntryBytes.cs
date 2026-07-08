@@ -1,4 +1,3 @@
-using System.Diagnostics.CodeAnalysis;
 using System.IO.Compression;
 
 namespace ExcelReader.Core.Reader
@@ -23,9 +22,11 @@ namespace ExcelReader.Core.Reader
             long entryLimit = 0)
         {
             using var stream = new LimitedReadStream(entry.Open(), counter, entryLimitName, entryLimit);
-            using MemoryStream bytes = new();
-            stream.CopyTo(bytes);
-            return bytes.ToArray();
+            // ZipArchiveEntry.Length is the exact uncompressed size from the central directory, so the
+            // destination can be sized once instead of growing/copying through an intermediate MemoryStream.
+            byte[] bytes = new byte[checked((int)entry.Length)];
+            stream.ReadExactly(bytes);
+            return bytes;
         }
 
         internal static async ValueTask<byte[]> ReadAsync(
@@ -45,8 +46,6 @@ namespace ExcelReader.Core.Reader
         }
 
 #if NET10_0_OR_GREATER
-        [SuppressMessage("SharpSource", "SS059:MemoryStream can be disposed of asynchronously",
-            Justification = "MemoryStream disposal is synchronous and keeps this helper simple.")]
         internal static async ValueTask<byte[]> ReadAsync(
             ZipArchiveEntry entry,
             DecompressedByteCounter counter,
@@ -58,9 +57,9 @@ namespace ExcelReader.Core.Reader
             var stream = new LimitedReadStream(opened, counter, entryLimitName, entryLimit);
             await using (stream.ConfigureAwait(false))
             {
-                using MemoryStream bytes = new();
-                await stream.CopyToAsync(bytes, ct).ConfigureAwait(false);
-                return bytes.ToArray();
+                byte[] bytes = new byte[checked((int)entry.Length)];
+                await stream.ReadExactlyAsync(bytes, ct).ConfigureAwait(false);
+                return bytes;
             }
         }
 #else

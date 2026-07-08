@@ -250,23 +250,21 @@ namespace ExcelReader.Core.Writer
             await WriteEntryAsync("xl/styles.bin", data.Memory, ct).ConfigureAwait(false);
         }
 
-        private ValueTask WriteSharedStringsAsync(CancellationToken ct)
+        private async ValueTask WriteSharedStringsAsync(CancellationToken ct)
         {
-            ReadOnlyMemory<byte> data = _sharedStrings is null
-                ? EmptySharedStrings()
-                : _sharedStrings.ToXlsbBytes();
-            return WriteEntryAsync("xl/sharedStrings.bin", data, ct);
+            using var data = _sharedStrings is null ? EmptySharedStrings() : _sharedStrings.ToXlsbBytes();
+            await WriteEntryAsync("xl/sharedStrings.bin", data.Memory, ct).ConfigureAwait(false);
         }
 
-        private static ReadOnlyMemory<byte> EmptySharedStrings()
+        private static BiffBuffer EmptySharedStrings()
         {
-            using var data = new BiffBuffer(16);
+            var data = new BiffBuffer(16);
             using var payload = new BiffBuffer(8);
             payload.WriteU32(0);
             payload.WriteU32(0);
             Biff12RecordWriter.WriteRecord(data, Brt.BeginSst, payload.Span);
             Biff12RecordWriter.WriteRecord(data, Brt.EndSst);
-            return data.Memory.ToArray();
+            return data;
         }
 
         private static void WriteCountedRecord(BiffBuffer data, BiffBuffer payload, int id, int count)
@@ -365,18 +363,9 @@ namespace ExcelReader.Core.Writer
             return ZipEntryWriter.WriteTextAsync(_zip, entryName, content, _compression, ct);
         }
 
-        private async ValueTask WriteEntryAsync(string entryName, ReadOnlyMemory<byte> content, CancellationToken ct)
+        private ValueTask WriteEntryAsync(string entryName, ReadOnlyMemory<byte> content, CancellationToken ct)
         {
-            ZipArchiveEntry entry = _zip.CreateEntry(entryName, _compression);
-#if NET10_0_OR_GREATER
-            var stream = await entry.OpenAsync(ct).ConfigureAwait(false);
-#else
-            var stream = entry.Open();
-#endif
-            await using (stream.ConfigureAwait(false))
-            {
-                await stream.WriteAsync(content, ct).ConfigureAwait(false);
-            }
+            return ZipEntryWriter.WriteBytesAsync(_zip, entryName, content, _compression, ct);
         }
     }
 }
