@@ -11,8 +11,9 @@ namespace ExcelReader.Core.Parser.Internal
         ;
 #endif
 
-    // Column-level TryParse over a cell already matched to the target column.
-    // Returns false on parse failure; true on success or empty cell (keep default).
+    // Column-level TryParse over a cell already matched to the target column. Callers never invoke
+    // this for an empty cell (they skip the call and keep the model's default), so implementations
+    // don't need their own empty-cell guard. Returns false on parse failure, true on success.
     // provider supplies the culture for text-backed numeric/Guid cells (ExcelParserConfig.Culture).
     internal delegate bool ColumnParser<TModel>(
         ref TModel model,

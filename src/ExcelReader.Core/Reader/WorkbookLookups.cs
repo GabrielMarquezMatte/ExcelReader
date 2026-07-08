@@ -1,3 +1,5 @@
+using System.IO.Compression;
+
 namespace ExcelReader.Core.Reader
 {
     // Small lookups duplicated identically across the XLSX/XLS/XLSB readers: sheet-name resolution,
@@ -31,6 +33,12 @@ namespace ExcelReader.Core.Reader
             return (uint)style < (uint)styleIsDate.Length && styleIsDate[style];
         }
 
+        // A numFmtId is a date style if it's a custom format flagged as such, else the builtin table decides.
+        internal static bool ResolveDateFlag(Dictionary<int, bool> customFormats, int numFmtId)
+        {
+            return customFormats.TryGetValue(numFmtId, out bool isDate) ? isDate : NumberFormat.IsBuiltinDate(numFmtId);
+        }
+
         internal static (int Start, int Length) SharedAt(int[] sharedOffsets, int index)
         {
             if ((uint)index >= (uint)(sharedOffsets.Length - 1))
@@ -38,6 +46,17 @@ namespace ExcelReader.Core.Reader
                 return (0, 0);
             }
             return (sharedOffsets[index], sharedOffsets[index + 1] - sharedOffsets[index]);
+        }
+
+        internal static ZipArchiveEntry GetWorksheetEntry(ZipArchive zip, (string Name, string Path)[] sheets, int current)
+        {
+            return zip.GetEntry(sheets[current].Path)
+                ?? throw new InvalidDataException($"Worksheet part not found: {sheets[current].Path}");
+        }
+
+        internal static LimitedReadStream OpenEntryStream(ZipArchiveEntry entry, DecompressedByteCounter counter)
+        {
+            return new LimitedReadStream(entry.Open(), counter);
         }
     }
 }
