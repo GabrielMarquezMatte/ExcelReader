@@ -1,7 +1,7 @@
 using System.Buffers;
-using System.Buffers.Binary;
 using System.Diagnostics.CodeAnalysis;
 using System.Runtime.InteropServices;
+using static ExcelReader.Core.Reader.Biff12;
 
 namespace ExcelReader.Core.Reader
 {
@@ -59,35 +59,27 @@ namespace ExcelReader.Core.Reader
 
         internal bool IsDateStyle(int style)
         {
-            return (uint)style < (uint)_styleIsDate.Length && _styleIsDate[style];
+            return WorkbookLookups.IsDateStyle(_styleIsDate, style);
         }
 
         internal (int Start, int Length) SharedAt(int index)
         {
-            if ((uint)index >= (uint)(_sharedOffsets.Length - 1))
-            {
-                return (0, 0);
-            }
-            return (_sharedOffsets[index], _sharedOffsets[index + 1] - _sharedOffsets[index]);
+            return WorkbookLookups.SharedAt(_sharedOffsets, index);
         }
 
         public bool TryMoveToSheet(ReadOnlySpan<char> name)
         {
-            for (int i = 0; i < _sheets.Length; i++)
+            if (!WorkbookLookups.TryFindSheetIndex(_sheets, name, static s => s.Name, out int index))
             {
-                if (name.Equals(_sheets[i].Name, StringComparison.OrdinalIgnoreCase))
-                {
-                    _current = i;
-                    return true;
-                }
+                return false;
             }
-            return false;
+            _current = index;
+            return true;
         }
 
         public void MoveToSheet(int index)
         {
-            ArgumentOutOfRangeException.ThrowIfNegative(index);
-            ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(index, _sheets.Length);
+            WorkbookLookups.ValidateSheetIndex(index, _sheets.Length);
             _current = index;
         }
 
@@ -359,21 +351,6 @@ namespace ExcelReader.Core.Reader
                 ArrayPool<byte>.Shared.Return(flat);
                 ArrayPool<char>.Shared.Return(scratch);
             }
-        }
-
-        private static ushort ReadU16(ReadOnlySpan<byte> src, int offset)
-        {
-            return BinaryPrimitives.ReadUInt16LittleEndian(src.Slice(offset, 2));
-        }
-
-        private static int ReadI32(ReadOnlySpan<byte> src, int offset)
-        {
-            return BinaryPrimitives.ReadInt32LittleEndian(src.Slice(offset, 4));
-        }
-
-        private static uint ReadU32(ReadOnlySpan<byte> src, int offset)
-        {
-            return BinaryPrimitives.ReadUInt32LittleEndian(src.Slice(offset, 4));
         }
 
         private static void EnsureSharedCapacity(ExcelReaderOptions options, ref byte[] buffer, int needed)

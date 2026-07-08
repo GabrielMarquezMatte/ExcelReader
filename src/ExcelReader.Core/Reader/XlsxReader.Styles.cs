@@ -20,7 +20,7 @@ namespace ExcelReader.Core.Reader
                 int id = ParseIntOr(XlsxXml.Attr(tag, " numFmtId=\""u8), -1);
                 if (id >= 0)
                 {
-                    custom[id] = NumberFormat.LooksLikeDate(Decode(XlsxXml.Attr(tag, " formatCode=\""u8)));
+                    custom[id] = NumberFormat.LooksLikeDate(XlsxXml.DecodeToString(XlsxXml.Attr(tag, " formatCode=\""u8)));
                 }
             }
 

@@ -68,8 +68,8 @@ namespace ExcelReader.Core.Reader
 
         public bool IsDate1904 => false;
 
-        // CSV is a single, unnamed sheet. These satisfy the IExcelReader surface so a CSV reader can be
-        // driven through the same format-agnostic IExcelRowReader loop as the Excel readers.
+        // CSV is a single, unnamed sheet. These satisfy the IExcelRowReader surface so a CSV reader can
+        // be driven through the same format-agnostic loop as the Excel readers.
         public string SheetName => "";
         public int SheetCount => 1;
 

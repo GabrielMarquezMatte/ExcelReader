@@ -220,13 +220,6 @@ namespace ExcelReader.Core.Writer.Internal
             buffer.EndRecord(len);
         }
 
-        internal static void WriteBlank(BiffBuffer buffer, int row, int col, int xf)
-        {
-            int len = buffer.BeginRecord(BiffRecord.Blank);
-            WriteCellHeader(buffer, row, col, xf);
-            buffer.EndRecord(len);
-        }
-
         private static void WriteCellHeader(BiffBuffer buffer, int row, int col, int xf)
         {
             buffer.WriteU16(row);

@@ -1,7 +1,5 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
-using ExcelReader.Core.Reader;
-using ExcelReader.Core.Writer.Internal;
 
 namespace ExcelReader.Core.Writer
 {
@@ -10,18 +8,12 @@ namespace ExcelReader.Core.Writer
         [SuppressMessage("SharpSource", "SS066:DisposableFieldIsNotDisposed",
             Justification = "XlsbSheetWriter is borrowed; its lifetime is managed by the caller.")]
         private readonly XlsbSheetWriter _owner;
-        [SuppressMessage("SharpSource", "SS066:DisposableFieldIsNotDisposed",
-            Justification = "BiffBuffer is owned by XlsbSheetWriter; row writer borrows it.")]
-        private readonly BiffBuffer _payload;
-        private readonly bool _date1904;
         private int _columnIndex;
         private bool _disposed;
 
-        internal XlsbRowWriter(XlsbSheetWriter owner, bool date1904)
+        internal XlsbRowWriter(XlsbSheetWriter owner)
         {
             _owner = owner;
-            _payload = owner.Payload;
-            _date1904 = date1904;
         }
 
         private void ThrowIfDisposed()
@@ -32,33 +24,14 @@ namespace ExcelReader.Core.Writer
         public void Write(string? value)
         {
             ThrowIfDisposed();
-            if (value is null)
-            {
-                _columnIndex++;
-                return;
-            }
-            _payload.Reset();
-            Biff12RecordWriter.WriteCellHeader(_payload, _columnIndex, 0);
-            if (_owner.UseSharedStrings)
-            {
-                _payload.WriteU32((uint)_owner.GetSharedStringIndex(value));
-                _owner.WriteRecord(Brt.CellIsst, _payload.Span);
-                _columnIndex++;
-                return;
-            }
-            Biff12RecordWriter.WriteWideString(_payload, value);
-            _owner.WriteRecord(Brt.CellSt, _payload.Span);
+            _owner.WriteStringCell(_columnIndex, value);
             _columnIndex++;
-
         }
 
         public void Write(bool value)
         {
             ThrowIfDisposed();
-            _payload.Reset();
-            Biff12RecordWriter.WriteCellHeader(_payload, _columnIndex, 0);
-            _payload.WriteByte(value ? (byte)1 : (byte)0);
-            _owner.WriteRecord(Brt.CellBool, _payload.Span);
+            _owner.WriteBoolCell(_columnIndex, value);
             _columnIndex++;
         }
 
@@ -76,12 +49,8 @@ namespace ExcelReader.Core.Writer
         public void Write(DateTime value)
         {
             ThrowIfDisposed();
-            double serial = value.ToOADate();
-            if (_date1904)
-            {
-                serial -= 1462.0;
-            }
-            WriteDouble(serial, style: 1);
+            _owner.WriteDateSerialCell(_columnIndex, value.ToOADate());
+            _columnIndex++;
         }
 
         public void Write(DateTime? value)
@@ -165,23 +134,6 @@ namespace ExcelReader.Core.Writer
             _columnIndex++;
         }
 
-        public void Write(float value)
-        {
-            ThrowIfDisposed();
-            WriteDouble(value, style: 0);
-        }
-
-        public void Write(float? value)
-        {
-            ThrowIfDisposed();
-            if (value is not null)
-            {
-                WriteDouble(value.Value, style: 0);
-                return;
-            }
-            _columnIndex++;
-        }
-
         public void Write(double value)
         {
             ThrowIfDisposed();
@@ -244,10 +196,7 @@ namespace ExcelReader.Core.Writer
 
         private void WriteDouble(double value, int style)
         {
-            _payload.Reset();
-            Biff12RecordWriter.WriteCellHeader(_payload, _columnIndex, style);
-            _payload.WriteDouble(value);
-            _owner.WriteRecord(Brt.CellReal, _payload.Span);
+            _owner.WriteDoubleCell(_columnIndex, value, style);
             _columnIndex++;
         }
 

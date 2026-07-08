@@ -1,4 +1,3 @@
-using System.Buffers;
 using System.Diagnostics.CodeAnalysis;
 using ExcelReader.Core.Enums;
 using ExcelReader.Core.ValueObjects;
@@ -8,9 +7,9 @@ namespace ExcelReader.Core.Reader
     public sealed partial class CsvReader
     {
         // Forward-only record scanner over a pooled buffer, structured like XlsxReader.Enumerator:
-        // a single moving cursor (_pos) into _buf, refilled/compacted by Fill/PrepareBuffer, with
-        // every field's bytes (unescaped as needed) copied into a persistent _vals buffer so that
-        // Current stays valid across the buffer compaction that the next MoveNext may trigger.
+        // a single moving cursor (_pos) into _buf, refilled/compacted via BufferedStreamCursor, with
+        // every field's bytes (unescaped as needed) copied into CellAccumulator's persistent value
+        // buffer so that Current stays valid across the buffer compaction that the next MoveNext may trigger.
         // Records are parsed from buffered bytes only (TryParseRecordFromBuffer, no stream I/O)
         // when a record is only partially buffered the parse restarts after a refill, so sync and
         // async share one parser and the async path awaits once per refill, not per field.
@@ -18,9 +17,6 @@ namespace ExcelReader.Core.Reader
             Justification = "Public nested enumerator is the standard foreach pattern.")]
         public sealed class Enumerator : IExcelRowEnumerator
         {
-            private const int InitialBuf = 64 * 1024;
-            private const int InitialVals = 4 * 1024;
-            private const int InitialCells = 32;
             private const byte Cr = (byte)'\r';
             private const byte Lf = (byte)'\n';
 
@@ -31,18 +27,16 @@ namespace ExcelReader.Core.Reader
             private readonly CancellationToken _ct;
             private readonly byte _delimiter;
             private readonly byte _quote;
-            private readonly int _maxCellBytes;
             private readonly bool _stripBom;
 
-            private byte[] _buf;
-            private int _pos;
-            private int _len;
-            private bool _eof;
+            private readonly BufferedStreamCursor _io;
+            private byte[] _buf => _io.Buf;
+            private int _pos { get => _io.Pos; set => _io.Pos = value; }
+            private int _len => _io.Len;
+            private bool _eof => _io.Eof;
             private bool _bomChecked;
 
-            private byte[] _vals;    // decoded (unescaped) bytes for every field of the current record
-            private int _valLen;
-            private CellDesc[] _cells;
+            private readonly CellAccumulator _acc; // per-record decoded values + cell descriptors
             private int _col;
 
             internal Enumerator(Stream stream, CsvReaderOptions options, CancellationToken ct = default)
@@ -51,24 +45,22 @@ namespace ExcelReader.Core.Reader
                 _ct = ct;
                 _delimiter = options.Delimiter;
                 _quote = options.Quote;
-                _maxCellBytes = options.MaxCellBytes;
                 _stripBom = options.DetectEncodingFromByteOrderMark;
-                _buf = ArrayPool<byte>.Shared.Rent(InitialBuf);
-                _vals = ArrayPool<byte>.Shared.Rent(InitialVals);
-                _cells = ArrayPool<CellDesc>.Shared.Rent(InitialCells);
+                _io = new BufferedStreamCursor(options.MaxCellBytes, nameof(CsvReaderOptions.MaxCellBytes));
+                _acc = new CellAccumulator(options.MaxCellBytes, nameof(CsvReaderOptions.MaxCellBytes));
             }
 
-            public Row Current => new(_cells.AsSpan(0, FieldCount), _vals.AsSpan(0, _valLen), default);
+            public Row Current => new(_acc.CellSpan, _acc.ValueSpan, default);
 
             // Dense field access for CsvEnumerable<T>: CSV cells are stored contiguously in column
-            // order (no gaps), so field i is _cells[i] — O(1), skipping Row's binary search and the
-            // RowCells re-walk the generic projector would do.
-            internal int FieldCount { get; private set; }
+            // order (no gaps), so field i is _acc.CellSpan[i] — O(1), skipping Row's binary search and
+            // the RowCells re-walk the generic projector would do.
+            internal int FieldCount => _acc.Count;
 
             internal Cell FieldAt(int index)
             {
-                ref readonly CellDesc d = ref _cells[index];
-                return new Cell(d.Type, _vals.AsSpan(d.Start, d.Length));
+                CellDesc d = _acc.CellSpan[index];
+                return new Cell(d.Type, _acc.ValueSpan.Slice(d.Start, d.Length));
             }
 
             public bool MoveNext()
@@ -115,8 +107,7 @@ namespace ExcelReader.Core.Reader
 
             private void BeginRecord()
             {
-                FieldCount = 0;
-                _valLen = 0;
+                _acc.Reset();
                 _col = 0;
             }
 
@@ -129,7 +120,7 @@ namespace ExcelReader.Core.Reader
 
             // Parses one full record from _buf[_pos.._len]. Returns false when the record is not
             // fully buffered yet (and not EOF); the caller restores _pos to the record start,
-            // refills, and re-parses the record from scratch (BeginRecord resets _vals/_cells).
+            // refills, and re-parses the record from scratch (BeginRecord resets _acc).
             // ponytail: restart-on-refill re-scans the partial record after every Fill — fine while
             // records are far smaller than the 64KB buffer; make the parse resumable if huge records
             // over trickling streams ever matter.
@@ -137,7 +128,7 @@ namespace ExcelReader.Core.Reader
             {
                 while (true)
                 {
-                    int valStart = _valLen;
+                    int valStart = _acc.ValueLength;
                     if (_pos < _len && _buf[_pos] == _quote)
                     {
                         _pos++;
@@ -151,7 +142,7 @@ namespace ExcelReader.Core.Reader
                     {
                         return false;
                     }
-                    AddCell(valStart, _valLen - valStart);
+                    AddCell(valStart, _acc.ValueLength - valStart);
                     if (term == RecordEnd)
                     {
                         return true;
@@ -159,7 +150,7 @@ namespace ExcelReader.Core.Reader
                 }
             }
 
-            // _pos is right after the opening quote. Appends unescaped content ("" -> ") to _vals
+            // _pos is right after the opening quote. Appends unescaped content ("" -> ") to _acc
             // and leaves _pos right after the closing quote (or at EOF for an unterminated field).
             // False means the closing quote (or the byte after it, needed to rule out "") is not
             // buffered yet.
@@ -262,7 +253,7 @@ namespace ExcelReader.Core.Reader
                 }
             }
 
-            // --- vals / cells buffers ---
+            // --- value/cell accumulation (CellAccumulator, shared with the XLSX/XLSB/XLS enumerators) ---
 
             private void AppendToVals(ReadOnlySpan<byte> src)
             {
@@ -270,121 +261,41 @@ namespace ExcelReader.Core.Reader
                 {
                     return;
                 }
-                EnsureValsCapacity(_valLen + src.Length);
-                src.CopyTo(_vals.AsSpan(_valLen));
-                _valLen += src.Length;
+                Span<byte> dst = _acc.ReserveValueSpan(src.Length);
+                src.CopyTo(dst);
+                _acc.Advance(src.Length);
             }
 
             private void AppendByteToVals(byte b)
             {
-                EnsureValsCapacity(_valLen + 1);
-                _vals[_valLen++] = b;
-            }
-
-            private void EnsureValsCapacity(int needed)
-            {
-                if (needed <= _vals.Length)
-                {
-                    return;
-                }
-                byte[] bigger = ArrayPool<byte>.Shared.Rent(
-                    LimitChecks.NextBufferSize(_maxCellBytes, nameof(CsvReaderOptions.MaxCellBytes), _vals.Length, needed));
-                Array.Copy(_vals, bigger, _valLen);
-                ArrayPool<byte>.Shared.Return(_vals);
-                _vals = bigger;
+                _acc.AppendByte(b);
             }
 
             private void AddCell(int start, int len)
             {
-                if (FieldCount == _cells.Length)
-                {
-                    CellDesc[] bigger = ArrayPool<CellDesc>.Shared.Rent(_cells.Length * 2);
-                    Array.Copy(_cells, bigger, FieldCount);
-                    ArrayPool<CellDesc>.Shared.Return(_cells);
-                    _cells = bigger;
-                }
-                _cells[FieldCount++] = new CellDesc
-                {
-                    Column = _col++,
-                    Start = start,
-                    Length = len,
-                    Type = len == 0 ? CellType.Empty : CellType.ExcelString,
-                    Style = 0,
-                    FromShared = false,
-                };
+                _acc.Add(_col++, start, len, len == 0 ? CellType.Empty : CellType.ExcelString, style: 0, fromShared: false);
             }
 
-            // --- buffer management (mirrors XlsxReader.Enumerator) ---
-
-            private void PrepareBuffer()
-            {
-                if (_pos > 0)
-                {
-                    _buf.AsSpan(_pos, _len - _pos).CopyTo(_buf);
-                    _len -= _pos;
-                    _pos = 0;
-                }
-                else if (_len == _buf.Length)
-                {
-                    byte[] bigger = ArrayPool<byte>.Shared.Rent(
-                        LimitChecks.NextBufferSize(_maxCellBytes, nameof(CsvReaderOptions.MaxCellBytes), _buf.Length, _buf.Length + 1));
-                    _buf.AsSpan(0, _len).CopyTo(bigger);
-                    ArrayPool<byte>.Shared.Return(_buf);
-                    _buf = bigger;
-                }
-            }
+            // --- buffer management (shared with XlsxReader/XlsbReader via BufferedStreamCursor) ---
 
             private void Fill()
             {
-                PrepareBuffer();
-                int n = _stream.Read(_buf, _len, _buf.Length - _len);
-                if (n == 0)
-                {
-                    _eof = true;
-                }
-                else
-                {
-                    _len += n;
-                }
+                _io.Fill(_stream);
             }
 
-            private async ValueTask FillAsync()
+            private ValueTask FillAsync()
             {
-                PrepareBuffer();
-                int n = await _stream.ReadAsync(_buf.AsMemory(_len, _buf.Length - _len), _ct).ConfigureAwait(false);
-                if (n == 0)
-                {
-                    _eof = true;
-                }
-                else
-                {
-                    _len += n;
-                }
+                return _io.FillAsync(_stream, _ct);
             }
 
             private void Ensure(int n)
             {
-                while (_len - _pos < n && !_eof)
-                {
-                    Fill();
-                }
+                _io.Ensure(_stream, n);
             }
 
             private ValueTask EnsureAsync(int n)
             {
-                if (_len - _pos >= n || _eof)
-                {
-                    return ValueTask.CompletedTask;
-                }
-                return EnsureSlowAsync(n);
-            }
-
-            private async ValueTask EnsureSlowAsync(int n)
-            {
-                while (_len - _pos < n && !_eof)
-                {
-                    await FillAsync().ConfigureAwait(false);
-                }
+                return _io.EnsureAsync(_stream, n, _ct);
             }
 
             public void Dispose()
@@ -400,21 +311,8 @@ namespace ExcelReader.Core.Reader
 
             private void ReturnBuffers()
             {
-                if (_buf.Length > 0)
-                {
-                    ArrayPool<byte>.Shared.Return(_buf);
-                    _buf = [];
-                }
-                if (_vals.Length > 0)
-                {
-                    ArrayPool<byte>.Shared.Return(_vals);
-                    _vals = [];
-                }
-                if (_cells.Length > 0)
-                {
-                    ArrayPool<CellDesc>.Shared.Return(_cells);
-                    _cells = [];
-                }
+                _io.Return();
+                _acc.Return();
             }
         }
     }

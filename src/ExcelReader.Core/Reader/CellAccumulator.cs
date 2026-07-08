@@ -14,15 +14,17 @@ namespace ExcelReader.Core.Reader
         private const int InitialVals = 4 * 1024;
         private const int InitialCells = 32;
 
-        private readonly ExcelReaderOptions _options;
+        private readonly int _maxCellBytes;
+        private readonly string _limitName;
         private byte[] _vals;
         private CellDesc[] _cells;
         private int _lastCol;
         private bool _sorted;
 
-        internal CellAccumulator(ExcelReaderOptions options)
+        internal CellAccumulator(int maxCellBytes, string limitName)
         {
-            _options = options;
+            _maxCellBytes = maxCellBytes;
+            _limitName = limitName;
             _vals = ArrayPool<byte>.Shared.Rent(InitialVals);
             _cells = ArrayPool<CellDesc>.Shared.Rent(InitialCells);
             _lastCol = -1;
@@ -61,7 +63,7 @@ namespace ExcelReader.Core.Reader
             {
                 return;
             }
-            byte[] bigger = ArrayPool<byte>.Shared.Rent(LimitChecks.NextBufferSize(_options, _vals.Length, needed));
+            byte[] bigger = ArrayPool<byte>.Shared.Rent(LimitChecks.NextBufferSize(_maxCellBytes, _limitName, _vals.Length, needed));
             Array.Copy(_vals, bigger, ValueLength);
             ArrayPool<byte>.Shared.Return(_vals);
             _vals = bigger;
