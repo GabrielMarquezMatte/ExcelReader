@@ -440,6 +440,47 @@ namespace ExcelReader.Core.Parser.Internal
         }
 
 #if NET8_0
+        private static bool TryParseGuid(in Cell cell, out Guid value)
+        {
+            ReadOnlySpan<byte> utf8 = cell.Value;
+            if (utf8.Length <= 128)
+            {
+                Span<char> chars = stackalloc char[128];
+                int charCount;
+                if (utf8.IsEmpty && cell.TryGetDouble(out double d))
+                {
+                    Span<byte> byteBuf = stackalloc byte[32];
+                    if (Utf8Formatter.TryFormat(d, byteBuf, out int byteWritten))
+                    {
+                        charCount = Encoding.UTF8.GetChars(byteBuf[..byteWritten], chars);
+                    }
+                    else
+                    {
+                        value = Guid.Empty;
+                        return false;
+                    }
+                }
+                else
+                {
+                    charCount = Encoding.UTF8.GetChars(utf8, chars);
+                }
+                return Guid.TryParse(chars[..charCount], out value);
+            }
+            else
+            {
+                char[] chars = ArrayPool<char>.Shared.Rent(utf8.Length);
+                try
+                {
+                    int charCount = Encoding.UTF8.GetChars(utf8, chars);
+                    return Guid.TryParse(chars.AsSpan(0, charCount), out value);
+                }
+                finally
+                {
+                    ArrayPool<char>.Shared.Return(chars);
+                }
+            }
+        }
+
         // Guid does not implement IUtf8SpanParsable<Guid> on all targets, so parse from the string
         // form rather than the UTF-8 generic dispatch. Culture is irrelevant for Guid.
         private static ColumnParser<T> BuildGuidParser<T>(PropertyInfo prop)
@@ -447,7 +488,7 @@ namespace ExcelReader.Core.Parser.Internal
             RefAction<T, Guid> setter = CompileSetter<T, Guid>(prop);
             return (ref model, in cell, _, _) =>
             {
-                if (!Guid.TryParse(cell.GetString(), out Guid value))
+                if (!TryParseGuid(in cell, out Guid value))
                 {
                     return false;
                 }
@@ -461,7 +502,7 @@ namespace ExcelReader.Core.Parser.Internal
             RefAction<T, Guid?> setter = CompileSetter<T, Guid?>(prop);
             return (ref model, in cell, _, _) =>
             {
-                if (!Guid.TryParse(cell.GetString(), out Guid value))
+                if (!TryParseGuid(in cell, out Guid value))
                 {
                     return false;
                 }
@@ -474,8 +515,61 @@ namespace ExcelReader.Core.Parser.Internal
         private static class EnumCache<TEnum>
             where TEnum : struct, Enum
         {
+#if !NET8_0
             private static readonly FrozenDictionary<string, TEnum> _nameMap = BuildNameMap();
+#endif
             private static readonly FrozenDictionary<int, TEnum> _valueMap = BuildValueMap();
+#if NET8_0
+            private static readonly (string Name, TEnum Value)[] _sortedNames = BuildSortedNames();
+
+            private static (string Name, TEnum Value)[] BuildSortedNames()
+            {
+                var list = new List<(string Name, TEnum Value)>();
+                foreach (TEnum value in Enum.GetValues<TEnum>())
+                {
+                    string name = value.ToString();
+                    list.Add((name, value));
+                    int intValue = Convert.ToInt32(value, CultureInfo.InvariantCulture);
+                    string intStr = intValue.ToString(CultureInfo.InvariantCulture);
+                    if (!string.Equals(name, intStr, StringComparison.OrdinalIgnoreCase))
+                    {
+                        list.Add((intStr, value));
+                    }
+                }
+                var arr = list.ToArray();
+                Array.Sort(arr, static (a, b) => string.Compare(a.Name, b.Name, StringComparison.OrdinalIgnoreCase));
+                return arr;
+            }
+
+            private static bool TryLookupSpan(ReadOnlySpan<char> span, out TEnum value)
+            {
+                int low = 0;
+                int high = _sortedNames.Length - 1;
+                while (low <= high)
+                {
+                    int mid = (low + high) >>> 1;
+                    var entry = _sortedNames[mid];
+                    int cmp = span.CompareTo(entry.Name.AsSpan(), StringComparison.OrdinalIgnoreCase);
+                    if (cmp == 0)
+                    {
+                        value = entry.Value;
+                        return true;
+                    }
+                    if (cmp < 0)
+                    {
+                        high = mid - 1;
+                    }
+                    else
+                    {
+                        low = mid + 1;
+                    }
+                }
+                value = default;
+                return false;
+            }
+#endif
+
+#if !NET8_0
             private static FrozenDictionary<string, TEnum> BuildNameMap()
             {
                 Dictionary<string, TEnum> map = new(StringComparer.OrdinalIgnoreCase);
@@ -488,6 +582,7 @@ namespace ExcelReader.Core.Parser.Internal
                 }
                 return map.ToFrozenDictionary(StringComparer.OrdinalIgnoreCase);
             }
+#endif
             private static FrozenDictionary<int, TEnum> BuildValueMap()
             {
                 Dictionary<int, TEnum> map = [];
@@ -505,8 +600,26 @@ namespace ExcelReader.Core.Parser.Internal
                     return _valueMap.TryGetValue((int)d, out value);
                 }
 #if NET8_0
-                var name = cell.GetString();
-                return _nameMap.TryGetValue(name, out value);
+                ReadOnlySpan<byte> utf8 = cell.Value;
+                if (utf8.Length <= 128)
+                {
+                    Span<char> chars = stackalloc char[128];
+                    int n = Encoding.UTF8.GetChars(utf8, chars);
+                    return TryLookupSpan(chars[..n], out value);
+                }
+                else
+                {
+                    char[] chars = ArrayPool<char>.Shared.Rent(utf8.Length);
+                    try
+                    {
+                        int n = Encoding.UTF8.GetChars(utf8, chars);
+                        return TryLookupSpan(chars.AsSpan(0, n), out value);
+                    }
+                    finally
+                    {
+                        ArrayPool<char>.Shared.Return(chars);
+                    }
+                }
 #else
                 var byteValue = cell.Value;
                 char[] chars = ArrayPool<char>.Shared.Rent(byteValue.Length);

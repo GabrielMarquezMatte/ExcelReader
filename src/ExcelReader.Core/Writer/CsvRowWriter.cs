@@ -5,7 +5,7 @@ using ExcelReader.Core.Writer.Internal;
 
 namespace ExcelReader.Core.Writer
 {
-    public sealed class CsvRowWriter : IDisposable
+    public sealed class CsvRowWriter : IDisposable, IAsyncDisposable
     {
         // Numbers, dates, Guids, and every other BCL formattable fit an ASCII field well under this;
         // the rare overflow falls back to a rented buffer in WriteUtf8FieldSlow.
@@ -227,6 +227,16 @@ namespace ExcelReader.Core.Writer
             }
             _disposed = true;
             _owner.EndRow();
+        }
+
+        public ValueTask DisposeAsync()
+        {
+            if (_disposed)
+            {
+                return ValueTask.CompletedTask;
+            }
+            _disposed = true;
+            return _owner.EndRowAsync();
         }
     }
 }
