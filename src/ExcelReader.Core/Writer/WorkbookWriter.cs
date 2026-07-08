@@ -184,9 +184,10 @@ namespace ExcelReader.Core.Writer
                 ct);
         }
 
-        private ValueTask WriteSharedStringsAsync(CancellationToken ct)
+        private async ValueTask WriteSharedStringsAsync(CancellationToken ct)
         {
-            return WriteEntryAsync("xl/sharedStrings.xml", _sharedStrings!.ToXlsxXml(), ct);
+            using var bytes = _sharedStrings!.ToXlsxBytes();
+            await WriteEntryAsync("xl/sharedStrings.xml", bytes.Memory, ct).ConfigureAwait(false);
         }
 
         private ValueTask WriteWorkbookAsync(CancellationToken ct)
@@ -245,6 +246,11 @@ namespace ExcelReader.Core.Writer
         private ValueTask WriteEntryAsync(string entryName, string content, CancellationToken ct)
         {
             return ZipEntryWriter.WriteTextAsync(_zip, entryName, content, _compression, ct);
+        }
+
+        private ValueTask WriteEntryAsync(string entryName, ReadOnlyMemory<byte> content, CancellationToken ct)
+        {
+            return ZipEntryWriter.WriteBytesAsync(_zip, entryName, content, _compression, ct);
         }
 
         private static string EscapeAttribute(string value)

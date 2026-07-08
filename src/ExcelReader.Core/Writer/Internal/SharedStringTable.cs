@@ -25,9 +25,11 @@ namespace ExcelReader.Core.Writer.Internal
             return index;
         }
 
-        internal string ToXlsxXml()
+        // Returns the fully-assembled sharedStrings.xml as UTF-8 bytes — no decode-to-string round trip,
+        // matching ToXlsbBytes's shape so the caller can write the ZIP entry directly.
+        internal BiffBuffer ToXlsxBytes()
         {
-            using var xml = new BiffBuffer(Math.Max(256, _values.Count * 32));
+            BiffBuffer xml = new(Math.Max(256, _values.Count * 32));
             xml.WriteUtf8(
                 "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>" +
                 $"<sst xmlns=\"{XlsxConstants.MainNs}\" count=\"");
@@ -47,12 +49,12 @@ namespace ExcelReader.Core.Writer.Internal
                 xml.Write("</t></si>"u8);
             }
             xml.Write("</sst>"u8);
-            return System.Text.Encoding.UTF8.GetString(xml.Span);
+            return xml;
         }
 
-        internal ReadOnlyMemory<byte> ToXlsbBytes()
+        internal BiffBuffer ToXlsbBytes()
         {
-            using var data = new BiffBuffer(Math.Max(128, _values.Count * 24));
+            var data = new BiffBuffer(Math.Max(128, _values.Count * 24));
             using var payload = new BiffBuffer(128);
             payload.WriteU32((uint)Count);
             payload.WriteU32((uint)UniqueCount);
@@ -65,7 +67,7 @@ namespace ExcelReader.Core.Writer.Internal
                 Biff12RecordWriter.WriteRecord(data, Brt.SSTItem, payload.Span);
             }
             Biff12RecordWriter.WriteRecord(data, Brt.EndSst);
-            return data.Memory.ToArray();
+            return data;
         }
 
         private static bool NeedsPreserveSpace(string value)

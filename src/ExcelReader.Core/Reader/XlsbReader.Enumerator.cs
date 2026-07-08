@@ -275,8 +275,9 @@ namespace ExcelReader.Core.Reader
 
             private void AppendString(int col, int style, ReadOnlySpan<char> chars)
             {
+                // Reserve the UTF-8 worst case and encode once, instead of a separate GetByteCount pass.
                 int start = _acc.ValueLength;
-                Span<byte> dst = _acc.ReserveValueSpan(Encoding.UTF8.GetByteCount(chars));
+                Span<byte> dst = _acc.ReserveValueSpan(Encoding.UTF8.GetMaxByteCount(chars.Length));
                 _acc.Advance(Encoding.UTF8.GetBytes(chars, dst));
                 _acc.Add(col, start, _acc.ValueLength - start, CellType.ExcelString, style, fromShared: false);
             }

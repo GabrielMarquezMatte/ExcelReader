@@ -33,14 +33,16 @@ namespace ExcelReader.Core.Reader
                 Buf.AsSpan(Pos, Len - Pos).CopyTo(Buf);
                 Len -= Pos;
                 Pos = 0;
+                return;
             }
-            else if (Len == Buf.Length)
+            if (Len != Buf.Length)
             {
-                byte[] bigger = ArrayPool<byte>.Shared.Rent(LimitChecks.NextBufferSize(_maxCellBytes, _limitName, Buf.Length, Buf.Length + 1));
-                Buf.AsSpan(0, Len).CopyTo(bigger);
-                ArrayPool<byte>.Shared.Return(Buf);
-                Buf = bigger;
+                return;
             }
+            byte[] bigger = ArrayPool<byte>.Shared.Rent(LimitChecks.NextBufferSize(_maxCellBytes, _limitName, Buf.Length, Buf.Length + 1));
+            Buf.AsSpan(0, Len).CopyTo(bigger);
+            ArrayPool<byte>.Shared.Return(Buf);
+            Buf = bigger;
         }
 
         internal void Fill(Stream source)
@@ -50,11 +52,9 @@ namespace ExcelReader.Core.Reader
             if (n == 0)
             {
                 Eof = true;
+                return;
             }
-            else
-            {
-                Len += n;
-            }
+            Len += n;
         }
 
         internal async ValueTask FillAsync(Stream source, CancellationToken ct)
@@ -64,11 +64,9 @@ namespace ExcelReader.Core.Reader
             if (n == 0)
             {
                 Eof = true;
+                return;
             }
-            else
-            {
-                Len += n;
-            }
+            Len += n;
         }
 
         internal void Ensure(Stream source, int n)
