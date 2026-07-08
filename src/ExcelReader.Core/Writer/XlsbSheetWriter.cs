@@ -326,11 +326,7 @@ namespace ExcelReader.Core.Writer
 
         internal void WriteDateSerialCell(int columnIndex, double serial)
         {
-            if (_date1904)
-            {
-                serial -= 1462.0;
-            }
-            WriteDoubleCell(columnIndex, serial, style: 1);
+            WriteDoubleCell(columnIndex, DateSerial.ForEpoch(serial, _date1904), style: 1);
         }
 
         internal void WriteDoubleCell(int columnIndex, double value, int style)

@@ -16,7 +16,7 @@ namespace ExcelReader.Core.Reader
         private const int EndOfChain = unchecked((int)0xFFFFFFFE);
         private const int FatSector = unchecked((int)0xFFFFFFFD);
         private const int FreeSector = unchecked((int)0xFFFFFFFF);
-        private static ReadOnlySpan<byte> Signature => [0xD0, 0xCF, 0x11, 0xE0, 0xA1, 0xB1, 0x1A, 0xE1];
+        internal static ReadOnlySpan<byte> Signature => [0xD0, 0xCF, 0x11, 0xE0, 0xA1, 0xB1, 0x1A, 0xE1];
 
         internal static WorkbookStream OpenWorkbook(Stream stream, bool leaveOpen)
         {

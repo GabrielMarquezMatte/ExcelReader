@@ -50,8 +50,7 @@ namespace ExcelReader.Core.Reader
             Justification = "Stream ownership transfers to CreateAsync, which disposes it on failure and via the reader on success.")]
         public static ValueTask<XlsxReader> FromFileAsync(string path, CancellationToken ct = default, ExcelReaderOptions? options = null)
         {
-            FileStream stream = new(path, FileMode.Open, FileAccess.Read, FileShare.Read, bufferSize: 65536,
-                                    options: FileOptions.Asynchronous | FileOptions.SequentialScan);
+            FileStream stream = OpenAsyncFile(path);
             return XlsxReader.CreateAsync(stream, leaveOpen: false, options, ct);
         }
 
@@ -66,8 +65,7 @@ namespace ExcelReader.Core.Reader
             Justification = "Stream ownership transfers to CreateAsync, which disposes it on failure and via the reader on success.")]
         public static ValueTask<XlsReader> FromXlsFileAsync(string path, CancellationToken ct = default, ExcelReaderOptions? options = null)
         {
-            FileStream stream = new(path, FileMode.Open, FileAccess.Read, FileShare.Read, bufferSize: 65536,
-                                    options: FileOptions.Asynchronous | FileOptions.SequentialScan);
+            FileStream stream = OpenAsyncFile(path);
             return XlsReader.CreateAsync(stream, leaveOpen: false, options, ct);
         }
 
@@ -80,8 +78,7 @@ namespace ExcelReader.Core.Reader
             Justification = "Stream ownership transfers to CreateAsync, which disposes it on failure and via the reader on success.")]
         public static ValueTask<XlsbReader> FromXlsbFileAsync(string path, CancellationToken ct = default, ExcelReaderOptions? options = null)
         {
-            FileStream stream = new(path, FileMode.Open, FileAccess.Read, FileShare.Read, bufferSize: 65536,
-                                    options: FileOptions.Asynchronous | FileOptions.SequentialScan);
+            FileStream stream = OpenAsyncFile(path);
             return XlsbReader.CreateAsync(stream, leaveOpen: false, options, ct);
         }
 
@@ -108,8 +105,7 @@ namespace ExcelReader.Core.Reader
             Justification = "Stream ownership transfers to CreateAsync, which disposes it on failure and via the reader on success.")]
         public static ValueTask<CsvReader> FromCsvFileAsync(string path, CancellationToken ct = default, CsvReaderOptions? options = null)
         {
-            FileStream stream = new(path, FileMode.Open, FileAccess.Read, FileShare.Read, bufferSize: 65536,
-                                    options: FileOptions.Asynchronous | FileOptions.SequentialScan);
+            FileStream stream = OpenAsyncFile(path);
             return CsvReader.CreateAsync(stream, leaveOpen: false, options, ct);
         }
 
@@ -122,7 +118,6 @@ namespace ExcelReader.Core.Reader
         // XLS is an OLE2/CFB compound document. XLSB is distinguished from XLSX by the presence of
         // "xl/workbook.bin" in the ZIP central directory.
         private static ReadOnlySpan<byte> ZipSignature => [0x50, 0x4B, 0x03, 0x04];
-        private static ReadOnlySpan<byte> OleSignature => [0xD0, 0xCF, 0x11, 0xE0, 0xA1, 0xB1, 0x1A, 0xE1];
         // Opens a workbook of either format, choosing the reader from the file's signature.
         // The returned reader iterates rows through its concrete type (XlsxReader / XlsReader)
         // pattern-match on the result to enumerate.
@@ -149,8 +144,7 @@ namespace ExcelReader.Core.Reader
         public static ValueTask<IExcelRowReader> OpenAsync(string path, CancellationToken ct = default, ExcelReaderOptions? options = null)
         {
             ArgumentNullException.ThrowIfNull(path);
-            FileStream stream = new(path, FileMode.Open, FileAccess.Read, FileShare.Read, bufferSize: 65536,
-                                    options: FileOptions.Asynchronous | FileOptions.SequentialScan);
+            FileStream stream = OpenAsyncFile(path);
             return OpenSeekableAsync(stream, leaveOpen: false, options, ct);
         }
 
@@ -248,7 +242,7 @@ namespace ExcelReader.Core.Reader
             int read = stream.ReadAtLeast(header, header.Length, throwOnEndOfStream: false);
             stream.Position = start;
             ReadOnlySpan<byte> sig = header[..read];
-            if (sig.StartsWith(OleSignature))
+            if (sig.StartsWith(XlsCompoundFile.Signature))
             {
                 return ExcelFileFormat.Xls;
             }
@@ -271,7 +265,7 @@ namespace ExcelReader.Core.Reader
             int read = await stream.ReadAtLeastAsync(header, header.Length, throwOnEndOfStream: false, ct).ConfigureAwait(false);
             stream.Position = start;
             ReadOnlySpan<byte> sig = header.AsSpan(0, read);
-            if (sig.StartsWith(OleSignature))
+            if (sig.StartsWith(XlsCompoundFile.Signature))
             {
                 return ExcelFileFormat.Xls;
             }
@@ -302,6 +296,12 @@ namespace ExcelReader.Core.Reader
                     "Open requires a seekable stream so the format signature can be detected. Buffer the stream first, or call From/FromXls/FromXlsb directly.",
                     nameof(stream));
             }
+        }
+
+        private static FileStream OpenAsyncFile(string path)
+        {
+            return new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, bufferSize: 65536,
+                                  options: FileOptions.Asynchronous | FileOptions.SequentialScan);
         }
     }
 }

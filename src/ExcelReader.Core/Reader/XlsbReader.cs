@@ -207,17 +207,6 @@ namespace ExcelReader.Core.Reader
             return await GetAsyncEnumeratorAsync(ct).ConfigureAwait(false);
         }
 
-        // Internal entry points used by Phase 3 tests — accept a pre-opened stream directly.
-        internal Enumerator GetEnumerator(Stream sheetStream)
-        {
-            return new(this, sheetStream);
-        }
-
-        internal Enumerator GetAsyncEnumerator(Stream sheetStream, CancellationToken ct = default)
-        {
-            return new(this, sheetStream, ct);
-        }
-
         // --- Dispose ---
 
         [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP007:Don't dispose injected",

@@ -172,7 +172,7 @@ namespace ExcelReader.Core.Writer.Internal
 
         private static int RoundUp(int value, int multiple)
         {
-            return (value + multiple - 1) / multiple * multiple;
+            return CeilingDiv(value, multiple) * multiple;
         }
 
         private static void WriteU16(Span<byte> dest, int offset, ushort value)

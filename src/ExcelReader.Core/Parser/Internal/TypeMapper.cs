@@ -34,7 +34,7 @@ namespace ExcelReader.Core.Parser.Internal
 
             foreach (PropertyInfo prop in properties)
             {
-                if (!prop.CanWrite || prop.GetSetMethod() is null)
+                if (prop.GetSetMethod() is null)
                 {
                     continue;
                 }
