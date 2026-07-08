@@ -542,30 +542,29 @@ namespace ExcelReader.Tests
         }
 
         [Fact]
-        public void ColumnNameWritesCharAndUtf8Forms()
+        public void ColumnNameWritesUtf8Form()
         {
-            Span<char> chars = stackalloc char[3];
             Span<byte> bytes = stackalloc byte[3];
 
-            int written = ColumnName.Write(chars, 0);
+            int written = ColumnName.Write(bytes, 0);
             Assert.Equal(1, written);
-            Assert.Equal("A", new string(chars[..written]));
+            Assert.Equal("A", Encoding.ASCII.GetString(bytes[..written]));
 
-            written = ColumnName.Write(chars, 25);
+            written = ColumnName.Write(bytes, 25);
             Assert.Equal(1, written);
-            Assert.Equal("Z", new string(chars[..written]));
+            Assert.Equal("Z", Encoding.ASCII.GetString(bytes[..written]));
 
-            written = ColumnName.Write(chars, 26);
+            written = ColumnName.Write(bytes, 26);
             Assert.Equal(2, written);
-            Assert.Equal("AA", new string(chars[..written]));
+            Assert.Equal("AA", Encoding.ASCII.GetString(bytes[..written]));
 
-            written = ColumnName.Write(chars, 701);
+            written = ColumnName.Write(bytes, 701);
             Assert.Equal(2, written);
-            Assert.Equal("ZZ", new string(chars[..written]));
+            Assert.Equal("ZZ", Encoding.ASCII.GetString(bytes[..written]));
 
-            written = ColumnName.Write(chars, 702);
+            written = ColumnName.Write(bytes, 702);
             Assert.Equal(3, written);
-            Assert.Equal("AAA", new string(chars[..written]));
+            Assert.Equal("AAA", Encoding.ASCII.GetString(bytes[..written]));
 
             written = ColumnName.Write(bytes, 16_383);
             Assert.Equal(3, written);
@@ -581,17 +580,12 @@ namespace ExcelReader.Tests
                 MaxSharedStringBytes = 8,
             };
 
-            ExcelLimitExceededException cell = Assert.Throws<ExcelLimitExceededException>(() =>
-                LimitChecks.ThrowIfOverCellLimit(options, 5));
-            Assert.Equal(nameof(ExcelReaderOptions.MaxCellBytes), cell.LimitName);
-
             ExcelLimitExceededException shared = Assert.Throws<ExcelLimitExceededException>(() =>
                 LimitChecks.ThrowIfOverSharedStringLimit(options, 9));
             Assert.Equal(nameof(ExcelReaderOptions.MaxSharedStringBytes), shared.LimitName);
 
-            var unlimited = options with { MaxCellBytes = 0 };
             ExcelLimitExceededException array = Assert.Throws<ExcelLimitExceededException>(() =>
-                LimitChecks.NextBufferSize(unlimited, Array.MaxLength, Array.MaxLength));
+                LimitChecks.NextBufferSize(0, nameof(ExcelReaderOptions.MaxCellBytes), Array.MaxLength, Array.MaxLength));
             Assert.Equal("ArrayMaxLength", array.LimitName);
         }
 

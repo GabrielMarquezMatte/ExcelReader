@@ -86,17 +86,6 @@ namespace ExcelReader.Core.Writer
             _rowActive = false;
         }
 
-        public void WriteRow<T>(ReadOnlySpan<T> values)
-            where T : ISpanFormattable
-        {
-            BeginRow();
-            for (int i = 0; i < values.Length; i++)
-            {
-                WriteDoubleCell(i, XlsbRowWriter.ToDouble(values[i]), style: 0);
-            }
-            _rowActive = false;
-        }
-
         internal void NotifyRowEnded()
         {
             _rowActive = false;

@@ -2,13 +2,11 @@ using System.Buffers.Text;
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Runtime.CompilerServices;
-using System.Runtime.InteropServices;
 using System.Text;
 using ExcelReader.Core.Enums;
 
 namespace ExcelReader.Core.ValueObjects
 {
-    [StructLayout(LayoutKind.Auto)]
     public readonly ref struct Cell
     {
         private readonly double _number;

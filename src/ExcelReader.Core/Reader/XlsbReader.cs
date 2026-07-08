@@ -174,9 +174,8 @@ namespace ExcelReader.Core.Reader
             Justification = "Public nested enumerator is the standard foreach pattern.")]
         public Enumerator GetEnumerator()
         {
-            var entry = _zip!.GetEntry(_sheets![_current].Path)
-                ?? throw new InvalidDataException($"Worksheet part not found: {_sheets[_current].Path}");
-            return new Enumerator(this, OpenEntryStream(entry));
+            var entry = WorkbookLookups.GetWorksheetEntry(_zip!, _sheets!, _current);
+            return new Enumerator(this, WorkbookLookups.OpenEntryStream(entry, _decompressedBytes));
         }
 
         IExcelRowEnumerator IExcelRowReader<IExcelRowEnumerator>.GetEnumerator()
@@ -186,20 +185,14 @@ namespace ExcelReader.Core.Reader
 
         public async ValueTask<Enumerator> GetAsyncEnumeratorAsync(CancellationToken ct = default)
         {
-            var entry = _zip!.GetEntry(_sheets![_current].Path)
-                ?? throw new InvalidDataException($"Worksheet part not found: {_sheets[_current].Path}");
+            var entry = WorkbookLookups.GetWorksheetEntry(_zip!, _sheets!, _current);
 #if NET10_0_OR_GREATER
             Stream sheet = new LimitedReadStream(await entry.OpenAsync(ct).ConfigureAwait(false), _decompressedBytes);
 #else
             ct.ThrowIfCancellationRequested();
-            Stream sheet = OpenEntryStream(entry);
+            Stream sheet = WorkbookLookups.OpenEntryStream(entry, _decompressedBytes);
 #endif
             return new Enumerator(this, sheet, ct);
-        }
-
-        private LimitedReadStream OpenEntryStream(ZipArchiveEntry entry)
-        {
-            return new LimitedReadStream(entry.Open(), _decompressedBytes);
         }
 
         async ValueTask<IExcelRowEnumerator> IExcelRowReader<IExcelRowEnumerator>.GetAsyncEnumeratorAsync(CancellationToken ct)

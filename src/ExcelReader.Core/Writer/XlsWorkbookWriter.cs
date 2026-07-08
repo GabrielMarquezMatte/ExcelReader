@@ -53,12 +53,6 @@ namespace ExcelReader.Core.Writer
             return ValueTask.CompletedTask;
         }
 
-        // The public FlushAsync returns Task; IWorkbookWriter wants ValueTask, so adapt explicitly.
-        ValueTask IWorkbookWriter<XlsSheetWriter>.FlushAsync(CancellationToken ct)
-        {
-            return new ValueTask(FlushAsync(ct));
-        }
-
         public XlsSheetWriter AddSheet(string name)
         {
             ArgumentNullException.ThrowIfNull(name);
@@ -164,10 +158,10 @@ namespace ExcelReader.Core.Writer
             }
         }
 
-        public Task FlushAsync(CancellationToken ct = default)
+        public ValueTask FlushAsync(CancellationToken ct = default)
         {
             ct.ThrowIfCancellationRequested();
-            return _stream.FlushAsync(ct);
+            return new ValueTask(_stream.FlushAsync(ct));
         }
 
         public async ValueTask DisposeAsync()

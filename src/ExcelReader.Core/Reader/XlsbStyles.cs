@@ -60,7 +60,7 @@ namespace ExcelReader.Core.Reader
                 return false;
             }
             int numFmtId = Biff12.ReadU16(payload, 2);
-            return custom.TryGetValue(numFmtId, out bool d) ? d : NumberFormat.IsBuiltinDate(numFmtId);
+            return WorkbookLookups.ResolveDateFlag(custom, numFmtId);
         }
     }
 }

@@ -88,22 +88,6 @@ namespace ExcelReader.Core.Writer
             return ValueTask.FromResult(_rowWriter);
         }
 
-        public void WriteRow<T>(ReadOnlySpan<T> values, CancellationToken ct = default)
-            where T : ISpanFormattable
-        {
-            int rowNumber = BeginRow(ct);
-            for (int i = 0; i < values.Length; i++)
-            {
-                CellFormatter.WriteNumber(_rowBuffer, values[i], i, rowNumber, includeReference: false);
-            }
-            EndBufferedRow();
-        }
-
-        internal void NotifyRowEnded()
-        {
-            _rowActive = false;
-        }
-
         [SuppressMessage("Reliability", "CA1849:Call async methods when in an async method",
             Justification = "Dispose() is called synchronously to ensure ZipArchive entry tracking is updated before this method returns.")]
         [SuppressMessage("Sonar", "S6966:Await DisposeAsync instead",
