@@ -3,11 +3,13 @@ namespace ExcelReader.Core.Reader
     internal sealed class DecompressedByteCounter
     {
         private readonly long _limit;
+        private readonly string _limitName;
         private long _total;
 
-        internal DecompressedByteCounter(long limit)
+        internal DecompressedByteCounter(long limit, string limitName = nameof(ExcelReaderOptions.MaxTotalDecompressedBytes))
         {
             _limit = limit;
+            _limitName = limitName;
         }
 
         internal void Add(long bytes)
@@ -19,7 +21,7 @@ namespace ExcelReader.Core.Reader
             long total = checked(_total + bytes);
             if (total > _limit)
             {
-                throw new ExcelLimitExceededException(nameof(ExcelReaderOptions.MaxTotalDecompressedBytes), _limit, total);
+                throw new ExcelLimitExceededException(_limitName, _limit, total);
             }
             _total = total;
         }
@@ -29,9 +31,7 @@ namespace ExcelReader.Core.Reader
     {
         private readonly Stream _inner;
         private readonly DecompressedByteCounter? _totalCounter;
-        private readonly string _entryLimitName;
-        private readonly long _entryLimit;
-        private long _entryTotal;
+        private readonly DecompressedByteCounter? _entryCounter;
 
         internal LimitedReadStream(
             Stream inner,
@@ -41,8 +41,7 @@ namespace ExcelReader.Core.Reader
         {
             _inner = inner;
             _totalCounter = totalCounter;
-            _entryLimitName = entryLimitName;
-            _entryLimit = entryLimit;
+            _entryCounter = entryLimit > 0 ? new DecompressedByteCounter(entryLimit, entryLimitName) : null;
         }
 
         public override bool CanRead => _inner.CanRead;
@@ -128,16 +127,7 @@ namespace ExcelReader.Core.Reader
                 return;
             }
             _totalCounter?.Add(read);
-            if (_entryLimit <= 0)
-            {
-                return;
-            }
-            long total = checked(_entryTotal + read);
-            if (total > _entryLimit)
-            {
-                throw new ExcelLimitExceededException(_entryLimitName, _entryLimit, total);
-            }
-            _entryTotal = total;
+            _entryCounter?.Add(read);
         }
     }
 }

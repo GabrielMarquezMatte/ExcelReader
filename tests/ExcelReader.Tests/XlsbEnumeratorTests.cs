@@ -29,7 +29,7 @@ namespace ExcelReader.Tests
 
         private static XlsbReader.Enumerator Open(XlsbReader reader, byte[] sheetBin)
         {
-            return reader.GetEnumerator(new MemoryStream(sheetBin));
+            return new(reader, new MemoryStream(sheetBin));
         }
 
         // --- Basic enumeration ---

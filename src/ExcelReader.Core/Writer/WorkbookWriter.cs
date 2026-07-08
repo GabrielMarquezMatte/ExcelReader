@@ -1,6 +1,7 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.IO.Compression;
+using System.Security;
 using System.Text;
 using ExcelReader.Core.Writer.Internal;
 
@@ -248,12 +249,7 @@ namespace ExcelReader.Core.Writer
 
         private static string EscapeAttribute(string value)
         {
-            StringBuilder sb = new(value);
-            return sb.Replace("&", "&amp;")
-                     .Replace("<", "&lt;")
-                     .Replace(">", "&gt;")
-                     .Replace("\"", "&quot;")
-                     .ToString();
+            return SecurityElement.Escape(value)!;
         }
     }
 }

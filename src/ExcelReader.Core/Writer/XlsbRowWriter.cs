@@ -134,23 +134,6 @@ namespace ExcelReader.Core.Writer
             _columnIndex++;
         }
 
-        public void Write(float value)
-        {
-            ThrowIfDisposed();
-            WriteDouble(value, style: 0);
-        }
-
-        public void Write(float? value)
-        {
-            ThrowIfDisposed();
-            if (value is not null)
-            {
-                WriteDouble(value.Value, style: 0);
-                return;
-            }
-            _columnIndex++;
-        }
-
         public void Write(double value)
         {
             ThrowIfDisposed();

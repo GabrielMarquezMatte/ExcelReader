@@ -25,8 +25,6 @@ namespace ExcelReader.Core.Reader
 
         internal long Position { get; set; }
 
-        internal long Length => _wb.Length;
-
         internal int PeekId()
         {
             if (Position + 4 > _wb.Length)
