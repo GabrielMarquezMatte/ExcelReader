@@ -115,6 +115,31 @@ namespace ExcelReader.Tests
             Assert.Equal("C", e.Current[2].GetString());
         }
 
+        // Regression: CellAccumulator keeps binary-double values in a side array parallel to the cell
+        // descriptors, which SortByColumn must permute in lockstep — a mixed row of out-of-order numeric
+        // and text cells is the case that would silently misalign values if that sort were wrong.
+        [Fact]
+        public void OutOfOrderNumericAndTextCellsStayAlignedAfterSort()
+        {
+            using var ms = XlsWorkbookBuilder.Build(sheets: [("S1", [[
+                new XlsAt(3, "D"),
+                new XlsAt(0, 100),
+                new XlsAt(2, "C"),
+                new XlsAt(1, 200),
+            ]])]);
+            using var reader = Excel.FromXls(ms);
+
+            using var e = reader.GetEnumerator();
+            Assert.True(e.MoveNext());
+            var row = e.Current;
+            Assert.True(row[0].TryGetDouble(out double v0));
+            Assert.Equal(100, v0);
+            Assert.True(row[1].TryGetDouble(out double v1));
+            Assert.Equal(200, v1);
+            Assert.Equal("C", row[2].GetString());
+            Assert.Equal("D", row[3].GetString());
+        }
+
         [Fact]
         public void ReadsSharedStringsAndMultipleSheets()
         {
