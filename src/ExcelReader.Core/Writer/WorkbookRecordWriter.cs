@@ -108,104 +108,116 @@ namespace ExcelReader.Core.Writer
         }
     }
 
-    // Per-type column plan, built once and cached. The writer is an expression-tree-compiled
-    // Action<IRowWriter, T>: each property is read strongly-typed and routed to the matching IRowWriter
-    // overload with no boxing and no per-cell type switch. Numeric properties go to the generic Write<U>
-    // (a number cell); everything non-numeric/non-primitive is written as its ToString() text, since
-    // Write<U> only produces valid numeric cells.
+    // Per-type column plan. Headers depend only on T; the write delegate additionally depends on the
+    // concrete TRow (RowWriter/XlsbRowWriter/XlsRowWriter), cached per (T, TRow) via the nested Plan<TRow>.
+    // Compiling against the concrete TRow (instead of the IRowWriter interface) lets each Expression.Call
+    // resolve directly to that sealed class's non-virtual method, so the JIT emits a direct call per cell
+    // instead of an interface dispatch. Numeric properties go to the generic Write<U> (a number cell)
+    // everything non-numeric/non-primitive is written as its ToString() text, since Write<U> only
+    // produces valid numeric cells.
     internal static class RecordColumns<T>
     {
-        // Single field whose type mentions T, so the per-close-type caching is deliberate (avoids S2743).
-        private static readonly (string[] Headers, Action<IRowWriter, T> Write) _plan = Build();
-        internal static string[] Headers => _plan.Headers;
-        // Write targets IRowWriter (every row writer is a reference type), so a TRow argument converts with no box.
+        private static readonly PropertyInfo[] _props = FilterProperties();
+        internal static string[] Headers { get; } = BuildHeaders(_props);
+
         internal static void WriteRow<TRow>(TRow row, T record) where TRow : IRowWriter
         {
-            _plan.Write(row, record);
+            Plan<TRow>.Write(row, record);
         }
 
-        private static (string[], Action<IRowWriter, T>) Build()
+        private static PropertyInfo[] FilterProperties()
         {
-            PropertyInfo[] props = typeof(T).GetProperties(BindingFlags.Public | BindingFlags.Instance);
-            var headers = new List<string>(props.Length);
-            ParameterExpression rowParam = Expression.Parameter(typeof(IRowWriter), "row");
-            ParameterExpression recParam = Expression.Parameter(typeof(T), "record");
-            var body = new List<Expression>(props.Length);
+            return [.. typeof(T).GetProperties(BindingFlags.Public | BindingFlags.Instance)
+                .Where(prop => prop.GetGetMethod() is not null && prop.GetIndexParameters().Length == 0
+                    && !Attribute.IsDefined(prop, typeof(ExcelIgnoreAttribute)))];
+        }
 
-            foreach (PropertyInfo prop in props)
+        private static string[] BuildHeaders(PropertyInfo[] props)
+        {
+            var headers = new string[props.Length];
+            for (int i = 0; i < props.Length; i++)
             {
-                if (prop.GetGetMethod() is null || prop.GetIndexParameters().Length > 0
-                    || Attribute.IsDefined(prop, typeof(ExcelIgnoreAttribute)))
-                {
-                    continue;
-                }
                 // First [ExcelColumn] wins (the attribute allows aliases); fall back to the property name.
-                ExcelColumnAttribute? attr = prop.GetCustomAttributes<ExcelColumnAttribute>().FirstOrDefault();
-                headers.Add(attr?.Name ?? prop.Name);
-
-                Expression value = Expression.Property(recParam, prop);
-                // A [ExcelConverter] whose type also implements IExcelCellWriter<propType> owns the write
-                // (round-trips a custom type written here and read back via its IExcelCellConverter side).
-                Expression? converterCall = TryBuildConverterWrite(prop, rowParam, value);
-                if (converterCall is not null)
-                {
-                    body.Add(converterCall);
-                    continue;
-                }
-                MethodInfo write = RowWriteMethods.Select(prop.PropertyType, out bool asString);
-                if (asString)
-                {
-                    value = ToStringExpression(value, prop.PropertyType);
-                }
-                body.Add(Expression.Call(rowParam, write, value));
+                ExcelColumnAttribute? attr = props[i].GetCustomAttributes<ExcelColumnAttribute>().FirstOrDefault();
+                headers[i] = attr?.Name ?? props[i].Name;
             }
-
-            var writeRow = body.Count == 0 ? static (_, _) => { } : Expression.Lambda<Action<IRowWriter, T>>(Expression.Block(body), rowParam, recParam).Compile();
-            return ([.. headers], writeRow);
+            return headers;
         }
 
-        // Produces a string? expression for a non-string, non-numeric property (Guid, enum, char, DateOnly,
-        // custom types): null-safe ToString() so it lands in a text cell rather than a corrupt number cell.
-        private static Expression ToStringExpression(Expression value, Type pt)
+        // Keyed by TRow: one compiled Action<TRow, T> per concrete row-writer type actually used with T.
+        private static class Plan<TRow> where TRow : IRowWriter
         {
-            MethodInfo toString = typeof(object).GetMethod(nameof(ToString), Type.EmptyTypes)!;
-            if (pt.IsValueType && Nullable.GetUnderlyingType(pt) is null)
+            internal static readonly Action<TRow, T> Write = Build();
+            // Produces a string? expression for a non-string, non-numeric property (Guid, enum, char, DateOnly,
+            // custom types): null-safe ToString() so it lands in a text cell rather than a corrupt number cell.
+            private static Expression ToStringExpression(Expression value, Type pt)
             {
-                // Never null; box once for the virtual ToString call (rare path).
-                return Expression.Call(Expression.Convert(value, typeof(object)), toString);
+                MethodInfo toString = typeof(object).GetMethod(nameof(ToString), Type.EmptyTypes)!;
+                if (pt.IsValueType && Nullable.GetUnderlyingType(pt) is null)
+                {
+                    // Never null; box once for the virtual ToString call (rare path).
+                    return Expression.Call(Expression.Convert(value, typeof(object)), toString);
+                }
+                Expression boxed = Expression.Convert(value, typeof(object));
+                return Expression.Condition(
+                    Expression.NotEqual(boxed, Expression.Constant(null, typeof(object))),
+                    Expression.Call(boxed, toString),
+                    Expression.Constant(null, typeof(string)));
             }
-            Expression boxed = Expression.Convert(value, typeof(object));
-            return Expression.Condition(
-                Expression.NotEqual(boxed, Expression.Constant(null, typeof(object))),
-                Expression.Call(boxed, toString),
-                Expression.Constant(null, typeof(string)));
-        }
+            // If the property carries [ExcelConverter(T)] and T implements IExcelCellWriter<propType>, returns
+            // a call to that converter's Write (a shared singleton instance); otherwise null so the caller
+            // falls back to type-based routing (a read-only converter simply gets no write side).
+            private static MethodCallExpression? TryBuildConverterWrite(PropertyInfo prop, ParameterExpression rowParam, Expression value)
+            {
+                ExcelConverterAttribute? converter = prop.GetCustomAttribute<ExcelConverterAttribute>();
+                if (converter is null)
+                {
+                    return null;
+                }
+                Type writerInterface = typeof(IExcelCellWriter<>).MakeGenericType(prop.PropertyType);
+                if (!writerInterface.IsAssignableFrom(converter.ConverterType))
+                {
+                    return null;
+                }
+                object instance = Activator.CreateInstance(converter.ConverterType)
+                    ?? throw new InvalidOperationException($"Converter '{converter.ConverterType}' could not be instantiated.");
+                MethodInfo writeMethod = writerInterface.GetMethod(nameof(IExcelCellWriter<>.Write))!;
+                return Expression.Call(Expression.Constant(instance, writerInterface), writeMethod, rowParam, value);
+            }
+            private static Action<TRow, T> Build()
+            {
+                ParameterExpression rowParam = Expression.Parameter(typeof(TRow), "row");
+                ParameterExpression recParam = Expression.Parameter(typeof(T), "record");
+                var body = new List<Expression>(_props.Length);
 
-        // If the property carries [ExcelConverter(T)] and T implements IExcelCellWriter<propType>, returns
-        // a call to that converter's Write (a shared singleton instance); otherwise null so the caller
-        // falls back to type-based routing (a read-only converter simply gets no write side).
-        private static MethodCallExpression? TryBuildConverterWrite(PropertyInfo prop, ParameterExpression rowParam, Expression value)
-        {
-            ExcelConverterAttribute? converter = prop.GetCustomAttribute<ExcelConverterAttribute>();
-            if (converter is null)
-            {
-                return null;
+                foreach (PropertyInfo prop in _props)
+                {
+                    Expression value = Expression.Property(recParam, prop);
+                    // A [ExcelConverter] whose type also implements IExcelCellWriter<propType> owns the write
+                    // (round-trips a custom type written here and read back via its IExcelCellConverter side).
+                    Expression? converterCall = TryBuildConverterWrite(prop, rowParam, value);
+                    if (converterCall is not null)
+                    {
+                        body.Add(converterCall);
+                        continue;
+                    }
+                    MethodInfo write = RowWriteMethods<TRow>.Select(prop.PropertyType, out bool asString);
+                    if (asString)
+                    {
+                        value = ToStringExpression(value, prop.PropertyType);
+                    }
+                    body.Add(Expression.Call(rowParam, write, value));
+                }
+
+                return body.Count == 0 ? static (_, _) => { } : Expression.Lambda<Action<TRow, T>>(Expression.Block(body), rowParam, recParam).Compile();
             }
-            Type writerInterface = typeof(IExcelCellWriter<>).MakeGenericType(prop.PropertyType);
-            if (!writerInterface.IsAssignableFrom(converter.ConverterType))
-            {
-                return null;
-            }
-            object instance = Activator.CreateInstance(converter.ConverterType)
-                ?? throw new InvalidOperationException($"Converter '{converter.ConverterType}' could not be instantiated.");
-            MethodInfo writeMethod = writerInterface.GetMethod(nameof(IExcelCellWriter<>.Write))!;
-            return Expression.Call(Expression.Constant(instance, writerInterface), writeMethod, rowParam, value);
         }
     }
 
-    // T-independent reflection resolved once for the whole process (not per closed RecordColumns<T>):
-    // the IRowWriter.Write overloads and the set of numeric property types that map to Write<U>.
-    internal static class RowWriteMethods
+    // Reflection resolved once per concrete TRow (RowWriter/XlsbRowWriter/XlsRowWriter — at most a
+    // handful of instantiations for the whole process): the Write overloads declared on that concrete
+    // type, plus the set of numeric property types that map to Write<U>.
+    internal static class RowWriteMethods<TRow> where TRow : IRowWriter
     {
         private readonly record struct MethodInfoSet(MethodInfo Str, MethodInfo Bool, MethodInfo BoolN, MethodInfo Date,
                                                      MethodInfo DateN, MethodInfo DateOnly, MethodInfo DateOnlyN,
@@ -223,7 +235,7 @@ namespace ExcelReader.Core.Writer
         {
             MethodInfo? str = null, boolean = null, booleanN = null, date = null, dateN = null,
                 dateOnly = null, dateOnlyN = null, timeOnly = null, timeOnlyN = null, generic = null, genericN = null;
-            foreach (MethodInfo m in typeof(IRowWriter).GetMethods())
+            foreach (MethodInfo m in typeof(TRow).GetMethods())
             {
                 if (!string.Equals(m.Name, nameof(IRowWriter.Write), StringComparison.Ordinal))
                 {
@@ -248,8 +260,8 @@ namespace ExcelReader.Core.Writer
             return new(str!, boolean!, booleanN!, date!, dateN!, dateOnly!, dateOnlyN!, timeOnly!, timeOnlyN!, generic!, genericN!);
         }
 
-        // Picks the IRowWriter.Write overload for a property type; asString means the caller must first
-        // convert the value to a string (the non-numeric fallback).
+        // Picks the concrete TRow.Write overload for a property type; asString means the caller must
+        // first convert the value to a string (the non-numeric fallback).
         internal static MethodInfo Select(Type pt, out bool asString)
         {
             asString = false;

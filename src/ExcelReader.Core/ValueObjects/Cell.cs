@@ -67,8 +67,89 @@ namespace ExcelReader.Core.ValueObjects
                 result = Unsafe.As<float, T>(ref f);
                 return true;
             }
-            // Other numeric targets (int, long, decimal, ...): format once and parse, which
-            // exactly matches "parse the formatted text" — e.g. int.TryParse fails on "12.5".
+            if (typeof(T) == typeof(decimal))
+            {
+                decimal m = (decimal)_number;
+                result = Unsafe.As<decimal, T>(ref m);
+                return true;
+            }
+            // Integral targets: cast directly when the stored double is a whole number that fits the
+            // target's range — skips the format+parse round trip that the general path below needs.
+            // Non-integral values (e.g. 12.5) and out-of-range values fall through, matching
+            // int.TryParse("12.5") semantics.
+            bool isIntegral = _number == Math.Truncate(_number);
+            if (typeof(T) == typeof(int))
+            {
+                if (isIntegral && _number is >= int.MinValue and <= int.MaxValue)
+                {
+                    int v = (int)_number;
+                    result = Unsafe.As<int, T>(ref v);
+                    return true;
+                }
+            }
+            else if (typeof(T) == typeof(long))
+            {
+                if (isIntegral && _number is >= -9223372036854775808.0 and < 9223372036854775808.0)
+                {
+                    long v = (long)_number;
+                    result = Unsafe.As<long, T>(ref v);
+                    return true;
+                }
+            }
+            else if (typeof(T) == typeof(short))
+            {
+                if (isIntegral && _number is >= short.MinValue and <= short.MaxValue)
+                {
+                    short v = (short)_number;
+                    result = Unsafe.As<short, T>(ref v);
+                    return true;
+                }
+            }
+            else if (typeof(T) == typeof(sbyte))
+            {
+                if (isIntegral && _number is >= sbyte.MinValue and <= sbyte.MaxValue)
+                {
+                    sbyte v = (sbyte)_number;
+                    result = Unsafe.As<sbyte, T>(ref v);
+                    return true;
+                }
+            }
+            else if (typeof(T) == typeof(uint))
+            {
+                if (isIntegral && _number is >= uint.MinValue and <= uint.MaxValue)
+                {
+                    uint v = (uint)_number;
+                    result = Unsafe.As<uint, T>(ref v);
+                    return true;
+                }
+            }
+            else if (typeof(T) == typeof(ulong))
+            {
+                if (isIntegral && _number is >= 0.0 and < 18446744073709551616.0)
+                {
+                    ulong v = (ulong)_number;
+                    result = Unsafe.As<ulong, T>(ref v);
+                    return true;
+                }
+            }
+            else if (typeof(T) == typeof(ushort))
+            {
+                if (isIntegral && _number is >= ushort.MinValue and <= ushort.MaxValue)
+                {
+                    ushort v = (ushort)_number;
+                    result = Unsafe.As<ushort, T>(ref v);
+                    return true;
+                }
+            }
+            else if (typeof(T) == typeof(byte) && isIntegral && _number is >= byte.MinValue and <= byte.MaxValue)
+            {
+                byte v = (byte)_number;
+                result = Unsafe.As<byte, T>(ref v);
+                return true;
+            }
+            // Other numeric targets (decimal, ...), plus out-of-range/non-integral cases above:
+            // format once and parse, which exactly matches "parse the formatted text" —
+            // e.g. int.TryParse fails on "12.5".
             Span<byte> buffer = stackalloc byte[32];
             return Utf8Formatter.TryFormat(_number, buffer, out int written)
                 ? T.TryParse(buffer[..written], provider, out result)

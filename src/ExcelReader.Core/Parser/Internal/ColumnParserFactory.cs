@@ -96,7 +96,7 @@ namespace ExcelReader.Core.Parser.Internal
             object converter = Activator.CreateInstance(converterType)
                 ?? throw new InvalidOperationException($"Converter '{converterType}' could not be instantiated.");
             return (ColumnParser<T>)_buildConverterMethod
-                .MakeGenericMethod(typeof(T), propType)
+                .MakeGenericMethod(typeof(T), propType, converterType)
                 .Invoke(null, [prop, converter])!;
         }
 
@@ -548,21 +548,19 @@ namespace ExcelReader.Core.Parser.Internal
                 while (low <= high)
                 {
                     int mid = (low + high) >>> 1;
-                    var entry = _sortedNames[mid];
-                    int cmp = span.CompareTo(entry.Name.AsSpan(), StringComparison.OrdinalIgnoreCase);
+                    var (Name, Value) = _sortedNames[mid];
+                    int cmp = span.CompareTo(Name.AsSpan(), StringComparison.OrdinalIgnoreCase);
                     if (cmp == 0)
                     {
-                        value = entry.Value;
+                        value = Value;
                         return true;
                     }
                     if (cmp < 0)
                     {
                         high = mid - 1;
+                        continue;
                     }
-                    else
-                    {
-                        low = mid + 1;
-                    }
+                    low = mid + 1;
                 }
                 value = default;
                 return false;
@@ -603,31 +601,35 @@ namespace ExcelReader.Core.Parser.Internal
                 ReadOnlySpan<byte> utf8 = cell.Value;
                 if (utf8.Length <= 128)
                 {
-                    Span<char> chars = stackalloc char[128];
-                    int n = Encoding.UTF8.GetChars(utf8, chars);
-                    return TryLookupSpan(chars[..n], out value);
+                    Span<char> spanChars = stackalloc char[128];
+                    int n = Encoding.UTF8.GetChars(utf8, spanChars);
+                    return TryLookupSpan(spanChars[..n], out value);
                 }
-                else
-                {
-                    char[] chars = ArrayPool<char>.Shared.Rent(utf8.Length);
-                    try
-                    {
-                        int n = Encoding.UTF8.GetChars(utf8, chars);
-                        return TryLookupSpan(chars.AsSpan(0, n), out value);
-                    }
-                    finally
-                    {
-                        ArrayPool<char>.Shared.Return(chars);
-                    }
-                }
-#else
-                var byteValue = cell.Value;
-                char[] chars = ArrayPool<char>.Shared.Rent(byteValue.Length);
+                char[] chars = ArrayPool<char>.Shared.Rent(utf8.Length);
                 try
                 {
-                    int charCount = Encoding.UTF8.GetChars(byteValue, chars);
+                    int n = Encoding.UTF8.GetChars(utf8, chars);
+                    return TryLookupSpan(chars.AsSpan(0, n), out value);
+                }
+                finally
+                {
+                    ArrayPool<char>.Shared.Return(chars);
+                }
+#else
+                ReadOnlySpan<byte> utf8 = cell.Value;
+                if (utf8.Length <= 128)
+                {
+                    Span<char> spanChars = stackalloc char[128];
+                    int n = Encoding.UTF8.GetChars(utf8, spanChars);
                     var alternateLookup = _nameMap.GetAlternateLookup<ReadOnlySpan<char>>();
-                    return alternateLookup.TryGetValue(chars.AsSpan(0, charCount), out value);
+                    return alternateLookup.TryGetValue(spanChars[..n], out value);
+                }
+                char[] chars = ArrayPool<char>.Shared.Rent(utf8.Length);
+                try
+                {
+                    int n = Encoding.UTF8.GetChars(utf8, chars);
+                    var alternateLookup = _nameMap.GetAlternateLookup<ReadOnlySpan<char>>();
+                    return alternateLookup.TryGetValue(chars.AsSpan(0, n), out value);
                 }
                 finally
                 {
@@ -669,9 +671,12 @@ namespace ExcelReader.Core.Parser.Internal
 
         // Callers (RowProjector/CsvRowProjector) skip invoking any ColumnParser for an empty cell, so
         // the converter only ever sees a populated one.
-        private static ColumnParser<T> BuildConverterCore<T, TProp>(PropertyInfo prop, object converter)
+        // TConv is the concrete converter type (not just the interface), so the TryConvert call below
+        // is a constrained generic call the JIT can devirtualize and inline instead of an interface callvirt.
+        private static ColumnParser<T> BuildConverterCore<T, TProp, TConv>(PropertyInfo prop, object converter)
+            where TConv : IExcelCellConverter<TProp>
         {
-            var typed = (IExcelCellConverter<TProp>)converter;
+            var typed = (TConv)converter;
             RefAction<T, TProp> setter = CompileSetter<T, TProp>(prop);
             return (ref model, in cell, isDate1904, provider) =>
             {
