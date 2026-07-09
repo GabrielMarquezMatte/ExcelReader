@@ -130,7 +130,7 @@ namespace ExcelReader.Core.Parser.Internal
                 {
                     break;
                 }
-                ColumnBinding<T> binding = bindings[bindingIndex];
+                ref readonly ColumnBinding<T> binding = ref bindings[bindingIndex];
                 if (binding.Column != column)
                 {
                     continue;

@@ -671,8 +671,12 @@ namespace ExcelReader.Core.Parser.Internal
 
         // Callers (RowProjector/CsvRowProjector) skip invoking any ColumnParser for an empty cell, so
         // the converter only ever sees a populated one.
-        // TConv is the concrete converter type (not just the interface), so the TryConvert call below
-        // is a constrained generic call the JIT can devirtualize and inline instead of an interface callvirt.
+        // TConv is the concrete converter type (not just the interface). This only devirtualizes
+        // typed.TryConvert for a value-type converter: CoreCLR shares one compiled body across all
+        // reference-type instantiations of a generic method (canonical __Canon sharing), so for a class
+        // converter — the common case — the constrained call still resolves through the interface at
+        // runtime, same as calling through IExcelCellConverter<TProp> directly.
+
         private static ColumnParser<T> BuildConverterCore<T, TProp, TConv>(PropertyInfo prop, object converter)
             where TConv : IExcelCellConverter<TProp>
         {

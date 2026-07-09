@@ -165,9 +165,11 @@ namespace ExcelReader.Core.Writer
                     Expression.Constant(null, typeof(string)));
             }
             // If the property carries [ExcelConverter(T)] and T implements IExcelCellWriter<propType>, returns
-            // a call to that converter's Write (a shared singleton instance); otherwise null so the caller
-            // falls back to type-based routing (a read-only converter simply gets no write side).
-            private static MethodCallExpression? TryBuildConverterWrite(PropertyInfo prop, ParameterExpression rowParam, Expression value)
+            // a call to that converter's Write; otherwise null so the caller falls back to type-based
+            // routing (a read-only converter simply gets no write side). `instances` caches by converter
+            // type so a converter used on multiple properties of the same (T, TRow) is built only once.
+            private static MethodCallExpression? TryBuildConverterWrite(
+                PropertyInfo prop, ParameterExpression rowParam, Expression value, Dictionary<Type, object> instances)
             {
                 ExcelConverterAttribute? converter = prop.GetCustomAttribute<ExcelConverterAttribute>();
                 if (converter is null)
@@ -179,8 +181,12 @@ namespace ExcelReader.Core.Writer
                 {
                     return null;
                 }
-                object instance = Activator.CreateInstance(converter.ConverterType)
-                    ?? throw new InvalidOperationException($"Converter '{converter.ConverterType}' could not be instantiated.");
+                if (!instances.TryGetValue(converter.ConverterType, out object? instance))
+                {
+                    instance = Activator.CreateInstance(converter.ConverterType)
+                        ?? throw new InvalidOperationException($"Converter '{converter.ConverterType}' could not be instantiated.");
+                    instances.Add(converter.ConverterType, instance);
+                }
                 MethodInfo writeMethod = writerInterface.GetMethod(nameof(IExcelCellWriter<>.Write))!;
                 return Expression.Call(Expression.Constant(instance, writerInterface), writeMethod, rowParam, value);
             }
@@ -189,13 +195,14 @@ namespace ExcelReader.Core.Writer
                 ParameterExpression rowParam = Expression.Parameter(typeof(TRow), "row");
                 ParameterExpression recParam = Expression.Parameter(typeof(T), "record");
                 var body = new List<Expression>(_props.Length);
+                var converterInstances = new Dictionary<Type, object>();
 
                 foreach (PropertyInfo prop in _props)
                 {
                     Expression value = Expression.Property(recParam, prop);
                     // A [ExcelConverter] whose type also implements IExcelCellWriter<propType> owns the write
                     // (round-trips a custom type written here and read back via its IExcelCellConverter side).
-                    Expression? converterCall = TryBuildConverterWrite(prop, rowParam, value);
+                    Expression? converterCall = TryBuildConverterWrite(prop, rowParam, value, converterInstances);
                     if (converterCall is not null)
                     {
                         body.Add(converterCall);
