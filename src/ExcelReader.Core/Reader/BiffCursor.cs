@@ -52,8 +52,7 @@ namespace ExcelReader.Core.Reader
             {
                 return false;
             }
-            Span<byte> hdr = stackalloc byte[4];
-            ReadInto(Position, hdr);
+            ReadOnlySpan<byte> hdr = ReadSpan(Position, 4);
             id = BinaryPrimitives.ReadUInt16LittleEndian(hdr);
             int len = BinaryPrimitives.ReadUInt16LittleEndian(hdr[2..]);
             long dataPos = Position + 4;
