@@ -366,7 +366,16 @@ namespace ExcelReader.Core.Reader
                     Kind.Formula => CellType.Formula,
                     _ => _reader.IsDateStyle(style) ? CellType.Date : CellType.Number,
                 };
-                AppendDecoded(ElementText(inner, "<v>"u8, "</v>"u8));
+                ReadOnlySpan<byte> v = ElementText(inner, "<v>"u8, "</v>"u8);
+                // Number/Bool/Error <v> text is pure ASCII digits/bool/error-code — it can never contain
+                // an XML entity, so skip the decode scan. Only formula string results (t="str") can.
+                if (kind == Kind.Formula)
+                {
+                    AppendDecoded(v);
+                    _acc.Add(col, vStart, _acc.ValueLength - vStart, cellType, style, fromShared: false);
+                    return;
+                }
+                AppendRaw(v);
                 _acc.Add(col, vStart, _acc.ValueLength - vStart, cellType, style, fromShared: false);
             }
 
@@ -390,6 +399,19 @@ namespace ExcelReader.Core.Reader
                 }
                 Span<byte> dst = _acc.ReserveValueSpan(src.Length);
                 _acc.Advance(XlsxXml.Decode(src, dst));
+            }
+
+            // Copies verbatim, skipping the entity-decode scan — for <v> text known to never contain
+            // XML entities (numbers, bools, error codes).
+            private void AppendRaw(ReadOnlySpan<byte> src)
+            {
+                if (src.IsEmpty)
+                {
+                    return;
+                }
+                Span<byte> dst = _acc.ReserveValueSpan(src.Length);
+                src.CopyTo(dst);
+                _acc.Advance(src.Length);
             }
 
             private bool SkipMarkup()

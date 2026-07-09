@@ -16,6 +16,13 @@ namespace ExcelReader.Core.Writer
             _owner = owner;
         }
 
+        // Reused across rows by XlsbSheetWriter: rents one instance per sheet instead of one per row.
+        internal void Reset()
+        {
+            _columnIndex = 0;
+            _disposed = false;
+        }
+
         private void ThrowIfDisposed()
         {
             ObjectDisposedException.ThrowIf(_disposed, this);

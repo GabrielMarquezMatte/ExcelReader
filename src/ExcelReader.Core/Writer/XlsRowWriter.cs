@@ -7,7 +7,7 @@ namespace ExcelReader.Core.Writer
         [SuppressMessage("SharpSource", "SS066:DisposableFieldIsNotDisposed",
             Justification = "XlsSheetWriter is borrowed; its lifetime is managed by the caller.")]
         private readonly XlsSheetWriter _owner;
-        private readonly int _rowNumber;
+        private int _rowNumber;
         private int _columnIndex;
         private bool _disposed;
 
@@ -15,6 +15,14 @@ namespace ExcelReader.Core.Writer
         {
             _owner = owner;
             _rowNumber = rowNumber;
+        }
+
+        // Reused across rows by XlsSheetWriter: rents one instance per sheet instead of one per row.
+        internal void Reset(int rowNumber)
+        {
+            _rowNumber = rowNumber;
+            _columnIndex = 0;
+            _disposed = false;
         }
 
         public void Write(string? value)

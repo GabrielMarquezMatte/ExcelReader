@@ -1,3 +1,4 @@
+using System.Buffers;
 using System.Buffers.Text;
 using System.Globalization;
 
@@ -5,6 +6,8 @@ namespace ExcelReader.Core.Writer.Internal
 {
     internal static class CellFormatter
     {
+        private static readonly SearchValues<char> specialChars = SearchValues.Create("&<>\"'");
+
         // Writes the cell reference (e.g. "B7") directly to the writer.
         // Max XLSX cell is XFD1048576 -> 3 column letters + 7 row digits.
         private static void WriteRef(BiffBuffer xml, int columnIndex, int rowNumber)
@@ -123,27 +126,25 @@ namespace ExcelReader.Core.Writer.Internal
         internal static void WriteEscaped(BiffBuffer xml, ReadOnlySpan<char> value)
         {
             int start = 0;
-            for (int i = 0; i < value.Length; i++)
+            int next = value.IndexOfAny(specialChars);
+            while (next >= 0)
             {
+                int i = start + next;
                 ReadOnlySpan<byte> escape = value[i] switch
                 {
                     '&' => "&amp;"u8,
                     '<' => "&lt;"u8,
                     '>' => "&gt;"u8,
                     '"' => "&quot;"u8,
-                    '\'' => "&apos;"u8,
-                    _ => default,
+                    _ => "&apos;"u8, // '\''
                 };
-                if (escape.IsEmpty)
-                {
-                    continue;
-                }
                 if (i > start)
                 {
                     xml.WriteUtf8(value[start..i]);
                 }
                 xml.Write(escape);
                 start = i + 1;
+                next = value[start..].IndexOfAny(specialChars);
             }
             if (start < value.Length)
             {
