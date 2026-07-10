@@ -1,4 +1,5 @@
 using System.Buffers.Binary;
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 
 namespace ExcelReader.Core.Reader
@@ -7,21 +8,25 @@ namespace ExcelReader.Core.Reader
     // Biff12RecordReader; these read the fields inside a payload span.
     internal static class Biff12
     {
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         internal static ushort ReadU16(ReadOnlySpan<byte> src, int offset)
         {
             return BinaryPrimitives.ReadUInt16LittleEndian(src.Slice(offset, 2));
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         internal static uint ReadU32(ReadOnlySpan<byte> src, int offset)
         {
             return BinaryPrimitives.ReadUInt32LittleEndian(src.Slice(offset, 4));
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         internal static int ReadI32(ReadOnlySpan<byte> src, int offset)
         {
             return BinaryPrimitives.ReadInt32LittleEndian(src.Slice(offset, 4));
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         internal static double ReadF64(ReadOnlySpan<byte> src, int offset)
         {
             return BinaryPrimitives.ReadDoubleLittleEndian(src.Slice(offset, 8));
@@ -29,6 +34,7 @@ namespace ExcelReader.Core.Reader
 
         // RkNumber (4 bytes), identical to BIFF8: bit0 = ÷100, bit1 = the upper 30 bits are a signed
         // integer; otherwise they are the high 30 bits of an IEEE-754 double (low 34 bits zero).
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         internal static double Rk(uint rk)
         {
             double value;

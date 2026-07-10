@@ -1,6 +1,7 @@
 using ExcelReader.Core.Enums;
 using ExcelReader.Core.Parser;
 using ExcelReader.Core.Reader;
+using ExcelReader.Core.Writer;
 using System.Collections;
 
 namespace ExcelReader.Tests
@@ -112,6 +113,31 @@ namespace ExcelReader.Tests
             Assert.Equal("A", e.Current[0].GetString());
             Assert.Equal("B", e.Current[1].GetString());
             Assert.Equal("C", e.Current[2].GetString());
+        }
+
+        // Regression: CellAccumulator keeps binary-double values in a side array parallel to the cell
+        // descriptors, which SortByColumn must permute in lockstep — a mixed row of out-of-order numeric
+        // and text cells is the case that would silently misalign values if that sort were wrong.
+        [Fact]
+        public void OutOfOrderNumericAndTextCellsStayAlignedAfterSort()
+        {
+            using var ms = XlsWorkbookBuilder.Build(sheets: [("S1", [[
+                new XlsAt(3, "D"),
+                new XlsAt(0, 100),
+                new XlsAt(2, "C"),
+                new XlsAt(1, 200),
+            ]])]);
+            using var reader = Excel.FromXls(ms);
+
+            using var e = reader.GetEnumerator();
+            Assert.True(e.MoveNext());
+            var row = e.Current;
+            Assert.True(row[0].TryGetDouble(out double v0));
+            Assert.Equal(100, v0);
+            Assert.True(row[1].TryGetDouble(out double v1));
+            Assert.Equal(200, v1);
+            Assert.Equal("C", row[2].GetString());
+            Assert.Equal("D", row[3].GetString());
         }
 
         [Fact]
@@ -588,6 +614,37 @@ namespace ExcelReader.Tests
             using var ms = XlsWorkbookBuilder.BuildPatched(
                 XlsWorkbookBuilder.FatSectorCountOffset, XlsWorkbookBuilder.LE32(0x40000000));
             Assert.Throws<InvalidDataException>(() => Excel.FromXls(ms));
+        }
+
+        [Fact]
+        public async Task WritesAndReadsLongLabelSplitsAcrossContinueRecords()
+        {
+            // Create a string of 10,000 characters (exceeds 8,224 bytes MaxPayload)
+            // with some non-ASCII CP1252 characters to verify compression handles correctly.
+            string longCompressed = new string('a', 5000) + "Café" + new string('b', 5000);
+            string longWide = new string('Ω', 6000);
+
+            var ms = new MemoryStream();
+            await using (XlsWorkbookWriter wb = XlsWorkbookWriter.Create(ms, leaveOpen: true))
+            {
+                wb.Start();
+                XlsSheetWriter sheet = wb.AddSheet("S1");
+                sheet.Start();
+                using (XlsRowWriter row = sheet.StartRow())
+                {
+                    row.Write(longCompressed);
+                    row.Write(longWide);
+                }
+                sheet.End();
+                await wb.EndAsync(TestContext.Current.CancellationToken);
+            }
+
+            ms.Position = 0;
+            using var reader = Excel.FromXls(ms);
+            using var e = reader.GetEnumerator();
+            Assert.True(e.MoveNext());
+            Assert.Equal(longCompressed, e.Current[0].GetString());
+            Assert.Equal(longWide, e.Current[1].GetString());
         }
 
         private const int SectorSize = 512;

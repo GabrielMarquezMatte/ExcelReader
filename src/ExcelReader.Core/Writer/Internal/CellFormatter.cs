@@ -1,3 +1,4 @@
+using System.Buffers;
 using System.Buffers.Text;
 using System.Globalization;
 
@@ -5,6 +6,8 @@ namespace ExcelReader.Core.Writer.Internal
 {
     internal static class CellFormatter
     {
+        private static readonly SearchValues<char> specialChars = SearchValues.Create("&<>\"'");
+
         // Writes the cell reference (e.g. "B7") directly to the writer.
         // Max XLSX cell is XFD1048576 -> 3 column letters + 7 row digits.
         private static void WriteRef(BiffBuffer xml, int columnIndex, int rowNumber)
@@ -66,13 +69,11 @@ namespace ExcelReader.Core.Writer.Internal
         }
 
         internal static void WriteNumber<T>(BiffBuffer xml, T value, int columnIndex, int rowNumber, bool includeReference)
-            where T : ISpanFormattable
+            where T : IUtf8SpanFormattable
         {
             WriteCellOpen(xml, columnIndex, rowNumber, includeReference);
             xml.Write("><v>"u8);
-            Span<char> buf = stackalloc char[64];
-            value.TryFormat(buf, out int written, default, CultureInfo.InvariantCulture);
-            xml.WriteUtf8(buf[..written]);
+            WriteValue(xml, value, sizeHint: 64);
             xml.Write("</v></c>"u8);
         }
 
@@ -113,34 +114,37 @@ namespace ExcelReader.Core.Writer.Internal
         private static void WriteValue<T>(BiffBuffer xml, T value, int sizeHint)
             where T : IUtf8SpanFormattable
         {
-            value.TryFormat(xml.GetSpan(sizeHint), out int written, default, CultureInfo.InvariantCulture);
+            int size = sizeHint;
+            int written;
+            while (!value.TryFormat(xml.GetSpan(size), out written, default, CultureInfo.InvariantCulture))
+            {
+                size = checked(size * 2);
+            }
             xml.Advance(written);
         }
 
         internal static void WriteEscaped(BiffBuffer xml, ReadOnlySpan<char> value)
         {
             int start = 0;
-            for (int i = 0; i < value.Length; i++)
+            int next = value.IndexOfAny(specialChars);
+            while (next >= 0)
             {
+                int i = start + next;
                 ReadOnlySpan<byte> escape = value[i] switch
                 {
                     '&' => "&amp;"u8,
                     '<' => "&lt;"u8,
                     '>' => "&gt;"u8,
                     '"' => "&quot;"u8,
-                    '\'' => "&apos;"u8,
-                    _ => default,
+                    _ => "&apos;"u8, // '\''
                 };
-                if (escape.IsEmpty)
-                {
-                    continue;
-                }
                 if (i > start)
                 {
                     xml.WriteUtf8(value[start..i]);
                 }
                 xml.Write(escape);
                 start = i + 1;
+                next = value[start..].IndexOfAny(specialChars);
             }
             if (start < value.Length)
             {
