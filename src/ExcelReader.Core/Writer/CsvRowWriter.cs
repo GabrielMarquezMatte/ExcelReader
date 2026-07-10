@@ -5,7 +5,7 @@ using ExcelReader.Core.Writer.Internal;
 
 namespace ExcelReader.Core.Writer
 {
-    public sealed class CsvRowWriter : IDisposable
+    public sealed class CsvRowWriter : IRowWriter, IDisposable
     {
         // Numbers, dates, Guids, and every other BCL formattable fit an ASCII field well under this;
         // the rare overflow falls back to a rented buffer in WriteUtf8FieldSlow.
@@ -103,6 +103,43 @@ namespace ExcelReader.Core.Writer
             if (value is not null)
             {
                 WriteUtf8Field(value.Value, "O");
+            }
+        }
+
+        // DateOnly as ISO "yyyy-MM-dd" (the "O" round-trip form), which the CSV text-date parser reads back.
+        public void Write(DateOnly value)
+        {
+            ThrowIfDisposed();
+            BeginField();
+            WriteUtf8Field(value, "O");
+        }
+
+        public void Write(DateOnly? value)
+        {
+            ThrowIfDisposed();
+            BeginField();
+            if (value is not null)
+            {
+                WriteUtf8Field(value.Value, "O");
+            }
+        }
+
+        // TimeOnly as an Excel-style time serial (fraction of a 24h day): a plain number the parser
+        // reconstructs via TryGetDouble, matching how the XLSX/XLSB row writers store it.
+        public void Write(TimeOnly value)
+        {
+            ThrowIfDisposed();
+            BeginField();
+            WriteUtf8Field(value.Ticks / (double)TimeSpan.TicksPerDay, default);
+        }
+
+        public void Write(TimeOnly? value)
+        {
+            ThrowIfDisposed();
+            BeginField();
+            if (value is not null)
+            {
+                WriteUtf8Field(value.Value.Ticks / (double)TimeSpan.TicksPerDay, default);
             }
         }
 
@@ -227,6 +264,16 @@ namespace ExcelReader.Core.Writer
             }
             _disposed = true;
             _owner.EndRow();
+        }
+
+        public ValueTask DisposeAsync()
+        {
+            if (_disposed)
+            {
+                return ValueTask.CompletedTask;
+            }
+            _disposed = true;
+            return _owner.EndRowAsync();
         }
     }
 }

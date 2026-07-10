@@ -115,11 +115,29 @@ namespace ExcelReader.Core.Reader
 
         internal void SortByColumn()
         {
-            if (!_sorted)
+            if (_sorted)
             {
-                Array.Sort(_cells, 0, Count, CellDescColumnComparer.Instance);
-                _sorted = true;
+                return;
             }
+            if (Count <= 1)
+            {
+                _sorted = true;
+                return;
+            }
+            int[] keys = ArrayPool<int>.Shared.Rent(Count);
+            try
+            {
+                for (int i = 0; i < Count; i++)
+                {
+                    keys[i] = _cells[i].Column;
+                }
+                Array.Sort(keys, _cells, 0, Count);
+            }
+            finally
+            {
+                ArrayPool<int>.Shared.Return(keys);
+            }
+            _sorted = true;
         }
 
         internal void Return()
@@ -152,14 +170,5 @@ namespace ExcelReader.Core.Reader
             };
         }
 
-        private sealed class CellDescColumnComparer : IComparer<CellDesc>
-        {
-            internal static readonly CellDescColumnComparer Instance = new();
-
-            public int Compare(CellDesc x, CellDesc y)
-            {
-                return x.Column.CompareTo(y.Column);
-            }
-        }
     }
 }

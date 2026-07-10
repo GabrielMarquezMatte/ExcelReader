@@ -211,7 +211,7 @@ namespace ExcelReader.Core.Writer
         }
 
         public void Write<T>(T value)
-            where T : ISpanFormattable
+            where T : IUtf8SpanFormattable
         {
             ThrowIfDisposed();
             CellFormatter.WriteNumber(_row, value, _columnIndex, _rowNumber, _useCellReferences);
@@ -219,7 +219,7 @@ namespace ExcelReader.Core.Writer
         }
 
         public void Write<T>(T? value)
-            where T : struct, ISpanFormattable
+            where T : struct, IUtf8SpanFormattable
         {
             ThrowIfDisposed();
             if (value is null)
@@ -248,12 +248,6 @@ namespace ExcelReader.Core.Writer
             _columnIndex++;
         }
 
-        [SuppressMessage("Reliability", "CA1849:Call async methods when in an async method",
-            Justification = "Rows are buffered in memory and flushed synchronously to avoid per-row async state machines.")]
-        [SuppressMessage("VisualStudio.Threading", "VSTHRD103:Dispose synchronously blocks",
-            Justification = "See CA1849 justification above.")]
-        [SuppressMessage("SharpSource", "SS033:Async overload available",
-            Justification = "See CA1849 justification above.")]
         public ValueTask DisposeAsync()
         {
             if (_disposed)
@@ -261,8 +255,7 @@ namespace ExcelReader.Core.Writer
                 return ValueTask.CompletedTask;
             }
             _disposed = true;
-            _owner.EndBufferedRow();
-            return ValueTask.CompletedTask;
+            return _owner.EndBufferedRowAsync();
         }
     }
 }

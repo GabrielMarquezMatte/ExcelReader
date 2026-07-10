@@ -14,7 +14,7 @@ ExcelReader is built for streaming spreadsheet workloads where low allocations m
 
 ## Benchmarks
 
-Benchmarks were run with BenchmarkDotNet v0.15.8 on Windows 10, AMD Ryzen 7 5700X, .NET 10.0.9 (SDK 11.0.100-preview.4). Each benchmark uses 50,000 rows.
+Benchmarks were run with BenchmarkDotNet v0.15.8 on Windows 10 (22H2), AMD Ryzen 7 5700X, .NET 10.0.9 (SDK 11.0.100-preview.4). Generated-data benchmarks use 50,000 rows.
 
 ### XLSX
 
@@ -22,53 +22,63 @@ Compares ExcelReader against established XLSX libraries on the same generated wo
 
 | Scenario | ExcelReader | MiniExcel | Sylvan | SpreadCheetah |
 |---|---:|---:|---:|---:|
-| Cell-by-cell read | 19.06 ms, 14.07 KB | 145.63 ms, 210.54 MB | 38.30 ms, 1.89 MB | — |
-| Cell-by-cell read async | 19.94 ms, 16.09 KB | — | — | — |
-| Typed row parsing | 20.02 ms, 3.88 MB | 161.86 ms, 199.31 MB | 59.35 ms, 10.47 MB | — |
-| Typed row parsing async | 22.48 ms, 3.88 MB | — | 61.04 ms, 10.48 MB | — |
-| Workbook writing | 16.26 ms, 2.11 MB | 282.20 ms, 85.14 MB | — | 14.58 ms, 12.32 MB |
-| Workbook writing, shared strings | 16.36 ms, 2.12 MB | — | — | — |
+| Cell-by-cell read | 18.940 ms, 12.49 KB | 148.109 ms, 210.54 MB | 38.825 ms, 1.89 MB | - |
+| Cell-by-cell read async | 20.465 ms, 14.51 KB | - | - | - |
+| Typed row parsing | 20.659 ms, 3.87 MB | 162.483 ms, 199.31 MB | 61.870 ms, 10.47 MB | - |
+| Typed row parsing async | 22.706 ms, 3.88 MB | - | 62.721 ms, 10.48 MB | - |
+| Workbook writing | 16.554 ms, 2.08 MB | 286.965 ms, 85.14 MB | - | 14.669 ms, 12.32 MB |
+| Workbook writing, shared strings | 16.958 ms, 2.08 MB | - | - | - |
 
-ExcelReader is ~7.6x faster than MiniExcel for reads and ~17.4x faster for writes. Compared with Sylvan, it is ~2.0x faster for raw reads and ~3.0x faster for typed parsing, with substantially lower allocations. Shared strings are opt-in and are effectively even with inline strings in this repeated-text benchmark. For writing, SpreadCheetah is ~1.1x faster but allocates ~5.8x more memory; the XLSB writer beats both on speed and allocation (see below).
+ExcelReader is ~7.8x faster than MiniExcel and ~2.0x faster than Sylvan for raw XLSX reads. For typed parsing, it is ~7.9x faster than MiniExcel and ~3.0x faster than Sylvan while allocating much less memory. For XLSX writing, SpreadCheetah is ~1.1x faster, but allocates ~5.9x more memory; ExcelReader is ~17.3x faster than MiniExcel and allocates ~41x less.
 
 ### XLSB (BIFF12)
 
 | Scenario | ExcelReader |
 |---|---:|
-| Cell-by-cell read | 4.37 ms, 15.83 KB |
-| Cell-by-cell read async | 5.04 ms, 18.27 KB |
-| Typed row parsing | 9.37 ms, 3.88 MB |
-| Typed row parsing async | 10.68 ms, 3.88 MB |
-| Workbook writing | 10.55 ms, 2.04 MB |
-| Workbook writing, shared strings | 9.90 ms, 2.05 MB |
+| Cell-by-cell read | 4.768 ms, 14.23 KB |
+| Cell-by-cell read async | 5.464 ms, 16.67 KB |
+| Typed row parsing | 6.495 ms, 3.88 MB |
+| Typed row parsing async | 8.197 ms, 3.88 MB |
+| Workbook writing | 9.821 ms, 2.02 MB |
+| Workbook writing, shared strings | 9.589 ms, 2.02 MB |
 
-XLSB is the fastest path in these results: raw reads are ~4.4x faster than XLSX reads, typed parsing is ~2.1x faster than XLSX parsing, and writing is ~1.5x faster than XLSX writing. The XLSB writer is also ~1.4x faster than SpreadCheetah while allocating ~83% less memory.
+XLSB is the fastest generated Excel format in these results: raw reads are ~4.0x faster than XLSX reads, typed parsing is ~3.2x faster than XLSX parsing, and writing is ~1.7x faster than XLSX writing. The XLSB writer is also ~1.5x faster than SpreadCheetah on this benchmark while allocating ~84% less memory.
 
 ### XLS (BIFF8)
 
 | Scenario | ExcelReader | Sylvan |
 |---|---:|---:|
-| Cell-by-cell read | 4.66 ms, 59.21 KB | 5.25 ms, 1,717.73 KB |
-| Cell-by-cell read async | 4.79 ms, 59.28 KB | — |
-| Workbook writing | 6.70 ms, 12.37 MB | — |
+| Cell-by-cell read | 4.491 ms, 58.22 KB | 5.438 ms, 1,717.73 KB |
+| Cell-by-cell read async | 4.508 ms, 58.29 KB | - |
+| Workbook writing | 5.892 ms, 10.47 MB | - |
 
-XLS reading allocates ~29x less than Sylvan at comparable speed. The XLS writer is ~2.6x faster than the XLSX writer (6.70 ms vs 17.16 ms), but allocates more in this benchmark.
+ExcelReader is ~1.2x faster than Sylvan for generated XLS reads while allocating ~29.5x less memory. The XLS writer is ~2.8x faster than the XLSX writer in this benchmark, but it allocates more because the BIFF8/OLE container is assembled in memory.
 
 ### CSV
 
 | Scenario | ExcelReader | Sep | Sylvan.Data.Csv | CsvHelper |
 |---|---:|---:|---:|---:|
-| Cell-by-cell read | 6.83 ms, 152 B | 7.85 ms, 3.93 KB | 4.70 ms, 1.61 MB | 24.78 ms, 14.37 MB |
-| Cell-by-cell read async | 7.19 ms, 272 B | — | — | — |
-| Typed row parsing | 8.05 ms, 3.86 MB | 8.72 ms, 3.87 MB | 12.56 ms, 10.95 MB | 23.78 ms, 14.41 MB |
-| Typed row parsing async | 9.27 ms, 3.86 MB | — | — | — |
-| Row writing | 7.21 ms, 7.00 MB | 7.27 ms, 4.01 MB | 7.38 ms, 4.04 MB | 19.70 ms, 13.79 MB |
+| Cell-by-cell read | 6.744 ms, 248 B | 7.623 ms, 3.93 KB | 4.455 ms, 1.61 MB | 24.627 ms, 14.38 MB |
+| Cell-by-cell read async | 7.413 ms, 368 B | - | - | - |
+| Typed row parsing | 8.584 ms, 3.86 MB | 8.597 ms, 3.87 MB | 12.446 ms, 10.95 MB | 22.982 ms, 14.41 MB |
+| Typed row parsing async | 9.461 ms, 3.86 MB | - | - | - |
+| Row writing | 7.029 ms, 7.00 MB | 7.075 ms, 4.01 MB | 7.147 ms, 4.04 MB | 19.704 ms, 13.79 MB |
 
-For raw cell-by-cell reads, ExcelReader is ~1.15x faster than Sep and allocates ~26x less; Sylvan.Data.Csv is ~1.45x faster but allocates ~11,110x more, and CsvHelper is ~3.6x slower and allocates ~99,167x more. The async reader now tracks the sync reader closely (~1.05x) rather than paying a per-field `await` cost: `CsvReader.Enumerator` parses each record from the buffered bytes in one synchronous pass and only awaits at buffer refills, so sync and async share one parser.
+For raw CSV reads, ExcelReader is ~1.1x faster than Sep and allocates ~16x less; Sylvan.Data.Csv is ~1.5x faster but allocates ~6,800x more, and CsvHelper is ~3.7x slower. For typed CSV parsing, ExcelReader is effectively tied with Sep, ~1.5x faster than Sylvan.Data.Csv, and ~2.7x faster than CsvHelper while keeping allocations at ~3.86 MB. For CSV writing, ExcelReader is close to Sep and Sylvan.Data.Csv, and ~2.8x faster than CsvHelper; the extra allocation shown here is primarily the destination `MemoryStream` growth, not per-row writer state.
 
-For typed row parsing, `ExcelParser<T>.Parse(CsvReader)` uses a CSV-specialized projection (dense field binding, single-pass parsing) rather than the generic Excel pipeline, and its `DateTime` columns parse straight from UTF-8 via `Utf8Parser` for the common round-trip ISO shape instead of transcoding to UTF-16 first. It now allocates the least of any library here (~3.86 MB) *and* is the fastest: ~1.08x faster than Sep, ~1.56x faster than Sylvan.Data.Csv, and ~2.95x faster than CsvHelper.
+### Real data reads
 
-For writing, `CsvWriter` buffers rows and flushes to the stream in ~1 MB chunks, RFC 4180-quoting only fields that need it (detected with a vectorized `SearchValues` scan) and formatting numbers and dates straight to UTF-8 rather than to a `char` buffer and back. It is now the fastest of the three, marginally ahead of Sep (~1.01x) and Sylvan.Data.Csv (~1.02x), and ~2.7x faster than CsvHelper. It does allocate more than Sep/Sylvan here (~7 MB vs ~4 MB), but that gap is the destination `MemoryStream`'s power-of-2 growth reacting to the 28-char round-trip ISO date pushing total output just past 2 MB into the next capacity doubling — not writer overhead. The pooled row buffer itself allocates effectively nothing across writes.
+This benchmark reads a real workbook exported in multiple formats.
+
+| Format | ExcelReader | Sylvan |
+|---|---:|---:|
+| XLSX | 99.339 ms, 39.91 KB | 195.820 ms, 644.23 KB |
+| XLSM | 103.951 ms, 39.95 KB | 205.471 ms, 644.30 KB |
+| XLSB | 24.706 ms, 40.58 KB | 31.390 ms, 338.54 KB |
+| XLS | 12.589 ms, 189.85 KB | 19.334 ms, 185.90 KB |
+| CSV | 8.942 ms, 248 B | 10.574 ms, 35.75 MB |
+
+On this real-data workload, ExcelReader is ~2.0x faster than Sylvan for XLSX/XLSM, ~1.3x faster for XLSB, ~1.5x faster for XLS, and ~1.2x faster for CSV. Allocations stay under 41 KB for XLSX/XLSM/XLSB and at 248 B for CSV.
 
 Run the benchmarks locally:
 
@@ -362,7 +372,7 @@ await workbook.EndAsync();
 
 ## Write typed records
 
-The low-level writers above give you cell-by-cell control. When you just want to dump a collection of objects to a sheet, `WorkbookRecordWriter` writes a header row followed by one row per record, mapping each public readable property to a column. It is generic over the low-level interfaces, so the same API targets XLSX, XLSB, and XLS — pick the format with a `RecordWriter.Create*` factory.
+The low-level writers above give you cell-by-cell control. When you just want to dump a collection of objects to a sheet, `WorkbookRecordWriter` writes a header row followed by one row per record, mapping each public readable property to a column. It is generic over the low-level interfaces, so the same API targets XLSX, XLSB, XLS, and CSV — pick the format with a `RecordWriter.Create*` factory.
 
 ```csharp
 using ExcelReader.Core.Writer;
@@ -382,11 +392,11 @@ var sales = new[]
 };
 
 await using var stream = File.Create("sales.xlsx");
-await using var writer = await RecordWriter.CreateXlsxAsync(stream);   // or CreateXlsbAsync / CreateXlsAsync
+await using var writer = await RecordWriter.CreateXlsxAsync(stream);   // or CreateXlsbAsync / CreateXlsAsync / CreateCsv
 await writer.WriteSheetAsync("Sales", sales);
 ```
 
-Each `WriteSheetAsync` call targets a new sheet (a duplicate name throws), so one workbook can hold sheets of different record types. An `IAsyncEnumerable<T>` overload streams records that are produced asynchronously. The written file round-trips straight back through `ExcelParser<T>` because the headers are the property names.
+Each `WriteSheetAsync` call targets a new sheet (a duplicate name throws), so one workbook can hold sheets of different record types. `RecordWriter.CreateCsv` is the exception: a CSV file is a single sheet, so a second `WriteSheetAsync` throws (the sheet name is ignored). An `IAsyncEnumerable<T>` overload streams records that are produced asynchronously. The written file round-trips straight back through `ExcelParser<T>` because the headers are the property names.
 
 Column behavior mirrors the parser attributes:
 
@@ -394,7 +404,7 @@ Column behavior mirrors the parser attributes:
 - **`[ExcelIgnore]`** — exclude a property from both writing and parsing (for computed/transient members).
 - **`[ExcelConverter(typeof(MyConverter))]`** — if the converter also implements `IExcelCellWriter<T>`, it controls how the value is written, so a custom type round-trips through the same converter it reads with.
 
-`DateTime` and `DateOnly` are written as Excel date serials; `TimeOnly` as a time-of-day fraction. Numeric properties become number cells; any other type is written as its `ToString()` text.
+`DateTime` and `DateOnly` are written as Excel date serials; `TimeOnly` as a time-of-day fraction. Numeric properties become number cells; any other type is written as its `ToString()` text. (`CreateCsv` follows the CSV rules instead — see [Write CSV](#write-csv) — writing `DateTime`/`DateOnly` as ISO text and `TimeOnly` as a time-of-day fraction, all still round-tripping through `ExcelParser<T>`.)
 
 ## Read CSV
 
@@ -454,7 +464,9 @@ using (CsvRowWriter row = writer.StartRow())
 }
 ```
 
-Fields are quoted only when they contain the delimiter, quote character, `\r`, or `\n`; embedded quotes are doubled. `bool` writes as lowercase `true`/`false` and `DateTime` as round-trip ISO 8601 (`"O"`) — both match what `ExcelParser<T>.Parse(CsvReader)` expects, so a file written by `CsvWriter` parses back without configuration. `Skip(count)` writes empty fields to keep column positions aligned (CSV has no sparse-cell concept). Pass `CsvWriterOptions` to change the delimiter/quote byte, mirroring `CsvReaderOptions`.
+Fields are quoted only when they contain the delimiter, quote character, `\r`, or `\n`; embedded quotes are doubled. `bool` writes as lowercase `true`/`false` and `DateTime`/`DateOnly` as round-trip ISO 8601 (`"O"`); `TimeOnly` as a time-of-day fraction — all matching what `ExcelParser<T>.Parse(CsvReader)` expects, so a file written by `CsvWriter` parses back without configuration. `Skip(count)` writes empty fields to keep column positions aligned (CSV has no sparse-cell concept). Pass `CsvWriterOptions` to change the delimiter/quote byte, mirroring `CsvReaderOptions`.
+
+To dump a collection of typed records instead of writing cells by hand, use `RecordWriter.CreateCsv(stream)` — the same [record-writing API](#write-typed-records) as the Excel formats, restricted to a single sheet.
 
 ## Notes
 
