@@ -26,8 +26,8 @@ namespace ExcelReader.Core.Writer
         void Write(DateOnly? value);
         void Write(TimeOnly value);
         void Write(TimeOnly? value);
-        void Write<T>(T value) where T : ISpanFormattable;
-        void Write<T>(T? value) where T : struct, ISpanFormattable;
+        void Write<T>(T value) where T : IUtf8SpanFormattable;
+        void Write<T>(T? value) where T : struct, IUtf8SpanFormattable;
         void Skip(int count = 1);
     }
 }

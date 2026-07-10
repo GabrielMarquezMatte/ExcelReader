@@ -161,5 +161,23 @@ namespace ExcelReader.Core.Writer
             }
             _rowActive = false;
         }
+
+        internal ValueTask EndBufferedRowAsync(CancellationToken ct = default)
+        {
+            _rowBuffer.Write("</row>"u8);
+            if (_rowBuffer.Length >= FlushThreshold)
+            {
+                return FlushRowBufferAsync(ct);
+            }
+            _rowActive = false;
+            return ValueTask.CompletedTask;
+        }
+
+        private async ValueTask FlushRowBufferAsync(CancellationToken ct)
+        {
+            await _stream!.WriteAsync(_rowBuffer.Memory, ct).ConfigureAwait(false);
+            _rowBuffer.Reset();
+            _rowActive = false;
+        }
     }
 }

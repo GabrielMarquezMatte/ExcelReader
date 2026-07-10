@@ -15,17 +15,17 @@ namespace ExcelReader.Tests
     {
         private static readonly CultureInfo Inv = CultureInfo.InvariantCulture;
 
-        // ISpanFormattable but NOT IConvertible — forces the XLSB writer's format-then-parse fallback.
-        private readonly struct Formattable(double value) : ISpanFormattable
+        // IUtf8SpanFormattable but NOT IConvertible — forces the XLSB writer's format-then-parse fallback.
+        private readonly struct Formattable(double value) : IUtf8SpanFormattable
         {
             public string ToString(string? format, IFormatProvider? formatProvider)
             {
                 return value.ToString(formatProvider);
             }
 
-            public bool TryFormat(Span<char> destination, out int charsWritten, ReadOnlySpan<char> format, IFormatProvider? provider)
+            public bool TryFormat(Span<byte> utf8Destination, out int bytesWritten, ReadOnlySpan<char> format, IFormatProvider? provider)
             {
-                return value.TryFormat(destination, out charsWritten, format, provider);
+                return value.TryFormat(utf8Destination, out bytesWritten, format, provider);
             }
         }
 

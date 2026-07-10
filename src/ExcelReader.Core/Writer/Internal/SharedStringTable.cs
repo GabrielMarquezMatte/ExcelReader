@@ -15,12 +15,12 @@ namespace ExcelReader.Core.Writer.Internal
         internal int GetOrAdd(string value)
         {
             Count++;
-            if (_indexes.TryGetValue(value, out int index))
+            ref int index = ref CollectionsMarshal.GetValueRefOrAddDefault(_indexes, value, out bool existed);
+            if (existed)
             {
                 return index;
             }
             index = _values.Count;
-            _indexes.Add(value, index);
             _values.Add(value);
             return index;
         }

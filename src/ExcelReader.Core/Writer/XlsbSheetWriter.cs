@@ -26,6 +26,7 @@ namespace ExcelReader.Core.Writer
         private bool _registered;
         private bool _buffersDisposed;
         private int _rowNumber = -1;
+        private XlsbRowWriter? _rowWriter;
 
         internal XlsbSheetWriter(
             XlsbWorkbookWriter owner,
@@ -73,7 +74,9 @@ namespace ExcelReader.Core.Writer
         public ValueTask<XlsbRowWriter> StartRowAsync(CancellationToken ct = default)
         {
             BeginRow();
-            return ValueTask.FromResult(new XlsbRowWriter(this));
+            _rowWriter ??= new XlsbRowWriter(this);
+            _rowWriter.Reset();
+            return ValueTask.FromResult(_rowWriter);
         }
 
         public void WriteRow(ReadOnlySpan<XlsbCell> values)
@@ -149,6 +152,14 @@ namespace ExcelReader.Core.Writer
         internal void WriteRecord(int id, ReadOnlySpan<byte> payload = default)
         {
             Biff12RecordWriter.WriteRecord(_records, id, payload);
+            MaybeFlush();
+        }
+
+        // Fixed-length records (known-size cells, row headers) write header + fields straight into
+        // _records, skipping the Payload-buffer round trip that WriteRecord/Payload.Reset() needs for
+        // variable-length records.
+        private void MaybeFlush()
+        {
             if (_records.Length >= SpillThreshold)
             {
                 FlushRecords();
@@ -223,15 +234,16 @@ namespace ExcelReader.Core.Writer
 
         private void WriteRowHeader(int rowNumber)
         {
-            Payload.Reset();
-            Payload.WriteU32((uint)rowNumber);
-            Payload.WriteU32(0);
-            Payload.WriteU32(0);
-            Payload.WriteU32(1);
-            Payload.WriteU32(0);
-            Payload.WriteU32(16384);
-            Payload.WriteByte(0);
-            WriteRecord(Brt.RowHdr, Payload.Span);
+            const int Length = (6 * 4) + 1; // 6 x u32 + 1 byte
+            Biff12RecordWriter.WriteRecordHeader(_records, Brt.RowHdr, Length);
+            _records.WriteU32((uint)rowNumber);
+            _records.WriteU32(0);
+            _records.WriteU32(0);
+            _records.WriteU32(1);
+            _records.WriteU32(0);
+            _records.WriteU32(16384);
+            _records.WriteByte(0);
+            MaybeFlush();
         }
         private static ReadOnlySpan<byte> InitialWorksheetViewPayload => [0x9C, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x04, 0x00, 0x00, 0x00, 0x64, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00];
         private static ReadOnlySpan<byte> SecondPayload => [0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xF0, 0x3F, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x01];
@@ -287,30 +299,38 @@ namespace ExcelReader.Core.Writer
 
         // internal: shared with XlsbRowWriter, whose per-cell Write(...) overloads delegate here so
         // the streaming and batch (WriteRow) paths emit BIFF12 cell records through one place.
+        private const int CellHeaderLength = 8; // column u32 + style u32
+
         internal void WriteStringCell(int columnIndex, string? value)
         {
             if (value is null)
             {
                 return;
             }
-            Payload.Reset();
-            Biff12RecordWriter.WriteCellHeader(Payload, columnIndex, 0);
             if (_owner.UseSharedStrings)
             {
-                Payload.WriteU32((uint)_owner.GetSharedStringIndex(value));
-                WriteRecord(Brt.CellIsst, Payload.Span);
+                const int Length = CellHeaderLength + 4; // + shared-string index u32
+                Biff12RecordWriter.WriteRecordHeader(_records, Brt.CellIsst, Length);
+                Biff12RecordWriter.WriteCellHeader(_records, columnIndex, 0);
+                _records.WriteU32((uint)_owner.GetSharedStringIndex(value));
+                MaybeFlush();
                 return;
             }
-            Biff12RecordWriter.WriteWideString(Payload, value);
-            WriteRecord(Brt.CellSt, Payload.Span);
+            // WriteWideString emits u32 length + UTF-16LE chars: an exact, known-upfront byte count.
+            int length = CellHeaderLength + 4 + checked(value.Length * 2);
+            Biff12RecordWriter.WriteRecordHeader(_records, Brt.CellSt, length);
+            Biff12RecordWriter.WriteCellHeader(_records, columnIndex, 0);
+            Biff12RecordWriter.WriteWideString(_records, value);
+            MaybeFlush();
         }
 
         internal void WriteBoolCell(int columnIndex, bool value)
         {
-            Payload.Reset();
-            Biff12RecordWriter.WriteCellHeader(Payload, columnIndex, 0);
-            Payload.WriteByte(value ? (byte)1 : (byte)0);
-            WriteRecord(Brt.CellBool, Payload.Span);
+            const int Length = CellHeaderLength + 1; // + bool byte
+            Biff12RecordWriter.WriteRecordHeader(_records, Brt.CellBool, Length);
+            Biff12RecordWriter.WriteCellHeader(_records, columnIndex, 0);
+            _records.WriteByte(value ? (byte)1 : (byte)0);
+            MaybeFlush();
         }
 
         internal void WriteDateSerialCell(int columnIndex, double serial)
@@ -320,10 +340,11 @@ namespace ExcelReader.Core.Writer
 
         internal void WriteDoubleCell(int columnIndex, double value, int style)
         {
-            Payload.Reset();
-            Biff12RecordWriter.WriteCellHeader(Payload, columnIndex, style);
-            Payload.WriteDouble(value);
-            WriteRecord(Brt.CellReal, Payload.Span);
+            const int Length = CellHeaderLength + 8; // + double
+            Biff12RecordWriter.WriteRecordHeader(_records, Brt.CellReal, Length);
+            Biff12RecordWriter.WriteCellHeader(_records, columnIndex, style);
+            _records.WriteDouble(value);
+            MaybeFlush();
         }
     }
 }
