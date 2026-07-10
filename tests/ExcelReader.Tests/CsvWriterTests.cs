@@ -1,6 +1,7 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Text;
 using ExcelReader.Core.Enums;
+using ExcelReader.Core.Parser;
 using ExcelReader.Core.Reader;
 using ExcelReader.Core.Writer;
 
@@ -342,6 +343,57 @@ namespace ExcelReader.Tests
             Assert.Equal("true", row2[1].GetString());
             Assert.False(row2[2].TryGetDateTime(out _)); // CSV cells have no serial date form
             Assert.Equal(date.ToString("O"), row2[2].GetString());
+        }
+
+        private sealed record CsvPerson
+        {
+            public string? Name { get; init; }
+            public int Age { get; init; }
+            public decimal Balance { get; init; }
+            public bool Active { get; init; }
+            public DateOnly BirthDate { get; init; }
+        }
+
+        [Fact]
+        public async Task RecordWriterRoundTripsThroughCsv()
+        {
+            var people = new[]
+            {
+                new CsvPerson { Name = "has, comma", Age = 1, Balance = 10.5m, Active = true, BirthDate = new DateOnly(2000, 1, 2) },
+                new CsvPerson { Name = "plain", Age = 2, Balance = 20m, Active = false, BirthDate = new DateOnly(2001, 3, 4) },
+            };
+
+            var ms = new MemoryStream();
+            var ct = TestContext.Current.CancellationToken;
+            await using (var writer = RecordWriter.CreateCsv(ms, leaveOpen: true))
+            {
+                await writer.WriteSheetAsync("People", people, ct);
+            }
+            ms.Position = 0;
+
+            // Concrete CsvReader (not IExcelRowReader) so Parse picks the CSV text-date overload.
+            using var reader = Excel.FromCsv(ms);
+            var parsed = new ExcelParser<CsvPerson>().Parse(reader).ToList();
+
+            Assert.Equal(2, parsed.Count);
+            Assert.Equal("has, comma", parsed[0].Name);
+            Assert.Equal(10.5m, parsed[0].Balance);
+            Assert.True(parsed[0].Active);
+            Assert.Equal(new DateOnly(2000, 1, 2), parsed[0].BirthDate);
+            Assert.Equal(2, parsed[1].Age);
+            Assert.False(parsed[1].Active);
+        }
+
+        [Fact]
+        public async Task RecordWriterRejectsSecondSheet()
+        {
+            var ms = new MemoryStream();
+            var ct = TestContext.Current.CancellationToken;
+            await using var writer = RecordWriter.CreateCsv(ms, leaveOpen: true);
+            await writer.WriteSheetAsync("One", Array.Empty<CsvPerson>(), ct);
+
+            await Assert.ThrowsAsync<InvalidOperationException>(
+                async () => await writer.WriteSheetAsync("Two", Array.Empty<CsvPerson>(), ct));
         }
 
         [Fact]

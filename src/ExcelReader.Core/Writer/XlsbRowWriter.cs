@@ -16,6 +16,13 @@ namespace ExcelReader.Core.Writer
             _owner = owner;
         }
 
+        // Reused across rows by XlsbSheetWriter: rents one instance per sheet instead of one per row.
+        internal void Reset()
+        {
+            _columnIndex = 0;
+            _disposed = false;
+        }
+
         private void ThrowIfDisposed()
         {
             ObjectDisposedException.ThrowIf(_disposed, this);
@@ -169,14 +176,14 @@ namespace ExcelReader.Core.Writer
         }
 
         public void Write<T>(T value)
-            where T : ISpanFormattable
+            where T : IUtf8SpanFormattable
         {
             ThrowIfDisposed();
             WriteDouble(ToDouble(value), style: 0);
         }
 
         public void Write<T>(T? value)
-            where T : struct, ISpanFormattable
+            where T : struct, IUtf8SpanFormattable
         {
             ThrowIfDisposed();
             if (value is not null)
@@ -201,7 +208,7 @@ namespace ExcelReader.Core.Writer
         }
 
         internal static double ToDouble<T>(T value)
-            where T : ISpanFormattable
+            where T : IUtf8SpanFormattable
         {
             switch (value)
             {
@@ -232,9 +239,9 @@ namespace ExcelReader.Core.Writer
             {
                 return convertible.ToDouble(CultureInfo.InvariantCulture);
             }
-            Span<char> chars = stackalloc char[64];
-            return value.TryFormat(chars, out int written, default, CultureInfo.InvariantCulture) &&
-                double.TryParse(chars[..written], CultureInfo.InvariantCulture, out double parsed)
+            Span<byte> bytes = stackalloc byte[64];
+            return value.TryFormat(bytes, out int written, default, CultureInfo.InvariantCulture) &&
+                double.TryParse(bytes[..written], CultureInfo.InvariantCulture, out double parsed)
                 ? parsed
                 : 0.0;
         }

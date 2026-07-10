@@ -54,16 +54,28 @@ namespace ExcelReader.Core.Reader
             return _memory.Span.Slice((int)pos, len);
         }
 
-        // Reads sectorSize bytes of physical sector at chainIndex into dest (length == SectorSize).
-        internal void LoadSector(int chainIndex, Span<byte> dest)
+        // Reads contiguous physical sectors starting from chainIndex into dest.
+        // Returns the number of sectors loaded.
+        internal int LoadSectors(int chainIndex, Span<byte> dest)
         {
             if ((uint)chainIndex >= (uint)_chain.Length)
             {
                 throw new InvalidDataException("Invalid OLE sector chain index.");
             }
+            int maxSectors = dest.Length / SectorSize;
+            int count = 1;
+            while (count < maxSectors && chainIndex + count < _chain.Length)
+            {
+                if (_chain[chainIndex + count] != _chain[chainIndex + count - 1] + 1)
+                {
+                    break;
+                }
+                count++;
+            }
             long offset = HeaderSize + ((long)_chain[chainIndex] * SectorSize);
             _source!.Seek(offset, SeekOrigin.Begin);
-            _source.ReadExactly(dest);
+            _source.ReadExactly(dest[..(count * SectorSize)]);
+            return count;
         }
 
         [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP007:Don't dispose injected",

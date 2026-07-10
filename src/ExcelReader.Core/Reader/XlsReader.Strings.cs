@@ -31,30 +31,29 @@ namespace ExcelReader.Core.Reader
         // BIFF8 string: bit 0 of `flags` selects compressed (1 byte/char, CP1252) vs wide (UTF-16LE).
         private static int DecodeStringToUtf8(ReadOnlySpan<byte> src, int charCount, byte flags, Span<byte> dest)
         {
-            if ((flags & 1) == 0)
+            if ((flags & 1) != 0)
             {
-                // Widen CP1252 bytes to chars once, then one bulk UTF-8 transcode — same shape as
-                // DecodeSharedStrings, instead of a Rune-per-byte encode.
-                char[] rented = ArrayPool<char>.Shared.Rent(charCount);
-                try
-                {
-                    ReadOnlySpan<byte> compressed = src[..charCount];
-                    for (int i = 0; i < charCount; i++)
-                    {
-                        rented[i] = DecodeCp1252(compressed[i]);
-                    }
-                    return Encoding.UTF8.GetBytes(rented.AsSpan(0, charCount), dest);
-                }
-                finally
-                {
-                    ArrayPool<char>.Shared.Return(rented);
-                }
+                // UTF-16LE code units read directly as chars; Encoding.UTF8.GetBytes combines surrogate
+                // pairs into 4-byte sequences and replaces any lone surrogate with U+FFFD — matters for
+                // astral chars (e.g. emoji) split across a CONTINUE boundary.
+                return Encoding.UTF8.GetBytes(MemoryMarshal.Cast<byte, char>(src[..(charCount * 2)]), dest);
             }
-
-            // UTF-16LE code units read directly as chars; Encoding.UTF8.GetBytes combines surrogate
-            // pairs into 4-byte sequences and replaces any lone surrogate with U+FFFD — matters for
-            // astral chars (e.g. emoji) split across a CONTINUE boundary.
-            return Encoding.UTF8.GetBytes(MemoryMarshal.Cast<byte, char>(src[..(charCount * 2)]), dest);
+            // Widen CP1252 bytes to chars once, then one bulk UTF-8 transcode — same shape as
+            // DecodeSharedStrings, instead of a Rune-per-byte encode.
+            char[] rented = ArrayPool<char>.Shared.Rent(charCount);
+            try
+            {
+                ReadOnlySpan<byte> compressed = src[..charCount];
+                for (int i = 0; i < charCount; i++)
+                {
+                    rented[i] = DecodeCp1252(compressed[i]);
+                }
+                return Encoding.UTF8.GetBytes(rented.AsSpan(0, charCount), dest);
+            }
+            finally
+            {
+                ArrayPool<char>.Shared.Return(rented);
+            }
         }
 
         private static char DecodeCp1252(byte value)

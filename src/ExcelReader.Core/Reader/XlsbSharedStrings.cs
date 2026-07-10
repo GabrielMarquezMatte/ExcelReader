@@ -30,6 +30,12 @@ namespace ExcelReader.Core.Reader
                 flatLen = AppendItem(payload, ref flat, flatLen, effectiveOptions);
                 offsets.Add(flatLen);
             }
+            // Trim to the exact UTF-8 length: the worst-case sizing (and growth doubling) above almost
+            // always overshoots, and this buffer is retained for the reader's lifetime.
+            if (flatLen < flat.Length)
+            {
+                Array.Resize(ref flat, flatLen);
+            }
             return (flat, [.. offsets]);
         }
 

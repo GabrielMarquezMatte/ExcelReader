@@ -31,6 +31,7 @@ namespace ExcelReader.Core.Writer
         private int _rowNumber = -1;
         private WriterState _state = WriterState.Created;
         private bool _rowActive;
+        private XlsRowWriter? _rowWriter;
 
         internal XlsSheetWriter(XlsWorkbookWriter owner, string name, bool date1904, bool isContinuation = false, string? baseName = null)
         {
@@ -80,7 +81,9 @@ namespace ExcelReader.Core.Writer
                 return _continuation.StartRow();
             }
             _rowActive = true;
-            return new XlsRowWriter(this, _rowNumber);
+            _rowWriter ??= new XlsRowWriter(this, _rowNumber);
+            _rowWriter.Reset(_rowNumber);
+            return _rowWriter;
         }
 
         internal void NotifyRowEnded()

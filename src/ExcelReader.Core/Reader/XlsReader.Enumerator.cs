@@ -182,14 +182,29 @@ namespace ExcelReader.Core.Reader
                 int chars = ReadU16(data, 6);
                 byte flags = data[8];
                 const int start = 9;
-                int byteCount = (flags & 1) == 0 ? chars : chars * 2;
-                if (start + byteCount > data.Length)
-                {
-                    return;
-                }
+
                 int valueStart = _acc.ValueLength;
+
+                int firstByteLen = data.Length - start;
+                int firstChars = (flags & 1) == 0 ? firstByteLen : firstByteLen / 2;
+                firstChars = Math.Min(firstChars, chars);
+                int firstBytes = (flags & 1) == 0 ? firstChars : firstChars * 2;
                 Span<byte> dst = _acc.ReserveValueSpan(chars * 4);
-                _acc.Advance(DecodeStringToUtf8(data.Slice(start, byteCount), chars, flags, dst));
+                int written = DecodeStringToUtf8(data.Slice(start, firstBytes), firstChars, flags, dst);
+                _acc.Advance(written);
+                int charsDecoded = firstChars;
+                while (charsDecoded < chars && _cursor.PeekId() == Rec.Continue && _cursor.TryReadRecord(out _, out ReadOnlySpan<byte> cont) && cont.Length > 0)
+                {
+                    byte contFlags = cont[0];
+                    int contByteLen = cont.Length - 1;
+                    int contChars = (contFlags & 1) == 0 ? contByteLen : contByteLen / 2;
+                    contChars = Math.Min(contChars, chars - charsDecoded);
+                    int contBytes = (contFlags & 1) == 0 ? contChars : contChars * 2;
+                    dst = _acc.ReserveValueSpan((chars - charsDecoded) * 4);
+                    written = DecodeStringToUtf8(cont.Slice(1, contBytes), contChars, contFlags, dst);
+                    _acc.Advance(written);
+                    charsDecoded += contChars;
+                }
                 _acc.Add(col, valueStart, _acc.ValueLength - valueStart, CellType.ExcelString, style, fromShared: false);
             }
 
