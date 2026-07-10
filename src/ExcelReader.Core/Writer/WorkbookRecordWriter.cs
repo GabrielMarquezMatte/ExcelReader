@@ -97,6 +97,17 @@ namespace ExcelReader.Core.Writer
             return new WorkbookRecordWriter<XlsbSheetWriter, XlsbRowWriter>(workbook);
         }
 
+        // CSV has no async setup (no ZIP/BIFF headers to write), so this is synchronous — the returned
+        // writer is still IAsyncDisposable. Only a single sheet is supported (a CSV file is one sheet).
+        [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
+            Justification = "Ownership of the workbook transfers to WorkbookRecordWriter, which disposes it.")]
+        public static WorkbookRecordWriter<CsvSheetWriter, CsvRowWriter> CreateCsv(
+            Stream stream, bool leaveOpen = false, CsvWriterOptions? options = null)
+        {
+            var workbook = CsvWorkbookWriter.Create(stream, leaveOpen, options);
+            return new WorkbookRecordWriter<CsvSheetWriter, CsvRowWriter>(workbook);
+        }
+
         [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
             Justification = "Ownership of the workbook transfers to WorkbookRecordWriter, which disposes it.")]
         public static async ValueTask<WorkbookRecordWriter<XlsSheetWriter, XlsRowWriter>> CreateXlsAsync(
