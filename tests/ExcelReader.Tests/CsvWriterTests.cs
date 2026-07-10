@@ -371,7 +371,8 @@ namespace ExcelReader.Tests
             }
             ms.Position = 0;
 
-            using IExcelRowReader reader = Excel.FromCsv(ms);
+            // Concrete CsvReader (not IExcelRowReader) so Parse picks the CSV text-date overload.
+            using var reader = Excel.FromCsv(ms);
             var parsed = new ExcelParser<CsvPerson>().Parse(reader).ToList();
 
             Assert.Equal(2, parsed.Count);
