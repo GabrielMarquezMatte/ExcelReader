@@ -168,34 +168,55 @@ namespace ExcelReader.Core.Reader
 
             private enum HeadKind { End, Row, Skip }
 
+            // Dispatches on the byte right after '<' before doing any StartsWith work, so the
+            // overwhelmingly common "<row" case (and, per call site, the rare end-tags) each pay for
+            // exactly one span comparison instead of up to three probes that mostly miss.
             private HeadKind ClassifyHead()
             {
-                var head = _buf.AsSpan(_pos, Math.Min(12, _len - _pos));
-                if (head.StartsWith("</sheetData"u8) || head.StartsWith("</worksheet"u8))
+                int avail = _len - _pos;
+                if (avail < 2)
                 {
-                    return HeadKind.End;
+                    return HeadKind.Skip;
                 }
-                if (head.StartsWith("<row"u8) && (head.Length < 5 || IsBoundary(head[4])))
+                switch (_buf[_pos + 1])
                 {
-                    return HeadKind.Row;
+                    case (byte)'r':
+                        var rowHead = _buf.AsSpan(_pos, Math.Min(5, avail));
+                        return rowHead.StartsWith("<row"u8) && (rowHead.Length < 5 || IsBoundary(rowHead[4]))
+                            ? HeadKind.Row
+                            : HeadKind.Skip;
+                    case (byte)'/':
+                        var endHead = _buf.AsSpan(_pos, Math.Min(11, avail));
+                        return endHead.StartsWith("</sheetData"u8) || endHead.StartsWith("</worksheet"u8)
+                            ? HeadKind.End
+                            : HeadKind.Skip;
+                    default:
+                        return HeadKind.Skip;
                 }
-                return HeadKind.Skip;
             }
 
             private enum RowHead { EndRow, Cell, Other }
 
             private RowHead ClassifyRowHead()
             {
-                var head = _buf.AsSpan(_pos, Math.Min(6, _len - _pos));
-                if (head.StartsWith("</row"u8))
+                int avail = _len - _pos;
+                if (avail < 2)
                 {
-                    return RowHead.EndRow;
+                    return RowHead.Other;
                 }
-                if (head.StartsWith("<c"u8) && (head.Length < 3 || IsBoundary(head[2])))
+                switch (_buf[_pos + 1])
                 {
-                    return RowHead.Cell;
+                    case (byte)'c':
+                        var cellHead = _buf.AsSpan(_pos, Math.Min(3, avail));
+                        return cellHead.StartsWith("<c"u8) && (cellHead.Length < 3 || IsBoundary(cellHead[2]))
+                            ? RowHead.Cell
+                            : RowHead.Other;
+                    case (byte)'/':
+                        var endHead = _buf.AsSpan(_pos, Math.Min(5, avail));
+                        return endHead.StartsWith("</row"u8) ? RowHead.EndRow : RowHead.Other;
+                    default:
+                        return RowHead.Other;
                 }
-                return RowHead.Other;
             }
 
             private readonly record struct CellHeader(int Col, int Style, Kind Kind, bool SelfClose);
@@ -376,7 +397,15 @@ namespace ExcelReader.Core.Reader
                     return;
                 }
                 AppendRaw(v);
-                _acc.Add(col, vStart, _acc.ValueLength - vStart, cellType, style, fromShared: false);
+                // Parse plain (non-exponent) numeric text at scan time so consumers (TryGetDouble/
+                // TryParse<double>) skip the general double.TryParse round trip; the raw text is kept
+                // either way so Value/GetString stay byte-identical. FastDouble.TryParse only accepts
+                // inputs it can prove bit-identical to double.TryParse, so anything else (exponent form,
+                // 17+ significant digits) just leaves hasNumber false and falls back at consume time.
+                double number = 0;
+                bool hasNumber = kind == Kind.Number && FastDouble.TryParse(v, out number);
+                _acc.Add(col, vStart, _acc.ValueLength - vStart, cellType, style, fromShared: false,
+                    number: number, hasNumber: hasNumber);
             }
 
             private static ReadOnlySpan<byte> ElementText(ReadOnlySpan<byte> inner, ReadOnlySpan<byte> openTag, ReadOnlySpan<byte> closeTag)

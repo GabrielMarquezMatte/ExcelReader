@@ -44,7 +44,7 @@ namespace ExcelReader.Core.ValueObjects
                 value = _number;
                 return true;
             }
-            return double.TryParse(Value, CultureInfo.InvariantCulture, out value);
+            return FastDouble.TryParse(Value, out value) || double.TryParse(Value, CultureInfo.InvariantCulture, out value);
         }
 
         public bool TryParse<T>(IFormatProvider? provider, [MaybeNullWhen(false)] out T result) where T : IUtf8SpanParsable<T>
@@ -53,6 +53,13 @@ namespace ExcelReader.Core.ValueObjects
             // through text. Guards are JIT constants, so non-matching T compiles them away.
             if (!_hasNumber)
             {
+                // Text-backed double (e.g. CSV, or an XLSX cell FastDouble.TryParse declined to parse
+                // eagerly): try the same exact-representability fast parse before the general parser.
+                if (typeof(T) == typeof(double) && FastDouble.TryParse(Value, out double fast))
+                {
+                    result = Unsafe.As<double, T>(ref fast);
+                    return true;
+                }
                 return T.TryParse(Value, provider, out result);
             }
             if (typeof(T) == typeof(double))
