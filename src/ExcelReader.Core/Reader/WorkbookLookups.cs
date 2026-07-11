@@ -58,5 +58,17 @@ namespace ExcelReader.Core.Reader
         {
             return new LimitedReadStream(entry.Open(), counter);
         }
+
+        // Sizes a worksheet's initial read buffer to its actual uncompressed size (entry.Length is exact,
+        // from the ZIP central directory) instead of a fixed 64 KB — fewer DeflateStream.Read interop
+        // transitions and PrepareBuffer compaction memmoves for sheets larger than that. Capped at 256 KB
+        // so a huge sheet doesn't over-allocate; floored at 4 KB so a tiny/unknown-length entry doesn't
+        // create a pathologically small buffer that immediately needs to grow.
+        internal static int InitialBufferCapacity(long entryLength)
+        {
+            const int Min = 4 * 1024;
+            const int Max = 256 * 1024;
+            return entryLength <= 0 ? 64 * 1024 : (int)Math.Clamp(entryLength, Min, Max);
+        }
     }
 }

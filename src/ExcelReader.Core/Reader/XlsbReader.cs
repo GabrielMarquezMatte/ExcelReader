@@ -11,6 +11,10 @@ namespace ExcelReader.Core.Reader
         // Shared-string pool: string i = _sharedFlat[_sharedOffsets[i].._sharedOffsets[i+1]].
         private readonly byte[] _sharedFlat = [];
         private readonly int[] _sharedOffsets = [0];
+        // Lazily created: dedups repeated shared-string values (categorical columns) into one string
+        // instance instead of re-decoding UTF-8 per row. Keyed by the string's stable byte offset into
+        // _sharedFlat (see CellDesc.ToCell / Cell.GetString).
+        private Dictionary<int, string>? _sharedStringCache;
         private readonly bool[] _styleIsDate = [];
         private readonly ExcelReaderOptions _options;
         private readonly DecompressedByteCounter _decompressedBytes;
@@ -160,6 +164,8 @@ namespace ExcelReader.Core.Reader
 
         internal ReadOnlySpan<byte> SharedSpan => _sharedFlat;
 
+        internal Dictionary<int, string> SharedStringCache => _sharedStringCache ??= [];
+
         internal bool IsDateStyle(int style)
         {
             return WorkbookLookups.IsDateStyle(_styleIsDate, style);
@@ -175,7 +181,7 @@ namespace ExcelReader.Core.Reader
         public Enumerator GetEnumerator()
         {
             var entry = WorkbookLookups.GetWorksheetEntry(_zip!, _sheets!, _current);
-            return new Enumerator(this, WorkbookLookups.OpenEntryStream(entry, _decompressedBytes));
+            return new Enumerator(this, WorkbookLookups.OpenEntryStream(entry, _decompressedBytes), entry.Length);
         }
 
         IExcelRowEnumerator IExcelRowReader<IExcelRowEnumerator>.GetEnumerator()
@@ -192,7 +198,7 @@ namespace ExcelReader.Core.Reader
             ct.ThrowIfCancellationRequested();
             Stream sheet = WorkbookLookups.OpenEntryStream(entry, _decompressedBytes);
 #endif
-            return new Enumerator(this, sheet, ct);
+            return new Enumerator(this, sheet, entry.Length, ct);
         }
 
         async ValueTask<IExcelRowEnumerator> IExcelRowReader<IExcelRowEnumerator>.GetAsyncEnumeratorAsync(CancellationToken ct)

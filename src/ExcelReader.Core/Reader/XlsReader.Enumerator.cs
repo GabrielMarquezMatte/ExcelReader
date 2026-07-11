@@ -31,7 +31,7 @@ namespace ExcelReader.Core.Reader
             }
 
             public Row Current =>
-                new(_acc.CellSpan, _acc.ValueSpan, _reader.SharedSpan);
+                new(_acc.CellSpan, _acc.ValueSpan, _reader.SharedSpan, _reader.SharedStringCache);
 
             public bool MoveNext()
             {

@@ -7,19 +7,24 @@ namespace ExcelReader.Core.ValueObjects
         private readonly ReadOnlySpan<CellDesc> _cells; // ascending by Column, gaps allowed
         private readonly ReadOnlySpan<byte> _rowValues;
         private readonly ReadOnlySpan<byte> _shared;
+        // Non-null only for readers with a true, cross-row-stable shared-string table (XLSX/XLSB); see
+        // CellDesc.ToCell. Defaults to null so existing 3-arg call sites (CSV, XLS) are unaffected.
+        private readonly Dictionary<int, string>? _sharedStringCache;
 
-        internal Row(ReadOnlySpan<CellDesc> cells, ReadOnlySpan<byte> rowValues, ReadOnlySpan<byte> shared)
+        internal Row(ReadOnlySpan<CellDesc> cells, ReadOnlySpan<byte> rowValues, ReadOnlySpan<byte> shared,
+            Dictionary<int, string>? sharedStringCache = null)
         {
             _cells = cells;
             _rowValues = rowValues;
             _shared = shared;
+            _sharedStringCache = sharedStringCache;
         }
 
         // One past the highest populated column, so callers can iterate 0..ColumnCount.
         public int ColumnCount => _cells.IsEmpty ? 0 : _cells[^1].Column + 1;
 
         // Populated cells only, in ascending column order. Skips gaps instead of binary-searching them.
-        public RowCellEnumerator Cells => new(_cells, _rowValues, _shared);
+        public RowCellEnumerator Cells => new(_cells, _rowValues, _shared, _sharedStringCache);
 
         public Cell this[int column]
         {
@@ -30,7 +35,7 @@ namespace ExcelReader.Core.ValueObjects
                 {
                     return new Cell(CellType.Empty, default);
                 }
-                return _cells[i].ToCell(_rowValues, _shared);
+                return _cells[i].ToCell(_rowValues, _shared, _sharedStringCache);
             }
         }
 

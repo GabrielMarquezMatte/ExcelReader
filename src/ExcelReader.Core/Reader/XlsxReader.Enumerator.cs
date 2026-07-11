@@ -30,22 +30,25 @@ namespace ExcelReader.Core.Reader
             private readonly CellAccumulator _acc; // per-row decoded values + cell descriptors
             private int _nextCol;
 
-            internal Enumerator(XlsxReader reader, Stream sheet, CancellationToken ct = default)
+            internal Enumerator(XlsxReader reader, Stream sheet, long entryLength = 0, CancellationToken ct = default)
             {
                 _reader = reader;
                 _sheet = sheet;
                 _ct = ct;
-                _io = new BufferedStreamCursor(reader._options.MaxCellBytes, nameof(ExcelReaderOptions.MaxCellBytes));
+                _io = new BufferedStreamCursor(reader._options.MaxCellBytes, nameof(ExcelReaderOptions.MaxCellBytes),
+                    WorkbookLookups.InitialBufferCapacity(entryLength));
                 _acc = new CellAccumulator(reader._options.MaxCellBytes, nameof(ExcelReaderOptions.MaxCellBytes));
             }
 
             public Row Current =>
-                new(_acc.CellSpan, _acc.ValueSpan, _reader.SharedSpan);
+                new(_acc.CellSpan, _acc.ValueSpan, _reader.SharedSpan, _reader.SharedStringCache);
 
-            // The sync and async row scanners share every span-touching helper below (ClassifyHead,
-            // ClassifyRowHead, ReadCellOpenTag, EmitCell). The two families differ only in whether the
-            // buffer refill (Fill / FillAsync) and the byte searches await — so the span work is factored
-            // into sync helpers that never hold a span across an await.
+            // Top-level scanning (finding the next '<row>'/'</sheetData>'/markup between rows) differs
+            // between sync and async only in whether the buffer refill (Fill / FillAsync) awaits — so
+            // that span work is factored into sync helpers (ClassifyHead, BeginRow) that never hold a
+            // span across an await. Once inside a row, ParseRow/ParseCellSpan/EmitCell are the *same*
+            // method for both: EnsureRowBuffered(Async) guarantees the whole row is buffered first, so
+            // there is no refill left to do and no sync/async split needed at all (see T3.1 note below).
 
             public bool MoveNext()
             {
@@ -66,7 +69,7 @@ namespace ExcelReader.Core.Reader
                         case HeadKind.Row:
                             if (!BeginRow())
                             {
-                                ParseRow();
+                                ParseRow(EnsureRowBuffered());
                             }
                             return true;
                         default:
@@ -132,12 +135,12 @@ namespace ExcelReader.Core.Reader
                                 }
                                 if (!beginTask.Result)
                                 {
-                                    ValueTask rowBufTask = EnsureRowBufferedAsync();
+                                    ValueTask<int> rowBufTask = EnsureRowBufferedAsync();
                                     if (!rowBufTask.IsCompletedSuccessfully)
                                     {
                                         return FinishRowAfterAsync(rowBufTask);
                                     }
-                                    ParseRow();
+                                    ParseRow(rowBufTask.Result);
                                 }
                                 return new ValueTask<bool>(true);
                             }
@@ -178,10 +181,10 @@ namespace ExcelReader.Core.Reader
             // so unlike AwaitThenRestartAsync this must not re-enter MoveNextAsync from the top — that
             // would misread the row's first cell as a new top-level element. Finishes buffering the row,
             // then parses it.
-            private async ValueTask<bool> FinishRowAfterAsync(ValueTask pendingRowBuffered)
+            private async ValueTask<bool> FinishRowAfterAsync(ValueTask<int> pendingRowBuffered)
             {
-                await pendingRowBuffered.ConfigureAwait(false);
-                ParseRow();
+                int rowEnd = await pendingRowBuffered.ConfigureAwait(false);
+                ParseRow(rowEnd);
                 return true;
             }
 
@@ -192,43 +195,59 @@ namespace ExcelReader.Core.Reader
                 return BeginRowAt(gt);
             }
 
-            private void ParseRow()
+            // Whole-row span parser: `rowEnd` (the '<' that starts "</row") is supplied by
+            // EnsureRowBuffered/EnsureRowBufferedAsync, which already grew the buffer (via Fill/FillAsync)
+            // until the entire row — cell data plus "</row...>"'s closing '>' — is present. Everything
+            // below is then pure ReadOnlySpan<byte> work over a local cursor: zero Ensure/Fill calls, zero
+            // _io property indirection, and no risk of PrepareBuffer compacting mid-row (which is what
+            // made the old per-cell fast path need careful `_pos`-relative rewinds). `_io.Pos` is written
+            // back exactly once, after the whole row is consumed. Called identically by MoveNext (sync)
+            // and MoveNextAsync (after awaiting EnsureRowBufferedAsync) — one parser, no async twin.
+            private void ParseRow(int rowEnd)
             {
+                byte[] buf = _buf;
+                int len = _len;
+                int p = _pos;
                 while (true)
                 {
-                    int lt = _pos < _len && _buf[_pos] == (byte)'<' ? _pos : IndexOf((byte)'<');
-                    if (lt < 0)
+                    int lt = p < len && buf[p] == (byte)'<' ? p : IndexOfBounded(buf, len, p, (byte)'<');
+                    if (lt < 0 || lt >= rowEnd)
                     {
-                        return;
+                        break; // no more cells before "</row" (or, on a truncated file, at all)
                     }
-                    _pos = lt;
-                    Ensure(6);
-                    switch (ClassifyRowHead())
+                    p = lt;
+                    if (IsCellStart(buf, len, p))
                     {
-                        case RowHead.EndRow:
-                            int gt = IndexOf((byte)'>');
-                            _pos = gt < 0 ? _len : gt + 1;
-                            return;
-                        case RowHead.Cell:
-                            ParseCell();
-                            break;
-                        default:
-                            if (!SkipMarkup())
-                            {
-                                return;
-                            }
-                            break;
+                        p = ParseCellSpan(buf, len, p);
+                    }
+                    else if (!SkipMarkupSpan(buf, len, ref p))
+                    {
+                        break;
                     }
                 }
+                _pos = rowEnd;
+                int gt = IndexOfBounded(buf, len, _pos, (byte)'>'); // already buffered — see EnsureRowBuffered
+                _pos = gt < 0 ? len : gt + 1;
             }
 
-            private void ParseCell()
+            // Parses one <c>...</c> element starting at `p` (already known to be a cell — IsCellStart)
+            // and returns the position right after it. Everything here operates on `buf`/`len`, which
+            // ParseRow already guarantees cover the whole row (through "</row...>"'s closing '>'), so —
+            // unlike the pre-T3.1 version — there is no Fill/compaction risk and therefore no need to
+            // rewind `p` on a fast-path miss: the miss branch simply never advanced `p` past the open tag,
+            // so falling through to the general "</c>" search below picks up from exactly where the fast
+            // path started looking.
+            private int ParseCellSpan(byte[] buf, int len, int p)
             {
-                int gt = IndexOf((byte)'>'); // end of the <c ...> open tag (buffered, no shift yet)
-                var header = ReadCellOpenTag(gt);
+                int gt = IndexOfBounded(buf, len, p, (byte)'>'); // end of the <c ...> open tag
+                if (gt < 0)
+                {
+                    return len; // malformed: unclosed <c open tag within the buffered row
+                }
+                var header = ReadCellOpenTagSpan(buf, ref p, gt);
                 if (header.SelfClose)
                 {
-                    return; // empty cell — store nothing; _pos already past the tag
+                    return p; // empty cell — store nothing
                 }
 
                 // Fast path for the common bare-<v> shape (Number/Shared/Bool/Error, and a cached
@@ -237,50 +256,34 @@ namespace ExcelReader.Core.Reader
                 // guaranteed to start "</v>" — one single-byte search replaces the general path's
                 // "</c>" scan over the whole cell body followed by a second "<v>"/"</v>" scan inside it.
                 // Inline-string and other formula shapes don't start with literal "<v>", so they
-                // naturally fall through unchanged. `valueLen` (a relative distance, not a captured
-                // absolute index) keeps this correct across any Fill/compaction inside IndexOf/Ensure —
-                // see the buffer-management notes below.
-                Ensure(3);
-                if (_buf.AsSpan(_pos, Math.Min(3, _len - _pos)).StartsWith("<v>"u8))
+                // naturally fall through unchanged.
+                if (buf.AsSpan(p, Math.Min(3, len - p)).StartsWith("<v>"u8))
                 {
-                    _pos += 3;
-                    int lt = IndexOf((byte)'<');
-                    if (lt >= 0)
+                    int valueStart = p + 3;
+                    int lt = IndexOfBounded(buf, len, valueStart, (byte)'<');
+                    if (lt >= 0 && buf.AsSpan(lt, Math.Min(8, len - lt)).StartsWith("</v></c>"u8))
                     {
-                        int valueLen = lt - _pos;
-                        _pos = lt;
-                        Ensure(8); // "</v></c>"
-                        if (_buf.AsSpan(_pos, Math.Min(8, _len - _pos)).StartsWith("</v></c>"u8))
+                        ReadOnlySpan<byte> value = buf.AsSpan(valueStart, lt - valueStart);
+                        if (header.Kind == Kind.Shared)
                         {
-                            ReadOnlySpan<byte> value = _buf.AsSpan(_pos - valueLen, valueLen);
-                            if (header.Kind == Kind.Shared)
-                            {
-                                var (start, len) = _reader.SharedAt(ParseInt(value));
-                                _acc.Add(header.Col, start, len, CellType.ExcelString, header.Style, fromShared: true);
-                            }
-                            else
-                            {
-                                EmitScalarValue(header.Kind, value, header.Col, header.Style);
-                            }
-                            _pos += 8;
-                            return;
+                            var (start, sharedLen) = _reader.SharedAt(ParseInt(value));
+                            _acc.Add(header.Col, start, sharedLen, CellType.ExcelString, header.Style, fromShared: true);
                         }
-                        _pos -= valueLen; // not the expected shape — rewind to the value's start
-                    }
-                    else
-                    {
-                        _pos -= 3; // no closing '<' found at all — rewind past "<v>"
+                        else
+                        {
+                            EmitScalarValue(header.Kind, value, header.Col, header.Style);
+                        }
+                        return lt + 8;
                     }
                 }
 
-                int cEnd = IndexOfSeq("</c>"u8); // ensures whole cell contiguous; shifts _pos consistently
+                int cEnd = IndexOfSeqBounded(buf, len, p, "</c>"u8); // ensures whole cell contiguous
                 if (cEnd < 0)
                 {
-                    _pos = _len;
-                    return;
+                    return len;
                 }
-                EmitCell(header.Kind, _buf.AsSpan(_pos, cEnd - _pos), header.Col, header.Style);
-                _pos = cEnd + 4;
+                EmitCell(header.Kind, buf.AsSpan(p, cEnd - p), header.Col, header.Style);
+                return cEnd + 4;
             }
 
             private enum HeadKind { End, Row, Skip }
@@ -312,37 +315,27 @@ namespace ExcelReader.Core.Reader
                 }
             }
 
-            private enum RowHead { EndRow, Cell, Other }
-
-            private RowHead ClassifyRowHead()
+            // "</row" itself is never reachable here — ParseRow's loop stops as soon as the found '<'
+            // reaches `rowEnd` (exactly where "</row" starts) — so this only needs to tell a cell apart
+            // from anything else (comments, CDATA, extension elements), which SkipMarkupSpan handles.
+            private static bool IsCellStart(byte[] buf, int len, int p)
             {
-                int avail = _len - _pos;
-                if (avail < 2)
+                int avail = len - p;
+                if (avail < 2 || buf[p + 1] != (byte)'c')
                 {
-                    return RowHead.Other;
+                    return false;
                 }
-                switch (_buf[_pos + 1])
-                {
-                    case (byte)'c':
-                        var cellHead = _buf.AsSpan(_pos, Math.Min(3, avail));
-                        return cellHead.StartsWith("<c"u8) && (cellHead.Length < 3 || IsBoundary(cellHead[2]))
-                            ? RowHead.Cell
-                            : RowHead.Other;
-                    case (byte)'/':
-                        var endHead = _buf.AsSpan(_pos, Math.Min(5, avail));
-                        return endHead.StartsWith("</row"u8) ? RowHead.EndRow : RowHead.Other;
-                    default:
-                        return RowHead.Other;
-                }
+                var cellHead = buf.AsSpan(p, Math.Min(3, avail));
+                return cellHead.StartsWith("<c"u8) && (cellHead.Length < 3 || IsBoundary(cellHead[2]));
             }
 
             private readonly record struct CellHeader(int Col, int Style, Kind Kind, bool SelfClose);
 
-            // Parses the <c ...> open tag ending at `gt`, advances _pos past it, and returns the extracted
-            // (non-span) attributes. Holds spans only within this synchronous call, so callers may await after.
-            private CellHeader ReadCellOpenTag(int gt)
+            // Parses the <c ...> open tag ending at `gt`, advances `p` past it, and returns the extracted
+            // (non-span) attributes.
+            private CellHeader ReadCellOpenTagSpan(byte[] buf, ref int p, int gt)
             {
-                var open = _buf.AsSpan(_pos, gt - _pos + 1);
+                var open = buf.AsSpan(p, gt - p + 1);
                 ScanCellAttributes(open, out var rRef, out var sVal, out var tVal);
 
                 // ColumnIndex returns -1 for a missing or malformed ref; fall back to the running column.
@@ -354,8 +347,8 @@ namespace ExcelReader.Core.Reader
                 _nextCol = col + 1;
                 int style = ParseInt(sVal);
                 var kind = ClassifyKind(tVal);
-                bool selfClose = _buf[gt - 1] == '/';
-                _pos = gt + 1; // consume open tag; _pos now at inner start (or next element if self-closed)
+                bool selfClose = buf[gt - 1] == '/';
+                p = gt + 1; // consume open tag; p now at inner start (or next element if self-closed)
                 return new CellHeader(col, style, kind, selfClose);
             }
 
@@ -621,6 +614,32 @@ namespace ExcelReader.Core.Reader
                 return true;
             }
 
+            // ParseRow's counterpart to SkipMarkup: same shape, but bounded to the already-fully-buffered
+            // `buf[0..len)` window via a local cursor instead of `_pos`/Ensure/Fill.
+            private static bool SkipMarkupSpan(byte[] buf, int len, ref int p)
+            {
+                if (buf.AsSpan(p, Math.Min(4, len - p)).StartsWith("<!--"u8))
+                {
+                    int end = IndexOfSeqBounded(buf, len, p, "-->"u8);
+                    p = end < 0 ? len : end + 3;
+                    return end >= 0;
+                }
+                if (buf.AsSpan(p, Math.Min(9, len - p)).StartsWith("<![CDATA["u8))
+                {
+                    int end = IndexOfSeqBounded(buf, len, p, "]]>"u8);
+                    p = end < 0 ? len : end + 3;
+                    return end >= 0;
+                }
+
+                int skip = IndexOfBounded(buf, len, p, (byte)'>');
+                if (skip < 0)
+                {
+                    return false;
+                }
+                p = skip + 1;
+                return true;
+            }
+
             private static int ParseInt(ReadOnlySpan<byte> src)
             {
                 return Utf8Parser.TryParse(src, out int v, out _) ? v : 0;
@@ -669,6 +688,22 @@ namespace ExcelReader.Core.Reader
                 }
             }
 
+            // Bounded, Fill-free counterparts used by ParseRow/ParseCellSpan/SkipMarkupSpan once
+            // EnsureRowBuffered(Async) has already guaranteed the whole row is buffered — a plain span
+            // search, never able to trigger PrepareBuffer compaction, so `from`/the returned index stay
+            // valid for as long as the caller doesn't call anything that can Fill in between.
+            private static int IndexOfBounded(byte[] buf, int boundExclusive, int from, byte b)
+            {
+                int rel = buf.AsSpan(from, boundExclusive - from).IndexOf(b);
+                return rel < 0 ? -1 : from + rel;
+            }
+
+            private static int IndexOfSeqBounded(byte[] buf, int boundExclusive, int from, ReadOnlySpan<byte> seq)
+            {
+                int rel = buf.AsSpan(from, boundExclusive - from).IndexOf(seq);
+                return rel < 0 ? -1 : from + rel;
+            }
+
             private void Ensure(int n)
             {
                 _io.Ensure(_sheet!, n);
@@ -703,49 +738,53 @@ namespace ExcelReader.Core.Reader
                 return -1;
             }
 
-            private ValueTask EnsureRowBufferedAsync()
+            // Grows the buffer (blocking Fill loop) until the whole row — cell data plus "</row...>"'s
+            // closing '>' — is present, so ParseRow can run entirely Fill-free over a local span+cursor.
+            // Returns the absolute position of "</row"'s '<' (the row's cell-data end); on a truncated
+            // file (no </row> before EOF) returns _len instead, so ParseRow still parses whatever cells
+            // are present before bailing, matching the original per-cell path's truncation behavior.
+            private int EnsureRowBuffered()
             {
-                return IsRowBuffered() ? ValueTask.CompletedTask : EnsureRowBufferedSlowAsync();
-            }
-
-            private bool IsRowBuffered()
-            {
-                int rowEnd = FindSeq(MarkupSeq.RowEnd, _pos);
-                if (rowEnd < 0)
+                while (true)
                 {
+                    int rowEnd = FindSeq(MarkupSeq.RowEnd, _pos);
+                    if (rowEnd >= 0 && _buf.AsSpan(rowEnd, _len - rowEnd).IndexOf((byte)'>') >= 0)
+                    {
+                        return rowEnd;
+                    }
                     if (_eof)
                     {
-                        _pos = _len;
-                        return true;
+                        return _len;
                     }
-                    return false;
+                    _io.Fill(_sheet!);
                 }
-
-                if (_buf.AsSpan(rowEnd, _len - rowEnd).IndexOf((byte)'>') >= 0)
-                {
-                    return true;
-                }
-                if (_eof)
-                {
-                    _pos = _len;
-                    return true;
-                }
-                return false;
             }
 
-            private async ValueTask EnsureRowBufferedSlowAsync()
+            // Async twin: non-async fast path checks synchronously first (the buffer already has the
+            // whole row ~99.9% of the time), only awaiting a Fill on a genuine miss.
+            private ValueTask<int> EnsureRowBufferedAsync()
             {
-                int rowEnd = await IndexOfSeqFromAsync(MarkupSeq.RowEnd).ConfigureAwait(false);
-                if (rowEnd < 0)
+                int rowEnd = FindSeq(MarkupSeq.RowEnd, _pos);
+                if (rowEnd >= 0 && _buf.AsSpan(rowEnd, _len - rowEnd).IndexOf((byte)'>') >= 0)
                 {
-                    _pos = _len;
-                    return;
+                    return new ValueTask<int>(rowEnd);
                 }
-                int gt = await IndexOfFromAsync((byte)'>', rowEnd).ConfigureAwait(false);
-                if (gt < 0)
+                return _eof ? new ValueTask<int>(_len) : EnsureRowBufferedSlowAsync();
+            }
+
+            private async ValueTask<int> EnsureRowBufferedSlowAsync()
+            {
+                do
                 {
-                    _pos = _len;
+                    await FillAsync().ConfigureAwait(false);
+                    int rowEnd = FindSeq(MarkupSeq.RowEnd, _pos);
+                    if (rowEnd >= 0 && _buf.AsSpan(rowEnd, _len - rowEnd).IndexOf((byte)'>') >= 0)
+                    {
+                        return rowEnd;
+                    }
                 }
+                while (!_eof);
+                return _len;
             }
 
             private enum MarkupSeq { CommentEnd, CDataEnd, RowEnd }
@@ -787,26 +826,6 @@ namespace ExcelReader.Core.Reader
                 }
                 while (!_eof);
                 return -1;
-            }
-
-            private async ValueTask<int> IndexOfFromAsync(byte b, int start)
-            {
-                int search = Math.Max(start, _pos);
-                while (true)
-                {
-                    int rel = _buf.AsSpan(search, _len - search).IndexOf(b);
-                    if (rel >= 0)
-                    {
-                        return search + rel;
-                    }
-                    if (_eof)
-                    {
-                        return -1;
-                    }
-                    int shift = _pos;
-                    await FillAsync().ConfigureAwait(false);
-                    search = shift > 0 ? Math.Max(_pos, search - shift) : search;
-                }
             }
 
             private ValueTask EnsureAsync(int n)
