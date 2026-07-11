@@ -79,36 +79,110 @@ namespace ExcelReader.Core.Reader
                 }
             }
 
-            public async ValueTask<bool> MoveNextAsync()
+            // Non-async fast path: IndexOfAsync/EnsureAsync/BeginRowAsync/EnsureRowBufferedAsync/
+            // SkipMarkupAsync are each already "check synchronously, only await on a genuine buffer
+            // miss" — but the original method being itself `async` meant every row paid for a state
+            // machine regardless. This mirrors the same steps but returns a completed ValueTask when
+            // every step resolves synchronously (~99.9% of rows), only falling to an awaiting
+            // continuation at the exact step that needs a refill.
+            [SuppressMessage("SharpSource", "SS034:Use await to get the result of a Task",
+                Justification = "Every .Result access is guarded by IsCompletedSuccessfully immediately above it — never blocks.")]
+            [SuppressMessage("VisualStudio.Threading", "VSTHRD103:Result synchronously blocks",
+                Justification = "Every .Result access is guarded by IsCompletedSuccessfully immediately above it — never blocks.")]
+            public ValueTask<bool> MoveNextAsync()
             {
                 while (true)
                 {
-                    int lt = _pos < _len && _buf[_pos] == (byte)'<' ? _pos : await IndexOfAsync((byte)'<').ConfigureAwait(false);
+                    int lt;
+                    if (_pos < _len && _buf[_pos] == (byte)'<')
+                    {
+                        lt = _pos;
+                    }
+                    else
+                    {
+                        ValueTask<int> ltTask = IndexOfAsync((byte)'<');
+                        if (!ltTask.IsCompletedSuccessfully)
+                        {
+                            return AwaitThenRestartAsync(ltTask);
+                        }
+                        lt = ltTask.Result;
+                    }
                     if (lt < 0)
                     {
-                        return false;
+                        return new ValueTask<bool>(false);
                     }
                     _pos = lt;
-                    await EnsureAsync(12).ConfigureAwait(false);
+
+                    ValueTask ensureTask = EnsureAsync(12);
+                    if (!ensureTask.IsCompletedSuccessfully)
+                    {
+                        return AwaitThenRestartAsync(ensureTask);
+                    }
+
                     switch (ClassifyHead())
                     {
                         case HeadKind.End:
-                            return false;
+                            return new ValueTask<bool>(false);
                         case HeadKind.Row:
-                            if (!await BeginRowAsync().ConfigureAwait(false))
                             {
-                                await EnsureRowBufferedAsync().ConfigureAwait(false);
-                                ParseRow();
+                                ValueTask<bool> beginTask = BeginRowAsync();
+                                if (!beginTask.IsCompletedSuccessfully)
+                                {
+                                    return AwaitThenRestartAsync(beginTask);
+                                }
+                                if (!beginTask.Result)
+                                {
+                                    ValueTask rowBufTask = EnsureRowBufferedAsync();
+                                    if (!rowBufTask.IsCompletedSuccessfully)
+                                    {
+                                        return FinishRowAfterAsync(rowBufTask);
+                                    }
+                                    ParseRow();
+                                }
+                                return new ValueTask<bool>(true);
                             }
-                            return true;
                         default:
-                            if (!await SkipMarkupAsync().ConfigureAwait(false))
                             {
-                                return false;
+                                ValueTask<bool> skipTask = SkipMarkupAsync();
+                                if (!skipTask.IsCompletedSuccessfully)
+                                {
+                                    return AwaitThenRestartAsync(skipTask);
+                                }
+                                if (!skipTask.Result)
+                                {
+                                    return new ValueTask<bool>(false);
+                                }
+                                break;
                             }
-                            break;
                     }
                 }
+            }
+
+            // Safe for every pending step above except the row-buffered check below: none of them
+            // commit a position change until they resolve (BeginRowAsync only advances _pos once it
+            // actually finds '>'; SkipMarkupAsync only advances _pos at its return statement). So once
+            // the fill completes, simply re-entering MoveNextAsync redoes the (now-buffered, cheap) work.
+            private async ValueTask<bool> AwaitThenRestartAsync(ValueTask pending)
+            {
+                await pending.ConfigureAwait(false);
+                return await MoveNextAsync().ConfigureAwait(false);
+            }
+
+            private async ValueTask<bool> AwaitThenRestartAsync<T>(ValueTask<T> pending)
+            {
+                await pending.ConfigureAwait(false);
+                return await MoveNextAsync().ConfigureAwait(false);
+            }
+
+            // BeginRowAsync already succeeded here (row is not self-closed, _pos is now past <row ...>),
+            // so unlike AwaitThenRestartAsync this must not re-enter MoveNextAsync from the top — that
+            // would misread the row's first cell as a new top-level element. Finishes buffering the row,
+            // then parses it.
+            private async ValueTask<bool> FinishRowAfterAsync(ValueTask pendingRowBuffered)
+            {
+                await pendingRowBuffered.ConfigureAwait(false);
+                ParseRow();
+                return true;
             }
 
             // Consumes the <row ...> open tag and resets per-row state. Call only after ClassifyHead()==Row.
@@ -156,6 +230,49 @@ namespace ExcelReader.Core.Reader
                 {
                     return; // empty cell — store nothing; _pos already past the tag
                 }
+
+                // Fast path for the common bare-<v> shape (Number/Shared/Bool/Error, and a cached
+                // t="str" formula result with no <f> element — see FormulaCellHasFormulaType). Raw '<'
+                // can never appear inside valid XML text content, so the next '<' after "<v>" is
+                // guaranteed to start "</v>" — one single-byte search replaces the general path's
+                // "</c>" scan over the whole cell body followed by a second "<v>"/"</v>" scan inside it.
+                // Inline-string and other formula shapes don't start with literal "<v>", so they
+                // naturally fall through unchanged. `valueLen` (a relative distance, not a captured
+                // absolute index) keeps this correct across any Fill/compaction inside IndexOf/Ensure —
+                // see the buffer-management notes below.
+                Ensure(3);
+                if (_buf.AsSpan(_pos, Math.Min(3, _len - _pos)).StartsWith("<v>"u8))
+                {
+                    _pos += 3;
+                    int lt = IndexOf((byte)'<');
+                    if (lt >= 0)
+                    {
+                        int valueLen = lt - _pos;
+                        _pos = lt;
+                        Ensure(8); // "</v></c>"
+                        if (_buf.AsSpan(_pos, Math.Min(8, _len - _pos)).StartsWith("</v></c>"u8))
+                        {
+                            ReadOnlySpan<byte> value = _buf.AsSpan(_pos - valueLen, valueLen);
+                            if (header.Kind == Kind.Shared)
+                            {
+                                var (start, len) = _reader.SharedAt(ParseInt(value));
+                                _acc.Add(header.Col, start, len, CellType.ExcelString, header.Style, fromShared: true);
+                            }
+                            else
+                            {
+                                EmitScalarValue(header.Kind, value, header.Col, header.Style);
+                            }
+                            _pos += 8;
+                            return;
+                        }
+                        _pos -= valueLen; // not the expected shape — rewind to the value's start
+                    }
+                    else
+                    {
+                        _pos -= 3; // no closing '<' found at all — rewind past "<v>"
+                    }
+                }
+
                 int cEnd = IndexOfSeq("</c>"u8); // ensures whole cell contiguous; shifts _pos consistently
                 if (cEnd < 0)
                 {
@@ -168,34 +285,55 @@ namespace ExcelReader.Core.Reader
 
             private enum HeadKind { End, Row, Skip }
 
+            // Dispatches on the byte right after '<' before doing any StartsWith work, so the
+            // overwhelmingly common "<row" case (and, per call site, the rare end-tags) each pay for
+            // exactly one span comparison instead of up to three probes that mostly miss.
             private HeadKind ClassifyHead()
             {
-                var head = _buf.AsSpan(_pos, Math.Min(12, _len - _pos));
-                if (head.StartsWith("</sheetData"u8) || head.StartsWith("</worksheet"u8))
+                int avail = _len - _pos;
+                if (avail < 2)
                 {
-                    return HeadKind.End;
+                    return HeadKind.Skip;
                 }
-                if (head.StartsWith("<row"u8) && (head.Length < 5 || IsBoundary(head[4])))
+                switch (_buf[_pos + 1])
                 {
-                    return HeadKind.Row;
+                    case (byte)'r':
+                        var rowHead = _buf.AsSpan(_pos, Math.Min(5, avail));
+                        return rowHead.StartsWith("<row"u8) && (rowHead.Length < 5 || IsBoundary(rowHead[4]))
+                            ? HeadKind.Row
+                            : HeadKind.Skip;
+                    case (byte)'/':
+                        var endHead = _buf.AsSpan(_pos, Math.Min(11, avail));
+                        return endHead.StartsWith("</sheetData"u8) || endHead.StartsWith("</worksheet"u8)
+                            ? HeadKind.End
+                            : HeadKind.Skip;
+                    default:
+                        return HeadKind.Skip;
                 }
-                return HeadKind.Skip;
             }
 
             private enum RowHead { EndRow, Cell, Other }
 
             private RowHead ClassifyRowHead()
             {
-                var head = _buf.AsSpan(_pos, Math.Min(6, _len - _pos));
-                if (head.StartsWith("</row"u8))
+                int avail = _len - _pos;
+                if (avail < 2)
                 {
-                    return RowHead.EndRow;
+                    return RowHead.Other;
                 }
-                if (head.StartsWith("<c"u8) && (head.Length < 3 || IsBoundary(head[2])))
+                switch (_buf[_pos + 1])
                 {
-                    return RowHead.Cell;
+                    case (byte)'c':
+                        var cellHead = _buf.AsSpan(_pos, Math.Min(3, avail));
+                        return cellHead.StartsWith("<c"u8) && (cellHead.Length < 3 || IsBoundary(cellHead[2]))
+                            ? RowHead.Cell
+                            : RowHead.Other;
+                    case (byte)'/':
+                        var endHead = _buf.AsSpan(_pos, Math.Min(5, avail));
+                        return endHead.StartsWith("</row"u8) ? RowHead.EndRow : RowHead.Other;
+                    default:
+                        return RowHead.Other;
                 }
-                return RowHead.Other;
             }
 
             private readonly record struct CellHeader(int Col, int Style, Kind Kind, bool SelfClose);
@@ -350,15 +488,26 @@ namespace ExcelReader.Core.Reader
                     return;
                 }
 
-                int vStart = _acc.ValueLength;
                 if (kind == Kind.Inline)
                 {
+                    int vStart = _acc.ValueLength;
                     Span<byte> dst = _acc.ReserveValueSpan(inner.Length);
                     _acc.Advance(XlsxXml.WriteTextRuns(inner, dst));
                     _acc.Add(col, vStart, _acc.ValueLength - vStart, CellType.ExcelString, style, fromShared: false);
                     return;
                 }
 
+                EmitScalarValue(kind, ElementText(inner, "<v>"u8, "</v>"u8), col, style);
+            }
+
+            // Handles every Kind whose content is bare "<v>...</v>" with no other wrapper: Number,
+            // Bool, Error, and Formula (a cached t="str" result with no <f> element). Shared uses this
+            // shape too but is handled by its callers directly, since its <v> holds a shared-string
+            // index rather than the cell's own text. Shared by EmitCell (which locates `v` via
+            // ElementText over the whole cell body) and ParseCell's fast path (which locates it via a
+            // direct '<' search) — everything after the value text is found is identical either way.
+            private void EmitScalarValue(Kind kind, ReadOnlySpan<byte> v, int col, int style)
+            {
                 CellType cellType = kind switch
                 {
                     Kind.Bool => CellType.Boolean,
@@ -366,7 +515,7 @@ namespace ExcelReader.Core.Reader
                     Kind.Formula => CellType.Formula,
                     _ => _reader.IsDateStyle(style) ? CellType.Date : CellType.Number,
                 };
-                ReadOnlySpan<byte> v = ElementText(inner, "<v>"u8, "</v>"u8);
+                int vStart = _acc.ValueLength;
                 // Number/Bool/Error <v> text is pure ASCII digits/bool/error-code — it can never contain
                 // an XML entity, so skip the decode scan. Only formula string results (t="str") can.
                 if (kind == Kind.Formula)
@@ -376,7 +525,15 @@ namespace ExcelReader.Core.Reader
                     return;
                 }
                 AppendRaw(v);
-                _acc.Add(col, vStart, _acc.ValueLength - vStart, cellType, style, fromShared: false);
+                // Parse plain (non-exponent) numeric text at scan time so consumers (TryGetDouble/
+                // TryParse<double>) skip the general double.TryParse round trip; the raw text is kept
+                // either way so Value/GetString stay byte-identical. FastDouble.TryParse only accepts
+                // inputs it can prove bit-identical to double.TryParse, so anything else (exponent form,
+                // 17+ significant digits) just leaves hasNumber false and falls back at consume time.
+                double number = 0;
+                bool hasNumber = kind == Kind.Number && FastDouble.TryParse(v, out number);
+                _acc.Add(col, vStart, _acc.ValueLength - vStart, cellType, style, fromShared: false,
+                    number: number, hasNumber: hasNumber);
             }
 
             private static ReadOnlySpan<byte> ElementText(ReadOnlySpan<byte> inner, ReadOnlySpan<byte> openTag, ReadOnlySpan<byte> closeTag)

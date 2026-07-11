@@ -49,22 +49,65 @@ namespace ExcelReader.Core.Reader
                 return MoveNextCore();
             }
 
-            public async ValueTask<bool> MoveNextAsync()
+            // Non-async fast path mirroring MoveNextCore: with a 64KB buffer, almost every row's
+            // header and cells are already fully buffered, so this runs the same *FromBuffer primitives
+            // MoveNextCore uses, entirely synchronously, and only pays for an async state machine when
+            // a primitive actually reports a buffer miss (result == 2) — a real refill, not per row.
+            public ValueTask<bool> MoveNextAsync()
             {
                 _ct.ThrowIfCancellationRequested();
                 if (_ended)
                 {
-                    return false;
+                    return new ValueTask<bool>(false);
                 }
                 while (true)
                 {
                     ResetRow();
-                    if (!_pendingRowHdr && !await SeekRowHdrAsync().ConfigureAwait(false))
+                    if (!_pendingRowHdr)
                     {
-                        return false;
+                        int seek = SeekRowHdrFromBuffer();
+                        if (seek == 0)
+                        {
+                            return new ValueTask<bool>(false);
+                        }
+                        if (seek == 2)
+                        {
+                            return MoveNextRowAsync(seekDone: false);
+                        }
                     }
                     _pendingRowHdr = false;
-                    await CollectCellsAsync().ConfigureAwait(false);
+                    int collect = CollectCellsFromBuffer();
+                    if (collect == 2)
+                    {
+                        return MoveNextRowAsync(seekDone: true);
+                    }
+                    if (_acc.Count > 0)
+                    {
+                        return new ValueTask<bool>(true);
+                    }
+                    if (!_pendingRowHdr)
+                    {
+                        return new ValueTask<bool>(false);
+                    }
+                    // Empty row — loop again, still fully synchronous.
+                }
+            }
+
+            // Resumes a row attempt that hit a buffer miss mid-seek (seekDone: false) or mid-collect
+            // (seekDone: true — the seek step, and clearing _pendingRowHdr, already happened
+            // synchronously in MoveNextAsync). _acc already holds whatever cells were collected before
+            // the miss; CollectCellsAsync appends to it rather than restarting. Once this row is
+            // resolved, continues the empty-row retry loop with the same awaiting primitives.
+            private async ValueTask<bool> MoveNextRowAsync(bool seekDone)
+            {
+                if (!seekDone && !await SeekRowHdrAsync().ConfigureAwait(false))
+                {
+                    return false;
+                }
+                _pendingRowHdr = false;
+                await CollectCellsAsync().ConfigureAwait(false);
+                while (true)
+                {
                     if (_acc.Count > 0)
                     {
                         return true;
@@ -73,6 +116,13 @@ namespace ExcelReader.Core.Reader
                     {
                         return false;
                     }
+                    ResetRow();
+                    if (!await SeekRowHdrAsync().ConfigureAwait(false))
+                    {
+                        return false;
+                    }
+                    _pendingRowHdr = false;
+                    await CollectCellsAsync().ConfigureAwait(false);
                 }
             }
 

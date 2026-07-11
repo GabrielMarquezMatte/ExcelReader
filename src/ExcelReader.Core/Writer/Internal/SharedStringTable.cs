@@ -6,8 +6,13 @@ namespace ExcelReader.Core.Writer.Internal
 {
     internal sealed class SharedStringTable
     {
-        private readonly Dictionary<string, int> _indexes = new(StringComparer.Ordinal);
-        private readonly List<string> _values = [];
+        // Starting from 0 means ~14 rehashes by 50k unique strings, each doubling past ~5,300
+        // entries landing on the LOH. A modest starting capacity avoids most of that for typical
+        // workbooks while staying cheap for small ones.
+        private const int DefaultCapacity = 1024;
+
+        private readonly Dictionary<string, int> _indexes = new(DefaultCapacity, StringComparer.Ordinal);
+        private readonly List<string> _values = new(DefaultCapacity);
 
         internal int Count { get; private set; }
         internal int UniqueCount => _values.Count;

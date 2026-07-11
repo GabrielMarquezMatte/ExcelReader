@@ -1,5 +1,7 @@
+using System.Buffers.Binary;
 using System.Diagnostics.CodeAnalysis;
 using System.IO.Compression;
+using System.Runtime.InteropServices;
 using ExcelReader.Core.Reader;
 using ExcelReader.Core.Writer.Internal;
 
@@ -7,7 +9,8 @@ namespace ExcelReader.Core.Writer
 {
     public sealed class XlsbSheetWriter : ISheetWriter<XlsbRowWriter>
     {
-        private const int SpillThreshold = 8 * 1024 * 1024;
+        // Kept under the LOH threshold instead of parking the pooled backing array there permanently.
+        private const int SpillThreshold = 64 * 1024;
 
         [SuppressMessage("SharpSource", "SS066:DisposableFieldIsNotDisposed",
             Justification = "XlsbWorkbookWriter is borrowed; its lifetime is managed by the caller.")]
@@ -235,14 +238,14 @@ namespace ExcelReader.Core.Writer
         private void WriteRowHeader(int rowNumber)
         {
             const int Length = (6 * 4) + 1; // 6 x u32 + 1 byte
-            Biff12RecordWriter.WriteRecordHeader(_records, Brt.RowHdr, Length);
-            _records.WriteU32((uint)rowNumber);
-            _records.WriteU32(0);
-            _records.WriteU32(0);
-            _records.WriteU32(1);
-            _records.WriteU32(0);
-            _records.WriteU32(16384);
-            _records.WriteByte(0);
+            Biff12RecordWriter.WriteFixedRecord(_records, Brt.RowHdr, Length, out Span<byte> p);
+            BinaryPrimitives.WriteUInt32LittleEndian(p, (uint)rowNumber);
+            BinaryPrimitives.WriteUInt32LittleEndian(p.Slice(4, 4), 0);
+            BinaryPrimitives.WriteUInt32LittleEndian(p.Slice(8, 4), 0);
+            BinaryPrimitives.WriteUInt32LittleEndian(p.Slice(12, 4), 1);
+            BinaryPrimitives.WriteUInt32LittleEndian(p.Slice(16, 4), 0);
+            BinaryPrimitives.WriteUInt32LittleEndian(p.Slice(20, 4), 16384);
+            p[24] = 0;
             MaybeFlush();
         }
         private static ReadOnlySpan<byte> InitialWorksheetViewPayload => [0x9C, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x04, 0x00, 0x00, 0x00, 0x64, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00];
@@ -310,26 +313,27 @@ namespace ExcelReader.Core.Writer
             if (_owner.UseSharedStrings)
             {
                 const int Length = CellHeaderLength + 4; // + shared-string index u32
-                Biff12RecordWriter.WriteRecordHeader(_records, Brt.CellIsst, Length);
-                Biff12RecordWriter.WriteCellHeader(_records, columnIndex, 0);
-                _records.WriteU32((uint)_owner.GetSharedStringIndex(value));
+                Biff12RecordWriter.WriteFixedRecord(_records, Brt.CellIsst, Length, out Span<byte> shared);
+                Biff12RecordWriter.WriteCellHeader(shared, columnIndex, 0);
+                BinaryPrimitives.WriteUInt32LittleEndian(shared.Slice(8, 4), (uint)_owner.GetSharedStringIndex(value));
                 MaybeFlush();
                 return;
             }
-            // WriteWideString emits u32 length + UTF-16LE chars: an exact, known-upfront byte count.
+            // Wide-string payload is u32 length + UTF-16LE chars: an exact, known-upfront byte count.
             int length = CellHeaderLength + 4 + checked(value.Length * 2);
-            Biff12RecordWriter.WriteRecordHeader(_records, Brt.CellSt, length);
-            Biff12RecordWriter.WriteCellHeader(_records, columnIndex, 0);
-            Biff12RecordWriter.WriteWideString(_records, value);
+            Biff12RecordWriter.WriteFixedRecord(_records, Brt.CellSt, length, out Span<byte> p);
+            Biff12RecordWriter.WriteCellHeader(p, columnIndex, 0);
+            BinaryPrimitives.WriteUInt32LittleEndian(p.Slice(8, 4), (uint)value.Length);
+            MemoryMarshal.AsBytes(value.AsSpan()).CopyTo(p[12..]);
             MaybeFlush();
         }
 
         internal void WriteBoolCell(int columnIndex, bool value)
         {
             const int Length = CellHeaderLength + 1; // + bool byte
-            Biff12RecordWriter.WriteRecordHeader(_records, Brt.CellBool, Length);
-            Biff12RecordWriter.WriteCellHeader(_records, columnIndex, 0);
-            _records.WriteByte(value ? (byte)1 : (byte)0);
+            Biff12RecordWriter.WriteFixedRecord(_records, Brt.CellBool, Length, out Span<byte> p);
+            Biff12RecordWriter.WriteCellHeader(p, columnIndex, 0);
+            p[8] = value ? (byte)1 : (byte)0;
             MaybeFlush();
         }
 
@@ -341,9 +345,9 @@ namespace ExcelReader.Core.Writer
         internal void WriteDoubleCell(int columnIndex, double value, int style)
         {
             const int Length = CellHeaderLength + 8; // + double
-            Biff12RecordWriter.WriteRecordHeader(_records, Brt.CellReal, Length);
-            Biff12RecordWriter.WriteCellHeader(_records, columnIndex, style);
-            _records.WriteDouble(value);
+            Biff12RecordWriter.WriteFixedRecord(_records, Brt.CellReal, Length, out Span<byte> p);
+            Biff12RecordWriter.WriteCellHeader(p, columnIndex, style);
+            BinaryPrimitives.WriteDoubleLittleEndian(p.Slice(8, 8), value);
             MaybeFlush();
         }
     }

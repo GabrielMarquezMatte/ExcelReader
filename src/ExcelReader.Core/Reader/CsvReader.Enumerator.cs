@@ -43,10 +43,16 @@ namespace ExcelReader.Core.Reader
             // Current field's bytes, built incrementally as either a single contiguous run in _buf
             // (the common case — zero-copy) or, once a discontiguous append is needed (a doubled ""
             // quote, or bytes trailing a closing quote), materialized into _acc's value buffer instead.
-            private int _fBufStart;
-            private int _fBufLen;
-            private bool _fMaterialized;
-            private int _fMatStart;
+            // Scoped to a single TryParseRecordFromBuffer call and threaded by ref, alongside the local
+            // `buf`/`len`/`pos` cursor, so the hot per-field loop touches only locals/registers instead
+            // of chasing the _io indirection (BufferedStreamCursor) and instance-field loads per field.
+            private struct FieldState
+            {
+                public int BufStart;
+                public int BufLen;
+                public bool Materialized;
+                public int MatStart;
+            }
 
             internal Enumerator(Stream stream, CsvReaderOptions options, CancellationToken ct = default)
             {
@@ -98,7 +104,27 @@ namespace ExcelReader.Core.Reader
                 }
             }
 
-            public async ValueTask<bool> MoveNextAsync()
+            // Non-async fast path: once the BOM check is done, ~99.9% of records are already fully
+            // buffered, so try the buffer-only parse synchronously before paying for an async state
+            // machine at all. Only a genuine buffer miss (or the first-ever call, for the BOM check)
+            // falls to the slow awaiting path.
+            public ValueTask<bool> MoveNextAsync()
+            {
+                if (!_bomChecked || _pos >= _len)
+                {
+                    return MoveNextSlowAsync();
+                }
+                BeginRecord();
+                int start = _pos;
+                if (TryParseRecordFromBuffer())
+                {
+                    return new ValueTask<bool>(true);
+                }
+                _pos = start;
+                return MoveNextSlowAsync();
+            }
+
+            private async ValueTask<bool> MoveNextSlowAsync()
             {
                 await EnsureBomStrippedAsync().ConfigureAwait(false);
                 while (true)
@@ -140,94 +166,155 @@ namespace ExcelReader.Core.Reader
             // over trickling streams ever matter.
             private bool TryParseRecordFromBuffer()
             {
+                byte[] buf = _buf;
+                int len = _len;
+                byte delim = _delimiter;
+                byte quote = _quote;
+                int pos = _pos;
+
+                // Fast path: one long-span IndexOfAny finds the record terminator, one long-span IndexOf
+                // rules out a quote anywhere in the line — both scan spans typically 50-200+ bytes, wide
+                // enough to actually engage the vectorized path (per-field spans below are 5-20 bytes and
+                // mostly don't). If the line has no quote, split it by delimiter directly with no
+                // FieldState/materialization machinery at all. Falls through to the general per-field
+                // parser for quoted lines, or when the terminator/EOF isn't resolvable yet.
+                ReadOnlySpan<byte> remaining = buf.AsSpan(pos, len - pos);
+                int lineTerm = remaining.IndexOfAny(Cr, Lf);
+                bool ambiguousCr = lineTerm >= 0 && remaining[lineTerm] == Cr && lineTerm == remaining.Length - 1 && !_eof;
+                if (!ambiguousCr && (lineTerm >= 0 || _eof))
+                {
+                    ReadOnlySpan<byte> line = lineTerm >= 0 ? remaining[..lineTerm] : remaining;
+                    if (line.IndexOf(quote) < 0)
+                    {
+                        ParseUnquotedLine(line, pos);
+                        pos += line.Length;
+                        if (lineTerm >= 0)
+                        {
+                            pos += buf[pos] == Cr && pos + 1 < len && buf[pos + 1] == Lf ? 2 : 1;
+                        }
+                        _pos = pos;
+                        return true;
+                    }
+                }
+
+                FieldState f = default;
+
                 while (true)
                 {
-                    FieldBegin();
-                    if (_pos < _len && _buf[_pos] == _quote)
+                    f.BufStart = pos;
+                    f.BufLen = 0;
+                    f.Materialized = false;
+
+                    if (pos < len && buf[pos] == quote)
                     {
-                        _pos++;
-                        if (!TryParseQuotedContent())
+                        pos++;
+                        if (!TryParseQuotedContent(buf, len, quote, ref pos, ref f))
                         {
+                            _pos = pos;
                             return false;
                         }
                     }
-                    int term = TryScanUnquotedRun();
+                    int term = TryScanUnquotedRun(buf, len, delim, ref pos, ref f);
                     if (term == NeedMore)
                     {
+                        _pos = pos;
                         return false;
                     }
-                    CommitField();
+                    CommitField(f);
                     if (term == RecordEnd)
                     {
+                        _pos = pos;
                         return true;
                     }
                 }
             }
 
-            // _pos is right after the opening quote. Appends unescaped content ("" -> ") to _acc
-            // and leaves _pos right after the closing quote (or at EOF for an unterminated field).
+            // Splits an entire quote-free line (already known fully buffered) by delimiter in one tight
+            // loop — no FieldState, no materialization check, no quote branch per field, since none of
+            // that machinery can possibly be needed here. `lineStart` is the line's absolute offset in
+            // buf, so committed cells still point directly into it (zero-copy, same as the general path).
+            private void ParseUnquotedLine(ReadOnlySpan<byte> line, int lineStart)
+            {
+                byte delim = _delimiter;
+                int start = 0;
+                while (true)
+                {
+                    int rel = line[start..].IndexOf(delim);
+                    if (rel < 0)
+                    {
+                        int fieldLen = line.Length - start;
+                        _acc.Add(_col++, lineStart + start, fieldLen, fieldLen == 0 ? CellType.Empty : CellType.ExcelString, style: 0, fromShared: false);
+                        return;
+                    }
+                    _acc.Add(_col++, lineStart + start, rel, rel == 0 ? CellType.Empty : CellType.ExcelString, style: 0, fromShared: false);
+                    start += rel + 1;
+                }
+            }
+
+            // `pos` is right after the opening quote. Appends unescaped content ("" -> ") to _acc
+            // and leaves `pos` right after the closing quote (or at EOF for an unterminated field).
             // False means the closing quote (or the byte after it, needed to rule out "") is not
             // buffered yet.
-            private bool TryParseQuotedContent()
+            private bool TryParseQuotedContent(ReadOnlySpan<byte> buf, int len, byte quote, ref int pos, ref FieldState f)
             {
                 while (true)
                 {
-                    int rel = _pos < _len ? _buf.AsSpan(_pos, _len - _pos).IndexOf(_quote) : -1;
+                    int rel = pos < len ? buf[pos..len].IndexOf(quote) : -1;
                     if (rel < 0)
                     {
                         if (!_eof)
                         {
                             return false;
                         }
-                        FieldAppendBufRun(_pos, _len - _pos);
-                        _pos = _len;
+                        FieldAppendBufRun(buf, pos, len - pos, ref f);
+                        pos = len;
                         return true; // unterminated quoted field at EOF
                     }
-                    int q = _pos + rel;
-                    if (q + 1 >= _len && !_eof)
+                    int q = pos + rel;
+                    if (q + 1 >= len && !_eof)
                     {
                         return false; // can't distinguish a closing quote from "" yet
                     }
-                    FieldAppendBufRun(_pos, q - _pos);
-                    if (q + 1 < _len && _buf[q + 1] == _quote)
+                    FieldAppendBufRun(buf, pos, q - pos, ref f);
+                    if (q + 1 < len && buf[q + 1] == quote)
                     {
-                        FieldAppendLiteralByte(_quote);
-                        _pos = q + 2;
+                        FieldAppendLiteralByte(buf, quote, ref f);
+                        pos = q + 2;
                         continue;
                     }
-                    _pos = q + 1;
+                    pos = q + 1;
                     return true;
                 }
             }
 
-            // Scans from _pos (either the field's start, or right after a closing quote) for the
+            // Scans from `pos` (either the field's start, or right after a closing quote) for the
             // next delimiter/terminator, appending the run verbatim.
-            private int TryScanUnquotedRun()
+            private int TryScanUnquotedRun(ReadOnlySpan<byte> buf, int len, byte delim, ref int pos, ref FieldState f)
             {
-                int rel = _pos < _len ? _buf.AsSpan(_pos, _len - _pos).IndexOfAny(_delimiter, Cr, Lf) : -1;
+                int rel = pos < len ? buf[pos..len].IndexOfAny(delim, Cr, Lf) : -1;
                 if (rel < 0)
                 {
                     if (!_eof)
                     {
                         return NeedMore;
                     }
-                    FieldAppendBufRun(_pos, _len - _pos);
-                    _pos = _len;
+                    FieldAppendBufRun(buf, pos, len - pos, ref f);
+                    pos = len;
                     return RecordEnd;
                 }
-                int found = _pos + rel;
-                byte b = _buf[found];
-                if (b == Cr && found + 1 >= _len && !_eof)
+                int found = pos + rel;
+                byte b = buf[found];
+                if (b == Cr && found + 1 >= len && !_eof)
                 {
                     return NeedMore; // can't tell a bare CR from CRLF yet
                 }
-                FieldAppendBufRun(_pos, found - _pos);
-                if (b == _delimiter)
+                FieldAppendBufRun(buf, pos, found - pos, ref f);
+                if (b == delim)
                 {
-                    _pos = found + 1;
+                    pos = found + 1;
                     return FieldEnd;
                 }
-                _pos = found + (b == Cr && found + 1 < _len && _buf[found + 1] == Lf ? 2 : 1);
+                pos = found + (b == Cr && found + 1 < len && buf[found + 1] == Lf ? 2 : 1);
                 return RecordEnd;
             }
 
@@ -271,74 +358,67 @@ namespace ExcelReader.Core.Reader
             // when a field's bytes aren't contiguous in _buf — a doubled "" quote or malformed bytes
             // trailing a closing quote) ---
 
-            private void FieldBegin()
-            {
-                _fBufStart = _pos;
-                _fBufLen = 0;
-                _fMaterialized = false;
-            }
-
-            // Appends a run of bytes already sitting at _buf[start..start+len). Stays a zero-copy
-            // slice of _buf as long as each run continues exactly where the previous one ended;
+            // Appends a run of bytes already sitting at buf[start..start+len). Stays a zero-copy
+            // slice of buf as long as each run continues exactly where the previous one ended;
             // any gap (or a prior literal byte append) forces materialization into _acc from then on.
-            private void FieldAppendBufRun(int start, int len)
+            private void FieldAppendBufRun(ReadOnlySpan<byte> buf, int start, int len, ref FieldState f)
             {
                 if (len == 0)
                 {
                     return;
                 }
-                if (!_fMaterialized)
+                if (!f.Materialized)
                 {
-                    if (_fBufLen == 0)
+                    if (f.BufLen == 0)
                     {
-                        _fBufStart = start;
-                        _fBufLen = len;
+                        f.BufStart = start;
+                        f.BufLen = len;
                         return;
                     }
-                    if (start == _fBufStart + _fBufLen)
+                    if (start == f.BufStart + f.BufLen)
                     {
-                        _fBufLen += len;
+                        f.BufLen += len;
                         return;
                     }
-                    Materialize();
+                    Materialize(buf, ref f);
                 }
                 Span<byte> dst = _acc.ReserveValueSpan(len);
-                _buf.AsSpan(start, len).CopyTo(dst);
+                buf.Slice(start, len).CopyTo(dst);
                 _acc.Advance(len);
             }
 
             // Appends one literal byte (the unescaped '"' from a doubled ""), which can never be a
-            // contiguous continuation of the surrounding _buf run.
-            private void FieldAppendLiteralByte(byte b)
+            // contiguous continuation of the surrounding buf run.
+            private void FieldAppendLiteralByte(ReadOnlySpan<byte> buf, byte b, ref FieldState f)
             {
-                if (!_fMaterialized)
+                if (!f.Materialized)
                 {
-                    Materialize();
+                    Materialize(buf, ref f);
                 }
                 _acc.AppendByte(b);
             }
 
-            private void Materialize()
+            private void Materialize(ReadOnlySpan<byte> buf, ref FieldState f)
             {
-                _fMatStart = _acc.ValueLength;
-                if (_fBufLen > 0)
+                f.MatStart = _acc.ValueLength;
+                if (f.BufLen > 0)
                 {
-                    Span<byte> dst = _acc.ReserveValueSpan(_fBufLen);
-                    _buf.AsSpan(_fBufStart, _fBufLen).CopyTo(dst);
-                    _acc.Advance(_fBufLen);
+                    Span<byte> dst = _acc.ReserveValueSpan(f.BufLen);
+                    buf.Slice(f.BufStart, f.BufLen).CopyTo(dst);
+                    _acc.Advance(f.BufLen);
                 }
-                _fMaterialized = true;
+                f.Materialized = true;
             }
 
-            private void CommitField()
+            private void CommitField(FieldState f)
             {
-                if (!_fMaterialized)
+                if (!f.Materialized)
                 {
-                    _acc.Add(_col++, _fBufStart, _fBufLen, _fBufLen == 0 ? CellType.Empty : CellType.ExcelString, style: 0, fromShared: false);
+                    _acc.Add(_col++, f.BufStart, f.BufLen, f.BufLen == 0 ? CellType.Empty : CellType.ExcelString, style: 0, fromShared: false);
                     return;
                 }
-                int len = _acc.ValueLength - _fMatStart;
-                _acc.Add(_col++, _fMatStart, len, len == 0 ? CellType.Empty : CellType.ExcelString, style: 0, fromShared: true);
+                int len = _acc.ValueLength - f.MatStart;
+                _acc.Add(_col++, f.MatStart, len, len == 0 ? CellType.Empty : CellType.ExcelString, style: 0, fromShared: true);
             }
 
             // --- buffer management (shared with XlsxReader/XlsbReader via BufferedStreamCursor) ---

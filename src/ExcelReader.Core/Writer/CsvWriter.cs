@@ -9,9 +9,10 @@ namespace ExcelReader.Core.Writer
     // configuration to round-trip.
     public sealed class CsvWriter : IDisposable, IAsyncDisposable
     {
-        // ponytail: same 1 MB flush threshold as the XLSX SheetWriter — bounds memory on huge
-        // files while turning many tiny row writes into a handful of big stream writes.
-        private const int FlushThreshold = 1024 * 1024;
+        // ponytail: same 64 KB flush threshold as the XLSX SheetWriter — bounds memory on huge
+        // files while turning many tiny row writes into a handful of big stream writes, and keeps
+        // the pooled backing array under the LOH threshold instead of parking it there permanently.
+        private const int FlushThreshold = 64 * 1024;
 
         private readonly Stream _stream;
         private readonly bool _leaveOpen;
