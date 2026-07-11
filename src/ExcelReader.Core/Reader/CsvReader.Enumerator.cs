@@ -104,7 +104,27 @@ namespace ExcelReader.Core.Reader
                 }
             }
 
-            public async ValueTask<bool> MoveNextAsync()
+            // Non-async fast path: once the BOM check is done, ~99.9% of records are already fully
+            // buffered, so try the buffer-only parse synchronously before paying for an async state
+            // machine at all. Only a genuine buffer miss (or the first-ever call, for the BOM check)
+            // falls to the slow awaiting path.
+            public ValueTask<bool> MoveNextAsync()
+            {
+                if (!_bomChecked || _pos >= _len)
+                {
+                    return MoveNextSlowAsync();
+                }
+                BeginRecord();
+                int start = _pos;
+                if (TryParseRecordFromBuffer())
+                {
+                    return new ValueTask<bool>(true);
+                }
+                _pos = start;
+                return MoveNextSlowAsync();
+            }
+
+            private async ValueTask<bool> MoveNextSlowAsync()
             {
                 await EnsureBomStrippedAsync().ConfigureAwait(false);
                 while (true)
@@ -151,6 +171,32 @@ namespace ExcelReader.Core.Reader
                 byte delim = _delimiter;
                 byte quote = _quote;
                 int pos = _pos;
+
+                // Fast path: one long-span IndexOfAny finds the record terminator, one long-span IndexOf
+                // rules out a quote anywhere in the line — both scan spans typically 50-200+ bytes, wide
+                // enough to actually engage the vectorized path (per-field spans below are 5-20 bytes and
+                // mostly don't). If the line has no quote, split it by delimiter directly with no
+                // FieldState/materialization machinery at all. Falls through to the general per-field
+                // parser for quoted lines, or when the terminator/EOF isn't resolvable yet.
+                ReadOnlySpan<byte> remaining = buf.AsSpan(pos, len - pos);
+                int lineTerm = remaining.IndexOfAny(Cr, Lf);
+                bool ambiguousCr = lineTerm >= 0 && remaining[lineTerm] == Cr && lineTerm == remaining.Length - 1 && !_eof;
+                if (!ambiguousCr && (lineTerm >= 0 || _eof))
+                {
+                    ReadOnlySpan<byte> line = lineTerm >= 0 ? remaining[..lineTerm] : remaining;
+                    if (line.IndexOf(quote) < 0)
+                    {
+                        ParseUnquotedLine(line, pos);
+                        pos += line.Length;
+                        if (lineTerm >= 0)
+                        {
+                            pos += buf[pos] == Cr && pos + 1 < len && buf[pos + 1] == Lf ? 2 : 1;
+                        }
+                        _pos = pos;
+                        return true;
+                    }
+                }
+
                 FieldState f = default;
 
                 while (true)
@@ -180,6 +226,28 @@ namespace ExcelReader.Core.Reader
                         _pos = pos;
                         return true;
                     }
+                }
+            }
+
+            // Splits an entire quote-free line (already known fully buffered) by delimiter in one tight
+            // loop — no FieldState, no materialization check, no quote branch per field, since none of
+            // that machinery can possibly be needed here. `lineStart` is the line's absolute offset in
+            // buf, so committed cells still point directly into it (zero-copy, same as the general path).
+            private void ParseUnquotedLine(ReadOnlySpan<byte> line, int lineStart)
+            {
+                byte delim = _delimiter;
+                int start = 0;
+                while (true)
+                {
+                    int rel = line[start..].IndexOf(delim);
+                    if (rel < 0)
+                    {
+                        int fieldLen = line.Length - start;
+                        _acc.Add(_col++, lineStart + start, fieldLen, fieldLen == 0 ? CellType.Empty : CellType.ExcelString, style: 0, fromShared: false);
+                        return;
+                    }
+                    _acc.Add(_col++, lineStart + start, rel, rel == 0 ? CellType.Empty : CellType.ExcelString, style: 0, fromShared: false);
+                    start += rel + 1;
                 }
             }
 

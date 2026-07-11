@@ -139,25 +139,64 @@ namespace ExcelReader.Core.Parser.Internal
 
             public T Current => _current;
 
+            // Non-async fast path once _rows exists: TEnumerator.MoveNextAsync is itself already
+            // "check synchronously, only await on a genuine buffer miss" (see e.g.
+            // XlsxReader.Enumerator.MoveNextAsync), but stacking this method's own `async` on top of
+            // that meant every row paid for a second state machine. This returns a completed ValueTask
+            // whenever the row-enumerator call and the projection both resolve synchronously, only
+            // falling to an awaiting continuation on a genuine miss.
+            [SuppressMessage("SharpSource", "SS034:Use await to get the result of a Task",
+                Justification = "The .Result access is guarded by IsCompletedSuccessfully immediately above it — never blocks.")]
+            [SuppressMessage("VisualStudio.Threading", "VSTHRD103:Result synchronously blocks",
+                Justification = "The .Result access is guarded by IsCompletedSuccessfully immediately above it — never blocks.")]
             public ValueTask<bool> MoveNextAsync()
             {
-                return AdvanceAsync();
+                if (_rows is null)
+                {
+                    return AdvanceAsync();
+                }
+                while (true)
+                {
+                    ValueTask<bool> moveTask = _rows.MoveNextAsync();
+                    if (!moveTask.IsCompletedSuccessfully)
+                    {
+                        return AwaitThenContinueAsync(moveTask);
+                    }
+                    if (!moveTask.Result)
+                    {
+                        return new ValueTask<bool>(false);
+                    }
+                    switch (Project())
+                    {
+                        case ProjectionStep.Yield:
+                            return new ValueTask<bool>(true);
+                        case ProjectionStep.Stop:
+                            return new ValueTask<bool>(false);
+                            // Skip: loop again, still synchronous.
+                    }
+                }
+            }
+
+            private async ValueTask<bool> AwaitThenContinueAsync(ValueTask<bool> pendingMoveNext)
+            {
+                if (!await pendingMoveNext.ConfigureAwait(false))
+                {
+                    return false;
+                }
+                switch (Project())
+                {
+                    case ProjectionStep.Yield:
+                        return true;
+                    case ProjectionStep.Stop:
+                        return false;
+                }
+                return await MoveNextAsync().ConfigureAwait(false); // Skip: resume the fast path.
             }
 
             private async ValueTask<bool> AdvanceAsync()
             {
-                _rows ??= await _reader.GetAsyncEnumeratorAsync(_ct).ConfigureAwait(false);
-                while (await _rows.MoveNextAsync().ConfigureAwait(false))
-                {
-                    switch (Project())
-                    {
-                        case ProjectionStep.Yield:
-                            return true;
-                        case ProjectionStep.Stop:
-                            return false;
-                    }
-                }
-                return false;
+                _rows = await _reader.GetAsyncEnumeratorAsync(_ct).ConfigureAwait(false);
+                return await MoveNextAsync().ConfigureAwait(false);
             }
 
             private ProjectionStep Project()

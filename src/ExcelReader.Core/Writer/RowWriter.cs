@@ -3,7 +3,7 @@ using ExcelReader.Core.Writer.Internal;
 
 namespace ExcelReader.Core.Writer
 {
-    public sealed class RowWriter : IRowWriter
+    public sealed class RowWriter : IRowWriter, IDisposable
     {
         [SuppressMessage("SharpSource", "SS066:DisposableFieldIsNotDisposed",
             Justification = "SheetWriter is borrowed; its lifetime is managed by the caller.")]
@@ -47,18 +47,18 @@ namespace ExcelReader.Core.Writer
             if (_owner.UseSharedStrings)
             {
                 int index = _owner.GetSharedStringIndex(value);
-                CellFormatter.WriteSharedString(_row, index, _columnIndex, _rowNumber, _useCellReferences);
+                CellFormatter.WriteSharedString(_row, index, _columnIndex, _rowNumber, ConsumeCellReference());
                 _columnIndex++;
                 return;
             }
-            CellFormatter.WriteString(_row, value, _columnIndex, _rowNumber, _useCellReferences);
+            CellFormatter.WriteString(_row, value, _columnIndex, _rowNumber, ConsumeCellReference());
             _columnIndex++;
         }
 
         public void Write(bool value)
         {
             ThrowIfDisposed();
-            CellFormatter.WriteBool(_row, value, _columnIndex, _rowNumber, _useCellReferences);
+            CellFormatter.WriteBool(_row, value, _columnIndex, _rowNumber, ConsumeCellReference());
             _columnIndex++;
         }
 
@@ -70,14 +70,14 @@ namespace ExcelReader.Core.Writer
                 WriteEmptyCell();
                 return;
             }
-            CellFormatter.WriteBool(_row, value.Value, _columnIndex, _rowNumber, _useCellReferences);
+            CellFormatter.WriteBool(_row, value.Value, _columnIndex, _rowNumber, ConsumeCellReference());
             _columnIndex++;
         }
 
         public void Write(DateTime value)
         {
             ThrowIfDisposed();
-            CellFormatter.WriteDateTime(_row, value, _columnIndex, _rowNumber, _useCellReferences);
+            CellFormatter.WriteDateTime(_row, value, _columnIndex, _rowNumber, ConsumeCellReference());
             _columnIndex++;
         }
 
@@ -89,7 +89,7 @@ namespace ExcelReader.Core.Writer
                 WriteEmptyCell();
                 return;
             }
-            CellFormatter.WriteDateTime(_row, value.Value, _columnIndex, _rowNumber, _useCellReferences);
+            CellFormatter.WriteDateTime(_row, value.Value, _columnIndex, _rowNumber, ConsumeCellReference());
             _columnIndex++;
         }
 
@@ -97,7 +97,7 @@ namespace ExcelReader.Core.Writer
         public void Write(DateOnly value)
         {
             ThrowIfDisposed();
-            CellFormatter.WriteDateTime(_row, value.ToDateTime(TimeOnly.MinValue), _columnIndex, _rowNumber, _useCellReferences);
+            CellFormatter.WriteDateTime(_row, value.ToDateTime(TimeOnly.MinValue), _columnIndex, _rowNumber, ConsumeCellReference());
             _columnIndex++;
         }
 
@@ -109,7 +109,7 @@ namespace ExcelReader.Core.Writer
                 WriteEmptyCell();
                 return;
             }
-            CellFormatter.WriteDateTime(_row, value.Value.ToDateTime(TimeOnly.MinValue), _columnIndex, _rowNumber, _useCellReferences);
+            CellFormatter.WriteDateTime(_row, value.Value.ToDateTime(TimeOnly.MinValue), _columnIndex, _rowNumber, ConsumeCellReference());
             _columnIndex++;
         }
 
@@ -118,7 +118,7 @@ namespace ExcelReader.Core.Writer
         public void Write(TimeOnly value)
         {
             ThrowIfDisposed();
-            CellFormatter.WriteNumber(_row, value.Ticks / (double)TimeSpan.TicksPerDay, _columnIndex, _rowNumber, _useCellReferences);
+            CellFormatter.WriteNumber(_row, value.Ticks / (double)TimeSpan.TicksPerDay, _columnIndex, _rowNumber, ConsumeCellReference());
             _columnIndex++;
         }
 
@@ -130,14 +130,14 @@ namespace ExcelReader.Core.Writer
                 WriteEmptyCell();
                 return;
             }
-            CellFormatter.WriteNumber(_row, value.Value.Ticks / (double)TimeSpan.TicksPerDay, _columnIndex, _rowNumber, _useCellReferences);
+            CellFormatter.WriteNumber(_row, value.Value.Ticks / (double)TimeSpan.TicksPerDay, _columnIndex, _rowNumber, ConsumeCellReference());
             _columnIndex++;
         }
 
         public void Write(int value)
         {
             ThrowIfDisposed();
-            CellFormatter.WriteNumber(_row, value, _columnIndex, _rowNumber, _useCellReferences);
+            CellFormatter.WriteNumber(_row, value, _columnIndex, _rowNumber, ConsumeCellReference());
             _columnIndex++;
         }
 
@@ -149,14 +149,14 @@ namespace ExcelReader.Core.Writer
                 WriteEmptyCell();
                 return;
             }
-            CellFormatter.WriteNumber(_row, value.Value, _columnIndex, _rowNumber, _useCellReferences);
+            CellFormatter.WriteNumber(_row, value.Value, _columnIndex, _rowNumber, ConsumeCellReference());
             _columnIndex++;
         }
 
         public void Write(long value)
         {
             ThrowIfDisposed();
-            CellFormatter.WriteNumber(_row, value, _columnIndex, _rowNumber, _useCellReferences);
+            CellFormatter.WriteNumber(_row, value, _columnIndex, _rowNumber, ConsumeCellReference());
             _columnIndex++;
         }
 
@@ -168,14 +168,14 @@ namespace ExcelReader.Core.Writer
                 WriteEmptyCell();
                 return;
             }
-            CellFormatter.WriteNumber(_row, value.Value, _columnIndex, _rowNumber, _useCellReferences);
+            CellFormatter.WriteNumber(_row, value.Value, _columnIndex, _rowNumber, ConsumeCellReference());
             _columnIndex++;
         }
 
         public void Write(double value)
         {
             ThrowIfDisposed();
-            CellFormatter.WriteNumber(_row, value, _columnIndex, _rowNumber, _useCellReferences);
+            CellFormatter.WriteNumber(_row, value, _columnIndex, _rowNumber, ConsumeCellReference());
             _columnIndex++;
         }
 
@@ -187,14 +187,14 @@ namespace ExcelReader.Core.Writer
                 WriteEmptyCell();
                 return;
             }
-            CellFormatter.WriteNumber(_row, value.Value, _columnIndex, _rowNumber, _useCellReferences);
+            CellFormatter.WriteNumber(_row, value.Value, _columnIndex, _rowNumber, ConsumeCellReference());
             _columnIndex++;
         }
 
         public void Write(decimal value)
         {
             ThrowIfDisposed();
-            CellFormatter.WriteNumber(_row, value, _columnIndex, _rowNumber, _useCellReferences);
+            CellFormatter.WriteNumber(_row, value, _columnIndex, _rowNumber, ConsumeCellReference());
             _columnIndex++;
         }
 
@@ -206,7 +206,7 @@ namespace ExcelReader.Core.Writer
                 WriteEmptyCell();
                 return;
             }
-            CellFormatter.WriteNumber(_row, value.Value, _columnIndex, _rowNumber, _useCellReferences);
+            CellFormatter.WriteNumber(_row, value.Value, _columnIndex, _rowNumber, ConsumeCellReference());
             _columnIndex++;
         }
 
@@ -214,7 +214,7 @@ namespace ExcelReader.Core.Writer
             where T : IUtf8SpanFormattable
         {
             ThrowIfDisposed();
-            CellFormatter.WriteNumber(_row, value, _columnIndex, _rowNumber, _useCellReferences);
+            CellFormatter.WriteNumber(_row, value, _columnIndex, _rowNumber, ConsumeCellReference());
             _columnIndex++;
         }
 
@@ -227,7 +227,7 @@ namespace ExcelReader.Core.Writer
                 WriteEmptyCell();
                 return;
             }
-            CellFormatter.WriteNumber(_row, value.Value, _columnIndex, _rowNumber, _useCellReferences);
+            CellFormatter.WriteNumber(_row, value.Value, _columnIndex, _rowNumber, ConsumeCellReference());
             _columnIndex++;
         }
 
@@ -241,10 +241,20 @@ namespace ExcelReader.Core.Writer
             _columnIndex += count;
         }
 
+        // Only the first cell written after a gap (a real Skip(), which leaves the corresponding
+        // <c> elements out entirely) needs an explicit r="..." reference so the reader can tell how
+        // many columns were skipped; every cell after that is contiguous again. A null-valued cell
+        // still emits a real (self-closing) <c/> placeholder, so on its own it never needs one.
+        private bool ConsumeCellReference()
+        {
+            bool result = _useCellReferences;
+            _useCellReferences = false;
+            return result;
+        }
+
         private void WriteEmptyCell()
         {
-            _useCellReferences = true;
-            CellFormatter.WriteEmpty(_row, _columnIndex, _rowNumber, includeReference: true);
+            CellFormatter.WriteEmpty(_row, _columnIndex, _rowNumber, includeReference: ConsumeCellReference());
             _columnIndex++;
         }
 
@@ -256,6 +266,20 @@ namespace ExcelReader.Core.Writer
             }
             _disposed = true;
             return _owner.EndBufferedRowAsync();
+        }
+
+        // Sync counterpart for callers on SheetWriter.StartRow's synchronous fast path (see
+        // SheetWriterExtensions.WriteRecordsAsync's SheetWriter-specific overload): avoids the
+        // per-row await entirely when the destination stream write only happens on the rare
+        // buffer-threshold flush, which EndBufferedRow already does synchronously.
+        public void Dispose()
+        {
+            if (_disposed)
+            {
+                return;
+            }
+            _disposed = true;
+            _owner.EndBufferedRow();
         }
     }
 }
