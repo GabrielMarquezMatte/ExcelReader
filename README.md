@@ -48,11 +48,11 @@ XLSB is the fastest generated Excel format in these results: raw reads are ~2.5x
 
 | Scenario | ExcelReader | Sylvan |
 |---|---:|---:|
-| Cell-by-cell read | 4.473 ms, 58.22 KB | 5.268 ms, 1,717.73 KB |
-| Cell-by-cell read async | 4.503 ms, 58.29 KB | - |
-| Workbook writing | 5.161 ms, 16.03 MB | - |
+| Cell-by-cell read | 4.602 ms, 2.89 KB | 5.328 ms, 1,717.73 KB |
+| Cell-by-cell read async | 4.572 ms, 2.96 KB | - |
+| Workbook writing | 5.201 ms, 16.03 MB | - |
 
-ExcelReader is ~1.2x faster than Sylvan for generated XLS reads while allocating ~29.5x less memory. The XLS writer is ~2.7x faster than the XLSX writer in this benchmark, but it allocates more because the BIFF8/OLE container is assembled in memory.
+ExcelReader is ~1.2x faster than Sylvan for generated XLS reads while allocating ~590x less memory. The XLS writer is ~2.7x faster than the XLSX writer in this benchmark, but it allocates more because the BIFF8/OLE container is assembled in memory.
 
 ### CSV
 
