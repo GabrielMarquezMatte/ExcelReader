@@ -56,11 +56,19 @@ namespace ExcelReader.Core.Reader
             var entry = _zip.GetEntry("xl/sharedStrings.xml");
             if (entry is not null)
             {
-                ParseShared(ZipEntryBytes.Read(
+                var (bytes, length) = ZipEntryBytes.ReadPooled(
                     entry,
                     _decompressedBytes,
                     nameof(ExcelReaderOptions.MaxSharedStringBytes),
-                    _options.MaxSharedStringBytes));
+                    _options.MaxSharedStringBytes);
+                try
+                {
+                    ParseShared(bytes.AsSpan(0, length));
+                }
+                finally
+                {
+                    ArrayPool<byte>.Shared.Return(bytes);
+                }
             }
         }
 
@@ -74,12 +82,20 @@ namespace ExcelReader.Core.Reader
             var entry = _zip.GetEntry("xl/sharedStrings.xml");
             if (entry is not null)
             {
-                ParseShared(await ZipEntryBytes.ReadAsync(
+                var (bytes, length) = await ZipEntryBytes.ReadPooledAsync(
                     entry,
                     _decompressedBytes,
                     ct,
                     nameof(ExcelReaderOptions.MaxSharedStringBytes),
-                    _options.MaxSharedStringBytes).ConfigureAwait(false));
+                    _options.MaxSharedStringBytes).ConfigureAwait(false);
+                try
+                {
+                    ParseShared(bytes.AsSpan(0, length));
+                }
+                finally
+                {
+                    ArrayPool<byte>.Shared.Return(bytes);
+                }
             }
         }
 
@@ -101,7 +117,9 @@ namespace ExcelReader.Core.Reader
                 }
             }
 
-            int[] offsets = new int[uniqueCount > 0 ? uniqueCount + 1 : 16];
+            // When uniqueCount is absent, guess from the XML size instead of always starting at 16 —
+            // avoids repeated Array.Resize doublings (each a full copy) on large string-heavy sheets.
+            int[] offsets = new int[uniqueCount > 0 ? uniqueCount + 1 : Math.Max(16, src.Length / 64)];
             int offsetCount = 1;
             int flat = 0;
             int p = 0;

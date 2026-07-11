@@ -7,7 +7,8 @@ namespace ExcelReader.Core.Writer
 {
     public sealed class XlsbSheetWriter : ISheetWriter<XlsbRowWriter>
     {
-        private const int SpillThreshold = 8 * 1024 * 1024;
+        // Kept under the LOH threshold instead of parking the pooled backing array there permanently.
+        private const int SpillThreshold = 64 * 1024;
 
         [SuppressMessage("SharpSource", "SS066:DisposableFieldIsNotDisposed",
             Justification = "XlsbWorkbookWriter is borrowed; its lifetime is managed by the caller.")]

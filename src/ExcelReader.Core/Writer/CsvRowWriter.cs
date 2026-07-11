@@ -1,6 +1,8 @@
 using System.Buffers;
+using System.Buffers.Text;
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
+using System.Runtime.CompilerServices;
 using ExcelReader.Core.Writer.Internal;
 
 namespace ExcelReader.Core.Writer
@@ -177,7 +179,25 @@ namespace ExcelReader.Core.Writer
             where T : IUtf8SpanFormattable
         {
             Span<byte> buf = stackalloc byte[StackFieldBytes];
-            if (!value.TryFormat(buf, out int written, format, CultureInfo.InvariantCulture))
+            // Utf8Formatter is culture-free (no per-field NumberFormatInfo lookup) and matches the
+            // InvariantCulture/default-format output below for these types. Guards are JIT constants,
+            // so non-matching T compiles them away (mirrors Cell.TryParse's dispatch).
+            if (format.IsEmpty && typeof(T) == typeof(int) && Utf8Formatter.TryFormat(Unsafe.As<T, int>(ref value), buf, out var written))
+            {
+                WriteFieldBytes(buf[..written]);
+                return;
+            }
+            if (format.IsEmpty && typeof(T) == typeof(long) && Utf8Formatter.TryFormat(Unsafe.As<T, long>(ref value), buf, out written))
+            {
+                WriteFieldBytes(buf[..written]);
+                return;
+            }
+            if (format.IsEmpty && typeof(T) == typeof(double) && Utf8Formatter.TryFormat(Unsafe.As<T, double>(ref value), buf, out written))
+            {
+                WriteFieldBytes(buf[..written]);
+                return;
+            }
+            if (!value.TryFormat(buf, out written, format, CultureInfo.InvariantCulture))
             {
                 WriteUtf8FieldSlow(value, format);
                 return;
