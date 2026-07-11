@@ -48,11 +48,11 @@ XLSB is the fastest generated Excel format in these results: raw reads are ~2.5x
 
 | Scenario | ExcelReader | Sylvan |
 |---|---:|---:|
-| Cell-by-cell read | 4.473 ms, 58.22 KB | 5.268 ms, 1,717.73 KB |
-| Cell-by-cell read async | 4.503 ms, 58.29 KB | - |
-| Workbook writing | 5.161 ms, 16.03 MB | - |
+| Cell-by-cell read | 4.602 ms, 2.89 KB | 5.328 ms, 1,717.73 KB |
+| Cell-by-cell read async | 4.572 ms, 2.96 KB | - |
+| Workbook writing | 5.201 ms, 16.03 MB | - |
 
-ExcelReader is ~1.2x faster than Sylvan for generated XLS reads while allocating ~29.5x less memory. The XLS writer is ~2.7x faster than the XLSX writer in this benchmark, but it allocates more because the BIFF8/OLE container is assembled in memory.
+ExcelReader is ~1.2x faster than Sylvan for generated XLS reads while allocating ~590x less memory. The XLS writer is ~2.7x faster than the XLSX writer in this benchmark, but it allocates more because the BIFF8/OLE container is assembled in memory.
 
 ### CSV
 
@@ -72,13 +72,13 @@ This benchmark reads a real workbook exported in multiple formats.
 
 | Format | ExcelReader | Sylvan |
 |---|---:|---:|
-| XLSX | 70.166 ms, 34.09 KB | 195.927 ms, 644.23 KB |
-| XLSM | 69.962 ms, 34.13 KB | 195.598 ms, 644.30 KB |
-| XLSB | 23.693 ms, 40.58 KB | 29.870 ms, 338.54 KB |
-| XLS | 12.215 ms, 189.85 KB | 18.475 ms, 185.90 KB |
-| CSV | 6.065 ms, 232 B | 10.032 ms, 35.74 MB |
+| XLSX | 64.090 ms, 34.18 KB | 197.046 ms, 644.23 KB |
+| XLSM | 64.751 ms, 34.22 KB | 191.153 ms, 644.30 KB |
+| XLSB | 23.951 ms, 40.66 KB | 29.959 ms, 338.54 KB |
+| XLS | 12.381 ms, 9.97 KB | 18.205 ms, 185.90 KB |
+| CSV | 5.968 ms, 232 B | 10.034 ms, 35.74 MB |
 
-On this real-data workload, ExcelReader is ~2.8x faster than Sylvan for XLSX/XLSM, ~1.3x faster for XLSB, ~1.5x faster for XLS, and ~1.7x faster for CSV. Allocations stay under 41 KB for XLSX/XLSM/XLSB and at 232 B for CSV.
+On this real-data workload, ExcelReader is ~3.0x faster than Sylvan for XLSX/XLSM, ~1.3x faster for XLSB, ~1.5x faster for XLS, and ~1.7x faster for CSV. Allocations stay under 41 KB for XLSX/XLSM/XLSB, ~10 KB for XLS, and 232 B for CSV.
 
 Run the benchmarks locally:
 
