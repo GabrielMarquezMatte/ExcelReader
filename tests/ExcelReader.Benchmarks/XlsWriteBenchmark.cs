@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using BenchmarkDotNet.Attributes;
 using ExcelReader.Core.Writer;
 
@@ -23,7 +24,9 @@ namespace ExcelReader.Benchmarks
         [Benchmark(Baseline = true)]
         public async Task<long> XlsWriter()
         {
-            await using var ms = new MemoryStream();
+            // Pre-sized to the neighborhood of the actual output so MemoryStream's doubling growth
+            // doesn't dominate the GC/allocation numbers being measured.
+            await using var ms = new MemoryStream(16 * 1024 * 1024);
             await using (XlsWorkbookWriter wb = XlsWorkbookWriter.Create(ms, leaveOpen: true))
             {
                 wb.Start();
@@ -52,15 +55,19 @@ namespace ExcelReader.Benchmarks
         }
 
         [Benchmark]
+        [SuppressMessage("Sonar", "S6966:Await StartRowAsync instead",
+            Justification = "Deliberately measuring SheetWriter's synchronous row fast path (StartRow/RowWriter.Dispose).")]
+        [SuppressMessage("VisualStudio.Threading", "VSTHRD103:StartRow synchronously blocks",
+            Justification = "Deliberately measuring SheetWriter's synchronous row fast path (StartRow/RowWriter.Dispose).")]
         public async Task<long> XlsxWriter()
         {
-            await using var ms = new MemoryStream();
+            await using var ms = new MemoryStream(4 * 1024 * 1024);
             await using (WorkbookWriter wb = await WorkbookWriter.CreateAsync(ms, leaveOpen: true))
             {
                 await wb.StartAsync();
                 SheetWriter sheet = wb.AddSheet("S1");
                 await sheet.StartAsync();
-                await using (RowWriter header = await sheet.StartRowAsync())
+                using (RowWriter header = sheet.StartRow())
                 {
                     header.Write("Name");
                     header.Write("Id");
@@ -70,7 +77,7 @@ namespace ExcelReader.Benchmarks
                 for (int i = 0; i < _records.Count; i++)
                 {
                     Record rec = _records[i];
-                    await using RowWriter row = await sheet.StartRowAsync();
+                    using RowWriter row = sheet.StartRow();
                     row.Write(rec.Name);
                     row.Write(rec.Id);
                     row.Write(rec.Date);

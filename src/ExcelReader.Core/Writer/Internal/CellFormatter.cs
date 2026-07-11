@@ -18,52 +18,76 @@ namespace ExcelReader.Core.Writer.Internal
             xml.Write(buf[..(len + rowLen)]);
         }
 
-        private static void WriteCellOpen(BiffBuffer xml, int columnIndex, int rowNumber, bool includeReference)
+        private static void WriteCellOpenWithRef(BiffBuffer xml, int columnIndex, int rowNumber, ReadOnlySpan<byte> tail)
         {
-            xml.Write("<c"u8);
-            if (!includeReference)
-            {
-                return;
-            }
-            xml.Write(" r=\""u8);
+            xml.Write("<c r=\""u8);
             WriteRef(xml, columnIndex, rowNumber);
             xml.WriteByte((byte)'"');
+            xml.Write(tail);
         }
 
         internal static void WriteEmpty(BiffBuffer xml, int columnIndex, int rowNumber, bool includeReference)
         {
-            WriteCellOpen(xml, columnIndex, rowNumber, includeReference);
-            xml.Write("/>"u8);
+            if (includeReference)
+            {
+                WriteCellOpenWithRef(xml, columnIndex, rowNumber, "/>"u8);
+                return;
+            }
+            xml.Write("<c/>"u8);
         }
 
         internal static void WriteString(BiffBuffer xml, string value, int columnIndex, int rowNumber, bool includeReference)
         {
-            WriteCellOpen(xml, columnIndex, rowNumber, includeReference);
-            xml.Write(" t=\"inlineStr\"><is><t>"u8);
+            if (includeReference)
+            {
+                WriteCellOpenWithRef(xml, columnIndex, rowNumber, " t=\"inlineStr\"><is><t>"u8);
+            }
+            else
+            {
+                xml.Write("<c t=\"inlineStr\"><is><t>"u8);
+            }
             WriteEscaped(xml, value);
             xml.Write("</t></is></c>"u8);
         }
 
         internal static void WriteSharedString(BiffBuffer xml, int sharedStringIndex, int columnIndex, int rowNumber, bool includeReference)
         {
-            WriteCellOpen(xml, columnIndex, rowNumber, includeReference);
-            xml.Write(" t=\"s\"><v>"u8);
+            if (includeReference)
+            {
+                WriteCellOpenWithRef(xml, columnIndex, rowNumber, " t=\"s\"><v>"u8);
+            }
+            else
+            {
+                xml.Write("<c t=\"s\"><v>"u8);
+            }
             WriteValue(xml, sharedStringIndex, sizeHint: 16);
             xml.Write("</v></c>"u8);
         }
 
         internal static void WriteBool(BiffBuffer xml, bool value, int columnIndex, int rowNumber, bool includeReference)
         {
-            WriteCellOpen(xml, columnIndex, rowNumber, includeReference);
-            xml.Write(" t=\"b\"><v>"u8);
+            if (includeReference)
+            {
+                WriteCellOpenWithRef(xml, columnIndex, rowNumber, " t=\"b\"><v>"u8);
+            }
+            else
+            {
+                xml.Write("<c t=\"b\"><v>"u8);
+            }
             xml.WriteByte(value ? (byte)'1' : (byte)'0');
             xml.Write("</v></c>"u8);
         }
 
         internal static void WriteDateTime(BiffBuffer xml, DateTime value, int columnIndex, int rowNumber, bool includeReference)
         {
-            WriteCellOpen(xml, columnIndex, rowNumber, includeReference);
-            xml.Write(" s=\"1\"><v>"u8);
+            if (includeReference)
+            {
+                WriteCellOpenWithRef(xml, columnIndex, rowNumber, " s=\"1\"><v>"u8);
+            }
+            else
+            {
+                xml.Write("<c s=\"1\"><v>"u8);
+            }
             WriteValue(xml, value.ToOADate(), sizeHint: 32);
             xml.Write("</v></c>"u8);
         }
@@ -71,46 +95,114 @@ namespace ExcelReader.Core.Writer.Internal
         internal static void WriteNumber<T>(BiffBuffer xml, T value, int columnIndex, int rowNumber, bool includeReference)
             where T : IUtf8SpanFormattable
         {
-            WriteCellOpen(xml, columnIndex, rowNumber, includeReference);
-            xml.Write("><v>"u8);
+            if (includeReference)
+            {
+                WriteCellOpenWithRef(xml, columnIndex, rowNumber, "><v>"u8);
+            }
+            else
+            {
+                xml.Write("<c><v>"u8);
+            }
             WriteValue(xml, value, sizeHint: 64);
             xml.Write("</v></c>"u8);
         }
 
         internal static void WriteNumber(BiffBuffer xml, int value, int columnIndex, int rowNumber, bool includeReference)
         {
-            WriteCellOpen(xml, columnIndex, rowNumber, includeReference);
-            xml.Write("><v>"u8);
+            if (includeReference)
+            {
+                WriteCellOpenWithRef(xml, columnIndex, rowNumber, "><v>"u8);
+            }
+            else
+            {
+                xml.Write("<c><v>"u8);
+            }
             WriteValue(xml, value, sizeHint: 16);
             xml.Write("</v></c>"u8);
         }
 
         internal static void WriteNumber(BiffBuffer xml, long value, int columnIndex, int rowNumber, bool includeReference)
         {
-            WriteCellOpen(xml, columnIndex, rowNumber, includeReference);
-            xml.Write("><v>"u8);
+            if (includeReference)
+            {
+                WriteCellOpenWithRef(xml, columnIndex, rowNumber, "><v>"u8);
+            }
+            else
+            {
+                xml.Write("<c><v>"u8);
+            }
             WriteValue(xml, value, sizeHint: 32);
             xml.Write("</v></c>"u8);
         }
 
         internal static void WriteNumber(BiffBuffer xml, double value, int columnIndex, int rowNumber, bool includeReference)
         {
-            WriteCellOpen(xml, columnIndex, rowNumber, includeReference);
-            xml.Write("><v>"u8);
+            if (includeReference)
+            {
+                WriteCellOpenWithRef(xml, columnIndex, rowNumber, "><v>"u8);
+            }
+            else
+            {
+                xml.Write("<c><v>"u8);
+            }
             WriteValue(xml, value, sizeHint: 32);
             xml.Write("</v></c>"u8);
         }
 
         internal static void WriteNumber(BiffBuffer xml, decimal value, int columnIndex, int rowNumber, bool includeReference)
         {
-            WriteCellOpen(xml, columnIndex, rowNumber, includeReference);
-            xml.Write("><v>"u8);
+            if (includeReference)
+            {
+                WriteCellOpenWithRef(xml, columnIndex, rowNumber, "><v>"u8);
+            }
+            else
+            {
+                xml.Write("<c><v>"u8);
+            }
             WriteValue(xml, value, sizeHint: 64);
             xml.Write("</v></c>"u8);
         }
 
+        // Utf8Formatter is culture-free (no NumberFormatInfo.GetInstance lookup per cell) and matches
+        // IUtf8SpanFormattable's default/InvariantCulture output for these types exactly, including
+        // double's shortest-round-trip format since .NET Core 3.0. These non-generic overloads bind
+        // ahead of the generic one below for int/long/double call sites.
+        private static void WriteValue(BiffBuffer xml, int value, int sizeHint)
+        {
+            int size = sizeHint;
+            int written;
+            while (!Utf8Formatter.TryFormat(value, xml.GetSpan(size), out written))
+            {
+                size = checked(size * 2);
+            }
+            xml.Advance(written);
+        }
+
+        private static void WriteValue(BiffBuffer xml, long value, int sizeHint)
+        {
+            int size = sizeHint;
+            int written;
+            while (!Utf8Formatter.TryFormat(value, xml.GetSpan(size), out written))
+            {
+                size = checked(size * 2);
+            }
+            xml.Advance(written);
+        }
+
+        private static void WriteValue(BiffBuffer xml, double value, int sizeHint)
+        {
+            int size = sizeHint;
+            int written;
+            while (!Utf8Formatter.TryFormat(value, xml.GetSpan(size), out written))
+            {
+                size = checked(size * 2);
+            }
+            xml.Advance(written);
+        }
+
         // Formats a numeric value straight into the buffer's free tail (no temp span + copy). The default
         // format is shortest round-trippable for floating point, so cells stay small and exactly readable.
+        // Used by decimal and the generic WriteNumber<T> overload (Utf8Formatter doesn't cover either).
         private static void WriteValue<T>(BiffBuffer xml, T value, int sizeHint)
             where T : IUtf8SpanFormattable
         {

@@ -1,5 +1,6 @@
 using System.Buffers;
 using System.Buffers.Binary;
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Text;
 
@@ -35,6 +36,7 @@ namespace ExcelReader.Core.Writer.Internal
             Length = 0;
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         internal void WriteByte(byte value)
         {
             Ensure(1);
@@ -69,6 +71,7 @@ namespace ExcelReader.Core.Writer.Internal
             Length += 8;
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         internal void Write(ReadOnlySpan<byte> bytes)
         {
             Ensure(bytes.Length);
@@ -133,6 +136,7 @@ namespace ExcelReader.Core.Writer.Internal
             BinaryPrimitives.WriteUInt16LittleEndian(_buffer.AsSpan(lengthPos), (ushort)payload);
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private void Ensure(int extra)
         {
             int needed = Length + extra;

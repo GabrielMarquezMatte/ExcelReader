@@ -1,4 +1,3 @@
-using System.Buffers.Text;
 using System.Diagnostics.CodeAnalysis;
 using System.IO.Compression;
 using ExcelReader.Core.Writer.Internal;
@@ -15,9 +14,10 @@ namespace ExcelReader.Core.Writer
         private readonly ZipArchive _zip;
         private readonly CompressionLevel _compression;
         private readonly BiffBuffer _rowBuffer = new(512);
-        // ponytail: flush to the deflate stream once buffered rows pass 1 MB; bounds memory on huge
-        // sheets while turning ~50k tiny per-row Writes into a handful of big ones.
-        private const int FlushThreshold = 1024 * 1024;
+        // ponytail: flush to the deflate stream once buffered rows pass 64 KB — bounds memory on huge
+        // sheets while turning ~50k tiny per-row Writes into a handful of big ones. Kept at/under the
+        // ArrayPool.Shared LOH threshold (a larger request would rent from the LOH and never leave it).
+        private const int FlushThreshold = 64 * 1024;
         private RowWriter? _rowWriter;
         [SuppressMessage("SharpSource", "SS066:DisposableFieldIsNotDisposed",
             Justification = "Stream is explicitly disposed in EndAsync via DisposeAsync.")]
@@ -88,6 +88,18 @@ namespace ExcelReader.Core.Writer
             return ValueTask.FromResult(_rowWriter);
         }
 
+        // Sync counterpart to StartRowAsync: row buffering and the (rare) threshold flush are already
+        // fully synchronous internally (BeginRow, EndBufferedRow), so a caller that never needs to
+        // await mid-row (e.g. SheetWriterExtensions.WriteRecordsAsync's SheetWriter-specific overload)
+        // can skip the per-row ValueTask/async-disposable machinery entirely.
+        public RowWriter StartRow(CancellationToken ct = default)
+        {
+            int rowNumber = BeginRow(ct);
+            _rowWriter ??= new RowWriter(this, _rowBuffer);
+            _rowWriter.Reset(rowNumber);
+            return _rowWriter;
+        }
+
         [SuppressMessage("Reliability", "CA1849:Call async methods when in an async method",
             Justification = "Dispose() is called synchronously to ensure ZipArchive entry tracking is updated before this method returns.")]
         [SuppressMessage("Sonar", "S6966:Await DisposeAsync instead",
@@ -143,11 +155,9 @@ namespace ExcelReader.Core.Writer
             ct.ThrowIfCancellationRequested();
             _rowNumber++;
             _rowActive = true;
-            _rowBuffer.Write("<row r=\""u8);
-            Span<byte> rowDigits = stackalloc byte[8];
-            Utf8Formatter.TryFormat(_rowNumber, rowDigits, out int written);
-            _rowBuffer.Write(rowDigits[..written]);
-            _rowBuffer.Write("\">"u8);
+            // The `r` attribute on <row> is optional per ECMA-376 (rows are positional); omitting it
+            // shrinks the XML fed to deflate and skips a Utf8Formatter call on every row.
+            _rowBuffer.Write("<row>"u8);
             return _rowNumber;
         }
 
