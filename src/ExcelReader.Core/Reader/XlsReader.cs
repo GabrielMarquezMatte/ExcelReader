@@ -14,6 +14,10 @@ namespace ExcelReader.Core.Reader
         private readonly bool _date1904;
         private byte[] _sharedFlat;
         private int[] _sharedOffsets;
+        // Lazily created: dedups repeated LABELSST values (categorical columns) into one string
+        // instance instead of re-decoding UTF-8 per row. Keyed by the string's stable byte offset into
+        // _sharedFlat (see CellDesc.ToCell / Cell.GetString) — same shape as XlsxReader/XlsbReader.
+        private Dictionary<int, string>? _sharedStringCache;
         private int _current;
 
         internal XlsReader(Stream stream, bool leaveOpen, ExcelReaderOptions? options = null)
@@ -56,6 +60,8 @@ namespace ExcelReader.Core.Reader
         public bool IsDate1904 => _date1904;
 
         internal ReadOnlySpan<byte> SharedSpan => _sharedFlat;
+
+        internal Dictionary<int, string> SharedStringCache => _sharedStringCache ??= [];
 
         internal bool IsDateStyle(int style)
         {
@@ -118,6 +124,7 @@ namespace ExcelReader.Core.Reader
             _workbook.Dispose();
             _sharedFlat = [];
             _sharedOffsets = [0];
+            _sharedStringCache = null;
         }
 
         public ValueTask DisposeAsync()
