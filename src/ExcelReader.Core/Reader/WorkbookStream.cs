@@ -1,3 +1,4 @@
+using System.Buffers;
 using System.Diagnostics.CodeAnalysis;
 
 namespace ExcelReader.Core.Reader
@@ -16,30 +17,33 @@ namespace ExcelReader.Core.Reader
             Justification = "Disposed in Dispose() when _ownsSource; otherwise the caller owns it.")]
         private readonly Stream? _source;
         private readonly bool _ownsSource;
-        private readonly int[] _chain;        // physical sector numbers, in order
+        private readonly int[] _chain;        // physical sector numbers, in order (pooled, oversized)
+        private readonly int _chainLength;    // valid entry count in _chain; the pooled array is larger
+        private bool _chainReturned;          // guards against a double pool-return on repeated Dispose
         private readonly ReadOnlyMemory<byte> _memory;
 
         internal int SectorSize { get; }
         internal long Length { get; }
 
-        private WorkbookStream(Stream? source, bool ownsSource, int[] chain, ReadOnlyMemory<byte> memory, int sectorSize, long length)
+        private WorkbookStream(Stream? source, bool ownsSource, int[] chain, int chainLength, ReadOnlyMemory<byte> memory, int sectorSize, long length)
         {
             _source = source;
             _ownsSource = ownsSource;
             _chain = chain;
+            _chainLength = chainLength;
             _memory = memory;
             SectorSize = sectorSize;
             Length = length;
         }
 
-        internal static WorkbookStream Streamed(Stream source, bool ownsSource, int[] chain, int sectorSize, long length)
+        internal static WorkbookStream Streamed(Stream source, bool ownsSource, int[] chain, int chainLength, int sectorSize, long length)
         {
-            return new WorkbookStream(source, ownsSource, chain, default, sectorSize, length);
+            return new WorkbookStream(source, ownsSource, chain, chainLength, default, sectorSize, length);
         }
 
         internal static WorkbookStream InMemory(ReadOnlyMemory<byte> data)
         {
-            return new WorkbookStream(null, ownsSource: false, [], data, sectorSize: 1, data.Length);
+            return new WorkbookStream(null, ownsSource: false, [], 0, data, sectorSize: 1, data.Length);
         }
 
         internal BiffCursor OpenCursor()
@@ -58,13 +62,13 @@ namespace ExcelReader.Core.Reader
         // Returns the number of sectors loaded.
         internal int LoadSectors(int chainIndex, Span<byte> dest)
         {
-            if ((uint)chainIndex >= (uint)_chain.Length)
+            if ((uint)chainIndex >= (uint)_chainLength)
             {
                 throw new InvalidDataException("Invalid OLE sector chain index.");
             }
             int maxSectors = dest.Length / SectorSize;
             int count = 1;
-            while (count < maxSectors && chainIndex + count < _chain.Length)
+            while (count < maxSectors && chainIndex + count < _chainLength)
             {
                 if (_chain[chainIndex + count] != _chain[chainIndex + count - 1] + 1)
                 {
@@ -85,6 +89,12 @@ namespace ExcelReader.Core.Reader
             if (_ownsSource)
             {
                 _source?.Dispose();
+            }
+            // Streamed mode rents _chain from the pool; in-memory mode holds the shared empty array.
+            if (_chainLength > 0 && !_chainReturned)
+            {
+                _chainReturned = true;
+                ArrayPool<int>.Shared.Return(_chain);
             }
         }
     }

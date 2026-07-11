@@ -181,7 +181,7 @@ namespace ExcelReader.Core.Reader
         public Enumerator GetEnumerator()
         {
             var entry = WorkbookLookups.GetWorksheetEntry(_zip!, _sheets!, _current);
-            return new Enumerator(this, WorkbookLookups.OpenEntryStream(entry, _decompressedBytes));
+            return new Enumerator(this, WorkbookLookups.OpenEntryStream(entry, _decompressedBytes), entry.Length);
         }
 
         IExcelRowEnumerator IExcelRowReader<IExcelRowEnumerator>.GetEnumerator()
