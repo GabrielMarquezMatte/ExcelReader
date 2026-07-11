@@ -18,11 +18,11 @@ namespace ExcelReader.Core.Reader
         internal int Len { get; private set; }
         internal bool Eof { get; private set; }
 
-        internal BufferedStreamCursor(int maxCellBytes, string limitName)
+        internal BufferedStreamCursor(int maxCellBytes, string limitName, int initialCapacity = InitialBuf)
         {
             _maxCellBytes = maxCellBytes;
             _limitName = limitName;
-            Buf = ArrayPool<byte>.Shared.Rent(InitialBuf);
+            Buf = ArrayPool<byte>.Shared.Rent(initialCapacity);
         }
 
         // Compact the consumed prefix, or grow the buffer if every byte is still unprocessed.
@@ -69,7 +69,18 @@ namespace ExcelReader.Core.Reader
             Len += n;
         }
 
+        // Fast/slow split mirroring EnsureAsync below: the common case (already buffered) is a single
+        // comparison the JIT can inline at call sites, instead of always entering a loop body.
         internal void Ensure(Stream source, int n)
+        {
+            if (Len - Pos >= n || Eof)
+            {
+                return;
+            }
+            EnsureSlow(source, n);
+        }
+
+        private void EnsureSlow(Stream source, int n)
         {
             while (Len - Pos < n && !Eof)
             {

@@ -13,7 +13,7 @@ namespace ExcelReader.Core.Parser.Internal
         // Separate cache for the CSV parser: identical to _info except DateTime/DateOnly parse text
         // instead of an Excel serial number. Built lazily so non-CSV callers never pay for it.
         private static readonly Lazy<TypeMapInfo<T>> _csvInfo =
-            new(static () => Build(csvTextDates: true), LazyThreadSafetyMode.ExecutionAndPublication);
+            new(BuildCsvInfo, LazyThreadSafetyMode.ExecutionAndPublication);
 
         internal static TypeMapInfo<T> GetInfo()
         {
@@ -23,6 +23,23 @@ namespace ExcelReader.Core.Parser.Internal
         internal static TypeMapInfo<T> GetCsvInfo()
         {
             return _csvInfo.Value;
+        }
+
+        // csvTextDates only changes how DateTime/DateOnly properties parse — for a T with none, the two
+        // maps would be built byte-for-byte identical, so this reuses _info's already-reflected,
+        // already-compiled map instead of re-reflecting every property and recompiling every setter.
+        private static TypeMapInfo<T> BuildCsvInfo()
+        {
+            return HasDateProperty() ? Build(csvTextDates: true) : _info.Value;
+        }
+
+        private static bool HasDateProperty()
+        {
+            return typeof(T).GetProperties(BindingFlags.Public | BindingFlags.Instance).Any(static prop =>
+            {
+                Type effective = Nullable.GetUnderlyingType(prop.PropertyType) ?? prop.PropertyType;
+                return effective == typeof(DateTime) || effective == typeof(DateOnly);
+            });
         }
 
         private static TypeMapInfo<T> Build(bool csvTextDates)

@@ -2,6 +2,7 @@ using System.Buffers.Text;
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 using System.Text;
 using ExcelReader.Core.Enums;
 
@@ -11,6 +12,13 @@ namespace ExcelReader.Core.ValueObjects
     {
         private readonly double _number;
         private readonly bool _hasNumber;
+        // Set only for a shared-string cell whose reader was constructed with a dedup cache (currently
+        // XLSX/XLSB): _sharedKey is the string's stable byte offset into that reader's flat shared-string
+        // buffer (unique per distinct non-empty shared string — see CellDesc.ToCell), and _sharedCache is
+        // the reader-owned index -> materialized-string map. Never set for non-shared cells (CSV/XLS's
+        // reuse of FromShared for per-row materialized scratch has no cross-row-stable key to cache by).
+        private readonly int _sharedKey;
+        private readonly Dictionary<int, string>? _sharedCache;
 
         public CellType Type { get; }
         // UTF-8 text bytes: shared-string text, or the raw <v> for bools/errors/XLSX numbers.
@@ -27,12 +35,20 @@ namespace ExcelReader.Core.ValueObjects
         }
 
         internal Cell(CellType type, ReadOnlySpan<byte> value, double number, bool hasNumber, int styleIndex)
+            : this(type, value, number, hasNumber, styleIndex, sharedKey: -1, sharedCache: null)
+        {
+        }
+
+        internal Cell(CellType type, ReadOnlySpan<byte> value, double number, bool hasNumber, int styleIndex,
+            int sharedKey, Dictionary<int, string>? sharedCache)
         {
             Type = type;
             Value = value;
             _number = number;
             _hasNumber = hasNumber;
             StyleIndex = styleIndex;
+            _sharedKey = sharedKey;
+            _sharedCache = sharedCache;
         }
 
         // Numeric cells from binary formats (XLS) carry the raw double, so this avoids the
@@ -210,7 +226,9 @@ namespace ExcelReader.Core.ValueObjects
             return false;
         }
 
-        // Allocates — only call when you actually need a string.
+        // Allocates — only call when you actually need a string. For a shared-string cell backed by a
+        // dedup cache (see the constructor), a repeated value (categorical columns are the common case)
+        // returns the same cached instance instead of decoding UTF-8 and allocating again.
         public string GetString()
         {
             if (_hasNumber)
@@ -219,6 +237,11 @@ namespace ExcelReader.Core.ValueObjects
                 return Utf8Formatter.TryFormat(_number, buffer, out int written)
                     ? Encoding.UTF8.GetString(buffer[..written])
                     : string.Empty;
+            }
+            if (_sharedCache is not null && !Value.IsEmpty)
+            {
+                ref string? cached = ref CollectionsMarshal.GetValueRefOrAddDefault(_sharedCache, _sharedKey, out _);
+                return cached ??= Encoding.UTF8.GetString(Value);
             }
             return Encoding.UTF8.GetString(Value);
         }

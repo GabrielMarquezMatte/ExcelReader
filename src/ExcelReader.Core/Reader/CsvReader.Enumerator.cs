@@ -83,16 +83,24 @@ namespace ExcelReader.Core.Reader
                 return new Cell(d.Type, buf.Slice(d.Start, d.Length));
             }
 
+            // Fast-path gate mirrors MoveNextAsync's: once BOM-checked, a failed TryParseRecordFromBuffer
+            // only ever happens with `_pos < _len` already true (it's restored to `start`, a position
+            // that was `< _len` when the attempt began), and Fill only grows `_len` or sets Eof — so once
+            // the loop is entered, `_pos < _len` is a loop invariant and never needs re-checking; only the
+            // very first record (or a buffer genuinely exhausted between records) needs the slow prologue.
             public bool MoveNext()
             {
-                EnsureBomStripped();
-                while (true)
+                if (!_bomChecked || _pos >= _len)
                 {
+                    EnsureBomStripped();
                     Ensure(1);
                     if (_pos >= _len)
                     {
                         return false;
                     }
+                }
+                while (true)
+                {
                     BeginRecord();
                     int start = _pos;
                     if (TryParseRecordFromBuffer())

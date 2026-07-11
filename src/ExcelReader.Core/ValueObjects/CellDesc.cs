@@ -19,10 +19,16 @@ namespace ExcelReader.Core.ValueObjects
         public double Number { get; init; }
         public bool HasNumber { get; init; }
 
-        internal Cell ToCell(ReadOnlySpan<byte> rowValues, ReadOnlySpan<byte> shared)
+        internal Cell ToCell(ReadOnlySpan<byte> rowValues, ReadOnlySpan<byte> shared, Dictionary<int, string>? sharedStringCache = null)
         {
             var buf = FromShared ? shared : rowValues;
-            return new Cell(Type, buf.Slice(Start, Length), Number, HasNumber, Style);
+            // `Start` is only usable as a dedup-cache key when it indexes a stable, append-only,
+            // cross-row buffer (a true shared-string table) — reject the cache otherwise, since CSV
+            // reuses FromShared/Start for its own per-row materialized scratch buffer, where the same
+            // Start is reused by unrelated content on the next row.
+            return FromShared
+                ? new Cell(Type, buf.Slice(Start, Length), Number, HasNumber, Style, Start, sharedStringCache)
+                : new Cell(Type, buf.Slice(Start, Length), Number, HasNumber, Style);
         }
     }
 }

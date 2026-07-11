@@ -122,41 +122,50 @@ namespace ExcelReader.Core.Reader
             }
             var fatSectorIds = new int[fatSectorCount];
             ReadDifat(source, header, sectorSize, fatSectorIds, firstDifatSector, difatSectorCount);
-            int[] fat = ReadFat(source, sectorSize, fatSectorIds);
-            byte[] directory = ReadChainBytes(source, sectorSize, fat, firstDirectorySector, -1);
-            DirectoryEntry[] entries = ReadDirectory(directory);
-            if (entries.Length == 0)
+            int[] fatArray = ReadFat(source, sectorSize, fatSectorIds, out int fatLength);
+            try
             {
-                throw new InvalidDataException("The OLE directory is empty.");
-            }
-
-            DirectoryEntry workbook = FindWorkbook(entries);
-
-            // Mini-stream workbooks (tiny, rare) are materialized; everything else streams.
-            if (workbook.Size < miniCutoff && workbook.StartSector >= 0)
-            {
-                int[] miniFat = firstMiniFatSector >= 0 && miniFatSectorCount > 0
-                    ? ReadIntSectors(source, sectorSize, fat, firstMiniFatSector, miniFatSectorCount)
-                    : [];
-                byte[] miniStream = entries[0].StartSector >= 0 && entries[0].Size > 0
-                    ? ReadChainBytes(source, sectorSize, fat, entries[0].StartSector, (int)entries[0].Size)
-                    : [];
-                if (miniFat.Length == 0 || miniStream.Length == 0)
+                ReadOnlySpan<int> fat = fatArray.AsSpan(0, fatLength);
+                byte[] directory = ReadChainBytes(source, sectorSize, fat, firstDirectorySector, -1);
+                DirectoryEntry[] entries = ReadDirectory(directory);
+                if (entries.Length == 0)
                 {
-                    throw new InvalidDataException("The OLE mini stream is missing.");
+                    throw new InvalidDataException("The OLE directory is empty.");
                 }
-                byte[] data = ReadMiniStream(miniStream, miniFat, miniSectorSize, workbook.StartSector, (int)workbook.Size);
-                if (ownsSource)
+
+                DirectoryEntry workbook = FindWorkbook(entries);
+
+                // Mini-stream workbooks (tiny, rare) are materialized; everything else streams.
+                if (workbook.Size < miniCutoff && workbook.StartSector >= 0)
                 {
+                    int[] miniFat = firstMiniFatSector >= 0 && miniFatSectorCount > 0
+                        ? ReadIntSectors(source, sectorSize, fat, firstMiniFatSector, miniFatSectorCount)
+                        : [];
+                    byte[] miniStream = entries[0].StartSector >= 0 && entries[0].Size > 0
+                        ? ReadChainBytes(source, sectorSize, fat, entries[0].StartSector, (int)entries[0].Size)
+                        : [];
+                    if (miniFat.Length == 0 || miniStream.Length == 0)
+                    {
+                        throw new InvalidDataException("The OLE mini stream is missing.");
+                    }
+                    byte[] data = ReadMiniStream(miniStream, miniFat, miniSectorSize, workbook.StartSector, (int)workbook.Size);
+                    if (ownsSource)
+                    {
 #pragma warning disable IDISP007 // Disposed only when this method owns the source; the in-memory workbook no longer needs it.
-                    source.Dispose();
+                        source.Dispose();
 #pragma warning restore IDISP007
+                    }
+                    return WorkbookStream.InMemory(data);
                 }
-                return WorkbookStream.InMemory(data);
-            }
 
-            int[] chain = BuildChain(fat, workbook.StartSector, SectorCount(workbook.Size, sectorSize));
-            return WorkbookStream.Streamed(source, ownsSource, chain, sectorSize, workbook.Size);
+                int chainCount = SectorCount(workbook.Size, sectorSize);
+                int[] chain = BuildChain(fat, workbook.StartSector, chainCount);
+                return WorkbookStream.Streamed(source, ownsSource, chain, chainCount, sectorSize, workbook.Size);
+            }
+            finally
+            {
+                ArrayPool<int>.Shared.Return(fatArray);
+            }
         }
 
         private static DirectoryEntry FindWorkbook(ReadOnlySpan<DirectoryEntry> entries)
@@ -180,9 +189,11 @@ namespace ExcelReader.Core.Reader
 
         [SuppressMessage("Performance", "HLQ013:Consider using 'foreach' loop instead of 'for' loop",
             Justification = "Not an iteration over fat; follows the sector linked-list, writing each hop into chain[i].")]
+        // Rents the chain from the pool (oversized); WorkbookStream owns it for the read and returns it
+        // in Dispose, bounding all access by the sectorCount it also receives (not chain.Length).
         private static int[] BuildChain(ReadOnlySpan<int> fat, int startSector, int sectorCount)
         {
-            int[] chain = new int[sectorCount];
+            int[] chain = ArrayPool<int>.Shared.Rent(sectorCount);
             int sector = startSector;
             for (int i = 0; i < sectorCount; i++)
             {
@@ -244,10 +255,13 @@ namespace ExcelReader.Core.Reader
             }
         }
 
-        private static int[] ReadFat(Stream source, int sectorSize, ReadOnlySpan<int> fatSectorIds)
+        // Rents from the pool (returned in BuildWorkbook's finally); fatLength is the true entry count,
+        // since the rented array is oversized — callers must bound reads by fatLength, not fat.Length.
+        private static int[] ReadFat(Stream source, int sectorSize, ReadOnlySpan<int> fatSectorIds, out int fatLength)
         {
             int entriesPerSector = sectorSize / 4;
-            int[] fat = new int[fatSectorIds.Length * entriesPerSector];
+            fatLength = fatSectorIds.Length * entriesPerSector;
+            int[] fat = ArrayPool<int>.Shared.Rent(fatLength);
             int index = 0;
             var sectorBuf = ArrayPool<byte>.Shared.Rent(sectorSize);
             try
