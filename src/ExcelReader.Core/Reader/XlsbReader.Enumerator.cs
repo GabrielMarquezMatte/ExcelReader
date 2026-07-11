@@ -31,17 +31,18 @@ namespace ExcelReader.Core.Reader
 
             private readonly CellAccumulator _acc;
 
-            internal Enumerator(XlsbReader reader, Stream sheet, CancellationToken ct = default)
+            internal Enumerator(XlsbReader reader, Stream sheet, long entryLength = 0, CancellationToken ct = default)
             {
                 _reader = reader;
                 _sheet = sheet;
                 _ct = ct;
-                _io = new BufferedStreamCursor(reader._options.MaxCellBytes, nameof(ExcelReaderOptions.MaxCellBytes));
+                _io = new BufferedStreamCursor(reader._options.MaxCellBytes, nameof(ExcelReaderOptions.MaxCellBytes),
+                    WorkbookLookups.InitialBufferCapacity(entryLength));
                 _acc = new CellAccumulator(reader._options.MaxCellBytes, nameof(ExcelReaderOptions.MaxCellBytes));
             }
 
             public Row Current =>
-                new(_acc.CellSpan, _acc.ValueSpan, _reader.SharedSpan);
+                new(_acc.CellSpan, _acc.ValueSpan, _reader.SharedSpan, _reader.SharedStringCache);
 
             public bool MoveNext()
             {

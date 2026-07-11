@@ -18,6 +18,11 @@ namespace ExcelReader.Core.Reader
         private byte[] _sharedFlat = [];      // pooled; all decoded shared-string bytes concatenated
         private int[] _sharedOffsets = [0];   // string i = _sharedFlat[_offsets[i].._offsets[i+1]]
         private bool _sharedLoaded;
+        // Lazily created: dedups repeated shared-string values (categorical columns) into one string
+        // instance instead of re-decoding UTF-8 per row. Keyed by the string's stable byte offset into
+        // _sharedFlat (see CellDesc.ToCell / Cell.GetString). Workbook-scoped, so it survives sheet
+        // switches (the shared-string table is shared across all sheets in a workbook).
+        private Dictionary<int, string>? _sharedStringCache;
 
         // Sync open: reads the central directory and workbook/styles parts synchronously.
         [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP003:Dispose previous before re-assigning",
@@ -142,7 +147,7 @@ namespace ExcelReader.Core.Reader
         {
             EnsureSharedLoaded();
             var entry = WorkbookLookups.GetWorksheetEntry(_zip, _sheets, _current);
-            return new Enumerator(this, WorkbookLookups.OpenEntryStream(entry, _decompressedBytes));
+            return new Enumerator(this, WorkbookLookups.OpenEntryStream(entry, _decompressedBytes), entry.Length);
         }
 
         IExcelRowEnumerator IExcelRowReader<IExcelRowEnumerator>.GetEnumerator()
@@ -168,7 +173,7 @@ namespace ExcelReader.Core.Reader
             ct.ThrowIfCancellationRequested();
             var sheet = WorkbookLookups.OpenEntryStream(entry, _decompressedBytes);
 #endif
-            return new Enumerator(this, sheet, ct);
+            return new Enumerator(this, sheet, entry.Length, ct);
         }
 
         async ValueTask<IExcelRowEnumerator> IExcelRowReader<IExcelRowEnumerator>.GetAsyncEnumeratorAsync(CancellationToken ct)
@@ -177,6 +182,8 @@ namespace ExcelReader.Core.Reader
         }
 
         internal ReadOnlySpan<byte> SharedSpan => _sharedFlat;
+
+        internal Dictionary<int, string> SharedStringCache => _sharedStringCache ??= new Dictionary<int, string>();
 
         internal (int Start, int Length) SharedAt(int index)
         {
