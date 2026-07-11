@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using BenchmarkDotNet.Attributes;
 using ExcelReader.Core.Writer;
 using MiniExcelLibs;
@@ -22,6 +23,10 @@ namespace ExcelReader.Benchmarks
         }
 
         [Benchmark(Baseline = true)]
+        [SuppressMessage("Sonar", "S6966:Await StartRowAsync instead",
+            Justification = "Deliberately measuring SheetWriter's synchronous row fast path (StartRow/RowWriter.Dispose).")]
+        [SuppressMessage("VisualStudio.Threading", "VSTHRD103:StartRow synchronously blocks",
+            Justification = "Deliberately measuring SheetWriter's synchronous row fast path (StartRow/RowWriter.Dispose).")]
         public async Task<long> ExcelReaderWriter()
         {
             // Pre-sized to the neighborhood of the actual output so MemoryStream's doubling growth
@@ -32,7 +37,7 @@ namespace ExcelReader.Benchmarks
                 await wb.StartAsync();
                 SheetWriter sheet = wb.AddSheet("S1");
                 await sheet.StartAsync();
-                await using (RowWriter header = await sheet.StartRowAsync())
+                using (RowWriter header = sheet.StartRow())
                 {
                     header.Write("Name");
                     header.Write("Id");
@@ -42,7 +47,7 @@ namespace ExcelReader.Benchmarks
                 for (int i = 0; i < _records.Count; i++)
                 {
                     Record rec = _records[i];
-                    await using RowWriter row = await sheet.StartRowAsync();
+                    using RowWriter row = sheet.StartRow();
                     row.Write(rec.Name);
                     row.Write(rec.Id);
                     row.Write(rec.Date);
@@ -55,6 +60,10 @@ namespace ExcelReader.Benchmarks
         }
 
         [Benchmark]
+        [SuppressMessage("Sonar", "S6966:Await StartRowAsync instead",
+            Justification = "Deliberately measuring SheetWriter's synchronous row fast path (StartRow/RowWriter.Dispose).")]
+        [SuppressMessage("VisualStudio.Threading", "VSTHRD103:StartRow synchronously blocks",
+            Justification = "Deliberately measuring SheetWriter's synchronous row fast path (StartRow/RowWriter.Dispose).")]
         public async Task<long> ExcelReaderWriterSharedStrings()
         {
             // Pre-sized to the neighborhood of the actual output so MemoryStream's doubling growth
@@ -65,7 +74,7 @@ namespace ExcelReader.Benchmarks
                 await wb.StartAsync();
                 SheetWriter sheet = wb.AddSheet("S1");
                 await sheet.StartAsync();
-                await using (RowWriter header = await sheet.StartRowAsync())
+                using (RowWriter header = sheet.StartRow())
                 {
                     header.Write("Name");
                     header.Write("Id");
@@ -75,7 +84,7 @@ namespace ExcelReader.Benchmarks
                 for (int i = 0; i < _records.Count; i++)
                 {
                     Record rec = _records[i];
-                    await using RowWriter row = await sheet.StartRowAsync();
+                    using RowWriter row = sheet.StartRow();
                     row.Write(rec.Name);
                     row.Write(rec.Id);
                     row.Write(rec.Date);

@@ -88,6 +88,18 @@ namespace ExcelReader.Core.Writer
             return ValueTask.FromResult(_rowWriter);
         }
 
+        // Sync counterpart to StartRowAsync: row buffering and the (rare) threshold flush are already
+        // fully synchronous internally (BeginRow, EndBufferedRow), so a caller that never needs to
+        // await mid-row (e.g. SheetWriterExtensions.WriteRecordsAsync's SheetWriter-specific overload)
+        // can skip the per-row ValueTask/async-disposable machinery entirely.
+        public RowWriter StartRow(CancellationToken ct = default)
+        {
+            int rowNumber = BeginRow(ct);
+            _rowWriter ??= new RowWriter(this, _rowBuffer);
+            _rowWriter.Reset(rowNumber);
+            return _rowWriter;
+        }
+
         [SuppressMessage("Reliability", "CA1849:Call async methods when in an async method",
             Justification = "Dispose() is called synchronously to ensure ZipArchive entry tracking is updated before this method returns.")]
         [SuppressMessage("Sonar", "S6966:Await DisposeAsync instead",
