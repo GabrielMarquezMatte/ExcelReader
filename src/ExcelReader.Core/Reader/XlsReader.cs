@@ -204,7 +204,10 @@ namespace ExcelReader.Core.Reader
         private static bool TryParseBoundSheet(ReadOnlySpan<byte> data, out (string Name, int Offset) sheet)
         {
             sheet = default;
-            if (data.Length < 8 || !TryDecodeBiffString(data, start: 8, charCount: data[6], flags: data[7], out string name))
+            // BoundSheet8 byte 5 is the sheet type (0 = worksheet). Charts, macro sheets and
+            // dialog sheets have a different substream layout and must not be enumerated as rows.
+            if (data.Length < 8 || data[5] != 0
+                || !TryDecodeBiffString(data, start: 8, charCount: data[6], flags: data[7], out string name))
             {
                 return false;
             }
@@ -395,6 +398,7 @@ namespace ExcelReader.Core.Reader
             internal const int Formula = 0x0006;
             internal const int Blank = 0x0201;
             internal const int MulBlank = 0x00BE;
+            internal const int StringRec = 0x0207;
         }
     }
 }

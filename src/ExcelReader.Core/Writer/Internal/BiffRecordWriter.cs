@@ -197,14 +197,30 @@ namespace ExcelReader.Core.Writer.Internal
 
         internal static void WriteNumber(BiffBuffer buffer, int row, int col, int xf, double value)
         {
+            // NaN/Infinity have no Xnum representation ([MS-XLS] 2.5.240 requires an IEEE 754 finite
+            // value) — writing them would produce a record a conformant reader must reject.
+            if (!double.IsFinite(value))
+            {
+                throw new ArgumentException($"Cannot write non-finite value '{value}' to a spreadsheet cell.", nameof(value));
+            }
             int len = buffer.BeginRecord(BiffRecord.Number);
             WriteCellHeader(buffer, row, col, xf);
             buffer.WriteDouble(value);
             buffer.EndRecord(len);
         }
 
+        // Excel's universal per-cell text limit. Enforcing it here also keeps `cch` below (a u16) from
+        // ever truncating: 32,767 fits in 16 bits, so the overflow that used to corrupt the record
+        // stream for longer strings can no longer happen.
+        private const int MaxCellTextLength = 32_767;
+
         internal static void WriteLabel(BiffBuffer buffer, int row, int col, int xf, ReadOnlySpan<char> value)
         {
+            if (value.Length > MaxCellTextLength)
+            {
+                throw new ArgumentException(
+                    $"Cell text exceeds Excel's {MaxCellTextLength}-character limit ({value.Length} chars).", nameof(value));
+            }
             bool compressed = BiffStringEncoder.CanCompress(value);
             int charBytes = compressed ? value.Length : value.Length * 2;
             if (9 + charBytes <= BiffRecord.MaxPayload)
