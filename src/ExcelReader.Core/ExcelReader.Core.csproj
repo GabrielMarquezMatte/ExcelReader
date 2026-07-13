@@ -17,8 +17,8 @@
     <Version>1.0.0</Version>
     <Authors>Gabriel Matte</Authors>
     <Title>ExcelReader</Title>
-    <Description>High-performance, low-allocation XLSX reading, typed row parsing, and minimal workbook writing for .NET.</Description>
-    <PackageTags>excel;xlsx;reader;writer;parser;spreadsheet;streaming;performance;low-allocation</PackageTags>
+    <Description>High-performance, low-allocation .NET library for reading and writing XLSX, XLSB, XLS, and CSV — streaming readers, typed row parsing, and workbook writers for all four formats.</Description>
+    <PackageTags>excel;xlsx;xlsb;xls;csv;reader;writer;parser;spreadsheet;streaming;performance;low-allocation</PackageTags>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <PackageProjectUrl>https://github.com/GabrielMarquezMatte/ExcelReader</PackageProjectUrl>
