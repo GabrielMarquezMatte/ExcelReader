@@ -266,5 +266,36 @@ namespace ExcelReader.Tests
             await using var reader = Excel.From(ms);
             Assert.False(reader.IsDate1904);
         }
+
+        [Fact]
+        public void Excel1900SerialsOneToSixtyMapToExcelCalendar()
+        {
+            const string styles =
+                """<styleSheet><cellXfs count="2"><xf numFmtId="0"/><xf numFmtId="14"/></cellXfs></styleSheet>""";
+            using var ms = WorkbookBuilder.Build(
+                """<row r="1"><c r="A1" s="1"><v>1</v></c><c r="B1" s="1"><v>59</v></c><c r="C1" s="1"><v>60</v></c></row>""",
+                styles: styles);
+            using var reader = Excel.From(ms);
+            using var e = reader.GetEnumerator();
+
+            Assert.True(e.MoveNext());
+            Assert.True(e.Current[0].TryGetDateTime(out DateTime first));
+            Assert.True(e.Current[1].TryGetDateTime(out DateTime leapBoundary));
+            Assert.True(e.Current[2].TryGetDateTime(out DateTime phantomLeapDay));
+            Assert.Equal(new DateTime(1900, 1, 1), first);
+            Assert.Equal(new DateTime(1900, 2, 28), leapBoundary);
+            Assert.Equal(new DateTime(1900, 2, 28), phantomLeapDay);
+        }
+
+        [Fact]
+        public void BinaryNumberOutsideDecimalRangeDoesNotThrow()
+        {
+            using var ms = WorkbookBuilder.Build("""<row r="1"><c r="A1"><v>1E+30</v></c></row>""");
+            using var reader = Excel.From(ms);
+            using var e = reader.GetEnumerator();
+
+            Assert.True(e.MoveNext());
+            Assert.False(e.Current[0].TryParse(null, out decimal _));
+        }
     }
 }

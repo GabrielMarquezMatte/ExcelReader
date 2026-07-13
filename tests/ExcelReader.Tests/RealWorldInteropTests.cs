@@ -92,6 +92,49 @@ namespace ExcelReader.Tests
                             new ExpectedCell(0, 1, CellType.ExcelString, "rich text"),
                         ])
                 ];
+
+                yield return
+                [
+                    new ProducerFixture(
+                        "Google-Sheets-like ISO-8601 date cells (t=\"d\") alongside typed strings",
+                        """
+                        <sheetData>
+                            <row r="1">
+                                <c r="A1" t="d"><v>2024-01-01</v></c>
+                                <c r="B1" t="d"><v>2024-01-01T00:00:00</v></c>
+                                <c r="C1" t="s"><v>0</v></c>
+                            </row>
+                        </sheetData>
+                        """,
+                        "<si><t>label</t></si>",
+                        [
+                            new ExpectedCell(0, 0, CellType.Date, "45292"),
+                            new ExpectedCell(0, 1, CellType.Date, "45292"),
+                            new ExpectedCell(0, 2, CellType.ExcelString, "label"),
+                        ])
+                ];
+
+                yield return
+                [
+                    new ProducerFixture(
+                        "Aspose/Java-like namespace-prefixed worksheet with an unprefixed workbook part",
+                        """
+                        <x:sheetData>
+                            <x:row r="1">
+                                <x:c r="A1"><x:v>3.14</x:v></x:c>
+                                <x:c r="B1" t="s"><x:v>0</x:v></x:c>
+                                <x:c r="C1" t="inlineStr"><x:is><x:t>inline</x:t></x:is></x:c>
+                            </x:row>
+                        </x:sheetData>
+                        """,
+                        "<x:si><x:t>shared</x:t></x:si>",
+                        [
+                            new ExpectedCell(0, 0, CellType.Number, "3.14"),
+                            new ExpectedCell(0, 1, CellType.ExcelString, "shared"),
+                            new ExpectedCell(0, 2, CellType.ExcelString, "inline"),
+                        ])
+                    { Prefix = "x" }
+                ];
             }
         }
 
@@ -277,8 +320,14 @@ namespace ExcelReader.Tests
 
         private static MemoryStream BuildProducerFixture(ProducerFixture fixture)
         {
+            // A fixture may prefix its worksheet/shared-strings elements (e.g. <x:row>) while the workbook
+            // part stays unprefixed — the mixed shape where a prefixed worksheet previously read as zero rows.
+            string pfx = fixture.Prefix is null ? "" : fixture.Prefix + ":";
+            string wsNs = fixture.Prefix is null
+                ? $"""xmlns="{SpreadsheetNs}" """
+                : $"""xmlns:{fixture.Prefix}="{SpreadsheetNs}" """;
             string worksheet =
-                $"""<worksheet xmlns="{SpreadsheetNs}" xmlns:x14ac="http://schemas.microsoft.com/office/spreadsheetml/2009/9/ac">{fixture.WorksheetInnerXml}</worksheet>""";
+                $"""<{pfx}worksheet {wsNs}xmlns:x14ac="http://schemas.microsoft.com/office/spreadsheetml/2009/9/ac">{fixture.WorksheetInnerXml}</{pfx}worksheet>""";
             var ms = new MemoryStream();
             using (var zip = new ZipArchive(ms, ZipArchiveMode.Create, leaveOpen: true))
             {
@@ -289,7 +338,7 @@ namespace ExcelReader.Tests
                     $"""<Relationships xmlns="{PackageRelationshipsNs}"><Relationship Id="rId1" Type="{WorksheetRelType}" Target="worksheets/sheet1.xml"/></Relationships>""");
                 if (fixture.SharedStringsXml is not null)
                 {
-                    WriteText(zip, "xl/sharedStrings.xml", $"""<sst xmlns="{SpreadsheetNs}">{fixture.SharedStringsXml}</sst>""");
+                    WriteText(zip, "xl/sharedStrings.xml", $"""<{pfx}sst {wsNs.TrimEnd()}>{fixture.SharedStringsXml}</{pfx}sst>""");
                 }
                 if (fixture.StylesXml is not null)
                 {
@@ -425,6 +474,9 @@ namespace ExcelReader.Tests
             }
 
             public string? StylesXml { get; init; }
+
+            // When set, the worksheet (and shared-strings) elements are namespace-prefixed, e.g. <x:row>.
+            public string? Prefix { get; init; }
 
             public override string ToString()
             {

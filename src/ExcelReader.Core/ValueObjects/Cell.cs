@@ -71,7 +71,10 @@ namespace ExcelReader.Core.ValueObjects
             {
                 // Text-backed double (e.g. CSV, or an XLSX cell FastDouble.TryParse declined to parse
                 // eagerly): try the same exact-representability fast parse before the general parser.
-                if (typeof(T) == typeof(double) && FastDouble.TryParse(Value, out double fast))
+                // FastDouble always treats '.' as the decimal separator, so it's only valid when the
+                // caller's culture agrees — otherwise "1.234" under e.g. pt-BR (comma decimal) would
+                // silently parse as 1.234 instead of the correct 1234.
+                if (typeof(T) == typeof(double) && UsesDotDecimalSeparator(provider) && FastDouble.TryParse(Value, out double fast))
                 {
                     result = Unsafe.As<double, T>(ref fast);
                     return true;
@@ -92,6 +95,12 @@ namespace ExcelReader.Core.ValueObjects
             }
             if (typeof(T) == typeof(decimal))
             {
+                if (double.IsNaN(_number) || double.IsInfinity(_number)
+                    || _number < (double)decimal.MinValue || _number > (double)decimal.MaxValue)
+                {
+                    result = default;
+                    return false;
+                }
                 decimal m = (decimal)_number;
                 result = Unsafe.As<decimal, T>(ref m);
                 return true;
@@ -179,6 +188,14 @@ namespace ExcelReader.Core.ValueObjects
                 : T.TryParse(Value, provider, out result);
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private static bool UsesDotDecimalSeparator(IFormatProvider? provider)
+        {
+            return provider is null
+                || ReferenceEquals(provider, CultureInfo.InvariantCulture)
+                || NumberFormatInfo.GetInstance(provider).NumberDecimalSeparator == ".";
+        }
+
         // Interprets the cell's numeric value as an Excel serial date (1900 date system).
         // Works on any cell whose value parses as a number — Type == Date signals the source style was a
         // date/time format. For Mac-authored workbooks with XlsxReader.IsDate1904 == true, use the
@@ -198,7 +215,14 @@ namespace ExcelReader.Core.ValueObjects
                 result = default;
                 return false;
             }
-            double oadate = isDate1904 ? serial + 1462.0 : serial;
+            // Excel's 1900 calendar includes a fictitious 1900-02-29 at serial 60.
+            // Map it explicitly to the adjacent real day; serials 1–59 need the inverse writer shift.
+            double oadate = isDate1904 ? serial + 1462.0 : serial switch
+            {
+                < 60.0 => serial + 1.0,
+                60.0 => 60.0,
+                _ => serial,
+            };
             // FromOADate throws outside this range; guard first.
             if (oadate is > -657435.0 and < 2958466.0)
             {

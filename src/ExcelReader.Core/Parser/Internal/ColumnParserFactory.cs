@@ -73,6 +73,10 @@ namespace ExcelReader.Core.Parser.Internal
                 {
                     return innerNullable is null ? BuildTextDateOnlyParser<T>(prop) : BuildTextNullableDateOnlyParser<T>(prop);
                 }
+                if (effective == typeof(TimeOnly))
+                {
+                    return innerNullable is null ? BuildTextTimeOnlyParser<T>(prop) : BuildTextNullableTimeOnlyParser<T>(prop);
+                }
             }
             if (innerNullable is not null)
             {
@@ -197,7 +201,11 @@ namespace ExcelReader.Core.Parser.Internal
             RefAction<T, bool> setter = CompileSetter<T, bool>(prop);
             return (ref model, in cell, _, _) =>
             {
-                setter(ref model, IsTruthy(in cell));
+                if (!TryParseBool(in cell, out bool value))
+                {
+                    return false;
+                }
+                setter(ref model, value);
                 return true;
             };
         }
@@ -330,6 +338,34 @@ namespace ExcelReader.Core.Parser.Internal
             };
         }
 
+        private static ColumnParser<T> BuildTextTimeOnlyParser<T>(PropertyInfo prop)
+        {
+            RefAction<T, TimeOnly> setter = CompileSetter<T, TimeOnly>(prop);
+            return (ref model, in cell, _, provider) =>
+            {
+                if (!TryParseTimeOnlyText(in cell, provider, out TimeOnly t))
+                {
+                    return false;
+                }
+                setter(ref model, t);
+                return true;
+            };
+        }
+
+        private static ColumnParser<T> BuildTextNullableTimeOnlyParser<T>(PropertyInfo prop)
+        {
+            RefAction<T, TimeOnly?> setter = CompileSetter<T, TimeOnly?>(prop);
+            return (ref model, in cell, _, provider) =>
+            {
+                if (!TryParseTimeOnlyText(in cell, provider, out TimeOnly t))
+                {
+                    return false;
+                }
+                setter(ref model, t);
+                return true;
+            };
+        }
+
         // DateTime/DateOnly implement ISpanParsable (char) and IUtf8SpanFormattable, but NOT
         // IUtf8SpanParsable (no parse-from-UTF-8) on either net8 or net10. So decode the short date
         // field to a stack char buffer — allocation-free — and parse culture-aware (honors Culture,
@@ -368,6 +404,18 @@ namespace ExcelReader.Core.Parser.Internal
             return DateOnly.TryParse(cell.GetString(), provider, DateTimeStyles.None, out value);
         }
 
+        private static bool TryParseTimeOnlyText(in Cell cell, IFormatProvider provider, out TimeOnly value)
+        {
+            ReadOnlySpan<byte> utf8 = cell.Value;
+            if (utf8.Length <= MaxStackDateChars)
+            {
+                Span<char> chars = stackalloc char[MaxStackDateChars];
+                int n = Encoding.UTF8.GetChars(utf8, chars);
+                return TimeOnly.TryParse(chars[..n], provider, DateTimeStyles.None, out value);
+            }
+            return TimeOnly.TryParse(cell.GetString(), provider, DateTimeStyles.None, out value);
+        }
+
         private static ColumnParser<T> BuildParsableCore<T, TProp>(PropertyInfo prop)
             where TProp : IUtf8SpanParsable<TProp>
         {
@@ -388,7 +436,11 @@ namespace ExcelReader.Core.Parser.Internal
             RefAction<T, bool?> setter = CompileSetter<T, bool?>(prop);
             return (ref model, in cell, _, _) =>
             {
-                setter(ref model, IsTruthy(in cell));
+                if (!TryParseBool(in cell, out bool value))
+                {
+                    return false;
+                }
+                setter(ref model, value);
                 return true;
             };
         }
@@ -518,7 +570,7 @@ namespace ExcelReader.Core.Parser.Internal
 #if !NET8_0
             private static readonly FrozenDictionary<string, TEnum> _nameMap = BuildNameMap();
 #endif
-            private static readonly FrozenDictionary<int, TEnum> _valueMap = BuildValueMap();
+            private static readonly FrozenDictionary<long, TEnum> _valueMap = BuildValueMap();
 #if NET8_0
             private static readonly (string Name, TEnum Value)[] _sortedNames = BuildSortedNames();
 
@@ -529,8 +581,8 @@ namespace ExcelReader.Core.Parser.Internal
                 {
                     string name = value.ToString();
                     list.Add((name, value));
-                    int intValue = Convert.ToInt32(value, CultureInfo.InvariantCulture);
-                    string intStr = intValue.ToString(CultureInfo.InvariantCulture);
+                    long numericValue = Convert.ToInt64(value, CultureInfo.InvariantCulture);
+                    string intStr = numericValue.ToString(CultureInfo.InvariantCulture);
                     if (!string.Equals(name, intStr, StringComparison.OrdinalIgnoreCase))
                     {
                         list.Add((intStr, value));
@@ -574,20 +626,20 @@ namespace ExcelReader.Core.Parser.Internal
                 foreach (TEnum value in Enum.GetValues<TEnum>())
                 {
                     string name = value.ToString();
-                    var intValue = Convert.ToInt32(value, CultureInfo.InvariantCulture);
+                    long numericValue = Convert.ToInt64(value, CultureInfo.InvariantCulture);
                     map[name] = value;
-                    map[intValue.ToString(CultureInfo.InvariantCulture)] = value;
+                    map[numericValue.ToString(CultureInfo.InvariantCulture)] = value;
                 }
                 return map.ToFrozenDictionary(StringComparer.OrdinalIgnoreCase);
             }
 #endif
-            private static FrozenDictionary<int, TEnum> BuildValueMap()
+            private static FrozenDictionary<long, TEnum> BuildValueMap()
             {
-                Dictionary<int, TEnum> map = [];
+                Dictionary<long, TEnum> map = [];
                 foreach (TEnum value in Enum.GetValues<TEnum>())
                 {
-                    int intValue = Convert.ToInt32(value, CultureInfo.InvariantCulture);
-                    map[intValue] = value;
+                    long numericValue = Convert.ToInt64(value, CultureInfo.InvariantCulture);
+                    map[numericValue] = value;
                 }
                 return map.ToFrozenDictionary();
             }
@@ -595,7 +647,12 @@ namespace ExcelReader.Core.Parser.Internal
             {
                 if (cell.Type == CellType.Number && cell.TryGetDouble(out double d))
                 {
-                    return _valueMap.TryGetValue((int)d, out value);
+                    if (d != Math.Truncate(d) || d < long.MinValue || d > long.MaxValue)
+                    {
+                        value = default;
+                        return false;
+                    }
+                    return _valueMap.TryGetValue((long)d, out value);
                 }
 #if NET8_0
                 ReadOnlySpan<byte> utf8 = cell.Value;
@@ -704,11 +761,21 @@ namespace ExcelReader.Core.Parser.Internal
             return (RefAction<T, TProp>)lambda.Compile();
         }
 
-        private static bool IsTruthy(in Cell cell)
+        // Matches "1"/"0" and "true"/"false" case-insensitively (so .NET's own bool.ToString() form
+        // "True"/"False" round-trips) and reports failure for anything else, so a nullable bool?
+        // column with garbage text stays null instead of silently becoming false.
+        private static bool TryParseBool(in Cell cell, out bool value)
         {
-            return cell.Value.SequenceEqual("1"u8)
-                || cell.Value.SequenceEqual("TRUE"u8)
-                || cell.Value.SequenceEqual("true"u8);
+            ReadOnlySpan<byte> v = cell.Value;
+            if (v.Length == 1)
+            {
+                if (v[0] == (byte)'1') { value = true; return true; }
+                if (v[0] == (byte)'0') { value = false; return true; }
+            }
+            if (Ascii.EqualsIgnoreCase(v, "true"u8)) { value = true; return true; }
+            if (Ascii.EqualsIgnoreCase(v, "false"u8)) { value = false; return true; }
+            value = false;
+            return false;
         }
     }
 }
