@@ -1,5 +1,6 @@
 using System.Buffers.Text;
 using System.Diagnostics.CodeAnalysis;
+using System.Globalization;
 using ExcelReader.Core.Enums;
 using ExcelReader.Core.ValueObjects;
 
@@ -30,6 +31,16 @@ namespace ExcelReader.Core.Reader
             private readonly CellAccumulator _acc; // per-row decoded values + cell descriptors
             private int _nextCol;
 
+            // Non-null only when this sheet's elements carry a namespace prefix (e.g. <x:row>); holds the
+            // prefixed forms of every token the scanner matches. Detected once, lazily, on the first
+            // MoveNext(Async). Null for the default-namespace case, which keeps the literal fast paths.
+            private NsTokens? _ns;
+            private bool _nsChecked;
+
+            private ReadOnlySpan<byte> VOpen => _ns is null ? "<v>"u8 : _ns.VOpen;
+            private ReadOnlySpan<byte> VClose => _ns is null ? "</v>"u8 : _ns.VClose;
+            private ReadOnlySpan<byte> CClose => _ns is null ? "</c>"u8 : _ns.CClose;
+
             internal Enumerator(XlsxReader reader, Stream sheet, long entryLength = 0, CancellationToken ct = default)
             {
                 _reader = reader;
@@ -52,6 +63,10 @@ namespace ExcelReader.Core.Reader
 
             public bool MoveNext()
             {
+                if (!_nsChecked)
+                {
+                    DetectNamespace();
+                }
                 while (true)
                 {
                     // Fast path: in compact output _pos already sits on the next '<', so skip the scan.
@@ -61,7 +76,7 @@ namespace ExcelReader.Core.Reader
                         return false;
                     }
                     _pos = lt;
-                    Ensure(12);
+                    Ensure(_ns is null ? 12 : _ns.HeadEnsure);
                     switch (ClassifyHead())
                     {
                         case HeadKind.End:
@@ -94,6 +109,10 @@ namespace ExcelReader.Core.Reader
                 Justification = "Every .Result access is guarded by IsCompletedSuccessfully immediately above it — never blocks.")]
             public ValueTask<bool> MoveNextAsync()
             {
+                if (!_nsChecked)
+                {
+                    return DetectNamespaceThenMoveNextAsync();
+                }
                 while (true)
                 {
                     int lt;
@@ -116,7 +135,7 @@ namespace ExcelReader.Core.Reader
                     }
                     _pos = lt;
 
-                    ValueTask ensureTask = EnsureAsync(12);
+                    ValueTask ensureTask = EnsureAsync(_ns is null ? 12 : _ns.HeadEnsure);
                     if (!ensureTask.IsCompletedSuccessfully)
                     {
                         return AwaitThenRestartAsync(ensureTask);
@@ -188,10 +207,42 @@ namespace ExcelReader.Core.Reader
                 return true;
             }
 
+            // Detects the sheet's element-name prefix (e.g. "x:" in <x:worksheet>) exactly once, from the
+            // root element at the very start of the stream. Prefixed worksheets are rare (Excel emits the
+            // default namespace), so this stays out of the per-row/per-cell hot path — it runs once, then
+            // _ns is null (fast literal matching) or holds the prefixed tokens for the whole enumeration.
+            private void DetectNamespace()
+            {
+                _nsChecked = true;
+                Ensure(256); // root element + its xmlns declarations sit at the head of the part
+                DetectNamespaceFromBuffer();
+            }
+
+            private async ValueTask<bool> DetectNamespaceThenMoveNextAsync()
+            {
+                _nsChecked = true;
+                await EnsureAsync(256).ConfigureAwait(false);
+                DetectNamespaceFromBuffer();
+                return await MoveNextAsync().ConfigureAwait(false);
+            }
+
+            private void DetectNamespaceFromBuffer()
+            {
+                ReadOnlySpan<byte> prefix = XlsxXml.DetectElementPrefix(_buf.AsSpan(_pos, _len - _pos));
+                if (!prefix.IsEmpty)
+                {
+                    _ns = new NsTokens(prefix);
+                }
+            }
+
             // Consumes the <row ...> open tag and resets per-row state. Call only after ClassifyHead()==Row.
             private bool BeginRow()
             {
                 int gt = IndexOf((byte)'>'); // open tag already fully buffered by the Ensure(12) above
+                if (gt < 0)
+                {
+                    return MissingRowOpenTag();
+                }
                 return BeginRowAt(gt);
             }
 
@@ -277,13 +328,14 @@ namespace ExcelReader.Core.Reader
                     }
                 }
 
-                int cEnd = IndexOfSeqBounded(buf, len, p, "</c>"u8); // ensures whole cell contiguous
+                ReadOnlySpan<byte> cClose = CClose; // "</c>", or "</x:c>" for a prefixed sheet
+                int cEnd = IndexOfSeqBounded(buf, len, p, cClose); // ensures whole cell contiguous
                 if (cEnd < 0)
                 {
                     return len;
                 }
                 EmitCell(header.Kind, buf.AsSpan(p, cEnd - p), header.Col, header.Style);
-                return cEnd + 4;
+                return cEnd + cClose.Length;
             }
 
             private enum HeadKind { End, Row, Skip }
@@ -297,6 +349,10 @@ namespace ExcelReader.Core.Reader
                 if (avail < 2)
                 {
                     return HeadKind.Skip;
+                }
+                if (_ns is not null)
+                {
+                    return ClassifyHeadPrefixed(_buf.AsSpan(_pos, avail));
                 }
                 switch (_buf[_pos + 1])
                 {
@@ -315,12 +371,40 @@ namespace ExcelReader.Core.Reader
                 }
             }
 
+            // Prefixed twin of ClassifyHead: matches "<x:row" (with a name boundary so it can't collide
+            // with "<x:rowBreaks"), "</x:sheetData", "</x:worksheet". Runs once per top-level element,
+            // never inside the per-cell loop, so field-token matching here costs nothing measurable.
+            private HeadKind ClassifyHeadPrefixed(ReadOnlySpan<byte> head)
+            {
+                if (StartsWithElement(head, _ns!.RowOpen))
+                {
+                    return HeadKind.Row;
+                }
+                if (head.StartsWith(_ns.SheetDataEnd) || head.StartsWith(_ns.WorksheetEnd))
+                {
+                    return HeadKind.End;
+                }
+                return HeadKind.Skip;
+            }
+
+            // token is a full element open like "<x:row"; require a name-boundary byte after it so a
+            // prefix match ("<x:row") doesn't swallow a longer sibling ("<x:rowBreaks").
+            private static bool StartsWithElement(ReadOnlySpan<byte> span, ReadOnlySpan<byte> token)
+            {
+                return span.StartsWith(token) && (span.Length == token.Length || IsBoundary(span[token.Length]));
+            }
+
             // "</row" itself is never reachable here — ParseRow's loop stops as soon as the found '<'
             // reaches `rowEnd` (exactly where "</row" starts) — so this only needs to tell a cell apart
             // from anything else (comments, CDATA, extension elements), which SkipMarkupSpan handles.
-            private static bool IsCellStart(byte[] buf, int len, int p)
+            private bool IsCellStart(byte[] buf, int len, int p)
             {
                 int avail = len - p;
+                if (_ns is not null)
+                {
+                    // The whole row is buffered here (EnsureRowBuffered), so the token can't be truncated.
+                    return StartsWithElement(buf.AsSpan(p, avail), _ns.CellOpen);
+                }
                 if (avail < 2 || buf[p + 1] != (byte)'c')
                 {
                     return false;
@@ -383,6 +467,8 @@ namespace ExcelReader.Core.Reader
             private bool MissingRowOpenTag()
             {
                 _pos = _len;
+                _acc.Reset();
+                _nextCol = 0;
                 return true;
             }
 
@@ -450,9 +536,10 @@ namespace ExcelReader.Core.Reader
                 return b is (byte)' ' or (byte)'\t' or (byte)'\r' or (byte)'\n';
             }
 
-            private enum Kind { Number, Shared, Inline, Bool, Error, Formula }
+            private enum Kind { Number, Shared, Inline, Bool, Error, Formula, IsoDate }
 
-            // "" / "n" -> Number; "s" shared; "inlineStr" inline; "b" bool; "e" error; "str" formula result.
+            // "" / "n" -> Number; "s" shared; "inlineStr" inline; "b" bool; "e" error; "str" formula
+            // result; "d" ISO-8601 date (ECMA-376 §18.18.11 ST_CellType, written by some non-Excel producers).
             private static Kind ClassifyKind(ReadOnlySpan<byte> t)
             {
                 return t.Length switch
@@ -462,6 +549,7 @@ namespace ExcelReader.Core.Reader
                         (byte)'s' => Kind.Shared,
                         (byte)'b' => Kind.Bool,
                         (byte)'e' => Kind.Error,
+                        (byte)'d' => Kind.IsoDate,
                         _ => Kind.Number,
                     },
                     3 => Kind.Formula,   // "str"
@@ -476,7 +564,7 @@ namespace ExcelReader.Core.Reader
                 // Shared strings: <v> holds an index; point the cell at that slice of the shared buffer.
                 if (kind == Kind.Shared)
                 {
-                    var (start, len) = _reader.SharedAt(ParseInt(ElementText(inner, "<v>"u8, "</v>"u8)));
+                    var (start, len) = _reader.SharedAt(ParseInt(ElementText(inner, VOpen, VClose)));
                     _acc.Add(col, start, len, CellType.ExcelString, style, fromShared: true);
                     return;
                 }
@@ -485,12 +573,15 @@ namespace ExcelReader.Core.Reader
                 {
                     int vStart = _acc.ValueLength;
                     Span<byte> dst = _acc.ReserveValueSpan(inner.Length);
-                    _acc.Advance(XlsxXml.WriteTextRuns(inner, dst));
+                    int written = _ns is null
+                        ? XlsxXml.WriteTextRuns(inner, dst)
+                        : XlsxXml.WriteTextRuns(inner, dst, _ns.TOpen, _ns.TClose, _ns.RPhOpen, _ns.RPhClose);
+                    _acc.Advance(written);
                     _acc.Add(col, vStart, _acc.ValueLength - vStart, CellType.ExcelString, style, fromShared: false);
                     return;
                 }
 
-                EmitScalarValue(kind, ElementText(inner, "<v>"u8, "</v>"u8), col, style);
+                EmitScalarValue(kind, ElementText(inner, VOpen, VClose), col, style);
             }
 
             // Handles every Kind whose content is bare "<v>...</v>" with no other wrapper: Number,
@@ -501,6 +592,13 @@ namespace ExcelReader.Core.Reader
             // direct '<' search) — everything after the value text is found is identical either way.
             private void EmitScalarValue(Kind kind, ReadOnlySpan<byte> v, int col, int style)
             {
+                // t="d": <v> holds ISO-8601 date text, not a serial. Parse it and store a 1900-system
+                // serial so the cell behaves exactly like a style-based date cell (numeric, Type=Date).
+                if (kind == Kind.IsoDate)
+                {
+                    EmitIsoDate(v, col, style);
+                    return;
+                }
                 CellType cellType = kind switch
                 {
                     Kind.Bool => CellType.Boolean,
@@ -527,6 +625,45 @@ namespace ExcelReader.Core.Reader
                 bool hasNumber = kind == Kind.Number && FastDouble.TryParse(v, out number);
                 _acc.Add(col, vStart, _acc.ValueLength - vStart, cellType, style, fromShared: false,
                     number: number, hasNumber: hasNumber);
+            }
+
+            // Stores a t="d" ISO-8601 cell as a numeric Excel date serial (identical shape to a
+            // style-based date cell), so TryGetDateTime works and GetString matches other date cells.
+            private void EmitIsoDate(ReadOnlySpan<byte> v, int col, int style)
+            {
+                if (TryParseIsoDate(v, out DateTime dt))
+                {
+                    // ponytail: dt.ToOADate() is exact for dates >= 1900-03-01, which every real t="d"
+                    // value is; pre-1900-03-01 would shift a day through the reader's 1900-leap fixup.
+                    double serial = dt.ToOADate();
+                    int start = _acc.ValueLength;
+                    Span<byte> dst = _acc.ReserveValueSpan(32);
+                    Utf8Formatter.TryFormat(serial, dst, out int written);
+                    _acc.Advance(written);
+                    _acc.Add(col, start, written, CellType.Date, style, fromShared: false, number: serial, hasNumber: true);
+                    return;
+                }
+                // Unparseable ISO text: keep it verbatim as a string so nothing is silently dropped.
+                int s = _acc.ValueLength;
+                AppendRaw(v);
+                _acc.Add(col, s, _acc.ValueLength - s, CellType.ExcelString, style, fromShared: false);
+            }
+
+            private static bool TryParseIsoDate(ReadOnlySpan<byte> utf8, out DateTime value)
+            {
+                // ST_Xstring ISO dates are always ASCII; transcode to chars for DateTime.TryParse.
+                if (utf8.Length is 0 or > 40)
+                {
+                    value = default;
+                    return false;
+                }
+                Span<char> chars = stackalloc char[40];
+                for (int i = 0; i < utf8.Length; i++)
+                {
+                    chars[i] = (char)utf8[i];
+                }
+                return DateTime.TryParse(chars[..utf8.Length], CultureInfo.InvariantCulture,
+                    DateTimeStyles.RoundtripKind | DateTimeStyles.AllowWhiteSpaces, out value);
             }
 
             private static ReadOnlySpan<byte> ElementText(ReadOnlySpan<byte> inner, ReadOnlySpan<byte> openTag, ReadOnlySpan<byte> closeTag)
@@ -795,7 +932,7 @@ namespace ExcelReader.Core.Reader
                 {
                     MarkupSeq.CommentEnd => _buf.AsSpan(start, _len - start).IndexOf("-->"u8),
                     MarkupSeq.CDataEnd => _buf.AsSpan(start, _len - start).IndexOf("]]>"u8),
-                    _ => _buf.AsSpan(start, _len - start).IndexOf("</row"u8),
+                    _ => _buf.AsSpan(start, _len - start).IndexOf(_ns is null ? "</row"u8 : _ns.RowEnd),
                 };
                 return rel < 0 ? -1 : start + rel;
             }

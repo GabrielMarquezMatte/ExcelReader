@@ -148,21 +148,41 @@ namespace ExcelReader.Core.Reader
         }
 
         // Scans every <t>...</t> run inside `si`, entity-decodes each one, and writes the result
-        // into `dest` starting at offset 0. Returns total bytes written.
+        // into `dest` starting at offset 0. Returns total bytes written. Text inside <rPh> (phonetic
+        // guide runs, e.g. Japanese furigana) is skipped — it's a pronunciation hint, not cell content.
         // `dest` must be at least `si.Length` bytes — decoded text is never longer than its source XML.
         internal static int WriteTextRuns(ReadOnlySpan<byte> si, Span<byte> dest)
+        {
+            return WriteTextRuns(si, dest, "<t"u8, "</t>"u8, "<rPh"u8, "</rPh>"u8);
+        }
+
+        // Namespace-prefixed overload: the element tokens (e.g. "<x:t", "</x:t>") are supplied by the
+        // caller, which built them once from the part's root-element prefix (see NsTokens / DetectElementPrefix).
+        internal static int WriteTextRuns(ReadOnlySpan<byte> si, Span<byte> dest,
+            ReadOnlySpan<byte> tOpen, ReadOnlySpan<byte> tClose, ReadOnlySpan<byte> rPhOpen, ReadOnlySpan<byte> rPhClose)
         {
             int totalWritten = 0;
             ReadOnlySpan<byte> remaining = si;
             Span<byte> destSlice = dest;
             while (true)
             {
-                var tIndex = remaining.IndexOf("<t"u8);
+                var tIndex = remaining.IndexOf(tOpen);
                 if (tIndex < 0)
                 {
                     break;
                 }
-                remaining = remaining[(tIndex + 2)..]; // Skip past "<t"
+                var rPhIndex = remaining.IndexOf(rPhOpen);
+                if (rPhIndex >= 0 && rPhIndex < tIndex)
+                {
+                    var rPhEnd = remaining.IndexOf(rPhClose);
+                    if (rPhEnd < 0)
+                    {
+                        break;
+                    }
+                    remaining = remaining[(rPhEnd + rPhClose.Length)..]; // Skip past "</rPh>"
+                    continue;
+                }
+                remaining = remaining[(tIndex + tOpen.Length)..]; // Skip past "<t"
                 var openIndex = remaining.IndexOf((byte)'>');
                 if (openIndex < 0)
                 {
@@ -174,7 +194,7 @@ namespace ExcelReader.Core.Reader
                     continue;
                 }
                 remaining = remaining[(openIndex + 1)..]; // Skip past the opening tag
-                var closeIndex = remaining.IndexOf("</t>"u8);
+                var closeIndex = remaining.IndexOf(tClose);
                 if (closeIndex < 0)
                 {
                     break;
@@ -183,9 +203,59 @@ namespace ExcelReader.Core.Reader
                 var written = Decode(innerText, destSlice);
                 totalWritten += written;
                 destSlice = destSlice[written..];
-                remaining = remaining[(closeIndex + 4)..]; // Skip past the closing tag
+                remaining = remaining[(closeIndex + tClose.Length)..]; // Skip past the closing tag
             }
             return totalWritten;
+        }
+
+        // The element-name prefix on the document's root element (e.g. "x:" in <x:worksheet ...>),
+        // including the trailing ':'. Empty span when elements are unprefixed — the default-namespace
+        // case Excel and most producers emit. Skips the XML declaration, comments, and DOCTYPE.
+        internal static ReadOnlySpan<byte> DetectElementPrefix(ReadOnlySpan<byte> src)
+        {
+            int i = 0;
+            while (true)
+            {
+                int lt = src[i..].IndexOf((byte)'<');
+                if (lt < 0)
+                {
+                    return default;
+                }
+                i += lt + 1;
+                if (i >= src.Length)
+                {
+                    return default;
+                }
+                // '?' = <?xml?>, '!' = <!-- --> / <!DOCTYPE>, '/' = stray close tag — none are the root.
+                if (src[i] is (byte)'?' or (byte)'!' or (byte)'/')
+                {
+                    continue;
+                }
+                int nameStart = i;
+                for (int j = i; j < src.Length; j++)
+                {
+                    byte b = src[j];
+                    if (b is (byte)' ' or (byte)'\t' or (byte)'\r' or (byte)'\n' or (byte)'>' or (byte)'/')
+                    {
+                        return default; // root element name has no ':' — unprefixed
+                    }
+                    if (b == (byte)':')
+                    {
+                        return src.Slice(nameStart, j - nameStart + 1); // "x:" (colon included)
+                    }
+                }
+                return default;
+            }
+        }
+
+        // Builds a literal element token "lead + prefix + rest", e.g. ("</", "x:", "row") -> "</x:row".
+        internal static byte[] Token(ReadOnlySpan<byte> lead, ReadOnlySpan<byte> prefix, ReadOnlySpan<byte> rest)
+        {
+            byte[] token = new byte[lead.Length + prefix.Length + rest.Length];
+            lead.CopyTo(token);
+            prefix.CopyTo(token.AsSpan(lead.Length));
+            rest.CopyTo(token.AsSpan(lead.Length + prefix.Length));
+            return token;
         }
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static int HexVal(byte d)

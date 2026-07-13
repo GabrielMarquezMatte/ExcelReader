@@ -117,6 +117,40 @@ namespace ExcelReader.Tests
             return ms;
         }
 
+        // Builds a workbook whose every SpreadsheetML element carries a namespace prefix (e.g. <x:row>),
+        // as some non-Excel producers emit. The caller supplies already-prefixed row/shared/style content;
+        // this prefixes the structural elements (workbook/sheets/sheet/worksheet/sheetData/sst). The .rels
+        // part keeps the OPC package-relationships namespace (never the spreadsheet prefix), matching reality.
+        internal static MemoryStream BuildPrefixed(
+            string prefix,
+            string sheetRows,
+            string? sharedStrings = null,
+            string? stylesInner = null)
+        {
+            string p = prefix + ":";
+            var ms = new MemoryStream();
+            using (var zip = new ZipArchive(ms, ZipArchiveMode.Create, leaveOpen: true))
+            {
+                Write(zip, "xl/worksheets/sheet1.xml",
+                    $"""<{p}worksheet xmlns:{prefix}="{Main}"><{p}sheetData>{sheetRows}</{p}sheetData></{p}worksheet>""");
+                Write(zip, "xl/workbook.xml",
+                    $"""<{p}workbook xmlns:{prefix}="{Main}" xmlns:r="{Rel}"><{p}sheets><{p}sheet name="S1" sheetId="1" r:id="rId1"/></{p}sheets></{p}workbook>""");
+                Write(zip, "xl/_rels/workbook.xml.rels",
+                    $"""<Relationships xmlns="{PkgRel}"><Relationship Id="rId1" Type="x" Target="worksheets/sheet1.xml"/></Relationships>""");
+                if (sharedStrings is not null)
+                {
+                    Write(zip, "xl/sharedStrings.xml", $"""<{p}sst xmlns:{prefix}="{Main}">{sharedStrings}</{p}sst>""");
+                }
+                if (stylesInner is not null)
+                {
+                    Write(zip, "xl/styles.xml",
+                        $"""<?xml version="1.0"?><{p}styleSheet xmlns:{prefix}="{Main}">{stylesInner}</{p}styleSheet>""");
+                }
+            }
+            ms.Position = 0;
+            return ms;
+        }
+
         private static void Write(ZipArchive zip, string name, string content)
         {
             using var s = zip.CreateEntry(name).Open();

@@ -43,9 +43,10 @@ namespace ExcelReader.Tests
             // A row with a gap (no B), and an inline string far larger than the 64 KB scan buffer
             // to exercise compaction/grow and the cross-boundary </c> search.
             string big = new('x', 100_000);
-            await using var ms = await TypedWorkbook.BuildAsync(
-                [10, new Gap(), 30],
-                [big]);
+            // Deliberately raw: the writer now rejects values beyond Excel's 32,767-character
+            // cell limit, while this reader test needs an oversized XML value to cross its buffer.
+            await using var ms = WorkbookBuilder.Build(
+                $$"""<row r="1"><c r="A1"><v>10</v></c><c r="C1"><v>30</v></c></row><row r="2"><c r="A2" t="inlineStr"><is><t>{{big}}</t></is></c></row>""");
 
             await using var reader = await Excel.FromAsync(ms, ct: TestContext.Current.CancellationToken);
             await using var enumerator = await reader.GetAsyncEnumeratorAsync(TestContext.Current.CancellationToken);
@@ -190,9 +191,12 @@ namespace ExcelReader.Tests
             // the cross-refill </c> search on the async path; the date cell exercises style detection.
             var ct = TestContext.Current.CancellationToken;
             string big = new('x', 100_000);
-            await using var ms = await TypedWorkbook.BuildAsync(
-                [DateTime.FromOADate(45292)],
-                [big]);
+            const string styles =
+                """<styleSheet><cellXfs count="2"><xf numFmtId="0"/><xf numFmtId="14"/></cellXfs></styleSheet>""";
+            // Deliberately raw for the same reason as the synchronous buffer-growth test above.
+            await using var ms = WorkbookBuilder.Build(
+                $$"""<row r="1"><c r="A1" s="1"><v>45292</v></c></row><row r="2"><c r="A2" t="inlineStr"><is><t>{{big}}</t></is></c></row>""",
+                styles: styles);
 
             await using var reader = await Excel.FromAsync(ms, ct: ct);
             await using var e = await reader.GetAsyncEnumeratorAsync(ct);

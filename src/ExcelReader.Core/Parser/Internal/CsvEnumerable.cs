@@ -251,6 +251,12 @@ namespace ExcelReader.Core.Parser.Internal
             {
                 return ProjectionStep.Stop;
             }
+            // The raw CSV reader intentionally exposes a terminal blank line as one empty field.
+            // Typed projection treats it as absent so it cannot yield a phantom model or fail Required.
+            if (rows.FieldCount == 1 && rows.FieldAt(0).Type == CellType.Empty)
+            {
+                return ProjectionStep.Skip;
+            }
             model = _typeInfo.CreateInstance();
             ParseCurrentRow(rows, ref model);
             return ProjectionStep.Yield;

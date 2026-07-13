@@ -232,6 +232,21 @@ namespace ExcelReader.Tests
         }
 
         [Fact]
+        public void SyncReaderMissingRowOpenTagReturnsEmptyRow()
+        {
+            using MemoryStream ms = BuildRawWorkbook(
+                """<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="S1" sheetId="1" r:id="rId1"/></sheets></workbook>""",
+                """<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="x" Target="worksheets/sheet1.xml"/></Relationships>""",
+                ("xl/worksheets/sheet1.xml", "<worksheet><sheetData><row r=\"1\""));
+            using XlsxReader reader = Excel.From(ms);
+            using XlsxReader.Enumerator rows = reader.GetEnumerator();
+
+            Assert.True(rows.MoveNext());
+            Assert.Equal(0, rows.Current.ColumnCount);
+            Assert.False(rows.MoveNext());
+        }
+
+        [Fact]
         public void ReaderSkipsUnknownTopLevelElementsAndStopsOnEnd()
         {
             using MemoryStream ms = WorkbookBuilder.Build(
