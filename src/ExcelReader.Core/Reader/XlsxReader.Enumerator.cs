@@ -317,8 +317,7 @@ namespace ExcelReader.Core.Reader
                         ReadOnlySpan<byte> value = buf.AsSpan(valueStart, lt - valueStart);
                         if (header.Kind == Kind.Shared)
                         {
-                            var (start, sharedLen) = _reader.SharedAt(ParseInt(value));
-                            _acc.Add(header.Col, start, sharedLen, CellType.ExcelString, header.Style, fromShared: true);
+                            EmitShared(value, header.Col, header.Style);
                         }
                         else
                         {
@@ -559,13 +558,26 @@ namespace ExcelReader.Core.Reader
             }
 
 
+            // Resolves a shared-string cell from its <v> index text. A non-numeric or negative index
+            // (a corrupt or empty <v>) yields an empty string cell — never a silent substitution of
+            // shared string 0, which is what parsing the garbage as index 0 used to produce.
+            private void EmitShared(ReadOnlySpan<byte> indexText, int col, int style)
+            {
+                if (Utf8Parser.TryParse(indexText, out int index, out _) && index >= 0)
+                {
+                    var (start, len) = _reader.SharedAt(index);
+                    _acc.Add(col, start, len, CellType.ExcelString, style, fromShared: true);
+                    return;
+                }
+                _acc.Add(col, _acc.ValueLength, 0, CellType.ExcelString, style, fromShared: false);
+            }
+
             private void EmitCell(Kind kind, ReadOnlySpan<byte> inner, int col, int style)
             {
                 // Shared strings: <v> holds an index; point the cell at that slice of the shared buffer.
                 if (kind == Kind.Shared)
                 {
-                    var (start, len) = _reader.SharedAt(ParseInt(ElementText(inner, VOpen, VClose)));
-                    _acc.Add(col, start, len, CellType.ExcelString, style, fromShared: true);
+                    EmitShared(ElementText(inner, VOpen, VClose), col, style);
                     return;
                 }
 
