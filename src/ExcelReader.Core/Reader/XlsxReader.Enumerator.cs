@@ -192,6 +192,10 @@ namespace ExcelReader.Core.Reader
             private bool BeginRow()
             {
                 int gt = IndexOf((byte)'>'); // open tag already fully buffered by the Ensure(12) above
+                if (gt < 0)
+                {
+                    return MissingRowOpenTag();
+                }
                 return BeginRowAt(gt);
             }
 
@@ -383,6 +387,8 @@ namespace ExcelReader.Core.Reader
             private bool MissingRowOpenTag()
             {
                 _pos = _len;
+                _acc.Reset();
+                _nextCol = 0;
                 return true;
             }
 

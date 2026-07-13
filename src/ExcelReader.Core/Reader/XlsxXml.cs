@@ -148,7 +148,8 @@ namespace ExcelReader.Core.Reader
         }
 
         // Scans every <t>...</t> run inside `si`, entity-decodes each one, and writes the result
-        // into `dest` starting at offset 0. Returns total bytes written.
+        // into `dest` starting at offset 0. Returns total bytes written. Text inside <rPh> (phonetic
+        // guide runs, e.g. Japanese furigana) is skipped — it's a pronunciation hint, not cell content.
         // `dest` must be at least `si.Length` bytes — decoded text is never longer than its source XML.
         internal static int WriteTextRuns(ReadOnlySpan<byte> si, Span<byte> dest)
         {
@@ -161,6 +162,17 @@ namespace ExcelReader.Core.Reader
                 if (tIndex < 0)
                 {
                     break;
+                }
+                var rPhIndex = remaining.IndexOf("<rPh"u8);
+                if (rPhIndex >= 0 && rPhIndex < tIndex)
+                {
+                    var rPhEnd = remaining.IndexOf("</rPh>"u8);
+                    if (rPhEnd < 0)
+                    {
+                        break;
+                    }
+                    remaining = remaining[(rPhEnd + 6)..]; // Skip past "</rPh>"
+                    continue;
                 }
                 remaining = remaining[(tIndex + 2)..]; // Skip past "<t"
                 var openIndex = remaining.IndexOf((byte)'>');

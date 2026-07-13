@@ -46,51 +46,57 @@ namespace ExcelReader.Core.Reader
 
             private bool MoveNextCore()
             {
-                if (_ended)
+                // A row whose only records are BLANK/MULBLANK (styled empty cells — Excel writes these
+                // routinely) yields zero cells; that must not end enumeration, so keep advancing to the
+                // next row instead of returning false for anything short of true EOF.
+                while (!_ended)
                 {
-                    return false;
-                }
-
-                ResetRow();
-                BiffCursor cursor = _cursor;
-                while (true)
-                {
-                    long recordStart = cursor.Position;
-                    if (!cursor.TryReadRecord(out int id, out ReadOnlySpan<byte> data))
+                    ResetRow();
+                    BiffCursor cursor = _cursor;
+                    while (true)
                     {
-                        _ended = true;
-                        return FinishRow();
-                    }
-
-                    if (id == Rec.Bof)
-                    {
-                        if (data.Length < 4 || ReadU16(data, 0) != Biff8Version || ReadU16(data, 2) != SubstreamWorksheet)
+                        long recordStart = cursor.Position;
+                        if (!cursor.TryReadRecord(out int id, out ReadOnlySpan<byte> data))
                         {
-                            throw new NotSupportedException("Only BIFF8 worksheet streams are supported.");
+                            _ended = true;
+                            break;
                         }
-                        continue;
-                    }
-                    if (id == Rec.Eof)
-                    {
-                        _ended = true;
-                        return FinishRow();
-                    }
-                    if (!TryGetCellRow(id, data, out int row))
-                    {
-                        continue;
-                    }
-                    if (_row < 0)
-                    {
-                        _row = row;
-                    }
-                    else if (row != _row)
-                    {
-                        cursor.Position = recordStart;
-                        return FinishRow();
-                    }
 
-                    ParseCellRecord(id, data);
+                        if (id == Rec.Bof)
+                        {
+                            if (data.Length < 4 || ReadU16(data, 0) != Biff8Version || ReadU16(data, 2) != SubstreamWorksheet)
+                            {
+                                throw new NotSupportedException("Only BIFF8 worksheet streams are supported.");
+                            }
+                            continue;
+                        }
+                        if (id == Rec.Eof)
+                        {
+                            _ended = true;
+                            break;
+                        }
+                        if (!TryGetCellRow(id, data, out int row))
+                        {
+                            continue;
+                        }
+                        if (_row < 0)
+                        {
+                            _row = row;
+                        }
+                        else if (row != _row)
+                        {
+                            cursor.Position = recordStart;
+                            break;
+                        }
+
+                        ParseCellRecord(id, data);
+                    }
+                    if (FinishRow())
+                    {
+                        return true;
+                    }
                 }
+                return false;
             }
 
             private bool FinishRow()
@@ -181,16 +187,22 @@ namespace ExcelReader.Core.Reader
                 int style = ReadU16(data, 4);
                 int chars = ReadU16(data, 6);
                 byte flags = data[8];
-                const int start = 9;
-
                 int valueStart = _acc.ValueLength;
+                DecodeUnicodeString(data[9..], chars, flags);
+                _acc.Add(col, valueStart, _acc.ValueLength - valueStart, CellType.ExcelString, style, fromShared: false);
+            }
 
-                int firstByteLen = data.Length - start;
+            // Decodes an XLUnicodeString body (chars, already-read flags byte) that may continue
+            // across one or more CONTINUE records — shared by LABEL and the FORMULA cached-string
+            // result, both of which use this exact shape. Appends decoded UTF-8 to the accumulator.
+            private void DecodeUnicodeString(ReadOnlySpan<byte> firstData, int chars, byte flags)
+            {
+                int firstByteLen = firstData.Length;
                 int firstChars = (flags & 1) == 0 ? firstByteLen : firstByteLen / 2;
                 firstChars = Math.Min(firstChars, chars);
                 int firstBytes = (flags & 1) == 0 ? firstChars : firstChars * 2;
                 Span<byte> dst = _acc.ReserveValueSpan(chars * 4);
-                int written = DecodeStringToUtf8(data.Slice(start, firstBytes), firstChars, flags, dst);
+                int written = DecodeStringToUtf8(firstData[..firstBytes], firstChars, flags, dst);
                 _acc.Advance(written);
                 int charsDecoded = firstChars;
                 while (charsDecoded < chars && _cursor.PeekId() == Rec.Continue && _cursor.TryReadRecord(out _, out ReadOnlySpan<byte> cont) && cont.Length > 0)
@@ -205,7 +217,6 @@ namespace ExcelReader.Core.Reader
                     _acc.Advance(written);
                     charsDecoded += contChars;
                 }
-                _acc.Add(col, valueStart, _acc.ValueLength - valueStart, CellType.ExcelString, style, fromShared: false);
             }
 
             private void ParseMulRk(ReadOnlySpan<byte> data)
@@ -264,6 +275,16 @@ namespace ExcelReader.Core.Reader
                         case 2:
                             int len = _acc.AppendErrorText(result[2]);
                             _acc.Add(col, start, len, CellType.Error, style, fromShared: false);
+                            break;
+                        case 0:
+                            // String result: the marker means "see the STRING record that follows".
+                            if (_cursor.PeekId() == Rec.StringRec && _cursor.TryReadRecord(out _, out ReadOnlySpan<byte> str) && str.Length >= 3)
+                            {
+                                int cch = ReadU16(str, 0);
+                                byte strFlags = str[2];
+                                DecodeUnicodeString(str[3..], cch, strFlags);
+                                _acc.Add(col, start, _acc.ValueLength - start, CellType.ExcelString, style, fromShared: false);
+                            }
                             break;
                         default:
                             break;

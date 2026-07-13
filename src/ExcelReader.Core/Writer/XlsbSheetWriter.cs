@@ -230,6 +230,10 @@ namespace ExcelReader.Core.Writer
             {
                 throw new InvalidOperationException("The previous XlsbRowWriter must be disposed before starting a new row.");
             }
+            if (_rowNumber >= 1_048_576)
+            {
+                throw new ExcelLimitExceededException("Rows", 1_048_576, _rowNumber + 1L);
+            }
             _rowNumber++;
             WriteRowHeader(_rowNumber);
             _rowActive = true;
@@ -244,7 +248,7 @@ namespace ExcelReader.Core.Writer
             BinaryPrimitives.WriteUInt32LittleEndian(p.Slice(8, 4), 0);
             BinaryPrimitives.WriteUInt32LittleEndian(p.Slice(12, 4), 1);
             BinaryPrimitives.WriteUInt32LittleEndian(p.Slice(16, 4), 0);
-            BinaryPrimitives.WriteUInt32LittleEndian(p.Slice(20, 4), 16384);
+            BinaryPrimitives.WriteUInt32LittleEndian(p.Slice(20, 4), 16383);
             p[24] = 0;
             MaybeFlush();
         }
@@ -306,9 +310,18 @@ namespace ExcelReader.Core.Writer
 
         internal void WriteStringCell(int columnIndex, string? value)
         {
+            ValidateColumn(columnIndex);
             if (value is null)
             {
                 return;
+            }
+            // Excel's universal per-cell text limit, enforced here so every writer rejects the same way
+            // instead of each format silently truncating or corrupting its own record encoding.
+            const int maxCellTextLength = 32_767;
+            if (value.Length > maxCellTextLength)
+            {
+                throw new ArgumentException(
+                    $"Cell text exceeds Excel's {maxCellTextLength}-character limit ({value.Length} chars).", nameof(value));
             }
             if (_owner.UseSharedStrings)
             {
@@ -330,6 +343,7 @@ namespace ExcelReader.Core.Writer
 
         internal void WriteBoolCell(int columnIndex, bool value)
         {
+            ValidateColumn(columnIndex);
             const int Length = CellHeaderLength + 1; // + bool byte
             Biff12RecordWriter.WriteFixedRecord(_records, Brt.CellBool, Length, out Span<byte> p);
             Biff12RecordWriter.WriteCellHeader(p, columnIndex, 0);
@@ -344,11 +358,26 @@ namespace ExcelReader.Core.Writer
 
         internal void WriteDoubleCell(int columnIndex, double value, int style)
         {
+            ValidateColumn(columnIndex);
+            // NaN/Infinity have no Xnum representation ([MS-XLSB] 2.5.166.6) — writing raw bit patterns
+            // for them would produce a record a conformant reader must reject.
+            if (!double.IsFinite(value))
+            {
+                throw new ArgumentException($"Cannot write non-finite value '{value}' to a spreadsheet cell.", nameof(value));
+            }
             const int Length = CellHeaderLength + 8; // + double
             Biff12RecordWriter.WriteFixedRecord(_records, Brt.CellReal, Length, out Span<byte> p);
             Biff12RecordWriter.WriteCellHeader(p, columnIndex, style);
             BinaryPrimitives.WriteDoubleLittleEndian(p.Slice(8, 8), value);
             MaybeFlush();
+        }
+
+        private static void ValidateColumn(int columnIndex)
+        {
+            if ((uint)columnIndex >= 16_384)
+            {
+                throw new ExcelLimitExceededException("Columns", 16_384, columnIndex + 1L);
+            }
         }
     }
 }

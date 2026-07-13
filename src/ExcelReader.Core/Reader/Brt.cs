@@ -11,6 +11,11 @@ namespace ExcelReader.Core.Reader
         internal const int CellReal = 5;
         internal const int CellSt = 6;     // inline string
         internal const int CellIsst = 7;   // shared-string index
+        internal const int FmlaString = 8; // formula cell, cached string result
+        internal const int FmlaNum = 9;    // formula cell, cached numeric result
+        internal const int FmlaBool = 10;  // formula cell, cached bool result
+        internal const int FmlaError = 11; // formula cell, cached error result
+        internal const int CellRString = 62; // inline rich string
         internal const int SSTItem = 19;
         internal const int Fmt = 44;
         internal const int Xf = 47;

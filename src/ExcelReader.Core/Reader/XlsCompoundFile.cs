@@ -295,8 +295,13 @@ namespace ExcelReader.Core.Reader
             byte[] sectorBuf = ArrayPool<byte>.Shared.Rent(sectorSize);
             try
             {
+                int sectorsRead = 0;
                 while (sector is >= 0 and not EndOfChain && (byteLimit < 0 || written < byteLimit))
                 {
+                    if (sectorsRead++ >= fat.Length)
+                    {
+                        throw new InvalidDataException("OLE FAT chain contains a cycle.");
+                    }
                     ReadAt(source, SectorOffset(sector, sectorSize), sectorBuf);
                     int take = byteLimit < 0 ? sectorSize : Math.Min(sectorSize, byteLimit - written);
                     ms.Write(sectorBuf, 0, take);
@@ -388,7 +393,7 @@ namespace ExcelReader.Core.Reader
             {
                 throw new InvalidDataException("Invalid OLE sector offset.");
             }
-            return HeaderSize + ((long)sector * sectorSize);
+            return ((long)sector + 1) * sectorSize;
         }
 
         private readonly record struct DirectoryEntry(string Name, byte ObjectType, int StartSector, long Size);

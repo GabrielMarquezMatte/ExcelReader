@@ -309,6 +309,24 @@ namespace ExcelReader.Core.Reader
                     case Brt.CellError when payload.Length >= 9:
                         AppendError(col, style, payload[8]);
                         break;
+                    // Formula cells: the cached result immediately follows the col/style header, in
+                    // the same shape as the equivalent plain-cell record; the formula bytes that follow
+                    // are outside the record framing we care about (TryReadRecord already bounds payload).
+                    case Brt.FmlaNum when payload.Length >= 16:
+                        AddDouble(col, style, Biff12.ReadF64(payload, 8));
+                        break;
+                    case Brt.FmlaString when Biff12.TryReadWideString(payload, 8, out ReadOnlySpan<char> fmlaChars, out _):
+                        AppendString(col, style, fmlaChars);
+                        break;
+                    case Brt.FmlaBool when payload.Length >= 9:
+                        AppendBool(col, style, payload[8]);
+                        break;
+                    case Brt.FmlaError when payload.Length >= 9:
+                        AppendError(col, style, payload[8]);
+                        break;
+                    case Brt.CellRString when payload.Length >= 9 && Biff12.TryReadWideString(payload, 9, out ReadOnlySpan<char> richChars, out _):
+                        AppendString(col, style, richChars);
+                        break;
                     // CellBlank: no value to emit
                 }
             }

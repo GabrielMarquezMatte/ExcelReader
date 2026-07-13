@@ -1,5 +1,6 @@
 using System.Diagnostics.CodeAnalysis;
 using System.IO.Compression;
+using ExcelReader.Core.Reader;
 using ExcelReader.Core.Writer.Internal;
 
 namespace ExcelReader.Core.Writer
@@ -153,6 +154,10 @@ namespace ExcelReader.Core.Writer
                 throw new InvalidOperationException("The previous RowWriter must be disposed before starting a new row.");
             }
             ct.ThrowIfCancellationRequested();
+            if (_rowNumber >= 1_048_576)
+            {
+                throw new ExcelLimitExceededException("Rows", 1_048_576, _rowNumber + 1L);
+            }
             _rowNumber++;
             _rowActive = true;
             // The `r` attribute on <row> is optional per ECMA-376 (rows are positional); omitting it

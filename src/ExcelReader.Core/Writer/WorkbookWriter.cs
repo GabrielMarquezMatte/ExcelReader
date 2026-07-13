@@ -109,6 +109,10 @@ namespace ExcelReader.Core.Writer
             {
                 await _activeSheet.DisposeAsync().ConfigureAwait(false);
             }
+            if (_sheets.Count == 0)
+            {
+                throw new InvalidOperationException("An XLSX workbook must contain at least one sheet.");
+            }
             await WriteStylesAsync(ct).ConfigureAwait(false);
             if (_sharedStrings is not null)
             {
@@ -138,7 +142,21 @@ namespace ExcelReader.Core.Writer
             _disposed = true;
             if (_state == WriterState.Started)
             {
-                await EndAsync().ConfigureAwait(false);
+                // EndAsync deliberately rejects a zero-sheet workbook. Disposal still must release
+                // a partially configured writer (for example after an earlier validation failure).
+                if (_sheets.Count == 0)
+                {
+                    _state = WriterState.Ended;
+#if NET10_0_OR_GREATER
+                    await _zip.DisposeAsync().ConfigureAwait(false);
+#else
+                    _zip.Dispose();
+#endif
+                }
+                else
+                {
+                    await EndAsync().ConfigureAwait(false);
+                }
             }
             else if (_state == WriterState.Created)
             {
