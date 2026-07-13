@@ -13,7 +13,15 @@ namespace ExcelReader.Core.Reader
             }
             Dictionary<string, string> rels = XlsxXml.ParseRelationships(relsBytes);
             var sheets = new List<(string, string)>();
-            foreach (var tag in Tags(wbBytes, "<sheet "u8))
+            // Some producers prefix every element (<x:workbook>/<x:sheet>); match the prefixed name
+            // when present so a prefixed workbook part still yields its sheets instead of none.
+            ReadOnlySpan<byte> prefix = XlsxXml.DetectElementPrefix(wbBytes);
+            ReadOnlySpan<byte> sheetTag = "<sheet "u8;
+            if (!prefix.IsEmpty)
+            {
+                sheetTag = XlsxXml.Token("<"u8, prefix, "sheet "u8);
+            }
+            foreach (var tag in Tags(wbBytes, sheetTag))
             {
                 var rid = XlsxXml.DecodeToString(XlsxXml.Attr(tag, " r:id=\""u8));
                 if (rels.TryGetValue(rid, out var target))
@@ -32,7 +40,13 @@ namespace ExcelReader.Core.Reader
             {
                 return false;
             }
-            int pos = IdxOf(src, 0, "<workbookPr"u8);
+            ReadOnlySpan<byte> prefix = XlsxXml.DetectElementPrefix(src);
+            ReadOnlySpan<byte> workbookPrTag = "<workbookPr"u8;
+            if (!prefix.IsEmpty)
+            {
+                workbookPrTag = XlsxXml.Token("<"u8, prefix, "workbookPr"u8);
+            }
+            int pos = IdxOf(src, 0, workbookPrTag);
             if (pos < 0)
             {
                 return false;
@@ -105,9 +119,25 @@ namespace ExcelReader.Core.Reader
             // Decoded text is never longer than its XML, so src.Length bounds the flat buffer.
             _sharedFlat = ArrayPool<byte>.Shared.Rent(Math.Max(1, src.Length));
 
+            // Match prefixed sst/si/t element names when the part uses a namespace prefix; built once,
+            // otherwise the compile-time literals with no allocation.
+            ReadOnlySpan<byte> prefix = XlsxXml.DetectElementPrefix(src);
+            ReadOnlySpan<byte> sstTag = "<sst"u8, siTag = "<si"u8, siClose = "</si>"u8;
+            ReadOnlySpan<byte> tOpen = "<t"u8, tClose = "</t>"u8, rPhOpen = "<rPh"u8, rPhClose = "</rPh>"u8;
+            if (!prefix.IsEmpty)
+            {
+                sstTag = XlsxXml.Token("<"u8, prefix, "sst"u8);
+                siTag = XlsxXml.Token("<"u8, prefix, "si"u8);
+                siClose = XlsxXml.Token("</"u8, prefix, "si>"u8);
+                tOpen = XlsxXml.Token("<"u8, prefix, "t"u8);
+                tClose = XlsxXml.Token("</"u8, prefix, "t>"u8);
+                rPhOpen = XlsxXml.Token("<"u8, prefix, "rPh"u8);
+                rPhClose = XlsxXml.Token("</"u8, prefix, "rPh>"u8);
+            }
+
             // Pre-size offsets from <sst uniqueCount="N">; exact counts avoid a final array copy.
             int uniqueCount = 0;
-            int sstPos = IdxOf(src, 0, "<sst"u8);
+            int sstPos = IdxOf(src, 0, sstTag);
             if (sstPos >= 0)
             {
                 int sstEnd = IdxOf(src, sstPos, (byte)'>');
@@ -125,7 +155,7 @@ namespace ExcelReader.Core.Reader
             int p = 0;
             while (true)
             {
-                int si = IdxOf(src, p, "<si"u8);
+                int si = IdxOf(src, p, siTag);
                 if (si < 0)
                 {
                     break;
@@ -137,13 +167,14 @@ namespace ExcelReader.Core.Reader
                 }
                 if (src[open - 1] != '/') // not <si/>
                 {
-                    int end = IdxOf(src, open, "</si>"u8);
+                    int end = IdxOf(src, open, siClose);
                     if (end < 0)
                     {
                         break;
                     }
-                    flat += XlsxXml.WriteTextRuns(src.Slice(open + 1, end - open - 1), _sharedFlat.AsSpan(flat));
-                    p = end + 5;
+                    flat += XlsxXml.WriteTextRuns(src.Slice(open + 1, end - open - 1), _sharedFlat.AsSpan(flat),
+                        tOpen, tClose, rPhOpen, rPhClose);
+                    p = end + siClose.Length;
                 }
                 else
                 {

@@ -13,9 +13,22 @@ namespace ExcelReader.Core.Reader
                 return [];
             }
 
+            // Match prefixed numFmt/cellXfs/xf element names when the styles part uses a namespace
+            // prefix; built once, otherwise the compile-time literals with no allocation.
+            ReadOnlySpan<byte> prefix = XlsxXml.DetectElementPrefix(src);
+            ReadOnlySpan<byte> numFmtTag = "<numFmt "u8, cellXfsTag = "<cellXfs"u8;
+            ReadOnlySpan<byte> cellXfsClose = "</cellXfs>"u8, xfTag = "<xf "u8;
+            if (!prefix.IsEmpty)
+            {
+                numFmtTag = XlsxXml.Token("<"u8, prefix, "numFmt "u8);
+                cellXfsTag = XlsxXml.Token("<"u8, prefix, "cellXfs"u8);
+                cellXfsClose = XlsxXml.Token("</"u8, prefix, "cellXfs>"u8);
+                xfTag = XlsxXml.Token("<"u8, prefix, "xf "u8);
+            }
+
             // Custom formats: numFmtId -> isDate(formatCode). Builtin ids (<164) handled by IsBuiltinDate.
             Dictionary<int, bool> custom = new(capacity: 16);
-            foreach (var tag in Tags(src, "<numFmt "u8))
+            foreach (var tag in Tags(src, numFmtTag))
             {
                 int id = ParseIntOr(XlsxXml.Attr(tag, " numFmtId=\""u8), -1);
                 if (id >= 0)
@@ -25,19 +38,19 @@ namespace ExcelReader.Core.Reader
             }
 
             // Only the <xf> entries inside <cellXfs> are cell styles; <cellStyleXfs> is the master table.
-            int region = IdxOf(src, 0, "<cellXfs"u8);
+            int region = IdxOf(src, 0, cellXfsTag);
             if (region < 0)
             {
                 return [];
             }
             int open = IdxOf(src, region, (byte)'>');
-            int end = IdxOf(src, open, "</cellXfs>"u8);
+            int end = IdxOf(src, open, cellXfsClose);
             if (open < 0 || end < 0)
             {
                 return [];
             }
             List<bool> flags = new(capacity: 16);
-            foreach (var xf in Tags(src.Slice(open + 1, end - open - 1), "<xf "u8))
+            foreach (var xf in Tags(src.Slice(open + 1, end - open - 1), xfTag))
             {
                 int numFmtId = ParseIntOr(XlsxXml.Attr(xf, " numFmtId=\""u8), 0);
                 flags.Add(WorkbookLookups.ResolveDateFlag(custom, numFmtId));
