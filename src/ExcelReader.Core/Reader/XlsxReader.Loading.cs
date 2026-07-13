@@ -23,10 +23,10 @@ namespace ExcelReader.Core.Reader
             }
             foreach (var tag in Tags(wbBytes, sheetTag))
             {
-                var rid = XlsxXml.DecodeToString(XlsxXml.Attr(tag, " r:id=\""u8));
+                var rid = XlsxXml.DecodeToString(XlsxXml.Attr(tag, " r:id="u8));
                 if (rels.TryGetValue(rid, out var target))
                 {
-                    var name = XlsxXml.DecodeToString(XlsxXml.Attr(tag, " name=\""u8));
+                    var name = XlsxXml.DecodeToString(XlsxXml.Attr(tag, " name="u8));
                     sheets.Add((name, XlsxXml.NormalizePart(target)));
                 }
             }
@@ -56,7 +56,7 @@ namespace ExcelReader.Core.Reader
             {
                 return false;
             }
-            var attr = XlsxXml.Attr(src.Slice(pos, end - pos + 1), " date1904=\""u8);
+            var attr = XlsxXml.Attr(src.Slice(pos, end - pos + 1), " date1904="u8);
             return attr.SequenceEqual("1"u8) || attr.SequenceEqual("true"u8);
         }
 
@@ -143,7 +143,7 @@ namespace ExcelReader.Core.Reader
                 int sstEnd = IdxOf(src, sstPos, (byte)'>');
                 if (sstEnd > sstPos)
                 {
-                    uniqueCount = ParseIntOr(XlsxXml.Attr(src[sstPos..sstEnd], " uniqueCount=\""u8), 0);
+                    uniqueCount = ParseIntOr(XlsxXml.Attr(src[sstPos..sstEnd], " uniqueCount="u8), 0);
                 }
             }
 
