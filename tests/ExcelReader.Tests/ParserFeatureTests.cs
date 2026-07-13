@@ -15,6 +15,16 @@ namespace ExcelReader.Tests
             Closed = 2,
         }
 
+        private enum LargeStatus : long
+        {
+            High = 3_000_000_000,
+        }
+
+        private sealed class LargeEnumRow
+        {
+            public LargeStatus? Status { get; set; }
+        }
+
         private sealed class MoneyRow
         {
             public string? Name { get; set; }
@@ -152,6 +162,21 @@ namespace ExcelReader.Tests
 
             Assert.Equal(Guid.Empty, row.Id);
             Assert.Null(row.OptionalId);
+        }
+
+        [Fact]
+        public async Task LongBackedEnumParsesWithoutTruncatingFractionalNumbers()
+        {
+            await using var ms = await TypedWorkbook.BuildAsync(
+                ["Status"],
+                [3_000_000_000d],
+                [3_000_000_000.5d]);
+            await using var reader = await Excel.FromAsync(ms, ct: TestContext.Current.CancellationToken);
+
+            LargeEnumRow[] rows = new ExcelParser<LargeEnumRow>().Parse(reader).ToArray();
+
+            Assert.Equal(LargeStatus.High, rows[0].Status);
+            Assert.Null(rows[1].Status);
         }
     }
 }

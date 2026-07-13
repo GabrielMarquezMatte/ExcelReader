@@ -206,6 +206,18 @@ namespace ExcelReader.Tests
         }
 
         [Fact]
+        public void TerminalBlankLineDoesNotYieldPhantomModelOrRequiredFailure()
+        {
+            using var ms = Csv("Id,Note\n7,valid\n\n");
+            using var reader = Excel.FromCsv(ms);
+
+            RequiredRow row = Assert.Single(new ExcelParser<RequiredRow>().Parse(reader).ToList());
+
+            Assert.Equal(7, row.Id);
+            Assert.Equal("valid", row.Note);
+        }
+
+        [Fact]
         public void PlainDateTimeAndDateOnlyColumnsParseTextNatively()
         {
             // The CSV parser parses DateTime/DateOnly from the cell text (no [ExcelConverter] needed) —

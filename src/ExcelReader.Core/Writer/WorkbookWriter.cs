@@ -104,14 +104,14 @@ namespace ExcelReader.Core.Writer
                 throw new InvalidOperationException("WorkbookWriter must be started before ending.");
             }
             ct.ThrowIfCancellationRequested();
+            if (_sheets.Count == 0)
+            {
+                throw new InvalidOperationException("An XLSX workbook must contain at least one sheet.");
+            }
             _state = WriterState.Ended;
             if (_activeSheet is not null)
             {
                 await _activeSheet.DisposeAsync().ConfigureAwait(false);
-            }
-            if (_sheets.Count == 0)
-            {
-                throw new InvalidOperationException("An XLSX workbook must contain at least one sheet.");
             }
             await WriteStylesAsync(ct).ConfigureAwait(false);
             if (_sharedStrings is not null)
