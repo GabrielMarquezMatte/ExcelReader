@@ -1,4 +1,6 @@
 using System.Diagnostics.CodeAnalysis;
+using System.IO.Compression;
+using System.Text;
 using ExcelReader.Core.Enums;
 using ExcelReader.Core.Parser;
 using ExcelReader.Core.Reader;
@@ -951,6 +953,105 @@ namespace ExcelReader.Tests
                 await wb.DisposeAsync().ConfigureAwait(true)).ConfigureAwait(true);
 
             Assert.Null(ex);
+        }
+
+        [Fact]
+        public async Task InlineStringWithEdgeWhitespaceUsesXmlSpacePreserve()
+        {
+            await using var ms = await WriteWorkbookAsync(async wb =>
+            {
+                SheetWriter sheet = wb.AddSheet("Sheet1");
+                await sheet.StartAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
+                await using RowWriter row = await sheet.StartRowAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
+                row.Write(" leading and trailing ");
+                await sheet.EndAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
+            }).ConfigureAwait(true);
+
+            using var zip = new ZipArchive(ms, ZipArchiveMode.Read, leaveOpen: true);
+            using var stream = zip.GetEntry("xl/worksheets/sheet1.xml")!.Open();
+            using var text = new StreamReader(stream, Encoding.UTF8);
+            string xml = await text.ReadToEndAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
+
+            Assert.Contains("<t xml:space=\"preserve\"> leading and trailing </t>", xml, StringComparison.Ordinal);
+        }
+
+        [Theory]
+        [InlineData(double.NaN)]
+        [InlineData(double.PositiveInfinity)]
+        public async Task WriterRejectsNonFiniteNumbers(double value)
+        {
+            await using var ms = new MemoryStream();
+            await using WorkbookWriter wb = await WorkbookWriter.CreateAsync(ms, leaveOpen: true, ct: TestContext.Current.CancellationToken).ConfigureAwait(true);
+            await wb.StartAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
+            SheetWriter sheet = wb.AddSheet("Sheet1");
+            await sheet.StartAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
+            await using RowWriter row = await sheet.StartRowAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
+
+            Assert.Throws<ArgumentException>(() => row.Write(value));
+        }
+
+        [Fact]
+        public async Task SheetWriterExtensionsWriteSynchronousAndAsyncRecords()
+        {
+            await using var ms = await WriteWorkbookAsync(async wb =>
+            {
+                SheetWriter sheet = wb.AddSheet("Numbers");
+                await sheet.StartAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
+
+                await sheet.WriteRecordsAsync([1, 2], static (row, value) => row.Write(value), TestContext.Current.CancellationToken);
+
+                ISheetWriter<RowWriter> genericSheet = sheet;
+                await genericSheet.WriteRecordsAsync(
+                    ToAsync([3, 4]),
+                    static (row, value) => row.Write(value),
+                    TestContext.Current.CancellationToken);
+
+                await sheet.EndAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
+            }).ConfigureAwait(true);
+
+            await using var reader = Excel.From(ms);
+            using XlsxReader.Enumerator e = reader.GetEnumerator();
+            for (int expected = 1; expected <= 4; expected++)
+            {
+                Assert.True(e.MoveNext());
+                Assert.True(e.Current[0].TryParse(null, out int actual));
+                Assert.Equal(expected, actual);
+            }
+            Assert.False(e.MoveNext());
+        }
+
+        [Fact]
+        public async Task WriterEscapesXmlControlsAndLiteralExcelEscapeSequences()
+        {
+            await using var ms = await WriteWorkbookAsync(async wb =>
+            {
+                SheetWriter sheet = wb.AddSheet("Sheet1");
+                await sheet.StartAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
+                await using RowWriter row = await sheet.StartRowAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
+                row.Write("a\u0001b _x0041_");
+                await sheet.EndAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
+            }).ConfigureAwait(true);
+
+            using var zip = new ZipArchive(ms, ZipArchiveMode.Read, leaveOpen: true);
+            using var stream = zip.GetEntry("xl/worksheets/sheet1.xml")!.Open();
+            using var text = new StreamReader(stream, Encoding.UTF8);
+            string xml = await text.ReadToEndAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
+
+            Assert.Contains("a_x0001_b _x005F_x0041_", xml, StringComparison.Ordinal);
+        }
+
+        [Fact]
+        public async Task WriterRejectsColumnsBeyondXfd()
+        {
+            await using var ms = new MemoryStream();
+            await using WorkbookWriter wb = await WorkbookWriter.CreateAsync(ms, leaveOpen: true, ct: TestContext.Current.CancellationToken).ConfigureAwait(true);
+            await wb.StartAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
+            SheetWriter sheet = wb.AddSheet("Sheet1");
+            await sheet.StartAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
+            await using RowWriter row = await sheet.StartRowAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
+
+            row.Skip(16_384);
+            Assert.Throws<ExcelLimitExceededException>(() => row.Write("beyond XFD"));
         }
     }
 }

@@ -285,7 +285,18 @@ namespace ExcelReader.Core.Writer.Internal
                         xml.Write("_x005F_"u8);
                         start = i + 1;
                     }
-                    // A plain '_' isn't special on its own; leave it in the pending run.
+                    else
+                    {
+                        // A plain '_' remains in the pending run, but the next scan must move past
+                        // it; otherwise this loop would rediscover the same underscore forever.
+                        int following = value[(i + 1)..].IndexOfAny(specialChars);
+                        if (following < 0)
+                        {
+                            break;
+                        }
+                        next = following + (i + 1 - start);
+                        continue;
+                    }
                 }
                 else
                 {
