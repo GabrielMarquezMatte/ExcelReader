@@ -201,7 +201,7 @@ namespace ExcelReader.Core.Reader
                 int firstChars = (flags & 1) == 0 ? firstByteLen : firstByteLen / 2;
                 firstChars = Math.Min(firstChars, chars);
                 int firstBytes = (flags & 1) == 0 ? firstChars : firstChars * 2;
-                Span<byte> dst = _acc.ReserveValueSpan(chars * 4);
+                Span<byte> dst = _acc.ReserveValueSpan((chars * 3) + 1);
                 int written = DecodeStringToUtf8(firstData[..firstBytes], firstChars, flags, dst);
                 _acc.Advance(written);
                 int charsDecoded = firstChars;
@@ -210,9 +210,10 @@ namespace ExcelReader.Core.Reader
                     byte contFlags = cont[0];
                     int contByteLen = cont.Length - 1;
                     int contChars = (contFlags & 1) == 0 ? contByteLen : contByteLen / 2;
-                    contChars = Math.Min(contChars, chars - charsDecoded);
+                    var remainingChars = chars - charsDecoded;
+                    contChars = Math.Min(contChars, remainingChars);
                     int contBytes = (contFlags & 1) == 0 ? contChars : contChars * 2;
-                    dst = _acc.ReserveValueSpan((chars - charsDecoded) * 4);
+                    dst = _acc.ReserveValueSpan((remainingChars * 3) + 1);
                     written = DecodeStringToUtf8(cont.Slice(1, contBytes), contChars, contFlags, dst);
                     _acc.Advance(written);
                     charsDecoded += contChars;

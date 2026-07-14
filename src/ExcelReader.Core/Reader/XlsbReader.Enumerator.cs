@@ -166,9 +166,11 @@ namespace ExcelReader.Core.Reader
                     }
                     if (IsEndSheetData(id))
                     {
-                        break;
+                        _ended = true;
+                        return false;
                     }
                 }
+                ThrowIfTruncated(); // TryNextRecord returned false => EOF (not EndSheetData)
                 _ended = true;
                 return false;
             }
@@ -189,6 +191,7 @@ namespace ExcelReader.Core.Reader
                     }
                     ProcessCell(id, payload);
                 }
+                ThrowIfTruncated(); // EOF reached without an EndSheetData record
                 _ended = true;
             }
 
@@ -243,6 +246,7 @@ namespace ExcelReader.Core.Reader
                 }
                 if (_eof)
                 {
+                    ThrowIfTruncated();
                     _ended = true;
                     return 0;
                 }
@@ -268,6 +272,7 @@ namespace ExcelReader.Core.Reader
                 }
                 if (_eof)
                 {
+                    ThrowIfTruncated();
                     _ended = true;
                     return 0;
                 }
@@ -400,6 +405,19 @@ namespace ExcelReader.Core.Reader
                 id = -1;
                 payload = default;
                 return false;
+            }
+
+            // Called when the record loop hits EOF unable to decode another record. Unconsumed bytes at
+            // that point (_pos < _len) are a record whose framing/payload ran past the end of the stream —
+            // i.e. a truncated part. TryReadRecord leaves _pos at that record's start, so the leftover is
+            // exactly the partial record. Surface it instead of silently returning the rows read so far.
+            private void ThrowIfTruncated()
+            {
+                if (_pos < _len)
+                {
+                    throw new InvalidDataException(
+                        $"Truncated XLSB worksheet stream: {_len - _pos} trailing byte(s) do not form a complete record.");
+                }
             }
 
             private void Fill()

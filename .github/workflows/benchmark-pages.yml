@@ -20,15 +20,22 @@ jobs:
       matrix:
         group:
           - name: read
-            filter: ExcelReader.Benchmarks.ReadBenchmark.*
+            filter: ExcelReader.Benchmarks.ReadBenchmark.* ExcelReader.Benchmarks.XlsReadBenchmark.* ExcelReader.Benchmarks.CsvReadBenchmark.*
+            args: --warmupCount 3 --iterationCount 10
           - name: parse
-            filter: ExcelReader.Benchmarks.ParseBenchmark.*
+            filter: ExcelReader.Benchmarks.ParseBenchmark.* ExcelReader.Benchmarks.CsvParseBenchmark.*
+            args: --warmupCount 3 --iterationCount 10
           - name: write
-            filter: ExcelReader.Benchmarks.WriteBenchmark.*
-          - name: xls
-            filter: ExcelReader.Benchmarks.Xls*
-          - name: csv
-            filter: ExcelReader.Benchmarks.Csv*
+            filter: ExcelReader.Benchmarks.WriteBenchmark.* ExcelReader.Benchmarks.RecordWriteBenchmark.* ExcelReader.Benchmarks.XlsWriteBenchmark.* ExcelReader.Benchmarks.CsvWriteBenchmark.*
+            args: --warmupCount 3 --iterationCount 10
+          - name: realdata
+            filter: ExcelReader.Benchmarks.RealDataReadBenchmark.*
+            args: --warmupCount 3 --iterationCount 10
+          # ColdStart drives its own launch/warmup/iteration counts via [SimpleJob]; passing
+          # --warmupCount/--iterationCount here would override them and warm away the cold measurement.
+          - name: coldstart
+            filter: ExcelReader.Benchmarks.ColdStartBenchmark.*
+            args: ''
 
     steps:
       - uses: actions/checkout@v7
@@ -56,7 +63,7 @@ jobs:
           IFS=' ' read -ra patterns <<< '${{ matrix.group.filter }}'
           dotnet run --project tests/ExcelReader.Benchmarks/ExcelReader.Benchmarks.csproj \
             --configuration Release --no-build \
-            -- --filter "${patterns[@]}" --warmupCount 3 --iterationCount 10
+            -- --filter "${patterns[@]}" ${{ matrix.group.args }}
 
       - name: Upload JSON results
         uses: actions/upload-artifact@v7
