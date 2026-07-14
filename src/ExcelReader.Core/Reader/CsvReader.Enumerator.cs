@@ -180,29 +180,29 @@ namespace ExcelReader.Core.Reader
                 byte quote = _quote;
                 int pos = _pos;
 
-                // Fast path: one long-span IndexOfAny finds the record terminator, one long-span IndexOf
-                // rules out a quote anywhere in the line — both scan spans typically 50-200+ bytes, wide
-                // enough to actually engage the vectorized path (per-field spans below are 5-20 bytes and
-                // mostly don't). If the line has no quote, split it by delimiter directly with no
-                // FieldState/materialization machinery at all. Falls through to the general per-field
-                // parser for quoted lines, or when the terminator/EOF isn't resolvable yet.
+                // Fast path: a single long-span IndexOfAny finds whichever of {CR, LF, quote} comes
+                // first — typically 50-200+ bytes, wide enough to actually engage the vectorized path
+                // (per-field spans below are 5-20 bytes and mostly don't). If a terminator is hit before
+                // any quote, the line up to it is provably quote-free, so it's split by delimiter
+                // directly with no FieldState/materialization machinery at all. Falls through to the
+                // general per-field parser when a quote is hit first, or when the terminator/EOF isn't
+                // resolvable yet.
                 ReadOnlySpan<byte> remaining = buf.AsSpan(pos, len - pos);
-                int lineTerm = remaining.IndexOfAny(Cr, Lf);
+                int first = remaining.IndexOfAny(Cr, Lf, quote);
+                bool quoteFirst = first >= 0 && remaining[first] == quote;
+                int lineTerm = quoteFirst ? -1 : first;
                 bool ambiguousCr = lineTerm >= 0 && remaining[lineTerm] == Cr && lineTerm == remaining.Length - 1 && !_eof;
-                if (!ambiguousCr && (lineTerm >= 0 || _eof))
+                if (!quoteFirst && !ambiguousCr && (lineTerm >= 0 || _eof))
                 {
                     ReadOnlySpan<byte> line = lineTerm >= 0 ? remaining[..lineTerm] : remaining;
-                    if (line.IndexOf(quote) < 0)
+                    ParseUnquotedLine(line, pos);
+                    pos += line.Length;
+                    if (lineTerm >= 0)
                     {
-                        ParseUnquotedLine(line, pos);
-                        pos += line.Length;
-                        if (lineTerm >= 0)
-                        {
-                            pos += buf[pos] == Cr && pos + 1 < len && buf[pos + 1] == Lf ? 2 : 1;
-                        }
-                        _pos = pos;
-                        return true;
+                        pos += buf[pos] == Cr && pos + 1 < len && buf[pos + 1] == Lf ? 2 : 1;
                     }
+                    _pos = pos;
+                    return true;
                 }
 
                 FieldState f = default;

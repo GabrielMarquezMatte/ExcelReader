@@ -569,6 +569,7 @@ namespace ExcelReader.Core.Parser.Internal
         {
 #if !NET8_0
             private static readonly FrozenDictionary<string, TEnum> _nameMap = BuildNameMap();
+            private static readonly FrozenDictionary<string, TEnum>.AlternateLookup<ReadOnlySpan<char>> _alternateLookup = _nameMap.GetAlternateLookup<ReadOnlySpan<char>>();
 #endif
             private static readonly FrozenDictionary<long, TEnum> _valueMap = BuildValueMap();
 #if NET8_0
@@ -678,15 +679,13 @@ namespace ExcelReader.Core.Parser.Internal
                 {
                     Span<char> spanChars = stackalloc char[128];
                     int n = Encoding.UTF8.GetChars(utf8, spanChars);
-                    var alternateLookup = _nameMap.GetAlternateLookup<ReadOnlySpan<char>>();
-                    return alternateLookup.TryGetValue(spanChars[..n], out value);
+                    return _alternateLookup.TryGetValue(spanChars[..n], out value);
                 }
                 char[] chars = ArrayPool<char>.Shared.Rent(utf8.Length);
                 try
                 {
                     int n = Encoding.UTF8.GetChars(utf8, chars);
-                    var alternateLookup = _nameMap.GetAlternateLookup<ReadOnlySpan<char>>();
-                    return alternateLookup.TryGetValue(chars.AsSpan(0, n), out value);
+                    return _alternateLookup.TryGetValue(chars.AsSpan(0, n), out value);
                 }
                 finally
                 {
