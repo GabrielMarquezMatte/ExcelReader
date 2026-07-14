@@ -4,6 +4,12 @@ using ExcelReader.Core.Reader;
 
 namespace ExcelReader.Core.Parser
 {
+    // Typed parsing reflects over T's properties (GetProperties) and compiles per-property setters via
+    // Expression.Compile plus MakeGenericMethod, so it needs runtime code generation and keeps T's
+    // members. Not compatible with Native AOT, and trimming can remove the properties it binds to. The
+    // raw Excel.From* readers use no reflection and stay AOT/trim-safe; only this typed layer does not.
+    [RequiresUnreferencedCode("Typed parsing reflects over T's public properties, which trimming may remove.")]
+    [RequiresDynamicCode("Typed parsing compiles property setters at runtime (Expression.Compile / MakeGenericMethod).")]
     public sealed class ExcelParser<T>
     {
         private readonly ExcelParserConfig _config;
