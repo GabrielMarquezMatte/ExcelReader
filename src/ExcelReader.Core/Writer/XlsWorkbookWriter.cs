@@ -37,11 +37,8 @@ namespace ExcelReader.Core.Writer
 
         public void Start()
         {
-            ObjectDisposedException.ThrowIf(_state == WriterState.Ended, this);
-            if (_state != WriterState.Created)
-            {
-                throw new InvalidOperationException("XlsWorkbookWriter has already been started.");
-            }
+            WriterStateGuard.ThrowIfEnded(_state, this);
+            WriterStateGuard.RequireCreated(_state, nameof(XlsWorkbookWriter));
             _state = WriterState.Started;
         }
 
@@ -56,11 +53,8 @@ namespace ExcelReader.Core.Writer
         public XlsSheetWriter AddSheet(string name)
         {
             ArgumentNullException.ThrowIfNull(name);
-            ObjectDisposedException.ThrowIf(_state == WriterState.Ended, this);
-            if (_state != WriterState.Started)
-            {
-                throw new InvalidOperationException("XlsWorkbookWriter must be started before adding sheets.");
-            }
+            WriterStateGuard.ThrowIfEnded(_state, this);
+            WriterStateGuard.RequireStarted(_state, nameof(XlsWorkbookWriter), "adding sheets");
             if (name.Length is 0 or > MaxSheetNameLength)
             {
                 throw new ArgumentException($"Sheet names must be 1 to {MaxSheetNameLength} characters.", nameof(name));
@@ -90,11 +84,8 @@ namespace ExcelReader.Core.Writer
 
         public async ValueTask EndAsync(CancellationToken ct = default)
         {
-            ObjectDisposedException.ThrowIf(_state == WriterState.Ended, this);
-            if (_state != WriterState.Started)
-            {
-                throw new InvalidOperationException("XlsWorkbookWriter must be started before ending.");
-            }
+            WriterStateGuard.ThrowIfEnded(_state, this);
+            WriterStateGuard.RequireStarted(_state, nameof(XlsWorkbookWriter), "ending");
             ct.ThrowIfCancellationRequested();
             _state = WriterState.Ended;
             if (_activeSheet is not null)

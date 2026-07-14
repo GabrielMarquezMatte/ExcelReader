@@ -56,11 +56,8 @@ namespace ExcelReader.Core.Writer
 
         public ValueTask StartAsync(CancellationToken ct = default)
         {
-            ObjectDisposedException.ThrowIf(_state == WriterState.Ended, this);
-            if (_state != WriterState.Created)
-            {
-                throw new InvalidOperationException("XlsbWorkbookWriter has already been started.");
-            }
+            WriterStateGuard.ThrowIfEnded(_state, this);
+            WriterStateGuard.RequireCreated(_state, nameof(XlsbWorkbookWriter));
             ct.ThrowIfCancellationRequested();
             _state = WriterState.Started;
             return ValueTask.CompletedTask;
@@ -69,11 +66,8 @@ namespace ExcelReader.Core.Writer
         public XlsbSheetWriter AddSheet(string name)
         {
             ArgumentNullException.ThrowIfNull(name);
-            ObjectDisposedException.ThrowIf(_state == WriterState.Ended, this);
-            if (_state != WriterState.Started)
-            {
-                throw new InvalidOperationException("XlsbWorkbookWriter must be started before adding sheets.");
-            }
+            WriterStateGuard.ThrowIfEnded(_state, this);
+            WriterStateGuard.RequireStarted(_state, nameof(XlsbWorkbookWriter), "adding sheets");
             if (name.Length is 0 or > MaxSheetNameLength)
             {
                 throw new ArgumentException($"Sheet names must be 1 to {MaxSheetNameLength} characters.", nameof(name));
@@ -106,11 +100,8 @@ namespace ExcelReader.Core.Writer
 
         public async ValueTask EndAsync(CancellationToken ct = default)
         {
-            ObjectDisposedException.ThrowIf(_state == WriterState.Ended, this);
-            if (_state != WriterState.Started)
-            {
-                throw new InvalidOperationException("XlsbWorkbookWriter must be started before ending.");
-            }
+            WriterStateGuard.ThrowIfEnded(_state, this);
+            WriterStateGuard.RequireStarted(_state, nameof(XlsbWorkbookWriter), "ending");
             ct.ThrowIfCancellationRequested();
             _state = WriterState.Ended;
             if (_activeSheet is not null)
@@ -129,11 +120,7 @@ namespace ExcelReader.Core.Writer
             await WriteSharedStringsAsync(ct).ConfigureAwait(false);
             await WriteAppPropertiesAsync(ct).ConfigureAwait(false);
             await WriteContentTypesAsync(ct).ConfigureAwait(false);
-#if NET10_0_OR_GREATER
-            await _zip.DisposeAsync().ConfigureAwait(false);
-#else
-            _zip.Dispose();
-#endif
+            await ZipArchiveDisposal.DisposeAsync(_zip).ConfigureAwait(false);
         }
 
         public ValueTask FlushAsync(CancellationToken ct = default)
@@ -161,11 +148,7 @@ namespace ExcelReader.Core.Writer
             }
             else if (_state == WriterState.Created)
             {
-#if NET10_0_OR_GREATER
-                await _zip.DisposeAsync().ConfigureAwait(false);
-#else
-                _zip.Dispose();
-#endif
+                await ZipArchiveDisposal.DisposeAsync(_zip).ConfigureAwait(false);
             }
             if (!_leaveOpen)
             {
