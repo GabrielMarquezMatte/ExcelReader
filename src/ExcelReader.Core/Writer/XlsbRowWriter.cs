@@ -1,5 +1,6 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
+using System.Runtime.CompilerServices;
 
 namespace ExcelReader.Core.Writer
 {
@@ -207,33 +208,55 @@ namespace ExcelReader.Core.Writer
             _columnIndex++;
         }
 
+        // typeof(T) == typeof(...) folds to a JIT constant per generic instantiation, so the dead
+        // branches are elided and — unlike a type-pattern switch on an unconstrained T — no boxing
+        // occurs. Mirrors the pattern in CellFormatter.WriteValue<T>/CsvRowWriter.WriteUtf8Field.
         internal static double ToDouble<T>(T value)
             where T : IUtf8SpanFormattable
         {
-            switch (value)
+            if (typeof(T) == typeof(double))
             {
-                case double d:
-                    return d;
-                case float f:
-                    return f;
-                case decimal m:
-                    return (double)m;
-                case int i:
-                    return i;
-                case long l:
-                    return l;
-                case short s:
-                    return s;
-                case byte b:
-                    return b;
-                case uint ui:
-                    return ui;
-                case ulong ul:
-                    return ul;
-                case ushort us:
-                    return us;
-                case sbyte sb:
-                    return sb;
+                return Unsafe.As<T, double>(ref value);
+            }
+            if (typeof(T) == typeof(float))
+            {
+                return Unsafe.As<T, float>(ref value);
+            }
+            if (typeof(T) == typeof(decimal))
+            {
+                return (double)Unsafe.As<T, decimal>(ref value);
+            }
+            if (typeof(T) == typeof(int))
+            {
+                return Unsafe.As<T, int>(ref value);
+            }
+            if (typeof(T) == typeof(long))
+            {
+                return Unsafe.As<T, long>(ref value);
+            }
+            if (typeof(T) == typeof(short))
+            {
+                return Unsafe.As<T, short>(ref value);
+            }
+            if (typeof(T) == typeof(byte))
+            {
+                return Unsafe.As<T, byte>(ref value);
+            }
+            if (typeof(T) == typeof(uint))
+            {
+                return Unsafe.As<T, uint>(ref value);
+            }
+            if (typeof(T) == typeof(ulong))
+            {
+                return Unsafe.As<T, ulong>(ref value);
+            }
+            if (typeof(T) == typeof(ushort))
+            {
+                return Unsafe.As<T, ushort>(ref value);
+            }
+            if (typeof(T) == typeof(sbyte))
+            {
+                return Unsafe.As<T, sbyte>(ref value);
             }
             if (value is IConvertible convertible)
             {
