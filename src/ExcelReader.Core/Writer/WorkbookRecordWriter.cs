@@ -23,6 +23,8 @@ namespace ExcelReader.Core.Writer
             _workbook = workbook;
         }
 
+        [RequiresUnreferencedCode("Record writing reflects over T's public properties, which trimming may remove.")]
+        [RequiresDynamicCode("Record writing compiles the per-type column writer at runtime (Expression.Compile / MakeGenericMethod).")]
         public async ValueTask WriteSheetAsync<T>(string sheetName, IEnumerable<T> records, CancellationToken ct = default)
         {
             ArgumentNullException.ThrowIfNull(records);
@@ -33,6 +35,8 @@ namespace ExcelReader.Core.Writer
             await sheet.EndAsync(ct).ConfigureAwait(false);
         }
 
+        [RequiresUnreferencedCode("Record writing reflects over T's public properties, which trimming may remove.")]
+        [RequiresDynamicCode("Record writing compiles the per-type column writer at runtime (Expression.Compile / MakeGenericMethod).")]
         public async ValueTask WriteSheetAsync<T>(string sheetName, IAsyncEnumerable<T> records, CancellationToken ct = default)
         {
             ArgumentNullException.ThrowIfNull(records);
