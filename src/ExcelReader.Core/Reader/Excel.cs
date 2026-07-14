@@ -234,6 +234,26 @@ namespace ExcelReader.Core.Reader
         // ZipArchive to distinguish XLSB ("xl/workbook.bin" present) from XLSX (XML workbook).
         // Both XLSX and XLSB readers need a seekable source anyway (ZipArchive seeks the central
         // directory), so requiring seek here costs nothing and keeps the peek cheap.
+        // Classifies the leading signature bytes shared by DetectSeekable/DetectSeekableAsync. Returns
+        // true (with the final answer) for XLS/Unknown; false means "it's a ZIP" and the caller must
+        // still peek the central directory to tell XLSB from XLSX - the one step that genuinely
+        // differs between the sync (stackalloc) and async (heap buffer, awaited zip dispose) paths.
+        private static bool TryClassifyHeader(ReadOnlySpan<byte> sig, out ExcelFileFormat format)
+        {
+            if (sig.StartsWith(XlsCompoundFile.Signature))
+            {
+                format = ExcelFileFormat.Xls;
+                return true;
+            }
+            if (!sig.StartsWith(ZipSignature))
+            {
+                format = ExcelFileFormat.Unknown;
+                return true;
+            }
+            format = default;
+            return false;
+        }
+
         private static ExcelFileFormat DetectSeekable(Stream stream)
         {
             RequireSeekable(stream);
@@ -241,14 +261,9 @@ namespace ExcelReader.Core.Reader
             Span<byte> header = stackalloc byte[8];
             int read = stream.ReadAtLeast(header, header.Length, throwOnEndOfStream: false);
             stream.Position = start;
-            ReadOnlySpan<byte> sig = header[..read];
-            if (sig.StartsWith(XlsCompoundFile.Signature))
+            if (TryClassifyHeader(header[..read], out ExcelFileFormat format))
             {
-                return ExcelFileFormat.Xls;
-            }
-            if (!sig.StartsWith(ZipSignature))
-            {
-                return ExcelFileFormat.Unknown;
+                return format;
             }
             // Peek the central directory to distinguish XLSB from XLSX.
             using var zipPeek = new ZipArchive(stream, ZipArchiveMode.Read, leaveOpen: true);
@@ -264,14 +279,9 @@ namespace ExcelReader.Core.Reader
             byte[] header = new byte[8];
             int read = await stream.ReadAtLeastAsync(header, header.Length, throwOnEndOfStream: false, ct).ConfigureAwait(false);
             stream.Position = start;
-            ReadOnlySpan<byte> sig = header.AsSpan(0, read);
-            if (sig.StartsWith(XlsCompoundFile.Signature))
+            if (TryClassifyHeader(header.AsSpan(0, read), out ExcelFileFormat format))
             {
-                return ExcelFileFormat.Xls;
-            }
-            if (!sig.StartsWith(ZipSignature))
-            {
-                return ExcelFileFormat.Unknown;
+                return format;
             }
             // Central directory read: open a temporary archive to peek entry names, then rewind.
             // Declared outside await using so the ZipArchive variable is accessible inside the block.

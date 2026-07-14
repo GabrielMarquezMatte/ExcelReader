@@ -1,5 +1,6 @@
 using System.Diagnostics.CodeAnalysis;
 using System.IO.Compression;
+using ExcelReader.Core.Writer.Internal;
 
 namespace ExcelReader.Core.Reader
 {
@@ -90,21 +91,12 @@ namespace ExcelReader.Core.Reader
             _sharedOffsets = sharedOffsets;
         }
 
-        [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP001:Dispose created",
-            Justification = "zip ownership transfers to the returned reader on success, disposed in the catch on failure.")]
-        internal static async ValueTask<XlsbReader> CreateAsync(Stream stream, bool leaveOpen, ExcelReaderOptions? options = null, CancellationToken ct = default)
+        internal static ValueTask<XlsbReader> CreateAsync(Stream stream, bool leaveOpen, ExcelReaderOptions? options = null, CancellationToken ct = default)
         {
             ExcelReaderOptions effectiveOptions = options ?? ExcelReaderOptions.Default;
             DecompressedByteCounter decompressedBytes = new(effectiveOptions.MaxTotalDecompressedBytes);
-            ZipArchive? zip = null;
-            try
+            return ZipReaderOpen.OpenAsync(stream, leaveOpen, ct, async zip =>
             {
-#if NET10_0_OR_GREATER
-                zip = await ZipArchive.CreateAsync(stream, ZipArchiveMode.Read, leaveOpen: true, entryNameEncoding: null, ct).ConfigureAwait(false);
-#else
-                ct.ThrowIfCancellationRequested();
-                zip = new ZipArchive(stream, ZipArchiveMode.Read, leaveOpen: true);
-#endif
                 var wb = await ZipEntryBytes.ReadAsync(zip, "xl/workbook.bin", decompressedBytes, ct).ConfigureAwait(false);
                 var zipEntryData = await ZipEntryBytes.ReadAsync(zip, "xl/_rels/workbook.bin.rels", decompressedBytes, ct).ConfigureAwait(false);
                 var sheets = XlsbWorkbook.ParseSheets(wb, zipEntryData);
@@ -119,23 +111,7 @@ namespace ExcelReader.Core.Reader
                         nameof(ExcelReaderOptions.MaxSharedStringBytes), effectiveOptions.MaxSharedStringBytes).ConfigureAwait(false),
                     effectiveOptions);
                 return new XlsbReader(stream, leaveOpen, zip, sheets, styleIsDate, date1904, flat, offsets, effectiveOptions, decompressedBytes);
-            }
-            catch
-            {
-                if (zip is not null)
-                {
-#if NET10_0_OR_GREATER
-                    await zip.DisposeAsync().ConfigureAwait(false);
-#else
-                    zip.Dispose();
-#endif
-                }
-                if (!leaveOpen)
-                {
-                    await stream.DisposeAsync().ConfigureAwait(false);
-                }
-                throw;
-            }
+            });
         }
 
         // --- IExcelReader ---
@@ -225,11 +201,7 @@ namespace ExcelReader.Core.Reader
         {
             if (_zip is not null)
             {
-#if NET10_0_OR_GREATER
-                await _zip.DisposeAsync().ConfigureAwait(false);
-#else
-                _zip.Dispose();
-#endif
+                await ZipArchiveDisposal.DisposeAsync(_zip).ConfigureAwait(false);
             }
             if (!_leaveOpen && _stream is not null)
             {
