@@ -9,9 +9,11 @@ namespace ExcelReader.Core.Reader
     // Everything works on UTF-8 ReadOnlySpan<byte> so cell values never round-trip through string.
     internal static class XlsxXml
     {
-        // Returns the value of attribute `name` inside an open tag span like `<c r="A1" s="1" t="s">`.
-        // `name` must include the leading space and `="`, e.g. " t=\"" — the leading space gives a cheap
-        // word boundary so " r=\"" doesn't match inside another attribute. Empty span if absent.
+        // Returns the value of attribute `name` inside an open tag span like `<c r="A1" s="1" t="s">`,
+        // or its single-quoted form `<c r='A1'>`. `name` must include the leading space and trailing '=',
+        // e.g. " t=" — the leading space gives a cheap word boundary so " r=" doesn't match inside another
+        // attribute. Accepts either ' or " as the value delimiter (both legal per XML); the closing quote
+        // must match the opening one. Empty span if the attribute is absent or malformed.
         public static ReadOnlySpan<byte> Attr(ReadOnlySpan<byte> openTag, ReadOnlySpan<byte> name)
         {
             int i = openTag.IndexOf(name);
@@ -20,7 +22,17 @@ namespace ExcelReader.Core.Reader
                 return default;
             }
             int start = i + name.Length;
-            int end = openTag[start..].IndexOf((byte)'"');
+            if (start >= openTag.Length)
+            {
+                return default;
+            }
+            byte quote = openTag[start];
+            if (quote is not ((byte)'"' or (byte)'\''))
+            {
+                return default;
+            }
+            start++;
+            int end = openTag[start..].IndexOf(quote);
             return end < 0 ? default : openTag.Slice(start, end);
         }
 
@@ -320,10 +332,10 @@ namespace ExcelReader.Core.Reader
             }
             foreach (ReadOnlySpan<byte> tag in new TagSpanEnumerable(relsBytes, "<Relationship"u8))
             {
-                string id = DecodeToString(Attr(tag, " Id=\""u8));
+                string id = DecodeToString(Attr(tag, " Id="u8));
                 if (id.Length > 0)
                 {
-                    rels[id] = DecodeToString(Attr(tag, " Target=\""u8));
+                    rels[id] = DecodeToString(Attr(tag, " Target="u8));
                 }
             }
             return rels;
