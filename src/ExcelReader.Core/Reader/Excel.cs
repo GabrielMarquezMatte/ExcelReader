@@ -1,5 +1,6 @@
 using System.Diagnostics.CodeAnalysis;
 using System.IO.Compression;
+using System.Runtime.CompilerServices;
 using ExcelReader.Core.Enums;
 
 namespace ExcelReader.Core.Reader
@@ -254,6 +255,7 @@ namespace ExcelReader.Core.Reader
             return false;
         }
 
+        [SkipLocalsInit]
         private static ExcelFileFormat DetectSeekable(Stream stream)
         {
             RequireSeekable(stream);

@@ -5,6 +5,7 @@ using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Linq.Expressions;
 using System.Reflection;
+using System.Runtime.CompilerServices;
 using System.Text;
 using ExcelReader.Core.Enums;
 using ExcelReader.Core.ValueObjects;
@@ -320,6 +321,7 @@ namespace ExcelReader.Core.Parser.Internal
         // e.g. pt-BR "02/07/2026"). Falls back to a string for pathologically long fields.
         private const int MaxStackDateChars = 128;
 
+        [SkipLocalsInit]
         private static bool TryParseDateTimeText(in Cell cell, IFormatProvider provider, out DateTime value)
         {
             ReadOnlySpan<byte> utf8 = cell.Value;
@@ -340,6 +342,7 @@ namespace ExcelReader.Core.Parser.Internal
             return DateTime.TryParse(cell.GetString(), provider, DateTimeStyles.None, out value);
         }
 
+        [SkipLocalsInit]
         private static bool TryParseDateOnlyText(in Cell cell, IFormatProvider provider, out DateOnly value)
         {
             ReadOnlySpan<byte> utf8 = cell.Value;
@@ -352,6 +355,7 @@ namespace ExcelReader.Core.Parser.Internal
             return DateOnly.TryParse(cell.GetString(), provider, DateTimeStyles.None, out value);
         }
 
+        [SkipLocalsInit]
         private static bool TryParseTimeOnlyText(in Cell cell, IFormatProvider provider, out TimeOnly value)
         {
             ReadOnlySpan<byte> utf8 = cell.Value;
@@ -404,6 +408,7 @@ namespace ExcelReader.Core.Parser.Internal
         }
 
 #if NET8_0
+        [SkipLocalsInit]
         private static bool TryParseGuid(in Cell cell, out Guid value)
         {
             ReadOnlySpan<byte> utf8 = cell.Value;
@@ -537,6 +542,8 @@ namespace ExcelReader.Core.Parser.Internal
                 }
                 return map.ToFrozenDictionary();
             }
+
+            [SkipLocalsInit]
             public static bool TryParse(in Cell cell, out TEnum value)
             {
                 if (cell.Type == CellType.Number && cell.TryGetDouble(out double d))

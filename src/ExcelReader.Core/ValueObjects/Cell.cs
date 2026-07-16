@@ -63,6 +63,7 @@ namespace ExcelReader.Core.ValueObjects
             return FastDouble.TryParse(Value, out value) || double.TryParse(Value, CultureInfo.InvariantCulture, out value);
         }
 
+        [SkipLocalsInit]
         public bool TryParse<T>(IFormatProvider? provider, [MaybeNullWhen(false)] out T result) where T : IUtf8SpanParsable<T>
         {
             // Fast path for binary doubles: hand back the stored value without round-tripping
@@ -253,6 +254,7 @@ namespace ExcelReader.Core.ValueObjects
         // Allocates — only call when you actually need a string. For a shared-string cell backed by a
         // dedup cache (see the constructor), a repeated value (categorical columns are the common case)
         // returns the same cached instance instead of decoding UTF-8 and allocating again.
+        [SkipLocalsInit]
         public string GetString()
         {
             if (_hasNumber)

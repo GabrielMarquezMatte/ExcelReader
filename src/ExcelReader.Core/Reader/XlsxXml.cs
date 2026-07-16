@@ -281,6 +281,7 @@ namespace ExcelReader.Core.Reader
 
         // Decode an XML-entity-encoded attribute/text value straight to a string. Small values (the
         // common case: rIds, sheet names, part paths) use a stack buffer; larger ones use a pooled array.
+        [SkipLocalsInit]
         internal static string DecodeToString(ReadOnlySpan<byte> src)
         {
             if (src.IsEmpty)

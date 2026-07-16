@@ -1,6 +1,7 @@
 using System.Buffers.Text;
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
+using System.Runtime.CompilerServices;
 using ExcelReader.Core.Enums;
 using ExcelReader.Core.ValueObjects;
 
@@ -661,6 +662,7 @@ namespace ExcelReader.Core.Reader
                 _acc.Add(col, s, _acc.ValueLength - s, CellType.ExcelString, style, fromShared: false);
             }
 
+            [SkipLocalsInit]
             private static bool TryParseIsoDate(ReadOnlySpan<byte> utf8, out DateTime value)
             {
                 // ST_Xstring ISO dates are always ASCII; transcode to chars for DateTime.TryParse.
