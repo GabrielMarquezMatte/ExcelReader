@@ -17,6 +17,7 @@ namespace ExcelReader.Core.Writer.Internal
 
         // Writes the cell reference (e.g. "B7") directly to the writer.
         // Max XLSX cell is XFD1048576 -> 3 column letters + 7 row digits.
+        [SkipLocalsInit]
         private static void WriteRef(BiffBuffer xml, int columnIndex, int rowNumber)
         {
             Span<byte> buf = stackalloc byte[10];
@@ -347,6 +348,7 @@ namespace ExcelReader.Core.Writer.Internal
             return value[i + 6] == '_';
         }
 
+        [SkipLocalsInit]
         private static void WriteHexEscape(BiffBuffer xml, char c)
         {
             Span<byte> buf = stackalloc byte[7];

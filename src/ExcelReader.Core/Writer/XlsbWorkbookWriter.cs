@@ -1,6 +1,7 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.IO.Compression;
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Text;
 using ExcelReader.Core.Reader;
@@ -310,6 +311,7 @@ namespace ExcelReader.Core.Writer
             return WriteEntryAsync("docProps/app.xml", xml, ct);
         }
 
+        [SkipLocalsInit]
         private static void WriteXf(BiffBuffer data, BiffBuffer payload, int numFmtId, bool isStyleXf = false)
         {
             payload.Reset();

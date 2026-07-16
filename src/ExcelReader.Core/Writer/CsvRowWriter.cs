@@ -175,8 +175,8 @@ namespace ExcelReader.Core.Writer
             }
         }
 
-        private void WriteUtf8Field<T>(T value, ReadOnlySpan<char> format)
-            where T : IUtf8SpanFormattable
+        [SkipLocalsInit]
+        private void WriteUtf8Field<T>(T value, ReadOnlySpan<char> format) where T : IUtf8SpanFormattable
         {
             Span<byte> buf = stackalloc byte[StackFieldBytes];
             // Utf8Formatter is culture-free (no per-field NumberFormatInfo lookup) and matches the
