@@ -16,7 +16,7 @@ namespace ExcelReader.Core.Reader
         // sync and async share one parser and the async path awaits once per refill, not per field.
         [SuppressMessage("Design", "CA1034:Nested types should not be visible",
             Justification = "Public nested enumerator is the standard foreach pattern.")]
-        public sealed class Enumerator : IExcelRowEnumerator
+        public sealed class Enumerator : PooledStreamRowEnumerator, IExcelRowEnumerator
         {
             private const byte Cr = (byte)'\r';
             private const byte Lf = (byte)'\n';
@@ -24,20 +24,12 @@ namespace ExcelReader.Core.Reader
             // Borrowed: CsvReader owns the stream's lifetime (it may be reused across enumerations).
             [SuppressMessage("Usage", "CA2213:Disposable fields should be disposed", Justification = "Borrowed, not owned.")]
             [SuppressMessage("SharpSource", "SS066:Disposable field is not disposed", Justification = "Borrowed, not owned.")]
-            private readonly Stream _stream;
-            private readonly CancellationToken _ct;
             private readonly byte _delimiter;
             private readonly byte _quote;
             private readonly bool _stripBom;
 
-            private readonly BufferedStreamCursor _io;
-            private byte[] _buf => _io.Buf;
-            private int _pos { get => _io.Pos; set => _io.Pos = value; }
-            private int _len => _io.Len;
-            private bool _eof => _io.Eof;
             private bool _bomChecked;
 
-            private readonly CellAccumulator _acc; // per-record decoded values + cell descriptors
             private int _col;
 
             // Current field's bytes, built incrementally as either a single contiguous run in _buf
@@ -55,14 +47,11 @@ namespace ExcelReader.Core.Reader
             }
 
             internal Enumerator(Stream stream, CsvReaderOptions options, CancellationToken ct = default)
+                : base(stream, options.MaxCellBytes, nameof(CsvReaderOptions.MaxCellBytes), 64 * 1024, ct)
             {
-                _stream = stream;
-                _ct = ct;
                 _delimiter = options.Delimiter;
                 _quote = options.Quote;
                 _stripBom = options.DetectEncodingFromByteOrderMark;
-                _io = new BufferedStreamCursor(options.MaxCellBytes, nameof(CsvReaderOptions.MaxCellBytes));
-                _acc = new CellAccumulator(options.MaxCellBytes, nameof(CsvReaderOptions.MaxCellBytes));
             }
 
             // Cells point either into _buf (the common, zero-copy case: unquoted or plain-quoted
@@ -431,26 +420,6 @@ namespace ExcelReader.Core.Reader
 
             // --- buffer management (shared with XlsxReader/XlsbReader via BufferedStreamCursor) ---
 
-            private void Fill()
-            {
-                _io.Fill(_stream);
-            }
-
-            private ValueTask FillAsync()
-            {
-                return _io.FillAsync(_stream, _ct);
-            }
-
-            private void Ensure(int n)
-            {
-                _io.Ensure(_stream, n);
-            }
-
-            private ValueTask EnsureAsync(int n)
-            {
-                return _io.EnsureAsync(_stream, n, _ct);
-            }
-
             public void Dispose()
             {
                 ReturnBuffers();
@@ -462,11 +431,6 @@ namespace ExcelReader.Core.Reader
                 return ValueTask.CompletedTask;
             }
 
-            private void ReturnBuffers()
-            {
-                _io.Return();
-                _acc.Return();
-            }
         }
     }
 }

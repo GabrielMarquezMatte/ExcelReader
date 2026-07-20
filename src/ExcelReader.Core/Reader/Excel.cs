@@ -176,19 +176,12 @@ namespace ExcelReader.Core.Reader
             }
             catch
             {
-                if (!leaveOpen)
-                {
-                    stream.Dispose();
-                }
+                DisposeOnFailure(stream, leaveOpen);
                 throw;
             }
             if (format is ExcelFileFormat.Unknown)
             {
-                if (!leaveOpen)
-                {
-                    stream.Dispose();
-                }
-                throw new InvalidDataException("Unrecognized file format; expected an XLSX/XLSB (ZIP) or XLS (OLE2) workbook.");
+                throw UnknownFormat(stream, leaveOpen);
             }
             return format switch
             {
@@ -208,18 +201,12 @@ namespace ExcelReader.Core.Reader
             }
             catch
             {
-                if (!leaveOpen)
-                {
-                    await stream.DisposeAsync().ConfigureAwait(false);
-                }
+                await DisposeOnFailureAsync(stream, leaveOpen).ConfigureAwait(false);
                 throw;
             }
             if (format is ExcelFileFormat.Unknown)
             {
-                if (!leaveOpen)
-                {
-                    await stream.DisposeAsync().ConfigureAwait(false);
-                }
+                await DisposeOnFailureAsync(stream, leaveOpen).ConfigureAwait(false);
                 throw new InvalidDataException("Unrecognized file format; expected an XLSX/XLSB (ZIP) or XLS (OLE2) workbook.");
             }
             return format switch
@@ -229,6 +216,29 @@ namespace ExcelReader.Core.Reader
                 ExcelFileFormat.Xlsx => await XlsxReader.CreateAsync(stream, leaveOpen, options, ct).ConfigureAwait(false),
                 _ => throw new System.Diagnostics.UnreachableException(),
             };
+        }
+
+        [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP007:Don't dispose injected",
+            Justification = "Open and OpenAsync transfer ownership when leaveOpen is false.")]
+        private static void DisposeOnFailure(Stream stream, bool leaveOpen)
+        {
+            if (!leaveOpen)
+            {
+                stream.Dispose();
+            }
+        }
+
+        [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP007:Don't dispose injected",
+            Justification = "Open and OpenAsync transfer ownership when leaveOpen is false.")]
+        private static ValueTask DisposeOnFailureAsync(Stream stream, bool leaveOpen)
+        {
+            return leaveOpen ? ValueTask.CompletedTask : stream.DisposeAsync();
+        }
+
+        private static InvalidDataException UnknownFormat(Stream stream, bool leaveOpen)
+        {
+            DisposeOnFailure(stream, leaveOpen);
+            return new InvalidDataException("Unrecognized file format; expected an XLSX/XLSB (ZIP) or XLS (OLE2) workbook.");
         }
 
         // Detection peeks the 8-byte signature then rewinds. For ZIP streams, opens a temporary

@@ -33,19 +33,15 @@ namespace ExcelReader.Core.Parser.Internal
         // the header, build the column map at the header row, then project each subsequent row.
         internal ProjectionStep Advance(in Row row, ref T model)
         {
-            _rowNumber++;
-            if (_rowNumber < _headerRow)
-            {
-                return ProjectionStep.Skip;
-            }
-            if (_rowNumber == _headerRow)
+            ProjectionStep step = ProjectionRules.ClassifyRow(ref _rowNumber, _headerRow, _bindings is not null);
+            if (step == ProjectionStep.BuildMap)
             {
                 BuildColumnMap(in row);
                 return ProjectionStep.Skip;
             }
-            if (_bindings is null)
+            if (step != ProjectionStep.Yield)
             {
-                return ProjectionStep.Stop;
+                return step;
             }
             model = _typeInfo.CreateInstance();
             ParseCurrentRow(in row, ref model);
@@ -161,8 +157,7 @@ namespace ExcelReader.Core.Parser.Internal
             {
                 if (bindings[i].RequireValue && !_seen[i])
                 {
-                    throw new InvalidOperationException(
-                        $"Required column '{bindings[i].Name}' has no value in row {_rowNumber.ToString(System.Globalization.CultureInfo.InvariantCulture)}.");
+                    throw ProjectionRules.MissingRequiredValue(bindings[i].Name, _rowNumber);
                 }
             }
         }
