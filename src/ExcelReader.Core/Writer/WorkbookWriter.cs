@@ -62,6 +62,7 @@ namespace ExcelReader.Core.Writer
             ArgumentNullException.ThrowIfNull(name);
             WriterStateGuard.ThrowIfEnded(_state, this);
             WriterStateGuard.RequireStarted(_state, nameof(WorkbookWriter), "adding sheets");
+            WriterStateGuard.ValidateSheetName(name);
             if (_sheetActive)
             {
                 throw new InvalidOperationException("The previous SheetWriter must be ended before adding a new sheet.");

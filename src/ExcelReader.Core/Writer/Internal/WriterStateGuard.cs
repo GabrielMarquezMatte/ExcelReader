@@ -28,6 +28,18 @@ namespace ExcelReader.Core.Writer.Internal
                 throw new InvalidOperationException($"{typeName} must be started before {action}.");
             }
         }
+
+        internal static void ValidateSheetName(string name)
+        {
+            if (name.Length is 0 or > 31)
+            {
+                throw new ArgumentException("Sheet names must be 1 to 31 characters.", nameof(name));
+            }
+            if (name.IndexOfAny([':', '\\', '/', '?', '*', '[', ']']) >= 0)
+            {
+                throw new ArgumentException("Sheet names cannot contain : \\ / ? * [ or ].", nameof(name));
+            }
+        }
     }
 
     // The "#if NET10_0_OR_GREATER await zip.DisposeAsync() #else zip.Dispose()" idiom, shared by the

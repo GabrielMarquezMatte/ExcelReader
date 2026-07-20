@@ -11,7 +11,6 @@ namespace ExcelReader.Core.Writer
     // sheets, so memory scales with total row count rather than being bounded per-sheet.
     public sealed class XlsWorkbookWriter : IWorkbookWriter<XlsSheetWriter>
     {
-        private const int MaxSheetNameLength = 31;
         private readonly Stream _stream;
         private readonly bool _leaveOpen;
         private readonly bool _date1904;
@@ -55,10 +54,7 @@ namespace ExcelReader.Core.Writer
             ArgumentNullException.ThrowIfNull(name);
             WriterStateGuard.ThrowIfEnded(_state, this);
             WriterStateGuard.RequireStarted(_state, nameof(XlsWorkbookWriter), "adding sheets");
-            if (name.Length is 0 or > MaxSheetNameLength)
-            {
-                throw new ArgumentException($"Sheet names must be 1 to {MaxSheetNameLength} characters.", nameof(name));
-            }
+            WriterStateGuard.ValidateSheetName(name);
             if (_activeSheet is not null)
             {
                 throw new InvalidOperationException("The previous XlsSheetWriter must be ended before adding a new sheet.");
