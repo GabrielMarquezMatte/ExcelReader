@@ -1,4 +1,5 @@
 using System.Buffers;
+using System.Buffers.Text;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Text;
@@ -9,6 +10,11 @@ namespace ExcelReader.Core.Reader
     // Everything works on UTF-8 ReadOnlySpan<byte> so cell values never round-trip through string.
     internal static class XlsxXml
     {
+        internal static int ParseIntOr(ReadOnlySpan<byte> source, int fallback)
+        {
+            return Utf8Parser.TryParse(source, out int value, out _) ? value : fallback;
+        }
+
         // Returns the value of attribute `name` inside an open tag span like `<c r="A1" s="1" t="s">`,
         // or its single-quoted form `<c r='A1'>`. `name` must include the leading space and trailing '=',
         // e.g. " t=" — the leading space gives a cheap word boundary so " r=" doesn't match inside another

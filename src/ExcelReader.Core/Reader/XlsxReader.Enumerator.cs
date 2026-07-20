@@ -13,23 +13,14 @@ namespace ExcelReader.Core.Reader
         // buffer; a single <c>...</c> element is guaranteed contiguous (the buffer grows if needed).
         [SuppressMessage("Design", "CA1034:Nested types should not be visible",
             Justification = "Public nested enumerator is the standard foreach pattern.")]
-        public sealed class Enumerator : IExcelRowEnumerator
+        public sealed class Enumerator : PooledStreamRowEnumerator, IExcelRowEnumerator
         {
             // Borrowed: the reader outlives the enumerator and owns its own disposal — do not dispose here.
             [SuppressMessage("Usage", "CA2213:Disposable fields should be disposed", Justification = "Borrowed, not owned.")]
             [SuppressMessage("SharpSource", "SS066:Disposable field is not disposed", Justification = "Borrowed, not owned.")]
             private readonly XlsxReader _reader;
-            private readonly CancellationToken _ct; // honored only by the async path
             // Owned: opened by Get(Async)Enumerator for this enumerator alone; disposed in Dispose(Async).
             [SuppressMessage("SharpSource", "SS066:Disposable field is not disposed", Justification = "Disposed in Dispose().")]
-            private Stream? _sheet;
-            private readonly BufferedStreamCursor _io;
-            private byte[] _buf => _io.Buf;
-            private int _pos { get => _io.Pos; set => _io.Pos = value; }
-            private int _len => _io.Len;
-            private bool _eof => _io.Eof;
-
-            private readonly CellAccumulator _acc; // per-row decoded values + cell descriptors
             private int _nextCol;
 
             // Non-null only when this sheet's elements carry a namespace prefix (e.g. <x:row>); holds the
@@ -43,13 +34,9 @@ namespace ExcelReader.Core.Reader
             private ReadOnlySpan<byte> CClose => _ns is null ? "</c>"u8 : _ns.CClose;
 
             internal Enumerator(XlsxReader reader, Stream sheet, long entryLength = 0, CancellationToken ct = default)
+                : base(sheet, reader._options.MaxCellBytes, nameof(ExcelReaderOptions.MaxCellBytes), WorkbookLookups.InitialBufferCapacity(entryLength), ct)
             {
                 _reader = reader;
-                _sheet = sheet;
-                _ct = ct;
-                _io = new BufferedStreamCursor(reader._options.MaxCellBytes, nameof(ExcelReaderOptions.MaxCellBytes),
-                    WorkbookLookups.InitialBufferCapacity(entryLength));
-                _acc = new CellAccumulator(reader._options.MaxCellBytes, nameof(ExcelReaderOptions.MaxCellBytes));
             }
 
             public Row Current =>
@@ -429,7 +416,7 @@ namespace ExcelReader.Core.Reader
                     col = _nextCol;
                 }
                 _nextCol = col + 1;
-                int style = ParseInt(sVal);
+                int style = XlsxXml.ParseIntOr(sVal, 0);
                 var kind = ClassifyKind(tVal);
                 bool selfClose = buf[gt - 1] == '/';
                 p = gt + 1; // consume open tag; p now at inner start (or next element if self-closed)
@@ -791,10 +778,6 @@ namespace ExcelReader.Core.Reader
                 return true;
             }
 
-            private static int ParseInt(ReadOnlySpan<byte> src)
-            {
-                return Utf8Parser.TryParse(src, out int v, out _) ? v : 0;
-            }
 
             private static bool IsBoundary(byte b)
             {
@@ -818,7 +801,7 @@ namespace ExcelReader.Core.Reader
                     {
                         return -1;
                     }
-                    _io.Fill(_sheet!);
+                    Fill();
                 }
             }
 
@@ -835,7 +818,7 @@ namespace ExcelReader.Core.Reader
                     {
                         return -1;
                     }
-                    _io.Fill(_sheet!);
+                    Fill();
                 }
             }
 
@@ -853,11 +836,6 @@ namespace ExcelReader.Core.Reader
             {
                 int rel = buf.AsSpan(from, boundExclusive - from).IndexOf(seq);
                 return rel < 0 ? -1 : from + rel;
-            }
-
-            private void Ensure(int n)
-            {
-                _io.Ensure(_sheet!, n);
             }
 
             // Async twins of the search/refill primitives. Each is split so the common case (the target is
@@ -907,7 +885,7 @@ namespace ExcelReader.Core.Reader
                     {
                         return _len;
                     }
-                    _io.Fill(_sheet!);
+                    Fill();
                 }
             }
 
@@ -979,22 +957,12 @@ namespace ExcelReader.Core.Reader
                 return -1;
             }
 
-            private ValueTask EnsureAsync(int n)
-            {
-                return _io.EnsureAsync(_sheet!, n, _ct);
-            }
-
-            private ValueTask FillAsync()
-            {
-                return _io.FillAsync(_sheet!, _ct);
-            }
-
             [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP007:Don't dispose injected",
                 Justification = "_sheet is opened for this enumerator and owned by it.")]
             public void Dispose()
             {
-                _sheet?.Dispose();
-                _sheet = null;
+                _source?.Dispose();
+                _source = null;
                 ReturnBuffers();
             }
 
@@ -1002,19 +970,14 @@ namespace ExcelReader.Core.Reader
                 Justification = "_sheet is opened for this enumerator and owned by it.")]
             public async ValueTask DisposeAsync()
             {
-                if (_sheet is not null)
+                if (_source is not null)
                 {
-                    await _sheet.DisposeAsync().ConfigureAwait(false);
-                    _sheet = null;
+                    await _source.DisposeAsync().ConfigureAwait(false);
+                    _source = null;
                 }
                 ReturnBuffers();
             }
 
-            private void ReturnBuffers()
-            {
-                _io.Return();
-                _acc.Return();
-            }
         }
     }
 }

@@ -34,72 +34,55 @@ namespace ExcelReader.Core.Writer.Internal
             xml.Write(tail);
         }
 
-        internal static void WriteEmpty(BiffBuffer xml, int columnIndex, int rowNumber, bool includeReference)
+        private static void WriteCellOpen(BiffBuffer xml, int columnIndex, int rowNumber, bool includeReference, ReadOnlySpan<byte> tail)
         {
             if (includeReference)
             {
-                WriteCellOpenWithRef(xml, columnIndex, rowNumber, "/>"u8);
+                WriteCellOpenWithRef(xml, columnIndex, rowNumber, tail);
                 return;
             }
-            xml.Write("<c/>"u8);
+            xml.Write(tail);
+        }
+
+        internal static void WriteEmpty(BiffBuffer xml, int columnIndex, int rowNumber, bool includeReference)
+        {
+            WriteCellOpen(xml, columnIndex, rowNumber, includeReference, includeReference ? "/>"u8 : "<c/>"u8);
         }
 
         internal static void WriteString(BiffBuffer xml, string value, int columnIndex, int rowNumber, bool includeReference)
         {
+            bool preserve = HasEdgeWhitespace(value);
+            ReadOnlySpan<byte> tail;
             if (includeReference)
             {
-                WriteCellOpenWithRef(xml, columnIndex, rowNumber, HasEdgeWhitespace(value)
-                    ? " t=\"inlineStr\"><is><t xml:space=\"preserve\">"u8
-                    : " t=\"inlineStr\"><is><t>"u8);
+                tail = preserve ? " t=\"inlineStr\"><is><t xml:space=\"preserve\">"u8 : " t=\"inlineStr\"><is><t>"u8;
             }
             else
             {
-                xml.Write(HasEdgeWhitespace(value)
-                    ? "<c t=\"inlineStr\"><is><t xml:space=\"preserve\">"u8
-                    : "<c t=\"inlineStr\"><is><t>"u8);
+                tail = preserve ? "<c t=\"inlineStr\"><is><t xml:space=\"preserve\">"u8 : "<c t=\"inlineStr\"><is><t>"u8;
             }
+            WriteCellOpen(xml, columnIndex, rowNumber, includeReference, tail);
             WriteEscaped(xml, value);
             xml.Write("</t></is></c>"u8);
         }
 
         internal static void WriteSharedString(BiffBuffer xml, int sharedStringIndex, int columnIndex, int rowNumber, bool includeReference)
         {
-            if (includeReference)
-            {
-                WriteCellOpenWithRef(xml, columnIndex, rowNumber, " t=\"s\"><v>"u8);
-            }
-            else
-            {
-                xml.Write("<c t=\"s\"><v>"u8);
-            }
+            WriteCellOpen(xml, columnIndex, rowNumber, includeReference, includeReference ? " t=\"s\"><v>"u8 : "<c t=\"s\"><v>"u8);
             WriteValue(xml, sharedStringIndex, sizeHint: 16);
             xml.Write("</v></c>"u8);
         }
 
         internal static void WriteBool(BiffBuffer xml, bool value, int columnIndex, int rowNumber, bool includeReference)
         {
-            if (includeReference)
-            {
-                WriteCellOpenWithRef(xml, columnIndex, rowNumber, " t=\"b\"><v>"u8);
-            }
-            else
-            {
-                xml.Write("<c t=\"b\"><v>"u8);
-            }
+            WriteCellOpen(xml, columnIndex, rowNumber, includeReference, includeReference ? " t=\"b\"><v>"u8 : "<c t=\"b\"><v>"u8);
             xml.WriteByte(value ? (byte)'1' : (byte)'0');
             xml.Write("</v></c>"u8);
         }
 
         internal static void WriteDateTime(BiffBuffer xml, DateTime value, int columnIndex, int rowNumber, bool includeReference)
         {
-            if (includeReference)
-            {
-                WriteCellOpenWithRef(xml, columnIndex, rowNumber, " s=\"1\"><v>"u8);
-            }
-            else
-            {
-                xml.Write("<c s=\"1\"><v>"u8);
-            }
+            WriteCellOpen(xml, columnIndex, rowNumber, includeReference, includeReference ? " s=\"1\"><v>"u8 : "<c s=\"1\"><v>"u8);
             WriteValue(xml, DateSerial.ForEpoch(value.ToOADate(), date1904: false), sizeHint: 32);
             xml.Write("</v></c>"u8);
         }
@@ -107,14 +90,7 @@ namespace ExcelReader.Core.Writer.Internal
         internal static void WriteNumber<T>(BiffBuffer xml, T value, int columnIndex, int rowNumber, bool includeReference)
             where T : IUtf8SpanFormattable
         {
-            if (includeReference)
-            {
-                WriteCellOpenWithRef(xml, columnIndex, rowNumber, "><v>"u8);
-            }
-            else
-            {
-                xml.Write("<c><v>"u8);
-            }
+            WriteCellOpen(xml, columnIndex, rowNumber, includeReference, includeReference ? "><v>"u8 : "<c><v>"u8);
             WriteValue(xml, value, sizeHint: 64);
             xml.Write("</v></c>"u8);
         }
@@ -126,56 +102,28 @@ namespace ExcelReader.Core.Writer.Internal
 
         internal static void WriteNumber(BiffBuffer xml, int value, int columnIndex, int rowNumber, bool includeReference)
         {
-            if (includeReference)
-            {
-                WriteCellOpenWithRef(xml, columnIndex, rowNumber, "><v>"u8);
-            }
-            else
-            {
-                xml.Write("<c><v>"u8);
-            }
+            WriteCellOpen(xml, columnIndex, rowNumber, includeReference, includeReference ? "><v>"u8 : "<c><v>"u8);
             WriteValue(xml, value, sizeHint: 16);
             xml.Write("</v></c>"u8);
         }
 
         internal static void WriteNumber(BiffBuffer xml, long value, int columnIndex, int rowNumber, bool includeReference)
         {
-            if (includeReference)
-            {
-                WriteCellOpenWithRef(xml, columnIndex, rowNumber, "><v>"u8);
-            }
-            else
-            {
-                xml.Write("<c><v>"u8);
-            }
+            WriteCellOpen(xml, columnIndex, rowNumber, includeReference, includeReference ? "><v>"u8 : "<c><v>"u8);
             WriteValue(xml, value, sizeHint: 32);
             xml.Write("</v></c>"u8);
         }
 
         internal static void WriteNumber(BiffBuffer xml, double value, int columnIndex, int rowNumber, bool includeReference)
         {
-            if (includeReference)
-            {
-                WriteCellOpenWithRef(xml, columnIndex, rowNumber, "><v>"u8);
-            }
-            else
-            {
-                xml.Write("<c><v>"u8);
-            }
+            WriteCellOpen(xml, columnIndex, rowNumber, includeReference, includeReference ? "><v>"u8 : "<c><v>"u8);
             WriteValue(xml, value, sizeHint: 32);
             xml.Write("</v></c>"u8);
         }
 
         internal static void WriteNumber(BiffBuffer xml, decimal value, int columnIndex, int rowNumber, bool includeReference)
         {
-            if (includeReference)
-            {
-                WriteCellOpenWithRef(xml, columnIndex, rowNumber, "><v>"u8);
-            }
-            else
-            {
-                xml.Write("<c><v>"u8);
-            }
+            WriteCellOpen(xml, columnIndex, rowNumber, includeReference, includeReference ? "><v>"u8 : "<c><v>"u8);
             WriteValue(xml, value, sizeHint: 64);
             xml.Write("</v></c>"u8);
         }

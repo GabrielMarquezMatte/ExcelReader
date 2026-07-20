@@ -194,7 +194,7 @@ namespace ExcelReader.Core.ValueObjects
         {
             return provider is null
                 || ReferenceEquals(provider, CultureInfo.InvariantCulture)
-                || NumberFormatInfo.GetInstance(provider).NumberDecimalSeparator == ".";
+                || string.Equals(NumberFormatInfo.GetInstance(provider).NumberDecimalSeparator, ".", StringComparison.Ordinal);
         }
 
         // Interprets the cell's numeric value as an Excel serial date (1900 date system).
@@ -216,14 +216,7 @@ namespace ExcelReader.Core.ValueObjects
                 result = default;
                 return false;
             }
-            // Excel's 1900 calendar includes a fictitious 1900-02-29 at serial 60.
-            // Map it explicitly to the adjacent real day; serials 1–59 need the inverse writer shift.
-            double oadate = isDate1904 ? serial + 1462.0 : serial switch
-            {
-                < 60.0 => serial + 1.0,
-                60.0 => 60.0,
-                _ => serial,
-            };
+            double oadate = ExcelEpoch.SerialToOADate(serial, isDate1904);
             // FromOADate throws outside this range; guard first.
             if (oadate is > -657435.0 and < 2958466.0)
             {

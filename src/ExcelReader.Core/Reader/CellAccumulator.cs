@@ -87,6 +87,20 @@ namespace ExcelReader.Core.Reader
             return text.Length;
         }
 
+        internal void AddBool(int col, int style, byte value)
+        {
+            int start = ValueLength;
+            AppendByte(value == 0 ? (byte)'0' : (byte)'1');
+            Add(col, start, 1, CellType.Boolean, style, fromShared: false);
+        }
+
+        internal void AddError(int col, int style, byte code)
+        {
+            int start = ValueLength;
+            int length = AppendErrorText(code);
+            Add(col, start, length, CellType.Error, style, fromShared: false);
+        }
+
         internal void Add(int col, int start, int len, CellType type, int style, bool fromShared, double number = 0, bool hasNumber = false)
         {
             if (Count == _cells.Length)

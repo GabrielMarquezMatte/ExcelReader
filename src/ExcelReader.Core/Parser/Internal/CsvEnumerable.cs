@@ -1,6 +1,5 @@
 using System.Collections;
 using System.Diagnostics.CodeAnalysis;
-using System.Globalization;
 using ExcelReader.Core.Enums;
 using ExcelReader.Core.Reader;
 using ExcelReader.Core.ValueObjects;
@@ -138,19 +137,15 @@ namespace ExcelReader.Core.Parser.Internal
 
         internal ProjectionStep Advance(CsvReader.Enumerator rows, ref T model)
         {
-            _rowNumber++;
-            if (_rowNumber < _headerRow)
-            {
-                return ProjectionStep.Skip;
-            }
-            if (_rowNumber == _headerRow)
+            ProjectionStep step = ProjectionRules.ClassifyRow(ref _rowNumber, _headerRow, _fieldParsers is not null);
+            if (step == ProjectionStep.BuildMap)
             {
                 BuildColumnMap(rows);
                 return ProjectionStep.Skip;
             }
-            if (_fieldParsers is null)
+            if (step != ProjectionStep.Yield)
             {
-                return ProjectionStep.Stop;
+                return step;
             }
             // The raw CSV reader intentionally exposes a terminal blank line as one empty field.
             // Typed projection treats it as absent so it cannot yield a phantom model or fail Required.
@@ -238,8 +233,7 @@ namespace ExcelReader.Core.Parser.Internal
             {
                 if (field >= fieldCount || rows.FieldAt(field).Type == CellType.Empty)
                 {
-                    throw new InvalidOperationException(
-                        $"Required column '{name}' has no value in row {_rowNumber.ToString(CultureInfo.InvariantCulture)}.");
+                    throw ProjectionRules.MissingRequiredValue(name, _rowNumber);
                 }
             }
         }

@@ -1,5 +1,3 @@
-using System.Buffers.Text;
-
 namespace ExcelReader.Core.Reader
 {
     public sealed partial class XlsxReader
@@ -30,7 +28,7 @@ namespace ExcelReader.Core.Reader
             Dictionary<int, bool> custom = new(capacity: 16);
             foreach (var tag in Tags(src, numFmtTag))
             {
-                int id = ParseIntOr(XlsxXml.Attr(tag, " numFmtId="u8), -1);
+                int id = XlsxXml.ParseIntOr(XlsxXml.Attr(tag, " numFmtId="u8), -1);
                 if (id >= 0)
                 {
                     custom[id] = NumberFormat.LooksLikeDate(XlsxXml.DecodeToString(XlsxXml.Attr(tag, " formatCode="u8)));
@@ -52,15 +50,11 @@ namespace ExcelReader.Core.Reader
             List<bool> flags = new(capacity: 16);
             foreach (var xf in Tags(src.Slice(open + 1, end - open - 1), xfTag))
             {
-                int numFmtId = ParseIntOr(XlsxXml.Attr(xf, " numFmtId="u8), 0);
+                int numFmtId = XlsxXml.ParseIntOr(XlsxXml.Attr(xf, " numFmtId="u8), 0);
                 flags.Add(WorkbookLookups.ResolveDateFlag(custom, numFmtId));
             }
             return [.. flags];
         }
 
-        private static int ParseIntOr(ReadOnlySpan<byte> src, int fallback)
-        {
-            return Utf8Parser.TryParse(src, out int v, out _) ? v : fallback;
-        }
     }
 }
