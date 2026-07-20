@@ -106,10 +106,26 @@ namespace ExcelReader.Core.ValueObjects
                 result = Unsafe.As<decimal, T>(ref m);
                 return true;
             }
-            // Integral targets: cast directly when the stored double is a whole number that fits the
-            // target's range — skips the format+parse round trip that the general path below needs.
-            // Non-integral values (e.g. 12.5) and out-of-range values fall through, matching
-            // int.TryParse("12.5") semantics.
+            if (TryParseIntegral(out result))
+            {
+                return true;
+            }
+            // Other numeric targets (decimal, ...), plus out-of-range/non-integral cases above:
+            // format once and parse, which exactly matches "parse the formatted text" —
+            // e.g. int.TryParse fails on "12.5".
+            Span<byte> buffer = stackalloc byte[32];
+            return Utf8Formatter.TryFormat(_number, buffer, out int written)
+                ? T.TryParse(buffer[..written], provider, out result)
+                : T.TryParse(Value, provider, out result);
+        }
+
+        // Integral targets: cast directly when the stored double is a whole number that fits the
+        // target's range — skips the format+parse round trip that the general path below needs.
+        // Non-integral values (e.g. 12.5) and out-of-range values return false so the caller can
+        // preserve the general parser's exact semantics.
+        [SkipLocalsInit]
+        private bool TryParseIntegral<T>([MaybeNullWhen(false)] out T result) where T : IUtf8SpanParsable<T>
+        {
             bool isIntegral = _number == Math.Truncate(_number);
             if (typeof(T) == typeof(int))
             {
@@ -180,13 +196,8 @@ namespace ExcelReader.Core.ValueObjects
                 result = Unsafe.As<byte, T>(ref v);
                 return true;
             }
-            // Other numeric targets (decimal, ...), plus out-of-range/non-integral cases above:
-            // format once and parse, which exactly matches "parse the formatted text" —
-            // e.g. int.TryParse fails on "12.5".
-            Span<byte> buffer = stackalloc byte[32];
-            return Utf8Formatter.TryFormat(_number, buffer, out int written)
-                ? T.TryParse(buffer[..written], provider, out result)
-                : T.TryParse(Value, provider, out result);
+            result = default;
+            return false;
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]

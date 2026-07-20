@@ -62,34 +62,10 @@ namespace ExcelReader.Core.Reader
                             break;
                         }
 
-                        if (id == Rec.Bof)
+                        if (!ReadRecord(cursor, recordStart, id, data))
                         {
-                            if (data.Length < 4 || ReadU16(data, 0) != Biff8Version || ReadU16(data, 2) != SubstreamWorksheet)
-                            {
-                                throw new NotSupportedException("Only BIFF8 worksheet streams are supported.");
-                            }
-                            continue;
-                        }
-                        if (id == Rec.Eof)
-                        {
-                            _ended = true;
                             break;
                         }
-                        if (!TryGetCellRow(id, data, out int row))
-                        {
-                            continue;
-                        }
-                        if (_row < 0)
-                        {
-                            _row = row;
-                        }
-                        else if (row != _row)
-                        {
-                            cursor.Position = recordStart;
-                            break;
-                        }
-
-                        ParseCellRecord(id, data);
                     }
                     if (FinishRow())
                     {
@@ -97,6 +73,41 @@ namespace ExcelReader.Core.Reader
                     }
                 }
                 return false;
+            }
+
+            // Returns false when the current row has ended or the worksheet stream reached EOF.
+            private bool ReadRecord(BiffCursor cursor, long recordStart, int id, ReadOnlySpan<byte> data)
+            {
+                if (id == Rec.Bof)
+                {
+                    if (data.Length < 4 || ReadU16(data, 0) != Biff8Version || ReadU16(data, 2) != SubstreamWorksheet)
+                    {
+                        throw new NotSupportedException("Only BIFF8 worksheet streams are supported.");
+                    }
+                    return true;
+                }
+                if (id == Rec.Eof)
+                {
+                    _ended = true;
+                    return false;
+                }
+                if (!TryGetCellRow(id, data, out int row))
+                {
+                    return true;
+                }
+                if (_row < 0)
+                {
+                    _row = row;
+                    ParseCellRecord(id, data);
+                    return true;
+                }
+                if (row != _row)
+                {
+                    cursor.Position = recordStart;
+                    return false;
+                }
+                ParseCellRecord(id, data);
+                return true;
             }
 
             private bool FinishRow()
