@@ -243,6 +243,7 @@ namespace ExcelReader.Core.Writer
         public void Skip(int count = 1)
         {
             ThrowIfDisposed();
+            ArgumentOutOfRangeException.ThrowIfNegative(count);
             if (count > 0)
             {
                 if (_columnIndex > 16_384 - count)

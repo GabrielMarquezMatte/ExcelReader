@@ -57,6 +57,16 @@ namespace ExcelReader.Tests
         }
 
         [Fact]
+        public void OverlongLengthVarintReturnsFalseWithoutAdvancing()
+        {
+            byte[] data = [.. Id(5), 0x80, 0x80, 0x80, 0x80];
+            var reader = new Biff12RecordReader(data);
+
+            Assert.False(reader.TryReadRecord(out _, out _));
+            Assert.Equal(0, reader.Position);
+        }
+
+        [Fact]
         public void EmptyDataReadsNothing()
         {
             var reader = new Biff12RecordReader([]);

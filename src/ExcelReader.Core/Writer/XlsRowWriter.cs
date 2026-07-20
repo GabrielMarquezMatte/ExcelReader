@@ -195,6 +195,7 @@ namespace ExcelReader.Core.Writer
         public void Skip(int count = 1)
         {
             ThrowIfDisposed();
+            ArgumentOutOfRangeException.ThrowIfNegative(count);
             _columnIndex += count;
         }
 

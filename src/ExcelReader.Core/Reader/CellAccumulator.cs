@@ -1,4 +1,5 @@
 using System.Buffers;
+using System.Runtime.CompilerServices;
 using ExcelReader.Core.Enums;
 using ExcelReader.Core.ValueObjects;
 
@@ -90,7 +91,13 @@ namespace ExcelReader.Core.Reader
         {
             if (Count == _cells.Length)
             {
-                CellDesc[] bigger = ArrayPool<CellDesc>.Shared.Rent(_cells.Length * 2);
+                int capacity = LimitChecks.NextBufferSize(
+                    _maxCellBytes,
+                    _limitName,
+                    _cells.Length,
+                    Count + 1,
+                    Unsafe.SizeOf<CellDesc>());
+                CellDesc[] bigger = ArrayPool<CellDesc>.Shared.Rent(capacity);
                 Array.Copy(_cells, bigger, Count);
                 ArrayPool<CellDesc>.Shared.Return(_cells);
                 _cells = bigger;

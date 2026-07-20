@@ -278,6 +278,19 @@ namespace ExcelReader.Tests
         }
 
         [Fact]
+        public void EmptyFieldsExceedingMaxCellBytesThrows()
+        {
+            // Empty fields add no value bytes, so this specifically exercises the cell-descriptor limit.
+            using var ms = Csv(new string(',', 32));
+            var options = new CsvReaderOptions { MaxCellBytes = 1024 };
+            using var reader = Excel.FromCsv(ms, options: options);
+            using CsvReader.Enumerator e = reader.GetEnumerator();
+
+            ExcelLimitExceededException ex = Assert.Throws<ExcelLimitExceededException>(() => e.MoveNext());
+            Assert.Equal(nameof(CsvReaderOptions.MaxCellBytes), ex.LimitName);
+        }
+
+        [Fact]
         public void SemicolonDelimiterIsRespected()
         {
             using var ms = Csv("a;b;c\n");

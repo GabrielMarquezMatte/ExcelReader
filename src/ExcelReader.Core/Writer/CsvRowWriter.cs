@@ -169,6 +169,7 @@ namespace ExcelReader.Core.Writer
         public void Skip(int count = 1)
         {
             ThrowIfDisposed();
+            ArgumentOutOfRangeException.ThrowIfNegative(count);
             for (int i = 0; i < count; i++)
             {
                 BeginField();

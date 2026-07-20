@@ -11,8 +11,6 @@ namespace ExcelReader.Core.Writer
 {
     public sealed class XlsbWorkbookWriter : IWorkbookWriter<XlsbSheetWriter>
     {
-        private const int MaxSheetNameLength = 31;
-
         private readonly ZipArchive _zip;
         private readonly Stream _stream;
         private readonly bool _leaveOpen;
@@ -69,10 +67,7 @@ namespace ExcelReader.Core.Writer
             ArgumentNullException.ThrowIfNull(name);
             WriterStateGuard.ThrowIfEnded(_state, this);
             WriterStateGuard.RequireStarted(_state, nameof(XlsbWorkbookWriter), "adding sheets");
-            if (name.Length is 0 or > MaxSheetNameLength)
-            {
-                throw new ArgumentException($"Sheet names must be 1 to {MaxSheetNameLength} characters.", nameof(name));
-            }
+            WriterStateGuard.ValidateSheetName(name);
             if (_activeSheet is not null)
             {
                 throw new InvalidOperationException("The previous XlsbSheetWriter must be ended before adding a new sheet.");

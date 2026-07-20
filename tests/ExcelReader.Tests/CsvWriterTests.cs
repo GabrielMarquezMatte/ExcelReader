@@ -80,6 +80,18 @@ namespace ExcelReader.Tests
         }
 
         [Fact]
+        public void NegativeSkipThrows()
+        {
+            string csv = Write(w =>
+            {
+                using CsvRowWriter row = w.StartRow();
+                Assert.Throws<ArgumentOutOfRangeException>(() => row.Skip(-1));
+            });
+
+            Assert.Equal("\r\n", csv);
+        }
+
+        [Fact]
         public void FieldContainingDelimiterIsQuoted()
         {
             string csv = Write(w =>
