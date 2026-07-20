@@ -134,38 +134,62 @@ namespace ExcelReader.Core.Reader
                         case HeadKind.End:
                             return new ValueTask<bool>(false);
                         case HeadKind.Row:
-                            {
-                                ValueTask<bool> beginTask = BeginRowAsync();
-                                if (!beginTask.IsCompletedSuccessfully)
-                                {
-                                    return AwaitThenRestartAsync(beginTask);
-                                }
-                                if (!beginTask.Result)
-                                {
-                                    ValueTask<int> rowBufTask = EnsureRowBufferedAsync();
-                                    if (!rowBufTask.IsCompletedSuccessfully)
-                                    {
-                                        return FinishRowAfterAsync(rowBufTask);
-                                    }
-                                    ParseRow(rowBufTask.Result);
-                                }
-                                return new ValueTask<bool>(true);
-                            }
+                            return ReadRowAsync();
                         default:
+                            ValueTask<bool> skipResult = SkipMarkupOrContinueAsync();
+                            if (skipResult.IsCompletedSuccessfully)
                             {
-                                ValueTask<bool> skipTask = SkipMarkupAsync();
-                                if (!skipTask.IsCompletedSuccessfully)
-                                {
-                                    return AwaitThenRestartAsync(skipTask);
-                                }
-                                if (!skipTask.Result)
-                                {
-                                    return new ValueTask<bool>(false);
-                                }
-                                break;
+                                return new ValueTask<bool>(skipResult.Result);
                             }
+                            break;
                     }
                 }
+            }
+
+            [SuppressMessage("SharpSource", "SS034:Use await to get the result of a Task",
+                Justification = "Every .Result access is guarded by IsCompletedSuccessfully immediately above it — never blocks.")]
+            [SuppressMessage("VisualStudio.Threading", "VSTHRD103:Result synchronously blocks",
+                Justification = "Every .Result access is guarded by IsCompletedSuccessfully immediately above it — never blocks.")]
+            private ValueTask<bool> ReadRowAsync()
+            {
+                ValueTask<bool> beginTask = BeginRowAsync();
+                if (!beginTask.IsCompletedSuccessfully)
+                {
+                    return AwaitThenRestartAsync(beginTask);
+                }
+                if (beginTask.Result)
+                {
+                    return new ValueTask<bool>(true);
+                }
+
+                ValueTask<int> rowBufferTask = EnsureRowBufferedAsync();
+                if (!rowBufferTask.IsCompletedSuccessfully)
+                {
+                    return FinishRowAfterAsync(rowBufferTask);
+                }
+                ParseRow(rowBufferTask.Result);
+                return new ValueTask<bool>(true);
+            }
+
+            // Returns null only when markup was skipped and enumeration should continue immediately.
+            [SuppressMessage("SharpSource", "SS034:Use await to get the result of a Task",
+                Justification = "The .Result access is guarded by IsCompletedSuccessfully immediately above it — never blocks.")]
+            [SuppressMessage("VisualStudio.Threading", "VSTHRD103:Result synchronously blocks",
+                Justification = "The .Result access is guarded by IsCompletedSuccessfully immediately above it — never blocks.")]
+            [SuppressMessage("Reliability", "CA2012:Use ValueTasks correctly",
+                Justification = "The ValueTask is either returned through AwaitThenRestartAsync or consumed once after confirming synchronous completion.")]
+            private ValueTask<bool> SkipMarkupOrContinueAsync()
+            {
+                ValueTask<bool> skipTask = SkipMarkupAsync();
+                if (!skipTask.IsCompletedSuccessfully)
+                {
+                    return AwaitThenRestartAsync(skipTask);
+                }
+                if (skipTask.Result)
+                {
+                    return new ValueTask<bool>(true);
+                }
+                return new ValueTask<bool>(false);
             }
 
             // Safe for every pending step above except the row-buffered check below: none of them
