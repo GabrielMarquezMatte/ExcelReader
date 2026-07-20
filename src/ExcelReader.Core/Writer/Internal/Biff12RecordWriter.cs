@@ -11,16 +11,6 @@ namespace ExcelReader.Core.Writer.Internal
             dest.Write(payload);
         }
 
-        // For records whose payload length the caller already knows (fixed-layout cells, row headers):
-        // writes just the id + length header, so the caller can then write the payload's fields straight
-        // into `dest` (e.g. via WriteCellHeader/WriteU32/WriteDouble) instead of building it in a temp
-        // buffer and copying it in — one fewer memcpy per cell.
-        internal static void WriteRecordHeader(BiffBuffer dest, int id, int length)
-        {
-            WriteId(dest, id);
-            WriteVarint(dest, length);
-        }
-
         // One reservation (one Ensure/bounds check) for the whole record — id + length header + payload
         // — instead of a separate Ensure per field (WriteRecordHeader's two WriteByte calls, then one
         // per WriteU32/WriteDouble the caller would otherwise make). The returned span aliases dest's
