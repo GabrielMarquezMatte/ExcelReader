@@ -181,7 +181,7 @@ namespace ExcelReader.Core.Reader
             }
             if (format is ExcelFileFormat.Unknown)
             {
-                throw UnknownFormat(stream, leaveOpen);
+                UnknownFormat(stream, leaveOpen);
             }
             return format switch
             {
@@ -207,7 +207,7 @@ namespace ExcelReader.Core.Reader
             if (format is ExcelFileFormat.Unknown)
             {
                 await DisposeOnFailureAsync(stream, leaveOpen).ConfigureAwait(false);
-                throw new InvalidDataException("Unrecognized file format; expected an XLSX/XLSB (ZIP) or XLS (OLE2) workbook.");
+                UnknownFormatException();
             }
             return format switch
             {
@@ -235,10 +235,17 @@ namespace ExcelReader.Core.Reader
             return leaveOpen ? ValueTask.CompletedTask : stream.DisposeAsync();
         }
 
-        private static InvalidDataException UnknownFormat(Stream stream, bool leaveOpen)
+        [DoesNotReturn]
+        private static void UnknownFormat(Stream stream, bool leaveOpen)
         {
             DisposeOnFailure(stream, leaveOpen);
-            return new InvalidDataException("Unrecognized file format; expected an XLSX/XLSB (ZIP) or XLS (OLE2) workbook.");
+            UnknownFormatException();
+        }
+
+        [DoesNotReturn]
+        private static void UnknownFormatException()
+        {
+            throw new InvalidDataException("Unrecognized file format; expected an XLSX/XLSB (ZIP) or XLS (OLE2) workbook.");
         }
 
         // Detection peeks the 8-byte signature then rewinds. For ZIP streams, opens a temporary

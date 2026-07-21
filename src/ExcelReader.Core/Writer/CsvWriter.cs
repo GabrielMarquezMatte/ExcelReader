@@ -119,8 +119,7 @@ namespace ExcelReader.Core.Writer
             ct.ThrowIfCancellationRequested();
             if (_buffer.Length > 0)
             {
-                await _stream.WriteAsync(_buffer.Memory, ct).ConfigureAwait(false);
-                _buffer.Reset();
+                await FlushBufferAsync(ct).ConfigureAwait(false);
             }
             await _stream.FlushAsync(ct).ConfigureAwait(false);
         }

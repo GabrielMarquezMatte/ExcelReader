@@ -136,12 +136,12 @@ namespace ExcelReader.Core.Reader
                         case HeadKind.Row:
                             return ReadRowAsync();
                         default:
-                            ValueTask<bool> skipResult = SkipMarkupOrContinueAsync();
-                            if (skipResult.IsCompletedSuccessfully)
+                            ValueTask<bool>? skipResult = SkipMarkupOrContinue();
+                            if (skipResult is null)
                             {
-                                return new ValueTask<bool>(skipResult.Result);
+                                break; // markup skipped — continue scanning for the next element
                             }
-                            break;
+                            return skipResult.Value;
                     }
                 }
             }
@@ -178,7 +178,7 @@ namespace ExcelReader.Core.Reader
                 Justification = "The .Result access is guarded by IsCompletedSuccessfully immediately above it — never blocks.")]
             [SuppressMessage("Reliability", "CA2012:Use ValueTasks correctly",
                 Justification = "The ValueTask is either returned through AwaitThenRestartAsync or consumed once after confirming synchronous completion.")]
-            private ValueTask<bool> SkipMarkupOrContinueAsync()
+            private ValueTask<bool>? SkipMarkupOrContinue()
             {
                 ValueTask<bool> skipTask = SkipMarkupAsync();
                 if (!skipTask.IsCompletedSuccessfully)
@@ -187,9 +187,9 @@ namespace ExcelReader.Core.Reader
                 }
                 if (skipTask.Result)
                 {
-                    return new ValueTask<bool>(true);
+                    return null; // markup skipped — caller continues the scan loop
                 }
-                return new ValueTask<bool>(false);
+                return new ValueTask<bool>(false); // end of sheetData/worksheet
             }
 
             // Safe for every pending step above except the row-buffered check below: none of them
