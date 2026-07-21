@@ -103,7 +103,7 @@ Relative ordering matches the lower-level writers above (XLS fastest, then XLSB,
 | `struct` (`ExcelParser<T>`) | 15.10 ms | 1.59 MB |
 | `ref struct` + span binding (`RefParser.ParseNamed<T>`) | 12.91 ms | 17.17 KB |
 
-Parsing into a `ref struct` with a `ReadOnlySpan<byte>` text column removes essentially all per-row allocation — ~99.6% less than the `class` baseline — and is ~15% faster, since there's no per-row model allocation and no per-row `string` allocation for the text column. It is not AOT/trim-safe (reflection-based, same tradeoff as `ExcelParser<T>`) and is sync-only: a `ref struct` element type cannot appear in `IAsyncEnumerable<T>`, so this has no async counterpart, permanently.
+Parsing into a `ref struct` with a `ReadOnlySpan<byte>` text column removes essentially all per-row allocation — ~99.6% less than the `class` baseline — and is ~15% faster, since there's no per-row model allocation and no per-row `string` allocation for the text column. It is not AOT/trim-safe (reflection-based, same tradeoff as `ExcelParser<T>`). It can be consumed with `foreach` or `await foreach` but not through `IEnumerable<T>`/`IAsyncEnumerable<T>`/LINQ — a `ref struct` element can't be boxed through those interfaces.
 
 ### Cold start
 
@@ -189,12 +189,24 @@ CSV is exposed as a single, unnamed sheet (`SheetCount == 1`, `SheetName == ""`)
 
 ## Read asynchronously
 
-`Row` and `Cell` are `ref struct` types, so async reading uses a manual loop instead of `await foreach`.
-For XLSX files, the async reader buffers one row at a time and uses the same row parser as the sync reader, so sync and async reads stay behaviorally aligned while awaits happen only when more bytes are needed.
+Every reader supports `await foreach`. For XLSX files, the async reader buffers one row at a time and uses the same row parser as the sync reader, so sync and async reads stay behaviorally aligned while awaits happen only when more bytes are needed.
 
 ```csharp
 using ExcelReader.Core.Reader;
 
+await using var reader = await Excel.FromFileAsync("report.xlsx", cancellationToken);
+
+await foreach (var row in reader)
+{
+    Console.WriteLine(row[0].GetString());
+}
+```
+
+`await foreach` binds to the reader's `GetAsyncEnumerator()` by pattern — the sheet is opened synchronously and only each row advance is awaited. Because `Row` and `Cell` are `ref struct` types, the current row cannot be held across an `await` inside the loop body: read its cells (or copy the values out) before awaiting anything else.
+
+When you need the sheet *opened* asynchronously too (e.g. the first read touches the network), or you need to `await` while a row is in scope, drive the enumerator manually via `GetAsyncEnumeratorAsync`, which awaits the open and threads the cancellation token:
+
+```csharp
 await using var reader = await Excel.FromFileAsync("report.xlsx", cancellationToken);
 await using var rows = await reader.GetAsyncEnumeratorAsync(cancellationToken);
 
@@ -204,6 +216,8 @@ while (await rows.MoveNextAsync())
     Console.WriteLine(row[0].GetString());
 }
 ```
+
+`await foreach` does not accept `.WithCancellation(ct)`: `Row` being a `ref struct` rules out `IAsyncEnumerable<Row>`, so the loop binds to the pattern rather than the interface. Pass the token at open time (as above), or use the manual `GetAsyncEnumeratorAsync(ct)` loop.
 
 ## Parse typed rows
 
@@ -330,11 +344,21 @@ foreach (ChangeRowRef item in RefParser.ParseNamed<ChangeRowRef>(reader))
 }
 ```
 
+The sequence also supports `await foreach`, so a `ref struct` model can be parsed asynchronously — the rows are streamed via `MoveNextAsync` while the model stays a zero-copy `ref struct`:
+
+```csharp
+await using var reader = await Excel.FromFileAsync("changes.xlsx");
+
+await foreach (ChangeRowRef item in RefParser.ParseNamed<ChangeRowRef>(reader))
+{
+    Console.WriteLine($"{Encoding.UTF8.GetString(item.File)}: +{item.LinesAdded}");
+}
+```
+
 A few differences from `ExcelParser<T>`:
 
-- **Span fields alias the reader's row buffer** — valid only until the next row. Copy them out (e.g. `Encoding.UTF8.GetString(span)`) if you need to keep the value past the loop body.
-- **Sync only, permanently.** `IAsyncEnumerable<T>` cannot have a `ref struct` element type, so there is no async counterpart — not a missing feature, a language limitation.
-- **`foreach` only.** The returned sequence cannot be consumed through `IEnumerable<T>`/LINQ — a `ref struct` element can't be boxed through that interface — so iterate it directly.
+- **Span fields alias the reader's row buffer** — valid only until the next row. Copy them out (e.g. `Encoding.UTF8.GetString(span)`) if you need to keep the value past the loop body. Under `await foreach`, the same rule means the model can't be held across an `await` in the loop body.
+- **`foreach` / `await foreach` only.** Consumption is pattern-based — the sequence cannot be surfaced through `IEnumerable<T>`, `IAsyncEnumerable<T>`, or LINQ, because a `ref struct` element can't be boxed through those interfaces (`IAsyncEnumerable<T>` in particular forbids a `ref struct` element type — CS9267). Iterate it directly.
 - **Not AOT/trim-safe**, same tradeoff as `ExcelParser<T>` (both reflect over `T`'s properties and compile setters at runtime).
 - A regular `struct`/`class` model works with `ParseNamed` too — only a genuine `ref struct` model gets the extra zero-copy span-property binding.
 

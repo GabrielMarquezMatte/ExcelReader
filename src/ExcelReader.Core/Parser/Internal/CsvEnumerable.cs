@@ -54,6 +54,8 @@ namespace ExcelReader.Core.Parser.Internal
             return GetAsyncEnumerator(cancellationToken);
         }
 
+        [SuppressMessage("Performance", "HLQ006:GetAsyncEnumerator should return a value type",
+            Justification = "Async enumerator requires a class to host the async state machine.")]
         public AsyncEnumerator GetAsyncEnumerator(CancellationToken cancellationToken = default)
         {
             TypeMapInfo<T> info = TypeMapper<T>.GetCsvInfo();

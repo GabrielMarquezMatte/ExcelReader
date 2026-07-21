@@ -43,6 +43,24 @@ namespace ExcelReader.Tests
             return rows;
         }
 
+        // Consumes the reader through 'await foreach', which binds by pattern to its GetAsyncEnumerator()
+        // (synchronous open, then MoveNextAsync per row) — the whole reason that method exists. Row is a
+        // ref struct, so the body must read it without awaiting (it never lives across the loop's await).
+        private static async Task<List<string[]>> ReadAllViaAsyncEnumerator(CsvReader reader)
+        {
+            var rows = new List<string[]>();
+            await foreach (var row in reader)
+            {
+                var cells = new string[row.ColumnCount];
+                for (int i = 0; i < row.ColumnCount; i++)
+                {
+                    cells[i] = row[i].GetString();
+                }
+                rows.Add(cells);
+            }
+            return rows;
+        }
+
         private static string[] ToArray(CsvReader.Enumerator e)
         {
             var row = e.Current;
@@ -74,6 +92,19 @@ namespace ExcelReader.Tests
             using var reader = Excel.FromCsv(ms);
 
             var rows = await ReadAllAsync(reader);
+
+            Assert.Equal(2, rows.Count);
+            Assert.Equal(["a", "b", "c"], rows[0]);
+            Assert.Equal(["1", "2", "3"], rows[1]);
+        }
+
+        [Fact]
+        public async Task SimpleRowsAreReadViaAsyncEnumerator()
+        {
+            using var ms = Csv("a,b,c\n1,2,3\n");
+            using var reader = Excel.FromCsv(ms);
+
+            var rows = await ReadAllViaAsyncEnumerator(reader);
 
             Assert.Equal(2, rows.Count);
             Assert.Equal(["a", "b", "c"], rows[0]);

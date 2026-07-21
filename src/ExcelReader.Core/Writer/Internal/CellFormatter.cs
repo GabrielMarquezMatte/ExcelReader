@@ -66,6 +66,11 @@ namespace ExcelReader.Core.Writer.Internal
             xml.Write("</t></is></c>"u8);
         }
 
+        private static bool HasEdgeWhitespace(string value)
+        {
+            return value.Length != 0 && (char.IsWhiteSpace(value[0]) || char.IsWhiteSpace(value[^1]));
+        }
+
         internal static void WriteSharedString(BiffBuffer xml, int sharedStringIndex, int columnIndex, int rowNumber, bool includeReference)
         {
             WriteCellOpen(xml, columnIndex, rowNumber, includeReference, includeReference ? " t=\"s\"><v>"u8 : "<c t=\"s\"><v>"u8);
@@ -93,11 +98,6 @@ namespace ExcelReader.Core.Writer.Internal
             WriteCellOpen(xml, columnIndex, rowNumber, includeReference, includeReference ? "><v>"u8 : "<c><v>"u8);
             WriteValue(xml, value, sizeHint: 64);
             xml.Write("</v></c>"u8);
-        }
-
-        private static bool HasEdgeWhitespace(string value)
-        {
-            return value.Length != 0 && (char.IsWhiteSpace(value[0]) || char.IsWhiteSpace(value[^1]));
         }
 
         internal static void WriteNumber(BiffBuffer xml, int value, int columnIndex, int rowNumber, bool includeReference)

@@ -39,11 +39,33 @@ namespace ExcelReader.Core.Parser.Internal
             _context = new ExcelRowContext(reader.IsDate1904, formatProvider ?? CultureInfo.InvariantCulture);
         }
 
-        // Zero-allocation struct enumerator — the supported way to consume this sequence.
+        // The supported way to consume this sequence via foreach.
+        [System.Diagnostics.CodeAnalysis.SuppressMessage("Performance", "HLQ006:GetEnumerator should return a value type",
+            Justification = "The enumerator is a class so the same type can also expose MoveNextAsync for the async path.")]
         public NamedRefRowEnumerator<TModel, TEnumerator> GetEnumerator()
         {
-            return new NamedRefRowEnumerator<TModel, TEnumerator>(
-                _reader.GetEnumerator(), _context, _typeInfo, _comparer, _normalization, _headerRow);
+            return new(_reader.GetEnumerator(), _context, _typeInfo, _comparer, _normalization, _headerRow);
+        }
+
+        // The 'await foreach' entry point: C#'s pattern-based async binding picks up this parameterless
+        // GetAsyncEnumerator() (the enumerator it returns has MoveNextAsync/Current/DisposeAsync). Opens
+        // the sheet synchronously — the reader's GetAsyncEnumerator() is a sync open (no I/O await), the
+        // async work is per-row via MoveNextAsync. A ref-struct TModel can't be surfaced through
+        // IAsyncEnumerable<TModel> (CS9267), so this stays a pattern match, never the interface.
+        [System.Diagnostics.CodeAnalysis.SuppressMessage("Performance", "HLQ006:GetAsyncEnumerator should return a value type",
+            Justification = "The enumerator is a class so the same type can also expose MoveNextAsync for the async path.")]
+        public NamedRefRowEnumerator<TModel, TEnumerator> GetAsyncEnumerator()
+        {
+            return new(_reader.GetAsyncEnumerator(), _context, _typeInfo, _comparer, _normalization, _headerRow);
+        }
+
+        // Manual-use alternative that opens the sheet asynchronously (awaits the reader's async open).
+        // Not reachable by 'await foreach' — its shape (returning a ValueTask of the enumerator) doesn't
+        // match the pattern. Await it, then drive the returned enumerator with MoveNextAsync in a loop.
+        public async ValueTask<NamedRefRowEnumerator<TModel, TEnumerator>> GetAsyncEnumeratorAsync(CancellationToken ct = default)
+        {
+            var enumerator = await _reader.GetAsyncEnumeratorAsync(ct).ConfigureAwait(false);
+            return new(enumerator, _context, _typeInfo, _comparer, _normalization, _headerRow);
         }
 
         IEnumerator<TModel> IEnumerable<TModel>.GetEnumerator()
