@@ -209,6 +209,26 @@ namespace ExcelReader.Tests
         }
 
         [Fact]
+        public async Task ParseNamed_AwaitForeach_EnumeratesRows()
+        {
+            await using var ms = await TypedWorkbook.BuildAsync(
+                ["Name", "Id", "Value", "Date"],
+                ["Alice", 1, 10.5, SampleDate],
+                ["Bob", 2, -3.25, SampleDate.AddDays(1)]);
+
+            using var reader = Excel.From(ms, leaveOpen: true);
+            var results = new List<(string? Name, int Id)>();
+            await foreach (SaleNamedRef s in RefParser.ParseNamed<SaleNamedRef>(reader))
+            {
+                results.Add((s.Name, s.Id));
+            }
+
+            Assert.Equal(2, results.Count);
+            Assert.Equal(("Alice", 1), results[0]);
+            Assert.Equal(("Bob", 2), results[1]);
+        }
+
+        [Fact]
         public async Task IEnumerableInterop_Throws()
         {
             await using var ms = await TypedWorkbook.BuildAsync(["Name", "Id", "Value", "Date"]);

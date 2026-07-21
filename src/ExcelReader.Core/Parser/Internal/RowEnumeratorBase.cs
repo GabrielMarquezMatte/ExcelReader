@@ -47,6 +47,8 @@ namespace ExcelReader.Core.Parser.Internal
 
         private protected abstract ProjectionStep Project();
 
+        [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP007:Don't dispose injected",
+            Justification = "Rows is created for this enumerator alone by the enclosing enumerable's GetEnumerator (reader.GetEnumerator()) — owned here, not injected.")]
         public void Dispose()
         {
             Rows.Dispose();

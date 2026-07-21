@@ -165,6 +165,18 @@ namespace ExcelReader.Core.Reader
             return GetEnumerator();
         }
 
+        [SuppressMessage("Performance", "HLQ006:GetAsyncEnumerator should return a value type",
+            Justification = "Enumerator is a class so the same type can also expose MoveNextAsync for the async path.")]
+        public Enumerator GetAsyncEnumerator()
+        {
+            return GetEnumerator();
+        }
+
+        IExcelRowEnumerator IExcelRowReader<IExcelRowEnumerator>.GetAsyncEnumerator()
+        {
+            return GetAsyncEnumerator();
+        }
+
         public async ValueTask<Enumerator> GetAsyncEnumeratorAsync(CancellationToken ct = default)
         {
             var entry = WorkbookLookups.GetWorksheetEntry(_zip!, _sheets!, _current);
