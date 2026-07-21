@@ -284,6 +284,39 @@ namespace ExcelReader.Tests
         }
 
         [Fact]
+        public async Task EmptySheetNameThrows()
+        {
+            var ms = new MemoryStream();
+            await using var wb = XlsWorkbookWriter.Create(ms, leaveOpen: true);
+            wb.Start();
+
+            Assert.Throws<ArgumentException>(() => wb.AddSheet(string.Empty));
+        }
+
+        [Fact]
+        public async Task InvalidSheetCharacterThrows()
+        {
+            var ms = new MemoryStream();
+            await using var wb = XlsWorkbookWriter.Create(ms, leaveOpen: true);
+            wb.Start();
+
+            Assert.Throws<ArgumentException>(() => wb.AddSheet("Bad[Name"));
+        }
+
+        [Fact]
+        public async Task NegativeSkipThrows()
+        {
+            var ms = new MemoryStream();
+            await using var wb = XlsWorkbookWriter.Create(ms, leaveOpen: true);
+            wb.Start();
+            XlsSheetWriter sheet = wb.AddSheet("S1");
+            sheet.Start();
+            using XlsRowWriter row = sheet.StartRow();
+
+            Assert.Throws<ArgumentOutOfRangeException>(() => row.Skip(-1));
+        }
+
+        [Fact]
         public async Task EmptyWorkbookThrows()
         {
             var ms = new MemoryStream();

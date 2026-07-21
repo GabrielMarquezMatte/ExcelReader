@@ -1,6 +1,7 @@
 using System.Buffers;
 using System.Buffers.Binary;
 using System.Diagnostics.CodeAnalysis;
+using System.Runtime.CompilerServices;
 using static ExcelReader.Core.Reader.Biff12;
 
 namespace ExcelReader.Core.Reader
@@ -84,6 +85,7 @@ namespace ExcelReader.Core.Reader
             return (ms, true);
         }
 
+        [SkipLocalsInit]
         private static WorkbookStream BuildWorkbook(Stream source, bool ownsSource)
         {
             if (source.Length < HeaderSize)

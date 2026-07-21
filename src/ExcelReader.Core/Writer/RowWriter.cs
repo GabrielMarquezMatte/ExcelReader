@@ -79,8 +79,7 @@ namespace ExcelReader.Core.Writer
                 WriteEmptyCell();
                 return;
             }
-            CellFormatter.WriteBool(_row, value.Value, _columnIndex, _rowNumber, ConsumeCellReference());
-            _columnIndex++;
+            Write(value.Value);
         }
 
         public void Write(DateTime value)
@@ -98,8 +97,7 @@ namespace ExcelReader.Core.Writer
                 WriteEmptyCell();
                 return;
             }
-            CellFormatter.WriteDateTime(_row, value.Value, _columnIndex, _rowNumber, ConsumeCellReference());
-            _columnIndex++;
+            Write(value.Value);
         }
 
         // DateOnly shares the DateTime date-serial cell format (midnight), so it round-trips as a date.
@@ -118,8 +116,7 @@ namespace ExcelReader.Core.Writer
                 WriteEmptyCell();
                 return;
             }
-            CellFormatter.WriteDateTime(_row, value.Value.ToDateTime(TimeOnly.MinValue), _columnIndex, _rowNumber, ConsumeCellReference());
-            _columnIndex++;
+            Write(value.Value);
         }
 
         // TimeOnly is written as an Excel time serial: the fraction of a 24h day, in [0,1). This is a
@@ -139,8 +136,7 @@ namespace ExcelReader.Core.Writer
                 WriteEmptyCell();
                 return;
             }
-            CellFormatter.WriteNumber(_row, value.Value.Ticks / (double)TimeSpan.TicksPerDay, _columnIndex, _rowNumber, ConsumeCellReference());
-            _columnIndex++;
+            Write(value.Value);
         }
 
         public void Write(int value)
@@ -158,8 +154,7 @@ namespace ExcelReader.Core.Writer
                 WriteEmptyCell();
                 return;
             }
-            CellFormatter.WriteNumber(_row, value.Value, _columnIndex, _rowNumber, ConsumeCellReference());
-            _columnIndex++;
+            Write(value.Value);
         }
 
         public void Write(long value)
@@ -177,8 +172,7 @@ namespace ExcelReader.Core.Writer
                 WriteEmptyCell();
                 return;
             }
-            CellFormatter.WriteNumber(_row, value.Value, _columnIndex, _rowNumber, ConsumeCellReference());
-            _columnIndex++;
+            Write(value.Value);
         }
 
         public void Write(double value)
@@ -196,8 +190,7 @@ namespace ExcelReader.Core.Writer
                 WriteEmptyCell();
                 return;
             }
-            CellFormatter.WriteNumber(_row, value.Value, _columnIndex, _rowNumber, ConsumeCellReference());
-            _columnIndex++;
+            Write(value.Value);
         }
 
         public void Write(decimal value)
@@ -215,8 +208,7 @@ namespace ExcelReader.Core.Writer
                 WriteEmptyCell();
                 return;
             }
-            CellFormatter.WriteNumber(_row, value.Value, _columnIndex, _rowNumber, ConsumeCellReference());
-            _columnIndex++;
+            Write(value.Value);
         }
 
         public void Write<T>(T value)
@@ -236,13 +228,13 @@ namespace ExcelReader.Core.Writer
                 WriteEmptyCell();
                 return;
             }
-            CellFormatter.WriteNumber(_row, value.Value, _columnIndex, _rowNumber, ConsumeCellReference());
-            _columnIndex++;
+            Write(value.Value);
         }
 
         public void Skip(int count = 1)
         {
             ThrowIfDisposed();
+            ArgumentOutOfRangeException.ThrowIfNegative(count);
             if (count > 0)
             {
                 if (_columnIndex > 16_384 - count)

@@ -249,6 +249,18 @@ namespace ExcelReader.Tests
             Assert.False(e.MoveNext());
         }
 
+        [Theory]
+        [InlineData("")]
+        [InlineData("12345678901234567890123456789012")]
+        [InlineData("Bad[Name")]
+        public async Task InvalidSheetNameThrows(string name)
+        {
+            await using var wb = await XlsbWorkbookWriter.CreateAsync(new MemoryStream(), ct: TestContext.Current.CancellationToken);
+            await wb.StartAsync(TestContext.Current.CancellationToken);
+
+            Assert.Throws<ArgumentException>(() => wb.AddSheet(name));
+        }
+
         [Fact]
         public async Task BulkXlsbCellRowRoundTrip()
         {

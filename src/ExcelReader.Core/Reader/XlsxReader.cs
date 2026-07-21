@@ -1,6 +1,7 @@
 using System.Buffers;
 using System.Diagnostics.CodeAnalysis;
 using System.IO.Compression;
+using ExcelReader.Core.Writer.Internal;
 
 namespace ExcelReader.Core.Reader
 {
@@ -71,21 +72,12 @@ namespace ExcelReader.Core.Reader
         }
 
         // Async open: central directory and parts are read with the .NET 10 async zip APIs.
-        [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP001:Dispose created",
-            Justification = "zip ownership transfers to the returned reader; disposed there or in the catch.")]
-        internal static async ValueTask<XlsxReader> CreateAsync(Stream stream, bool leaveOpen, ExcelReaderOptions? options = null, CancellationToken ct = default)
+        internal static ValueTask<XlsxReader> CreateAsync(Stream stream, bool leaveOpen, ExcelReaderOptions? options = null, CancellationToken ct = default)
         {
             ExcelReaderOptions effectiveOptions = options ?? ExcelReaderOptions.Default;
             DecompressedByteCounter decompressedBytes = new(effectiveOptions.MaxTotalDecompressedBytes);
-            ZipArchive? zip = null;
-            try
+            return ZipReaderOpen.OpenAsync(stream, leaveOpen, ct, async zip =>
             {
-#if NET10_0_OR_GREATER
-                zip = await ZipArchive.CreateAsync(stream, ZipArchiveMode.Read, leaveOpen: true, entryNameEncoding: null, ct).ConfigureAwait(false);
-#else
-                ct.ThrowIfCancellationRequested();
-                zip = new ZipArchive(stream, ZipArchiveMode.Read, leaveOpen: true);
-#endif
                 var wb = await ZipEntryBytes.ReadAsync(zip, "xl/workbook.xml", decompressedBytes, ct).ConfigureAwait(false);
                 var rels = await ZipEntryBytes.ReadAsync(zip, "xl/_rels/workbook.xml.rels", decompressedBytes, ct).ConfigureAwait(false);
                 var sheets = ParseSheets(wb, rels);
@@ -96,23 +88,7 @@ namespace ExcelReader.Core.Reader
                 var styleIsDate = ParseStyleDateFlags(await ZipEntryBytes.ReadAsync(zip, "xl/styles.xml", decompressedBytes, ct).ConfigureAwait(false));
                 bool date1904 = ParseDate1904(wb);
                 return new XlsxReader(stream, leaveOpen, zip, sheets, styleIsDate, date1904, effectiveOptions, decompressedBytes);
-            }
-            catch
-            {
-                if (zip is not null)
-                {
-#if NET10_0_OR_GREATER
-                    await zip.DisposeAsync().ConfigureAwait(false);
-#else
-                    zip.Dispose();
-#endif
-                }
-                if (!leaveOpen)
-                {
-                    await stream.DisposeAsync().ConfigureAwait(false);
-                }
-                throw;
-            }
+            });
         }
 
         public string SheetName => _sheets[_current].Name;
@@ -211,11 +187,7 @@ namespace ExcelReader.Core.Reader
                 ArrayPool<byte>.Shared.Return(_sharedFlat);
                 _sharedFlat = [];
             }
-#if NET10_0_OR_GREATER
-            await _zip.DisposeAsync().ConfigureAwait(false);
-#else
-            _zip.Dispose();
-#endif
+            await ZipArchiveDisposal.DisposeAsync(_zip).ConfigureAwait(false);
             if (!_leaveOpen)
             {
                 await _stream.DisposeAsync().ConfigureAwait(false);

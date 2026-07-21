@@ -63,6 +63,7 @@ namespace ExcelReader.Core.ValueObjects
             return FastDouble.TryParse(Value, out value) || double.TryParse(Value, CultureInfo.InvariantCulture, out value);
         }
 
+        [SkipLocalsInit]
         public bool TryParse<T>(IFormatProvider? provider, [MaybeNullWhen(false)] out T result) where T : IUtf8SpanParsable<T>
         {
             // Fast path for binary doubles: hand back the stored value without round-tripping
@@ -105,10 +106,26 @@ namespace ExcelReader.Core.ValueObjects
                 result = Unsafe.As<decimal, T>(ref m);
                 return true;
             }
-            // Integral targets: cast directly when the stored double is a whole number that fits the
-            // target's range — skips the format+parse round trip that the general path below needs.
-            // Non-integral values (e.g. 12.5) and out-of-range values fall through, matching
-            // int.TryParse("12.5") semantics.
+            if (TryParseIntegral(out result))
+            {
+                return true;
+            }
+            // Other numeric targets (decimal, ...), plus out-of-range/non-integral cases above:
+            // format once and parse, which exactly matches "parse the formatted text" —
+            // e.g. int.TryParse fails on "12.5".
+            Span<byte> buffer = stackalloc byte[32];
+            return Utf8Formatter.TryFormat(_number, buffer, out int written)
+                ? T.TryParse(buffer[..written], provider, out result)
+                : T.TryParse(Value, provider, out result);
+        }
+
+        // Integral targets: cast directly when the stored double is a whole number that fits the
+        // target's range — skips the format+parse round trip that the general path below needs.
+        // Non-integral values (e.g. 12.5) and out-of-range values return false so the caller can
+        // preserve the general parser's exact semantics.
+        [SkipLocalsInit]
+        private bool TryParseIntegral<T>([MaybeNullWhen(false)] out T result) where T : IUtf8SpanParsable<T>
+        {
             bool isIntegral = _number == Math.Truncate(_number);
             if (typeof(T) == typeof(int))
             {
@@ -179,13 +196,8 @@ namespace ExcelReader.Core.ValueObjects
                 result = Unsafe.As<byte, T>(ref v);
                 return true;
             }
-            // Other numeric targets (decimal, ...), plus out-of-range/non-integral cases above:
-            // format once and parse, which exactly matches "parse the formatted text" —
-            // e.g. int.TryParse fails on "12.5".
-            Span<byte> buffer = stackalloc byte[32];
-            return Utf8Formatter.TryFormat(_number, buffer, out int written)
-                ? T.TryParse(buffer[..written], provider, out result)
-                : T.TryParse(Value, provider, out result);
+            result = default;
+            return false;
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -193,7 +205,7 @@ namespace ExcelReader.Core.ValueObjects
         {
             return provider is null
                 || ReferenceEquals(provider, CultureInfo.InvariantCulture)
-                || NumberFormatInfo.GetInstance(provider).NumberDecimalSeparator == ".";
+                || string.Equals(NumberFormatInfo.GetInstance(provider).NumberDecimalSeparator, ".", StringComparison.Ordinal);
         }
 
         // Interprets the cell's numeric value as an Excel serial date (1900 date system).
@@ -215,14 +227,7 @@ namespace ExcelReader.Core.ValueObjects
                 result = default;
                 return false;
             }
-            // Excel's 1900 calendar includes a fictitious 1900-02-29 at serial 60.
-            // Map it explicitly to the adjacent real day; serials 1–59 need the inverse writer shift.
-            double oadate = isDate1904 ? serial + 1462.0 : serial switch
-            {
-                < 60.0 => serial + 1.0,
-                60.0 => 60.0,
-                _ => serial,
-            };
+            double oadate = ExcelEpoch.SerialToOADate(serial, isDate1904);
             // FromOADate throws outside this range; guard first.
             if (oadate is > -657435.0 and < 2958466.0)
             {
@@ -253,6 +258,7 @@ namespace ExcelReader.Core.ValueObjects
         // Allocates — only call when you actually need a string. For a shared-string cell backed by a
         // dedup cache (see the constructor), a repeated value (categorical columns are the common case)
         // returns the same cached instance instead of decoding UTF-8 and allocating again.
+        [SkipLocalsInit]
         public string GetString()
         {
             if (_hasNumber)

@@ -83,7 +83,7 @@ namespace ExcelReader.Core.Reader
                     return true;
                 }
             }
-            return true;
+            return false;
         }
     }
 }
