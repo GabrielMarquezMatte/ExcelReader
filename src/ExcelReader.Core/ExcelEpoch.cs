@@ -10,12 +10,8 @@ namespace ExcelReader.Core
             {
                 return serial + 1462.0;
             }
-            return serial switch
-            {
-                < 60.0 => serial + 1.0,
-                60.0 => 60.0,
-                _ => serial,
-            };
+            var isLessThan60 = serial < 60.0;
+            return isLessThan60 ? serial + 1.0 : serial;
         }
 
         internal static double OADateToSerial(double oadate, bool date1904)
