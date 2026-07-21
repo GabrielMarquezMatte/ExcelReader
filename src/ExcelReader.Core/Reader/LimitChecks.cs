@@ -12,13 +12,14 @@ namespace ExcelReader.Core.Reader
 
         // Format-agnostic core shared by ExcelReaderOptions (XLSX/XLSB/XLS) and CsvReaderOptions —
         // both cap a single buffered cell/record the same way, just under different option types.
-        internal static int NextBufferSize(int maxCellBytes, string limitName, int current, int needed)
+        internal static int NextBufferSize(int maxCellBytes, string limitName, int current, int needed, int elementSize = 1)
         {
             long doubled = (long)current * 2;
             long next = Math.Max(doubled, needed);
-            if (maxCellBytes > 0 && next > maxCellBytes)
+            long bytes = next * elementSize;
+            if (maxCellBytes > 0 && bytes > maxCellBytes)
             {
-                throw new ExcelLimitExceededException(limitName, maxCellBytes, next);
+                throw new ExcelLimitExceededException(limitName, maxCellBytes, bytes);
             }
             if (next > Array.MaxLength)
             {

@@ -1,6 +1,7 @@
 using System.Buffers.Text;
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
+using System.Runtime.CompilerServices;
 using ExcelReader.Core.Enums;
 using ExcelReader.Core.ValueObjects;
 
@@ -12,23 +13,14 @@ namespace ExcelReader.Core.Reader
         // buffer; a single <c>...</c> element is guaranteed contiguous (the buffer grows if needed).
         [SuppressMessage("Design", "CA1034:Nested types should not be visible",
             Justification = "Public nested enumerator is the standard foreach pattern.")]
-        public sealed class Enumerator : IExcelRowEnumerator
+        public sealed class Enumerator : PooledStreamRowEnumerator, IExcelRowEnumerator
         {
             // Borrowed: the reader outlives the enumerator and owns its own disposal — do not dispose here.
             [SuppressMessage("Usage", "CA2213:Disposable fields should be disposed", Justification = "Borrowed, not owned.")]
             [SuppressMessage("SharpSource", "SS066:Disposable field is not disposed", Justification = "Borrowed, not owned.")]
             private readonly XlsxReader _reader;
-            private readonly CancellationToken _ct; // honored only by the async path
             // Owned: opened by Get(Async)Enumerator for this enumerator alone; disposed in Dispose(Async).
             [SuppressMessage("SharpSource", "SS066:Disposable field is not disposed", Justification = "Disposed in Dispose().")]
-            private Stream? _sheet;
-            private readonly BufferedStreamCursor _io;
-            private byte[] _buf => _io.Buf;
-            private int _pos { get => _io.Pos; set => _io.Pos = value; }
-            private int _len => _io.Len;
-            private bool _eof => _io.Eof;
-
-            private readonly CellAccumulator _acc; // per-row decoded values + cell descriptors
             private int _nextCol;
 
             // Non-null only when this sheet's elements carry a namespace prefix (e.g. <x:row>); holds the
@@ -42,13 +34,9 @@ namespace ExcelReader.Core.Reader
             private ReadOnlySpan<byte> CClose => _ns is null ? "</c>"u8 : _ns.CClose;
 
             internal Enumerator(XlsxReader reader, Stream sheet, long entryLength = 0, CancellationToken ct = default)
+                : base(sheet, reader._options.MaxCellBytes, nameof(ExcelReaderOptions.MaxCellBytes), WorkbookLookups.InitialBufferCapacity(entryLength), ct)
             {
                 _reader = reader;
-                _sheet = sheet;
-                _ct = ct;
-                _io = new BufferedStreamCursor(reader._options.MaxCellBytes, nameof(ExcelReaderOptions.MaxCellBytes),
-                    WorkbookLookups.InitialBufferCapacity(entryLength));
-                _acc = new CellAccumulator(reader._options.MaxCellBytes, nameof(ExcelReaderOptions.MaxCellBytes));
             }
 
             public Row Current =>
@@ -146,38 +134,62 @@ namespace ExcelReader.Core.Reader
                         case HeadKind.End:
                             return new ValueTask<bool>(false);
                         case HeadKind.Row:
-                            {
-                                ValueTask<bool> beginTask = BeginRowAsync();
-                                if (!beginTask.IsCompletedSuccessfully)
-                                {
-                                    return AwaitThenRestartAsync(beginTask);
-                                }
-                                if (!beginTask.Result)
-                                {
-                                    ValueTask<int> rowBufTask = EnsureRowBufferedAsync();
-                                    if (!rowBufTask.IsCompletedSuccessfully)
-                                    {
-                                        return FinishRowAfterAsync(rowBufTask);
-                                    }
-                                    ParseRow(rowBufTask.Result);
-                                }
-                                return new ValueTask<bool>(true);
-                            }
+                            return ReadRowAsync();
                         default:
+                            ValueTask<bool>? skipResult = SkipMarkupOrContinue();
+                            if (skipResult is null)
                             {
-                                ValueTask<bool> skipTask = SkipMarkupAsync();
-                                if (!skipTask.IsCompletedSuccessfully)
-                                {
-                                    return AwaitThenRestartAsync(skipTask);
-                                }
-                                if (!skipTask.Result)
-                                {
-                                    return new ValueTask<bool>(false);
-                                }
-                                break;
+                                break; // markup skipped — continue scanning for the next element
                             }
+                            return skipResult.Value;
                     }
                 }
+            }
+
+            [SuppressMessage("SharpSource", "SS034:Use await to get the result of a Task",
+                Justification = "Every .Result access is guarded by IsCompletedSuccessfully immediately above it — never blocks.")]
+            [SuppressMessage("VisualStudio.Threading", "VSTHRD103:Result synchronously blocks",
+                Justification = "Every .Result access is guarded by IsCompletedSuccessfully immediately above it — never blocks.")]
+            private ValueTask<bool> ReadRowAsync()
+            {
+                ValueTask<bool> beginTask = BeginRowAsync();
+                if (!beginTask.IsCompletedSuccessfully)
+                {
+                    return AwaitThenRestartAsync(beginTask);
+                }
+                if (beginTask.Result)
+                {
+                    return new ValueTask<bool>(true);
+                }
+
+                ValueTask<int> rowBufferTask = EnsureRowBufferedAsync();
+                if (!rowBufferTask.IsCompletedSuccessfully)
+                {
+                    return FinishRowAfterAsync(rowBufferTask);
+                }
+                ParseRow(rowBufferTask.Result);
+                return new ValueTask<bool>(true);
+            }
+
+            // Returns null only when markup was skipped and enumeration should continue immediately.
+            [SuppressMessage("SharpSource", "SS034:Use await to get the result of a Task",
+                Justification = "The .Result access is guarded by IsCompletedSuccessfully immediately above it — never blocks.")]
+            [SuppressMessage("VisualStudio.Threading", "VSTHRD103:Result synchronously blocks",
+                Justification = "The .Result access is guarded by IsCompletedSuccessfully immediately above it — never blocks.")]
+            [SuppressMessage("Reliability", "CA2012:Use ValueTasks correctly",
+                Justification = "The ValueTask is either returned through AwaitThenRestartAsync or consumed once after confirming synchronous completion.")]
+            private ValueTask<bool>? SkipMarkupOrContinue()
+            {
+                ValueTask<bool> skipTask = SkipMarkupAsync();
+                if (!skipTask.IsCompletedSuccessfully)
+                {
+                    return AwaitThenRestartAsync(skipTask);
+                }
+                if (skipTask.Result)
+                {
+                    return null; // markup skipped — caller continues the scan loop
+                }
+                return new ValueTask<bool>(false); // end of sheetData/worksheet
             }
 
             // Safe for every pending step above except the row-buffered check below: none of them
@@ -428,7 +440,7 @@ namespace ExcelReader.Core.Reader
                     col = _nextCol;
                 }
                 _nextCol = col + 1;
-                int style = ParseInt(sVal);
+                int style = XlsxXml.ParseIntOr(sVal, 0);
                 var kind = ClassifyKind(tVal);
                 bool selfClose = buf[gt - 1] == '/';
                 p = gt + 1; // consume open tag; p now at inner start (or next element if self-closed)
@@ -661,6 +673,7 @@ namespace ExcelReader.Core.Reader
                 _acc.Add(col, s, _acc.ValueLength - s, CellType.ExcelString, style, fromShared: false);
             }
 
+            [SkipLocalsInit]
             private static bool TryParseIsoDate(ReadOnlySpan<byte> utf8, out DateTime value)
             {
                 // ST_Xstring ISO dates are always ASCII; transcode to chars for DateTime.TryParse.
@@ -789,10 +802,6 @@ namespace ExcelReader.Core.Reader
                 return true;
             }
 
-            private static int ParseInt(ReadOnlySpan<byte> src)
-            {
-                return Utf8Parser.TryParse(src, out int v, out _) ? v : 0;
-            }
 
             private static bool IsBoundary(byte b)
             {
@@ -816,7 +825,7 @@ namespace ExcelReader.Core.Reader
                     {
                         return -1;
                     }
-                    _io.Fill(_sheet!);
+                    Fill();
                 }
             }
 
@@ -833,7 +842,7 @@ namespace ExcelReader.Core.Reader
                     {
                         return -1;
                     }
-                    _io.Fill(_sheet!);
+                    Fill();
                 }
             }
 
@@ -851,11 +860,6 @@ namespace ExcelReader.Core.Reader
             {
                 int rel = buf.AsSpan(from, boundExclusive - from).IndexOf(seq);
                 return rel < 0 ? -1 : from + rel;
-            }
-
-            private void Ensure(int n)
-            {
-                _io.Ensure(_sheet!, n);
             }
 
             // Async twins of the search/refill primitives. Each is split so the common case (the target is
@@ -905,7 +909,7 @@ namespace ExcelReader.Core.Reader
                     {
                         return _len;
                     }
-                    _io.Fill(_sheet!);
+                    Fill();
                 }
             }
 
@@ -977,22 +981,12 @@ namespace ExcelReader.Core.Reader
                 return -1;
             }
 
-            private ValueTask EnsureAsync(int n)
-            {
-                return _io.EnsureAsync(_sheet!, n, _ct);
-            }
-
-            private ValueTask FillAsync()
-            {
-                return _io.FillAsync(_sheet!, _ct);
-            }
-
             [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP007:Don't dispose injected",
                 Justification = "_sheet is opened for this enumerator and owned by it.")]
             public void Dispose()
             {
-                _sheet?.Dispose();
-                _sheet = null;
+                _source?.Dispose();
+                _source = null;
                 ReturnBuffers();
             }
 
@@ -1000,19 +994,14 @@ namespace ExcelReader.Core.Reader
                 Justification = "_sheet is opened for this enumerator and owned by it.")]
             public async ValueTask DisposeAsync()
             {
-                if (_sheet is not null)
+                if (_source is not null)
                 {
-                    await _sheet.DisposeAsync().ConfigureAwait(false);
-                    _sheet = null;
+                    await _source.DisposeAsync().ConfigureAwait(false);
+                    _source = null;
                 }
                 ReturnBuffers();
             }
 
-            private void ReturnBuffers()
-            {
-                _io.Return();
-                _acc.Return();
-            }
         }
     }
 }

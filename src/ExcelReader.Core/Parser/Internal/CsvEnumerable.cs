@@ -1,6 +1,5 @@
 using System.Collections;
 using System.Diagnostics.CodeAnalysis;
-using System.Globalization;
 using ExcelReader.Core.Enums;
 using ExcelReader.Core.Reader;
 using ExcelReader.Core.ValueObjects;
@@ -13,7 +12,7 @@ namespace ExcelReader.Core.Parser.Internal
     // CellDesc re-walk, no per-cell binding search. It reuses the same compiled ColumnParser<T>
     // delegates as the generic parser, but from the CSV type-map (dates parse text, not serials).
     [SuppressMessage("Design", "CA1034:Nested types should not be visible",
-        Justification = "Public nested struct Enumerator is the standard foreach pattern.")]
+        Justification = "Public nested Enumerator/AsyncEnumerator are the standard foreach/await-foreach pattern.")]
     public sealed class CsvEnumerable<T> : IEnumerable<T>, IAsyncEnumerable<T>
     {
         private readonly CsvReader _reader;
@@ -29,6 +28,8 @@ namespace ExcelReader.Core.Parser.Internal
 
         [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP015:Member should not return created and cached instance",
             Justification = "Each call creates a fresh enumerator; no caching.")]
+        [SuppressMessage("Performance", "HLQ006:GetEnumerator should return a value type",
+            Justification = "Enumerator is a class so the sync and async paths can share the SyncRowEnumerator/AsyncRowEnumerator base plumbing.")]
         public Enumerator GetEnumerator()
         {
             TypeMapInfo<T> info = TypeMapper<T>.GetCsvInfo();
@@ -60,13 +61,9 @@ namespace ExcelReader.Core.Parser.Internal
             return new AsyncEnumerator(_reader, info, _config.ColumnNameComparer, _config.HeaderNormalization, _config.HeaderRow, _config.Culture, effective);
         }
 
-        public struct Enumerator : IEnumerator<T>
+        public sealed class Enumerator : SyncRowEnumerator<T, CsvReader.Enumerator>
         {
-            [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP006:Implement IDisposable",
-                Justification = "Struct implements IDisposable; rows disposed in Dispose().")]
-            private readonly CsvReader.Enumerator _rows;
             private CsvRowProjector<T> _projector;
-            private T _current = default!;
 
             internal Enumerator(
                 CsvReader.Enumerator rows,
@@ -75,52 +72,20 @@ namespace ExcelReader.Core.Parser.Internal
                 HeaderNormalization normalization,
                 int headerRow,
                 IFormatProvider provider)
+                : base(rows)
             {
-                _rows = rows;
                 _projector = new CsvRowProjector<T>(typeInfo, comparer, normalization, headerRow, provider);
             }
 
-            public readonly T Current => _current;
-
-            readonly object? IEnumerator.Current => _current;
-
-            public bool MoveNext()
+            private protected override ProjectionStep Project()
             {
-                while (_rows.MoveNext())
-                {
-                    switch (_projector.Advance(_rows, ref _current))
-                    {
-                        case ProjectionStep.Yield:
-                            return true;
-                        case ProjectionStep.Stop:
-                            return false;
-                    }
-                }
-                return false;
-            }
-
-            [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP007:Don't dispose injected",
-                Justification = "The enumerator owns _rows; it was created by GetEnumerator, not injected from outside.")]
-            public readonly void Dispose()
-            {
-                _rows.Dispose();
-            }
-
-            public void Reset()
-            {
-                throw new NotSupportedException();
+                return _projector.Advance(Rows, ref CurrentValue);
             }
         }
 
-        public sealed class AsyncEnumerator : IAsyncEnumerator<T>
+        public sealed class AsyncEnumerator : AsyncRowEnumerator<T, CsvReader, CsvReader.Enumerator>
         {
-            // Borrowed: the caller owns the CsvReader's lifetime. Only _rows (opened here) is disposed.
-            [SuppressMessage("SharpSource", "SS066:Disposable field is not disposed", Justification = "Borrowed, not owned.")]
-            private readonly CsvReader _reader;
-            private readonly CancellationToken _ct;
             private CsvRowProjector<T> _projector;
-            private CsvReader.Enumerator? _rows;
-            private T _current = default!;
 
             internal AsyncEnumerator(
                 CsvReader reader,
@@ -130,81 +95,16 @@ namespace ExcelReader.Core.Parser.Internal
                 int headerRow,
                 IFormatProvider provider,
                 CancellationToken ct)
+                : base(reader, ct)
             {
-                _reader = reader;
                 _projector = new CsvRowProjector<T>(typeInfo, comparer, normalization, headerRow, provider);
-                _ct = ct;
-            }
-
-            public T Current => _current;
-
-            // Non-async fast path once _rows exists — see ExcelEnumerable.AsyncEnumerator.MoveNextAsync
-            // for the rationale: CsvReader.Enumerator.MoveNextAsync already resolves synchronously for
-            // ~99.9% of records, so this avoids paying for a second state machine on top of that one.
-            [SuppressMessage("SharpSource", "SS034:Use await to get the result of a Task",
-                Justification = "The .Result access is guarded by IsCompletedSuccessfully immediately above it — never blocks.")]
-            [SuppressMessage("VisualStudio.Threading", "VSTHRD103:Result synchronously blocks",
-                Justification = "The .Result access is guarded by IsCompletedSuccessfully immediately above it — never blocks.")]
-            public ValueTask<bool> MoveNextAsync()
-            {
-                if (_rows is null)
-                {
-                    return AdvanceAsync();
-                }
-                while (true)
-                {
-                    ValueTask<bool> moveTask = _rows.MoveNextAsync();
-                    if (!moveTask.IsCompletedSuccessfully)
-                    {
-                        return AwaitThenContinueAsync(moveTask);
-                    }
-                    if (!moveTask.Result)
-                    {
-                        return new ValueTask<bool>(false);
-                    }
-                    switch (Project())
-                    {
-                        case ProjectionStep.Yield:
-                            return new ValueTask<bool>(true);
-                        case ProjectionStep.Stop:
-                            return new ValueTask<bool>(false);
-                            // Skip: loop again, still synchronous.
-                    }
-                }
-            }
-
-            private async ValueTask<bool> AwaitThenContinueAsync(ValueTask<bool> pendingMoveNext)
-            {
-                if (!await pendingMoveNext.ConfigureAwait(false))
-                {
-                    return false;
-                }
-                switch (Project())
-                {
-                    case ProjectionStep.Yield:
-                        return true;
-                    case ProjectionStep.Stop:
-                        return false;
-                }
-                return await MoveNextAsync().ConfigureAwait(false); // Skip: resume the fast path.
-            }
-
-            private async ValueTask<bool> AdvanceAsync()
-            {
-                _rows = await _reader.GetAsyncEnumeratorAsync(_ct).ConfigureAwait(false);
-                return await MoveNextAsync().ConfigureAwait(false);
             }
 
             // Synchronous projection step: the ref-struct Cells never escape this call, so no span
-            // is held across the await in AdvanceAsync.
-            private ProjectionStep Project()
+            // is held across the await in the base class's AdvanceAsync.
+            private protected override ProjectionStep Project()
             {
-                return _projector.Advance(_rows!, ref _current);
-            }
-
-            public ValueTask DisposeAsync()
-            {
-                return _rows is null ? ValueTask.CompletedTask : _rows.DisposeAsync();
+                return _projector.Advance(Rows!, ref CurrentValue);
             }
         }
     }
@@ -237,19 +137,15 @@ namespace ExcelReader.Core.Parser.Internal
 
         internal ProjectionStep Advance(CsvReader.Enumerator rows, ref T model)
         {
-            _rowNumber++;
-            if (_rowNumber < _headerRow)
-            {
-                return ProjectionStep.Skip;
-            }
-            if (_rowNumber == _headerRow)
+            ProjectionStep step = ProjectionRules.ClassifyRow(ref _rowNumber, _headerRow, _fieldParsers is not null);
+            if (step == ProjectionStep.BuildMap)
             {
                 BuildColumnMap(rows);
                 return ProjectionStep.Skip;
             }
-            if (_fieldParsers is null)
+            if (step != ProjectionStep.Yield)
             {
-                return ProjectionStep.Stop;
+                return step;
             }
             // The raw CSV reader intentionally exposes a terminal blank line as one empty field.
             // Typed projection treats it as absent so it cannot yield a phantom model or fail Required.
@@ -337,8 +233,7 @@ namespace ExcelReader.Core.Parser.Internal
             {
                 if (field >= fieldCount || rows.FieldAt(field).Type == CellType.Empty)
                 {
-                    throw new InvalidOperationException(
-                        $"Required column '{name}' has no value in row {_rowNumber.ToString(CultureInfo.InvariantCulture)}.");
+                    throw ProjectionRules.MissingRequiredValue(name, _rowNumber);
                 }
             }
         }

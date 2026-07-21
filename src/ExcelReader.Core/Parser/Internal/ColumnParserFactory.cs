@@ -5,6 +5,7 @@ using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Linq.Expressions;
 using System.Reflection;
+using System.Runtime.CompilerServices;
 using System.Text;
 using ExcelReader.Core.Enums;
 using ExcelReader.Core.ValueObjects;
@@ -52,6 +53,8 @@ namespace ExcelReader.Core.Parser.Internal
         [
             typeof(int), typeof(long), typeof(double), typeof(float), typeof(decimal),
             typeof(short), typeof(byte), typeof(uint), typeof(ulong), typeof(ushort),
+            // Guid is only reached here on net9+, where it implements IUtf8SpanParsable. On net8 the
+            // dedicated Guid build paths (guarded by #if NET8_0 below) intercept it before this set.
             typeof(Guid),
         ];
 
@@ -62,27 +65,11 @@ namespace ExcelReader.Core.Parser.Internal
         {
             Type propType = prop.PropertyType;
             Type? innerNullable = Nullable.GetUnderlyingType(propType);
-            if (csvTextDates)
-            {
-                Type effective = innerNullable ?? propType;
-                if (effective == typeof(DateTime))
-                {
-                    return innerNullable is null ? BuildTextDateTimeParser<T>(prop) : BuildTextNullableDateTimeParser<T>(prop);
-                }
-                if (effective == typeof(DateOnly))
-                {
-                    return innerNullable is null ? BuildTextDateOnlyParser<T>(prop) : BuildTextNullableDateOnlyParser<T>(prop);
-                }
-                if (effective == typeof(TimeOnly))
-                {
-                    return innerNullable is null ? BuildTextTimeOnlyParser<T>(prop) : BuildTextNullableTimeOnlyParser<T>(prop);
-                }
-            }
             if (innerNullable is not null)
             {
-                return BuildNullableParser<T>(prop, innerNullable);
+                return BuildNullableParser<T>(prop, innerNullable, csvTextDates);
             }
-            return BuildConcreteParser<T>(prop, propType);
+            return BuildConcreteParser<T>(prop, propType, csvTextDates);
         }
 
         // Builds a parser from a user-supplied IExcelCellConverter<TProperty>. The converter type must
@@ -104,7 +91,7 @@ namespace ExcelReader.Core.Parser.Internal
                 .Invoke(null, [prop, converter])!;
         }
 
-        private static ColumnParser<T>? BuildConcreteParser<T>(PropertyInfo prop, Type propType)
+        private static ColumnParser<T>? BuildConcreteParser<T>(PropertyInfo prop, Type propType, bool textDates)
         {
             if (propType == typeof(string))
             {
@@ -112,24 +99,24 @@ namespace ExcelReader.Core.Parser.Internal
             }
             if (propType == typeof(bool))
             {
-                return BuildBoolParser<T>(prop);
+                return BuildValue<T, bool>(prop, ReadBool);
             }
             if (propType == typeof(DateTime))
             {
-                return BuildDateTimeParser<T>(prop);
+                return BuildValue<T, DateTime>(prop, DateTimeReader(textDates));
             }
             if (propType == typeof(DateOnly))
             {
-                return BuildDateOnlyParser<T>(prop);
+                return BuildValue<T, DateOnly>(prop, DateOnlyReader(textDates));
             }
             if (propType == typeof(TimeOnly))
             {
-                return BuildTimeOnlyParser<T>(prop);
+                return BuildValue<T, TimeOnly>(prop, TimeOnlyReader(textDates));
             }
 #if NET8_0
             if (propType == typeof(Guid))
             {
-                return BuildGuidParser<T>(prop);
+                return BuildValue<T, Guid>(prop, ReadGuid);
             }
 #endif
             if (propType.IsEnum)
@@ -147,29 +134,29 @@ namespace ExcelReader.Core.Parser.Internal
                 .Invoke(null, [prop]);
         }
 
-        private static ColumnParser<T>? BuildNullableParser<T>(PropertyInfo prop, Type innerType)
+        private static ColumnParser<T>? BuildNullableParser<T>(PropertyInfo prop, Type innerType, bool textDates)
         {
             if (innerType == typeof(bool))
             {
-                return BuildNullableBoolParser<T>(prop);
+                return BuildNullableValue<T, bool>(prop, ReadBool);
             }
             if (innerType == typeof(DateTime))
             {
-                return BuildNullableDateTimeParser<T>(prop);
+                return BuildNullableValue<T, DateTime>(prop, DateTimeReader(textDates));
             }
 #if NET8_0
             if (innerType == typeof(Guid))
             {
-                return BuildNullableGuidParser<T>(prop);
+                return BuildNullableValue<T, Guid>(prop, ReadGuid);
             }
 #endif
             if (innerType == typeof(DateOnly))
             {
-                return BuildNullableDateOnlyParser<T>(prop);
+                return BuildNullableValue<T, DateOnly>(prop, DateOnlyReader(textDates));
             }
             if (innerType == typeof(TimeOnly))
             {
-                return BuildNullableTimeOnlyParser<T>(prop);
+                return BuildNullableValue<T, TimeOnly>(prop, TimeOnlyReader(textDates));
             }
             if (innerType.IsEnum)
             {
@@ -196,12 +183,18 @@ namespace ExcelReader.Core.Parser.Internal
             };
         }
 
-        private static ColumnParser<T> BuildBoolParser<T>(PropertyInfo prop)
+        // Shared shape behind every value-type column parser below: read the cell into a V via one of
+        // the Read*/TryParse* strategies, then assign through the compiled setter. Build*Parser methods
+        // differ only in which reader they plug in, so they collapse to one-line factories over these
+        // two generics instead of ~12 structurally identical bodies.
+        private delegate bool CellReader<V>(in Cell cell, bool isDate1904, IFormatProvider provider, out V value);
+
+        private static ColumnParser<T> BuildValue<T, V>(PropertyInfo prop, CellReader<V> read)
         {
-            RefAction<T, bool> setter = CompileSetter<T, bool>(prop);
-            return (ref model, in cell, _, _) =>
+            RefAction<T, V> setter = CompileSetter<T, V>(prop);
+            return (ref model, in cell, isDate1904, provider) =>
             {
-                if (!TryParseBool(in cell, out bool value))
+                if (!read(in cell, isDate1904, provider, out V value))
                 {
                     return false;
                 }
@@ -210,64 +203,85 @@ namespace ExcelReader.Core.Parser.Internal
             };
         }
 
-        private static ColumnParser<T> BuildDateTimeParser<T>(PropertyInfo prop)
+        private static ColumnParser<T> BuildNullableValue<T, V>(PropertyInfo prop, CellReader<V> read)
+            where V : struct
         {
-            RefAction<T, DateTime> setter = CompileSetter<T, DateTime>(prop);
-            return (ref model, in cell, isDate1904, _) =>
+            RefAction<T, V?> setter = CompileSetter<T, V?>(prop);
+            return (ref model, in cell, isDate1904, provider) =>
             {
-                if (!cell.TryGetDateTime(isDate1904, out DateTime dt))
+                if (!read(in cell, isDate1904, provider, out V value))
                 {
                     return false;
                 }
-                setter(ref model, dt);
+                setter(ref model, value);
                 return true;
             };
         }
 
-        private static ColumnParser<T> BuildDateOnlyParser<T>(PropertyInfo prop)
+#pragma warning disable S1172 // CellReader has one fixed signature for all typed cell readers.
+        private static bool ReadBool(in Cell cell, bool isDate1904, IFormatProvider provider, out bool value)
         {
-            RefAction<T, DateOnly> setter = CompileSetter<T, DateOnly>(prop);
-            return (ref model, in cell, isDate1904, _) =>
-            {
-                if (!cell.TryGetDateTime(isDate1904, out DateTime dt))
-                {
-                    return false;
-                }
-                setter(ref model, DateOnly.FromDateTime(dt));
-                return true;
-            };
+            return TryParseBool(in cell, out value);
         }
 
-        private static ColumnParser<T> BuildTimeOnlyParser<T>(PropertyInfo prop)
+        private static bool ReadDateTime(in Cell cell, bool isDate1904, IFormatProvider _, out DateTime value)
         {
-            RefAction<T, TimeOnly> setter = CompileSetter<T, TimeOnly>(prop);
-            return (ref model, in cell, _, _) =>
-            {
-                // TryGetDouble reads the binary double (XLS/XLSB) or parses the text invariantly (XLSX),
-                // matching how the serial is written; a culture-aware parse would misread "0.5" cells.
-                if (!cell.TryGetDouble(out double serial))
-                {
-                    return false;
-                }
-                setter(ref model, TimeOnlyFromSerial(serial));
-                return true;
-            };
+            return cell.TryGetDateTime(isDate1904, out value);
         }
 
-        private static ColumnParser<T> BuildNullableTimeOnlyParser<T>(PropertyInfo prop)
+        private static bool ReadDateOnly(in Cell cell, bool isDate1904, IFormatProvider _, out DateOnly value)
         {
-            RefAction<T, TimeOnly?> setter = CompileSetter<T, TimeOnly?>(prop);
-            return (ref model, in cell, _, _) =>
+            if (!cell.TryGetDateTime(isDate1904, out DateTime dt))
             {
-                // TryGetDouble reads the binary double (XLS/XLSB) or parses the text invariantly (XLSX),
-                // matching how the serial is written; a culture-aware parse would misread "0.5" cells.
-                if (!cell.TryGetDouble(out double serial))
-                {
-                    return false;
-                }
-                setter(ref model, TimeOnlyFromSerial(serial));
-                return true;
-            };
+                value = default;
+                return false;
+            }
+            value = DateOnly.FromDateTime(dt);
+            return true;
+        }
+
+        // TryGetDouble reads the binary double (XLS/XLSB) or parses the text invariantly (XLSX),
+        // matching how the serial is written; a culture-aware parse would misread "0.5" cells.
+        private static bool ReadTimeOnly(in Cell cell, bool isDate1904, IFormatProvider provider, out TimeOnly value)
+        {
+            if (!cell.TryGetDouble(out double serial))
+            {
+                value = default;
+                return false;
+            }
+            value = TimeOnlyFromSerial(serial);
+            return true;
+        }
+
+        private static bool ReadTextDateTime(in Cell cell, bool _, IFormatProvider provider, out DateTime value)
+        {
+            return TryParseDateTimeText(in cell, provider, out value);
+        }
+
+        private static bool ReadTextDateOnly(in Cell cell, bool _, IFormatProvider provider, out DateOnly value)
+        {
+            return TryParseDateOnlyText(in cell, provider, out value);
+        }
+
+        private static bool ReadTextTimeOnly(in Cell cell, bool _, IFormatProvider provider, out TimeOnly value)
+        {
+            return TryParseTimeOnlyText(in cell, provider, out value);
+        }
+#pragma warning restore S1172
+
+        private static CellReader<DateTime> DateTimeReader(bool textDates)
+        {
+            return textDates ? ReadTextDateTime : ReadDateTime;
+        }
+
+        private static CellReader<DateOnly> DateOnlyReader(bool textDates)
+        {
+            return textDates ? ReadTextDateOnly : ReadDateOnly;
+        }
+
+        private static CellReader<TimeOnly> TimeOnlyReader(bool textDates)
+        {
+            return textDates ? ReadTextTimeOnly : ReadTimeOnly;
         }
 
         // Excel time serial -> TimeOnly: the fractional part of the day, rounded to the nearest tick to
@@ -279,99 +293,13 @@ namespace ExcelReader.Core.Parser.Internal
             return new TimeOnly(ticks == TimeSpan.TicksPerDay ? 0 : ticks);
         }
 
-        // CSV text-date parsers: the cell holds a date string (e.g. "2026-07-02" or ISO "O" form).
-        // DateTime/DateOnly implement ISpanParsable (char) but not IUtf8SpanParsable, so decode the
-        // short field to a stack char buffer and parse culture-aware — no heap allocation.
-        private static ColumnParser<T> BuildTextDateTimeParser<T>(PropertyInfo prop)
-        {
-            RefAction<T, DateTime> setter = CompileSetter<T, DateTime>(prop);
-            return (ref model, in cell, _, provider) =>
-            {
-                if (!TryParseDateTimeText(in cell, provider, out DateTime dt))
-                {
-                    return false;
-                }
-                setter(ref model, dt);
-                return true;
-            };
-        }
-
-        private static ColumnParser<T> BuildTextNullableDateTimeParser<T>(PropertyInfo prop)
-        {
-            RefAction<T, DateTime?> setter = CompileSetter<T, DateTime?>(prop);
-            return (ref model, in cell, _, provider) =>
-            {
-                if (!TryParseDateTimeText(in cell, provider, out DateTime dt))
-                {
-                    return false;
-                }
-                setter(ref model, dt);
-                return true;
-            };
-        }
-
-        private static ColumnParser<T> BuildTextDateOnlyParser<T>(PropertyInfo prop)
-        {
-            RefAction<T, DateOnly> setter = CompileSetter<T, DateOnly>(prop);
-            return (ref model, in cell, _, provider) =>
-            {
-                if (!TryParseDateOnlyText(in cell, provider, out DateOnly d))
-                {
-                    return false;
-                }
-                setter(ref model, d);
-                return true;
-            };
-        }
-
-        private static ColumnParser<T> BuildTextNullableDateOnlyParser<T>(PropertyInfo prop)
-        {
-            RefAction<T, DateOnly?> setter = CompileSetter<T, DateOnly?>(prop);
-            return (ref model, in cell, _, provider) =>
-            {
-                if (!TryParseDateOnlyText(in cell, provider, out DateOnly d))
-                {
-                    return false;
-                }
-                setter(ref model, d);
-                return true;
-            };
-        }
-
-        private static ColumnParser<T> BuildTextTimeOnlyParser<T>(PropertyInfo prop)
-        {
-            RefAction<T, TimeOnly> setter = CompileSetter<T, TimeOnly>(prop);
-            return (ref model, in cell, _, provider) =>
-            {
-                if (!TryParseTimeOnlyText(in cell, provider, out TimeOnly t))
-                {
-                    return false;
-                }
-                setter(ref model, t);
-                return true;
-            };
-        }
-
-        private static ColumnParser<T> BuildTextNullableTimeOnlyParser<T>(PropertyInfo prop)
-        {
-            RefAction<T, TimeOnly?> setter = CompileSetter<T, TimeOnly?>(prop);
-            return (ref model, in cell, _, provider) =>
-            {
-                if (!TryParseTimeOnlyText(in cell, provider, out TimeOnly t))
-                {
-                    return false;
-                }
-                setter(ref model, t);
-                return true;
-            };
-        }
-
         // DateTime/DateOnly implement ISpanParsable (char) and IUtf8SpanFormattable, but NOT
         // IUtf8SpanParsable (no parse-from-UTF-8) on either net8 or net10. So decode the short date
         // field to a stack char buffer — allocation-free — and parse culture-aware (honors Culture,
         // e.g. pt-BR "02/07/2026"). Falls back to a string for pathologically long fields.
         private const int MaxStackDateChars = 128;
 
+        [SkipLocalsInit]
         private static bool TryParseDateTimeText(in Cell cell, IFormatProvider provider, out DateTime value)
         {
             ReadOnlySpan<byte> utf8 = cell.Value;
@@ -392,6 +320,7 @@ namespace ExcelReader.Core.Parser.Internal
             return DateTime.TryParse(cell.GetString(), provider, DateTimeStyles.None, out value);
         }
 
+        [SkipLocalsInit]
         private static bool TryParseDateOnlyText(in Cell cell, IFormatProvider provider, out DateOnly value)
         {
             ReadOnlySpan<byte> utf8 = cell.Value;
@@ -404,6 +333,7 @@ namespace ExcelReader.Core.Parser.Internal
             return DateOnly.TryParse(cell.GetString(), provider, DateTimeStyles.None, out value);
         }
 
+        [SkipLocalsInit]
         private static bool TryParseTimeOnlyText(in Cell cell, IFormatProvider provider, out TimeOnly value)
         {
             ReadOnlySpan<byte> utf8 = cell.Value;
@@ -431,48 +361,6 @@ namespace ExcelReader.Core.Parser.Internal
             };
         }
 
-        private static ColumnParser<T> BuildNullableBoolParser<T>(PropertyInfo prop)
-        {
-            RefAction<T, bool?> setter = CompileSetter<T, bool?>(prop);
-            return (ref model, in cell, _, _) =>
-            {
-                if (!TryParseBool(in cell, out bool value))
-                {
-                    return false;
-                }
-                setter(ref model, value);
-                return true;
-            };
-        }
-
-        private static ColumnParser<T> BuildNullableDateTimeParser<T>(PropertyInfo prop)
-        {
-            RefAction<T, DateTime?> setter = CompileSetter<T, DateTime?>(prop);
-            return (ref model, in cell, isDate1904, _) =>
-            {
-                if (!cell.TryGetDateTime(isDate1904, out DateTime dt))
-                {
-                    return false;
-                }
-                setter(ref model, dt);
-                return true;
-            };
-        }
-
-        private static ColumnParser<T> BuildNullableDateOnlyParser<T>(PropertyInfo prop)
-        {
-            RefAction<T, DateOnly?> setter = CompileSetter<T, DateOnly?>(prop);
-            return (ref model, in cell, isDate1904, _) =>
-            {
-                if (!cell.TryGetDateTime(isDate1904, out DateTime dt))
-                {
-                    return false;
-                }
-                setter(ref model, DateOnly.FromDateTime(dt));
-                return true;
-            };
-        }
-
         [SuppressMessage("Blocker Code Smell", "S3011:Reflection should not be used to increase accessibility of classes, methods, or fields",
             Justification = "Called via MakeGenericMethod dispatch; private access is intentional and type-safe.")]
         private static ColumnParser<T> BuildNullableParsableCore<T, TProp>(PropertyInfo prop)
@@ -492,6 +380,7 @@ namespace ExcelReader.Core.Parser.Internal
         }
 
 #if NET8_0
+        [SkipLocalsInit]
         private static bool TryParseGuid(in Cell cell, out Guid value)
         {
             ReadOnlySpan<byte> utf8 = cell.Value;
@@ -533,35 +422,13 @@ namespace ExcelReader.Core.Parser.Internal
             }
         }
 
-        // Guid does not implement IUtf8SpanParsable<Guid> on all targets, so parse from the string
-        // form rather than the UTF-8 generic dispatch. Culture is irrelevant for Guid.
-        private static ColumnParser<T> BuildGuidParser<T>(PropertyInfo prop)
+        private static bool ReadGuid(in Cell cell, bool isDate1904, IFormatProvider provider, out Guid value)
         {
-            RefAction<T, Guid> setter = CompileSetter<T, Guid>(prop);
-            return (ref model, in cell, _, _) =>
-            {
-                if (!TryParseGuid(in cell, out Guid value))
-                {
-                    return false;
-                }
-                setter(ref model, value);
-                return true;
-            };
+            return TryParseGuid(in cell, out value);
         }
 
-        private static ColumnParser<T> BuildNullableGuidParser<T>(PropertyInfo prop)
-        {
-            RefAction<T, Guid?> setter = CompileSetter<T, Guid?>(prop);
-            return (ref model, in cell, _, _) =>
-            {
-                if (!TryParseGuid(in cell, out Guid value))
-                {
-                    return false;
-                }
-                setter(ref model, value);
-                return true;
-            };
-        }
+        // Guid does not implement IUtf8SpanParsable<Guid> on all targets, so parse from the string
+        // form rather than the UTF-8 generic dispatch. Culture is irrelevant for Guid.
 #endif
 
         private static class EnumCache<TEnum>
@@ -644,6 +511,8 @@ namespace ExcelReader.Core.Parser.Internal
                 }
                 return map.ToFrozenDictionary();
             }
+
+            [SkipLocalsInit]
             public static bool TryParse(in Cell cell, out TEnum value)
             {
                 if (cell.Type == CellType.Number && cell.TryGetDouble(out double d))

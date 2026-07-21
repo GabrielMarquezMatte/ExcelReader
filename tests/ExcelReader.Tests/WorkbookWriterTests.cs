@@ -721,6 +721,32 @@ namespace ExcelReader.Tests
             Assert.Equal("ccc", rows[0].C);
         }
 
+        [Fact]
+        public async Task NegativeSkipThrows()
+        {
+            await using var ms = new MemoryStream();
+            await using var wb = await WorkbookWriter.CreateAsync(ms, leaveOpen: true, ct: TestContext.Current.CancellationToken).ConfigureAwait(true);
+            await wb.StartAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
+            SheetWriter sheet = wb.AddSheet("Sheet1");
+            await sheet.StartAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
+            await using RowWriter row = await sheet.StartRowAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
+
+            Assert.Throws<ArgumentOutOfRangeException>(() => row.Skip(-1));
+        }
+
+        [Theory]
+        [InlineData("")]
+        [InlineData("12345678901234567890123456789012")]
+        [InlineData("Bad[Name")]
+        public async Task InvalidSheetNameThrows(string name)
+        {
+            await using var ms = new MemoryStream();
+            await using var wb = await WorkbookWriter.CreateAsync(ms, leaveOpen: true, ct: TestContext.Current.CancellationToken).ConfigureAwait(true);
+            await wb.StartAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
+
+            Assert.Throws<ArgumentException>(() => wb.AddSheet(name));
+        }
+
         // --- XML special characters in strings ---
 
         [Fact]

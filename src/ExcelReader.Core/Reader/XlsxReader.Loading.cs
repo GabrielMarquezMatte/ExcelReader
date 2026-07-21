@@ -143,7 +143,7 @@ namespace ExcelReader.Core.Reader
                 int sstEnd = IdxOf(src, sstPos, (byte)'>');
                 if (sstEnd > sstPos)
                 {
-                    uniqueCount = ParseIntOr(XlsxXml.Attr(src[sstPos..sstEnd], " uniqueCount="u8), 0);
+                    uniqueCount = XlsxXml.ParseIntOr(XlsxXml.Attr(src[sstPos..sstEnd], " uniqueCount="u8), 0);
                 }
             }
 

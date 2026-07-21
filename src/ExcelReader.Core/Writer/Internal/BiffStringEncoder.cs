@@ -12,14 +12,6 @@ namespace ExcelReader.Core.Writer.Internal
     // specials on read, so those (and anything > 0xFF) force UTF-16 to stay lossless.
     internal static class BiffStringEncoder
     {
-        // u16 char count + flags + chars. Used by Label and Format records.
-        internal static void WriteLong(BiffBuffer buffer, ReadOnlySpan<char> value)
-        {
-            bool compressed = CanCompress(value);
-            buffer.WriteU16(value.Length);
-            WriteFlagsAndChars(buffer, value, compressed);
-        }
-
         // u8 char count + flags + chars. Used by BoundSheet sheet names.
         internal static void WriteShort(BiffBuffer buffer, ReadOnlySpan<char> value)
         {

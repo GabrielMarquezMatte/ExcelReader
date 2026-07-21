@@ -211,8 +211,8 @@ namespace ExcelReader.Core.Writer
         // typeof(T) == typeof(...) folds to a JIT constant per generic instantiation, so the dead
         // branches are elided and — unlike a type-pattern switch on an unconstrained T — no boxing
         // occurs. Mirrors the pattern in CellFormatter.WriteValue<T>/CsvRowWriter.WriteUtf8Field.
-        internal static double ToDouble<T>(T value)
-            where T : IUtf8SpanFormattable
+        [SkipLocalsInit]
+        internal static double ToDouble<T>(T value) where T : IUtf8SpanFormattable
         {
             if (typeof(T) == typeof(double))
             {

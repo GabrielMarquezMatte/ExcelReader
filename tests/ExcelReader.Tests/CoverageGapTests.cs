@@ -18,7 +18,7 @@ namespace ExcelReader.Tests
         // IUtf8SpanFormattable but NOT IConvertible — forces the XLSB writer's format-then-parse fallback.
         private readonly struct Formattable(double value) : IUtf8SpanFormattable
         {
-            public string ToString(string? format, IFormatProvider? formatProvider)
+            public string ToString(IFormatProvider? formatProvider)
             {
                 return value.ToString(formatProvider);
             }

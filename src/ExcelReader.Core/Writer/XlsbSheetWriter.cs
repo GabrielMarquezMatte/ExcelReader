@@ -158,9 +158,6 @@ namespace ExcelReader.Core.Writer
             MaybeFlush();
         }
 
-        // Fixed-length records (known-size cells, row headers) write header + fields straight into
-        // _records, skipping the Payload-buffer round trip that WriteRecord/Payload.Reset() needs for
-        // variable-length records.
         private void MaybeFlush()
         {
             if (_records.Length >= SpillThreshold)
@@ -239,6 +236,9 @@ namespace ExcelReader.Core.Writer
             _rowActive = true;
         }
 
+        // Fixed-length records (known-size cells, row headers) write header + fields straight into
+        // _records, skipping the Payload-buffer round trip that WriteRecord/Payload.Reset() needs for
+        // variable-length records.
         private void WriteRowHeader(int rowNumber)
         {
             const int Length = (6 * 4) + 1; // 6 x u32 + 1 byte

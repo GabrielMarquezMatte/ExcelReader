@@ -317,27 +317,7 @@ namespace ExcelReader.Core.Reader
                         pos += 4;
                     }
                     bool compressed = (flags & 1) == 0;
-                    int produced = 0;
-                    bool truncated = false;
-                    for (int c = 0; c < chars; c++)
-                    {
-                        // Drop boundaries already behind us (splits outside the character array), then
-                        // consume the grbit for a boundary that lands exactly on this character.
-                        while (boundaryIdx < boundaries.Length && boundaries[boundaryIdx] < pos) { boundaryIdx++; }
-                        if (boundaryIdx < boundaries.Length && boundaries[boundaryIdx] == pos)
-                        {
-                            if (pos >= sst.Length) { truncated = true; break; }
-                            compressed = (sst[pos] & 1) == 0;
-                            pos++;
-                            boundaryIdx++;
-                        }
-                        int step = compressed ? 1 : 2;
-                        if (pos + step > sst.Length) { truncated = true; break; }
-                        scratch[produced++] = compressed
-                            ? DecodeCp1252(sst[pos])
-                            : (char)(sst[pos] | (sst[pos + 1] << 8));
-                        pos += step;
-                    }
+                    int produced = DecodeChars(sst, boundaries, chars, scratch, ref pos, ref boundaryIdx, ref compressed, out bool truncated);
                     int maxBytes = System.Text.Encoding.UTF8.GetMaxByteCount(produced);
                     EnsureSharedCapacity(options, ref flat, flatLen + maxBytes);
                     flatLen += System.Text.Encoding.UTF8.GetBytes(scratch.AsSpan(0, produced), flat.AsSpan(flatLen));
@@ -358,6 +338,35 @@ namespace ExcelReader.Core.Reader
                 ArrayPool<byte>.Shared.Return(flat);
                 ArrayPool<char>.Shared.Return(scratch);
             }
+        }
+
+        // Decodes one shared string's code units into scratch, advancing the position and boundary
+        // index and flipping the compression mode at each grbit boundary. Returns the unit count
+        // produced, and reports truncated when the source ends mid-string.
+        private static int DecodeChars(ReadOnlySpan<byte> sst, ReadOnlySpan<int> boundaries, int chars, char[] scratch, ref int pos, ref int boundaryIdx, ref bool compressed, out bool truncated)
+        {
+            truncated = false;
+            int produced = 0;
+            for (int c = 0; c < chars; c++)
+            {
+                // Drop boundaries already behind us (splits outside the character array), then
+                // consume the grbit for a boundary that lands exactly on this character.
+                while (boundaryIdx < boundaries.Length && boundaries[boundaryIdx] < pos) { boundaryIdx++; }
+                if (boundaryIdx < boundaries.Length && boundaries[boundaryIdx] == pos)
+                {
+                    if (pos >= sst.Length) { truncated = true; break; }
+                    compressed = (sst[pos] & 1) == 0;
+                    pos++;
+                    boundaryIdx++;
+                }
+                int step = compressed ? 1 : 2;
+                if (pos + step > sst.Length) { truncated = true; break; }
+                scratch[produced++] = compressed
+                    ? DecodeCp1252(sst[pos])
+                    : (char)(sst[pos] | (sst[pos + 1] << 8));
+                pos += step;
+            }
+            return produced;
         }
 
         private static void EnsureSharedCapacity(ExcelReaderOptions options, ref byte[] buffer, int needed)

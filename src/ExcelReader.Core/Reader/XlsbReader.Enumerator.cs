@@ -12,33 +12,19 @@ namespace ExcelReader.Core.Reader
         // buffer boundary is detected and retried after the next fill.
         [SuppressMessage("Design", "CA1034:Nested types should not be visible",
             Justification = "Public nested enumerator is the standard foreach pattern.")]
-        public sealed class Enumerator : IExcelRowEnumerator
+        public sealed class Enumerator : PooledStreamRowEnumerator, IExcelRowEnumerator
         {
             [SuppressMessage("SharpSource", "SS066:Disposable field is not disposed", Justification = "Borrowed, not owned.")]
             private readonly XlsbReader _reader;
-            private readonly CancellationToken _ct;
-            [SuppressMessage("SharpSource", "SS066:Disposable field is not disposed", Justification = "Disposed in Dispose().")]
-            private Stream? _sheet;
-            private readonly BufferedStreamCursor _io;
-            private byte[] _buf => _io.Buf;
-            private int _pos { get => _io.Pos; set => _io.Pos = value; }
-            private int _len => _io.Len;
-            private bool _eof => _io.Eof;
             private bool _ended;
             // A BrtRowHdr for the NEXT row was already consumed while collecting cells for the current row.
             // On the next MoveNext call, skip the "seek to row header" step.
             private bool _pendingRowHdr;
 
-            private readonly CellAccumulator _acc;
-
             internal Enumerator(XlsbReader reader, Stream sheet, long entryLength = 0, CancellationToken ct = default)
+                : base(sheet, reader._options.MaxCellBytes, nameof(ExcelReaderOptions.MaxCellBytes), WorkbookLookups.InitialBufferCapacity(entryLength), ct)
             {
                 _reader = reader;
-                _sheet = sheet;
-                _ct = ct;
-                _io = new BufferedStreamCursor(reader._options.MaxCellBytes, nameof(ExcelReaderOptions.MaxCellBytes),
-                    WorkbookLookups.InitialBufferCapacity(entryLength));
-                _acc = new CellAccumulator(reader._options.MaxCellBytes, nameof(ExcelReaderOptions.MaxCellBytes));
             }
 
             public Row Current =>
@@ -300,11 +286,11 @@ namespace ExcelReader.Core.Reader
                         AddDouble(col, style, Biff12.ReadF64(payload, 8));
                         break;
                     case Brt.CellIsst when payload.Length >= 12:
-                    {
-                        var (start, len) = _reader.SharedAt((int)Biff12.ReadU32(payload, 8));
-                        _acc.Add(col, start, len, CellType.ExcelString, style, fromShared: true);
-                        break;
-                    }
+                        {
+                            var (start, len) = _reader.SharedAt((int)Biff12.ReadU32(payload, 8));
+                            _acc.Add(col, start, len, CellType.ExcelString, style, fromShared: true);
+                            break;
+                        }
                     case Brt.CellSt when Biff12.TryReadWideString(payload, 8, out ReadOnlySpan<char> chars, out _):
                         AppendString(col, style, chars);
                         break;
@@ -332,7 +318,7 @@ namespace ExcelReader.Core.Reader
                     case Brt.CellRString when payload.Length >= 9 && Biff12.TryReadWideString(payload, 9, out ReadOnlySpan<char> richChars, out _):
                         AppendString(col, style, richChars);
                         break;
-                    // CellBlank: no value to emit
+                        // CellBlank: no value to emit
                 }
             }
 
@@ -358,16 +344,12 @@ namespace ExcelReader.Core.Reader
 
             private void AppendBool(int col, int style, byte value)
             {
-                int start = _acc.ValueLength;
-                _acc.AppendByte(value == 0 ? (byte)'0' : (byte)'1');
-                _acc.Add(col, start, 1, CellType.Boolean, style, fromShared: false);
+                _acc.AddBool(col, style, value);
             }
 
             private void AppendError(int col, int style, byte error)
             {
-                int start = _acc.ValueLength;
-                int len = _acc.AppendErrorText(error);
-                _acc.Add(col, start, len, CellType.Error, style, fromShared: false);
+                _acc.AddError(col, style, error);
             }
 
             private void ResetRow()
@@ -420,22 +402,12 @@ namespace ExcelReader.Core.Reader
                 }
             }
 
-            private void Fill()
-            {
-                _io.Fill(_sheet!);
-            }
-
-            private ValueTask FillAsync()
-            {
-                return _io.FillAsync(_sheet!, _ct);
-            }
-
             [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP007:Don't dispose injected",
                 Justification = "_sheet is opened for this enumerator and owned by it.")]
             public void Dispose()
             {
-                _sheet?.Dispose();
-                _sheet = null;
+                _source?.Dispose();
+                _source = null;
                 ReturnBuffers();
             }
 
@@ -443,19 +415,14 @@ namespace ExcelReader.Core.Reader
                 Justification = "_sheet is opened for this enumerator and owned by it.")]
             public async ValueTask DisposeAsync()
             {
-                if (_sheet is not null)
+                if (_source is not null)
                 {
-                    await _sheet.DisposeAsync().ConfigureAwait(false);
-                    _sheet = null;
+                    await _source.DisposeAsync().ConfigureAwait(false);
+                    _source = null;
                 }
                 ReturnBuffers();
             }
 
-            private void ReturnBuffers()
-            {
-                _io.Return();
-                _acc.Return();
-            }
         }
     }
 }

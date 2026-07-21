@@ -62,34 +62,10 @@ namespace ExcelReader.Core.Reader
                             break;
                         }
 
-                        if (id == Rec.Bof)
+                        if (!ReadRecord(cursor, recordStart, id, data))
                         {
-                            if (data.Length < 4 || ReadU16(data, 0) != Biff8Version || ReadU16(data, 2) != SubstreamWorksheet)
-                            {
-                                throw new NotSupportedException("Only BIFF8 worksheet streams are supported.");
-                            }
-                            continue;
-                        }
-                        if (id == Rec.Eof)
-                        {
-                            _ended = true;
                             break;
                         }
-                        if (!TryGetCellRow(id, data, out int row))
-                        {
-                            continue;
-                        }
-                        if (_row < 0)
-                        {
-                            _row = row;
-                        }
-                        else if (row != _row)
-                        {
-                            cursor.Position = recordStart;
-                            break;
-                        }
-
-                        ParseCellRecord(id, data);
                     }
                     if (FinishRow())
                     {
@@ -97,6 +73,41 @@ namespace ExcelReader.Core.Reader
                     }
                 }
                 return false;
+            }
+
+            // Returns false when the current row has ended or the worksheet stream reached EOF.
+            private bool ReadRecord(BiffCursor cursor, long recordStart, int id, ReadOnlySpan<byte> data)
+            {
+                if (id == Rec.Bof)
+                {
+                    if (data.Length < 4 || ReadU16(data, 0) != Biff8Version || ReadU16(data, 2) != SubstreamWorksheet)
+                    {
+                        throw new NotSupportedException("Only BIFF8 worksheet streams are supported.");
+                    }
+                    return true;
+                }
+                if (id == Rec.Eof)
+                {
+                    _ended = true;
+                    return false;
+                }
+                if (!TryGetCellRow(id, data, out int row))
+                {
+                    return true;
+                }
+                if (_row < 0)
+                {
+                    _row = row;
+                    ParseCellRecord(id, data);
+                    return true;
+                }
+                if (row != _row)
+                {
+                    cursor.Position = recordStart;
+                    return false;
+                }
+                ParseCellRecord(id, data);
+                return true;
             }
 
             private bool FinishRow()
@@ -173,7 +184,7 @@ namespace ExcelReader.Core.Reader
                     case Rec.Formula:
                         ParseFormula(data);
                         break;
-                    // Blank / MulBlank and unknown records contribute no value.
+                        // Blank / MulBlank and unknown records contribute no value.
                 }
             }
 
@@ -244,15 +255,12 @@ namespace ExcelReader.Core.Reader
                 int style = ReadU16(data, 4);
                 byte value = data[6];
                 bool isError = data[7] != 0;
-                int start = _acc.ValueLength;
                 if (isError)
                 {
-                    int len = _acc.AppendErrorText(value);
-                    _acc.Add(col, start, len, CellType.Error, style, fromShared: false);
+                    _acc.AddError(col, style, value);
                     return;
                 }
-                _acc.AppendByte(value == 0 ? (byte)'0' : (byte)'1');
-                _acc.Add(col, start, 1, CellType.Boolean, style, fromShared: false);
+                _acc.AddBool(col, style, value);
             }
 
             private void ParseFormula(ReadOnlySpan<byte> data)
@@ -264,23 +272,21 @@ namespace ExcelReader.Core.Reader
                 int col = ReadU16(data, 2);
                 int style = ReadU16(data, 4);
                 ReadOnlySpan<byte> result = data.Slice(6, 8);
-                int start = _acc.ValueLength;
                 if (result[6] == 0xFF && result[7] == 0xFF)
                 {
                     switch (result[0])
                     {
                         case 1:
-                            _acc.AppendByte(result[2] == 0 ? (byte)'0' : (byte)'1');
-                            _acc.Add(col, start, 1, CellType.Boolean, style, fromShared: false);
+                            _acc.AddBool(col, style, result[2]);
                             break;
                         case 2:
-                            int len = _acc.AppendErrorText(result[2]);
-                            _acc.Add(col, start, len, CellType.Error, style, fromShared: false);
+                            _acc.AddError(col, style, result[2]);
                             break;
                         case 0:
                             // String result: the marker means "see the STRING record that follows".
                             if (_cursor.PeekId() == Rec.StringRec && _cursor.TryReadRecord(out _, out ReadOnlySpan<byte> str) && str.Length >= 3)
                             {
+                                int start = _acc.ValueLength;
                                 int cch = ReadU16(str, 0);
                                 byte strFlags = str[2];
                                 DecodeUnicodeString(str[3..], cch, strFlags);
