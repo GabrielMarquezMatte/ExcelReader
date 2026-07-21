@@ -10,7 +10,7 @@ namespace ExcelReader.Core.Writer.Internal
         // The 5 XML entity chars, '_' (to detect literal "_xHHHH_" escape sequences that must be
         // themselves escaped), and every C0 control char that's illegal in XML 1.0 text content
         // (0x00-0x08, 0x0B, 0x0C, 0x0E-0x1F — tab/LF/CR are legal and excluded).
-        private static readonly SearchValues<char> specialChars = SearchValues.Create(
+        private static readonly SearchValues<char> SpecialChars = SearchValues.Create(
             "&<>\"'_" +
             "\u0000\u0001\u0002\u0003\u0004\u0005\u0006\u0007\u0008\u000B\u000C" +
             "\u000E\u000F\u0010\u0011\u0012\u0013\u0014\u0015\u0016\u0017\u0018\u0019\u001A\u001B\u001C\u001D\u001E\u001F");
@@ -206,7 +206,7 @@ namespace ExcelReader.Core.Writer.Internal
         internal static void WriteEscaped(BiffBuffer xml, ReadOnlySpan<char> value)
         {
             int start = 0;
-            int next = value.IndexOfAny(specialChars);
+            int next = value.IndexOfAny(SpecialChars);
             while (next >= 0)
             {
                 int i = start + next;
@@ -238,7 +238,7 @@ namespace ExcelReader.Core.Writer.Internal
                     {
                         // A plain '_' remains in the pending run, but the next scan must move past
                         // it; otherwise this loop would rediscover the same underscore forever.
-                        int following = value[(i + 1)..].IndexOfAny(specialChars);
+                        int following = value[(i + 1)..].IndexOfAny(SpecialChars);
                         if (following < 0)
                         {
                             break;
@@ -258,7 +258,7 @@ namespace ExcelReader.Core.Writer.Internal
                     WriteHexEscape(xml, c);
                     start = i + 1;
                 }
-                next = value[start..].IndexOfAny(specialChars);
+                next = value[start..].IndexOfAny(SpecialChars);
             }
             if (start < value.Length)
             {

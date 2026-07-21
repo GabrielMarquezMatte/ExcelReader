@@ -53,6 +53,8 @@ namespace ExcelReader.Core.Parser.Internal
         [
             typeof(int), typeof(long), typeof(double), typeof(float), typeof(decimal),
             typeof(short), typeof(byte), typeof(uint), typeof(ulong), typeof(ushort),
+            // Guid is only reached here on net9+, where it implements IUtf8SpanParsable. On net8 the
+            // dedicated Guid build paths (guarded by #if NET8_0 below) intercept it before this set.
             typeof(Guid),
         ];
 
