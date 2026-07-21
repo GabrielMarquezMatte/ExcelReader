@@ -1,6 +1,9 @@
 namespace ExcelReader.Core.Parser.Internal
 {
     internal readonly struct PropertyMap<T>
+#if NET9_0_OR_GREATER
+        where T : allows ref struct
+#endif
     {
         internal PropertyMap(string[] names, ColumnParser<T> parser, bool isRequired, bool requireValue)
         {

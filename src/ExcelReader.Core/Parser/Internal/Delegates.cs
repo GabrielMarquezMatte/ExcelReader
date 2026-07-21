@@ -4,9 +4,12 @@ namespace ExcelReader.Core.Parser.Internal
 {
     // Setter compiled once per property via Expression tree.
     // ref TModel allows in-place mutation for both classes and structs.
+    // TProperty also allows ref struct (net9+) so a ReadOnlySpan<byte> property can bind directly to
+    // Cell.Value (zero-copy) via ColumnParserFactory's span parser — see BuildSpanParser.
     internal delegate void RefAction<TModel, in TProperty>(ref TModel model, TProperty value)
 #if NET9_0_OR_GREATER
-        where TModel : allows ref struct;
+        where TModel : allows ref struct
+        where TProperty : allows ref struct;
 #else
         ;
 #endif

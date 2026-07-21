@@ -12,6 +12,31 @@ namespace ExcelReader.Benchmarks
         public double Value { get; set; }
     }
 
+    // Struct twin of Record, same property names/types. ExcelParser<T> binds properties via `ref
+    // TModel` throughout (ColumnParser<T>/RefAction<T,TProperty> — see Delegates.cs), so parsing into
+    // a struct T avoids the per-row model allocation that a class T requires. Used by
+    // ParseBenchmark.ExcelParserStructSync to measure that directly.
+    public struct RecordStruct
+    {
+        public string? Name { get; set; }
+        public int Id { get; set; }
+        public DateTime Date { get; set; }
+        public double Value { get; set; }
+    }
+
+    // ref struct twin of Record, parsed via RefParser.ParseNamed<T> (reflection/attribute-driven —
+    // ExcelReader.Core.Parser.RefParser) rather than IExcelRowModel<T>.FromRow. A genuine `ref struct`
+    // (not just a normal struct, which ExcelParser<T> already supports) — proves ParseNamed's
+    // reflection pipeline works for ref structs too. Name stays `string?` (allocates per row): see
+    // RefParser.ParseNamed's doc comment — span-typed property binding isn't implemented yet.
+    public readonly ref struct RecordNamedRef
+    {
+        public ReadOnlySpan<byte> Name { get; init; }
+        public int Id { get; init; }
+        public DateTime Date { get; init; }
+        public double Value { get; init; }
+    }
+
     // Builds self-contained workbooks in memory via the project writers.
     internal static class WorkbookGenerator
     {

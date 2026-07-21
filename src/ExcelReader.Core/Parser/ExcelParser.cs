@@ -8,6 +8,15 @@ namespace ExcelReader.Core.Parser
     // Expression.Compile plus MakeGenericMethod, so it needs runtime code generation and keeps T's
     // members. Not compatible with Native AOT, and trimming can remove the properties it binds to. The
     // raw Excel.From* readers use no reflection and stay AOT/trim-safe; only this typed layer does not.
+    //
+    // Lower-allocation parsing: column binding runs through `ref TModel` end to end (ColumnParser<T>,
+    // RefAction<T,TProperty> — see Internal/Delegates.cs), and Row/RowCell are ref structs. So a
+    // `struct T` consumed via a direct `foreach` (not LINQ over IEnumerable<object> or anything else
+    // that boxes) skips the per-row model allocation a class T requires — measured -59% (3.88 MB ->
+    // 1.59 MB / 50k rows) on a 4-column benchmark record. The rest of that allocation is T's own
+    // reference-typed fields (e.g. a string column decodes to a fresh managed string per row
+    // regardless of T's kind) — struct T doesn't remove that, only the container. See
+    // ParseBenchmark.ExcelParserStructSync/RecordStruct in tests/ExcelReader.Benchmarks.
     [RequiresUnreferencedCode("Typed parsing reflects over T's public properties, which trimming may remove.")]
     [RequiresDynamicCode("Typed parsing compiles property setters at runtime (Expression.Compile / MakeGenericMethod).")]
     public sealed class ExcelParser<T>
