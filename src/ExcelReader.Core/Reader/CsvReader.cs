@@ -97,6 +97,18 @@ namespace ExcelReader.Core.Reader
             return GetEnumerator();
         }
 
+        [SuppressMessage("Performance", "HLQ006:GetAsyncEnumerator should return a value type",
+            Justification = "Enumerator is a class so the same type can also expose MoveNextAsync for the async path.")]
+        public Enumerator GetAsyncEnumerator()
+        {
+            return GetEnumerator();
+        }
+
+        IExcelRowEnumerator IExcelRowReader<IExcelRowEnumerator>.GetAsyncEnumerator()
+        {
+            return GetAsyncEnumerator();
+        }
+
         [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP001:Dispose created",
             Justification = "Enumerator ownership transfers to the caller, who disposes it via await using / DisposeAsync.")]
         [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",

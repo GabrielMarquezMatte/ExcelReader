@@ -103,17 +103,37 @@ namespace ExcelReader.Core.Reader
 
         [SuppressMessage("Performance", "HLQ006:GetAsyncEnumerator should return a value type",
             Justification = "Enumerator is a class so the same type can also expose MoveNextAsync for parity with XlsxReader.")]
-        public Enumerator GetAsyncEnumerator(CancellationToken ct = default)
+        public Enumerator GetAsyncEnumerator()
+        {
+            return GetEnumerator();
+        }
+
+        // ct overload takes no default value: the parameterless GetAsyncEnumerator() above already covers
+        // the no-argument call, so a default here would only shadow it.
+        [SuppressMessage("Performance", "HLQ006:GetAsyncEnumerator should return a value type",
+            Justification = "Enumerator is a class so the same type can also expose MoveNextAsync for parity with XlsxReader.")]
+        public Enumerator GetAsyncEnumerator(CancellationToken ct)
         {
             ct.ThrowIfCancellationRequested();
             return new Enumerator(this, _sheets[_current].Offset, ct);
         }
 
+        IExcelRowEnumerator IExcelRowReader<IExcelRowEnumerator>.GetAsyncEnumerator()
+        {
+            return GetAsyncEnumerator();
+        }
+
+        [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
+            Justification = "Enumerator ownership transfers to the caller, who disposes it via await using / DisposeAsync.")]
         public ValueTask<Enumerator> GetAsyncEnumeratorAsync(CancellationToken ct = default)
         {
             return new ValueTask<Enumerator>(GetAsyncEnumerator(ct));
         }
 
+        [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
+            Justification = "Enumerator ownership transfers to the caller, who disposes it via await using / DisposeAsync.")]
+        [SuppressMessage("Performance", "CA1849:Call async methods when in an async method",
+            Justification = "XlsReader is fully in-memory; opening the enumerator is synchronous, so there is no async open to await here.")]
         ValueTask<IExcelRowEnumerator> IExcelRowReader<IExcelRowEnumerator>.GetAsyncEnumeratorAsync(CancellationToken ct)
         {
             return new ValueTask<IExcelRowEnumerator>(GetAsyncEnumerator(ct));

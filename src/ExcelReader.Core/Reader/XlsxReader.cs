@@ -131,6 +131,18 @@ namespace ExcelReader.Core.Reader
             return GetEnumerator();
         }
 
+        [SuppressMessage("Performance", "HLQ006:GetAsyncEnumerator should return a value type",
+            Justification = "Enumerator is a class so the same type can also expose MoveNextAsync for the async path.")]
+        public Enumerator GetAsyncEnumerator()
+        {
+            return GetEnumerator();
+        }
+
+        IExcelRowEnumerator IExcelRowReader<IExcelRowEnumerator>.GetAsyncEnumerator()
+        {
+            return GetAsyncEnumerator();
+        }
+
         /// <summary>
         /// Streaming async enumerator over the current sheet. Use with a manual loop — <c>Current</c>
         /// is a ref struct (<c>Row</c>), so <c>await foreach</c> cannot bind it:
