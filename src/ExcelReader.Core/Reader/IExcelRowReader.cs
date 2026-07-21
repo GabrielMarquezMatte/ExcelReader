@@ -7,6 +7,7 @@ namespace ExcelReader.Core.Reader
     {
         bool IsDate1904 { get; }
         TEnumerator GetEnumerator();
+        TEnumerator GetAsyncEnumerator();
         ValueTask<TEnumerator> GetAsyncEnumeratorAsync(CancellationToken ct = default);
     }
 

@@ -16,11 +16,17 @@ namespace ExcelReader.Core.Parser.Internal
     // call, immediately writing into a caller-supplied `ref T model`. Every existing caller stores
     // that result in a class FIELD (SyncRowEnumerator<T,TRows>.CurrentValue) — illegal for a
     // ref-struct-constrained T (CS8345: a ref struct field is only legal inside another ref struct).
-    // So this type splits the same two responsibilities instead: MoveNext() only advances/classifies
-    // (skip pre-header rows, build the column map once at the header row), and Current's getter parses
-    // the row into a fresh LOCAL model on every access — never stored as a field, safe to call
-    // repeatedly (idempotent) for the same row.
-    public struct NamedRefRowEnumerator<TModel, TEnumerator> : IDisposable
+    // So this type splits the same two responsibilities instead: MoveNext()/MoveNextAsync() only
+    // advance/classify (skip pre-header rows, build the column map once at the header row), and Current's
+    // getter parses the row into a fresh LOCAL model on every access — never stored as a field, safe to
+    // call repeatedly (idempotent) for the same row.
+    //
+    // A reference type (not a struct): MoveNextAsync's awaiting slow path mutates enumeration state
+    // (_rowNumber, and the one-time column map) across an await, which a struct would silently lose to the
+    // async state machine's by-value `this` copy. A class shares the one instance, exactly like
+    // AsyncRowEnumerator<T,TReader,TRows>. The lazy-Current design above is still required regardless:
+    // a ref-struct TModel can never be stored in a field (CS8345), class or struct.
+    public sealed class NamedRefRowEnumerator<TModel, TEnumerator> : IDisposable, IAsyncDisposable
         where TModel : allows ref struct
         where TEnumerator : class, IExcelRowEnumerator
     {
@@ -55,7 +61,7 @@ namespace ExcelReader.Core.Parser.Internal
         }
 
         // Recomputed on every access (see class remarks) — never cached in a field.
-        public readonly TModel Current
+        public TModel Current
         {
             get
             {
@@ -83,6 +89,63 @@ namespace ExcelReader.Core.Parser.Internal
                 }
             }
             return false;
+        }
+
+        // Async twin of MoveNext, mirroring AsyncRowEnumerator<T,TReader,TRows>.MoveNextAsync: a non-async
+        // fast path that stays synchronous whenever the underlying row-enumerator resolves synchronously
+        // (the common case — no second state machine on top of _rows' own), only falling to an awaiting
+        // continuation on a genuine buffer miss. Every state mutation (ClassifyRow's ref _rowNumber,
+        // BuildColumnMap) runs on the shared class instance, so it survives the await (see class remarks).
+        [SuppressMessage("SharpSource", "SS034:Use await to get the result of a Task",
+            Justification = "The .Result access is guarded by IsCompletedSuccessfully immediately above it — never blocks.")]
+        [SuppressMessage("VisualStudio.Threading", "VSTHRD103:Result synchronously blocks",
+            Justification = "The .Result access is guarded by IsCompletedSuccessfully immediately above it — never blocks.")]
+        public ValueTask<bool> MoveNextAsync()
+        {
+            while (true)
+            {
+                ValueTask<bool> moveTask = _rows.MoveNextAsync();
+                if (!moveTask.IsCompletedSuccessfully)
+                {
+                    return AwaitThenContinueAsync(moveTask);
+                }
+                if (!moveTask.Result)
+                {
+                    return new ValueTask<bool>(false);
+                }
+                switch (ProjectionRules.ClassifyRow(ref _rowNumber, _headerRow, _bindings is not null))
+                {
+                    case ProjectionStep.Yield:
+                        return new ValueTask<bool>(true);
+                    case ProjectionStep.BuildMap:
+                        BuildColumnMap(_rows.Current);
+                        break;
+                    case ProjectionStep.Stop:
+                        return new ValueTask<bool>(false);
+                        // Skip: loop again, still synchronous.
+                }
+            }
+        }
+
+        private async ValueTask<bool> AwaitThenContinueAsync(ValueTask<bool> pendingMoveNext)
+        {
+            if (!await pendingMoveNext.ConfigureAwait(false))
+            {
+                return false;
+            }
+            ProjectionStep step = ProjectionRules.ClassifyRow(ref _rowNumber, _headerRow, _bindings is not null);
+            switch (step)
+            {
+                case ProjectionStep.Yield:
+                    return true;
+                case ProjectionStep.BuildMap:
+                    BuildColumnMap(_rows.Current);
+                    break; // map built at the header row — resume the fast path for the next row.
+                case ProjectionStep.Stop:
+                    return false;
+                // Skip: resume the fast path.
+            }
+            return await MoveNextAsync().ConfigureAwait(false);
         }
 
         private void BuildColumnMap(Row row)
@@ -143,7 +206,7 @@ namespace ExcelReader.Core.Parser.Internal
             _seen = requireValueCount > 0 ? new bool[bindings.Length] : [];
         }
 
-        private readonly void ParseCurrentRow(Row row, ref TModel model)
+        private void ParseCurrentRow(Row row, ref TModel model)
         {
             NamedColumnBinding<TModel>[] bindings = _bindings!;
             bool track = _requireValueCount > 0;
@@ -187,20 +250,30 @@ namespace ExcelReader.Core.Parser.Internal
             }
         }
 
-        private readonly void ValidateRowValues(NamedColumnBinding<TModel>[] bindings)
+        private void ValidateRowValues(NamedColumnBinding<TModel>[] bindings)
         {
             for (int i = 0; i < bindings.Length; i++)
             {
-                if (bindings[i].RequireValue && !_seen[i])
+                ref readonly var binding = ref bindings[i];
+                if (binding.RequireValue && !_seen[i])
                 {
-                    throw ProjectionRules.MissingRequiredValue(bindings[i].Name, _rowNumber);
+                    throw ProjectionRules.MissingRequiredValue(binding.Name, _rowNumber);
                 }
             }
         }
 
-        public readonly void Dispose()
+        [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP007:Don't dispose injected",
+            Justification = "_rows is created for this enumerator alone by NamedRefRowEnumerable.Get(Async)Enumerator() — owned here, not injected.")]
+        public void Dispose()
         {
             _rows.Dispose();
+        }
+
+        [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP007:Don't dispose injected",
+            Justification = "_rows is created for this enumerator alone by NamedRefRowEnumerable.Get(Async)Enumerator() — owned here, not injected.")]
+        public ValueTask DisposeAsync()
+        {
+            return _rows.DisposeAsync();
         }
     }
 }

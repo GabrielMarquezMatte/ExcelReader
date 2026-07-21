@@ -16,6 +16,7 @@ namespace ExcelReader.Tests
                 yield return [new ParityFixture("xlsx many rows (mid-stream refills)", BuildManyRowsXlsxAsync, stream => Excel.From(stream), OpenXlsxAsync)];
                 yield return [new ParityFixture("xls mixed rows", BuildMixedXlsAsync, stream => Excel.FromXls(stream), OpenXlsAsync)];
                 yield return [new ParityFixture("xlsb mixed rows", BuildMixedXlsbAsync, stream => Excel.FromXlsb(stream), OpenXlsbAsync)];
+                yield return [new ParityFixture("csv mixed rows", BuildCsvAsync, stream => Excel.FromCsv(stream), OpenCsvAsync)];
             }
         }
 
@@ -28,8 +29,12 @@ namespace ExcelReader.Tests
 
             List<CellSnapshot> sync = ReadSync(workbook, fixture.OpenSync);
             List<CellSnapshot> asyncCells = await ReadAsync(workbook, fixture.OpenAsync, ct);
+            // The reader's GetAsyncEnumerator() (synchronous open, async row streaming — the 'await foreach'
+            // entry point) must produce the same cells as both the sync path and the async-open path.
+            List<CellSnapshot> asyncEnum = await ReadViaAsyncEnumeratorAsync(workbook, fixture.OpenSync);
 
             Assert.Equal(sync, asyncCells);
+            Assert.Equal(sync, asyncEnum);
         }
 
         private static List<CellSnapshot> ReadSync(byte[] workbook, Func<Stream, IExcelRowReader> open)
@@ -54,6 +59,23 @@ namespace ExcelReader.Tests
             await using MemoryStream stream = new(workbook, writable: false);
             await using IExcelRowReader reader = await open(stream, ct);
             await using IExcelRowEnumerator e = await reader.GetAsyncEnumeratorAsync(ct);
+            List<CellSnapshot> cells = [];
+            int rowIndex = 0;
+            while (await e.MoveNextAsync())
+            {
+                AddRow(cells, rowIndex++, e.Current);
+            }
+            return cells;
+        }
+
+        // Drives the reader's GetAsyncEnumerator() — a synchronous sheet open whose rows are then streamed
+        // via MoveNextAsync (what 'await foreach' binds to). Opens the workbook synchronously; only the
+        // per-row advance is awaited.
+        private static async Task<List<CellSnapshot>> ReadViaAsyncEnumeratorAsync(byte[] workbook, Func<Stream, IExcelRowReader> open)
+        {
+            await using MemoryStream stream = new(workbook, writable: false);
+            await using IExcelRowReader reader = open(stream);
+            await using IExcelRowEnumerator e = reader.GetAsyncEnumerator();
             List<CellSnapshot> cells = [];
             int rowIndex = 0;
             while (await e.MoveNextAsync())
@@ -190,6 +212,22 @@ namespace ExcelReader.Tests
             await sheet.EndAsync(ct);
             await wb.EndAsync(ct);
             return ms.ToArray();
+        }
+
+        private static ValueTask<byte[]> BuildCsvAsync(CancellationToken ct)
+        {
+            ct.ThrowIfCancellationRequested();
+            const string csv =
+                "Name,Age,Active\n" +
+                "Ana,31,true\n" +
+                "\"Bia, Jr.\",27,false\n" +   // quoted field with an embedded comma
+                "Cid,,\n";                     // trailing empty fields
+            return ValueTask.FromResult(System.Text.Encoding.UTF8.GetBytes(csv));
+        }
+
+        private static async ValueTask<IExcelRowReader> OpenCsvAsync(Stream stream, CancellationToken ct)
+        {
+            return await Excel.FromCsvAsync(stream, ct: ct);
         }
 
         private static async ValueTask<IExcelRowReader> OpenXlsxAsync(Stream stream, CancellationToken ct)
