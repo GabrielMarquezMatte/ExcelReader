@@ -4,6 +4,9 @@ using System.Reflection;
 namespace ExcelReader.Core.Parser.Internal
 {
     internal static class TypeMapper<T>
+#if NET9_0_OR_GREATER
+        where T : allows ref struct
+#endif
     {
         // ExecutionAndPublication already caches a thrown build exception and re-throws it (original
         // stack trace preserved) on every subsequent .Value access — no need to do that by hand.

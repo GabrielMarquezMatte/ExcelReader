@@ -30,6 +30,16 @@ namespace ExcelReader.Benchmarks
             return rec.Id + (long)rec.Value + (rec.Name?.Length ?? 0) + rec.Date.Ticks;
         }
 
+        private static long Accumulate(RecordStruct rec)
+        {
+            return rec.Id + (long)rec.Value + (rec.Name?.Length ?? 0) + rec.Date.Ticks;
+        }
+
+        private static long Accumulate(RecordNamedRef rec)
+        {
+            return rec.Id + (long)rec.Value + rec.Name.Length + rec.Date.Ticks;
+        }
+
 
         [Benchmark(Baseline = true)]
         public long ExcelParserSync()
@@ -38,6 +48,41 @@ namespace ExcelReader.Benchmarks
             using var reader = Excel.From(ms);
             long acc = 0;
             foreach (Record rec in new ExcelParser<Record>().Parse(reader))
+            {
+                acc += Accumulate(rec);
+            }
+            return acc;
+        }
+
+        // Same workbook/columns as ExcelParserSync, but the target is a struct — proves out the
+        // zero-per-row-allocation path: ExcelParser<T> binds columns via `ref TModel`
+        // (ColumnParser<T>/RefAction<T,TProperty>, see Delegates.cs) all the way down, and Row/RowCell
+        // are ref structs, so a struct T and a direct foreach never box or allocate a model per row.
+        [Benchmark]
+        public long ExcelParserStructSync()
+        {
+            using var ms = new MemoryStream(_workbook, writable: false);
+            using var reader = Excel.From(ms);
+            long acc = 0;
+            foreach (RecordStruct rec in new ExcelParser<RecordStruct>().Parse(reader))
+            {
+                acc += Accumulate(rec);
+            }
+            return acc;
+        }
+
+        // Reflection/attribute-driven ref-struct parse (ExcelReader.Core.Parser.RefParser.ParseNamed) —
+        // same workbook/columns, matched by header name instead of ExcelParser<T>'s reflection-built
+        // property setters. Name binds via ColumnParserFactory's span parser (zero-copy Cell.Value),
+        // not GetString(), so this measures the fully-zero-alloc path, not just the container saving
+        // ExcelParserStructSync/RecordStruct already showed.
+        [Benchmark]
+        public long RefParserParseNamedSync()
+        {
+            using var ms = new MemoryStream(_workbook, writable: false);
+            using var reader = Excel.From(ms);
+            long acc = 0;
+            foreach (RecordNamedRef rec in RefParser.ParseNamed<RecordNamedRef>(reader))
             {
                 acc += Accumulate(rec);
             }

@@ -3,6 +3,9 @@ using System.Collections.Concurrent;
 namespace ExcelReader.Core.Parser.Internal
 {
     internal readonly struct TypeMapInfo<T>
+#if NET9_0_OR_GREATER
+        where T : allows ref struct
+#endif
     {
         private readonly PropertyMap<T>[] _properties;
         private readonly Func<T> _factory;
