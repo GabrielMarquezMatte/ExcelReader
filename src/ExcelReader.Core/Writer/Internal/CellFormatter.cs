@@ -88,7 +88,7 @@ namespace ExcelReader.Core.Writer.Internal
         internal static void WriteDateTime(BiffBuffer xml, DateTime value, int columnIndex, int rowNumber, bool includeReference)
         {
             WriteCellOpen(xml, columnIndex, rowNumber, includeReference, includeReference ? " s=\"1\"><v>"u8 : "<c s=\"1\"><v>"u8);
-            WriteValue(xml, DateSerial.ForEpoch(value.ToOADate(), date1904: false), sizeHint: 32);
+            WriteValue(xml, ExcelEpoch.OADateToSerial(value.ToOADate(), date1904: false), sizeHint: 32);
             xml.Write("</v></c>"u8);
         }
 

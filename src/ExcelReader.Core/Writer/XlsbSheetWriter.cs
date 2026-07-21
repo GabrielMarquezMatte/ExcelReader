@@ -353,7 +353,7 @@ namespace ExcelReader.Core.Writer
 
         internal void WriteDateSerialCell(int columnIndex, double serial)
         {
-            WriteDoubleCell(columnIndex, DateSerial.ForEpoch(serial, _date1904), style: 1);
+            WriteDoubleCell(columnIndex, ExcelEpoch.OADateToSerial(serial, _date1904), style: 1);
         }
 
         internal void WriteDoubleCell(int columnIndex, double value, int style)
