@@ -13,8 +13,6 @@ namespace ExcelReader.Core.Reader
     {
         private const int HeaderSize = 512;
 
-        [SuppressMessage("SharpSource", "SS066:DisposableFieldIsNotDisposed",
-            Justification = "Disposed in Dispose() when _ownsSource; otherwise the caller owns it.")]
         private readonly Stream? _source;
         private readonly bool _ownsSource;
         private readonly int[] _chain;        // physical sector numbers, in order (pooled, oversized)

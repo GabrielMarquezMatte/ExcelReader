@@ -20,7 +20,6 @@ namespace ExcelReader.Core.Reader
         private readonly ExcelReaderOptions _options;
         private readonly DecompressedByteCounter _decompressedBytes;
 
-        [SuppressMessage("SharpSource", "SS066:Disposable field is not disposed", Justification = "Disposed in Dispose().")]
         private readonly ZipArchive? _zip;
         private readonly Stream? _stream;
         private readonly bool _leaveOpen;
@@ -177,6 +176,8 @@ namespace ExcelReader.Core.Reader
             return GetAsyncEnumerator();
         }
 
+        [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP001:Dispose created",
+            Justification = "sheet is handed to the returned Enumerator, which owns and disposes it.")]
         public async ValueTask<Enumerator> GetAsyncEnumeratorAsync(CancellationToken ct = default)
         {
             var entry = WorkbookLookups.GetWorksheetEntry(_zip!, _sheets!, _current);

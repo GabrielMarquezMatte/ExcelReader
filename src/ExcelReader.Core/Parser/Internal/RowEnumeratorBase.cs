@@ -73,7 +73,6 @@ namespace ExcelReader.Core.Parser.Internal
         where TRows : class, IExcelRowEnumerator
     {
         // Borrowed: the caller owns the reader's lifetime. Only Rows (opened here) is disposed.
-        [SuppressMessage("SharpSource", "SS066:Disposable field is not disposed", Justification = "Borrowed, not owned.")]
         private readonly TReader _reader;
         private readonly CancellationToken _ct;
         protected TRows? Rows;
@@ -87,8 +86,6 @@ namespace ExcelReader.Core.Parser.Internal
 
         public T Current => CurrentValue;
 
-        [SuppressMessage("SharpSource", "SS034:Use await to get the result of a Task",
-            Justification = "The .Result access is guarded by IsCompletedSuccessfully immediately above it — never blocks.")]
         [SuppressMessage("VisualStudio.Threading", "VSTHRD103:Result synchronously blocks",
             Justification = "The .Result access is guarded by IsCompletedSuccessfully immediately above it — never blocks.")]
         public ValueTask<bool> MoveNextAsync()

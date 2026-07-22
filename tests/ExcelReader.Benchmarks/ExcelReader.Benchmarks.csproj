@@ -4,7 +4,13 @@
     <OutputType>Exe</OutputType>
     <TargetFramework>net10.0</TargetFramework>
     <!-- Benchmark host app: ConfigureAwait is irrelevant (no captured sync context). -->
-    <NoWarn>$(NoWarn);CA2007;MA0004</NoWarn>
+    <!-- CA1707: BenchmarkDotNet method names use underscores (e.g. Xlsx_ExcelReader) for readable
+         report output — that's the tool's own naming convention, not a target for cleanup. -->
+    <!-- CA1849/VSTHRD103/S6966: several benchmarks deliberately call the sync API because that's
+         the code path being measured. -->
+    <!-- IDISP001: sheet/row writers created here are owned and disposed by their parent
+         workbook writer, same pattern as the ownership-transfer suppressions in Core. -->
+    <NoWarn>$(NoWarn);CA2007;MA0004;CA1707;CA1849;VSTHRD103;S6966;IDISP001</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>

@@ -1,4 +1,3 @@
-using System.Diagnostics.CodeAnalysis;
 using ExcelReader.Core.Writer.Internal;
 using ExcelReader.Core.Reader;
 
@@ -6,11 +5,7 @@ namespace ExcelReader.Core.Writer
 {
     public sealed class XlsxRowWriter : IRowWriter, IDisposable
     {
-        [SuppressMessage("SharpSource", "SS066:DisposableFieldIsNotDisposed",
-            Justification = "XlsxSheetWriter is borrowed; its lifetime is managed by the caller.")]
         private readonly XlsxSheetWriter _owner;
-        [SuppressMessage("SharpSource", "SS066:DisposableFieldIsNotDisposed",
-            Justification = "BiffBuffer is owned by XlsxSheetWriter; XlsxRowWriter borrows it.")]
         private readonly BiffBuffer _row;
         private int _rowNumber;
         private int _columnIndex;

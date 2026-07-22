@@ -1,4 +1,3 @@
-using System.Diagnostics.CodeAnalysis;
 using System.Runtime.InteropServices;
 using ExcelReader.Core.Writer.Internal;
 
@@ -16,8 +15,6 @@ namespace ExcelReader.Core.Writer
         private readonly bool _date1904;
         private readonly List<XlsSheetWriter> _sheets = [];
         private WriterState _state = WriterState.Created;
-        [SuppressMessage("SharpSource", "SS066:DisposableFieldIsNotDisposed",
-            Justification = "Disposed in NotifySheetEnded and EndAsync once its records are flushed.")]
         private XlsSheetWriter? _activeSheet;
         private bool _disposed;
 

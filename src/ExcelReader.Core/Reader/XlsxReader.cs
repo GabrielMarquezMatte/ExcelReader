@@ -151,6 +151,8 @@ namespace ExcelReader.Core.Reader
         /// while (await e.MoveNextAsync()) { var row = e.Current; /* ... */ }
         /// </code>
         /// </summary>
+        [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP001:Dispose created",
+            Justification = "sheet is handed to the returned Enumerator, which owns and disposes it.")]
         public async ValueTask<Enumerator> GetAsyncEnumeratorAsync(CancellationToken ct = default)
         {
             await EnsureSharedLoadedAsync(ct).ConfigureAwait(false);

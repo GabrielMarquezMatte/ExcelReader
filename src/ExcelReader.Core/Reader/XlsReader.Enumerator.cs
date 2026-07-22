@@ -12,8 +12,6 @@ namespace ExcelReader.Core.Reader
             Justification = "Public nested enumerator is the standard foreach pattern.")]
         public sealed class Enumerator : IExcelRowEnumerator
         {
-            [SuppressMessage("SharpSource", "SS066:DisposableFieldIsNotDisposed",
-                Justification = "Borrowed reader; caller owns its lifetime.")]
             private readonly XlsReader _reader;
             private readonly CancellationToken _ct;
             private readonly BiffCursor _cursor;

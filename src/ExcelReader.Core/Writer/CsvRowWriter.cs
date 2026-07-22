@@ -1,6 +1,5 @@
 using System.Buffers;
 using System.Buffers.Text;
-using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Runtime.CompilerServices;
 using ExcelReader.Core.Writer.Internal;
@@ -13,11 +12,7 @@ namespace ExcelReader.Core.Writer
         // the rare overflow falls back to a rented buffer in WriteUtf8FieldSlow.
         private const int StackFieldBytes = 64;
 
-        [SuppressMessage("SharpSource", "SS066:DisposableFieldIsNotDisposed",
-            Justification = "CsvWriter is borrowed; its lifetime is managed by the caller.")]
         private readonly CsvWriter _owner;
-        [SuppressMessage("SharpSource", "SS066:DisposableFieldIsNotDisposed",
-            Justification = "BiffBuffer is owned by CsvWriter; row writer borrows it.")]
         private readonly BiffBuffer _buffer;
         private readonly byte _delimiter;
         private readonly byte _quote;

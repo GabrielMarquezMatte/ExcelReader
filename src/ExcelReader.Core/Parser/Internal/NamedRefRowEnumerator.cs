@@ -96,8 +96,6 @@ namespace ExcelReader.Core.Parser.Internal
         // (the common case — no second state machine on top of _rows' own), only falling to an awaiting
         // continuation on a genuine buffer miss. Every state mutation (ClassifyRow's ref _rowNumber,
         // BuildColumnMap) runs on the shared class instance, so it survives the await (see class remarks).
-        [SuppressMessage("SharpSource", "SS034:Use await to get the result of a Task",
-            Justification = "The .Result access is guarded by IsCompletedSuccessfully immediately above it — never blocks.")]
         [SuppressMessage("VisualStudio.Threading", "VSTHRD103:Result synchronously blocks",
             Justification = "The .Result access is guarded by IsCompletedSuccessfully immediately above it — never blocks.")]
         public ValueTask<bool> MoveNextAsync()

@@ -7,11 +7,7 @@ namespace ExcelReader.Core.Writer
 {
     public sealed class XlsxSheetWriter : ISheetWriter<XlsxRowWriter>
     {
-        [SuppressMessage("SharpSource", "SS066:DisposableFieldIsNotDisposed",
-            Justification = "XlsxWorkbookWriter is borrowed; its lifetime is managed by the caller.")]
         private readonly XlsxWorkbookWriter _owner;
-        [SuppressMessage("SharpSource", "SS066:DisposableFieldIsNotDisposed",
-            Justification = "ZipArchive is borrowed from XlsxWorkbookWriter; its lifetime exceeds this sheet.")]
         private readonly ZipArchive _zip;
         private readonly CompressionLevel _compression;
         private readonly BiffBuffer _rowBuffer = new(512);
@@ -20,8 +16,6 @@ namespace ExcelReader.Core.Writer
         // ArrayPool.Shared LOH threshold (a larger request would rent from the LOH and never leave it).
         private const int FlushThreshold = 64 * 1024;
         private XlsxRowWriter? _rowWriter;
-        [SuppressMessage("SharpSource", "SS066:DisposableFieldIsNotDisposed",
-            Justification = "Stream is explicitly disposed in EndAsync via DisposeAsync.")]
         private Stream? _stream;
         private int _rowNumber;
         private WriterState _state = WriterState.Created;
@@ -50,8 +44,6 @@ namespace ExcelReader.Core.Writer
         [SuppressMessage("AsyncFixer", "AsyncFixer02:Long-running or blocking operation invoked inside an async method",
             Justification = "ZipArchiveEntry.Open() is used intentionally; OpenAsync entry-tracking semantics differ in .NET 10.")]
         [SuppressMessage("Reliability", "CA1849:Call async methods when in an async method",
-            Justification = "See AsyncFixer02 justification above.")]
-        [SuppressMessage("SharpSource", "SS033:Async overload available",
             Justification = "See AsyncFixer02 justification above.")]
         [SuppressMessage("Sonar", "S6966:Await DisposeAsync instead",
             Justification = "See AsyncFixer02 justification above.")]
@@ -104,10 +96,6 @@ namespace ExcelReader.Core.Writer
         [SuppressMessage("Reliability", "CA1849:Call async methods when in an async method",
             Justification = "Dispose() is called synchronously to ensure ZipArchive entry tracking is updated before this method returns.")]
         [SuppressMessage("Sonar", "S6966:Await DisposeAsync instead",
-            Justification = "See CA1849 justification above.")]
-        [SuppressMessage("SharpSource", "SS033:Async overload available",
-            Justification = "See CA1849 justification above.")]
-        [SuppressMessage("SharpSource", "SS059:Async disposable should be disposed asynchronously",
             Justification = "See CA1849 justification above.")]
         [SuppressMessage("VisualStudio.Threading", "VSTHRD103:Dispose synchronously blocks",
             Justification = "See CA1849 justification above.")]
