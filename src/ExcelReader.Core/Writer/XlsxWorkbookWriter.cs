@@ -7,7 +7,7 @@ using ExcelReader.Core.Writer.Internal;
 
 namespace ExcelReader.Core.Writer
 {
-    public sealed class WorkbookWriter : IWorkbookWriter<SheetWriter>
+    public sealed class XlsxWorkbookWriter : IWorkbookWriter<XlsxSheetWriter>
     {
         private readonly ZipArchive _zip;
         private readonly Stream _stream;
@@ -17,10 +17,10 @@ namespace ExcelReader.Core.Writer
         private readonly List<(string Name, int SheetId)> _sheets = [];
         private WriterState _state = WriterState.Created;
         private bool _sheetActive;
-        private SheetWriter? _activeSheet;
+        private XlsxSheetWriter? _activeSheet;
         private bool _disposed;
 
-        private WorkbookWriter(ZipArchive zip, Stream stream, bool leaveOpen, bool useSharedStrings, CompressionLevel compression)
+        private XlsxWorkbookWriter(ZipArchive zip, Stream stream, bool leaveOpen, bool useSharedStrings, CompressionLevel compression)
         {
             _zip = zip;
             _stream = stream;
@@ -31,45 +31,43 @@ namespace ExcelReader.Core.Writer
         }
 
         [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP001:Dispose created",
-            Justification = "Factory method transfers ZipArchive ownership to WorkbookWriter; caller disposes via DisposeAsync.")]
+            Justification = "Factory method transfers ZipArchive ownership to XlsxWorkbookWriter; caller disposes via DisposeAsync.")]
         [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
-            Justification = "WorkbookWriter takes ownership of ZipArchive and disposes it in DisposeAsync/EndAsync.")]
-        [SuppressMessage("Design", "CA1068:CancellationToken parameters must come last",
-            Justification = "useSharedStrings was added after existing optional parameters to preserve positional source compatibility.")]
-        public static ValueTask<WorkbookWriter> CreateAsync(
+            Justification = "XlsxWorkbookWriter takes ownership of ZipArchive and disposes it in DisposeAsync/EndAsync.")]
+        public static ValueTask<XlsxWorkbookWriter> CreateAsync(
             Stream stream, bool leaveOpen = false,
             CompressionLevel compression = CompressionLevel.Fastest,
-            CancellationToken ct = default,
-            bool useSharedStrings = false)
+            bool useSharedStrings = false,
+            CancellationToken ct = default)
         {
             ArgumentNullException.ThrowIfNull(stream);
             ct.ThrowIfCancellationRequested();
             ZipArchive zip = new(stream, ZipArchiveMode.Create, leaveOpen: true);
-            return ValueTask.FromResult(new WorkbookWriter(zip, stream, leaveOpen, useSharedStrings, compression));
+            return ValueTask.FromResult(new XlsxWorkbookWriter(zip, stream, leaveOpen, useSharedStrings, compression));
         }
 
         public ValueTask StartAsync(CancellationToken ct = default)
         {
             WriterStateGuard.ThrowIfEnded(_state, this);
-            WriterStateGuard.RequireCreated(_state, nameof(WorkbookWriter));
+            WriterStateGuard.RequireCreated(_state, nameof(XlsxWorkbookWriter));
             ct.ThrowIfCancellationRequested();
             _state = WriterState.Started;
             return WriteRootRelsAsync(ct);
         }
 
-        public SheetWriter AddSheet(string name)
+        public XlsxSheetWriter AddSheet(string name)
         {
             ArgumentNullException.ThrowIfNull(name);
             WriterStateGuard.ThrowIfEnded(_state, this);
-            WriterStateGuard.RequireStarted(_state, nameof(WorkbookWriter), "adding sheets");
+            WriterStateGuard.RequireStarted(_state, nameof(XlsxWorkbookWriter), "adding sheets");
             WriterStateGuard.ValidateSheetName(name);
             if (_sheetActive)
             {
-                throw new InvalidOperationException("The previous SheetWriter must be ended before adding a new sheet.");
+                throw new InvalidOperationException("The previous XlsxSheetWriter must be ended before adding a new sheet.");
             }
             _sheetActive = true;
             int sheetId = _sheets.Count + 1;
-            _activeSheet = new SheetWriter(this, _zip, name, sheetId, _compression);
+            _activeSheet = new XlsxSheetWriter(this, _zip, name, sheetId, _compression);
             return _activeSheet;
         }
 
@@ -94,7 +92,7 @@ namespace ExcelReader.Core.Writer
         public async ValueTask EndAsync(CancellationToken ct = default)
         {
             WriterStateGuard.ThrowIfEnded(_state, this);
-            WriterStateGuard.RequireStarted(_state, nameof(WorkbookWriter), "ending");
+            WriterStateGuard.RequireStarted(_state, nameof(XlsxWorkbookWriter), "ending");
             ct.ThrowIfCancellationRequested();
             if (_sheets.Count == 0)
             {

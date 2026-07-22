@@ -40,23 +40,23 @@ namespace ExcelReader.Core.Writer
             }
         }
 
-        // SheetWriter/RowWriter-specific overload: row buffering only ever touches the destination
+        // XlsxSheetWriter/XlsxRowWriter-specific overload: row buffering only ever touches the destination
         // stream on the rare buffer-threshold flush (EndBufferedRow, already synchronous), so this
         // resolves in preference to the generic ISheetWriter<TRow> overload above whenever the caller's
-        // static type is the concrete SheetWriter — e.g. plain IEnumerable<T> sources, which are the
+        // static type is the concrete XlsxSheetWriter — e.g. plain IEnumerable<T> sources, which are the
         // overwhelming majority — skipping the per-row ValueTask/async-disposable machinery entirely.
         [SuppressMessage("Reliability", "CA1849:Call async methods when in an async method",
-            Justification = "Deliberately using SheetWriter/RowWriter's synchronous fast path — see the comment above.")]
+            Justification = "Deliberately using XlsxSheetWriter/XlsxRowWriter's synchronous fast path — see the comment above.")]
         [SuppressMessage("Sonar", "S6966:Await StartRowAsync instead",
-            Justification = "Deliberately using SheetWriter's synchronous row fast path — see the comment above.")]
+            Justification = "Deliberately using XlsxSheetWriter's synchronous row fast path — see the comment above.")]
         [SuppressMessage("VisualStudio.Threading", "VSTHRD103:StartRow synchronously blocks",
-            Justification = "Deliberately using SheetWriter's synchronous row fast path — see the comment above.")]
+            Justification = "Deliberately using XlsxSheetWriter's synchronous row fast path — see the comment above.")]
         [SuppressMessage("Sonar", "S6966:Await DisposeAsync instead",
-            Justification = "Deliberately using RowWriter's synchronous Dispose fast path — see the comment above.")]
+            Justification = "Deliberately using XlsxRowWriter's synchronous Dispose fast path — see the comment above.")]
         [SuppressMessage("VisualStudio.Threading", "VSTHRD103:Dispose synchronously blocks",
-            Justification = "Deliberately using RowWriter's synchronous Dispose fast path — see the comment above.")]
-        public static ValueTask WriteRecordsAsync<T>(this SheetWriter sheet, IEnumerable<T> records,
-                                                      Action<RowWriter, T> writeRow, CancellationToken ct = default)
+            Justification = "Deliberately using XlsxRowWriter's synchronous Dispose fast path — see the comment above.")]
+        public static ValueTask WriteRecordsAsync<T>(this XlsxSheetWriter sheet, IEnumerable<T> records,
+                                                      Action<XlsxRowWriter, T> writeRow, CancellationToken ct = default)
         {
             ArgumentNullException.ThrowIfNull(sheet);
             ArgumentNullException.ThrowIfNull(records);
@@ -64,7 +64,7 @@ namespace ExcelReader.Core.Writer
             foreach (T record in records)
             {
                 ct.ThrowIfCancellationRequested();
-                RowWriter row = sheet.StartRow(ct);
+                XlsxRowWriter row = sheet.StartRow(ct);
                 writeRow(row, record);
                 row.Dispose();
             }

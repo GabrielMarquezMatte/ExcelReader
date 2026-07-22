@@ -47,7 +47,7 @@ namespace ExcelReader.Benchmarks
         // every reader value path for the read benchmark.
         public static Task<byte[]> BuildAsync(int rows)
         {
-            return BuildAsync<WorkbookWriter, SheetWriter, RowWriter>(rows, static ms => WorkbookWriter.CreateAsync(ms, leaveOpen: true));
+            return BuildAsync<XlsxWorkbookWriter, XlsxSheetWriter, XlsxRowWriter>(rows, static ms => XlsxWorkbookWriter.CreateAsync(ms, leaveOpen: true));
         }
 
         public static Task<byte[]> BuildXlsbAsync(int rows)
