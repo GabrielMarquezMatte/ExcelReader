@@ -5,7 +5,7 @@ using System.Text;
 namespace ExcelReader.Core.Writer.Internal
 {
     // Shared "write one text part into a ZIP/OPC entry" and "flush the underlying stream" logic for
-    // the ZIP-based workbook writers (WorkbookWriter / XlsbWorkbookWriter). XlsWorkbookWriter instead
+    // the ZIP-based workbook writers (XlsxWorkbookWriter / XlsbWorkbookWriter). XlsWorkbookWriter instead
     // assembles a single OLE container, so it has no ZIP entries to share this with.
     internal static class ZipEntryWriter
     {

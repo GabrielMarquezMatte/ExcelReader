@@ -20,9 +20,9 @@ namespace ExcelReader.Tests
         {
             await using MemoryStream workbook = await WriteXlsxAsync(useSharedStrings: false, async wb =>
             {
-                SheetWriter sheet = wb.AddSheet("S1");
+                XlsxSheetWriter sheet = wb.AddSheet("S1");
                 await sheet.StartAsync(TestContext.Current.CancellationToken);
-                await using (RowWriter row = await sheet.StartRowAsync(TestContext.Current.CancellationToken))
+                await using (XlsxRowWriter row = await sheet.StartRowAsync(TestContext.Current.CancellationToken))
                 {
                     row.Write("repeat");
                     row.Write("repeat");
@@ -44,9 +44,9 @@ namespace ExcelReader.Tests
         {
             await using MemoryStream workbook = await WriteXlsxAsync(useSharedStrings: true, async wb =>
             {
-                SheetWriter first = wb.AddSheet("First");
+                XlsxSheetWriter first = wb.AddSheet("First");
                 await first.StartAsync(TestContext.Current.CancellationToken);
-                await using (RowWriter row = await first.StartRowAsync(TestContext.Current.CancellationToken))
+                await using (XlsxRowWriter row = await first.StartRowAsync(TestContext.Current.CancellationToken))
                 {
                     row.Write("repeat");
                     row.Write("repeat");
@@ -54,9 +54,9 @@ namespace ExcelReader.Tests
                 }
                 await first.EndAsync(TestContext.Current.CancellationToken);
 
-                SheetWriter second = wb.AddSheet("Second");
+                XlsxSheetWriter second = wb.AddSheet("Second");
                 await second.StartAsync(TestContext.Current.CancellationToken);
-                await using (RowWriter row = await second.StartRowAsync(TestContext.Current.CancellationToken))
+                await using (XlsxRowWriter row = await second.StartRowAsync(TestContext.Current.CancellationToken))
                 {
                     row.Write("repeat");
                 }
@@ -216,10 +216,10 @@ namespace ExcelReader.Tests
             Assert.False(rows.MoveNext());
         }
 
-        private static async Task<MemoryStream> WriteXlsxAsync(bool useSharedStrings, Func<WorkbookWriter, Task> build)
+        private static async Task<MemoryStream> WriteXlsxAsync(bool useSharedStrings, Func<XlsxWorkbookWriter, Task> build)
         {
             var ms = new MemoryStream();
-            await using (WorkbookWriter writer = await WorkbookWriter.CreateAsync(
+            await using (XlsxWorkbookWriter writer = await XlsxWorkbookWriter.CreateAsync(
                 ms,
                 leaveOpen: true,
                 useSharedStrings: useSharedStrings,

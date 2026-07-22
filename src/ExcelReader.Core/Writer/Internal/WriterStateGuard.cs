@@ -2,7 +2,7 @@ using System.IO.Compression;
 
 namespace ExcelReader.Core.Writer.Internal
 {
-    // Shared WriterState guard checks for the three state-tracking workbook writers (WorkbookWriter,
+    // Shared WriterState guard checks for the three state-tracking workbook writers (XlsxWorkbookWriter,
     // XlsbWorkbookWriter, XlsWorkbookWriter): each StartAsync/AddSheet/EndAsync call site repeats the
     // same "already disposed" / "wrong state" checks, differing only in the writer's type name and
     // the action being guarded.
@@ -43,7 +43,7 @@ namespace ExcelReader.Core.Writer.Internal
     }
 
     // The "#if NET10_0_OR_GREATER await zip.DisposeAsync() #else zip.Dispose()" idiom, shared by the
-    // two ZIP-backed writers (WorkbookWriter, XlsbWorkbookWriter) across their EndAsync/DisposeAsync
+    // two ZIP-backed writers (XlsxWorkbookWriter, XlsbWorkbookWriter) across their EndAsync/DisposeAsync
     // paths.
     internal static class ZipArchiveDisposal
     {

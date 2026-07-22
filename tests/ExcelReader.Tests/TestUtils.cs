@@ -8,11 +8,11 @@ namespace ExcelReader.Tests
     // A record class (not struct) so `new Gap()` honors the Count = 1 default.
     internal sealed record Gap(int Count = 1);
 
-    // Builds workbooks via the real WorkbookWriter from typed cell values.
+    // Builds workbooks via the real XlsxWorkbookWriter from typed cell values.
     // Use for reader/parser fixtures expressible as inline strings, numbers,
     // dates (builtin numFmt 14), and bools. For shared strings, custom number
     // formats, the 1904 date system, or error/formula cells, use WorkbookBuilder
-    // (raw XML) instead — WorkbookWriter cannot emit those.
+    // (raw XML) instead — XlsxWorkbookWriter cannot emit those.
     internal static class TypedWorkbook
     {
         // Single sheet "S1"; each row is an array of cell values.
@@ -25,16 +25,16 @@ namespace ExcelReader.Tests
             params (string Name, object?[][] Rows)[] sheets)
         {
             var ms = new MemoryStream();
-            await using (WorkbookWriter wb = await WorkbookWriter.CreateAsync(ms, leaveOpen: true))
+            await using (XlsxWorkbookWriter wb = await XlsxWorkbookWriter.CreateAsync(ms, leaveOpen: true))
             {
                 await wb.StartAsync();
                 foreach ((string name, object?[][] rows) in sheets)
                 {
-                    SheetWriter sheet = wb.AddSheet(name);
+                    XlsxSheetWriter sheet = wb.AddSheet(name);
                     await sheet.StartAsync();
                     foreach (object?[] row in rows)
                     {
-                        await using RowWriter rw = await sheet.StartRowAsync();
+                        await using XlsxRowWriter rw = await sheet.StartRowAsync();
                         foreach (object? cell in row)
                         {
                             WriteCell(rw, cell);
@@ -48,7 +48,7 @@ namespace ExcelReader.Tests
             return ms;
         }
 
-        private static void WriteCell(RowWriter rw, object? cell)
+        private static void WriteCell(XlsxRowWriter rw, object? cell)
         {
             switch (cell)
             {

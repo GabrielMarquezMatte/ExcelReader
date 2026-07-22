@@ -584,7 +584,7 @@ namespace ExcelReader.Tests
             try
             {
                 await File.WriteAllTextAsync(path, "a,b\n1,2\n", TestContext.Current.CancellationToken);
-                await using var reader = await Excel.FromCsvFileAsync(path, TestContext.Current.CancellationToken);
+                await using var reader = await Excel.FromCsvFileAsync(path, ct: TestContext.Current.CancellationToken);
 
                 var rows = await ReadAllAsync(reader);
 

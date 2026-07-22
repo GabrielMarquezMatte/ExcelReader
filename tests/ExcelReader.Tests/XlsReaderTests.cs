@@ -415,7 +415,7 @@ namespace ExcelReader.Tests
                     Assert.Equal("A", e.Current[0].GetString());
                 }
 
-                await using (var reader = await Excel.FromXlsFileAsync(path, TestContext.Current.CancellationToken))
+                await using (var reader = await Excel.FromXlsFileAsync(path, ct: TestContext.Current.CancellationToken))
                 {
                     await using var e = reader.GetAsyncEnumerator(TestContext.Current.CancellationToken);
                     Assert.True(await e.MoveNextAsync());
