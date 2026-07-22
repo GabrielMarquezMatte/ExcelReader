@@ -76,7 +76,7 @@ namespace ExcelReader.Tests
             string path = WriteTemp(".xls", XlsWorkbookBuilder.Build(sheets: [("S1", [["A"]])]));
             try
             {
-                await using var reader = await Excel.OpenAsync(path, TestContext.Current.CancellationToken);
+                await using var reader = await Excel.OpenAsync(path, ct: TestContext.Current.CancellationToken);
                 Assert.IsType<XlsReader>(reader);
             }
             finally

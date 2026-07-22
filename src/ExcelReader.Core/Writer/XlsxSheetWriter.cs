@@ -5,13 +5,9 @@ using ExcelReader.Core.Writer.Internal;
 
 namespace ExcelReader.Core.Writer
 {
-    public sealed class SheetWriter : ISheetWriter<RowWriter>
+    public sealed class XlsxSheetWriter : ISheetWriter<XlsxRowWriter>
     {
-        [SuppressMessage("SharpSource", "SS066:DisposableFieldIsNotDisposed",
-            Justification = "WorkbookWriter is borrowed; its lifetime is managed by the caller.")]
-        private readonly WorkbookWriter _owner;
-        [SuppressMessage("SharpSource", "SS066:DisposableFieldIsNotDisposed",
-            Justification = "ZipArchive is borrowed from WorkbookWriter; its lifetime exceeds this sheet.")]
+        private readonly XlsxWorkbookWriter _owner;
         private readonly ZipArchive _zip;
         private readonly CompressionLevel _compression;
         private readonly BiffBuffer _rowBuffer = new(512);
@@ -19,15 +15,17 @@ namespace ExcelReader.Core.Writer
         // sheets while turning ~50k tiny per-row Writes into a handful of big ones. Kept at/under the
         // ArrayPool.Shared LOH threshold (a larger request would rent from the LOH and never leave it).
         private const int FlushThreshold = 64 * 1024;
-        private RowWriter? _rowWriter;
-        [SuppressMessage("SharpSource", "SS066:DisposableFieldIsNotDisposed",
-            Justification = "Stream is explicitly disposed in EndAsync via DisposeAsync.")]
+        [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP002:Dispose member",
+            Justification = "Reused per row; the caller disposes it via using after each row, and EndAsync's _rowActive guard rejects ending the sheet with it still open.")]
+        [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP006:Implement IDisposable",
+            Justification = "Reused per row; the caller disposes it via using after each row, and EndAsync's _rowActive guard rejects ending the sheet with it still open.")]
+        private XlsxRowWriter? _rowWriter;
         private Stream? _stream;
         private int _rowNumber;
         private WriterState _state = WriterState.Created;
         private bool _rowActive;
 
-        internal SheetWriter(WorkbookWriter owner, ZipArchive zip, string name, int sheetId, CompressionLevel compression)
+        internal XlsxSheetWriter(XlsxWorkbookWriter owner, ZipArchive zip, string name, int sheetId, CompressionLevel compression)
         {
             _owner = owner;
             _zip = zip;
@@ -51,8 +49,6 @@ namespace ExcelReader.Core.Writer
             Justification = "ZipArchiveEntry.Open() is used intentionally; OpenAsync entry-tracking semantics differ in .NET 10.")]
         [SuppressMessage("Reliability", "CA1849:Call async methods when in an async method",
             Justification = "See AsyncFixer02 justification above.")]
-        [SuppressMessage("SharpSource", "SS033:Async overload available",
-            Justification = "See AsyncFixer02 justification above.")]
         [SuppressMessage("Sonar", "S6966:Await DisposeAsync instead",
             Justification = "See AsyncFixer02 justification above.")]
         public async ValueTask StartAsync(CancellationToken ct = default)
@@ -60,7 +56,7 @@ namespace ExcelReader.Core.Writer
             ObjectDisposedException.ThrowIf(_state == WriterState.Ended, this);
             if (_state != WriterState.Created)
             {
-                throw new InvalidOperationException("SheetWriter has already been started.");
+                throw new InvalidOperationException("XlsxSheetWriter has already been started.");
             }
             ct.ThrowIfCancellationRequested();
             ZipArchiveEntry entry = _zip.CreateEntry($"xl/worksheets/sheet{SheetId}.xml", _compression);
@@ -81,22 +77,22 @@ namespace ExcelReader.Core.Writer
             _owner.RegisterSheet(Name, SheetId);
         }
 
-        public ValueTask<RowWriter> StartRowAsync(CancellationToken ct = default)
+        public ValueTask<XlsxRowWriter> StartRowAsync(CancellationToken ct = default)
         {
             int rowNumber = BeginRow(ct);
-            _rowWriter ??= new RowWriter(this, _rowBuffer);
+            _rowWriter ??= new XlsxRowWriter(this, _rowBuffer);
             _rowWriter.Reset(rowNumber);
             return ValueTask.FromResult(_rowWriter);
         }
 
         // Sync counterpart to StartRowAsync: row buffering and the (rare) threshold flush are already
         // fully synchronous internally (BeginRow, EndBufferedRow), so a caller that never needs to
-        // await mid-row (e.g. SheetWriterExtensions.WriteRecordsAsync's SheetWriter-specific overload)
+        // await mid-row (e.g. SheetWriterExtensions.WriteRecordsAsync's XlsxSheetWriter-specific overload)
         // can skip the per-row ValueTask/async-disposable machinery entirely.
-        public RowWriter StartRow(CancellationToken ct = default)
+        public XlsxRowWriter StartRow(CancellationToken ct = default)
         {
             int rowNumber = BeginRow(ct);
-            _rowWriter ??= new RowWriter(this, _rowBuffer);
+            _rowWriter ??= new XlsxRowWriter(this, _rowBuffer);
             _rowWriter.Reset(rowNumber);
             return _rowWriter;
         }
@@ -105,10 +101,6 @@ namespace ExcelReader.Core.Writer
             Justification = "Dispose() is called synchronously to ensure ZipArchive entry tracking is updated before this method returns.")]
         [SuppressMessage("Sonar", "S6966:Await DisposeAsync instead",
             Justification = "See CA1849 justification above.")]
-        [SuppressMessage("SharpSource", "SS033:Async overload available",
-            Justification = "See CA1849 justification above.")]
-        [SuppressMessage("SharpSource", "SS059:Async disposable should be disposed asynchronously",
-            Justification = "See CA1849 justification above.")]
         [SuppressMessage("VisualStudio.Threading", "VSTHRD103:Dispose synchronously blocks",
             Justification = "See CA1849 justification above.")]
         public async ValueTask EndAsync(CancellationToken ct = default)
@@ -116,7 +108,11 @@ namespace ExcelReader.Core.Writer
             ObjectDisposedException.ThrowIf(_state == WriterState.Ended, this);
             if (_state != WriterState.Started)
             {
-                throw new InvalidOperationException("SheetWriter must be started before ending.");
+                throw new InvalidOperationException("XlsxSheetWriter must be started before ending.");
+            }
+            if (_rowActive)
+            {
+                throw new InvalidOperationException("The active XlsxRowWriter must be disposed before ending the sheet.");
             }
             ct.ThrowIfCancellationRequested();
             _state = WriterState.Ended;
@@ -147,11 +143,11 @@ namespace ExcelReader.Core.Writer
             ObjectDisposedException.ThrowIf(_state == WriterState.Ended, this);
             if (_state != WriterState.Started)
             {
-                throw new InvalidOperationException("SheetWriter must be started before adding rows.");
+                throw new InvalidOperationException("XlsxSheetWriter must be started before adding rows.");
             }
             if (_rowActive)
             {
-                throw new InvalidOperationException("The previous RowWriter must be disposed before starting a new row.");
+                throw new InvalidOperationException("The previous XlsxRowWriter must be disposed before starting a new row.");
             }
             ct.ThrowIfCancellationRequested();
             if (_rowNumber >= 1_048_576)

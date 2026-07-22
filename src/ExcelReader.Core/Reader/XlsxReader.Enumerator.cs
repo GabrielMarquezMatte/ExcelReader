@@ -17,10 +17,8 @@ namespace ExcelReader.Core.Reader
         {
             // Borrowed: the reader outlives the enumerator and owns its own disposal — do not dispose here.
             [SuppressMessage("Usage", "CA2213:Disposable fields should be disposed", Justification = "Borrowed, not owned.")]
-            [SuppressMessage("SharpSource", "SS066:Disposable field is not disposed", Justification = "Borrowed, not owned.")]
             private readonly XlsxReader _reader;
             // Owned: opened by Get(Async)Enumerator for this enumerator alone; disposed in Dispose(Async).
-            [SuppressMessage("SharpSource", "SS066:Disposable field is not disposed", Justification = "Disposed in Dispose().")]
             private int _nextCol;
 
             // Non-null only when this sheet's elements carry a namespace prefix (e.g. <x:row>); holds the
@@ -91,8 +89,6 @@ namespace ExcelReader.Core.Reader
             // machine regardless. This mirrors the same steps but returns a completed ValueTask when
             // every step resolves synchronously (~99.9% of rows), only falling to an awaiting
             // continuation at the exact step that needs a refill.
-            [SuppressMessage("SharpSource", "SS034:Use await to get the result of a Task",
-                Justification = "Every .Result access is guarded by IsCompletedSuccessfully immediately above it — never blocks.")]
             [SuppressMessage("VisualStudio.Threading", "VSTHRD103:Result synchronously blocks",
                 Justification = "Every .Result access is guarded by IsCompletedSuccessfully immediately above it — never blocks.")]
             public ValueTask<bool> MoveNextAsync()
@@ -146,8 +142,6 @@ namespace ExcelReader.Core.Reader
                 }
             }
 
-            [SuppressMessage("SharpSource", "SS034:Use await to get the result of a Task",
-                Justification = "Every .Result access is guarded by IsCompletedSuccessfully immediately above it — never blocks.")]
             [SuppressMessage("VisualStudio.Threading", "VSTHRD103:Result synchronously blocks",
                 Justification = "Every .Result access is guarded by IsCompletedSuccessfully immediately above it — never blocks.")]
             private ValueTask<bool> ReadRowAsync()
@@ -172,9 +166,9 @@ namespace ExcelReader.Core.Reader
             }
 
             // Returns null only when markup was skipped and enumeration should continue immediately.
-            [SuppressMessage("SharpSource", "SS034:Use await to get the result of a Task",
-                Justification = "The .Result access is guarded by IsCompletedSuccessfully immediately above it — never blocks.")]
             [SuppressMessage("VisualStudio.Threading", "VSTHRD103:Result synchronously blocks",
+                Justification = "The .Result access is guarded by IsCompletedSuccessfully immediately above it — never blocks.")]
+            [SuppressMessage("VisualStudio.Threading", "VSTHRD002:Avoid problematic synchronous waits",
                 Justification = "The .Result access is guarded by IsCompletedSuccessfully immediately above it — never blocks.")]
             [SuppressMessage("Reliability", "CA2012:Use ValueTasks correctly",
                 Justification = "The ValueTask is either returned through AwaitThenRestartAsync or consumed once after confirming synchronous completion.")]

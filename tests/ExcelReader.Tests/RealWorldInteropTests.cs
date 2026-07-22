@@ -162,9 +162,9 @@ namespace ExcelReader.Tests
         {
             await using MemoryStream workbook = await WriteXlsxAsync(async wb =>
             {
-                SheetWriter first = wb.AddSheet("Sales & Ops");
+                XlsxSheetWriter first = wb.AddSheet("Sales & Ops");
                 await first.StartAsync(TestContext.Current.CancellationToken);
-                await using (RowWriter row = await first.StartRowAsync(TestContext.Current.CancellationToken))
+                await using (XlsxRowWriter row = await first.StartRowAsync(TestContext.Current.CancellationToken))
                 {
                     row.Write("<North>");
                     row.Write(42);
@@ -172,9 +172,9 @@ namespace ExcelReader.Tests
                 }
                 await first.EndAsync(TestContext.Current.CancellationToken);
 
-                SheetWriter second = wb.AddSheet("Dates");
+                XlsxSheetWriter second = wb.AddSheet("Dates");
                 await second.StartAsync(TestContext.Current.CancellationToken);
-                await using (RowWriter row = await second.StartRowAsync(TestContext.Current.CancellationToken))
+                await using (XlsxRowWriter row = await second.StartRowAsync(TestContext.Current.CancellationToken))
                 {
                     row.Write(new DateTime(2024, 5, 6, 0, 0, 0, DateTimeKind.Unspecified));
                 }
@@ -350,10 +350,10 @@ namespace ExcelReader.Tests
             return ms;
         }
 
-        private static async Task<MemoryStream> WriteXlsxAsync(Func<WorkbookWriter, Task> build)
+        private static async Task<MemoryStream> WriteXlsxAsync(Func<XlsxWorkbookWriter, Task> build)
         {
             var ms = new MemoryStream();
-            await using (WorkbookWriter writer = await WorkbookWriter.CreateAsync(ms, leaveOpen: true, ct: TestContext.Current.CancellationToken))
+            await using (XlsxWorkbookWriter writer = await XlsxWorkbookWriter.CreateAsync(ms, leaveOpen: true, ct: TestContext.Current.CancellationToken))
             {
                 await writer.StartAsync(TestContext.Current.CancellationToken);
                 await build(writer);

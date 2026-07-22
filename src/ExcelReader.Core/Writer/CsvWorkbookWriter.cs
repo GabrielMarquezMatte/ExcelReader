@@ -7,8 +7,6 @@ namespace ExcelReader.Core.Writer
     // sheet and rejects a second AddSheet. The workbook owns the CsvWriter; the sheet only borrows it.
     public sealed class CsvSheetWriter : ISheetWriter<CsvRowWriter>
     {
-        [SuppressMessage("SharpSource", "SS066:DisposableFieldIsNotDisposed",
-            Justification = "CsvWriter is borrowed; CsvWorkbookWriter owns and disposes it.")]
         private readonly CsvWriter _writer;
 
         internal CsvSheetWriter(CsvWriter writer)

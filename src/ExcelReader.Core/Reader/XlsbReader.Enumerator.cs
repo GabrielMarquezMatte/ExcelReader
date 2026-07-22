@@ -14,7 +14,8 @@ namespace ExcelReader.Core.Reader
             Justification = "Public nested enumerator is the standard foreach pattern.")]
         public sealed class Enumerator : PooledStreamRowEnumerator, IExcelRowEnumerator
         {
-            [SuppressMessage("SharpSource", "SS066:Disposable field is not disposed", Justification = "Borrowed, not owned.")]
+            [SuppressMessage("Usage", "CA2213:Disposable fields should be disposed",
+                Justification = "XlsbReader is borrowed; its lifetime is managed by the caller, not this enumerator.")]
             private readonly XlsbReader _reader;
             private bool _ended;
             // A BrtRowHdr for the NEXT row was already consumed while collecting cells for the current row.

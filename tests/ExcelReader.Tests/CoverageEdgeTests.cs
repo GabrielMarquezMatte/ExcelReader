@@ -469,12 +469,12 @@ namespace ExcelReader.Tests
         public async Task WriterCoversNullableBoolAndLargeColumnNames()
         {
             await using var ms = new MemoryStream();
-            await using (WorkbookWriter wb = await WorkbookWriter.CreateAsync(ms, leaveOpen: true, ct: TestContext.Current.CancellationToken))
+            await using (XlsxWorkbookWriter wb = await XlsxWorkbookWriter.CreateAsync(ms, leaveOpen: true, ct: TestContext.Current.CancellationToken))
             {
                 await wb.StartAsync(TestContext.Current.CancellationToken);
-                SheetWriter sheet = wb.AddSheet("Wide");
+                XlsxSheetWriter sheet = wb.AddSheet("Wide");
                 await sheet.StartAsync(TestContext.Current.CancellationToken);
-                await using (RowWriter row = await sheet.StartRowAsync(TestContext.Current.CancellationToken))
+                await using (XlsxRowWriter row = await sheet.StartRowAsync(TestContext.Current.CancellationToken))
                 {
                     row.Write((bool?)null);
                     row.Write((bool?)true);
@@ -499,12 +499,12 @@ namespace ExcelReader.Tests
         [Fact]
         public async Task WriterStateErrorsCoverStartedAndEndedBranches()
         {
-            await using WorkbookWriter wb = await WorkbookWriter.CreateAsync(new MemoryStream(), ct: TestContext.Current.CancellationToken);
+            await using XlsxWorkbookWriter wb = await XlsxWorkbookWriter.CreateAsync(new MemoryStream(), ct: TestContext.Current.CancellationToken);
 
             await wb.StartAsync(TestContext.Current.CancellationToken);
             await Assert.ThrowsAsync<InvalidOperationException>(async () =>
                 await wb.StartAsync(TestContext.Current.CancellationToken));
-            SheetWriter sheet = wb.AddSheet("S1");
+            XlsxSheetWriter sheet = wb.AddSheet("S1");
             Assert.Throws<InvalidOperationException>(() => wb.AddSheet("S2"));
             await sheet.StartAsync(TestContext.Current.CancellationToken);
             await sheet.EndAsync(TestContext.Current.CancellationToken);
@@ -516,9 +516,9 @@ namespace ExcelReader.Tests
         [Fact]
         public async Task SheetWriterStateErrorsCoverStartedAndEndedBranches()
         {
-            await using WorkbookWriter wb = await WorkbookWriter.CreateAsync(new MemoryStream(), ct: TestContext.Current.CancellationToken);
+            await using XlsxWorkbookWriter wb = await XlsxWorkbookWriter.CreateAsync(new MemoryStream(), ct: TestContext.Current.CancellationToken);
             await wb.StartAsync(TestContext.Current.CancellationToken);
-            SheetWriter sheet = wb.AddSheet("S1");
+            XlsxSheetWriter sheet = wb.AddSheet("S1");
 
             await Assert.ThrowsAsync<InvalidOperationException>(async () =>
                 await sheet.EndAsync(TestContext.Current.CancellationToken));

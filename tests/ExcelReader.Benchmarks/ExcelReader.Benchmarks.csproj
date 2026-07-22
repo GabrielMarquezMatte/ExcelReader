@@ -4,7 +4,18 @@
     <OutputType>Exe</OutputType>
     <TargetFramework>net10.0</TargetFramework>
     <!-- Benchmark host app: ConfigureAwait is irrelevant (no captured sync context). -->
-    <NoWarn>$(NoWarn);CA2007;MA0004</NoWarn>
+    <!-- CA1707: BenchmarkDotNet method names use underscores (e.g. Xlsx_ExcelReader) for readable
+         report output — that's the tool's own naming convention, not a target for cleanup. -->
+    <!-- CA1849/VSTHRD103/S6966: several benchmarks deliberately call the sync API because that's
+         the code path being measured. -->
+    <!-- IDISP001: sheet/row writers created here are owned and disposed by their parent
+         workbook writer, same pattern as the ownership-transfer suppressions in Core. -->
+    <!-- CA1815: benchmark data POCOs (e.g. RecordStruct) are never compared for equality. -->
+    <!-- HLQ012: CollectionsMarshal.AsSpan() vs foreach is setup-code noise here — it's the data
+         generator/harness, not the path being measured. -->
+    <!-- RS0016/RS0026/RS0037: public-API tracking is for ExcelReader.Core's shipped NuGet
+         surface. This app is never packaged, so there's no PublicAPI.txt here by design. -->
+    <NoWarn>$(NoWarn);CA2007;MA0004;CA1707;CA1849;VSTHRD103;S6966;IDISP001;CA1815;HLQ012;RS0016;RS0026;RS0037</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>

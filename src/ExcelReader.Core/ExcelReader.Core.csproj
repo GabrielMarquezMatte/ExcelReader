@@ -44,4 +44,12 @@
     <InternalsVisibleTo Include="ExcelReader.Tests" />
   </ItemGroup>
 
+  <!-- Public API surface differs per TFM (RefParser/NamedRefRowEnumerable/ExcelRowContext are
+       #if NET9_0_OR_GREATER only), so each target framework tracks its own Shipped/Unshipped
+       files instead of sharing the root-level ones the analyzer picks up by convention. -->
+  <ItemGroup>
+    <AdditionalFiles Include="PublicAPI\$(TargetFramework)\PublicAPI.Shipped.txt" />
+    <AdditionalFiles Include="PublicAPI\$(TargetFramework)\PublicAPI.Unshipped.txt" />
+  </ItemGroup>
+
 </Project>

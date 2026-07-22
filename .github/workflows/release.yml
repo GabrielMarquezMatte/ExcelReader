@@ -73,3 +73,43 @@ jobs:
           name: nuget-packages
           path: ./artifacts/*
           if-no-files-found: warn
+
+  promote-public-api:
+    name: Promote PublicAPI.Unshipped -> Shipped
+    needs: publish
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+
+    steps:
+      - name: Checkout master
+        uses: actions/checkout@v7
+        with:
+          ref: master
+
+      - name: Promote unshipped API entries
+        id: promote
+        run: |
+          if python3 .github/scripts/promote_public_api.py; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Open PR
+        if: steps.promote.outputs.changed == 'true'
+        uses: peter-evans/create-pull-request@v7
+        with:
+          commit-message: "chore: promote public API for ${{ github.ref_name }}"
+          title: "chore: promote public API for ${{ github.ref_name }}"
+          body: >-
+            Everything that was in `PublicAPI.Unshipped.txt` when `${{ github.ref_name }}` was
+            published is now part of the shipped contract. Moves it into `PublicAPI.Shipped.txt`
+            so future removals/signature changes get flagged as breaking.
+          branch: chore/promote-public-api-${{ github.ref_name }}
+          base: master
+          delete-branch: true
+          add-paths: |
+            src/*/PublicAPI/*/PublicAPI.Shipped.txt
+            src/*/PublicAPI/*/PublicAPI.Unshipped.txt

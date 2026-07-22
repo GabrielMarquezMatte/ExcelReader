@@ -37,15 +37,13 @@ namespace ExcelReader.Core.Writer
             Justification = "Factory method transfers ZipArchive ownership to XlsbWorkbookWriter; caller disposes via DisposeAsync.")]
         [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
             Justification = "XlsbWorkbookWriter takes ownership of ZipArchive and disposes it in DisposeAsync/EndAsync.")]
-        [SuppressMessage("Design", "CA1068:CancellationToken parameters must come last",
-            Justification = "useSharedStrings was added after existing optional parameters to preserve positional source compatibility.")]
         public static ValueTask<XlsbWorkbookWriter> CreateAsync(
             Stream stream,
             bool leaveOpen = false,
             bool date1904 = false,
             CompressionLevel compression = CompressionLevel.Fastest,
-            CancellationToken ct = default,
-            bool useSharedStrings = false)
+            bool useSharedStrings = false,
+            CancellationToken ct = default)
         {
             ArgumentNullException.ThrowIfNull(stream);
             ct.ThrowIfCancellationRequested();

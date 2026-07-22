@@ -368,7 +368,7 @@ A few differences from `ExcelParser<T>`:
 using ExcelReader.Core.Writer;
 
 await using var stream = File.Create("out.xlsx");
-await using var workbook = await WorkbookWriter.CreateAsync(stream);
+await using var workbook = await XlsxWorkbookWriter.CreateAsync(stream);
 
 await workbook.StartAsync();
 await using (var sheet = workbook.AddSheet("Summary"))
@@ -397,7 +397,7 @@ By default, the XLSX writer emits inline strings to keep memory usage flat while
 If your workbook repeats many strings and smaller files matter more than the extra lookup table, opt in to shared strings:
 
 ```csharp
-await using var workbook = await WorkbookWriter.CreateAsync(stream, useSharedStrings: true);
+await using var workbook = await XlsxWorkbookWriter.CreateAsync(stream, useSharedStrings: true);
 ```
 
 ## Read and write XLSB workbooks (BIFF12)

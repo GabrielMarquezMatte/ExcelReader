@@ -1,4 +1,5 @@
 using System.Buffers;
+using System.Diagnostics.CodeAnalysis;
 using ExcelReader.Core.Writer.Internal;
 
 namespace ExcelReader.Core.Writer
@@ -9,7 +10,7 @@ namespace ExcelReader.Core.Writer
     // configuration to round-trip.
     public sealed class CsvWriter : IDisposable, IAsyncDisposable
     {
-        // ponytail: same 64 KB flush threshold as the XLSX SheetWriter — bounds memory on huge
+        // ponytail: same 64 KB flush threshold as the XLSX XlsxSheetWriter — bounds memory on huge
         // files while turning many tiny row writes into a handful of big stream writes, and keeps
         // the pooled backing array under the LOH threshold instead of parking it there permanently.
         private const int FlushThreshold = 64 * 1024;
@@ -23,6 +24,8 @@ namespace ExcelReader.Core.Writer
         private readonly SearchValues<byte> _specialBytes;
         private readonly SearchValues<char> _specialChars;
         private readonly BiffBuffer _buffer = new(4096);
+        [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP002:Dispose member",
+            Justification = "Reused per row; the caller disposes it via using after each row, and TerminateOpenRow handles a dangling open row on Dispose without needing _rowWriter.Dispose() itself.")]
         private CsvRowWriter? _rowWriter;
         private bool _rowActive;
         private bool _disposed;
