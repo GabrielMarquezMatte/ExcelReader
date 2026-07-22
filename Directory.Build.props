@@ -11,11 +11,10 @@
     <WarningLevel>9999</WarningLevel>
     <FileAlignment>512</FileAlignment>
     <NoWarn>
-      $(NoWarn);CA1062;CA1008;1591;RS0016;RS0037;RS0026;S1244;SS002;SS008;SS019;MA0016;CA1819;S6964;NU1902;NU1901;IDE0008;IDE0046;IDE0058;CA1515;CA1002</NoWarn>
-    <NoWarn>$(NoWarn);CA1848;CA3003;AD0001;S6960;MA0051;CA1873;MA0049;CA1724;SS017;MA0048</NoWarn>
+      $(NoWarn);CA1062;RS0016;RS0037;RS0026;S1244;CA1819;CA1515</NoWarn>
+    <NoWarn>$(NoWarn);MA0051;MA0048</NoWarn>
     <!-- CS8032: a preview analyzer fails to instantiate in this SDK; analyzer-load noise, not our code. -->
     <NoWarn>$(NoWarn);CS8032</NoWarn>
-    <NoWarn>$(NoWarn);RS0037</NoWarn>
     <AccelerateBuildsInVisualStudio>true</AccelerateBuildsInVisualStudio>
     <AutoGenerateBindingRedirects>true</AutoGenerateBindingRedirects>
     <GenerateBindingRedirectsOutputType>true</GenerateBindingRedirectsOutputType>
@@ -76,10 +75,6 @@
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
     <PackageReference Include="Microsoft.CodeAnalysis.Analyzers" Version="5.6.0">
-      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
-      <PrivateAssets>all</PrivateAssets>
-    </PackageReference>
-    <PackageReference Include="SharpSource" Version="1.33.3">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
