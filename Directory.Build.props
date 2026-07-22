@@ -10,8 +10,12 @@
     <CodeAnalysisTreatWarningsAsErrors>true</CodeAnalysisTreatWarningsAsErrors>
     <WarningLevel>9999</WarningLevel>
     <FileAlignment>512</FileAlignment>
+    <!-- RS0026: flags public overloads with optional parameters as a backcompat risk (adding a
+         new overload later can rebind existing callers). Several intentional overloads (e.g.
+         Excel.Open) already accept this tradeoff for ergonomics; fixing it means redesigning
+         those APIs, not a PublicAPI.txt entry, so it stays suppressed. -->
     <NoWarn>
-      $(NoWarn);CA1062;RS0016;RS0037;RS0026;S1244;CA1819;CA1515</NoWarn>
+      $(NoWarn);CA1062;RS0026;S1244;CA1819;CA1515</NoWarn>
     <NoWarn>$(NoWarn);MA0051;MA0048</NoWarn>
     <!-- CS8032: a preview analyzer fails to instantiate in this SDK; analyzer-load noise, not our code. -->
     <NoWarn>$(NoWarn);CS8032</NoWarn>

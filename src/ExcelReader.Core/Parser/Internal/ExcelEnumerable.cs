@@ -34,6 +34,8 @@ namespace ExcelReader.Core.Parser.Internal
             Justification = "Each call creates a fresh enumerator; no caching.")]
         [SuppressMessage("Performance", "HLQ006:GetEnumerator should return a value type",
             Justification = "Enumerator is a class so the sync and async paths can share the SyncRowEnumerator/AsyncRowEnumerator base plumbing.")]
+        [SuppressMessage("ApiDesign", "RS0041:Public members should not use oblivious types",
+            Justification = "T is intentionally unconstrained so a row model can be a class or a struct (see RefParser/struct-binding support); constraining it would break that.")]
         public Enumerator GetEnumerator()
         {
             TypeMapInfo<T> info = TypeMapper<T>.GetInfo();
@@ -58,6 +60,8 @@ namespace ExcelReader.Core.Parser.Internal
 
         [SuppressMessage("Performance", "HLQ006:GetAsyncEnumerator should return a value type",
             Justification = "Async enumerator requires a class to host the async state machine.")]
+        [SuppressMessage("ApiDesign", "RS0041:Public members should not use oblivious types",
+            Justification = "T is intentionally unconstrained so a row model can be a class or a struct (see RefParser/struct-binding support); constraining it would break that.")]
         public AsyncEnumerator GetAsyncEnumerator(CancellationToken cancellationToken = default)
         {
             TypeMapInfo<T> info = TypeMapper<T>.GetInfo();

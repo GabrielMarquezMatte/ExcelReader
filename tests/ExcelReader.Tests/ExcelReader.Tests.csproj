@@ -16,6 +16,10 @@
          DateTimeKind.Unspecified (the library never sets Kind) — no ambiguity in practice. -->
     <NoWarn>$(NoWarn);CA2007;CA1849;S6966;CA1707;S6562;HLQ005;S3459;S1144;MA0004;IDISP004;VSTHRD103;AsyncFixer02;IDISP005;IDISP001</NoWarn>
     <NoWarn>$(NoWarn);S3878;CA2000;IDISP016;CA1034;CA1812;IDISP012;CA1835;CA1034;S2094;MA0060;CA2022</NoWarn>
+    <!-- RS0016/RS0026/RS0037: the public-API-tracking analyzer is for ExcelReader.Core's shipped
+         NuGet surface. This is a test project — its public test classes/methods are an xUnit
+         convention, not an API commitment, so there's no PublicAPI.txt here by design. -->
+    <NoWarn>$(NoWarn);RS0016;RS0026;RS0037</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>
