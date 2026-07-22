@@ -83,10 +83,10 @@ jobs:
       pull-requests: write
 
     steps:
-      - name: Checkout master
+      - name: Checkout develop
         uses: actions/checkout@v7
         with:
-          ref: master
+          ref: develop
 
       - name: Promote unshipped API entries
         id: promote
@@ -108,7 +108,7 @@ jobs:
             published is now part of the shipped contract. Moves it into `PublicAPI.Shipped.txt`
             so future removals/signature changes get flagged as breaking.
           branch: chore/promote-public-api-${{ github.ref_name }}
-          base: master
+          base: develop
           delete-branch: true
           add-paths: |
             src/*/PublicAPI/*/PublicAPI.Shipped.txt
