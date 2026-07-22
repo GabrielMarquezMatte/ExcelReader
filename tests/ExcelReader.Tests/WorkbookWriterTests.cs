@@ -988,8 +988,10 @@ namespace ExcelReader.Tests
             {
                 XlsxSheetWriter sheet = wb.AddSheet("Sheet1");
                 await sheet.StartAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
-                await using XlsxRowWriter row = await sheet.StartRowAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
-                row.Write(" leading and trailing ");
+                await using (XlsxRowWriter row = await sheet.StartRowAsync(TestContext.Current.CancellationToken).ConfigureAwait(true))
+                {
+                    row.Write(" leading and trailing ");
+                }
                 await sheet.EndAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
             }).ConfigureAwait(true);
 
@@ -1053,8 +1055,10 @@ namespace ExcelReader.Tests
             {
                 XlsxSheetWriter sheet = wb.AddSheet("Sheet1");
                 await sheet.StartAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
-                await using XlsxRowWriter row = await sheet.StartRowAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
-                row.Write("a\u0001b _x0041_");
+                await using (XlsxRowWriter row = await sheet.StartRowAsync(TestContext.Current.CancellationToken).ConfigureAwait(true))
+                {
+                    row.Write("a\u0001b _x0041_");
+                }
                 await sheet.EndAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
             }).ConfigureAwait(true);
 
@@ -1078,6 +1082,23 @@ namespace ExcelReader.Tests
 
             row.Skip(16_384);
             Assert.Throws<ExcelLimitExceededException>(() => row.Write("beyond XFD"));
+        }
+
+        [Fact]
+        public async Task XlsxEndAsyncThrowsWhenLastRowStillActive()
+        {
+            await using var ms = new MemoryStream();
+            await using XlsxWorkbookWriter wb = await XlsxWorkbookWriter.CreateAsync(ms, leaveOpen: true, ct: TestContext.Current.CancellationToken).ConfigureAwait(true);
+            await wb.StartAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
+            XlsxSheetWriter sheet = wb.AddSheet("Sheet1");
+            await sheet.StartAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
+            XlsxRowWriter row = await sheet.StartRowAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
+
+            await Assert.ThrowsAsync<InvalidOperationException>(
+                () => sheet.EndAsync(TestContext.Current.CancellationToken).AsTask()).ConfigureAwait(true);
+
+            await row.DisposeAsync().ConfigureAwait(true);
+            await sheet.EndAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
         }
     }
 }

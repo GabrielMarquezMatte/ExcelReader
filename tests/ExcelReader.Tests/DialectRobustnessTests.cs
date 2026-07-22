@@ -123,6 +123,7 @@ namespace ExcelReader.Tests
             {
                 while (e.MoveNext())
                 {
+                    // Drain rows until the truncated stream throws.
                 }
             });
         }
@@ -138,6 +139,7 @@ namespace ExcelReader.Tests
             {
                 while (await e.MoveNextAsync())
                 {
+                    // Drain rows until the truncated stream throws.
                 }
             });
         }

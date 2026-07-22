@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using ExcelReader.Core.Enums;
 using ExcelReader.Core.Reader;
@@ -400,6 +401,24 @@ namespace ExcelReader.Tests
                 }
             }
             Assert.Equal(rows, totalRows);
+        }
+
+        [Fact]
+        [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP017:Prefer using",
+            Justification = "The test disposes row manually, between the assert and the follow-up End() call, to prove the sheet can end normally once the row is closed.")]
+        public async Task EndThrowsWhenLastRowStillActive()
+        {
+            var ms = new MemoryStream();
+            await using var wb = XlsWorkbookWriter.Create(ms, leaveOpen: true);
+            wb.Start();
+            var sheet = wb.AddSheet("S");
+            sheet.Start();
+            var row = sheet.StartRow();
+
+            Assert.Throws<InvalidOperationException>(sheet.End);
+
+            row.Dispose();
+            sheet.End();
         }
     }
 }

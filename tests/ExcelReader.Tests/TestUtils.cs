@@ -117,10 +117,12 @@ namespace ExcelReader.Tests
             return ms;
         }
 
+#pragma warning disable S125 // false positive: "<x:row>" below reads as commented-out code, it's prose.
         // Builds a workbook whose every SpreadsheetML element carries a namespace prefix (e.g. <x:row>),
-        // as some non-Excel producers emit. The caller supplies already-prefixed row/shared/style content;
+        // as some non-Excel producers emit. The caller supplies already-prefixed row/shared/style content
         // this prefixes the structural elements (workbook/sheets/sheet/worksheet/sheetData/sst). The .rels
         // part keeps the OPC package-relationships namespace (never the spreadsheet prefix), matching reality.
+#pragma warning restore S125
         internal static MemoryStream BuildPrefixed(
             string prefix,
             string sheetRows,

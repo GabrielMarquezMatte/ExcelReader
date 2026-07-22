@@ -10,7 +10,10 @@
          the code path being measured. -->
     <!-- IDISP001: sheet/row writers created here are owned and disposed by their parent
          workbook writer, same pattern as the ownership-transfer suppressions in Core. -->
-    <NoWarn>$(NoWarn);CA2007;MA0004;CA1707;CA1849;VSTHRD103;S6966;IDISP001</NoWarn>
+    <!-- CA1815: benchmark data POCOs (e.g. RecordStruct) are never compared for equality. -->
+    <!-- HLQ012: CollectionsMarshal.AsSpan() vs foreach is setup-code noise here — it's the data
+         generator/harness, not the path being measured. -->
+    <NoWarn>$(NoWarn);CA2007;MA0004;CA1707;CA1849;VSTHRD103;S6966;IDISP001;CA1815;HLQ012</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>

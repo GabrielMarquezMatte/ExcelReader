@@ -13,8 +13,10 @@ namespace ExcelReader.Core.Reader
     {
         [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP001:Dispose created",
             Justification = "zip ownership transfers to parseBody's returned reader on success; disposed here in the catch on failure.")]
+        [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
+            Justification = "zip ownership transfers to parseBody's returned reader on success; disposed here in the catch on failure.")]
         internal static async ValueTask<TResult> OpenAsync<TResult>(
-            Stream stream, bool leaveOpen, CancellationToken ct, Func<ZipArchive, ValueTask<TResult>> parseBody)
+            Stream stream, bool leaveOpen, Func<ZipArchive, ValueTask<TResult>> parseBody, CancellationToken ct = default)
         {
             ZipArchive? zip = null;
             try

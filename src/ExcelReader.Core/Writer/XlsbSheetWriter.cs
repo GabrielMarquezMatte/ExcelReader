@@ -158,6 +158,8 @@ namespace ExcelReader.Core.Writer
 
         [SuppressMessage("Reliability", "CA1849:Call async methods when in an async method",
             Justification = "Opening the entry from the synchronous row-writing hot path avoids an async API on every cell.")]
+        [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP003:Dispose previous before re-assigning",
+            Justification = "The null-guard above means this only ever assigns _stream once, from null; never re-assigns a live stream.")]
         private void EnsureStream()
         {
             if (_stream is not null)

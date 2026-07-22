@@ -25,6 +25,8 @@ namespace ExcelReader.Core.Writer
         private int _rowNumber = -1;
         private WriterState _state = WriterState.Created;
         private bool _rowActive;
+        [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP002:Dispose member",
+            Justification = "Reused per row; the caller disposes it via using after each row, and End's _rowActive guard rejects ending the sheet with it still open.")]
         private XlsRowWriter? _rowWriter;
 
         internal XlsSheetWriter(XlsWorkbookWriter owner, string name, bool date1904, bool isContinuation = false, string? baseName = null)
@@ -150,6 +152,10 @@ namespace ExcelReader.Core.Writer
             if (_state != WriterState.Started)
             {
                 throw new InvalidOperationException("XlsSheetWriter must be started before ending.");
+            }
+            if (_rowActive)
+            {
+                throw new InvalidOperationException("The active XlsRowWriter must be disposed before ending the sheet.");
             }
             _state = WriterState.Ended;
             _continuation?.End();
