@@ -6,8 +6,8 @@
     <Deterministic>true</Deterministic>
     <AnalysisLevel>latest</AnalysisLevel>
     <AnalysisMode>All</AnalysisMode>
-    <!-- <TreatWarningsAsErrors>true</TreatWarningsAsErrors> -->
-    <!-- <CodeAnalysisTreatWarningsAsErrors>true</CodeAnalysisTreatWarningsAsErrors> -->
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <CodeAnalysisTreatWarningsAsErrors>true</CodeAnalysisTreatWarningsAsErrors>
     <WarningLevel>9999</WarningLevel>
     <FileAlignment>512</FileAlignment>
     <NoWarn>
