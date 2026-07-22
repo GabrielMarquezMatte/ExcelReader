@@ -13,12 +13,22 @@ namespace ExcelReader.Core.Parser.Internal
     // (a base class can never be less accessible than its derived type).
     [SuppressMessage("Design", "CA1034:Nested types should not be visible",
         Justification = "Base class of the public nested Enumerator types; not itself meant for direct external use.")]
+    [SuppressMessage("Design", "CA1063:Implement IDisposable correctly",
+        Justification = "No unmanaged resources and no finalizer; every derived Enumerator is sealed and adds no disposal logic, so the full Dispose(bool) pattern buys nothing here.")]
+    [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP025:Class with no virtual dispose method should be sealed",
+        Justification = "Abstract by design (base of the public nested Enumerator types); every concrete derivative is itself sealed.")]
+    [SuppressMessage("Sonar", "S3881:IDisposable should be implemented correctly",
+        Justification = "No unmanaged resources and no finalizer; every derived Enumerator is sealed and adds no disposal logic.")]
     public abstract class SyncRowEnumerator<T, TRows> : IEnumerator<T>
         where TRows : class, IExcelRowEnumerator
     {
         [SuppressMessage("Performance", "HLQ011:ReadOnlyEnumeratorField",
             Justification = "TRows is constrained to `class` here, so it is always a reference type — no copy-on-mutate risk from a readonly field.")]
+        [SuppressMessage("Design", "CA1051:Do not declare visible instance fields",
+            Justification = "Hot-path base class (MoveNext runs per row); a field avoids a property-call indirection in the tightest loop of the library.")]
         protected readonly TRows Rows;
+        [SuppressMessage("Design", "CA1051:Do not declare visible instance fields",
+            Justification = "Hot-path base class (MoveNext runs per row); a field avoids a property-call indirection in the tightest loop of the library.")]
         protected T CurrentValue = default!;
 
         protected SyncRowEnumerator(TRows rows)
@@ -49,6 +59,8 @@ namespace ExcelReader.Core.Parser.Internal
 
         [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP007:Don't dispose injected",
             Justification = "Rows is created for this enumerator alone by the enclosing enumerable's GetEnumerator (reader.GetEnumerator()) — owned here, not injected.")]
+        [SuppressMessage("Design", "CA1816:Dispose methods should call SuppressFinalize",
+            Justification = "No finalizer exists on this type or any sealed derivative, so there is nothing to suppress.")]
         public void Dispose()
         {
             Rows.Dispose();
@@ -68,6 +80,8 @@ namespace ExcelReader.Core.Parser.Internal
     // the row-enumerator's own (e.g. XlsxReader.Enumerator.MoveNextAsync / CsvReader.Enumerator.MoveNextAsync).
     [SuppressMessage("Design", "CA1034:Nested types should not be visible",
         Justification = "Base class of the public nested AsyncEnumerator types; not itself meant for direct external use.")]
+    [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP026:Class with no virtual DisposeAsyncCore method should be sealed",
+        Justification = "Abstract by design (base of the public nested AsyncEnumerator types); every concrete derivative is itself sealed.")]
     public abstract class AsyncRowEnumerator<T, TReader, TRows> : IAsyncEnumerator<T>
         where TReader : IExcelRowReader<TRows>
         where TRows : class, IExcelRowEnumerator
@@ -75,7 +89,11 @@ namespace ExcelReader.Core.Parser.Internal
         // Borrowed: the caller owns the reader's lifetime. Only Rows (opened here) is disposed.
         private readonly TReader _reader;
         private readonly CancellationToken _ct;
+        [SuppressMessage("Design", "CA1051:Do not declare visible instance fields",
+            Justification = "Hot-path base class (MoveNextAsync runs per row); a field avoids a property-call indirection in the tightest loop of the library.")]
         protected TRows? Rows;
+        [SuppressMessage("Design", "CA1051:Do not declare visible instance fields",
+            Justification = "Hot-path base class (MoveNextAsync runs per row); a field avoids a property-call indirection in the tightest loop of the library.")]
         protected T CurrentValue = default!;
 
         protected AsyncRowEnumerator(TReader reader, CancellationToken ct)
@@ -140,6 +158,8 @@ namespace ExcelReader.Core.Parser.Internal
             return await MoveNextAsync().ConfigureAwait(false);
         }
 
+        [SuppressMessage("Design", "CA1816:Dispose methods should call SuppressFinalize",
+            Justification = "No finalizer exists on this type or any sealed derivative, so there is nothing to suppress.")]
         public ValueTask DisposeAsync()
         {
             return Rows is null ? ValueTask.CompletedTask : Rows.DisposeAsync();

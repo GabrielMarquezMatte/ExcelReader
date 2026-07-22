@@ -168,6 +168,8 @@ namespace ExcelReader.Core.Reader
             // Returns null only when markup was skipped and enumeration should continue immediately.
             [SuppressMessage("VisualStudio.Threading", "VSTHRD103:Result synchronously blocks",
                 Justification = "The .Result access is guarded by IsCompletedSuccessfully immediately above it — never blocks.")]
+            [SuppressMessage("VisualStudio.Threading", "VSTHRD002:Avoid problematic synchronous waits",
+                Justification = "The .Result access is guarded by IsCompletedSuccessfully immediately above it — never blocks.")]
             [SuppressMessage("Reliability", "CA2012:Use ValueTasks correctly",
                 Justification = "The ValueTask is either returned through AwaitThenRestartAsync or consumed once after confirming synchronous completion.")]
             private ValueTask<bool>? SkipMarkupOrContinue()

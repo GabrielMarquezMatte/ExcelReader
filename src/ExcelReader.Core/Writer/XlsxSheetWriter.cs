@@ -15,6 +15,10 @@ namespace ExcelReader.Core.Writer
         // sheets while turning ~50k tiny per-row Writes into a handful of big ones. Kept at/under the
         // ArrayPool.Shared LOH threshold (a larger request would rent from the LOH and never leave it).
         private const int FlushThreshold = 64 * 1024;
+        [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP002:Dispose member",
+            Justification = "Reused per row; the caller disposes it via using after each row, and EndAsync's _rowActive guard rejects ending the sheet with it still open.")]
+        [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP006:Implement IDisposable",
+            Justification = "Reused per row; the caller disposes it via using after each row, and EndAsync's _rowActive guard rejects ending the sheet with it still open.")]
         private XlsxRowWriter? _rowWriter;
         private Stream? _stream;
         private int _rowNumber;
@@ -105,6 +109,10 @@ namespace ExcelReader.Core.Writer
             if (_state != WriterState.Started)
             {
                 throw new InvalidOperationException("XlsxSheetWriter must be started before ending.");
+            }
+            if (_rowActive)
+            {
+                throw new InvalidOperationException("The active XlsxRowWriter must be disposed before ending the sheet.");
             }
             ct.ThrowIfCancellationRequested();
             _state = WriterState.Ended;

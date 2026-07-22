@@ -12,7 +12,9 @@
     <!-- CA1849/S6966: tests deliberately exercise the sync reader/dispose paths;
          "use the async overload" is noise here. Core keeps these rules active. -->
     <!-- CA1707: xUnit test names use underscores (Should_X_When_Y) for readability. -->
-    <NoWarn>$(NoWarn);CA2007;CA1849;S6966;CA1707;HLQ005;S3459;S1144;MA0004;IDISP004;VSTHRD103;AsyncFixer02;IDISP005;IDISP001</NoWarn>
+    <!-- S6562: assertion dates are compared against TryGetDateTime results, which are always
+         DateTimeKind.Unspecified (the library never sets Kind) — no ambiguity in practice. -->
+    <NoWarn>$(NoWarn);CA2007;CA1849;S6966;CA1707;S6562;HLQ005;S3459;S1144;MA0004;IDISP004;VSTHRD103;AsyncFixer02;IDISP005;IDISP001</NoWarn>
     <NoWarn>$(NoWarn);S3878;CA2000;IDISP016;CA1034;CA1812;IDISP012;CA1835;CA1034;S2094;MA0060;CA2022</NoWarn>
   </PropertyGroup>
 

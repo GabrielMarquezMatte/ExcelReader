@@ -46,6 +46,8 @@ namespace ExcelReader.Tests
         // Consumes the reader through 'await foreach', which binds by pattern to its GetAsyncEnumerator()
         // (synchronous open, then MoveNextAsync per row) — the whole reason that method exists. Row is a
         // ref struct, so the body must read it without awaiting (it never lives across the loop's await).
+        [SuppressMessage("VisualStudio.Threading", "VSTHRD200:Use \"Async\" suffix in names of methods that return an awaitable type",
+            Justification = "The name already communicates the async enumerator path (\"ViaAsyncEnumerator\"); appending another Async suffix would be redundant.")]
         private static async Task<List<string[]>> ReadAllViaAsyncEnumerator(CsvReader reader)
         {
             var rows = new List<string[]>();
