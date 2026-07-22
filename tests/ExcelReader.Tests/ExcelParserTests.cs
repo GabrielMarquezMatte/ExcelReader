@@ -471,7 +471,7 @@ namespace ExcelReader.Tests
         [Fact]
         public void Date1904IsHandledCorrectly()
         {
-            // 1904 date system: serial 0 = Jan 1, 1904. WorkbookWriter only emits the
+            // 1904 date system: serial 0 = Jan 1, 1904. XlsxWorkbookWriter only emits the
             // 1900 system, so this fixture stays on the raw-XML builder.
             using var ms = WorkbookBuilder.Build(
                 """<row r="1"><c r="A1" t="inlineStr"><is><t>BirthDate</t></is></c></row>""" +
@@ -570,7 +570,7 @@ namespace ExcelReader.Tests
         [Fact]
         public void SharedStringHeaderIsResolved()
         {
-            // Shared-strings table is a raw-XML feature WorkbookWriter does not emit.
+            // Shared-strings table is a raw-XML feature XlsxWorkbookWriter does not emit.
             using var ms = WorkbookBuilder.Build(
                 """<row r="1"><c r="A1" t="s"><v>0</v></c></row>""" +
                 """<row r="2"><c r="A2" t="inlineStr"><is><t>Alice</t></is></c></row>""",

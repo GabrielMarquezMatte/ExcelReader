@@ -12,7 +12,7 @@ namespace ExcelReader.Benchmarks
     // column-writer compilation — the startup cost that steady-state throughput benchmarks warm away.
     // Rows is deliberately small so the fixed compile cost dominates the per-row work.
     //
-    // GlobalSetup builds the parse workbook through the LOW-LEVEL writer (RowWriter), never through
+    // GlobalSetup builds the parse workbook through the LOW-LEVEL writer (XlsxRowWriter), never through
     // ExcelParser<T> or the record writer, so neither TypeMapper<Record> (parser) nor RecordColumns<Record>
     // (writer) is warmed before the measured invocation.
     [MemoryDiagnoser]
@@ -37,12 +37,12 @@ namespace ExcelReader.Benchmarks
         private static async Task<byte[]> BuildTypedLowLevelAsync(List<Record> records)
         {
             await using var ms = new MemoryStream();
-            await using (WorkbookWriter wb = await WorkbookWriter.CreateAsync(ms, leaveOpen: true))
+            await using (XlsxWorkbookWriter wb = await XlsxWorkbookWriter.CreateAsync(ms, leaveOpen: true))
             {
                 await wb.StartAsync();
-                SheetWriter sheet = wb.AddSheet("S1");
+                XlsxSheetWriter sheet = wb.AddSheet("S1");
                 await sheet.StartAsync();
-                await using (RowWriter header = await sheet.StartRowAsync())
+                await using (XlsxRowWriter header = await sheet.StartRowAsync())
                 {
                     header.Write("Name");
                     header.Write("Id");
@@ -51,7 +51,7 @@ namespace ExcelReader.Benchmarks
                 }
                 foreach (Record rec in records)
                 {
-                    await using RowWriter row = await sheet.StartRowAsync();
+                    await using XlsxRowWriter row = await sheet.StartRowAsync();
                     row.Write(rec.Name);
                     row.Write(rec.Id);
                     row.Write(rec.Date);

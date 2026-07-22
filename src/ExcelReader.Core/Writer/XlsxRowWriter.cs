@@ -1,29 +1,24 @@
-using System.Diagnostics.CodeAnalysis;
 using ExcelReader.Core.Writer.Internal;
 using ExcelReader.Core.Reader;
 
 namespace ExcelReader.Core.Writer
 {
-    public sealed class RowWriter : IRowWriter, IDisposable
+    public sealed class XlsxRowWriter : IRowWriter, IDisposable
     {
-        [SuppressMessage("SharpSource", "SS066:DisposableFieldIsNotDisposed",
-            Justification = "SheetWriter is borrowed; its lifetime is managed by the caller.")]
-        private readonly SheetWriter _owner;
-        [SuppressMessage("SharpSource", "SS066:DisposableFieldIsNotDisposed",
-            Justification = "BiffBuffer is owned by SheetWriter; RowWriter borrows it.")]
+        private readonly XlsxSheetWriter _owner;
         private readonly BiffBuffer _row;
         private int _rowNumber;
         private int _columnIndex;
         private bool _useCellReferences;
         private bool _disposed;
 
-        internal RowWriter(SheetWriter owner, BiffBuffer row)
+        internal XlsxRowWriter(XlsxSheetWriter owner, BiffBuffer row)
         {
             _owner = owner;
             _row = row;
         }
 
-        // Reused across rows by SheetWriter: rents one instance per sheet instead of one per row.
+        // Reused across rows by XlsxSheetWriter: rents one instance per sheet instead of one per row.
         internal void Reset(int rowNumber)
         {
             _rowNumber = rowNumber;
@@ -277,8 +272,8 @@ namespace ExcelReader.Core.Writer
             return _owner.EndBufferedRowAsync();
         }
 
-        // Sync counterpart for callers on SheetWriter.StartRow's synchronous fast path (see
-        // SheetWriterExtensions.WriteRecordsAsync's SheetWriter-specific overload): avoids the
+        // Sync counterpart for callers on XlsxSheetWriter.StartRow's synchronous fast path (see
+        // SheetWriterExtensions.WriteRecordsAsync's XlsxSheetWriter-specific overload): avoids the
         // per-row await entirely when the destination stream write only happens on the rare
         // buffer-threshold flush, which EndBufferedRow already does synchronously.
         public void Dispose()

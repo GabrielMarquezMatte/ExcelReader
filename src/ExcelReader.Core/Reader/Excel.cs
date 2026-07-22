@@ -5,8 +5,6 @@ using ExcelReader.Core.Enums;
 
 namespace ExcelReader.Core.Reader
 {
-    [SuppressMessage("Design", "CA1068:CancellationToken parameters must come last",
-        Justification = "ExcelReaderOptions was added after existing CancellationToken parameters to preserve source compatibility.")]
     public static class Excel
     {
         public static XlsxReader FromFile(string path, ExcelReaderOptions? options = null)
@@ -49,13 +47,13 @@ namespace ExcelReader.Core.Reader
 
         [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP001:Dispose created",
             Justification = "Stream ownership transfers to CreateAsync, which disposes it on failure and via the reader on success.")]
-        public static ValueTask<XlsxReader> FromFileAsync(string path, CancellationToken ct = default, ExcelReaderOptions? options = null)
+        public static ValueTask<XlsxReader> FromFileAsync(string path, ExcelReaderOptions? options = null, CancellationToken ct = default)
         {
             FileStream stream = OpenAsyncFile(path);
             return XlsxReader.CreateAsync(stream, leaveOpen: false, options, ct);
         }
 
-        public static ValueTask<XlsxReader> FromAsync(Stream stream, bool leaveOpen = true, CancellationToken ct = default, ExcelReaderOptions? options = null)
+        public static ValueTask<XlsxReader> FromAsync(Stream stream, bool leaveOpen = true, ExcelReaderOptions? options = null, CancellationToken ct = default)
         {
             return XlsxReader.CreateAsync(stream, leaveOpen, options, ct);
         }
@@ -64,26 +62,26 @@ namespace ExcelReader.Core.Reader
             Justification = "Stream ownership transfers to CreateAsync, which disposes it on failure and is consumed into the reader on success.")]
         [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
             Justification = "Stream ownership transfers to CreateAsync, which disposes it on failure and via the reader on success.")]
-        public static ValueTask<XlsReader> FromXlsFileAsync(string path, CancellationToken ct = default, ExcelReaderOptions? options = null)
+        public static ValueTask<XlsReader> FromXlsFileAsync(string path, ExcelReaderOptions? options = null, CancellationToken ct = default)
         {
             FileStream stream = OpenAsyncFile(path);
             return XlsReader.CreateAsync(stream, leaveOpen: false, options, ct);
         }
 
-        public static ValueTask<XlsReader> FromXlsAsync(Stream stream, bool leaveOpen = true, CancellationToken ct = default, ExcelReaderOptions? options = null)
+        public static ValueTask<XlsReader> FromXlsAsync(Stream stream, bool leaveOpen = true, ExcelReaderOptions? options = null, CancellationToken ct = default)
         {
             return XlsReader.CreateAsync(stream, leaveOpen, options, ct);
         }
 
         [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP001:Dispose created",
             Justification = "Stream ownership transfers to CreateAsync, which disposes it on failure and via the reader on success.")]
-        public static ValueTask<XlsbReader> FromXlsbFileAsync(string path, CancellationToken ct = default, ExcelReaderOptions? options = null)
+        public static ValueTask<XlsbReader> FromXlsbFileAsync(string path, ExcelReaderOptions? options = null, CancellationToken ct = default)
         {
             FileStream stream = OpenAsyncFile(path);
             return XlsbReader.CreateAsync(stream, leaveOpen: false, options, ct);
         }
 
-        public static ValueTask<XlsbReader> FromXlsbAsync(Stream stream, bool leaveOpen = true, CancellationToken ct = default, ExcelReaderOptions? options = null)
+        public static ValueTask<XlsbReader> FromXlsbAsync(Stream stream, bool leaveOpen = true, ExcelReaderOptions? options = null, CancellationToken ct = default)
         {
             return XlsbReader.CreateAsync(stream, leaveOpen, options, ct);
         }
@@ -104,13 +102,13 @@ namespace ExcelReader.Core.Reader
 
         [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP001:Dispose created",
             Justification = "Stream ownership transfers to CreateAsync, which disposes it on failure and via the reader on success.")]
-        public static ValueTask<CsvReader> FromCsvFileAsync(string path, CancellationToken ct = default, CsvReaderOptions? options = null)
+        public static ValueTask<CsvReader> FromCsvFileAsync(string path, CsvReaderOptions? options = null, CancellationToken ct = default)
         {
             FileStream stream = OpenAsyncFile(path);
             return CsvReader.CreateAsync(stream, leaveOpen: false, options, ct);
         }
 
-        public static ValueTask<CsvReader> FromCsvAsync(Stream stream, bool leaveOpen = true, CancellationToken ct = default, CsvReaderOptions? options = null)
+        public static ValueTask<CsvReader> FromCsvAsync(Stream stream, bool leaveOpen = true, CsvReaderOptions? options = null, CancellationToken ct = default)
         {
             return CsvReader.CreateAsync(stream, leaveOpen, options, ct);
         }
@@ -142,14 +140,14 @@ namespace ExcelReader.Core.Reader
             Justification = "Stream ownership transfers to OpenSeekableAsync, which disposes it on failure and via the reader on success.")]
         [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
             Justification = "Stream ownership transfers to OpenSeekableAsync, which disposes it on failure and via the reader on success.")]
-        public static ValueTask<IExcelRowReader> OpenAsync(string path, CancellationToken ct = default, ExcelReaderOptions? options = null)
+        public static ValueTask<IExcelRowReader> OpenAsync(string path, ExcelReaderOptions? options = null, CancellationToken ct = default)
         {
             ArgumentNullException.ThrowIfNull(path);
             FileStream stream = OpenAsyncFile(path);
             return OpenSeekableAsync(stream, leaveOpen: false, options, ct);
         }
 
-        public static ValueTask<IExcelRowReader> OpenAsync(Stream stream, bool leaveOpen = true, CancellationToken ct = default, ExcelReaderOptions? options = null)
+        public static ValueTask<IExcelRowReader> OpenAsync(Stream stream, bool leaveOpen = true, ExcelReaderOptions? options = null, CancellationToken ct = default)
         {
             ArgumentNullException.ThrowIfNull(stream);
             return OpenSeekableAsync(stream, leaveOpen, options, ct);

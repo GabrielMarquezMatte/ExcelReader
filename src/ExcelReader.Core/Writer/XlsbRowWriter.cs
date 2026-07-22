@@ -1,4 +1,3 @@
-using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Runtime.CompilerServices;
 
@@ -6,8 +5,6 @@ namespace ExcelReader.Core.Writer
 {
     public sealed class XlsbRowWriter : IRowWriter
     {
-        [SuppressMessage("SharpSource", "SS066:DisposableFieldIsNotDisposed",
-            Justification = "XlsbSheetWriter is borrowed; its lifetime is managed by the caller.")]
         private readonly XlsbSheetWriter _owner;
         private int _columnIndex;
         private bool _disposed;

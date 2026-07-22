@@ -22,7 +22,7 @@ namespace ExcelReader.Tests
         [Fact]
         public void ErrorCellHasErrorType()
         {
-            // Error cells (t="e") are a raw-XML feature WorkbookWriter does not emit.
+            // Error cells (t="e") are a raw-XML feature XlsxWorkbookWriter does not emit.
             using var ms = WorkbookBuilder.Build(
                 """<row r="1"><c r="A1" t="e"><v>#DIV/0!</v></c></row>""");
             using var reader = Excel.From(ms);
@@ -35,7 +35,7 @@ namespace ExcelReader.Tests
         [Fact]
         public void FormulaCellHasFormulaType()
         {
-            // Formula string cells (t="str") are a raw-XML feature WorkbookWriter does not emit.
+            // Formula string cells (t="str") are a raw-XML feature XlsxWorkbookWriter does not emit.
             using var ms = WorkbookBuilder.Build(
                 """<row r="1"><c r="A1" t="str"><v>Hello</v></c></row>""");
             using var reader = Excel.From(ms);
@@ -62,7 +62,7 @@ namespace ExcelReader.Tests
         [Fact]
         public void SelfClosingRowYieldsZeroColumnCount()
         {
-            // Self-closing <row/> is a raw-XML shape WorkbookWriter never produces.
+            // Self-closing <row/> is a raw-XML shape XlsxWorkbookWriter never produces.
             using var ms = WorkbookBuilder.Build("""<row r="1"/>""");
             using var reader = Excel.From(ms);
             using var e = reader.GetEnumerator();
@@ -73,7 +73,7 @@ namespace ExcelReader.Tests
         [Fact]
         public void DecodesQuotAndAposEntities()
         {
-            // Shared strings are a raw-XML feature WorkbookWriter does not emit.
+            // Shared strings are a raw-XML feature XlsxWorkbookWriter does not emit.
             using var ms = WorkbookBuilder.Build(
                 """<row r="1"><c r="A1" t="s"><v>0</v></c><c r="B1" t="s"><v>1</v></c></row>""",
                 sharedStrings: "<si><t>say &quot;hi&quot;</t></si><si><t>it&apos;s</t></si>");
@@ -239,7 +239,7 @@ namespace ExcelReader.Tests
         public void Date1904WorkbookReadsCorrectDates()
         {
             // 1904 system: serial 0 = Jan 1 1904, serial 1 = Jan 2 1904.
-            // WorkbookWriter only emits the 1900 system, so this fixture stays raw XML.
+            // XlsxWorkbookWriter only emits the 1900 system, so this fixture stays raw XML.
             // IsDate1904 must be true; TryGetDateTime(true) shifts by +1462 days to reach the OADate epoch.
             const string styles =
                 """<styleSheet><cellXfs count="2"><xf numFmtId="0"/><xf numFmtId="14"/></cellXfs></styleSheet>""";

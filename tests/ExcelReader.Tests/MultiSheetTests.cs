@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using ExcelReader.Core.Reader;
 
 namespace ExcelReader.Tests
@@ -91,6 +92,8 @@ namespace ExcelReader.Tests
         }
 
         [Fact]
+        [SuppressMessage("Performance", "CA1859:Use concrete types when possible for improved performance",
+            Justification = "The test deliberately exercises CSV through the IExcelRowReader interface, the contract every format shares.")]
         public void CsvIsExposedAsSingleUnnamedSheet()
         {
             using var ms = new MemoryStream("h\nv\n"u8.ToArray());

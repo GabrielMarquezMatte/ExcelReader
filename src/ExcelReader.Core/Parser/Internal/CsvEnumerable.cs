@@ -30,6 +30,8 @@ namespace ExcelReader.Core.Parser.Internal
             Justification = "Each call creates a fresh enumerator; no caching.")]
         [SuppressMessage("Performance", "HLQ006:GetEnumerator should return a value type",
             Justification = "Enumerator is a class so the sync and async paths can share the SyncRowEnumerator/AsyncRowEnumerator base plumbing.")]
+        [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP001:Dispose created",
+            Justification = "rows is handed to the returned Enumerator, which owns and disposes it.")]
         public Enumerator GetEnumerator()
         {
             TypeMapInfo<T> info = TypeMapper<T>.GetCsvInfo();

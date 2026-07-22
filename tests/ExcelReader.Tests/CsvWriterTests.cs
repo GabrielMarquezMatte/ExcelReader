@@ -306,6 +306,8 @@ namespace ExcelReader.Tests
         }
 
         [Fact]
+        [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP017:Prefer using",
+            Justification = "The test calls Dispose() manually, twice, to verify the second call is a no-op — a using block would only call it once.")]
         public void RowDisposedTwiceIsNoOp()
         {
             var ms = new MemoryStream();

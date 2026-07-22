@@ -1,10 +1,9 @@
-using System.Diagnostics.CodeAnalysis;
 using System.Runtime.InteropServices;
 using ExcelReader.Core.Writer.Internal;
 
 namespace ExcelReader.Core.Writer
 {
-    // Writes a BIFF8 (.xls) workbook in the same shape as WorkbookWriter (XLSX). Unlike the ZIP
+    // Writes a BIFF8 (.xls) workbook in the same shape as XlsxWorkbookWriter (XLSX). Unlike the ZIP
     // writer, records are buffered in memory and the OLE container is assembled in EndAsync: the
     // BoundSheet offsets in the globals and the OLE FAT both need stream sizes known only at the
     // end. Rows beyond the BIFF8 per-sheet cap (65,536) overflow into auto-generated continuation
@@ -16,8 +15,6 @@ namespace ExcelReader.Core.Writer
         private readonly bool _date1904;
         private readonly List<XlsSheetWriter> _sheets = [];
         private WriterState _state = WriterState.Created;
-        [SuppressMessage("SharpSource", "SS066:DisposableFieldIsNotDisposed",
-            Justification = "Disposed in NotifySheetEnded and EndAsync once its records are flushed.")]
         private XlsSheetWriter? _activeSheet;
         private bool _disposed;
 

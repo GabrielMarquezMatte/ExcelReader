@@ -100,7 +100,7 @@ namespace ExcelReader.Tests
         [Fact]
         public void DecodesXmlEntitiesInSharedStrings()
         {
-            // Shared strings are a raw-XML feature WorkbookWriter does not emit.
+            // Shared strings are a raw-XML feature XlsxWorkbookWriter does not emit.
             using var ms = WorkbookBuilder.Build(
                 """<row r="1"><c r="A1" t="s"><v>0</v></c></row>""",
                 sharedStrings: "<si><t>a &amp; b &lt;tag&gt; &#65;</t></si>");
@@ -132,7 +132,7 @@ namespace ExcelReader.Tests
         public void DetectsDateStylesAndConvertsSerial()
         {
             // s="1" -> cellXfs[1] -> builtin numFmtId 14 (date); s="2" -> custom 164 (date); s="0" -> General.
-            // Custom number formats are a raw-XML feature WorkbookWriter does not emit.
+            // Custom number formats are a raw-XML feature XlsxWorkbookWriter does not emit.
             const string styles =
                 """<styleSheet><numFmts count="1"><numFmt numFmtId="164" formatCode="yyyy-mm-dd hh:mm"/></numFmts>""" +
                 """<cellXfs count="3"><xf numFmtId="0"/><xf numFmtId="14"/><xf numFmtId="164"/></cellXfs></styleSheet>""";
@@ -162,7 +162,7 @@ namespace ExcelReader.Tests
         {
             var ct = TestContext.Current.CancellationToken;
             string path = Path.Combine(AppContext.BaseDirectory, "data", "sample.xlsx");
-            await using var reader = await Excel.FromFileAsync(path, ct);
+            await using var reader = await Excel.FromFileAsync(path, ct: ct);
             await using var e = await reader.GetAsyncEnumeratorAsync(ct);
 
             int r = 0;

@@ -9,6 +9,8 @@ namespace ExcelReader.Core.Reader
     {
         private readonly Stream _stream;
         private readonly bool _leaveOpen;
+        [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP008:Don't assign member with injected and created disposables",
+            Justification = "Two construction paths: the sync ctor opens and owns the ZipArchive itself; the CreateAsync path receives one already opened by ZipReaderOpen. Either way this reader ends up owning it and disposes it in Dispose/DisposeAsync.")]
         private readonly ZipArchive _zip;
         private readonly ExcelReaderOptions _options;
         private readonly DecompressedByteCounter _decompressedBytes;
@@ -76,7 +78,7 @@ namespace ExcelReader.Core.Reader
         {
             ExcelReaderOptions effectiveOptions = options ?? ExcelReaderOptions.Default;
             DecompressedByteCounter decompressedBytes = new(effectiveOptions.MaxTotalDecompressedBytes);
-            return ZipReaderOpen.OpenAsync(stream, leaveOpen, ct, async zip =>
+            return ZipReaderOpen.OpenAsync(stream, leaveOpen, async zip =>
             {
                 var wb = await ZipEntryBytes.ReadAsync(zip, "xl/workbook.xml", decompressedBytes, ct).ConfigureAwait(false);
                 var rels = await ZipEntryBytes.ReadAsync(zip, "xl/_rels/workbook.xml.rels", decompressedBytes, ct).ConfigureAwait(false);
@@ -88,7 +90,7 @@ namespace ExcelReader.Core.Reader
                 var styleIsDate = ParseStyleDateFlags(await ZipEntryBytes.ReadAsync(zip, "xl/styles.xml", decompressedBytes, ct).ConfigureAwait(false));
                 bool date1904 = ParseDate1904(wb);
                 return new XlsxReader(stream, leaveOpen, zip, sheets, styleIsDate, date1904, effectiveOptions, decompressedBytes);
-            });
+            }, ct);
         }
 
         public string SheetName => _sheets[_current].Name;
@@ -151,6 +153,8 @@ namespace ExcelReader.Core.Reader
         /// while (await e.MoveNextAsync()) { var row = e.Current; /* ... */ }
         /// </code>
         /// </summary>
+        [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP001:Dispose created",
+            Justification = "sheet is handed to the returned Enumerator, which owns and disposes it.")]
         public async ValueTask<Enumerator> GetAsyncEnumeratorAsync(CancellationToken ct = default)
         {
             await EnsureSharedLoadedAsync(ct).ConfigureAwait(false);

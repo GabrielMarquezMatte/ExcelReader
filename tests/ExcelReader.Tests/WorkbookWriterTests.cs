@@ -45,10 +45,10 @@ namespace ExcelReader.Tests
         }
 
         private static async Task<MemoryStream> WriteWorkbookAsync(
-            Func<WorkbookWriter, Task> body)
+            Func<XlsxWorkbookWriter, Task> body)
         {
             var ms = new MemoryStream();
-            await using var wb = await WorkbookWriter.CreateAsync(ms, leaveOpen: true, ct: TestContext.Current.CancellationToken).ConfigureAwait(true);
+            await using var wb = await XlsxWorkbookWriter.CreateAsync(ms, leaveOpen: true, ct: TestContext.Current.CancellationToken).ConfigureAwait(true);
             await wb.StartAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
             await body(wb).ConfigureAwait(true);
             await wb.EndAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
@@ -63,7 +63,7 @@ namespace ExcelReader.Tests
         {
             await using var ms = await WriteWorkbookAsync(async wb =>
             {
-                SheetWriter sheet = wb.AddSheet("Sheet1");
+                XlsxSheetWriter sheet = wb.AddSheet("Sheet1");
                 await sheet.StartAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
 
                 await using (var header = await sheet.StartRowAsync(TestContext.Current.CancellationToken).ConfigureAwait(true))
@@ -413,10 +413,10 @@ namespace ExcelReader.Tests
 
             await using var ms = await WriteWorkbookAsync(async wb =>
             {
-                SheetWriter sheet = wb.AddSheet("Sheet1");
+                XlsxSheetWriter sheet = wb.AddSheet("Sheet1");
                 await sheet.StartAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
 
-                await using (RowWriter header = await sheet.StartRowAsync(TestContext.Current.CancellationToken).ConfigureAwait(true))
+                await using (XlsxRowWriter header = await sheet.StartRowAsync(TestContext.Current.CancellationToken).ConfigureAwait(true))
                 {
                     header.Write("Age");
                     header.Write("Score");
@@ -425,7 +425,7 @@ namespace ExcelReader.Tests
                     header.Write("BirthDate");
                 }
 
-                await using (RowWriter row = await sheet.StartRowAsync(TestContext.Current.CancellationToken).ConfigureAwait(true))
+                await using (XlsxRowWriter row = await sheet.StartRowAsync(TestContext.Current.CancellationToken).ConfigureAwait(true))
                 {
                     row.Write(42);
                     row.Write(3.14);
@@ -452,15 +452,15 @@ namespace ExcelReader.Tests
         {
             await using var ms = await WriteWorkbookAsync(async wb =>
             {
-                SheetWriter sheet = wb.AddSheet("Sheet1");
+                XlsxSheetWriter sheet = wb.AddSheet("Sheet1");
                 await sheet.StartAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
 
-                await using (RowWriter header = await sheet.StartRowAsync(TestContext.Current.CancellationToken).ConfigureAwait(true))
+                await using (XlsxRowWriter header = await sheet.StartRowAsync(TestContext.Current.CancellationToken).ConfigureAwait(true))
                 {
                     header.Write("Active");
                 }
 
-                await using (RowWriter row = await sheet.StartRowAsync(TestContext.Current.CancellationToken).ConfigureAwait(true))
+                await using (XlsxRowWriter row = await sheet.StartRowAsync(TestContext.Current.CancellationToken).ConfigureAwait(true))
                 {
                     row.Write(false);
                 }
@@ -479,15 +479,15 @@ namespace ExcelReader.Tests
         {
             await using var ms = await WriteWorkbookAsync(async wb =>
             {
-                SheetWriter sheet = wb.AddSheet("Sheet1");
+                XlsxSheetWriter sheet = wb.AddSheet("Sheet1");
                 await sheet.StartAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
 
-                await using (RowWriter header = await sheet.StartRowAsync(TestContext.Current.CancellationToken).ConfigureAwait(true))
+                await using (XlsxRowWriter header = await sheet.StartRowAsync(TestContext.Current.CancellationToken).ConfigureAwait(true))
                 {
                     header.Write("Name");
                 }
 
-                await using (RowWriter row = await sheet.StartRowAsync(TestContext.Current.CancellationToken).ConfigureAwait(true))
+                await using (XlsxRowWriter row = await sheet.StartRowAsync(TestContext.Current.CancellationToken).ConfigureAwait(true))
                 {
                     row.Write((string?)null);
                 }
@@ -506,16 +506,16 @@ namespace ExcelReader.Tests
         {
             await using var ms = await WriteWorkbookAsync(async wb =>
             {
-                SheetWriter sheet = wb.AddSheet("Sheet1");
+                XlsxSheetWriter sheet = wb.AddSheet("Sheet1");
                 await sheet.StartAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
 
-                await using (RowWriter header = await sheet.StartRowAsync(TestContext.Current.CancellationToken).ConfigureAwait(true))
+                await using (XlsxRowWriter header = await sheet.StartRowAsync(TestContext.Current.CancellationToken).ConfigureAwait(true))
                 {
                     header.Write("Quantity");
                     header.Write("EventDate");
                 }
 
-                await using (RowWriter row = await sheet.StartRowAsync(TestContext.Current.CancellationToken).ConfigureAwait(true))
+                await using (XlsxRowWriter row = await sheet.StartRowAsync(TestContext.Current.CancellationToken).ConfigureAwait(true))
                 {
                     row.Write((int?)77);
                     row.Write((DateTime?)null);
@@ -538,16 +538,16 @@ namespace ExcelReader.Tests
 
             await using var ms = await WriteWorkbookAsync(async wb =>
             {
-                SheetWriter sheet = wb.AddSheet("Sheet1");
+                XlsxSheetWriter sheet = wb.AddSheet("Sheet1");
                 await sheet.StartAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
 
-                await using (RowWriter header = await sheet.StartRowAsync(TestContext.Current.CancellationToken).ConfigureAwait(true))
+                await using (XlsxRowWriter header = await sheet.StartRowAsync(TestContext.Current.CancellationToken).ConfigureAwait(true))
                 {
                     header.Write("Quantity");
                     header.Write("EventDate");
                 }
 
-                await using (RowWriter row = await sheet.StartRowAsync(TestContext.Current.CancellationToken).ConfigureAwait(true))
+                await using (XlsxRowWriter row = await sheet.StartRowAsync(TestContext.Current.CancellationToken).ConfigureAwait(true))
                 {
                     row.Write((int?)null);
                     row.Write((DateTime?)dt);
@@ -569,10 +569,10 @@ namespace ExcelReader.Tests
         {
             await using var ms = await WriteWorkbookAsync(async wb =>
             {
-                SheetWriter sheet = wb.AddSheet("Numbers");
+                XlsxSheetWriter sheet = wb.AddSheet("Numbers");
                 await sheet.StartAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
 
-                await using (RowWriter row = await sheet.StartRowAsync(TestContext.Current.CancellationToken).ConfigureAwait(true))
+                await using (XlsxRowWriter row = await sheet.StartRowAsync(TestContext.Current.CancellationToken).ConfigureAwait(true))
                 {
                     row.Write((long?)1234567890123L);
                     row.Write((long?)null);
@@ -615,17 +615,17 @@ namespace ExcelReader.Tests
         {
             await using var ms = await WriteWorkbookAsync(async wb =>
             {
-                SheetWriter sheet = wb.AddSheet("Sheet1");
+                XlsxSheetWriter sheet = wb.AddSheet("Sheet1");
                 await sheet.StartAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
 
-                await using (RowWriter header = await sheet.StartRowAsync(TestContext.Current.CancellationToken).ConfigureAwait(true))
+                await using (XlsxRowWriter header = await sheet.StartRowAsync(TestContext.Current.CancellationToken).ConfigureAwait(true))
                 {
                     header.Write("Name");
                 }
 
                 foreach (string name in stringArray)
                 {
-                    await using RowWriter row = await sheet.StartRowAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
+                    await using XlsxRowWriter row = await sheet.StartRowAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
                     row.Write(name);
                 }
 
@@ -649,25 +649,25 @@ namespace ExcelReader.Tests
         {
             await using var ms = await WriteWorkbookAsync(async wb =>
             {
-                SheetWriter sheet1 = wb.AddSheet("Alpha");
+                XlsxSheetWriter sheet1 = wb.AddSheet("Alpha");
                 await sheet1.StartAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
-                await using (RowWriter h1 = await sheet1.StartRowAsync(TestContext.Current.CancellationToken).ConfigureAwait(true))
+                await using (XlsxRowWriter h1 = await sheet1.StartRowAsync(TestContext.Current.CancellationToken).ConfigureAwait(true))
                 {
                     h1.Write("Value");
                 }
-                await using (RowWriter r1 = await sheet1.StartRowAsync(TestContext.Current.CancellationToken).ConfigureAwait(true))
+                await using (XlsxRowWriter r1 = await sheet1.StartRowAsync(TestContext.Current.CancellationToken).ConfigureAwait(true))
                 {
                     r1.Write("FromAlpha");
                 }
                 await sheet1.EndAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
 
-                SheetWriter sheet2 = wb.AddSheet("Beta");
+                XlsxSheetWriter sheet2 = wb.AddSheet("Beta");
                 await sheet2.StartAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
-                await using (RowWriter h2 = await sheet2.StartRowAsync(TestContext.Current.CancellationToken).ConfigureAwait(true))
+                await using (XlsxRowWriter h2 = await sheet2.StartRowAsync(TestContext.Current.CancellationToken).ConfigureAwait(true))
                 {
                     h2.Write("Value");
                 }
-                await using (RowWriter r2 = await sheet2.StartRowAsync(TestContext.Current.CancellationToken).ConfigureAwait(true))
+                await using (XlsxRowWriter r2 = await sheet2.StartRowAsync(TestContext.Current.CancellationToken).ConfigureAwait(true))
                 {
                     r2.Write("FromBeta");
                 }
@@ -694,17 +694,17 @@ namespace ExcelReader.Tests
         {
             await using var ms = await WriteWorkbookAsync(async wb =>
             {
-                SheetWriter sheet = wb.AddSheet("Sheet1");
+                XlsxSheetWriter sheet = wb.AddSheet("Sheet1");
                 await sheet.StartAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
 
-                await using (RowWriter header = await sheet.StartRowAsync(TestContext.Current.CancellationToken).ConfigureAwait(true))
+                await using (XlsxRowWriter header = await sheet.StartRowAsync(TestContext.Current.CancellationToken).ConfigureAwait(true))
                 {
                     header.Write("A");
                     header.Skip(1);
                     header.Write("C");
                 }
 
-                await using (RowWriter row = await sheet.StartRowAsync(TestContext.Current.CancellationToken).ConfigureAwait(true))
+                await using (XlsxRowWriter row = await sheet.StartRowAsync(TestContext.Current.CancellationToken).ConfigureAwait(true))
                 {
                     row.Write("aaa");
                     row.Skip(1);
@@ -725,11 +725,11 @@ namespace ExcelReader.Tests
         public async Task NegativeSkipThrows()
         {
             await using var ms = new MemoryStream();
-            await using var wb = await WorkbookWriter.CreateAsync(ms, leaveOpen: true, ct: TestContext.Current.CancellationToken).ConfigureAwait(true);
+            await using var wb = await XlsxWorkbookWriter.CreateAsync(ms, leaveOpen: true, ct: TestContext.Current.CancellationToken).ConfigureAwait(true);
             await wb.StartAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
-            SheetWriter sheet = wb.AddSheet("Sheet1");
+            XlsxSheetWriter sheet = wb.AddSheet("Sheet1");
             await sheet.StartAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
-            await using RowWriter row = await sheet.StartRowAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
+            await using XlsxRowWriter row = await sheet.StartRowAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
 
             Assert.Throws<ArgumentOutOfRangeException>(() => row.Skip(-1));
         }
@@ -741,7 +741,7 @@ namespace ExcelReader.Tests
         public async Task InvalidSheetNameThrows(string name)
         {
             await using var ms = new MemoryStream();
-            await using var wb = await WorkbookWriter.CreateAsync(ms, leaveOpen: true, ct: TestContext.Current.CancellationToken).ConfigureAwait(true);
+            await using var wb = await XlsxWorkbookWriter.CreateAsync(ms, leaveOpen: true, ct: TestContext.Current.CancellationToken).ConfigureAwait(true);
             await wb.StartAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
 
             Assert.Throws<ArgumentException>(() => wb.AddSheet(name));
@@ -754,15 +754,15 @@ namespace ExcelReader.Tests
         {
             await using var ms = await WriteWorkbookAsync(async wb =>
             {
-                SheetWriter sheet = wb.AddSheet("Sheet1");
+                XlsxSheetWriter sheet = wb.AddSheet("Sheet1");
                 await sheet.StartAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
 
-                await using (RowWriter header = await sheet.StartRowAsync(TestContext.Current.CancellationToken).ConfigureAwait(true))
+                await using (XlsxRowWriter header = await sheet.StartRowAsync(TestContext.Current.CancellationToken).ConfigureAwait(true))
                 {
                     header.Write("Name");
                 }
 
-                await using (RowWriter row = await sheet.StartRowAsync(TestContext.Current.CancellationToken).ConfigureAwait(true))
+                await using (XlsxRowWriter row = await sheet.StartRowAsync(TestContext.Current.CancellationToken).ConfigureAwait(true))
                 {
                     row.Write("<Alice & \"Bob\">");
                 }
@@ -782,18 +782,18 @@ namespace ExcelReader.Tests
         public async Task DisposeAsyncWithoutEndAsyncProducesReadableWorkbook()
         {
             await using var ms = new MemoryStream();
-            WorkbookWriter wb = await WorkbookWriter.CreateAsync(ms, leaveOpen: true, ct: TestContext.Current.CancellationToken).ConfigureAwait(true);
+            XlsxWorkbookWriter wb = await XlsxWorkbookWriter.CreateAsync(ms, leaveOpen: true, ct: TestContext.Current.CancellationToken).ConfigureAwait(true);
             await wb.StartAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
 
-            SheetWriter sheet = wb.AddSheet("Sheet1");
+            XlsxSheetWriter sheet = wb.AddSheet("Sheet1");
             await sheet.StartAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
 
-            await using (RowWriter header = await sheet.StartRowAsync(TestContext.Current.CancellationToken).ConfigureAwait(true))
+            await using (XlsxRowWriter header = await sheet.StartRowAsync(TestContext.Current.CancellationToken).ConfigureAwait(true))
             {
                 header.Write("Name");
             }
 
-            await using (RowWriter row = await sheet.StartRowAsync(TestContext.Current.CancellationToken).ConfigureAwait(true))
+            await using (XlsxRowWriter row = await sheet.StartRowAsync(TestContext.Current.CancellationToken).ConfigureAwait(true))
             {
                 row.Write("Auto");
             }
@@ -815,20 +815,20 @@ namespace ExcelReader.Tests
         {
             await using var ms = await WriteWorkbookAsync(async wb =>
             {
-                SheetWriter sheet = wb.AddSheet("Sheet1");
+                XlsxSheetWriter sheet = wb.AddSheet("Sheet1");
                 await sheet.StartAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
 
-                await using (RowWriter skip = await sheet.StartRowAsync(TestContext.Current.CancellationToken).ConfigureAwait(true))
+                await using (XlsxRowWriter skip = await sheet.StartRowAsync(TestContext.Current.CancellationToken).ConfigureAwait(true))
                 {
                     skip.Write("ignored");
                 }
 
-                await using (RowWriter header = await sheet.StartRowAsync(TestContext.Current.CancellationToken).ConfigureAwait(true))
+                await using (XlsxRowWriter header = await sheet.StartRowAsync(TestContext.Current.CancellationToken).ConfigureAwait(true))
                 {
                     header.Write("Name");
                 }
 
-                await using (RowWriter row = await sheet.StartRowAsync(TestContext.Current.CancellationToken).ConfigureAwait(true))
+                await using (XlsxRowWriter row = await sheet.StartRowAsync(TestContext.Current.CancellationToken).ConfigureAwait(true))
                 {
                     row.Write("HeaderRow2");
                 }
@@ -848,17 +848,17 @@ namespace ExcelReader.Tests
         [Fact]
         public async Task AddSheetBeforeStartAsyncThrows()
         {
-            await using WorkbookWriter wb = await WorkbookWriter.CreateAsync(new MemoryStream(), ct: TestContext.Current.CancellationToken).ConfigureAwait(true);
+            await using XlsxWorkbookWriter wb = await XlsxWorkbookWriter.CreateAsync(new MemoryStream(), ct: TestContext.Current.CancellationToken).ConfigureAwait(true);
             Assert.Throws<InvalidOperationException>(() => wb.AddSheet("Sheet1"));
         }
 
         [Fact]
         public async Task AddSheetWhileSheetActiveThrows()
         {
-            await using WorkbookWriter wb = await WorkbookWriter.CreateAsync(new MemoryStream(), ct: TestContext.Current.CancellationToken).ConfigureAwait(true);
+            await using XlsxWorkbookWriter wb = await XlsxWorkbookWriter.CreateAsync(new MemoryStream(), ct: TestContext.Current.CancellationToken).ConfigureAwait(true);
             await wb.StartAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
 
-            SheetWriter sheet = wb.AddSheet("Sheet1");
+            XlsxSheetWriter sheet = wb.AddSheet("Sheet1");
             await sheet.StartAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
 
             Assert.Throws<InvalidOperationException>(() => wb.AddSheet("Sheet2"));
@@ -868,10 +868,10 @@ namespace ExcelReader.Tests
         [Fact]
         public async Task StartRowBeforeSheetStartAsyncThrows()
         {
-            await using WorkbookWriter wb = await WorkbookWriter.CreateAsync(new MemoryStream(), ct: TestContext.Current.CancellationToken).ConfigureAwait(true);
+            await using XlsxWorkbookWriter wb = await XlsxWorkbookWriter.CreateAsync(new MemoryStream(), ct: TestContext.Current.CancellationToken).ConfigureAwait(true);
             await wb.StartAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
 
-            SheetWriter sheet = wb.AddSheet("Sheet1");
+            XlsxSheetWriter sheet = wb.AddSheet("Sheet1");
 
             await Assert.ThrowsAsync<InvalidOperationException>(() => sheet.StartRowAsync(TestContext.Current.CancellationToken).AsTask()).ConfigureAwait(true);
         }
@@ -879,13 +879,13 @@ namespace ExcelReader.Tests
         [Fact]
         public async Task StartRowWhileRowActiveThrows()
         {
-            await using WorkbookWriter wb = await WorkbookWriter.CreateAsync(new MemoryStream(), ct: TestContext.Current.CancellationToken).ConfigureAwait(true);
+            await using XlsxWorkbookWriter wb = await XlsxWorkbookWriter.CreateAsync(new MemoryStream(), ct: TestContext.Current.CancellationToken).ConfigureAwait(true);
             await wb.StartAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
 
-            SheetWriter sheet = wb.AddSheet("Sheet1");
+            XlsxSheetWriter sheet = wb.AddSheet("Sheet1");
             await sheet.StartAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
 
-            RowWriter row = await sheet.StartRowAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
+            XlsxRowWriter row = await sheet.StartRowAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
 
             await Assert.ThrowsAsync<InvalidOperationException>(() => sheet.StartRowAsync(TestContext.Current.CancellationToken).AsTask()).ConfigureAwait(true);
 
@@ -896,13 +896,13 @@ namespace ExcelReader.Tests
         [Fact]
         public async Task WriteAfterRowDisposedThrows()
         {
-            await using WorkbookWriter wb = await WorkbookWriter.CreateAsync(new MemoryStream(), ct: TestContext.Current.CancellationToken).ConfigureAwait(true);
+            await using XlsxWorkbookWriter wb = await XlsxWorkbookWriter.CreateAsync(new MemoryStream(), ct: TestContext.Current.CancellationToken).ConfigureAwait(true);
             await wb.StartAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
 
-            SheetWriter sheet = wb.AddSheet("Sheet1");
+            XlsxSheetWriter sheet = wb.AddSheet("Sheet1");
             await sheet.StartAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
 
-            RowWriter row = await sheet.StartRowAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
+            XlsxRowWriter row = await sheet.StartRowAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
             await row.DisposeAsync().ConfigureAwait(true);
 
             Assert.Throws<ObjectDisposedException>(() => row.Write("late"));
@@ -919,17 +919,17 @@ namespace ExcelReader.Tests
 
             await using var ms = await WriteWorkbookAsync(async wb =>
             {
-                SheetWriter sheet = wb.AddSheet("Sheet1");
+                XlsxSheetWriter sheet = wb.AddSheet("Sheet1");
                 await sheet.StartAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
 
-                await using (RowWriter header = await sheet.StartRowAsync(TestContext.Current.CancellationToken).ConfigureAwait(true))
+                await using (XlsxRowWriter header = await sheet.StartRowAsync(TestContext.Current.CancellationToken).ConfigureAwait(true))
                 {
                     header.Write("Age");
                 }
 
                 for (int i = 0; i < rowCount; i++)
                 {
-                    await using RowWriter row = await sheet.StartRowAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
+                    await using XlsxRowWriter row = await sheet.StartRowAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
                     row.Write(i);
                 }
 
@@ -951,7 +951,7 @@ namespace ExcelReader.Tests
         public async Task FlushAsyncDoesNotThrow()
         {
             await using var ms = new MemoryStream();
-            await using WorkbookWriter wb = await WorkbookWriter.CreateAsync(ms, leaveOpen: true, ct: TestContext.Current.CancellationToken).ConfigureAwait(true);
+            await using XlsxWorkbookWriter wb = await XlsxWorkbookWriter.CreateAsync(ms, leaveOpen: true, ct: TestContext.Current.CancellationToken).ConfigureAwait(true);
             await wb.StartAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
             await wb.FlushAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
             Assert.True(ms.Length >= 0);
@@ -967,10 +967,10 @@ namespace ExcelReader.Tests
         public async Task DisposeAsyncIsIdempotent()
         {
             await using var ms = new MemoryStream();
-            WorkbookWriter wb = await WorkbookWriter.CreateAsync(ms, leaveOpen: true, ct: TestContext.Current.CancellationToken).ConfigureAwait(true);
+            XlsxWorkbookWriter wb = await XlsxWorkbookWriter.CreateAsync(ms, leaveOpen: true, ct: TestContext.Current.CancellationToken).ConfigureAwait(true);
             await wb.StartAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
 
-            SheetWriter sheet = wb.AddSheet("Sheet1");
+            XlsxSheetWriter sheet = wb.AddSheet("Sheet1");
             await sheet.StartAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
             await sheet.EndAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
 
@@ -986,10 +986,12 @@ namespace ExcelReader.Tests
         {
             await using var ms = await WriteWorkbookAsync(async wb =>
             {
-                SheetWriter sheet = wb.AddSheet("Sheet1");
+                XlsxSheetWriter sheet = wb.AddSheet("Sheet1");
                 await sheet.StartAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
-                await using RowWriter row = await sheet.StartRowAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
-                row.Write(" leading and trailing ");
+                await using (XlsxRowWriter row = await sheet.StartRowAsync(TestContext.Current.CancellationToken).ConfigureAwait(true))
+                {
+                    row.Write(" leading and trailing ");
+                }
                 await sheet.EndAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
             }).ConfigureAwait(true);
 
@@ -1007,11 +1009,11 @@ namespace ExcelReader.Tests
         public async Task WriterRejectsNonFiniteNumbers(double value)
         {
             await using var ms = new MemoryStream();
-            await using WorkbookWriter wb = await WorkbookWriter.CreateAsync(ms, leaveOpen: true, ct: TestContext.Current.CancellationToken).ConfigureAwait(true);
+            await using XlsxWorkbookWriter wb = await XlsxWorkbookWriter.CreateAsync(ms, leaveOpen: true, ct: TestContext.Current.CancellationToken).ConfigureAwait(true);
             await wb.StartAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
-            SheetWriter sheet = wb.AddSheet("Sheet1");
+            XlsxSheetWriter sheet = wb.AddSheet("Sheet1");
             await sheet.StartAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
-            await using RowWriter row = await sheet.StartRowAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
+            await using XlsxRowWriter row = await sheet.StartRowAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
 
             Assert.Throws<ArgumentException>(() => row.Write(value));
         }
@@ -1021,12 +1023,12 @@ namespace ExcelReader.Tests
         {
             await using var ms = await WriteWorkbookAsync(async wb =>
             {
-                SheetWriter sheet = wb.AddSheet("Numbers");
+                XlsxSheetWriter sheet = wb.AddSheet("Numbers");
                 await sheet.StartAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
 
                 await sheet.WriteRecordsAsync([1, 2], static (row, value) => row.Write(value), TestContext.Current.CancellationToken);
 
-                ISheetWriter<RowWriter> genericSheet = sheet;
+                ISheetWriter<XlsxRowWriter> genericSheet = sheet;
                 await genericSheet.WriteRecordsAsync(
                     ToAsync([3, 4]),
                     static (row, value) => row.Write(value),
@@ -1051,10 +1053,12 @@ namespace ExcelReader.Tests
         {
             await using var ms = await WriteWorkbookAsync(async wb =>
             {
-                SheetWriter sheet = wb.AddSheet("Sheet1");
+                XlsxSheetWriter sheet = wb.AddSheet("Sheet1");
                 await sheet.StartAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
-                await using RowWriter row = await sheet.StartRowAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
-                row.Write("a\u0001b _x0041_");
+                await using (XlsxRowWriter row = await sheet.StartRowAsync(TestContext.Current.CancellationToken).ConfigureAwait(true))
+                {
+                    row.Write("a\u0001b _x0041_");
+                }
                 await sheet.EndAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
             }).ConfigureAwait(true);
 
@@ -1070,14 +1074,31 @@ namespace ExcelReader.Tests
         public async Task WriterRejectsColumnsBeyondXfd()
         {
             await using var ms = new MemoryStream();
-            await using WorkbookWriter wb = await WorkbookWriter.CreateAsync(ms, leaveOpen: true, ct: TestContext.Current.CancellationToken).ConfigureAwait(true);
+            await using XlsxWorkbookWriter wb = await XlsxWorkbookWriter.CreateAsync(ms, leaveOpen: true, ct: TestContext.Current.CancellationToken).ConfigureAwait(true);
             await wb.StartAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
-            SheetWriter sheet = wb.AddSheet("Sheet1");
+            XlsxSheetWriter sheet = wb.AddSheet("Sheet1");
             await sheet.StartAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
-            await using RowWriter row = await sheet.StartRowAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
+            await using XlsxRowWriter row = await sheet.StartRowAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
 
             row.Skip(16_384);
             Assert.Throws<ExcelLimitExceededException>(() => row.Write("beyond XFD"));
+        }
+
+        [Fact]
+        public async Task XlsxEndAsyncThrowsWhenLastRowStillActive()
+        {
+            await using var ms = new MemoryStream();
+            await using XlsxWorkbookWriter wb = await XlsxWorkbookWriter.CreateAsync(ms, leaveOpen: true, ct: TestContext.Current.CancellationToken).ConfigureAwait(true);
+            await wb.StartAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
+            XlsxSheetWriter sheet = wb.AddSheet("Sheet1");
+            await sheet.StartAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
+            XlsxRowWriter row = await sheet.StartRowAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
+
+            await Assert.ThrowsAsync<InvalidOperationException>(
+                () => sheet.EndAsync(TestContext.Current.CancellationToken).AsTask()).ConfigureAwait(true);
+
+            await row.DisposeAsync().ConfigureAwait(true);
+            await sheet.EndAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
         }
     }
 }

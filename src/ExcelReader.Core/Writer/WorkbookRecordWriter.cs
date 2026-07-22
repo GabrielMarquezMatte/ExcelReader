@@ -82,13 +82,13 @@ namespace ExcelReader.Core.Writer
     // start it, and hand it to WorkbookRecordWriter so callers never touch the type parameters.
     public static class RecordWriter
     {
-        public static async ValueTask<WorkbookRecordWriter<SheetWriter, RowWriter>> CreateXlsxAsync(
+        public static async ValueTask<WorkbookRecordWriter<XlsxSheetWriter, XlsxRowWriter>> CreateXlsxAsync(
             Stream stream, bool leaveOpen = false, CompressionLevel compression = CompressionLevel.Fastest,
             bool useSharedStrings = false, CancellationToken ct = default)
         {
-            var workbook = await WorkbookWriter.CreateAsync(stream, leaveOpen, compression, ct, useSharedStrings).ConfigureAwait(false);
+            var workbook = await XlsxWorkbookWriter.CreateAsync(stream, leaveOpen, compression, useSharedStrings, ct).ConfigureAwait(false);
             await workbook.StartAsync(ct).ConfigureAwait(false);
-            return new WorkbookRecordWriter<SheetWriter, RowWriter>(workbook);
+            return new WorkbookRecordWriter<XlsxSheetWriter, XlsxRowWriter>(workbook);
         }
 
         public static async ValueTask<WorkbookRecordWriter<XlsbSheetWriter, XlsbRowWriter>> CreateXlsbAsync(
@@ -96,7 +96,7 @@ namespace ExcelReader.Core.Writer
             CompressionLevel compression = CompressionLevel.Fastest, bool useSharedStrings = false,
             CancellationToken ct = default)
         {
-            var workbook = await XlsbWorkbookWriter.CreateAsync(stream, leaveOpen, date1904, compression, ct, useSharedStrings).ConfigureAwait(false);
+            var workbook = await XlsbWorkbookWriter.CreateAsync(stream, leaveOpen, date1904, compression, useSharedStrings, ct).ConfigureAwait(false);
             await workbook.StartAsync(ct).ConfigureAwait(false);
             return new WorkbookRecordWriter<XlsbSheetWriter, XlsbRowWriter>(workbook);
         }
@@ -124,7 +124,7 @@ namespace ExcelReader.Core.Writer
     }
 
     // Per-type column plan. Headers depend only on T; the write delegate additionally depends on the
-    // concrete TRow (RowWriter/XlsbRowWriter/XlsRowWriter), cached per (T, TRow) via the nested Plan<TRow>.
+    // concrete TRow (XlsxRowWriter/XlsbRowWriter/XlsRowWriter), cached per (T, TRow) via the nested Plan<TRow>.
     // Compiling against the concrete TRow (instead of the IRowWriter interface) lets each Expression.Call
     // resolve directly to that sealed class's non-virtual method, so the JIT emits a direct call per cell
     // instead of an interface dispatch. Numeric properties go to the generic Write<U> (a number cell)
@@ -238,7 +238,7 @@ namespace ExcelReader.Core.Writer
         }
     }
 
-    // Reflection resolved once per concrete TRow (RowWriter/XlsbRowWriter/XlsRowWriter — at most a
+    // Reflection resolved once per concrete TRow (XlsxRowWriter/XlsbRowWriter/XlsRowWriter — at most a
     // handful of instantiations for the whole process): the Write overloads declared on that concrete
     // type, plus the set of numeric property types that map to Write<U>.
     [SuppressMessage("Major Code Smell", "S2743:Static fields should not be used in generic types",
