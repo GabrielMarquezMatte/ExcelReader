@@ -12,17 +12,11 @@ namespace ExcelReader.Core.Writer
         // Kept under the LOH threshold instead of parking the pooled backing array there permanently.
         private const int SpillThreshold = 64 * 1024;
 
-        [SuppressMessage("SharpSource", "SS066:DisposableFieldIsNotDisposed",
-            Justification = "XlsbWorkbookWriter is borrowed; its lifetime is managed by the caller.")]
         private readonly XlsbWorkbookWriter _owner;
-        [SuppressMessage("SharpSource", "SS066:DisposableFieldIsNotDisposed",
-            Justification = "ZipArchive is borrowed from XlsbWorkbookWriter; its lifetime exceeds this sheet.")]
         private readonly ZipArchive _zip;
         private readonly bool _date1904;
         private readonly CompressionLevel _compression;
         private readonly BiffBuffer _records = new(4096);
-        [SuppressMessage("SharpSource", "SS066:DisposableFieldIsNotDisposed",
-            Justification = "Stream is explicitly disposed in EndAsync or DisposeAsync.")]
         private Stream? _stream;
         private WriterState _state = WriterState.Created;
         private bool _rowActive;
@@ -99,8 +93,6 @@ namespace ExcelReader.Core.Writer
 
         [SuppressMessage("Reliability", "CA1849:Call async methods when in an async method",
             Justification = "The sheet body is written synchronously by row writers; EndAsync only finalizes and closes the entry.")]
-        [SuppressMessage("SharpSource", "SS033:Async overload available",
-            Justification = "See CA1849 justification above.")]
         public async ValueTask EndAsync(CancellationToken ct = default)
         {
             ObjectDisposedException.ThrowIf(_state == WriterState.Ended, this);
@@ -150,8 +142,6 @@ namespace ExcelReader.Core.Writer
 
         [SuppressMessage("Reliability", "CA1849:Call async methods when in an async method",
             Justification = "Rows write records synchronously to keep the per-cell API synchronous.")]
-        [SuppressMessage("SharpSource", "SS033:Async overload available",
-            Justification = "See CA1849 justification above.")]
         internal void WriteRecord(int id, ReadOnlySpan<byte> payload = default)
         {
             Biff12RecordWriter.WriteRecord(_records, id, payload);
@@ -168,8 +158,6 @@ namespace ExcelReader.Core.Writer
 
         [SuppressMessage("Reliability", "CA1849:Call async methods when in an async method",
             Justification = "Opening the entry from the synchronous row-writing hot path avoids an async API on every cell.")]
-        [SuppressMessage("SharpSource", "SS033:Async overload available",
-            Justification = "See CA1849 justification above.")]
         private void EnsureStream()
         {
             if (_stream is not null)

@@ -12,19 +12,13 @@ namespace ExcelReader.Core.Writer
         // Fixed framing added around the cell records when the substream is assembled.
         private const int FramingBytes = 20 + 18 + 22 + 4; // BOF + DIMENSION + WINDOW2 + EOF
 
-        [SuppressMessage("SharpSource", "SS066:DisposableFieldIsNotDisposed",
-            Justification = "XlsWorkbookWriter is borrowed; its lifetime is managed by the caller.")]
         private readonly XlsWorkbookWriter _owner;
         private readonly bool _date1904;
         private readonly bool _isContinuation;
         private readonly string _baseName;
         [SuppressMessage("Usage", "CA2213:Disposable fields should be disposed",
             Justification = "The cell buffer outlives Dispose; XlsWorkbookWriter releases it via ReleaseBuffer after writing the bytes in EndAsync.")]
-        [SuppressMessage("SharpSource", "SS066:DisposableFieldIsNotDisposed",
-            Justification = "The cell buffer outlives Dispose; XlsWorkbookWriter releases it via ReleaseBuffer after writing the bytes in EndAsync.")]
         private readonly BiffBuffer _cells = new();
-        [SuppressMessage("SharpSource", "SS066:DisposableFieldIsNotDisposed",
-            Justification = "Continuation is registered with the owner and ended via End(); its buffer is released by XlsWorkbookWriter.")]
         private XlsSheetWriter? _continuation;
         private int _maxRow = -1;
         private int _maxCol = -1;
