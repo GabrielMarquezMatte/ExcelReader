@@ -11,6 +11,7 @@ namespace ExcelReader.Core.Reader
     {
         // Forward-only, low-memory worksheet scanner. Streams the sheet through a refillable pooled
         // buffer; a single <c>...</c> element is guaranteed contiguous (the buffer grows if needed).
+        /// <summary>Forward-only enumerator over an <see cref="XlsxReader"/> sheet's rows.</summary>
         [SuppressMessage("Design", "CA1034:Nested types should not be visible",
             Justification = "Public nested enumerator is the standard foreach pattern.")]
         public sealed class Enumerator : PooledStreamRowEnumerator, IExcelRowEnumerator
@@ -37,6 +38,7 @@ namespace ExcelReader.Core.Reader
                 _reader = reader;
             }
 
+            /// <inheritdoc/>
             public Row Current =>
                 new(_acc.CellSpan, _acc.ValueSpan, _reader.SharedSpan, _reader.SharedStringCache);
 
@@ -47,6 +49,7 @@ namespace ExcelReader.Core.Reader
             // method for both: EnsureRowBuffered(Async) guarantees the whole row is buffered first, so
             // there is no refill left to do and no sync/async split needed at all (see T3.1 note below).
 
+            /// <inheritdoc/>
             public bool MoveNext()
             {
                 if (!_nsChecked)
@@ -89,6 +92,7 @@ namespace ExcelReader.Core.Reader
             // machine regardless. This mirrors the same steps but returns a completed ValueTask when
             // every step resolves synchronously (~99.9% of rows), only falling to an awaiting
             // continuation at the exact step that needs a refill.
+            /// <inheritdoc/>
             [SuppressMessage("VisualStudio.Threading", "VSTHRD103:Result synchronously blocks",
                 Justification = "Every .Result access is guarded by IsCompletedSuccessfully immediately above it — never blocks.")]
             public ValueTask<bool> MoveNextAsync()
@@ -975,6 +979,7 @@ namespace ExcelReader.Core.Reader
                 return -1;
             }
 
+            /// <inheritdoc/>
             [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP007:Don't dispose injected",
                 Justification = "_sheet is opened for this enumerator and owned by it.")]
             public void Dispose()
@@ -984,6 +989,7 @@ namespace ExcelReader.Core.Reader
                 ReturnBuffers();
             }
 
+            /// <inheritdoc/>
             [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP007:Don't dispose injected",
                 Justification = "_sheet is opened for this enumerator and owned by it.")]
             public async ValueTask DisposeAsync()

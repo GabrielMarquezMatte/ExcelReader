@@ -11,6 +11,8 @@ namespace ExcelReader.Core.Parser.Internal
     // row and then parses each data row in a single indexed pass — no Row.Cells enumeration, no
     // CellDesc re-walk, no per-cell binding search. It reuses the same compiled ColumnParser<T>
     // delegates as the generic parser, but from the CSV type-map (dates parse text, not serials).
+    /// <summary>Lazily projects CSV rows into <typeparamref name="T"/> instances by binding each property to a fixed field index, for both synchronous and asynchronous enumeration.</summary>
+    /// <typeparam name="T">The row model type to bind each CSV row to.</typeparam>
     [SuppressMessage("Design", "CA1034:Nested types should not be visible",
         Justification = "Public nested Enumerator/AsyncEnumerator are the standard foreach/await-foreach pattern.")]
     public sealed class CsvEnumerable<T> : IEnumerable<T>, IAsyncEnumerable<T>
@@ -26,6 +28,7 @@ namespace ExcelReader.Core.Parser.Internal
             _ct = ct;
         }
 
+        /// <inheritdoc cref="IEnumerable{T}.GetEnumerator"/>
         [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP015:Member should not return created and cached instance",
             Justification = "Each call creates a fresh enumerator; no caching.")]
         [SuppressMessage("Performance", "HLQ006:GetEnumerator should return a value type",
@@ -56,6 +59,7 @@ namespace ExcelReader.Core.Parser.Internal
             return GetAsyncEnumerator(cancellationToken);
         }
 
+        /// <inheritdoc cref="IAsyncEnumerable{T}.GetAsyncEnumerator"/>
         [SuppressMessage("Performance", "HLQ006:GetAsyncEnumerator should return a value type",
             Justification = "Async enumerator requires a class to host the async state machine.")]
         public AsyncEnumerator GetAsyncEnumerator(CancellationToken cancellationToken = default)
@@ -65,6 +69,7 @@ namespace ExcelReader.Core.Parser.Internal
             return new AsyncEnumerator(_reader, info, _config.ColumnNameComparer, _config.HeaderNormalization, _config.HeaderRow, _config.Culture, _config.ThrowOnParseFailure, effective);
         }
 
+        /// <summary>Enumerates CSV rows synchronously, projecting each into a <typeparamref name="T"/> instance by fixed field index.</summary>
         public sealed class Enumerator : SyncRowEnumerator<T, CsvReader.Enumerator>
         {
             private CsvRowProjector<T> _projector;
@@ -88,6 +93,7 @@ namespace ExcelReader.Core.Parser.Internal
             }
         }
 
+        /// <summary>Enumerates CSV rows asynchronously, projecting each into a <typeparamref name="T"/> instance by fixed field index.</summary>
         public sealed class AsyncEnumerator : AsyncRowEnumerator<T, CsvReader, CsvReader.Enumerator>
         {
             private CsvRowProjector<T> _projector;

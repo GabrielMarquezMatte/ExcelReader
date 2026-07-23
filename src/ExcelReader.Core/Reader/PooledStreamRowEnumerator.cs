@@ -2,6 +2,7 @@ namespace ExcelReader.Core.Reader
 {
     // Shared refill plumbing for concrete XLSX/XLSB/CSV enumerators. MoveNext stays concrete in each
     // format; this base only owns the per-buffer operations and pooled row storage.
+    /// <summary>Base class holding the pooled buffer and refill plumbing shared by every concrete format's row enumerator.</summary>
     public abstract class PooledStreamRowEnumerator
     {
         private protected Stream? _source;

@@ -6,18 +6,34 @@ using ExcelReader.Core.Writer.Internal;
 
 namespace ExcelReader.Core.Reader
 {
+    /// <summary>
+    /// Entry point for opening Excel and CSV workbooks. <see cref="Open(string,ExcelReaderOptions?)"/>/
+    /// <see cref="Open(Stream,bool,ExcelReaderOptions?)"/> and their async counterparts auto-detect XLSX/XLSB/XLS
+    /// from the file's signature and return a format-agnostic <see cref="IExcelRowReader"/>; the
+    /// <c>From*</c>/<c>FromXls*</c>/<c>FromXlsb*</c>/<c>FromCsv*</c> methods open a specific, known format directly.
+    /// </summary>
     public static class Excel
     {
+        /// <summary>Opens an XLSX workbook from a file path, taking ownership of the file stream.</summary>
+        /// <param name="path">The path to the XLSX file.</param>
+        /// <param name="options">Resource limits and behavior toggles; <see cref="ExcelReaderOptions.Default"/> when <see langword="null"/>.</param>
         public static XlsxReader FromFile(string path, ExcelReaderOptions? options = null)
         {
             return new XlsxReader(File.OpenRead(path), leaveOpen: false, options);
         }
 
+        /// <summary>Opens an XLSX workbook from an existing stream.</summary>
+        /// <param name="stream">The stream containing the XLSX data.</param>
+        /// <param name="leaveOpen">When <see langword="true"/> (the default), <paramref name="stream"/> is not disposed when the reader is disposed.</param>
+        /// <param name="options">Resource limits and behavior toggles; <see cref="ExcelReaderOptions.Default"/> when <see langword="null"/>.</param>
         public static XlsxReader From(Stream stream, bool leaveOpen = true, ExcelReaderOptions? options = null)
         {
             return new XlsxReader(stream, leaveOpen, options);
         }
 
+        /// <summary>Opens a legacy binary (XLS) workbook from a file path, taking ownership of the file stream.</summary>
+        /// <param name="path">The path to the XLS file.</param>
+        /// <param name="options">Resource limits and behavior toggles; <see cref="ExcelReaderOptions.Default"/> when <see langword="null"/>.</param>
         [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP001:Dispose created",
             Justification = "Stream ownership transfers to XlsReader, which streams from it and disposes it on Dispose (and on construction failure).")]
         [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
@@ -27,11 +43,18 @@ namespace ExcelReader.Core.Reader
             return new XlsReader(File.OpenRead(path), leaveOpen: false, options);
         }
 
+        /// <summary>Opens a legacy binary (XLS) workbook from an existing stream.</summary>
+        /// <param name="stream">The stream containing the XLS data.</param>
+        /// <param name="leaveOpen">When <see langword="true"/> (the default), <paramref name="stream"/> is not disposed when the reader is disposed.</param>
+        /// <param name="options">Resource limits and behavior toggles; <see cref="ExcelReaderOptions.Default"/> when <see langword="null"/>.</param>
         public static XlsReader FromXls(Stream stream, bool leaveOpen = true, ExcelReaderOptions? options = null)
         {
             return new XlsReader(stream, leaveOpen, options);
         }
 
+        /// <summary>Opens an XLSB (Excel binary) workbook from a file path, taking ownership of the file stream.</summary>
+        /// <param name="path">The path to the XLSB file.</param>
+        /// <param name="options">Resource limits and behavior toggles; <see cref="ExcelReaderOptions.Default"/> when <see langword="null"/>.</param>
         [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP001:Dispose created",
             Justification = "Stream ownership transfers to XlsbReader on success, disposed on failure.")]
         [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
@@ -41,11 +64,19 @@ namespace ExcelReader.Core.Reader
             return new XlsbReader(File.OpenRead(path), leaveOpen: false, options);
         }
 
+        /// <summary>Opens an XLSB (Excel binary) workbook from an existing stream.</summary>
+        /// <param name="stream">The stream containing the XLSB data.</param>
+        /// <param name="leaveOpen">When <see langword="true"/> (the default), <paramref name="stream"/> is not disposed when the reader is disposed.</param>
+        /// <param name="options">Resource limits and behavior toggles; <see cref="ExcelReaderOptions.Default"/> when <see langword="null"/>.</param>
         public static XlsbReader FromXlsb(Stream stream, bool leaveOpen = true, ExcelReaderOptions? options = null)
         {
             return new XlsbReader(stream, leaveOpen, options);
         }
 
+        /// <summary>Asynchronously opens an XLSX workbook from a file path, taking ownership of the file stream.</summary>
+        /// <param name="path">The path to the XLSX file.</param>
+        /// <param name="options">Resource limits and behavior toggles; <see cref="ExcelReaderOptions.Default"/> when <see langword="null"/>.</param>
+        /// <param name="ct">A token to cancel the open operation.</param>
         [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP001:Dispose created",
             Justification = "Stream ownership transfers to CreateAsync, which disposes it on failure and via the reader on success.")]
         public static ValueTask<XlsxReader> FromFileAsync(string path, ExcelReaderOptions? options = null, CancellationToken ct = default)
@@ -54,11 +85,20 @@ namespace ExcelReader.Core.Reader
             return XlsxReader.CreateAsync(stream, leaveOpen: false, options, ct);
         }
 
+        /// <summary>Asynchronously opens an XLSX workbook from an existing stream.</summary>
+        /// <param name="stream">The stream containing the XLSX data.</param>
+        /// <param name="leaveOpen">When <see langword="true"/> (the default), <paramref name="stream"/> is not disposed when the reader is disposed.</param>
+        /// <param name="options">Resource limits and behavior toggles; <see cref="ExcelReaderOptions.Default"/> when <see langword="null"/>.</param>
+        /// <param name="ct">A token to cancel the open operation.</param>
         public static ValueTask<XlsxReader> FromAsync(Stream stream, bool leaveOpen = true, ExcelReaderOptions? options = null, CancellationToken ct = default)
         {
             return XlsxReader.CreateAsync(stream, leaveOpen, options, ct);
         }
 
+        /// <summary>Asynchronously opens a legacy binary (XLS) workbook from a file path, taking ownership of the file stream.</summary>
+        /// <param name="path">The path to the XLS file.</param>
+        /// <param name="options">Resource limits and behavior toggles; <see cref="ExcelReaderOptions.Default"/> when <see langword="null"/>.</param>
+        /// <param name="ct">A token to cancel the open operation.</param>
         [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP001:Dispose created",
             Justification = "Stream ownership transfers to CreateAsync, which disposes it on failure and is consumed into the reader on success.")]
         [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
@@ -69,11 +109,20 @@ namespace ExcelReader.Core.Reader
             return XlsReader.CreateAsync(stream, leaveOpen: false, options, ct);
         }
 
+        /// <summary>Asynchronously opens a legacy binary (XLS) workbook from an existing stream.</summary>
+        /// <param name="stream">The stream containing the XLS data.</param>
+        /// <param name="leaveOpen">When <see langword="true"/> (the default), <paramref name="stream"/> is not disposed when the reader is disposed.</param>
+        /// <param name="options">Resource limits and behavior toggles; <see cref="ExcelReaderOptions.Default"/> when <see langword="null"/>.</param>
+        /// <param name="ct">A token to cancel the open operation.</param>
         public static ValueTask<XlsReader> FromXlsAsync(Stream stream, bool leaveOpen = true, ExcelReaderOptions? options = null, CancellationToken ct = default)
         {
             return XlsReader.CreateAsync(stream, leaveOpen, options, ct);
         }
 
+        /// <summary>Asynchronously opens an XLSB (Excel binary) workbook from a file path, taking ownership of the file stream.</summary>
+        /// <param name="path">The path to the XLSB file.</param>
+        /// <param name="options">Resource limits and behavior toggles; <see cref="ExcelReaderOptions.Default"/> when <see langword="null"/>.</param>
+        /// <param name="ct">A token to cancel the open operation.</param>
         [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP001:Dispose created",
             Justification = "Stream ownership transfers to CreateAsync, which disposes it on failure and via the reader on success.")]
         public static ValueTask<XlsbReader> FromXlsbFileAsync(string path, ExcelReaderOptions? options = null, CancellationToken ct = default)
@@ -82,11 +131,19 @@ namespace ExcelReader.Core.Reader
             return XlsbReader.CreateAsync(stream, leaveOpen: false, options, ct);
         }
 
+        /// <summary>Asynchronously opens an XLSB (Excel binary) workbook from an existing stream.</summary>
+        /// <param name="stream">The stream containing the XLSB data.</param>
+        /// <param name="leaveOpen">When <see langword="true"/> (the default), <paramref name="stream"/> is not disposed when the reader is disposed.</param>
+        /// <param name="options">Resource limits and behavior toggles; <see cref="ExcelReaderOptions.Default"/> when <see langword="null"/>.</param>
+        /// <param name="ct">A token to cancel the open operation.</param>
         public static ValueTask<XlsbReader> FromXlsbAsync(Stream stream, bool leaveOpen = true, ExcelReaderOptions? options = null, CancellationToken ct = default)
         {
             return XlsbReader.CreateAsync(stream, leaveOpen, options, ct);
         }
 
+        /// <summary>Opens a CSV (or other delimited-text) source from a file path, taking ownership of the file stream.</summary>
+        /// <param name="path">The path to the CSV file.</param>
+        /// <param name="options">Delimiter, quote, encoding, and size-limit settings; <see cref="CsvReaderOptions.Default"/> when <see langword="null"/>.</param>
         [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP001:Dispose created",
             Justification = "Stream ownership transfers to CsvReader, which disposes it on Dispose/DisposeAsync when leaveOpen is false.")]
         [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
@@ -96,11 +153,19 @@ namespace ExcelReader.Core.Reader
             return new CsvReader(File.OpenRead(path), leaveOpen: false, options);
         }
 
+        /// <summary>Opens a CSV (or other delimited-text) source from an existing stream.</summary>
+        /// <param name="stream">The stream containing the CSV data.</param>
+        /// <param name="leaveOpen">When <see langword="true"/> (the default), <paramref name="stream"/> is not disposed when the reader is disposed.</param>
+        /// <param name="options">Delimiter, quote, encoding, and size-limit settings; <see cref="CsvReaderOptions.Default"/> when <see langword="null"/>.</param>
         public static CsvReader FromCsv(Stream stream, bool leaveOpen = true, CsvReaderOptions? options = null)
         {
             return new CsvReader(stream, leaveOpen, options);
         }
 
+        /// <summary>Asynchronously opens a CSV (or other delimited-text) source from a file path, taking ownership of the file stream.</summary>
+        /// <param name="path">The path to the CSV file.</param>
+        /// <param name="options">Delimiter, quote, encoding, and size-limit settings; <see cref="CsvReaderOptions.Default"/> when <see langword="null"/>.</param>
+        /// <param name="ct">A token to cancel the open operation.</param>
         [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP001:Dispose created",
             Justification = "Stream ownership transfers to CreateAsync, which disposes it on failure and via the reader on success.")]
         public static ValueTask<CsvReader> FromCsvFileAsync(string path, CsvReaderOptions? options = null, CancellationToken ct = default)
@@ -109,6 +174,11 @@ namespace ExcelReader.Core.Reader
             return CsvReader.CreateAsync(stream, leaveOpen: false, options, ct);
         }
 
+        /// <summary>Asynchronously opens a CSV (or other delimited-text) source from an existing stream.</summary>
+        /// <param name="stream">The stream containing the CSV data.</param>
+        /// <param name="leaveOpen">When <see langword="true"/> (the default), <paramref name="stream"/> is not disposed when the reader is disposed.</param>
+        /// <param name="options">Delimiter, quote, encoding, and size-limit settings; <see cref="CsvReaderOptions.Default"/> when <see langword="null"/>.</param>
+        /// <param name="ct">A token to cancel the open operation.</param>
         public static ValueTask<CsvReader> FromCsvAsync(Stream stream, bool leaveOpen = true, CsvReaderOptions? options = null, CancellationToken ct = default)
         {
             return CsvReader.CreateAsync(stream, leaveOpen, options, ct);
@@ -121,6 +191,15 @@ namespace ExcelReader.Core.Reader
         // Opens a workbook of either format, choosing the reader from the file's signature.
         // The returned reader iterates rows through its concrete type (XlsxReader / XlsReader)
         // pattern-match on the result to enumerate.
+        /// <summary>
+        /// Opens a workbook from a file path, auto-detecting its format (XLSX/XLSB/XLS) from the file's signature
+        /// and taking ownership of the file stream.
+        /// </summary>
+        /// <param name="path">The path to the workbook file.</param>
+        /// <param name="options">Resource limits and behavior toggles; <see cref="ExcelReaderOptions.Default"/> when <see langword="null"/>.</param>
+        /// <returns>A format-agnostic <see cref="IExcelRowReader"/> backed by the concrete reader that matches the detected format.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="path"/> is <see langword="null"/>.</exception>
+        /// <exception cref="InvalidDataException">The file's signature does not match a supported format.</exception>
         [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP001:Dispose created",
             Justification = "Stream ownership transfers to OpenSeekable, which disposes it on failure and via the reader on success.")]
         [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
@@ -131,12 +210,33 @@ namespace ExcelReader.Core.Reader
             return OpenSeekable(File.OpenRead(path), leaveOpen: false, options);
         }
 
+        /// <summary>
+        /// Opens a workbook from an existing seekable stream, auto-detecting its format (XLSX/XLSB/XLS) from the
+        /// stream's signature.
+        /// </summary>
+        /// <param name="stream">A seekable stream containing the workbook data.</param>
+        /// <param name="leaveOpen">When <see langword="true"/> (the default), <paramref name="stream"/> is not disposed when the reader is disposed.</param>
+        /// <param name="options">Resource limits and behavior toggles; <see cref="ExcelReaderOptions.Default"/> when <see langword="null"/>.</param>
+        /// <returns>A format-agnostic <see cref="IExcelRowReader"/> backed by the concrete reader that matches the detected format.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="stream"/> is <see langword="null"/>.</exception>
+        /// <exception cref="ArgumentException"><paramref name="stream"/> does not support seeking.</exception>
+        /// <exception cref="InvalidDataException">The stream's signature does not match a supported format.</exception>
         public static IExcelRowReader Open(Stream stream, bool leaveOpen = true, ExcelReaderOptions? options = null)
         {
             ArgumentNullException.ThrowIfNull(stream);
             return OpenSeekable(stream, leaveOpen, options);
         }
 
+        /// <summary>
+        /// Asynchronously opens a workbook from a file path, auto-detecting its format (XLSX/XLSB/XLS) from the
+        /// file's signature and taking ownership of the file stream.
+        /// </summary>
+        /// <param name="path">The path to the workbook file.</param>
+        /// <param name="options">Resource limits and behavior toggles; <see cref="ExcelReaderOptions.Default"/> when <see langword="null"/>.</param>
+        /// <param name="ct">A token to cancel the open operation.</param>
+        /// <returns>A format-agnostic <see cref="IExcelRowReader"/> backed by the concrete reader that matches the detected format.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="path"/> is <see langword="null"/>.</exception>
+        /// <exception cref="InvalidDataException">The file's signature does not match a supported format.</exception>
         [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP001:Dispose created",
             Justification = "Stream ownership transfers to OpenSeekableAsync, which disposes it on failure and via the reader on success.")]
         [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
@@ -148,12 +248,29 @@ namespace ExcelReader.Core.Reader
             return OpenSeekableAsync(stream, leaveOpen: false, options, ct);
         }
 
+        /// <summary>
+        /// Asynchronously opens a workbook from an existing seekable stream, auto-detecting its format
+        /// (XLSX/XLSB/XLS) from the stream's signature.
+        /// </summary>
+        /// <param name="stream">A seekable stream containing the workbook data.</param>
+        /// <param name="leaveOpen">When <see langword="true"/> (the default), <paramref name="stream"/> is not disposed when the reader is disposed.</param>
+        /// <param name="options">Resource limits and behavior toggles; <see cref="ExcelReaderOptions.Default"/> when <see langword="null"/>.</param>
+        /// <param name="ct">A token to cancel the open operation.</param>
+        /// <returns>A format-agnostic <see cref="IExcelRowReader"/> backed by the concrete reader that matches the detected format.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="stream"/> is <see langword="null"/>.</exception>
+        /// <exception cref="ArgumentException"><paramref name="stream"/> does not support seeking.</exception>
+        /// <exception cref="InvalidDataException">The stream's signature does not match a supported format.</exception>
         public static ValueTask<IExcelRowReader> OpenAsync(Stream stream, bool leaveOpen = true, ExcelReaderOptions? options = null, CancellationToken ct = default)
         {
             ArgumentNullException.ThrowIfNull(stream);
             return OpenSeekableAsync(stream, leaveOpen, options, ct);
         }
 
+        /// <summary>Detects a workbook's file format (XLSX/XLSB/XLS/unknown) from a seekable stream's signature, without consuming it.</summary>
+        /// <param name="stream">A seekable stream containing the workbook data. The stream's position is restored after detection.</param>
+        /// <returns>The detected <see cref="ExcelFileFormat"/>, or <see cref="ExcelFileFormat.Unknown"/> if the signature matches no supported format.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="stream"/> is <see langword="null"/>.</exception>
+        /// <exception cref="ArgumentException"><paramref name="stream"/> does not support seeking.</exception>
         public static ExcelFileFormat DetectFileFormat(Stream stream)
         {
             ArgumentNullException.ThrowIfNull(stream);
@@ -162,6 +279,12 @@ namespace ExcelReader.Core.Reader
             return format;
         }
 
+        /// <summary>Asynchronously detects a workbook's file format (XLSX/XLSB/XLS/unknown) from a seekable stream's signature, without consuming it.</summary>
+        /// <param name="stream">A seekable stream containing the workbook data. The stream's position is restored after detection.</param>
+        /// <param name="ct">A token to cancel the detection operation.</param>
+        /// <returns>The detected <see cref="ExcelFileFormat"/>, or <see cref="ExcelFileFormat.Unknown"/> if the signature matches no supported format.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="stream"/> is <see langword="null"/>.</exception>
+        /// <exception cref="ArgumentException"><paramref name="stream"/> does not support seeking.</exception>
         public static async ValueTask<ExcelFileFormat> DetectFileFormatAsync(Stream stream, CancellationToken ct = default)
         {
             ArgumentNullException.ThrowIfNull(stream);

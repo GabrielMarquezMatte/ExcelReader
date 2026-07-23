@@ -9,6 +9,7 @@ using ExcelReader.Core.Writer.Internal;
 
 namespace ExcelReader.Core.Writer
 {
+    /// <summary>Writes an .xlsb workbook (BIFF12 binary format) to a stream, one sheet at a time.</summary>
     public sealed class XlsbWorkbookWriter : IWorkbookWriter<XlsbSheetWriter>
     {
         private readonly ZipArchive _zip;
@@ -33,6 +34,13 @@ namespace ExcelReader.Core.Writer
             _sharedStrings = useSharedStrings ? new SharedStringTable() : null;
         }
 
+        /// <summary>Creates a writer that will produce an .xlsb archive on <paramref name="stream"/> once started.</summary>
+        /// <param name="stream">The destination stream; must be writable.</param>
+        /// <param name="leaveOpen">If <see langword="true"/>, <paramref name="stream"/> is not disposed when the writer is disposed.</param>
+        /// <param name="date1904">Whether the workbook uses the 1904 date system instead of the default 1900 system.</param>
+        /// <param name="compression">The zip compression level to use for every part written.</param>
+        /// <param name="useSharedStrings">Whether string cells are deduplicated through a shared string table instead of written inline.</param>
+        /// <param name="ct">A token to cancel creation before any I/O has started.</param>
         [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP001:Dispose created",
             Justification = "Factory method transfers ZipArchive ownership to XlsbWorkbookWriter; caller disposes via DisposeAsync.")]
         [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
@@ -51,6 +59,7 @@ namespace ExcelReader.Core.Writer
             return ValueTask.FromResult(new XlsbWorkbookWriter(zip, stream, leaveOpen, date1904, useSharedStrings, compression));
         }
 
+        /// <inheritdoc/>
         public ValueTask StartAsync(CancellationToken ct = default)
         {
             WriterStateGuard.ThrowIfEnded(_state, this);
@@ -60,6 +69,7 @@ namespace ExcelReader.Core.Writer
             return ValueTask.CompletedTask;
         }
 
+        /// <inheritdoc/>
         public XlsbSheetWriter AddSheet(string name)
         {
             ArgumentNullException.ThrowIfNull(name);
@@ -92,6 +102,7 @@ namespace ExcelReader.Core.Writer
             return _sharedStrings!.GetOrAdd(value);
         }
 
+        /// <inheritdoc/>
         public async ValueTask EndAsync(CancellationToken ct = default)
         {
             WriterStateGuard.ThrowIfEnded(_state, this);
@@ -117,11 +128,13 @@ namespace ExcelReader.Core.Writer
             await ZipArchiveDisposal.DisposeAsync(_zip).ConfigureAwait(false);
         }
 
+        /// <inheritdoc/>
         public ValueTask FlushAsync(CancellationToken ct = default)
         {
             return ZipEntryWriter.FlushAsync(_stream, ct);
         }
 
+        /// <inheritdoc/>
         public async ValueTask DisposeAsync()
         {
             if (_disposed)

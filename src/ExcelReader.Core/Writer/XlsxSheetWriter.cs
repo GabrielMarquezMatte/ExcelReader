@@ -5,6 +5,9 @@ using ExcelReader.Core.Writer.Internal;
 
 namespace ExcelReader.Core.Writer
 {
+    /// <summary>
+    /// Writes a single worksheet's XML into an XLSX ZIP archive, buffering rows and flushing them to the entry stream once they cross a size threshold.
+    /// </summary>
     public sealed class XlsxSheetWriter : ISheetWriter<XlsxRowWriter>
     {
         private readonly XlsxWorkbookWriter _owner;
@@ -43,6 +46,9 @@ namespace ExcelReader.Core.Writer
             return _owner.GetSharedStringIndex(value);
         }
 
+        /// <inheritdoc/>
+        /// <exception cref="ObjectDisposedException">The sheet has already been ended.</exception>
+        /// <exception cref="InvalidOperationException">The sheet has already been started.</exception>
         [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP003:Dispose previous before re-assigning",
             Justification = "_stream is always null when StartAsync is called (state machine guarantees Created state).")]
         [SuppressMessage("AsyncFixer", "AsyncFixer02:Long-running or blocking operation invoked inside an async method",
@@ -74,6 +80,10 @@ namespace ExcelReader.Core.Writer
             _owner.RegisterSheet(Name, SheetId);
         }
 
+        /// <inheritdoc/>
+        /// <exception cref="ObjectDisposedException">The sheet has already been ended.</exception>
+        /// <exception cref="InvalidOperationException">The sheet has not been started, or the previous <see cref="XlsxRowWriter"/> has not been disposed.</exception>
+        /// <exception cref="ExcelLimitExceededException">The worksheet's 1,048,576-row limit has been reached.</exception>
         public ValueTask<XlsxRowWriter> StartRowAsync(CancellationToken ct = default)
         {
             int rowNumber = BeginRow(ct);
@@ -86,6 +96,14 @@ namespace ExcelReader.Core.Writer
         // fully synchronous internally (BeginRow, EndBufferedRow), so a caller that never needs to
         // await mid-row (e.g. SheetWriterExtensions.WriteRecordsAsync's XlsxSheetWriter-specific overload)
         // can skip the per-row ValueTask/async-disposable machinery entirely.
+        /// <summary>
+        /// Starts a new row without the async/await machinery of <see cref="StartRowAsync(CancellationToken)"/>, for callers that never need to await mid-row.
+        /// </summary>
+        /// <param name="ct">A token checked before the row starts; the row buffering itself is fully synchronous.</param>
+        /// <returns>The reusable <see cref="XlsxRowWriter"/> for the new row.</returns>
+        /// <exception cref="ObjectDisposedException">The sheet has already been ended.</exception>
+        /// <exception cref="InvalidOperationException">The sheet has not been started, or the previous <see cref="XlsxRowWriter"/> has not been disposed.</exception>
+        /// <exception cref="ExcelLimitExceededException">The worksheet's 1,048,576-row limit has been reached.</exception>
         public XlsxRowWriter StartRow(CancellationToken ct = default)
         {
             int rowNumber = BeginRow(ct);
@@ -94,6 +112,9 @@ namespace ExcelReader.Core.Writer
             return _rowWriter;
         }
 
+        /// <inheritdoc/>
+        /// <exception cref="ObjectDisposedException">The sheet has already been ended.</exception>
+        /// <exception cref="InvalidOperationException">The sheet has not been started, or the active <see cref="XlsxRowWriter"/> has not been disposed.</exception>
         [SuppressMessage("Reliability", "CA1849:Call async methods when in an async method",
             Justification = "Dispose() is called synchronously to ensure ZipArchive entry tracking is updated before this method returns.")]
         [SuppressMessage("Sonar", "S6966:Await DisposeAsync instead",
@@ -116,6 +137,7 @@ namespace ExcelReader.Core.Writer
             _owner.NotifySheetEnded();
         }
 
+        /// <inheritdoc/>
         public async ValueTask DisposeAsync()
         {
             if (_state == WriterState.Started)

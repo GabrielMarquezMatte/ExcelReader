@@ -14,6 +14,7 @@ namespace ExcelReader.Core.Reader
         // next MoveNext may trigger. Records are parsed from buffered bytes only (TryParseRecordFromBuffer,
         // no stream I/O); when a record is only partially buffered the parse restarts after a refill, so
         // sync and async share one parser and the async path awaits once per refill, not per field.
+        /// <summary>A forward-only cursor over a <see cref="CsvReader"/> source's records, reading either synchronously or asynchronously.</summary>
         [SuppressMessage("Design", "CA1034:Nested types should not be visible",
             Justification = "Public nested enumerator is the standard foreach pattern.")]
         public sealed class Enumerator : PooledStreamRowEnumerator, IExcelRowEnumerator
@@ -57,6 +58,7 @@ namespace ExcelReader.Core.Reader
             // fields are already contiguous bytes read straight from the stream) or into _acc's value
             // buffer (only for fields needing unescaping, e.g. a doubled "" quote, or malformed
             // trailing bytes after a closing quote) — see CellDesc.FromShared / ToCell.
+            /// <inheritdoc/>
             public Row Current => new(_acc.CellSpan, _buf.AsSpan(0, _len), _acc.ValueSpan);
 
             // Dense field access for CsvEnumerable<T>: CSV cells are stored contiguously in column
@@ -76,6 +78,7 @@ namespace ExcelReader.Core.Reader
             // that was `< _len` when the attempt began), and Fill only grows `_len` or sets Eof — so once
             // the loop is entered, `_pos < _len` is a loop invariant and never needs re-checking; only the
             // very first record (or a buffer genuinely exhausted between records) needs the slow prologue.
+            /// <inheritdoc/>
             public bool MoveNext()
             {
                 if (!_bomChecked || _pos >= _len)
@@ -104,6 +107,7 @@ namespace ExcelReader.Core.Reader
             // buffered, so try the buffer-only parse synchronously before paying for an async state
             // machine at all. Only a genuine buffer miss (or the first-ever call, for the BOM check)
             // falls to the slow awaiting path.
+            /// <inheritdoc/>
             public ValueTask<bool> MoveNextAsync()
             {
                 if (!_bomChecked || _pos >= _len)
@@ -419,11 +423,13 @@ namespace ExcelReader.Core.Reader
 
             // --- buffer management (shared with XlsxReader/XlsbReader via BufferedStreamCursor) ---
 
+            /// <inheritdoc/>
             public void Dispose()
             {
                 ReturnBuffers();
             }
 
+            /// <inheritdoc/>
             public ValueTask DisposeAsync()
             {
                 ReturnBuffers();

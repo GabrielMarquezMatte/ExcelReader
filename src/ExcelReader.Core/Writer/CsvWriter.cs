@@ -8,6 +8,10 @@ namespace ExcelReader.Core.Writer
     // flushed straight to the stream instead of going through the ZIP/BIFF machinery the other
     // writers need. Delimiter/Quote mirror CsvReaderOptions so a written file needs no reader
     // configuration to round-trip.
+    /// <summary>
+    /// A minimal RFC4180 writer for CSV files: rows are buffered and flushed straight to the
+    /// underlying stream, with no sheets, styles, or shared strings.
+    /// </summary>
     public sealed class CsvWriter : IDisposable, IAsyncDisposable
     {
         // ponytail: same 64 KB flush threshold as the XLSX XlsxSheetWriter — bounds memory on huge
@@ -44,6 +48,13 @@ namespace ExcelReader.Core.Writer
             _specialChars = SearchValues.Create(specialChars);
         }
 
+        /// <summary>
+        /// Creates a writer that emits CSV text to <paramref name="stream"/>.
+        /// </summary>
+        /// <param name="stream">The destination stream.</param>
+        /// <param name="leaveOpen">If <see langword="true"/>, the stream is left open when the writer is disposed.</param>
+        /// <param name="options">Delimiter/quote options; defaults to <see cref="CsvWriterOptions.Default"/> when omitted.</param>
+        /// <exception cref="ArgumentException">The delimiter and quote byte are the same, or either is a carriage return or line feed.</exception>
         public static CsvWriter Create(Stream stream, bool leaveOpen = false, CsvWriterOptions? options = null)
         {
             ArgumentNullException.ThrowIfNull(stream);
@@ -68,6 +79,12 @@ namespace ExcelReader.Core.Writer
             }
         }
 
+        /// <summary>
+        /// Begins writing the next row, returning a reused <see cref="CsvRowWriter"/> that must be
+        /// disposed before another row can be started.
+        /// </summary>
+        /// <exception cref="ObjectDisposedException">The writer has already been disposed.</exception>
+        /// <exception cref="InvalidOperationException">The previous row's <see cref="CsvRowWriter"/> has not been disposed yet.</exception>
         public CsvRowWriter StartRow()
         {
             ObjectDisposedException.ThrowIf(_disposed, this);
@@ -109,6 +126,10 @@ namespace ExcelReader.Core.Writer
             _buffer.Reset();
         }
 
+        /// <summary>
+        /// Writes any buffered rows to the underlying stream and flushes it.
+        /// </summary>
+        /// <exception cref="ObjectDisposedException">The writer has already been disposed.</exception>
         public void Flush()
         {
             ObjectDisposedException.ThrowIf(_disposed, this);
@@ -116,6 +137,10 @@ namespace ExcelReader.Core.Writer
             _stream.Flush();
         }
 
+        /// <summary>
+        /// Writes any buffered rows to the underlying stream and flushes it asynchronously.
+        /// </summary>
+        /// <exception cref="ObjectDisposedException">The writer has already been disposed.</exception>
         public async ValueTask FlushAsync(CancellationToken ct = default)
         {
             ObjectDisposedException.ThrowIf(_disposed, this);
@@ -148,6 +173,10 @@ namespace ExcelReader.Core.Writer
             }
         }
 
+        /// <summary>
+        /// Terminates any open row, flushes buffered output, and closes the underlying stream unless
+        /// the writer was created with <c>leaveOpen: true</c>.
+        /// </summary>
         public void Dispose()
         {
             if (_disposed)
@@ -164,6 +193,10 @@ namespace ExcelReader.Core.Writer
             }
         }
 
+        /// <summary>
+        /// Terminates any open row, flushes buffered output, and closes the underlying stream unless
+        /// the writer was created with <c>leaveOpen: true</c>.
+        /// </summary>
         public async ValueTask DisposeAsync()
         {
             if (_disposed)

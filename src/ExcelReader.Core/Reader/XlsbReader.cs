@@ -7,6 +7,7 @@ namespace ExcelReader.Core.Reader
     // BIFF12 (.xlsb) reader. Uses the same ZIP/OPC container as .xlsx but worksheet parts are
     // binary BIFF12 records. The workbook, styles, and shared-string parts are read once at open
     // time (they're small); worksheets are streamed on demand by the enumerator.
+    /// <summary>Reads rows from a binary Excel (.xlsb / BIFF12) workbook, streaming each sheet's cells without loading the whole file into memory.</summary>
     public sealed partial class XlsbReader : IExcelRowReader, IExcelRowReader<XlsbReader.Enumerator>
     {
         // Shared-string pool: string i = _sharedFlat[_sharedOffsets[i].._sharedOffsets[i+1]].
@@ -156,10 +157,14 @@ namespace ExcelReader.Core.Reader
 
         // --- IExcelReader ---
 
+        /// <inheritdoc/>
         public bool IsDate1904 { get; }
+        /// <inheritdoc/>
         public string SheetName => _sheets![_current].Name;
+        /// <inheritdoc/>
         public int SheetCount => _sheets!.Length;
 
+        /// <inheritdoc/>
         public bool TryMoveToSheet(ReadOnlySpan<char> name)
         {
             if (!WorkbookLookups.TryFindSheetIndex(_sheets!, name, static s => s.Name, out int index))
@@ -170,6 +175,7 @@ namespace ExcelReader.Core.Reader
             return true;
         }
 
+        /// <inheritdoc/>
         public void MoveToSheet(int index)
         {
             WorkbookLookups.ValidateSheetIndex(index, _sheets!.Length);
@@ -192,6 +198,7 @@ namespace ExcelReader.Core.Reader
             return WorkbookLookups.SharedAt(_sharedOffsets, index);
         }
 
+        /// <inheritdoc/>
         [SuppressMessage("Performance", "HLQ006:GetEnumerator should return a value type",
             Justification = "Public nested enumerator is the standard foreach pattern.")]
         public Enumerator GetEnumerator()
@@ -205,6 +212,7 @@ namespace ExcelReader.Core.Reader
             return GetEnumerator();
         }
 
+        /// <inheritdoc/>
         [SuppressMessage("Performance", "HLQ006:GetAsyncEnumerator should return a value type",
             Justification = "Enumerator is a class so the same type can also expose MoveNextAsync for the async path.")]
         public Enumerator GetAsyncEnumerator()
@@ -217,6 +225,14 @@ namespace ExcelReader.Core.Reader
             return GetAsyncEnumerator();
         }
 
+        /// <summary>
+        /// Streaming async enumerator over the current sheet. Use with a manual loop — <c>Current</c>
+        /// is a ref struct (<c>Row</c>), so <c>await foreach</c> cannot bind it:
+        /// <code>
+        /// await using var e = await reader.GetAsyncEnumeratorAsync(ct);
+        /// while (await e.MoveNextAsync()) { var row = e.Current; /* ... */ }
+        /// </code>
+        /// </summary>
         [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP001:Dispose created",
             Justification = "sheet is handed to the returned Enumerator, which owns and disposes it.")]
         public async ValueTask<Enumerator> GetAsyncEnumeratorAsync(CancellationToken ct = default)
@@ -238,6 +254,7 @@ namespace ExcelReader.Core.Reader
 
         // --- Dispose ---
 
+        /// <inheritdoc/>
         [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP007:Don't dispose injected",
             Justification = "_stream is disposed conditionally based on _leaveOpen.")]
         public void Dispose()
@@ -249,6 +266,7 @@ namespace ExcelReader.Core.Reader
             }
         }
 
+        /// <inheritdoc/>
         [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP007:Don't dispose injected",
             Justification = "_stream is disposed conditionally based on _leaveOpen.")]
         public async ValueTask DisposeAsync()
