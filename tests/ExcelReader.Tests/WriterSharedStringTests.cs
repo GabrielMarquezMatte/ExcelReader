@@ -152,7 +152,6 @@ namespace ExcelReader.Tests
             Assert.Contains(Brt.RowHdr, sheetRecords);
             Assert.Contains(Brt.EndSheetData, sheetRecords);
             Assert.Equal(Brt.EndSheet, sheetRecords[^1]);
-            Assert.DoesNotContain(Brt.LegacyEndSheetData, sheetRecords);
             Assert.Contains(ReadRecords(ReadEntry(zip, "xl/worksheets/sheet1.bin")), record => record.Id == Brt.BeginWsView && record.Length == 30);
             Assert.Contains(ReadRecords(ReadEntry(zip, "xl/worksheets/sheet1.bin")), record => record.Id == Brt.Pane && record.Length == 29);
             Assert.Contains(ReadRecords(ReadEntry(zip, "xl/worksheets/sheet1.bin")), record => record.Id == Brt.RowHdr && record.Length == 25);

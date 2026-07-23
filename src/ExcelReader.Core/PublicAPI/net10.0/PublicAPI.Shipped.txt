@@ -142,6 +142,8 @@ ExcelReader.Core.Reader.ExcelReaderOptions.MaxSharedStringBytes.get -> long
 ExcelReader.Core.Reader.ExcelReaderOptions.MaxSharedStringBytes.init -> void
 ExcelReader.Core.Reader.ExcelReaderOptions.MaxTotalDecompressedBytes.get -> long
 ExcelReader.Core.Reader.ExcelReaderOptions.MaxTotalDecompressedBytes.init -> void
+ExcelReader.Core.Reader.ExcelReaderOptions.MaxZipEntries.get -> int
+ExcelReader.Core.Reader.ExcelReaderOptions.MaxZipEntries.init -> void
 ExcelReader.Core.Reader.IExcelRowEnumerator
 ExcelReader.Core.Reader.IExcelRowEnumerator.Current.get -> ExcelReader.Core.ValueObjects.Row
 ExcelReader.Core.Reader.IExcelRowEnumerator.MoveNext() -> bool
@@ -418,7 +420,8 @@ ExcelReader.Core.Writer.XlsxWorkbookWriter.DisposeAsync() -> System.Threading.Ta
 ExcelReader.Core.Writer.XlsxWorkbookWriter.EndAsync(System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
 ExcelReader.Core.Writer.XlsxWorkbookWriter.FlushAsync(System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
 ExcelReader.Core.Writer.XlsxWorkbookWriter.StartAsync(System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
-override ExcelReader.Core.Parser.ExcelRowContext.Equals(object? obj) -> bool
+~override ExcelReader.Core.Parser.ExcelRowContext.Equals(object obj) -> bool
+~override ExcelReader.Core.Parser.ExcelRowContext.ToString() -> string
 override ExcelReader.Core.Parser.ExcelRowContext.GetHashCode() -> int
 override ExcelReader.Core.Reader.CsvReaderOptions.Equals(object? obj) -> bool
 override ExcelReader.Core.Reader.CsvReaderOptions.GetHashCode() -> int

@@ -55,7 +55,6 @@ namespace ExcelReader.Core.Reader
         internal const int BeginTableStyles = 648;
         internal const int TableStyleClient = 649;
         internal const int EndTableStyles = 650;
-        internal const int LegacyEndSheetData = 92;
         internal const int BeginBundleShs = 143;
         internal const int EndBundleShs = 144;
     }

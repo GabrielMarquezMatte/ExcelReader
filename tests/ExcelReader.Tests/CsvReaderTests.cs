@@ -402,6 +402,19 @@ namespace ExcelReader.Tests
             Assert.Equal(first[0], second[0]);
         }
 
+        [Fact]
+        public void NonSeekableStreamThrowsOnSecondEnumeration()
+        {
+            byte[] bytes = Encoding.UTF8.GetBytes("a,b\n1,2\n");
+            using NonSeekableStream stream = new(bytes);
+            using var reader = Excel.FromCsv(stream);
+
+            var first = ReadAll(reader);
+            Assert.Equal(2, first.Count);
+
+            Assert.Throws<InvalidOperationException>(reader.GetEnumerator);
+        }
+
         // --- async twins of edge cases only previously exercised on the sync path ---
 
         [Fact]

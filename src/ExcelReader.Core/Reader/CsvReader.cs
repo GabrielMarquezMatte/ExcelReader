@@ -14,6 +14,7 @@ namespace ExcelReader.Core.Reader
         private readonly bool _leaveOpen;
         private readonly CsvReaderOptions _options;
         private readonly long _startPosition = -1;
+        private bool _enumeratedOnce;
 
         [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP003:Dispose previous before re-assigning",
             Justification = "Readonly field, first and only assignment in this constructor.")]
@@ -126,13 +127,22 @@ namespace ExcelReader.Core.Reader
         }
 
         // Lets the same reader be enumerated more than once when the source stream supports seeking
-        // (mirrors XlsxReader.GetEnumerator reopening its ZIP entry fresh on every call).
+        // (mirrors XlsxReader.GetEnumerator reopening its ZIP entry fresh on every call). Over a
+        // non-seekable/transcoding stream there's no position to rewind to, so a second enumeration
+        // would silently yield zero rows instead of replaying the file — fail loudly instead.
         private void ResetToStart()
         {
             if (_startPosition >= 0)
             {
                 _stream.Position = _startPosition;
+                return;
             }
+            if (_enumeratedOnce)
+            {
+                throw new InvalidOperationException(
+                    "This CsvReader is over a non-seekable stream and can only be enumerated once.");
+            }
+            _enumeratedOnce = true;
         }
 
         public void Dispose()
