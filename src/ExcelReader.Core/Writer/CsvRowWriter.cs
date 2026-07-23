@@ -76,12 +76,8 @@ namespace ExcelReader.Core.Writer
 
         public void Write(bool? value)
         {
-            ThrowIfDisposed();
-            BeginField();
-            if (value is not null)
-            {
-                _buffer.Write(value.Value ? "true"u8 : "false"u8);
-            }
+            if (value is null) { Skip(1); return; }
+            Write(value.Value);
         }
 
         // Round-trip ISO 8601 ("O"): unambiguous, culture-independent, and — for the common
@@ -95,12 +91,8 @@ namespace ExcelReader.Core.Writer
 
         public void Write(DateTime? value)
         {
-            ThrowIfDisposed();
-            BeginField();
-            if (value is not null)
-            {
-                WriteUtf8Field(value.Value, "O");
-            }
+            if (value is null) { Skip(1); return; }
+            Write(value.Value);
         }
 
         // DateOnly as ISO "yyyy-MM-dd" (the "O" round-trip form), which the CSV text-date parser reads back.
@@ -113,12 +105,8 @@ namespace ExcelReader.Core.Writer
 
         public void Write(DateOnly? value)
         {
-            ThrowIfDisposed();
-            BeginField();
-            if (value is not null)
-            {
-                WriteUtf8Field(value.Value, "O");
-            }
+            if (value is null) { Skip(1); return; }
+            Write(value.Value);
         }
 
         // TimeOnly as an Excel-style time serial (fraction of a 24h day): a plain number the parser
@@ -132,12 +120,8 @@ namespace ExcelReader.Core.Writer
 
         public void Write(TimeOnly? value)
         {
-            ThrowIfDisposed();
-            BeginField();
-            if (value is not null)
-            {
-                WriteUtf8Field(value.Value.Ticks / (double)TimeSpan.TicksPerDay, default);
-            }
+            if (value is null) { Skip(1); return; }
+            Write(value.Value);
         }
 
         // IUtf8SpanFormattable (not ISpanFormattable): CSV output is UTF-8, so numbers format straight
@@ -153,12 +137,8 @@ namespace ExcelReader.Core.Writer
         public void Write<T>(T? value)
             where T : struct, IUtf8SpanFormattable
         {
-            ThrowIfDisposed();
-            BeginField();
-            if (value is not null)
-            {
-                WriteUtf8Field(value.Value, default);
-            }
+            if (value is null) { Skip(1); return; }
+            Write(value.Value);
         }
 
         public void Skip(int count = 1)

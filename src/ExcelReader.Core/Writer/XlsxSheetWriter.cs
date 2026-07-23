@@ -53,11 +53,8 @@ namespace ExcelReader.Core.Writer
             Justification = "See AsyncFixer02 justification above.")]
         public async ValueTask StartAsync(CancellationToken ct = default)
         {
-            ObjectDisposedException.ThrowIf(_state == WriterState.Ended, this);
-            if (_state != WriterState.Created)
-            {
-                throw new InvalidOperationException("XlsxSheetWriter has already been started.");
-            }
+            WriterStateGuard.ThrowIfEnded(_state, this);
+            WriterStateGuard.RequireCreated(_state, nameof(XlsxSheetWriter));
             ct.ThrowIfCancellationRequested();
             ZipArchiveEntry entry = _zip.CreateEntry($"xl/worksheets/sheet{SheetId}.xml", _compression);
 #if NET10_0_OR_GREATER
@@ -105,15 +102,9 @@ namespace ExcelReader.Core.Writer
             Justification = "See CA1849 justification above.")]
         public async ValueTask EndAsync(CancellationToken ct = default)
         {
-            ObjectDisposedException.ThrowIf(_state == WriterState.Ended, this);
-            if (_state != WriterState.Started)
-            {
-                throw new InvalidOperationException("XlsxSheetWriter must be started before ending.");
-            }
-            if (_rowActive)
-            {
-                throw new InvalidOperationException("The active XlsxRowWriter must be disposed before ending the sheet.");
-            }
+            WriterStateGuard.ThrowIfEnded(_state, this);
+            WriterStateGuard.RequireStarted(_state, nameof(XlsxSheetWriter), "ending");
+            WriterStateGuard.RequireNoActiveRowForEnd(_rowActive, nameof(XlsxRowWriter));
             ct.ThrowIfCancellationRequested();
             _state = WriterState.Ended;
             _rowBuffer.Write("</sheetData></worksheet>"u8);
@@ -140,15 +131,9 @@ namespace ExcelReader.Core.Writer
 
         private int BeginRow(CancellationToken ct)
         {
-            ObjectDisposedException.ThrowIf(_state == WriterState.Ended, this);
-            if (_state != WriterState.Started)
-            {
-                throw new InvalidOperationException("XlsxSheetWriter must be started before adding rows.");
-            }
-            if (_rowActive)
-            {
-                throw new InvalidOperationException("The previous XlsxRowWriter must be disposed before starting a new row.");
-            }
+            WriterStateGuard.ThrowIfEnded(_state, this);
+            WriterStateGuard.RequireStarted(_state, nameof(XlsxSheetWriter), "adding rows");
+            WriterStateGuard.RequireNoActiveRowForStart(_rowActive, nameof(XlsxRowWriter));
             ct.ThrowIfCancellationRequested();
             if (_rowNumber >= 1_048_576)
             {

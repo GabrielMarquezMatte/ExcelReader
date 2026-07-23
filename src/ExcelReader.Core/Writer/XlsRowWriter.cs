@@ -40,12 +40,12 @@ namespace ExcelReader.Core.Writer
 
         public void Write(bool? value)
         {
-            ThrowIfDisposed();
-            if (value is not null)
+            if (value is null)
             {
-                _owner.EmitBool(_rowNumber, _columnIndex, value.Value);
+                Skip(1);
+                return;
             }
-            _columnIndex++;
+            Write(value.Value);
         }
 
         public void Write(DateTime value)
@@ -57,12 +57,12 @@ namespace ExcelReader.Core.Writer
 
         public void Write(DateTime? value)
         {
-            ThrowIfDisposed();
-            if (value is not null)
+            if (value is null)
             {
-                _owner.EmitDate(_rowNumber, _columnIndex, value.Value);
+                Skip(1);
+                return;
             }
-            _columnIndex++;
+            Write(value.Value);
         }
 
         // DateOnly shares the DateTime date-serial cell format (midnight), so it round-trips as a date.
@@ -75,12 +75,12 @@ namespace ExcelReader.Core.Writer
 
         public void Write(DateOnly? value)
         {
-            ThrowIfDisposed();
-            if (value is not null)
+            if (value is null)
             {
-                _owner.EmitDate(_rowNumber, _columnIndex, value.Value.ToDateTime(TimeOnly.MinValue));
+                Skip(1);
+                return;
             }
-            _columnIndex++;
+            Write(value.Value);
         }
 
         // TimeOnly is written as an Excel time serial (fraction of a 24h day) in a plain number cell.
@@ -93,12 +93,12 @@ namespace ExcelReader.Core.Writer
 
         public void Write(TimeOnly? value)
         {
-            ThrowIfDisposed();
-            if (value is not null)
+            if (value is null)
             {
-                _owner.EmitNumber(_rowNumber, _columnIndex, value.Value.Ticks / (double)TimeSpan.TicksPerDay);
+                Skip(1);
+                return;
             }
-            _columnIndex++;
+            Write(value.Value);
         }
 
         public void Write(int value)
@@ -180,12 +180,12 @@ namespace ExcelReader.Core.Writer
         public void Write<T>(T? value)
             where T : struct, IUtf8SpanFormattable
         {
-            ThrowIfDisposed();
-            if (value is not null)
+            if (value is null)
             {
-                _owner.EmitNumber(_rowNumber, _columnIndex, XlsbRowWriter.ToDouble(value.Value));
+                Skip(1);
+                return;
             }
-            _columnIndex++;
+            Write(value.Value);
         }
 
         public void Skip(int count = 1)
