@@ -3,13 +3,11 @@ using System.Text;
 
 namespace ExcelReader.Core.Reader
 {
-    // Forward-only CSV reader. Unlike the XLSX/XLSB/XLS readers there are no styles or shared strings.
-    // It exposes a single, unnamed sheet so it can be driven through the same format-agnostic
-    // IExcelRowReader surface (row enumeration + trivial sheet navigation) as the Excel readers.
     /// <summary>
     /// A forward-only reader over a delimited (CSV-style) text source, exposed as a single, unnamed
     /// sheet through the same <see cref="IExcelRowReader"/> surface as the XLSX/XLSB/XLS readers.
     /// </summary>
+    /// <remarks>Unlike the XLSX/XLSB/XLS readers, there are no styles or shared strings to resolve.</remarks>
     public sealed partial class CsvReader : IExcelRowReader, IExcelRowReader<CsvReader.Enumerator>
     {
         [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP008:Don't assign member with injected and created disposables",
@@ -74,8 +72,6 @@ namespace ExcelReader.Core.Reader
         /// <inheritdoc/>
         public bool IsDate1904 => false;
 
-        // CSV is a single, unnamed sheet. These satisfy the IExcelRowReader surface so a CSV reader can
-        // be driven through the same format-agnostic loop as the Excel readers.
         /// <summary>Gets the sheet name. Always the empty string, since a CSV source has a single, unnamed sheet.</summary>
         public string SheetName => "";
 

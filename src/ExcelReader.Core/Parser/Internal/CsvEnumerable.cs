@@ -6,13 +6,15 @@ using ExcelReader.Core.ValueObjects;
 
 namespace ExcelReader.Core.Parser.Internal
 {
-    // CSV-specialized counterpart to ExcelEnumerable<T>. Because CSV rows are dense (columns 0..n-1,
-    // no gaps) and every cell is text, this binds each property to a fixed field index at the header
-    // row and then parses each data row in a single indexed pass — no Row.Cells enumeration, no
-    // CellDesc re-walk, no per-cell binding search. It reuses the same compiled ColumnParser<T>
-    // delegates as the generic parser, but from the CSV type-map (dates parse text, not serials).
     /// <summary>Lazily projects CSV rows into <typeparamref name="T"/> instances by binding each property to a fixed field index, for both synchronous and asynchronous enumeration.</summary>
     /// <typeparam name="T">The row model type to bind each CSV row to.</typeparam>
+    /// <remarks>
+    /// The CSV-specialized counterpart to <see cref="ExcelEnumerable{T}"/>. Because CSV rows are dense
+    /// (columns 0..n-1, no gaps) and every cell is text, each data row is parsed in a single indexed
+    /// pass — no <c>Row.Cells</c> enumeration, no cell-descriptor re-walk, no per-cell binding search. It
+    /// reuses the same compiled <c>ColumnParser&lt;T&gt;</c> delegates as the generic parser, but from the
+    /// CSV type-map, where dates parse text rather than Excel serial numbers.
+    /// </remarks>
     [SuppressMessage("Design", "CA1034:Nested types should not be visible",
         Justification = "Public nested Enumerator/AsyncEnumerator are the standard foreach/await-foreach pattern.")]
     public sealed class CsvEnumerable<T> : IEnumerable<T>, IAsyncEnumerable<T>

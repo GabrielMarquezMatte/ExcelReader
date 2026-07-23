@@ -188,13 +188,11 @@ namespace ExcelReader.Core.Reader
         // XLS is an OLE2/CFB compound document. XLSB is distinguished from XLSX by the presence of
         // "xl/workbook.bin" in the ZIP central directory.
         private static ReadOnlySpan<byte> ZipSignature => [0x50, 0x4B, 0x03, 0x04];
-        // Opens a workbook of either format, choosing the reader from the file's signature.
-        // The returned reader iterates rows through its concrete type (XlsxReader / XlsReader)
-        // pattern-match on the result to enumerate.
         /// <summary>
         /// Opens a workbook from a file path, auto-detecting its format (XLSX/XLSB/XLS) from the file's signature
         /// and taking ownership of the file stream.
         /// </summary>
+        /// <remarks>Pattern-match on the returned reader against its concrete type (<see cref="XlsxReader"/> / <see cref="XlsReader"/> / <see cref="XlsbReader"/>) to access format-specific members.</remarks>
         /// <param name="path">The path to the workbook file.</param>
         /// <param name="options">Resource limits and behavior toggles; <see cref="ExcelReaderOptions.Default"/> when <see langword="null"/>.</param>
         /// <returns>A format-agnostic <see cref="IExcelRowReader"/> backed by the concrete reader that matches the detected format.</returns>

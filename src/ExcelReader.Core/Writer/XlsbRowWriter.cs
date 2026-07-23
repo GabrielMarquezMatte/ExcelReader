@@ -73,8 +73,10 @@ namespace ExcelReader.Core.Writer
             Write(value.Value);
         }
 
-        // DateOnly shares the DateTime date-serial cell format (midnight), so it round-trips as a date.
         /// <inheritdoc/>
+        /// <remarks>
+        /// Shares the <see cref="DateTime"/> date-serial cell format (midnight), so it round-trips as a date.
+        /// </remarks>
         public void Write(DateOnly value)
         {
             ThrowIfDisposed();
@@ -92,8 +94,8 @@ namespace ExcelReader.Core.Writer
             Write(value.Value);
         }
 
-        // TimeOnly is written as an Excel time serial (fraction of a 24h day) in a plain number cell.
         /// <inheritdoc/>
+        /// <remarks>Written as an Excel time serial (fraction of a 24h day) in a plain number cell.</remarks>
         public void Write(TimeOnly value)
         {
             ThrowIfDisposed();

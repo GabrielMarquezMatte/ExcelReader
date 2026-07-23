@@ -1,11 +1,47 @@
 using System.IO.Compression;
 using System.Text;
+using ExcelReader.Core.Enums;
 using ExcelReader.Core.Reader;
 
 namespace ExcelReader.Tests
 {
     public class ReaderLimitTests
     {
+        // Regression: a corrupted/malicious file can encode an arbitrary column index in a per-cell
+        // record (e.g. a raw 4-byte BIFF12 column field), which used to flow straight into
+        // Row.ColumnCount unchecked — turning a fuzzed single-byte flip into a near-infinite loop for
+        // any caller iterating 0..ColumnCount, instead of a graceful rejection. CellAccumulator.Add is
+        // the one choke point shared by every reader (XLS/XLSB/XLSX/CSV), so the bound lives there.
+        [Fact]
+        public void CellAccumulatorRejectsColumnIndexAtOrAboveExcelLimit()
+        {
+            var acc = new CellAccumulator(maxCellBytes: 0, limitName: "Test");
+            try
+            {
+                ExcelLimitExceededException ex = Assert.Throws<ExcelLimitExceededException>(
+                    () => acc.Add(16_384, start: 0, len: 0, CellType.ExcelString, style: 0, fromShared: false));
+                Assert.Equal("Columns", ex.LimitName);
+            }
+            finally
+            {
+                acc.Return();
+            }
+        }
+
+        [Fact]
+        public void CellAccumulatorAcceptsColumnIndexAtExcelLimitBoundary()
+        {
+            var acc = new CellAccumulator(maxCellBytes: 0, limitName: "Test");
+            try
+            {
+                acc.Add(16_383, start: 0, len: 0, CellType.ExcelString, style: 0, fromShared: false);
+                Assert.Equal(1, acc.Count);
+            }
+            finally
+            {
+                acc.Return();
+            }
+        }
         // Patches the uncompressed-size field of a central-directory record in place, so the entry's
         // declared size (what ZipArchiveEntry.Length reports) lies far above its real, tiny compressed
         // content — the exact shape of a zip-bomb-style amplification attack (see docs/road-to-a.md, F1).

@@ -1,7 +1,5 @@
 namespace ExcelReader.Core.Parser
 {
-    // Binds a custom IExcelCellConverter<TProperty> to a property. The converter type must implement
-    // IExcelCellConverter<> for the property's exact type and expose a public parameterless constructor.
     /// <summary>
     /// Binds a custom <see cref="IExcelCellConverter{T}"/> to a property. The converter type must
     /// implement <see cref="IExcelCellConverter{T}"/> for the property's exact type and expose a public

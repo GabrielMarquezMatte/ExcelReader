@@ -6,17 +6,12 @@ using ExcelReader.Core.Parser;
 
 namespace ExcelReader.Core.Writer
 {
-    // High-level record writer: writes a header row (from [ExcelColumn] or the property name) followed
-    // by one row per record, mapping each public readable property to a column. Each call targets a new
-    // sheet, so one workbook can hold sheets of different record types. Generic over the low-level
-    // IWorkbookWriter/ISheetWriter/IRowWriter interfaces, so it works for XLSX, XLSB and XLS alike.
-    // Round-trips through ExcelParser<T> because headers match property names/aliases (column order is
-    // irrelevant there). Use the RecordWriter.Create* factories rather than constructing directly.
     /// <summary>
     /// Writes plain-old-CLR-object records to a workbook as sheets: each call to <c>WriteSheetAsync</c>
     /// writes a new sheet, with a header row (from each property's <c>[ExcelColumn]</c> name or, failing
     /// that, the property name) followed by one row per record, one column per public readable property
-    /// of the record type. Works uniformly across XLSX, XLSB, XLS and CSV via the
+    /// of the record type. Each call targets a new sheet, so one workbook can hold sheets of different
+    /// record types. Works uniformly across XLSX, XLSB, XLS and CSV via the
     /// <see cref="IWorkbookWriter{TSheet}"/>/<see cref="ISheetWriter{TRow}"/>/<see cref="IRowWriter"/>
     /// abstractions. Prefer the <see cref="RecordWriter"/> factory methods over constructing this type
     /// directly. Headers written here match the property names/aliases that <c>ExcelParser&lt;T&gt;</c>
@@ -116,8 +111,6 @@ namespace ExcelReader.Core.Writer
         }
     }
 
-    // Format-specific factories for the generic record writer: they create the low-level workbook,
-    // start it, and hand it to WorkbookRecordWriter so callers never touch the type parameters.
     /// <summary>
     /// Format-specific factories that create the underlying low-level workbook writer, start it, and wrap
     /// it in a <see cref="WorkbookRecordWriter{TSheet,TRow}"/>, so callers never need to name the writer's
@@ -159,12 +152,10 @@ namespace ExcelReader.Core.Writer
             return new WorkbookRecordWriter<XlsbSheetWriter, XlsbRowWriter>(workbook);
         }
 
-        // CSV has no async setup (no ZIP/BIFF headers to write), so this is synchronous — the returned
-        // writer is still IAsyncDisposable. Only a single sheet is supported (a CSV file is one sheet).
         /// <summary>
         /// Creates a record writer that produces a CSV file. Unlike the other formats, this is synchronous
         /// (a CSV file has no archive/binary headers to write) and supports only a single sheet, since a
-        /// CSV file is inherently one sheet.
+        /// CSV file is inherently one sheet. The returned writer is still <see cref="IAsyncDisposable"/>.
         /// </summary>
         /// <param name="stream">The destination stream; must support writing.</param>
         /// <param name="leaveOpen">If <see langword="true"/>, <paramref name="stream"/> is left open when the returned writer is disposed.</param>

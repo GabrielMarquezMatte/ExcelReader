@@ -2,13 +2,15 @@ using System.Diagnostics.CodeAnalysis;
 
 namespace ExcelReader.Core.Writer
 {
-    // Adapts the flat CsvWriter to the ISheetWriter<TRow>/IWorkbookWriter<TSheet> pair that
-    // WorkbookRecordWriter drives. A CSV file is a single sheet, so the workbook exposes exactly one
-    // sheet and rejects a second AddSheet. The workbook owns the CsvWriter; the sheet only borrows it.
     /// <summary>
     /// The single sheet of a CSV "workbook". Adapts the flat <see cref="CsvWriter"/> to the
-    /// <see cref="ISheetWriter{TRow}"/> contract.
+    /// <see cref="ISheetWriter{TRow}"/> contract that <see cref="WorkbookRecordWriter{TSheet,TRow}"/> drives.
     /// </summary>
+    /// <remarks>
+    /// A CSV file is a single sheet, so the owning <see cref="CsvWorkbookWriter"/> exposes exactly one
+    /// sheet and rejects a second <see cref="CsvWorkbookWriter.AddSheet"/> call. The workbook owns the
+    /// <see cref="CsvWriter"/>; this sheet only borrows it.
+    /// </remarks>
     public sealed class CsvSheetWriter : ISheetWriter<CsvRowWriter>
     {
         private readonly CsvWriter _writer;

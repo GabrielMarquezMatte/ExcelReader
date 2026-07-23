@@ -24,11 +24,9 @@ namespace ExcelReader.Core.ValueObjects
             _sharedStringCache = sharedStringCache;
         }
 
-        // One past the highest populated column, so callers can iterate 0..ColumnCount.
         /// <summary>One past the highest populated column index, so callers can iterate 0..ColumnCount.</summary>
         public int ColumnCount => _cells.IsEmpty ? 0 : _cells[^1].Column + 1;
 
-        // Populated cells only, in ascending column order. Skips gaps instead of binary-searching them.
         /// <summary>Enumerates only the populated cells in this row, in ascending column order.</summary>
         public RowCellEnumerator Cells => new(_cells, _rowValues, _shared, _sharedStringCache);
 

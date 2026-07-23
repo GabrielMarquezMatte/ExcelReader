@@ -6,15 +6,16 @@ using ExcelReader.Core.Reader;
 
 namespace ExcelReader.Core.Parser.Internal
 {
-    // Zero-model-allocation, attribute-driven row sequence (see NamedRefRowEnumerator). Mirrors
-    // RefRowEnumerable<TModel,TReader,TEnumerator>'s shape exactly (struct GetEnumerator for a
-    // zero-allocation foreach; IEnumerable<TModel> implemented only for the familiar shape — its
-    // members throw, since a ref struct TModel cannot be surfaced through the boxed
-    // IEnumerator<TModel>/IEnumerator).
     /// <summary>A zero-model-allocation sequence of rows bound by attribute to a ref struct model type, consumable via <c>foreach</c> or <c>await foreach</c>.</summary>
     /// <typeparam name="TModel">The ref-struct-capable row model type to bind each row to.</typeparam>
     /// <typeparam name="TReader">The concrete row reader type this instance pulls rows from.</typeparam>
     /// <typeparam name="TEnumerator">The concrete row enumerator type <typeparamref name="TReader"/> produces.</typeparam>
+    /// <remarks>
+    /// Mirrors <c>RefRowEnumerable&lt;TModel,TReader,TEnumerator&gt;</c>'s shape exactly: a struct
+    /// <c>GetEnumerator()</c> gives a zero-allocation <c>foreach</c>, while <see cref="IEnumerable{TModel}"/>
+    /// is implemented only for the familiar shape — its members throw, since a ref struct
+    /// <typeparamref name="TModel"/> cannot be surfaced through the boxed <c>IEnumerator&lt;TModel&gt;</c>/<c>IEnumerator</c>.
+    /// </remarks>
     public sealed class NamedRefRowEnumerable<TModel, TReader, TEnumerator> : IEnumerable<TModel>
         where TModel : allows ref struct
         where TReader : IExcelRowReader<TEnumerator>
@@ -54,12 +55,14 @@ namespace ExcelReader.Core.Parser.Internal
             return new(_reader.GetEnumerator(), _context, _typeInfo, _comparer, _normalization, _headerRow, _throwOnParseFailure);
         }
 
-        // The 'await foreach' entry point: C#'s pattern-based async binding picks up this parameterless
-        // GetAsyncEnumerator() (the enumerator it returns has MoveNextAsync/Current/DisposeAsync). Opens
-        // the sheet synchronously — the reader's GetAsyncEnumerator() is a sync open (no I/O await), the
-        // async work is per-row via MoveNextAsync. A ref-struct TModel can't be surfaced through
-        // IAsyncEnumerable<TModel> (CS9267), so this stays a pattern match, never the interface.
         /// <summary>Gets the enumerator used to consume this sequence with an <c>await foreach</c> loop, opening the underlying sheet synchronously.</summary>
+        /// <remarks>
+        /// The <c>await foreach</c> entry point: C#'s pattern-based async binding picks up this
+        /// parameterless <c>GetAsyncEnumerator()</c> (the enumerator it returns has
+        /// <c>MoveNextAsync</c>/<c>Current</c>/<c>DisposeAsync</c>). The async work happens per-row via
+        /// <c>MoveNextAsync</c>. A ref-struct <typeparamref name="TModel"/> can't be surfaced through
+        /// <c>IAsyncEnumerable&lt;TModel&gt;</c> (CS9267), so this stays a pattern match, never the interface.
+        /// </remarks>
         [System.Diagnostics.CodeAnalysis.SuppressMessage("Performance", "HLQ006:GetAsyncEnumerator should return a value type",
             Justification = "The enumerator is a class so the same type can also expose MoveNextAsync for the async path.")]
         public NamedRefRowEnumerator<TModel, TEnumerator> GetAsyncEnumerator()

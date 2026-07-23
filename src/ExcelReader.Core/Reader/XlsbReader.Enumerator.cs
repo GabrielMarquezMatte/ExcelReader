@@ -7,10 +7,12 @@ namespace ExcelReader.Core.Reader
 {
     public sealed partial class XlsbReader
     {
-        // Forward-only worksheet scanner over a binary sheetN.bin entry. Streams the part through a
-        // refillable pooled buffer; Biff12RecordReader framing guarantees that a partial record at the
-        // buffer boundary is detected and retried after the next fill.
         /// <summary>Forward-only enumerator over an <see cref="XlsbReader"/> sheet's rows.</summary>
+        /// <remarks>
+        /// Streams the underlying binary <c>sheetN.bin</c> entry through a refillable pooled buffer;
+        /// <c>Biff12RecordReader</c> framing guarantees that a partial record at the buffer boundary
+        /// is detected and retried after the next fill.
+        /// </remarks>
         [SuppressMessage("Design", "CA1034:Nested types should not be visible",
             Justification = "Public nested enumerator is the standard foreach pattern.")]
         public sealed class Enumerator : PooledStreamRowEnumerator, IExcelRowEnumerator

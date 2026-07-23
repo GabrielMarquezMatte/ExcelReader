@@ -174,8 +174,11 @@ namespace ExcelReader.Core.Writer
             }
         }
 
-        // XLS buffers everything in memory, so these wrap the synchronous path in a completed ValueTask.
         /// <inheritdoc/>
+        /// <remarks>
+        /// XLS buffers everything in memory, so this (and the other <c>*Async</c> members below) simply
+        /// wraps the synchronous path in a completed <see cref="ValueTask"/>.
+        /// </remarks>
         public ValueTask StartAsync(CancellationToken ct = default)
         {
             ct.ThrowIfCancellationRequested();

@@ -26,17 +26,12 @@ namespace ExcelReader.Core.ValueObjects
 
         /// <summary>The kind of value this cell holds.</summary>
         public CellType Type { get; }
-        // UTF-8 text bytes: shared-string text, or the raw <v> for bools/errors/XLSX numbers.
-        // EMPTY for binary-numeric cells (XLS Number/RK/Date/Formula), which carry the raw double
-        // instead — read those via TryGetDouble/TryParse, or TryFormat/GetString for text.
         /// <summary>
         /// The cell's raw UTF-8 text bytes. Empty for binary-numeric cells (XLS Number/RK/Date/Formula);
         /// use <see cref="TryGetDouble"/>, <see cref="TryParse{T}"/>, <see cref="TryFormat"/>, or
         /// <see cref="GetString"/> to read those instead.
         /// </summary>
         public ReadOnlySpan<byte> Value { get; }
-        // The `s` style index from the worksheet (0 when absent). Escape hatch for date detection,
-        // which is deferred: dates arrive as Number, and the caller maps StyleIndex -> format itself.
         /// <summary>
         /// The worksheet's <c>s</c> style index for this cell (0 when absent). Callers can map this to a
         /// number format to detect dates themselves, since date cells arrive with <see cref="Type"/> of
@@ -67,9 +62,11 @@ namespace ExcelReader.Core.ValueObjects
             _sharedCache = sharedCache;
         }
 
-        // Numeric cells from binary formats (XLS) carry the raw double, so this avoids the
-        // format-then-parse round trip. Text-backed cells (XLSX, strings) parse Value as a fallback.
         /// <summary>Reads the cell's value as a <see cref="double"/>; returns false if it isn't numeric.</summary>
+        /// <remarks>
+        /// Numeric cells from binary formats (XLS) carry the raw double, so this avoids the
+        /// format-then-parse round trip. Text-backed cells (XLSX, strings) parse <see cref="Value"/> as a fallback.
+        /// </remarks>
         public bool TryGetDouble(out double value)
         {
             if (_hasNumber)
@@ -233,10 +230,6 @@ namespace ExcelReader.Core.ValueObjects
                 || string.Equals(NumberFormatInfo.GetInstance(provider).NumberDecimalSeparator, ".", StringComparison.Ordinal);
         }
 
-        // Interprets the cell's numeric value as an Excel serial date (1900 date system).
-        // Works on any cell whose value parses as a number — Type == Date signals the source style was a
-        // date/time format. For Mac-authored workbooks with XlsxReader.IsDate1904 == true, use the
-        // overload that accepts isDate1904 so the 1462-day epoch offset is applied.
         /// <summary>
         /// Interprets the cell's numeric value as an Excel serial date under the 1900 date system.
         /// Works on any cell whose value parses as a number, not only cells whose <see cref="Type"/> is
@@ -248,9 +241,6 @@ namespace ExcelReader.Core.ValueObjects
             return TryGetDateTime(isDate1904: false, out result);
         }
 
-        // Interprets the cell's numeric value as an Excel serial date.
-        // Pass isDate1904: true (from XlsxReader.IsDate1904) to shift the 1904 epoch to
-        // DateTime.FromOADate's 1900 epoch (+1462 days: Jan 1 1904 = OADate 1462).
         /// <summary>Interprets the cell's numeric value as an Excel serial date.</summary>
         /// <param name="isDate1904">
         /// Pass true for workbooks using the 1904 date system (e.g. when the reader's IsDate1904 is true)
@@ -275,8 +265,6 @@ namespace ExcelReader.Core.ValueObjects
             return false;
         }
 
-        // Writes the cell's text into destination as UTF-8; false if it doesn't fit.
-        // Zero-allocation way to get the text of a binary-numeric cell.
         /// <summary>
         /// Writes the cell's text into <paramref name="destination"/> as UTF-8, without allocating;
         /// returns false if the buffer is too small.
@@ -296,13 +284,14 @@ namespace ExcelReader.Core.ValueObjects
             return false;
         }
 
-        // Allocates — only call when you actually need a string. For a shared-string cell backed by a
-        // dedup cache (see the constructor), a repeated value (categorical columns are the common case)
-        // returns the same cached instance instead of decoding UTF-8 and allocating again.
         /// <summary>
         /// Returns the cell's value as a string, allocating a new instance unless it is a repeated
         /// shared string served from the reader's dedup cache. Only call this when a string is required.
         /// </summary>
+        /// <remarks>
+        /// A repeated value — the common case for categorical columns — returns the same cached instance
+        /// instead of decoding UTF-8 and allocating again. See the constructor for how the dedup cache is supplied.
+        /// </remarks>
         [SkipLocalsInit]
         public string GetString()
         {

@@ -103,6 +103,16 @@ namespace ExcelReader.Core.Reader
 
         internal void Add(int col, int start, int len, CellType type, int style, bool fromShared, double number = 0, bool hasNumber = false)
         {
+            // A corrupted/malicious file can encode an arbitrary column index in a per-cell record
+            // (e.g. a 4-byte BIFF12/BIFF8 column field); without this bound, Row.ColumnCount (Column +
+            // 1 of the last cell) can come out in the billions, turning a naive column-index loop over
+            // the row into a near-infinite spin instead of a crash — far worse than an exception.
+            // 16,384 is Excel's own hard column cap (A..XFD), already enforced symmetrically on the
+            // writer side (see ColumnName.cs / XlsxRowWriter.cs / XlsbSheetWriter.cs).
+            if ((uint)col >= 16_384)
+            {
+                throw new ExcelLimitExceededException("Columns", 16_384, col + 1L);
+            }
             if (Count == _cells.Length)
             {
                 int capacity = LimitChecks.NextBufferSize(

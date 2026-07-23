@@ -4,14 +4,15 @@ using ExcelReader.Core.Writer.Internal;
 
 namespace ExcelReader.Core.Writer
 {
-    // Minimal RFC4180 writer: no sheets, styles, or shared strings, so rows are buffered and
-    // flushed straight to the stream instead of going through the ZIP/BIFF machinery the other
-    // writers need. Delimiter/Quote mirror CsvReaderOptions so a written file needs no reader
-    // configuration to round-trip.
     /// <summary>
     /// A minimal RFC4180 writer for CSV files: rows are buffered and flushed straight to the
-    /// underlying stream, with no sheets, styles, or shared strings.
+    /// underlying stream, with no sheets, styles, or shared strings — instead of going through the
+    /// ZIP/BIFF machinery the other writers need.
     /// </summary>
+    /// <remarks>
+    /// Delimiter/Quote mirror <c>CsvReaderOptions</c> so a written file needs no reader configuration
+    /// to round-trip.
+    /// </remarks>
     public sealed class CsvWriter : IDisposable, IAsyncDisposable
     {
         // ponytail: same 64 KB flush threshold as the XLSX XlsxSheetWriter — bounds memory on huge

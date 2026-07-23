@@ -118,9 +118,8 @@ namespace ExcelReader.Core.Reader
             return GetEnumerator();
         }
 
-        // ct overload takes no default value: the parameterless GetAsyncEnumerator() above already covers
-        // the no-argument call, so a default here would only shadow it.
         /// <summary>Creates an enumerator for the current sheet that observes cancellation while iterating.</summary>
+        /// <remarks>This overload takes no default value for <paramref name="ct"/>: the parameterless <see cref="GetAsyncEnumerator()"/> above already covers the no-argument call, so a default here would only shadow it.</remarks>
         /// <param name="ct">Token checked before enumeration starts and on each subsequent move.</param>
         [SuppressMessage("Performance", "HLQ006:GetAsyncEnumerator should return a value type",
             Justification = "Enumerator is a class so the same type can also expose MoveNextAsync for parity with XlsxReader.")]
@@ -316,10 +315,10 @@ namespace ExcelReader.Core.Reader
 
         // `boundaries` holds the offsets (into `sst`) where each CONTINUE payload starts. A boundary that
         // falls inside a string's character array marks an inserted grbit byte to consume; one outside the
-        // array (header, formatting runs, extended data) carries no grbit and is simply read through.
-        // ponytail: handles the common char-boundary split; a split *between the two bytes* of one wide
-        // char (rare, Excel aligns to char boundaries) would still misread — upgrade to a bit-level
-        // continuation reader if such a file ever surfaces.
+        // array (header, formatting runs, extended data) carries no grbit and is simply read through. A
+        // wide (UTF-16) code unit whose two bytes straddle the boundary is handled too: its low byte is
+        // read from the end of the preceding run, then the grbit is consumed, then its high byte from the
+        // start of the continuation — see the `boundaries[boundaryIdx] == pos + 1` branch below.
         private static void DecodeSharedStrings(ReadOnlySpan<byte> sst, ReadOnlySpan<int> boundaries, ExcelReaderOptions options, out byte[] sharedFlat, out int[] sharedOffsets)
         {
             LimitChecks.ThrowIfOverSharedStringLimit(options, sst.Length);
