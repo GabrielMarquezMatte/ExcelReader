@@ -29,6 +29,25 @@ namespace ExcelReader.Core.Writer.Internal
             }
         }
 
+        // Guards row-writer re-entrancy at the start of a new row — every sheet writer must reject
+        // starting row N+1 while row N's writer is still open.
+        internal static void RequireNoActiveRowForStart(bool rowActive, string rowWriterTypeName)
+        {
+            if (rowActive)
+            {
+                throw new InvalidOperationException($"The previous {rowWriterTypeName} must be disposed before starting a new row.");
+            }
+        }
+
+        // Guards ending the sheet while its row writer is still open.
+        internal static void RequireNoActiveRowForEnd(bool rowActive, string rowWriterTypeName)
+        {
+            if (rowActive)
+            {
+                throw new InvalidOperationException($"The active {rowWriterTypeName} must be disposed before ending the sheet.");
+            }
+        }
+
         internal static void ValidateSheetName(string name)
         {
             if (name.Length is 0 or > 31)

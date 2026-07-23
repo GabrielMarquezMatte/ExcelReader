@@ -49,26 +49,17 @@ namespace ExcelReader.Core.Writer
 
         public void Start()
         {
-            ObjectDisposedException.ThrowIf(_state == WriterState.Ended, this);
-            if (_state != WriterState.Created)
-            {
-                throw new InvalidOperationException("XlsSheetWriter has already been started.");
-            }
+            WriterStateGuard.ThrowIfEnded(_state, this);
+            WriterStateGuard.RequireCreated(_state, nameof(XlsSheetWriter));
             _state = WriterState.Started;
             _owner.RegisterSheet(this);
         }
 
         public XlsRowWriter StartRow()
         {
-            ObjectDisposedException.ThrowIf(_state == WriterState.Ended, this);
-            if (_state != WriterState.Started)
-            {
-                throw new InvalidOperationException("XlsSheetWriter must be started before adding rows.");
-            }
-            if (_rowActive)
-            {
-                throw new InvalidOperationException("The previous XlsRowWriter must be disposed before starting a new row.");
-            }
+            WriterStateGuard.ThrowIfEnded(_state, this);
+            WriterStateGuard.RequireStarted(_state, nameof(XlsSheetWriter), "adding rows");
+            WriterStateGuard.RequireNoActiveRowForStart(_rowActive, nameof(XlsRowWriter));
             _rowNumber++;
             if (_rowNumber > MaxRow)
             {
@@ -148,15 +139,9 @@ namespace ExcelReader.Core.Writer
 
         public void End()
         {
-            ObjectDisposedException.ThrowIf(_state == WriterState.Ended, this);
-            if (_state != WriterState.Started)
-            {
-                throw new InvalidOperationException("XlsSheetWriter must be started before ending.");
-            }
-            if (_rowActive)
-            {
-                throw new InvalidOperationException("The active XlsRowWriter must be disposed before ending the sheet.");
-            }
+            WriterStateGuard.ThrowIfEnded(_state, this);
+            WriterStateGuard.RequireStarted(_state, nameof(XlsSheetWriter), "ending");
+            WriterStateGuard.RequireNoActiveRowForEnd(_rowActive, nameof(XlsRowWriter));
             _state = WriterState.Ended;
             _continuation?.End();
             if (!_isContinuation)
