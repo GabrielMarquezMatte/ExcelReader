@@ -2,6 +2,10 @@ using ExcelReader.Core.Enums;
 
 namespace ExcelReader.Core.ValueObjects
 {
+    /// <summary>
+    /// A single worksheet row, exposed as a zero-allocation view over the reader's underlying buffers.
+    /// Only valid for the lifetime of the enumeration that produced it — do not store it past that point.
+    /// </summary>
     public readonly ref struct Row
     {
         private readonly ReadOnlySpan<CellDesc> _cells; // ascending by Column, gaps allowed
@@ -20,12 +24,13 @@ namespace ExcelReader.Core.ValueObjects
             _sharedStringCache = sharedStringCache;
         }
 
-        // One past the highest populated column, so callers can iterate 0..ColumnCount.
+        /// <summary>One past the highest populated column index, so callers can iterate 0..ColumnCount.</summary>
         public int ColumnCount => _cells.IsEmpty ? 0 : _cells[^1].Column + 1;
 
-        // Populated cells only, in ascending column order. Skips gaps instead of binary-searching them.
+        /// <summary>Enumerates only the populated cells in this row, in ascending column order.</summary>
         public RowCellEnumerator Cells => new(_cells, _rowValues, _shared, _sharedStringCache);
 
+        /// <summary>Gets the cell at the given column index, or an empty cell if the column has no value.</summary>
         public Cell this[int column]
         {
             get

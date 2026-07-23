@@ -594,6 +594,23 @@ namespace ExcelReader.Tests
         }
 
         [Fact]
+        public void WideSharedStringCodeUnitSplitAcrossContinueBoundaryDecodesCorrectly()
+        {
+            // The low byte of Omega is the last byte in the SST; its high byte follows the CONTINUE grbit.
+            // The continuation switches to compressed mode for the final 'B', exercising both runs.
+            byte[] firstRegion = [0x03, 0x00, 0x01, 0x41, 0x00, 0xA9]; // "AΩB", wide through Omega's low byte
+            byte[] continueRegion = [0x00, 0x03, (byte)'B'];
+            byte[] framed = XlsWorkbookBuilder.FrameSstWithContinue(1, 1, firstRegion, continueRegion);
+
+            using var ms = XlsWorkbookBuilder.BuildRawSst(framed, labelSstCount: 1);
+            using var reader = Excel.FromXls(ms);
+
+            using var e = reader.GetEnumerator();
+            Assert.True(e.MoveNext());
+            Assert.Equal("AΩB", e.Current[0].GetString());
+        }
+
+        [Fact]
         public void AstralCharInUnicodeStringRoundTripsAsValidUtf8()
         {
             // A surrogate pair must encode as one 4-byte UTF-8 scalar, not two 3-byte CESU-8 sequences.

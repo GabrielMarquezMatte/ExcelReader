@@ -25,6 +25,10 @@ namespace ExcelReader.Core.Reader
             }
             _total = total;
         }
+
+        // Budget left before this counter's own limit trips; used to bound a single entry's declared
+        // size against what the workbook-wide counter has left, not just its absolute cap.
+        internal long Remaining => _limit <= 0 ? long.MaxValue : _limit - _total;
     }
 
     internal sealed class LimitedReadStream : Stream

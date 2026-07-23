@@ -182,6 +182,37 @@ namespace ExcelReader.Tests
         }
 
         [Fact]
+        public async Task ParseNamed_RequiredColumnWithUnparseableValueThrowsAsIfMissing()
+        {
+            // Id is [ExcelRequired] and present ("oops"), but unparseable as int — F3 applies to the
+            // ref-struct/NamedRef path too (shares SparseRowProjection with RowProjector<T> — F9).
+            await using var ms = await TypedWorkbook.BuildAsync(
+                ["Name", "Id", "Value", "Date"],
+                ["Alice", "oops", 10.5, SampleDate]);
+
+            using var reader = Excel.From(ms, leaveOpen: true);
+            var enumerator = RefParser.ParseNamed<SaleNamedRef>(reader).GetEnumerator();
+            Assert.True(enumerator.MoveNext()); // header maps fine — Id IS present, just unparseable
+            Assert.Throws<InvalidOperationException>(() => { _ = enumerator.Current; });
+        }
+
+        [Fact]
+        public async Task ParseNamed_ThrowOnParseFailureThrowsExcelParseException()
+        {
+            await using var ms = await TypedWorkbook.BuildAsync(
+                ["Name", "Id", "Value", "Date"],
+                ["Alice", "oops", 10.5, SampleDate]);
+            var config = new ExcelParserConfig { ThrowOnParseFailure = true };
+
+            using var reader = Excel.From(ms, leaveOpen: true);
+            var enumerator = RefParser.ParseNamed<SaleNamedRef>(reader, config).GetEnumerator();
+            Assert.True(enumerator.MoveNext());
+            ExcelParseException ex = Assert.Throws<ExcelParseException>(() => { _ = enumerator.Current; });
+            Assert.Equal("Id", ex.ColumnName);
+            Assert.Equal("oops", ex.RawValue);
+        }
+
+        [Fact]
         public void ParseNamed_Date1904System_ShiftsParsedDateBy1462Days()
         {
             const string sheetRows =

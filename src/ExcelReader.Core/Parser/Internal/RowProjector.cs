@@ -1,4 +1,3 @@
-using ExcelReader.Core.Enums;
 using ExcelReader.Core.ValueObjects;
 
 namespace ExcelReader.Core.Parser.Internal
@@ -11,14 +10,16 @@ namespace ExcelReader.Core.Parser.Internal
         private readonly int _headerRow;
         private readonly bool _isDate1904;
         private readonly IFormatProvider _provider;
+        private readonly bool _throwOnParseFailure;
         private ColumnBinding<T>[]? _bindings;
-        // Per-row scratch: _seen[i] is set when binding i saw a non-empty cell this row. Only allocated
-        // and walked when at least one bound column requires a value (_requireValueCount > 0).
+        // Per-row scratch: _seen[i] is set when binding i saw a non-empty cell this row that parsed
+        // successfully. Only allocated and walked when at least one bound column requires a value
+        // (_requireValueCount > 0).
         private bool[] _seen;
         private int _requireValueCount;
         private int _rowNumber;
 
-        internal RowProjector(TypeMapInfo<T> typeInfo, StringComparer comparer, HeaderNormalization normalization, int headerRow, bool isDate1904, IFormatProvider provider)
+        internal RowProjector(TypeMapInfo<T> typeInfo, StringComparer comparer, HeaderNormalization normalization, int headerRow, bool isDate1904, IFormatProvider provider, bool throwOnParseFailure = false)
         {
             _typeInfo = typeInfo;
             _comparer = comparer;
@@ -26,6 +27,7 @@ namespace ExcelReader.Core.Parser.Internal
             _headerRow = headerRow;
             _isDate1904 = isDate1904;
             _provider = provider;
+            _throwOnParseFailure = throwOnParseFailure;
             _seen = [];
         }
 
@@ -50,132 +52,15 @@ namespace ExcelReader.Core.Parser.Internal
 
         private void BuildColumnMap(in Row row)
         {
-            int propertyCount = _typeInfo.PropertyCount;
-            int[] columns = new int[propertyCount];
-            int[] aliasIndexes = new int[propertyCount];
-            var parsers = new ColumnParser<T>?[propertyCount];
-            Array.Fill(aliasIndexes, int.MaxValue);
-
-            int bindingCount = 0;
-            foreach (RowCell rowCell in row.Cells)
-            {
-                Cell cell = rowCell.Value;
-                string header = _normalization.Apply(cell.GetString());
-                if (string.IsNullOrEmpty(header))
-                {
-                    continue;
-                }
-                if (!_typeInfo.TryFindHeader(header, _comparer, _normalization, out HeaderMatch<T> match))
-                {
-                    continue;
-                }
-                if (match.AliasIndex >= aliasIndexes[match.PropertyIndex])
-                {
-                    continue;
-                }
-                if (aliasIndexes[match.PropertyIndex] == int.MaxValue)
-                {
-                    bindingCount++;
-                }
-                columns[match.PropertyIndex] = rowCell.ColumnIndex;
-                parsers[match.PropertyIndex] = match.Parser;
-                aliasIndexes[match.PropertyIndex] = match.AliasIndex;
-            }
-
-            _typeInfo.ValidateRequiredColumns(aliasIndexes);
-
-            var bindings = new ColumnBinding<T>[bindingCount];
-            int index = 0;
-            int requireValueCount = 0;
-            for (int i = 0; i < parsers.Length; i++)
-            {
-                ColumnParser<T>? parser = parsers[i];
-                if (parser is not null)
-                {
-                    bool requireValue = _typeInfo.RequiresValue(i);
-                    if (requireValue)
-                    {
-                        requireValueCount++;
-                    }
-                    bindings[index++] = new ColumnBinding<T>(columns[i], parser, requireValue, _typeInfo.DisplayName(i));
-                }
-            }
-            Array.Sort(bindings, static (left, right) => left.Column.CompareTo(right.Column));
-            _bindings = bindings;
+            _bindings = SparseRowProjection.BuildColumnMap(in row, _typeInfo, _comparer, _normalization, out int requireValueCount);
             _requireValueCount = requireValueCount;
-            _seen = requireValueCount > 0 ? new bool[bindings.Length] : [];
+            _seen = requireValueCount > 0 ? new bool[_bindings.Length] : [];
         }
 
         private readonly void ParseCurrentRow(in Row row, ref T model)
         {
-            ColumnBinding<T>[] bindings = _bindings!;
             bool track = _requireValueCount > 0;
-            if (track)
-            {
-                Array.Clear(_seen, 0, bindings.Length);
-            }
-            int bindingIndex = 0;
-            foreach (RowCell rowCell in row.Cells)
-            {
-                int column = rowCell.ColumnIndex;
-                while (bindingIndex < bindings.Length && bindings[bindingIndex].Column < column)
-                {
-                    bindingIndex++;
-                }
-                if (bindingIndex == bindings.Length)
-                {
-                    break;
-                }
-                ref readonly ColumnBinding<T> binding = ref bindings[bindingIndex];
-                if (binding.Column != column)
-                {
-                    continue;
-                }
-                Cell cell = rowCell.Value;
-                if (cell.Type == CellType.Empty)
-                {
-                    bindingIndex++;
-                    continue;
-                }
-                binding.Parser(ref model, in cell, _isDate1904, _provider);
-                if (track && binding.RequireValue)
-                {
-                    _seen[bindingIndex] = true;
-                }
-                bindingIndex++;
-            }
-            if (track)
-            {
-                ValidateRowValues(bindings);
-            }
-        }
-
-        // Throws on the first required column whose cell was empty or absent in the current row.
-        private readonly void ValidateRowValues(ColumnBinding<T>[] bindings)
-        {
-            for (int i = 0; i < bindings.Length; i++)
-            {
-                if (bindings[i].RequireValue && !_seen[i])
-                {
-                    throw ProjectionRules.MissingRequiredValue(bindings[i].Name, _rowNumber);
-                }
-            }
-        }
-
-        private readonly struct ColumnBinding<TModel>
-        {
-            internal ColumnBinding(int column, ColumnParser<TModel> parser, bool requireValue, string name)
-            {
-                Column = column;
-                Parser = parser;
-                RequireValue = requireValue;
-                Name = name;
-            }
-
-            internal int Column { get; }
-            internal ColumnParser<TModel> Parser { get; }
-            internal bool RequireValue { get; }
-            internal string Name { get; }
+            SparseRowProjection.ParseRow(in row, _bindings!, _seen, track, _isDate1904, _provider, _throwOnParseFailure, _rowNumber, ref model);
         }
     }
 }

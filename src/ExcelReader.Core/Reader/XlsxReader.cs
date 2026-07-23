@@ -5,6 +5,7 @@ using ExcelReader.Core.Writer.Internal;
 
 namespace ExcelReader.Core.Reader
 {
+    /// <summary>Reads rows from an Office Open XML (.xlsx) workbook, streaming each sheet's cells without loading the whole file into memory.</summary>
     public sealed partial class XlsxReader : IExcelRowReader, IExcelRowReader<XlsxReader.Enumerator>
     {
         private readonly Stream _stream;
@@ -28,17 +29,26 @@ namespace ExcelReader.Core.Reader
         private Dictionary<int, string>? _sharedStringCache;
 
         // Sync open: reads the central directory and workbook/styles parts synchronously.
+        internal XlsxReader(Stream stream, bool leaveOpen, ExcelReaderOptions? options = null)
+            : this(stream, leaveOpen, new ZipArchive(stream, ZipArchiveMode.Read, leaveOpen: true), options)
+        {
+        }
+
+        // Sync open over an already-opened ZipArchive — lets a caller that already opened the archive
+        // for format detection (Excel.Open's DetectSeekable) hand it straight to the reader instead of
+        // re-parsing the central directory a second time.
         [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP003:Dispose previous before re-assigning",
             Justification = "Readonly field, first and only assignment in this constructor.")]
-        internal XlsxReader(Stream stream, bool leaveOpen, ExcelReaderOptions? options = null)
+        internal XlsxReader(Stream stream, bool leaveOpen, ZipArchive zip, ExcelReaderOptions? options = null)
         {
             _stream = stream;
             _leaveOpen = leaveOpen;
             _options = options ?? ExcelReaderOptions.Default;
             _decompressedBytes = new DecompressedByteCounter(_options.MaxTotalDecompressedBytes);
-            _zip = new ZipArchive(stream, ZipArchiveMode.Read, leaveOpen: true);
+            _zip = zip;
             try
             {
+                LimitChecks.ThrowIfTooManyEntries(_zip.Entries.Count, _options);
                 var wbBytes = ZipEntryBytes.Read(_zip, "xl/workbook.xml", _decompressedBytes);
                 _sheets = ParseSheets(wbBytes, ZipEntryBytes.Read(_zip, "xl/_rels/workbook.xml.rels", _decompressedBytes));
                 if (_sheets.Length == 0)
@@ -78,23 +88,56 @@ namespace ExcelReader.Core.Reader
         {
             ExcelReaderOptions effectiveOptions = options ?? ExcelReaderOptions.Default;
             DecompressedByteCounter decompressedBytes = new(effectiveOptions.MaxTotalDecompressedBytes);
-            return ZipReaderOpen.OpenAsync(stream, leaveOpen, async zip =>
-            {
-                var wb = await ZipEntryBytes.ReadAsync(zip, "xl/workbook.xml", decompressedBytes, ct).ConfigureAwait(false);
-                var rels = await ZipEntryBytes.ReadAsync(zip, "xl/_rels/workbook.xml.rels", decompressedBytes, ct).ConfigureAwait(false);
-                var sheets = ParseSheets(wb, rels);
-                if (sheets.Length == 0)
-                {
-                    throw new InvalidDataException("The workbook contains no sheets.");
-                }
-                var styleIsDate = ParseStyleDateFlags(await ZipEntryBytes.ReadAsync(zip, "xl/styles.xml", decompressedBytes, ct).ConfigureAwait(false));
-                bool date1904 = ParseDate1904(wb);
-                return new XlsxReader(stream, leaveOpen, zip, sheets, styleIsDate, date1904, effectiveOptions, decompressedBytes);
-            }, ct);
+            return ZipReaderOpen.OpenAsync(stream, leaveOpen, effectiveOptions,
+                zip => ParseAsync(stream, leaveOpen, zip, effectiveOptions, decompressedBytes, ct), ct);
         }
 
+        // Async open over an already-opened ZipArchive — the async twin of the ZipArchive-taking sync
+        // ctor above, for callers (Excel.OpenAsync's DetectSeekableAsync) that already opened the
+        // archive for format detection. Bypasses ZipReaderOpen.OpenAsync, so it owns dispose-on-failure
+        // itself instead of relying on that helper's try/catch.
+        internal static async ValueTask<XlsxReader> CreateFromOpenZipAsync(
+            Stream stream, bool leaveOpen, ZipArchive zip, ExcelReaderOptions? options, CancellationToken ct)
+        {
+            ExcelReaderOptions effectiveOptions = options ?? ExcelReaderOptions.Default;
+            DecompressedByteCounter decompressedBytes = new(effectiveOptions.MaxTotalDecompressedBytes);
+            try
+            {
+                LimitChecks.ThrowIfTooManyEntries(zip.Entries.Count, effectiveOptions);
+                return await ParseAsync(stream, leaveOpen, zip, effectiveOptions, decompressedBytes, ct).ConfigureAwait(false);
+            }
+            catch
+            {
+                await ZipArchiveDisposal.DisposeAsync(zip).ConfigureAwait(false);
+                if (!leaveOpen)
+                {
+                    await stream.DisposeAsync().ConfigureAwait(false);
+                }
+                throw;
+            }
+        }
+
+        private static async ValueTask<XlsxReader> ParseAsync(
+            Stream stream, bool leaveOpen, ZipArchive zip, ExcelReaderOptions effectiveOptions,
+            DecompressedByteCounter decompressedBytes, CancellationToken ct)
+        {
+            var wb = await ZipEntryBytes.ReadAsync(zip, "xl/workbook.xml", decompressedBytes, ct).ConfigureAwait(false);
+            var rels = await ZipEntryBytes.ReadAsync(zip, "xl/_rels/workbook.xml.rels", decompressedBytes, ct).ConfigureAwait(false);
+            var sheets = ParseSheets(wb, rels);
+            if (sheets.Length == 0)
+            {
+                throw new InvalidDataException("The workbook contains no sheets.");
+            }
+            var styleIsDate = ParseStyleDateFlags(await ZipEntryBytes.ReadAsync(zip, "xl/styles.xml", decompressedBytes, ct).ConfigureAwait(false));
+            bool date1904 = ParseDate1904(wb);
+            return new XlsxReader(stream, leaveOpen, zip, sheets, styleIsDate, date1904, effectiveOptions, decompressedBytes);
+        }
+
+        /// <inheritdoc/>
         public string SheetName => _sheets[_current].Name;
+        /// <inheritdoc/>
         public int SheetCount => _sheets.Length;
+        /// <inheritdoc/>
         public bool IsDate1904 { get; }
 
         // A numeric cell whose style index maps to a date/time format is reported as CellType.Date.
@@ -103,6 +146,7 @@ namespace ExcelReader.Core.Reader
             return WorkbookLookups.IsDateStyle(_styleIsDate, style);
         }
 
+        /// <inheritdoc/>
         public bool TryMoveToSheet(ReadOnlySpan<char> name)
         {
             if (!WorkbookLookups.TryFindSheetIndex(_sheets, name, static s => s.Name, out int index))
@@ -113,12 +157,14 @@ namespace ExcelReader.Core.Reader
             return true;
         }
 
+        /// <inheritdoc/>
         public void MoveToSheet(int index)
         {
             WorkbookLookups.ValidateSheetIndex(index, _sheets.Length);
             _current = index;
         }
 
+        /// <inheritdoc/>
         [SuppressMessage("Performance", "HLQ006:GetEnumerator should return a value type",
             Justification = "Enumerator is a class so the same type can also expose MoveNextAsync for the async path.")]
         public Enumerator GetEnumerator()
@@ -133,6 +179,7 @@ namespace ExcelReader.Core.Reader
             return GetEnumerator();
         }
 
+        /// <inheritdoc/>
         [SuppressMessage("Performance", "HLQ006:GetAsyncEnumerator should return a value type",
             Justification = "Enumerator is a class so the same type can also expose MoveNextAsync for the async path.")]
         public Enumerator GetAsyncEnumerator()
@@ -182,6 +229,7 @@ namespace ExcelReader.Core.Reader
             return WorkbookLookups.SharedAt(_sharedOffsets, index);
         }
 
+        /// <inheritdoc/>
         public void Dispose()
         {
             if (_sharedFlat.Length > 0)
@@ -196,6 +244,7 @@ namespace ExcelReader.Core.Reader
             }
         }
 
+        /// <inheritdoc/>
         public async ValueTask DisposeAsync()
         {
             if (_sharedFlat.Length > 0)

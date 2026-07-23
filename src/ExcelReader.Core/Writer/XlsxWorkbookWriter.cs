@@ -7,6 +7,9 @@ using ExcelReader.Core.Writer.Internal;
 
 namespace ExcelReader.Core.Writer
 {
+    /// <summary>
+    /// Writes a workbook to the XLSX (Office Open XML) format, streaming each sheet's rows into a ZIP archive as they're written.
+    /// </summary>
     public sealed class XlsxWorkbookWriter : IWorkbookWriter<XlsxSheetWriter>
     {
         private readonly ZipArchive _zip;
@@ -30,6 +33,15 @@ namespace ExcelReader.Core.Writer
             _sharedStrings = useSharedStrings ? new SharedStringTable() : null;
         }
 
+        /// <summary>
+        /// Creates a new <see cref="XlsxWorkbookWriter"/> that writes an XLSX package to <paramref name="stream"/>.
+        /// </summary>
+        /// <param name="stream">The destination stream; the returned writer takes ownership of the ZIP archive built on top of it.</param>
+        /// <param name="leaveOpen">When <see langword="true"/>, <paramref name="stream"/> is left open after the workbook is disposed.</param>
+        /// <param name="compression">The compression level applied to each ZIP entry.</param>
+        /// <param name="useSharedStrings">When <see langword="true"/>, string cells are deduplicated into a shared string table instead of being inlined.</param>
+        /// <param name="ct">A token to cancel the operation before the archive is created.</param>
+        /// <exception cref="ArgumentNullException"><paramref name="stream"/> is <see langword="null"/>.</exception>
         [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP001:Dispose created",
             Justification = "Factory method transfers ZipArchive ownership to XlsxWorkbookWriter; caller disposes via DisposeAsync.")]
         [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
@@ -46,6 +58,9 @@ namespace ExcelReader.Core.Writer
             return ValueTask.FromResult(new XlsxWorkbookWriter(zip, stream, leaveOpen, useSharedStrings, compression));
         }
 
+        /// <inheritdoc/>
+        /// <exception cref="ObjectDisposedException">The workbook has already been ended.</exception>
+        /// <exception cref="InvalidOperationException">The workbook has already been started.</exception>
         public ValueTask StartAsync(CancellationToken ct = default)
         {
             WriterStateGuard.ThrowIfEnded(_state, this);
@@ -55,6 +70,11 @@ namespace ExcelReader.Core.Writer
             return WriteRootRelsAsync(ct);
         }
 
+        /// <inheritdoc/>
+        /// <exception cref="ArgumentNullException"><paramref name="name"/> is <see langword="null"/>.</exception>
+        /// <exception cref="ArgumentException"><paramref name="name"/> is empty, longer than 31 characters, or contains one of <c>: \ / ? * [ ]</c>.</exception>
+        /// <exception cref="ObjectDisposedException">The workbook has already been ended.</exception>
+        /// <exception cref="InvalidOperationException">The workbook has not been started, or the previously added sheet has not been ended.</exception>
         public XlsxSheetWriter AddSheet(string name)
         {
             ArgumentNullException.ThrowIfNull(name);
@@ -89,6 +109,9 @@ namespace ExcelReader.Core.Writer
             return _sharedStrings!.GetOrAdd(value);
         }
 
+        /// <inheritdoc/>
+        /// <exception cref="ObjectDisposedException">The workbook has already been ended.</exception>
+        /// <exception cref="InvalidOperationException">The workbook has not been started, or no sheet has been added yet.</exception>
         public async ValueTask EndAsync(CancellationToken ct = default)
         {
             WriterStateGuard.ThrowIfEnded(_state, this);
@@ -114,11 +137,13 @@ namespace ExcelReader.Core.Writer
             await ZipArchiveDisposal.DisposeAsync(_zip).ConfigureAwait(false);
         }
 
+        /// <inheritdoc/>
         public ValueTask FlushAsync(CancellationToken ct = default)
         {
             return ZipEntryWriter.FlushAsync(_stream, ct);
         }
 
+        /// <inheritdoc/>
         public async ValueTask DisposeAsync()
         {
             if (_disposed)

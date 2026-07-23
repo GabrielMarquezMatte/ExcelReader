@@ -16,7 +16,7 @@ namespace ExcelReader.Core.Reader
         [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
             Justification = "zip ownership transfers to parseBody's returned reader on success; disposed here in the catch on failure.")]
         internal static async ValueTask<TResult> OpenAsync<TResult>(
-            Stream stream, bool leaveOpen, Func<ZipArchive, ValueTask<TResult>> parseBody, CancellationToken ct = default)
+            Stream stream, bool leaveOpen, ExcelReaderOptions options, Func<ZipArchive, ValueTask<TResult>> parseBody, CancellationToken ct = default)
         {
             ZipArchive? zip = null;
             try
@@ -27,6 +27,7 @@ namespace ExcelReader.Core.Reader
                 ct.ThrowIfCancellationRequested();
                 zip = new ZipArchive(stream, ZipArchiveMode.Read, leaveOpen: true);
 #endif
+                LimitChecks.ThrowIfTooManyEntries(zip.Entries.Count, options);
                 return await parseBody(zip).ConfigureAwait(false);
             }
             catch

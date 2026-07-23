@@ -1,7 +1,4 @@
-using System.Diagnostics.CodeAnalysis;
-using System.Runtime.CompilerServices;
-using System.Runtime.InteropServices;
-using System.Runtime.Intrinsics;
+using System.Buffers;
 using System.Text;
 
 namespace ExcelReader.Core.Writer.Internal
@@ -41,62 +38,28 @@ namespace ExcelReader.Core.Writer.Internal
             buffer.Advance(value.Length);
         }
 
-        [SuppressMessage("Performance", "HLQ004:The enumerator returns a reference to the item",
-            Justification = "Iterating char by value; 'ref readonly char' gains nothing for a 2-byte primitive.")]
+        // [0x00..0x7F] ∪ [0xA0..0xFF] — the chars a compressed (1 byte/char) BIFF8 string can hold
+        // without loss (see the class comment for why 0x80-0x9F is excluded).
+        private static readonly SearchValues<char> CompressibleChars = BuildCompressibleChars();
+
+        private static SearchValues<char> BuildCompressibleChars()
+        {
+            Span<char> chars = stackalloc char[0x7F - 0x00 + 1 + 0xFF - 0xA0 + 1];
+            int i = 0;
+            for (int c = 0x00; c <= 0x7F; c++)
+            {
+                chars[i++] = (char)c;
+            }
+            for (int c = 0xA0; c <= 0xFF; c++)
+            {
+                chars[i++] = (char)c;
+            }
+            return SearchValues.Create(chars);
+        }
+
         internal static bool CanCompress(ReadOnlySpan<char> value)
         {
-            ref char ptr = ref MemoryMarshal.GetReference(value);
-            int length = value.Length;
-            int i = 0;
-            if (Vector256.IsHardwareAccelerated && length >= Vector256<ushort>.Count)
-            {
-                var maxValid = Vector256.Create((ushort)0x00FF);
-                var shift = Vector256.Create((ushort)0x0080);
-                var rangeLength = Vector256.Create((ushort)0x001F);
-                int vectorLoopLimit = length - Vector256<ushort>.Count;
-                for (; i <= vectorLoopLimit; i += Vector256<ushort>.Count)
-                {
-                    ref var offsetPtr = ref Unsafe.Add(ref ptr, i);
-                    var v = Vector256.LoadUnsafe(ref Unsafe.As<char, ushort>(ref offsetPtr)).AsUInt16();
-                    var overFF = Vector256.GreaterThan(v, maxValid);
-                    var shifted = Vector256.Subtract(v, shift);
-                    var inRange = Vector256.LessThanOrEqual(shifted, rangeLength);
-                    var invalidChars = Vector256.BitwiseOr(overFF, inRange);
-                    if (invalidChars != Vector256<ushort>.Zero)
-                    {
-                        return false;
-                    }
-                }
-            }
-            if (Vector128.IsHardwareAccelerated && length >= Vector128<ushort>.Count)
-            {
-                var maxValid = Vector128.Create((ushort)0x00FF);
-                var shift = Vector128.Create((ushort)0x0080);
-                var rangeLength = Vector128.Create((ushort)0x001F);
-                int vectorLoopLimit = length - Vector128<ushort>.Count;
-                for (; i <= vectorLoopLimit; i += Vector128<ushort>.Count)
-                {
-                    ref var offsetPtr = ref Unsafe.Add(ref ptr, i);
-                    var v = Vector128.LoadUnsafe(ref Unsafe.As<char, ushort>(ref offsetPtr)).AsUInt16();
-                    var overFF = Vector128.GreaterThan(v, maxValid);
-                    var shifted = Vector128.Subtract(v, shift);
-                    var inRange = Vector128.LessThanOrEqual(shifted, rangeLength);
-                    var invalidChars = Vector128.BitwiseOr(overFF, inRange);
-                    if (invalidChars != Vector128<ushort>.Zero)
-                    {
-                        return false;
-                    }
-                }
-            }
-            for (; i < length; i++)
-            {
-                char c = Unsafe.Add(ref ptr, i);
-                if (c is > (char)0xFF or (>= (char)0x80 and <= (char)0x9F))
-                {
-                    return false;
-                }
-            }
-            return true;
+            return value.IndexOfAnyExcept(CompressibleChars) < 0;
         }
     }
 }

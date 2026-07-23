@@ -1,4 +1,3 @@
-using System.Diagnostics.CodeAnalysis;
 using ExcelReader.Core.Enums;
 using ExcelReader.Core.Reader;
 using ExcelReader.Core.Writer;
@@ -339,80 +338,5 @@ namespace ExcelReader.Tests
             return path;
         }
 
-        private sealed class NonSeekableStream : Stream
-        {
-            private readonly MemoryStream _inner;
-
-            internal NonSeekableStream(byte[] bytes)
-            {
-                _inner = new MemoryStream(bytes);
-            }
-
-            public override bool CanRead
-            {
-                get { return true; }
-            }
-
-            public override bool CanSeek
-            {
-                get { return false; }
-            }
-
-            [ExcludeFromCodeCoverage]
-            public override bool CanWrite
-            {
-                get { return false; }
-            }
-
-            [ExcludeFromCodeCoverage]
-            public override long Length
-            {
-                get { throw new NotSupportedException(); }
-            }
-
-            [ExcludeFromCodeCoverage]
-            public override long Position
-            {
-                get { return _inner.Position; }
-                set { throw new NotSupportedException(); }
-            }
-
-            public override int Read(byte[] buffer, int offset, int count)
-            {
-                return _inner.Read(buffer, offset, count);
-            }
-
-            [ExcludeFromCodeCoverage]
-            public override void Flush()
-            {
-            }
-
-            [ExcludeFromCodeCoverage]
-            public override long Seek(long offset, SeekOrigin origin)
-            {
-                throw new NotSupportedException();
-            }
-
-            [ExcludeFromCodeCoverage]
-            public override void SetLength(long value)
-            {
-                throw new NotSupportedException();
-            }
-
-            [ExcludeFromCodeCoverage]
-            public override void Write(byte[] buffer, int offset, int count)
-            {
-                throw new NotSupportedException();
-            }
-
-            protected override void Dispose(bool disposing)
-            {
-                if (disposing)
-                {
-                    _inner.Dispose();
-                }
-                base.Dispose(disposing);
-            }
-        }
     }
 }
