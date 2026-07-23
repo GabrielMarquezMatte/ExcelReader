@@ -82,6 +82,12 @@ namespace ExcelReader.Tests
             return [.. U32((uint)col), .. U32((uint)style), error];
         }
 
+        // BrtCellRString: col(u32) + styleAndFlags(u32) + cRun(byte) + XLWideString.
+        internal static byte[] CellRString(int col, int style, byte cRun, string value)
+        {
+            return [.. U32((uint)col), .. U32((uint)style), cRun, .. WideString(value)];
+        }
+
 
         private static byte[] Id(int id)
         {

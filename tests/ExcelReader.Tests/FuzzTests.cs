@@ -167,6 +167,7 @@ namespace ExcelReader.Tests
                 await using (XlsbRowWriter row = await sheet.StartRowAsync(ct))
                 {
                     row.Write("hello");
+                    row.Write(new string('x', 1000)); // long string
                     row.Write(42);
                     row.Write(true);
                     row.Write(new DateTime(2026, 1, 1));

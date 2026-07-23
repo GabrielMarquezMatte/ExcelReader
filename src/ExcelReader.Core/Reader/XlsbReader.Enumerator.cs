@@ -293,11 +293,10 @@ namespace ExcelReader.Core.Reader
                         AddDouble(col, style, Biff12.ReadF64(payload, 8));
                         break;
                     case Brt.CellIsst when payload.Length >= 12:
-                        {
-                            var (start, len) = _reader.SharedAt((int)Biff12.ReadU32(payload, 8));
-                            _acc.Add(col, start, len, CellType.ExcelString, style, fromShared: true);
-                            break;
-                        }
+                        var (start, len) = _reader.SharedAt((int)Biff12.ReadU32(payload, 8));
+                        _acc.Add(col, start, len, CellType.ExcelString, style, fromShared: true);
+                        break;
+
                     case Brt.CellSt when Biff12.TryReadWideString(payload, 8, out ReadOnlySpan<char> chars, out _):
                         AppendString(col, style, chars);
                         break;

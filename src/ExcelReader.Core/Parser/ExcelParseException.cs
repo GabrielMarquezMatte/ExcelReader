@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 
 namespace ExcelReader.Core.Parser
@@ -15,17 +16,20 @@ namespace ExcelReader.Core.Parser
     public sealed class ExcelParseException : Exception
     {
         /// <summary>Creates an exception with no message.</summary>
+        [ExcludeFromCodeCoverage]
         public ExcelParseException()
         {
         }
 
         /// <summary>Creates an exception with the given message.</summary>
+        [ExcludeFromCodeCoverage]
         public ExcelParseException(string message)
             : base(message)
         {
         }
 
         /// <summary>Creates an exception with the given message and inner exception.</summary>
+        [ExcludeFromCodeCoverage]
         public ExcelParseException(string message, Exception innerException)
             : base(message, innerException)
         {

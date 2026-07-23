@@ -27,9 +27,9 @@ namespace ExcelReader.Tests
             return new XlsbReader(flat, offsets, styleIsDate: [], date1904: false);
         }
 
-        private static XlsbReader.Enumerator Open(XlsbReader reader, byte[] sheetBin)
+        private static XlsbReader.Enumerator Open(XlsbReader reader, byte[] sheetBin, long entryLength = 0, CancellationToken? ct = null)
         {
-            return new(reader, new MemoryStream(sheetBin));
+            return new(reader, new MemoryStream(sheetBin), entryLength, ct ?? TestContext.Current.CancellationToken);
         }
 
         // --- Basic enumeration ---
@@ -268,6 +268,208 @@ namespace ExcelReader.Tests
             Assert.True(e.Current[0].TryGetDouble(out double val));
             Assert.Equal(7.0, val);
 
+            Assert.False(await e.MoveNextAsync());
+        }
+
+        // --- Formula cells (cached result) ---
+
+        [Fact]
+        public void FmlaNumDecodesCachedNumber()
+        {
+            byte[] sheet =
+            [
+                .. B.Record(Brt.RowHdr),
+                .. B.Record(Brt.FmlaNum, B.CellReal(0, 0, 2.5)),
+            ];
+            using var e = Open(BlankReader(), sheet);
+            Assert.True(e.MoveNext());
+            Assert.Equal(CellType.Number, e.Current[0].Type);
+            Assert.True(e.Current[0].TryGetDouble(out double val));
+            Assert.Equal(2.5, val);
+        }
+
+        [Fact]
+        public void FmlaStringDecodesCachedString()
+        {
+            byte[] sheet =
+            [
+                .. B.Record(Brt.RowHdr),
+                .. B.Record(Brt.FmlaString, B.CellSt(0, 0, "formula")),
+            ];
+            using var e = Open(BlankReader(), sheet);
+            Assert.True(e.MoveNext());
+            Assert.Equal(CellType.ExcelString, e.Current[0].Type);
+            Assert.Equal("formula", e.Current[0].GetString());
+        }
+
+        [Fact]
+        public void FmlaBoolDecodesCachedBool()
+        {
+            byte[] sheet =
+            [
+                .. B.Record(Brt.RowHdr),
+                .. B.Record(Brt.FmlaBool, B.CellBool(0, 0, true)),
+            ];
+            using var e = Open(BlankReader(), sheet);
+            Assert.True(e.MoveNext());
+            Assert.Equal(CellType.Boolean, e.Current[0].Type);
+            Assert.Equal("1", e.Current[0].GetString());
+        }
+
+        [Fact]
+        public void FmlaErrorDecodesCachedError()
+        {
+            byte[] sheet =
+            [
+                .. B.Record(Brt.RowHdr),
+                .. B.Record(Brt.FmlaError, B.CellError(0, 0, 0x2A)),
+            ];
+            using var e = Open(BlankReader(), sheet);
+            Assert.True(e.MoveNext());
+            Assert.Equal(CellType.Error, e.Current[0].Type);
+            Assert.Equal("#N/A", e.Current[0].GetString());
+        }
+
+        [Fact]
+        public void CellRStringDecodesRichInlineString()
+        {
+            byte[] sheet =
+            [
+                .. B.Record(Brt.RowHdr),
+                .. B.Record(Brt.CellRString, B.CellRString(0, 0, cRun: 0, "rich")),
+            ];
+            using var e = Open(BlankReader(), sheet);
+            Assert.True(e.MoveNext());
+            Assert.Equal(CellType.ExcelString, e.Current[0].Type);
+            Assert.Equal("rich", e.Current[0].GetString());
+        }
+
+        // --- Malformed cell records ---
+
+        [Fact]
+        public void CellRecordShorterThanColStyleHeaderIsIgnored()
+        {
+            byte[] sheet =
+            [
+                .. B.Record(Brt.RowHdr),
+                .. B.Record(Brt.CellBool, B.U32(0)), // only col, no style/value: length < 8
+                .. B.Record(Brt.CellBool, B.CellBool(1, 0, true)),
+            ];
+            using var e = Open(BlankReader(), sheet);
+            Assert.True(e.MoveNext());
+            Assert.Equal(CellType.Empty, e.Current[0].Type);
+            Assert.Equal(CellType.Boolean, e.Current[1].Type);
+        }
+
+        [Fact]
+        public void CellRecordTooShortForItsValueIsIgnored()
+        {
+            byte[] sheet =
+            [
+                .. B.Record(Brt.RowHdr),
+                // col + style only, no bool value byte: length == 8, guard on CellBool needs >= 9.
+                .. B.Record(Brt.CellBool, [.. B.U32(0), .. B.U32(0)]),
+                .. B.Record(Brt.CellBool, B.CellBool(1, 0, false)),
+            ];
+            using var e = Open(BlankReader(), sheet);
+            Assert.True(e.MoveNext());
+            Assert.Equal(CellType.Empty, e.Current[0].Type);
+            Assert.Equal(CellType.Boolean, e.Current[1].Type);
+        }
+
+        // --- Truncated stream ---
+
+        [Fact]
+        public void TruncatedRecordBeforeAnyRowHdrThrows()
+        {
+            byte[] full = [.. B.Record(Brt.CellBool, B.CellBool(0, 0, true))];
+            byte[] truncated = full[..^1];
+            using var e = Open(BlankReader(), truncated);
+            Assert.Throws<InvalidDataException>(() => e.MoveNext());
+        }
+
+        [Fact]
+        public void TruncatedCellRecordAfterRowHdrThrows()
+        {
+            byte[] full = [.. B.Record(Brt.RowHdr), .. B.Record(Brt.CellBool, B.CellBool(0, 0, true))];
+            byte[] truncated = full[..^1];
+            using var e = Open(BlankReader(), truncated);
+            Assert.Throws<InvalidDataException>(() => e.MoveNext());
+        }
+
+        [Fact]
+        public async Task TruncatedRecordAsyncThrows()
+        {
+            byte[] full = [.. B.Record(Brt.RowHdr), .. B.Record(Brt.CellBool, B.CellBool(0, 0, true))];
+            byte[] truncated = full[..^1];
+            await using var e = Open(BlankReader(), truncated);
+            await Assert.ThrowsAsync<InvalidDataException>(async () => await e.MoveNextAsync());
+        }
+
+        // --- Cancellation ---
+
+        [Fact]
+        public void MoveNextHonorsCancellation()
+        {
+            using var cts = new CancellationTokenSource();
+            cts.Cancel();
+            byte[] sheet = [.. B.Record(Brt.RowHdr), .. B.Record(Brt.CellBool, B.CellBool(0, 0, true))];
+            using var e = Open(BlankReader(), sheet, ct: cts.Token);
+            Assert.Throws<OperationCanceledException>(() => e.MoveNext());
+        }
+
+        [Fact]
+        public async Task MoveNextAsyncHonorsCancellation()
+        {
+            using var cts = new CancellationTokenSource();
+            cts.Cancel();
+            byte[] sheet = [.. B.Record(Brt.RowHdr), .. B.Record(Brt.CellBool, B.CellBool(0, 0, true))];
+            await using var e = Open(BlankReader(), sheet, ct: cts.Token);
+            await Assert.ThrowsAsync<OperationCanceledException>(async () => await e.MoveNextAsync());
+        }
+
+        // --- Buffer refill / growth across many rows ---
+
+        private static byte[] BuildManyRowsSheet(int rowCount)
+        {
+            List<byte> bytes = [];
+            for (int i = 0; i < rowCount; i++)
+            {
+                bytes.AddRange(B.Record(Brt.RowHdr));
+                bytes.AddRange(B.Record(Brt.CellSt, B.CellSt(0, 0, $"row-value-{i}")));
+            }
+            return [.. bytes];
+        }
+
+        [Fact]
+        public void ManyRowsSpanningMultipleBufferFillsEnumerateInOrderSync()
+        {
+            const int rowCount = 300;
+            byte[] sheet = BuildManyRowsSheet(rowCount);
+            // entryLength > 0 clamps the initial buffer to its 4 KB floor, forcing multiple
+            // Fill/PrepareBuffer(grow) cycles since the sheet is well over 4 KB.
+            using var e = Open(BlankReader(), sheet, entryLength: 1);
+
+            for (int i = 0; i < rowCount; i++)
+            {
+                Assert.True(e.MoveNext());
+                Assert.Equal($"row-value-{i}", e.Current[0].GetString());
+            }
+            Assert.False(e.MoveNext());
+        }
+
+        [Fact]
+        public async Task ManyRowsSpanningMultipleBufferFillsEnumerateInOrderAsync()
+        {
+            const int rowCount = 300;
+            byte[] sheet = BuildManyRowsSheet(rowCount);
+            await using var e = Open(BlankReader(), sheet, entryLength: 1);
+
+            for (int i = 0; i < rowCount; i++)
+            {
+                Assert.True(await e.MoveNextAsync());
+                Assert.Equal($"row-value-{i}", e.Current[0].GetString());
+            }
             Assert.False(await e.MoveNextAsync());
         }
     }

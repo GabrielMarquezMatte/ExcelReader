@@ -51,10 +51,13 @@ namespace ExcelReader.Core.Writer
         {
             ArgumentNullException.ThrowIfNull(records);
             TSheet sheet = BeginSheet(sheetName);
-            await sheet.StartAsync(ct).ConfigureAwait(false);
-            await WriteHeaderAsync<T>(sheet, ct).ConfigureAwait(false);
-            await sheet.WriteRecordsAsync(records, RecordColumns<T>.WriteRow, ct).ConfigureAwait(false);
-            await sheet.EndAsync(ct).ConfigureAwait(false);
+            await using (sheet.ConfigureAwait(false))
+            {
+                await sheet.StartAsync(ct).ConfigureAwait(false);
+                await WriteHeaderAsync<T>(sheet, ct).ConfigureAwait(false);
+                await sheet.WriteRecordsAsync(records, RecordColumns<T>.WriteRow, ct).ConfigureAwait(false);
+                await sheet.EndAsync(ct).ConfigureAwait(false);
+            }
         }
 
         /// <summary>
@@ -73,10 +76,13 @@ namespace ExcelReader.Core.Writer
         {
             ArgumentNullException.ThrowIfNull(records);
             TSheet sheet = BeginSheet(sheetName);
-            await sheet.StartAsync(ct).ConfigureAwait(false);
-            await WriteHeaderAsync<T>(sheet, ct).ConfigureAwait(false);
-            await sheet.WriteRecordsAsync(records, RecordColumns<T>.WriteRow, ct).ConfigureAwait(false);
-            await sheet.EndAsync(ct).ConfigureAwait(false);
+            await using(sheet.ConfigureAwait(false))
+            {
+                await sheet.StartAsync(ct).ConfigureAwait(false);
+                await WriteHeaderAsync<T>(sheet, ct).ConfigureAwait(false);
+                await sheet.WriteRecordsAsync(records, RecordColumns<T>.WriteRow, ct).ConfigureAwait(false);
+                await sheet.EndAsync(ct).ConfigureAwait(false);
+            }
         }
 
         private TSheet BeginSheet(string sheetName)
