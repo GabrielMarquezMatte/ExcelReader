@@ -5,6 +5,7 @@ using static ExcelReader.Core.Reader.Biff12;
 
 namespace ExcelReader.Core.Reader
 {
+    /// <summary>Reads rows from a legacy BIFF8 (.xls) workbook, exposing each worksheet through synchronous and asynchronous enumeration.</summary>
     public sealed partial class XlsReader : IExcelRowReader, IExcelRowReader<XlsReader.Enumerator>
     {
         private readonly WorkbookStream _workbook;
@@ -55,8 +56,13 @@ namespace ExcelReader.Core.Reader
             return cursor;
         }
 
+        /// <inheritdoc/>
         public string SheetName => _sheets[_current].Name;
+
+        /// <inheritdoc/>
         public int SheetCount => _sheets.Length;
+
+        /// <inheritdoc/>
         public bool IsDate1904 => _date1904;
 
         internal ReadOnlySpan<byte> SharedSpan => _sharedFlat;
@@ -73,6 +79,7 @@ namespace ExcelReader.Core.Reader
             return WorkbookLookups.SharedAt(_sharedOffsets, index);
         }
 
+        /// <inheritdoc/>
         public bool TryMoveToSheet(ReadOnlySpan<char> name)
         {
             if (!WorkbookLookups.TryFindSheetIndex(_sheets, name, static s => s.Name, out int index))
@@ -83,12 +90,14 @@ namespace ExcelReader.Core.Reader
             return true;
         }
 
+        /// <inheritdoc/>
         public void MoveToSheet(int index)
         {
             WorkbookLookups.ValidateSheetIndex(index, _sheets.Length);
             _current = index;
         }
 
+        /// <inheritdoc/>
         [SuppressMessage("Performance", "HLQ006:GetEnumerator should return a value type",
             Justification = "Enumerator is a class so the same type can also expose MoveNextAsync for parity with XlsxReader.")]
         public Enumerator GetEnumerator()
@@ -101,6 +110,7 @@ namespace ExcelReader.Core.Reader
             return GetEnumerator();
         }
 
+        /// <inheritdoc/>
         [SuppressMessage("Performance", "HLQ006:GetAsyncEnumerator should return a value type",
             Justification = "Enumerator is a class so the same type can also expose MoveNextAsync for parity with XlsxReader.")]
         public Enumerator GetAsyncEnumerator()
@@ -108,8 +118,9 @@ namespace ExcelReader.Core.Reader
             return GetEnumerator();
         }
 
-        // ct overload takes no default value: the parameterless GetAsyncEnumerator() above already covers
-        // the no-argument call, so a default here would only shadow it.
+        /// <summary>Creates an enumerator for the current sheet that observes cancellation while iterating.</summary>
+        /// <remarks>This overload takes no default value for <paramref name="ct"/>: the parameterless <see cref="GetAsyncEnumerator()"/> above already covers the no-argument call, so a default here would only shadow it.</remarks>
+        /// <param name="ct">Token checked before enumeration starts and on each subsequent move.</param>
         [SuppressMessage("Performance", "HLQ006:GetAsyncEnumerator should return a value type",
             Justification = "Enumerator is a class so the same type can also expose MoveNextAsync for parity with XlsxReader.")]
         public Enumerator GetAsyncEnumerator(CancellationToken ct)
@@ -123,6 +134,7 @@ namespace ExcelReader.Core.Reader
             return GetAsyncEnumerator();
         }
 
+        /// <inheritdoc/>
         [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
             Justification = "Enumerator ownership transfers to the caller, who disposes it via await using / DisposeAsync.")]
         public ValueTask<Enumerator> GetAsyncEnumeratorAsync(CancellationToken ct = default)
@@ -139,6 +151,7 @@ namespace ExcelReader.Core.Reader
             return new ValueTask<IExcelRowEnumerator>(GetAsyncEnumerator(ct));
         }
 
+        /// <inheritdoc/>
         public void Dispose()
         {
             _workbook.Dispose();
@@ -147,6 +160,7 @@ namespace ExcelReader.Core.Reader
             _sharedStringCache = null;
         }
 
+        /// <inheritdoc/>
         public ValueTask DisposeAsync()
         {
             Dispose();
@@ -301,10 +315,10 @@ namespace ExcelReader.Core.Reader
 
         // `boundaries` holds the offsets (into `sst`) where each CONTINUE payload starts. A boundary that
         // falls inside a string's character array marks an inserted grbit byte to consume; one outside the
-        // array (header, formatting runs, extended data) carries no grbit and is simply read through.
-        // ponytail: handles the common char-boundary split; a split *between the two bytes* of one wide
-        // char (rare, Excel aligns to char boundaries) would still misread — upgrade to a bit-level
-        // continuation reader if such a file ever surfaces.
+        // array (header, formatting runs, extended data) carries no grbit and is simply read through. A
+        // wide (UTF-16) code unit whose two bytes straddle the boundary is handled too: its low byte is
+        // read from the end of the preceding run, then the grbit is consumed, then its high byte from the
+        // start of the continuation — see the `boundaries[boundaryIdx] == pos + 1` branch below.
         private static void DecodeSharedStrings(ReadOnlySpan<byte> sst, ReadOnlySpan<int> boundaries, ExcelReaderOptions options, out byte[] sharedFlat, out int[] sharedOffsets)
         {
             LimitChecks.ThrowIfOverSharedStringLimit(options, sst.Length);
@@ -378,6 +392,19 @@ namespace ExcelReader.Core.Reader
                     compressed = (sst[pos] & 1) == 0;
                     pos++;
                     boundaryIdx++;
+                }
+
+                // A UTF-16 code unit may itself straddle a CONTINUE boundary. Its low byte belongs to
+                // the preceding run, followed by the continuation grbit, followed by its high byte.
+                // Decode that unit as wide regardless of the new grbit; the grbit controls the next unit.
+                if (!compressed && boundaryIdx < boundaries.Length && boundaries[boundaryIdx] == pos + 1)
+                {
+                    if (pos + 2 >= sst.Length) { truncated = true; break; }
+                    byte low = sst[pos++];
+                    compressed = (sst[pos++] & 1) == 0;
+                    boundaryIdx++;
+                    scratch[produced++] = (char)(low | (sst[pos++] << 8));
+                    continue;
                 }
                 int step = compressed ? 1 : 2;
                 if (pos + step > sst.Length) { truncated = true; break; }

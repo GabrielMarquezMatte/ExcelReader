@@ -7,9 +7,12 @@ namespace ExcelReader.Core.Reader
 {
     public sealed partial class XlsbReader
     {
-        // Forward-only worksheet scanner over a binary sheetN.bin entry. Streams the part through a
-        // refillable pooled buffer; Biff12RecordReader framing guarantees that a partial record at the
-        // buffer boundary is detected and retried after the next fill.
+        /// <summary>Forward-only enumerator over an <see cref="XlsbReader"/> sheet's rows.</summary>
+        /// <remarks>
+        /// Streams the underlying binary <c>sheetN.bin</c> entry through a refillable pooled buffer;
+        /// <c>Biff12RecordReader</c> framing guarantees that a partial record at the buffer boundary
+        /// is detected and retried after the next fill.
+        /// </remarks>
         [SuppressMessage("Design", "CA1034:Nested types should not be visible",
             Justification = "Public nested enumerator is the standard foreach pattern.")]
         public sealed class Enumerator : PooledStreamRowEnumerator, IExcelRowEnumerator
@@ -28,9 +31,11 @@ namespace ExcelReader.Core.Reader
                 _reader = reader;
             }
 
+            /// <inheritdoc/>
             public Row Current =>
                 new(_acc.CellSpan, _acc.ValueSpan, _reader.SharedSpan, _reader.SharedStringCache);
 
+            /// <inheritdoc/>
             public bool MoveNext()
             {
                 _ct.ThrowIfCancellationRequested();
@@ -41,6 +46,7 @@ namespace ExcelReader.Core.Reader
             // header and cells are already fully buffered, so this runs the same *FromBuffer primitives
             // MoveNextCore uses, entirely synchronously, and only pays for an async state machine when
             // a primitive actually reports a buffer miss (result == 2) — a real refill, not per row.
+            /// <inheritdoc/>
             public ValueTask<bool> MoveNextAsync()
             {
                 _ct.ThrowIfCancellationRequested();
@@ -325,7 +331,7 @@ namespace ExcelReader.Core.Reader
 
             private static bool IsEndSheetData(int id)
             {
-                return id is Brt.EndSheetData or Brt.LegacyEndSheetData;
+                return id == Brt.EndSheetData;
             }
 
             private void AddDouble(int col, int style, double value)
@@ -403,6 +409,7 @@ namespace ExcelReader.Core.Reader
                 }
             }
 
+            /// <inheritdoc/>
             [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP007:Don't dispose injected",
                 Justification = "_sheet is opened for this enumerator and owned by it.")]
             public void Dispose()
@@ -412,6 +419,7 @@ namespace ExcelReader.Core.Reader
                 ReturnBuffers();
             }
 
+            /// <inheritdoc/>
             [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP007:Don't dispose injected",
                 Justification = "_sheet is opened for this enumerator and owned by it.")]
             public async ValueTask DisposeAsync()

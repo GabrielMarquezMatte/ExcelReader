@@ -6,6 +6,10 @@ using ExcelReader.Core.Writer.Internal;
 
 namespace ExcelReader.Core.Writer
 {
+    /// <summary>
+    /// Writes the fields of a single CSV row, quoting a field only when it contains the delimiter,
+    /// quote character, carriage return, or line feed.
+    /// </summary>
     public sealed class CsvRowWriter : IRowWriter, IDisposable
     {
         // Numbers, dates, Guids, and every other BCL formattable fit an ASCII field well under this;
@@ -55,6 +59,7 @@ namespace ExcelReader.Core.Writer
             _columnIndex++;
         }
 
+        /// <inheritdoc/>
         public void Write(string? value)
         {
             ThrowIfDisposed();
@@ -65,8 +70,11 @@ namespace ExcelReader.Core.Writer
             }
         }
 
-        // Lowercase "true"/"false" — the only spellings ColumnParserFactory's IsTruthy recognizes
-        // besides "1", so a written bool round-trips through ExcelParser<T> unchanged.
+        /// <inheritdoc/>
+        /// <remarks>
+        /// Writes lowercase "true"/"false" — the only spellings ColumnParserFactory's IsTruthy recognizes
+        /// besides "1", so a written bool round-trips through ExcelParser&lt;T&gt; unchanged.
+        /// </remarks>
         public void Write(bool value)
         {
             ThrowIfDisposed();
@@ -74,18 +82,18 @@ namespace ExcelReader.Core.Writer
             _buffer.Write(value ? "true"u8 : "false"u8);
         }
 
+        /// <inheritdoc/>
         public void Write(bool? value)
         {
-            ThrowIfDisposed();
-            BeginField();
-            if (value is not null)
-            {
-                _buffer.Write(value.Value ? "true"u8 : "false"u8);
-            }
+            if (value is null) { Skip(1); return; }
+            Write(value.Value);
         }
 
-        // Round-trip ISO 8601 ("O"): unambiguous, culture-independent, and — for the common
-        // no-offset shape — exactly what ColumnParserFactory's CSV date fast path recognizes.
+        /// <inheritdoc/>
+        /// <remarks>
+        /// Writes the round-trip ISO 8601 ("O") format: unambiguous, culture-independent, and — for
+        /// the common no-offset shape — exactly what ColumnParserFactory's CSV date fast path recognizes.
+        /// </remarks>
         public void Write(DateTime value)
         {
             ThrowIfDisposed();
@@ -93,17 +101,18 @@ namespace ExcelReader.Core.Writer
             WriteUtf8Field(value, "O");
         }
 
+        /// <inheritdoc/>
         public void Write(DateTime? value)
         {
-            ThrowIfDisposed();
-            BeginField();
-            if (value is not null)
-            {
-                WriteUtf8Field(value.Value, "O");
-            }
+            if (value is null) { Skip(1); return; }
+            Write(value.Value);
         }
 
-        // DateOnly as ISO "yyyy-MM-dd" (the "O" round-trip form), which the CSV text-date parser reads back.
+        /// <inheritdoc/>
+        /// <remarks>
+        /// Writes the value as ISO "yyyy-MM-dd" (the "O" round-trip form), which the CSV text-date
+        /// parser reads back.
+        /// </remarks>
         public void Write(DateOnly value)
         {
             ThrowIfDisposed();
@@ -111,18 +120,18 @@ namespace ExcelReader.Core.Writer
             WriteUtf8Field(value, "O");
         }
 
+        /// <inheritdoc/>
         public void Write(DateOnly? value)
         {
-            ThrowIfDisposed();
-            BeginField();
-            if (value is not null)
-            {
-                WriteUtf8Field(value.Value, "O");
-            }
+            if (value is null) { Skip(1); return; }
+            Write(value.Value);
         }
 
-        // TimeOnly as an Excel-style time serial (fraction of a 24h day): a plain number the parser
-        // reconstructs via TryGetDouble, matching how the XLSX/XLSB row writers store it.
+        /// <inheritdoc/>
+        /// <remarks>
+        /// Writes the value as an Excel-style time serial (fraction of a 24h day): a plain number the
+        /// parser reconstructs via TryGetDouble, matching how the XLSX/XLSB row writers store it.
+        /// </remarks>
         public void Write(TimeOnly value)
         {
             ThrowIfDisposed();
@@ -130,18 +139,18 @@ namespace ExcelReader.Core.Writer
             WriteUtf8Field(value.Ticks / (double)TimeSpan.TicksPerDay, default);
         }
 
+        /// <inheritdoc/>
         public void Write(TimeOnly? value)
         {
-            ThrowIfDisposed();
-            BeginField();
-            if (value is not null)
-            {
-                WriteUtf8Field(value.Value.Ticks / (double)TimeSpan.TicksPerDay, default);
-            }
+            if (value is null) { Skip(1); return; }
+            Write(value.Value);
         }
 
-        // IUtf8SpanFormattable (not ISpanFormattable): CSV output is UTF-8, so numbers format straight
-        // to bytes with no char buffer or transcode. Every BCL numeric type implements it.
+        /// <inheritdoc/>
+        /// <remarks>
+        /// Constrained to IUtf8SpanFormattable (not ISpanFormattable): CSV output is UTF-8, so numbers
+        /// format straight to bytes with no char buffer or transcode. Every BCL numeric type implements it.
+        /// </remarks>
         public void Write<T>(T value)
             where T : IUtf8SpanFormattable
         {
@@ -150,17 +159,15 @@ namespace ExcelReader.Core.Writer
             WriteUtf8Field(value, default);
         }
 
+        /// <inheritdoc/>
         public void Write<T>(T? value)
             where T : struct, IUtf8SpanFormattable
         {
-            ThrowIfDisposed();
-            BeginField();
-            if (value is not null)
-            {
-                WriteUtf8Field(value.Value, default);
-            }
+            if (value is null) { Skip(1); return; }
+            Write(value.Value);
         }
 
+        /// <inheritdoc/>
         public void Skip(int count = 1)
         {
             ThrowIfDisposed();
@@ -272,6 +279,7 @@ namespace ExcelReader.Core.Writer
             _buffer.WriteByte(_quote);
         }
 
+        /// <inheritdoc/>
         public void Dispose()
         {
             if (_disposed)
@@ -282,6 +290,7 @@ namespace ExcelReader.Core.Writer
             _owner.EndRow();
         }
 
+        /// <inheritdoc/>
         public ValueTask DisposeAsync()
         {
             if (_disposed)

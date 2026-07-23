@@ -3,6 +3,9 @@ using ExcelReader.Core.Reader;
 
 namespace ExcelReader.Core.Writer
 {
+    /// <summary>
+    /// Writes the cells of a single worksheet row into an XLSX row buffer; reused across rows by <see cref="XlsxSheetWriter"/>.
+    /// </summary>
     public sealed class XlsxRowWriter : IRowWriter, IDisposable
     {
         private readonly XlsxSheetWriter _owner;
@@ -32,6 +35,9 @@ namespace ExcelReader.Core.Writer
             ObjectDisposedException.ThrowIf(_disposed, this);
         }
 
+        /// <inheritdoc/>
+        /// <exception cref="ObjectDisposedException">The row has already been disposed.</exception>
+        /// <exception cref="ArgumentException"><paramref name="value"/> exceeds Excel's 32,767-character per-cell limit.</exception>
         public void Write(string? value)
         {
             ThrowIfDisposed();
@@ -59,6 +65,8 @@ namespace ExcelReader.Core.Writer
             _columnIndex++;
         }
 
+        /// <inheritdoc/>
+        /// <exception cref="ObjectDisposedException">The row has already been disposed.</exception>
         public void Write(bool value)
         {
             ThrowIfDisposed();
@@ -66,6 +74,8 @@ namespace ExcelReader.Core.Writer
             _columnIndex++;
         }
 
+        /// <inheritdoc/>
+        /// <exception cref="ObjectDisposedException">The row has already been disposed.</exception>
         public void Write(bool? value)
         {
             ThrowIfDisposed();
@@ -77,6 +87,8 @@ namespace ExcelReader.Core.Writer
             Write(value.Value);
         }
 
+        /// <inheritdoc/>
+        /// <exception cref="ObjectDisposedException">The row has already been disposed.</exception>
         public void Write(DateTime value)
         {
             ThrowIfDisposed();
@@ -84,6 +96,8 @@ namespace ExcelReader.Core.Writer
             _columnIndex++;
         }
 
+        /// <inheritdoc/>
+        /// <exception cref="ObjectDisposedException">The row has already been disposed.</exception>
         public void Write(DateTime? value)
         {
             ThrowIfDisposed();
@@ -95,7 +109,11 @@ namespace ExcelReader.Core.Writer
             Write(value.Value);
         }
 
-        // DateOnly shares the DateTime date-serial cell format (midnight), so it round-trips as a date.
+        /// <inheritdoc/>
+        /// <exception cref="ObjectDisposedException">The row has already been disposed.</exception>
+        /// <remarks>
+        /// Shares the <see cref="DateTime"/> date-serial cell format (midnight), so it round-trips as a date.
+        /// </remarks>
         public void Write(DateOnly value)
         {
             ThrowIfDisposed();
@@ -103,6 +121,8 @@ namespace ExcelReader.Core.Writer
             _columnIndex++;
         }
 
+        /// <inheritdoc/>
+        /// <exception cref="ObjectDisposedException">The row has already been disposed.</exception>
         public void Write(DateOnly? value)
         {
             ThrowIfDisposed();
@@ -114,8 +134,12 @@ namespace ExcelReader.Core.Writer
             Write(value.Value);
         }
 
-        // TimeOnly is written as an Excel time serial: the fraction of a 24h day, in [0,1). This is a
-        // plain number cell (no date style); ExcelParser<T> reconstructs the TimeOnly from the fraction.
+        /// <inheritdoc/>
+        /// <exception cref="ObjectDisposedException">The row has already been disposed.</exception>
+        /// <remarks>
+        /// Written as an Excel time serial: the fraction of a 24h day, in [0,1). This is a plain number
+        /// cell (no date style); <c>ExcelParser&lt;T&gt;</c> reconstructs the <see cref="TimeOnly"/> from the fraction.
+        /// </remarks>
         public void Write(TimeOnly value)
         {
             ThrowIfDisposed();
@@ -123,6 +147,8 @@ namespace ExcelReader.Core.Writer
             _columnIndex++;
         }
 
+        /// <inheritdoc/>
+        /// <exception cref="ObjectDisposedException">The row has already been disposed.</exception>
         public void Write(TimeOnly? value)
         {
             ThrowIfDisposed();
@@ -134,6 +160,10 @@ namespace ExcelReader.Core.Writer
             Write(value.Value);
         }
 
+        /// <summary>
+        /// Writes <paramref name="value"/> to the current cell as a number and advances to the next column.
+        /// </summary>
+        /// <exception cref="ObjectDisposedException">The row has already been disposed.</exception>
         public void Write(int value)
         {
             ThrowIfDisposed();
@@ -141,6 +171,10 @@ namespace ExcelReader.Core.Writer
             _columnIndex++;
         }
 
+        /// <summary>
+        /// Writes <paramref name="value"/> to the current cell as a number, or an empty cell when it is <see langword="null"/>, and advances to the next column.
+        /// </summary>
+        /// <exception cref="ObjectDisposedException">The row has already been disposed.</exception>
         public void Write(int? value)
         {
             ThrowIfDisposed();
@@ -152,6 +186,10 @@ namespace ExcelReader.Core.Writer
             Write(value.Value);
         }
 
+        /// <summary>
+        /// Writes <paramref name="value"/> to the current cell as a number and advances to the next column.
+        /// </summary>
+        /// <exception cref="ObjectDisposedException">The row has already been disposed.</exception>
         public void Write(long value)
         {
             ThrowIfDisposed();
@@ -159,6 +197,10 @@ namespace ExcelReader.Core.Writer
             _columnIndex++;
         }
 
+        /// <summary>
+        /// Writes <paramref name="value"/> to the current cell as a number, or an empty cell when it is <see langword="null"/>, and advances to the next column.
+        /// </summary>
+        /// <exception cref="ObjectDisposedException">The row has already been disposed.</exception>
         public void Write(long? value)
         {
             ThrowIfDisposed();
@@ -170,6 +212,10 @@ namespace ExcelReader.Core.Writer
             Write(value.Value);
         }
 
+        /// <summary>
+        /// Writes <paramref name="value"/> to the current cell as a number and advances to the next column.
+        /// </summary>
+        /// <exception cref="ObjectDisposedException">The row has already been disposed.</exception>
         public void Write(double value)
         {
             ThrowIfDisposed();
@@ -177,6 +223,10 @@ namespace ExcelReader.Core.Writer
             _columnIndex++;
         }
 
+        /// <summary>
+        /// Writes <paramref name="value"/> to the current cell as a number, or an empty cell when it is <see langword="null"/>, and advances to the next column.
+        /// </summary>
+        /// <exception cref="ObjectDisposedException">The row has already been disposed.</exception>
         public void Write(double? value)
         {
             ThrowIfDisposed();
@@ -188,6 +238,10 @@ namespace ExcelReader.Core.Writer
             Write(value.Value);
         }
 
+        /// <summary>
+        /// Writes <paramref name="value"/> to the current cell as a number and advances to the next column.
+        /// </summary>
+        /// <exception cref="ObjectDisposedException">The row has already been disposed.</exception>
         public void Write(decimal value)
         {
             ThrowIfDisposed();
@@ -195,6 +249,10 @@ namespace ExcelReader.Core.Writer
             _columnIndex++;
         }
 
+        /// <summary>
+        /// Writes <paramref name="value"/> to the current cell as a number, or an empty cell when it is <see langword="null"/>, and advances to the next column.
+        /// </summary>
+        /// <exception cref="ObjectDisposedException">The row has already been disposed.</exception>
         public void Write(decimal? value)
         {
             ThrowIfDisposed();
@@ -206,6 +264,8 @@ namespace ExcelReader.Core.Writer
             Write(value.Value);
         }
 
+        /// <inheritdoc/>
+        /// <exception cref="ObjectDisposedException">The row has already been disposed.</exception>
         public void Write<T>(T value)
             where T : IUtf8SpanFormattable
         {
@@ -214,6 +274,8 @@ namespace ExcelReader.Core.Writer
             _columnIndex++;
         }
 
+        /// <inheritdoc/>
+        /// <exception cref="ObjectDisposedException">The row has already been disposed.</exception>
         public void Write<T>(T? value)
             where T : struct, IUtf8SpanFormattable
         {
@@ -226,6 +288,10 @@ namespace ExcelReader.Core.Writer
             Write(value.Value);
         }
 
+        /// <inheritdoc/>
+        /// <exception cref="ObjectDisposedException">The row has already been disposed.</exception>
+        /// <exception cref="ArgumentOutOfRangeException"><paramref name="count"/> is negative.</exception>
+        /// <exception cref="ExcelLimitExceededException">Skipping would advance past Excel's 16,384-column limit.</exception>
         public void Skip(int count = 1)
         {
             ThrowIfDisposed();
@@ -262,6 +328,7 @@ namespace ExcelReader.Core.Writer
             _columnIndex++;
         }
 
+        /// <inheritdoc/>
         public ValueTask DisposeAsync()
         {
             if (_disposed)
@@ -272,10 +339,16 @@ namespace ExcelReader.Core.Writer
             return _owner.EndBufferedRowAsync();
         }
 
-        // Sync counterpart for callers on XlsxSheetWriter.StartRow's synchronous fast path (see
-        // SheetWriterExtensions.WriteRecordsAsync's XlsxSheetWriter-specific overload): avoids the
-        // per-row await entirely when the destination stream write only happens on the rare
-        // buffer-threshold flush, which EndBufferedRow already does synchronously.
+        /// <summary>
+        /// Synchronous counterpart to <see cref="DisposeAsync"/>: ends the row and, on the rare buffer-threshold flush, writes to the destination stream synchronously.
+        /// </summary>
+        /// <remarks>
+        /// Exists for callers on <see cref="XlsxSheetWriter"/>'s synchronous <c>StartRow</c> fast path (see
+        /// <see cref="SheetWriterExtensions"/>'s <see cref="XlsxSheetWriter"/>-specific
+        /// <c>WriteRecordsAsync</c> overload): avoids the per-row await entirely, since the destination
+        /// stream write only happens on the rare buffer-threshold flush, which <c>EndBufferedRow</c>
+        /// already does synchronously.
+        /// </remarks>
         public void Dispose()
         {
             if (_disposed)

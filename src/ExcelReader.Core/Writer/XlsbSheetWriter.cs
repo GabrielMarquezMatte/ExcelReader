@@ -7,6 +7,7 @@ using ExcelReader.Core.Writer.Internal;
 
 namespace ExcelReader.Core.Writer
 {
+    /// <summary>Writes a single worksheet's rows into an .xlsb workbook produced by <see cref="XlsbWorkbookWriter"/>.</summary>
     public sealed class XlsbSheetWriter : ISheetWriter<XlsbRowWriter>
     {
         // Kept under the LOH threshold instead of parking the pooled backing array there permanently.
@@ -51,13 +52,11 @@ namespace ExcelReader.Core.Writer
             return _owner.GetSharedStringIndex(value);
         }
 
+        /// <inheritdoc/>
         public ValueTask StartAsync(CancellationToken ct = default)
         {
-            ObjectDisposedException.ThrowIf(_state == WriterState.Ended, this);
-            if (_state != WriterState.Created)
-            {
-                throw new InvalidOperationException("XlsbSheetWriter has already been started.");
-            }
+            WriterStateGuard.ThrowIfEnded(_state, this);
+            WriterStateGuard.RequireCreated(_state, nameof(XlsbSheetWriter));
             ct.ThrowIfCancellationRequested();
             _state = WriterState.Started;
             WriteRecord(Brt.BeginSheet);
@@ -68,6 +67,7 @@ namespace ExcelReader.Core.Writer
             return ValueTask.CompletedTask;
         }
 
+        /// <inheritdoc/>
         public ValueTask<XlsbRowWriter> StartRowAsync(CancellationToken ct = default)
         {
             BeginRow();
@@ -76,6 +76,7 @@ namespace ExcelReader.Core.Writer
             return ValueTask.FromResult(_rowWriter);
         }
 
+        /// <summary>Writes an entire row in one call, mapping each element of <paramref name="values"/> to a column starting at 0.</summary>
         public void WriteRow(ReadOnlySpan<XlsbCell> values)
         {
             BeginRow();
@@ -91,19 +92,14 @@ namespace ExcelReader.Core.Writer
             _rowActive = false;
         }
 
+        /// <inheritdoc/>
         [SuppressMessage("Reliability", "CA1849:Call async methods when in an async method",
             Justification = "The sheet body is written synchronously by row writers; EndAsync only finalizes and closes the entry.")]
         public async ValueTask EndAsync(CancellationToken ct = default)
         {
-            ObjectDisposedException.ThrowIf(_state == WriterState.Ended, this);
-            if (_state != WriterState.Started)
-            {
-                throw new InvalidOperationException("XlsbSheetWriter must be started before ending.");
-            }
-            if (_rowActive)
-            {
-                throw new InvalidOperationException("The active XlsbRowWriter must be disposed before ending the sheet.");
-            }
+            WriterStateGuard.ThrowIfEnded(_state, this);
+            WriterStateGuard.RequireStarted(_state, nameof(XlsbSheetWriter), "ending");
+            WriterStateGuard.RequireNoActiveRowForEnd(_rowActive, nameof(XlsbRowWriter));
             ct.ThrowIfCancellationRequested();
             _state = WriterState.Ended;
             WriteRecord(Brt.EndSheetData);
@@ -128,6 +124,7 @@ namespace ExcelReader.Core.Writer
             _owner.NotifySheetEnded();
         }
 
+        /// <inheritdoc/>
         public async ValueTask DisposeAsync()
         {
             if (_state == WriterState.Started)
@@ -208,15 +205,9 @@ namespace ExcelReader.Core.Writer
 
         private void BeginRow()
         {
-            ObjectDisposedException.ThrowIf(_state == WriterState.Ended, this);
-            if (_state != WriterState.Started)
-            {
-                throw new InvalidOperationException("XlsbSheetWriter must be started before adding rows.");
-            }
-            if (_rowActive)
-            {
-                throw new InvalidOperationException("The previous XlsbRowWriter must be disposed before starting a new row.");
-            }
+            WriterStateGuard.ThrowIfEnded(_state, this);
+            WriterStateGuard.RequireStarted(_state, nameof(XlsbSheetWriter), "adding rows");
+            WriterStateGuard.RequireNoActiveRowForStart(_rowActive, nameof(XlsbRowWriter));
             if (_rowNumber >= 1_048_576)
             {
                 throw new ExcelLimitExceededException("Rows", 1_048_576, _rowNumber + 1L);

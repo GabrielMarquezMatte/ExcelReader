@@ -3,6 +3,7 @@ using System.Runtime.CompilerServices;
 
 namespace ExcelReader.Core.Writer
 {
+    /// <summary>Writes the cells of a single row into an .xlsb worksheet, one column at a time.</summary>
     public sealed class XlsbRowWriter : IRowWriter
     {
         private readonly XlsbSheetWriter _owner;
@@ -26,6 +27,7 @@ namespace ExcelReader.Core.Writer
             ObjectDisposedException.ThrowIf(_disposed, this);
         }
 
+        /// <inheritdoc/>
         public void Write(string? value)
         {
             ThrowIfDisposed();
@@ -33,6 +35,7 @@ namespace ExcelReader.Core.Writer
             _columnIndex++;
         }
 
+        /// <inheritdoc/>
         public void Write(bool value)
         {
             ThrowIfDisposed();
@@ -40,17 +43,18 @@ namespace ExcelReader.Core.Writer
             _columnIndex++;
         }
 
+        /// <inheritdoc/>
         public void Write(bool? value)
         {
-            ThrowIfDisposed();
-            if (value is not null)
+            if (value is null)
             {
-                Write(value.Value);
+                Skip(1);
                 return;
             }
-            _columnIndex++;
+            Write(value.Value);
         }
 
+        /// <inheritdoc/>
         public void Write(DateTime value)
         {
             ThrowIfDisposed();
@@ -58,59 +62,65 @@ namespace ExcelReader.Core.Writer
             _columnIndex++;
         }
 
+        /// <inheritdoc/>
         public void Write(DateTime? value)
         {
-            ThrowIfDisposed();
-            if (value is not null)
+            if (value is null)
             {
-                Write(value.Value);
+                Skip(1);
                 return;
             }
-            _columnIndex++;
+            Write(value.Value);
         }
 
-        // DateOnly shares the DateTime date-serial cell format (midnight), so it round-trips as a date.
+        /// <inheritdoc/>
+        /// <remarks>
+        /// Shares the <see cref="DateTime"/> date-serial cell format (midnight), so it round-trips as a date.
+        /// </remarks>
         public void Write(DateOnly value)
         {
             ThrowIfDisposed();
             Write(value.ToDateTime(TimeOnly.MinValue));
         }
 
+        /// <inheritdoc/>
         public void Write(DateOnly? value)
         {
-            ThrowIfDisposed();
-            if (value is not null)
+            if (value is null)
             {
-                Write(value.Value.ToDateTime(TimeOnly.MinValue));
+                Skip(1);
                 return;
             }
-            _columnIndex++;
+            Write(value.Value);
         }
 
-        // TimeOnly is written as an Excel time serial (fraction of a 24h day) in a plain number cell.
+        /// <inheritdoc/>
+        /// <remarks>Written as an Excel time serial (fraction of a 24h day) in a plain number cell.</remarks>
         public void Write(TimeOnly value)
         {
             ThrowIfDisposed();
             WriteDouble(value.Ticks / (double)TimeSpan.TicksPerDay, style: 0);
         }
 
+        /// <inheritdoc/>
         public void Write(TimeOnly? value)
         {
-            ThrowIfDisposed();
-            if (value is not null)
+            if (value is null)
             {
-                WriteDouble(value.Value.Ticks / (double)TimeSpan.TicksPerDay, style: 0);
+                Skip(1);
                 return;
             }
-            _columnIndex++;
+            Write(value.Value);
         }
 
+        /// <summary>Writes <paramref name="value"/> as a numeric cell in the current column, advancing to the next column.</summary>
         public void Write(int value)
         {
             ThrowIfDisposed();
             WriteDouble(value, style: 0);
         }
 
+        /// <summary>Writes <paramref name="value"/> as a numeric cell, or an empty cell if it has no value, advancing to the next column.</summary>
         public void Write(int? value)
         {
             ThrowIfDisposed();
@@ -122,12 +132,14 @@ namespace ExcelReader.Core.Writer
             _columnIndex++;
         }
 
+        /// <summary>Writes <paramref name="value"/> as a numeric cell in the current column, advancing to the next column.</summary>
         public void Write(long value)
         {
             ThrowIfDisposed();
             WriteDouble(value, style: 0);
         }
 
+        /// <summary>Writes <paramref name="value"/> as a numeric cell, or an empty cell if it has no value, advancing to the next column.</summary>
         public void Write(long? value)
         {
             ThrowIfDisposed();
@@ -139,12 +151,14 @@ namespace ExcelReader.Core.Writer
             _columnIndex++;
         }
 
+        /// <summary>Writes <paramref name="value"/> as a numeric cell in the current column, advancing to the next column.</summary>
         public void Write(double value)
         {
             ThrowIfDisposed();
             WriteDouble(value, style: 0);
         }
 
+        /// <summary>Writes <paramref name="value"/> as a numeric cell, or an empty cell if it has no value, advancing to the next column.</summary>
         public void Write(double? value)
         {
             ThrowIfDisposed();
@@ -156,12 +170,14 @@ namespace ExcelReader.Core.Writer
             _columnIndex++;
         }
 
+        /// <summary>Writes <paramref name="value"/> as a numeric cell in the current column, advancing to the next column.</summary>
         public void Write(decimal value)
         {
             ThrowIfDisposed();
             WriteDouble((double)value, style: 0);
         }
 
+        /// <summary>Writes <paramref name="value"/> as a numeric cell, or an empty cell if it has no value, advancing to the next column.</summary>
         public void Write(decimal? value)
         {
             ThrowIfDisposed();
@@ -173,6 +189,7 @@ namespace ExcelReader.Core.Writer
             _columnIndex++;
         }
 
+        /// <inheritdoc/>
         public void Write<T>(T value)
             where T : IUtf8SpanFormattable
         {
@@ -180,18 +197,19 @@ namespace ExcelReader.Core.Writer
             WriteDouble(ToDouble(value), style: 0);
         }
 
+        /// <inheritdoc/>
         public void Write<T>(T? value)
             where T : struct, IUtf8SpanFormattable
         {
-            ThrowIfDisposed();
-            if (value is not null)
+            if (value is null)
             {
-                Write(value.Value);
+                Skip(1);
                 return;
             }
-            _columnIndex++;
+            Write(value.Value);
         }
 
+        /// <inheritdoc/>
         public void Skip(int count = 1)
         {
             ThrowIfDisposed();
@@ -266,6 +284,7 @@ namespace ExcelReader.Core.Writer
                 : 0.0;
         }
 
+        /// <inheritdoc/>
         public ValueTask DisposeAsync()
         {
             if (_disposed)

@@ -206,6 +206,32 @@ namespace ExcelReader.Tests
         }
 
         [Fact]
+        public void RequiredCellWithUnparseableValueThrowsAsIfMissing()
+        {
+            // "Id" is present and non-empty but "abc" isn't a valid int — F3: treated the same as a
+            // blank required cell instead of silently leaving the model's Id at 0.
+            using var ms = Csv("Id,Note\nabc,hi\n");
+            using var reader = Excel.FromCsv(ms);
+
+            InvalidOperationException ex = Assert.Throws<InvalidOperationException>(
+                () => new ExcelParser<RequiredRow>().Parse(reader).ToList());
+            Assert.Contains("Id", ex.Message, StringComparison.Ordinal);
+        }
+
+        [Fact]
+        public void ThrowOnParseFailureThrowsExcelParseExceptionForUnparseableColumn()
+        {
+            using var ms = Csv("Name,Amount\nConta,not-a-number\n");
+            using var reader = Excel.FromCsv(ms);
+            var config = new ExcelParserConfig { ThrowOnParseFailure = true };
+
+            ExcelParseException ex = Assert.Throws<ExcelParseException>(
+                () => new ExcelParser<MoneyRow>(config).Parse(reader).ToList());
+            Assert.Equal("Amount", ex.ColumnName);
+            Assert.Equal("not-a-number", ex.RawValue);
+        }
+
+        [Fact]
         public void TerminalBlankLineDoesNotYieldPhantomModelOrRequiredFailure()
         {
             using var ms = Csv("Id,Note\n7,valid\n\n");

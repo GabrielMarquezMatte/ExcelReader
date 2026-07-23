@@ -866,6 +866,22 @@ namespace ExcelReader.Tests
         }
 
         [Fact]
+        public async Task StartingSheetTwiceThrows()
+        {
+            await using XlsxWorkbookWriter wb = await XlsxWorkbookWriter.CreateAsync(new MemoryStream(), ct: TestContext.Current.CancellationToken).ConfigureAwait(true);
+            await wb.StartAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
+
+            XlsxSheetWriter sheet = wb.AddSheet("Sheet1");
+            await sheet.StartAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
+
+            InvalidOperationException ex = await Assert.ThrowsAsync<InvalidOperationException>(
+                () => sheet.StartAsync(TestContext.Current.CancellationToken).AsTask()).ConfigureAwait(true);
+            Assert.Equal("XlsxSheetWriter has already been started.", ex.Message);
+
+            await sheet.EndAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
+        }
+
+        [Fact]
         public async Task StartRowBeforeSheetStartAsyncThrows()
         {
             await using XlsxWorkbookWriter wb = await XlsxWorkbookWriter.CreateAsync(new MemoryStream(), ct: TestContext.Current.CancellationToken).ConfigureAwait(true);

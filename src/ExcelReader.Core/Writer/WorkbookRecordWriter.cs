@@ -6,23 +6,45 @@ using ExcelReader.Core.Parser;
 
 namespace ExcelReader.Core.Writer
 {
-    // High-level record writer: writes a header row (from [ExcelColumn] or the property name) followed
-    // by one row per record, mapping each public readable property to a column. Each call targets a new
-    // sheet, so one workbook can hold sheets of different record types. Generic over the low-level
-    // IWorkbookWriter/ISheetWriter/IRowWriter interfaces, so it works for XLSX, XLSB and XLS alike.
-    // Round-trips through ExcelParser<T> because headers match property names/aliases (column order is
-    // irrelevant there). Use the RecordWriter.Create* factories rather than constructing directly.
+    /// <summary>
+    /// Writes plain-old-CLR-object records to a workbook as sheets: each call to <c>WriteSheetAsync</c>
+    /// writes a new sheet, with a header row (from each property's <c>[ExcelColumn]</c> name or, failing
+    /// that, the property name) followed by one row per record, one column per public readable property
+    /// of the record type. Each call targets a new sheet, so one workbook can hold sheets of different
+    /// record types. Works uniformly across XLSX, XLSB, XLS and CSV via the
+    /// <see cref="IWorkbookWriter{TSheet}"/>/<see cref="ISheetWriter{TRow}"/>/<see cref="IRowWriter"/>
+    /// abstractions. Prefer the <see cref="RecordWriter"/> factory methods over constructing this type
+    /// directly. Headers written here match the property names/aliases that <c>ExcelParser&lt;T&gt;</c>
+    /// looks for, so column order does not need to match between writing and reading.
+    /// </summary>
+    /// <typeparam name="TSheet">The concrete sheet writer type.</typeparam>
+    /// <typeparam name="TRow">The concrete row writer type.</typeparam>
     public sealed class WorkbookRecordWriter<TSheet, TRow> : IAsyncDisposable where TSheet : ISheetWriter<TRow> where TRow : IRowWriter
     {
         private readonly IWorkbookWriter<TSheet> _workbook;
         private readonly HashSet<string> _sheetNames = new(StringComparer.OrdinalIgnoreCase);
 
+        /// <summary>
+        /// Wraps an already-created, already-started workbook writer. Ownership of <paramref name="workbook"/>
+        /// transfers to this instance, which disposes it when this instance is disposed.
+        /// </summary>
+        /// <param name="workbook">The started workbook writer to wrap.</param>
         public WorkbookRecordWriter(IWorkbookWriter<TSheet> workbook)
         {
             ArgumentNullException.ThrowIfNull(workbook);
             _workbook = workbook;
         }
 
+        /// <summary>
+        /// Writes a new sheet named <paramref name="sheetName"/> containing a header row followed by one
+        /// row per item in <paramref name="records"/>.
+        /// </summary>
+        /// <typeparam name="T">The record type; its public readable, non-indexer properties (excluding
+        /// any marked <c>[ExcelIgnore]</c>) each become a column.</typeparam>
+        /// <param name="sheetName">The sheet's name; must be unique within this workbook.</param>
+        /// <param name="records">The records to write, one row each, in enumeration order.</param>
+        /// <param name="ct">A token to cancel the operation.</param>
+        /// <exception cref="InvalidOperationException">A sheet named <paramref name="sheetName"/> already exists in this workbook.</exception>
         [RequiresUnreferencedCode("Record writing reflects over T's public properties, which trimming may remove.")]
         [RequiresDynamicCode("Record writing compiles the per-type column writer at runtime (Expression.Compile / MakeGenericMethod).")]
         public async ValueTask WriteSheetAsync<T>(string sheetName, IEnumerable<T> records, CancellationToken ct = default)
@@ -35,6 +57,16 @@ namespace ExcelReader.Core.Writer
             await sheet.EndAsync(ct).ConfigureAwait(false);
         }
 
+        /// <summary>
+        /// Writes a new sheet named <paramref name="sheetName"/> containing a header row followed by one
+        /// row per item produced by <paramref name="records"/>.
+        /// </summary>
+        /// <typeparam name="T">The record type; its public readable, non-indexer properties (excluding
+        /// any marked <c>[ExcelIgnore]</c>) each become a column.</typeparam>
+        /// <param name="sheetName">The sheet's name; must be unique within this workbook.</param>
+        /// <param name="records">The records to write, one row each, in enumeration order.</param>
+        /// <param name="ct">A token to cancel the operation, and passed to the source enumerable.</param>
+        /// <exception cref="InvalidOperationException">A sheet named <paramref name="sheetName"/> already exists in this workbook.</exception>
         [RequiresUnreferencedCode("Record writing reflects over T's public properties, which trimming may remove.")]
         [RequiresDynamicCode("Record writing compiles the per-type column writer at runtime (Expression.Compile / MakeGenericMethod).")]
         public async ValueTask WriteSheetAsync<T>(string sheetName, IAsyncEnumerable<T> records, CancellationToken ct = default)
@@ -69,6 +101,7 @@ namespace ExcelReader.Core.Writer
             }
         }
 
+        /// <summary>Finalizes and disposes the underlying workbook writer, completing the workbook.</summary>
         [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP007:Don't dispose injected",
             Justification = "The RecordWriter factories transfer ownership of the workbook to this wrapper, which finalizes it here.")]
         public ValueTask DisposeAsync()
@@ -78,10 +111,20 @@ namespace ExcelReader.Core.Writer
         }
     }
 
-    // Format-specific factories for the generic record writer: they create the low-level workbook,
-    // start it, and hand it to WorkbookRecordWriter so callers never touch the type parameters.
+    /// <summary>
+    /// Format-specific factories that create the underlying low-level workbook writer, start it, and wrap
+    /// it in a <see cref="WorkbookRecordWriter{TSheet,TRow}"/>, so callers never need to name the writer's
+    /// type parameters themselves.
+    /// </summary>
     public static class RecordWriter
     {
+        /// <summary>Creates and starts a record writer that produces an XLSX workbook.</summary>
+        /// <param name="stream">The destination stream; must support writing.</param>
+        /// <param name="leaveOpen">If <see langword="true"/>, <paramref name="stream"/> is left open when the returned writer is disposed.</param>
+        /// <param name="compression">The ZIP compression level used for the XLSX package's entries.</param>
+        /// <param name="useSharedStrings">If <see langword="true"/>, text cells are deduplicated into the shared-strings table instead of written inline.</param>
+        /// <param name="ct">A token to cancel the operation.</param>
+        /// <returns>A started record writer ready to accept sheets.</returns>
         public static async ValueTask<WorkbookRecordWriter<XlsxSheetWriter, XlsxRowWriter>> CreateXlsxAsync(
             Stream stream, bool leaveOpen = false, CompressionLevel compression = CompressionLevel.Fastest,
             bool useSharedStrings = false, CancellationToken ct = default)
@@ -91,6 +134,14 @@ namespace ExcelReader.Core.Writer
             return new WorkbookRecordWriter<XlsxSheetWriter, XlsxRowWriter>(workbook);
         }
 
+        /// <summary>Creates and starts a record writer that produces an XLSB workbook.</summary>
+        /// <param name="stream">The destination stream; must support writing.</param>
+        /// <param name="leaveOpen">If <see langword="true"/>, <paramref name="stream"/> is left open when the returned writer is disposed.</param>
+        /// <param name="date1904">If <see langword="true"/>, dates are serialized using the 1904 date system instead of the default 1900 system.</param>
+        /// <param name="compression">The ZIP compression level used for the XLSB package's entries.</param>
+        /// <param name="useSharedStrings">If <see langword="true"/>, text cells are deduplicated into the shared-strings table instead of written inline.</param>
+        /// <param name="ct">A token to cancel the operation.</param>
+        /// <returns>A started record writer ready to accept sheets.</returns>
         public static async ValueTask<WorkbookRecordWriter<XlsbSheetWriter, XlsbRowWriter>> CreateXlsbAsync(
             Stream stream, bool leaveOpen = false, bool date1904 = false,
             CompressionLevel compression = CompressionLevel.Fastest, bool useSharedStrings = false,
@@ -101,8 +152,15 @@ namespace ExcelReader.Core.Writer
             return new WorkbookRecordWriter<XlsbSheetWriter, XlsbRowWriter>(workbook);
         }
 
-        // CSV has no async setup (no ZIP/BIFF headers to write), so this is synchronous — the returned
-        // writer is still IAsyncDisposable. Only a single sheet is supported (a CSV file is one sheet).
+        /// <summary>
+        /// Creates a record writer that produces a CSV file. Unlike the other formats, this is synchronous
+        /// (a CSV file has no archive/binary headers to write) and supports only a single sheet, since a
+        /// CSV file is inherently one sheet. The returned writer is still <see cref="IAsyncDisposable"/>.
+        /// </summary>
+        /// <param name="stream">The destination stream; must support writing.</param>
+        /// <param name="leaveOpen">If <see langword="true"/>, <paramref name="stream"/> is left open when the returned writer is disposed.</param>
+        /// <param name="options">The delimiter/quote character to use; defaults to <see cref="CsvWriterOptions.Default"/> if <see langword="null"/>.</param>
+        /// <returns>A record writer ready to accept its single sheet.</returns>
         [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
             Justification = "Ownership of the workbook transfers to WorkbookRecordWriter, which disposes it.")]
         public static WorkbookRecordWriter<CsvSheetWriter, CsvRowWriter> CreateCsv(
@@ -112,6 +170,12 @@ namespace ExcelReader.Core.Writer
             return new WorkbookRecordWriter<CsvSheetWriter, CsvRowWriter>(workbook);
         }
 
+        /// <summary>Creates and starts a record writer that produces a legacy XLS (BIFF8) workbook.</summary>
+        /// <param name="stream">The destination stream; must support writing.</param>
+        /// <param name="leaveOpen">If <see langword="true"/>, <paramref name="stream"/> is left open when the returned writer is disposed.</param>
+        /// <param name="date1904">If <see langword="true"/>, dates are serialized using the 1904 date system instead of the default 1900 system.</param>
+        /// <param name="ct">A token to cancel the operation.</param>
+        /// <returns>A started record writer ready to accept sheets.</returns>
         [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
             Justification = "Ownership of the workbook transfers to WorkbookRecordWriter, which disposes it.")]
         public static async ValueTask<WorkbookRecordWriter<XlsSheetWriter, XlsRowWriter>> CreateXlsAsync(
