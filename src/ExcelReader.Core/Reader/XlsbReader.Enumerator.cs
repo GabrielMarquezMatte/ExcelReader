@@ -325,7 +325,7 @@ namespace ExcelReader.Core.Reader
 
             private static bool IsEndSheetData(int id)
             {
-                return id is Brt.EndSheetData or Brt.LegacyEndSheetData;
+                return id == Brt.EndSheetData;
             }
 
             private void AddDouble(int col, int style, double value)

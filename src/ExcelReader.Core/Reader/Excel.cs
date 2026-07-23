@@ -2,6 +2,7 @@ using System.Diagnostics.CodeAnalysis;
 using System.IO.Compression;
 using System.Runtime.CompilerServices;
 using ExcelReader.Core.Enums;
+using ExcelReader.Core.Writer.Internal;
 
 namespace ExcelReader.Core.Reader
 {
@@ -156,24 +157,37 @@ namespace ExcelReader.Core.Reader
         public static ExcelFileFormat DetectFileFormat(Stream stream)
         {
             ArgumentNullException.ThrowIfNull(stream);
-            return DetectSeekable(stream);
+            ExcelFileFormat format = DetectSeekable(stream, out ZipArchive? zip);
+            zip?.Dispose();
+            return format;
         }
 
-        public static ValueTask<ExcelFileFormat> DetectFileFormatAsync(Stream stream, CancellationToken ct = default)
+        public static async ValueTask<ExcelFileFormat> DetectFileFormatAsync(Stream stream, CancellationToken ct = default)
         {
             ArgumentNullException.ThrowIfNull(stream);
-            return DetectSeekableAsync(stream, ct);
+            (ExcelFileFormat format, ZipArchive? zip) = await DetectSeekableAsync(stream, ct).ConfigureAwait(false);
+            if (zip is not null)
+            {
+                await ZipArchiveDisposal.DisposeAsync(zip).ConfigureAwait(false);
+            }
+            return format;
         }
 
+        [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP001:Dispose created",
+            Justification = "zip (when non-null) is handed to the chosen reader on success, which takes ownership; on failure it's disposed in the catch below.")]
+        [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
+            Justification = "zip (when non-null) is handed to the chosen reader on success, which takes ownership; on failure it's disposed in the catch below.")]
         private static IExcelRowReader OpenSeekable(Stream stream, bool leaveOpen, ExcelReaderOptions? options)
         {
             ExcelFileFormat format;
+            ZipArchive? zip = null;
             try
             {
-                format = DetectSeekable(stream);
+                format = DetectSeekable(stream, out zip);
             }
             catch
             {
+                zip?.Dispose();
                 DisposeOnFailure(stream, leaveOpen);
                 throw;
             }
@@ -181,11 +195,14 @@ namespace ExcelReader.Core.Reader
             {
                 UnknownFormat(stream, leaveOpen);
             }
+            // zip (when non-null) is handed to the chosen reader, which takes ownership of it — this
+            // is the same archive DetectSeekable already opened to peek "xl/workbook.bin", so the
+            // central directory isn't parsed a second time.
             return format switch
             {
                 ExcelFileFormat.Xls => new XlsReader(stream, leaveOpen, options),
-                ExcelFileFormat.Xlsb => new XlsbReader(stream, leaveOpen, options),
-                ExcelFileFormat.Xlsx => new XlsxReader(stream, leaveOpen, options),
+                ExcelFileFormat.Xlsb => new XlsbReader(stream, leaveOpen, zip!, options),
+                ExcelFileFormat.Xlsx => new XlsxReader(stream, leaveOpen, zip!, options),
                 _ => throw new System.Diagnostics.UnreachableException(),
             };
         }
@@ -193,12 +210,17 @@ namespace ExcelReader.Core.Reader
         private static async ValueTask<IExcelRowReader> OpenSeekableAsync(Stream stream, bool leaveOpen, ExcelReaderOptions? options, CancellationToken ct)
         {
             ExcelFileFormat format;
+            ZipArchive? zip = null;
             try
             {
-                format = await DetectSeekableAsync(stream, ct).ConfigureAwait(false);
+                (format, zip) = await DetectSeekableAsync(stream, ct).ConfigureAwait(false);
             }
             catch
             {
+                if (zip is not null)
+                {
+                    await ZipArchiveDisposal.DisposeAsync(zip).ConfigureAwait(false);
+                }
                 await DisposeOnFailureAsync(stream, leaveOpen).ConfigureAwait(false);
                 throw;
             }
@@ -210,8 +232,8 @@ namespace ExcelReader.Core.Reader
             return format switch
             {
                 ExcelFileFormat.Xls => await XlsReader.CreateAsync(stream, leaveOpen, options, ct).ConfigureAwait(false),
-                ExcelFileFormat.Xlsb => await XlsbReader.CreateAsync(stream, leaveOpen, options, ct).ConfigureAwait(false),
-                ExcelFileFormat.Xlsx => await XlsxReader.CreateAsync(stream, leaveOpen, options, ct).ConfigureAwait(false),
+                ExcelFileFormat.Xlsb => await XlsbReader.CreateFromOpenZipAsync(stream, leaveOpen, zip!, options, ct).ConfigureAwait(false),
+                ExcelFileFormat.Xlsx => await XlsxReader.CreateFromOpenZipAsync(stream, leaveOpen, zip!, options, ct).ConfigureAwait(false),
                 _ => throw new System.Diagnostics.UnreachableException(),
             };
         }
@@ -270,9 +292,15 @@ namespace ExcelReader.Core.Reader
             return false;
         }
 
+        // `zip` receives the archive opened to peek the central directory (null for Xls/Unknown, which
+        // never need one) so the caller can hand it straight to the chosen reader instead of letting
+        // that reader re-parse the central directory from scratch.
         [SkipLocalsInit]
-        private static ExcelFileFormat DetectSeekable(Stream stream)
+        [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP001:Dispose created",
+            Justification = "Ownership transfers to the caller via the out parameter, which disposes it on failure or hands it to the chosen reader on success.")]
+        private static ExcelFileFormat DetectSeekable(Stream stream, out ZipArchive? zip)
         {
+            zip = null;
             RequireSeekable(stream);
             long start = stream.Position;
             Span<byte> header = stackalloc byte[8];
@@ -282,14 +310,16 @@ namespace ExcelReader.Core.Reader
             {
                 return format;
             }
-            // Peek the central directory to distinguish XLSB from XLSX.
-            using var zipPeek = new ZipArchive(stream, ZipArchiveMode.Read, leaveOpen: true);
+            // Peek the central directory to distinguish XLSB from XLSX. Assign `zip` immediately so a
+            // caller-side catch can dispose it even if GetEntry below were to throw.
+            var zipPeek = new ZipArchive(stream, ZipArchiveMode.Read, leaveOpen: true);
+            zip = zipPeek;
             bool isXlsb = zipPeek.GetEntry("xl/workbook.bin") is not null;
             stream.Position = start;
             return isXlsb ? ExcelFileFormat.Xlsb : ExcelFileFormat.Xlsx;
         }
 
-        private static async ValueTask<ExcelFileFormat> DetectSeekableAsync(Stream stream, CancellationToken ct)
+        private static async ValueTask<(ExcelFileFormat Format, ZipArchive? Zip)> DetectSeekableAsync(Stream stream, CancellationToken ct)
         {
             RequireSeekable(stream);
             long start = stream.Position;
@@ -298,21 +328,14 @@ namespace ExcelReader.Core.Reader
             stream.Position = start;
             if (TryClassifyHeader(header.AsSpan(0, read), out ExcelFileFormat format))
             {
-                return format;
+                return (format, null);
             }
-            // Central directory read: open a temporary archive to peek entry names, then rewind.
-            // Declared outside await using so the ZipArchive variable is accessible inside the block.
+            // Peek the central directory to distinguish XLSB from XLSX; kept open (not disposed here)
+            // so the caller can hand it straight to the chosen reader.
             var zipPeek = new ZipArchive(stream, ZipArchiveMode.Read, leaveOpen: true);
-#if NET10_0_OR_GREATER
-            await using (zipPeek.ConfigureAwait(false))
-#else
-            using (zipPeek)
-#endif
-            {
-                bool isXlsb = zipPeek.GetEntry("xl/workbook.bin") is not null;
-                stream.Position = start;
-                return isXlsb ? ExcelFileFormat.Xlsb : ExcelFileFormat.Xlsx;
-            }
+            bool isXlsb = zipPeek.GetEntry("xl/workbook.bin") is not null;
+            stream.Position = start;
+            return (isXlsb ? ExcelFileFormat.Xlsb : ExcelFileFormat.Xlsx, zipPeek);
         }
 
         private static void RequireSeekable(Stream stream)

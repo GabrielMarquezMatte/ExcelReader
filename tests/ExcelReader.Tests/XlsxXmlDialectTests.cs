@@ -71,5 +71,18 @@ namespace ExcelReader.Tests
             Assert.True(e.MoveNext());
             Assert.Equal("shared &amp; <tag>", e.Current[0].GetString());
         }
+
+        [Fact]
+        public void ParseRelationshipsDoesNotMatchLongerElementNameSharingThePrefix()
+        {
+            // "<RelationshipGroup" is not a valid OPC element, but it contains "<Relationship" as a
+            // literal substring — without a name-boundary check, TagSpanEnumerable would misparse it
+            // as a real <Relationship> tag and inject a spurious rId into the map.
+            var rels = XlsxXml.ParseRelationships(
+                """<Relationship Id="rId1" Target="worksheets/sheet1.xml"/><RelationshipGroup Id="rId2" Target="malicious.xml"/>"""u8);
+
+            Assert.Equal("worksheets/sheet1.xml", rels["rId1"]);
+            Assert.False(rels.ContainsKey("rId2"));
+        }
     }
 }

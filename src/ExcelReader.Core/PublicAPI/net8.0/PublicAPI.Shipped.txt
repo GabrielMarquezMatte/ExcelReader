@@ -126,6 +126,8 @@ ExcelReader.Core.Reader.ExcelReaderOptions.MaxSharedStringBytes.get -> long
 ExcelReader.Core.Reader.ExcelReaderOptions.MaxSharedStringBytes.init -> void
 ExcelReader.Core.Reader.ExcelReaderOptions.MaxTotalDecompressedBytes.get -> long
 ExcelReader.Core.Reader.ExcelReaderOptions.MaxTotalDecompressedBytes.init -> void
+ExcelReader.Core.Reader.ExcelReaderOptions.MaxZipEntries.get -> int
+ExcelReader.Core.Reader.ExcelReaderOptions.MaxZipEntries.init -> void
 ExcelReader.Core.Reader.IExcelRowEnumerator
 ExcelReader.Core.Reader.IExcelRowEnumerator.Current.get -> ExcelReader.Core.ValueObjects.Row
 ExcelReader.Core.Reader.IExcelRowEnumerator.MoveNext() -> bool

@@ -3,7 +3,10 @@ namespace ExcelReader.Core.Parser
 {
     // Immutable per-enumeration context handed to every IExcelRowModel<TSelf>.FromRow call. A normal
     // readonly struct (not ref struct), so it can be passed `in` freely (unlike Row itself).
-    public readonly struct ExcelRowContext : IEquatable<ExcelRowContext>
+    // Declared as a record struct purely for its compiler-synthesized equality members, satisfying
+    // CA1815 without hand-written boilerplate; nothing in this codebase actually compares two
+    // contexts. Kept non-positional (no primary constructor) so construction stays internal-only.
+    public readonly record struct ExcelRowContext
     {
         public bool IsDate1904 { get; }
         public IFormatProvider FormatProvider { get; }
@@ -12,31 +15,6 @@ namespace ExcelReader.Core.Parser
         {
             IsDate1904 = isDate1904;
             FormatProvider = formatProvider;
-        }
-
-        public bool Equals(ExcelRowContext other)
-        {
-            return IsDate1904 == other.IsDate1904 && FormatProvider.Equals(other.FormatProvider);
-        }
-
-        public override bool Equals(object? obj)
-        {
-            return obj is ExcelRowContext other && Equals(other);
-        }
-
-        public override int GetHashCode()
-        {
-            return HashCode.Combine(IsDate1904, FormatProvider);
-        }
-
-        public static bool operator ==(ExcelRowContext left, ExcelRowContext right)
-        {
-            return left.Equals(right);
-        }
-
-        public static bool operator !=(ExcelRowContext left, ExcelRowContext right)
-        {
-            return !left.Equals(right);
         }
     }
 }

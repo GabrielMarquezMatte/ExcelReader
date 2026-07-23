@@ -1,9 +1,88 @@
+using System.Diagnostics.CodeAnalysis;
 using System.IO.Compression;
 using System.Text;
 using ExcelReader.Core.Writer;
 
 namespace ExcelReader.Tests
 {
+    // Wraps a byte array as a read-only, forward-only stream (CanSeek == false), for exercising the
+    // non-seekable-source code paths (buffered .xls loading, CSV single-pass enumeration, etc.).
+    internal sealed class NonSeekableStream : Stream
+    {
+        private readonly MemoryStream _inner;
+
+        internal NonSeekableStream(byte[] bytes)
+        {
+            _inner = new MemoryStream(bytes);
+        }
+
+        public override bool CanRead
+        {
+            get { return true; }
+        }
+
+        public override bool CanSeek
+        {
+            get { return false; }
+        }
+
+        [ExcludeFromCodeCoverage]
+        public override bool CanWrite
+        {
+            get { return false; }
+        }
+
+        [ExcludeFromCodeCoverage]
+        public override long Length
+        {
+            get { throw new NotSupportedException(); }
+        }
+
+        [ExcludeFromCodeCoverage]
+        public override long Position
+        {
+            get { return _inner.Position; }
+            set { throw new NotSupportedException(); }
+        }
+
+        public override int Read(byte[] buffer, int offset, int count)
+        {
+            return _inner.Read(buffer, offset, count);
+        }
+
+        [ExcludeFromCodeCoverage]
+        public override void Flush()
+        {
+        }
+
+        [ExcludeFromCodeCoverage]
+        public override long Seek(long offset, SeekOrigin origin)
+        {
+            throw new NotSupportedException();
+        }
+
+        [ExcludeFromCodeCoverage]
+        public override void SetLength(long value)
+        {
+            throw new NotSupportedException();
+        }
+
+        [ExcludeFromCodeCoverage]
+        public override void Write(byte[] buffer, int offset, int count)
+        {
+            throw new NotSupportedException();
+        }
+
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing)
+            {
+                _inner.Dispose();
+            }
+            base.Dispose(disposing);
+        }
+    }
+
     // Marks a skipped (empty) column gap inside a TypedWorkbook row.
     // A record class (not struct) so `new Gap()` honors the Count = 1 default.
     internal sealed record Gap(int Count = 1);
