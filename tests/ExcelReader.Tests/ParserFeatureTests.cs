@@ -98,6 +98,34 @@ namespace ExcelReader.Tests
             Assert.Equal(0m, row.Amount);
         }
 
+        // --- #5 ThrowOnParseFailure (F3) ---
+
+        [Fact]
+        public async Task ThrowOnParseFailureThrowsForUnparseableNonRequiredColumn()
+        {
+            await using var ms = await TypedWorkbook.BuildAsync(["Name", "Amount"], ["Conta", "not-a-number"]);
+            await using var reader = await Excel.FromAsync(ms, ct: TestContext.Current.CancellationToken);
+            var config = new ExcelParserConfig { ThrowOnParseFailure = true };
+
+            ExcelParseException ex = Assert.Throws<ExcelParseException>(
+                () => new ExcelParser<MoneyRow>(config).Parse(reader).ToList());
+            Assert.Equal("Amount", ex.ColumnName);
+            Assert.Equal("not-a-number", ex.RawValue);
+        }
+
+        [Fact]
+        public async Task DefaultConfigLeavesUnparseableNonRequiredColumnAtDefault()
+        {
+            // Same input as ThrowOnParseFailureThrowsForUnparseableNonRequiredColumn, default config:
+            // stays lenient (pre-existing behavior, unchanged by F3 — see also InvariantCultureRejectsCommaDecimal).
+            await using var ms = await TypedWorkbook.BuildAsync(["Name", "Amount"], ["Conta", "not-a-number"]);
+            await using var reader = await Excel.FromAsync(ms, ct: TestContext.Current.CancellationToken);
+
+            MoneyRow row = new ExcelParser<MoneyRow>().Parse(reader).Single();
+
+            Assert.Equal(0m, row.Amount);
+        }
+
         // --- #4 Enum + Guid ---
 
         [Fact]

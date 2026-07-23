@@ -22,6 +22,7 @@ namespace ExcelReader.Core.Parser.Internal
         private readonly StringComparer _comparer;
         private readonly HeaderNormalization _normalization;
         private readonly int _headerRow;
+        private readonly bool _throwOnParseFailure;
 
         internal NamedRefRowEnumerable(
             TReader reader,
@@ -29,13 +30,15 @@ namespace ExcelReader.Core.Parser.Internal
             StringComparer comparer,
             HeaderNormalization normalization,
             int headerRow,
-            IFormatProvider? formatProvider)
+            IFormatProvider? formatProvider,
+            bool throwOnParseFailure = false)
         {
             _reader = reader;
             _typeInfo = typeInfo;
             _comparer = comparer;
             _normalization = normalization;
             _headerRow = headerRow;
+            _throwOnParseFailure = throwOnParseFailure;
             _context = new ExcelRowContext(reader.IsDate1904, formatProvider ?? CultureInfo.InvariantCulture);
         }
 
@@ -44,7 +47,7 @@ namespace ExcelReader.Core.Parser.Internal
             Justification = "The enumerator is a class so the same type can also expose MoveNextAsync for the async path.")]
         public NamedRefRowEnumerator<TModel, TEnumerator> GetEnumerator()
         {
-            return new(_reader.GetEnumerator(), _context, _typeInfo, _comparer, _normalization, _headerRow);
+            return new(_reader.GetEnumerator(), _context, _typeInfo, _comparer, _normalization, _headerRow, _throwOnParseFailure);
         }
 
         // The 'await foreach' entry point: C#'s pattern-based async binding picks up this parameterless
@@ -56,7 +59,7 @@ namespace ExcelReader.Core.Parser.Internal
             Justification = "The enumerator is a class so the same type can also expose MoveNextAsync for the async path.")]
         public NamedRefRowEnumerator<TModel, TEnumerator> GetAsyncEnumerator()
         {
-            return new(_reader.GetAsyncEnumerator(), _context, _typeInfo, _comparer, _normalization, _headerRow);
+            return new(_reader.GetAsyncEnumerator(), _context, _typeInfo, _comparer, _normalization, _headerRow, _throwOnParseFailure);
         }
 
         // Manual-use alternative that opens the sheet asynchronously (awaits the reader's async open).
@@ -65,7 +68,7 @@ namespace ExcelReader.Core.Parser.Internal
         public async ValueTask<NamedRefRowEnumerator<TModel, TEnumerator>> GetAsyncEnumeratorAsync(CancellationToken ct = default)
         {
             var enumerator = await _reader.GetAsyncEnumeratorAsync(ct).ConfigureAwait(false);
-            return new(enumerator, _context, _typeInfo, _comparer, _normalization, _headerRow);
+            return new(enumerator, _context, _typeInfo, _comparer, _normalization, _headerRow, _throwOnParseFailure);
         }
 
         IEnumerator<TModel> IEnumerable<TModel>.GetEnumerator()
