@@ -6,15 +6,17 @@ namespace ExcelReader.Core.Reader
 {
     public sealed partial class CsvReader
     {
-        // Forward-only record scanner over a pooled buffer, structured like XlsxReader.Enumerator:
-        // a single moving cursor (_pos) into _buf, refilled/compacted via BufferedStreamCursor. Most
-        // fields (unquoted, or quoted without a doubled "") are already contiguous bytes in _buf, so
-        // cells reference that buffer directly with no copy; only fields needing unescaping fall back
-        // to CellAccumulator's value buffer, whose contents stay valid across the compaction that the
-        // next MoveNext may trigger. Records are parsed from buffered bytes only (TryParseRecordFromBuffer,
-        // no stream I/O); when a record is only partially buffered the parse restarts after a refill, so
-        // sync and async share one parser and the async path awaits once per refill, not per field.
         /// <summary>A forward-only cursor over a <see cref="CsvReader"/> source's records, reading either synchronously or asynchronously.</summary>
+        /// <remarks>
+        /// Structured like <c>XlsxReader.Enumerator</c>: a single moving cursor (<c>_pos</c>) into the pooled buffer,
+        /// refilled/compacted via <see cref="BufferedStreamCursor"/>. Most fields (unquoted, or quoted without a doubled
+        /// <c>""</c>) are already contiguous bytes in the buffer, so cells reference it directly with no copy; only
+        /// fields needing unescaping fall back to the cell accumulator's value buffer, whose contents stay valid
+        /// across the compaction that the next <c>MoveNext</c> may trigger. Records are parsed from buffered bytes
+        /// only, with no stream I/O; when a record is only partially buffered the parse restarts after a refill, so
+        /// the synchronous and asynchronous paths share one parser and the async path awaits once per refill, not
+        /// per field.
+        /// </remarks>
         [SuppressMessage("Design", "CA1034:Nested types should not be visible",
             Justification = "Public nested enumerator is the standard foreach pattern.")]
         public sealed class Enumerator : PooledStreamRowEnumerator, IExcelRowEnumerator

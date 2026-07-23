@@ -70,9 +70,11 @@ namespace ExcelReader.Core.Writer
             }
         }
 
-        // Lowercase "true"/"false" — the only spellings ColumnParserFactory's IsTruthy recognizes
-        // besides "1", so a written bool round-trips through ExcelParser<T> unchanged.
         /// <inheritdoc/>
+        /// <remarks>
+        /// Writes lowercase "true"/"false" — the only spellings ColumnParserFactory's IsTruthy recognizes
+        /// besides "1", so a written bool round-trips through ExcelParser&lt;T&gt; unchanged.
+        /// </remarks>
         public void Write(bool value)
         {
             ThrowIfDisposed();
@@ -87,9 +89,11 @@ namespace ExcelReader.Core.Writer
             Write(value.Value);
         }
 
-        // Round-trip ISO 8601 ("O"): unambiguous, culture-independent, and — for the common
-        // no-offset shape — exactly what ColumnParserFactory's CSV date fast path recognizes.
         /// <inheritdoc/>
+        /// <remarks>
+        /// Writes the round-trip ISO 8601 ("O") format: unambiguous, culture-independent, and — for
+        /// the common no-offset shape — exactly what ColumnParserFactory's CSV date fast path recognizes.
+        /// </remarks>
         public void Write(DateTime value)
         {
             ThrowIfDisposed();
@@ -104,8 +108,11 @@ namespace ExcelReader.Core.Writer
             Write(value.Value);
         }
 
-        // DateOnly as ISO "yyyy-MM-dd" (the "O" round-trip form), which the CSV text-date parser reads back.
         /// <inheritdoc/>
+        /// <remarks>
+        /// Writes the value as ISO "yyyy-MM-dd" (the "O" round-trip form), which the CSV text-date
+        /// parser reads back.
+        /// </remarks>
         public void Write(DateOnly value)
         {
             ThrowIfDisposed();
@@ -120,9 +127,11 @@ namespace ExcelReader.Core.Writer
             Write(value.Value);
         }
 
-        // TimeOnly as an Excel-style time serial (fraction of a 24h day): a plain number the parser
-        // reconstructs via TryGetDouble, matching how the XLSX/XLSB row writers store it.
         /// <inheritdoc/>
+        /// <remarks>
+        /// Writes the value as an Excel-style time serial (fraction of a 24h day): a plain number the
+        /// parser reconstructs via TryGetDouble, matching how the XLSX/XLSB row writers store it.
+        /// </remarks>
         public void Write(TimeOnly value)
         {
             ThrowIfDisposed();
@@ -137,9 +146,11 @@ namespace ExcelReader.Core.Writer
             Write(value.Value);
         }
 
-        // IUtf8SpanFormattable (not ISpanFormattable): CSV output is UTF-8, so numbers format straight
-        // to bytes with no char buffer or transcode. Every BCL numeric type implements it.
         /// <inheritdoc/>
+        /// <remarks>
+        /// Constrained to IUtf8SpanFormattable (not ISpanFormattable): CSV output is UTF-8, so numbers
+        /// format straight to bytes with no char buffer or transcode. Every BCL numeric type implements it.
+        /// </remarks>
         public void Write<T>(T value)
             where T : IUtf8SpanFormattable
         {

@@ -5,29 +5,35 @@ using ExcelReader.Core.ValueObjects;
 
 namespace ExcelReader.Core.Parser.Internal
 {
-    // Reflection-based, attribute-driven ("[ExcelColumn]"/"[ExcelRequired]"/"[ExcelConverter]") ref
-    // struct row projector. Reuses TypeMapper<TModel>/TypeMapInfo<TModel>/ColumnParserFactory (widened
-    // to `allows ref struct` for this TFM) for reflection + Expression-tree byref setter compilation —
-    // the exact same machinery ExcelParser<T> already uses for classes/structs, now extended to ref
-    // structs too. NOT AOT/trim-safe (unlike IExcelRowModel<TSelf>'s manual FromRow path).
-    //
-    // Can't reuse RowProjector<T> directly: RowProjector<T>.Advance classifies AND parses a row in one
-    // call, immediately writing into a caller-supplied `ref T model`. Every existing caller stores
-    // that result in a class FIELD (SyncRowEnumerator<T,TRows>.CurrentValue) — illegal for a
-    // ref-struct-constrained T (CS8345: a ref struct field is only legal inside another ref struct).
-    // So this type splits the same two responsibilities instead: MoveNext()/MoveNextAsync() only
-    // advance/classify (skip pre-header rows, build the column map once at the header row), and Current's
-    // getter parses the row into a fresh LOCAL model on every access — never stored as a field, safe to
-    // call repeatedly (idempotent) for the same row.
-    //
-    // A reference type (not a struct): MoveNextAsync's awaiting slow path mutates enumeration state
-    // (_rowNumber, and the one-time column map) across an await, which a struct would silently lose to the
-    // async state machine's by-value `this` copy. A class shares the one instance, exactly like
-    // AsyncRowEnumerator<T,TReader,TRows>. The lazy-Current design above is still required regardless:
-    // a ref-struct TModel can never be stored in a field (CS8345), class or struct.
     /// <summary>A forward-only, zero-model-allocation cursor over rows bound by attribute to a ref struct model type, driven by <c>MoveNext</c>/<c>MoveNextAsync</c> and read via <see cref="Current"/>.</summary>
     /// <typeparam name="TModel">The ref-struct-capable row model type to bind each row to.</typeparam>
     /// <typeparam name="TEnumerator">The concrete row enumerator type this instance pulls rows from.</typeparam>
+    /// <remarks>
+    /// Reflection-based, attribute-driven (<c>[ExcelColumn]</c>/<c>[ExcelRequired]</c>/<c>[ExcelConverter]</c>)
+    /// ref struct row projector. Reuses <c>TypeMapper&lt;TModel&gt;</c>/<c>TypeMapInfo&lt;TModel&gt;</c>/<c>ColumnParserFactory</c>
+    /// (widened to <c>allows ref struct</c> for this TFM) — the same machinery <c>ExcelParser&lt;T&gt;</c>
+    /// already uses for classes/structs, now extended to ref structs too. NOT AOT/trim-safe (unlike
+    /// <c>IExcelRowModel&lt;TSelf&gt;</c>'s manual <c>FromRow</c> path).
+    /// <para>
+    /// Can't reuse <c>RowProjector&lt;T&gt;</c> directly: its <c>Advance</c> classifies AND parses a row in
+    /// one call, immediately writing into a caller-supplied <c>ref T model</c>. Every existing caller
+    /// stores that result in a class field (<c>SyncRowEnumerator&lt;T,TRows&gt;.CurrentValue</c>) —
+    /// illegal for a ref-struct-constrained <c>T</c> (CS8345: a ref struct field is only legal inside
+    /// another ref struct). So this type splits the same two responsibilities instead:
+    /// <c>MoveNext()</c>/<c>MoveNextAsync()</c> only advance/classify (skip pre-header rows, build the
+    /// column map once at the header row), and <see cref="Current"/>'s getter parses the row into a
+    /// fresh local model on every access — never stored as a field, safe to call repeatedly (idempotent)
+    /// for the same row.
+    /// </para>
+    /// <para>
+    /// A reference type, not a struct: <c>MoveNextAsync</c>'s awaiting slow path mutates enumeration
+    /// state (the row number, and the one-time column map) across an await, which a struct would
+    /// silently lose to the async state machine's by-value <c>this</c> copy. A class shares the one
+    /// instance, exactly like <c>AsyncRowEnumerator&lt;T,TReader,TRows&gt;</c>. The lazy-<see cref="Current"/>
+    /// design above is still required regardless: a ref-struct <typeparamref name="TModel"/> can never
+    /// be stored in a field (CS8345), class or struct.
+    /// </para>
+    /// </remarks>
     public sealed class NamedRefRowEnumerator<TModel, TEnumerator> : IDisposable, IAsyncDisposable
         where TModel : allows ref struct
         where TEnumerator : class, IExcelRowEnumerator
@@ -66,7 +72,6 @@ namespace ExcelReader.Core.Parser.Internal
         }
 
         /// <summary>Gets the row at the enumerator's current position, freshly parsed into a new model instance on every access.</summary>
-        // Recomputed on every access (see class remarks) — never cached in a field.
         public TModel Current
         {
             get

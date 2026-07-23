@@ -109,9 +109,11 @@ namespace ExcelReader.Core.Writer
             Write(value.Value);
         }
 
-        // DateOnly shares the DateTime date-serial cell format (midnight), so it round-trips as a date.
         /// <inheritdoc/>
         /// <exception cref="ObjectDisposedException">The row has already been disposed.</exception>
+        /// <remarks>
+        /// Shares the <see cref="DateTime"/> date-serial cell format (midnight), so it round-trips as a date.
+        /// </remarks>
         public void Write(DateOnly value)
         {
             ThrowIfDisposed();
@@ -132,10 +134,12 @@ namespace ExcelReader.Core.Writer
             Write(value.Value);
         }
 
-        // TimeOnly is written as an Excel time serial: the fraction of a 24h day, in [0,1). This is a
-        // plain number cell (no date style); ExcelParser<T> reconstructs the TimeOnly from the fraction.
         /// <inheritdoc/>
         /// <exception cref="ObjectDisposedException">The row has already been disposed.</exception>
+        /// <remarks>
+        /// Written as an Excel time serial: the fraction of a 24h day, in [0,1). This is a plain number
+        /// cell (no date style); <c>ExcelParser&lt;T&gt;</c> reconstructs the <see cref="TimeOnly"/> from the fraction.
+        /// </remarks>
         public void Write(TimeOnly value)
         {
             ThrowIfDisposed();
@@ -335,13 +339,16 @@ namespace ExcelReader.Core.Writer
             return _owner.EndBufferedRowAsync();
         }
 
-        // Sync counterpart for callers on XlsxSheetWriter.StartRow's synchronous fast path (see
-        // SheetWriterExtensions.WriteRecordsAsync's XlsxSheetWriter-specific overload): avoids the
-        // per-row await entirely when the destination stream write only happens on the rare
-        // buffer-threshold flush, which EndBufferedRow already does synchronously.
         /// <summary>
         /// Synchronous counterpart to <see cref="DisposeAsync"/>: ends the row and, on the rare buffer-threshold flush, writes to the destination stream synchronously.
         /// </summary>
+        /// <remarks>
+        /// Exists for callers on <see cref="XlsxSheetWriter"/>'s synchronous <c>StartRow</c> fast path (see
+        /// <see cref="SheetWriterExtensions"/>'s <see cref="XlsxSheetWriter"/>-specific
+        /// <c>WriteRecordsAsync</c> overload): avoids the per-row await entirely, since the destination
+        /// stream write only happens on the rare buffer-threshold flush, which <c>EndBufferedRow</c>
+        /// already does synchronously.
+        /// </remarks>
         public void Dispose()
         {
             if (_disposed)

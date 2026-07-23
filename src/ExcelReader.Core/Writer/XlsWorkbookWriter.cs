@@ -3,14 +3,16 @@ using ExcelReader.Core.Writer.Internal;
 
 namespace ExcelReader.Core.Writer
 {
-    // Writes a BIFF8 (.xls) workbook in the same shape as XlsxWorkbookWriter (XLSX). Unlike the ZIP
-    // writer, records are buffered in memory and the OLE container is assembled in EndAsync: the
-    // BoundSheet offsets in the globals and the OLE FAT both need stream sizes known only at the
-    // end. Rows beyond the BIFF8 per-sheet cap (65,536) overflow into auto-generated continuation
-    // sheets, so memory scales with total row count rather than being bounded per-sheet.
     /// <summary>
     /// Writes a workbook to the legacy BIFF8 (.xls) binary format.
     /// </summary>
+    /// <remarks>
+    /// Structured the same way as <see cref="XlsxWorkbookWriter"/> (XLSX). Unlike the ZIP writer, records
+    /// are buffered in memory and the OLE container is assembled in <see cref="EndAsync"/>: the BoundSheet
+    /// offsets in the globals and the OLE FAT both need stream sizes known only at the end. Rows beyond
+    /// the BIFF8 per-sheet cap (65,536) overflow into auto-generated continuation sheets, so memory scales
+    /// with total row count rather than being bounded per sheet.
+    /// </remarks>
     public sealed class XlsWorkbookWriter : IWorkbookWriter<XlsSheetWriter>
     {
         private readonly Stream _stream;
@@ -50,8 +52,8 @@ namespace ExcelReader.Core.Writer
             _state = WriterState.Started;
         }
 
-        // XLS assembles the OLE container synchronously in EndAsync; StartAsync just wraps Start().
         /// <inheritdoc/>
+        /// <remarks>XLS assembles the OLE container synchronously in <see cref="EndAsync"/>; this just wraps <see cref="Start"/>.</remarks>
         public ValueTask StartAsync(CancellationToken ct = default)
         {
             ct.ThrowIfCancellationRequested();

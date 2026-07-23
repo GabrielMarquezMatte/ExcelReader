@@ -25,15 +25,17 @@ namespace ExcelReader.Core.Reader
         ValueTask<TEnumerator> GetAsyncEnumeratorAsync(CancellationToken ct = default);
     }
 
-    // The non-generic reader is the generic one specialized to the interface enumerator, plus a
-    // sheet-navigation surface and dispose. Unifying them lets the typed parser drive a
-    // format-agnostic reader (Excel.Open) and lets callers walk every sheet without downcasting to
-    // the concrete XlsxReader/XlsbReader/XlsReader type.
     /// <summary>
     /// Format-agnostic workbook reader implemented by every concrete reader (XLSX, XLSB, XLS, CSV),
     /// exposing row enumeration plus sheet navigation without requiring callers to downcast to the
     /// concrete reader type.
     /// </summary>
+    /// <remarks>
+    /// This is the generic <see cref="IExcelRowReader{TEnumerator}"/> specialized to <see cref="IExcelRowEnumerator"/>,
+    /// plus a sheet-navigation surface and dispose; unifying them lets the typed parser drive a format-agnostic
+    /// reader (<see cref="Excel.Open(string, ExcelReaderOptions?)"/>) and lets callers walk every sheet without
+    /// downcasting to the concrete <c>XlsxReader</c>/<c>XlsbReader</c>/<c>XlsReader</c> type.
+    /// </remarks>
     public interface IExcelRowReader : IExcelRowReader<IExcelRowEnumerator>, IDisposable, IAsyncDisposable
     {
         /// <summary>Gets the name of the currently selected sheet.</summary>

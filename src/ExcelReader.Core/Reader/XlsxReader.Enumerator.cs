@@ -9,9 +9,8 @@ namespace ExcelReader.Core.Reader
 {
     public sealed partial class XlsxReader
     {
-        // Forward-only, low-memory worksheet scanner. Streams the sheet through a refillable pooled
-        // buffer; a single <c>...</c> element is guaranteed contiguous (the buffer grows if needed).
         /// <summary>Forward-only enumerator over an <see cref="XlsxReader"/> sheet's rows.</summary>
+        /// <remarks>Low-memory: streams the sheet through a refillable pooled buffer, growing it as needed so a single <c>&lt;c&gt;...&lt;/c&gt;</c> element is always guaranteed contiguous.</remarks>
         [SuppressMessage("Design", "CA1034:Nested types should not be visible",
             Justification = "Public nested enumerator is the standard foreach pattern.")]
         public sealed class Enumerator : PooledStreamRowEnumerator, IExcelRowEnumerator

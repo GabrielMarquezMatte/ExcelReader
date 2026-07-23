@@ -92,13 +92,15 @@ namespace ExcelReader.Core.Writer
             return ValueTask.FromResult(_rowWriter);
         }
 
-        // Sync counterpart to StartRowAsync: row buffering and the (rare) threshold flush are already
-        // fully synchronous internally (BeginRow, EndBufferedRow), so a caller that never needs to
-        // await mid-row (e.g. SheetWriterExtensions.WriteRecordsAsync's XlsxSheetWriter-specific overload)
-        // can skip the per-row ValueTask/async-disposable machinery entirely.
         /// <summary>
         /// Starts a new row without the async/await machinery of <see cref="StartRowAsync(CancellationToken)"/>, for callers that never need to await mid-row.
         /// </summary>
+        /// <remarks>
+        /// Safe because row buffering and the (rare) threshold flush (<c>BeginRow</c>, <c>EndBufferedRow</c>)
+        /// are already fully synchronous internally, so a caller that never needs to await mid-row (e.g.
+        /// <see cref="SheetWriterExtensions"/>'s <see cref="XlsxSheetWriter"/>-specific <c>WriteRecordsAsync</c>
+        /// overload) can skip the per-row <see cref="ValueTask"/>/async-disposable machinery entirely.
+        /// </remarks>
         /// <param name="ct">A token checked before the row starts; the row buffering itself is fully synchronous.</param>
         /// <returns>The reusable <see cref="XlsxRowWriter"/> for the new row.</returns>
         /// <exception cref="ObjectDisposedException">The sheet has already been ended.</exception>

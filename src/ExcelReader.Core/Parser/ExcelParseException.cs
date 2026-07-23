@@ -2,16 +2,16 @@ using System.Globalization;
 
 namespace ExcelReader.Core.Parser
 {
-    // Thrown when a bound column's cell is non-empty but fails to parse into the target property type,
-    // and ExcelParserConfig.ThrowOnParseFailure is true. With the default (false), a parse failure on a
-    // non-required column silently keeps the property at its default (existing, pre-F3 behavior); a
-    // parse failure on an [ExcelRequired] column instead surfaces as ProjectionRules.MissingRequiredValue
-    // regardless of this flag, since the column effectively has no usable value either way.
     /// <summary>
     /// Thrown when a bound column's cell is non-empty but fails to parse into the target property type
     /// and the parser is configured to throw on parse failures (rather than silently keep the property
-    /// at its default).
+    /// at its default). See <see cref="ExcelParserConfig.ThrowOnParseFailure"/>.
     /// </summary>
+    /// <remarks>
+    /// A parse failure on an <c>[ExcelRequired]</c> column always surfaces as a missing-required-value
+    /// error instead, regardless of <see cref="ExcelParserConfig.ThrowOnParseFailure"/>, since the column
+    /// has no usable value either way.
+    /// </remarks>
     public sealed class ExcelParseException : Exception
     {
         /// <summary>Creates an exception with no message.</summary>
