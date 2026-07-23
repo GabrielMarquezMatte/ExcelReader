@@ -1,6 +1,5 @@
 #if NET9_0_OR_GREATER
 using System.Diagnostics.CodeAnalysis;
-using ExcelReader.Core.Enums;
 using ExcelReader.Core.Reader;
 using ExcelReader.Core.ValueObjects;
 
@@ -38,7 +37,8 @@ namespace ExcelReader.Core.Parser.Internal
         private readonly StringComparer _comparer;
         private readonly HeaderNormalization _normalization;
         private readonly int _headerRow;
-        private NamedColumnBinding<TModel>[]? _bindings;
+        private readonly bool _throwOnParseFailure;
+        private ColumnBinding<TModel>[]? _bindings;
         private bool[] _seen;
         private int _requireValueCount;
         private int _rowNumber;
@@ -49,7 +49,8 @@ namespace ExcelReader.Core.Parser.Internal
             TypeMapInfo<TModel> typeInfo,
             StringComparer comparer,
             HeaderNormalization normalization,
-            int headerRow)
+            int headerRow,
+            bool throwOnParseFailure = false)
         {
             _rows = rows;
             _context = context;
@@ -57,6 +58,7 @@ namespace ExcelReader.Core.Parser.Internal
             _comparer = comparer;
             _normalization = normalization;
             _headerRow = headerRow;
+            _throwOnParseFailure = throwOnParseFailure;
             _seen = [];
         }
 
@@ -148,116 +150,16 @@ namespace ExcelReader.Core.Parser.Internal
 
         private void BuildColumnMap(Row row)
         {
-            int propertyCount = _typeInfo.PropertyCount;
-            int[] columns = new int[propertyCount];
-            int[] aliasIndexes = new int[propertyCount];
-            var parsers = new ColumnParser<TModel>?[propertyCount];
-            Array.Fill(aliasIndexes, int.MaxValue);
-
-            int bindingCount = 0;
-            foreach (RowCell rowCell in row.Cells)
-            {
-                Cell cell = rowCell.Value;
-                string header = _normalization.Apply(cell.GetString());
-                if (string.IsNullOrEmpty(header))
-                {
-                    continue;
-                }
-                if (!_typeInfo.TryFindHeader(header, _comparer, _normalization, out HeaderMatch<TModel> match))
-                {
-                    continue;
-                }
-                if (match.AliasIndex >= aliasIndexes[match.PropertyIndex])
-                {
-                    continue;
-                }
-                if (aliasIndexes[match.PropertyIndex] == int.MaxValue)
-                {
-                    bindingCount++;
-                }
-                columns[match.PropertyIndex] = rowCell.ColumnIndex;
-                parsers[match.PropertyIndex] = match.Parser;
-                aliasIndexes[match.PropertyIndex] = match.AliasIndex;
-            }
-
-            _typeInfo.ValidateRequiredColumns(aliasIndexes);
-
-            var bindings = new NamedColumnBinding<TModel>[bindingCount];
-            int index = 0;
-            int requireValueCount = 0;
-            for (int i = 0; i < parsers.Length; i++)
-            {
-                ColumnParser<TModel>? parser = parsers[i];
-                if (parser is not null)
-                {
-                    bool requireValue = _typeInfo.RequiresValue(i);
-                    if (requireValue)
-                    {
-                        requireValueCount++;
-                    }
-                    bindings[index++] = new NamedColumnBinding<TModel>(columns[i], parser, requireValue, _typeInfo.DisplayName(i));
-                }
-            }
-            Array.Sort(bindings, static (left, right) => left.Column.CompareTo(right.Column));
-            _bindings = bindings;
+            _bindings = SparseRowProjection.BuildColumnMap(in row, _typeInfo, _comparer, _normalization, out int requireValueCount);
             _requireValueCount = requireValueCount;
-            _seen = requireValueCount > 0 ? new bool[bindings.Length] : [];
+            _seen = requireValueCount > 0 ? new bool[_bindings.Length] : [];
         }
 
         private void ParseCurrentRow(Row row, ref TModel model)
         {
-            NamedColumnBinding<TModel>[] bindings = _bindings!;
             bool track = _requireValueCount > 0;
-            if (track)
-            {
-                Array.Clear(_seen, 0, bindings.Length);
-            }
-            int bindingIndex = 0;
-            foreach (RowCell rowCell in row.Cells)
-            {
-                int column = rowCell.ColumnIndex;
-                while (bindingIndex < bindings.Length && bindings[bindingIndex].Column < column)
-                {
-                    bindingIndex++;
-                }
-                if (bindingIndex == bindings.Length)
-                {
-                    break;
-                }
-                ref readonly NamedColumnBinding<TModel> binding = ref bindings[bindingIndex];
-                if (binding.Column != column)
-                {
-                    continue;
-                }
-                Cell cell = rowCell.Value;
-                if (cell.Type == CellType.Empty)
-                {
-                    bindingIndex++;
-                    continue;
-                }
-                binding.Parser(ref model, in cell, _context.IsDate1904, _context.FormatProvider);
-                if (track && binding.RequireValue)
-                {
-                    _seen[bindingIndex] = true;
-                }
-                bindingIndex++;
-            }
-            if (track)
-            {
-                ValidateRowValues(bindings);
-            }
-        }
-
-        private void ValidateRowValues(NamedColumnBinding<TModel>[] bindings)
-        {
-            for (int i = 0; i < bindings.Length; i++)
-            {
-                ref readonly var binding = ref bindings[i];
-                if (binding.RequireValue && !_seen[i])
-                {
-                    throw ProjectionRules.MissingRequiredValue(binding.Name, _rowNumber);
-                }
-            }
+            SparseRowProjection.ParseRow(
+                in row, _bindings!, _seen, track, _context.IsDate1904, _context.FormatProvider, _throwOnParseFailure, _rowNumber, ref model);
         }
 
         [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP007:Don't dispose injected",

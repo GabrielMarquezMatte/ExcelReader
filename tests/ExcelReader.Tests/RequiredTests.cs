@@ -122,6 +122,35 @@ namespace ExcelReader.Tests
         }
 
         [Fact]
+        public async Task RequiredColumnWithUnparseableValueThrowsAsIfMissing()
+        {
+            // "Id" is [ExcelRequired] and its cell is present and non-empty ("oops"), but "oops" isn't
+            // a valid int — F3: this must fail the same way an empty required cell would, instead of
+            // silently leaving Id at its default (0).
+            await using var ms = await TypedWorkbook.BuildAsync(["Id", "FullName"], ["oops", "Alice"]);
+            await using var reader = await Excel.FromAsync(ms, ct: TestContext.Current.CancellationToken);
+
+            InvalidOperationException ex = Assert.Throws<InvalidOperationException>(
+                () => new ExcelParser<Row>().Parse(reader).ToList());
+            Assert.Contains("Id", ex.Message, StringComparison.Ordinal);
+        }
+
+        [Fact]
+        public async Task ThrowOnParseFailureReportsColumnAndRawValueEvenForRequiredColumn()
+        {
+            // ThrowOnParseFailure takes priority over the "missing required value" message: the caller
+            // asked for the more specific diagnostic (row/column/raw text), not the generic one.
+            await using var ms = await TypedWorkbook.BuildAsync(["Id", "FullName"], ["oops", "Alice"]);
+            await using var reader = await Excel.FromAsync(ms, ct: TestContext.Current.CancellationToken);
+            var config = new ExcelParserConfig { ThrowOnParseFailure = true };
+
+            ExcelParseException ex = Assert.Throws<ExcelParseException>(
+                () => new ExcelParser<Row>(config).Parse(reader).ToList());
+            Assert.Equal("Id", ex.ColumnName);
+            Assert.Equal("oops", ex.RawValue);
+        }
+
+        [Fact]
         public async Task AbsentCellInRequiredColumnThrows()
         {
             // Two columns in the header; the second data row omits the Code cell entirely (short row).

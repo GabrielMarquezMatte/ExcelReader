@@ -20,6 +20,14 @@ ExcelReader.Core.Parser.ExcelConverterAttribute.ConverterType.get -> System.Type
 ExcelReader.Core.Parser.ExcelConverterAttribute.ExcelConverterAttribute(System.Type! converterType) -> void
 ExcelReader.Core.Parser.ExcelIgnoreAttribute
 ExcelReader.Core.Parser.ExcelIgnoreAttribute.ExcelIgnoreAttribute() -> void
+ExcelReader.Core.Parser.ExcelParseException
+ExcelReader.Core.Parser.ExcelParseException.ColumnName.get -> string!
+ExcelReader.Core.Parser.ExcelParseException.ExcelParseException() -> void
+ExcelReader.Core.Parser.ExcelParseException.ExcelParseException(int row, string! columnName, string! rawValue) -> void
+ExcelReader.Core.Parser.ExcelParseException.ExcelParseException(string! message) -> void
+ExcelReader.Core.Parser.ExcelParseException.ExcelParseException(string! message, System.Exception! innerException) -> void
+ExcelReader.Core.Parser.ExcelParseException.RawValue.get -> string!
+ExcelReader.Core.Parser.ExcelParseException.Row.get -> int
 ExcelReader.Core.Parser.ExcelParser<T>
 ExcelReader.Core.Parser.ExcelParser<T>.ExcelParser(ExcelReader.Core.Parser.ExcelParserConfig? config = null) -> void
 ExcelReader.Core.Parser.ExcelParser<T>.Parse(ExcelReader.Core.Reader.CsvReader! reader) -> ExcelReader.Core.Parser.Internal.CsvEnumerable<T>!
@@ -42,6 +50,8 @@ ExcelReader.Core.Parser.ExcelParserConfig.HeaderNormalization.get -> ExcelReader
 ExcelReader.Core.Parser.ExcelParserConfig.HeaderNormalization.init -> void
 ExcelReader.Core.Parser.ExcelParserConfig.HeaderRow.get -> int
 ExcelReader.Core.Parser.ExcelParserConfig.HeaderRow.init -> void
+ExcelReader.Core.Parser.ExcelParserConfig.ThrowOnParseFailure.get -> bool
+ExcelReader.Core.Parser.ExcelParserConfig.ThrowOnParseFailure.init -> void
 ExcelReader.Core.Parser.ExcelRequiredAttribute
 ExcelReader.Core.Parser.ExcelRequiredAttribute.AllowEmpty.get -> bool
 ExcelReader.Core.Parser.ExcelRequiredAttribute.AllowEmpty.set -> void

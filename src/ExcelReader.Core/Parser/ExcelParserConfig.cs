@@ -12,5 +12,12 @@ namespace ExcelReader.Core.Parser
         // Binary numeric cells (XLS/XLSB) carry a raw double and ignore this. Defaults to invariant
         // to preserve existing behavior.
         public CultureInfo Culture { get; init; } = CultureInfo.InvariantCulture;
+
+        // When true, a non-empty cell that fails to parse into its bound property's type throws
+        // ExcelParseException instead of silently leaving the property at its default. Defaults to
+        // false to preserve existing lenient behavior. Independent of [ExcelRequired]: a required
+        // column whose cell fails to parse always throws (as "missing required value"), regardless
+        // of this flag, since the property never actually received a value either way.
+        public bool ThrowOnParseFailure { get; init; }
     }
 }

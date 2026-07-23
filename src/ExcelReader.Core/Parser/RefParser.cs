@@ -37,7 +37,7 @@ namespace ExcelReader.Core.Parser
             ArgumentNullException.ThrowIfNull(reader);
             config ??= new ExcelParserConfig();
             return new NamedRefRowEnumerable<TModel, XlsxReader, XlsxReader.Enumerator>(
-                reader, TypeMapper<TModel>.GetInfo(), config.ColumnNameComparer, config.HeaderNormalization, config.HeaderRow, config.Culture);
+                reader, TypeMapper<TModel>.GetInfo(), config.ColumnNameComparer, config.HeaderNormalization, config.HeaderRow, config.Culture, config.ThrowOnParseFailure);
         }
 
         [RequiresUnreferencedCode("ParseNamed reflects over TModel's public properties, which trimming may remove.")]
@@ -49,7 +49,7 @@ namespace ExcelReader.Core.Parser
             ArgumentNullException.ThrowIfNull(reader);
             config ??= new ExcelParserConfig();
             return new NamedRefRowEnumerable<TModel, XlsbReader, XlsbReader.Enumerator>(
-                reader, TypeMapper<TModel>.GetInfo(), config.ColumnNameComparer, config.HeaderNormalization, config.HeaderRow, config.Culture);
+                reader, TypeMapper<TModel>.GetInfo(), config.ColumnNameComparer, config.HeaderNormalization, config.HeaderRow, config.Culture, config.ThrowOnParseFailure);
         }
 
         [RequiresUnreferencedCode("ParseNamed reflects over TModel's public properties, which trimming may remove.")]
@@ -61,7 +61,7 @@ namespace ExcelReader.Core.Parser
             ArgumentNullException.ThrowIfNull(reader);
             config ??= new ExcelParserConfig();
             return new NamedRefRowEnumerable<TModel, XlsReader, XlsReader.Enumerator>(
-                reader, TypeMapper<TModel>.GetInfo(), config.ColumnNameComparer, config.HeaderNormalization, config.HeaderRow, config.Culture);
+                reader, TypeMapper<TModel>.GetInfo(), config.ColumnNameComparer, config.HeaderNormalization, config.HeaderRow, config.Culture, config.ThrowOnParseFailure);
         }
 
         // CSV uses TypeMapper<TModel>.GetCsvInfo() — the only difference is DateTime/DateOnly/TimeOnly
@@ -75,7 +75,7 @@ namespace ExcelReader.Core.Parser
             ArgumentNullException.ThrowIfNull(reader);
             config ??= new ExcelParserConfig();
             return new NamedRefRowEnumerable<TModel, CsvReader, CsvReader.Enumerator>(
-                reader, TypeMapper<TModel>.GetCsvInfo(), config.ColumnNameComparer, config.HeaderNormalization, config.HeaderRow, config.Culture);
+                reader, TypeMapper<TModel>.GetCsvInfo(), config.ColumnNameComparer, config.HeaderNormalization, config.HeaderRow, config.Culture, config.ThrowOnParseFailure);
         }
 
         // Format-agnostic entry point for the reader returned by Excel.Open, so callers need not
@@ -89,7 +89,7 @@ namespace ExcelReader.Core.Parser
             ArgumentNullException.ThrowIfNull(reader);
             config ??= new ExcelParserConfig();
             return new NamedRefRowEnumerable<TModel, IExcelRowReader, IExcelRowEnumerator>(
-                reader, TypeMapper<TModel>.GetInfo(), config.ColumnNameComparer, config.HeaderNormalization, config.HeaderRow, config.Culture);
+                reader, TypeMapper<TModel>.GetInfo(), config.ColumnNameComparer, config.HeaderNormalization, config.HeaderRow, config.Culture, config.ThrowOnParseFailure);
         }
     }
 }

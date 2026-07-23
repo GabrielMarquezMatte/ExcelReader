@@ -40,7 +40,7 @@ namespace ExcelReader.Core.Parser.Internal
         {
             TypeMapInfo<T> info = TypeMapper<T>.GetInfo();
             TEnumerator rows = _reader.GetEnumerator();
-            return new Enumerator(rows, info, _config.ColumnNameComparer, _config.HeaderNormalization, _config.HeaderRow, _reader.IsDate1904, _config.Culture);
+            return new Enumerator(rows, info, _config.ColumnNameComparer, _config.HeaderNormalization, _config.HeaderRow, _reader.IsDate1904, _config.Culture, _config.ThrowOnParseFailure);
         }
 
         IEnumerator<T> IEnumerable<T>.GetEnumerator()
@@ -66,7 +66,7 @@ namespace ExcelReader.Core.Parser.Internal
         {
             TypeMapInfo<T> info = TypeMapper<T>.GetInfo();
             CancellationToken effective = cancellationToken.CanBeCanceled ? cancellationToken : _ct;
-            return new AsyncEnumerator(_reader, info, _config.ColumnNameComparer, _config.HeaderNormalization, _config.HeaderRow, _config.Culture, effective);
+            return new AsyncEnumerator(_reader, info, _config.ColumnNameComparer, _config.HeaderNormalization, _config.HeaderRow, _config.Culture, _config.ThrowOnParseFailure, effective);
         }
 
         public sealed class Enumerator : SyncRowEnumerator<T, TEnumerator>
@@ -80,10 +80,11 @@ namespace ExcelReader.Core.Parser.Internal
                 HeaderNormalization normalization,
                 int headerRow,
                 bool isDate1904,
-                IFormatProvider provider)
+                IFormatProvider provider,
+                bool throwOnParseFailure = false)
                 : base(rows)
             {
-                _projector = new RowProjector<T>(typeInfo, comparer, normalization, headerRow, isDate1904, provider);
+                _projector = new RowProjector<T>(typeInfo, comparer, normalization, headerRow, isDate1904, provider, throwOnParseFailure);
             }
 
             private protected override ProjectionStep Project()
@@ -104,10 +105,11 @@ namespace ExcelReader.Core.Parser.Internal
                 HeaderNormalization normalization,
                 int headerRow,
                 IFormatProvider provider,
+                bool throwOnParseFailure,
                 CancellationToken ct)
                 : base(reader, ct)
             {
-                _projector = new RowProjector<T>(typeInfo, comparer, normalization, headerRow, reader.IsDate1904, provider);
+                _projector = new RowProjector<T>(typeInfo, comparer, normalization, headerRow, reader.IsDate1904, provider, throwOnParseFailure);
             }
 
             private protected override ProjectionStep Project()
