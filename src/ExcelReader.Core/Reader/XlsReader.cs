@@ -379,6 +379,19 @@ namespace ExcelReader.Core.Reader
                     pos++;
                     boundaryIdx++;
                 }
+
+                // A UTF-16 code unit may itself straddle a CONTINUE boundary. Its low byte belongs to
+                // the preceding run, followed by the continuation grbit, followed by its high byte.
+                // Decode that unit as wide regardless of the new grbit; the grbit controls the next unit.
+                if (!compressed && boundaryIdx < boundaries.Length && boundaries[boundaryIdx] == pos + 1)
+                {
+                    if (pos + 2 >= sst.Length) { truncated = true; break; }
+                    byte low = sst[pos++];
+                    compressed = (sst[pos++] & 1) == 0;
+                    boundaryIdx++;
+                    scratch[produced++] = (char)(low | (sst[pos++] << 8));
+                    continue;
+                }
                 int step = compressed ? 1 : 2;
                 if (pos + step > sst.Length) { truncated = true; break; }
                 scratch[produced++] = compressed
