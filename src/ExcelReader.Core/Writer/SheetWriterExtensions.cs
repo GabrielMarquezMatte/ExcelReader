@@ -5,8 +5,22 @@ namespace ExcelReader.Core.Writer
     // High-level wrapper over the low-level ISheetWriter<TRow>/IRowWriter pair: maps each record to a
     // row via the caller-supplied delegate and drives the StartRow/dispose lifecycle. Generic over TRow
     // so callers keep the concrete row writer's full Write overloads (int, double, DateTime, ...).
+    /// <summary>
+    /// Convenience methods layered on <see cref="ISheetWriter{TRow}"/>: write a whole collection of
+    /// records to a sheet in one call, driving the start-row/write/dispose lifecycle per record.
+    /// </summary>
     public static class SheetWriterExtensions
     {
+        /// <summary>
+        /// Writes one row per item in <paramref name="records"/>, calling <paramref name="writeRow"/>
+        /// for each to populate that row's cells.
+        /// </summary>
+        /// <typeparam name="T">The record type being written.</typeparam>
+        /// <typeparam name="TRow">The concrete row writer type.</typeparam>
+        /// <param name="sheet">The sheet to write rows to.</param>
+        /// <param name="records">The records to write, one row each, in enumeration order.</param>
+        /// <param name="writeRow">Populates a row's cells from a single record.</param>
+        /// <param name="ct">A token to cancel the operation between rows.</param>
         public static async ValueTask WriteRecordsAsync<T, TRow>(this ISheetWriter<TRow> sheet, IEnumerable<T> records,
                                                                  Action<TRow, T> writeRow,
                                                                  CancellationToken ct = default)
@@ -24,6 +38,16 @@ namespace ExcelReader.Core.Writer
             }
         }
 
+        /// <summary>
+        /// Writes one row per item produced by <paramref name="records"/>, calling <paramref name="writeRow"/>
+        /// for each to populate that row's cells.
+        /// </summary>
+        /// <typeparam name="T">The record type being written.</typeparam>
+        /// <typeparam name="TRow">The concrete row writer type.</typeparam>
+        /// <param name="sheet">The sheet to write rows to.</param>
+        /// <param name="records">The records to write, one row each, in enumeration order.</param>
+        /// <param name="writeRow">Populates a row's cells from a single record.</param>
+        /// <param name="ct">A token to cancel the operation between rows, and passed to the source enumerable.</param>
         public static async ValueTask WriteRecordsAsync<T, TRow>(this ISheetWriter<TRow> sheet,
                                                                  IAsyncEnumerable<T> records, Action<TRow, T> writeRow,
                                                                  CancellationToken ct = default)
@@ -45,6 +69,17 @@ namespace ExcelReader.Core.Writer
         // resolves in preference to the generic ISheetWriter<TRow> overload above whenever the caller's
         // static type is the concrete XlsxSheetWriter — e.g. plain IEnumerable<T> sources, which are the
         // overwhelming majority — skipping the per-row ValueTask/async-disposable machinery entirely.
+        /// <summary>
+        /// Writes one row per item in <paramref name="records"/> to an <see cref="XlsxSheetWriter"/> using
+        /// its synchronous fast path, calling <paramref name="writeRow"/> for each to populate that row's
+        /// cells. Behaviorally equivalent to the generic <see cref="ISheetWriter{TRow}"/> overload, but
+        /// resolved in preference to it when the caller's static sheet type is <see cref="XlsxSheetWriter"/>.
+        /// </summary>
+        /// <typeparam name="T">The record type being written.</typeparam>
+        /// <param name="sheet">The sheet to write rows to.</param>
+        /// <param name="records">The records to write, one row each, in enumeration order.</param>
+        /// <param name="writeRow">Populates a row's cells from a single record.</param>
+        /// <param name="ct">A token to cancel the operation between rows.</param>
         [SuppressMessage("Reliability", "CA1849:Call async methods when in an async method",
             Justification = "Deliberately using XlsxSheetWriter/XlsxRowWriter's synchronous fast path — see the comment above.")]
         [SuppressMessage("Sonar", "S6966:Await StartRowAsync instead",

@@ -26,8 +26,18 @@ namespace ExcelReader.Core.Parser
     // date columns is fully zero-alloc end to end — not just the container (see docs/performance-plan.md
     // P2, which measured the container-only win for a plain struct; this closes the remaining gap for
     // genuine ref structs too).
+    /// <summary>
+    /// Parses rows into instances of a <c>ref struct</c>-eligible model type by matching header columns to
+    /// properties decorated with <c>[ExcelColumn]</c>/<c>[ExcelRequired]</c>/<c>[ExcelConverter]</c>, the same
+    /// way <see cref="ExcelParser{T}"/> does for ordinary types.
+    /// </summary>
     public static class RefParser
     {
+        /// <summary>Parses the rows of an XLSX reader into <typeparamref name="TModel"/> instances, lazily as the result is enumerated.</summary>
+        /// <param name="reader">The XLSX reader to pull rows from.</param>
+        /// <param name="config">The options controlling header matching, culture, and parse-failure behavior. Defaults to a new <see cref="ExcelParserConfig"/> when <see langword="null"/>.</param>
+        /// <returns>An enumerable that yields one <typeparamref name="TModel"/> per data row.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="reader"/> is <see langword="null"/>.</exception>
         [RequiresUnreferencedCode("ParseNamed reflects over TModel's public properties, which trimming may remove.")]
         [RequiresDynamicCode("ParseNamed compiles property setters at runtime (Expression.Compile / MakeGenericMethod).")]
         public static NamedRefRowEnumerable<TModel, XlsxReader, XlsxReader.Enumerator> ParseNamed<TModel>(
@@ -40,6 +50,11 @@ namespace ExcelReader.Core.Parser
                 reader, TypeMapper<TModel>.GetInfo(), config.ColumnNameComparer, config.HeaderNormalization, config.HeaderRow, config.Culture, config.ThrowOnParseFailure);
         }
 
+        /// <summary>Parses the rows of an XLSB reader into <typeparamref name="TModel"/> instances, lazily as the result is enumerated.</summary>
+        /// <param name="reader">The XLSB reader to pull rows from.</param>
+        /// <param name="config">The options controlling header matching, culture, and parse-failure behavior. Defaults to a new <see cref="ExcelParserConfig"/> when <see langword="null"/>.</param>
+        /// <returns>An enumerable that yields one <typeparamref name="TModel"/> per data row.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="reader"/> is <see langword="null"/>.</exception>
         [RequiresUnreferencedCode("ParseNamed reflects over TModel's public properties, which trimming may remove.")]
         [RequiresDynamicCode("ParseNamed compiles property setters at runtime (Expression.Compile / MakeGenericMethod).")]
         public static NamedRefRowEnumerable<TModel, XlsbReader, XlsbReader.Enumerator> ParseNamed<TModel>(
@@ -52,6 +67,11 @@ namespace ExcelReader.Core.Parser
                 reader, TypeMapper<TModel>.GetInfo(), config.ColumnNameComparer, config.HeaderNormalization, config.HeaderRow, config.Culture, config.ThrowOnParseFailure);
         }
 
+        /// <summary>Parses the rows of an XLS reader into <typeparamref name="TModel"/> instances, lazily as the result is enumerated.</summary>
+        /// <param name="reader">The XLS reader to pull rows from.</param>
+        /// <param name="config">The options controlling header matching, culture, and parse-failure behavior. Defaults to a new <see cref="ExcelParserConfig"/> when <see langword="null"/>.</param>
+        /// <returns>An enumerable that yields one <typeparamref name="TModel"/> per data row.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="reader"/> is <see langword="null"/>.</exception>
         [RequiresUnreferencedCode("ParseNamed reflects over TModel's public properties, which trimming may remove.")]
         [RequiresDynamicCode("ParseNamed compiles property setters at runtime (Expression.Compile / MakeGenericMethod).")]
         public static NamedRefRowEnumerable<TModel, XlsReader, XlsReader.Enumerator> ParseNamed<TModel>(
@@ -66,6 +86,11 @@ namespace ExcelReader.Core.Parser
 
         // CSV uses TypeMapper<TModel>.GetCsvInfo() — the only difference is DateTime/DateOnly/TimeOnly
         // columns parse the cell text rather than an Excel serial number (see TypeMapper.GetCsvInfo).
+        /// <summary>Parses the rows of a CSV reader into <typeparamref name="TModel"/> instances, lazily as the result is enumerated.</summary>
+        /// <param name="reader">The CSV reader to pull rows from.</param>
+        /// <param name="config">The options controlling header matching, culture, and parse-failure behavior. Defaults to a new <see cref="ExcelParserConfig"/> when <see langword="null"/>.</param>
+        /// <returns>An enumerable that yields one <typeparamref name="TModel"/> per data row.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="reader"/> is <see langword="null"/>.</exception>
         [RequiresUnreferencedCode("ParseNamed reflects over TModel's public properties, which trimming may remove.")]
         [RequiresDynamicCode("ParseNamed compiles property setters at runtime (Expression.Compile / MakeGenericMethod).")]
         public static NamedRefRowEnumerable<TModel, CsvReader, CsvReader.Enumerator> ParseNamed<TModel>(
@@ -80,6 +105,11 @@ namespace ExcelReader.Core.Parser
 
         // Format-agnostic entry point for the reader returned by Excel.Open, so callers need not
         // pattern-match the concrete reader type. Dispatches through the interface enumerator.
+        /// <summary>Parses the rows of a format-agnostic reader (e.g. one returned by <c>Excel.Open</c>) into <typeparamref name="TModel"/> instances, lazily as the result is enumerated.</summary>
+        /// <param name="reader">The reader to pull rows from.</param>
+        /// <param name="config">The options controlling header matching, culture, and parse-failure behavior. Defaults to a new <see cref="ExcelParserConfig"/> when <see langword="null"/>.</param>
+        /// <returns>An enumerable that yields one <typeparamref name="TModel"/> per data row.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="reader"/> is <see langword="null"/>.</exception>
         [RequiresUnreferencedCode("ParseNamed reflects over TModel's public properties, which trimming may remove.")]
         [RequiresDynamicCode("ParseNamed compiles property setters at runtime (Expression.Compile / MakeGenericMethod).")]
         public static NamedRefRowEnumerable<TModel, IExcelRowReader, IExcelRowEnumerator> ParseNamed<TModel>(

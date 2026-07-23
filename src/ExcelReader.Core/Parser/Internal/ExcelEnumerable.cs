@@ -5,6 +5,8 @@ using ExcelReader.Core.ValueObjects;
 
 namespace ExcelReader.Core.Parser.Internal
 {
+    /// <summary>Lazily projects XLSX rows into <typeparamref name="T"/> instances, for both synchronous and asynchronous enumeration.</summary>
+    /// <typeparam name="T">The row model type to bind each row to.</typeparam>
     public sealed class ExcelEnumerable<T> : ExcelEnumerable<T, XlsxReader, XlsxReader.Enumerator>
     {
         internal ExcelEnumerable(XlsxReader reader, ExcelParserConfig config, CancellationToken ct = default)
@@ -13,6 +15,10 @@ namespace ExcelReader.Core.Parser.Internal
         }
     }
 
+    /// <summary>Lazily projects rows read by a given reader/enumerator pair into <typeparamref name="T"/> instances, for both synchronous and asynchronous enumeration.</summary>
+    /// <typeparam name="T">The row model type to bind each row to.</typeparam>
+    /// <typeparam name="TReader">The concrete row reader type this instance pulls rows from.</typeparam>
+    /// <typeparam name="TEnumerator">The concrete row enumerator type <typeparamref name="TReader"/> produces.</typeparam>
     [SuppressMessage("Design", "CA1034:Nested types should not be visible",
         Justification = "Public nested Enumerator/AsyncEnumerator are the standard foreach/await-foreach pattern.")]
     public class ExcelEnumerable<T, TReader, TEnumerator> : IEnumerable<T>, IAsyncEnumerable<T>
@@ -30,6 +36,7 @@ namespace ExcelReader.Core.Parser.Internal
             _ct = ct;
         }
 
+        /// <inheritdoc cref="IEnumerable{T}.GetEnumerator"/>
         [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP015:Member should not return created and cached instance",
             Justification = "Each call creates a fresh enumerator; no caching.")]
         [SuppressMessage("Performance", "HLQ006:GetEnumerator should return a value type",
@@ -58,6 +65,7 @@ namespace ExcelReader.Core.Parser.Internal
             return GetAsyncEnumerator(cancellationToken);
         }
 
+        /// <inheritdoc cref="IAsyncEnumerable{T}.GetAsyncEnumerator"/>
         [SuppressMessage("Performance", "HLQ006:GetAsyncEnumerator should return a value type",
             Justification = "Async enumerator requires a class to host the async state machine.")]
         [SuppressMessage("ApiDesign", "RS0041:Public members should not use oblivious types",
@@ -69,6 +77,7 @@ namespace ExcelReader.Core.Parser.Internal
             return new AsyncEnumerator(_reader, info, _config.ColumnNameComparer, _config.HeaderNormalization, _config.HeaderRow, _config.Culture, _config.ThrowOnParseFailure, effective);
         }
 
+        /// <summary>Enumerates rows synchronously, projecting each into a <typeparamref name="T"/> instance.</summary>
         public sealed class Enumerator : SyncRowEnumerator<T, TEnumerator>
         {
             private RowProjector<T> _projector;
@@ -94,6 +103,7 @@ namespace ExcelReader.Core.Parser.Internal
             }
         }
 
+        /// <summary>Enumerates rows asynchronously, projecting each into a <typeparamref name="T"/> instance.</summary>
         public sealed class AsyncEnumerator : AsyncRowEnumerator<T, TReader, TEnumerator>
         {
             private RowProjector<T> _projector;

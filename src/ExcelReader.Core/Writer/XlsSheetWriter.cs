@@ -3,6 +3,11 @@ using ExcelReader.Core.Writer.Internal;
 
 namespace ExcelReader.Core.Writer
 {
+    /// <summary>
+    /// Writes a single sheet of a BIFF8 (.xls) workbook, buffering cell records in memory until the
+    /// workbook is finalized. Rows beyond the BIFF8 65,536-row cap spill into an auto-generated
+    /// continuation sheet.
+    /// </summary>
     public sealed class XlsSheetWriter : IDisposable, ISheetWriter<XlsRowWriter>
     {
         private const int MaxRow = 65535;
@@ -47,6 +52,9 @@ namespace ExcelReader.Core.Writer
         internal int ColCount => _maxCol + 1;
         internal ReadOnlyMemory<byte> CellsMemory => _cells.Memory;
 
+        /// <summary>
+        /// Marks the sheet as started and registers it with the owning workbook.
+        /// </summary>
         public void Start()
         {
             WriterStateGuard.ThrowIfEnded(_state, this);
@@ -55,6 +63,10 @@ namespace ExcelReader.Core.Writer
             _owner.RegisterSheet(this);
         }
 
+        /// <summary>
+        /// Begins writing the next row, transparently spilling into a continuation sheet once the
+        /// BIFF8 row cap is reached.
+        /// </summary>
         public XlsRowWriter StartRow()
         {
             WriterStateGuard.ThrowIfEnded(_state, this);
@@ -137,6 +149,9 @@ namespace ExcelReader.Core.Writer
             return cont;
         }
 
+        /// <summary>
+        /// Marks the sheet (and any continuation sheet it spilled into) as ended.
+        /// </summary>
         public void End()
         {
             WriterStateGuard.ThrowIfEnded(_state, this);
@@ -150,6 +165,7 @@ namespace ExcelReader.Core.Writer
             }
         }
 
+        /// <inheritdoc/>
         public void Dispose()
         {
             if (_state == WriterState.Started)
@@ -159,6 +175,7 @@ namespace ExcelReader.Core.Writer
         }
 
         // XLS buffers everything in memory, so these wrap the synchronous path in a completed ValueTask.
+        /// <inheritdoc/>
         public ValueTask StartAsync(CancellationToken ct = default)
         {
             ct.ThrowIfCancellationRequested();
@@ -166,6 +183,7 @@ namespace ExcelReader.Core.Writer
             return ValueTask.CompletedTask;
         }
 
+        /// <inheritdoc/>
         [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP004:Don't ignore created IDisposable",
             Justification = "The row writer is returned to the caller, who disposes it to end the row.")]
         [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
@@ -176,6 +194,7 @@ namespace ExcelReader.Core.Writer
             return ValueTask.FromResult(StartRow());
         }
 
+        /// <inheritdoc/>
         public ValueTask EndAsync(CancellationToken ct = default)
         {
             ct.ThrowIfCancellationRequested();
@@ -183,6 +202,7 @@ namespace ExcelReader.Core.Writer
             return ValueTask.CompletedTask;
         }
 
+        /// <inheritdoc/>
         public ValueTask DisposeAsync()
         {
             Dispose();

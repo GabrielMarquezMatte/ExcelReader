@@ -6,6 +6,10 @@ namespace ExcelReader.Core.Reader
     // Forward-only CSV reader. Unlike the XLSX/XLSB/XLS readers there are no styles or shared strings.
     // It exposes a single, unnamed sheet so it can be driven through the same format-agnostic
     // IExcelRowReader surface (row enumeration + trivial sheet navigation) as the Excel readers.
+    /// <summary>
+    /// A forward-only reader over a delimited (CSV-style) text source, exposed as a single, unnamed
+    /// sheet through the same <see cref="IExcelRowReader"/> surface as the XLSX/XLSB/XLS readers.
+    /// </summary>
     public sealed partial class CsvReader : IExcelRowReader, IExcelRowReader<CsvReader.Enumerator>
     {
         [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP008:Don't assign member with injected and created disposables",
@@ -67,24 +71,35 @@ namespace ExcelReader.Core.Reader
             }
         }
 
+        /// <inheritdoc/>
         public bool IsDate1904 => false;
 
         // CSV is a single, unnamed sheet. These satisfy the IExcelRowReader surface so a CSV reader can
         // be driven through the same format-agnostic loop as the Excel readers.
+        /// <summary>Gets the sheet name. Always the empty string, since a CSV source has a single, unnamed sheet.</summary>
         public string SheetName => "";
+
+        /// <summary>Gets the sheet count. Always 1, since a CSV source has a single, unnamed sheet.</summary>
         public int SheetCount => 1;
 
+        /// <summary>Checks whether <paramref name="name"/> matches the (empty) CSV sheet name, case-insensitively.</summary>
+        /// <param name="name">The sheet name to look for.</param>
+        /// <returns><see langword="true"/> if <paramref name="name"/> is empty; otherwise <see langword="false"/>.</returns>
         public bool TryMoveToSheet(ReadOnlySpan<char> name)
         {
             return name.Equals(SheetName, StringComparison.OrdinalIgnoreCase);
         }
 
+        /// <summary>Validates that <paramref name="index"/> is 0, the only valid sheet index for a CSV source.</summary>
+        /// <param name="index">The zero-based sheet index. Must be 0.</param>
+        /// <exception cref="ArgumentOutOfRangeException"><paramref name="index"/> is not 0.</exception>
         public void MoveToSheet(int index)
         {
             ArgumentOutOfRangeException.ThrowIfNegative(index);
             ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(index, SheetCount);
         }
 
+        /// <summary>Gets an enumerator that reads records synchronously from the start of the source.</summary>
         [SuppressMessage("Performance", "HLQ006:GetEnumerator should return a value type",
             Justification = "Enumerator is a class so the same type can also expose MoveNextAsync for the async path.")]
         public Enumerator GetEnumerator()
@@ -98,6 +113,7 @@ namespace ExcelReader.Core.Reader
             return GetEnumerator();
         }
 
+        /// <summary>Gets an enumerator that reads records asynchronously from the start of the source.</summary>
         [SuppressMessage("Performance", "HLQ006:GetAsyncEnumerator should return a value type",
             Justification = "Enumerator is a class so the same type can also expose MoveNextAsync for the async path.")]
         public Enumerator GetAsyncEnumerator()
@@ -110,6 +126,8 @@ namespace ExcelReader.Core.Reader
             return GetAsyncEnumerator();
         }
 
+        /// <summary>Asynchronously creates an enumerator that reads records from the start of the source.</summary>
+        /// <param name="ct">A token to cancel the setup operation.</param>
         [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP001:Dispose created",
             Justification = "Enumerator ownership transfers to the caller, who disposes it via await using / DisposeAsync.")]
         [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
@@ -145,6 +163,7 @@ namespace ExcelReader.Core.Reader
             _enumeratedOnce = true;
         }
 
+        /// <inheritdoc/>
         public void Dispose()
         {
             if (!_leaveOpen)
@@ -153,6 +172,7 @@ namespace ExcelReader.Core.Reader
             }
         }
 
+        /// <inheritdoc/>
         public ValueTask DisposeAsync()
         {
             return _leaveOpen ? ValueTask.CompletedTask : _stream.DisposeAsync();

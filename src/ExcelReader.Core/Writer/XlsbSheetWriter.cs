@@ -7,6 +7,7 @@ using ExcelReader.Core.Writer.Internal;
 
 namespace ExcelReader.Core.Writer
 {
+    /// <summary>Writes a single worksheet's rows into an .xlsb workbook produced by <see cref="XlsbWorkbookWriter"/>.</summary>
     public sealed class XlsbSheetWriter : ISheetWriter<XlsbRowWriter>
     {
         // Kept under the LOH threshold instead of parking the pooled backing array there permanently.
@@ -51,6 +52,7 @@ namespace ExcelReader.Core.Writer
             return _owner.GetSharedStringIndex(value);
         }
 
+        /// <inheritdoc/>
         public ValueTask StartAsync(CancellationToken ct = default)
         {
             WriterStateGuard.ThrowIfEnded(_state, this);
@@ -65,6 +67,7 @@ namespace ExcelReader.Core.Writer
             return ValueTask.CompletedTask;
         }
 
+        /// <inheritdoc/>
         public ValueTask<XlsbRowWriter> StartRowAsync(CancellationToken ct = default)
         {
             BeginRow();
@@ -73,6 +76,7 @@ namespace ExcelReader.Core.Writer
             return ValueTask.FromResult(_rowWriter);
         }
 
+        /// <summary>Writes an entire row in one call, mapping each element of <paramref name="values"/> to a column starting at 0.</summary>
         public void WriteRow(ReadOnlySpan<XlsbCell> values)
         {
             BeginRow();
@@ -88,6 +92,7 @@ namespace ExcelReader.Core.Writer
             _rowActive = false;
         }
 
+        /// <inheritdoc/>
         [SuppressMessage("Reliability", "CA1849:Call async methods when in an async method",
             Justification = "The sheet body is written synchronously by row writers; EndAsync only finalizes and closes the entry.")]
         public async ValueTask EndAsync(CancellationToken ct = default)
@@ -119,6 +124,7 @@ namespace ExcelReader.Core.Writer
             _owner.NotifySheetEnded();
         }
 
+        /// <inheritdoc/>
         public async ValueTask DisposeAsync()
         {
             if (_state == WriterState.Started)

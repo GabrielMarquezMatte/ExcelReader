@@ -25,6 +25,9 @@ namespace ExcelReader.Core.Parser.Internal
     // async state machine's by-value `this` copy. A class shares the one instance, exactly like
     // AsyncRowEnumerator<T,TReader,TRows>. The lazy-Current design above is still required regardless:
     // a ref-struct TModel can never be stored in a field (CS8345), class or struct.
+    /// <summary>A forward-only, zero-model-allocation cursor over rows bound by attribute to a ref struct model type, driven by <c>MoveNext</c>/<c>MoveNextAsync</c> and read via <see cref="Current"/>.</summary>
+    /// <typeparam name="TModel">The ref-struct-capable row model type to bind each row to.</typeparam>
+    /// <typeparam name="TEnumerator">The concrete row enumerator type this instance pulls rows from.</typeparam>
     public sealed class NamedRefRowEnumerator<TModel, TEnumerator> : IDisposable, IAsyncDisposable
         where TModel : allows ref struct
         where TEnumerator : class, IExcelRowEnumerator
@@ -62,6 +65,7 @@ namespace ExcelReader.Core.Parser.Internal
             _seen = [];
         }
 
+        /// <summary>Gets the row at the enumerator's current position, freshly parsed into a new model instance on every access.</summary>
         // Recomputed on every access (see class remarks) — never cached in a field.
         public TModel Current
         {
@@ -73,6 +77,7 @@ namespace ExcelReader.Core.Parser.Internal
             }
         }
 
+        /// <inheritdoc cref="System.Collections.IEnumerator.MoveNext"/>
         public bool MoveNext()
         {
             while (_rows.MoveNext())
@@ -98,6 +103,7 @@ namespace ExcelReader.Core.Parser.Internal
         // (the common case — no second state machine on top of _rows' own), only falling to an awaiting
         // continuation on a genuine buffer miss. Every state mutation (ClassifyRow's ref _rowNumber,
         // BuildColumnMap) runs on the shared class instance, so it survives the await (see class remarks).
+        /// <inheritdoc cref="IExcelRowEnumerator.MoveNextAsync"/>
         [SuppressMessage("VisualStudio.Threading", "VSTHRD103:Result synchronously blocks",
             Justification = "The .Result access is guarded by IsCompletedSuccessfully immediately above it — never blocks.")]
         public ValueTask<bool> MoveNextAsync()
@@ -162,6 +168,7 @@ namespace ExcelReader.Core.Parser.Internal
                 in row, _bindings!, _seen, track, _context.IsDate1904, _context.FormatProvider, _throwOnParseFailure, _rowNumber, ref model);
         }
 
+        /// <inheritdoc/>
         [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP007:Don't dispose injected",
             Justification = "_rows is created for this enumerator alone by NamedRefRowEnumerable.Get(Async)Enumerator() — owned here, not injected.")]
         public void Dispose()
@@ -169,6 +176,7 @@ namespace ExcelReader.Core.Parser.Internal
             _rows.Dispose();
         }
 
+        /// <inheritdoc/>
         [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP007:Don't dispose injected",
             Justification = "_rows is created for this enumerator alone by NamedRefRowEnumerable.Get(Async)Enumerator() — owned here, not injected.")]
         public ValueTask DisposeAsync()

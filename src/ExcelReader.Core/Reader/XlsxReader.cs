@@ -5,6 +5,7 @@ using ExcelReader.Core.Writer.Internal;
 
 namespace ExcelReader.Core.Reader
 {
+    /// <summary>Reads rows from an Office Open XML (.xlsx) workbook, streaming each sheet's cells without loading the whole file into memory.</summary>
     public sealed partial class XlsxReader : IExcelRowReader, IExcelRowReader<XlsxReader.Enumerator>
     {
         private readonly Stream _stream;
@@ -132,8 +133,11 @@ namespace ExcelReader.Core.Reader
             return new XlsxReader(stream, leaveOpen, zip, sheets, styleIsDate, date1904, effectiveOptions, decompressedBytes);
         }
 
+        /// <inheritdoc/>
         public string SheetName => _sheets[_current].Name;
+        /// <inheritdoc/>
         public int SheetCount => _sheets.Length;
+        /// <inheritdoc/>
         public bool IsDate1904 { get; }
 
         // A numeric cell whose style index maps to a date/time format is reported as CellType.Date.
@@ -142,6 +146,7 @@ namespace ExcelReader.Core.Reader
             return WorkbookLookups.IsDateStyle(_styleIsDate, style);
         }
 
+        /// <inheritdoc/>
         public bool TryMoveToSheet(ReadOnlySpan<char> name)
         {
             if (!WorkbookLookups.TryFindSheetIndex(_sheets, name, static s => s.Name, out int index))
@@ -152,12 +157,14 @@ namespace ExcelReader.Core.Reader
             return true;
         }
 
+        /// <inheritdoc/>
         public void MoveToSheet(int index)
         {
             WorkbookLookups.ValidateSheetIndex(index, _sheets.Length);
             _current = index;
         }
 
+        /// <inheritdoc/>
         [SuppressMessage("Performance", "HLQ006:GetEnumerator should return a value type",
             Justification = "Enumerator is a class so the same type can also expose MoveNextAsync for the async path.")]
         public Enumerator GetEnumerator()
@@ -172,6 +179,7 @@ namespace ExcelReader.Core.Reader
             return GetEnumerator();
         }
 
+        /// <inheritdoc/>
         [SuppressMessage("Performance", "HLQ006:GetAsyncEnumerator should return a value type",
             Justification = "Enumerator is a class so the same type can also expose MoveNextAsync for the async path.")]
         public Enumerator GetAsyncEnumerator()
@@ -221,6 +229,7 @@ namespace ExcelReader.Core.Reader
             return WorkbookLookups.SharedAt(_sharedOffsets, index);
         }
 
+        /// <inheritdoc/>
         public void Dispose()
         {
             if (_sharedFlat.Length > 0)
@@ -235,6 +244,7 @@ namespace ExcelReader.Core.Reader
             }
         }
 
+        /// <inheritdoc/>
         public async ValueTask DisposeAsync()
         {
             if (_sharedFlat.Length > 0)

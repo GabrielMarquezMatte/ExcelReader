@@ -8,6 +8,7 @@ namespace ExcelReader.Core.Reader
 {
     public sealed partial class XlsReader
     {
+        /// <summary>Enumerates the rows of a single worksheet in an <see cref="XlsReader"/>, supporting both synchronous and asynchronous iteration.</summary>
         [SuppressMessage("Design", "CA1034:Nested types should not be visible",
             Justification = "Public nested enumerator is the standard foreach pattern.")]
         public sealed class Enumerator : IExcelRowEnumerator
@@ -28,15 +29,18 @@ namespace ExcelReader.Core.Reader
                 _acc = new CellAccumulator(reader._options.MaxCellBytes, nameof(ExcelReaderOptions.MaxCellBytes));
             }
 
+            /// <inheritdoc/>
             public Row Current =>
                 new(_acc.CellSpan, _acc.ValueSpan, _reader.SharedSpan, _reader.SharedStringCache);
 
+            /// <inheritdoc/>
             public bool MoveNext()
             {
                 _ct.ThrowIfCancellationRequested();
                 return MoveNextCore();
             }
 
+            /// <inheritdoc/>
             public ValueTask<bool> MoveNextAsync()
             {
                 return new ValueTask<bool>(MoveNext());
@@ -307,11 +311,13 @@ namespace ExcelReader.Core.Reader
                 _acc.Add(col, _acc.ValueLength, 0, type, style, fromShared: false, number: value, hasNumber: true);
             }
 
+            /// <inheritdoc/>
             public void Dispose()
             {
                 ReturnBuffers();
             }
 
+            /// <inheritdoc/>
             public ValueTask DisposeAsync()
             {
                 ReturnBuffers();

@@ -5,6 +5,7 @@ using static ExcelReader.Core.Reader.Biff12;
 
 namespace ExcelReader.Core.Reader
 {
+    /// <summary>Reads rows from a legacy BIFF8 (.xls) workbook, exposing each worksheet through synchronous and asynchronous enumeration.</summary>
     public sealed partial class XlsReader : IExcelRowReader, IExcelRowReader<XlsReader.Enumerator>
     {
         private readonly WorkbookStream _workbook;
@@ -55,8 +56,13 @@ namespace ExcelReader.Core.Reader
             return cursor;
         }
 
+        /// <inheritdoc/>
         public string SheetName => _sheets[_current].Name;
+
+        /// <inheritdoc/>
         public int SheetCount => _sheets.Length;
+
+        /// <inheritdoc/>
         public bool IsDate1904 => _date1904;
 
         internal ReadOnlySpan<byte> SharedSpan => _sharedFlat;
@@ -73,6 +79,7 @@ namespace ExcelReader.Core.Reader
             return WorkbookLookups.SharedAt(_sharedOffsets, index);
         }
 
+        /// <inheritdoc/>
         public bool TryMoveToSheet(ReadOnlySpan<char> name)
         {
             if (!WorkbookLookups.TryFindSheetIndex(_sheets, name, static s => s.Name, out int index))
@@ -83,12 +90,14 @@ namespace ExcelReader.Core.Reader
             return true;
         }
 
+        /// <inheritdoc/>
         public void MoveToSheet(int index)
         {
             WorkbookLookups.ValidateSheetIndex(index, _sheets.Length);
             _current = index;
         }
 
+        /// <inheritdoc/>
         [SuppressMessage("Performance", "HLQ006:GetEnumerator should return a value type",
             Justification = "Enumerator is a class so the same type can also expose MoveNextAsync for parity with XlsxReader.")]
         public Enumerator GetEnumerator()
@@ -101,6 +110,7 @@ namespace ExcelReader.Core.Reader
             return GetEnumerator();
         }
 
+        /// <inheritdoc/>
         [SuppressMessage("Performance", "HLQ006:GetAsyncEnumerator should return a value type",
             Justification = "Enumerator is a class so the same type can also expose MoveNextAsync for parity with XlsxReader.")]
         public Enumerator GetAsyncEnumerator()
@@ -110,6 +120,8 @@ namespace ExcelReader.Core.Reader
 
         // ct overload takes no default value: the parameterless GetAsyncEnumerator() above already covers
         // the no-argument call, so a default here would only shadow it.
+        /// <summary>Creates an enumerator for the current sheet that observes cancellation while iterating.</summary>
+        /// <param name="ct">Token checked before enumeration starts and on each subsequent move.</param>
         [SuppressMessage("Performance", "HLQ006:GetAsyncEnumerator should return a value type",
             Justification = "Enumerator is a class so the same type can also expose MoveNextAsync for parity with XlsxReader.")]
         public Enumerator GetAsyncEnumerator(CancellationToken ct)
@@ -123,6 +135,7 @@ namespace ExcelReader.Core.Reader
             return GetAsyncEnumerator();
         }
 
+        /// <inheritdoc/>
         [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
             Justification = "Enumerator ownership transfers to the caller, who disposes it via await using / DisposeAsync.")]
         public ValueTask<Enumerator> GetAsyncEnumeratorAsync(CancellationToken ct = default)
@@ -139,6 +152,7 @@ namespace ExcelReader.Core.Reader
             return new ValueTask<IExcelRowEnumerator>(GetAsyncEnumerator(ct));
         }
 
+        /// <inheritdoc/>
         public void Dispose()
         {
             _workbook.Dispose();
@@ -147,6 +161,7 @@ namespace ExcelReader.Core.Reader
             _sharedStringCache = null;
         }
 
+        /// <inheritdoc/>
         public ValueTask DisposeAsync()
         {
             Dispose();

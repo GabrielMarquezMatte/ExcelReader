@@ -11,6 +11,9 @@ namespace ExcelReader.Core.Parser.Internal
     // via CsvRowProjector<T>) - see ExcelEnumerable<T,TReader,TEnumerator>.Enumerator and
     // CsvEnumerable<T>.Enumerator. Public because it is the base class of those public nested types
     // (a base class can never be less accessible than its derived type).
+    /// <summary>Base class supplying the shared row-advancement loop for a synchronous, format-specific row enumerator.</summary>
+    /// <typeparam name="T">The row model type each derived enumerator yields.</typeparam>
+    /// <typeparam name="TRows">The concrete row enumerator type this instance drives.</typeparam>
     [SuppressMessage("Design", "CA1034:Nested types should not be visible",
         Justification = "Base class of the public nested Enumerator types; not itself meant for direct external use.")]
     [SuppressMessage("Design", "CA1063:Implement IDisposable correctly",
@@ -22,24 +25,30 @@ namespace ExcelReader.Core.Parser.Internal
     public abstract class SyncRowEnumerator<T, TRows> : IEnumerator<T>
         where TRows : class, IExcelRowEnumerator
     {
+        /// <summary>The underlying row cursor this enumerator advances.</summary>
         [SuppressMessage("Performance", "HLQ011:ReadOnlyEnumeratorField",
             Justification = "TRows is constrained to `class` here, so it is always a reference type — no copy-on-mutate risk from a readonly field.")]
         [SuppressMessage("Design", "CA1051:Do not declare visible instance fields",
             Justification = "Hot-path base class (MoveNext runs per row); a field avoids a property-call indirection in the tightest loop of the library.")]
         protected readonly TRows Rows;
+        /// <summary>The most recently projected row model, returned by <see cref="Current"/>.</summary>
         [SuppressMessage("Design", "CA1051:Do not declare visible instance fields",
             Justification = "Hot-path base class (MoveNext runs per row); a field avoids a property-call indirection in the tightest loop of the library.")]
         protected T CurrentValue = default!;
 
+        /// <summary>Initializes the base enumerator with the row cursor it will drive.</summary>
+        /// <param name="rows">The row enumerator to advance and project from.</param>
         protected SyncRowEnumerator(TRows rows)
         {
             Rows = rows;
         }
 
+        /// <inheritdoc/>
         public T Current => CurrentValue;
 
         object? IEnumerator.Current => CurrentValue;
 
+        /// <inheritdoc/>
         public bool MoveNext()
         {
             while (Rows.MoveNext())
@@ -57,6 +66,7 @@ namespace ExcelReader.Core.Parser.Internal
 
         private protected abstract ProjectionStep Project();
 
+        /// <inheritdoc/>
         [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP007:Don't dispose injected",
             Justification = "Rows is created for this enumerator alone by the enclosing enumerable's GetEnumerator (reader.GetEnumerator()) — owned here, not injected.")]
         [SuppressMessage("Design", "CA1816:Dispose methods should call SuppressFinalize",
@@ -66,6 +76,7 @@ namespace ExcelReader.Core.Parser.Internal
             Rows.Dispose();
         }
 
+        /// <inheritdoc/>
         public void Reset()
         {
             throw new NotSupportedException();
@@ -78,6 +89,10 @@ namespace ExcelReader.Core.Parser.Internal
     // the projection both resolve synchronously (the common case), only falling to an awaiting
     // continuation on a genuine buffer miss - this avoids paying for a second state machine on top of
     // the row-enumerator's own (e.g. XlsxReader.Enumerator.MoveNextAsync / CsvReader.Enumerator.MoveNextAsync).
+    /// <summary>Base class supplying the shared row-advancement loop for an asynchronous, format-specific row enumerator.</summary>
+    /// <typeparam name="T">The row model type each derived enumerator yields.</typeparam>
+    /// <typeparam name="TReader">The concrete row reader type used to lazily open the row cursor.</typeparam>
+    /// <typeparam name="TRows">The concrete row enumerator type this instance drives.</typeparam>
     [SuppressMessage("Design", "CA1034:Nested types should not be visible",
         Justification = "Base class of the public nested AsyncEnumerator types; not itself meant for direct external use.")]
     [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP026:Class with no virtual DisposeAsyncCore method should be sealed",
@@ -89,21 +104,28 @@ namespace ExcelReader.Core.Parser.Internal
         // Borrowed: the caller owns the reader's lifetime. Only Rows (opened here) is disposed.
         private readonly TReader _reader;
         private readonly CancellationToken _ct;
+        /// <summary>The underlying row cursor this enumerator advances, opened lazily on the first call to <see cref="MoveNextAsync"/>.</summary>
         [SuppressMessage("Design", "CA1051:Do not declare visible instance fields",
             Justification = "Hot-path base class (MoveNextAsync runs per row); a field avoids a property-call indirection in the tightest loop of the library.")]
         protected TRows? Rows;
+        /// <summary>The most recently projected row model, returned by <see cref="Current"/>.</summary>
         [SuppressMessage("Design", "CA1051:Do not declare visible instance fields",
             Justification = "Hot-path base class (MoveNextAsync runs per row); a field avoids a property-call indirection in the tightest loop of the library.")]
         protected T CurrentValue = default!;
 
+        /// <summary>Initializes the base enumerator with the reader it will lazily open a row cursor from.</summary>
+        /// <param name="reader">The row reader used to open the row cursor on first advancement.</param>
+        /// <param name="ct">The cancellation token to use when opening the row cursor, if the caller does not supply one to <see cref="MoveNextAsync"/>.</param>
         protected AsyncRowEnumerator(TReader reader, CancellationToken ct)
         {
             _reader = reader;
             _ct = ct;
         }
 
+        /// <inheritdoc/>
         public T Current => CurrentValue;
 
+        /// <inheritdoc/>
         [SuppressMessage("VisualStudio.Threading", "VSTHRD103:Result synchronously blocks",
             Justification = "The .Result access is guarded by IsCompletedSuccessfully immediately above it — never blocks.")]
         public ValueTask<bool> MoveNextAsync()
@@ -158,6 +180,7 @@ namespace ExcelReader.Core.Parser.Internal
             return await MoveNextAsync().ConfigureAwait(false);
         }
 
+        /// <inheritdoc/>
         [SuppressMessage("Design", "CA1816:Dispose methods should call SuppressFinalize",
             Justification = "No finalizer exists on this type or any sealed derivative, so there is nothing to suppress.")]
         public ValueTask DisposeAsync()

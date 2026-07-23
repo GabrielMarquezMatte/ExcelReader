@@ -11,6 +11,10 @@ namespace ExcelReader.Core.Parser.Internal
     // zero-allocation foreach; IEnumerable<TModel> implemented only for the familiar shape — its
     // members throw, since a ref struct TModel cannot be surfaced through the boxed
     // IEnumerator<TModel>/IEnumerator).
+    /// <summary>A zero-model-allocation sequence of rows bound by attribute to a ref struct model type, consumable via <c>foreach</c> or <c>await foreach</c>.</summary>
+    /// <typeparam name="TModel">The ref-struct-capable row model type to bind each row to.</typeparam>
+    /// <typeparam name="TReader">The concrete row reader type this instance pulls rows from.</typeparam>
+    /// <typeparam name="TEnumerator">The concrete row enumerator type <typeparamref name="TReader"/> produces.</typeparam>
     public sealed class NamedRefRowEnumerable<TModel, TReader, TEnumerator> : IEnumerable<TModel>
         where TModel : allows ref struct
         where TReader : IExcelRowReader<TEnumerator>
@@ -42,7 +46,7 @@ namespace ExcelReader.Core.Parser.Internal
             _context = new ExcelRowContext(reader.IsDate1904, formatProvider ?? CultureInfo.InvariantCulture);
         }
 
-        // The supported way to consume this sequence via foreach.
+        /// <summary>Gets the enumerator used to consume this sequence with a <c>foreach</c> loop.</summary>
         [System.Diagnostics.CodeAnalysis.SuppressMessage("Performance", "HLQ006:GetEnumerator should return a value type",
             Justification = "The enumerator is a class so the same type can also expose MoveNextAsync for the async path.")]
         public NamedRefRowEnumerator<TModel, TEnumerator> GetEnumerator()
@@ -55,6 +59,7 @@ namespace ExcelReader.Core.Parser.Internal
         // the sheet synchronously — the reader's GetAsyncEnumerator() is a sync open (no I/O await), the
         // async work is per-row via MoveNextAsync. A ref-struct TModel can't be surfaced through
         // IAsyncEnumerable<TModel> (CS9267), so this stays a pattern match, never the interface.
+        /// <summary>Gets the enumerator used to consume this sequence with an <c>await foreach</c> loop, opening the underlying sheet synchronously.</summary>
         [System.Diagnostics.CodeAnalysis.SuppressMessage("Performance", "HLQ006:GetAsyncEnumerator should return a value type",
             Justification = "The enumerator is a class so the same type can also expose MoveNextAsync for the async path.")]
         public NamedRefRowEnumerator<TModel, TEnumerator> GetAsyncEnumerator()
@@ -62,6 +67,9 @@ namespace ExcelReader.Core.Parser.Internal
             return new(_reader.GetAsyncEnumerator(), _context, _typeInfo, _comparer, _normalization, _headerRow, _throwOnParseFailure);
         }
 
+        /// <summary>Asynchronously opens the underlying sheet and returns an enumerator to drive manually with <c>MoveNextAsync</c>, for callers who cannot use <c>await foreach</c>.</summary>
+        /// <param name="ct">A token to cancel the open operation.</param>
+        /// <returns>An enumerator positioned before the first row.</returns>
         // Manual-use alternative that opens the sheet asynchronously (awaits the reader's async open).
         // Not reachable by 'await foreach' — its shape (returning a ValueTask of the enumerator) doesn't
         // match the pattern. Await it, then drive the returned enumerator with MoveNextAsync in a loop.

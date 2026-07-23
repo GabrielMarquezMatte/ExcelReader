@@ -8,6 +8,9 @@ namespace ExcelReader.Core.Writer
     // BoundSheet offsets in the globals and the OLE FAT both need stream sizes known only at the
     // end. Rows beyond the BIFF8 per-sheet cap (65,536) overflow into auto-generated continuation
     // sheets, so memory scales with total row count rather than being bounded per-sheet.
+    /// <summary>
+    /// Writes a workbook to the legacy BIFF8 (.xls) binary format.
+    /// </summary>
     public sealed class XlsWorkbookWriter : IWorkbookWriter<XlsSheetWriter>
     {
         private readonly Stream _stream;
@@ -25,12 +28,21 @@ namespace ExcelReader.Core.Writer
             _date1904 = date1904;
         }
 
+        /// <summary>
+        /// Creates a writer that emits a BIFF8 (.xls) workbook to <paramref name="stream"/>.
+        /// </summary>
+        /// <param name="stream">The destination stream.</param>
+        /// <param name="leaveOpen">If <see langword="true"/>, the stream is left open when the writer is disposed.</param>
+        /// <param name="date1904">If <see langword="true"/>, dates are serialized using the 1904 epoch instead of the default 1900 epoch.</param>
         public static XlsWorkbookWriter Create(Stream stream, bool leaveOpen = false, bool date1904 = false)
         {
             ArgumentNullException.ThrowIfNull(stream);
             return new XlsWorkbookWriter(stream, leaveOpen, date1904);
         }
 
+        /// <summary>
+        /// Marks the workbook as started so that sheets can be added.
+        /// </summary>
         public void Start()
         {
             WriterStateGuard.ThrowIfEnded(_state, this);
@@ -39,6 +51,7 @@ namespace ExcelReader.Core.Writer
         }
 
         // XLS assembles the OLE container synchronously in EndAsync; StartAsync just wraps Start().
+        /// <inheritdoc/>
         public ValueTask StartAsync(CancellationToken ct = default)
         {
             ct.ThrowIfCancellationRequested();
@@ -46,6 +59,8 @@ namespace ExcelReader.Core.Writer
             return ValueTask.CompletedTask;
         }
 
+        /// <inheritdoc/>
+        /// <exception cref="InvalidOperationException">The previously added sheet has not been ended yet.</exception>
         public XlsSheetWriter AddSheet(string name)
         {
             ArgumentNullException.ThrowIfNull(name);
@@ -75,6 +90,8 @@ namespace ExcelReader.Core.Writer
             _activeSheet = null;
         }
 
+        /// <inheritdoc/>
+        /// <exception cref="InvalidOperationException">No sheet was ever added to the workbook.</exception>
         public async ValueTask EndAsync(CancellationToken ct = default)
         {
             WriterStateGuard.ThrowIfEnded(_state, this);
@@ -142,12 +159,14 @@ namespace ExcelReader.Core.Writer
             }
         }
 
+        /// <inheritdoc/>
         public ValueTask FlushAsync(CancellationToken ct = default)
         {
             ct.ThrowIfCancellationRequested();
             return new ValueTask(_stream.FlushAsync(ct));
         }
 
+        /// <inheritdoc/>
         public async ValueTask DisposeAsync()
         {
             if (_disposed)

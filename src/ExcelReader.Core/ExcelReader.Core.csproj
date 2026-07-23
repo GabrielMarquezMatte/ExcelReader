@@ -4,9 +4,8 @@
     <TargetFrameworks>net10.0;net8.0</TargetFrameworks>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
 
-    <!-- Ship XML docs (members without a doc comment do not warn). -->
+    <!-- Ship XML docs and enforce documentation for every public API member. -->
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
-    <NoWarn>$(NoWarn);CS1591</NoWarn>
   </PropertyGroup>
 
   <!-- NuGet package metadata -->
