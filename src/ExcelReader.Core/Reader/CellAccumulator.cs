@@ -34,6 +34,7 @@ namespace ExcelReader.Core.Reader
 
         internal ReadOnlySpan<CellDesc> CellSpan => _cells.AsSpan(0, Count);
         internal ReadOnlySpan<byte> ValueSpan => _vals.AsSpan(0, ValueLength);
+
         internal int Count { get; private set; }
         internal int ValueLength { get; private set; }
 
@@ -64,6 +65,14 @@ namespace ExcelReader.Core.Reader
             {
                 return;
             }
+            GrowVals(needed);
+        }
+
+        // Split from EnsureCapacity so the (rarely taken) grow path doesn't bloat the hot caller's IL,
+        // leaving more headroom for the JIT to inline the capacity check itself.
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        private void GrowVals(int needed)
+        {
             byte[] bigger = ArrayPool<byte>.Shared.Rent(LimitChecks.NextBufferSize(_maxCellBytes, _limitName, _vals.Length, needed));
             Array.Copy(_vals, bigger, ValueLength);
             ArrayPool<byte>.Shared.Return(_vals);
@@ -115,16 +124,7 @@ namespace ExcelReader.Core.Reader
             }
             if (Count == _cells.Length)
             {
-                int capacity = LimitChecks.NextBufferSize(
-                    _maxCellBytes,
-                    _limitName,
-                    _cells.Length,
-                    Count + 1,
-                    Unsafe.SizeOf<CellDesc>());
-                CellDesc[] bigger = ArrayPool<CellDesc>.Shared.Rent(capacity);
-                Array.Copy(_cells, bigger, Count);
-                ArrayPool<CellDesc>.Shared.Return(_cells);
-                _cells = bigger;
+                GrowCells();
             }
             if (col < _lastCol)
             {
@@ -142,6 +142,19 @@ namespace ExcelReader.Core.Reader
                 Number = number,
                 HasNumber = hasNumber,
             };
+        }
+
+        // Split from Add so the (rarely taken) grow path doesn't bloat the hot caller's IL, leaving
+        // more headroom for the JIT to inline the capacity check itself.
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        private void GrowCells()
+        {
+            int capacity = LimitChecks.NextBufferSize(_maxCellBytes, _limitName, _cells.Length, Count + 1,
+                                                      Unsafe.SizeOf<CellDesc>());
+            CellDesc[] bigger = ArrayPool<CellDesc>.Shared.Rent(capacity);
+            Array.Copy(_cells, bigger, Count);
+            ArrayPool<CellDesc>.Shared.Return(_cells);
+            _cells = bigger;
         }
 
         internal void SortByColumn()
