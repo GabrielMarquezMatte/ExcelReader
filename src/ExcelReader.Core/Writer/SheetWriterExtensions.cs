@@ -85,14 +85,8 @@ namespace ExcelReader.Core.Writer
         /// <param name="ct">A token to cancel the operation between rows.</param>
         [SuppressMessage("Reliability", "CA1849:Call async methods when in an async method",
             Justification = "Deliberately using XlsxSheetWriter/XlsxRowWriter's synchronous fast path — see the <remarks> above.")]
-        [SuppressMessage("Sonar", "S6966:Await StartRowAsync instead",
-            Justification = "Deliberately using XlsxSheetWriter's synchronous row fast path — see the <remarks> above.")]
         [SuppressMessage("VisualStudio.Threading", "VSTHRD103:StartRow synchronously blocks",
             Justification = "Deliberately using XlsxSheetWriter's synchronous row fast path — see the <remarks> above.")]
-        [SuppressMessage("Sonar", "S6966:Await DisposeAsync instead",
-            Justification = "Deliberately using XlsxRowWriter's synchronous Dispose fast path — see the <remarks> above.")]
-        [SuppressMessage("VisualStudio.Threading", "VSTHRD103:Dispose synchronously blocks",
-            Justification = "Deliberately using XlsxRowWriter's synchronous Dispose fast path — see the <remarks> above.")]
         public static ValueTask WriteRecordsAsync<T>(this XlsxSheetWriter sheet, IEnumerable<T> records,
                                                       Action<XlsxRowWriter, T> writeRow, CancellationToken ct = default)
         {

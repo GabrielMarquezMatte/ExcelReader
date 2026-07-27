@@ -187,10 +187,6 @@ namespace ExcelReader.Core.Writer
         }
 
         /// <inheritdoc/>
-        [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP004:Don't ignore created IDisposable",
-            Justification = "The row writer is returned to the caller, who disposes it to end the row.")]
-        [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
-            Justification = "The row writer is returned to the caller, who disposes it to end the row.")]
         public ValueTask<XlsRowWriter> StartRowAsync(CancellationToken ct = default)
         {
             ct.ThrowIfCancellationRequested();

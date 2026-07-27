@@ -93,8 +93,6 @@ namespace ExcelReader.Core.Writer
         }
 
         /// <inheritdoc/>
-        [SuppressMessage("Reliability", "CA1849:Call async methods when in an async method",
-            Justification = "The sheet body is written synchronously by row writers; EndAsync only finalizes and closes the entry.")]
         public async ValueTask EndAsync(CancellationToken ct = default)
         {
             WriterStateGuard.ThrowIfEnded(_state, this);
@@ -137,8 +135,6 @@ namespace ExcelReader.Core.Writer
             }
         }
 
-        [SuppressMessage("Reliability", "CA1849:Call async methods when in an async method",
-            Justification = "Rows write records synchronously to keep the per-cell API synchronous.")]
         internal void WriteRecord(int id, ReadOnlySpan<byte> payload = default)
         {
             Biff12RecordWriter.WriteRecord(_records, id, payload);
@@ -153,8 +149,6 @@ namespace ExcelReader.Core.Writer
             }
         }
 
-        [SuppressMessage("Reliability", "CA1849:Call async methods when in an async method",
-            Justification = "Opening the entry from the synchronous row-writing hot path avoids an async API on every cell.")]
         [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP003:Dispose previous before re-assigning",
             Justification = "The null-guard above means this only ever assigns _stream once, from null; never re-assigns a live stream.")]
         private void EnsureStream()

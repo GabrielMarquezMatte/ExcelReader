@@ -37,8 +37,6 @@ namespace ExcelReader.Core.Parser.Internal
         }
 
         /// <inheritdoc cref="IEnumerable{T}.GetEnumerator"/>
-        [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP015:Member should not return created and cached instance",
-            Justification = "Each call creates a fresh enumerator; no caching.")]
         [SuppressMessage("Performance", "HLQ006:GetEnumerator should return a value type",
             Justification = "Enumerator is a class so the sync and async paths can share the SyncRowEnumerator/AsyncRowEnumerator base plumbing.")]
         [SuppressMessage("ApiDesign", "RS0041:Public members should not use oblivious types",

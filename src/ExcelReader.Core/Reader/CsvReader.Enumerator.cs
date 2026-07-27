@@ -25,7 +25,6 @@ namespace ExcelReader.Core.Reader
             private const byte Lf = (byte)'\n';
 
             // Borrowed: CsvReader owns the stream's lifetime (it may be reused across enumerations).
-            [SuppressMessage("Usage", "CA2213:Disposable fields should be disposed", Justification = "Borrowed, not owned.")]
             private readonly byte _delimiter;
             private readonly byte _quote;
             private readonly bool _stripBom;

@@ -37,8 +37,6 @@ namespace ExcelReader.Core.Reader
         // Sync open over an already-opened ZipArchive — lets a caller that already opened the archive
         // for format detection (Excel.Open's DetectSeekable) hand it straight to the reader instead of
         // re-parsing the central directory a second time.
-        [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP003:Dispose previous before re-assigning",
-            Justification = "Readonly field, first and only assignment in this constructor.")]
         internal XlsxReader(Stream stream, bool leaveOpen, ZipArchive zip, ExcelReaderOptions? options = null)
         {
             _stream = stream;
