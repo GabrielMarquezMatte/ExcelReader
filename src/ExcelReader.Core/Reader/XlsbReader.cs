@@ -51,8 +51,6 @@ namespace ExcelReader.Core.Reader
         // Sync open over an already-opened ZipArchive — lets a caller that already opened the archive
         // for format detection (Excel.Open's DetectSeekable) hand it straight to the reader instead of
         // re-parsing the central directory a second time.
-        [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP003:Dispose previous before re-assigning",
-            Justification = "Readonly field, first and only assignment in this constructor.")]
         internal XlsbReader(Stream stream, bool leaveOpen, ZipArchive zip, ExcelReaderOptions? options = null)
         {
             _stream = stream;
@@ -257,8 +255,6 @@ namespace ExcelReader.Core.Reader
         // --- Dispose ---
 
         /// <inheritdoc/>
-        [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP007:Don't dispose injected",
-            Justification = "_stream is disposed conditionally based on _leaveOpen.")]
         public void Dispose()
         {
             _zip?.Dispose(); // ZipArchive was opened with leaveOpen:true — does not close _stream

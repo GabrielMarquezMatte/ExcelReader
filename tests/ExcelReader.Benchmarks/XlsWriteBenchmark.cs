@@ -55,10 +55,6 @@ namespace ExcelReader.Benchmarks
         }
 
         [Benchmark]
-        [SuppressMessage("Sonar", "S6966:Await StartRowAsync instead",
-            Justification = "Deliberately measuring XlsxSheetWriter's synchronous row fast path (StartRow/XlsxRowWriter.Dispose).")]
-        [SuppressMessage("VisualStudio.Threading", "VSTHRD103:StartRow synchronously blocks",
-            Justification = "Deliberately measuring XlsxSheetWriter's synchronous row fast path (StartRow/XlsxRowWriter.Dispose).")]
         public async Task<long> XlsxWriter()
         {
             await using var ms = new MemoryStream(4 * 1024 * 1024);

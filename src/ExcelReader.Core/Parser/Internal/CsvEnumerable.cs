@@ -31,8 +31,6 @@ namespace ExcelReader.Core.Parser.Internal
         }
 
         /// <inheritdoc cref="IEnumerable{T}.GetEnumerator"/>
-        [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP015:Member should not return created and cached instance",
-            Justification = "Each call creates a fresh enumerator; no caching.")]
         [SuppressMessage("Performance", "HLQ006:GetEnumerator should return a value type",
             Justification = "Enumerator is a class so the sync and async paths can share the SyncRowEnumerator/AsyncRowEnumerator base plumbing.")]
         [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP001:Dispose created",
@@ -54,8 +52,6 @@ namespace ExcelReader.Core.Parser.Internal
             return GetEnumerator();
         }
 
-        [SuppressMessage("Performance", "HLQ006:GetAsyncEnumerator should return a value type",
-            Justification = "Async enumerator requires a class to host the async state machine.")]
         IAsyncEnumerator<T> IAsyncEnumerable<T>.GetAsyncEnumerator(CancellationToken cancellationToken)
         {
             return GetAsyncEnumerator(cancellationToken);

@@ -23,10 +23,6 @@ namespace ExcelReader.Benchmarks
         }
 
         [Benchmark(Baseline = true)]
-        [SuppressMessage("Sonar", "S6966:Await StartRowAsync instead",
-            Justification = "Deliberately measuring XlsxSheetWriter's synchronous row fast path (StartRow/XlsxRowWriter.Dispose).")]
-        [SuppressMessage("VisualStudio.Threading", "VSTHRD103:StartRow synchronously blocks",
-            Justification = "Deliberately measuring XlsxSheetWriter's synchronous row fast path (StartRow/XlsxRowWriter.Dispose).")]
         public async Task<long> ExcelReaderWriter()
         {
             // Pre-sized to the neighborhood of the actual output so MemoryStream's doubling growth
@@ -60,10 +56,6 @@ namespace ExcelReader.Benchmarks
         }
 
         [Benchmark]
-        [SuppressMessage("Sonar", "S6966:Await StartRowAsync instead",
-            Justification = "Deliberately measuring XlsxSheetWriter's synchronous row fast path (StartRow/XlsxRowWriter.Dispose).")]
-        [SuppressMessage("VisualStudio.Threading", "VSTHRD103:StartRow synchronously blocks",
-            Justification = "Deliberately measuring XlsxSheetWriter's synchronous row fast path (StartRow/XlsxRowWriter.Dispose).")]
         public async Task<long> ExcelReaderWriterSharedStrings()
         {
             // Pre-sized to the neighborhood of the actual output so MemoryStream's doubling growth

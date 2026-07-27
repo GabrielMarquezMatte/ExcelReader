@@ -18,8 +18,6 @@ namespace ExcelReader.Core.Reader
         private readonly long _startPosition = -1;
         private bool _enumeratedOnce;
 
-        [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP003:Dispose previous before re-assigning",
-            Justification = "Readonly field, first and only assignment in this constructor.")]
         internal CsvReader(Stream stream, bool leaveOpen, CsvReaderOptions? options = null)
         {
             ArgumentNullException.ThrowIfNull(stream);
@@ -43,8 +41,6 @@ namespace ExcelReader.Core.Reader
             }
         }
 
-        [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP001:Dispose created",
-            Justification = "Reader ownership transfers to the caller, who disposes it via await using / DisposeAsync.")]
         [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
             Justification = "Reader ownership transfers to the caller, who disposes it via await using / DisposeAsync.")]
         internal static ValueTask<CsvReader> CreateAsync(Stream stream, bool leaveOpen, CsvReaderOptions? options = null, CancellationToken ct = default)
@@ -124,8 +120,6 @@ namespace ExcelReader.Core.Reader
 
         /// <summary>Asynchronously creates an enumerator that reads records from the start of the source.</summary>
         /// <param name="ct">A token to cancel the setup operation.</param>
-        [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP001:Dispose created",
-            Justification = "Enumerator ownership transfers to the caller, who disposes it via await using / DisposeAsync.")]
         [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
             Justification = "Enumerator ownership transfers to the caller, who disposes it via await using / DisposeAsync.")]
         public ValueTask<Enumerator> GetAsyncEnumeratorAsync(CancellationToken ct = default)
