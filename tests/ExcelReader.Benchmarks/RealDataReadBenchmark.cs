@@ -204,6 +204,15 @@ namespace ExcelReader.Benchmarks
             return AccumulateSylvanExcel(reader);
         }
 
+        [Benchmark]
+        public long Xls_ExcelReader_Memory()
+        {
+            using XlsReader reader = Excel.FromXls(_xls.AsMemory());
+            long acc = 0;
+            foreach (Row row in reader) { acc += AccumulateRow(row); }
+            return acc;
+        }
+
         // --- CSV --- (CSV cells are always plain text on both sides — no style-driven date/number
         // typing is possible — so both benchmarks just sum text length for a like-for-like comparison.)
 
@@ -236,6 +245,21 @@ namespace ExcelReader.Benchmarks
                 for (int i = 0; i < reader.FieldCount; i++)
                 {
                     acc += reader.GetString(i).Length;
+                }
+            }
+            return acc;
+        }
+
+        [Benchmark]
+        public long Csv_ExcelReader_Memory()
+        {
+            using CsvReader reader = Excel.FromCsv(_csv.AsMemory());
+            long acc = 0;
+            foreach (Row row in reader)
+            {
+                foreach (RowCell rowCell in row.Cells)
+                {
+                    acc += rowCell.Value.Value.Length;
                 }
             }
             return acc;

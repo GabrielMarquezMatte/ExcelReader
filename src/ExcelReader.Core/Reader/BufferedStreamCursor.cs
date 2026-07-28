@@ -22,6 +22,7 @@ namespace ExcelReader.Core.Reader
         internal byte[] Buf { get; private set; }
         internal int Pos { get; set; }
         internal int Len { get; private set; }
+        internal int Start { get; private set; }
         internal bool Eof { get; private set; }
 
         internal BufferedStreamCursor(int maxCellBytes, string limitName, int initialCapacity = InitialBuf)
@@ -30,29 +31,34 @@ namespace ExcelReader.Core.Reader
             _limitName = limitName;
             _pooled = true;
             Buf = ArrayPool<byte>.Shared.Rent(initialCapacity);
+            Start = 0;
         }
 
         // Pre-filled, EOF from the start: the whole ZIP part is already decompressed, so there is
         // nothing left to refill and no source to refill from. `content` may alias a sub-range of a
-        // larger array (e.g. a stored entry sliced out of the whole-file buffer), so Pos/Len start at
-        // that sub-range's offsets rather than always at 0.
+        // larger array (e.g. a stored entry sliced out of the whole-file buffer), so Pos/Len preserve
+        // that sub-range's offsets instead of forcing a copy or shifting everything back to zero.
         internal BufferedStreamCursor(ReadOnlyMemory<byte> content, int maxCellBytes, string limitName)
         {
             _maxCellBytes = maxCellBytes;
             _limitName = limitName;
             _pooled = false;
             Eof = true;
-            if (MemoryMarshal.TryGetArray(content, out ArraySegment<byte> segment))
+            if (!MemoryMarshal.TryGetArray(content, out ArraySegment<byte> segment))
             {
-                Buf = segment.Array!;
-                Pos = segment.Offset;
-                Len = segment.Offset + segment.Count;
+                // Rare: a non-array-backed ReadOnlyMemory<byte> (e.g. a custom MemoryManager<byte>). One
+                // copy here is unavoidable since Buf must be a raw array.
+                Buf = content.ToArray();
+                Start = 0;
+                Pos = 0;
+                Len = Buf.Length;
                 return;
             }
-            // Rare: a non-array-backed ReadOnlyMemory<byte> (e.g. a custom MemoryManager<byte>). One
-            // copy here is unavoidable since Buf must be a raw array.
-            Buf = content.ToArray();
-            Len = Buf.Length;
+
+            Buf = segment.Array!;
+            Start = segment.Offset;
+            Pos = 0;
+            Len = segment.Count;
         }
 
         // Compact the consumed prefix, or grow the buffer if every byte is still unprocessed.
