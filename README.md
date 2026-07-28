@@ -87,11 +87,9 @@ The real-data corpus above is mostly numbers and dates — its shared-string tab
 | Format | ExcelReader | ExcelReader, prefetch | Sylvan |
 |---|---:|---:|---:|
 | XLSX | 57.48 ms, 756.72 KB | 37.88 ms, 826.43 KB | 184.77 ms, 17,825.41 KB |
-| XLSB | 37.51 ms, 27,384.42 KB | 30.50 ms, 27,400.84 KB | 62.79 ms, 17,799.79 KB |
+| XLSB | 37.23 ms, 756.84 KB | 26.80 ms, 822.35 KB | 62.79 ms, 17,799.79 KB |
 
-XLSX handles this well: ~3.2x faster than Sylvan, ~24x less memory, and no garbage collections in either configuration.
-
-XLSB does not. It allocates ~27 MB here — about 36x what XLSX does on the same data, and more than Sylvan — with collections up to Gen2. The XLSX shared-string path streams and pools its table; the XLSB path still materializes eagerly. This is a known gap rather than an inherent format cost, and it is invisible on the numeric corpus above, where XLSB allocates 40 KB.
+Both formats now handle this well: ~3.2x and ~2.3x faster than Sylvan for XLSX and XLSB respectively, at roughly ~24x and ~23x less memory, with no garbage collections in either configuration. XLSB's shared-string path previously materialized its table eagerly (~27 MB here); `ParseSharedStreaming` brought it in line with the XLSX streaming/pooling path, cutting allocation by ~36x on this workload.
 
 ### Typed record writing
 
