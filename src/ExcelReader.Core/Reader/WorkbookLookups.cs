@@ -1,5 +1,6 @@
 using System.Diagnostics.CodeAnalysis;
 using System.IO.Compression;
+using System.Text;
 
 namespace ExcelReader.Core.Reader
 {
@@ -55,6 +56,15 @@ namespace ExcelReader.Core.Reader
                 ?? throw new InvalidDataException($"Worksheet part not found: {sheets[current].Path}");
         }
 
+        // In-memory ZIP path twin of the ZipArchive overload above; same exception, same message shape.
+        internal static ZipEntryRef GetWorksheetEntry(ZipMemoryIndex memZip, (string Name, string Path)[] sheets, int current)
+        {
+            string path = sheets[current].Path;
+            return memZip.TryGetEntry(Encoding.UTF8.GetBytes(path), out ZipEntryRef entry)
+                ? entry
+                : throw new InvalidDataException($"Worksheet part not found: {path}");
+        }
+
         // entryLimitName/entryLimit carry a per-part cap (e.g. MaxSharedStringBytes) that
         // LimitedReadStream enforces on top of the workbook-wide counter; parts relying solely on
         // MaxTotalDecompressedBytes omit them.
@@ -95,10 +105,11 @@ namespace ExcelReader.Core.Reader
         }
 #endif
 
-        // Sole branch point for PrefetchDecompression, shared by the sync and async openers. Wrapping
-        // order is load-bearing: prefetch innermost, limits outermost, so DecompressedByteCounter
+        // Sole branch point for PrefetchDecompression, shared by the sync and async openers (and by
+        // ZipMemoryIndex.OpenEntryStream, so the in-memory ZIP path gets the same prefetch overlap).
+        // Wrapping order is load-bearing: prefetch innermost, limits outermost, so DecompressedByteCounter
         // accounting stays on the consumer thread and byte-for-byte identical to the serial path.
-        private static LimitedReadStream Wrap(
+        internal static LimitedReadStream Wrap(
             Stream opened, DecompressedByteCounter counter, ExcelReaderOptions options,
             string entryLimitName, long entryLimit)
         {

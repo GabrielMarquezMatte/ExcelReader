@@ -1,3 +1,7 @@
 #nullable enable
 ExcelReader.Core.Reader.ExcelReaderOptions.PrefetchDecompression.get -> bool
 ExcelReader.Core.Reader.ExcelReaderOptions.PrefetchDecompression.init -> void
+static ExcelReader.Core.Reader.Excel.From(System.ReadOnlyMemory<byte> data, ExcelReader.Core.Reader.ExcelReaderOptions? options = null) -> ExcelReader.Core.Reader.XlsxReader!
+static ExcelReader.Core.Reader.Excel.FromXlsb(System.ReadOnlyMemory<byte> data, ExcelReader.Core.Reader.ExcelReaderOptions? options = null) -> ExcelReader.Core.Reader.XlsbReader!
+static ExcelReader.Core.Reader.Excel.Open(System.ReadOnlyMemory<byte> data, ExcelReader.Core.Reader.ExcelReaderOptions? options = null) -> ExcelReader.Core.Reader.IExcelRowReader!
+static ExcelReader.Core.Reader.Excel.DetectFileFormat(System.ReadOnlyMemory<byte> data) -> ExcelReader.Core.Enums.ExcelFileFormat
