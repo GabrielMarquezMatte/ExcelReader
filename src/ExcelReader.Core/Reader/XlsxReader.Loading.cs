@@ -120,10 +120,9 @@ namespace ExcelReader.Core.Reader
         // EnsureRowBuffered so decompression overlaps the scan (via PrefetchStream) instead of finishing
         // first. Growth is capped by MaxSharedStringBytes, the same limit ThrowIfSharedEntryTooLarge
         // already checked the declared part length against.
-        private void ParseSharedStreaming(Stream stream, long entryLength)
         {
-            int partLength = checked((int)entryLength);
-            int growthCap = SharedFlatGrowthCap();
+            LimitChecks.ThrowIfEntryLengthExceeds(entryLength, Array.MaxLength, "ArrayMaxLength");
+            int partLength = (int)entryLength;
             var io = new BufferedStreamCursor(growthCap, nameof(ExcelReaderOptions.MaxSharedStringBytes),
                 WorkbookLookups.InitialBufferCapacity(entryLength));
             try
