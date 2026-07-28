@@ -10,7 +10,7 @@
 
 High-performance Excel reading and writing for .NET 10. Reads `.xlsx`, `.xlsb`, `.xls`, and `.csv`; writes `.xlsx`, `.xlsb`, `.xls`, and `.csv`.
 
-ExcelReader is built for streaming spreadsheet workloads where low allocations matter. It reads worksheet rows as lightweight `ref struct` values, resolves shared strings, recognizes date styles, handles sparse cells, and includes writers for producing `.xlsx` (Open XML), `.xlsb` (BIFF12), and `.xls` (BIFF8) workbooks.
+ExcelReader is built for streaming spreadsheet workloads where low allocations matter. It reads worksheet rows as lightweight `ref struct` values, resolves shared strings, recognizes date styles, handles sparse cells, and includes writers for producing `.xlsx` (Open XML), `.xlsb` (BIFF12), and `.xls` (BIFF8) workbooks. The library also supports opening workbook data directly from in-memory buffers without requiring a stream, which makes it convenient for API and network-based scenarios.
 
 ## Benchmarks
 
@@ -79,6 +79,19 @@ This benchmark reads a real workbook exported in multiple formats.
 | CSV | 6.172 ms, 232 B | n/a | 10.750 ms, 35.75 MB |
 
 On this real-data workload, ExcelReader is ~3.1x faster than Sylvan for XLSX, ~2.9x faster for XLSM, ~1.3x faster for XLSB, ~1.5x faster for XLS, and ~1.7x faster for CSV — allocating ~18.7x less for XLSX/XLSM, ~8.3x less for XLSB, ~18.6x less for XLS, and ~161,000x less for CSV (232 B vs 35.75 MB). The prefetch column is the opt-in [`PrefetchDecompression`](#prefetch-decompression-xlsxxlsb) option; XLS and CSV are uncompressed, so it does not apply to them.
+
+### In-memory real-data reads (latest)
+
+The latest real-data benchmark also measures the in-memory path for workbook content loaded directly into memory.
+
+| Method | Mean | Error | StdDev | Allocated |
+|---|---:|---:|---:|---:|
+| Xlsx_ExcelReader_Memory | 65.86 ms | 0.446 ms | 0.396 ms | 4.98 KB |
+| Xlsx_ExcelReader_Memory_Prefetch | 42.88 ms | 0.198 ms | 0.166 ms | 71.33 KB |
+| Xlsm_ExcelReader_Memory | 66.48 ms | 0.597 ms | 0.558 ms | 4.98 KB |
+| Xlsm_ExcelReader_Memory_Prefetch | 43.59 ms | 0.574 ms | 0.509 ms | 72.99 KB |
+| Xlsb_ExcelReader_Memory | 24.98 ms | 0.247 ms | 0.231 ms | 14.43 KB |
+| Xlsb_ExcelReader_Memory_Prefetch | 19.40 ms | 0.256 ms | 0.200 ms | 33.06 KB |
 
 ### String-heavy reads
 
