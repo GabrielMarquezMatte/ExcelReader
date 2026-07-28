@@ -169,7 +169,7 @@ namespace ExcelReader.Core.Reader
         {
             EnsureSharedLoaded();
             var entry = WorkbookLookups.GetWorksheetEntry(_zip, _sheets, _current);
-            return new Enumerator(this, WorkbookLookups.OpenEntryStream(entry, _decompressedBytes), entry.Length);
+            return new Enumerator(this, WorkbookLookups.OpenEntryStream(entry, _decompressedBytes, _options), entry.Length);
         }
 
         IExcelRowEnumerator IExcelRowReader<IExcelRowEnumerator>.GetEnumerator()
@@ -205,10 +205,13 @@ namespace ExcelReader.Core.Reader
             await EnsureSharedLoadedAsync(ct).ConfigureAwait(false);
             var entry = WorkbookLookups.GetWorksheetEntry(_zip, _sheets, _current);
 #if NET10_0_OR_GREATER
-            var sheet = new LimitedReadStream(await entry.OpenAsync(ct).ConfigureAwait(false), _decompressedBytes);
+            Stream entryStream = await entry.OpenAsync(ct).ConfigureAwait(false);
+            LimitedReadStream sheet = _options.PrefetchDecompression
+                ? new(new PrefetchStream(entryStream), _decompressedBytes)
+                : new(entryStream, _decompressedBytes);
 #else
             ct.ThrowIfCancellationRequested();
-            var sheet = WorkbookLookups.OpenEntryStream(entry, _decompressedBytes);
+            var sheet = WorkbookLookups.OpenEntryStream(entry, _decompressedBytes, _options);
 #endif
             return new Enumerator(this, sheet, entry.Length, ct);
         }

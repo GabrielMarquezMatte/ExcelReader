@@ -1,1 +1,3 @@
 #nullable enable
+ExcelReader.Core.Reader.ExcelReaderOptions.PrefetchDecompression.get -> bool
+ExcelReader.Core.Reader.ExcelReaderOptions.PrefetchDecompression.init -> void
