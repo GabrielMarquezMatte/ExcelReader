@@ -2,6 +2,7 @@ using System.IO.Compression;
 using System.Text;
 using ExcelReader.Core.Enums;
 using ExcelReader.Core.Reader;
+using ExcelReader.Core.ValueObjects;
 
 namespace ExcelReader.Tests
 {
@@ -19,7 +20,7 @@ namespace ExcelReader.Tests
             try
             {
                 ExcelLimitExceededException ex = Assert.Throws<ExcelLimitExceededException>(
-                    () => acc.Add(16_384, start: 0, len: 0, CellType.ExcelString, style: 0, fromShared: false));
+                    () => acc.Add(16_384, start: 0, len: 0, CellType.ExcelString, style: 0, CellValueSource.RowValues));
                 Assert.Equal("Columns", ex.LimitName);
             }
             finally
@@ -34,7 +35,7 @@ namespace ExcelReader.Tests
             var acc = new CellAccumulator(maxCellBytes: 0, limitName: "Test");
             try
             {
-                acc.Add(16_383, start: 0, len: 0, CellType.ExcelString, style: 0, fromShared: false);
+                acc.Add(16_383, start: 0, len: 0, CellType.ExcelString, style: 0, CellValueSource.RowValues);
                 Assert.Equal(1, acc.Count);
             }
             finally

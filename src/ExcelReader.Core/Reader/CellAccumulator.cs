@@ -34,6 +34,7 @@ namespace ExcelReader.Core.Reader
 
         internal ReadOnlySpan<CellDesc> CellSpan => _cells.AsSpan(0, Count);
         internal ReadOnlySpan<byte> ValueSpan => _vals.AsSpan(0, ValueLength);
+
         internal int Count { get; private set; }
         internal int ValueLength { get; private set; }
 
@@ -64,6 +65,14 @@ namespace ExcelReader.Core.Reader
             {
                 return;
             }
+            GrowVals(needed);
+        }
+
+        // Split from EnsureCapacity so the (rarely taken) grow path doesn't bloat the hot caller's IL,
+        // leaving more headroom for the JIT to inline the capacity check itself.
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        private void GrowVals(int needed)
+        {
             byte[] bigger = ArrayPool<byte>.Shared.Rent(LimitChecks.NextBufferSize(_maxCellBytes, _limitName, _vals.Length, needed));
             Array.Copy(_vals, bigger, ValueLength);
             ArrayPool<byte>.Shared.Return(_vals);
@@ -91,17 +100,17 @@ namespace ExcelReader.Core.Reader
         {
             int start = ValueLength;
             AppendByte(value == 0 ? (byte)'0' : (byte)'1');
-            Add(col, start, 1, CellType.Boolean, style, fromShared: false);
+            Add(col, start, 1, CellType.Boolean, style, CellValueSource.RowValues);
         }
 
         internal void AddError(int col, int style, byte code)
         {
             int start = ValueLength;
             int length = AppendErrorText(code);
-            Add(col, start, length, CellType.Error, style, fromShared: false);
+            Add(col, start, length, CellType.Error, style, CellValueSource.RowValues);
         }
 
-        internal void Add(int col, int start, int len, CellType type, int style, bool fromShared, double number = 0, bool hasNumber = false)
+        internal void Add(int col, int start, int len, CellType type, int style, CellValueSource source, double number = 0, bool hasNumber = false)
         {
             // A corrupted/malicious file can encode an arbitrary column index in a per-cell record
             // (e.g. a 4-byte BIFF12/BIFF8 column field); without this bound, Row.ColumnCount (Column +
@@ -115,16 +124,7 @@ namespace ExcelReader.Core.Reader
             }
             if (Count == _cells.Length)
             {
-                int capacity = LimitChecks.NextBufferSize(
-                    _maxCellBytes,
-                    _limitName,
-                    _cells.Length,
-                    Count + 1,
-                    Unsafe.SizeOf<CellDesc>());
-                CellDesc[] bigger = ArrayPool<CellDesc>.Shared.Rent(capacity);
-                Array.Copy(_cells, bigger, Count);
-                ArrayPool<CellDesc>.Shared.Return(_cells);
-                _cells = bigger;
+                GrowCells();
             }
             if (col < _lastCol)
             {
@@ -138,10 +138,23 @@ namespace ExcelReader.Core.Reader
                 Length = len,
                 Type = type,
                 Style = style,
-                FromShared = fromShared,
+                Source = source,
                 Number = number,
                 HasNumber = hasNumber,
             };
+        }
+
+        // Split from Add so the (rarely taken) grow path doesn't bloat the hot caller's IL, leaving
+        // more headroom for the JIT to inline the capacity check itself.
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        private void GrowCells()
+        {
+            int capacity = LimitChecks.NextBufferSize(_maxCellBytes, _limitName, _cells.Length, Count + 1,
+                                                      Unsafe.SizeOf<CellDesc>());
+            CellDesc[] bigger = ArrayPool<CellDesc>.Shared.Rent(capacity);
+            Array.Copy(_cells, bigger, Count);
+            ArrayPool<CellDesc>.Shared.Return(_cells);
+            _cells = bigger;
         }
 
         internal void SortByColumn()

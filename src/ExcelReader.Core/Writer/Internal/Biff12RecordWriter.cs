@@ -70,23 +70,9 @@ namespace ExcelReader.Core.Writer.Internal
             }
         }
 
-        internal static void WriteCellHeader(BiffBuffer dest, int column, int style)
-        {
-            if (column < 0)
-            {
-                throw new InvalidOperationException("Column index cannot be negative.");
-            }
-            dest.WriteU32((uint)column);
-            dest.WriteU32((uint)style);
-        }
-
         // Span counterpart for callers already holding a WriteFixedRecord payload span.
         internal static void WriteCellHeader(Span<byte> dest, int column, int style)
         {
-            if (column < 0)
-            {
-                throw new InvalidOperationException("Column index cannot be negative.");
-            }
             BinaryPrimitives.WriteUInt32LittleEndian(dest, (uint)column);
             BinaryPrimitives.WriteUInt32LittleEndian(dest[4..], (uint)style);
         }

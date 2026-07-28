@@ -34,8 +34,6 @@ namespace ExcelReader.Core.Reader
         /// <summary>Opens a legacy binary (XLS) workbook from a file path, taking ownership of the file stream.</summary>
         /// <param name="path">The path to the XLS file.</param>
         /// <param name="options">Resource limits and behavior toggles; <see cref="ExcelReaderOptions.Default"/> when <see langword="null"/>.</param>
-        [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP001:Dispose created",
-            Justification = "Stream ownership transfers to XlsReader, which streams from it and disposes it on Dispose (and on construction failure).")]
         [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
             Justification = "Stream ownership transfers to XlsReader, which streams from it and disposes it on Dispose (and on construction failure).")]
         public static XlsReader FromXlsFile(string path, ExcelReaderOptions? options = null)
@@ -55,10 +53,6 @@ namespace ExcelReader.Core.Reader
         /// <summary>Opens an XLSB (Excel binary) workbook from a file path, taking ownership of the file stream.</summary>
         /// <param name="path">The path to the XLSB file.</param>
         /// <param name="options">Resource limits and behavior toggles; <see cref="ExcelReaderOptions.Default"/> when <see langword="null"/>.</param>
-        [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP001:Dispose created",
-            Justification = "Stream ownership transfers to XlsbReader on success, disposed on failure.")]
-        [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
-            Justification = "Stream ownership transfers to XlsbReader on success, disposed on failure.")]
         public static XlsbReader FromXlsbFile(string path, ExcelReaderOptions? options = null)
         {
             return new XlsbReader(File.OpenRead(path), leaveOpen: false, options);
@@ -99,8 +93,6 @@ namespace ExcelReader.Core.Reader
         /// <param name="path">The path to the XLS file.</param>
         /// <param name="options">Resource limits and behavior toggles; <see cref="ExcelReaderOptions.Default"/> when <see langword="null"/>.</param>
         /// <param name="ct">A token to cancel the open operation.</param>
-        [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP001:Dispose created",
-            Justification = "Stream ownership transfers to CreateAsync, which disposes it on failure and is consumed into the reader on success.")]
         [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
             Justification = "Stream ownership transfers to CreateAsync, which disposes it on failure and via the reader on success.")]
         public static ValueTask<XlsReader> FromXlsFileAsync(string path, ExcelReaderOptions? options = null, CancellationToken ct = default)
@@ -144,10 +136,6 @@ namespace ExcelReader.Core.Reader
         /// <summary>Opens a CSV (or other delimited-text) source from a file path, taking ownership of the file stream.</summary>
         /// <param name="path">The path to the CSV file.</param>
         /// <param name="options">Delimiter, quote, encoding, and size-limit settings; <see cref="CsvReaderOptions.Default"/> when <see langword="null"/>.</param>
-        [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP001:Dispose created",
-            Justification = "Stream ownership transfers to CsvReader, which disposes it on Dispose/DisposeAsync when leaveOpen is false.")]
-        [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
-            Justification = "Stream ownership transfers to CsvReader, which disposes it on Dispose/DisposeAsync when leaveOpen is false.")]
         public static CsvReader FromCsvFile(string path, CsvReaderOptions? options = null)
         {
             return new CsvReader(File.OpenRead(path), leaveOpen: false, options);
@@ -188,6 +176,7 @@ namespace ExcelReader.Core.Reader
         // XLS is an OLE2/CFB compound document. XLSB is distinguished from XLSX by the presence of
         // "xl/workbook.bin" in the ZIP central directory.
         private static ReadOnlySpan<byte> ZipSignature => [0x50, 0x4B, 0x03, 0x04];
+
         /// <summary>
         /// Opens a workbook from a file path, auto-detecting its format (XLSX/XLSB/XLS) from the file's signature
         /// and taking ownership of the file stream.
@@ -198,8 +187,6 @@ namespace ExcelReader.Core.Reader
         /// <returns>A format-agnostic <see cref="IExcelRowReader"/> backed by the concrete reader that matches the detected format.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="path"/> is <see langword="null"/>.</exception>
         /// <exception cref="InvalidDataException">The file's signature does not match a supported format.</exception>
-        [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP001:Dispose created",
-            Justification = "Stream ownership transfers to OpenSeekable, which disposes it on failure and via the reader on success.")]
         [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
             Justification = "Stream ownership transfers to OpenSeekable, which disposes it on failure and via the reader on success.")]
         public static IExcelRowReader Open(string path, ExcelReaderOptions? options = null)
@@ -235,8 +222,6 @@ namespace ExcelReader.Core.Reader
         /// <returns>A format-agnostic <see cref="IExcelRowReader"/> backed by the concrete reader that matches the detected format.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="path"/> is <see langword="null"/>.</exception>
         /// <exception cref="InvalidDataException">The file's signature does not match a supported format.</exception>
-        [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP001:Dispose created",
-            Justification = "Stream ownership transfers to OpenSeekableAsync, which disposes it on failure and via the reader on success.")]
         [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
             Justification = "Stream ownership transfers to OpenSeekableAsync, which disposes it on failure and via the reader on success.")]
         public static ValueTask<IExcelRowReader> OpenAsync(string path, ExcelReaderOptions? options = null, CancellationToken ct = default)
@@ -359,8 +344,6 @@ namespace ExcelReader.Core.Reader
             };
         }
 
-        [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP007:Don't dispose injected",
-            Justification = "Open and OpenAsync transfer ownership when leaveOpen is false.")]
         private static void DisposeOnFailure(Stream stream, bool leaveOpen)
         {
             if (!leaveOpen)

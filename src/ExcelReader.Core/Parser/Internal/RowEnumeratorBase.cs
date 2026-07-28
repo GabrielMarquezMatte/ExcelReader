@@ -17,8 +17,6 @@ namespace ExcelReader.Core.Parser.Internal
     /// Public because it is the base class of those public nested types (a base class can never be less
     /// accessible than its derived type).
     /// </remarks>
-    [SuppressMessage("Design", "CA1034:Nested types should not be visible",
-        Justification = "Base class of the public nested Enumerator types; not itself meant for direct external use.")]
     [SuppressMessage("Design", "CA1063:Implement IDisposable correctly",
         Justification = "No unmanaged resources and no finalizer; every derived Enumerator is sealed and adds no disposal logic, so the full Dispose(bool) pattern buys nothing here.")]
     [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP025:Class with no virtual dispose method should be sealed",
@@ -99,8 +97,6 @@ namespace ExcelReader.Core.Parser.Internal
     /// for a second state machine on top of the row-enumerator's own (e.g.
     /// <c>XlsxReader.Enumerator.MoveNextAsync</c> / <c>CsvReader.Enumerator.MoveNextAsync</c>).
     /// </remarks>
-    [SuppressMessage("Design", "CA1034:Nested types should not be visible",
-        Justification = "Base class of the public nested AsyncEnumerator types; not itself meant for direct external use.")]
     [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP026:Class with no virtual DisposeAsyncCore method should be sealed",
         Justification = "Abstract by design (base of the public nested AsyncEnumerator types); every concrete derivative is itself sealed.")]
     public abstract class AsyncRowEnumerator<T, TReader, TRows> : IAsyncEnumerator<T>

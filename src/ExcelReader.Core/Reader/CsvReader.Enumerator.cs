@@ -25,7 +25,6 @@ namespace ExcelReader.Core.Reader
             private const byte Lf = (byte)'\n';
 
             // Borrowed: CsvReader owns the stream's lifetime (it may be reused across enumerations).
-            [SuppressMessage("Usage", "CA2213:Disposable fields should be disposed", Justification = "Borrowed, not owned.")]
             private readonly byte _delimiter;
             private readonly byte _quote;
             private readonly bool _stripBom;
@@ -59,9 +58,9 @@ namespace ExcelReader.Core.Reader
             // Cells point either into _buf (the common, zero-copy case: unquoted or plain-quoted
             // fields are already contiguous bytes read straight from the stream) or into _acc's value
             // buffer (only for fields needing unescaping, e.g. a doubled "" quote, or malformed
-            // trailing bytes after a closing quote) — see CellDesc.FromShared / ToCell.
+            // trailing bytes after a closing quote) — see CellDesc.Source / ToCell.
             /// <inheritdoc/>
-            public Row Current => new(_acc.CellSpan, _buf.AsSpan(0, _len), _acc.ValueSpan);
+            public Row Current => new(_acc.CellSpan, _buf.AsSpan(0, _len), _acc.ValueSpan, rowBuffer: default);
 
             // Dense field access for CsvEnumerable<T>: CSV cells are stored contiguously in column
             // order (no gaps), so field i is _acc.CellSpan[i] — O(1), skipping Row's binary search and
@@ -71,7 +70,7 @@ namespace ExcelReader.Core.Reader
             internal Cell FieldAt(int index)
             {
                 CellDesc d = _acc.CellSpan[index];
-                ReadOnlySpan<byte> buf = d.FromShared ? _acc.ValueSpan : _buf.AsSpan(0, _len);
+                ReadOnlySpan<byte> buf = d.Source == CellValueSource.Shared ? _acc.ValueSpan : _buf.AsSpan(0, _len);
                 return new Cell(d.Type, buf.Slice(d.Start, d.Length));
             }
 
@@ -245,10 +244,10 @@ namespace ExcelReader.Core.Reader
                     if (rel < 0)
                     {
                         int fieldLen = line.Length - start;
-                        _acc.Add(_col++, lineStart + start, fieldLen, fieldLen == 0 ? CellType.Empty : CellType.ExcelString, style: 0, fromShared: false);
+                        _acc.Add(_col++, lineStart + start, fieldLen, fieldLen == 0 ? CellType.Empty : CellType.ExcelString, style: 0, CellValueSource.RowValues);
                         return;
                     }
-                    _acc.Add(_col++, lineStart + start, rel, rel == 0 ? CellType.Empty : CellType.ExcelString, style: 0, fromShared: false);
+                    _acc.Add(_col++, lineStart + start, rel, rel == 0 ? CellType.Empty : CellType.ExcelString, style: 0, CellValueSource.RowValues);
                     start += rel + 1;
                 }
             }
@@ -416,11 +415,11 @@ namespace ExcelReader.Core.Reader
             {
                 if (!f.Materialized)
                 {
-                    _acc.Add(_col++, f.BufStart, f.BufLen, f.BufLen == 0 ? CellType.Empty : CellType.ExcelString, style: 0, fromShared: false);
+                    _acc.Add(_col++, f.BufStart, f.BufLen, f.BufLen == 0 ? CellType.Empty : CellType.ExcelString, style: 0, CellValueSource.RowValues);
                     return;
                 }
                 int len = _acc.ValueLength - f.MatStart;
-                _acc.Add(_col++, f.MatStart, len, len == 0 ? CellType.Empty : CellType.ExcelString, style: 0, fromShared: true);
+                _acc.Add(_col++, f.MatStart, len, len == 0 ? CellType.Empty : CellType.ExcelString, style: 0, CellValueSource.Shared);
             }
 
             // --- buffer management (shared with XlsxReader/XlsbReader via BufferedStreamCursor) ---

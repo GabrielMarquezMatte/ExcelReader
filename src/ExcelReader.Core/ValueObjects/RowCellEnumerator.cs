@@ -10,14 +10,16 @@ namespace ExcelReader.Core.ValueObjects
         private readonly ReadOnlySpan<CellDesc> _cells;
         private readonly ReadOnlySpan<byte> _rowValues;
         private readonly ReadOnlySpan<byte> _shared;
+        private readonly ReadOnlySpan<byte> _rowBuffer;
         private readonly Dictionary<int, string>? _sharedStringCache;
         private int _index;
         internal RowCellEnumerator(ReadOnlySpan<CellDesc> cells, ReadOnlySpan<byte> rowValues, ReadOnlySpan<byte> shared,
-            Dictionary<int, string>? sharedStringCache = null)
+            ReadOnlySpan<byte> rowBuffer = default, Dictionary<int, string>? sharedStringCache = null)
         {
             _cells = cells;
             _rowValues = rowValues;
             _shared = shared;
+            _rowBuffer = rowBuffer;
             _sharedStringCache = sharedStringCache;
             _index = -1;
         }
@@ -32,7 +34,7 @@ namespace ExcelReader.Core.ValueObjects
             get
             {
                 ref readonly var d = ref _cells[_index];
-                return new RowCell(d.Column, d.ToCell(_rowValues, _shared, _sharedStringCache));
+                return new RowCell(d.Column, d.ToCell(_rowValues, _shared, _rowBuffer, _sharedStringCache));
             }
         }
         /// <summary>Advances to the next populated cell; returns false when enumeration is exhausted.</summary>
