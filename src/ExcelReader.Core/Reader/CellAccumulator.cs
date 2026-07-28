@@ -1,4 +1,5 @@
 using System.Buffers;
+using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
 using ExcelReader.Core.Enums;
 using ExcelReader.Core.ValueObjects;
@@ -120,7 +121,7 @@ namespace ExcelReader.Core.Reader
             // writer side (see ColumnName.cs / XlsxRowWriter.cs / XlsbSheetWriter.cs).
             if ((uint)col >= 16_384)
             {
-                throw new ExcelLimitExceededException("Columns", 16_384, col + 1L);
+                ThrowColumnLimit(col);
             }
             if (Count == _cells.Length)
             {
@@ -142,6 +143,16 @@ namespace ExcelReader.Core.Reader
                 Number = number,
                 HasNumber = hasNumber,
             };
+        }
+
+        // Split from Add for the same reason as GrowCells: Add gets inlined into each ProcessCell
+        // dispatch arm, so an inline `throw` duplicates the whole exception-construction sequence
+        // (~70 bytes of cold code) once per call site inside the hot method.
+        [DoesNotReturn]
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        private static void ThrowColumnLimit(int col)
+        {
+            throw new ExcelLimitExceededException("Columns", 16_384, col + 1L);
         }
 
         // Split from Add so the (rarely taken) grow path doesn't bloat the hot caller's IL, leaving

@@ -1,4 +1,5 @@
 using System.Diagnostics.CodeAnalysis;
+using System.Runtime.CompilerServices;
 using System.Text;
 using ExcelReader.Core.Enums;
 using ExcelReader.Core.ValueObjects;
@@ -20,6 +21,13 @@ namespace ExcelReader.Core.Reader
             [SuppressMessage("Usage", "CA2213:Disposable fields should be disposed",
                 Justification = "XlsbReader is borrowed; its lifetime is managed by the caller, not this enumerator.")]
             private readonly XlsbReader _reader;
+            // Hoisted out of _reader: AddDouble consults it once per numeric cell, and going through
+            // _reader.IsDateStyle put two dependent loads (_reader -> array) on that critical path.
+            // _reader._styleIsDate is readonly and fully assigned before any enumerator exists.
+            private readonly bool[] _styleIsDate;
+            // Same hoist, for what PGO says is the hottest arm of ProcessCell (CellIsst): reaching the
+            // offsets through _reader.SharedAt cost two dependent loads before the index could be read.
+            private readonly int[] _sharedOffsets;
             private bool _ended;
             // A BrtRowHdr for the NEXT row was already consumed while collecting cells for the current row.
             // On the next MoveNext call, skip the "seek to row header" step.
@@ -31,6 +39,8 @@ namespace ExcelReader.Core.Reader
                 : base(sheet, reader._options.MaxCellBytes, nameof(ExcelReaderOptions.MaxCellBytes), WorkbookLookups.InitialBufferCapacity(entryLength), ct)
             {
                 _reader = reader;
+                _styleIsDate = reader._styleIsDate;
+                _sharedOffsets = reader._sharedOffsets;
             }
 
             /// <inheritdoc/>
@@ -150,44 +160,30 @@ namespace ExcelReader.Core.Reader
             }
 
             // --- Sync record-loop helpers (use blocking Fill) ---
+            // Same shape as the async wrappers below: drive the *FromBuffer primitive, refill only when
+            // it reports a buffer miss. Going through a per-record TryNextRecord meant rebuilding the
+            // buffer window (and its AsSpan bounds check) for every record, when the window only
+            // actually changes on a refill.
 
             private bool SkipToRowHdr()
             {
-                while (TryNextRecord(out int id, out _))
+                while (true)
                 {
-                    if (id == Brt.RowHdr)
+                    int result = SeekRowHdrFromBuffer();
+                    if (result != 2)
                     {
-                        return true;
+                        return result == 1;
                     }
-                    if (IsEndSheetData(id))
-                    {
-                        _ended = true;
-                        return false;
-                    }
+                    Fill();
                 }
-                ThrowIfTruncated(); // TryNextRecord returned false => EOF (not EndSheetData)
-                _ended = true;
-                return false;
             }
 
             private void CollectCells()
             {
-                while (TryNextRecord(out int id, out ReadOnlySpan<byte> payload))
+                while (CollectCellsFromBuffer() == 2)
                 {
-                    if (id == Brt.RowHdr)
-                    {
-                        _pendingRowHdr = true;
-                        return;
-                    }
-                    if (IsEndSheetData(id))
-                    {
-                        _ended = true;
-                        return;
-                    }
-                    ProcessCell(id, payload);
+                    Fill();
                 }
-                ThrowIfTruncated(); // EOF reached without an EndSheetData record
-                _ended = true;
             }
 
             // --- Async record-loop helpers ---
@@ -225,20 +221,27 @@ namespace ExcelReader.Core.Reader
             }
 
             // 1 = found BrtRowHdr; 0 = ended (EndSheetData/EOF); 2 = buffer exhausted (needs refill).
+            // One reader per buffer window, not per record. TryReadRecord leaves its Position on the
+            // last fully decoded record, so writing _pos back on every exit preserves the retry
+            // contract: a partial record at the window's tail is re-decoded after the refill.
             private int SeekRowHdrFromBuffer()
             {
-                while (TryNextRecordFromBuffer(out int id, out _))
+                Biff12RecordReader reader = new(_buf.AsSpan(_pos, _len - _pos));
+                while (reader.TryReadRecord(out int id, out _))
                 {
                     if (id == Brt.RowHdr)
                     {
+                        _pos += reader.Position;
                         return 1;
                     }
                     if (IsEndSheetData(id))
                     {
+                        _pos += reader.Position;
                         _ended = true;
                         return 0;
                     }
                 }
+                _pos += reader.Position;
                 if (_eof)
                 {
                     ThrowIfTruncated();
@@ -251,20 +254,24 @@ namespace ExcelReader.Core.Reader
             // 1 = found next BrtRowHdr (_pendingRowHdr set); 0 = ended; 2 = needs refill.
             private int CollectCellsFromBuffer()
             {
-                while (TryNextRecordFromBuffer(out int id, out ReadOnlySpan<byte> payload))
+                var reader = new Biff12RecordReader(_buf.AsSpan(_pos, _len - _pos));
+                while (reader.TryReadRecord(out int id, out ReadOnlySpan<byte> payload))
                 {
                     if (id == Brt.RowHdr)
                     {
+                        _pos += reader.Position;
                         _pendingRowHdr = true;
                         return 1;
                     }
                     if (IsEndSheetData(id))
                     {
+                        _pos += reader.Position;
                         _ended = true;
                         return 0;
                     }
                     ProcessCell(id, payload);
                 }
+                _pos += reader.Position;
                 if (_eof)
                 {
                     ThrowIfTruncated();
@@ -291,42 +298,44 @@ namespace ExcelReader.Core.Reader
                     case Brt.CellRk when payload.Length >= 12:
                         AddDouble(col, style, Biff12.Rk(Biff12.ReadU32(payload, 8)));
                         break;
-                    case Brt.CellReal when payload.Length >= 16:
-                        AddDouble(col, style, Biff12.ReadF64(payload, 8));
-                        break;
-                    case Brt.CellIsst when payload.Length >= 12:
-                        var (start, len) = _reader.SharedAt((int)Biff12.ReadU32(payload, 8));
-                        _acc.Add(col, start, len, CellType.ExcelString, style, CellValueSource.Shared);
-                        break;
-
-                    case Brt.CellSt when Biff12.TryReadWideString(payload, 8, out ReadOnlySpan<char> chars, out _):
-                        AppendString(col, style, chars);
-                        break;
-                    case Brt.CellBool when payload.Length >= 9:
-                        AppendBool(col, style, payload[8]);
-                        break;
-                    case Brt.CellError when payload.Length >= 9:
-                        AppendError(col, style, payload[8]);
-                        break;
                     // Formula cells: the cached result immediately follows the col/style header, in
                     // the same shape as the equivalent plain-cell record; the formula bytes that follow
                     // are outside the record framing we care about (TryReadRecord already bounds payload).
-                    case Brt.FmlaNum when payload.Length >= 16:
+                    case Brt.CellReal or Brt.FmlaNum when payload.Length >= 16:
                         AddDouble(col, style, Biff12.ReadF64(payload, 8));
                         break;
-                    case Brt.FmlaString when Biff12.TryReadWideString(payload, 8, out ReadOnlySpan<char> fmlaChars, out _):
-                        AppendString(col, style, fmlaChars);
+                    case Brt.CellIsst when payload.Length >= 12:
+                        var (start, len) = WorkbookLookups.SharedAt(_sharedOffsets, (int)Biff12.ReadU32(payload, 8));
+                        _acc.Add(col, start, len, CellType.ExcelString, style, CellValueSource.Shared);
                         break;
-                    case Brt.FmlaBool when payload.Length >= 9:
+
+                    case Brt.CellSt or Brt.FmlaString:
+                        AddInlineString(col, style, payload, 8);
+                        break;
+                    case Brt.CellBool or Brt.FmlaBool when payload.Length >= 9:
                         AppendBool(col, style, payload[8]);
                         break;
-                    case Brt.FmlaError when payload.Length >= 9:
+                    case Brt.CellError or Brt.FmlaError when payload.Length >= 9:
                         AppendError(col, style, payload[8]);
                         break;
-                    case Brt.CellRString when payload.Length >= 9 && Biff12.TryReadWideString(payload, 9, out ReadOnlySpan<char> richChars, out _):
-                        AppendString(col, style, richChars);
+                    case Brt.CellRString when payload.Length >= 9:
+                        AddInlineString(col, style, payload, 9);
                         break;
                         // CellBlank: no value to emit
+                }
+            }
+
+            // The `out ReadOnlySpan<char>` deliberately lives here rather than in ProcessCell: an
+            // address-exposed byref-containing local must be zero-initialised in the prologue for GC
+            // reporting, and ProcessCell was paying that on *every* cell -- including CellRk/CellReal,
+            // which never touch a string. Keeping the span out of ProcessCell's frame keeps its
+            // prologue cheap. NoInlining so the JIT can't undo it.
+            [MethodImpl(MethodImplOptions.NoInlining)]
+            private void AddInlineString(int col, int style, ReadOnlySpan<byte> payload, int offset)
+            {
+                if (Biff12.TryReadWideString(payload, offset, out ReadOnlySpan<char> chars, out _))
+                {
+                    AppendString(col, style, chars);
                 }
             }
 
@@ -335,10 +344,19 @@ namespace ExcelReader.Core.Reader
                 return id == Brt.EndSheetData;
             }
 
+            // NoInlining for the same reason as AddInlineString: inlined here, the double got promoted
+            // into xmm6 -- callee-saved on Windows x64 -- so ProcessCell had to vmovaps it to the stack
+            // and back on *every* cell, including the CellIsst/bool/error arms that never touch a double.
+            // The CellReal/FmlaNum arm was already a call, so this only makes the two numeric arms
+            // consistent. Costs the RK arm one call; saves every other arm the register shuffle.
+            [MethodImpl(MethodImplOptions.NoInlining)]
             private void AddDouble(int col, int style, double value)
             {
-                CellType type = _reader.IsDateStyle(style) ? CellType.Date : CellType.Number;
-                _acc.Add(col, _acc.ValueLength, 0, type, style, CellValueSource.RowValues, number: value, hasNumber: true);
+                CellType type = WorkbookLookups.IsDateStyle(_styleIsDate, style) ? CellType.Date : CellType.Number;
+                // One local, not two `_acc` field reads: the JIT emitted a redundant reload of the
+                // field for the ValueLength argument.
+                CellAccumulator acc = _acc;
+                acc.Add(col, acc.ValueLength, 0, type, style, CellValueSource.RowValues, number: value, hasNumber: true);
             }
 
             private void AppendString(int col, int style, ReadOnlySpan<char> chars)
@@ -366,36 +384,6 @@ namespace ExcelReader.Core.Reader
             }
 
             // --- Binary streaming ---
-
-            private bool TryNextRecord(out int id, out ReadOnlySpan<byte> payload)
-            {
-                while (true)
-                {
-                    if (TryNextRecordFromBuffer(out id, out payload))
-                    {
-                        return true;
-                    }
-                    if (_eof)
-                    {
-                        return false;
-                    }
-                    Fill();
-                }
-            }
-
-            // Tries to decode one record from the current buffer window. Position advances only on success.
-            private bool TryNextRecordFromBuffer(out int id, out ReadOnlySpan<byte> payload)
-            {
-                var reader = new Biff12RecordReader(_buf.AsSpan(_pos, _len - _pos));
-                if (reader.TryReadRecord(out id, out payload))
-                {
-                    _pos += reader.Position;
-                    return true;
-                }
-                id = -1;
-                payload = default;
-                return false;
-            }
 
             // Called when the record loop hits EOF unable to decode another record. Unconsumed bytes at
             // that point (_pos < _len) are a record whose framing/payload ran past the end of the stream —
