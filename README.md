@@ -219,6 +219,40 @@ while (await rows.MoveNextAsync())
 
 `await foreach` does not accept `.WithCancellation(ct)`: `Row` being a `ref struct` rules out `IAsyncEnumerable<Row>`, so the loop binds to the pattern rather than the interface. Pass the token at open time (as above), or use the manual `GetAsyncEnumeratorAsync(ct)` loop.
 
+## Prefetch decompression (XLSX/XLSB)
+
+XLSX and XLSB are ZIP-backed, and inflating a sheet's compressed bytes competes for
+wall-clock time with parsing it. `ExcelReaderOptions.PrefetchDecompression` overlaps the
+two: a background thread inflates ahead while the calling thread parses. It is **opt-in,
+defaults to `false`**, and only affects XLSX/XLSB — XLS and CSV have nothing to
+decompress, so the option is silently ignored for them.
+
+```csharp
+var options = new ExcelReaderOptions { PrefetchDecompression = true };
+using var reader = Excel.FromFile("report.xlsx", options);
+
+foreach (var row in reader)
+{
+    Console.WriteLine(row[0].GetString());
+}
+```
+
+Measured on the real-data benchmark (see [Real data reads](#real-data-reads)), on a
+65K-row workbook:
+
+| Format | Default | `PrefetchDecompression = true` | Gain |
+|---|---|---|---|
+| XLSX | 66.7 ms | 45.1 ms | 32% |
+| XLSM | 66.8 ms | 47.3 ms | 29% |
+| XLSB | 22.9 ms | 14.0 ms | 39% |
+
+Allocations roughly double on XLSX and rise about a quarter on XLSB, from the producer
+task and the pooled decompression buffers; neither path triggers a GC collection. Do
+**not** enable it for concurrent
+server workloads: a caller already reading many files in parallel is CPU-saturated, and
+an extra background thread per read only doubles thread demand for no gain. It's meant
+for single-file batch processing.
+
 ## Parse typed rows
 
 `ExcelParser<T>` maps worksheet columns to the public settable properties of `T`. Columns match on the property name, or on `[ExcelColumn("header")]` aliases — repeat the attribute to accept several headers. The first row is the header by default.

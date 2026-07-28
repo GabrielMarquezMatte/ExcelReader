@@ -17,6 +17,8 @@ namespace ExcelReader.Benchmarks
     [MemoryDiagnoser]
     public class RealDataReadBenchmark
     {
+        private static readonly ExcelReaderOptions _prefetchOptions = new() { PrefetchDecompression = true };
+
         private byte[] _xlsx = [];
         private byte[] _xlsm = [];
         private byte[] _xlsb = [];
@@ -92,8 +94,8 @@ namespace ExcelReader.Benchmarks
         [Benchmark(Baseline = true)]
         public long Xlsx_ExcelReader()
         {
-            using var ms = new MemoryStream(_xlsx, writable: false);
-            using var reader = Excel.From(ms);
+            using MemoryStream ms = new(_xlsx, writable: false);
+            using XlsxReader reader = Excel.From(ms);
             long acc = 0;
             foreach (Row row in reader) { acc += AccumulateRow(row); }
             return acc;
@@ -102,9 +104,19 @@ namespace ExcelReader.Benchmarks
         [Benchmark]
         public long Xlsx_Sylvan()
         {
-            using var ms = new MemoryStream(_xlsx, writable: false);
-            using var reader = ExcelDataReader.Create(ms, ExcelWorkbookType.ExcelXml, new ExcelDataReaderOptions());
+            using MemoryStream ms = new(_xlsx, writable: false);
+            using ExcelDataReader reader = ExcelDataReader.Create(ms, ExcelWorkbookType.ExcelXml, new ExcelDataReaderOptions());
             return AccumulateSylvanExcel(reader);
+        }
+
+        [Benchmark]
+        public long Xlsx_ExcelReader_Prefetch()
+        {
+            using MemoryStream ms = new(_xlsx, writable: false);
+            using XlsxReader reader = Excel.From(ms, options: _prefetchOptions);
+            long acc = 0;
+            foreach (Row row in reader) { acc += AccumulateRow(row); }
+            return acc;
         }
 
         // --- XLSM (same OOXML container as XLSX; ExcelReader parses it identically) ---
@@ -112,8 +124,8 @@ namespace ExcelReader.Benchmarks
         [Benchmark]
         public long Xlsm_ExcelReader()
         {
-            using var ms = new MemoryStream(_xlsm, writable: false);
-            using var reader = Excel.From(ms);
+            using MemoryStream ms = new(_xlsm, writable: false);
+            using XlsxReader reader = Excel.From(ms);
             long acc = 0;
             foreach (Row row in reader) { acc += AccumulateRow(row); }
             return acc;
@@ -122,9 +134,19 @@ namespace ExcelReader.Benchmarks
         [Benchmark]
         public long Xlsm_Sylvan()
         {
-            using var ms = new MemoryStream(_xlsm, writable: false);
-            using var reader = ExcelDataReader.Create(ms, ExcelWorkbookType.ExcelXml, new ExcelDataReaderOptions());
+            using MemoryStream ms = new(_xlsm, writable: false);
+            using ExcelDataReader reader = ExcelDataReader.Create(ms, ExcelWorkbookType.ExcelXml, new ExcelDataReaderOptions());
             return AccumulateSylvanExcel(reader);
+        }
+
+        [Benchmark]
+        public long Xlsm_ExcelReader_Prefetch()
+        {
+            using MemoryStream ms = new(_xlsm, writable: false);
+            using XlsxReader reader = Excel.From(ms, options: _prefetchOptions);
+            long acc = 0;
+            foreach (Row row in reader) { acc += AccumulateRow(row); }
+            return acc;
         }
 
         // --- XLSB ---
@@ -132,8 +154,8 @@ namespace ExcelReader.Benchmarks
         [Benchmark]
         public long Xlsb_ExcelReader()
         {
-            using var ms = new MemoryStream(_xlsb, writable: false);
-            using var reader = Excel.FromXlsb(ms);
+            using MemoryStream ms = new(_xlsb, writable: false);
+            using XlsbReader reader = Excel.FromXlsb(ms);
             long acc = 0;
             foreach (Row row in reader) { acc += AccumulateRow(row); }
             return acc;
@@ -142,9 +164,19 @@ namespace ExcelReader.Benchmarks
         [Benchmark]
         public long Xlsb_Sylvan()
         {
-            using var ms = new MemoryStream(_xlsb, writable: false);
-            using var reader = ExcelDataReader.Create(ms, ExcelWorkbookType.ExcelBinary, new ExcelDataReaderOptions());
+            using MemoryStream ms = new(_xlsb, writable: false);
+            using ExcelDataReader reader = ExcelDataReader.Create(ms, ExcelWorkbookType.ExcelBinary, new ExcelDataReaderOptions());
             return AccumulateSylvanExcel(reader);
+        }
+
+        [Benchmark]
+        public long Xlsb_ExcelReader_Prefetch()
+        {
+            using MemoryStream ms = new(_xlsb, writable: false);
+            using XlsbReader reader = Excel.FromXlsb(ms, options: _prefetchOptions);
+            long acc = 0;
+            foreach (Row row in reader) { acc += AccumulateRow(row); }
+            return acc;
         }
 
         // --- XLS ---
@@ -152,8 +184,8 @@ namespace ExcelReader.Benchmarks
         [Benchmark]
         public long Xls_ExcelReader()
         {
-            using var ms = new MemoryStream(_xls, writable: false);
-            using var reader = Excel.FromXls(ms);
+            using MemoryStream ms = new(_xls, writable: false);
+            using XlsReader reader = Excel.FromXls(ms);
             long acc = 0;
             foreach (Row row in reader) { acc += AccumulateRow(row); }
             return acc;
@@ -162,8 +194,8 @@ namespace ExcelReader.Benchmarks
         [Benchmark]
         public long Xls_Sylvan()
         {
-            using var ms = new MemoryStream(_xls, writable: false);
-            using var reader = ExcelDataReader.Create(ms, ExcelWorkbookType.Excel, new ExcelDataReaderOptions());
+            using MemoryStream ms = new(_xls, writable: false);
+            using ExcelDataReader reader = ExcelDataReader.Create(ms, ExcelWorkbookType.Excel, new ExcelDataReaderOptions());
             return AccumulateSylvanExcel(reader);
         }
 
@@ -173,8 +205,8 @@ namespace ExcelReader.Benchmarks
         [Benchmark]
         public long Csv_ExcelReader()
         {
-            using var ms = new MemoryStream(_csv, writable: false);
-            using var reader = Excel.FromCsv(ms);
+            using MemoryStream ms = new(_csv, writable: false);
+            using CsvReader reader = Excel.FromCsv(ms);
             long acc = 0;
             foreach (Row row in reader)
             {
@@ -189,10 +221,10 @@ namespace ExcelReader.Benchmarks
         [Benchmark]
         public long Csv_Sylvan()
         {
-            using var ms = new MemoryStream(_csv, writable: false);
-            using var tr = new StreamReader(ms);
-            var options = new CsvDataReaderOptions { HasHeaders = false, Culture = CultureInfo.InvariantCulture };
-            using var reader = CsvDataReader.Create(tr, options);
+            using MemoryStream ms = new(_csv, writable: false);
+            using StreamReader tr = new(ms);
+            CsvDataReaderOptions options = new() { HasHeaders = false, Culture = CultureInfo.InvariantCulture };
+            using CsvDataReader reader = CsvDataReader.Create(tr, options);
             long acc = 0;
             while (reader.Read())
             {
