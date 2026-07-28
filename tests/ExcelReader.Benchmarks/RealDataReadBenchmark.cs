@@ -1,7 +1,6 @@
 using System.Globalization;
 using System.Text;
 using BenchmarkDotNet.Attributes;
-using ExcelReader.Core.Enums;
 using ExcelReader.Core.Reader;
 using ExcelReader.Core.ValueObjects;
 using Sylvan.Data.Csv;
