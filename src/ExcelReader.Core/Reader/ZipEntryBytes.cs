@@ -1,4 +1,3 @@
-using System.Buffers;
 using System.IO.Compression;
 
 namespace ExcelReader.Core.Reader
