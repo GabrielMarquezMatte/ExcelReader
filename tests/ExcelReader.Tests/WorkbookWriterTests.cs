@@ -1,4 +1,3 @@
-using System.Diagnostics.CodeAnalysis;
 using System.IO.Compression;
 using System.Text;
 using ExcelReader.Core.Enums;
@@ -976,10 +975,6 @@ namespace ExcelReader.Tests
         // --- DisposeAsync is idempotent ---
 
         [Fact]
-        [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP001:Dispose created",
-            Justification = "Intentionally testing manual double-dispose for idempotency contract.")]
-        [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP016:Don't use disposed instance",
-            Justification = "Second DisposeAsync call is the subject under test for idempotency.")]
         public async Task DisposeAsyncIsIdempotent()
         {
             await using var ms = new MemoryStream();

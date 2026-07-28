@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.IO.Compression;
 
 namespace ExcelReader.Core.Reader
@@ -54,9 +55,58 @@ namespace ExcelReader.Core.Reader
                 ?? throw new InvalidDataException($"Worksheet part not found: {sheets[current].Path}");
         }
 
-        internal static LimitedReadStream OpenEntryStream(ZipArchiveEntry entry, DecompressedByteCounter counter)
+        // entryLimitName/entryLimit carry a per-part cap (e.g. MaxSharedStringBytes) that
+        // LimitedReadStream enforces on top of the workbook-wide counter; parts relying solely on
+        // MaxTotalDecompressedBytes omit them.
+        [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP001:Dispose created",
+            Justification = "Ownership of the opened entry stream and its wrapper transfers to the caller.")]
+        [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
+            Justification = "Ownership of the opened entry stream and its wrapper transfers to the caller.")]
+        internal static LimitedReadStream OpenEntryStream(
+            ZipArchiveEntry entry, DecompressedByteCounter counter, ExcelReaderOptions options,
+            string entryLimitName = "", long entryLimit = 0)
         {
-            return new LimitedReadStream(entry.Open(), counter);
+            return Wrap(entry.Open(), counter, options, entryLimitName, entryLimit);
+        }
+
+#if NET10_0_OR_GREATER
+        [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP001:Dispose created",
+            Justification = "Ownership of the opened entry stream and its wrapper transfers to the caller.")]
+        [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
+            Justification = "Ownership of the opened entry stream and its wrapper transfers to the caller.")]
+        internal static async ValueTask<LimitedReadStream> OpenEntryStreamAsync(
+            ZipArchiveEntry entry, DecompressedByteCounter counter, ExcelReaderOptions options,
+            CancellationToken ct, string entryLimitName = "", long entryLimit = 0)
+        {
+            Stream opened = await entry.OpenAsync(ct).ConfigureAwait(false);
+            return Wrap(opened, counter, options, entryLimitName, entryLimit);
+        }
+#else
+        [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP001:Dispose created",
+            Justification = "Ownership of the opened entry stream and its wrapper transfers to the caller.")]
+        [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
+            Justification = "Ownership of the opened entry stream and its wrapper transfers to the caller.")]
+        internal static ValueTask<LimitedReadStream> OpenEntryStreamAsync(
+            ZipArchiveEntry entry, DecompressedByteCounter counter, ExcelReaderOptions options,
+            CancellationToken ct, string entryLimitName = "", long entryLimit = 0)
+        {
+            ct.ThrowIfCancellationRequested();
+            return new ValueTask<LimitedReadStream>(Wrap(entry.Open(), counter, options, entryLimitName, entryLimit));
+        }
+#endif
+
+        // Sole branch point for PrefetchDecompression, shared by the sync and async openers. Wrapping
+        // order is load-bearing: prefetch innermost, limits outermost, so DecompressedByteCounter
+        // accounting stays on the consumer thread and byte-for-byte identical to the serial path.
+        private static LimitedReadStream Wrap(
+            Stream opened, DecompressedByteCounter counter, ExcelReaderOptions options,
+            string entryLimitName, long entryLimit)
+        {
+            if (!options.PrefetchDecompression)
+            {
+                return new LimitedReadStream(opened, counter, entryLimitName, entryLimit);
+            }
+            return new LimitedReadStream(new PrefetchStream(opened), counter, entryLimitName, entryLimit);
         }
 
         // Sizes a worksheet's initial read buffer to its actual uncompressed size (entry.Length is exact,

@@ -16,33 +16,19 @@ namespace ExcelReader.Tests
             _inner = new MemoryStream(bytes);
         }
 
-        public override bool CanRead
-        {
-            get { return true; }
-        }
+        public override bool CanRead => true;
 
-        public override bool CanSeek
-        {
-            get { return false; }
-        }
+        public override bool CanSeek => false;
 
         [ExcludeFromCodeCoverage]
-        public override bool CanWrite
-        {
-            get { return false; }
-        }
+        public override bool CanWrite => false;
 
         [ExcludeFromCodeCoverage]
-        public override long Length
-        {
-            get { throw new NotSupportedException(); }
-        }
+        public override long Length => throw new NotSupportedException();
 
         [ExcludeFromCodeCoverage]
         public override long Position
-        {
-            get { return _inner.Position; }
-            set { throw new NotSupportedException(); }
+        { get => _inner.Position; set => throw new NotSupportedException();
         }
 
         public override int Read(byte[] buffer, int offset, int count)
@@ -196,12 +182,10 @@ namespace ExcelReader.Tests
             return ms;
         }
 
-#pragma warning disable S125 // false positive: "<x:row>" below reads as commented-out code, it's prose.
         // Builds a workbook whose every SpreadsheetML element carries a namespace prefix (e.g. <x:row>),
         // as some non-Excel producers emit. The caller supplies already-prefixed row/shared/style content
         // this prefixes the structural elements (workbook/sheets/sheet/worksheet/sheetData/sst). The .rels
         // part keeps the OPC package-relationships namespace (never the spreadsheet prefix), matching reality.
-#pragma warning restore S125
         internal static MemoryStream BuildPrefixed(
             string prefix,
             string sheetRows,

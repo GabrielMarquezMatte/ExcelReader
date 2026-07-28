@@ -37,8 +37,6 @@ namespace ExcelReader.Core.Reader
         // Sync open over an already-opened ZipArchive — lets a caller that already opened the archive
         // for format detection (Excel.Open's DetectSeekable) hand it straight to the reader instead of
         // re-parsing the central directory a second time.
-        [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP003:Dispose previous before re-assigning",
-            Justification = "Readonly field, first and only assignment in this constructor.")]
         internal XlsxReader(Stream stream, bool leaveOpen, ZipArchive zip, ExcelReaderOptions? options = null)
         {
             _stream = stream;
@@ -171,7 +169,7 @@ namespace ExcelReader.Core.Reader
         {
             EnsureSharedLoaded();
             var entry = WorkbookLookups.GetWorksheetEntry(_zip, _sheets, _current);
-            return new Enumerator(this, WorkbookLookups.OpenEntryStream(entry, _decompressedBytes), entry.Length);
+            return new Enumerator(this, WorkbookLookups.OpenEntryStream(entry, _decompressedBytes, _options), entry.Length);
         }
 
         IExcelRowEnumerator IExcelRowReader<IExcelRowEnumerator>.GetEnumerator()
@@ -206,12 +204,8 @@ namespace ExcelReader.Core.Reader
         {
             await EnsureSharedLoadedAsync(ct).ConfigureAwait(false);
             var entry = WorkbookLookups.GetWorksheetEntry(_zip, _sheets, _current);
-#if NET10_0_OR_GREATER
-            var sheet = new LimitedReadStream(await entry.OpenAsync(ct).ConfigureAwait(false), _decompressedBytes);
-#else
-            ct.ThrowIfCancellationRequested();
-            var sheet = WorkbookLookups.OpenEntryStream(entry, _decompressedBytes);
-#endif
+            LimitedReadStream sheet = await WorkbookLookups
+                .OpenEntryStreamAsync(entry, _decompressedBytes, _options, ct).ConfigureAwait(false);
             return new Enumerator(this, sheet, entry.Length, ct);
         }
 

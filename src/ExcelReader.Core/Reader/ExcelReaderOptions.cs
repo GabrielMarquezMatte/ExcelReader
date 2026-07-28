@@ -18,6 +18,15 @@ namespace ExcelReader.Core.Reader
         /// <summary>Gets the maximum number of ZIP entries allowed in an XLSX/XLSB archive. Defaults to 65,536.</summary>
         public int MaxZipEntries { get; init; } = 65_536;
 
+        /// <summary>Gets a value indicating whether ZIP-backed sheet data is decompressed on a
+        /// background thread ahead of parsing. Defaults to <see langword="false"/>.</summary>
+        /// <remarks>Applies only to ZIP-backed formats (XLSX/XLSB); XLS and CSV have nothing to
+        /// decompress, so the option is silently ignored for them. Intended for single-file batch
+        /// processing, where overlapping inflate with parsing shortens one read's wall-clock time —
+        /// not for concurrent server workloads, where the extra background thread per read competes
+        /// with work already saturating the CPU.</remarks>
+        public bool PrefetchDecompression { get; init; }
+
         /// <summary>Gets the default options instance, used whenever a reader is opened without explicit options.</summary>
         public static ExcelReaderOptions Default { get; } = new();
     }

@@ -312,8 +312,6 @@ namespace ExcelReader.Tests
         }
 
         [Fact]
-        [System.Diagnostics.CodeAnalysis.SuppressMessage("Performance", "HLQ001:Assignment causes boxing",
-            Justification = "Deliberately exercises the boxed non-generic IEnumerable.GetEnumerator() path.")]
         public void NonGenericEnumerableGetEnumeratorWorks()
         {
             using var ms = Csv("Name\nAlice\n");

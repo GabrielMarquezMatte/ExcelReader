@@ -39,7 +39,7 @@ namespace ExcelReader.Core.Reader
 
             /// <inheritdoc/>
             public Row Current =>
-                new(_acc.CellSpan, _acc.ValueSpan, _reader.SharedSpan, _reader.SharedStringCache);
+                new(_acc.CellSpan, _acc.ValueSpan, _reader.SharedSpan, _buf.AsSpan(0, _len), _reader.SharedStringCache);
 
             // Top-level scanning (finding the next '<row>'/'</sheetData>'/markup between rows) differs
             // between sync and async only in whether the buffer refill (Fill / FillAsync) awaits — so
@@ -169,8 +169,6 @@ namespace ExcelReader.Core.Reader
             }
 
             // Returns null only when markup was skipped and enumeration should continue immediately.
-            [SuppressMessage("VisualStudio.Threading", "VSTHRD103:Result synchronously blocks",
-                Justification = "The .Result access is guarded by IsCompletedSuccessfully immediately above it — never blocks.")]
             [SuppressMessage("VisualStudio.Threading", "VSTHRD002:Avoid problematic synchronous waits",
                 Justification = "The .Result access is guarded by IsCompletedSuccessfully immediately above it — never blocks.")]
             [SuppressMessage("Reliability", "CA2012:Use ValueTasks correctly",
@@ -330,7 +328,7 @@ namespace ExcelReader.Core.Reader
                         }
                         else
                         {
-                            EmitScalarValue(header.Kind, value, header.Col, header.Style);
+                            EmitScalarValueFast(header.Kind, value, valueStart, header.Col, header.Style);
                         }
                         return lt + 8;
                     }
@@ -575,10 +573,10 @@ namespace ExcelReader.Core.Reader
                 if (Utf8Parser.TryParse(indexText, out int index, out _) && index >= 0)
                 {
                     var (start, len) = _reader.SharedAt(index);
-                    _acc.Add(col, start, len, CellType.ExcelString, style, fromShared: true);
+                    _acc.Add(col, start, len, CellType.ExcelString, style, CellValueSource.Shared);
                     return;
                 }
-                _acc.Add(col, _acc.ValueLength, 0, CellType.ExcelString, style, fromShared: false);
+                _acc.Add(col, _acc.ValueLength, 0, CellType.ExcelString, style, CellValueSource.RowValues);
             }
 
             private void EmitCell(Kind kind, ReadOnlySpan<byte> inner, int col, int style)
@@ -598,7 +596,7 @@ namespace ExcelReader.Core.Reader
                         ? XlsxXml.WriteTextRuns(inner, dst)
                         : XlsxXml.WriteTextRuns(inner, dst, _ns.TOpen, _ns.TClose, _ns.RPhOpen, _ns.RPhClose);
                     _acc.Advance(written);
-                    _acc.Add(col, vStart, _acc.ValueLength - vStart, CellType.ExcelString, style, fromShared: false);
+                    _acc.Add(col, vStart, _acc.ValueLength - vStart, CellType.ExcelString, style, CellValueSource.RowValues);
                     return;
                 }
 
@@ -633,7 +631,7 @@ namespace ExcelReader.Core.Reader
                 if (kind == Kind.Formula)
                 {
                     AppendDecoded(v);
-                    _acc.Add(col, vStart, _acc.ValueLength - vStart, cellType, style, fromShared: false);
+                    _acc.Add(col, vStart, _acc.ValueLength - vStart, cellType, style, CellValueSource.RowValues);
                     return;
                 }
                 AppendRaw(v);
@@ -644,7 +642,34 @@ namespace ExcelReader.Core.Reader
                 // 17+ significant digits) just leaves hasNumber false and falls back at consume time.
                 double number = 0;
                 bool hasNumber = kind == Kind.Number && FastDouble.TryParse(v, out number);
-                _acc.Add(col, vStart, _acc.ValueLength - vStart, cellType, style, fromShared: false,
+                _acc.Add(col, vStart, _acc.ValueLength - vStart, cellType, style, CellValueSource.RowValues,
+                    number: number, hasNumber: hasNumber);
+            }
+
+            // Fast-path counterpart to EmitScalarValue, called only from ParseCellSpan's bare-<v> shape
+            // (where `valueStart` is `v`'s absolute offset in the row-buffered `buf`, guaranteed valid
+            // for as long as the accumulator's own spans — both are invalidated together at the next
+            // MoveNext). Number/Bool/Error/style-based-Date text can never contain an XML entity, so it
+            // aliases `buf` directly instead of copying into the accumulator. A Formula (t="str") result
+            // aliases only when it contains no '&' (no entity to decode); IsoDate always reformats to a
+            // serial, so it never aliases. Either exclusion falls back to the copying EmitScalarValue.
+            private void EmitScalarValueFast(Kind kind, ReadOnlySpan<byte> v, int valueStart, int col, int style)
+            {
+                if (kind == Kind.IsoDate || (kind == Kind.Formula && v.IndexOf((byte)'&') >= 0))
+                {
+                    EmitScalarValue(kind, v, col, style);
+                    return;
+                }
+                CellType cellType = kind switch
+                {
+                    Kind.Bool => CellType.Boolean,
+                    Kind.Error => CellType.Error,
+                    Kind.Formula => CellType.Formula,
+                    _ => _reader.IsDateStyle(style) ? CellType.Date : CellType.Number,
+                };
+                double number = 0;
+                bool hasNumber = kind == Kind.Number && FastDouble.TryParse(v, out number);
+                _acc.Add(col, valueStart, v.Length, cellType, style, CellValueSource.RowBuffer,
                     number: number, hasNumber: hasNumber);
             }
 
@@ -661,13 +686,13 @@ namespace ExcelReader.Core.Reader
                     Span<byte> dst = _acc.ReserveValueSpan(32);
                     Utf8Formatter.TryFormat(serial, dst, out int written);
                     _acc.Advance(written);
-                    _acc.Add(col, start, written, CellType.Date, style, fromShared: false, number: serial, hasNumber: true);
+                    _acc.Add(col, start, written, CellType.Date, style, CellValueSource.RowValues, number: serial, hasNumber: true);
                     return;
                 }
                 // Unparseable ISO text: keep it verbatim as a string so nothing is silently dropped.
                 int s = _acc.ValueLength;
                 AppendRaw(v);
-                _acc.Add(col, s, _acc.ValueLength - s, CellType.ExcelString, style, fromShared: false);
+                _acc.Add(col, s, _acc.ValueLength - s, CellType.ExcelString, style, CellValueSource.RowValues);
             }
 
             [SkipLocalsInit]

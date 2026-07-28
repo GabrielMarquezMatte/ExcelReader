@@ -19,8 +19,8 @@ namespace ExcelReader.Core.ValueObjects
         // Set only for a shared-string cell whose reader was constructed with a dedup cache (currently
         // XLSX/XLSB): _sharedKey is the string's stable byte offset into that reader's flat shared-string
         // buffer (unique per distinct non-empty shared string — see CellDesc.ToCell), and _sharedCache is
-        // the reader-owned index -> materialized-string map. Never set for non-shared cells (CSV/XLS's
-        // reuse of FromShared for per-row materialized scratch has no cross-row-stable key to cache by).
+        // the reader-owned index -> materialized-string map. Never set for non-shared cells (CSV's
+        // reuse of Source.Shared for per-row materialized scratch has no cross-row-stable key to cache by).
         private readonly int _sharedKey;
         private readonly Dictionary<int, string>? _sharedCache;
 

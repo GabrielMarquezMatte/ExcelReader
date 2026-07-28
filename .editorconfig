@@ -1,0 +1,51 @@
+root = true
+
+[*]
+charset = utf-8
+end_of_line = crlf
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+[*.cs]
+indent_style = space
+indent_size = 4
+
+# STYLEGUIDE.md: "Every method ... must use a block body. Expression bodies (=>) are forbidden on
+# methods, no matter how short." Properties are exempted here (project preference overrides the
+# guide for the common one-line forwarding getter).
+csharp_style_expression_bodied_methods = false:warning
+csharp_style_expression_bodied_constructors = false:warning
+csharp_style_expression_bodied_operators = false:warning
+csharp_style_expression_bodied_local_functions = false:warning
+
+# STYLEGUIDE.md: "Always use braces on `if`, even single-line bodies. The linter enforces this."
+csharp_prefer_braces = true:warning
+
+# STYLEGUIDE.md ternary rule ("nested ternary" / "branches contain logic" forbidden) has no direct
+# analyzer id; IDE0045/IDE0046 (convert if to/from ternary) would fight that rule, so both are off.
+dotnet_diagnostic.IDE0045.severity = none
+dotnet_diagnostic.IDE0046.severity = none
+
+# Naming: private fields _camelCase, private consts PascalCase, everything else PascalCase/camelCase
+# per STYLEGUIDE.md.
+dotnet_naming_style.underscore_camel_case.capitalization = camel_case
+dotnet_naming_style.underscore_camel_case.required_prefix = _
+dotnet_naming_style.pascal_case.capitalization = pascal_case
+
+# Consts first — more specific than the general private-field rule below, so it must win. Rule order
+# matters: the first matching rule applies.
+dotnet_naming_symbols.private_consts.applicable_kinds = field
+dotnet_naming_symbols.private_consts.applicable_accessibilities = private
+dotnet_naming_symbols.private_consts.required_modifiers = const
+
+dotnet_naming_rule.private_consts_pascal_case.symbols = private_consts
+dotnet_naming_rule.private_consts_pascal_case.style = pascal_case
+dotnet_naming_rule.private_consts_pascal_case.severity = warning
+
+dotnet_naming_symbols.private_fields.applicable_kinds = field
+dotnet_naming_symbols.private_fields.applicable_accessibilities = private
+dotnet_naming_symbols.private_fields.required_modifiers =
+
+dotnet_naming_rule.private_fields_underscore_camel_case.symbols = private_fields
+dotnet_naming_rule.private_fields_underscore_camel_case.style = underscore_camel_case
+dotnet_naming_rule.private_fields_underscore_camel_case.severity = warning

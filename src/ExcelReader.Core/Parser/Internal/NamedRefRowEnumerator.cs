@@ -97,7 +97,7 @@ namespace ExcelReader.Core.Parser.Internal
                         break;
                     case ProjectionStep.Stop:
                         return false;
-                    // Skip: loop again.
+                        // Skip: loop again.
                 }
             }
             return false;
@@ -154,7 +154,7 @@ namespace ExcelReader.Core.Parser.Internal
                     break; // map built at the header row — resume the fast path for the next row.
                 case ProjectionStep.Stop:
                     return false;
-                // Skip: resume the fast path.
+                    // Skip: resume the fast path.
             }
             return await MoveNextAsync().ConfigureAwait(false);
         }

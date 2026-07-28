@@ -31,7 +31,7 @@ namespace ExcelReader.Core.Reader
 
             /// <inheritdoc/>
             public Row Current =>
-                new(_acc.CellSpan, _acc.ValueSpan, _reader.SharedSpan, _reader.SharedStringCache);
+                new(_acc.CellSpan, _acc.ValueSpan, _reader.SharedSpan, rowBuffer: default, _reader.SharedStringCache);
 
             /// <inheritdoc/>
             public bool MoveNext()
@@ -162,7 +162,7 @@ namespace ExcelReader.Core.Reader
                             int col = ReadU16(data, 2);
                             int style = ReadU16(data, 4);
                             var (start, len) = _reader.SharedAt(ReadI32(data, 6));
-                            _acc.Add(col, start, len, CellType.ExcelString, style, fromShared: true);
+                            _acc.Add(col, start, len, CellType.ExcelString, style, CellValueSource.Shared);
                         }
                         break;
                     case Rec.Number:
@@ -202,7 +202,7 @@ namespace ExcelReader.Core.Reader
                 byte flags = data[8];
                 int valueStart = _acc.ValueLength;
                 DecodeUnicodeString(data[9..], chars, flags);
-                _acc.Add(col, valueStart, _acc.ValueLength - valueStart, CellType.ExcelString, style, fromShared: false);
+                _acc.Add(col, valueStart, _acc.ValueLength - valueStart, CellType.ExcelString, style, CellValueSource.RowValues);
             }
 
             // Decodes an XLUnicodeString body (chars, already-read flags byte) that may continue
@@ -292,7 +292,7 @@ namespace ExcelReader.Core.Reader
                                 int cch = ReadU16(str, 0);
                                 byte strFlags = str[2];
                                 DecodeUnicodeString(str[3..], cch, strFlags);
-                                _acc.Add(col, start, _acc.ValueLength - start, CellType.ExcelString, style, fromShared: false);
+                                _acc.Add(col, start, _acc.ValueLength - start, CellType.ExcelString, style, CellValueSource.RowValues);
                             }
                             break;
                         default:
@@ -308,7 +308,7 @@ namespace ExcelReader.Core.Reader
                 // Store the raw double only — no eager formatting. Cell formats lazily if a caller
                 // asks for text (GetString/Value); numeric consumers read the double directly.
                 CellType type = forced ?? (_reader.IsDateStyle(style) ? CellType.Date : CellType.Number);
-                _acc.Add(col, _acc.ValueLength, 0, type, style, fromShared: false, number: value, hasNumber: true);
+                _acc.Add(col, _acc.ValueLength, 0, type, style, CellValueSource.RowValues, number: value, hasNumber: true);
             }
 
             /// <inheritdoc/>

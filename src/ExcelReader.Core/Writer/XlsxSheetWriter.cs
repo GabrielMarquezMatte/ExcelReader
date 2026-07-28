@@ -51,12 +51,6 @@ namespace ExcelReader.Core.Writer
         /// <exception cref="InvalidOperationException">The sheet has already been started.</exception>
         [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP003:Dispose previous before re-assigning",
             Justification = "_stream is always null when StartAsync is called (state machine guarantees Created state).")]
-        [SuppressMessage("AsyncFixer", "AsyncFixer02:Long-running or blocking operation invoked inside an async method",
-            Justification = "ZipArchiveEntry.Open() is used intentionally; OpenAsync entry-tracking semantics differ in .NET 10.")]
-        [SuppressMessage("Reliability", "CA1849:Call async methods when in an async method",
-            Justification = "See AsyncFixer02 justification above.")]
-        [SuppressMessage("Sonar", "S6966:Await DisposeAsync instead",
-            Justification = "See AsyncFixer02 justification above.")]
         public async ValueTask StartAsync(CancellationToken ct = default)
         {
             WriterStateGuard.ThrowIfEnded(_state, this);
@@ -117,12 +111,6 @@ namespace ExcelReader.Core.Writer
         /// <inheritdoc/>
         /// <exception cref="ObjectDisposedException">The sheet has already been ended.</exception>
         /// <exception cref="InvalidOperationException">The sheet has not been started, or the active <see cref="XlsxRowWriter"/> has not been disposed.</exception>
-        [SuppressMessage("Reliability", "CA1849:Call async methods when in an async method",
-            Justification = "Dispose() is called synchronously to ensure ZipArchive entry tracking is updated before this method returns.")]
-        [SuppressMessage("Sonar", "S6966:Await DisposeAsync instead",
-            Justification = "See CA1849 justification above.")]
-        [SuppressMessage("VisualStudio.Threading", "VSTHRD103:Dispose synchronously blocks",
-            Justification = "See CA1849 justification above.")]
         public async ValueTask EndAsync(CancellationToken ct = default)
         {
             WriterStateGuard.ThrowIfEnded(_state, this);

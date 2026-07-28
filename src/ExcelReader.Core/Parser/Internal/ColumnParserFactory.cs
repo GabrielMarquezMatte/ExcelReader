@@ -408,8 +408,6 @@ namespace ExcelReader.Core.Parser.Internal
             };
         }
 
-        [SuppressMessage("Blocker Code Smell", "S3011:Reflection should not be used to increase accessibility of classes, methods, or fields",
-            Justification = "Called via MakeGenericMethod dispatch; private access is intentional and type-safe.")]
         private static ColumnParser<T> BuildNullableParsableCore<T, TProp>(PropertyInfo prop)
             where TProp : struct, IUtf8SpanParsable<TProp>
 #if NET9_0_OR_GREATER

@@ -1,3 +1,4 @@
+using System.Buffers;
 using System.Text;
 using ExcelReader.Core.Reader;
 using B = ExcelReader.Tests.Biff12Build;
@@ -132,6 +133,81 @@ namespace ExcelReader.Tests
             Assert.Equal("Alice", At(flat, offsets, 0));
             Assert.Equal("Café", At(flat, offsets, 1));
             Assert.Equal("Ω", At(flat, offsets, 2));
+        }
+
+        [Fact]
+        public void StreamingSharedStringsMatchInMemoryDecoder()
+        {
+            byte[] shared = SharedStringsWithManyItems();
+            var expected = XlsbSharedStrings.Parse(shared);
+
+            byte[] flat = [];
+            try
+            {
+                using var stream = new MemoryStream(shared);
+                (flat, int[] offsets) = XlsbSharedStrings.ParseStreaming(stream, shared.Length, ExcelReaderOptions.Default);
+
+                Assert.Equal(expected.Offsets, offsets);
+                Assert.True(expected.Flat.AsSpan().SequenceEqual(flat.AsSpan(0, offsets[^1])));
+            }
+            finally
+            {
+                if (flat.Length != 0)
+                {
+                    ArrayPool<byte>.Shared.Return(flat);
+                }
+            }
+        }
+
+        [Fact]
+        public async Task AsyncStreamingSharedStringsMatchInMemoryDecoder()
+        {
+            byte[] shared = SharedStringsWithManyItems();
+            var expected = XlsbSharedStrings.Parse(shared);
+
+            byte[] flat = [];
+            try
+            {
+                await using var stream = new MemoryStream(shared);
+                (flat, int[] offsets) = await XlsbSharedStrings.ParseStreamingAsync(
+                    stream, shared.Length, ExcelReaderOptions.Default, TestContext.Current.CancellationToken);
+
+                Assert.Equal(expected.Offsets, offsets);
+                Assert.True(expected.Flat.AsSpan().SequenceEqual(flat.AsSpan(0, offsets[^1])));
+            }
+            finally
+            {
+                if (flat.Length != 0)
+                {
+                    ArrayPool<byte>.Shared.Return(flat);
+                }
+            }
+        }
+
+        [Fact]
+        public void StreamingSharedStringsEnforcesDecodedByteLimit()
+        {
+            byte[] shared = B.Record(Brt.SSTItem, [0, .. B.WideString("limit")]);
+            using var stream = new MemoryStream(shared);
+
+            ExcelLimitExceededException ex = Assert.Throws<ExcelLimitExceededException>(() =>
+                XlsbSharedStrings.ParseStreaming(stream, shared.Length,
+                    new ExcelReaderOptions { MaxSharedStringBytes = 4 }));
+
+            Assert.Equal(nameof(ExcelReaderOptions.MaxSharedStringBytes), ex.LimitName);
+            Assert.Equal(5, ex.Actual);
+        }
+
+        private static byte[] SharedStringsWithManyItems()
+        {
+            var bytes = new List<byte>();
+            bytes.AddRange(B.Record(Brt.BeginSst, [.. B.U32(700), .. B.U32(700)]));
+            for (int i = 0; i < 700; i++)
+            {
+                bytes.AddRange(B.Record(Brt.SSTItem, [0, .. B.WideString($"shared string {i:D4} — café")]));
+            }
+            bytes.AddRange(B.Record(Brt.EndSst));
+            return [.. bytes];
         }
 
         private static string At(byte[] flat, int[] offsets, int index)
