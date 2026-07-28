@@ -138,10 +138,9 @@ namespace ExcelReader.Core.Reader
             }
         }
 
-        private async ValueTask ParseSharedStreamingAsync(Stream stream, long entryLength, CancellationToken ct)
         {
-            int partLength = checked((int)entryLength);
-            int growthCap = SharedFlatGrowthCap();
+            LimitChecks.ThrowIfEntryLengthExceeds(entryLength, Array.MaxLength, "ArrayMaxLength");
+            int partLength = (int)entryLength;
             var io = new BufferedStreamCursor(growthCap, nameof(ExcelReaderOptions.MaxSharedStringBytes),
                 WorkbookLookups.InitialBufferCapacity(entryLength));
             try
