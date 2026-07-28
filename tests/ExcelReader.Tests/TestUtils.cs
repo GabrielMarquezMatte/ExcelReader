@@ -16,33 +16,19 @@ namespace ExcelReader.Tests
             _inner = new MemoryStream(bytes);
         }
 
-        public override bool CanRead
-        {
-            get { return true; }
-        }
+        public override bool CanRead => true;
 
-        public override bool CanSeek
-        {
-            get { return false; }
-        }
+        public override bool CanSeek => false;
 
         [ExcludeFromCodeCoverage]
-        public override bool CanWrite
-        {
-            get { return false; }
-        }
+        public override bool CanWrite => false;
 
         [ExcludeFromCodeCoverage]
-        public override long Length
-        {
-            get { throw new NotSupportedException(); }
-        }
+        public override long Length => throw new NotSupportedException();
 
         [ExcludeFromCodeCoverage]
         public override long Position
-        {
-            get { return _inner.Position; }
-            set { throw new NotSupportedException(); }
+        { get => _inner.Position; set => throw new NotSupportedException();
         }
 
         public override int Read(byte[] buffer, int offset, int count)
