@@ -33,7 +33,7 @@ namespace ExcelReader.Core.Reader
 
             /// <inheritdoc/>
             public Row Current =>
-                new(_acc.CellSpan, _acc.ValueSpan, _reader.SharedSpan, _reader.SharedStringCache);
+                new(_acc.CellSpan, _acc.ValueSpan, _reader.SharedSpan, rowBuffer: default, _reader.SharedStringCache);
 
             /// <inheritdoc/>
             public bool MoveNext()
@@ -294,7 +294,7 @@ namespace ExcelReader.Core.Reader
                         break;
                     case Brt.CellIsst when payload.Length >= 12:
                         var (start, len) = _reader.SharedAt((int)Biff12.ReadU32(payload, 8));
-                        _acc.Add(col, start, len, CellType.ExcelString, style, fromShared: true);
+                        _acc.Add(col, start, len, CellType.ExcelString, style, CellValueSource.Shared);
                         break;
 
                     case Brt.CellSt when Biff12.TryReadWideString(payload, 8, out ReadOnlySpan<char> chars, out _):
@@ -336,7 +336,7 @@ namespace ExcelReader.Core.Reader
             private void AddDouble(int col, int style, double value)
             {
                 CellType type = _reader.IsDateStyle(style) ? CellType.Date : CellType.Number;
-                _acc.Add(col, _acc.ValueLength, 0, type, style, fromShared: false, number: value, hasNumber: true);
+                _acc.Add(col, _acc.ValueLength, 0, type, style, CellValueSource.RowValues, number: value, hasNumber: true);
             }
 
             private void AppendString(int col, int style, ReadOnlySpan<char> chars)
@@ -345,7 +345,7 @@ namespace ExcelReader.Core.Reader
                 int start = _acc.ValueLength;
                 Span<byte> dst = _acc.ReserveValueSpan(Encoding.UTF8.GetMaxByteCount(chars.Length));
                 _acc.Advance(Encoding.UTF8.GetBytes(chars, dst));
-                _acc.Add(col, start, _acc.ValueLength - start, CellType.ExcelString, style, fromShared: false);
+                _acc.Add(col, start, _acc.ValueLength - start, CellType.ExcelString, style, CellValueSource.RowValues);
             }
 
             private void AppendBool(int col, int style, byte value)

@@ -11,16 +11,20 @@ namespace ExcelReader.Core.ValueObjects
         private readonly ReadOnlySpan<CellDesc> _cells; // ascending by Column, gaps allowed
         private readonly ReadOnlySpan<byte> _rowValues;
         private readonly ReadOnlySpan<byte> _shared;
+        // Aliases the reader's live read buffer directly (currently only XLSX's bare-<v> fast path uses
+        // this) — empty for readers that never emit a CellValueSource.RowBuffer cell.
+        private readonly ReadOnlySpan<byte> _rowBuffer;
         // Non-null only for readers with a true, cross-row-stable shared-string table (XLSX/XLSB); see
         // CellDesc.ToCell. Defaults to null so existing 3-arg call sites (CSV, XLS) are unaffected.
         private readonly Dictionary<int, string>? _sharedStringCache;
 
         internal Row(ReadOnlySpan<CellDesc> cells, ReadOnlySpan<byte> rowValues, ReadOnlySpan<byte> shared,
-            Dictionary<int, string>? sharedStringCache = null)
+            ReadOnlySpan<byte> rowBuffer = default, Dictionary<int, string>? sharedStringCache = null)
         {
             _cells = cells;
             _rowValues = rowValues;
             _shared = shared;
+            _rowBuffer = rowBuffer;
             _sharedStringCache = sharedStringCache;
         }
 
@@ -28,7 +32,7 @@ namespace ExcelReader.Core.ValueObjects
         public int ColumnCount => _cells.IsEmpty ? 0 : _cells[^1].Column + 1;
 
         /// <summary>Enumerates only the populated cells in this row, in ascending column order.</summary>
-        public RowCellEnumerator Cells => new(_cells, _rowValues, _shared, _sharedStringCache);
+        public RowCellEnumerator Cells => new(_cells, _rowValues, _shared, _rowBuffer, _sharedStringCache);
 
         /// <summary>Gets the cell at the given column index, or an empty cell if the column has no value.</summary>
         public Cell this[int column]
@@ -40,7 +44,7 @@ namespace ExcelReader.Core.ValueObjects
                 {
                     return new Cell(CellType.Empty, default);
                 }
-                return _cells[i].ToCell(_rowValues, _shared, _sharedStringCache);
+                return _cells[i].ToCell(_rowValues, _shared, _rowBuffer, _sharedStringCache);
             }
         }
 

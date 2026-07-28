@@ -71,6 +71,20 @@ namespace ExcelReader.Core.Reader
             return new LimitedReadStream(new PrefetchStream(entry.Open()), counter);
         }
 
+        // Same branch point, plus a per-entry limit (e.g. MaxSharedStringBytes) LimitedReadStream
+        // enforces on top of the workbook-wide counter — used by parts that carry their own cap
+        // instead of relying solely on MaxTotalDecompressedBytes.
+        internal static LimitedReadStream OpenEntryStream(
+            ZipArchiveEntry entry, DecompressedByteCounter counter, ExcelReaderOptions options,
+            string entryLimitName, long entryLimit)
+        {
+            if (!options.PrefetchDecompression)
+            {
+                return new LimitedReadStream(entry.Open(), counter, entryLimitName, entryLimit);
+            }
+            return new LimitedReadStream(new PrefetchStream(entry.Open()), counter, entryLimitName, entryLimit);
+        }
+
         // Sizes a worksheet's initial read buffer to its actual uncompressed size (entry.Length is exact,
         // from the ZIP central directory) instead of a fixed 64 KB — fewer DeflateStream.Read interop
         // transitions and PrepareBuffer compaction memmoves for sheets larger than that. Capped at 256 KB
