@@ -1,4 +1,3 @@
-using System.Diagnostics.CodeAnalysis;
 using BenchmarkDotNet.Attributes;
 using ExcelReader.Core.Writer;
 using MiniExcelLibs;
