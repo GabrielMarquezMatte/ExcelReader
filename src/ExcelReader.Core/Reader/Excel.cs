@@ -1,6 +1,7 @@
 using System.Diagnostics.CodeAnalysis;
 using System.IO.Compression;
 using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 using ExcelReader.Core.Enums;
 using ExcelReader.Core.Writer.Internal;
 
@@ -29,6 +30,19 @@ namespace ExcelReader.Core.Reader
         public static XlsxReader From(Stream stream, bool leaveOpen = true, ExcelReaderOptions? options = null)
         {
             return new XlsxReader(stream, leaveOpen, options);
+        }
+
+        /// <summary>
+        /// Opens an XLSX workbook directly from an in-memory buffer (docs/in-memory-zip.md). Reads the ZIP
+        /// central directory and decompresses parts without a <see cref="ZipArchive"/>
+        /// or intermediate <see cref="Stream"/> — every part is fully materialized up front, so the returned
+        /// reader never suspends, even under <c>await foreach</c>.
+        /// </summary>
+        /// <param name="data">The whole XLSX file's bytes. Must outlive the returned reader.</param>
+        /// <param name="options">Resource limits and behavior toggles; <see cref="ExcelReaderOptions.Default"/> when <see langword="null"/>. <see cref="ExcelReaderOptions.PrefetchDecompression"/> is ignored on this path — there is nothing left to overlap.</param>
+        public static XlsxReader From(ReadOnlyMemory<byte> data, ExcelReaderOptions? options = null)
+        {
+            return XlsxReader.CreateFromMemory(data, options);
         }
 
         /// <summary>Opens a legacy binary (XLS) workbook from a file path, taking ownership of the file stream.</summary>
@@ -65,6 +79,19 @@ namespace ExcelReader.Core.Reader
         public static XlsbReader FromXlsb(Stream stream, bool leaveOpen = true, ExcelReaderOptions? options = null)
         {
             return new XlsbReader(stream, leaveOpen, options);
+        }
+
+        /// <summary>
+        /// Opens an XLSB workbook directly from an in-memory buffer (docs/in-memory-zip.md). Reads the ZIP
+        /// central directory and decompresses parts without a <see cref="ZipArchive"/>
+        /// or intermediate <see cref="Stream"/> — every part is fully materialized up front, so the returned
+        /// reader never suspends, even under <c>await foreach</c>.
+        /// </summary>
+        /// <param name="data">The whole XLSB file's bytes. Must outlive the returned reader.</param>
+        /// <param name="options">Resource limits and behavior toggles; <see cref="ExcelReaderOptions.Default"/> when <see langword="null"/>. <see cref="ExcelReaderOptions.PrefetchDecompression"/> is ignored on this path — there is nothing left to overlap.</param>
+        public static XlsbReader FromXlsb(ReadOnlyMemory<byte> data, ExcelReaderOptions? options = null)
+        {
+            return XlsbReader.CreateFromMemory(data, options);
         }
 
         /// <summary>Asynchronously opens an XLSX workbook from a file path, taking ownership of the file stream.</summary>
@@ -213,6 +240,63 @@ namespace ExcelReader.Core.Reader
         }
 
         /// <summary>
+        /// Opens a workbook from an in-memory buffer, auto-detecting its format (XLSX/XLSB/XLS) from its
+        /// signature (docs/in-memory-zip.md). XLSX/XLSB route through <see cref="ZipMemoryIndex"/> instead of
+        /// a <see cref="System.IO.Compression.ZipArchive"/>/<see cref="Stream"/>, so the returned reader never
+        /// suspends, even under <c>await foreach</c>.
+        /// </summary>
+        /// <param name="data">The whole workbook file's bytes. Must outlive the returned reader.</param>
+        /// <param name="options">Resource limits and behavior toggles; <see cref="ExcelReaderOptions.Default"/> when <see langword="null"/>.</param>
+        /// <returns>A format-agnostic <see cref="IExcelRowReader"/> backed by the concrete reader that matches the detected format.</returns>
+        /// <exception cref="InvalidDataException">The buffer's signature does not match a supported format.</exception>
+        [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP001:Dispose created",
+            Justification = "memZip (when non-null) is handed to the chosen reader on success, which takes ownership; on Unknown format it's disposed immediately above.")]
+        [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
+            Justification = "memZip (when non-null) is handed to the chosen reader on success, which takes ownership; on Unknown format it's disposed immediately above.")]
+        public static IExcelRowReader Open(ReadOnlyMemory<byte> data, ExcelReaderOptions? options = null)
+        {
+            ExcelReaderOptions effective = options ?? ExcelReaderOptions.Default;
+            ExcelFileFormat format = ClassifyMemory(data, effective, out ZipMemoryIndex? memZip);
+            if (format is ExcelFileFormat.Unknown)
+            {
+                memZip?.Dispose();
+                UnknownFormatException();
+            }
+            return format switch
+            {
+                ExcelFileFormat.Xls => new XlsReader(ToMemoryStream(data), leaveOpen: false, effective),
+                ExcelFileFormat.Xlsb => XlsbReader.CreateFromMemory(memZip!, effective),
+                ExcelFileFormat.Xlsx => XlsxReader.CreateFromMemory(memZip!, effective),
+                _ => throw new System.Diagnostics.UnreachableException(),
+            };
+        }
+
+        // The ZIP central directory must be walked to tell XLSB from XLSX (same "peek to distinguish"
+        // shape as DetectSeekable for streams), so the resulting ZipMemoryIndex is handed back for reuse
+        // by the chosen reader's CreateFromMemory instead of being parsed a second time.
+        private static ExcelFileFormat ClassifyMemory(ReadOnlyMemory<byte> data, ExcelReaderOptions options, out ZipMemoryIndex? memZip)
+        {
+            memZip = null;
+            ReadOnlySpan<byte> span = data.Span;
+            ReadOnlySpan<byte> header = span.Length > 8 ? span[..8] : span;
+            if (TryClassifyHeader(header, out ExcelFileFormat format))
+            {
+                return format;
+            }
+            memZip = ZipMemoryIndex.Create(data, options);
+            return memZip.TryGetEntry("xl/workbook.bin"u8, out _) ? ExcelFileFormat.Xlsb : ExcelFileFormat.Xlsx;
+        }
+
+        private static MemoryStream ToMemoryStream(ReadOnlyMemory<byte> data)
+        {
+            if (MemoryMarshal.TryGetArray(data, out ArraySegment<byte> segment))
+            {
+                return new MemoryStream(segment.Array!, segment.Offset, segment.Count, writable: false);
+            }
+            return new MemoryStream(data.ToArray(), writable: false);
+        }
+
+        /// <summary>
         /// Asynchronously opens a workbook from a file path, auto-detecting its format (XLSX/XLSB/XLS) from the
         /// file's signature and taking ownership of the file stream.
         /// </summary>
@@ -259,6 +343,17 @@ namespace ExcelReader.Core.Reader
             ArgumentNullException.ThrowIfNull(stream);
             ExcelFileFormat format = DetectSeekable(stream, out ZipArchive? zip);
             zip?.Dispose();
+            return format;
+        }
+        /// <summary>
+        /// Detects a workbook's file format (XLSX/XLSB/XLS/unknown) from an in-memory buffer's signature, without consuming it.
+        /// </summary>
+        /// <param name="data">A buffer containing the workbook data.</param>
+        /// <returns>The detected <see cref="ExcelFileFormat"/>, or <see cref="ExcelFileFormat.Unknown"/> if the signature matches no supported format.</returns>
+        public static ExcelFileFormat DetectFileFormat(ReadOnlyMemory<byte> data)
+        {
+            var format = ClassifyMemory(data, ExcelReaderOptions.Default, out ZipMemoryIndex? memZip);
+            memZip?.Dispose();
             return format;
         }
 

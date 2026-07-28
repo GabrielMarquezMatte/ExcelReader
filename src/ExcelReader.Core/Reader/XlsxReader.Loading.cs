@@ -68,7 +68,7 @@ namespace ExcelReader.Core.Reader
                 return;
             }
             _sharedLoaded = true;
-            ZipArchiveEntry? entry = _zip.GetEntry("xl/sharedStrings.xml");
+            ZipArchiveEntry? entry = _zip!.GetEntry("xl/sharedStrings.xml");
             if (entry is null)
             {
                 return;
@@ -86,7 +86,7 @@ namespace ExcelReader.Core.Reader
                 return;
             }
             _sharedLoaded = true;
-            ZipArchiveEntry? entry = _zip.GetEntry("xl/sharedStrings.xml");
+            ZipArchiveEntry? entry = _zip!.GetEntry("xl/sharedStrings.xml");
             if (entry is null)
             {
                 return;
@@ -163,7 +163,7 @@ namespace ExcelReader.Core.Reader
         // compact — every search below runs from io.Pos and the caller advances it as soon as bytes
         // before the new position are no longer needed, so a Fill mid-search never invalidates an
         // already-found offset (see FindSeqGrowing/EnsureSiBuffered).
-        private int[] ParseSharedBody(BufferedStreamCursor io, Stream stream, int partLength)
+        private int[] ParseSharedBody(BufferedStreamCursor io, Stream? stream, int partLength)
         {
             io.Ensure(stream, 256); // root element + its xmlns declarations sit at the head of the part
             var tok = new SharedStringTokens(XlsxXml.DetectElementPrefix(io.Buf.AsSpan(0, io.Len)));
@@ -306,7 +306,7 @@ namespace ExcelReader.Core.Reader
         // owns io.Pos as the search anchor — set it immediately before calling whenever the anchor
         // should move, so a Fill-triggered compaction (which always resets io.Pos to 0) never strands a
         // position computed against the pre-compaction buffer layout.
-        private static int FindSeqGrowing(BufferedStreamCursor io, Stream stream, byte[] seq)
+        private static int FindSeqGrowing(BufferedStreamCursor io, Stream? stream, byte[] seq)
         {
             while (true)
             {
@@ -345,7 +345,7 @@ namespace ExcelReader.Core.Reader
         // contiguously in io.Buf. Mirrors XlsxReader.Enumerator.EnsureRowBuffered's "buffer the whole
         // element before parsing it" contract; returns -1 on a truncated file, matching the original
         // ParseShared's own break-on-truncation behavior instead of throwing.
-        private static int EnsureSiBuffered(BufferedStreamCursor io, Stream stream, byte[] siClose)
+        private static int EnsureSiBuffered(BufferedStreamCursor io, Stream? stream, byte[] siClose)
         {
             while (true)
             {
