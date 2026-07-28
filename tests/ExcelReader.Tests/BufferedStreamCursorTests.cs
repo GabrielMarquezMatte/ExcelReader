@@ -31,9 +31,10 @@ namespace ExcelReader.Tests
             var cursor = new BufferedStreamCursor(slice, maxCellBytes: 0, limitName: "Test");
 
             Assert.Same(backing, cursor.Buf);
-            Assert.Equal(2, cursor.Pos);
-            Assert.Equal(5, cursor.Len);
-            Assert.Equal([10, 20, 30], cursor.Buf.AsSpan(cursor.Pos, cursor.Len - cursor.Pos).ToArray());
+            Assert.Equal(2, cursor.Start);
+            Assert.Equal(0, cursor.Pos);
+            Assert.Equal(3, cursor.Len);
+            Assert.Equal([10, 20, 30], cursor.Buf.AsSpan(cursor.Start, cursor.Len).ToArray());
         }
 
         [Fact]

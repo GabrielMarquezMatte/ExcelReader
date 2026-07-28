@@ -10,7 +10,7 @@
 
 High-performance Excel reading and writing for .NET 10. Reads `.xlsx`, `.xlsb`, `.xls`, and `.csv`; writes `.xlsx`, `.xlsb`, `.xls`, and `.csv`.
 
-ExcelReader is built for streaming spreadsheet workloads where low allocations matter. It reads worksheet rows as lightweight `ref struct` values, resolves shared strings, recognizes date styles, handles sparse cells, and includes writers for producing `.xlsx` (Open XML), `.xlsb` (BIFF12), and `.xls` (BIFF8) workbooks. The library also supports opening workbook data directly from in-memory buffers without requiring a stream, which makes it convenient for API and network-based scenarios.
+ExcelReader is built for streaming spreadsheet workloads where low allocations matter. It reads worksheet rows as lightweight `ref struct` values, resolves shared strings, recognizes date styles, handles sparse cells, and includes writers for producing `.xlsx` (Open XML), `.xlsb` (BIFF12), and `.xls` (BIFF8) workbooks. The library also supports opening workbook data directly from in-memory buffers without requiring a stream, which makes it convenient for API and network-based scenarios. `Excel.FromCsv(ReadOnlyMemory<byte>)` and `Excel.FromXls(ReadOnlyMemory<byte>)` now accept caller-owned buffers directly, and `Excel.Open(ReadOnlyMemory<byte>)` routes XLS workbooks through the same true-memory path instead of wrapping the bytes in `MemoryStream`.
 
 ## Benchmarks
 
@@ -92,6 +92,8 @@ The latest real-data benchmark also measures the in-memory path for workbook con
 | Xlsm_ExcelReader_Memory_Prefetch | 43.59 ms | 0.574 ms | 0.509 ms | 72.99 KB |
 | Xlsb_ExcelReader_Memory | 24.98 ms | 0.247 ms | 0.231 ms | 14.43 KB |
 | Xlsb_ExcelReader_Memory_Prefetch | 19.40 ms | 0.256 ms | 0.200 ms | 33.06 KB |
+| Xls_ExcelReader_Memory | 12.40 ms | 0.132 ms | 0.117 ms | 1.99 KB |
+| Csv_ExcelReader_Memory | 6.03 ms | 0.084 ms | 0.074 ms | 232 B |
 
 ### String-heavy reads
 
