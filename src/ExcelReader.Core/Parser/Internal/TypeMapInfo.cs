@@ -22,11 +22,20 @@ namespace ExcelReader.Core.Parser.Internal
 
         // Creates a fresh model instance per row without a `where T : new()` constraint, so types with
         // required members (which the new() constraint forbids) can still be parsed.
-        internal T CreateInstance() => _factory();
+        internal T CreateInstance()
+        {
+            return _factory();
+        }
 
-        internal bool RequiresValue(int propertyIndex) => _properties[propertyIndex].RequireValue;
+        internal bool RequiresValue(int propertyIndex)
+        {
+            return _properties[propertyIndex].RequireValue;
+        }
 
-        internal string DisplayName(int propertyIndex) => _properties[propertyIndex].Names[0];
+        internal string DisplayName(int propertyIndex)
+        {
+            return _properties[propertyIndex].Names[0];
+        }
 
         // Throws if any [ExcelRequired] property was left unmatched after the header row was mapped.
         // unmatched[i] is int.MaxValue when property i found no header column (RowProjector's sentinel).

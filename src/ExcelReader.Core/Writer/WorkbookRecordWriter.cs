@@ -76,7 +76,7 @@ namespace ExcelReader.Core.Writer
         {
             ArgumentNullException.ThrowIfNull(records);
             TSheet sheet = BeginSheet(sheetName);
-            await using(sheet.ConfigureAwait(false))
+            await using (sheet.ConfigureAwait(false))
             {
                 await sheet.StartAsync(ct).ConfigureAwait(false);
                 await WriteHeaderAsync<T>(sheet, ct).ConfigureAwait(false);

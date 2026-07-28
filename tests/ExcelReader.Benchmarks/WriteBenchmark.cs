@@ -159,7 +159,7 @@ namespace ExcelReader.Benchmarks
             {
                 await writer.StartWorksheetAsync("S1").ConfigureAwait(false);
                 await writer.AddHeaderRowAsync(["Name", "Id", "Date", "Value"]).ConfigureAwait(false);
-                foreach(var rec in _records)
+                foreach (var rec in _records)
                 {
                     Cell[] row = [
                         new(rec.Name),
