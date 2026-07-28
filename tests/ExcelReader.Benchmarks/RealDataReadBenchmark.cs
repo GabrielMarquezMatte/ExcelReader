@@ -6,6 +6,7 @@ using ExcelReader.Core.Reader;
 using ExcelReader.Core.ValueObjects;
 using Sylvan.Data.Csv;
 using Sylvan.Data.Excel;
+using static ExcelReader.Benchmarks.BenchmarkAccumulators;
 
 namespace ExcelReader.Benchmarks
 {
@@ -36,57 +37,6 @@ namespace ExcelReader.Benchmarks
             _xlsb = File.ReadAllBytes(Path.Combine(dir, "65K_Records_Data.xlsb"));
             _xls = File.ReadAllBytes(Path.Combine(dir, "65K_Records_Data.xls"));
             _csv = File.ReadAllBytes(Path.Combine(dir, "65K_Records_Data.csv"));
-        }
-
-        private static long AccumulateRow(Row row)
-        {
-            long acc = 0;
-            foreach (RowCell rowCell in row.Cells)
-            {
-                Cell cell = rowCell.Value;
-                switch (cell.Type)
-                {
-                    case CellType.ExcelString:
-                        acc += cell.Value.Length;
-                        break;
-                    case CellType.Number:
-                        if (cell.TryParse(null, out double n)) { acc += (long)n; }
-                        break;
-                    case CellType.Date:
-                        if (cell.TryGetDateTime(out DateTime d)) { acc += d.Ticks; }
-                        break;
-                }
-            }
-            return acc;
-        }
-
-        private static long AccumulateSylvanExcel(ExcelDataReader reader)
-        {
-            long acc = 0;
-            do
-            {
-                while (reader.Read())
-                {
-                    for (int i = 0; i < reader.FieldCount; i++)
-                    {
-                        if (reader.IsDBNull(i)) { continue; }
-                        switch (reader.GetExcelDataType(i))
-                        {
-                            case ExcelDataType.String:
-                                acc += reader.GetString(i).Length;
-                                break;
-                            case ExcelDataType.Numeric:
-                                acc += (long)reader.GetDouble(i);
-                                break;
-                            case ExcelDataType.DateTime:
-                                acc += reader.GetDateTime(i).Ticks;
-                                break;
-                        }
-                    }
-                }
-            }
-            while (reader.NextResult());
-            return acc;
         }
 
         // --- XLSX ---
