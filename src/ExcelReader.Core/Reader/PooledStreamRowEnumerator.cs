@@ -21,6 +21,14 @@ namespace ExcelReader.Core.Reader
             _acc = new CellAccumulator(maxCellBytes, limitName);
         }
 
+        private protected PooledStreamRowEnumerator(ReadOnlyMemory<byte> content, int maxCellBytes, string limitName, CancellationToken ct)
+        {
+            _source = null;
+            _ct = ct;
+            _io = new BufferedStreamCursor(content, maxCellBytes, limitName);
+            _acc = new CellAccumulator(maxCellBytes, limitName);
+        }
+
         private protected void Fill()
         {
             _io.Fill(_source);

@@ -20,7 +20,7 @@ namespace ExcelReader.Core.Reader
         {
             _wb = wb;
             _sectorSize = wb.SectorSize;
-            if (wb.IsMemory)
+            if (wb.Kind != WorkbookStream.SourceKind.Streamed)
             {
                 _maxSectors = 0;
                 _sector = null;
@@ -67,9 +67,13 @@ namespace ExcelReader.Core.Reader
         // otherwise assembled into the scratch buffer. Valid only until the next cursor read.
         private ReadOnlySpan<byte> ReadSpan(long pos, int len)
         {
-            if (_wb.IsMemory)
+            if (_wb.Kind == WorkbookStream.SourceKind.Contiguous)
             {
                 return _wb.Memory(pos, len);
+            }
+            if (_wb.Kind == WorkbookStream.SourceKind.Chained)
+            {
+                return ReadChainedSpan(pos, len);
             }
             int chainIndex = (int)(pos / _sectorSize);
             int within = (int)(pos % _sectorSize);
@@ -84,11 +88,27 @@ namespace ExcelReader.Core.Reader
             return scratch.AsSpan(0, len);
         }
 
+        private ReadOnlySpan<byte> ReadChainedSpan(long pos, int len)
+        {
+            if (_wb.TryGetChainedSpan(pos, len, out ReadOnlySpan<byte> span))
+            {
+                return span;
+            }
+            byte[] scratch = EnsureScratch(len);
+            _wb.CopyChained(pos, scratch.AsSpan(0, len));
+            return scratch.AsSpan(0, len);
+        }
+
         private void ReadInto(long pos, Span<byte> dest)
         {
-            if (_wb.IsMemory)
+            if (_wb.Kind == WorkbookStream.SourceKind.Contiguous)
             {
                 _wb.Memory(pos, dest.Length).CopyTo(dest);
+                return;
+            }
+            if (_wb.Kind == WorkbookStream.SourceKind.Chained)
+            {
+                _wb.CopyChained(pos, dest);
                 return;
             }
             int written = 0;

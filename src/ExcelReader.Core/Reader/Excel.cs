@@ -64,6 +64,14 @@ namespace ExcelReader.Core.Reader
             return new XlsReader(stream, leaveOpen, options);
         }
 
+        /// <summary>Opens a legacy binary (XLS) workbook directly from an in-memory buffer.</summary>
+        /// <param name="data">The whole XLS file's bytes. Must outlive the returned reader and must not be mutated while it is in use.</param>
+        /// <param name="options">Resource limits and behavior toggles; <see cref="ExcelReaderOptions.Default"/> when <see langword="null"/>.</param>
+        public static XlsReader FromXls(ReadOnlyMemory<byte> data, ExcelReaderOptions? options = null)
+        {
+            return new XlsReader(data, options);
+        }
+
         /// <summary>Opens an XLSB (Excel binary) workbook from a file path, taking ownership of the file stream.</summary>
         /// <param name="path">The path to the XLSB file.</param>
         /// <param name="options">Resource limits and behavior toggles; <see cref="ExcelReaderOptions.Default"/> when <see langword="null"/>.</param>
@@ -177,6 +185,14 @@ namespace ExcelReader.Core.Reader
             return new CsvReader(stream, leaveOpen, options);
         }
 
+        /// <summary>Opens a CSV (or other delimited-text) source directly from an in-memory buffer.</summary>
+        /// <param name="data">The whole CSV source's bytes. Must outlive the returned reader and must not be mutated while it is in use.</param>
+        /// <param name="options">Delimiter, quote, encoding, and size-limit settings; <see cref="CsvReaderOptions.Default"/> when <see langword="null"/>.</param>
+        public static CsvReader FromCsv(ReadOnlyMemory<byte> data, CsvReaderOptions? options = null)
+        {
+            return new CsvReader(data, options);
+        }
+
         /// <summary>Asynchronously opens a CSV (or other delimited-text) source from a file path, taking ownership of the file stream.</summary>
         /// <param name="path">The path to the CSV file.</param>
         /// <param name="options">Delimiter, quote, encoding, and size-limit settings; <see cref="CsvReaderOptions.Default"/> when <see langword="null"/>.</param>
@@ -264,7 +280,7 @@ namespace ExcelReader.Core.Reader
             }
             return format switch
             {
-                ExcelFileFormat.Xls => new XlsReader(ToMemoryStream(data), leaveOpen: false, effective),
+                ExcelFileFormat.Xls => new XlsReader(data, effective),
                 ExcelFileFormat.Xlsb => XlsbReader.CreateFromMemory(memZip!, effective),
                 ExcelFileFormat.Xlsx => XlsxReader.CreateFromMemory(memZip!, effective),
                 _ => throw new System.Diagnostics.UnreachableException(),
@@ -285,15 +301,6 @@ namespace ExcelReader.Core.Reader
             }
             memZip = ZipMemoryIndex.Create(data, options);
             return memZip.TryGetEntry("xl/workbook.bin"u8, out _) ? ExcelFileFormat.Xlsb : ExcelFileFormat.Xlsx;
-        }
-
-        private static MemoryStream ToMemoryStream(ReadOnlyMemory<byte> data)
-        {
-            if (MemoryMarshal.TryGetArray(data, out ArraySegment<byte> segment))
-            {
-                return new MemoryStream(segment.Array!, segment.Offset, segment.Count, writable: false);
-            }
-            return new MemoryStream(data.ToArray(), writable: false);
         }
 
         /// <summary>
