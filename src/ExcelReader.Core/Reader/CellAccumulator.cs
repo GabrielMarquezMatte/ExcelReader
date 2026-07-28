@@ -100,17 +100,17 @@ namespace ExcelReader.Core.Reader
         {
             int start = ValueLength;
             AppendByte(value == 0 ? (byte)'0' : (byte)'1');
-            Add(col, start, 1, CellType.Boolean, style, fromShared: false);
+            Add(col, start, 1, CellType.Boolean, style, CellValueSource.RowValues);
         }
 
         internal void AddError(int col, int style, byte code)
         {
             int start = ValueLength;
             int length = AppendErrorText(code);
-            Add(col, start, length, CellType.Error, style, fromShared: false);
+            Add(col, start, length, CellType.Error, style, CellValueSource.RowValues);
         }
 
-        internal void Add(int col, int start, int len, CellType type, int style, bool fromShared, double number = 0, bool hasNumber = false)
+        internal void Add(int col, int start, int len, CellType type, int style, CellValueSource source, double number = 0, bool hasNumber = false)
         {
             // A corrupted/malicious file can encode an arbitrary column index in a per-cell record
             // (e.g. a 4-byte BIFF12/BIFF8 column field); without this bound, Row.ColumnCount (Column +
@@ -138,7 +138,7 @@ namespace ExcelReader.Core.Reader
                 Length = len,
                 Type = type,
                 Style = style,
-                FromShared = fromShared,
+                Source = source,
                 Number = number,
                 HasNumber = hasNumber,
             };
