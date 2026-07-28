@@ -68,6 +68,26 @@ namespace ExcelReader.Benchmarks
             return acc;
         }
 
+        // In-memory ZIP path (docs/in-memory-zip.md): no ZipArchive/Stream, central directory read
+        // directly out of _xlsx. Phase 1 gate — compare against Xlsx_ExcelReader before starting D1.
+        [Benchmark]
+        public long Xlsx_ExcelReader_Memory()
+        {
+            using XlsxReader reader = Excel.From(_xlsx.AsMemory());
+            long acc = 0;
+            foreach (Row row in reader) { acc += AccumulateRow(row); }
+            return acc;
+        }
+
+        [Benchmark]
+        public long Xlsx_ExcelReader_Memory_Prefetch()
+        {
+            using XlsxReader reader = Excel.From(_xlsx.AsMemory(), options: _prefetchOptions);
+            long acc = 0;
+            foreach (Row row in reader) { acc += AccumulateRow(row); }
+            return acc;
+        }
+
         // --- XLSM (same OOXML container as XLSX; ExcelReader parses it identically) ---
 
         [Benchmark]
@@ -98,6 +118,24 @@ namespace ExcelReader.Benchmarks
             return acc;
         }
 
+        [Benchmark]
+        public long Xlsm_ExcelReader_Memory()
+        {
+            using XlsxReader reader = Excel.From(_xlsm.AsMemory());
+            long acc = 0;
+            foreach (Row row in reader) { acc += AccumulateRow(row); }
+            return acc;
+        }
+
+        [Benchmark]
+        public long Xlsm_ExcelReader_Memory_Prefetch()
+        {
+            using XlsxReader reader = Excel.From(_xlsm.AsMemory(), options: _prefetchOptions);
+            long acc = 0;
+            foreach (Row row in reader) { acc += AccumulateRow(row); }
+            return acc;
+        }
+
         // --- XLSB ---
 
         [Benchmark]
@@ -123,6 +161,24 @@ namespace ExcelReader.Benchmarks
         {
             using MemoryStream ms = new(_xlsb, writable: false);
             using XlsbReader reader = Excel.FromXlsb(ms, options: _prefetchOptions);
+            long acc = 0;
+            foreach (Row row in reader) { acc += AccumulateRow(row); }
+            return acc;
+        }
+
+        [Benchmark]
+        public long Xlsb_ExcelReader_Memory()
+        {
+            using XlsbReader reader = Excel.FromXlsb(_xlsb.AsMemory());
+            long acc = 0;
+            foreach (Row row in reader) { acc += AccumulateRow(row); }
+            return acc;
+        }
+
+        [Benchmark]
+        public long Xlsb_ExcelReader_Memory_Prefetch()
+        {
+            using XlsbReader reader = Excel.FromXlsb(_xlsb.AsMemory(), options: _prefetchOptions);
             long acc = 0;
             foreach (Row row in reader) { acc += AccumulateRow(row); }
             return acc;

@@ -1,4 +1,5 @@
 using System.Buffers;
+using System.Runtime.InteropServices;
 
 namespace ExcelReader.Core.Reader
 {
@@ -13,6 +14,11 @@ namespace ExcelReader.Core.Reader
         private readonly int _maxCellBytes;
         private readonly string _limitName;
 
+        // False for a memory-backed cursor: Buf then aliases either the caller's own array (a ZIP
+        // stored entry) or an array owned by ZipPart (a deflated entry) — never one this cursor rented,
+        // so Return() must never hand it back to the pool.
+        private readonly bool _pooled;
+
         internal byte[] Buf { get; private set; }
         internal int Pos { get; set; }
         internal int Len { get; private set; }
@@ -22,7 +28,31 @@ namespace ExcelReader.Core.Reader
         {
             _maxCellBytes = maxCellBytes;
             _limitName = limitName;
+            _pooled = true;
             Buf = ArrayPool<byte>.Shared.Rent(initialCapacity);
+        }
+
+        // Pre-filled, EOF from the start: the whole ZIP part is already decompressed, so there is
+        // nothing left to refill and no source to refill from. `content` may alias a sub-range of a
+        // larger array (e.g. a stored entry sliced out of the whole-file buffer), so Pos/Len start at
+        // that sub-range's offsets rather than always at 0.
+        internal BufferedStreamCursor(ReadOnlyMemory<byte> content, int maxCellBytes, string limitName)
+        {
+            _maxCellBytes = maxCellBytes;
+            _limitName = limitName;
+            _pooled = false;
+            Eof = true;
+            if (MemoryMarshal.TryGetArray(content, out ArraySegment<byte> segment))
+            {
+                Buf = segment.Array!;
+                Pos = segment.Offset;
+                Len = segment.Offset + segment.Count;
+                return;
+            }
+            // Rare: a non-array-backed ReadOnlyMemory<byte> (e.g. a custom MemoryManager<byte>). One
+            // copy here is unavoidable since Buf must be a raw array.
+            Buf = content.ToArray();
+            Len = Buf.Length;
         }
 
         // Compact the consumed prefix, or grow the buffer if every byte is still unprocessed.
@@ -45,8 +75,14 @@ namespace ExcelReader.Core.Reader
             Buf = bigger;
         }
 
-        internal void Fill(Stream source)
+        // No-op once Eof is set at construction (the memory-backed ctor), rather than requiring every
+        // enumerator call site to check Eof before calling Fill — there is no source to read from.
+        internal void Fill(Stream? source)
         {
+            if (source is null)
+            {
+                return;
+            }
             PrepareBuffer();
             int n = source.Read(Buf, Len, Buf.Length - Len);
             if (n == 0)
@@ -57,7 +93,12 @@ namespace ExcelReader.Core.Reader
             Len += n;
         }
 
-        internal async ValueTask FillAsync(Stream source, CancellationToken ct)
+        internal ValueTask FillAsync(Stream? source, CancellationToken ct)
+        {
+            return source is null ? ValueTask.CompletedTask : FillFromAsync(source, ct);
+        }
+
+        private async ValueTask FillFromAsync(Stream source, CancellationToken ct)
         {
             PrepareBuffer();
             int n = await source.ReadAsync(Buf.AsMemory(Len, Buf.Length - Len), ct).ConfigureAwait(false);
@@ -71,7 +112,7 @@ namespace ExcelReader.Core.Reader
 
         // Fast/slow split mirroring EnsureAsync below: the common case (already buffered) is a single
         // comparison the JIT can inline at call sites, instead of always entering a loop body.
-        internal void Ensure(Stream source, int n)
+        internal void Ensure(Stream? source, int n)
         {
             if (Len - Pos >= n || Eof)
             {
@@ -80,7 +121,7 @@ namespace ExcelReader.Core.Reader
             EnsureSlow(source, n);
         }
 
-        private void EnsureSlow(Stream source, int n)
+        private void EnsureSlow(Stream? source, int n)
         {
             while (Len - Pos < n && !Eof)
             {
@@ -88,7 +129,7 @@ namespace ExcelReader.Core.Reader
             }
         }
 
-        internal ValueTask EnsureAsync(Stream source, int n, CancellationToken ct)
+        internal ValueTask EnsureAsync(Stream? source, int n, CancellationToken ct)
         {
             if (Len - Pos >= n || Eof)
             {
@@ -97,7 +138,7 @@ namespace ExcelReader.Core.Reader
             return EnsureSlowAsync(source, n, ct);
         }
 
-        private async ValueTask EnsureSlowAsync(Stream source, int n, CancellationToken ct)
+        private async ValueTask EnsureSlowAsync(Stream? source, int n, CancellationToken ct)
         {
             while (Len - Pos < n && !Eof)
             {
@@ -107,11 +148,11 @@ namespace ExcelReader.Core.Reader
 
         internal void Return()
         {
-            if (Buf.Length > 0)
+            if (_pooled && Buf.Length > 0)
             {
                 ArrayPool<byte>.Shared.Return(Buf);
-                Buf = [];
             }
+            Buf = [];
         }
     }
 }

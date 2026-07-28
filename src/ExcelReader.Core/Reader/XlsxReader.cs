@@ -8,11 +8,14 @@ namespace ExcelReader.Core.Reader
     /// <summary>Reads rows from an Office Open XML (.xlsx) workbook, streaming each sheet's cells without loading the whole file into memory.</summary>
     public sealed partial class XlsxReader : IExcelRowReader, IExcelRowReader<XlsxReader.Enumerator>
     {
-        private readonly Stream _stream;
+        private readonly Stream? _stream;
         private readonly bool _leaveOpen;
         [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP008:Don't assign member with injected and created disposables",
             Justification = "Two construction paths: the sync ctor opens and owns the ZipArchive itself; the CreateAsync path receives one already opened by ZipReaderOpen. Either way this reader ends up owning it and disposes it in Dispose/DisposeAsync.")]
-        private readonly ZipArchive _zip;
+        private readonly ZipArchive? _zip;
+        // Non-null instead of _zip/_stream for the in-memory ZIP path (docs/in-memory-zip.md, Z4) —
+        // exactly one of _zip or _memZip is non-null for any given reader instance.
+        private readonly ZipMemoryIndex? _memZip;
         private readonly ExcelReaderOptions _options;
         private readonly DecompressedByteCounter _decompressedBytes;
         private readonly (string Name, string Path)[] _sheets;
@@ -74,6 +77,21 @@ namespace ExcelReader.Core.Reader
             _stream = stream;
             _leaveOpen = leaveOpen;
             _zip = zip;
+            _options = options;
+            _decompressedBytes = decompressedBytes;
+            _sheets = sheets;
+            _styleIsDate = styleIsDate;
+            IsDate1904 = date1904;
+        }
+
+        // In-memory ZIP path (docs/in-memory-zip.md, Z4): no stream, no ZipArchive — everything is
+        // already-decompressed parts resolved from memZip on demand.
+        private XlsxReader(ZipMemoryIndex memZip,
+            (string Name, string Path)[] sheets, bool[] styleIsDate, bool date1904,
+            ExcelReaderOptions options, DecompressedByteCounter decompressedBytes)
+        {
+            _leaveOpen = true;
+            _memZip = memZip;
             _options = options;
             _decompressedBytes = decompressedBytes;
             _sheets = sheets;
@@ -167,8 +185,13 @@ namespace ExcelReader.Core.Reader
             Justification = "Enumerator is a class so the same type can also expose MoveNextAsync for the async path.")]
         public Enumerator GetEnumerator()
         {
+            if (_memZip is not null)
+            {
+                EnsureSharedLoadedFromMemory();
+                return GetEnumeratorFromMemory();
+            }
             EnsureSharedLoaded();
-            var entry = WorkbookLookups.GetWorksheetEntry(_zip, _sheets, _current);
+            var entry = WorkbookLookups.GetWorksheetEntry(_zip!, _sheets, _current);
             return new Enumerator(this, WorkbookLookups.OpenEntryStream(entry, _decompressedBytes, _options), entry.Length);
         }
 
@@ -202,8 +225,13 @@ namespace ExcelReader.Core.Reader
             Justification = "sheet is handed to the returned Enumerator, which owns and disposes it.")]
         public async ValueTask<Enumerator> GetAsyncEnumeratorAsync(CancellationToken ct = default)
         {
+            if (_memZip is not null)
+            {
+                EnsureSharedLoadedFromMemory();
+                return GetEnumeratorFromMemory();
+            }
             await EnsureSharedLoadedAsync(ct).ConfigureAwait(false);
-            var entry = WorkbookLookups.GetWorksheetEntry(_zip, _sheets, _current);
+            var entry = WorkbookLookups.GetWorksheetEntry(_zip!, _sheets, _current);
             LimitedReadStream sheet = await WorkbookLookups
                 .OpenEntryStreamAsync(entry, _decompressedBytes, _options, ct).ConfigureAwait(false);
             return new Enumerator(this, sheet, entry.Length, ct);
@@ -224,6 +252,8 @@ namespace ExcelReader.Core.Reader
         }
 
         /// <inheritdoc/>
+        [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP007:Don't dispose injected",
+            Justification = "_memZip's lifetime was transferred to this reader at construction; this is owned disposal, not disposing a borrowed dependency.")]
         public void Dispose()
         {
             if (_sharedFlat.Length > 0)
@@ -231,14 +261,17 @@ namespace ExcelReader.Core.Reader
                 ArrayPool<byte>.Shared.Return(_sharedFlat);
                 _sharedFlat = [];
             }
-            _zip.Dispose();
+            _memZip?.Dispose();
+            _zip?.Dispose();
             if (!_leaveOpen)
             {
-                _stream.Dispose();
+                _stream?.Dispose();
             }
         }
 
         /// <inheritdoc/>
+        [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP007:Don't dispose injected",
+            Justification = "_memZip's lifetime was transferred to this reader at construction; this is owned disposal, not disposing a borrowed dependency.")]
         public async ValueTask DisposeAsync()
         {
             if (_sharedFlat.Length > 0)
@@ -246,8 +279,12 @@ namespace ExcelReader.Core.Reader
                 ArrayPool<byte>.Shared.Return(_sharedFlat);
                 _sharedFlat = [];
             }
-            await ZipArchiveDisposal.DisposeAsync(_zip).ConfigureAwait(false);
-            if (!_leaveOpen)
+            _memZip?.Dispose();
+            if (_zip is not null)
+            {
+                await ZipArchiveDisposal.DisposeAsync(_zip).ConfigureAwait(false);
+            }
+            if (!_leaveOpen && _stream is not null)
             {
                 await _stream.DisposeAsync().ConfigureAwait(false);
             }

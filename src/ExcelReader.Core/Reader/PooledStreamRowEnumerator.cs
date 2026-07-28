@@ -23,22 +23,22 @@ namespace ExcelReader.Core.Reader
 
         private protected void Fill()
         {
-            _io.Fill(_source!);
+            _io.Fill(_source);
         }
 
         private protected ValueTask FillAsync()
         {
-            return _io.FillAsync(_source!, _ct);
+            return _io.FillAsync(_source, _ct);
         }
 
         private protected void Ensure(int count)
         {
-            _io.Ensure(_source!, count);
+            _io.Ensure(_source, count);
         }
 
         private protected ValueTask EnsureAsync(int count)
         {
-            return _io.EnsureAsync(_source!, count, _ct);
+            return _io.EnsureAsync(_source, count, _ct);
         }
 
         private protected void ReturnBuffers()

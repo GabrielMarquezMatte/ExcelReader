@@ -181,7 +181,7 @@ namespace ExcelReader.Tests
         [Fact]
         public void DetectFileFormatThrowsOnNullStream()
         {
-            Assert.Throws<ArgumentNullException>(() => Excel.DetectFileFormat(null!));
+            Assert.Throws<ArgumentNullException>(() => Excel.DetectFileFormat((Stream)null!));
         }
 
         [Fact]
