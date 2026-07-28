@@ -21,6 +21,31 @@ namespace ExcelReader.Core.Reader
         // refill its buffer and retry from the same record.
         internal bool TryReadRecord(out int id, out ReadOnlySpan<byte> payload)
         {
+            // Fast path: single-byte id and single-byte length, which is every cell record in a normal
+            // sheet (ids 1..11, payloads 12-16 bytes). Skips both varint loops -- TryReadLength is a
+            // general 4-iteration loop, and paying it to read one plain byte dominated the record loop.
+            // Anything else (2-byte id, payload >= 128 bytes, or a record straddling the buffer tail)
+            // falls through to the general decoder below, which owns the retry contract.
+            ReadOnlySpan<byte> data = _data;
+            int fast = Position;
+            if (fast + 1 >= data.Length)
+            {
+                return TryReadRecordSlow(out id, out payload);
+            }
+            int b0 = data[fast];
+            int len = data[fast + 1];
+            if (((b0 | len) & 0x80) != 0 || fast + 2 + len > data.Length)
+            {
+                return TryReadRecordSlow(out id, out payload);
+            }
+            id = b0;
+            payload = data.Slice(fast + 2, len);
+            Position = fast + 2 + len;
+            return true;
+        }
+
+        private bool TryReadRecordSlow(out int id, out ReadOnlySpan<byte> payload)
+        {
             id = 0;
             payload = default;
             int pos = Position;

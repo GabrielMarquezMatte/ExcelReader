@@ -69,7 +69,7 @@ namespace ExcelReader.Core.Reader
 
             internal Cell FieldAt(int index)
             {
-                CellDesc d = _acc.CellSpan[index];
+                ref readonly CellDesc d = ref _acc.CellSpan[index];
                 ReadOnlySpan<byte> buf = d.Source == CellValueSource.Shared ? _acc.ValueSpan : _buf.AsSpan(0, _len);
                 return new Cell(d.Type, buf.Slice(d.Start, d.Length));
             }
