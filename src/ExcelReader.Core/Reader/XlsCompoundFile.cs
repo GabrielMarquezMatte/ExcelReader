@@ -2,6 +2,7 @@ using System.Buffers;
 using System.Buffers.Binary;
 using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 using static ExcelReader.Core.Reader.Biff12;
 
 namespace ExcelReader.Core.Reader
@@ -34,6 +35,12 @@ namespace ExcelReader.Core.Reader
                 }
                 throw;
             }
+        }
+
+        internal static WorkbookStream OpenWorkbook(ReadOnlyMemory<byte> data)
+        {
+            using MemoryStream metadata = AsStream(data);
+            return BuildWorkbook(metadata, ownsSource: false, memory: data);
         }
 
         internal static async ValueTask<WorkbookStream> OpenWorkbookAsync(Stream stream, bool leaveOpen, CancellationToken ct)
@@ -85,8 +92,17 @@ namespace ExcelReader.Core.Reader
             return (ms, true);
         }
 
+        private static MemoryStream AsStream(ReadOnlyMemory<byte> data)
+        {
+            if (MemoryMarshal.TryGetArray(data, out ArraySegment<byte> segment))
+            {
+                return new MemoryStream(segment.Array!, segment.Offset, segment.Count, writable: false);
+            }
+            return new MemoryStream(data.ToArray(), writable: false);
+        }
+
         [SkipLocalsInit]
-        private static WorkbookStream BuildWorkbook(Stream source, bool ownsSource)
+        private static WorkbookStream BuildWorkbook(Stream source, bool ownsSource, ReadOnlyMemory<byte> memory = default)
         {
             if (source.Length < HeaderSize)
             {
@@ -162,6 +178,10 @@ namespace ExcelReader.Core.Reader
 
                 int chainCount = SectorCount(workbook.Size, sectorSize);
                 int[] chain = BuildChain(fat, workbook.StartSector, chainCount);
+                if (!memory.IsEmpty)
+                {
+                    return WorkbookStream.Chained(memory, chain, chainCount, sectorSize, workbook.Size);
+                }
                 return WorkbookStream.Streamed(source, ownsSource, chain, chainCount, sectorSize, workbook.Size);
             }
             finally

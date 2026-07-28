@@ -55,6 +55,14 @@ namespace ExcelReader.Core.Reader
                 _stripBom = options.DetectEncodingFromByteOrderMark;
             }
 
+            internal Enumerator(ReadOnlyMemory<byte> content, CsvReaderOptions options, CancellationToken ct = default)
+                : base(content, options.MaxCellBytes, nameof(CsvReaderOptions.MaxCellBytes), ct)
+            {
+                _delimiter = options.Delimiter;
+                _quote = options.Quote;
+                _stripBom = options.DetectEncodingFromByteOrderMark;
+            }
+
             // Cells point either into _buf (the common, zero-copy case: unquoted or plain-quoted
             // fields are already contiguous bytes read straight from the stream) or into _acc's value
             // buffer (only for fields needing unescaping, e.g. a doubled "" quote, or malformed

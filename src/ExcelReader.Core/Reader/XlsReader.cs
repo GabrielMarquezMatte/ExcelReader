@@ -26,6 +26,11 @@ namespace ExcelReader.Core.Reader
         {
         }
 
+        internal XlsReader(ReadOnlyMemory<byte> data, ExcelReaderOptions? options = null)
+            : this(XlsCompoundFile.OpenWorkbook(data), options)
+        {
+        }
+
         private XlsReader(WorkbookStream workbook, ExcelReaderOptions? options = null)
         {
             _workbook = workbook;

@@ -3,10 +3,11 @@ using System.Diagnostics.CodeAnalysis;
 
 namespace ExcelReader.Core.Reader
 {
-    // The Workbook OLE stream, read on demand instead of materialized. Two modes:
+    // The Workbook OLE stream, read on demand instead of materialized. Three modes:
     //  - streamed: a seekable source + the stream's physical FAT-sector chain. Only one sector
     //    (plus a record-assembly scratch) is held at a time, so a 3 MB workbook costs ~KBs.
-    //  - in-memory: a contiguous buffer (mini-stream workbooks, or a non-seekable fallback).
+    //  - contiguous: a contiguous buffer (mini-stream workbooks, or a non-seekable fallback).
+    //  - chained: the whole file in memory plus the workbook's FAT chain.
     // Immutable and shareable; each consumer reads through its own BiffCursor.
     [ExcludeFromCodeCoverage(Justification = "Exercised through XlsReader integration tests; guard-rail branches are corrupt-OLE only.")]
     internal sealed class WorkbookStream : IDisposable
@@ -23,7 +24,16 @@ namespace ExcelReader.Core.Reader
         internal int SectorSize { get; }
         internal long Length { get; }
 
-        private WorkbookStream(Stream? source, bool ownsSource, int[] chain, int chainLength, ReadOnlyMemory<byte> memory, int sectorSize, long length)
+        internal enum SourceKind
+        {
+            Streamed,
+            Contiguous,
+            Chained,
+        }
+
+        internal SourceKind Kind { get; }
+
+        private WorkbookStream(Stream? source, bool ownsSource, int[] chain, int chainLength, ReadOnlyMemory<byte> memory, int sectorSize, long length, SourceKind kind)
         {
             _source = source;
             _ownsSource = ownsSource;
@@ -32,16 +42,22 @@ namespace ExcelReader.Core.Reader
             _memory = memory;
             SectorSize = sectorSize;
             Length = length;
+            Kind = kind;
         }
 
         internal static WorkbookStream Streamed(Stream source, bool ownsSource, int[] chain, int chainLength, int sectorSize, long length)
         {
-            return new WorkbookStream(source, ownsSource, chain, chainLength, default, sectorSize, length);
+            return new WorkbookStream(source, ownsSource, chain, chainLength, default, sectorSize, length, SourceKind.Streamed);
         }
 
         internal static WorkbookStream InMemory(ReadOnlyMemory<byte> data)
         {
-            return new WorkbookStream(null, ownsSource: false, [], 0, data, sectorSize: 1, data.Length);
+            return new WorkbookStream(null, ownsSource: false, [], 0, data, sectorSize: 1, data.Length, SourceKind.Contiguous);
+        }
+
+        internal static WorkbookStream Chained(ReadOnlyMemory<byte> data, int[] chain, int chainLength, int sectorSize, long length)
+        {
+            return new WorkbookStream(null, ownsSource: false, chain, chainLength, data, sectorSize, length, SourceKind.Chained);
         }
 
         internal BiffCursor OpenCursor()
@@ -49,11 +65,63 @@ namespace ExcelReader.Core.Reader
             return new BiffCursor(this);
         }
 
-        internal bool IsMemory => _source is null;
+        internal bool IsMemory => Kind != SourceKind.Streamed;
 
         internal ReadOnlySpan<byte> Memory(long pos, int len)
         {
             return _memory.Span.Slice((int)pos, len);
+        }
+
+        internal bool TryGetChainedSpan(long pos, int len, out ReadOnlySpan<byte> span)
+        {
+            span = default;
+            int chainIndex = (int)(pos / SectorSize);
+            int within = (int)(pos % SectorSize);
+            RequireChainIndex(chainIndex);
+            int needed = within + len;
+            for (int sectors = 1; needed > sectors * SectorSize; sectors++)
+            {
+                int next = chainIndex + sectors;
+                if (next >= _chainLength || _chain[next] != _chain[next - 1] + 1)
+                {
+                    return false;
+                }
+            }
+            span = FileSlice(_chain[chainIndex], within, len);
+            return true;
+        }
+
+        internal void CopyChained(long pos, Span<byte> dest)
+        {
+            int written = 0;
+            while (written < dest.Length)
+            {
+                long at = pos + written;
+                int chainIndex = (int)(at / SectorSize);
+                int within = (int)(at % SectorSize);
+                RequireChainIndex(chainIndex);
+                int take = Math.Min(SectorSize - within, dest.Length - written);
+                FileSlice(_chain[chainIndex], within, take).CopyTo(dest[written..]);
+                written += take;
+            }
+        }
+
+        private void RequireChainIndex(int chainIndex)
+        {
+            if ((uint)chainIndex >= (uint)_chainLength)
+            {
+                throw new InvalidDataException("Invalid OLE sector chain index.");
+            }
+        }
+
+        private ReadOnlySpan<byte> FileSlice(int sector, int within, int len)
+        {
+            long offset = HeaderSize + ((long)sector * SectorSize) + within;
+            if (sector < 0 || offset < 0 || offset + len > _memory.Length)
+            {
+                throw new InvalidDataException("The OLE sector chain points past the end of the buffer.");
+            }
+            return _memory.Span.Slice((int)offset, len);
         }
 
         // Reads contiguous physical sectors starting from chainIndex into dest.
