@@ -253,12 +253,6 @@ namespace ExcelReader.Core.Reader
             Justification = "PrefetchStream owns the wrapped entry stream for the duration of the decorated read.")]
         [SuppressMessage("VisualStudio.Threading", "VSTHRD002:Avoid problematic synchronous waits",
             Justification = "Dispose must not return before the producer thread stops touching _inner; ProduceAsync catches every exception, so this never blocks long or throws.")]
-        [SuppressMessage("Reliability", "CA1849:Call async methods when in an async method",
-            Justification = "This is the synchronous Dispose(bool) override — there is no async context to await CancelAsync from.")]
-        [SuppressMessage("VisualStudio.Threading", "VSTHRD103:Call async methods when in an async method",
-            Justification = "This is the synchronous Dispose(bool) override — there is no async context to await CancelAsync from.")]
-        [SuppressMessage("Major Code Smell", "S6966:Awaitable method should be used",
-            Justification = "This is the synchronous Dispose(bool) override — there is no async context to await CancelAsync from.")]
         protected override void Dispose(bool disposing)
         {
             if (disposing && !_disposed)
