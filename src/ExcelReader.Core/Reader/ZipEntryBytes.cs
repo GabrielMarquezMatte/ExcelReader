@@ -92,54 +92,5 @@ namespace ExcelReader.Core.Reader
         }
 #endif
 
-        // Same shape as Read/ReadAsync, but rents the destination from ArrayPool<byte>.Shared instead
-        // of allocating — for callers that only need the bytes for the duration of one synchronous
-        // parse (e.g. shared-strings) and return the buffer immediately after. The rented array may be
-        // longer than `Length`; callers must slice to [0, Length) and return the array when done.
-        internal static (byte[] Bytes, int Length) ReadPooled(
-            ZipArchiveEntry entry,
-            DecompressedByteCounter counter,
-            string entryLimitName = "",
-            long entryLimit = 0)
-        {
-            ThrowIfEntryLengthExceedsLimits(entry, counter, entryLimitName, entryLimit);
-            using var stream = new LimitedReadStream(entry.Open(), counter, entryLimitName, entryLimit);
-            int length = checked((int)entry.Length);
-            byte[] bytes = ArrayPool<byte>.Shared.Rent(length);
-            stream.ReadExactly(bytes, 0, length);
-            return (bytes, length);
-        }
-
-#if NET10_0_OR_GREATER
-        internal static async ValueTask<(byte[] Bytes, int Length)> ReadPooledAsync(
-            ZipArchiveEntry entry,
-            DecompressedByteCounter counter,
-            CancellationToken ct,
-            string entryLimitName = "",
-            long entryLimit = 0)
-        {
-            ThrowIfEntryLengthExceedsLimits(entry, counter, entryLimitName, entryLimit);
-            Stream opened = await entry.OpenAsync(ct).ConfigureAwait(false);
-            var stream = new LimitedReadStream(opened, counter, entryLimitName, entryLimit);
-            await using (stream.ConfigureAwait(false))
-            {
-                int length = checked((int)entry.Length);
-                byte[] bytes = ArrayPool<byte>.Shared.Rent(length);
-                await stream.ReadExactlyAsync(bytes.AsMemory(0, length), ct).ConfigureAwait(false);
-                return (bytes, length);
-            }
-        }
-#else
-        internal static ValueTask<(byte[] Bytes, int Length)> ReadPooledAsync(
-            ZipArchiveEntry entry,
-            DecompressedByteCounter counter,
-            CancellationToken ct,
-            string entryLimitName = "",
-            long entryLimit = 0)
-        {
-            ct.ThrowIfCancellationRequested();
-            return new ValueTask<(byte[], int)>(ReadPooled(entry, counter, entryLimitName, entryLimit));
-        }
-#endif
     }
 }

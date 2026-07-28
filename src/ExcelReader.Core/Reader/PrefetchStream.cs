@@ -193,7 +193,7 @@ namespace ExcelReader.Core.Reader
 
         // Runs on a pooled thread pool thread for the entry's whole lifetime. Blocking Read here is
         // deliberate: this is CPU-bound inflate, not blocking I/O, so occupying the thread is not a
-        // starvation bug (see docs/parallel-prefetch.md). Every exception path is caught so the Task
+        // starvation bug. Every exception path is caught so the Task
         // itself always completes successfully — Dispose/DisposeAsync await it without risking an
         // unobserved-exception or a rethrow at a moment nobody is prepared to catch it.
         [SuppressMessage("Design", "CA1031:Do not catch general exception types",

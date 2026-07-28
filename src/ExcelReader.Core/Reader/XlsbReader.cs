@@ -238,15 +238,8 @@ namespace ExcelReader.Core.Reader
         public async ValueTask<Enumerator> GetAsyncEnumeratorAsync(CancellationToken ct = default)
         {
             var entry = WorkbookLookups.GetWorksheetEntry(_zip!, _sheets!, _current);
-#if NET10_0_OR_GREATER
-            Stream entryStream = await entry.OpenAsync(ct).ConfigureAwait(false);
-            Stream sheet = _options.PrefetchDecompression
-                ? new LimitedReadStream(new PrefetchStream(entryStream), _decompressedBytes)
-                : new LimitedReadStream(entryStream, _decompressedBytes);
-#else
-            ct.ThrowIfCancellationRequested();
-            Stream sheet = WorkbookLookups.OpenEntryStream(entry, _decompressedBytes, _options);
-#endif
+            Stream sheet = await WorkbookLookups
+                .OpenEntryStreamAsync(entry, _decompressedBytes, _options, ct).ConfigureAwait(false);
             return new Enumerator(this, sheet, entry.Length, ct);
         }
 

@@ -7,10 +7,10 @@ using ExcelReader.Core.Writer;
 
 namespace ExcelReader.Tests
 {
-    // Test plan: docs/parallel-prefetch.md, "Test plan" section. PrefetchStream overlaps the ZIP
-    // entry's zlib inflate with parsing on a background thread; every test here exists because the
-    // doc calls out a specific way that could go wrong (deadlock on early abandonment, a swallowed
-    // or rewrapped exception, a byte-for-byte mismatch versus the serial path, ...).
+    // PrefetchStream overlaps the ZIP entry's zlib inflate with parsing on a background thread.
+    // Each test here pins one specific way that can go wrong: deadlock on early abandonment, a
+    // swallowed or rewrapped exception, a byte-for-byte mismatch versus the serial path, a limit
+    // that stops firing, or cancellation that stops being prompt.
     public class PrefetchDecompressionTests
     {
         private static readonly TimeSpan HangGuard = TimeSpan.FromSeconds(10);

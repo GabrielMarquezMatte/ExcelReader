@@ -92,26 +92,18 @@ namespace ExcelReader.Core.Reader
                 return;
             }
             ThrowIfSharedEntryTooLarge(entry.Length);
-#if NET10_0_OR_GREATER
-            Stream opened = await entry.OpenAsync(ct).ConfigureAwait(false);
-            LimitedReadStream stream = _options.PrefetchDecompression
-                ? new(new PrefetchStream(opened), _decompressedBytes, nameof(ExcelReaderOptions.MaxSharedStringBytes), _options.MaxSharedStringBytes)
-                : new(opened, _decompressedBytes, nameof(ExcelReaderOptions.MaxSharedStringBytes), _options.MaxSharedStringBytes);
-#else
-            ct.ThrowIfCancellationRequested();
-            LimitedReadStream stream = WorkbookLookups.OpenEntryStream(entry, _decompressedBytes, _options,
-                nameof(ExcelReaderOptions.MaxSharedStringBytes), _options.MaxSharedStringBytes);
-#endif
+            LimitedReadStream stream = await WorkbookLookups.OpenEntryStreamAsync(
+                entry, _decompressedBytes, _options, ct,
+                nameof(ExcelReaderOptions.MaxSharedStringBytes), _options.MaxSharedStringBytes).ConfigureAwait(false);
             await using (stream.ConfigureAwait(false))
             {
                 await ParseSharedStreamingAsync(stream, entry.Length, ct).ConfigureAwait(false);
             }
         }
 
-        // Same two checks ZipEntryBytes.ReadPooled(Async) ran before allocating a destination sized
-        // from the (attacker-controlled) central-directory length — run up front here too, since the
-        // streaming path never materializes that single destination buffer but still must reject an
-        // oversized part before touching the entry stream at all.
+        // Rejects an oversized part before the entry stream is touched at all. The streaming path never
+        // materializes one destination buffer sized from the (attacker-controlled) central-directory
+        // length, but that declared length must still be checked against both caps up front.
         private void ThrowIfSharedEntryTooLarge(long declaredLength)
         {
             LimitChecks.ThrowIfEntryLengthExceeds(declaredLength, _decompressedBytes.Remaining,
@@ -168,7 +160,7 @@ namespace ExcelReader.Core.Reader
         // as the "everything before this is fully consumed" marker BufferedStreamCursor.Fill uses to
         // compact — every search below runs from io.Pos and the caller advances it as soon as bytes
         // before the new position are no longer needed, so a Fill mid-search never invalidates an
-        // already-found offset (see FindSeqGrowing/FindGtGrowing/EnsureSiBuffered).
+        // already-found offset (see FindSeqGrowing/EnsureSiBuffered).
         private int[] ParseSharedBody(BufferedStreamCursor io, Stream stream, int partLength)
         {
             io.Ensure(stream, 256); // root element + its xmlns declarations sit at the head of the part
@@ -179,7 +171,7 @@ namespace ExcelReader.Core.Reader
             if (sstPos >= 0)
             {
                 io.Pos = sstPos;
-                int sstEnd = FindGtGrowing(io, stream);
+                int sstEnd = FindSeqGrowing(io, stream, GtToken);
                 if (sstEnd > sstPos)
                 {
                     uniqueCount = XlsxXml.ParseIntOr(XlsxXml.Attr(io.Buf.AsSpan(sstPos, sstEnd - sstPos), " uniqueCount="u8), 0);
@@ -223,7 +215,7 @@ namespace ExcelReader.Core.Reader
             if (sstPos >= 0)
             {
                 io.Pos = sstPos;
-                int sstEnd = await FindGtGrowingAsync(io, stream, ct).ConfigureAwait(false);
+                int sstEnd = await FindSeqGrowingAsync(io, stream, GtToken, ct).ConfigureAwait(false);
                 if (sstEnd > sstPos)
                 {
                     uniqueCount = XlsxXml.ParseIntOr(XlsxXml.Attr(io.Buf.AsSpan(sstPos, sstEnd - sstPos), " uniqueCount="u8), 0);
@@ -304,6 +296,10 @@ namespace ExcelReader.Core.Reader
             return (int)Math.Min(_options.MaxSharedStringBytes, Array.MaxLength);
         }
 
+        // Single-byte '>' searches reuse the sequence search below; IndexOf handles a length-1
+        // needle, so a dedicated overload would only duplicate the grow loop.
+        private static readonly byte[] GtToken = ">"u8.ToArray();
+
         // Grows io (via Fill) until `seq` is found at or after io.Pos, or the stream ends. The caller
         // owns io.Pos as the search anchor — set it immediately before calling whenever the anchor
         // should move, so a Fill-triggered compaction (which always resets io.Pos to 0) never strands a
@@ -330,41 +326,6 @@ namespace ExcelReader.Core.Reader
             while (true)
             {
                 int rel = io.Buf.AsSpan(io.Pos, io.Len - io.Pos).IndexOf(seq);
-                if (rel >= 0)
-                {
-                    return io.Pos + rel;
-                }
-                if (io.Eof)
-                {
-                    return -1;
-                }
-                await io.FillAsync(stream, ct).ConfigureAwait(false);
-            }
-        }
-
-        // Same growing search, for a single byte — used to find an open tag's closing '>'.
-        private static int FindGtGrowing(BufferedStreamCursor io, Stream stream)
-        {
-            while (true)
-            {
-                int rel = io.Buf.AsSpan(io.Pos, io.Len - io.Pos).IndexOf((byte)'>');
-                if (rel >= 0)
-                {
-                    return io.Pos + rel;
-                }
-                if (io.Eof)
-                {
-                    return -1;
-                }
-                io.Fill(stream);
-            }
-        }
-
-        private static async ValueTask<int> FindGtGrowingAsync(BufferedStreamCursor io, Stream stream, CancellationToken ct)
-        {
-            while (true)
-            {
-                int rel = io.Buf.AsSpan(io.Pos, io.Len - io.Pos).IndexOf((byte)'>');
                 if (rel >= 0)
                 {
                     return io.Pos + rel;
