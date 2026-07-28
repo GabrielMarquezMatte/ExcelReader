@@ -37,21 +37,13 @@ namespace ExcelReader.Core.Reader
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         internal static double Rk(uint rk)
         {
-            double value;
-            if ((rk & 0x02) != 0)
-            {
-                value = (int)rk >> 2; // arithmetic shift keeps the sign
-            }
-            else
-            {
-                ulong bits = (ulong)(rk & 0xFFFFFFFC) << 32;
-                value = BitConverter.Int64BitsToDouble((long)bits);
-            }
-            if ((rk & 0x01) != 0)
-            {
-                value /= 100.0;
-            }
-            return value;
+            // Written as expressions rather than `value /= 100.0`: the read-modify-write form made the
+            // JIT give `value` a stack home, emitting a spill+immediate-reload of xmm0 right after the
+            // (already ~14-cycle) vdivsd. Same IEEE operations in the same order -- no reassociation.
+            double value = (rk & 0x02) != 0
+                ? (int)rk >> 2 // arithmetic shift keeps the sign
+                : BitConverter.Int64BitsToDouble((long)((ulong)(rk & 0xFFFFFFFC) << 32));
+            return (rk & 0x01) != 0 ? value / 100.0 : value;
         }
 
         // XLWideString / XLNullableWideString at `offset`: cch (u32) + UTF-16LE chars. The chars span
