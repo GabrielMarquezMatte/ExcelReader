@@ -273,15 +273,17 @@ namespace ExcelReader.Core.Reader
             Justification = "_producer is this instance's own producer loop, started in the constructor and always brought to completion exactly once, here or in Dispose(bool) — not a fire-and-forget foreign Task.")]
         public override async ValueTask DisposeAsync()
         {
-            if (!_disposed)
+            if (_disposed)
             {
-                _disposed = true;
-                await _cts.CancelAsync().ConfigureAwait(false);
-                await _producer.ConfigureAwait(false);
-                DrainRemainingBuffers();
-                _cts.Dispose();
-                await _inner.DisposeAsync().ConfigureAwait(false);
+                await base.DisposeAsync().ConfigureAwait(false);
+                return;
             }
+            _disposed = true;
+            await _cts.CancelAsync().ConfigureAwait(false);
+            await _producer.ConfigureAwait(false);
+            DrainRemainingBuffers();
+            _cts.Dispose();
+            await _inner.DisposeAsync().ConfigureAwait(false);
             await base.DisposeAsync().ConfigureAwait(false);
         }
     }
