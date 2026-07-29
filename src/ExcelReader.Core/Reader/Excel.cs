@@ -1,9 +1,8 @@
 using System.Diagnostics.CodeAnalysis;
 using System.IO.Compression;
 using System.Runtime.CompilerServices;
-using System.Runtime.InteropServices;
 using ExcelReader.Core.Enums;
-using ExcelReader.Core.Writer.Internal;
+using ExcelReader.Core.Internal;
 
 namespace ExcelReader.Core.Reader
 {
@@ -33,7 +32,7 @@ namespace ExcelReader.Core.Reader
         }
 
         /// <summary>
-        /// Opens an XLSX workbook directly from an in-memory buffer (docs/in-memory-zip.md). Reads the ZIP
+        /// Opens an XLSX workbook directly from an in-memory buffer. Reads the ZIP
         /// central directory and decompresses parts without a <see cref="ZipArchive"/>
         /// or intermediate <see cref="Stream"/> — every part is fully materialized up front, so the returned
         /// reader never suspends, even under <c>await foreach</c>.
@@ -43,6 +42,31 @@ namespace ExcelReader.Core.Reader
         public static XlsxReader From(ReadOnlyMemory<byte> data, ExcelReaderOptions? options = null)
         {
             return XlsxReader.CreateFromMemory(data, options);
+        }
+
+        /// <summary>Opens an XLSX workbook from a file path, taking ownership of the file stream. Alias for <see cref="FromFile(string, ExcelReaderOptions?)"/>, for callers who grep for a format-named factory.</summary>
+        /// <param name="path">The path to the XLSX file.</param>
+        /// <param name="options">Resource limits and behavior toggles; <see cref="ExcelReaderOptions.Default"/> when <see langword="null"/>.</param>
+        public static XlsxReader FromXlsxFile(string path, ExcelReaderOptions? options = null)
+        {
+            return FromFile(path, options);
+        }
+
+        /// <summary>Opens an XLSX workbook from an existing stream. Alias for <see cref="From(Stream, bool, ExcelReaderOptions?)"/>, for callers who grep for a format-named factory.</summary>
+        /// <param name="stream">The stream containing the XLSX data.</param>
+        /// <param name="leaveOpen">When <see langword="true"/> (the default), <paramref name="stream"/> is not disposed when the reader is disposed.</param>
+        /// <param name="options">Resource limits and behavior toggles; <see cref="ExcelReaderOptions.Default"/> when <see langword="null"/>.</param>
+        public static XlsxReader FromXlsx(Stream stream, bool leaveOpen = true, ExcelReaderOptions? options = null)
+        {
+            return From(stream, leaveOpen, options);
+        }
+
+        /// <summary>Opens an XLSX workbook directly from an in-memory buffer. Alias for <see cref="From(ReadOnlyMemory{byte}, ExcelReaderOptions?)"/>, for callers who grep for a format-named factory.</summary>
+        /// <param name="data">The whole XLSX file's bytes. Must outlive the returned reader.</param>
+        /// <param name="options">Resource limits and behavior toggles; <see cref="ExcelReaderOptions.Default"/> when <see langword="null"/>.</param>
+        public static XlsxReader FromXlsx(ReadOnlyMemory<byte> data, ExcelReaderOptions? options = null)
+        {
+            return From(data, options);
         }
 
         /// <summary>Opens a legacy binary (XLS) workbook from a file path, taking ownership of the file stream.</summary>
@@ -64,6 +88,14 @@ namespace ExcelReader.Core.Reader
             return new XlsReader(stream, leaveOpen, options);
         }
 
+        /// <summary>Opens a legacy binary (XLS) workbook directly from an in-memory buffer.</summary>
+        /// <param name="data">The whole XLS file's bytes. Must outlive the returned reader and must not be mutated while it is in use.</param>
+        /// <param name="options">Resource limits and behavior toggles; <see cref="ExcelReaderOptions.Default"/> when <see langword="null"/>.</param>
+        public static XlsReader FromXls(ReadOnlyMemory<byte> data, ExcelReaderOptions? options = null)
+        {
+            return new XlsReader(data, options);
+        }
+
         /// <summary>Opens an XLSB (Excel binary) workbook from a file path, taking ownership of the file stream.</summary>
         /// <param name="path">The path to the XLSB file.</param>
         /// <param name="options">Resource limits and behavior toggles; <see cref="ExcelReaderOptions.Default"/> when <see langword="null"/>.</param>
@@ -82,7 +114,7 @@ namespace ExcelReader.Core.Reader
         }
 
         /// <summary>
-        /// Opens an XLSB workbook directly from an in-memory buffer (docs/in-memory-zip.md). Reads the ZIP
+        /// Opens an XLSB workbook directly from an in-memory buffer. Reads the ZIP
         /// central directory and decompresses parts without a <see cref="ZipArchive"/>
         /// or intermediate <see cref="Stream"/> — every part is fully materialized up front, so the returned
         /// reader never suspends, even under <c>await foreach</c>.
@@ -114,6 +146,25 @@ namespace ExcelReader.Core.Reader
         public static ValueTask<XlsxReader> FromAsync(Stream stream, bool leaveOpen = true, ExcelReaderOptions? options = null, CancellationToken ct = default)
         {
             return XlsxReader.CreateAsync(stream, leaveOpen, options, ct);
+        }
+
+        /// <summary>Asynchronously opens an XLSX workbook from a file path, taking ownership of the file stream. Alias for <see cref="FromFileAsync(string, ExcelReaderOptions?, CancellationToken)"/>, for callers who grep for a format-named factory.</summary>
+        /// <param name="path">The path to the XLSX file.</param>
+        /// <param name="options">Resource limits and behavior toggles; <see cref="ExcelReaderOptions.Default"/> when <see langword="null"/>.</param>
+        /// <param name="ct">A token to cancel the open operation.</param>
+        public static ValueTask<XlsxReader> FromXlsxFileAsync(string path, ExcelReaderOptions? options = null, CancellationToken ct = default)
+        {
+            return FromFileAsync(path, options, ct);
+        }
+
+        /// <summary>Asynchronously opens an XLSX workbook from an existing stream. Alias for <see cref="FromAsync(Stream, bool, ExcelReaderOptions?, CancellationToken)"/>, for callers who grep for a format-named factory.</summary>
+        /// <param name="stream">The stream containing the XLSX data.</param>
+        /// <param name="leaveOpen">When <see langword="true"/> (the default), <paramref name="stream"/> is not disposed when the reader is disposed.</param>
+        /// <param name="options">Resource limits and behavior toggles; <see cref="ExcelReaderOptions.Default"/> when <see langword="null"/>.</param>
+        /// <param name="ct">A token to cancel the open operation.</param>
+        public static ValueTask<XlsxReader> FromXlsxAsync(Stream stream, bool leaveOpen = true, ExcelReaderOptions? options = null, CancellationToken ct = default)
+        {
+            return FromAsync(stream, leaveOpen, options, ct);
         }
 
         /// <summary>Asynchronously opens a legacy binary (XLS) workbook from a file path, taking ownership of the file stream.</summary>
@@ -175,6 +226,14 @@ namespace ExcelReader.Core.Reader
         public static CsvReader FromCsv(Stream stream, bool leaveOpen = true, CsvReaderOptions? options = null)
         {
             return new CsvReader(stream, leaveOpen, options);
+        }
+
+        /// <summary>Opens a CSV (or other delimited-text) source directly from an in-memory buffer.</summary>
+        /// <param name="data">The whole CSV source's bytes. Must outlive the returned reader and must not be mutated while it is in use.</param>
+        /// <param name="options">Delimiter, quote, encoding, and size-limit settings; <see cref="CsvReaderOptions.Default"/> when <see langword="null"/>.</param>
+        public static CsvReader FromCsv(ReadOnlyMemory<byte> data, CsvReaderOptions? options = null)
+        {
+            return new CsvReader(data, options);
         }
 
         /// <summary>Asynchronously opens a CSV (or other delimited-text) source from a file path, taking ownership of the file stream.</summary>
@@ -241,8 +300,8 @@ namespace ExcelReader.Core.Reader
 
         /// <summary>
         /// Opens a workbook from an in-memory buffer, auto-detecting its format (XLSX/XLSB/XLS) from its
-        /// signature (docs/in-memory-zip.md). XLSX/XLSB route through <see cref="ZipMemoryIndex"/> instead of
-        /// a <see cref="System.IO.Compression.ZipArchive"/>/<see cref="Stream"/>, so the returned reader never
+        /// signature. XLSX/XLSB route through <see cref="ZipMemoryIndex"/> instead of
+        /// a <see cref="ZipArchive"/>/<see cref="Stream"/>, so the returned reader never
         /// suspends, even under <c>await foreach</c>.
         /// </summary>
         /// <param name="data">The whole workbook file's bytes. Must outlive the returned reader.</param>
@@ -264,7 +323,7 @@ namespace ExcelReader.Core.Reader
             }
             return format switch
             {
-                ExcelFileFormat.Xls => new XlsReader(ToMemoryStream(data), leaveOpen: false, effective),
+                ExcelFileFormat.Xls => new XlsReader(data, effective),
                 ExcelFileFormat.Xlsb => XlsbReader.CreateFromMemory(memZip!, effective),
                 ExcelFileFormat.Xlsx => XlsxReader.CreateFromMemory(memZip!, effective),
                 _ => throw new System.Diagnostics.UnreachableException(),
@@ -285,15 +344,6 @@ namespace ExcelReader.Core.Reader
             }
             memZip = ZipMemoryIndex.Create(data, options);
             return memZip.TryGetEntry("xl/workbook.bin"u8, out _) ? ExcelFileFormat.Xlsb : ExcelFileFormat.Xlsx;
-        }
-
-        private static MemoryStream ToMemoryStream(ReadOnlyMemory<byte> data)
-        {
-            if (MemoryMarshal.TryGetArray(data, out ArraySegment<byte> segment))
-            {
-                return new MemoryStream(segment.Array!, segment.Offset, segment.Count, writable: false);
-            }
-            return new MemoryStream(data.ToArray(), writable: false);
         }
 
         /// <summary>

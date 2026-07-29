@@ -331,6 +331,64 @@ namespace ExcelReader.Tests
             Assert.Equal("Async", e.Current[0].GetString());
         }
 
+        // --- Excel.FromXlsx* aliases (API1: format-named factory matching FromXls/FromXlsb) ---
+
+        [Fact]
+        public void FromXlsxFileOpensLikeFromFile()
+        {
+            string path = WriteTemp(".xlsx", WorkbookBuilder.Build("""<row r="1"><c r="A1"><v>1</v></c></row>"""));
+            try
+            {
+                using XlsxReader reader = Excel.FromXlsxFile(path);
+                using XlsxReader.Enumerator e = reader.GetEnumerator();
+                Assert.True(e.MoveNext());
+                Assert.Equal("1", e.Current[0].GetString());
+            }
+            finally
+            {
+                File.Delete(path);
+            }
+        }
+
+        [Fact]
+        public void FromXlsxStreamAndMemoryOpenLikeFrom()
+        {
+            using MemoryStream ms = WorkbookBuilder.Build("""<row r="1"><c r="A1"><v>7</v></c></row>""");
+            using XlsxReader streamReader = Excel.FromXlsx(ms, leaveOpen: true);
+            using XlsxReader.Enumerator se = streamReader.GetEnumerator();
+            Assert.True(se.MoveNext());
+            Assert.Equal("7", se.Current[0].GetString());
+
+            using XlsxReader memoryReader = Excel.FromXlsx(ms.ToArray().AsMemory());
+            using XlsxReader.Enumerator me = memoryReader.GetEnumerator();
+            Assert.True(me.MoveNext());
+            Assert.Equal("7", me.Current[0].GetString());
+        }
+
+        [Fact]
+        public async Task FromXlsxFileAsyncAndFromXlsxAsyncOpenLikeTheirCanonicalCounterparts()
+        {
+            CancellationToken ct = TestContext.Current.CancellationToken;
+            string path = WriteTemp(".xlsx", WorkbookBuilder.Build("""<row r="1"><c r="A1"><v>9</v></c></row>"""));
+            try
+            {
+                await using XlsxReader fileReader = await Excel.FromXlsxFileAsync(path, ct: ct);
+                await using XlsxReader.Enumerator fe = fileReader.GetEnumerator();
+                Assert.True(fe.MoveNext());
+                Assert.Equal("9", fe.Current[0].GetString());
+            }
+            finally
+            {
+                File.Delete(path);
+            }
+
+            await using MemoryStream ms = WorkbookBuilder.Build("""<row r="1"><c r="A1"><v>3</v></c></row>""");
+            await using XlsxReader streamReader = await Excel.FromXlsxAsync(ms, ct: ct);
+            await using XlsxReader.Enumerator se = streamReader.GetEnumerator();
+            Assert.True(se.MoveNext());
+            Assert.Equal("3", se.Current[0].GetString());
+        }
+
         private static string WriteTemp(string extension, MemoryStream content)
         {
             string path = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N") + extension);

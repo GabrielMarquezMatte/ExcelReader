@@ -3,6 +3,7 @@ using ExcelReader.Core.Enums;
 using ExcelReader.Core.Reader;
 using MiniExcelLibs;
 using Sylvan.Data.Excel;
+using static ExcelReader.Benchmarks.BenchmarkAccumulators;
 
 namespace ExcelReader.Benchmarks
 {
@@ -146,6 +147,19 @@ namespace ExcelReader.Benchmarks
                     }
                 }
             }
+            return acc;
+        }
+
+        // Matched-work counterpart to ExcelReader: materializes a string per cell like Sylvan's
+        // GetString below is forced to, instead of reading the zero-copy span (see the README's
+        // "Benchmark methodology" note).
+        [Benchmark]
+        public long ExcelReaderMaterialized()
+        {
+            using var ms = new MemoryStream(_workbook, writable: false);
+            using var reader = Excel.From(ms);
+            long acc = 0;
+            foreach (var row in reader) { acc += AccumulateRowMaterialized(row); }
             return acc;
         }
 

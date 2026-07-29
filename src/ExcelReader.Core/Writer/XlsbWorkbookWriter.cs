@@ -4,6 +4,7 @@ using System.IO.Compression;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Text;
+using ExcelReader.Core.Internal;
 using ExcelReader.Core.Reader;
 using ExcelReader.Core.Writer.Internal;
 

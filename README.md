@@ -10,11 +10,13 @@
 
 High-performance Excel reading and writing for .NET 10. Reads `.xlsx`, `.xlsb`, `.xls`, and `.csv`; writes `.xlsx`, `.xlsb`, `.xls`, and `.csv`.
 
-ExcelReader is built for streaming spreadsheet workloads where low allocations matter. It reads worksheet rows as lightweight `ref struct` values, resolves shared strings, recognizes date styles, handles sparse cells, and includes writers for producing `.xlsx` (Open XML), `.xlsb` (BIFF12), and `.xls` (BIFF8) workbooks. The library also supports opening workbook data directly from in-memory buffers without requiring a stream, which makes it convenient for API and network-based scenarios.
+ExcelReader is built for streaming spreadsheet workloads where low allocations matter. It reads worksheet rows as lightweight `ref struct` values, resolves shared strings, recognizes date styles, handles sparse cells, and includes writers for producing `.xlsx` (Open XML), `.xlsb` (BIFF12), and `.xls` (BIFF8) workbooks. The library also supports opening workbook data directly from in-memory buffers without requiring a stream, which makes it convenient for API and network-based scenarios. `Excel.FromCsv(ReadOnlyMemory<byte>)` and `Excel.FromXls(ReadOnlyMemory<byte>)` now accept caller-owned buffers directly, and `Excel.Open(ReadOnlyMemory<byte>)` routes XLS workbooks through the same true-memory path instead of wrapping the bytes in `MemoryStream`.
 
 ## Benchmarks
 
-Benchmarks were run with BenchmarkDotNet v0.15.8 on Windows 10 (22H2), AMD Ryzen 7 5700X, .NET 10.0.9 (SDK 11.0.100-preview.4). Generated-data benchmarks use 50,000 rows, except the string-heavy reads, which use 65,536. Raw results: [`tests/ExcelReader.Benchmarks/BenchmarkDotNet.Artifacts/results`](tests/ExcelReader.Benchmarks/BenchmarkDotNet.Artifacts/results).
+Benchmarks were run with BenchmarkDotNet v0.15.8 on Windows 10 (22H2), AMD Ryzen 7 5700X, .NET 10.0.9 (SDK 11.0.100-preview.4), except where a table states its own machine. Generated-data benchmarks use 50,000 rows, except the string-heavy reads, which use 65,536. Raw results: [`tests/ExcelReader.Benchmarks/BenchmarkDotNet.Artifacts/results`](tests/ExcelReader.Benchmarks/BenchmarkDotNet.Artifacts/results).
+
+**Benchmark methodology.** In every table below, the **"Cell-by-cell read"** rows (including the CSV table's, and the per-format rows in "Real data reads" / "String-heavy reads") read ExcelReader's `cell.Value` — a zero-copy `ReadOnlySpan<byte>`, no decode or allocation — against each competitor's own idiomatic read call. For Sylvan, that's the ADO.NET-style `GetString(i)`, which is forced to materialize a UTF-16 `string`; Sylvan's API has no zero-copy accessor, so it cannot avoid that cost. These rows are therefore not matched work: part of the reported gap is "we parse faster" and part is "we skipped an allocation you were never offered a way to skip." Each affected benchmark class also has a `*_Materialized` sibling (calling `cell.GetString()`, the same UTF-16 materialization Sylvan pays) so the matched-work number is measurable — see `tests/ExcelReader.Benchmarks/BenchmarkAccumulators.cs`. **Those results are published under [Matched-work reads](#matched-work-reads-_materialized), and reading them is the honest way to judge the comparison:** treat the cell-by-cell ratios in the tables below as an upper bound, not a like-for-like number. The **"Typed row parsing"** / **"Typed record writing"** rows are unaffected — both sides already materialize real objects/strings there, so those comparisons are matched work as published.
 
 ### XLSX
 
@@ -86,12 +88,22 @@ The latest real-data benchmark also measures the in-memory path for workbook con
 
 | Method | Mean | Error | StdDev | Allocated |
 |---|---:|---:|---:|---:|
-| Xlsx_ExcelReader_Memory | 65.86 ms | 0.446 ms | 0.396 ms | 4.98 KB |
-| Xlsx_ExcelReader_Memory_Prefetch | 42.88 ms | 0.198 ms | 0.166 ms | 71.33 KB |
-| Xlsm_ExcelReader_Memory | 66.48 ms | 0.597 ms | 0.558 ms | 4.98 KB |
-| Xlsm_ExcelReader_Memory_Prefetch | 43.59 ms | 0.574 ms | 0.509 ms | 72.99 KB |
-| Xlsb_ExcelReader_Memory | 24.98 ms | 0.247 ms | 0.231 ms | 14.43 KB |
-| Xlsb_ExcelReader_Memory_Prefetch | 19.40 ms | 0.256 ms | 0.200 ms | 33.06 KB |
+| Xlsx_ExcelReader_Memory | 67.03 ms | 1.059 ms | 1.088 ms | 4.98 KB |
+| Xlsx_ExcelReader_Memory_Prefetch | 53.17 ms | 3.265 ms | 9.626 ms | 94.57 KB |
+| Xlsm_ExcelReader_Memory † | 67.06 ms | 1.295 ms | 1.148 ms | 4.98 KB |
+| Xlsm_ExcelReader_Memory_Prefetch | 48.75 ms | 0.914 ms | 1.016 ms | 93.44 KB |
+| Xlsb_ExcelReader_Memory † | 30.12 ms | 0.569 ms | 0.584 ms | 14.45 KB |
+| Xlsb_ExcelReader_Memory_Prefetch | 18.46 ms | 0.124 ms | 0.110 ms | 59.70 KB |
+| Xls_ExcelReader_Memory † | 11.02 ms | 0.182 ms | 0.161 ms | 10.05 KB |
+| Csv_ExcelReader_Memory † | 5.91 ms | 0.072 ms | 0.064 ms | 168 B |
+
+† These four rows come from a later targeted re-run of only the `*_Memory` benchmarks; the unmarked rows are from the preceding full-suite run. Timings are not strictly comparable across the two — a smaller run has less GC and cache interference from neighboring benchmarks, which is the likely cause of the small `Xlsm`/`Xlsb` improvements (their allocation figures are byte-identical, and neither path was touched by the change described below).
+
+`Xls_ExcelReader_Memory` and `Csv_ExcelReader_Memory` are the two most recently added overloads; the rest predate them. Csv's memory path is both faster (5.91 ms vs. 6.21 ms for `Csv_ExcelReader`) and allocates less (168 B vs. 232 B).
+
+`Xls_ExcelReader_Memory` was initially ~11% *slower* than its stream twin: it re-derived every record's address through the FAT chain and materialized `ReadOnlyMemory.Span` per read, while the stream path amortized translation across a 64 KB sector window. `BiffCursor` now caches the enclosing contiguous sector run and slices the backing array directly, so a sequentially written Workbook stream translates with one compare per record. That took it from 14.77 ms to **11.02 ms** here, against 13.31 ms for `Xls_ExcelReader` in the full run — and 0.61x the stream path on the same-run 20K-row `MemorySourceSmokeBenchmark`, which is the more trustworthy ratio since both arms ran together.
+
+One caveat on that path: it allocates **80 B more** than the stream twin (10.05 KB vs. 9.97 KB), up from byte-identical before the change, because `BiffCursor` grew the cached-run fields and two cursors are constructed per read. Allocation here is fixed reader setup rather than per-record, so it does not scale with workbook size, but the memory overload is faster than the stream path rather than strictly cheaper than it.
 
 ### String-heavy reads
 
@@ -103,6 +115,45 @@ The real-data corpus above is mostly numbers and dates — its shared-string tab
 | XLSB | 37.23 ms, 756.84 KB | 26.80 ms, 822.35 KB | 62.79 ms, 17,799.79 KB |
 
 Both formats now handle this well: ~3.2x and ~2.3x faster than Sylvan for XLSX and XLSB respectively, at roughly ~24x and ~23x less memory, with no garbage collections in either configuration. XLSB's shared-string path previously materialized its table eagerly (~27 MB here); `ParseSharedStreaming` brought it in line with the XLSX streaming/pooling path, cutting allocation by ~36x on this workload.
+
+### Matched-work reads (`*_Materialized`)
+
+Every read benchmark class has a `*_Materialized` sibling that calls `cell.GetString()` per text cell — the same UTF-16 materialization Sylvan's ADO.NET-style API is forced to pay — while keeping `TryParse`/`TryGetDateTime` for numeric and date cells, exactly mirroring the competitor accumulator. These are the matched-work counterparts to the zero-copy rows above.
+
+**Machine for the three tables in this section only:** BenchmarkDotNet v0.15.8, Windows 11 (10.0.26200.8875/25H2), 13th Gen Intel Core i7-1355U 1.70 GHz (1 CPU, 12 logical / 10 physical cores), .NET 10.0.10, SDK 10.0.302, X64 RyuJIT x86-64-v3 — **not** the Ryzen 7 5700X used for every other table.
+
+> **Do not divide these timings against the span-based rows above.** The CPU differs, so a cross-table ratio folds the hardware change into what looks like a materialization cost. Isolating that needs a same-machine paired run. **Allocation figures, however, are deterministic and safe to compare across tables** — those are the rows to read for the real tradeoff. The XLSX/XLSM means below also carry wide error bars (a thermally-constrained laptop part), so medians are given alongside.
+
+Real-data workbook, per format:
+
+| Format | Mean | Median | StdDev | Allocated |
+|---|---:|---:|---:|---:|
+| XLSX | 95.46 ms | 82.47 ms | 24.44 ms | 99.41 KB |
+| XLSM | 81.89 ms | 80.32 ms | 9.46 ms | 104.27 KB |
+| XLSB | 32.44 ms | 32.51 ms | 0.50 ms | 74.86 KB |
+| XLS | 17.96 ms | 17.89 ms | 0.29 ms | 47.92 KB |
+| CSV | 21.30 ms | 21.26 ms | 0.52 ms | 36,567.43 KB |
+
+Generated 50,000-row XLSX workbook:
+
+| Scenario | Mean | Median | StdDev | Allocated |
+|---|---:|---:|---:|---:|
+| Cell-by-cell read, materialized | 14.44 ms | 13.77 ms | 2.14 ms | 1.59 MB |
+
+String-heavy workbook (65,536 rows, ~190,000 distinct shared strings):
+
+| Format | Mean | StdDev | Gen0 | Gen1 | Gen2 | Allocated |
+|---|---:|---:|---:|---:|---:|---:|
+| XLSX | 112.45 ms | 3.05 ms | 2,600 | 1,400 | 400 | 32.19 MB |
+| XLSB | 99.64 ms | 4.69 ms | 2,600 | 1,400 | 400 | 36.83 MB |
+
+Reading the allocation columns against the tables above gives the honest shape of the tradeoff:
+
+- **CSV real data:** 36.57 MB materialized against 232 B for the span-based read of the same file. Every CSV field is a distinct string, so nothing dedupes — this is where zero-copy reading earns its keep outright.
+- **XLSB real data:** 74.86 KB, essentially cheap. That corpus repeats a small set of values, so the shared-string table dedupes and the reader's string cache materializes each distinct value once.
+- **String-heavy XLSX:** 32.19 MB materialized, against **Sylvan's 17.83 MB on the same workload** — doing matched work here, ExcelReader allocates roughly 1.8x *more* than Sylvan, and moves from zero collections to 400 Gen2 collections. The likely cause is the per-reader shared-string cache: with ~190,000 distinct values it holds every materialized string alive for the whole read and pays its dictionary's growth churn on top, whereas the span-based path never materializes them at all. That cache is a clear win on categorical data (the common case) and a liability at high cardinality. Stated as an observation with a hypothesis, not a measured attribution — quantifying it is an open item.
+
+The takeaway is not that one column beats the other: it is that ExcelReader's headline read numbers come from a zero-copy path competitors do not expose, and when it does the same work as them, the gap narrows sharply and can invert on allocation for high-cardinality string data.
 
 ### Typed record writing
 
@@ -641,6 +692,13 @@ dotnet restore ExcelReader.slnx
 dotnet build ExcelReader.slnx --configuration Release
 dotnet test --project tests/ExcelReader.Tests/ExcelReader.Tests.csproj --configuration Release
 ```
+
+## Contributing
+
+See [ARCHITECTURE.md](ARCHITECTURE.md) for a map of the codebase, [STYLEGUIDE.md](STYLEGUIDE.md) for
+the code style, and [CONTRIBUTING.md](CONTRIBUTING.md) for build expectations and how to submit a
+change. Security issues should go through the private channel in [SECURITY.md](SECURITY.md), not a
+public issue.
 
 ## License
 

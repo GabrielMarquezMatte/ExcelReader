@@ -1,7 +1,7 @@
 namespace ExcelReader.Core.Enums
 {
     /// <summary>
-    /// Identifies the kind of value a <see cref="ExcelReader.Core.ValueObjects.Cell"/> holds.
+    /// Identifies the kind of value a <see cref="ValueObjects.Cell"/> holds.
     /// </summary>
     public enum CellType
     {

@@ -35,7 +35,9 @@ namespace ExcelReader.Core.Reader
         // Pre-filled, EOF from the start: the whole ZIP part is already decompressed, so there is
         // nothing left to refill and no source to refill from. `content` may alias a sub-range of a
         // larger array (e.g. a stored entry sliced out of the whole-file buffer), so Pos/Len start at
-        // that sub-range's offsets rather than always at 0.
+        // that sub-range's absolute offsets rather than always at 0 — every consumer of this cursor
+        // (XlsxReader/XlsbReader included) indexes Buf directly via Pos/Len, so those offsets must stay
+        // absolute instead of being rebased to the segment's own 0-based range.
         internal BufferedStreamCursor(ReadOnlyMemory<byte> content, int maxCellBytes, string limitName)
         {
             _maxCellBytes = maxCellBytes;

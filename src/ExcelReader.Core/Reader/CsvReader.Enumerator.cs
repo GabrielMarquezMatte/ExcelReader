@@ -55,6 +55,14 @@ namespace ExcelReader.Core.Reader
                 _stripBom = options.DetectEncodingFromByteOrderMark;
             }
 
+            internal Enumerator(ReadOnlyMemory<byte> content, CsvReaderOptions options, CancellationToken ct = default)
+                : base(content, options.MaxCellBytes, nameof(CsvReaderOptions.MaxCellBytes), ct)
+            {
+                _delimiter = options.Delimiter;
+                _quote = options.Quote;
+                _stripBom = options.DetectEncodingFromByteOrderMark;
+            }
+
             // Cells point either into _buf (the common, zero-copy case: unquoted or plain-quoted
             // fields are already contiguous bytes read straight from the stream) or into _acc's value
             // buffer (only for fields needing unescaping, e.g. a doubled "" quote, or malformed
@@ -167,7 +175,7 @@ namespace ExcelReader.Core.Reader
             // over trickling streams ever matter.
             private bool TryParseRecordFromBuffer()
             {
-                byte[] buf = _buf;
+                ReadOnlySpan<byte> buf = _buf.AsSpan(0, _len);
                 int len = _len;
                 byte delim = _delimiter;
                 byte quote = _quote;
@@ -180,7 +188,7 @@ namespace ExcelReader.Core.Reader
                 // directly with no FieldState/materialization machinery at all. Falls through to the
                 // general per-field parser when a quote is hit first, or when the terminator/EOF isn't
                 // resolvable yet.
-                ReadOnlySpan<byte> remaining = buf.AsSpan(pos, len - pos);
+                ReadOnlySpan<byte> remaining = buf[pos..len];
                 int first = remaining.IndexOfAny(Cr, Lf, quote);
                 bool quoteFirst = first >= 0 && remaining[first] == quote;
                 int lineTerm = quoteFirst ? -1 : first;
@@ -331,7 +339,8 @@ namespace ExcelReader.Core.Reader
                     return;
                 }
                 Ensure(3);
-                if (_len - _pos >= 3 && _buf[_pos] == 0xEF && _buf[_pos + 1] == 0xBB && _buf[_pos + 2] == 0xBF)
+                ReadOnlySpan<byte> buf = _buf.AsSpan(0, _len);
+                if (_len - _pos >= 3 && buf[_pos] == 0xEF && buf[_pos + 1] == 0xBB && buf[_pos + 2] == 0xBF)
                 {
                     _pos += 3;
                 }
@@ -349,7 +358,8 @@ namespace ExcelReader.Core.Reader
                     return;
                 }
                 await EnsureAsync(3).ConfigureAwait(false);
-                if (_len - _pos >= 3 && _buf[_pos] == 0xEF && _buf[_pos + 1] == 0xBB && _buf[_pos + 2] == 0xBF)
+                ReadOnlySpan<byte> buf = _buf.AsSpan(0, _len);
+                if (_len - _pos >= 3 && buf[_pos] == 0xEF && buf[_pos + 1] == 0xBB && buf[_pos + 2] == 0xBF)
                 {
                     _pos += 3;
                 }

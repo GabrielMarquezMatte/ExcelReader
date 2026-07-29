@@ -10,7 +10,7 @@ using ExcelReader.Core.Writer;
 
 namespace ExcelReader.Tests
 {
-    // Z4/Z5 in docs/in-memory-zip.md: Excel.From/FromXlsb/Open(ReadOnlyMemory<byte>) must be
+    // Excel.From/FromXlsb/Open(ReadOnlyMemory<byte>) (the in-memory ZIP path) must be
     // observationally identical to the streamed path — same cells, same exceptions, same exception
     // types on malformed input. Every fixture here is a real ZipArchive-built file, so any divergence
     // is a bug in the memory path, not the fixture.
@@ -67,8 +67,8 @@ namespace ExcelReader.Tests
             await using IExcelRowEnumerator e = await task;
         }
 
-        // ---- 2. PrefetchDecompression overlaps inflate with parsing here too (docs/in-memory-zip.md
-        // Phase 1 gate), same as the streamed path — output must stay identical either way. ----
+        // ---- 2. PrefetchDecompression overlaps inflate with parsing here too, same as the
+        // streamed path — output must stay identical either way. ----
 
         [Theory]
         [MemberData(nameof(Fixtures))]

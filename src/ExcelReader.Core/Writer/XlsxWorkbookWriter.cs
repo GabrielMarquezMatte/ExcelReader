@@ -3,6 +3,7 @@ using System.Globalization;
 using System.IO.Compression;
 using System.Security;
 using System.Text;
+using ExcelReader.Core.Internal;
 using ExcelReader.Core.Writer.Internal;
 
 namespace ExcelReader.Core.Writer

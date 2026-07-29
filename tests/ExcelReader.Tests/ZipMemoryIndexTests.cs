@@ -8,8 +8,8 @@ using ExcelReader.Core.Reader;
 
 namespace ExcelReader.Tests
 {
-    // Z1 in docs/in-memory-zip.md: the in-memory ZIP central-directory reader, exercised directly
-    // (Excel.From(ReadOnlyMemory<byte>) — Z4 — doesn't exist yet). Every fixture here is a real
+    // The in-memory ZIP central-directory reader, exercised directly here (rather than only through
+    // Excel.From(ReadOnlyMemory<byte>)). Every fixture here is a real
     // ZipArchive-built file, so any divergence from the streamed path (parsed via
     // ZipEntryBytes/ZipArchive in the same test) is a bug in the new reader, not the fixture.
     // No CRC-32 check: ZipArchive doesn't validate it on read either (see ZipMemoryIndex.OpenPart),

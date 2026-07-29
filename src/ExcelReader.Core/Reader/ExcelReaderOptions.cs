@@ -7,6 +7,10 @@ namespace ExcelReader.Core.Reader
     public sealed record ExcelReaderOptions
     {
         /// <summary>Gets the maximum total decompressed bytes allowed across the whole workbook. Defaults to 512 MiB.</summary>
+        /// <remarks>Applies to ZIP-backed formats (XLSX/XLSB) as their decompressed byte budget, and to
+        /// the legacy CFB container (.xls) as the cap on its declared Workbook stream size — the CFB path
+        /// has nothing to decompress, but this is still the caller's budget for what that phase may
+        /// materialize.</remarks>
         public long MaxTotalDecompressedBytes { get; init; } = 512L * 1024 * 1024;
 
         /// <summary>Gets the maximum byte length allowed for a single cell's value. Defaults to 32 MiB.</summary>

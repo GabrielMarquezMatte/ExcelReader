@@ -6,7 +6,7 @@ namespace ExcelReader.Tests
 {
     // Focused reader suite for XlsxReader itself — the flagship format's coverage was previously
     // scattered across dialect/corpus/interop test files with no single place asserting the reader's
-    // own structural behaviors (F13 in docs/road-to-a.md).
+    // own structural behaviors.
     public class XlsxReaderTests
     {
         [Fact]
