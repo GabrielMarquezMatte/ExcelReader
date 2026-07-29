@@ -1,4 +1,3 @@
-using System.Buffers;
 using System.Buffers.Text;
 using System.Collections.Frozen;
 using System.Diagnostics.CodeAnalysis;
@@ -338,11 +337,9 @@ namespace ExcelReader.Core.Parser.Internal
         }
 
         // DateTime/DateOnly implement ISpanParsable (char) and IUtf8SpanFormattable, but NOT
-        // IUtf8SpanParsable (no parse-from-UTF-8) on either net8 or net10. So decode the short date
-        // field to a stack char buffer — allocation-free — and parse culture-aware (honors Culture,
-        // e.g. pt-BR "02/07/2026"). Falls back to a string for pathologically long fields.
-        private const int MaxStackDateChars = 128;
-
+        // IUtf8SpanParsable (no parse-from-UTF-8) on either net8 or net10. So decode the date field to
+        // a stack (or, rarely, pooled) char buffer and parse culture-aware (honors Culture, e.g. pt-BR
+        // "02/07/2026").
         [SkipLocalsInit]
         private static bool TryParseDateTimeText(in Cell cell, IFormatProvider provider, out DateTime value)
         {
@@ -355,39 +352,46 @@ namespace ExcelReader.Core.Parser.Internal
             {
                 return true;
             }
-            if (utf8.Length <= MaxStackDateChars)
+            Span<char> stack = stackalloc char[Utf8Text.StackChars];
+            ReadOnlySpan<char> chars = Utf8Text.Decode(utf8, stack, out char[]? rented);
+            try
             {
-                Span<char> chars = stackalloc char[MaxStackDateChars];
-                int n = Encoding.UTF8.GetChars(utf8, chars);
-                return DateTime.TryParse(chars[..n], provider, DateTimeStyles.None, out value);
+                return DateTime.TryParse(chars, provider, DateTimeStyles.None, out value);
             }
-            return DateTime.TryParse(cell.GetString(), provider, DateTimeStyles.None, out value);
+            finally
+            {
+                Utf8Text.Release(rented);
+            }
         }
 
         [SkipLocalsInit]
         private static bool TryParseDateOnlyText(in Cell cell, IFormatProvider provider, out DateOnly value)
         {
-            ReadOnlySpan<byte> utf8 = cell.Value;
-            if (utf8.Length <= MaxStackDateChars)
+            Span<char> stack = stackalloc char[Utf8Text.StackChars];
+            ReadOnlySpan<char> chars = Utf8Text.Decode(cell.Value, stack, out char[]? rented);
+            try
             {
-                Span<char> chars = stackalloc char[MaxStackDateChars];
-                int n = Encoding.UTF8.GetChars(utf8, chars);
-                return DateOnly.TryParse(chars[..n], provider, DateTimeStyles.None, out value);
+                return DateOnly.TryParse(chars, provider, DateTimeStyles.None, out value);
             }
-            return DateOnly.TryParse(cell.GetString(), provider, DateTimeStyles.None, out value);
+            finally
+            {
+                Utf8Text.Release(rented);
+            }
         }
 
         [SkipLocalsInit]
         private static bool TryParseTimeOnlyText(in Cell cell, IFormatProvider provider, out TimeOnly value)
         {
-            ReadOnlySpan<byte> utf8 = cell.Value;
-            if (utf8.Length <= MaxStackDateChars)
+            Span<char> stack = stackalloc char[Utf8Text.StackChars];
+            ReadOnlySpan<char> chars = Utf8Text.Decode(cell.Value, stack, out char[]? rented);
+            try
             {
-                Span<char> chars = stackalloc char[MaxStackDateChars];
-                int n = Encoding.UTF8.GetChars(utf8, chars);
-                return TimeOnly.TryParse(chars[..n], provider, DateTimeStyles.None, out value);
+                return TimeOnly.TryParse(chars, provider, DateTimeStyles.None, out value);
             }
-            return TimeOnly.TryParse(cell.GetString(), provider, DateTimeStyles.None, out value);
+            finally
+            {
+                Utf8Text.Release(rented);
+            }
         }
 
         private static ColumnParser<T> BuildParsableCore<T, TProp>(PropertyInfo prop)
@@ -432,41 +436,31 @@ namespace ExcelReader.Core.Parser.Internal
         private static bool TryParseGuid(in Cell cell, out Guid value)
         {
             ReadOnlySpan<byte> utf8 = cell.Value;
-            if (utf8.Length <= 128)
+            if (!utf8.IsEmpty || !cell.TryGetDouble(out double d))
             {
-                Span<char> chars = stackalloc char[128];
-                int charCount;
-                if (utf8.IsEmpty && cell.TryGetDouble(out double d))
-                {
-                    Span<byte> byteBuf = stackalloc byte[32];
-                    if (Utf8Formatter.TryFormat(d, byteBuf, out int byteWritten))
-                    {
-                        charCount = Encoding.UTF8.GetChars(byteBuf[..byteWritten], chars);
-                    }
-                    else
-                    {
-                        value = Guid.Empty;
-                        return false;
-                    }
-                }
-                else
-                {
-                    charCount = Encoding.UTF8.GetChars(utf8, chars);
-                }
-                return Guid.TryParse(chars[..charCount], out value);
+                return TryParseGuidChars(utf8, out value);
             }
-            else
+            Span<byte> doubleBuf = stackalloc byte[32];
+            if (!Utf8Formatter.TryFormat(d, doubleBuf, out int byteWritten))
             {
-                char[] chars = ArrayPool<char>.Shared.Rent(utf8.Length);
-                try
-                {
-                    int charCount = Encoding.UTF8.GetChars(utf8, chars);
-                    return Guid.TryParse(chars.AsSpan(0, charCount), out value);
-                }
-                finally
-                {
-                    ArrayPool<char>.Shared.Return(chars);
-                }
+                value = Guid.Empty;
+                return false;
+            }
+            return TryParseGuidChars(doubleBuf[..byteWritten], out value);
+        }
+
+        [SkipLocalsInit]
+        private static bool TryParseGuidChars(ReadOnlySpan<byte> utf8, out Guid value)
+        {
+            Span<char> stack = stackalloc char[Utf8Text.StackChars];
+            ReadOnlySpan<char> chars = Utf8Text.Decode(utf8, stack, out char[]? rented);
+            try
+            {
+                return Guid.TryParse(chars, out value);
+            }
+            finally
+            {
+                Utf8Text.Release(rented);
             }
         }
 
@@ -572,42 +566,24 @@ namespace ExcelReader.Core.Parser.Internal
                     }
                     return _valueMap.TryGetValue((long)d, out value);
                 }
+                Span<char> stack = stackalloc char[Utf8Text.StackChars];
+                ReadOnlySpan<char> chars = Utf8Text.Decode(cell.Value, stack, out char[]? rented);
+                try
+                {
+                    return TryLookupName(chars, out value);
+                }
+                finally
+                {
+                    Utf8Text.Release(rented);
+                }
+            }
+
+            private static bool TryLookupName(ReadOnlySpan<char> name, out TEnum value)
+            {
 #if NET8_0
-                ReadOnlySpan<byte> utf8 = cell.Value;
-                if (utf8.Length <= 128)
-                {
-                    Span<char> spanChars = stackalloc char[128];
-                    int n = Encoding.UTF8.GetChars(utf8, spanChars);
-                    return TryLookupSpan(spanChars[..n], out value);
-                }
-                char[] chars = ArrayPool<char>.Shared.Rent(utf8.Length);
-                try
-                {
-                    int n = Encoding.UTF8.GetChars(utf8, chars);
-                    return TryLookupSpan(chars.AsSpan(0, n), out value);
-                }
-                finally
-                {
-                    ArrayPool<char>.Shared.Return(chars);
-                }
+                return TryLookupSpan(name, out value);
 #else
-                ReadOnlySpan<byte> utf8 = cell.Value;
-                if (utf8.Length <= 128)
-                {
-                    Span<char> spanChars = stackalloc char[128];
-                    int n = Encoding.UTF8.GetChars(utf8, spanChars);
-                    return _alternateLookup.TryGetValue(spanChars[..n], out value);
-                }
-                char[] chars = ArrayPool<char>.Shared.Rent(utf8.Length);
-                try
-                {
-                    int n = Encoding.UTF8.GetChars(utf8, chars);
-                    return _alternateLookup.TryGetValue(chars.AsSpan(0, n), out value);
-                }
-                finally
-                {
-                    ArrayPool<char>.Shared.Return(chars);
-                }
+                return _alternateLookup.TryGetValue(name, out value);
 #endif
             }
         }

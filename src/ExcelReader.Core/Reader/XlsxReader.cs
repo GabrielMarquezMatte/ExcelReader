@@ -110,27 +110,14 @@ namespace ExcelReader.Core.Reader
 
         // Async open over an already-opened ZipArchive — the async twin of the ZipArchive-taking sync
         // ctor above, for callers (Excel.OpenAsync's DetectSeekableAsync) that already opened the
-        // archive for format detection. Bypasses ZipReaderOpen.OpenAsync, so it owns dispose-on-failure
-        // itself instead of relying on that helper's try/catch.
-        internal static async ValueTask<XlsxReader> CreateFromOpenZipAsync(
+        // archive for format detection.
+        internal static ValueTask<XlsxReader> CreateFromOpenZipAsync(
             Stream stream, bool leaveOpen, ZipArchive zip, ExcelReaderOptions? options, CancellationToken ct)
         {
             ExcelReaderOptions effectiveOptions = options ?? ExcelReaderOptions.Default;
             DecompressedByteCounter decompressedBytes = new(effectiveOptions.MaxTotalDecompressedBytes);
-            try
-            {
-                LimitChecks.ThrowIfTooManyEntries(zip.Entries.Count, effectiveOptions);
-                return await ParseAsync(stream, leaveOpen, zip, effectiveOptions, decompressedBytes, ct).ConfigureAwait(false);
-            }
-            catch
-            {
-                await ZipArchiveDisposal.DisposeAsync(zip).ConfigureAwait(false);
-                if (!leaveOpen)
-                {
-                    await stream.DisposeAsync().ConfigureAwait(false);
-                }
-                throw;
-            }
+            return ZipReaderOpen.FromOpenZipAsync(stream, leaveOpen, zip, effectiveOptions,
+                z => ParseAsync(stream, leaveOpen, z, effectiveOptions, decompressedBytes, ct));
         }
 
         private static async ValueTask<XlsxReader> ParseAsync(

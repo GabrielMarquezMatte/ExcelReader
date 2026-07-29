@@ -16,45 +16,27 @@ namespace ExcelReader.Core.Reader
         }
 
         // Takes an already-built index (from Excel.Open's format peek) so the central directory isn't
-        // walked a second time — the memory-path twin of CreateFromOpenZipAsync. Owns dispose-on-failure
-        // either way: on success memZip's lifetime transfers to the returned reader.
-        [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP007:Don't dispose injected",
-            Justification = "memZip's lifetime transfers to this call; disposing it here on failure is correct ownership, not disposing a borrowed dependency.")]
+        // walked a second time — the memory-path twin of CreateFromOpenZipAsync.
         internal static XlsbReader CreateFromMemory(ZipMemoryIndex memZip, ExcelReaderOptions effectiveOptions)
         {
-            try
-            {
-                return BuildFromMemory(memZip, effectiveOptions);
-            }
-            catch
-            {
-                memZip.Dispose();
-                throw;
-            }
+            return ZipReaderOpen.FromMemory(memZip, zip => BuildFromMemory(zip, effectiveOptions));
         }
 
         private static XlsbReader BuildFromMemory(ZipMemoryIndex memZip, ExcelReaderOptions effectiveOptions)
         {
             DecompressedByteCounter decompressedBytes = new(effectiveOptions.MaxTotalDecompressedBytes);
-            using ZipPart wbPart = OpenPartOrDefault(memZip, "xl/workbook.bin"u8, decompressedBytes);
-            using ZipPart relsPart = OpenPartOrDefault(memZip, "xl/_rels/workbook.bin.rels"u8, decompressedBytes);
+            using ZipPart wbPart = memZip.OpenPartOrDefault("xl/workbook.bin"u8, decompressedBytes);
+            using ZipPart relsPart = memZip.OpenPartOrDefault("xl/_rels/workbook.bin.rels"u8, decompressedBytes);
             (string Name, string Path)[] sheets = XlsbWorkbook.ParseSheets(wbPart.Memory.Span, relsPart.Memory.Span);
             if (sheets.Length == 0)
             {
                 throw new InvalidDataException("The workbook contains no sheets.");
             }
-            using ZipPart stylesPart = OpenPartOrDefault(memZip, "xl/styles.bin"u8, decompressedBytes);
+            using ZipPart stylesPart = memZip.OpenPartOrDefault("xl/styles.bin"u8, decompressedBytes);
             bool[] styleIsDate = XlsbStyles.ParseStyleDateFlags(stylesPart.Memory.Span);
             bool date1904 = XlsbWorkbook.ParseDate1904(wbPart.Memory.Span);
             (byte[] flat, int[] offsets) = LoadSharedStringsFromMemory(memZip, decompressedBytes, effectiveOptions);
             return new XlsbReader(memZip, sheets, styleIsDate, date1904, flat, offsets, effectiveOptions, decompressedBytes);
-        }
-
-        // default(ZipPart) (empty Memory, nothing to return on Dispose) stands in for a missing part,
-        // mirroring ZipEntryBytes.Read's "return [] when the entry is absent" behavior on the streamed path.
-        private static ZipPart OpenPartOrDefault(ZipMemoryIndex memZip, ReadOnlySpan<byte> utf8Name, DecompressedByteCounter counter)
-        {
-            return memZip.TryGetEntry(utf8Name, out ZipEntryRef entry) ? memZip.OpenPart(entry, counter) : default;
         }
 
         private static (byte[] Flat, int[] Offsets) LoadSharedStringsFromMemory(
@@ -64,7 +46,7 @@ namespace ExcelReader.Core.Reader
             {
                 return ([], [0]);
             }
-            ThrowIfSharedEntryTooLarge(entry.UncompressedSize, decompressedBytes, options);
+            WorkbookLookups.ThrowIfSharedEntryTooLarge(entry.UncompressedSize, decompressedBytes, options);
             using ZipPart part = memZip.OpenPart(entry, decompressedBytes,
                 nameof(ExcelReaderOptions.MaxSharedStringBytes), options.MaxSharedStringBytes);
             return XlsbSharedStrings.Parse(part.Memory.Span, options);

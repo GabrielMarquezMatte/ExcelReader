@@ -327,6 +327,18 @@ namespace ExcelReader.Core.Reader
                 return RecordEnd;
             }
 
+            // The three-byte UTF-8 BOM, if present at the very start. Splitting this out of the
+            // sync/async entry points keeps the byte check itself in one place: only the buffer fill
+            // differs between them.
+            private void StripBomFromBuffer()
+            {
+                ReadOnlySpan<byte> buf = _buf.AsSpan(0, _len);
+                if (_len - _pos >= 3 && buf[_pos] == 0xEF && buf[_pos + 1] == 0xBB && buf[_pos + 2] == 0xBF)
+                {
+                    _pos += 3;
+                }
+            }
+
             private void EnsureBomStripped()
             {
                 if (_bomChecked)
@@ -339,11 +351,7 @@ namespace ExcelReader.Core.Reader
                     return;
                 }
                 Ensure(3);
-                ReadOnlySpan<byte> buf = _buf.AsSpan(0, _len);
-                if (_len - _pos >= 3 && buf[_pos] == 0xEF && buf[_pos + 1] == 0xBB && buf[_pos + 2] == 0xBF)
-                {
-                    _pos += 3;
-                }
+                StripBomFromBuffer();
             }
 
             private async ValueTask EnsureBomStrippedAsync()
@@ -358,11 +366,7 @@ namespace ExcelReader.Core.Reader
                     return;
                 }
                 await EnsureAsync(3).ConfigureAwait(false);
-                ReadOnlySpan<byte> buf = _buf.AsSpan(0, _len);
-                if (_len - _pos >= 3 && buf[_pos] == 0xEF && buf[_pos + 1] == 0xBB && buf[_pos + 2] == 0xBF)
-                {
-                    _pos += 3;
-                }
+                StripBomFromBuffer();
             }
 
             // --- field building (zero-copy _buf slice, falling back to _acc's value buffer only

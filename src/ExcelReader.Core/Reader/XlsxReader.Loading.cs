@@ -73,7 +73,7 @@ namespace ExcelReader.Core.Reader
             {
                 return;
             }
-            ThrowIfSharedEntryTooLarge(entry.Length);
+            WorkbookLookups.ThrowIfSharedEntryTooLarge(entry.Length, _decompressedBytes, _options);
             using LimitedReadStream stream = WorkbookLookups.OpenEntryStream(entry, _decompressedBytes, _options,
                 nameof(ExcelReaderOptions.MaxSharedStringBytes), _options.MaxSharedStringBytes);
             ParseSharedStreaming(stream, entry.Length);
@@ -91,27 +91,13 @@ namespace ExcelReader.Core.Reader
             {
                 return;
             }
-            ThrowIfSharedEntryTooLarge(entry.Length);
+            WorkbookLookups.ThrowIfSharedEntryTooLarge(entry.Length, _decompressedBytes, _options);
             LimitedReadStream stream = await WorkbookLookups.OpenEntryStreamAsync(
                 entry, _decompressedBytes, _options, ct,
                 nameof(ExcelReaderOptions.MaxSharedStringBytes), _options.MaxSharedStringBytes).ConfigureAwait(false);
             await using (stream.ConfigureAwait(false))
             {
                 await ParseSharedStreamingAsync(stream, entry.Length, ct).ConfigureAwait(false);
-            }
-        }
-
-        // Rejects an oversized part before the entry stream is touched at all. The streaming path never
-        // materializes one destination buffer sized from the (attacker-controlled) central-directory
-        // length, but that declared length must still be checked against both caps up front.
-        private void ThrowIfSharedEntryTooLarge(long declaredLength)
-        {
-            LimitChecks.ThrowIfEntryLengthExceeds(declaredLength, _decompressedBytes.Remaining,
-                nameof(ExcelReaderOptions.MaxTotalDecompressedBytes));
-            if (_options.MaxSharedStringBytes > 0)
-            {
-                LimitChecks.ThrowIfEntryLengthExceeds(declaredLength, _options.MaxSharedStringBytes,
-                    nameof(ExcelReaderOptions.MaxSharedStringBytes));
             }
         }
 
