@@ -34,7 +34,7 @@ namespace ExcelReader.Core.Reader
             // Also used by the in-memory ZIP path: ZipMemoryIndex.OpenEntryStream hands back a
             // DeflateStream/MemoryStream over the part's bytes, same as the ZipArchive path.
             internal Enumerator(XlsxReader reader, Stream sheet, long entryLength = 0, CancellationToken ct = default)
-                : base(sheet, reader._options.MaxCellBytes, nameof(ExcelReaderOptions.MaxCellBytes), WorkbookLookups.InitialBufferCapacity(entryLength), ct)
+                : base(sheet, reader._options.MaxCellBytes, nameof(ExcelReaderOptions.MaxCellBytes), WorkbookLookups.InitialBufferCapacity(entryLength), ownsSource: true, ct)
             {
                 _reader = reader;
             }
@@ -1003,29 +1003,6 @@ namespace ExcelReader.Core.Reader
                 }
                 while (!_eof);
                 return -1;
-            }
-
-            /// <inheritdoc/>
-            [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP007:Don't dispose injected",
-                Justification = "_sheet is opened for this enumerator and owned by it.")]
-            public void Dispose()
-            {
-                _source?.Dispose();
-                _source = null;
-                ReturnBuffers();
-            }
-
-            /// <inheritdoc/>
-            [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP007:Don't dispose injected",
-                Justification = "_sheet is opened for this enumerator and owned by it.")]
-            public async ValueTask DisposeAsync()
-            {
-                if (_source is not null)
-                {
-                    await _source.DisposeAsync().ConfigureAwait(false);
-                    _source = null;
-                }
-                ReturnBuffers();
             }
 
         }
