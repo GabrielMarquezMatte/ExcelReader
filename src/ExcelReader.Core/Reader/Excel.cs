@@ -1,7 +1,6 @@
 using System.Diagnostics.CodeAnalysis;
 using System.IO.Compression;
 using System.Runtime.CompilerServices;
-using System.Runtime.InteropServices;
 using ExcelReader.Core.Enums;
 using ExcelReader.Core.Writer.Internal;
 

@@ -23,7 +23,7 @@ namespace ExcelReader.Tests
         {
             byte[] bytes = Encoding.UTF8.GetBytes("name,age\nAda,37\n");
             ReadOnlyMemory<byte> sliced = bytes.AsMemory(1, bytes.Length - 2);
-            var manager = new NonArrayMemoryManager(bytes);
+            var manager = new NonArrayMemoryManager(sliced.ToArray());
 
             using CsvReader streamReader = Excel.FromCsv(new MemoryStream(sliced.ToArray(), writable: false));
             using CsvReader memoryReader = Excel.FromCsv(sliced);

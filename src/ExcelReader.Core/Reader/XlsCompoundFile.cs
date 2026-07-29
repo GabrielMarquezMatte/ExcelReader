@@ -92,7 +92,7 @@ namespace ExcelReader.Core.Reader
             return (ms, true);
         }
 
-        private static MemoryStream AsStream(ReadOnlyMemory<byte> data)
+        internal static MemoryStream AsStream(ReadOnlyMemory<byte> data)
         {
             if (MemoryMarshal.TryGetArray(data, out ArraySegment<byte> segment))
             {
