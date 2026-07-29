@@ -45,7 +45,7 @@ namespace ExcelReader.Tests
         }
         // Patches the uncompressed-size field of a central-directory record in place, so the entry's
         // declared size (what ZipArchiveEntry.Length reports) lies far above its real, tiny compressed
-        // content — the exact shape of a zip-bomb-style amplification attack (see docs/road-to-a.md, F1).
+        // content — the exact shape of a zip-bomb-style amplification attack.
         private static void ForgeCentralDirectoryUncompressedSize(byte[] zipBytes, string entryName, uint forgedSize)
         {
             byte[] nameBytes = Encoding.UTF8.GetBytes(entryName);
@@ -255,6 +255,45 @@ namespace ExcelReader.Tests
             Assert.Equal(nameof(ExcelReaderOptions.MaxCellBytes), ex.LimitName);
             Assert.Equal(2, ex.Limit);
             Assert.Equal(4, ex.Actual);
+        }
+
+        // --- XlsCompoundFile (.xls / OLE-CFB) container-phase guard rails ---
+
+        [Fact]
+        public void ForgedWorkbookSizeNearUInt32MaxThrowsInvalidDataException()
+        {
+            using MemoryStream ms = XlsWorkbookBuilder.BuildPatched(
+                XlsWorkbookBuilder.WorkbookSizeOffset, XlsWorkbookBuilder.LE64(0xFFFFFFFFL));
+            Assert.Throws<InvalidDataException>(() => Excel.FromXls(ms));
+        }
+
+        [Fact]
+        public void ForgedWorkbookSizeNearLongMaxThrowsInvalidDataException()
+        {
+            using MemoryStream ms = XlsWorkbookBuilder.BuildPatched(
+                XlsWorkbookBuilder.WorkbookSizeOffset, XlsWorkbookBuilder.LE64(long.MaxValue - 1));
+            Assert.Throws<InvalidDataException>(() => Excel.FromXls(ms));
+        }
+
+        [Fact]
+        public void ForgedMiniCutoffThrowsInvalidDataException()
+        {
+            using MemoryStream ms = XlsWorkbookBuilder.BuildPatched(
+                XlsWorkbookBuilder.MiniCutoffOffset, XlsWorkbookBuilder.LE32(int.MaxValue - 1));
+            Assert.Throws<InvalidDataException>(() => Excel.FromXls(ms));
+        }
+
+        [Fact]
+        public void ForgedOversizedWorkbookSizeTripsTotalDecompressedLimitBeforeAllocating()
+        {
+            using MemoryStream ms = XlsWorkbookBuilder.BuildPatched(
+                XlsWorkbookBuilder.WorkbookSizeOffset, XlsWorkbookBuilder.LE64(5000));
+
+            var options = new ExcelReaderOptions { MaxTotalDecompressedBytes = 4096 };
+
+            ExcelLimitExceededException ex = Assert.Throws<ExcelLimitExceededException>(() => Excel.FromXls(ms, options: options));
+            Assert.Equal(nameof(ExcelReaderOptions.MaxTotalDecompressedBytes), ex.LimitName);
+            Assert.Equal(5000, ex.Actual);
         }
 
         [Fact]

@@ -3,7 +3,7 @@ namespace ExcelReader.Core.ValueObjects
     /// <summary>
     /// Enumerates the populated cells of a <see cref="Row"/>, in ascending column order, skipping gaps.
     /// Supports <c>foreach</c> via the duck-typed enumerator pattern (ref structs cannot implement
-    /// <see cref="System.Collections.Generic.IEnumerator{T}"/>).
+    /// <see cref="IEnumerator{T}"/>).
     /// </summary>
     public ref struct RowCellEnumerator
     {

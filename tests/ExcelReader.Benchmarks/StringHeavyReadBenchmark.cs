@@ -68,6 +68,18 @@ namespace ExcelReader.Benchmarks
             return AccumulateSylvanExcel(reader);
         }
 
+        // Matched-work counterpart to Xlsx_ExcelReader: materializes a string per cell like
+        // Xlsx_Sylvan is forced to, instead of reading the zero-copy span.
+        [Benchmark]
+        public long Xlsx_ExcelReader_Materialized()
+        {
+            using MemoryStream ms = new(_xlsx, writable: false);
+            using XlsxReader reader = Excel.From(ms);
+            long acc = 0;
+            foreach (Row row in reader) { acc += AccumulateRowMaterialized(row); }
+            return acc;
+        }
+
         // --- XLSB ---
 
         [Benchmark]
@@ -96,6 +108,17 @@ namespace ExcelReader.Benchmarks
             using MemoryStream ms = new(_xlsb, writable: false);
             using ExcelDataReader reader = ExcelDataReader.Create(ms, ExcelWorkbookType.ExcelBinary, new ExcelDataReaderOptions());
             return AccumulateSylvanExcel(reader);
+        }
+
+        // Matched-work counterpart to Xlsb_ExcelReader — see Xlsx_ExcelReader_Materialized.
+        [Benchmark]
+        public long Xlsb_ExcelReader_Materialized()
+        {
+            using MemoryStream ms = new(_xlsb, writable: false);
+            using XlsbReader reader = Excel.FromXlsb(ms);
+            long acc = 0;
+            foreach (Row row in reader) { acc += AccumulateRowMaterialized(row); }
+            return acc;
         }
     }
 }

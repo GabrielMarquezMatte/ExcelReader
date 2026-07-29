@@ -5,8 +5,8 @@ using ExcelReader.Core.Reader;
 
 namespace ExcelReader.Tests
 {
-    // Z3 in docs/in-memory-zip.md: the memory-backed BufferedStreamCursor ctor used by the in-memory
-    // ZIP path once a ZipPart is fully decompressed. No source stream, no refills — these tests cover
+    // The memory-backed BufferedStreamCursor ctor used by the in-memory ZIP path once a ZipPart is
+    // fully decompressed. No source stream, no refills — these tests cover
     // the ctor's aliasing/offset behavior and the one sharp edge: Return() must never hand a
     // caller-owned or ZipPart-owned array back to ArrayPool.
     public class BufferedStreamCursorTests

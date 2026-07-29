@@ -33,8 +33,8 @@ namespace ExcelReader.Core.Reader
             // On the next MoveNext call, skip the "seek to row header" step.
             private bool _pendingRowHdr;
 
-            // Also used by the in-memory ZIP path (docs/in-memory-zip.md): ZipMemoryIndex.OpenEntryStream
-            // hands back a DeflateStream/MemoryStream over the part's bytes, same as the ZipArchive path.
+            // Also used by the in-memory ZIP path: ZipMemoryIndex.OpenEntryStream hands back a
+            // DeflateStream/MemoryStream over the part's bytes, same as the ZipArchive path.
             internal Enumerator(XlsbReader reader, Stream sheet, long entryLength = 0, CancellationToken ct = default)
                 : base(sheet, reader._options.MaxCellBytes, nameof(ExcelReaderOptions.MaxCellBytes), WorkbookLookups.InitialBufferCapacity(entryLength), ct)
             {

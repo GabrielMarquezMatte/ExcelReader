@@ -122,7 +122,7 @@ namespace ExcelReader.Tests
         {
             public bool TryConvert(in Cell cell, bool isDate1904, IFormatProvider provider, out Money value)
             {
-                if (cell.TryParse<decimal>(provider, out decimal amount))
+                if (cell.TryParse(provider, out decimal amount))
                 {
                     value = new Money(amount);
                     return true;

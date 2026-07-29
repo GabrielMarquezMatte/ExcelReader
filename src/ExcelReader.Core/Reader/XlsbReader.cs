@@ -1,7 +1,7 @@
 using System.Buffers;
 using System.Diagnostics.CodeAnalysis;
 using System.IO.Compression;
-using ExcelReader.Core.Writer.Internal;
+using ExcelReader.Core.Internal;
 
 namespace ExcelReader.Core.Reader
 {
@@ -28,8 +28,8 @@ namespace ExcelReader.Core.Reader
         [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP008:Don't assign member with injected and created disposables",
             Justification = "Two construction paths: the sync ctor opens and owns the ZipArchive itself; the CreateAsync path receives one already opened by ZipReaderOpen. Either way this reader ends up owning it and disposes it in Dispose/DisposeAsync.")]
         private readonly ZipArchive? _zip;
-        // Non-null instead of _zip/_stream for the in-memory ZIP path (docs/in-memory-zip.md, Z4) —
-        // exactly one of _zip or _memZip is non-null for any reader instance other than the test-only ctor.
+        // Non-null instead of _zip/_stream for the in-memory ZIP path — exactly one of _zip or _memZip
+        // is non-null for any reader instance other than the test-only ctor.
         private readonly ZipMemoryIndex? _memZip;
         private readonly Stream? _stream;
         private readonly bool _leaveOpen;
@@ -107,7 +107,7 @@ namespace ExcelReader.Core.Reader
             _pooledSharedFlat = sharedFlat.Length != 0;
         }
 
-        // In-memory ZIP path (docs/in-memory-zip.md, Z4): no stream, no ZipArchive. sharedFlat here
+        // In-memory ZIP path: no stream, no ZipArchive. sharedFlat here
         // comes from XlsbSharedStrings.Parse (a plain array, not ArrayPool-rented), unlike the streamed
         // ctor above — _pooledSharedFlat is always false.
         private XlsbReader(ZipMemoryIndex memZip,
