@@ -2,7 +2,11 @@ root = true
 
 [*]
 charset = utf-8
-end_of_line = crlf
+# lf, not crlf: every tracked file is committed LF, and CI runs the `dotnet format whitespace`
+# gate on Linux where nothing rewrites endings on checkout. Demanding crlf here only passes on
+# Windows, where core.autocrlf converts on checkout and hides the mismatch. See .gitattributes,
+# which pins eol=lf so no contributor's autocrlf setting can change what lands in a blob.
+end_of_line = lf
 insert_final_newline = true
 trim_trailing_whitespace = true
 
