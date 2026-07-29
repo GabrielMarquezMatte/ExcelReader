@@ -53,6 +53,13 @@ jobs:
           -p:Version=${{ steps.version.outputs.value }}
           --output ./artifacts
 
+      - name: Generate SBOM
+        uses: anchore/sbom-action@v0
+        with:
+          path: ./artifacts
+          format: spdx-json
+          output-file: ./artifacts/excelreader.spdx.json
+
       - name: NuGet login (Trusted Publishing / OIDC)
         uses: NuGet/login@v1
         id: nuget-login

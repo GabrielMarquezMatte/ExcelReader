@@ -47,6 +47,10 @@ jobs:
       - name: Build (Release)
         run: dotnet build ExcelReader.slnx --configuration Release --no-restore -p:DeterministicSourcePaths=false
 
+      - name: Verify formatting (whitespace)
+        if: matrix.os == 'ubuntu-latest'
+        run: dotnet format whitespace ExcelReader.slnx --verify-no-changes
+
       - name: Test (Release) + collect coverage
         run: >-
           dotnet test --project tests/ExcelReader.Tests/ExcelReader.Tests.csproj

@@ -44,6 +44,31 @@ namespace ExcelReader.Core.Reader
             return XlsxReader.CreateFromMemory(data, options);
         }
 
+        /// <summary>Opens an XLSX workbook from a file path, taking ownership of the file stream. Alias for <see cref="FromFile(string, ExcelReaderOptions?)"/>, for callers who grep for a format-named factory.</summary>
+        /// <param name="path">The path to the XLSX file.</param>
+        /// <param name="options">Resource limits and behavior toggles; <see cref="ExcelReaderOptions.Default"/> when <see langword="null"/>.</param>
+        public static XlsxReader FromXlsxFile(string path, ExcelReaderOptions? options = null)
+        {
+            return FromFile(path, options);
+        }
+
+        /// <summary>Opens an XLSX workbook from an existing stream. Alias for <see cref="From(Stream, bool, ExcelReaderOptions?)"/>, for callers who grep for a format-named factory.</summary>
+        /// <param name="stream">The stream containing the XLSX data.</param>
+        /// <param name="leaveOpen">When <see langword="true"/> (the default), <paramref name="stream"/> is not disposed when the reader is disposed.</param>
+        /// <param name="options">Resource limits and behavior toggles; <see cref="ExcelReaderOptions.Default"/> when <see langword="null"/>.</param>
+        public static XlsxReader FromXlsx(Stream stream, bool leaveOpen = true, ExcelReaderOptions? options = null)
+        {
+            return From(stream, leaveOpen, options);
+        }
+
+        /// <summary>Opens an XLSX workbook directly from an in-memory buffer. Alias for <see cref="From(ReadOnlyMemory{byte}, ExcelReaderOptions?)"/>, for callers who grep for a format-named factory.</summary>
+        /// <param name="data">The whole XLSX file's bytes. Must outlive the returned reader.</param>
+        /// <param name="options">Resource limits and behavior toggles; <see cref="ExcelReaderOptions.Default"/> when <see langword="null"/>.</param>
+        public static XlsxReader FromXlsx(ReadOnlyMemory<byte> data, ExcelReaderOptions? options = null)
+        {
+            return From(data, options);
+        }
+
         /// <summary>Opens a legacy binary (XLS) workbook from a file path, taking ownership of the file stream.</summary>
         /// <param name="path">The path to the XLS file.</param>
         /// <param name="options">Resource limits and behavior toggles; <see cref="ExcelReaderOptions.Default"/> when <see langword="null"/>.</param>
@@ -121,6 +146,25 @@ namespace ExcelReader.Core.Reader
         public static ValueTask<XlsxReader> FromAsync(Stream stream, bool leaveOpen = true, ExcelReaderOptions? options = null, CancellationToken ct = default)
         {
             return XlsxReader.CreateAsync(stream, leaveOpen, options, ct);
+        }
+
+        /// <summary>Asynchronously opens an XLSX workbook from a file path, taking ownership of the file stream. Alias for <see cref="FromFileAsync(string, ExcelReaderOptions?, CancellationToken)"/>, for callers who grep for a format-named factory.</summary>
+        /// <param name="path">The path to the XLSX file.</param>
+        /// <param name="options">Resource limits and behavior toggles; <see cref="ExcelReaderOptions.Default"/> when <see langword="null"/>.</param>
+        /// <param name="ct">A token to cancel the open operation.</param>
+        public static ValueTask<XlsxReader> FromXlsxFileAsync(string path, ExcelReaderOptions? options = null, CancellationToken ct = default)
+        {
+            return FromFileAsync(path, options, ct);
+        }
+
+        /// <summary>Asynchronously opens an XLSX workbook from an existing stream. Alias for <see cref="FromAsync(Stream, bool, ExcelReaderOptions?, CancellationToken)"/>, for callers who grep for a format-named factory.</summary>
+        /// <param name="stream">The stream containing the XLSX data.</param>
+        /// <param name="leaveOpen">When <see langword="true"/> (the default), <paramref name="stream"/> is not disposed when the reader is disposed.</param>
+        /// <param name="options">Resource limits and behavior toggles; <see cref="ExcelReaderOptions.Default"/> when <see langword="null"/>.</param>
+        /// <param name="ct">A token to cancel the open operation.</param>
+        public static ValueTask<XlsxReader> FromXlsxAsync(Stream stream, bool leaveOpen = true, ExcelReaderOptions? options = null, CancellationToken ct = default)
+        {
+            return FromAsync(stream, leaveOpen, options, ct);
         }
 
         /// <summary>Asynchronously opens a legacy binary (XLS) workbook from a file path, taking ownership of the file stream.</summary>
