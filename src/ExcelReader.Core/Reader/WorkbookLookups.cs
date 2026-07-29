@@ -41,6 +41,22 @@ namespace ExcelReader.Core.Reader
             return customFormats.TryGetValue(numFmtId, out bool isDate) ? isDate : NumberFormat.IsBuiltinDate(numFmtId);
         }
 
+        // Rejects an oversized shared-strings part before its entry stream is touched at all. The streaming
+        // path never materializes one destination buffer sized from the (attacker-controlled)
+        // central-directory length, but that declared length must still be checked against both caps up
+        // front — validate before allocating, not before using.
+        internal static void ThrowIfSharedEntryTooLarge(
+            long declaredLength, DecompressedByteCounter counter, ExcelReaderOptions options)
+        {
+            LimitChecks.ThrowIfEntryLengthExceeds(declaredLength, counter.Remaining,
+                nameof(ExcelReaderOptions.MaxTotalDecompressedBytes));
+            if (options.MaxSharedStringBytes > 0)
+            {
+                LimitChecks.ThrowIfEntryLengthExceeds(declaredLength, options.MaxSharedStringBytes,
+                    nameof(ExcelReaderOptions.MaxSharedStringBytes));
+            }
+        }
+
         internal static (int Start, int Length) SharedAt(int[] sharedOffsets, int index)
         {
             if ((uint)index >= (uint)(sharedOffsets.Length - 1))

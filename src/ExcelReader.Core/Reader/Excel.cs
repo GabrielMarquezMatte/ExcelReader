@@ -517,14 +517,9 @@ namespace ExcelReader.Core.Reader
             throw new InvalidDataException("Unrecognized file format; expected an XLSX/XLSB (ZIP) or XLS (OLE2) workbook.");
         }
 
-        // Detection peeks the 8-byte signature then rewinds. For ZIP streams, opens a temporary
-        // ZipArchive to distinguish XLSB ("xl/workbook.bin" present) from XLSX (XML workbook).
-        // Both XLSX and XLSB readers need a seekable source anyway (ZipArchive seeks the central
-        // directory), so requiring seek here costs nothing and keeps the peek cheap.
         // Classifies the leading signature bytes shared by DetectSeekable/DetectSeekableAsync. Returns
         // true (with the final answer) for XLS/Unknown; false means "it's a ZIP" and the caller must
-        // still peek the central directory to tell XLSB from XLSX - the one step that genuinely
-        // differs between the sync (stackalloc) and async (heap buffer, awaited zip dispose) paths.
+        // still peek the central directory to tell XLSB from XLSX.
         private static bool TryClassifyHeader(ReadOnlySpan<byte> sig, out ExcelFileFormat format)
         {
             if (sig.StartsWith(XlsCompoundFile.Signature))
@@ -541,6 +536,25 @@ namespace ExcelReader.Core.Reader
             return false;
         }
 
+        // Peeks the central directory to distinguish XLSB ("xl/workbook.bin" present) from XLSX (XML
+        // workbook). Kept open (not disposed here) so the caller can hand the archive straight to the
+        // chosen reader instead of letting it re-parse the central directory. `start` is the position
+        // detection began at, restored before returning so the reader sees an untouched stream.
+        [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP001:Dispose created",
+            Justification = "Ownership transfers to the caller via the out parameter, which disposes it on failure or hands it to the chosen reader on success.")]
+        private static ExcelFileFormat ClassifyZipStream(Stream stream, long start, out ZipArchive zip)
+        {
+            var zipPeek = new ZipArchive(stream, ZipArchiveMode.Read, leaveOpen: true);
+            zip = zipPeek; // assign immediately so a caller-side catch can dispose it even if GetEntry throws
+            bool isXlsb = zipPeek.GetEntry("xl/workbook.bin") is not null;
+            stream.Position = start;
+            return isXlsb ? ExcelFileFormat.Xlsb : ExcelFileFormat.Xlsx;
+        }
+
+        // Detection peeks the 8-byte signature then rewinds. For ZIP streams, opens a temporary
+        // ZipArchive to distinguish XLSB from XLSX. Both XLSX and XLSB readers need a seekable source
+        // anyway (ZipArchive seeks the central directory), so requiring seek here costs nothing and
+        // keeps the peek cheap.
         // `zip` receives the archive opened to peek the central directory (null for Xls/Unknown, which
         // never need one) so the caller can hand it straight to the chosen reader instead of letting
         // that reader re-parse the central directory from scratch.
@@ -559,13 +573,9 @@ namespace ExcelReader.Core.Reader
             {
                 return format;
             }
-            // Peek the central directory to distinguish XLSB from XLSX. Assign `zip` immediately so a
-            // caller-side catch can dispose it even if GetEntry below were to throw.
-            var zipPeek = new ZipArchive(stream, ZipArchiveMode.Read, leaveOpen: true);
+            ExcelFileFormat zipFormat = ClassifyZipStream(stream, start, out ZipArchive zipPeek);
             zip = zipPeek;
-            bool isXlsb = zipPeek.GetEntry("xl/workbook.bin") is not null;
-            stream.Position = start;
-            return isXlsb ? ExcelFileFormat.Xlsb : ExcelFileFormat.Xlsx;
+            return zipFormat;
         }
 
         private static async ValueTask<(ExcelFileFormat Format, ZipArchive? Zip)> DetectSeekableAsync(Stream stream, CancellationToken ct)
@@ -579,12 +589,8 @@ namespace ExcelReader.Core.Reader
             {
                 return (format, null);
             }
-            // Peek the central directory to distinguish XLSB from XLSX; kept open (not disposed here)
-            // so the caller can hand it straight to the chosen reader.
-            var zipPeek = new ZipArchive(stream, ZipArchiveMode.Read, leaveOpen: true);
-            bool isXlsb = zipPeek.GetEntry("xl/workbook.bin") is not null;
-            stream.Position = start;
-            return (isXlsb ? ExcelFileFormat.Xlsb : ExcelFileFormat.Xlsx, zipPeek);
+            ExcelFileFormat zipFormat = ClassifyZipStream(stream, start, out ZipArchive zip);
+            return (zipFormat, zip);
         }
 
         private static void RequireSeekable(Stream stream)

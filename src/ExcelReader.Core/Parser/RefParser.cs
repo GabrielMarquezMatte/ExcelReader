@@ -48,10 +48,7 @@ namespace ExcelReader.Core.Parser
             XlsxReader reader, ExcelParserConfig? config = null)
             where TModel : allows ref struct
         {
-            ArgumentNullException.ThrowIfNull(reader);
-            config ??= new ExcelParserConfig();
-            return new NamedRefRowEnumerable<TModel, XlsxReader, XlsxReader.Enumerator>(
-                reader, TypeMapper<TModel>.GetInfo(), config.ColumnNameComparer, config.HeaderNormalization, config.HeaderRow, config.Culture, config.ThrowOnParseFailure);
+            return Create<TModel, XlsxReader, XlsxReader.Enumerator>(reader, TypeMapper<TModel>.GetInfo(), config);
         }
 
         /// <summary>Parses the rows of an XLSB reader into <typeparamref name="TModel"/> instances, lazily as the result is enumerated.</summary>
@@ -65,10 +62,7 @@ namespace ExcelReader.Core.Parser
             XlsbReader reader, ExcelParserConfig? config = null)
             where TModel : allows ref struct
         {
-            ArgumentNullException.ThrowIfNull(reader);
-            config ??= new ExcelParserConfig();
-            return new NamedRefRowEnumerable<TModel, XlsbReader, XlsbReader.Enumerator>(
-                reader, TypeMapper<TModel>.GetInfo(), config.ColumnNameComparer, config.HeaderNormalization, config.HeaderRow, config.Culture, config.ThrowOnParseFailure);
+            return Create<TModel, XlsbReader, XlsbReader.Enumerator>(reader, TypeMapper<TModel>.GetInfo(), config);
         }
 
         /// <summary>Parses the rows of an XLS reader into <typeparamref name="TModel"/> instances, lazily as the result is enumerated.</summary>
@@ -82,10 +76,7 @@ namespace ExcelReader.Core.Parser
             XlsReader reader, ExcelParserConfig? config = null)
             where TModel : allows ref struct
         {
-            ArgumentNullException.ThrowIfNull(reader);
-            config ??= new ExcelParserConfig();
-            return new NamedRefRowEnumerable<TModel, XlsReader, XlsReader.Enumerator>(
-                reader, TypeMapper<TModel>.GetInfo(), config.ColumnNameComparer, config.HeaderNormalization, config.HeaderRow, config.Culture, config.ThrowOnParseFailure);
+            return Create<TModel, XlsReader, XlsReader.Enumerator>(reader, TypeMapper<TModel>.GetInfo(), config);
         }
 
         /// <summary>Parses the rows of a CSV reader into <typeparamref name="TModel"/> instances, lazily as the result is enumerated.</summary>
@@ -104,10 +95,7 @@ namespace ExcelReader.Core.Parser
             CsvReader reader, ExcelParserConfig? config = null)
             where TModel : allows ref struct
         {
-            ArgumentNullException.ThrowIfNull(reader);
-            config ??= new ExcelParserConfig();
-            return new NamedRefRowEnumerable<TModel, CsvReader, CsvReader.Enumerator>(
-                reader, TypeMapper<TModel>.GetCsvInfo(), config.ColumnNameComparer, config.HeaderNormalization, config.HeaderRow, config.Culture, config.ThrowOnParseFailure);
+            return Create<TModel, CsvReader, CsvReader.Enumerator>(reader, TypeMapper<TModel>.GetCsvInfo(), config);
         }
 
         /// <summary>Parses the rows of a format-agnostic reader (e.g. one returned by <c>Excel.Open</c>) into <typeparamref name="TModel"/> instances, lazily as the result is enumerated. Lets callers avoid pattern-matching the concrete reader type; dispatches through the interface enumerator.</summary>
@@ -121,10 +109,19 @@ namespace ExcelReader.Core.Parser
             IExcelRowReader reader, ExcelParserConfig? config = null)
             where TModel : allows ref struct
         {
+            return Create<TModel, IExcelRowReader, IExcelRowEnumerator>(reader, TypeMapper<TModel>.GetInfo(), config);
+        }
+
+        private static NamedRefRowEnumerable<TModel, TReader, TEnumerator> Create<TModel, TReader, TEnumerator>(
+            TReader reader, TypeMapInfo<TModel> typeInfo, ExcelParserConfig? config)
+            where TModel : allows ref struct
+            where TReader : class, IExcelRowReader<TEnumerator>
+            where TEnumerator : class, IExcelRowEnumerator
+        {
             ArgumentNullException.ThrowIfNull(reader);
             config ??= new ExcelParserConfig();
-            return new NamedRefRowEnumerable<TModel, IExcelRowReader, IExcelRowEnumerator>(
-                reader, TypeMapper<TModel>.GetInfo(), config.ColumnNameComparer, config.HeaderNormalization, config.HeaderRow, config.Culture, config.ThrowOnParseFailure);
+            return new NamedRefRowEnumerable<TModel, TReader, TEnumerator>(
+                reader, typeInfo, config.ColumnNameComparer, config.HeaderNormalization, config.HeaderRow, config.Culture, config.ThrowOnParseFailure);
         }
     }
 }

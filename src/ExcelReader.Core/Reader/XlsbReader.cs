@@ -136,27 +136,14 @@ namespace ExcelReader.Core.Reader
 
         // Async open over an already-opened ZipArchive — the async twin of the ZipArchive-taking sync
         // ctor above, for callers (Excel.OpenAsync's DetectSeekableAsync) that already opened the
-        // archive for format detection. Bypasses ZipReaderOpen.OpenAsync, so it owns dispose-on-failure
-        // itself instead of relying on that helper's try/catch.
-        internal static async ValueTask<XlsbReader> CreateFromOpenZipAsync(
+        // archive for format detection.
+        internal static ValueTask<XlsbReader> CreateFromOpenZipAsync(
             Stream stream, bool leaveOpen, ZipArchive zip, ExcelReaderOptions? options, CancellationToken ct)
         {
             ExcelReaderOptions effectiveOptions = options ?? ExcelReaderOptions.Default;
             DecompressedByteCounter decompressedBytes = new(effectiveOptions.MaxTotalDecompressedBytes);
-            try
-            {
-                LimitChecks.ThrowIfTooManyEntries(zip.Entries.Count, effectiveOptions);
-                return await ParseAsync(stream, leaveOpen, zip, effectiveOptions, decompressedBytes, ct).ConfigureAwait(false);
-            }
-            catch
-            {
-                await ZipArchiveDisposal.DisposeAsync(zip).ConfigureAwait(false);
-                if (!leaveOpen)
-                {
-                    await stream.DisposeAsync().ConfigureAwait(false);
-                }
-                throw;
-            }
+            return ZipReaderOpen.FromOpenZipAsync(stream, leaveOpen, zip, effectiveOptions,
+                z => ParseAsync(stream, leaveOpen, z, effectiveOptions, decompressedBytes, ct));
         }
 
         private static async ValueTask<XlsbReader> ParseAsync(
@@ -183,7 +170,7 @@ namespace ExcelReader.Core.Reader
             {
                 return ([], [0]);
             }
-            ThrowIfSharedEntryTooLarge(entry.Length);
+            WorkbookLookups.ThrowIfSharedEntryTooLarge(entry.Length, _decompressedBytes, _options);
             using LimitedReadStream stream = WorkbookLookups.OpenEntryStream(entry, _decompressedBytes, _options,
                 nameof(ExcelReaderOptions.MaxSharedStringBytes), _options.MaxSharedStringBytes);
             return XlsbSharedStrings.ParseStreaming(stream, entry.Length, _options);
@@ -197,28 +184,12 @@ namespace ExcelReader.Core.Reader
             {
                 return ([], [0]);
             }
-            ThrowIfSharedEntryTooLarge(entry.Length, decompressedBytes, options);
+            WorkbookLookups.ThrowIfSharedEntryTooLarge(entry.Length, decompressedBytes, options);
             LimitedReadStream stream = await WorkbookLookups.OpenEntryStreamAsync(entry, decompressedBytes, options, ct,
                 nameof(ExcelReaderOptions.MaxSharedStringBytes), options.MaxSharedStringBytes).ConfigureAwait(false);
             await using (stream.ConfigureAwait(false))
             {
                 return await XlsbSharedStrings.ParseStreamingAsync(stream, entry.Length, options, ct).ConfigureAwait(false);
-            }
-        }
-
-        private void ThrowIfSharedEntryTooLarge(long declaredLength)
-        {
-            ThrowIfSharedEntryTooLarge(declaredLength, _decompressedBytes, _options);
-        }
-
-        private static void ThrowIfSharedEntryTooLarge(long declaredLength, DecompressedByteCounter decompressedBytes, ExcelReaderOptions options)
-        {
-            LimitChecks.ThrowIfEntryLengthExceeds(declaredLength, decompressedBytes.Remaining,
-                nameof(ExcelReaderOptions.MaxTotalDecompressedBytes));
-            if (options.MaxSharedStringBytes > 0)
-            {
-                LimitChecks.ThrowIfEntryLengthExceeds(declaredLength, options.MaxSharedStringBytes,
-                    nameof(ExcelReaderOptions.MaxSharedStringBytes));
             }
         }
 

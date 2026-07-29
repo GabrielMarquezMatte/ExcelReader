@@ -147,9 +147,9 @@ namespace ExcelReader.Core.Writer
             WriterStateGuard.RequireStarted(_state, nameof(XlsxSheetWriter), "adding rows");
             WriterStateGuard.RequireNoActiveRowForStart(_rowActive, nameof(XlsxRowWriter));
             ct.ThrowIfCancellationRequested();
-            if (_rowNumber >= 1_048_576)
+            if (_rowNumber >= ExcelLimits.MaxRows)
             {
-                throw new ExcelLimitExceededException("Rows", 1_048_576, _rowNumber + 1L);
+                ExcelLimits.ThrowRowLimit(_rowNumber + 1L);
             }
             _rowNumber++;
             _rowActive = true;

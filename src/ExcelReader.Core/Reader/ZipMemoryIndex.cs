@@ -147,6 +147,13 @@ namespace ExcelReader.Core.Reader
             return part;
         }
 
+        // default(ZipPart) (empty Memory, nothing to return on Dispose) stands in for a missing part,
+        // mirroring ZipEntryBytes.Read's "return [] when the entry is absent" behavior on the streamed path.
+        internal ZipPart OpenPartOrDefault(ReadOnlySpan<byte> utf8Name, DecompressedByteCounter counter)
+        {
+            return TryGetEntry(utf8Name, out ZipEntryRef entry) ? OpenPart(entry, counter) : default;
+        }
+
         // In-memory ZIP path's worksheet entry point: opens a Stream over the
         // entry's compressed bytes instead of eagerly materializing the whole part, so the caller (the
         // XlsxReader/XlsbReader enumerator) can reuse the exact same PrefetchStream/LimitedReadStream

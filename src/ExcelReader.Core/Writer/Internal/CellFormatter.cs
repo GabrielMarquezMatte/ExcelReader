@@ -156,7 +156,7 @@ namespace ExcelReader.Core.Writer.Internal
 
         private static void WriteValue(BiffBuffer xml, double value, int sizeHint)
         {
-            ThrowIfNonFinite(value);
+            CellValueGuards.ThrowIfNonFinite(value, nameof(value));
             int size = sizeHint;
             int written;
             while (!Utf8Formatter.TryFormat(value, xml.GetSpan(size), out written))
@@ -174,15 +174,11 @@ namespace ExcelReader.Core.Writer.Internal
         {
             if (typeof(T) == typeof(double))
             {
-                ThrowIfNonFinite(Unsafe.As<T, double>(ref value));
+                CellValueGuards.ThrowIfNonFinite(Unsafe.As<T, double>(ref value), nameof(value));
             }
             else if (typeof(T) == typeof(float))
             {
-                float f = Unsafe.As<T, float>(ref value);
-                if (!float.IsFinite(f))
-                {
-                    throw new ArgumentException($"Cannot write non-finite value '{f}' to a spreadsheet cell.", nameof(value));
-                }
+                CellValueGuards.ThrowIfNonFinite(Unsafe.As<T, float>(ref value), nameof(value));
             }
             int size = sizeHint;
             int written;
@@ -191,16 +187,6 @@ namespace ExcelReader.Core.Writer.Internal
                 size = checked(size * 2);
             }
             xml.Advance(written);
-        }
-
-        // NaN/Infinity have no representation in the numeric <v> element ([ISO/IEC 29500] ST_Xstring
-        // doesn't cover it either) — writing them as literal text produces a file Excel rejects on open.
-        private static void ThrowIfNonFinite(double value)
-        {
-            if (!double.IsFinite(value))
-            {
-                throw new ArgumentException($"Cannot write non-finite value '{value}' to a spreadsheet cell.", nameof(value));
-            }
         }
 
         internal static void WriteEscaped(BiffBuffer xml, ReadOnlySpan<char> value)
