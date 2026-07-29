@@ -22,7 +22,12 @@ namespace ExcelReader.Core.Reader
         private int _current;
 
         internal XlsReader(Stream stream, bool leaveOpen, ExcelReaderOptions? options = null)
-            : this(XlsCompoundFile.OpenWorkbook(stream, leaveOpen), options)
+            : this(XlsCompoundFile.OpenWorkbook(stream, leaveOpen, options), options)
+        {
+        }
+
+        internal XlsReader(ReadOnlyMemory<byte> data, ExcelReaderOptions? options = null)
+            : this(XlsCompoundFile.OpenWorkbook(data, options), options)
         {
         }
 
@@ -45,7 +50,7 @@ namespace ExcelReader.Core.Reader
 
         internal static async ValueTask<XlsReader> CreateAsync(Stream stream, bool leaveOpen, ExcelReaderOptions? options = null, CancellationToken ct = default)
         {
-            WorkbookStream workbook = await XlsCompoundFile.OpenWorkbookAsync(stream, leaveOpen, ct).ConfigureAwait(false);
+            WorkbookStream workbook = await XlsCompoundFile.OpenWorkbookAsync(stream, leaveOpen, options, ct).ConfigureAwait(false);
             return new XlsReader(workbook, options);
         }
 

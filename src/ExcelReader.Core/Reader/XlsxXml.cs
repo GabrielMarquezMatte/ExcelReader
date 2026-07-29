@@ -136,6 +136,10 @@ namespace ExcelReader.Core.Reader
         // used as the literal fallback when the codepoint is malformed.
         private static int DecodeNumeric(ReadOnlySpan<byte> body, Span<byte> dest, ReadOnlySpan<byte> raw)
         {
+            // Bails once cp exceeds the highest valid codepoint rather than accumulating unchecked:
+            // an overlong run (e.g. "&#99999999999999999999;") would otherwise wrap the int silently
+            // into a different, unrelated valid codepoint instead of being rejected as malformed.
+            const int MaxCodepoint = 0x10FFFF;
             int cp = 0;
             bool ok = false;
             if (body.Length > 0 && (body[0] == 'x' || body[0] == 'X'))
@@ -143,7 +147,7 @@ namespace ExcelReader.Core.Reader
                 foreach (ref readonly byte d in body[1..])
                 {
                     int v = HexVal(d);
-                    if (v < 0) { ok = false; break; }
+                    if (v < 0 || cp > MaxCodepoint) { ok = false; break; }
                     cp = (cp * 16) + v;
                     ok = true;
                 }
@@ -152,7 +156,7 @@ namespace ExcelReader.Core.Reader
             {
                 foreach (ref readonly byte d in body)
                 {
-                    if (d is < (byte)'0' or > (byte)'9') { ok = false; break; }
+                    if (d is < (byte)'0' or > (byte)'9' || cp > MaxCodepoint) { ok = false; break; }
                     cp = (cp * 10) + (d - '0');
                     ok = true;
                 }

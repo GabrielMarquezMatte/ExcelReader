@@ -2,7 +2,7 @@ using System.Diagnostics.CodeAnalysis;
 
 namespace ExcelReader.Core.Reader
 {
-    // In-memory ZIP path (docs/in-memory-zip.md, Z4): opens an XlsbReader directly over a
+    // In-memory ZIP path: opens an XlsbReader directly over a
     // ReadOnlyMemory<byte> via ZipMemoryIndex instead of ZipArchive/Stream. No refills, no async
     // suspension — every part is already fully decompressed before the reader is constructed.
     public sealed partial class XlsbReader

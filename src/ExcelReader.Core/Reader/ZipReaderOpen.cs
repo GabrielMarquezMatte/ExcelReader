@@ -1,6 +1,6 @@
 using System.Diagnostics.CodeAnalysis;
 using System.IO.Compression;
-using ExcelReader.Core.Writer.Internal;
+using ExcelReader.Core.Internal;
 
 namespace ExcelReader.Core.Reader
 {

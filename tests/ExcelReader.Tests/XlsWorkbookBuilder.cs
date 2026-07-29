@@ -111,10 +111,15 @@ namespace ExcelReader.Tests
         // tests to corrupt one field of an otherwise-valid container.
         internal const int SectorShiftOffset = 0x1E;     // log2(sector size); valid is 9 -> 512
         internal const int FatSectorCountOffset = 0x2C;  // header DIFAT lists this many FAT sectors
+        internal const int MiniCutoffOffset = 0x38;      // header's mini stream cutoff field (Int32)
         internal const int SignatureOffset = 0x00;
         // Directory is sector 1: header (512) + FAT sector (512) = byte 1024. The Workbook entry
         // is the second 128-byte directory entry, so its UTF-16 name starts at 1024 + 128.
         internal const int WorkbookEntryNameOffset = 1024 + 128;
+        // The Workbook entry's Int64 Size field (see WriteDirectoryEntry: offset 120 within the entry).
+        internal const int WorkbookSizeOffset = 1024 + 128 + 120;
+        // The Root Entry's Int64 Size field — the first 128-byte directory entry, so no +128 offset.
+        internal const int RootEntrySizeOffset = 1024 + 120;
 
         // A valid single-sheet workbook with `replacement` overwritten at `offset`.
         internal static MemoryStream BuildPatched(int offset, params byte[] replacement)
@@ -132,6 +137,13 @@ namespace ExcelReader.Tests
         internal static byte[] LE16(int value)
         {
             return U16(value);
+        }
+
+        internal static byte[] LE64(long value)
+        {
+            byte[] bytes = new byte[8];
+            BinaryPrimitives.WriteInt64LittleEndian(bytes, value);
+            return bytes;
         }
 
         internal static byte[] RawLabel(int row, int col, string value)

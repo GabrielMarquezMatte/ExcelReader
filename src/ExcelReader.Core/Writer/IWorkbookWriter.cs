@@ -7,6 +7,12 @@ namespace ExcelReader.Core.Writer
     /// (or call <see cref="EndAsync"/> then dispose) when finished.
     /// </summary>
     /// <typeparam name="TSheet">The concrete <see cref="ISheetWriter{TRow}"/> this workbook produces.</typeparam>
+    /// <remarks>
+    /// <b>Thread safety:</b> no implementation is thread-safe, nor are the <see cref="ISheetWriter{TRow}"/>/
+    /// <see cref="IRowWriter"/> instances it hands out. All of them carry mutable state (current
+    /// sheet/row, buffered output) with no synchronization. Use one workbook writer per thread; do not
+    /// call into a writer, its current sheet, or its current row from more than one thread at a time.
+    /// </remarks>
     public interface IWorkbookWriter<out TSheet> : IAsyncDisposable
     {
         /// <summary>

@@ -42,6 +42,31 @@ namespace ExcelReader.Tests
             Assert.True(XlsxXml.Attr(" name=bad"u8, " name="u8).IsEmpty);    // unquoted value
         }
 
+        // ---- S5: overlong numeric XML entities must not wrap into an unrelated valid codepoint ----
+
+        [Fact]
+        public void OverlongDecimalEntityRoundTripsAsLiteralText()
+        {
+            // 20 digits; unchecked accumulation would wrap the int and could decode to a valid,
+            // unrelated codepoint instead of being rejected as malformed.
+            string result = XlsxXml.DecodeToString("&#99999999999999999999;"u8);
+            Assert.Equal("&#99999999999999999999;", result);
+        }
+
+        [Fact]
+        public void OverlongHexEntityRoundTripsAsLiteralText()
+        {
+            string result = XlsxXml.DecodeToString("&#xFFFFFFFFFFFFFFFF;"u8);
+            Assert.Equal("&#xFFFFFFFFFFFFFFFF;", result);
+        }
+
+        [Fact]
+        public void ValidNumericEntityStillDecodesNormally()
+        {
+            Assert.Equal("A", XlsxXml.DecodeToString("&#65;"u8));
+            Assert.Equal("A", XlsxXml.DecodeToString("&#x41;"u8));
+        }
+
         [Fact]
         public void SingleQuotedWorkbookAttributesAreRead()
         {

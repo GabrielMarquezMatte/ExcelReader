@@ -5,8 +5,8 @@ using ExcelReader.Core.Writer;
 
 namespace ExcelReader.Tests
 {
-    // Seeded-random-mutator fuzz harness (F14 in docs/road-to-a.md). No binary-format parser in this
-    // codebase (OLE/CFB, BIFF8, BIFF12, ZIP) had ever been exercised against randomized corruption —
+    // Seeded-random-mutator fuzz harness. No binary-format parser in this codebase (OLE/CFB, BIFF8,
+    // BIFF12, ZIP) had ever been exercised against randomized corruption —
     // only hand-crafted malformed inputs. This flips random bytes in otherwise-valid seed files and
     // requires every resulting failure to surface as one of this library's own graceful rejections
     // (ExcelLimitExceededException, or a well-known BCL parsing exception like InvalidDataException),

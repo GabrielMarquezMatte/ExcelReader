@@ -35,6 +35,13 @@ namespace ExcelReader.Core.Reader
     /// plus a sheet-navigation surface and dispose; unifying them lets the typed parser drive a format-agnostic
     /// reader (<see cref="Excel.Open(string, ExcelReaderOptions?)"/>) and lets callers walk every sheet without
     /// downcasting to the concrete <c>XlsxReader</c>/<c>XlsbReader</c>/<c>XlsReader</c> type.
+    /// <para>
+    /// <b>Thread safety:</b> no implementation is thread-safe. A reader instance carries mutable enumeration
+    /// state (current sheet, buffer positions, shared-string cache) with no synchronization; concurrent calls
+    /// from multiple threads — including two enumerators obtained from the same reader used concurrently —
+    /// produce undefined behavior. Use one reader instance per thread, or fully consume/dispose one enumerator
+    /// before starting another.
+    /// </para>
     /// </remarks>
     public interface IExcelRowReader : IExcelRowReader<IExcelRowEnumerator>, IDisposable, IAsyncDisposable
     {

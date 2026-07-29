@@ -26,16 +26,33 @@ namespace ExcelReader.Benchmarks
 
         // BenchmarkDotNet runs each [Benchmark] in its own process, so an unsplit setup would rebuild
         // both 65K-row fixtures for every method — doubling suite wall time to build one it never reads.
-        [GlobalSetup(Targets = [nameof(Xlsx_ExcelReader), nameof(Xlsx_ExcelReader_Prefetch), nameof(Xlsx_Sylvan)])]
+        // Every new [Benchmark] MUST be added to the matching Targets list: only the setup whose Targets
+        // name the running method executes, so an unlisted method reads a never-built empty fixture.
+        // Open() below is what turns that mistake into a readable failure instead of a silent one.
+        [GlobalSetup(Targets = [nameof(Xlsx_ExcelReader), nameof(Xlsx_ExcelReader_Prefetch), nameof(Xlsx_Sylvan), nameof(Xlsx_ExcelReader_Materialized)])]
         public async Task SetupXlsxAsync()
         {
             _xlsx = await StringHeavyWorkbookGenerator.BuildXlsxAsync(Rows);
         }
 
-        [GlobalSetup(Targets = [nameof(Xlsb_ExcelReader), nameof(Xlsb_ExcelReader_Prefetch), nameof(Xlsb_Sylvan)])]
+        [GlobalSetup(Targets = [nameof(Xlsb_ExcelReader), nameof(Xlsb_ExcelReader_Prefetch), nameof(Xlsb_Sylvan), nameof(Xlsb_ExcelReader_Materialized)])]
         public async Task SetupXlsbAsync()
         {
             _xlsb = await StringHeavyWorkbookGenerator.BuildXlsbAsync(Rows);
+        }
+
+        // An empty fixture means the benchmark was never registered in a Targets list above. ZipArchive
+        // happens to surface that as "Central Directory corrupt", but a format that tolerates a
+        // zero-length input would instead measure no work at all and publish a meaningless number —
+        // so fail loudly here rather than trusting each reader to reject it.
+        private static MemoryStream Open(byte[] fixture, string benchmark)
+        {
+            if (fixture.Length == 0)
+            {
+                throw new InvalidOperationException(
+                    $"{benchmark} is absent from every [GlobalSetup(Targets = ...)] list, so its fixture was never built.");
+            }
+            return new MemoryStream(fixture, writable: false);
         }
 
         // --- XLSX ---
@@ -43,7 +60,7 @@ namespace ExcelReader.Benchmarks
         [Benchmark(Baseline = true)]
         public long Xlsx_ExcelReader()
         {
-            using MemoryStream ms = new(_xlsx, writable: false);
+            using MemoryStream ms = Open(_xlsx, nameof(Xlsx_ExcelReader));
             using XlsxReader reader = Excel.From(ms);
             long acc = 0;
             foreach (Row row in reader) { acc += AccumulateRow(row); }
@@ -53,7 +70,7 @@ namespace ExcelReader.Benchmarks
         [Benchmark]
         public long Xlsx_ExcelReader_Prefetch()
         {
-            using MemoryStream ms = new(_xlsx, writable: false);
+            using MemoryStream ms = Open(_xlsx, nameof(Xlsx_ExcelReader_Prefetch));
             using XlsxReader reader = Excel.From(ms, options: _prefetchOptions);
             long acc = 0;
             foreach (Row row in reader) { acc += AccumulateRow(row); }
@@ -63,9 +80,21 @@ namespace ExcelReader.Benchmarks
         [Benchmark]
         public long Xlsx_Sylvan()
         {
-            using MemoryStream ms = new(_xlsx, writable: false);
+            using MemoryStream ms = Open(_xlsx, nameof(Xlsx_Sylvan));
             using ExcelDataReader reader = ExcelDataReader.Create(ms, ExcelWorkbookType.ExcelXml, new ExcelDataReaderOptions());
             return AccumulateSylvanExcel(reader);
+        }
+
+        // Matched-work counterpart to Xlsx_ExcelReader: materializes a string per cell like
+        // Xlsx_Sylvan is forced to, instead of reading the zero-copy span.
+        [Benchmark]
+        public long Xlsx_ExcelReader_Materialized()
+        {
+            using MemoryStream ms = Open(_xlsx, nameof(Xlsx_ExcelReader_Materialized));
+            using XlsxReader reader = Excel.From(ms);
+            long acc = 0;
+            foreach (Row row in reader) { acc += AccumulateRowMaterialized(row); }
+            return acc;
         }
 
         // --- XLSB ---
@@ -73,7 +102,7 @@ namespace ExcelReader.Benchmarks
         [Benchmark]
         public long Xlsb_ExcelReader()
         {
-            using MemoryStream ms = new(_xlsb, writable: false);
+            using MemoryStream ms = Open(_xlsb, nameof(Xlsb_ExcelReader));
             using XlsbReader reader = Excel.FromXlsb(ms);
             long acc = 0;
             foreach (Row row in reader) { acc += AccumulateRow(row); }
@@ -83,7 +112,7 @@ namespace ExcelReader.Benchmarks
         [Benchmark]
         public long Xlsb_ExcelReader_Prefetch()
         {
-            using MemoryStream ms = new(_xlsb, writable: false);
+            using MemoryStream ms = Open(_xlsb, nameof(Xlsb_ExcelReader_Prefetch));
             using XlsbReader reader = Excel.FromXlsb(ms, options: _prefetchOptions);
             long acc = 0;
             foreach (Row row in reader) { acc += AccumulateRow(row); }
@@ -93,9 +122,20 @@ namespace ExcelReader.Benchmarks
         [Benchmark]
         public long Xlsb_Sylvan()
         {
-            using MemoryStream ms = new(_xlsb, writable: false);
+            using MemoryStream ms = Open(_xlsb, nameof(Xlsb_Sylvan));
             using ExcelDataReader reader = ExcelDataReader.Create(ms, ExcelWorkbookType.ExcelBinary, new ExcelDataReaderOptions());
             return AccumulateSylvanExcel(reader);
+        }
+
+        // Matched-work counterpart to Xlsb_ExcelReader — see Xlsx_ExcelReader_Materialized.
+        [Benchmark]
+        public long Xlsb_ExcelReader_Materialized()
+        {
+            using MemoryStream ms = Open(_xlsb, nameof(Xlsb_ExcelReader_Materialized));
+            using XlsbReader reader = Excel.FromXlsb(ms);
+            long acc = 0;
+            foreach (Row row in reader) { acc += AccumulateRowMaterialized(row); }
+            return acc;
         }
     }
 }
