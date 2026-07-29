@@ -118,6 +118,8 @@ namespace ExcelReader.Tests
         internal const int WorkbookEntryNameOffset = 1024 + 128;
         // The Workbook entry's Int64 Size field (see WriteDirectoryEntry: offset 120 within the entry).
         internal const int WorkbookSizeOffset = 1024 + 128 + 120;
+        // The Root Entry's Int64 Size field — the first 128-byte directory entry, so no +128 offset.
+        internal const int RootEntrySizeOffset = 1024 + 120;
 
         // A valid single-sheet workbook with `replacement` overwritten at `offset`.
         internal static MemoryStream BuildPatched(int offset, params byte[] replacement)

@@ -276,6 +276,21 @@ namespace ExcelReader.Tests
         }
 
         [Fact]
+        public void ForgedRootEntrySizeAboveIntMaxValueThrowsInvalidDataException()
+        {
+            // The root entry's mini-stream length used to be cast straight from a long to an int; a
+            // value above the signed 32-bit range truncated to a negative limit, which the chain
+            // reader interpreted as "read everything" instead of "read N bytes". The default builder's
+            // workbook size always sits above the mini-stream cutoff, so the workbook size is shrunk
+            // here too, forcing the one branch that reads the root entry's length at all.
+            byte[] bytes = XlsWorkbookBuilder.Build(sheets: [("S1", [["A"]])]).ToArray();
+            XlsWorkbookBuilder.LE64(100).CopyTo(bytes, XlsWorkbookBuilder.WorkbookSizeOffset);
+            XlsWorkbookBuilder.LE64(int.MaxValue + 1L).CopyTo(bytes, XlsWorkbookBuilder.RootEntrySizeOffset);
+            using var ms = new MemoryStream(bytes);
+            Assert.Throws<InvalidDataException>(() => Excel.FromXls(ms));
+        }
+
+        [Fact]
         public void ForgedMiniCutoffThrowsInvalidDataException()
         {
             using MemoryStream ms = XlsWorkbookBuilder.BuildPatched(

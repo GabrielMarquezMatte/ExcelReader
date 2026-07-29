@@ -177,6 +177,14 @@ namespace ExcelReader.Core.Reader
                     int[] miniFat = firstMiniFatSector >= 0 && miniFatSectorCount > 0
                         ? ReadIntSectors(source, sectorSize, fat, firstMiniFatSector, miniFatSectorCount)
                         : [];
+                    // entries[0].Size (the root storage entry's mini-stream length) is a long; a value
+                    // above int.MaxValue would truncate through the (int) cast into a negative byteLimit,
+                    // which ReadChainBytes interprets as "read the entire chain" instead of "read N bytes" —
+                    // bounded safely by the cycle check below, but a silent semantic flip worth closing.
+                    if (entries[0].Size > int.MaxValue)
+                    {
+                        throw new InvalidDataException("The OLE root entry size exceeds the container.");
+                    }
                     byte[] miniStream = entries[0].StartSector >= 0 && entries[0].Size > 0
                         ? ReadChainBytes(source, sectorSize, fat, entries[0].StartSector, (int)entries[0].Size)
                         : [];

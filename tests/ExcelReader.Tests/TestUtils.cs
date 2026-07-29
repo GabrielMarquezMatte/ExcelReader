@@ -28,7 +28,8 @@ namespace ExcelReader.Tests
 
         [ExcludeFromCodeCoverage]
         public override long Position
-        { get => _inner.Position; set => throw new NotSupportedException();
+        {
+            get => _inner.Position; set => throw new NotSupportedException();
         }
 
         public override int Read(byte[] buffer, int offset, int count)
