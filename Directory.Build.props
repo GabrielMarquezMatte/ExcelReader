@@ -30,11 +30,11 @@
     <DefineConstants>$(DefineConstants.Replace("TRACE;", ""))</DefineConstants>
   </PropertyGroup>
   <ItemGroup>
-    <PackageReference Include="SonarAnalyzer.CSharp" Version="10.29.0.143774">
+    <PackageReference Include="SonarAnalyzer.CSharp" Version="10.31.0.145097">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
-    <PackageReference Include="Meziantou.Analyzer" Version="3.0.124">
+    <PackageReference Include="Meziantou.Analyzer" Version="3.0.136">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
