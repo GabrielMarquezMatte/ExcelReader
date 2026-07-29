@@ -20,12 +20,12 @@ namespace ExcelReader.Core.Reader
         private const int FreeSector = unchecked((int)0xFFFFFFFF);
         internal static ReadOnlySpan<byte> Signature => [0xD0, 0xCF, 0x11, 0xE0, 0xA1, 0xB1, 0x1A, 0xE1];
 
-        internal static WorkbookStream OpenWorkbook(Stream stream, bool leaveOpen)
+        internal static WorkbookStream OpenWorkbook(Stream stream, bool leaveOpen, ExcelReaderOptions? options = null)
         {
             (Stream source, bool ownsSource) = EnsureSeekable(stream, leaveOpen);
             try
             {
-                return BuildWorkbook(source, ownsSource);
+                return BuildWorkbook(source, ownsSource, options ?? ExcelReaderOptions.Default);
             }
             catch
             {
@@ -37,18 +37,18 @@ namespace ExcelReader.Core.Reader
             }
         }
 
-        internal static WorkbookStream OpenWorkbook(ReadOnlyMemory<byte> data)
+        internal static WorkbookStream OpenWorkbook(ReadOnlyMemory<byte> data, ExcelReaderOptions? options = null)
         {
             using MemoryStream metadata = AsStream(data);
-            return BuildWorkbook(metadata, ownsSource: false, memory: data);
+            return BuildWorkbook(metadata, ownsSource: false, options ?? ExcelReaderOptions.Default, memory: data);
         }
 
-        internal static async ValueTask<WorkbookStream> OpenWorkbookAsync(Stream stream, bool leaveOpen, CancellationToken ct)
+        internal static async ValueTask<WorkbookStream> OpenWorkbookAsync(Stream stream, bool leaveOpen, ExcelReaderOptions? options, CancellationToken ct)
         {
             (Stream source, bool ownsSource) = await EnsureSeekableAsync(stream, leaveOpen, ct).ConfigureAwait(false);
             try
             {
-                return BuildWorkbook(source, ownsSource);
+                return BuildWorkbook(source, ownsSource, options ?? ExcelReaderOptions.Default);
             }
             catch
             {
@@ -102,7 +102,7 @@ namespace ExcelReader.Core.Reader
         }
 
         [SkipLocalsInit]
-        private static WorkbookStream BuildWorkbook(Stream source, bool ownsSource, ReadOnlyMemory<byte> memory = default)
+        private static WorkbookStream BuildWorkbook(Stream source, bool ownsSource, ExcelReaderOptions options, ReadOnlyMemory<byte> memory = default)
         {
             if (source.Length < HeaderSize)
             {
@@ -129,6 +129,13 @@ namespace ExcelReader.Core.Reader
             {
                 throw new InvalidDataException("Unsupported OLE sector size.");
             }
+            // MS-CFB fixes the mini-stream cutoff at 4096 bytes. Without this bound a crafted header
+            // could push miniCutoff toward int.MaxValue, letting the mini-stream branch below take a
+            // multi-GB workbook.Size and materialize it as a single non-pooled byte[].
+            if (miniCutoff != 4096)
+            {
+                throw new InvalidDataException("Unsupported OLE mini stream cutoff.");
+            }
             // A file cannot hold more sectors than its length allows, so a FAT/DIFAT sector count above
             // that is a crafted header. Reject it before allocating, or `new int[fatSectorCount]` below
             // would let a bogus count force a multi-GB allocation / OOM on untrusted input.
@@ -152,6 +159,17 @@ namespace ExcelReader.Core.Reader
                 }
 
                 DirectoryEntry workbook = FindWorkbook(entries);
+
+                // A stream cannot hold more content than the container's own byte length, so an
+                // inflated Size field (the same attack class as fatSectorCount/difatSectorCount above)
+                // is a crafted header — reject it before it drives an allocation or a chain walk sized
+                // off it. The caller's byte budget applies here too, since this is the one choke point
+                // both the mini-stream and chained/streamed branches below pass through.
+                if (workbook.Size < 0 || workbook.Size > source.Length)
+                {
+                    throw new InvalidDataException("The OLE Workbook stream size exceeds the container.");
+                }
+                LimitChecks.ThrowIfEntryLengthExceeds(workbook.Size, options.MaxTotalDecompressedBytes, nameof(ExcelReaderOptions.MaxTotalDecompressedBytes));
 
                 // Mini-stream workbooks (tiny, rare) are materialized; everything else streams.
                 if (workbook.Size < miniCutoff && workbook.StartSector >= 0)
@@ -206,7 +224,7 @@ namespace ExcelReader.Core.Reader
 
         private static int SectorCount(long size, int sectorSize)
         {
-            return (int)((size + sectorSize - 1) / sectorSize);
+            return checked((int)((size + sectorSize - 1) / sectorSize));
         }
 
         [SuppressMessage("Performance", "HLQ013:Consider using 'foreach' loop instead of 'for' loop",
@@ -216,17 +234,25 @@ namespace ExcelReader.Core.Reader
         private static int[] BuildChain(ReadOnlySpan<int> fat, int startSector, int sectorCount)
         {
             int[] chain = ArrayPool<int>.Shared.Rent(sectorCount);
-            int sector = startSector;
-            for (int i = 0; i < sectorCount; i++)
+            try
             {
-                if (sector is < 0 or EndOfChain)
+                int sector = startSector;
+                for (int i = 0; i < sectorCount; i++)
                 {
-                    throw new InvalidDataException("The OLE Workbook chain ended early.");
+                    if (sector is < 0 or EndOfChain)
+                    {
+                        throw new InvalidDataException("The OLE Workbook chain ended early.");
+                    }
+                    chain[i] = sector;
+                    sector = NextSector(fat, sector);
                 }
-                chain[i] = sector;
-                sector = NextSector(fat, sector);
+                return chain;
             }
-            return chain;
+            catch
+            {
+                ArrayPool<int>.Shared.Return(chain);
+                throw;
+            }
         }
 
         private static void ReadAt(Stream source, long offset, Span<byte> dest)
@@ -351,6 +377,10 @@ namespace ExcelReader.Core.Reader
 
         private static byte[] ReadMiniStream(ReadOnlySpan<byte> miniStream, ReadOnlySpan<int> miniFat, int miniSectorSize, int startSector, int size)
         {
+            if (size < 0 || size > miniStream.Length)
+            {
+                throw new InvalidDataException("Invalid OLE mini stream size.");
+            }
             byte[] result = new byte[size];
             int sector = startSector;
             int written = 0;

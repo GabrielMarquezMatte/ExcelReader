@@ -14,7 +14,7 @@ namespace ExcelReader.Core.Parser
         /// <summary>Gets the comparer used to match header text to the names bound by property attributes. Defaults to <see cref="StringComparer.OrdinalIgnoreCase"/>.</summary>
         public StringComparer ColumnNameComparer { get; init; } = StringComparer.OrdinalIgnoreCase;
 
-        /// <summary>Gets how header text is normalized before it is compared against bound property names. Defaults to <see cref="Parser.HeaderNormalization.Trim"/>.</summary>
+        /// <summary>Gets how header text is normalized before it is compared against bound property names. Defaults to <see cref="HeaderNormalization.Trim"/>.</summary>
         public HeaderNormalization HeaderNormalization { get; init; } = HeaderNormalization.Trim;
 
         /// <summary>

@@ -30,9 +30,9 @@ namespace ExcelReader.Core.Parser
     /// unsupported property type is silently left unbound (matching <see cref="ExcelParser{T}"/>'s
     /// existing behavior) unless marked <c>[ExcelRequired]</c>, which throws at type-map-build time
     /// instead. A model using only <c>ReadOnlySpan&lt;byte&gt;</c>/numeric/bool/date columns is fully
-    /// zero-alloc end to end — not just the container (see <c>docs/performance-plan.md</c> P2, which
-    /// measured the container-only win for a plain struct; this closes the remaining gap for genuine ref
-    /// structs too).
+    /// zero-alloc end to end — not just the container. A plain <c>struct</c> model with
+    /// <see cref="ExcelParser{T}"/> already avoids allocating the container itself; this closes the
+    /// remaining gap by letting a text column bind to a span instead of allocating a <c>string</c> too.
     /// </para>
     /// </remarks>
     public static class RefParser

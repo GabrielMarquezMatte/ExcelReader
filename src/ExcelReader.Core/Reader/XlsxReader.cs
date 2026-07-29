@@ -1,7 +1,7 @@
 using System.Buffers;
 using System.Diagnostics.CodeAnalysis;
 using System.IO.Compression;
-using ExcelReader.Core.Writer.Internal;
+using ExcelReader.Core.Internal;
 
 namespace ExcelReader.Core.Reader
 {
@@ -13,8 +13,8 @@ namespace ExcelReader.Core.Reader
         [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP008:Don't assign member with injected and created disposables",
             Justification = "Two construction paths: the sync ctor opens and owns the ZipArchive itself; the CreateAsync path receives one already opened by ZipReaderOpen. Either way this reader ends up owning it and disposes it in Dispose/DisposeAsync.")]
         private readonly ZipArchive? _zip;
-        // Non-null instead of _zip/_stream for the in-memory ZIP path (docs/in-memory-zip.md, Z4) —
-        // exactly one of _zip or _memZip is non-null for any given reader instance.
+        // Non-null instead of _zip/_stream for the in-memory ZIP path — exactly one of _zip or _memZip
+        // is non-null for any given reader instance.
         private readonly ZipMemoryIndex? _memZip;
         private readonly ExcelReaderOptions _options;
         private readonly DecompressedByteCounter _decompressedBytes;
@@ -84,7 +84,7 @@ namespace ExcelReader.Core.Reader
             IsDate1904 = date1904;
         }
 
-        // In-memory ZIP path (docs/in-memory-zip.md, Z4): no stream, no ZipArchive — everything is
+        // In-memory ZIP path: no stream, no ZipArchive — everything is
         // already-decompressed parts resolved from memZip on demand.
         private XlsxReader(ZipMemoryIndex memZip,
             (string Name, string Path)[] sheets, bool[] styleIsDate, bool date1904,

@@ -31,6 +31,32 @@ namespace ExcelReader.Benchmarks
             return acc;
         }
 
+        // Same shape as AccumulateRow, but calls Cell.GetString() for text — matching the allocation
+        // Sylvan's ADO.NET-style GetString(i) is forced to pay on its side. This is the fair,
+        // matched-work counterpart to AccumulateRow's zero-copy span read (see the README's
+        // "Benchmark methodology" note).
+        internal static long AccumulateRowMaterialized(Row row)
+        {
+            long acc = 0;
+            foreach (RowCell rowCell in row.Cells)
+            {
+                Cell cell = rowCell.Value;
+                switch (cell.Type)
+                {
+                    case CellType.ExcelString:
+                        acc += cell.GetString().Length;
+                        break;
+                    case CellType.Number:
+                        if (cell.TryParse(null, out double n)) { acc += (long)n; }
+                        break;
+                    case CellType.Date:
+                        if (cell.TryGetDateTime(out DateTime d)) { acc += d.Ticks; }
+                        break;
+                }
+            }
+            return acc;
+        }
+
         internal static long AccumulateSylvanExcel(ExcelDataReader reader)
         {
             long acc = 0;

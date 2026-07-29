@@ -2,7 +2,7 @@ using System.Diagnostics.CodeAnalysis;
 using System.IO.Compression;
 using System.Runtime.CompilerServices;
 using ExcelReader.Core.Enums;
-using ExcelReader.Core.Writer.Internal;
+using ExcelReader.Core.Internal;
 
 namespace ExcelReader.Core.Reader
 {
@@ -32,7 +32,7 @@ namespace ExcelReader.Core.Reader
         }
 
         /// <summary>
-        /// Opens an XLSX workbook directly from an in-memory buffer (docs/in-memory-zip.md). Reads the ZIP
+        /// Opens an XLSX workbook directly from an in-memory buffer. Reads the ZIP
         /// central directory and decompresses parts without a <see cref="ZipArchive"/>
         /// or intermediate <see cref="Stream"/> — every part is fully materialized up front, so the returned
         /// reader never suspends, even under <c>await foreach</c>.
@@ -89,7 +89,7 @@ namespace ExcelReader.Core.Reader
         }
 
         /// <summary>
-        /// Opens an XLSB workbook directly from an in-memory buffer (docs/in-memory-zip.md). Reads the ZIP
+        /// Opens an XLSB workbook directly from an in-memory buffer. Reads the ZIP
         /// central directory and decompresses parts without a <see cref="ZipArchive"/>
         /// or intermediate <see cref="Stream"/> — every part is fully materialized up front, so the returned
         /// reader never suspends, even under <c>await foreach</c>.
@@ -256,8 +256,8 @@ namespace ExcelReader.Core.Reader
 
         /// <summary>
         /// Opens a workbook from an in-memory buffer, auto-detecting its format (XLSX/XLSB/XLS) from its
-        /// signature (docs/in-memory-zip.md). XLSX/XLSB route through <see cref="ZipMemoryIndex"/> instead of
-        /// a <see cref="System.IO.Compression.ZipArchive"/>/<see cref="Stream"/>, so the returned reader never
+        /// signature. XLSX/XLSB route through <see cref="ZipMemoryIndex"/> instead of
+        /// a <see cref="ZipArchive"/>/<see cref="Stream"/>, so the returned reader never
         /// suspends, even under <c>await foreach</c>.
         /// </summary>
         /// <param name="data">The whole workbook file's bytes. Must outlive the returned reader.</param>

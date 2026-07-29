@@ -147,7 +147,7 @@ namespace ExcelReader.Core.Reader
             return part;
         }
 
-        // In-memory ZIP path's worksheet entry point (docs/in-memory-zip.md): opens a Stream over the
+        // In-memory ZIP path's worksheet entry point: opens a Stream over the
         // entry's compressed bytes instead of eagerly materializing the whole part, so the caller (the
         // XlsxReader/XlsbReader enumerator) can reuse the exact same PrefetchStream/LimitedReadStream
         // pipeline as the ZipArchive path (WorkbookLookups.Wrap) and overlap inflate with row parsing.
@@ -443,8 +443,9 @@ namespace ExcelReader.Core.Reader
             return headerOffset + LocalHeaderFixedSize + nameLength + extraLength;
         }
 
-        // Phase 1 targets stdlib DeflateStream (docs/in-memory-zip.md, Z1); Phase 2 (D1-D3) replaces
-        // this with a one-shot span-based inflater and removes the array-backing requirement below.
+        // This is a known stopgap: it round-trips through stdlib DeflateStream, which needs an
+        // array-backed ReadOnlyMemory<byte> (or a one-time copy). A zero-allocation span-based
+        // inflater would remove that, but is a separate, larger, not-yet-started follow-up.
         private static ZipPart InflateToPart(ReadOnlyMemory<byte> compressed, long uncompressedSize)
         {
             int size = checked((int)uncompressedSize);

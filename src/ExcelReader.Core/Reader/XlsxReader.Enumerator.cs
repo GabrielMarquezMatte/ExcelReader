@@ -31,8 +31,8 @@ namespace ExcelReader.Core.Reader
             private ReadOnlySpan<byte> VClose => _ns is null ? "</v>"u8 : _ns.VClose;
             private ReadOnlySpan<byte> CClose => _ns is null ? "</c>"u8 : _ns.CClose;
 
-            // Also used by the in-memory ZIP path (docs/in-memory-zip.md): ZipMemoryIndex.OpenEntryStream
-            // hands back a DeflateStream/MemoryStream over the part's bytes, same as the ZipArchive path.
+            // Also used by the in-memory ZIP path: ZipMemoryIndex.OpenEntryStream hands back a
+            // DeflateStream/MemoryStream over the part's bytes, same as the ZipArchive path.
             internal Enumerator(XlsxReader reader, Stream sheet, long entryLength = 0, CancellationToken ct = default)
                 : base(sheet, reader._options.MaxCellBytes, nameof(ExcelReaderOptions.MaxCellBytes), WorkbookLookups.InitialBufferCapacity(entryLength), ct)
             {

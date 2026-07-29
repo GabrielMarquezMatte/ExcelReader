@@ -5,9 +5,9 @@ namespace ExcelReader.Core.Parser.Internal
 {
     // The merge-walk column-binding loop shared by RowProjector<T> (class/struct models) and
     // NamedRefRowEnumerator<TModel,...> (ref struct models, net9+). Both bind sparse Row.Cells to a
-    // header-resolved column map the same way; before this they carried two byte-identical copies (see
-    // docs/road-to-a.md F9). A `static` generic method — never storing TModel in a field — is what lets
-    // a ref-struct-constrained TModel flow through without CS8345.
+    // header-resolved column map the same way; before this they carried two byte-identical copies. A
+    // `static` generic method — never storing TModel in a field — is what lets a ref-struct-constrained
+    // TModel flow through without CS8345.
     //
     // Deliberately NOT shared with CsvRowProjector<T>: CSV rows are dense (field index == column index,
     // no gaps), so its fast path is a direct indexed scan with no merge-walk at all — forcing it through

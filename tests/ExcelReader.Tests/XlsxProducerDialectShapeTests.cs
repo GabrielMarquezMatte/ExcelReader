@@ -7,7 +7,9 @@ using ExcelReader.Core.Writer;
 
 namespace ExcelReader.Tests
 {
-    public class RealWorldInteropTests
+    // Hand-authored XML/ZIP fragments mimicking known producer quirks — not files actually exported by
+    // those producers. See RealWorldXlsxCorpusTests for tests against genuine producer-exported binaries.
+    public class XlsxProducerDialectShapeTests
     {
         private const string SpreadsheetNs = "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
         private const string RelationshipsNs = "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
