@@ -1,5 +1,6 @@
 using System.Buffers;
 using System.Buffers.Binary;
+using System.Runtime.CompilerServices;
 
 namespace ExcelReader.Core.Reader
 {
@@ -16,10 +17,23 @@ namespace ExcelReader.Core.Reader
         private int _loadedCount;        // number of sectors loaded in _sector
         private byte[]? _scratch;             // assembles records that span sectors
 
+        // In-memory modes: the whole buffer, copied into locals here so the per-record path never
+        // reloads them through _wb.
+        private readonly byte[] _file;
+        private readonly int _fileBase;
+
+        // Chained mode's cached contiguous sector run (logical bounds + the run's buffer offset).
+        // Empty until the first read; -1 can never satisfy the fast-path compare.
+        private long _runStart = -1;
+        private long _runEnd = -1;
+        private long _runBufferOffset;
+
         internal BiffCursor(WorkbookStream wb)
         {
             _wb = wb;
             _sectorSize = wb.SectorSize;
+            _file = wb.Buffer;
+            _fileBase = wb.BufferBase;
             if (wb.Kind != WorkbookStream.SourceKind.Streamed)
             {
                 _maxSectors = 0;
@@ -88,12 +102,27 @@ namespace ExcelReader.Core.Reader
             return scratch.AsSpan(0, len);
         }
 
+        // Inlined into ReadSpan: for a sequentially written Workbook stream the cached run covers the
+        // whole file, so this collapses to one compare plus an array slice per record.
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private ReadOnlySpan<byte> ReadChainedSpan(long pos, int len)
         {
-            if (_wb.TryGetChainedSpan(pos, len, out ReadOnlySpan<byte> span))
+            if (pos >= _runStart && pos + len <= _runEnd)
             {
-                return span;
+                return _file.AsSpan(_fileBase + (int)(_runBufferOffset + pos - _runStart), len);
             }
+            return ReadChainedSpanSlow(pos, len);
+        }
+
+        private ReadOnlySpan<byte> ReadChainedSpanSlow(long pos, int len)
+        {
+            _wb.ResolveChainedRun(pos, out _runStart, out _runEnd, out _runBufferOffset);
+            if (pos + len <= _runEnd)
+            {
+                return _file.AsSpan(_fileBase + (int)(_runBufferOffset + pos - _runStart), len);
+            }
+            // Straddles a chain discontinuity: assemble sector-by-sector, as the streamed path does
+            // when a record crosses its sector window.
             byte[] scratch = EnsureScratch(len);
             _wb.CopyChained(pos, scratch.AsSpan(0, len));
             return scratch.AsSpan(0, len);

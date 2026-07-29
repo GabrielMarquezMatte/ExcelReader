@@ -86,14 +86,22 @@ The latest real-data benchmark also measures the in-memory path for workbook con
 
 | Method | Mean | Error | StdDev | Allocated |
 |---|---:|---:|---:|---:|
-| Xlsx_ExcelReader_Memory | 65.86 ms | 0.446 ms | 0.396 ms | 4.98 KB |
-| Xlsx_ExcelReader_Memory_Prefetch | 42.88 ms | 0.198 ms | 0.166 ms | 71.33 KB |
-| Xlsm_ExcelReader_Memory | 66.48 ms | 0.597 ms | 0.558 ms | 4.98 KB |
-| Xlsm_ExcelReader_Memory_Prefetch | 43.59 ms | 0.574 ms | 0.509 ms | 72.99 KB |
-| Xlsb_ExcelReader_Memory | 24.98 ms | 0.247 ms | 0.231 ms | 14.43 KB |
-| Xlsb_ExcelReader_Memory_Prefetch | 19.40 ms | 0.256 ms | 0.200 ms | 33.06 KB |
-| Xls_ExcelReader_Memory | 12.40 ms | 0.132 ms | 0.117 ms | 1.99 KB |
-| Csv_ExcelReader_Memory | 6.03 ms | 0.084 ms | 0.074 ms | 232 B |
+| Xlsx_ExcelReader_Memory | 67.03 ms | 1.059 ms | 1.088 ms | 4.98 KB |
+| Xlsx_ExcelReader_Memory_Prefetch | 53.17 ms | 3.265 ms | 9.626 ms | 94.57 KB |
+| Xlsm_ExcelReader_Memory † | 67.06 ms | 1.295 ms | 1.148 ms | 4.98 KB |
+| Xlsm_ExcelReader_Memory_Prefetch | 48.75 ms | 0.914 ms | 1.016 ms | 93.44 KB |
+| Xlsb_ExcelReader_Memory † | 30.12 ms | 0.569 ms | 0.584 ms | 14.45 KB |
+| Xlsb_ExcelReader_Memory_Prefetch | 18.46 ms | 0.124 ms | 0.110 ms | 59.70 KB |
+| Xls_ExcelReader_Memory † | 11.02 ms | 0.182 ms | 0.161 ms | 10.05 KB |
+| Csv_ExcelReader_Memory † | 5.91 ms | 0.072 ms | 0.064 ms | 168 B |
+
+† These four rows come from a later targeted re-run of only the `*_Memory` benchmarks; the unmarked rows are from the preceding full-suite run. Timings are not strictly comparable across the two — a smaller run has less GC and cache interference from neighboring benchmarks, which is the likely cause of the small `Xlsm`/`Xlsb` improvements (their allocation figures are byte-identical, and neither path was touched by the change described below).
+
+`Xls_ExcelReader_Memory` and `Csv_ExcelReader_Memory` are the two most recently added overloads; the rest predate them. Csv's memory path is both faster (5.91 ms vs. 6.21 ms for `Csv_ExcelReader`) and allocates less (168 B vs. 232 B).
+
+`Xls_ExcelReader_Memory` was initially ~11% *slower* than its stream twin: it re-derived every record's address through the FAT chain and materialized `ReadOnlyMemory.Span` per read, while the stream path amortized translation across a 64 KB sector window. `BiffCursor` now caches the enclosing contiguous sector run and slices the backing array directly, so a sequentially written Workbook stream translates with one compare per record. That took it from 14.77 ms to **11.02 ms** here, against 13.31 ms for `Xls_ExcelReader` in the full run — and 0.61x the stream path on the same-run 20K-row `MemorySourceSmokeBenchmark`, which is the more trustworthy ratio since both arms ran together.
+
+One caveat on that path: it allocates **80 B more** than the stream twin (10.05 KB vs. 9.97 KB), up from byte-identical before the change, because `BiffCursor` grew the cached-run fields and two cursors are constructed per read. Allocation here is fixed reader setup rather than per-record, so it does not scale with workbook size, but the memory overload is faster than the stream path rather than strictly cheaper than it.
 
 ### String-heavy reads
 

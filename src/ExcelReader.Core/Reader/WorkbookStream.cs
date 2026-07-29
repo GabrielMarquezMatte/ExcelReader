@@ -1,5 +1,6 @@
 using System.Buffers;
 using System.Diagnostics.CodeAnalysis;
+using System.Runtime.InteropServices;
 
 namespace ExcelReader.Core.Reader
 {
@@ -19,7 +20,12 @@ namespace ExcelReader.Core.Reader
         private readonly int[] _chain;        // physical sector numbers, in order (pooled, oversized)
         private readonly int _chainLength;    // valid entry count in _chain; the pooled array is larger
         private bool _chainReturned;          // guards against a double pool-return on repeated Dispose
-        private readonly ReadOnlyMemory<byte> _memory;
+
+        // The in-memory modes' buffer, resolved to its backing array once here rather than kept as a
+        // ReadOnlyMemory<byte>: reads happen per BIFF record, and ReadOnlyMemory.Span is a property that
+        // has to disambiguate array/MemoryManager/string backing on every access, whereas an array plus
+        // a base offset slices with plain pointer arithmetic.
+        private readonly int _fileLength; // usable bytes from _fileBase
 
         internal int SectorSize { get; }
         internal long Length { get; }
@@ -39,10 +45,26 @@ namespace ExcelReader.Core.Reader
             _ownsSource = ownsSource;
             _chain = chain;
             _chainLength = chainLength;
-            _memory = memory;
             SectorSize = sectorSize;
             Length = length;
             Kind = kind;
+            if (kind == SourceKind.Streamed)
+            {
+                Buffer = [];
+                return;
+            }
+            if (MemoryMarshal.TryGetArray(memory, out ArraySegment<byte> segment))
+            {
+                Buffer = segment.Array!;
+                BufferBase = segment.Offset;
+                _fileLength = segment.Count;
+                return;
+            }
+            // Rare: a non-array-backed ReadOnlyMemory<byte> (a custom MemoryManager<byte>). One copy
+            // here keeps every subsequent record read on the array fast path, matching what
+            // BufferedStreamCursor and XlsCompoundFile.AsStream already do for this case.
+            Buffer = memory.ToArray();
+            _fileLength = Buffer.Length;
         }
 
         internal static WorkbookStream Streamed(Stream source, bool ownsSource, int[] chain, int chainLength, int sectorSize, long length)
@@ -65,30 +87,46 @@ namespace ExcelReader.Core.Reader
             return new BiffCursor(this);
         }
 
-        internal bool IsMemory => Kind != SourceKind.Streamed;
+
+        // The in-memory buffer and the offset of its first byte, handed to each BiffCursor so the hot
+        // record path slices the array directly instead of loading them back through this object.
+        internal byte[] Buffer { get; }
+        internal int BufferBase { get; }
 
         internal ReadOnlySpan<byte> Memory(long pos, int len)
         {
-            return _memory.Span.Slice((int)pos, len);
+            return Buffer.AsSpan(BufferBase + (int)pos, len);
         }
 
-        internal bool TryGetChainedSpan(long pos, int len, out ReadOnlySpan<byte> span)
+        // The maximal run of physically consecutive sectors containing `pos`, in logical coordinates
+        // plus the run's byte offset into the buffer. BiffCursor caches this, so records inside one run
+        // translate with a compare and pointer arithmetic instead of a per-record chain walk — and
+        // Excel writes the Workbook stream as a single sequential run, so in practice one resolve
+        // covers the whole file. Walking both directions keeps a backward seek (the enumerator rewinds
+        // a record when a row ends) inside the cached run rather than re-resolving.
+        internal void ResolveChainedRun(long pos, out long runStart, out long runEnd, out long bufferOffset)
         {
-            span = default;
             int chainIndex = (int)(pos / SectorSize);
-            int within = (int)(pos % SectorSize);
             RequireChainIndex(chainIndex);
-            int needed = within + len;
-            for (int sectors = 1; needed > sectors * SectorSize; sectors++)
+            int first = chainIndex;
+            while (first > 0 && _chain[first] == _chain[first - 1] + 1)
             {
-                int next = chainIndex + sectors;
-                if (next >= _chainLength || _chain[next] != _chain[next - 1] + 1)
-                {
-                    return false;
-                }
+                first--;
             }
-            span = FileSlice(_chain[chainIndex], within, len);
-            return true;
+            int last = chainIndex;
+            while (last + 1 < _chainLength && _chain[last + 1] == _chain[last] + 1)
+            {
+                last++;
+            }
+            runStart = (long)first * SectorSize;
+            runEnd = Math.Min(Length, (long)(last + 1) * SectorSize);
+            bufferOffset = HeaderSize + ((long)_chain[first] * SectorSize);
+            // Trust boundary: the chain comes from untrusted bytes, so the whole run is range-checked
+            // once here. Every cached-run read afterwards is provably inside the buffer.
+            if (_chain[first] < 0 || bufferOffset < 0 || bufferOffset + (runEnd - runStart) > _fileLength)
+            {
+                throw new InvalidDataException("The OLE sector chain points past the end of the buffer.");
+            }
         }
 
         internal void CopyChained(long pos, Span<byte> dest)
@@ -117,11 +155,11 @@ namespace ExcelReader.Core.Reader
         private ReadOnlySpan<byte> FileSlice(int sector, int within, int len)
         {
             long offset = HeaderSize + ((long)sector * SectorSize) + within;
-            if (sector < 0 || offset < 0 || offset + len > _memory.Length)
+            if (sector < 0 || offset < 0 || offset + len > _fileLength)
             {
                 throw new InvalidDataException("The OLE sector chain points past the end of the buffer.");
             }
-            return _memory.Span.Slice((int)offset, len);
+            return Buffer.AsSpan(BufferBase + (int)offset, len);
         }
 
         // Reads contiguous physical sectors starting from chainIndex into dest.
