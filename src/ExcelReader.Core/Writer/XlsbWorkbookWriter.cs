@@ -73,14 +73,8 @@ namespace ExcelReader.Core.Writer
         /// <inheritdoc/>
         public XlsbSheetWriter AddSheet(string name)
         {
-            ArgumentNullException.ThrowIfNull(name);
-            WriterStateGuard.ThrowIfEnded(_state, this);
-            WriterStateGuard.RequireStarted(_state, nameof(XlsbWorkbookWriter), "adding sheets");
-            WriterStateGuard.ValidateSheetName(name);
-            if (_activeSheet is not null)
-            {
-                throw new InvalidOperationException("The previous XlsbSheetWriter must be ended before adding a new sheet.");
-            }
+            WriterStateGuard.RequireCanAddSheet(
+                _state, this, nameof(XlsbWorkbookWriter), name, _activeSheet is not null, nameof(XlsbSheetWriter));
             int sheetId = _sheets.Count + 1;
             _activeSheet = new XlsbSheetWriter(this, _zip, name, sheetId, _date1904, _compression);
             return _activeSheet;

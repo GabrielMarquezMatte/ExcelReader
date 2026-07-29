@@ -101,6 +101,19 @@ namespace ExcelReader.Core.Reader
             }
         }
 
+        // Both the sync and async shared-strings parsers open on the same footing: reject a declared
+        // length that cannot even be indexed, size the flat buffer from it (decoded text is never
+        // longer than its XML source), and build a cursor whose growth is capped by MaxSharedStringBytes.
+        // The flat-buffer Rent stays in each caller's own try (not here) so a throw from this method
+        // itself never leaves a rented buffer behind for the caller's finally to miss.
+        private BufferedStreamCursor CreateSharedCursor(long entryLength, out int partLength)
+        {
+            LimitChecks.ThrowIfEntryLengthExceeds(entryLength, Array.MaxLength, "ArrayMaxLength");
+            partLength = (int)entryLength;
+            return new BufferedStreamCursor(SharedFlatGrowthCap(), nameof(ExcelReaderOptions.MaxSharedStringBytes),
+                WorkbookLookups.InitialBufferCapacity(entryLength));
+        }
+
         // Streams xl/sharedStrings.xml through a growable pooled buffer instead of inflating the whole
         // part before parsing a byte of it — mirrors how the row enumerators use BufferedStreamCursor/
         // EnsureRowBuffered so decompression overlaps the scan (via PrefetchStream) instead of finishing
@@ -108,11 +121,7 @@ namespace ExcelReader.Core.Reader
         // already checked the declared part length against.
         private void ParseSharedStreaming(Stream stream, long entryLength)
         {
-            LimitChecks.ThrowIfEntryLengthExceeds(entryLength, Array.MaxLength, "ArrayMaxLength");
-            int partLength = (int)entryLength;
-            int growthCap = SharedFlatGrowthCap();
-            var io = new BufferedStreamCursor(growthCap, nameof(ExcelReaderOptions.MaxSharedStringBytes),
-                WorkbookLookups.InitialBufferCapacity(entryLength));
+            BufferedStreamCursor io = CreateSharedCursor(entryLength, out int partLength);
             try
             {
                 // Decoded text is never longer than its XML, so partLength bounds the flat buffer —
@@ -128,11 +137,7 @@ namespace ExcelReader.Core.Reader
 
         private async ValueTask ParseSharedStreamingAsync(Stream stream, long entryLength, CancellationToken ct)
         {
-            LimitChecks.ThrowIfEntryLengthExceeds(entryLength, Array.MaxLength, "ArrayMaxLength");
-            int partLength = (int)entryLength;
-            int growthCap = SharedFlatGrowthCap();
-            var io = new BufferedStreamCursor(growthCap, nameof(ExcelReaderOptions.MaxSharedStringBytes),
-                WorkbookLookups.InitialBufferCapacity(entryLength));
+            BufferedStreamCursor io = CreateSharedCursor(entryLength, out int partLength);
             try
             {
                 _sharedFlat = ArrayPool<byte>.Shared.Rent(Math.Max(1, partLength));
@@ -288,6 +293,16 @@ namespace ExcelReader.Core.Reader
         // needle, so a dedicated overload would only duplicate the grow loop.
         private static readonly byte[] GtToken = ">"u8.ToArray();
 
+        // Looks for `seq` in the currently buffered window [io.Pos..io.Len). -1 means "not in this
+        // window" — the caller decides whether that is EOF (give up) or a reason to Fill and retry.
+        // Split out so the sync and async growth loops share one search instead of two copies of the
+        // same IndexOf.
+        private static int FindSeqInWindow(BufferedStreamCursor io, byte[] seq)
+        {
+            int rel = io.Buf.AsSpan(io.Pos, io.Len - io.Pos).IndexOf(seq);
+            return rel < 0 ? -1 : io.Pos + rel;
+        }
+
         // Grows io (via Fill) until `seq` is found at or after io.Pos, or the stream ends. The caller
         // owns io.Pos as the search anchor — set it immediately before calling whenever the anchor
         // should move, so a Fill-triggered compaction (which always resets io.Pos to 0) never strands a
@@ -296,10 +311,10 @@ namespace ExcelReader.Core.Reader
         {
             while (true)
             {
-                int rel = io.Buf.AsSpan(io.Pos, io.Len - io.Pos).IndexOf(seq);
-                if (rel >= 0)
+                int found = FindSeqInWindow(io, seq);
+                if (found >= 0)
                 {
-                    return io.Pos + rel;
+                    return found;
                 }
                 if (io.Eof)
                 {
@@ -313,10 +328,10 @@ namespace ExcelReader.Core.Reader
         {
             while (true)
             {
-                int rel = io.Buf.AsSpan(io.Pos, io.Len - io.Pos).IndexOf(seq);
-                if (rel >= 0)
+                int found = FindSeqInWindow(io, seq);
+                if (found >= 0)
                 {
-                    return io.Pos + rel;
+                    return found;
                 }
                 if (io.Eof)
                 {
@@ -324,6 +339,24 @@ namespace ExcelReader.Core.Reader
                 }
                 await io.FillAsync(stream, ct).ConfigureAwait(false);
             }
+        }
+
+        // The '>' that closes the <si ...> open tag, but only once the whole element is contiguous in
+        // the buffer: either the tag self-closes (<si/>) or its matching "</si>" is already buffered
+        // too. -1 means "keep filling" — same contract as FindSeqInWindow.
+        private static int FindSiEndInWindow(BufferedStreamCursor io, byte[] siClose)
+        {
+            int openRel = io.Buf.AsSpan(io.Pos, io.Len - io.Pos).IndexOf((byte)'>');
+            if (openRel < 0)
+            {
+                return -1;
+            }
+            int open = io.Pos + openRel;
+            if (io.Buf[open - 1] == (byte)'/' || io.Buf.AsSpan(open, io.Len - open).IndexOf(siClose) >= 0)
+            {
+                return open;
+            }
+            return -1;
         }
 
         // Grows io (io.Pos already anchored at the '<si' tag's start by the caller) until the whole
@@ -335,14 +368,10 @@ namespace ExcelReader.Core.Reader
         {
             while (true)
             {
-                int openRel = io.Buf.AsSpan(io.Pos, io.Len - io.Pos).IndexOf((byte)'>');
-                if (openRel >= 0)
+                int open = FindSiEndInWindow(io, siClose);
+                if (open >= 0)
                 {
-                    int open = io.Pos + openRel;
-                    if (io.Buf[open - 1] == (byte)'/' || io.Buf.AsSpan(open, io.Len - open).IndexOf(siClose) >= 0)
-                    {
-                        return open;
-                    }
+                    return open;
                 }
                 if (io.Eof)
                 {
@@ -356,14 +385,10 @@ namespace ExcelReader.Core.Reader
         {
             while (true)
             {
-                int openRel = io.Buf.AsSpan(io.Pos, io.Len - io.Pos).IndexOf((byte)'>');
-                if (openRel >= 0)
+                int open = FindSiEndInWindow(io, siClose);
+                if (open >= 0)
                 {
-                    int open = io.Pos + openRel;
-                    if (io.Buf[open - 1] == (byte)'/' || io.Buf.AsSpan(open, io.Len - open).IndexOf(siClose) >= 0)
-                    {
-                        return open;
-                    }
+                    return open;
                 }
                 if (io.Eof)
                 {

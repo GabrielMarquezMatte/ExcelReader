@@ -48,7 +48,7 @@ namespace ExcelReader.Core.Reader
             }
 
             internal Enumerator(Stream stream, CsvReaderOptions options, CancellationToken ct = default)
-                : base(stream, options.MaxCellBytes, nameof(CsvReaderOptions.MaxCellBytes), 64 * 1024, ct)
+                : base(stream, options.MaxCellBytes, nameof(CsvReaderOptions.MaxCellBytes), 64 * 1024, ownsSource: false, ct)
             {
                 _delimiter = options.Delimiter;
                 _quote = options.Quote;
@@ -434,21 +434,6 @@ namespace ExcelReader.Core.Reader
                 }
                 int len = _acc.ValueLength - f.MatStart;
                 _acc.Add(_col++, f.MatStart, len, len == 0 ? CellType.Empty : CellType.ExcelString, style: 0, CellValueSource.Shared);
-            }
-
-            // --- buffer management (shared with XlsxReader/XlsbReader via BufferedStreamCursor) ---
-
-            /// <inheritdoc/>
-            public void Dispose()
-            {
-                ReturnBuffers();
-            }
-
-            /// <inheritdoc/>
-            public ValueTask DisposeAsync()
-            {
-                ReturnBuffers();
-                return ValueTask.CompletedTask;
             }
 
         }

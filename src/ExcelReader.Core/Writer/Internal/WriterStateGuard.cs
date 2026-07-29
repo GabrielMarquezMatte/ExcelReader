@@ -46,6 +46,25 @@ namespace ExcelReader.Core.Writer.Internal
             }
         }
 
+        // The four workbook writers all gate AddSheet the same way: the workbook must be started and not
+        // ended, the name must be a legal sheet name, and the previously added sheet must have been ended
+        // first (each writer exposes exactly one live sheet at a time). Centralized so a new format cannot
+        // accidentally enforce three of the four.
+        internal static void RequireCanAddSheet(
+            WriterState state, object owner, string workbookTypeName, string name,
+            bool sheetActive, string sheetWriterTypeName)
+        {
+            ArgumentNullException.ThrowIfNull(name);
+            ThrowIfEnded(state, owner);
+            RequireStarted(state, workbookTypeName, "adding sheets");
+            ValidateSheetName(name);
+            if (sheetActive)
+            {
+                throw new InvalidOperationException(
+                    $"The previous {sheetWriterTypeName} must be ended before adding a new sheet.");
+            }
+        }
+
         internal static void ValidateSheetName(string name)
         {
             if (name.Length is 0 or > 31)

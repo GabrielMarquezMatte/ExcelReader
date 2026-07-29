@@ -78,14 +78,8 @@ namespace ExcelReader.Core.Writer
         /// <exception cref="InvalidOperationException">The workbook has not been started, or the previously added sheet has not been ended.</exception>
         public XlsxSheetWriter AddSheet(string name)
         {
-            ArgumentNullException.ThrowIfNull(name);
-            WriterStateGuard.ThrowIfEnded(_state, this);
-            WriterStateGuard.RequireStarted(_state, nameof(XlsxWorkbookWriter), "adding sheets");
-            WriterStateGuard.ValidateSheetName(name);
-            if (_sheetActive)
-            {
-                throw new InvalidOperationException("The previous XlsxSheetWriter must be ended before adding a new sheet.");
-            }
+            WriterStateGuard.RequireCanAddSheet(
+                _state, this, nameof(XlsxWorkbookWriter), name, _sheetActive, nameof(XlsxSheetWriter));
             _sheetActive = true;
             int sheetId = _sheets.Count + 1;
             _activeSheet = new XlsxSheetWriter(this, _zip, name, sheetId, _compression);

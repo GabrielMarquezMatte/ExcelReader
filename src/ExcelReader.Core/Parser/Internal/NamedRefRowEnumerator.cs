@@ -82,22 +82,37 @@ namespace ExcelReader.Core.Parser.Internal
             }
         }
 
+        // Advances the row-number/column-map state machine one step and reports what the caller should
+        // do: true = yield this row, false = stop enumerating, null = neither (a pre-header row was
+        // skipped, or the header row just built the column map) so the caller loops to the next row.
+        // One place, because the sync loop, the async fast path, and the awaiting continuation must not
+        // drift apart. Reads _rows.Current (a ref struct Row) only to pass it straight into
+        // BuildColumnMap — never stored, never returned, never crosses an await.
+        private bool? Classify()
+        {
+            switch (ProjectionRules.ClassifyRow(ref _rowNumber, _headerRow, _bindings is not null))
+            {
+                case ProjectionStep.Yield:
+                    return true;
+                case ProjectionStep.Stop:
+                    return false;
+                case ProjectionStep.BuildMap:
+                    BuildColumnMap(_rows.Current);
+                    return null;
+                default:
+                    return null; // Skip
+            }
+        }
+
         /// <inheritdoc cref="System.Collections.IEnumerator.MoveNext"/>
         public bool MoveNext()
         {
             while (_rows.MoveNext())
             {
-                ProjectionStep step = ProjectionRules.ClassifyRow(ref _rowNumber, _headerRow, _bindings is not null);
-                switch (step)
+                bool? decision = Classify();
+                if (decision is not null)
                 {
-                    case ProjectionStep.Yield:
-                        return true;
-                    case ProjectionStep.BuildMap:
-                        BuildColumnMap(_rows.Current);
-                        break;
-                    case ProjectionStep.Stop:
-                        return false;
-                        // Skip: loop again.
+                    return decision.Value;
                 }
             }
             return false;
@@ -106,7 +121,7 @@ namespace ExcelReader.Core.Parser.Internal
         // Async twin of MoveNext, mirroring AsyncRowEnumerator<T,TReader,TRows>.MoveNextAsync: a non-async
         // fast path that stays synchronous whenever the underlying row-enumerator resolves synchronously
         // (the common case — no second state machine on top of _rows' own), only falling to an awaiting
-        // continuation on a genuine buffer miss. Every state mutation (ClassifyRow's ref _rowNumber,
+        // continuation on a genuine buffer miss. Every state mutation (Classify's ref _rowNumber,
         // BuildColumnMap) runs on the shared class instance, so it survives the await (see class remarks).
         /// <inheritdoc cref="IExcelRowEnumerator.MoveNextAsync"/>
         [SuppressMessage("VisualStudio.Threading", "VSTHRD103:Result synchronously blocks",
@@ -124,16 +139,10 @@ namespace ExcelReader.Core.Parser.Internal
                 {
                     return new ValueTask<bool>(false);
                 }
-                switch (ProjectionRules.ClassifyRow(ref _rowNumber, _headerRow, _bindings is not null))
+                bool? decision = Classify();
+                if (decision is not null)
                 {
-                    case ProjectionStep.Yield:
-                        return new ValueTask<bool>(true);
-                    case ProjectionStep.BuildMap:
-                        BuildColumnMap(_rows.Current);
-                        break;
-                    case ProjectionStep.Stop:
-                        return new ValueTask<bool>(false);
-                        // Skip: loop again, still synchronous.
+                    return new ValueTask<bool>(decision.Value);
                 }
             }
         }
@@ -144,17 +153,10 @@ namespace ExcelReader.Core.Parser.Internal
             {
                 return false;
             }
-            ProjectionStep step = ProjectionRules.ClassifyRow(ref _rowNumber, _headerRow, _bindings is not null);
-            switch (step)
+            bool? decision = Classify();
+            if (decision is not null)
             {
-                case ProjectionStep.Yield:
-                    return true;
-                case ProjectionStep.BuildMap:
-                    BuildColumnMap(_rows.Current);
-                    break; // map built at the header row — resume the fast path for the next row.
-                case ProjectionStep.Stop:
-                    return false;
-                    // Skip: resume the fast path.
+                return decision.Value;
             }
             return await MoveNextAsync().ConfigureAwait(false);
         }
