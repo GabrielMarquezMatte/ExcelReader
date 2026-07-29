@@ -1,5 +1,4 @@
 using System.Diagnostics.CodeAnalysis;
-using System.Runtime.InteropServices;
 using System.Text;
 
 namespace ExcelReader.Core.Reader
@@ -59,20 +58,11 @@ namespace ExcelReader.Core.Reader
             {
                 return data;
             }
-            using MemoryStream source = AsStream(data);
+            using MemoryStream source = XlsCompoundFile.AsStream(data);
             using Stream transcoding = Encoding.CreateTranscodingStream(source, encoding, Encoding.UTF8, leaveOpen: true);
             using MemoryStream target = new(data.Length);
             transcoding.CopyTo(target);
             return target.GetBuffer().AsMemory(0, (int)target.Length);
-        }
-
-        private static MemoryStream AsStream(ReadOnlyMemory<byte> data)
-        {
-            if (MemoryMarshal.TryGetArray(data, out ArraySegment<byte> segment))
-            {
-                return new MemoryStream(segment.Array!, segment.Offset, segment.Count, writable: false);
-            }
-            return new MemoryStream(data.ToArray(), writable: false);
         }
 
         [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
@@ -211,7 +201,11 @@ namespace ExcelReader.Core.Reader
         /// <inheritdoc/>
         public ValueTask DisposeAsync()
         {
-            return _leaveOpen || _stream is null ? ValueTask.CompletedTask : _stream.DisposeAsync();
+            if (_leaveOpen || _stream is null)
+            {
+                return ValueTask.CompletedTask;
+            }
+            return _stream.DisposeAsync();
         }
     }
 }
