@@ -695,9 +695,10 @@ dotnet test --project tests/ExcelReader.Tests/ExcelReader.Tests.csproj --configu
 
 ## Contributing
 
-See [ARCHITECTURE.md](ARCHITECTURE.md) for a map of the codebase and [CONTRIBUTING.md](CONTRIBUTING.md)
-for build expectations and how to submit a change. Security issues should go through the private
-channel in [SECURITY.md](SECURITY.md), not a public issue.
+See [ARCHITECTURE.md](ARCHITECTURE.md) for a map of the codebase, [STYLEGUIDE.md](STYLEGUIDE.md) for
+the code style, and [CONTRIBUTING.md](CONTRIBUTING.md) for build expectations and how to submit a
+change. Security issues should go through the private channel in [SECURITY.md](SECURITY.md), not a
+public issue.
 
 ## License
 

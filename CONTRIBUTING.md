@@ -1,7 +1,8 @@
 # Contributing
 
 Thanks for considering a contribution. This project takes small, focused pull requests over large
-rewrites — see [ARCHITECTURE.md](ARCHITECTURE.md) for the shape of the codebase before diving in.
+rewrites — see [ARCHITECTURE.md](ARCHITECTURE.md) for the shape of the codebase before diving in, and
+[STYLEGUIDE.md](STYLEGUIDE.md) for the code style, which the analyzers only partly enforce.
 
 ## Build expectations
 
@@ -28,7 +29,9 @@ rewrites — see [ARCHITECTURE.md](ARCHITECTURE.md) for the shape of the codebas
 
   Untrusted-input paths (the CFB/OLE, BIFF8, BIFF12, and ZIP parsers) get extra scrutiny — new
   parsing code should have a corresponding limit/fuzz-safety test in
-  `tests/ExcelReader.Tests/ReaderLimitTests.cs` or `FuzzTests.cs` where relevant.
+  `tests/ExcelReader.Tests/ReaderLimitTests.cs` or `FuzzTests.cs` where relevant. Read
+  [STYLEGUIDE.md § Untrusted Input](STYLEGUIDE.md#untrusted-input) before touching a parser: every
+  length, offset, and size read from the file must be bounded before it drives an allocation.
 
 ## Pull requests
 
