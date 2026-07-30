@@ -109,7 +109,7 @@ namespace ExcelReader.Core.Reader
             ZipArchiveEntry entry, DecompressedByteCounter counter, ExcelReaderOptions options,
             string entryLimitName = "", long entryLimit = 0)
         {
-            return Wrap(entry.Open(), counter, options, entryLimitName, entryLimit);
+            return Wrap(entry.Open(), counter, options, entryLimitName, entryLimit, entry.Length);
         }
 
 #if NET10_0_OR_GREATER
@@ -122,7 +122,7 @@ namespace ExcelReader.Core.Reader
             CancellationToken ct, string entryLimitName = "", long entryLimit = 0)
         {
             Stream opened = await entry.OpenAsync(ct).ConfigureAwait(false);
-            return Wrap(opened, counter, options, entryLimitName, entryLimit);
+            return Wrap(opened, counter, options, entryLimitName, entryLimit, entry.Length);
         }
 #else
         [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP001:Dispose created",
@@ -134,9 +134,14 @@ namespace ExcelReader.Core.Reader
             CancellationToken ct, string entryLimitName = "", long entryLimit = 0)
         {
             ct.ThrowIfCancellationRequested();
-            return new ValueTask<LimitedReadStream>(Wrap(entry.Open(), counter, options, entryLimitName, entryLimit));
+            return new ValueTask<LimitedReadStream>(Wrap(entry.Open(), counter, options, entryLimitName, entryLimit, entry.Length));
         }
 #endif
+
+        // Below this, the overlap isn't worth a dedicated thread + producer/consumer handoff: a small
+        // sheet decompresses faster than the Task.Run dispatch and teardown join cost it, so prefetch
+        // would only add overhead. Matches InitialBufferCapacity's own 256 KB ceiling below.
+        private const long PrefetchMinUncompressedSize = 256 * 1024;
 
         // Sole branch point for PrefetchDecompression, shared by the sync and async openers (and by
         // ZipMemoryIndex.OpenEntryStream, so the in-memory ZIP path gets the same prefetch overlap).
@@ -144,9 +149,9 @@ namespace ExcelReader.Core.Reader
         // accounting stays on the consumer thread and byte-for-byte identical to the serial path.
         internal static LimitedReadStream Wrap(
             Stream opened, DecompressedByteCounter counter, ExcelReaderOptions options,
-            string entryLimitName, long entryLimit)
+            string entryLimitName, long entryLimit, long uncompressedSize)
         {
-            if (!options.PrefetchDecompression)
+            if (!options.PrefetchDecompression || uncompressedSize < PrefetchMinUncompressedSize)
             {
                 return new LimitedReadStream(opened, counter, entryLimitName, entryLimit);
             }

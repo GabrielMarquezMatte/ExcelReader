@@ -72,7 +72,7 @@ namespace ExcelReader.Core.Reader
             {
                 return 0;
             }
-            return ConsumeCurrentChunk(buffer);
+            return ConsumeAvailableChunks(buffer);
         }
 
         public override async ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default)
@@ -85,7 +85,7 @@ namespace ExcelReader.Core.Reader
             {
                 return 0;
             }
-            return ConsumeCurrentChunk(buffer.Span);
+            return ConsumeAvailableChunks(buffer.Span);
         }
 
         public override Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken)
@@ -189,6 +189,22 @@ namespace ExcelReader.Core.Reader
                 _currentBuffer = null;
             }
             return toCopy;
+        }
+
+        // Drains the already-ensured current chunk, then keeps draining further chunks the producer has
+        // already queued -- a non-blocking TryRead, never another wait -- while the destination still
+        // has room. Without this, a destination bigger than ChunkSize (the caller's buffer can be up to
+        // 256 KB; see WorkbookLookups.InitialBufferCapacity) still only returns one 64 KB chunk per call,
+        // forcing extra Fill/Read round trips to satisfy one Ensure.
+        private int ConsumeAvailableChunks(Span<byte> destination)
+        {
+            int total = ConsumeCurrentChunk(destination);
+            while (total < destination.Length && _currentBuffer is null && _channel.Reader.TryRead(out var item))
+            {
+                SetCurrent(item);
+                total += ConsumeCurrentChunk(destination[total..]);
+            }
+            return total;
         }
 
         // Runs on a pooled thread pool thread for the entry's whole lifetime. Blocking Read here is
