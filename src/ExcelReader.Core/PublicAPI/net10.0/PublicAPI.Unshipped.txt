@@ -5,6 +5,8 @@
 *REMOVED*ExcelReader.Core.Reader.XlsbReader.Enumerator.DisposeAsync() -> System.Threading.Tasks.ValueTask
 *REMOVED*ExcelReader.Core.Reader.XlsxReader.Enumerator.Dispose() -> void
 *REMOVED*ExcelReader.Core.Reader.XlsxReader.Enumerator.DisposeAsync() -> System.Threading.Tasks.ValueTask
+ExcelReader.Core.Parser.ExcelParseException.ExcelParseException(int row, string! columnName) -> void
+ExcelReader.Core.Parser.ExcelParseException.ExcelParseException(System.Collections.Generic.IReadOnlyList<string!>! missingColumnNames) -> void
 ExcelReader.Core.Reader.PooledStreamRowEnumerator.Dispose() -> void
 ExcelReader.Core.Reader.PooledStreamRowEnumerator.DisposeAsync() -> System.Threading.Tasks.ValueTask
 static ExcelReader.Core.Reader.Excel.FromCsv(System.ReadOnlyMemory<byte> data, ExcelReader.Core.Reader.CsvReaderOptions? options = null) -> ExcelReader.Core.Reader.CsvReader!

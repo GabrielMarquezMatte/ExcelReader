@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 
@@ -43,6 +44,22 @@ namespace ExcelReader.Core.Parser
             Row = row;
             ColumnName = columnName;
             RawValue = rawValue;
+        }
+
+        /// <summary>Creates an exception describing a required column that has no value in a given row.</summary>
+        public ExcelParseException(int row, string columnName)
+            : base(string.Create(CultureInfo.InvariantCulture,
+                $"Required column '{columnName}' has no value in row {row}."))
+        {
+            Row = row;
+            ColumnName = columnName;
+        }
+
+        /// <summary>Creates an exception describing required column(s) missing from the header row.</summary>
+        public ExcelParseException(IReadOnlyList<string> missingColumnNames)
+            : base($"Required column(s) not found in the header row: {string.Join(", ", missingColumnNames)}.")
+        {
+            ColumnName = string.Join(", ", missingColumnNames);
         }
 
         /// <summary>The 1-based row number where the parse failure occurred (the header row is row 1).</summary>

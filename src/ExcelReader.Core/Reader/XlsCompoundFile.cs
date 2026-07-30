@@ -263,8 +263,19 @@ namespace ExcelReader.Core.Reader
             }
         }
 
+        // Every sector-based read in this file (FAT, DIFAT, chain walks) funnels through here with an
+        // offset derived from a sector id read straight from the file. SectorOffset already rejects a
+        // negative sector, but a huge positive one (still a valid int, e.g. from a single flipped byte)
+        // passed that check and reached Stream.Seek/ReadExactly directly — surfacing as a raw
+        // ArgumentOutOfRangeException or EndOfStreamException instead of the graceful InvalidDataException
+        // every other bound in this file already throws. This is the one choke point all three callers
+        // share, so the bound belongs here rather than duplicated at each call site.
         private static void ReadAt(Stream source, long offset, Span<byte> dest)
         {
+            if (offset < 0 || offset > source.Length - dest.Length)
+            {
+                throw new InvalidDataException("The OLE compound file references a sector outside the container.");
+            }
             source.Seek(offset, SeekOrigin.Begin);
             source.ReadExactly(dest);
         }
@@ -433,6 +444,14 @@ namespace ExcelReader.Core.Reader
             {
                 ReadOnlySpan<byte> entry = bytes.Slice(i * 128, 128);
                 int nameBytes = ReadU16(entry, 64);
+                // [MS-CFB] caps a directory entry's name length at 64 bytes (including the null
+                // terminator); nothing enforced that here, so a crafted value up to 65535 either threw
+                // a raw ArgumentOutOfRangeException slicing this fixed 128-byte slot, or (for values
+                // between 66 and 130) silently read adjacent slot fields into the name string.
+                if (nameBytes < 0 || nameBytes > 64)
+                {
+                    throw new InvalidDataException("The OLE directory entry name length is out of range.");
+                }
                 string name = string.Empty;
                 if (nameBytes >= 2)
                 {

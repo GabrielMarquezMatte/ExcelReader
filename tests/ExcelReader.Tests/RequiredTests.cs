@@ -86,7 +86,7 @@ namespace ExcelReader.Tests
             await using var ms = await TypedWorkbook.BuildAsync(["Note"], ["x"]);
             await using var reader = await Excel.FromAsync(ms, ct: TestContext.Current.CancellationToken);
 
-            InvalidOperationException ex = Assert.Throws<InvalidOperationException>(
+            ExcelParseException ex = Assert.Throws<ExcelParseException>(
                 () => new ExcelParser<Row>().Parse(reader).ToList());
 
             Assert.Contains("Id", ex.Message, StringComparison.Ordinal);
@@ -116,7 +116,7 @@ namespace ExcelReader.Tests
             Assert.True(enumerator.MoveNext()); // row 2 ok
             Assert.Equal("A1", enumerator.Current.Code);
 
-            InvalidOperationException ex = Assert.Throws<InvalidOperationException>(() => enumerator.MoveNext());
+            ExcelParseException ex = Assert.Throws<ExcelParseException>(() => enumerator.MoveNext());
             Assert.Contains("Code", ex.Message, StringComparison.Ordinal);
             Assert.Contains("row 3", ex.Message, StringComparison.Ordinal);
         }
@@ -130,7 +130,7 @@ namespace ExcelReader.Tests
             await using var ms = await TypedWorkbook.BuildAsync(["Id", "FullName"], ["oops", "Alice"]);
             await using var reader = await Excel.FromAsync(ms, ct: TestContext.Current.CancellationToken);
 
-            InvalidOperationException ex = Assert.Throws<InvalidOperationException>(
+            ExcelParseException ex = Assert.Throws<ExcelParseException>(
                 () => new ExcelParser<Row>().Parse(reader).ToList());
             Assert.Contains("Id", ex.Message, StringComparison.Ordinal);
         }
@@ -158,7 +158,7 @@ namespace ExcelReader.Tests
                 ("S1", [["Note", "Code"], ["n1", "c1"], ["n2"]]));
             await using var reader = await Excel.FromAsync(ms, ct: TestContext.Current.CancellationToken);
 
-            InvalidOperationException ex = Assert.Throws<InvalidOperationException>(
+            ExcelParseException ex = Assert.Throws<ExcelParseException>(
                 () => new ExcelParser<TwoColRow>().Parse(reader).ToList());
             Assert.Contains("Code", ex.Message, StringComparison.Ordinal);
         }

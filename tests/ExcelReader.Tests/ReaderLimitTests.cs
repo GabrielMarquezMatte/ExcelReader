@@ -115,6 +115,81 @@ namespace ExcelReader.Tests
             Assert.Equal(50_000_000, ex.Actual);
         }
 
+        // SEC-1: <sst uniqueCount="…"> is attacker-controlled independent of the part's real byte
+        // length — unlike ForgedOversizedSharedStringsEntryTripsSharedStringLimitBeforeReading above,
+        // this entry's *declared central-directory size* is honest and tiny; only the XML attribute
+        // lies. Before the fix, `new int[uniqueCount + 1]` sized the offsets array straight from this
+        // attribute, so a ~100-byte part could force an allocation many times its own MaxSharedStringBytes
+        // budget. LimitChecks.ThrowIfSharedStringCountImplausible now rejects a count the part could not
+        // physically contain before that allocation happens.
+        [Fact]
+        public void ImplausibleUniqueCountTripsSharedStringLimitBeforeAllocating()
+        {
+            using MemoryStream built = WorkbookBuilder.Build(
+                """<row r="1"><c r="A1" t="s"><v>0</v></c></row>""",
+                sharedStrings: "<si><t>a</t></si>");
+            byte[] zipBytes = built.ToArray();
+            using var ms = new MemoryStream();
+            ms.Write(zipBytes, 0, zipBytes.Length);
+            using (var zip = new ZipArchive(ms, ZipArchiveMode.Update, leaveOpen: true))
+            {
+                zip.GetEntry("xl/sharedStrings.xml")!.Delete();
+                using StreamWriter writer = new(zip.CreateEntry("xl/sharedStrings.xml").Open(), Encoding.UTF8);
+                writer.Write(
+                    """<sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" uniqueCount="500000000"><si><t>a</t></si></sst>""");
+            }
+            ms.Position = 0;
+
+            using XlsxReader reader = Excel.From(ms);
+            ExcelLimitExceededException ex = Assert.Throws<ExcelLimitExceededException>(() =>
+            {
+                using XlsxReader.Enumerator e = reader.GetEnumerator();
+            });
+            Assert.Equal(nameof(ExcelReaderOptions.MaxSharedStringBytes), ex.LimitName);
+            Assert.Equal(500_000_000, ex.Actual);
+        }
+
+        // SEC-2: BoundSheet8.lbPlyPos is read as a raw signed int32 with no validation before it becomes
+        // a BiffCursor.Position assignment. On the Chained WorkbookStream kind, a negative position used
+        // to resolve to a valid-looking byte range elsewhere in the file (the OLE header/preceding
+        // sectors) and silently decode wrong bytes as BIFF records — no exception, wrong data — while
+        // the Streamed/Contiguous kinds already threw. The fix validates lbPlyPos once, in
+        // ParseWorkbookGlobals, before OpenCursor is ever called with it — which runs identically
+        // regardless of which WorkbookStream kind BuildWorkbook chose, so this is structurally the same
+        // fix for all three kinds rather than three separate ones. Exercised here through the
+        // Stream-based open (Streamed/Contiguous, depending on the forged workbook's size) and the
+        // ReadOnlyMemory-based open (Contiguous for a small workbook); a dedicated large-workbook fixture
+        // to force the Chained kind specifically would strengthen this further but wasn't built here.
+        private static void PatchBoundSheetLbPlyPos(byte[] bytes, int forgedOffset)
+        {
+            for (int i = 0; i + 8 <= bytes.Length; i++)
+            {
+                if (bytes[i] == 0x85 && bytes[i + 1] == 0x00)
+                {
+                    BitConverter.GetBytes(forgedOffset).CopyTo(bytes, i + 4);
+                    return;
+                }
+            }
+            throw new InvalidOperationException("BoundSheet8 record (0x0085) not found.");
+        }
+
+        [Fact]
+        public void NegativeBoundSheetOffsetThrowsInsteadOfReadingOutOfRange()
+        {
+            using MemoryStream built = XlsWorkbookBuilder.Build(sheets: [("S1", [["Alice", 1, true]])]);
+            byte[] streamBytes = built.ToArray();
+            PatchBoundSheetLbPlyPos(streamBytes, -100);
+
+            InvalidDataException streamEx = Assert.Throws<InvalidDataException>(
+                () => Excel.FromXls(new MemoryStream(streamBytes)));
+
+            byte[] memoryBytes = (byte[])streamBytes.Clone();
+            InvalidDataException memoryEx = Assert.Throws<InvalidDataException>(
+                () => Excel.FromXls(memoryBytes.AsMemory()));
+
+            Assert.Equal(streamEx.Message, memoryEx.Message);
+        }
+
         [Fact]
         public void TooManyZipEntriesTripsMaxZipEntriesLimit()
         {

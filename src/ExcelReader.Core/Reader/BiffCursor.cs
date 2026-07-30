@@ -14,7 +14,6 @@ namespace ExcelReader.Core.Reader
         // them here saves the _wb -> field indirection on every PeekId/TryReadRecord/ReadSpan call —
         // several of those per BIFF8 record, across ~910K records on a large real-world workbook.
         private readonly WorkbookStream.SourceKind _kind;
-        private readonly long _length;
         private readonly int _sectorSize;
         private readonly int _maxSectors;
         private byte[]? _sector;     // current sector buffer window (streamed mode only)
@@ -37,7 +36,7 @@ namespace ExcelReader.Core.Reader
         {
             _wb = wb;
             _kind = wb.Kind;
-            _length = wb.Length;
+            Length = wb.Length;
             _sectorSize = wb.SectorSize;
             _file = wb.Buffer;
             _fileBase = wb.BufferBase;
@@ -53,9 +52,14 @@ namespace ExcelReader.Core.Reader
 
         internal long Position { get; set; }
 
+        // Exposes the Workbook stream's total length so a caller with an attacker-controlled offset
+        // (e.g. BoundSheet8.lbPlyPos) can validate it before ever assigning Position — see
+        // ParseWorkbookGlobals's BoundSheet8 handling.
+        internal long Length { get; }
+
         internal int PeekId()
         {
-            if (Position + 4 > _length)
+            if (Position + 4 > Length)
             {
                 return -1;
             }
@@ -67,7 +71,7 @@ namespace ExcelReader.Core.Reader
         {
             id = 0;
             data = default;
-            if (Position + 4 > _length)
+            if (Position + 4 > Length)
             {
                 return false;
             }
@@ -75,7 +79,7 @@ namespace ExcelReader.Core.Reader
             id = BinaryPrimitives.ReadUInt16LittleEndian(hdr);
             int len = BinaryPrimitives.ReadUInt16LittleEndian(hdr[2..]);
             long dataPos = Position + 4;
-            if (dataPos + len > _length)
+            if (dataPos + len > Length)
             {
                 return false;
             }

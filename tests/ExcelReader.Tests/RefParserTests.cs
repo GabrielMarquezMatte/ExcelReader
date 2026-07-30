@@ -158,7 +158,7 @@ namespace ExcelReader.Tests
 
             using var reader = Excel.From(ms, leaveOpen: true);
             var enumerable = RefParser.ParseNamed<SaleNamedRef>(reader);
-            Assert.Throws<InvalidOperationException>(() =>
+            Assert.Throws<ExcelParseException>(() =>
             {
                 var enumerator = enumerable.GetEnumerator();
                 enumerator.MoveNext();
@@ -193,7 +193,7 @@ namespace ExcelReader.Tests
             using var reader = Excel.From(ms, leaveOpen: true);
             var enumerator = RefParser.ParseNamed<SaleNamedRef>(reader).GetEnumerator();
             Assert.True(enumerator.MoveNext()); // header maps fine — Id IS present, just unparseable
-            Assert.Throws<InvalidOperationException>(() => { _ = enumerator.Current; });
+            Assert.Throws<ExcelParseException>(() => { _ = enumerator.Current; });
         }
 
         [Fact]
