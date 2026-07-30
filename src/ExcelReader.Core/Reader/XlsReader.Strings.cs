@@ -13,12 +13,21 @@ namespace ExcelReader.Core.Reader
 
         private static string DecodeCompressedString(ReadOnlySpan<byte> bytes, int charCount)
         {
+            ReadOnlySpan<byte> compressed = bytes[..charCount];
+            // CP1252 and ASCII agree byte-for-byte below 0x80 (only 0x80-0x9F get remapped by
+            // DecodeCp1252); almost all real-world text is ASCII, so this Ascii.IsValid guard (a
+            // vectorized scan) skips the byte->char widening loop and rented buffer entirely for the
+            // common case. Any byte >= 0x80 fails IsValid and falls through to the general path below.
+            if (Ascii.IsValid(compressed))
+            {
+                return Encoding.ASCII.GetString(compressed);
+            }
             char[] rented = ArrayPool<char>.Shared.Rent(charCount);
             try
             {
                 for (int i = 0; i < charCount; i++)
                 {
-                    rented[i] = DecodeCp1252(bytes[i]);
+                    rented[i] = DecodeCp1252(compressed[i]);
                 }
                 return new string(rented, 0, charCount);
             }
@@ -38,12 +47,19 @@ namespace ExcelReader.Core.Reader
                 // astral chars (e.g. emoji) split across a CONTINUE boundary.
                 return Encoding.UTF8.GetBytes(MemoryMarshal.Cast<byte, char>(src[..(charCount * 2)]), dest);
             }
+            // Pure ASCII (ASCII and CP1252 agree byte-for-byte below 0x80): the source bytes already
+            // are the UTF-8 encoding, so copy directly instead of widening to char and transcoding.
+            ReadOnlySpan<byte> compressed = src[..charCount];
+            if (Ascii.IsValid(compressed))
+            {
+                compressed.CopyTo(dest);
+                return charCount;
+            }
             // Widen CP1252 bytes to chars once, then one bulk UTF-8 transcode — same shape as
             // DecodeSharedStrings, instead of a Rune-per-byte encode.
             char[] rented = ArrayPool<char>.Shared.Rent(charCount);
             try
             {
-                ReadOnlySpan<byte> compressed = src[..charCount];
                 for (int i = 0; i < charCount; i++)
                 {
                     rented[i] = DecodeCp1252(compressed[i]);

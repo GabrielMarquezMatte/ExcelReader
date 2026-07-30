@@ -1,4 +1,5 @@
 using System.Diagnostics.CodeAnalysis;
+using System.Reflection;
 using System.Text;
 using ExcelReader.Core.Enums;
 using ExcelReader.Core.Reader;
@@ -276,6 +277,53 @@ namespace ExcelReader.Tests
 
             Task moveNext = Task.Run(async () => await e.MoveNextAsync(), openCt);
             await AssertCompletesWithinGuardAsync(moveNext, openCt);
+        }
+
+        // ---- 6. Small-entry threshold ----
+        //
+        // WorkbookLookups.Wrap skips PrefetchStream below a size floor: the background-thread
+        // dispatch/teardown cost isn't worth it for a small sheet, and it would only add overhead.
+        // These reach into LimitedReadStream's private _inner field because that decision has no other
+        // externally observable effect for a tiny, fast-to-read stream — both paths return identical
+        // data (SyncReadIsIdenticalWithPrefetchOnAndOff already covers correctness at large sizes).
+
+        [Fact]
+        public void WrapSkipsPrefetchForAnEntrySmallerThanTheThreshold()
+        {
+            using var inner = new MemoryStream(new byte[16]);
+            var options = new ExcelReaderOptions { PrefetchDecompression = true };
+            using LimitedReadStream wrapped = WorkbookLookups.Wrap(
+                inner, new DecompressedByteCounter(0), options, "", 0, uncompressedSize: 16);
+
+            Assert.False(GetInnerStream(wrapped) is PrefetchStream);
+        }
+
+        [Fact]
+        public void WrapUsesPrefetchForAnEntryAtOrAboveTheThresholdWhenEnabled()
+        {
+            using var inner = new MemoryStream(new byte[16]);
+            var options = new ExcelReaderOptions { PrefetchDecompression = true };
+            using LimitedReadStream wrapped = WorkbookLookups.Wrap(
+                inner, new DecompressedByteCounter(0), options, "", 0, uncompressedSize: 256 * 1024);
+
+            Assert.True(GetInnerStream(wrapped) is PrefetchStream);
+        }
+
+        [Fact]
+        public void WrapNeverUsesPrefetchWhenDisabledRegardlessOfSize()
+        {
+            using var inner = new MemoryStream(new byte[16]);
+            var options = new ExcelReaderOptions { PrefetchDecompression = false };
+            using LimitedReadStream wrapped = WorkbookLookups.Wrap(
+                inner, new DecompressedByteCounter(0), options, "", 0, uncompressedSize: 256 * 1024);
+
+            Assert.False(GetInnerStream(wrapped) is PrefetchStream);
+        }
+
+        private static Stream GetInnerStream(LimitedReadStream stream)
+        {
+            var field = typeof(LimitedReadStream).GetField("_inner", BindingFlags.NonPublic | BindingFlags.Instance)!;
+            return (Stream)field.GetValue(stream)!;
         }
 
         // ---- Shared read helpers ----

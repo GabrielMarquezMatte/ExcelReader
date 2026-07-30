@@ -78,6 +78,12 @@ namespace ExcelReader.Core.Reader
             }
 
             // Returns false when the current row has ended or the worksheet stream reached EOF.
+            //
+            // A single switch below handles every cell-record kind: it reads the row (always at offset
+            // 0), applies the row-tracking decision (first row / same row / new row started), and then
+            // runs the type-specific parse in the same case, all in one dispatch on the record id.
+            // Previously this was two separate switches on the same id — one just to test whether the
+            // id carried a row, a second to parse it — twice the dispatch cost per cell record.
             private bool ReadRecord(BiffCursor cursor, long recordStart, int id, ReadOnlySpan<byte> data)
             {
                 if (id == Rec.Bof)
@@ -93,14 +99,70 @@ namespace ExcelReader.Core.Reader
                     _ended = true;
                     return false;
                 }
-                if (!TryGetCellRow(id, data, out int row))
+                if (data.Length < 2)
                 {
-                    return true;
+                    return true; // no room for the row field -- not a usable cell record, keep going
                 }
+                switch (id)
+                {
+                    case Rec.Label:
+                        if (!AdvanceRow(cursor, recordStart, ReadU16(data, 0))) { return false; }
+                        ParseLabel(data);
+                        return true;
+                    case Rec.LabelSst:
+                        if (!AdvanceRow(cursor, recordStart, ReadU16(data, 0))) { return false; }
+                        if (data.Length >= 10)
+                        {
+                            int col = ReadU16(data, 2);
+                            int style = ReadU16(data, 4);
+                            var (start, len, sharedIndex) = _reader.SharedAt(ReadI32(data, 6));
+                            _acc.Add(col, start, len, CellType.ExcelString, style, CellValueSource.Shared, sharedIndex: sharedIndex);
+                        }
+                        return true;
+                    case Rec.Number:
+                        if (!AdvanceRow(cursor, recordStart, ReadU16(data, 0))) { return false; }
+                        if (data.Length >= 14)
+                        {
+                            AddDouble(ReadU16(data, 2), ReadU16(data, 4), BinaryPrimitives.ReadDoubleLittleEndian(data.Slice(6, 8)));
+                        }
+                        return true;
+                    case Rec.Rk:
+                        if (!AdvanceRow(cursor, recordStart, ReadU16(data, 0))) { return false; }
+                        if (data.Length >= 10)
+                        {
+                            AddDouble(ReadU16(data, 2), ReadU16(data, 4), Rk(ReadU32(data, 6)));
+                        }
+                        return true;
+                    case Rec.MulRk:
+                        if (!AdvanceRow(cursor, recordStart, ReadU16(data, 0))) { return false; }
+                        ParseMulRk(data);
+                        return true;
+                    case Rec.BoolErr:
+                        if (!AdvanceRow(cursor, recordStart, ReadU16(data, 0))) { return false; }
+                        ParseBoolErr(data);
+                        return true;
+                    case Rec.Formula:
+                        if (!AdvanceRow(cursor, recordStart, ReadU16(data, 0))) { return false; }
+                        ParseFormula(data);
+                        return true;
+                    case Rec.Blank:
+                    case Rec.MulBlank:
+                        // Contributes no value, but still participates in row tracking.
+                        return AdvanceRow(cursor, recordStart, ReadU16(data, 0));
+                    default:
+                        return true; // markup / unrecognized record -- keep going
+                }
+            }
+
+            // Owns the row-tracking decision shared by every cell-record case above: the first cell
+            // record of a row adopts its row number; a later record for the same row proceeds; a record
+            // for a *different* row means the current row has ended, so the cursor rewinds to re-read
+            // this same record as the first record of the next row.
+            private bool AdvanceRow(BiffCursor cursor, long recordStart, int row)
+            {
                 if (_row < 0)
                 {
                     _row = row;
-                    ParseCellRecord(id, data);
                     return true;
                 }
                 if (row != _row)
@@ -108,7 +170,6 @@ namespace ExcelReader.Core.Reader
                     cursor.Position = recordStart;
                     return false;
                 }
-                ParseCellRecord(id, data);
                 return true;
             }
 
@@ -122,72 +183,6 @@ namespace ExcelReader.Core.Reader
             {
                 _acc.Reset();
                 _row = -1;
-            }
-
-            private static bool TryGetCellRow(int id, ReadOnlySpan<byte> data, out int row)
-            {
-                row = -1;
-                if (data.Length < 2)
-                {
-                    return false;
-                }
-                switch (id)
-                {
-                    case Rec.Label:
-                    case Rec.LabelSst:
-                    case Rec.Number:
-                    case Rec.Rk:
-                    case Rec.MulRk:
-                    case Rec.BoolErr:
-                    case Rec.Formula:
-                    case Rec.Blank:
-                    case Rec.MulBlank:
-                        row = ReadU16(data, 0);
-                        return true;
-                    default:
-                        return false;
-                }
-            }
-
-            private void ParseCellRecord(int id, ReadOnlySpan<byte> data)
-            {
-                switch (id)
-                {
-                    case Rec.Label:
-                        ParseLabel(data);
-                        break;
-                    case Rec.LabelSst:
-                        if (data.Length >= 10)
-                        {
-                            int col = ReadU16(data, 2);
-                            int style = ReadU16(data, 4);
-                            var (start, len, sharedIndex) = _reader.SharedAt(ReadI32(data, 6));
-                            _acc.Add(col, start, len, CellType.ExcelString, style, CellValueSource.Shared, sharedIndex: sharedIndex);
-                        }
-                        break;
-                    case Rec.Number:
-                        if (data.Length >= 14)
-                        {
-                            AddDouble(ReadU16(data, 2), ReadU16(data, 4), BinaryPrimitives.ReadDoubleLittleEndian(data.Slice(6, 8)));
-                        }
-                        break;
-                    case Rec.Rk:
-                        if (data.Length >= 10)
-                        {
-                            AddDouble(ReadU16(data, 2), ReadU16(data, 4), Rk(ReadU32(data, 6)));
-                        }
-                        break;
-                    case Rec.MulRk:
-                        ParseMulRk(data);
-                        break;
-                    case Rec.BoolErr:
-                        ParseBoolErr(data);
-                        break;
-                    case Rec.Formula:
-                        ParseFormula(data);
-                        break;
-                        // Blank / MulBlank and unknown records contribute no value.
-                }
             }
 
             private void ParseLabel(ReadOnlySpan<byte> data)

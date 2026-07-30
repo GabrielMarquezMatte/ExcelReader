@@ -50,14 +50,16 @@ namespace ExcelReader.Core.Reader
             try
             {
                 LimitChecks.ThrowIfTooManyEntries(_zip.Entries.Count, _options);
-                var wbBytes = ZipEntryBytes.Read(_zip, "xl/workbook.xml", _decompressedBytes);
-                _sheets = ParseSheets(wbBytes, ZipEntryBytes.Read(_zip, "xl/_rels/workbook.xml.rels", _decompressedBytes));
+                using ZipPart wbPart = ZipEntryBytes.Read(_zip, "xl/workbook.xml", _decompressedBytes);
+                using ZipPart relsPart = ZipEntryBytes.Read(_zip, "xl/_rels/workbook.xml.rels", _decompressedBytes);
+                _sheets = ParseSheets(wbPart.Memory.Span, relsPart.Memory.Span);
                 if (_sheets.Length == 0)
                 {
                     throw new InvalidDataException("The workbook contains no sheets.");
                 }
-                _styleIsDate = ParseStyleDateFlags(ZipEntryBytes.Read(_zip, "xl/styles.xml", _decompressedBytes));
-                IsDate1904 = ParseDate1904(wbBytes);
+                using ZipPart stylesPart = ZipEntryBytes.Read(_zip, "xl/styles.xml", _decompressedBytes);
+                _styleIsDate = ParseStyleDateFlags(stylesPart.Memory.Span);
+                IsDate1904 = ParseDate1904(wbPart.Memory.Span);
             }
             catch
             {
@@ -124,15 +126,16 @@ namespace ExcelReader.Core.Reader
             Stream stream, bool leaveOpen, ZipArchive zip, ExcelReaderOptions effectiveOptions,
             DecompressedByteCounter decompressedBytes, CancellationToken ct)
         {
-            var wb = await ZipEntryBytes.ReadAsync(zip, "xl/workbook.xml", decompressedBytes, ct).ConfigureAwait(false);
-            var rels = await ZipEntryBytes.ReadAsync(zip, "xl/_rels/workbook.xml.rels", decompressedBytes, ct).ConfigureAwait(false);
-            var sheets = ParseSheets(wb, rels);
+            using ZipPart wbPart = await ZipEntryBytes.ReadAsync(zip, "xl/workbook.xml", decompressedBytes, ct).ConfigureAwait(false);
+            using ZipPart relsPart = await ZipEntryBytes.ReadAsync(zip, "xl/_rels/workbook.xml.rels", decompressedBytes, ct).ConfigureAwait(false);
+            var sheets = ParseSheets(wbPart.Memory.Span, relsPart.Memory.Span);
             if (sheets.Length == 0)
             {
                 throw new InvalidDataException("The workbook contains no sheets.");
             }
-            var styleIsDate = ParseStyleDateFlags(await ZipEntryBytes.ReadAsync(zip, "xl/styles.xml", decompressedBytes, ct).ConfigureAwait(false));
-            bool date1904 = ParseDate1904(wb);
+            using ZipPart stylesPart = await ZipEntryBytes.ReadAsync(zip, "xl/styles.xml", decompressedBytes, ct).ConfigureAwait(false);
+            var styleIsDate = ParseStyleDateFlags(stylesPart.Memory.Span);
+            bool date1904 = ParseDate1904(wbPart.Memory.Span);
             return new XlsxReader(stream, leaveOpen, zip, sheets, styleIsDate, date1904, effectiveOptions, decompressedBytes);
         }
 

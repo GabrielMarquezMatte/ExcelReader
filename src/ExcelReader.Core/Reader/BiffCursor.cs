@@ -10,6 +10,11 @@ namespace ExcelReader.Core.Reader
     internal sealed class BiffCursor : IDisposable
     {
         private readonly WorkbookStream _wb;
+        // Cached from _wb: both are get-only properties, fixed for the stream's lifetime, so caching
+        // them here saves the _wb -> field indirection on every PeekId/TryReadRecord/ReadSpan call —
+        // several of those per BIFF8 record, across ~910K records on a large real-world workbook.
+        private readonly WorkbookStream.SourceKind _kind;
+        private readonly long _length;
         private readonly int _sectorSize;
         private readonly int _maxSectors;
         private byte[]? _sector;     // current sector buffer window (streamed mode only)
@@ -31,6 +36,8 @@ namespace ExcelReader.Core.Reader
         internal BiffCursor(WorkbookStream wb)
         {
             _wb = wb;
+            _kind = wb.Kind;
+            _length = wb.Length;
             _sectorSize = wb.SectorSize;
             _file = wb.Buffer;
             _fileBase = wb.BufferBase;
@@ -48,7 +55,7 @@ namespace ExcelReader.Core.Reader
 
         internal int PeekId()
         {
-            if (Position + 4 > _wb.Length)
+            if (Position + 4 > _length)
             {
                 return -1;
             }
@@ -60,7 +67,7 @@ namespace ExcelReader.Core.Reader
         {
             id = 0;
             data = default;
-            if (Position + 4 > _wb.Length)
+            if (Position + 4 > _length)
             {
                 return false;
             }
@@ -68,7 +75,7 @@ namespace ExcelReader.Core.Reader
             id = BinaryPrimitives.ReadUInt16LittleEndian(hdr);
             int len = BinaryPrimitives.ReadUInt16LittleEndian(hdr[2..]);
             long dataPos = Position + 4;
-            if (dataPos + len > _wb.Length)
+            if (dataPos + len > _length)
             {
                 return false;
             }
@@ -81,11 +88,11 @@ namespace ExcelReader.Core.Reader
         // otherwise assembled into the scratch buffer. Valid only until the next cursor read.
         private ReadOnlySpan<byte> ReadSpan(long pos, int len)
         {
-            if (_wb.Kind == WorkbookStream.SourceKind.Contiguous)
+            if (_kind == WorkbookStream.SourceKind.Contiguous)
             {
                 return _wb.Memory(pos, len);
             }
-            if (_wb.Kind == WorkbookStream.SourceKind.Chained)
+            if (_kind == WorkbookStream.SourceKind.Chained)
             {
                 return ReadChainedSpan(pos, len);
             }
@@ -130,12 +137,12 @@ namespace ExcelReader.Core.Reader
 
         private void ReadInto(long pos, Span<byte> dest)
         {
-            if (_wb.Kind == WorkbookStream.SourceKind.Contiguous)
+            if (_kind == WorkbookStream.SourceKind.Contiguous)
             {
                 _wb.Memory(pos, dest.Length).CopyTo(dest);
                 return;
             }
-            if (_wb.Kind == WorkbookStream.SourceKind.Chained)
+            if (_kind == WorkbookStream.SourceKind.Chained)
             {
                 _wb.CopyChained(pos, dest);
                 return;
