@@ -227,7 +227,8 @@ namespace ExcelReader.Tests
         {
             using var ms = new MemoryStream(zipBytes);
             using var zip = new ZipArchive(ms, ZipArchiveMode.Read);
-            return ZipEntryBytes.Read(zip, entryName, new DecompressedByteCounter(0));
+            using ZipPart part = ZipEntryBytes.Read(zip, entryName, new DecompressedByteCounter(0));
+            return part.Memory.ToArray();
         }
 
         private static byte[] BuildZipWithOneEntry(string entryName, byte[] payload, CompressionLevel level)

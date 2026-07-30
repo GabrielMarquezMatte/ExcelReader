@@ -46,14 +46,7 @@ namespace ExcelReader.Core.Writer
                 WriteEmptyCell();
                 return;
             }
-            // Excel's universal per-cell text limit, enforced here so every writer rejects the same way
-            // instead of each format silently truncating or corrupting its own record encoding.
-            const int maxCellTextLength = 32_767;
-            if (value.Length > maxCellTextLength)
-            {
-                throw new ArgumentException(
-                    $"Cell text exceeds Excel's {maxCellTextLength}-character limit ({value.Length} chars).", nameof(value));
-            }
+            ExcelLimits.ThrowIfCellTextTooLong(value.Length, nameof(value));
             if (_owner.UseSharedStrings)
             {
                 int index = _owner.GetSharedStringIndex(value);
@@ -298,9 +291,9 @@ namespace ExcelReader.Core.Writer
             ArgumentOutOfRangeException.ThrowIfNegative(count);
             if (count > 0)
             {
-                if (_columnIndex > 16_384 - count)
+                if (_columnIndex > ExcelLimits.MaxColumns - count)
                 {
-                    throw new ExcelLimitExceededException("Columns", 16_384, (long)_columnIndex + count);
+                    throw new ExcelLimitExceededException("Columns", ExcelLimits.MaxColumns, (long)_columnIndex + count);
                 }
                 _useCellReferences = true;
             }
@@ -313,10 +306,7 @@ namespace ExcelReader.Core.Writer
         // still emits a real (self-closing) <c/> placeholder, so on its own it never needs one.
         private bool ConsumeCellReference()
         {
-            if ((uint)_columnIndex >= 16_384)
-            {
-                throw new ExcelLimitExceededException("Columns", 16_384, _columnIndex + 1L);
-            }
+            ExcelLimits.ThrowIfColumnOutOfRange(_columnIndex);
             bool result = _useCellReferences;
             _useCellReferences = false;
             return result;

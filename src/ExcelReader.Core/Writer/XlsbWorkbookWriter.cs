@@ -73,14 +73,8 @@ namespace ExcelReader.Core.Writer
         /// <inheritdoc/>
         public XlsbSheetWriter AddSheet(string name)
         {
-            ArgumentNullException.ThrowIfNull(name);
-            WriterStateGuard.ThrowIfEnded(_state, this);
-            WriterStateGuard.RequireStarted(_state, nameof(XlsbWorkbookWriter), "adding sheets");
-            WriterStateGuard.ValidateSheetName(name);
-            if (_activeSheet is not null)
-            {
-                throw new InvalidOperationException("The previous XlsbSheetWriter must be ended before adding a new sheet.");
-            }
+            WriterStateGuard.RequireCanAddSheet(
+                _state, this, nameof(XlsbWorkbookWriter), name, _activeSheet is not null, nameof(XlsbSheetWriter));
             int sheetId = _sheets.Count + 1;
             _activeSheet = new XlsbSheetWriter(this, _zip, name, sheetId, _date1904, _compression);
             return _activeSheet;
@@ -222,13 +216,13 @@ namespace ExcelReader.Core.Writer
             WriteCountedRecord(data, payload, Brt.BeginFmts, 0);
             Biff12RecordWriter.WriteRecord(data, Brt.EndFmts);
             WriteCountedRecord(data, payload, Brt.BeginFonts, 1);
-            WriteDefaultFont(data, payload);
+            WriteBlobRecord(data, payload, Brt.Font, DefaultFontPayload);
             Biff12RecordWriter.WriteRecord(data, Brt.EndFonts);
             WriteCountedRecord(data, payload, Brt.BeginFills, 1);
-            WriteDefaultFill(data, payload);
+            WriteBlobRecord(data, payload, Brt.Fill, DefaultFillPayload);
             Biff12RecordWriter.WriteRecord(data, Brt.EndFills);
             WriteCountedRecord(data, payload, Brt.BeginBorders, 1);
-            WriteDefaultBorder(data, payload);
+            WriteBlobRecord(data, payload, Brt.Border, DefaultBorderPayload);
             Biff12RecordWriter.WriteRecord(data, Brt.EndBorders);
             WriteCountedRecord(data, payload, Brt.BeginCellStyleXFs, 1);
             WriteXf(data, payload, 0, isStyleXf: true);
@@ -264,6 +258,17 @@ namespace ExcelReader.Core.Writer
             payload.WriteU32((uint)count);
             Biff12RecordWriter.WriteRecord(data, id, payload.Span);
         }
+
+        // The default font/fill/border records are fixed byte blobs Excel expects verbatim in a
+        // minimal styles part; nothing in them varies per workbook, so they are emitted from constants
+        // rather than composed field by field.
+        private static void WriteBlobRecord(BiffBuffer data, BiffBuffer payload, int id, ReadOnlySpan<byte> blob)
+        {
+            payload.Reset();
+            payload.Write(blob);
+            Biff12RecordWriter.WriteRecord(data, id, payload.Span);
+        }
+
         private static ReadOnlySpan<byte> DefaultFontPayload => [
             0xDC, 0x00, 0x00, 0x00, 0x90, 0x01, 0x00, 0x00,
             0x00, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
@@ -271,12 +276,6 @@ namespace ExcelReader.Core.Writer
             0x00, 0x43, 0x00, 0x61, 0x00, 0x6C, 0x00, 0x69,
             0x00, 0x62, 0x00, 0x72, 0x00, 0x69, 0x00,
         ];
-        private static void WriteDefaultFont(BiffBuffer data, BiffBuffer payload)
-        {
-            payload.Reset();
-            payload.Write(DefaultFontPayload);
-            Biff12RecordWriter.WriteRecord(data, 43, payload.Span);
-        }
         private static ReadOnlySpan<byte> DefaultFillPayload => [
             0x00, 0x00, 0x00, 0x03, 0x40, 0x00, 0x00, 0x00,
             0x00, 0x00, 0xFF, 0x03, 0x41, 0x00, 0x00, 0xFF,
@@ -288,12 +287,6 @@ namespace ExcelReader.Core.Writer
             0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
             0x00, 0x00, 0x00, 0x00,
         ];
-        private static void WriteDefaultFill(BiffBuffer data, BiffBuffer payload)
-        {
-            payload.Reset();
-            payload.Write(DefaultFillPayload);
-            Biff12RecordWriter.WriteRecord(data, 45, payload.Span);
-        }
         private static ReadOnlySpan<byte> DefaultBorderPayload => [
             0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00,
             0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00,
@@ -303,12 +296,6 @@ namespace ExcelReader.Core.Writer
             0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00,
             0x00, 0x00, 0x00,
         ];
-        private static void WriteDefaultBorder(BiffBuffer data, BiffBuffer payload)
-        {
-            payload.Reset();
-            payload.Write(DefaultBorderPayload);
-            Biff12RecordWriter.WriteRecord(data, 46, payload.Span);
-        }
 
         private ValueTask WriteAppPropertiesAsync(CancellationToken ct)
         {

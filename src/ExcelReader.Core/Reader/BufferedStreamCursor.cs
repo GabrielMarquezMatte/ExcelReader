@@ -57,18 +57,24 @@ namespace ExcelReader.Core.Reader
             Len = Buf.Length;
         }
 
-        // Compact the consumed prefix, or grow the buffer if every byte is still unprocessed.
+        // Compact the consumed prefix, or grow the buffer if every byte is still unprocessed. Compacting
+        // is skipped when the tail already has generous free room (>= a quarter of the buffer): the next
+        // Fill can just read into that room directly, so moving the consumed prefix out of the way now
+        // would be a memmove that pays for itself later than it needs to. Once the tail shrinks below
+        // that threshold, compaction reclaims the (by-then-larger) consumed prefix in one pass, instead
+        // of paying a smaller memmove on every single Fill call regardless of how much room already exists.
         private void PrepareBuffer()
         {
+            int freeTail = Buf.Length - Len;
+            if (freeTail > 0 && (Pos == 0 || freeTail >= Buf.Length / 4))
+            {
+                return;
+            }
             if (Pos > 0)
             {
                 Buf.AsSpan(Pos, Len - Pos).CopyTo(Buf);
                 Len -= Pos;
                 Pos = 0;
-                return;
-            }
-            if (Len != Buf.Length)
-            {
                 return;
             }
             byte[] bigger = ArrayPool<byte>.Shared.Rent(LimitChecks.NextBufferSize(_maxCellBytes, _limitName, Buf.Length, Buf.Length + 1));

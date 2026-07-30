@@ -65,14 +65,8 @@ namespace ExcelReader.Core.Writer
         /// <exception cref="InvalidOperationException">The previously added sheet has not been ended yet.</exception>
         public XlsSheetWriter AddSheet(string name)
         {
-            ArgumentNullException.ThrowIfNull(name);
-            WriterStateGuard.ThrowIfEnded(_state, this);
-            WriterStateGuard.RequireStarted(_state, nameof(XlsWorkbookWriter), "adding sheets");
-            WriterStateGuard.ValidateSheetName(name);
-            if (_activeSheet is not null)
-            {
-                throw new InvalidOperationException("The previous XlsSheetWriter must be ended before adding a new sheet.");
-            }
+            WriterStateGuard.RequireCanAddSheet(
+                _state, this, nameof(XlsWorkbookWriter), name, _activeSheet is not null, nameof(XlsSheetWriter));
 #pragma warning disable IDISP003 // The guard above guarantees _activeSheet is null here — there is no previous to dispose.
             _activeSheet = new XlsSheetWriter(this, name, _date1904);
 #pragma warning restore IDISP003

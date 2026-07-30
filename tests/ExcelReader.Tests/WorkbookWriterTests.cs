@@ -350,7 +350,7 @@ namespace ExcelReader.Tests
             await using var reader2 = Excel.From(ms);
             reader2.MoveToSheet(1);
             var strings = new ExcelParser<StringRow>().Parse(reader2).ToList();
-            Assert.Equal(["Alice", "Bob"], strings.Select(r => r.Name));
+            Assert.Equal(["Alice", "Bob"], strings.Select(r => r.Name), StringComparer.Ordinal);
         }
 
         [Fact]
@@ -367,7 +367,7 @@ namespace ExcelReader.Tests
 
             await using var reader = Excel.From(ms);
             var rows = new ExcelParser<AliasedRow>().Parse(reader).ToList();
-            Assert.Equal(["Alice", "Bob"], rows.Select(r => r.Name));
+            Assert.Equal(["Alice", "Bob"], rows.Select(r => r.Name), StringComparer.Ordinal);
         }
 
         [Fact]

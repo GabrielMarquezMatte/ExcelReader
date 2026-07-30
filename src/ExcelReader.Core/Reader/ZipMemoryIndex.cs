@@ -147,6 +147,13 @@ namespace ExcelReader.Core.Reader
             return part;
         }
 
+        // default(ZipPart) (empty Memory, nothing to return on Dispose) stands in for a missing part —
+        // the same convention ZipEntryBytes.Read uses for a missing entry on the streamed path.
+        internal ZipPart OpenPartOrDefault(ReadOnlySpan<byte> utf8Name, DecompressedByteCounter counter)
+        {
+            return TryGetEntry(utf8Name, out ZipEntryRef entry) ? OpenPart(entry, counter) : default;
+        }
+
         // In-memory ZIP path's worksheet entry point: opens a Stream over the
         // entry's compressed bytes instead of eagerly materializing the whole part, so the caller (the
         // XlsxReader/XlsbReader enumerator) can reuse the exact same PrefetchStream/LimitedReadStream
@@ -166,7 +173,7 @@ namespace ExcelReader.Core.Reader
                 8 => new DeflateStream(ToReadableMemoryStream(compressed), CompressionMode.Decompress),
                 _ => throw new NotSupportedException($"Unsupported ZIP compression method: {entry.Method}."),
             };
-            return WorkbookLookups.Wrap(opened, counter, options, entryLimitName, entryLimit);
+            return WorkbookLookups.Wrap(opened, counter, options, entryLimitName, entryLimit, entry.UncompressedSize);
         }
 
         // Bounds-checks and slices the entry's compressed bytes out of the whole-file buffer. Shared by

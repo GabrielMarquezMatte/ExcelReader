@@ -1,7 +1,13 @@
+using System.Buffers;
 using System.IO.Compression;
 
 namespace ExcelReader.Core.Reader
 {
+    // Reads a whole ZIP entry (workbook.xml/.rels/styles.xml and the XLSB equivalents) into a pooled
+    // buffer instead of a GC array: these are transient parse inputs, read once and discarded within
+    // the same constructor/factory method, so there is no reason to hand the caller anything that
+    // outlives a `using` block. Returns ZipPart (defined in ZipMemoryIndex.cs) for the same reason the
+    // in-memory ZIP path already does: a pooled array with an exact-length view, Dispose returns it.
     internal static class ZipEntryBytes
     {
         // Guards entry.Length — the attacker-controlled central-directory uncompressed size — against
@@ -18,7 +24,7 @@ namespace ExcelReader.Core.Reader
             }
         }
 
-        internal static byte[] Read(
+        internal static ZipPart Read(
             ZipArchive zip,
             string name,
             DecompressedByteCounter counter,
@@ -26,10 +32,10 @@ namespace ExcelReader.Core.Reader
             long entryLimit = 0)
         {
             ZipArchiveEntry? entry = zip.GetEntry(name);
-            return entry is null ? [] : Read(entry, counter, entryLimitName, entryLimit);
+            return entry is null ? default : Read(entry, counter, entryLimitName, entryLimit);
         }
 
-        internal static byte[] Read(
+        internal static ZipPart Read(
             ZipArchiveEntry entry,
             DecompressedByteCounter counter,
             string entryLimitName = "",
@@ -39,12 +45,13 @@ namespace ExcelReader.Core.Reader
             using var stream = new LimitedReadStream(entry.Open(), counter, entryLimitName, entryLimit);
             // ZipArchiveEntry.Length is the exact uncompressed size from the central directory, so the
             // destination can be sized once instead of growing/copying through an intermediate MemoryStream.
-            byte[] bytes = new byte[checked((int)entry.Length)];
-            stream.ReadExactly(bytes);
-            return bytes;
+            int length = checked((int)entry.Length);
+            byte[] rented = ArrayPool<byte>.Shared.Rent(length);
+            stream.ReadExactly(rented.AsSpan(0, length));
+            return new ZipPart(rented.AsMemory(0, length), rented);
         }
 
-        internal static async ValueTask<byte[]> ReadAsync(
+        internal static async ValueTask<ZipPart> ReadAsync(
             ZipArchive zip,
             string name,
             DecompressedByteCounter counter,
@@ -55,13 +62,13 @@ namespace ExcelReader.Core.Reader
             ZipArchiveEntry? entry = zip.GetEntry(name);
             if (entry is null)
             {
-                return [];
+                return default;
             }
             return await ReadAsync(entry, counter, ct, entryLimitName, entryLimit).ConfigureAwait(false);
         }
 
 #if NET10_0_OR_GREATER
-        internal static async ValueTask<byte[]> ReadAsync(
+        internal static async ValueTask<ZipPart> ReadAsync(
             ZipArchiveEntry entry,
             DecompressedByteCounter counter,
             CancellationToken ct,
@@ -73,13 +80,14 @@ namespace ExcelReader.Core.Reader
             var stream = new LimitedReadStream(opened, counter, entryLimitName, entryLimit);
             await using (stream.ConfigureAwait(false))
             {
-                byte[] bytes = new byte[checked((int)entry.Length)];
-                await stream.ReadExactlyAsync(bytes, ct).ConfigureAwait(false);
-                return bytes;
+                int length = checked((int)entry.Length);
+                byte[] rented = ArrayPool<byte>.Shared.Rent(length);
+                await stream.ReadExactlyAsync(rented.AsMemory(0, length), ct).ConfigureAwait(false);
+                return new ZipPart(rented.AsMemory(0, length), rented);
             }
         }
 #else
-        internal static ValueTask<byte[]> ReadAsync(
+        internal static ValueTask<ZipPart> ReadAsync(
             ZipArchiveEntry entry,
             DecompressedByteCounter counter,
             CancellationToken ct,
@@ -87,7 +95,7 @@ namespace ExcelReader.Core.Reader
             long entryLimit = 0)
         {
             ct.ThrowIfCancellationRequested();
-            return new ValueTask<byte[]>(Read(entry, counter, entryLimitName, entryLimit));
+            return new ValueTask<ZipPart>(Read(entry, counter, entryLimitName, entryLimit));
         }
 #endif
 

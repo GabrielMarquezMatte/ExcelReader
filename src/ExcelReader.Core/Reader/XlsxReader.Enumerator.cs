@@ -18,6 +18,15 @@ namespace ExcelReader.Core.Reader
             // Borrowed: the reader outlives the enumerator and owns its own disposal — do not dispose here.
             [SuppressMessage("Usage", "CA2213:Disposable fields should be disposed", Justification = "Borrowed, not owned.")]
             private readonly XlsxReader _reader;
+            // Hoisted out of _reader, mirroring XlsbReader.Enumerator: EmitScalarValue(Fast) consults
+            // IsDateStyle on every numeric cell and EmitShared consults SharedAt on every shared-string
+            // cell, and reaching either through _reader put two dependent loads (_reader -> array) on
+            // that critical path. _styleIsDate is readonly on the reader and fully assigned before any
+            // enumerator exists. _sharedOffsets is reassigned once, lazily, the first time shared strings
+            // load — but every Get(Async)Enumerator path calls EnsureSharedLoaded(Async) before
+            // constructing this enumerator, so the array reference captured here is always the final one.
+            private readonly bool[] _styleIsDate;
+            private readonly int[] _sharedOffsets;
             // Owned: opened by Get(Async)Enumerator for this enumerator alone; disposed in Dispose(Async).
             private int _nextCol;
 
@@ -34,9 +43,11 @@ namespace ExcelReader.Core.Reader
             // Also used by the in-memory ZIP path: ZipMemoryIndex.OpenEntryStream hands back a
             // DeflateStream/MemoryStream over the part's bytes, same as the ZipArchive path.
             internal Enumerator(XlsxReader reader, Stream sheet, long entryLength = 0, CancellationToken ct = default)
-                : base(sheet, reader._options.MaxCellBytes, nameof(ExcelReaderOptions.MaxCellBytes), WorkbookLookups.InitialBufferCapacity(entryLength), ct)
+                : base(sheet, reader._options.MaxCellBytes, nameof(ExcelReaderOptions.MaxCellBytes), WorkbookLookups.InitialBufferCapacity(entryLength), ownsSource: true, ct)
             {
                 _reader = reader;
+                _styleIsDate = reader._styleIsDate;
+                _sharedOffsets = reader._sharedOffsets;
             }
 
             /// <inheritdoc/>
@@ -574,8 +585,8 @@ namespace ExcelReader.Core.Reader
             {
                 if (Utf8Parser.TryParse(indexText, out int index, out _) && index >= 0)
                 {
-                    var (start, len) = _reader.SharedAt(index);
-                    _acc.Add(col, start, len, CellType.ExcelString, style, CellValueSource.Shared);
+                    var (start, len, sharedIndex) = WorkbookLookups.SharedAt(_sharedOffsets, index);
+                    _acc.Add(col, start, len, CellType.ExcelString, style, CellValueSource.Shared, sharedIndex: sharedIndex);
                     return;
                 }
                 _acc.Add(col, _acc.ValueLength, 0, CellType.ExcelString, style, CellValueSource.RowValues);
@@ -625,7 +636,7 @@ namespace ExcelReader.Core.Reader
                     Kind.Bool => CellType.Boolean,
                     Kind.Error => CellType.Error,
                     Kind.Formula => CellType.Formula,
-                    _ => _reader.IsDateStyle(style) ? CellType.Date : CellType.Number,
+                    _ => WorkbookLookups.IsDateStyle(_styleIsDate, style) ? CellType.Date : CellType.Number,
                 };
                 int vStart = _acc.ValueLength;
                 // Number/Bool/Error <v> text is pure ASCII digits/bool/error-code — it can never contain
@@ -667,7 +678,7 @@ namespace ExcelReader.Core.Reader
                     Kind.Bool => CellType.Boolean,
                     Kind.Error => CellType.Error,
                     Kind.Formula => CellType.Formula,
-                    _ => _reader.IsDateStyle(style) ? CellType.Date : CellType.Number,
+                    _ => WorkbookLookups.IsDateStyle(_styleIsDate, style) ? CellType.Date : CellType.Number,
                 };
                 double number = 0;
                 bool hasNumber = kind == Kind.Number && FastDouble.TryParse(v, out number);
@@ -1003,29 +1014,6 @@ namespace ExcelReader.Core.Reader
                 }
                 while (!_eof);
                 return -1;
-            }
-
-            /// <inheritdoc/>
-            [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP007:Don't dispose injected",
-                Justification = "_sheet is opened for this enumerator and owned by it.")]
-            public void Dispose()
-            {
-                _source?.Dispose();
-                _source = null;
-                ReturnBuffers();
-            }
-
-            /// <inheritdoc/>
-            [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP007:Don't dispose injected",
-                Justification = "_sheet is opened for this enumerator and owned by it.")]
-            public async ValueTask DisposeAsync()
-            {
-                if (_source is not null)
-                {
-                    await _source.DisposeAsync().ConfigureAwait(false);
-                    _source = null;
-                }
-                ReturnBuffers();
             }
 
         }

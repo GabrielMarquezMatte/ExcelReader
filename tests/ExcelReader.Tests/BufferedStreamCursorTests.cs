@@ -95,6 +95,50 @@ namespace ExcelReader.Tests
             }
         }
 
+        // Small initial capacity plus a source that only ever hands back a few bytes per Read forces
+        // PrepareBuffer through every branch across the same cursor's lifetime: skip-compaction (the
+        // tail still has generous room), compact (the tail has shrunk below the threshold), and grow
+        // (the buffer is full and Pos is already 0) -- exactly the logic B9 changed. Consuming in
+        // small, uneven steps between fills (rather than draining each fill immediately) is what
+        // makes Pos and the tail's free space drift independently of each other.
+        [Fact]
+        [SuppressMessage("Security", "CA5394:Do not use insecure randomness",
+            Justification = "Needs a reproducible seeded PRNG for deterministic test content, not cryptographic randomness.")]
+        public void PooledCursorReassemblesContentAcrossManySmallRefillsRegardlessOfCompactOrGrowPath()
+        {
+            byte[] expected = new byte[500];
+            new Random(12345).NextBytes(expected);
+            using var source = new SmallChunkStream(expected, chunkSize: 7);
+            var cursor = new BufferedStreamCursor(maxCellBytes: 0, limitName: "Test", initialCapacity: 16);
+            try
+            {
+                byte[] actual = new byte[expected.Length];
+                int written = 0;
+                while (written < actual.Length)
+                {
+                    int step = Math.Min(3, actual.Length - written);
+                    cursor.Ensure(source, step);
+                    Assert.True(cursor.Len - cursor.Pos >= step);
+                    cursor.Buf.AsSpan(cursor.Pos, step).CopyTo(actual.AsSpan(written));
+                    cursor.Pos += step;
+                    written += step;
+                }
+                Assert.Equal(expected, actual);
+            }
+            finally
+            {
+                cursor.Return();
+            }
+        }
+
+        private sealed class SmallChunkStream(byte[] data, int chunkSize) : MemoryStream(data)
+        {
+            public override int Read(byte[] buffer, int offset, int count)
+            {
+                return base.Read(buffer, offset, Math.Min(count, chunkSize));
+            }
+        }
+
         private sealed class NonArrayMemoryManager : MemoryManager<byte>
         {
             private readonly byte[] _data;

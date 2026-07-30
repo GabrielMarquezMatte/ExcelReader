@@ -106,7 +106,7 @@ jobs:
 
       - name: Open PR
         if: steps.promote.outputs.changed == 'true'
-        uses: peter-evans/create-pull-request@v7
+        uses: peter-evans/create-pull-request@v8
         with:
           commit-message: "chore: promote public API for ${{ github.ref_name }}"
           title: "chore: promote public API for ${{ github.ref_name }}"
