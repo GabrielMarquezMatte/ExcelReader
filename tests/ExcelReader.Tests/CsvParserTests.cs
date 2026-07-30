@@ -193,7 +193,7 @@ namespace ExcelReader.Tests
             using var ms = Csv("Note\nhi\n");
             using var reader = Excel.FromCsv(ms);
 
-            Assert.Throws<InvalidOperationException>(() => new ExcelParser<RequiredRow>().Parse(reader).ToList());
+            Assert.Throws<ExcelParseException>(() => new ExcelParser<RequiredRow>().Parse(reader).ToList());
         }
 
         [Fact]
@@ -202,7 +202,7 @@ namespace ExcelReader.Tests
             using var ms = Csv("Id,Note\n,hi\n");
             using var reader = Excel.FromCsv(ms);
 
-            Assert.Throws<InvalidOperationException>(() => new ExcelParser<RequiredRow>().Parse(reader).ToList());
+            Assert.Throws<ExcelParseException>(() => new ExcelParser<RequiredRow>().Parse(reader).ToList());
         }
 
         [Fact]
@@ -213,7 +213,7 @@ namespace ExcelReader.Tests
             using var ms = Csv("Id,Note\nabc,hi\n");
             using var reader = Excel.FromCsv(ms);
 
-            InvalidOperationException ex = Assert.Throws<InvalidOperationException>(
+            ExcelParseException ex = Assert.Throws<ExcelParseException>(
                 () => new ExcelParser<RequiredRow>().Parse(reader).ToList());
             Assert.Contains("Id", ex.Message, StringComparison.Ordinal);
         }

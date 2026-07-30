@@ -1,10 +1,97 @@
+using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
+using System.Globalization;
 using System.IO.Compression;
 using System.Text;
+using ExcelReader.Core.Reader;
 using ExcelReader.Core.Writer;
 
 namespace ExcelReader.Tests
 {
+    // Shared seeded-mutation fuzz harness used by FuzzTests, MemoryZipParityTests, and
+    // ZipMemoryIndexTests. Previously each file had its own copy of MutateCopy and its own
+    // AcceptableExceptionTypes list, and the lists had already drifted apart (SEC-7): a
+    // Span-bounds violation surfacing as ArgumentOutOfRangeException, or an unchecked-arithmetic
+    // wrap surfacing as OverflowException, is the same "parser forgot a check" bug class as
+    // IndexOutOfRangeException — which none of the three lists ever accepted. Only exceptions
+    // that mean "this input was deliberately and correctly rejected" belong here.
+    internal static class FuzzMutation
+    {
+        internal static readonly Type[] AcceptableExceptionTypes =
+        [
+            typeof(InvalidDataException),
+            typeof(ExcelLimitExceededException),
+            typeof(IOException),
+            typeof(NotSupportedException),
+            typeof(FormatException),
+        ];
+
+        internal static bool IsAcceptable(Exception ex)
+        {
+            foreach (Type acceptableType in AcceptableExceptionTypes)
+            {
+                if (acceptableType.IsInstanceOfType(ex))
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        // Flips 1-8 random bytes to random values; a copy so the seed itself is never mutated.
+        // Deliberately not cryptographically secure — CA5394 doesn't apply: a seeded, reproducible
+        // PRNG is exactly what makes a fuzz failure pinpoint-able, unlike a CSPRNG would be.
+        [SuppressMessage("Security", "CA5394:Do not use insecure randomness",
+            Justification = "Fuzzing needs a reproducible seeded PRNG, not cryptographic randomness.")]
+        [SuppressMessage("Performance", "HLQ013:Consider using 'foreach' loop instead of 'for' loop",
+            Justification = "Each iteration both reads (rng.Next) and writes positions[i] by index; foreach can't express the write.")]
+        internal static byte[] MutateCopy(byte[] seed, Random rng, out int[] positions)
+        {
+            byte[] copy = (byte[])seed.Clone();
+            int count = rng.Next(1, 9);
+            positions = new int[count];
+            for (int i = 0; i < count; i++)
+            {
+                int pos = rng.Next(copy.Length);
+                positions[i] = pos;
+                copy[pos] = (byte)rng.Next(256);
+            }
+            return copy;
+        }
+
+        // SEC-1/SEC-3/SEC-5-class bugs (an attacker-controlled count driving an allocation the
+        // configured limits never see) don't necessarily throw at all — they can succeed while
+        // burning far more time/memory than a few-KB seed file could ever legitimately need. A round
+        // that completes "successfully" after allocating hundreds of MB, or after seconds of spinning,
+        // is not a graceful rejection; it's the amplification attack working. The caps here are set
+        // generously above anything these tiny seeds should ever legitimately need (they normally
+        // allocate low hundreds of KB and run in low single-digit milliseconds), so tripping this is a
+        // real finding, not noise.
+        private const long MaxAllocatedBytesPerRound = 32L * 1024 * 1024;
+        private static readonly TimeSpan MaxDurationPerRound = TimeSpan.FromSeconds(2);
+
+        internal static void RunBounded(Action action)
+        {
+            long before = GC.GetAllocatedBytesForCurrentThread();
+            var stopwatch = Stopwatch.StartNew();
+            action();
+            stopwatch.Stop();
+            long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+            if (allocated > MaxAllocatedBytesPerRound)
+            {
+                throw new InvalidOperationException(
+                    string.Create(CultureInfo.InvariantCulture,
+                        $"Round allocated {allocated:N0} bytes, exceeding the {MaxAllocatedBytesPerRound:N0}-byte budget. This indicates an attacker-controlled size/count driving an allocation the configured limits never checked."));
+            }
+            if (stopwatch.Elapsed > MaxDurationPerRound)
+            {
+                throw new InvalidOperationException(
+                    string.Create(CultureInfo.InvariantCulture,
+                        $"Round took {stopwatch.Elapsed.TotalMilliseconds:N0}ms, exceeding the {MaxDurationPerRound.TotalMilliseconds:N0}ms budget. This indicates an unbounded loop or O(n^2) path reachable from untrusted input."));
+            }
+        }
+    }
+
     // Wraps a byte array as a read-only, forward-only stream (CanSeek == false), for exercising the
     // non-seekable-source code paths (buffered .xls loading, CSV single-pass enumeration, etc.).
     internal sealed class NonSeekableStream : Stream

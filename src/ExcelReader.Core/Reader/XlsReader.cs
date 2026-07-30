@@ -211,10 +211,22 @@ namespace ExcelReader.Core.Reader
                         date1904 = data.Length >= 2 && ReadU16(data, 0) != 0;
                         break;
                     case Rec.BoundSheet:
-                        if (TryParseBoundSheet(data, out var sheet))
+                        if (!TryParseBoundSheet(data, out var sheet))
                         {
-                            sheetList.Add(sheet);
+                            break;
                         }
+                        // BoundSheet8.lbPlyPos is attacker-controlled and later becomes a raw
+                        // BiffCursor.Position assignment (OpenCursor). Reject it here, at the point
+                        // it's read, rather than letting a negative or out-of-range value reach the
+                        // cursor — the Chained WorkbookStream kind resolved a negative position to a
+                        // valid-looking byte range elsewhere in the file (the OLE header/preceding
+                        // sectors) instead of throwing, returning wrong data silently instead of
+                        // failing loudly like the other two WorkbookStream kinds already did.
+                        if (sheet.Offset < 0 || sheet.Offset > cursor.Length)
+                        {
+                            throw new InvalidDataException("The OLE BoundSheet8 offset is out of range.");
+                        }
+                        sheetList.Add(sheet);
                         break;
                     case Rec.Sst:
                         DecodeSstFromCursor(cursor, data, options, out sharedFlat, out sharedOffsets);
