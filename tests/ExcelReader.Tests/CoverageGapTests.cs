@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Runtime.CompilerServices;
 using ExcelReader.Core.Enums;
 using ExcelReader.Core.Parser;
 using ExcelReader.Core.Reader;
@@ -63,6 +64,45 @@ namespace ExcelReader.Tests
             var cell = new Cell(CellType.Number, default, 2.5, hasNumber: true, 0);
             Assert.True(cell.TryParse(Inv, out float f));
             Assert.Equal(2.5f, f);
+        }
+
+        // XLSX caches a scan-time double alongside the cell's original text (e.g. "1.50") so numeric
+        // consumers skip the parse round trip, but GetString()/TryFormat() must still hand back the
+        // original text byte-for-byte — reformatting the cached double would turn "1.50" into "1.5".
+        [Fact]
+        public void CellGetStringPreservesRawTextWhenNumberIsCachedAlongsideText()
+        {
+            var cell = new Cell(CellType.Number, "1.50"u8, 1.5, hasNumber: true, 0);
+            Assert.Equal("1.50", cell.GetString());
+        }
+
+        [Fact]
+        public void CellTryFormatPreservesRawTextWhenNumberIsCachedAlongsideText()
+        {
+            var cell = new Cell(CellType.Number, "1.50"u8, 1.5, hasNumber: true, 0);
+            Span<byte> buf = stackalloc byte[8];
+            Assert.True(cell.TryFormat(buf, out int written));
+            Assert.Equal("1.50", System.Text.Encoding.UTF8.GetString(buf[..written]));
+        }
+
+        // A binary-numeric cell (XLS/XLSB) carries no text — Value is empty — so GetString()/TryFormat()
+        // must fall back to reformatting the cached double instead of returning "".
+        [Fact]
+        public void CellGetStringReformatsNumberWhenValueIsEmpty()
+        {
+            var cell = new Cell(CellType.Number, default, 42.5, hasNumber: true, 0);
+            Assert.Equal("42.5", cell.GetString());
+        }
+
+        // CellDesc's SharedIndex field (added for the shared-string dedup cache) was placed to land
+        // inside existing struct padding under LayoutKind.Auto. If a future field addition pushes the
+        // struct past that padding, this catches the regression — CellDesc is allocated per cell, so
+        // its size directly affects per-row memory traffic on wide sheets.
+        [Fact]
+        public void CellDescSizeStaysWithinPaddingBudget()
+        {
+            int size = Unsafe.SizeOf<CellDesc>();
+            Assert.True(size <= 40, $"CellDesc grew to {size.ToString(Inv)} bytes.");
         }
 
         // --- HeaderNormalization ---

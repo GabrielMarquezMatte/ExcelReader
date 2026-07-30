@@ -138,16 +138,16 @@ String-heavy workbook (65,536 rows, ~190,000 distinct shared strings):
 
 | Format | Mean | StdDev | Gen0 | Gen1 | Gen2 | Allocated |
 |---|---:|---:|---:|---:|---:|---:|
-| XLSX | 93.90 ms | 1.00 ms | 1,166.7 | 1,000.0 | 333.3 | 30.53 MB |
-| XLSB | 73.21 ms | 0.74 ms | 1,000.0 | 857.1 | 285.7 | 30.53 MB |
+| XLSX | 80.49 ms | 1.07 ms | 1,000.0 | 857.1 | 285.7 | 15.26 MB |
+| XLSB | 61.82 ms | 0.87 ms | 1,000.0 | 875.0 | 250.0 | 15.26 MB |
 
 Reading the allocation columns against the tables above gives the honest shape of the tradeoff:
 
 - **CSV real data:** 35.71 MB materialized against 240 B for the span-based read of the same file. Every CSV field is a distinct string, so nothing dedupes — this is where zero-copy reading earns its keep outright.
 - **XLSB real data:** 56.63 KB, essentially cheap. That corpus repeats a small set of values, so the shared-string table dedupes and the reader's string cache materializes each distinct value once.
-- **String-heavy XLSX:** 30.53 MB materialized, against **Sylvan's 17.41 MB on the same workload** — doing matched work here, ExcelReader allocates roughly 1.75x *more* than Sylvan, and moves from zero collections to 333 Gen2 collections. The likely cause is the per-reader shared-string cache: with ~190,000 distinct values it holds every materialized string alive for the whole read and pays its dictionary's growth churn on top, whereas the span-based path never materializes them at all. That cache is a clear win on categorical data (the common case) and a liability at high cardinality. The same pattern holds for XLSB (30.53 MB materialized vs. Sylvan's 17.38 MB, ~1.76x more). Stated as an observation with a hypothesis, not a measured attribution — quantifying it is an open item.
+- **String-heavy XLSX:** 15.26 MB materialized, against **Sylvan's 17.41 MB on the same workload** — doing matched work here, ExcelReader now allocates ~12% *less* than Sylvan, with 286 Gen2 collections. The same holds for XLSB (15.26 MB vs. Sylvan's 17.38 MB, also ~12% less, 250 Gen2 collections). This was previously an inversion (ExcelReader allocated ~1.75x *more* than Sylvan here): the per-reader shared-string dedup cache was an unpresized `Dictionary<int,string>`, and at ~190,000 distinct values its resize/rehash churn (several of the largest resizes landing on the LOH) accounted for the entire gap — the strings themselves were never the problem, since both readers retain the same ~190,000 distinct instances. Replacing the dictionary with a `string?[]` indexed by shared-string index (sized exactly from the table's known count, no resizing) cut the allocation in half and cut wall-clock time by 14-16% on this benchmark too, since the churn was costing cycles, not just memory.
 
-The takeaway is not that one column beats the other: it is that ExcelReader's headline read numbers come from a zero-copy path competitors do not expose, and when it does the same work as them, the gap narrows sharply and can invert on allocation for high-cardinality string data.
+The takeaway is not that one column beats the other: it is that ExcelReader's headline read numbers come from a zero-copy path competitors do not expose, and when it does the same work as them, the gap narrows — and here, with the dedup cache fixed, no longer inverts even at high shared-string cardinality.
 
 ### Typed record writing
 

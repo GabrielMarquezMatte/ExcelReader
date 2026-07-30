@@ -110,7 +110,7 @@ namespace ExcelReader.Core.Reader
             Add(col, start, length, CellType.Error, style, CellValueSource.RowValues);
         }
 
-        internal void Add(int col, int start, int len, CellType type, int style, CellValueSource source, double number = 0, bool hasNumber = false)
+        internal void Add(int col, int start, int len, CellType type, int style, CellValueSource source, double number = 0, bool hasNumber = false, int sharedIndex = -1)
         {
             // A corrupted/malicious file can encode an arbitrary column index in a per-cell record
             // (e.g. a 4-byte BIFF12/BIFF8 column field); without this bound, Row.ColumnCount (Column +
@@ -141,6 +141,7 @@ namespace ExcelReader.Core.Reader
                 Source = source,
                 Number = number,
                 HasNumber = hasNumber,
+                SharedIndex = sharedIndex,
             };
         }
 

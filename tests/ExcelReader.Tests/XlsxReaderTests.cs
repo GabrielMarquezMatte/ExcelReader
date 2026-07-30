@@ -130,11 +130,18 @@ namespace ExcelReader.Tests
             using XlsxReader reader = Excel.From(ms);
             using XlsxReader.Enumerator e = reader.GetEnumerator();
 
+            string? firstRepeat = null;
             for (int i = 0; i < 200; i++)
             {
                 Assert.True(e.MoveNext());
                 Assert.Equal($"value{i}", e.Current[0].GetString());
-                Assert.Equal("value0", e.Current[1].GetString());
+                string repeat = e.Current[1].GetString();
+                Assert.Equal("value0", repeat);
+                // Every row's second cell resolves the same shared-string index (0) — the reader's
+                // dedup cache should hand back the same instance every time rather than decoding UTF-8
+                // afresh per row.
+                firstRepeat ??= repeat;
+                Assert.Same(firstRepeat, repeat);
             }
             Assert.False(e.MoveNext());
         }
@@ -184,6 +191,24 @@ namespace ExcelReader.Tests
             using XlsxReader reader = Excel.From(ms);
 
             Assert.True(reader.IsDate1904);
+        }
+
+        // The scan-time FastDouble fast path caches a parsed double alongside the cell's original text
+        // so TryGetDouble/TryParse<double> can skip re-parsing, but GetString() must still return the
+        // file's own text byte-for-byte — a naive "prefer the cached number" implementation would
+        // reformat "1.50" down to "1.5", silently dropping the trailing zero the workbook actually had.
+        [Fact]
+        public void GetStringPreservesOriginalNumericTextRatherThanReformattingCachedDouble()
+        {
+            using MemoryStream ms = WorkbookBuilder.Build(
+                """<row r="1"><c r="A1"><v>1.50</v></c></row>""");
+            using XlsxReader reader = Excel.From(ms);
+            using XlsxReader.Enumerator e = reader.GetEnumerator();
+
+            Assert.True(e.MoveNext());
+            Assert.True(e.Current[0].TryGetDouble(out double d));
+            Assert.Equal(1.5, d);
+            Assert.Equal("1.50", e.Current[0].GetString());
         }
     }
 }

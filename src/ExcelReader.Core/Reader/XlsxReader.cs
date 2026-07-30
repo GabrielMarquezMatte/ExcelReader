@@ -26,10 +26,10 @@ namespace ExcelReader.Core.Reader
         private int[] _sharedOffsets = [0];   // string i = _sharedFlat[_offsets[i].._offsets[i+1]]
         private bool _sharedLoaded;
         // Lazily created: dedups repeated shared-string values (categorical columns) into one string
-        // instance instead of re-decoding UTF-8 per row. Keyed by the string's stable byte offset into
-        // _sharedFlat (see CellDesc.ToCell / Cell.GetString). Workbook-scoped, so it survives sheet
-        // switches (the shared-string table is shared across all sheets in a workbook).
-        private Dictionary<int, string>? _sharedStringCache;
+        // instance instead of re-decoding UTF-8 per row. Indexed by shared-string index (see
+        // WorkbookLookups.CreateSharedStringCache, CellDesc.ToCell, Cell.GetString). Workbook-scoped, so
+        // it survives sheet switches (the shared-string table is shared across all sheets in a workbook).
+        private string?[]? _sharedStringCache;
 
         // Sync open: reads the central directory and workbook/styles parts synchronously.
         internal XlsxReader(Stream stream, bool leaveOpen, ExcelReaderOptions? options = null)
@@ -231,12 +231,7 @@ namespace ExcelReader.Core.Reader
 
         internal ReadOnlySpan<byte> SharedSpan => _sharedFlat;
 
-        internal Dictionary<int, string> SharedStringCache => _sharedStringCache ??= new Dictionary<int, string>();
-
-        internal (int Start, int Length) SharedAt(int index)
-        {
-            return WorkbookLookups.SharedAt(_sharedOffsets, index);
-        }
+        internal string?[] SharedStringCache => _sharedStringCache ??= WorkbookLookups.CreateSharedStringCache(_sharedOffsets);
 
         /// <inheritdoc/>
         [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP007:Don't dispose injected",

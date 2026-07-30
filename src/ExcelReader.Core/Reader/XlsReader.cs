@@ -16,9 +16,10 @@ namespace ExcelReader.Core.Reader
         private byte[] _sharedFlat;
         private int[] _sharedOffsets;
         // Lazily created: dedups repeated LABELSST values (categorical columns) into one string
-        // instance instead of re-decoding UTF-8 per row. Keyed by the string's stable byte offset into
-        // _sharedFlat (see CellDesc.ToCell / Cell.GetString) — same shape as XlsxReader/XlsbReader.
-        private Dictionary<int, string>? _sharedStringCache;
+        // instance instead of re-decoding UTF-8 per row. Indexed by shared-string index (see
+        // WorkbookLookups.CreateSharedStringCache, CellDesc.ToCell, Cell.GetString) — same shape as
+        // XlsxReader/XlsbReader.
+        private string?[]? _sharedStringCache;
         private int _current;
 
         internal XlsReader(Stream stream, bool leaveOpen, ExcelReaderOptions? options = null)
@@ -72,14 +73,14 @@ namespace ExcelReader.Core.Reader
 
         internal ReadOnlySpan<byte> SharedSpan => _sharedFlat;
 
-        internal Dictionary<int, string> SharedStringCache => _sharedStringCache ??= [];
+        internal string?[] SharedStringCache => _sharedStringCache ??= WorkbookLookups.CreateSharedStringCache(_sharedOffsets);
 
         internal bool IsDateStyle(int style)
         {
             return WorkbookLookups.IsDateStyle(_styleIsDate, style);
         }
 
-        internal (int Start, int Length) SharedAt(int index)
+        internal (int Start, int Length, int ValidIndex) SharedAt(int index)
         {
             return WorkbookLookups.SharedAt(_sharedOffsets, index);
         }

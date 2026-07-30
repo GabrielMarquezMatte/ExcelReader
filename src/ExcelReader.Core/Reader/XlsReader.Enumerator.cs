@@ -161,8 +161,8 @@ namespace ExcelReader.Core.Reader
                         {
                             int col = ReadU16(data, 2);
                             int style = ReadU16(data, 4);
-                            var (start, len) = _reader.SharedAt(ReadI32(data, 6));
-                            _acc.Add(col, start, len, CellType.ExcelString, style, CellValueSource.Shared);
+                            var (start, len, sharedIndex) = _reader.SharedAt(ReadI32(data, 6));
+                            _acc.Add(col, start, len, CellType.ExcelString, style, CellValueSource.Shared, sharedIndex: sharedIndex);
                         }
                         break;
                     case Rec.Number:
