@@ -271,7 +271,7 @@ namespace ExcelReader.Core.Writer
 
         private static string EscapeAttribute(string value)
         {
-            return SecurityElement.Escape(value)!;
+            return SecurityElement.Escape(value);
         }
     }
 }

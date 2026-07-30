@@ -137,7 +137,7 @@ namespace ExcelReader.Core.Reader
             Justification = "Sync Read must block on the producer channel by design; it never blocks on I/O.")]
         private bool WaitForNextChunkSync()
         {
-            ValueTask<bool> waitTask = _channel.Reader.WaitToReadAsync();
+            ValueTask<bool> waitTask = _channel.Reader.WaitToReadAsync(_cts.Token);
             if (waitTask.IsCompletedSuccessfully)
             {
                 return waitTask.Result;
@@ -275,7 +275,15 @@ namespace ExcelReader.Core.Reader
             {
                 _disposed = true;
                 _cts.Cancel();
-                _producer.GetAwaiter().GetResult();
+                try
+                {
+                    _producer.GetAwaiter().GetResult();
+                }
+                catch (OperationCanceledException) when (_cts.IsCancellationRequested)
+                {
+                    // Early abandonment (consumer disposed while WriteAsync was blocked on a full channel).
+                    // Not an error — the consumer already stopped reading.
+                }
                 DrainRemainingBuffers();
                 _cts.Dispose();
                 _inner.Dispose();
@@ -296,7 +304,15 @@ namespace ExcelReader.Core.Reader
             }
             _disposed = true;
             await _cts.CancelAsync().ConfigureAwait(false);
-            await _producer.ConfigureAwait(false);
+            try
+            {
+                await _producer.ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (_cts.IsCancellationRequested)
+            {
+                // Early abandonment (consumer disposed while WriteAsync was blocked on a full channel).
+                // Not an error — the consumer already stopped reading.
+            }
             DrainRemainingBuffers();
             _cts.Dispose();
             await _inner.DisposeAsync().ConfigureAwait(false);

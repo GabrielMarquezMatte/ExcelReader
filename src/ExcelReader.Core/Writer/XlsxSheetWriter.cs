@@ -119,7 +119,9 @@ namespace ExcelReader.Core.Writer
             ct.ThrowIfCancellationRequested();
             _state = WriterState.Ended;
             _rowBuffer.Write("</sheetData></worksheet>"u8);
-            await _stream!.WriteAsync(_rowBuffer.Memory, ct).ConfigureAwait(false);
+#pragma warning disable CS8602 // Dereference of a possibly null reference.
+            await _stream.WriteAsync(_rowBuffer.Memory, ct).ConfigureAwait(false);
+#pragma warning restore CS8602 // Dereference of a possibly null reference.
             await _stream.FlushAsync(ct).ConfigureAwait(false);
             await _stream.DisposeAsync().ConfigureAwait(false);
             _stream = null;
@@ -183,7 +185,9 @@ namespace ExcelReader.Core.Writer
 
         private async ValueTask FlushRowBufferAsync(CancellationToken ct)
         {
-            await _stream!.WriteAsync(_rowBuffer.Memory, ct).ConfigureAwait(false);
+#pragma warning disable CS8602 // Dereference of a possibly null reference.
+            await _stream.WriteAsync(_rowBuffer.Memory, ct).ConfigureAwait(false);
+#pragma warning restore CS8602 // Dereference of a possibly null reference.
             _rowBuffer.Reset();
             _rowActive = false;
         }
