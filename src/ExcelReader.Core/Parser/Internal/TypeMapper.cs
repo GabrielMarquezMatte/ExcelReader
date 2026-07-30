@@ -87,10 +87,17 @@ namespace ExcelReader.Core.Parser.Internal
                 propertyMaps.Add(new PropertyMap<T>(names, parser, isRequired, requireValue));
             }
 
-            // Compiled once per type — the per-row instance factory that replaces `new T()`, so the
-            // parser no longer needs a `where T : new()` constraint (and types with required members work).
-            Func<T> factory = Expression.Lambda<Func<T>>(Expression.New(typeof(T))).Compile();
-            return new TypeMapInfo<T>([.. propertyMaps], factory);
+            // A value type with no explicit parameterless constructor needs no factory at all: default(T)
+            // is byte-for-byte what `new T()` would produce, so CreateInstance() can skip the delegate
+            // call (and the struct copy `Func<T>` returns by value) entirely. Reflection only reports a
+            // struct's parameterless constructor when the type explicitly declares one (C# 10+); the
+            // ordinary implicit one is invisible here, so this stays false for the common plain-struct
+            // case and true (needing the compiled factory) only for a genuine user-defined constructor.
+            bool useDefault = typeof(T).IsValueType && typeof(T).GetConstructor(Type.EmptyTypes) is null;
+            Func<T>? factory = useDefault
+                ? null
+                : Expression.Lambda<Func<T>>(Expression.New(typeof(T))).Compile();
+            return new TypeMapInfo<T>([.. propertyMaps], factory, useDefault);
         }
     }
 }

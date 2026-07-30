@@ -41,13 +41,46 @@ namespace ExcelReader.Core.Reader
             return customFormats.TryGetValue(numFmtId, out bool isDate) ? isDate : NumberFormat.IsBuiltinDate(numFmtId);
         }
 
-        internal static (int Start, int Length) SharedAt(int[] sharedOffsets, int index)
+        // Rejects an oversized shared-strings part before its entry stream is touched at all. The streaming
+        // path never materializes one destination buffer sized from the (attacker-controlled)
+        // central-directory length, but that declared length must still be checked against both caps up
+        // front — validate before allocating, not before using.
+        internal static void ThrowIfSharedEntryTooLarge(
+            long declaredLength, DecompressedByteCounter counter, ExcelReaderOptions options)
+        {
+            LimitChecks.ThrowIfEntryLengthExceeds(declaredLength, counter.Remaining,
+                nameof(ExcelReaderOptions.MaxTotalDecompressedBytes));
+            if (options.MaxSharedStringBytes > 0)
+            {
+                LimitChecks.ThrowIfEntryLengthExceeds(declaredLength, options.MaxSharedStringBytes,
+                    nameof(ExcelReaderOptions.MaxSharedStringBytes));
+            }
+        }
+
+        // ValidIndex is `index` when in range, or -1 otherwise — callers thread it straight into the
+        // per-reader shared-string dedup cache (an array indexed by shared-string index) as the cache
+        // key, so an out-of-range/corrupt index never becomes an out-of-bounds array access there.
+        // Shared-string dedup cache: a lazily-allocated array indexed by shared-string index, rather than
+        // a Dictionary<int,string>. With the table's exact string count known up front, one array avoids
+        // the resize/rehash churn (and resulting LOH pressure) an unsized Dictionary pays at high
+        // cardinality. Capped so a workbook that declares an extreme shared-string count doesn't force
+        // one huge eager allocation; above the cap, GetString() still returns the right value, it just
+        // never dedups (Cell.GetString()'s bounds check excludes any index outside the array).
+        private const int MaxCachedSharedStrings = 4_000_000; // ~32 MB of string? references
+
+        internal static string?[] CreateSharedStringCache(int[] sharedOffsets)
+        {
+            int count = sharedOffsets.Length - 1;
+            return count is > 0 and <= MaxCachedSharedStrings ? new string?[count] : [];
+        }
+
+        internal static (int Start, int Length, int ValidIndex) SharedAt(int[] sharedOffsets, int index)
         {
             if ((uint)index >= (uint)(sharedOffsets.Length - 1))
             {
-                return (0, 0);
+                return (0, 0, -1);
             }
-            return (sharedOffsets[index], sharedOffsets[index + 1] - sharedOffsets[index]);
+            return (sharedOffsets[index], sharedOffsets[index + 1] - sharedOffsets[index], index);
         }
 
         internal static ZipArchiveEntry GetWorksheetEntry(ZipArchive zip, (string Name, string Path)[] sheets, int current)
@@ -76,7 +109,7 @@ namespace ExcelReader.Core.Reader
             ZipArchiveEntry entry, DecompressedByteCounter counter, ExcelReaderOptions options,
             string entryLimitName = "", long entryLimit = 0)
         {
-            return Wrap(entry.Open(), counter, options, entryLimitName, entryLimit);
+            return Wrap(entry.Open(), counter, options, entryLimitName, entryLimit, entry.Length);
         }
 
 #if NET10_0_OR_GREATER
@@ -89,7 +122,7 @@ namespace ExcelReader.Core.Reader
             CancellationToken ct, string entryLimitName = "", long entryLimit = 0)
         {
             Stream opened = await entry.OpenAsync(ct).ConfigureAwait(false);
-            return Wrap(opened, counter, options, entryLimitName, entryLimit);
+            return Wrap(opened, counter, options, entryLimitName, entryLimit, entry.Length);
         }
 #else
         [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP001:Dispose created",
@@ -101,9 +134,14 @@ namespace ExcelReader.Core.Reader
             CancellationToken ct, string entryLimitName = "", long entryLimit = 0)
         {
             ct.ThrowIfCancellationRequested();
-            return new ValueTask<LimitedReadStream>(Wrap(entry.Open(), counter, options, entryLimitName, entryLimit));
+            return new ValueTask<LimitedReadStream>(Wrap(entry.Open(), counter, options, entryLimitName, entryLimit, entry.Length));
         }
 #endif
+
+        // Below this, the overlap isn't worth a dedicated thread + producer/consumer handoff: a small
+        // sheet decompresses faster than the Task.Run dispatch and teardown join cost it, so prefetch
+        // would only add overhead. Matches InitialBufferCapacity's own 256 KB ceiling below.
+        private const long PrefetchMinUncompressedSize = 256 * 1024;
 
         // Sole branch point for PrefetchDecompression, shared by the sync and async openers (and by
         // ZipMemoryIndex.OpenEntryStream, so the in-memory ZIP path gets the same prefetch overlap).
@@ -111,9 +149,9 @@ namespace ExcelReader.Core.Reader
         // accounting stays on the consumer thread and byte-for-byte identical to the serial path.
         internal static LimitedReadStream Wrap(
             Stream opened, DecompressedByteCounter counter, ExcelReaderOptions options,
-            string entryLimitName, long entryLimit)
+            string entryLimitName, long entryLimit, long uncompressedSize)
         {
-            if (!options.PrefetchDecompression)
+            if (!options.PrefetchDecompression || uncompressedSize < PrefetchMinUncompressedSize)
             {
                 return new LimitedReadStream(opened, counter, entryLimitName, entryLimit);
             }

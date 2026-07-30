@@ -2,7 +2,6 @@ using System.Buffers.Text;
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Runtime.CompilerServices;
-using System.Runtime.InteropServices;
 using System.Text;
 using ExcelReader.Core.Enums;
 
@@ -17,12 +16,12 @@ namespace ExcelReader.Core.ValueObjects
         private readonly double _number;
         private readonly bool _hasNumber;
         // Set only for a shared-string cell whose reader was constructed with a dedup cache (currently
-        // XLSX/XLSB): _sharedKey is the string's stable byte offset into that reader's flat shared-string
-        // buffer (unique per distinct non-empty shared string — see CellDesc.ToCell), and _sharedCache is
-        // the reader-owned index -> materialized-string map. Never set for non-shared cells (CSV's
-        // reuse of Source.Shared for per-row materialized scratch has no cross-row-stable key to cache by).
-        private readonly int _sharedKey;
-        private readonly Dictionary<int, string>? _sharedCache;
+        // XLSX/XLSB/XLS): _sharedIndex is the string's index into that reader's shared-string table
+        // (see CellDesc.ToCell), and _sharedCache is the reader-owned index -> materialized-string array,
+        // sized to the table's string count. -1 for non-shared cells and for an out-of-range/corrupt
+        // index (WorkbookLookups.SharedAt), which the bounds check in GetString() below excludes safely.
+        private readonly int _sharedIndex;
+        private readonly string?[]? _sharedCache;
 
         /// <summary>The kind of value this cell holds.</summary>
         public CellType Type { get; }
@@ -46,19 +45,19 @@ namespace ExcelReader.Core.ValueObjects
         }
 
         internal Cell(CellType type, ReadOnlySpan<byte> value, double number, bool hasNumber, int styleIndex)
-            : this(type, value, number, hasNumber, styleIndex, sharedKey: -1, sharedCache: null)
+            : this(type, value, number, hasNumber, styleIndex, sharedIndex: -1, sharedCache: null)
         {
         }
 
         internal Cell(CellType type, ReadOnlySpan<byte> value, double number, bool hasNumber, int styleIndex,
-            int sharedKey, Dictionary<int, string>? sharedCache)
+            int sharedIndex, string?[]? sharedCache)
         {
             Type = type;
             Value = value;
             _number = number;
             _hasNumber = hasNumber;
             StyleIndex = styleIndex;
-            _sharedKey = sharedKey;
+            _sharedIndex = sharedIndex;
             _sharedCache = sharedCache;
         }
 
@@ -271,7 +270,7 @@ namespace ExcelReader.Core.ValueObjects
         /// </summary>
         public bool TryFormat(Span<byte> destination, out int bytesWritten)
         {
-            if (_hasNumber)
+            if (_hasNumber && Value.IsEmpty)
             {
                 return Utf8Formatter.TryFormat(_number, destination, out bytesWritten);
             }
@@ -295,16 +294,16 @@ namespace ExcelReader.Core.ValueObjects
         [SkipLocalsInit]
         public string GetString()
         {
-            if (_hasNumber)
+            if (_hasNumber && Value.IsEmpty)
             {
                 Span<byte> buffer = stackalloc byte[32];
                 return Utf8Formatter.TryFormat(_number, buffer, out int written)
                     ? Encoding.UTF8.GetString(buffer[..written])
                     : string.Empty;
             }
-            if (_sharedCache is not null && !Value.IsEmpty)
+            if (_sharedCache is not null && !Value.IsEmpty && (uint)_sharedIndex < (uint)_sharedCache.Length)
             {
-                ref string? cached = ref CollectionsMarshal.GetValueRefOrAddDefault(_sharedCache, _sharedKey, out _);
+                ref string? cached = ref _sharedCache[_sharedIndex];
                 return cached ??= Encoding.UTF8.GetString(Value);
             }
             return Encoding.UTF8.GetString(Value);

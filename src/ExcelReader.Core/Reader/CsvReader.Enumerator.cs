@@ -48,7 +48,7 @@ namespace ExcelReader.Core.Reader
             }
 
             internal Enumerator(Stream stream, CsvReaderOptions options, CancellationToken ct = default)
-                : base(stream, options.MaxCellBytes, nameof(CsvReaderOptions.MaxCellBytes), 64 * 1024, ct)
+                : base(stream, options.MaxCellBytes, nameof(CsvReaderOptions.MaxCellBytes), 64 * 1024, ownsSource: false, ct)
             {
                 _delimiter = options.Delimiter;
                 _quote = options.Quote;
@@ -327,6 +327,18 @@ namespace ExcelReader.Core.Reader
                 return RecordEnd;
             }
 
+            // The three-byte UTF-8 BOM, if present at the very start. Splitting this out of the
+            // sync/async entry points keeps the byte check itself in one place: only the buffer fill
+            // differs between them.
+            private void StripBomFromBuffer()
+            {
+                ReadOnlySpan<byte> buf = _buf.AsSpan(0, _len);
+                if (_len - _pos >= 3 && buf[_pos] == 0xEF && buf[_pos + 1] == 0xBB && buf[_pos + 2] == 0xBF)
+                {
+                    _pos += 3;
+                }
+            }
+
             private void EnsureBomStripped()
             {
                 if (_bomChecked)
@@ -339,11 +351,7 @@ namespace ExcelReader.Core.Reader
                     return;
                 }
                 Ensure(3);
-                ReadOnlySpan<byte> buf = _buf.AsSpan(0, _len);
-                if (_len - _pos >= 3 && buf[_pos] == 0xEF && buf[_pos + 1] == 0xBB && buf[_pos + 2] == 0xBF)
-                {
-                    _pos += 3;
-                }
+                StripBomFromBuffer();
             }
 
             private async ValueTask EnsureBomStrippedAsync()
@@ -358,11 +366,7 @@ namespace ExcelReader.Core.Reader
                     return;
                 }
                 await EnsureAsync(3).ConfigureAwait(false);
-                ReadOnlySpan<byte> buf = _buf.AsSpan(0, _len);
-                if (_len - _pos >= 3 && buf[_pos] == 0xEF && buf[_pos + 1] == 0xBB && buf[_pos + 2] == 0xBF)
-                {
-                    _pos += 3;
-                }
+                StripBomFromBuffer();
             }
 
             // --- field building (zero-copy _buf slice, falling back to _acc's value buffer only
@@ -430,21 +434,6 @@ namespace ExcelReader.Core.Reader
                 }
                 int len = _acc.ValueLength - f.MatStart;
                 _acc.Add(_col++, f.MatStart, len, len == 0 ? CellType.Empty : CellType.ExcelString, style: 0, CellValueSource.Shared);
-            }
-
-            // --- buffer management (shared with XlsxReader/XlsbReader via BufferedStreamCursor) ---
-
-            /// <inheritdoc/>
-            public void Dispose()
-            {
-                ReturnBuffers();
-            }
-
-            /// <inheritdoc/>
-            public ValueTask DisposeAsync()
-            {
-                ReturnBuffers();
-                return ValueTask.CompletedTask;
             }
 
         }

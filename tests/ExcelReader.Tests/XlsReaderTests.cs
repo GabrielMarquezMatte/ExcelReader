@@ -389,6 +389,20 @@ namespace ExcelReader.Tests
             Assert.Throws<OperationCanceledException>(() => reader.GetAsyncEnumerator(cts.Token));
         }
 
+        // Two cells referencing the same shared-string index should resolve through the reader's
+        // index-keyed dedup cache rather than each allocating and decoding its own copy.
+        [Fact]
+        public void RepeatedSharedStringDedupsIntoSameInstance()
+        {
+            using var ms = XlsWorkbookBuilder.Build(
+                sheets: [("S1", [[new XlsSharedString("Repeat"), new XlsSharedString("Repeat")]])]);
+            using var reader = Excel.FromXls(ms);
+
+            using var e = reader.GetEnumerator();
+            Assert.True(e.MoveNext());
+            Assert.Same(e.Current[0].GetString(), e.Current[1].GetString());
+        }
+
         [Fact]
         public void SharedStringIndexOutsideTableYieldsEmptyString()
         {

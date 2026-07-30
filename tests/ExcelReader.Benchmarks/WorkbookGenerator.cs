@@ -85,6 +85,20 @@ namespace ExcelReader.Benchmarks
             return ms.ToArray();
         }
 
+        // Same shape as BuildTypedAsync, but Name cells dedupe into the shared-strings table instead of
+        // being written inline. Name is drawn from an 8-value Pool, so this is where the reader's
+        // shared-string dedup cache actually engages for the typed parser — BuildTypedAsync's inline
+        // strings never touch it.
+        public static async Task<byte[]> BuildTypedSharedStringsAsync(int rows)
+        {
+            await using var ms = new MemoryStream();
+            await using (var writer = await RecordWriter.CreateXlsxAsync(ms, leaveOpen: true, useSharedStrings: true))
+            {
+                await writer.WriteSheetAsync("S1", Records(rows));
+            }
+            return ms.ToArray();
+        }
+
         public static async Task<byte[]> BuildTypedXlsbAsync(int rows)
         {
             await using var ms = new MemoryStream();

@@ -38,6 +38,19 @@ namespace ExcelReader.Tests
             public string? Label { get; set; }
         }
 
+        // A C# 10+ struct with an explicit parameterless constructor: CreateInstance() must still run
+        // it per row rather than shortcut to default(T), which would silently skip Tag's initializer.
+        private struct MeasurementRowWithCtor
+        {
+            public double X { get; set; }
+            public string Tag { get; set; }
+
+            public MeasurementRowWithCtor()
+            {
+                Tag = "ctor-default";
+            }
+        }
+
         private sealed class NullableRow
         {
             public int? Quantity { get; set; }
@@ -454,6 +467,20 @@ namespace ExcelReader.Tests
             Assert.Equal(2, result.Count);
             Assert.Equal(10.0, result[0].X);
             Assert.Equal(20.0, result[1].X);
+        }
+
+        [Fact]
+        public async Task StructWithExplicitParameterlessConstructorRunsItsInitializer()
+        {
+            // The workbook has no "Tag" column at all, so Tag is never touched by parsing -- whatever
+            // it holds came straight from CreateInstance(). If that shortcut to default(T) instead of
+            // calling the constructor, Tag would come back null instead of "ctor-default".
+            await using var ms = await TypedWorkbook.BuildAsync(["X"], [1.5]);
+            await using var reader = await Excel.FromAsync(ms, ct: TestContext.Current.CancellationToken);
+            var result = new ExcelParser<MeasurementRowWithCtor>().Parse(reader).ToList();
+            Assert.Single(result);
+            Assert.Equal(1.5, result[0].X);
+            Assert.Equal("ctor-default", result[0].Tag);
         }
 
         // --- Date cells ---

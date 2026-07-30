@@ -1,5 +1,4 @@
 using System.Buffers;
-using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
 using ExcelReader.Core.Enums;
 using ExcelReader.Core.ValueObjects;
@@ -111,17 +110,17 @@ namespace ExcelReader.Core.Reader
             Add(col, start, length, CellType.Error, style, CellValueSource.RowValues);
         }
 
-        internal void Add(int col, int start, int len, CellType type, int style, CellValueSource source, double number = 0, bool hasNumber = false)
+        internal void Add(int col, int start, int len, CellType type, int style, CellValueSource source, double number = 0, bool hasNumber = false, int sharedIndex = -1)
         {
             // A corrupted/malicious file can encode an arbitrary column index in a per-cell record
             // (e.g. a 4-byte BIFF12/BIFF8 column field); without this bound, Row.ColumnCount (Column +
             // 1 of the last cell) can come out in the billions, turning a naive column-index loop over
             // the row into a near-infinite spin instead of a crash — far worse than an exception.
-            // 16,384 is Excel's own hard column cap (A..XFD), already enforced symmetrically on the
-            // writer side (see ColumnName.cs / XlsxRowWriter.cs / XlsbSheetWriter.cs).
-            if ((uint)col >= 16_384)
+            // ExcelLimits.MaxColumns is Excel's own hard column cap (A..XFD), enforced symmetrically
+            // on the writer side too.
+            if ((uint)col >= ExcelLimits.MaxColumns)
             {
-                ThrowColumnLimit(col);
+                ExcelLimits.ThrowColumnLimit(col);
             }
             if (Count == _cells.Length)
             {
@@ -142,17 +141,8 @@ namespace ExcelReader.Core.Reader
                 Source = source,
                 Number = number,
                 HasNumber = hasNumber,
+                SharedIndex = sharedIndex,
             };
-        }
-
-        // Split from Add for the same reason as GrowCells: Add gets inlined into each ProcessCell
-        // dispatch arm, so an inline `throw` duplicates the whole exception-construction sequence
-        // (~70 bytes of cold code) once per call site inside the hot method.
-        [DoesNotReturn]
-        [MethodImpl(MethodImplOptions.NoInlining)]
-        private static void ThrowColumnLimit(int col)
-        {
-            throw new ExcelLimitExceededException("Columns", 16_384, col + 1L);
         }
 
         // Split from Add so the (rarely taken) grow path doesn't bloat the hot caller's IL, leaving

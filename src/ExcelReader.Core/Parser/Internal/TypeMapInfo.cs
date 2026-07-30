@@ -8,23 +8,32 @@ namespace ExcelReader.Core.Parser.Internal
 #endif
     {
         private readonly PropertyMap<T>[] _properties;
-        private readonly Func<T> _factory;
+        // Null when _useDefault is true: a value type with no explicit parameterless constructor needs
+        // no factory at all, since default(T) is exactly what `new T()` would have produced, and Build()
+        // skips compiling one. Non-null (and always invoked instead of _useDefault) for every class T
+        // and for a struct T that declares an explicit parameterless constructor (C# 10+), whose
+        // user-written initializer logic default(T) would silently skip.
+        private readonly Func<T>? _factory;
+        private readonly bool _useDefault;
         private readonly ConcurrentDictionary<(StringComparer, HeaderNormalization), Dictionary<string, HeaderMatch<T>>> _lookupCache;
 
-        internal TypeMapInfo(PropertyMap<T>[] properties, Func<T> factory)
+        internal TypeMapInfo(PropertyMap<T>[] properties, Func<T>? factory, bool useDefault)
         {
             _properties = properties;
             _factory = factory;
+            _useDefault = useDefault;
             _lookupCache = new ConcurrentDictionary<(StringComparer, HeaderNormalization), Dictionary<string, HeaderMatch<T>>>();
         }
 
         internal int PropertyCount => _properties.Length;
 
         // Creates a fresh model instance per row without a `where T : new()` constraint, so types with
-        // required members (which the new() constraint forbids) can still be parsed.
+        // required members (which the new() constraint forbids) can still be parsed. For a plain struct
+        // target (the common case for a zero-allocation row model), skips the compiled-factory delegate
+        // call/struct-copy entirely — see Build()'s _useDefault computation.
         internal T CreateInstance()
         {
-            return _factory();
+            return _useDefault ? default! : _factory!();
         }
 
         internal bool RequiresValue(int propertyIndex)

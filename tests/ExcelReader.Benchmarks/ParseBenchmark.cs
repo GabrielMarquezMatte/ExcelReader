@@ -17,12 +17,14 @@ namespace ExcelReader.Benchmarks
 
         private byte[] _workbook = [];
         private byte[] _xlsbWorkbook = [];
+        private byte[] _workbookSharedStrings = [];
 
         [GlobalSetup]
         public async Task SetupAsync()
         {
             _workbook = await WorkbookGenerator.BuildTypedAsync(Rows);
             _xlsbWorkbook = await WorkbookGenerator.BuildTypedXlsbAsync(Rows);
+            _workbookSharedStrings = await WorkbookGenerator.BuildTypedSharedStringsAsync(Rows);
         }
 
         private static long Accumulate(Record rec)
@@ -45,6 +47,26 @@ namespace ExcelReader.Benchmarks
         public long ExcelParserSync()
         {
             using var ms = new MemoryStream(_workbook, writable: false);
+            using var reader = Excel.From(ms);
+            long acc = 0;
+            foreach (Record rec in new ExcelParser<Record>().Parse(reader))
+            {
+                acc += Accumulate(rec);
+            }
+            return acc;
+        }
+
+        // Same as ExcelParserSync, but Name comes from a shared-strings workbook instead of inline
+        // strings. Name is drawn from an 8-value Pool, so this is where the reader's shared-string dedup
+        // cache actually engages: cell.GetString() (called by BuildStringParser, ColumnParserFactory.cs)
+        // resolves 8 distinct string instances instead of allocating one per row — ExcelParserSync's
+        // inline-string workbook can never hit that cache (CellValueSource.RowValues/RowBuffer, not
+        // Shared), so its 1.59 MB Name-string allocation is a property of the benchmark's input shape,
+        // not an inherent parser cost.
+        [Benchmark]
+        public long ExcelParserSyncSharedStrings()
+        {
+            using var ms = new MemoryStream(_workbookSharedStrings, writable: false);
             using var reader = Excel.From(ms);
             long acc = 0;
             foreach (Record rec in new ExcelParser<Record>().Parse(reader))

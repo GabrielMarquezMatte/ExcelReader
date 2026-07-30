@@ -36,7 +36,7 @@ namespace ExcelReader.Core.Reader
             // Also used by the in-memory ZIP path: ZipMemoryIndex.OpenEntryStream hands back a
             // DeflateStream/MemoryStream over the part's bytes, same as the ZipArchive path.
             internal Enumerator(XlsbReader reader, Stream sheet, long entryLength = 0, CancellationToken ct = default)
-                : base(sheet, reader._options.MaxCellBytes, nameof(ExcelReaderOptions.MaxCellBytes), WorkbookLookups.InitialBufferCapacity(entryLength), ct)
+                : base(sheet, reader._options.MaxCellBytes, nameof(ExcelReaderOptions.MaxCellBytes), WorkbookLookups.InitialBufferCapacity(entryLength), ownsSource: true, ct)
             {
                 _reader = reader;
                 _styleIsDate = reader._styleIsDate;
@@ -305,8 +305,8 @@ namespace ExcelReader.Core.Reader
                         AddDouble(col, style, Biff12.ReadF64(payload, 8));
                         break;
                     case Brt.CellIsst when payload.Length >= 12:
-                        var (start, len) = WorkbookLookups.SharedAt(_sharedOffsets, (int)Biff12.ReadU32(payload, 8));
-                        _acc.Add(col, start, len, CellType.ExcelString, style, CellValueSource.Shared);
+                        var (start, len, sharedIndex) = WorkbookLookups.SharedAt(_sharedOffsets, (int)Biff12.ReadU32(payload, 8));
+                        _acc.Add(col, start, len, CellType.ExcelString, style, CellValueSource.Shared, sharedIndex: sharedIndex);
                         break;
 
                     case Brt.CellSt or Brt.FmlaString:
@@ -344,12 +344,13 @@ namespace ExcelReader.Core.Reader
                 return id == Brt.EndSheetData;
             }
 
-            // NoInlining for the same reason as AddInlineString: inlined here, the double got promoted
-            // into xmm6 -- callee-saved on Windows x64 -- so ProcessCell had to vmovaps it to the stack
-            // and back on *every* cell, including the CellIsst/bool/error arms that never touch a double.
-            // The CellReal/FmlaNum arm was already a call, so this only makes the two numeric arms
-            // consistent. Costs the RK arm one call; saves every other arm the register shuffle.
-            [MethodImpl(MethodImplOptions.NoInlining)]
+            // Deliberately inlinable, unlike AddInlineString above. An earlier NoInlining here traded a
+            // register-spill saving on non-numeric cell arms for one extra call on every RK/Real cell —
+            // a bad trade on real-world numeric-heavy workbooks, where RK/Real dominate. Measured on the
+            // 65K-row real-data corpus (mostly numeric): NoInlining here cost ~5% wall-clock (30.64ms ->
+            // 29.12ms with it removed); the shared-string-heavy corpus, where the original tradeoff was
+            // supposed to pay off, showed no measurable change either way (40.22ms -> 40.85ms, within
+            // run-to-run noise).
             private void AddDouble(int col, int style, double value)
             {
                 CellType type = WorkbookLookups.IsDateStyle(_styleIsDate, style) ? CellType.Date : CellType.Number;
@@ -396,29 +397,6 @@ namespace ExcelReader.Core.Reader
                     throw new InvalidDataException(
                         $"Truncated XLSB worksheet stream: {_len - _pos} trailing byte(s) do not form a complete record.");
                 }
-            }
-
-            /// <inheritdoc/>
-            [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP007:Don't dispose injected",
-                Justification = "_sheet is opened for this enumerator and owned by it.")]
-            public void Dispose()
-            {
-                _source?.Dispose();
-                _source = null;
-                ReturnBuffers();
-            }
-
-            /// <inheritdoc/>
-            [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP007:Don't dispose injected",
-                Justification = "_sheet is opened for this enumerator and owned by it.")]
-            public async ValueTask DisposeAsync()
-            {
-                if (_source is not null)
-                {
-                    await _source.DisposeAsync().ConfigureAwait(false);
-                    _source = null;
-                }
-                ReturnBuffers();
             }
 
         }

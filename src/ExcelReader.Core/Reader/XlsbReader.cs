@@ -18,9 +18,9 @@ namespace ExcelReader.Core.Reader
         private readonly int[] _sharedOffsets = [0];
         private readonly bool _pooledSharedFlat;
         // Lazily created: dedups repeated shared-string values (categorical columns) into one string
-        // instance instead of re-decoding UTF-8 per row. Keyed by the string's stable byte offset into
-        // _sharedFlat (see CellDesc.ToCell / Cell.GetString).
-        private Dictionary<int, string>? _sharedStringCache;
+        // instance instead of re-decoding UTF-8 per row. Indexed by shared-string index (see
+        // WorkbookLookups.CreateSharedStringCache, CellDesc.ToCell, Cell.GetString).
+        private string?[]? _sharedStringCache;
         private readonly bool[] _styleIsDate = [];
         private readonly ExcelReaderOptions _options;
         private readonly DecompressedByteCounter _decompressedBytes;
@@ -67,14 +67,16 @@ namespace ExcelReader.Core.Reader
             try
             {
                 LimitChecks.ThrowIfTooManyEntries(_zip.Entries.Count, _options);
-                var wb = ZipEntryBytes.Read(_zip, "xl/workbook.bin", _decompressedBytes);
-                _sheets = XlsbWorkbook.ParseSheets(wb, ZipEntryBytes.Read(_zip, "xl/_rels/workbook.bin.rels", _decompressedBytes));
+                using ZipPart wbPart = ZipEntryBytes.Read(_zip, "xl/workbook.bin", _decompressedBytes);
+                using ZipPart relsPart = ZipEntryBytes.Read(_zip, "xl/_rels/workbook.bin.rels", _decompressedBytes);
+                _sheets = XlsbWorkbook.ParseSheets(wbPart.Memory.Span, relsPart.Memory.Span);
                 if (_sheets.Length == 0)
                 {
                     throw new InvalidDataException("The workbook contains no sheets.");
                 }
-                _styleIsDate = XlsbStyles.ParseStyleDateFlags(ZipEntryBytes.Read(_zip, "xl/styles.bin", _decompressedBytes));
-                IsDate1904 = XlsbWorkbook.ParseDate1904(wb);
+                using ZipPart stylesPart = ZipEntryBytes.Read(_zip, "xl/styles.bin", _decompressedBytes);
+                _styleIsDate = XlsbStyles.ParseStyleDateFlags(stylesPart.Memory.Span);
+                IsDate1904 = XlsbWorkbook.ParseDate1904(wbPart.Memory.Span);
                 (_sharedFlat, _sharedOffsets) = LoadSharedStrings(_zip);
                 _pooledSharedFlat = _sharedFlat.Length != 0;
             }
@@ -136,42 +138,30 @@ namespace ExcelReader.Core.Reader
 
         // Async open over an already-opened ZipArchive — the async twin of the ZipArchive-taking sync
         // ctor above, for callers (Excel.OpenAsync's DetectSeekableAsync) that already opened the
-        // archive for format detection. Bypasses ZipReaderOpen.OpenAsync, so it owns dispose-on-failure
-        // itself instead of relying on that helper's try/catch.
-        internal static async ValueTask<XlsbReader> CreateFromOpenZipAsync(
+        // archive for format detection.
+        internal static ValueTask<XlsbReader> CreateFromOpenZipAsync(
             Stream stream, bool leaveOpen, ZipArchive zip, ExcelReaderOptions? options, CancellationToken ct)
         {
             ExcelReaderOptions effectiveOptions = options ?? ExcelReaderOptions.Default;
             DecompressedByteCounter decompressedBytes = new(effectiveOptions.MaxTotalDecompressedBytes);
-            try
-            {
-                LimitChecks.ThrowIfTooManyEntries(zip.Entries.Count, effectiveOptions);
-                return await ParseAsync(stream, leaveOpen, zip, effectiveOptions, decompressedBytes, ct).ConfigureAwait(false);
-            }
-            catch
-            {
-                await ZipArchiveDisposal.DisposeAsync(zip).ConfigureAwait(false);
-                if (!leaveOpen)
-                {
-                    await stream.DisposeAsync().ConfigureAwait(false);
-                }
-                throw;
-            }
+            return ZipReaderOpen.FromOpenZipAsync(stream, leaveOpen, zip, effectiveOptions,
+                z => ParseAsync(stream, leaveOpen, z, effectiveOptions, decompressedBytes, ct));
         }
 
         private static async ValueTask<XlsbReader> ParseAsync(
             Stream stream, bool leaveOpen, ZipArchive zip, ExcelReaderOptions effectiveOptions,
             DecompressedByteCounter decompressedBytes, CancellationToken ct)
         {
-            var wb = await ZipEntryBytes.ReadAsync(zip, "xl/workbook.bin", decompressedBytes, ct).ConfigureAwait(false);
-            var zipEntryData = await ZipEntryBytes.ReadAsync(zip, "xl/_rels/workbook.bin.rels", decompressedBytes, ct).ConfigureAwait(false);
-            var sheets = XlsbWorkbook.ParseSheets(wb, zipEntryData);
+            using ZipPart wbPart = await ZipEntryBytes.ReadAsync(zip, "xl/workbook.bin", decompressedBytes, ct).ConfigureAwait(false);
+            using ZipPart relsPart = await ZipEntryBytes.ReadAsync(zip, "xl/_rels/workbook.bin.rels", decompressedBytes, ct).ConfigureAwait(false);
+            var sheets = XlsbWorkbook.ParseSheets(wbPart.Memory.Span, relsPart.Memory.Span);
             if (sheets.Length == 0)
             {
                 throw new InvalidDataException("The workbook contains no sheets.");
             }
-            var styleIsDate = XlsbStyles.ParseStyleDateFlags(await ZipEntryBytes.ReadAsync(zip, "xl/styles.bin", decompressedBytes, ct).ConfigureAwait(false));
-            bool date1904 = XlsbWorkbook.ParseDate1904(wb);
+            using ZipPart stylesPart = await ZipEntryBytes.ReadAsync(zip, "xl/styles.bin", decompressedBytes, ct).ConfigureAwait(false);
+            var styleIsDate = XlsbStyles.ParseStyleDateFlags(stylesPart.Memory.Span);
+            bool date1904 = XlsbWorkbook.ParseDate1904(wbPart.Memory.Span);
             var (flat, offsets) = await LoadSharedStringsAsync(zip, decompressedBytes, effectiveOptions, ct).ConfigureAwait(false);
             return new XlsbReader(stream, leaveOpen, zip, sheets, styleIsDate, date1904, flat, offsets, effectiveOptions, decompressedBytes);
         }
@@ -183,7 +173,7 @@ namespace ExcelReader.Core.Reader
             {
                 return ([], [0]);
             }
-            ThrowIfSharedEntryTooLarge(entry.Length);
+            WorkbookLookups.ThrowIfSharedEntryTooLarge(entry.Length, _decompressedBytes, _options);
             using LimitedReadStream stream = WorkbookLookups.OpenEntryStream(entry, _decompressedBytes, _options,
                 nameof(ExcelReaderOptions.MaxSharedStringBytes), _options.MaxSharedStringBytes);
             return XlsbSharedStrings.ParseStreaming(stream, entry.Length, _options);
@@ -197,28 +187,12 @@ namespace ExcelReader.Core.Reader
             {
                 return ([], [0]);
             }
-            ThrowIfSharedEntryTooLarge(entry.Length, decompressedBytes, options);
+            WorkbookLookups.ThrowIfSharedEntryTooLarge(entry.Length, decompressedBytes, options);
             LimitedReadStream stream = await WorkbookLookups.OpenEntryStreamAsync(entry, decompressedBytes, options, ct,
                 nameof(ExcelReaderOptions.MaxSharedStringBytes), options.MaxSharedStringBytes).ConfigureAwait(false);
             await using (stream.ConfigureAwait(false))
             {
                 return await XlsbSharedStrings.ParseStreamingAsync(stream, entry.Length, options, ct).ConfigureAwait(false);
-            }
-        }
-
-        private void ThrowIfSharedEntryTooLarge(long declaredLength)
-        {
-            ThrowIfSharedEntryTooLarge(declaredLength, _decompressedBytes, _options);
-        }
-
-        private static void ThrowIfSharedEntryTooLarge(long declaredLength, DecompressedByteCounter decompressedBytes, ExcelReaderOptions options)
-        {
-            LimitChecks.ThrowIfEntryLengthExceeds(declaredLength, decompressedBytes.Remaining,
-                nameof(ExcelReaderOptions.MaxTotalDecompressedBytes));
-            if (options.MaxSharedStringBytes > 0)
-            {
-                LimitChecks.ThrowIfEntryLengthExceeds(declaredLength, options.MaxSharedStringBytes,
-                    nameof(ExcelReaderOptions.MaxSharedStringBytes));
             }
         }
 
@@ -253,16 +227,11 @@ namespace ExcelReader.Core.Reader
 
         internal ReadOnlySpan<byte> SharedSpan => _sharedFlat;
 
-        internal Dictionary<int, string> SharedStringCache => _sharedStringCache ??= [];
+        internal string?[] SharedStringCache => _sharedStringCache ??= WorkbookLookups.CreateSharedStringCache(_sharedOffsets);
 
         internal bool IsDateStyle(int style)
         {
             return WorkbookLookups.IsDateStyle(_styleIsDate, style);
-        }
-
-        internal (int Start, int Length) SharedAt(int index)
-        {
-            return WorkbookLookups.SharedAt(_sharedOffsets, index);
         }
 
         /// <inheritdoc/>

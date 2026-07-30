@@ -72,7 +72,7 @@ namespace ExcelReader.Core.Reader
             {
                 return 0;
             }
-            return ConsumeCurrentChunk(buffer);
+            return ConsumeAvailableChunks(buffer);
         }
 
         public override async ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default)
@@ -85,7 +85,7 @@ namespace ExcelReader.Core.Reader
             {
                 return 0;
             }
-            return ConsumeCurrentChunk(buffer.Span);
+            return ConsumeAvailableChunks(buffer.Span);
         }
 
         public override Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken)
@@ -137,7 +137,7 @@ namespace ExcelReader.Core.Reader
             Justification = "Sync Read must block on the producer channel by design; it never blocks on I/O.")]
         private bool WaitForNextChunkSync()
         {
-            ValueTask<bool> waitTask = _channel.Reader.WaitToReadAsync();
+            ValueTask<bool> waitTask = _channel.Reader.WaitToReadAsync(_cts.Token);
             if (waitTask.IsCompletedSuccessfully)
             {
                 return waitTask.Result;
@@ -189,6 +189,22 @@ namespace ExcelReader.Core.Reader
                 _currentBuffer = null;
             }
             return toCopy;
+        }
+
+        // Drains the already-ensured current chunk, then keeps draining further chunks the producer has
+        // already queued -- a non-blocking TryRead, never another wait -- while the destination still
+        // has room. Without this, a destination bigger than ChunkSize (the caller's buffer can be up to
+        // 256 KB; see WorkbookLookups.InitialBufferCapacity) still only returns one 64 KB chunk per call,
+        // forcing extra Fill/Read round trips to satisfy one Ensure.
+        private int ConsumeAvailableChunks(Span<byte> destination)
+        {
+            int total = ConsumeCurrentChunk(destination);
+            while (total < destination.Length && _currentBuffer is null && _channel.Reader.TryRead(out var item))
+            {
+                SetCurrent(item);
+                total += ConsumeCurrentChunk(destination[total..]);
+            }
+            return total;
         }
 
         // Runs on a pooled thread pool thread for the entry's whole lifetime. Blocking Read here is
@@ -259,7 +275,15 @@ namespace ExcelReader.Core.Reader
             {
                 _disposed = true;
                 _cts.Cancel();
-                _producer.GetAwaiter().GetResult();
+                try
+                {
+                    _producer.GetAwaiter().GetResult();
+                }
+                catch (OperationCanceledException) when (_cts.IsCancellationRequested)
+                {
+                    // Early abandonment (consumer disposed while WriteAsync was blocked on a full channel).
+                    // Not an error — the consumer already stopped reading.
+                }
                 DrainRemainingBuffers();
                 _cts.Dispose();
                 _inner.Dispose();
@@ -280,7 +304,15 @@ namespace ExcelReader.Core.Reader
             }
             _disposed = true;
             await _cts.CancelAsync().ConfigureAwait(false);
-            await _producer.ConfigureAwait(false);
+            try
+            {
+                await _producer.ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (_cts.IsCancellationRequested)
+            {
+                // Early abandonment (consumer disposed while WriteAsync was blocked on a full channel).
+                // Not an error — the consumer already stopped reading.
+            }
             DrainRemainingBuffers();
             _cts.Dispose();
             await _inner.DisposeAsync().ConfigureAwait(false);
