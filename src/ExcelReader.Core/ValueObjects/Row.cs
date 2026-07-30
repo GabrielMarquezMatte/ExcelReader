@@ -14,12 +14,12 @@ namespace ExcelReader.Core.ValueObjects
         // Aliases the reader's live read buffer directly (currently only XLSX's bare-<v> fast path uses
         // this) — empty for readers that never emit a CellValueSource.RowBuffer cell.
         private readonly ReadOnlySpan<byte> _rowBuffer;
-        // Non-null only for readers with a true, cross-row-stable shared-string table (XLSX/XLSB); see
-        // CellDesc.ToCell. Defaults to null so existing 3-arg call sites (CSV, XLS) are unaffected.
-        private readonly Dictionary<int, string>? _sharedStringCache;
+        // Non-null only for readers with a true, cross-row-stable shared-string table (XLSX/XLSB/XLS); see
+        // CellDesc.ToCell. Defaults to null so existing 3-arg call sites (CSV) are unaffected.
+        private readonly string?[]? _sharedStringCache;
 
         internal Row(ReadOnlySpan<CellDesc> cells, ReadOnlySpan<byte> rowValues, ReadOnlySpan<byte> shared,
-            ReadOnlySpan<byte> rowBuffer = default, Dictionary<int, string>? sharedStringCache = null)
+            ReadOnlySpan<byte> rowBuffer = default, string?[]? sharedStringCache = null)
         {
             _cells = cells;
             _rowValues = rowValues;

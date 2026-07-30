@@ -57,13 +57,30 @@ namespace ExcelReader.Core.Reader
             }
         }
 
-        internal static (int Start, int Length) SharedAt(int[] sharedOffsets, int index)
+        // ValidIndex is `index` when in range, or -1 otherwise — callers thread it straight into the
+        // per-reader shared-string dedup cache (an array indexed by shared-string index) as the cache
+        // key, so an out-of-range/corrupt index never becomes an out-of-bounds array access there.
+        // Shared-string dedup cache: a lazily-allocated array indexed by shared-string index, rather than
+        // a Dictionary<int,string>. With the table's exact string count known up front, one array avoids
+        // the resize/rehash churn (and resulting LOH pressure) an unsized Dictionary pays at high
+        // cardinality. Capped so a workbook that declares an extreme shared-string count doesn't force
+        // one huge eager allocation; above the cap, GetString() still returns the right value, it just
+        // never dedups (Cell.GetString()'s bounds check excludes any index outside the array).
+        private const int MaxCachedSharedStrings = 4_000_000; // ~32 MB of string? references
+
+        internal static string?[] CreateSharedStringCache(int[] sharedOffsets)
+        {
+            int count = sharedOffsets.Length - 1;
+            return count is > 0 and <= MaxCachedSharedStrings ? new string?[count] : [];
+        }
+
+        internal static (int Start, int Length, int ValidIndex) SharedAt(int[] sharedOffsets, int index)
         {
             if ((uint)index >= (uint)(sharedOffsets.Length - 1))
             {
-                return (0, 0);
+                return (0, 0, -1);
             }
-            return (sharedOffsets[index], sharedOffsets[index + 1] - sharedOffsets[index]);
+            return (sharedOffsets[index], sharedOffsets[index + 1] - sharedOffsets[index], index);
         }
 
         internal static ZipArchiveEntry GetWorksheetEntry(ZipArchive zip, (string Name, string Path)[] sheets, int current)

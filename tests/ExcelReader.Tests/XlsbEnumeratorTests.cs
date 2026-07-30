@@ -115,6 +115,24 @@ namespace ExcelReader.Tests
             Assert.Equal("World", e.Current[1].GetString());
         }
 
+        // Two cells referencing the same shared-string index should resolve through the reader's
+        // index-keyed dedup cache rather than each allocating and decoding its own copy.
+        [Fact]
+        public void CellIsstDedupsRepeatedSharedStringIntoSameInstance()
+        {
+            var reader = ReaderWithShared("Hello", "World");
+            byte[] sheet =
+            [
+                .. B.Record(Brt.RowHdr),
+                .. B.Record(Brt.CellIsst, B.CellIsst(0, 0, 0)), // "Hello"
+                .. B.Record(Brt.CellIsst, B.CellIsst(1, 0, 1)), // "World"
+                .. B.Record(Brt.CellIsst, B.CellIsst(2, 0, 0)), // "Hello" again
+            ];
+            using var e = Open(reader, sheet);
+            Assert.True(e.MoveNext());
+            Assert.Same(e.Current[0].GetString(), e.Current[2].GetString());
+        }
+
         [Fact]
         public void CellStDecodesInlineString()
         {

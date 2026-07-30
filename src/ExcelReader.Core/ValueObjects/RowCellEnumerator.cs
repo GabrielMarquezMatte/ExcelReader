@@ -11,10 +11,10 @@ namespace ExcelReader.Core.ValueObjects
         private readonly ReadOnlySpan<byte> _rowValues;
         private readonly ReadOnlySpan<byte> _shared;
         private readonly ReadOnlySpan<byte> _rowBuffer;
-        private readonly Dictionary<int, string>? _sharedStringCache;
+        private readonly string?[]? _sharedStringCache;
         private int _index;
         internal RowCellEnumerator(ReadOnlySpan<CellDesc> cells, ReadOnlySpan<byte> rowValues, ReadOnlySpan<byte> shared,
-            ReadOnlySpan<byte> rowBuffer = default, Dictionary<int, string>? sharedStringCache = null)
+            ReadOnlySpan<byte> rowBuffer = default, string?[]? sharedStringCache = null)
         {
             _cells = cells;
             _rowValues = rowValues;
