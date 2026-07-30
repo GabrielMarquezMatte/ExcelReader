@@ -201,7 +201,8 @@ namespace ExcelReader.Tests
             XDocument workbookXml = ReadXml(zip, "xl/workbook.xml");
             XNamespace s = SpreadsheetNs;
             XNamespace r = RelationshipsNs;
-            XElement[] sheets = [.. workbookXml.Root!.Element(s + "sheets")!.Elements(s + "sheet")];
+#pragma warning disable CS8602 // Dereference of a possibly null reference.
+            XElement[] sheets = [.. workbookXml.Root.Element(s + "sheets")!.Elements(s + "sheet")];
             Assert.Collection(
                 sheets,
                 sheet =>
@@ -227,7 +228,7 @@ namespace ExcelReader.Tests
             AssertOverride(contentTypes, "/xl/worksheets/sheet2.xml", "application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml");
 
             XDocument sheet1 = ReadXml(zip, "xl/worksheets/sheet1.xml");
-            XElement[] cells = [.. sheet1.Root!.Element(s + "sheetData")!.Element(s + "row")!.Elements(s + "c")];
+            XElement[] cells = [.. sheet1.Root.Element(s + "sheetData")!.Element(s + "row")!.Elements(s + "c")];
             Assert.Equal("inlineStr", cells[0].Attribute("t")?.Value);
             Assert.Equal("<North>", cells[0].Element(s + "is")!.Element(s + "t")!.Value);
             Assert.Equal("42", cells[1].Element(s + "v")!.Value);
@@ -309,8 +310,8 @@ namespace ExcelReader.Tests
             int sectorSize = 1 << BitConverter.ToUInt16(bytes, 0x1E);
             int firstDirectorySector = BitConverter.ToInt32(bytes, 0x30);
             int directoryOffset = 512 + (firstDirectorySector * sectorSize);
-            Assert.Contains("Root Entry", ReadDirectoryNames(bytes, directoryOffset, sectorSize));
-            Assert.Contains("Workbook", ReadDirectoryNames(bytes, directoryOffset, sectorSize));
+            Assert.Contains("Root Entry", ReadDirectoryNames(bytes, directoryOffset, sectorSize), StringComparer.Ordinal);
+            Assert.Contains("Workbook", ReadDirectoryNames(bytes, directoryOffset, sectorSize), StringComparer.Ordinal);
             Assert.Equal(1, BitConverter.ToInt32(bytes, directoryOffset + 76));
             Assert.Equal(unchecked((int)0xFFFFFFFF), BitConverter.ToInt32(bytes, directoryOffset + 128 + 68));
             Assert.Equal(unchecked((int)0xFFFFFFFF), BitConverter.ToInt32(bytes, directoryOffset + 128 + 72));
@@ -489,3 +490,4 @@ namespace ExcelReader.Tests
         public readonly record struct ExpectedCell(int Row, int Column, CellType Type, string Value);
     }
 }
+#pragma warning restore CS8602 // Dereference of a possibly null reference.
