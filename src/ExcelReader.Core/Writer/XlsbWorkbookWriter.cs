@@ -142,13 +142,18 @@ namespace ExcelReader.Core.Writer
             _disposed = true;
             if (_state == WriterState.Started)
             {
-                if (_sheets.Count > 0 || _activeSheet is not null)
+                // COR-1 (second half): EndAsync deliberately rejects a zero-sheet workbook, so disposal
+                // must release a partially configured writer itself rather than routing through it —
+                // this branch used to just flip _state without disposing _zip at all, unlike
+                // XlsxWorkbookWriter's equivalent branch.
+                if (_sheets.Count == 0)
                 {
-                    await EndAsync().ConfigureAwait(false);
+                    _state = WriterState.Ended;
+                    await ZipArchiveDisposal.DisposeAsync(_zip).ConfigureAwait(false);
                 }
                 else
                 {
-                    _state = WriterState.Ended;
+                    await EndAsync().ConfigureAwait(false);
                 }
             }
             else if (_state == WriterState.Created)
