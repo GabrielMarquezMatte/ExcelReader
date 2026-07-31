@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.IO.Compression;
 using ExcelReader.Core.Reader;
 using ExcelReader.Core.Writer;
 
@@ -55,6 +56,93 @@ namespace ExcelReader.Tests
             byte[] seed = BuildXlsSeedWithContinuedSst();
             int completed = FuzzFormat(seed, format: "xls-continue");
             Assert.Equal(RoundsPerFormat, completed);
+        }
+
+        // SEC-7 item 4: whole-file byte flips mostly corrupt the ZIP container itself (a bad CRC/local
+        // header), so the mutation dies in DeflateStream/ZipArchive before it ever reaches this
+        // library's own XML/BIFF12 parsing — the part these formats actually need fuzzed. Mutating one
+        // part's decompressed content, then rebuilding a structurally valid ZIP with a fresh CRC via
+        // ZipArchive, guarantees every round's corruption lands where the parser can see it.
+        [Fact]
+        public void MutatedXlsxSharedStringsContentNeverCrashesTheReader()
+        {
+            byte[] seed = BuildXlsxSeed();
+            int completed = FuzzZipEntryContent(seed, "xl/sharedStrings.xml", format: "xlsx-sharedStrings");
+            Assert.Equal(RoundsPerFormat, completed);
+        }
+
+        [Fact]
+        public async Task MutatedXlsbWorkbookBinContentNeverCrashesTheReader()
+        {
+            byte[] seed = await BuildXlsbSeedAsync();
+            int completed = FuzzZipEntryContent(seed, "xl/worksheets/sheet1.bin", format: "xlsb-sheet1");
+            Assert.Equal(RoundsPerFormat, completed);
+        }
+
+        private static int FuzzZipEntryContent(byte[] seed, string entryName, string format)
+        {
+            byte[] entryContent = ReadZipEntry(seed, entryName);
+            var rng = new Random(Seed);
+            for (int round = 0; round < RoundsPerFormat; round++)
+            {
+                byte[] mutatedEntry = FuzzMutation.MutateCopy(entryContent, rng, out int[] positions);
+                byte[] mutatedZip = RebuildZipWithEntry(seed, entryName, mutatedEntry);
+                try
+                {
+                    FuzzMutation.RunBounded(() => OpenAndDrain(mutatedZip));
+                }
+                catch (Exception ex) when (FuzzMutation.IsAcceptable(ex))
+                {
+                    // Expected: the mutated bytes were rejected gracefully.
+                }
+                catch (Exception ex)
+                {
+                    string offsets = string.Join(", ", positions);
+                    throw new InvalidOperationException(
+                        string.Create(CultureInfo.InvariantCulture,
+                            $"Round {round} on {format} seed (entry '{entryName}') produced an unhandled '{ex.GetType().Name}' (mutated byte offsets within the entry: [{offsets}]). This indicates a validation/bounds gap reachable from untrusted input, not a graceful rejection."),
+                        ex);
+                }
+            }
+            return RoundsPerFormat;
+        }
+
+        private static byte[] ReadZipEntry(byte[] zipBytes, string entryName)
+        {
+            using var input = new MemoryStream(zipBytes);
+            using var zip = new ZipArchive(input, ZipArchiveMode.Read);
+            using Stream entryStream = zip.GetEntry(entryName)!.Open();
+            using var buffer = new MemoryStream();
+            entryStream.CopyTo(buffer);
+            return buffer.ToArray();
+        }
+
+        // Copies every entry verbatim except `entryName`, which is written with `newContent` instead —
+        // ZipArchive computes a fresh CRC32/sizes for it, so the result is always a structurally valid
+        // ZIP even though the part's content is corrupted.
+        private static byte[] RebuildZipWithEntry(byte[] zipBytes, string entryName, byte[] newContent)
+        {
+            using var input = new MemoryStream(zipBytes);
+            using var output = new MemoryStream();
+            using (var srcZip = new ZipArchive(input, ZipArchiveMode.Read))
+            using (var dstZip = new ZipArchive(output, ZipArchiveMode.Create, leaveOpen: true))
+            {
+                foreach (ZipArchiveEntry srcEntry in srcZip.Entries)
+                {
+                    ZipArchiveEntry dstEntry = dstZip.CreateEntry(srcEntry.FullName, CompressionLevel.Fastest);
+                    using Stream dstStream = dstEntry.Open();
+                    if (string.Equals(srcEntry.FullName, entryName, StringComparison.Ordinal))
+                    {
+                        dstStream.Write(newContent);
+                    }
+                    else
+                    {
+                        using Stream srcStream = srcEntry.Open();
+                        srcStream.CopyTo(dstStream);
+                    }
+                }
+            }
+            return output.ToArray();
         }
 
         // Returns the number of rounds completed (always RoundsPerFormat unless it throws first).

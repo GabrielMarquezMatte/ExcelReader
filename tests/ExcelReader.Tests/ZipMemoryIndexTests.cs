@@ -57,6 +57,58 @@ namespace ExcelReader.Tests
         }
 
         [Fact]
+        public void CreateThrowsOnDuplicateCentralDirectoryEntryNames()
+        {
+            // SEC-6: TryGetEntry returns the first name match, so a second central-directory record
+            // sharing a name would silently be unreachable - reject the file outright instead.
+            using var ms = new MemoryStream();
+            using (var zip = new ZipArchive(ms, ZipArchiveMode.Create, leaveOpen: true))
+            {
+                using (var s1 = zip.CreateEntry("dup.txt", CompressionLevel.NoCompression).Open())
+                {
+                    s1.Write("first"u8);
+                }
+                using (var s2 = zip.CreateEntry("dup.txt", CompressionLevel.NoCompression).Open())
+                {
+                    s2.Write("second"u8);
+                }
+            }
+            byte[] zipBytes = ms.ToArray();
+
+            InvalidDataException ex = Assert.Throws<InvalidDataException>(
+                () => ZipMemoryIndex.Create(zipBytes, ExcelReaderOptions.Default));
+            Assert.Contains("duplicate", ex.Message, StringComparison.OrdinalIgnoreCase);
+        }
+
+        [Fact]
+        public void OpenPartThrowsWhenLocalHeaderNameDoesNotMatchCentralDirectory()
+        {
+            // SEC-6: the central directory and local header each carry their own copy of the entry
+            // name. Patch only the local header's copy (same length, so no offset shifts) and confirm
+            // the mismatch is rejected instead of silently reading the entry under the wrong identity.
+            byte[] payload = Encoding.UTF8.GetBytes("hello world, stored and not deflated");
+            byte[] zipBytes = BuildZipWithOneEntry("hello.txt", payload, CompressionLevel.NoCompression);
+
+            long localHeaderOffset;
+            using (ZipMemoryIndex index = ZipMemoryIndex.Create(zipBytes, ExcelReaderOptions.Default))
+            {
+                Assert.True(index.TryGetEntry("hello.txt"u8, out ZipEntryRef entry));
+                localHeaderOffset = entry.LocalHeaderOffset;
+            }
+
+            // Local header layout: 4-byte signature + 26 bytes of fixed fields, then the name.
+            int nameOffset = (int)localHeaderOffset + 30;
+            Assert.Equal((byte)'h', zipBytes[nameOffset]);
+            zipBytes[nameOffset] = (byte)'j'; // "hello.txt" -> "jello.txt" in the local header only
+
+            using ZipMemoryIndex mutatedIndex = ZipMemoryIndex.Create(zipBytes, ExcelReaderOptions.Default);
+            Assert.True(mutatedIndex.TryGetEntry("hello.txt"u8, out ZipEntryRef mutatedEntry));
+            InvalidDataException ex = Assert.Throws<InvalidDataException>(
+                () => mutatedIndex.OpenPart(mutatedEntry, new DecompressedByteCounter(0)));
+            Assert.Contains("does not match", ex.Message, StringComparison.OrdinalIgnoreCase);
+        }
+
+        [Fact]
         public void OpenPartThrowsWhenDeclaredSizeExceedsTheRemainingBudget()
         {
             using MemoryStream built = WorkbookBuilder.Build("""<row r="1"><c r="A1"><v>1</v></c></row>""");

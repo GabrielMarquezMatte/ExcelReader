@@ -104,6 +104,7 @@ namespace ExcelReader.Core.Reader
             try
             {
                 count = WalkCentralDirectory(span, cdOffset, cdSize, ref entries, options);
+                ThrowIfDuplicateEntryNames(file, entries, count);
             }
             catch
             {
@@ -111,6 +112,52 @@ namespace ExcelReader.Core.Reader
                 throw;
             }
             return new ZipMemoryIndex(file, entries, count);
+        }
+
+        // SEC-6: TryGetEntry returns the first name match, so two central-directory records sharing a
+        // name would silently make the second one unreachable - a spoofing vector (e.g. a real
+        // xl/workbook.xml followed by a forged duplicate the reader never sees, or the reverse). Sorting
+        // by name content first means every duplicate becomes an adjacent pair, so this is one O(n log n)
+        // pass over indices rather than an O(n^2) scan - safe even at the full MaxZipEntries count.
+        private static void ThrowIfDuplicateEntryNames(ReadOnlyMemory<byte> file, ZipEntryRef[] entries, int count)
+        {
+            if (count <= 1)
+            {
+                return;
+            }
+            int[] order = ArrayPool<int>.Shared.Rent(count);
+            try
+            {
+                // Span<T> is a ref struct and can't be captured by the Comparison<int> lambda below, so
+                // the sort/compare bodies re-derive `.Span` from this ReadOnlyMemory<byte> each time
+                // instead of closing over a span directly.
+                for (int i = 0; i < count; i++)
+                {
+                    order[i] = i;
+                }
+                Array.Sort(order, 0, count, Comparer<int>.Create((a, b) =>
+                {
+                    ReadOnlySpan<byte> span = file.Span;
+                    ref readonly ZipEntryRef ea = ref entries[a];
+                    ref readonly ZipEntryRef eb = ref entries[b];
+                    return span.Slice(ea.NameStart, ea.NameLength).SequenceCompareTo(span.Slice(eb.NameStart, eb.NameLength));
+                }));
+                ReadOnlySpan<byte> fileSpan = file.Span;
+                for (int i = 1; i < count; i++)
+                {
+                    ref readonly ZipEntryRef prev = ref entries[order[i - 1]];
+                    ref readonly ZipEntryRef curr = ref entries[order[i]];
+                    if (prev.NameLength == curr.NameLength &&
+                        fileSpan.Slice(prev.NameStart, prev.NameLength).SequenceEqual(fileSpan.Slice(curr.NameStart, curr.NameLength)))
+                    {
+                        throw new InvalidDataException("The ZIP central directory contains a duplicate entry name.");
+                    }
+                }
+            }
+            finally
+            {
+                ArrayPool<int>.Shared.Return(order);
+            }
         }
 
         internal bool TryGetEntry(ReadOnlySpan<byte> utf8Name, out ZipEntryRef entry)
@@ -461,7 +508,22 @@ namespace ExcelReader.Core.Reader
             }
             ushort nameLength = BinaryPrimitives.ReadUInt16LittleEndian(header[26..]);
             ushort extraLength = BinaryPrimitives.ReadUInt16LittleEndian(header[28..]);
-            return headerOffset + LocalHeaderFixedSize + nameLength + extraLength;
+            long nameStart = headerOffset + LocalHeaderFixedSize;
+            if (nameStart + nameLength > fileSpan.Length)
+            {
+                throw new InvalidDataException("The ZIP local file header name runs past the end of the file.");
+            }
+            // SEC-6: the central directory and local header each carry their own copy of the entry
+            // name. A crafted file can make them disagree - the central directory says "this name"
+            // points here, but the bytes physically at this offset carry a different name. Every
+            // lookup (TryGetEntry) trusts the central directory's name; silently reading whatever the
+            // local header actually says instead is a spoofing vector, not a graceful mismatch.
+            if (nameLength != entry.NameLength ||
+                !fileSpan.Slice((int)nameStart, nameLength).SequenceEqual(fileSpan.Slice(entry.NameStart, entry.NameLength)))
+            {
+                throw new InvalidDataException("The ZIP local file header name does not match the central directory.");
+            }
+            return nameStart + nameLength + extraLength;
         }
 
         // This is a known stopgap: it round-trips through stdlib DeflateStream, which needs an
