@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Runtime.CompilerServices;
+using ExcelReader.Core.Reader;
 
 namespace ExcelReader.Core.Writer
 {
@@ -210,10 +211,17 @@ namespace ExcelReader.Core.Writer
         }
 
         /// <inheritdoc/>
+        /// <exception cref="ExcelLimitExceededException">Skipping would advance past Excel's 16,384-column limit.</exception>
         public void Skip(int count = 1)
         {
             ThrowIfDisposed();
             ArgumentOutOfRangeException.ThrowIfNegative(count);
+            // XlsxRowWriter already bounds this; XLS/XLSB didn't, so Skip(int.MaxValue) advanced
+            // _columnIndex unboundedly instead of failing fast.
+            if (count > 0 && _columnIndex > ExcelLimits.MaxColumns - count)
+            {
+                throw new ExcelLimitExceededException("Columns", ExcelLimits.MaxColumns, (long)_columnIndex + count);
+            }
             _columnIndex += count;
         }
 
@@ -278,10 +286,18 @@ namespace ExcelReader.Core.Writer
                 return convertible.ToDouble(CultureInfo.InvariantCulture);
             }
             Span<byte> bytes = stackalloc byte[64];
-            return value.TryFormat(bytes, out int written, default, CultureInfo.InvariantCulture) &&
-                double.TryParse(bytes[..written], CultureInfo.InvariantCulture, out double parsed)
-                ? parsed
-                : 0.0;
+            // Silently falling back to 0.0 here (as this used to) writes a wrong-but-plausible
+            // value for a caller-supplied T that can't actually convert — banned by STYLEGUIDE.md:209.
+            // This is a caller mistake (a Write<T> call with a T that doesn't represent a number), not a
+            // file defect, so it throws ArgumentException, matching CellValueGuards' convention for the
+            // same "caller passed something a spreadsheet cell can't hold" class of error.
+            if (value.TryFormat(bytes, out int written, default, CultureInfo.InvariantCulture) &&
+                double.TryParse(bytes[..written], CultureInfo.InvariantCulture, out double parsed))
+            {
+                return parsed;
+            }
+            throw new ArgumentException(
+                $"Cannot convert value of type '{typeof(T)}' to a numeric cell value.", nameof(value));
         }
 
         /// <inheritdoc/>

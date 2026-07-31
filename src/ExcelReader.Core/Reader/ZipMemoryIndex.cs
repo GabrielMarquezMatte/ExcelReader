@@ -86,7 +86,12 @@ namespace ExcelReader.Core.Reader
             {
                 (cdOffset, cdSize, declaredCount) = ReadZip64Eocd(span, zip64EocdOffset);
             }
-            if (cdOffset < 0 || cdSize < 0 || cdOffset + cdSize > span.Length)
+            // cdOffset and cdSize are both attacker-controlled longs (straight from the ZIP64 EOCD when
+            // present); `cdOffset + cdSize` can overflow and wrap negative for a value near long.MaxValue,
+            // making this check pass when it should reject. Comparing via subtraction instead can never
+            // overflow: cdOffset is already bounded >= 0 here, and span.Length (an int) minus cdSize can
+            // go very negative for a huge cdSize but never wraps, so the comparison still rejects it.
+            if (cdOffset < 0 || cdSize < 0 || cdOffset > span.Length - cdSize)
             {
                 throw new InvalidDataException("The ZIP central directory is out of range.");
             }
@@ -98,15 +103,61 @@ namespace ExcelReader.Core.Reader
             int count;
             try
             {
-                count = WalkCentralDirectory(span, cdOffset, cdSize, ref entries);
+                count = WalkCentralDirectory(span, cdOffset, cdSize, ref entries, options);
+                ThrowIfDuplicateEntryNames(file, entries, count);
             }
             catch
             {
                 ArrayPool<ZipEntryRef>.Shared.Return(entries);
                 throw;
             }
-            LimitChecks.ThrowIfTooManyEntries(count, options);
             return new ZipMemoryIndex(file, entries, count);
+        }
+
+        // TryGetEntry returns the first name match, so two central-directory records sharing a
+        // name would silently make the second one unreachable - a spoofing vector (e.g. a real
+        // xl/workbook.xml followed by a forged duplicate the reader never sees, or the reverse). Sorting
+        // by name content first means every duplicate becomes an adjacent pair, so this is one O(n log n)
+        // pass over indices rather than an O(n^2) scan - safe even at the full MaxZipEntries count.
+        private static void ThrowIfDuplicateEntryNames(ReadOnlyMemory<byte> file, ZipEntryRef[] entries, int count)
+        {
+            if (count <= 1)
+            {
+                return;
+            }
+            int[] order = ArrayPool<int>.Shared.Rent(count);
+            try
+            {
+                // Span<T> is a ref struct and can't be captured by the Comparison<int> lambda below, so
+                // the sort/compare bodies re-derive `.Span` from this ReadOnlyMemory<byte> each time
+                // instead of closing over a span directly.
+                for (int i = 0; i < count; i++)
+                {
+                    order[i] = i;
+                }
+                Array.Sort(order, 0, count, Comparer<int>.Create((a, b) =>
+                {
+                    ReadOnlySpan<byte> span = file.Span;
+                    ref readonly ZipEntryRef ea = ref entries[a];
+                    ref readonly ZipEntryRef eb = ref entries[b];
+                    return span.Slice(ea.NameStart, ea.NameLength).SequenceCompareTo(span.Slice(eb.NameStart, eb.NameLength));
+                }));
+                ReadOnlySpan<byte> fileSpan = file.Span;
+                for (int i = 1; i < count; i++)
+                {
+                    ref readonly ZipEntryRef prev = ref entries[order[i - 1]];
+                    ref readonly ZipEntryRef curr = ref entries[order[i]];
+                    if (prev.NameLength == curr.NameLength &&
+                        fileSpan.Slice(prev.NameStart, prev.NameLength).SequenceEqual(fileSpan.Slice(curr.NameStart, curr.NameLength)))
+                    {
+                        throw new InvalidDataException("The ZIP central directory contains a duplicate entry name.");
+                    }
+                }
+            }
+            finally
+            {
+                ArrayPool<int>.Shared.Return(order);
+            }
         }
 
         internal bool TryGetEntry(ReadOnlySpan<byte> utf8Name, out ZipEntryRef entry)
@@ -271,7 +322,13 @@ namespace ExcelReader.Core.Reader
 
         private static (long CdOffset, long CdSize, long Count) ReadZip64Eocd(ReadOnlySpan<byte> span, long offset)
         {
-            if (offset < 0 || offset + Zip64EocdFixedSize > span.Length)
+            // offset comes straight from the ZIP64 locator's 8-byte field, so a value near
+            // long.MaxValue makes `offset + Zip64EocdFixedSize` overflow and wrap negative, passing this
+            // check when it should reject — then `(int)offset` truncates to an arbitrary value and
+            // Slice either throws a raw ArgumentOutOfRangeException or, worse, succeeds on the wrong
+            // range. The subtraction form below can't overflow (span.Length is a small int) and rejects
+            // the same inputs correctly.
+            if (offset < 0 || offset > span.Length - Zip64EocdFixedSize)
             {
                 throw new InvalidDataException("The ZIP64 end of central directory record is out of range.");
             }
@@ -286,7 +343,7 @@ namespace ExcelReader.Core.Reader
             return (cdOffset, cdSize, count);
         }
 
-        private static int WalkCentralDirectory(ReadOnlySpan<byte> span, long cdOffset, long cdSize, ref ZipEntryRef[] entries)
+        private static int WalkCentralDirectory(ReadOnlySpan<byte> span, long cdOffset, long cdSize, ref ZipEntryRef[] entries, ExcelReaderOptions options)
         {
             long end = cdOffset + cdSize;
             long pos = cdOffset;
@@ -330,6 +387,10 @@ namespace ExcelReader.Core.Reader
                     Flags = fields.Flags,
                 };
                 count++;
+                // The entry-count limit was previously enforced only after the whole central directory had been
+                // walked and every entry materialized into `entries` — a huge malicious CD count still
+                // paid the full walk/grow cost before rejection. Check as each entry lands instead.
+                LimitChecks.ThrowIfTooManyEntries(count, options);
                 pos = recordEnd;
             }
             return count;
@@ -447,7 +508,22 @@ namespace ExcelReader.Core.Reader
             }
             ushort nameLength = BinaryPrimitives.ReadUInt16LittleEndian(header[26..]);
             ushort extraLength = BinaryPrimitives.ReadUInt16LittleEndian(header[28..]);
-            return headerOffset + LocalHeaderFixedSize + nameLength + extraLength;
+            long nameStart = headerOffset + LocalHeaderFixedSize;
+            if (nameStart + nameLength > fileSpan.Length)
+            {
+                throw new InvalidDataException("The ZIP local file header name runs past the end of the file.");
+            }
+            // The central directory and local header each carry their own copy of the entry
+            // name. A crafted file can make them disagree - the central directory says "this name"
+            // points here, but the bytes physically at this offset carry a different name. Every
+            // lookup (TryGetEntry) trusts the central directory's name; silently reading whatever the
+            // local header actually says instead is a spoofing vector, not a graceful mismatch.
+            if (nameLength != entry.NameLength ||
+                !fileSpan.Slice((int)nameStart, nameLength).SequenceEqual(fileSpan.Slice(entry.NameStart, entry.NameLength)))
+            {
+                throw new InvalidDataException("The ZIP local file header name does not match the central directory.");
+            }
+            return nameStart + nameLength + extraLength;
         }
 
         // This is a known stopgap: it round-trips through stdlib DeflateStream, which needs an

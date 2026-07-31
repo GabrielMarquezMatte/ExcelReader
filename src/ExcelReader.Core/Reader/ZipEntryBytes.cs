@@ -47,8 +47,36 @@ namespace ExcelReader.Core.Reader
             // destination can be sized once instead of growing/copying through an intermediate MemoryStream.
             int length = checked((int)entry.Length);
             byte[] rented = ArrayPool<byte>.Shared.Rent(length);
-            stream.ReadExactly(rented.AsSpan(0, length));
+            try
+            {
+                ReadExactlyChecked(stream, rented.AsSpan(0, length));
+            }
+            catch
+            {
+                ArrayPool<byte>.Shared.Return(rented);
+                throw;
+            }
             return new ZipPart(rented.AsMemory(0, length), rented);
+        }
+
+        // An entry whose real decompressed data is *shorter* than its declared central-directory
+        // size is a malformed file, not a raw BCL stream-plumbing exception — matches
+        // ZipMemoryIndex.InflateToPart's equivalent rewrap on the in-memory path. There is no equivalent
+        // over-delivery check here (InflateToPart has one): confirmed by direct experiment that
+        // ZipArchiveEntry.Open()'s stream silently truncates at the entry's declared Length regardless of
+        // how much more the underlying compressed data would actually produce — a trailing "is there
+        // more?" read always reports EOF, so over-delivery is invisible on this BCL-backed path, not
+        // fixable without bypassing ZipArchiveEntry.Open() entirely (a far larger change).
+        private static void ReadExactlyChecked(Stream stream, Span<byte> destination)
+        {
+            try
+            {
+                stream.ReadExactly(destination);
+            }
+            catch (EndOfStreamException ex)
+            {
+                throw new InvalidDataException("The ZIP entry produced less data than its declared uncompressed size.", ex);
+            }
         }
 
         internal static async ValueTask<ZipPart> ReadAsync(
@@ -82,8 +110,28 @@ namespace ExcelReader.Core.Reader
             {
                 int length = checked((int)entry.Length);
                 byte[] rented = ArrayPool<byte>.Shared.Rent(length);
-                await stream.ReadExactlyAsync(rented.AsMemory(0, length), ct).ConfigureAwait(false);
+                try
+                {
+                    await ReadExactlyCheckedAsync(stream, rented.AsMemory(0, length), ct).ConfigureAwait(false);
+                }
+                catch
+                {
+                    ArrayPool<byte>.Shared.Return(rented);
+                    throw;
+                }
                 return new ZipPart(rented.AsMemory(0, length), rented);
+            }
+        }
+
+        private static async ValueTask ReadExactlyCheckedAsync(Stream stream, Memory<byte> destination, CancellationToken ct)
+        {
+            try
+            {
+                await stream.ReadExactlyAsync(destination, ct).ConfigureAwait(false);
+            }
+            catch (EndOfStreamException ex)
+            {
+                throw new InvalidDataException("The ZIP entry produced less data than its declared uncompressed size.", ex);
             }
         }
 #else

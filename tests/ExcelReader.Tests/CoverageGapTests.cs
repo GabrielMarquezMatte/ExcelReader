@@ -506,17 +506,5 @@ namespace ExcelReader.Tests
             Assert.True(e.MoveNext());
             Assert.Equal(string.Empty, e.Current[0].GetString());
         }
-
-        // Tracks whether the stream was disposed; used to assert leaveOpen semantics.
-        private sealed class TrackingStream : MemoryStream
-        {
-            internal bool Disposed { get; private set; }
-
-            protected override void Dispose(bool disposing)
-            {
-                Disposed = true;
-                base.Dispose(disposing);
-            }
-        }
     }
 }

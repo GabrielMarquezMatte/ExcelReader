@@ -251,17 +251,6 @@ namespace ExcelReader.Tests
 
         // ---- 8. Fuzz: mutated ZIP bytes must fail the same way through Excel.Open(memory) ----
 
-        private static readonly Type[] AcceptableExceptionTypes =
-        [
-            typeof(InvalidDataException),
-            typeof(ExcelLimitExceededException),
-            typeof(EndOfStreamException),
-            typeof(IOException),
-            typeof(OverflowException),
-            typeof(ArgumentException),
-            typeof(NotSupportedException),
-        ];
-
         [Fact]
         public void MutatedZipBytesNeverCrashExcelOpenMemory()
         {
@@ -280,12 +269,12 @@ namespace ExcelReader.Tests
             int completed = 0;
             for (int round = 0; round < rounds; round++)
             {
-                byte[] mutated = MutateCopy(seed, rng, out int[] positions);
+                byte[] mutated = FuzzMutation.MutateCopy(seed, rng, out int[] positions);
                 try
                 {
-                    OpenAndDrainMemory(mutated);
+                    FuzzMutation.RunBounded(() => OpenAndDrainMemory(mutated));
                 }
-                catch (Exception ex) when (IsAcceptable(ex))
+                catch (Exception ex) when (FuzzMutation.IsAcceptable(ex))
                 {
                     // Expected: the mutated bytes were rejected gracefully.
                 }
@@ -317,36 +306,6 @@ namespace ExcelReader.Tests
                     }
                 }
             }
-        }
-
-        private static bool IsAcceptable(Exception ex)
-        {
-            foreach (Type acceptableType in AcceptableExceptionTypes)
-            {
-                if (acceptableType.IsInstanceOfType(ex))
-                {
-                    return true;
-                }
-            }
-            return false;
-        }
-
-        [SuppressMessage("Security", "CA5394:Do not use insecure randomness",
-            Justification = "Fuzzing needs a reproducible seeded PRNG, not cryptographic randomness.")]
-        [SuppressMessage("Performance", "HLQ013:Consider using 'foreach' loop instead of 'for' loop",
-            Justification = "Each iteration both reads (rng.Next) and writes positions[i] by index; foreach can't express the write.")]
-        private static byte[] MutateCopy(byte[] seed, Random rng, out int[] positions)
-        {
-            byte[] copy = (byte[])seed.Clone();
-            int count = rng.Next(1, 9);
-            positions = new int[count];
-            for (int i = 0; i < count; i++)
-            {
-                int pos = rng.Next(copy.Length);
-                positions[i] = pos;
-                copy[pos] = (byte)rng.Next(256);
-            }
-            return copy;
         }
 
         // ---- Real-world corpus ----
@@ -552,50 +511,5 @@ namespace ExcelReader.Tests
             }
         }
 
-        private readonly record struct CellSnapshot(
-            int Row,
-            int Column,
-            int ColumnCount,
-            CellType Type,
-            string Value,
-            bool HasDouble,
-            long DoubleBits)
-        {
-            public static CellSnapshot RowMarker(int row, int columnCount)
-            {
-                return new CellSnapshot(row, -1, columnCount, CellType.Empty, string.Empty, false, 0);
-            }
-        }
-
-        private sealed class NonArrayMemoryManager : MemoryManager<byte>
-        {
-            private readonly byte[] _data;
-
-            internal NonArrayMemoryManager(byte[] data)
-            {
-                _data = data;
-            }
-
-            public override Span<byte> GetSpan()
-            {
-                return _data;
-            }
-
-            public override MemoryHandle Pin(int elementIndex = 0)
-            {
-                throw new NotSupportedException();
-            }
-
-            public override void Unpin()
-            {
-                throw new NotSupportedException();
-            }
-
-            [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP010:Call base.Dispose(disposing)",
-                Justification = "MemoryManager<byte>.Dispose(bool) is abstract — there is no base implementation to call.")]
-            protected override void Dispose(bool disposing)
-            {
-            }
-        }
     }
 }

@@ -32,6 +32,24 @@ namespace ExcelReader.Core.Reader
             }
         }
 
+        // <sst uniqueCount="…"> is an attacker-controlled attribute independent of the part's actual
+        // byte length — a file can be a few hundred bytes on disk yet declare uniqueCount in the
+        // hundreds of millions, sizing the offsets array to that count before a single <si> is parsed.
+        // The declared count can never legitimately exceed what the part could physically contain: the
+        // smallest possible entry is "<si/>" (5 bytes), so partLength / 5 is a safe, generous ceiling
+        // that also makes the "uniqueCount + 1" addition downstream incapable of overflowing (this
+        // bound is always far below int.MaxValue for any MaxSharedStringBytes a caller would configure).
+        private const int MinBytesPerSharedStringEntry = 5;
+
+        internal static void ThrowIfSharedStringCountImplausible(int uniqueCount, int partLength)
+        {
+            long maxPlausibleCount = (long)partLength / MinBytesPerSharedStringEntry;
+            if (uniqueCount > maxPlausibleCount)
+            {
+                throw new ExcelLimitExceededException(nameof(ExcelReaderOptions.MaxSharedStringBytes), maxPlausibleCount, uniqueCount);
+            }
+        }
+
         // Format-agnostic core shared by ExcelReaderOptions (XLSX/XLSB/XLS) and CsvReaderOptions —
         // both cap a single buffered cell/record the same way, just under different option types.
         internal static int NextBufferSize(int maxCellBytes, string limitName, int current, int needed, int elementSize = 1)

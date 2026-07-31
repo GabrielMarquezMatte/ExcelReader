@@ -138,36 +138,5 @@ namespace ExcelReader.Tests
                 return base.Read(buffer, offset, Math.Min(count, chunkSize));
             }
         }
-
-        private sealed class NonArrayMemoryManager : MemoryManager<byte>
-        {
-            private readonly byte[] _data;
-
-            internal NonArrayMemoryManager(byte[] data)
-            {
-                _data = data;
-            }
-
-            public override Span<byte> GetSpan()
-            {
-                return _data;
-            }
-
-            public override MemoryHandle Pin(int elementIndex = 0)
-            {
-                throw new NotSupportedException();
-            }
-
-            public override void Unpin()
-            {
-                throw new NotSupportedException();
-            }
-
-            [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP010:Call base.Dispose(disposing)",
-                Justification = "MemoryManager<byte>.Dispose(bool) is abstract — there is no base implementation to call.")]
-            protected override void Dispose(bool disposing)
-            {
-            }
-        }
     }
 }

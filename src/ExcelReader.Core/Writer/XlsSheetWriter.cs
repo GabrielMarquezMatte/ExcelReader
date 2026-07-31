@@ -11,7 +11,9 @@ namespace ExcelReader.Core.Writer
     public sealed class XlsSheetWriter : IDisposable, ISheetWriter<XlsRowWriter>
     {
         private const int MaxRow = 65535;
-        private const int MaxColumn = 255;
+        // Internal (not private) so XlsRowWriter.Skip can bound itself against the same limit instead
+        // of duplicating the literal — BIFF8's grid is 256 columns, not the 16,384 of XLSX/XLSB.
+        internal const int MaxColumn = 255;
         private const int MaxSheetNameLength = 31;
 
         // Fixed framing added around the cell records when the substream is assembled.

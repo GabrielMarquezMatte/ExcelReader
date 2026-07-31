@@ -48,6 +48,9 @@ namespace ExcelReader.Core.Parser.Internal
 
         // Throws if any [ExcelRequired] property was left unmatched after the header row was mapped.
         // unmatched[i] is int.MaxValue when property i found no header column (RowProjector's sentinel).
+        // A header missing a required column is a defect in the file, not a caller mistake, so this
+        // throws ExcelParseException — the same type used for a per-row parse/required-value failure —
+        // rather than InvalidOperationException, which would misattribute the fault to the caller.
         internal void ValidateRequiredColumns(int[] unmatched)
         {
             List<string>? missing = null;
@@ -60,8 +63,7 @@ namespace ExcelReader.Core.Parser.Internal
             }
             if (missing is not null)
             {
-                throw new InvalidOperationException(
-                    $"Required column(s) not found in the header row: {string.Join(", ", missing)}.");
+                throw new ExcelParseException(missing);
             }
         }
 
