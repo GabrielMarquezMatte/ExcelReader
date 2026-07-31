@@ -337,6 +337,14 @@ paket-files/
 __pycache__/
 *.pyc
 
+# Python (.github/scripts/*.py tooling) - was previously only kept out of git status
+# because mypy writes its own .mypy_cache/.gitignore containing "*"; an explicit rule
+# here doesn't depend on that.
+.mypy_cache/
+.venv/
+.pytest_cache/
+.ruff_cache/
+
 # Cake - Uncomment if you are using it
 # tools/**
 # !tools/packages.config
