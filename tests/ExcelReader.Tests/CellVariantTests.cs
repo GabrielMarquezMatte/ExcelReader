@@ -48,7 +48,7 @@ namespace ExcelReader.Tests
         [Fact]
         public void TryGetDoubleRejectsCommaDecimalInsteadOfMisreadingIt()
         {
-            // COR-2: text-backed cell (t="str", not Number-typed, so TryGetDouble falls through to its
+            // Text-backed cell (t="str", not Number-typed, so TryGetDouble falls through to its
             // text-parsing branch). Default NumberStyles treats ',' as a thousands separator, so a
             // pt-BR-formatted "1,5" used to silently parse as 15.0 instead of failing.
             using var ms = WorkbookBuilder.Build(

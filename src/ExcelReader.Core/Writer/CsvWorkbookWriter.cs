@@ -81,7 +81,7 @@ namespace ExcelReader.Core.Writer
         /// <exception cref="InvalidOperationException">The workbook has already been started.</exception>
         public ValueTask StartAsync(CancellationToken ct = default)
         {
-            // COR-6: this used to do nothing at all — no state tracking, so AddSheet worked identically
+            // This used to do nothing at all — no state tracking, so AddSheet worked identically
             // before StartAsync, after EndAsync, or called twice, unlike the other three workbook
             // writers. WriterStateGuard is the shared machinery those three already use for exactly
             // this.

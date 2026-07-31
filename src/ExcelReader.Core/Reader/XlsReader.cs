@@ -326,7 +326,7 @@ namespace ExcelReader.Core.Reader
                 // A zero-length CONTINUE payload leaves `needed <= buffer.Length` in EnsureSharedCapacity
                 // forever, so its ThrowIfOverSharedStringLimit call never fires — but each CONTINUE record
                 // still costs 4 real bytes on disk (its own header) regardless of payload size, so an
-                // endless run of empty ones grows `boundaries` with no limit ever consulted (SEC-5).
+                // endless run of empty ones grows `boundaries` with no limit ever consulted.
                 // Charging that fixed per-record cost here closes the gap independent of payload length.
                 LimitChecks.ThrowIfOverSharedStringLimit(options, (long)boundaries.Count * ContinueRecordHeaderBytes);
                 EnsureSharedCapacity(options, ref buffer, len + cont.Length);
@@ -346,7 +346,7 @@ namespace ExcelReader.Core.Reader
         private static void DecodeSharedStrings(ReadOnlySpan<byte> sst, ReadOnlySpan<int> boundaries, ExcelReaderOptions options, out byte[] sharedFlat, out int[] sharedOffsets)
         {
             LimitChecks.ThrowIfOverSharedStringLimit(options, sst.Length);
-            // PERF-3: `sst.Length * 3` as a plain int multiply wraps negative above ~715M, which used
+            // `sst.Length * 3` as a plain int multiply wraps negative above ~715M, which used
             // to silently degrade to `Rent(256)` — harmless (EnsureSharedCapacity's growth path still
             // re-checks the limit and re-rents correctly) but defeats the point of pre-sizing for a
             // legitimately huge SST. Widen to long first so the initial size request is always correct.

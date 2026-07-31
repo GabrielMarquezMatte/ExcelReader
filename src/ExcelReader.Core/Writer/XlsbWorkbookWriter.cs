@@ -103,7 +103,7 @@ namespace ExcelReader.Core.Writer
             WriterStateGuard.ThrowIfEnded(_state, this);
             WriterStateGuard.RequireStarted(_state, nameof(XlsbWorkbookWriter), "ending");
             ct.ThrowIfCancellationRequested();
-            // COR-1: unlike XlsxSheetWriter (which registers itself in StartAsync, so _sheets.Count is
+            // Unlike XlsxSheetWriter (which registers itself in StartAsync, so _sheets.Count is
             // already accurate by the time the workbook ends), XlsbSheetWriter registers itself in its
             // own EndAsync/DisposeAsync — so the active sheet must be disposed (and thus registered)
             // BEFORE checking _sheets.Count here, or a workbook with exactly one still-open sheet (never
@@ -147,7 +147,7 @@ namespace ExcelReader.Core.Writer
             _disposed = true;
             if (_state == WriterState.Started)
             {
-                // COR-1 (second half): EndAsync deliberately rejects a zero-sheet workbook, so disposal
+                // EndAsync deliberately rejects a zero-sheet workbook, so disposal
                 // must release a partially configured writer itself rather than routing through it —
                 // this branch used to just flip _state without disposing _zip at all, unlike
                 // XlsxWorkbookWriter's equivalent branch. _activeSheet is checked too (unlike Xlsx's

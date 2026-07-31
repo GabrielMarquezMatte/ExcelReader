@@ -374,7 +374,7 @@ namespace ExcelReader.Tests
             Assert.Equal(7d, XlsbCell.Create((short?)7).Number);
         }
 
-        // COR-8: XlsbRowWriter.Skip had no bound anywhere in the class before this fix — not even
+        // XlsbRowWriter.Skip had no bound anywhere in the class before this fix — not even
         // downstream at Write time, unlike XLS. BIFF12/.xlsb uses the modern 16,384-column grid.
         [Fact]
         public async Task SkipBeyondColumnLimitThrows()
@@ -390,7 +390,7 @@ namespace ExcelReader.Tests
             Assert.Throws<ExcelLimitExceededException>(() => row.Skip(16_385));
         }
 
-        // COR-5: Write<T> falls back through XlsbRowWriter.ToDouble, whose final fallback used to
+        // Write<T> falls back through XlsbRowWriter.ToDouble, whose final fallback used to
         // silently return 0.0 for a T that formats as non-numeric text instead of throwing.
         [Fact]
         public async Task WriteNonNumericFormattableThrowsArgumentException()
@@ -406,7 +406,7 @@ namespace ExcelReader.Tests
             Assert.Throws<ArgumentException>(() => row.Write(new NonNumericFormattable()));
         }
 
-        // COR-1: EndAsync used to flip _state to Ended before the zero-sheet check threw, so a failed
+        // EndAsync used to flip _state to Ended before the zero-sheet check threw, so a failed
         // EndAsync left DisposeAsync's state check matching neither Started nor Created — _zip was
         // never disposed on this path. After the reorder, _state stays Started when EndAsync throws,
         // so DisposeAsync correctly falls into its Started branch instead of silently skipping _zip.

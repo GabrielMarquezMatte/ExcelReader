@@ -46,8 +46,8 @@ namespace ExcelReader.Tests
         }
 
         // The plain xls seed above never has its SST split across a CONTINUE record, so mutation never
-        // touches that decode path (SEC-5: a zero-length CONTINUE can grow an unbounded list invisible
-        // to the byte limit). This seed forces a real CONTINUE boundary using the same byte layout as
+        // touches that decode path (a zero-length CONTINUE can grow an unbounded list invisible
+        // to the byte limit otherwise). This seed forces a real CONTINUE boundary using the same byte layout as
         // XlsReaderTests.SharedStringSplitAcrossContinueBoundaryDecodesCorrectly (a known-good, already
         // passing construction), so mutation now has that boundary to corrupt.
         [Fact]
@@ -58,7 +58,7 @@ namespace ExcelReader.Tests
             Assert.Equal(RoundsPerFormat, completed);
         }
 
-        // SEC-7 item 4: whole-file byte flips mostly corrupt the ZIP container itself (a bad CRC/local
+        // Whole-file byte flips mostly corrupt the ZIP container itself (a bad CRC/local
         // header), so the mutation dies in DeflateStream/ZipArchive before it ever reaches this
         // library's own XML/BIFF12 parsing — the part these formats actually need fuzzed. Mutating one
         // part's decompressed content, then rebuilding a structurally valid ZIP with a fresh CRC via

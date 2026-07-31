@@ -216,7 +216,7 @@ namespace ExcelReader.Core.Writer
         {
             ThrowIfDisposed();
             ArgumentOutOfRangeException.ThrowIfNegative(count);
-            // COR-8: XlsxRowWriter already bounds this; XLS/XLSB didn't, so Skip(int.MaxValue) advanced
+            // XlsxRowWriter already bounds this; XLS/XLSB didn't, so Skip(int.MaxValue) advanced
             // _columnIndex unboundedly instead of failing fast.
             if (count > 0 && _columnIndex > ExcelLimits.MaxColumns - count)
             {
@@ -286,7 +286,7 @@ namespace ExcelReader.Core.Writer
                 return convertible.ToDouble(CultureInfo.InvariantCulture);
             }
             Span<byte> bytes = stackalloc byte[64];
-            // COR-5: silently falling back to 0.0 here (as this used to) writes a wrong-but-plausible
+            // Silently falling back to 0.0 here (as this used to) writes a wrong-but-plausible
             // value for a caller-supplied T that can't actually convert — banned by STYLEGUIDE.md:209.
             // This is a caller mistake (a Write<T> call with a T that doesn't represent a number), not a
             // file defect, so it throws ArgumentException, matching CellValueGuards' convention for the

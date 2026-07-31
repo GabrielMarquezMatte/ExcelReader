@@ -218,7 +218,7 @@ namespace ExcelReader.Core.Writer
         {
             ThrowIfDisposed();
             ArgumentOutOfRangeException.ThrowIfNegative(count);
-            // COR-8: unbounded before — Skip(int.MaxValue) advanced _columnIndex with nothing checking
+            // Unbounded before — Skip(int.MaxValue) advanced _columnIndex with nothing checking
             // it until the next actual cell Write eventually rejected it downstream (XlsSheetWriter's
             // own ValidateColumn), or never did if no further Write followed. BIFF8's real grid is 256
             // columns (XlsSheetWriter.MaxColumn), not the 16,384 of XLSX/XLSB — using that constant here
