@@ -1,5 +1,5 @@
-using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
+using System.IO.Compression;
 using ExcelReader.Core.Reader;
 using ExcelReader.Core.Writer;
 
@@ -20,22 +20,6 @@ namespace ExcelReader.Tests
     {
         private const int Seed = 20260723;
         private const int RoundsPerFormat = 500;
-
-        // Anything NOT an instance of one of these types is treated as a real bug: a corrupt file must
-        // be rejected gracefully, not crash the parser. Deliberately broad (covers the BCL exceptions
-        // ZipArchive/Stream plumbing can itself throw on a corrupted container) since the goal is
-        // catching genuine unhandled-crash bugs, not policing exact exception taxonomy.
-        private static readonly Type[] AcceptableExceptionTypes =
-        [
-            typeof(InvalidDataException),
-            typeof(ExcelLimitExceededException),
-            typeof(EndOfStreamException),
-            typeof(IOException),
-            typeof(OverflowException),
-            typeof(ArgumentException), // covers ArgumentOutOfRangeException, ArgumentNullException
-            typeof(NotSupportedException),
-            typeof(FormatException),
-        ];
 
         [Fact]
         public void MutatedXlsxBytesNeverCrashTheReader()
@@ -61,6 +45,106 @@ namespace ExcelReader.Tests
             Assert.Equal(RoundsPerFormat, completed);
         }
 
+        // The plain xls seed above never has its SST split across a CONTINUE record, so mutation never
+        // touches that decode path (a zero-length CONTINUE can grow an unbounded list invisible
+        // to the byte limit otherwise). This seed forces a real CONTINUE boundary using the same byte layout as
+        // XlsReaderTests.SharedStringSplitAcrossContinueBoundaryDecodesCorrectly (a known-good, already
+        // passing construction), so mutation now has that boundary to corrupt.
+        [Fact]
+        public void MutatedXlsBytesWithContinueRecordNeverCrashTheReader()
+        {
+            byte[] seed = BuildXlsSeedWithContinuedSst();
+            int completed = FuzzFormat(seed, format: "xls-continue");
+            Assert.Equal(RoundsPerFormat, completed);
+        }
+
+        // Whole-file byte flips mostly corrupt the ZIP container itself (a bad CRC/local
+        // header), so the mutation dies in DeflateStream/ZipArchive before it ever reaches this
+        // library's own XML/BIFF12 parsing — the part these formats actually need fuzzed. Mutating one
+        // part's decompressed content, then rebuilding a structurally valid ZIP with a fresh CRC via
+        // ZipArchive, guarantees every round's corruption lands where the parser can see it.
+        [Fact]
+        public void MutatedXlsxSharedStringsContentNeverCrashesTheReader()
+        {
+            byte[] seed = BuildXlsxSeed();
+            int completed = FuzzZipEntryContent(seed, "xl/sharedStrings.xml", format: "xlsx-sharedStrings");
+            Assert.Equal(RoundsPerFormat, completed);
+        }
+
+        [Fact]
+        public async Task MutatedXlsbWorkbookBinContentNeverCrashesTheReader()
+        {
+            byte[] seed = await BuildXlsbSeedAsync();
+            int completed = FuzzZipEntryContent(seed, "xl/worksheets/sheet1.bin", format: "xlsb-sheet1");
+            Assert.Equal(RoundsPerFormat, completed);
+        }
+
+        private static int FuzzZipEntryContent(byte[] seed, string entryName, string format)
+        {
+            byte[] entryContent = ReadZipEntry(seed, entryName);
+            var rng = new Random(Seed);
+            for (int round = 0; round < RoundsPerFormat; round++)
+            {
+                byte[] mutatedEntry = FuzzMutation.MutateCopy(entryContent, rng, out int[] positions);
+                byte[] mutatedZip = RebuildZipWithEntry(seed, entryName, mutatedEntry);
+                try
+                {
+                    FuzzMutation.RunBounded(() => OpenAndDrain(mutatedZip));
+                }
+                catch (Exception ex) when (FuzzMutation.IsAcceptable(ex))
+                {
+                    // Expected: the mutated bytes were rejected gracefully.
+                }
+                catch (Exception ex)
+                {
+                    string offsets = string.Join(", ", positions);
+                    throw new InvalidOperationException(
+                        string.Create(CultureInfo.InvariantCulture,
+                            $"Round {round} on {format} seed (entry '{entryName}') produced an unhandled '{ex.GetType().Name}' (mutated byte offsets within the entry: [{offsets}]). This indicates a validation/bounds gap reachable from untrusted input, not a graceful rejection."),
+                        ex);
+                }
+            }
+            return RoundsPerFormat;
+        }
+
+        private static byte[] ReadZipEntry(byte[] zipBytes, string entryName)
+        {
+            using var input = new MemoryStream(zipBytes);
+            using var zip = new ZipArchive(input, ZipArchiveMode.Read);
+            using Stream entryStream = zip.GetEntry(entryName)!.Open();
+            using var buffer = new MemoryStream();
+            entryStream.CopyTo(buffer);
+            return buffer.ToArray();
+        }
+
+        // Copies every entry verbatim except `entryName`, which is written with `newContent` instead —
+        // ZipArchive computes a fresh CRC32/sizes for it, so the result is always a structurally valid
+        // ZIP even though the part's content is corrupted.
+        private static byte[] RebuildZipWithEntry(byte[] zipBytes, string entryName, byte[] newContent)
+        {
+            using var input = new MemoryStream(zipBytes);
+            using var output = new MemoryStream();
+            using (var srcZip = new ZipArchive(input, ZipArchiveMode.Read))
+            using (var dstZip = new ZipArchive(output, ZipArchiveMode.Create, leaveOpen: true))
+            {
+                foreach (ZipArchiveEntry srcEntry in srcZip.Entries)
+                {
+                    ZipArchiveEntry dstEntry = dstZip.CreateEntry(srcEntry.FullName, CompressionLevel.Fastest);
+                    using Stream dstStream = dstEntry.Open();
+                    if (string.Equals(srcEntry.FullName, entryName, StringComparison.Ordinal))
+                    {
+                        dstStream.Write(newContent);
+                    }
+                    else
+                    {
+                        using Stream srcStream = srcEntry.Open();
+                        srcStream.CopyTo(dstStream);
+                    }
+                }
+            }
+            return output.ToArray();
+        }
+
         // Returns the number of rounds completed (always RoundsPerFormat unless it throws first).
         // Any exception escaping a round that isn't in AcceptableExceptionTypes is rewrapped with the
         // mutated byte offsets so the failure is reproducible, then rethrown — that failure is what
@@ -70,12 +154,12 @@ namespace ExcelReader.Tests
             var rng = new Random(Seed);
             for (int round = 0; round < RoundsPerFormat; round++)
             {
-                byte[] mutated = MutateCopy(seed, rng, out int[] positions);
+                byte[] mutated = FuzzMutation.MutateCopy(seed, rng, out int[] positions);
                 try
                 {
-                    OpenAndDrain(mutated);
+                    FuzzMutation.RunBounded(() => OpenAndDrain(mutated));
                 }
-                catch (Exception ex) when (IsAcceptable(ex))
+                catch (Exception ex) when (FuzzMutation.IsAcceptable(ex))
                 {
                     // Expected: the mutated bytes were rejected gracefully.
                 }
@@ -107,39 +191,6 @@ namespace ExcelReader.Tests
                     }
                 }
             }
-        }
-
-        private static bool IsAcceptable(Exception ex)
-        {
-            foreach (Type acceptableType in AcceptableExceptionTypes)
-            {
-                if (acceptableType.IsInstanceOfType(ex))
-                {
-                    return true;
-                }
-            }
-            return false;
-        }
-
-        // Flips 1-8 random bytes to random values; a copy so the seed itself is never mutated.
-        // Deliberately not cryptographically secure — CA5394 doesn't apply: a seeded, reproducible
-        // PRNG is exactly what makes a fuzz failure pinpoint-able, unlike a CSPRNG would be.
-        [SuppressMessage("Security", "CA5394:Do not use insecure randomness",
-            Justification = "Fuzzing needs a reproducible seeded PRNG, not cryptographic randomness.")]
-        [SuppressMessage("Performance", "HLQ013:Consider using 'foreach' loop instead of 'for' loop",
-            Justification = "Each iteration both reads (rng.Next) and writes positions[i] by index; foreach can't express the write.")]
-        private static byte[] MutateCopy(byte[] seed, Random rng, out int[] positions)
-        {
-            byte[] copy = (byte[])seed.Clone();
-            int count = rng.Next(1, 9);
-            positions = new int[count];
-            for (int i = 0; i < count; i++)
-            {
-                int pos = rng.Next(copy.Length);
-                positions[i] = pos;
-                copy[pos] = (byte)rng.Next(256);
-            }
-            return copy;
         }
 
         private static byte[] BuildXlsxSeed()
@@ -184,6 +235,21 @@ namespace ExcelReader.Tests
             [
                 ("S1", [["Name", 1, true], ["Alice", 2, false]]),
             ]);
+            return ms.ToArray();
+        }
+
+        private static byte[] BuildXlsSeedWithContinuedSst()
+        {
+            // string 0 = "AB" (cch=2, compressed); string 1 = "CDEF" split after "CD" — the SST record
+            // ends mid-way through string 1's character array and a CONTINUE record resumes it.
+            byte[] firstRegion =
+            [
+                0x02, 0x00, 0x00, (byte)'A', (byte)'B',
+                0x04, 0x00, 0x00, (byte)'C', (byte)'D',
+            ];
+            byte[] continueRegion = [0x00, (byte)'E', (byte)'F']; // grbit + remaining two chars
+            byte[] framed = XlsWorkbookBuilder.FrameSstWithContinue(cstTotal: 2, cstUnique: 2, firstRegion, continueRegion);
+            using MemoryStream ms = XlsWorkbookBuilder.BuildRawSst(framed, labelSstCount: 2);
             return ms.ToArray();
         }
     }

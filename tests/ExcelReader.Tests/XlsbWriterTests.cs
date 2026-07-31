@@ -373,5 +373,58 @@ namespace ExcelReader.Tests
             Assert.Equal(6d, XlsbCell.Create<short>(6).Number);
             Assert.Equal(7d, XlsbCell.Create((short?)7).Number);
         }
+
+        // XlsbRowWriter.Skip had no bound anywhere in the class before this fix — not even
+        // downstream at Write time, unlike XLS. BIFF12/.xlsb uses the modern 16,384-column grid.
+        [Fact]
+        public async Task SkipBeyondColumnLimitThrows()
+        {
+            CancellationToken ct = TestContext.Current.CancellationToken;
+            using MemoryStream ms = new();
+            await using XlsbWorkbookWriter wb = await XlsbWorkbookWriter.CreateAsync(ms, leaveOpen: true, ct: ct);
+            await wb.StartAsync(ct);
+            XlsbSheetWriter sheet = wb.AddSheet("Sheet1");
+            await sheet.StartAsync(ct);
+            await using XlsbRowWriter row = await sheet.StartRowAsync(ct);
+
+            Assert.Throws<ExcelLimitExceededException>(() => row.Skip(16_385));
+        }
+
+        // Write<T> falls back through XlsbRowWriter.ToDouble, whose final fallback used to
+        // silently return 0.0 for a T that formats as non-numeric text instead of throwing.
+        [Fact]
+        public async Task WriteNonNumericFormattableThrowsArgumentException()
+        {
+            CancellationToken ct = TestContext.Current.CancellationToken;
+            using MemoryStream ms = new();
+            await using XlsbWorkbookWriter wb = await XlsbWorkbookWriter.CreateAsync(ms, leaveOpen: true, ct: ct);
+            await wb.StartAsync(ct);
+            XlsbSheetWriter sheet = wb.AddSheet("Sheet1");
+            await sheet.StartAsync(ct);
+            await using XlsbRowWriter row = await sheet.StartRowAsync(ct);
+
+            Assert.Throws<ArgumentException>(() => row.Write(new NonNumericFormattable()));
+        }
+
+        // EndAsync used to flip _state to Ended before the zero-sheet check threw, so a failed
+        // EndAsync left DisposeAsync's state check matching neither Started nor Created — _zip was
+        // never disposed on this path. After the reorder, _state stays Started when EndAsync throws,
+        // so DisposeAsync correctly falls into its Started branch instead of silently skipping _zip.
+        [Fact]
+        public async Task DisposeAfterFailedZeroSheetEndDoesNotThrow()
+        {
+            CancellationToken ct = TestContext.Current.CancellationToken;
+            using MemoryStream ms = new();
+            XlsbWorkbookWriter wb = await XlsbWorkbookWriter.CreateAsync(ms, leaveOpen: true, ct: ct);
+            await wb.StartAsync(ct);
+
+            await Assert.ThrowsAsync<InvalidOperationException>(() => wb.EndAsync(ct).AsTask());
+
+            // Before the fix, _state was already Ended here, so DisposeAsync's Started/Created branches
+            // both missed and _zip leaked silently — this call completing without throwing or hanging is
+            // the observable half of the fix; the other half (that _zip's Dispose actually ran) is
+            // internal and not directly assertable from the test.
+            await wb.DisposeAsync();
+        }
     }
 }

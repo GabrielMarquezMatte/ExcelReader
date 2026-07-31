@@ -125,7 +125,12 @@ namespace ExcelReader.Core.Reader
             int firstDifatSector = ReadI32(header, 0x44);
             int difatSectorCount = ReadI32(header, 0x48);
 
-            if (sectorSize < HeaderSize || sectorSize > 4096 || miniSectorSize <= 0)
+            // [MS-CFB] fixes the mini sector size at 64 bytes (shift = 6); nothing bounded the upper end
+            // here before, and an unchecked shift amount from the file could still land the result well
+            // above 64 (int shift amounts wrap mod 32, so this never overflows, but a crafted header
+            // could pick any power-of-two result and later drive checked(sector * miniSectorSize) into an
+            // avoidable OverflowException instead of a graceful rejection at the source).
+            if (sectorSize < HeaderSize || sectorSize > 4096 || miniSectorSize != 64)
             {
                 throw new InvalidDataException("Unsupported OLE sector size.");
             }
@@ -263,8 +268,19 @@ namespace ExcelReader.Core.Reader
             }
         }
 
+        // Every sector-based read in this file (FAT, DIFAT, chain walks) funnels through here with an
+        // offset derived from a sector id read straight from the file. SectorOffset already rejects a
+        // negative sector, but a huge positive one (still a valid int, e.g. from a single flipped byte)
+        // passed that check and reached Stream.Seek/ReadExactly directly — surfacing as a raw
+        // ArgumentOutOfRangeException or EndOfStreamException instead of the graceful InvalidDataException
+        // every other bound in this file already throws. This is the one choke point all three callers
+        // share, so the bound belongs here rather than duplicated at each call site.
         private static void ReadAt(Stream source, long offset, Span<byte> dest)
         {
+            if (offset < 0 || offset > source.Length - dest.Length)
+            {
+                throw new InvalidDataException("The OLE compound file references a sector outside the container.");
+            }
             source.Seek(offset, SeekOrigin.Begin);
             source.ReadExactly(dest);
         }
@@ -349,15 +365,22 @@ namespace ExcelReader.Core.Reader
             int sector = startSector;
             int written = 0;
             byte[] sectorBuf = ArrayPool<byte>.Shared.Rent(sectorSize);
+            // Counting iterations (as this used to) lets a 2-sector cycle (fat[a]=b, fat[b]=a) run the
+            // full fat.Length before tripping, writing sectorSize bytes per hop into this unbounded
+            // MemoryStream — up to ~1000x amplification on a file whose FAT happens to have many
+            // entries. Tracking visited sectors instead catches a cycle after at most fat.Length
+            // distinct sectors, which is the true worst case for an acyclic chain too.
+            bool[] visited = ArrayPool<bool>.Shared.Rent(Math.Max(1, fat.Length));
+            Array.Clear(visited, 0, fat.Length);
             try
             {
-                int sectorsRead = 0;
                 while (sector is >= 0 and not EndOfChain && (byteLimit < 0 || written < byteLimit))
                 {
-                    if (sectorsRead++ >= fat.Length)
+                    if ((uint)sector >= (uint)fat.Length || visited[sector])
                     {
                         throw new InvalidDataException("OLE FAT chain contains a cycle.");
                     }
+                    visited[sector] = true;
                     ReadAt(source, SectorOffset(sector, sectorSize), sectorBuf);
                     int take = byteLimit < 0 ? sectorSize : Math.Min(sectorSize, byteLimit - written);
                     ms.Write(sectorBuf, 0, take);
@@ -369,6 +392,7 @@ namespace ExcelReader.Core.Reader
             finally
             {
                 ArrayPool<byte>.Shared.Return(sectorBuf);
+                ArrayPool<bool>.Shared.Return(visited);
             }
         }
 
@@ -433,6 +457,14 @@ namespace ExcelReader.Core.Reader
             {
                 ReadOnlySpan<byte> entry = bytes.Slice(i * 128, 128);
                 int nameBytes = ReadU16(entry, 64);
+                // [MS-CFB] caps a directory entry's name length at 64 bytes (including the null
+                // terminator); nothing enforced that here, so a crafted value up to 65535 either threw
+                // a raw ArgumentOutOfRangeException slicing this fixed 128-byte slot, or (for values
+                // between 66 and 130) silently read adjacent slot fields into the name string.
+                if (nameBytes < 0 || nameBytes > 64)
+                {
+                    throw new InvalidDataException("The OLE directory entry name length is out of range.");
+                }
                 string name = string.Empty;
                 if (nameBytes >= 2)
                 {

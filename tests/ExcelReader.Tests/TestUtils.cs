@@ -1,10 +1,99 @@
+using System.Buffers;
+using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
+using System.Globalization;
 using System.IO.Compression;
 using System.Text;
+using ExcelReader.Core.Enums;
+using ExcelReader.Core.Reader;
 using ExcelReader.Core.Writer;
 
 namespace ExcelReader.Tests
 {
+    // Shared seeded-mutation fuzz harness used by FuzzTests, MemoryZipParityTests, and
+    // ZipMemoryIndexTests. Previously each file had its own copy of MutateCopy and its own
+    // AcceptableExceptionTypes list, and the lists had already drifted apart from each other:
+    // Span-bounds violation surfacing as ArgumentOutOfRangeException, or an unchecked-arithmetic
+    // wrap surfacing as OverflowException, is the same "parser forgot a check" bug class as
+    // IndexOutOfRangeException — which none of the three lists ever accepted. Only exceptions
+    // that mean "this input was deliberately and correctly rejected" belong here.
+    internal static class FuzzMutation
+    {
+        internal static readonly Type[] AcceptableExceptionTypes =
+        [
+            typeof(InvalidDataException),
+            typeof(ExcelLimitExceededException),
+            typeof(IOException),
+            typeof(NotSupportedException),
+            typeof(FormatException),
+        ];
+
+        internal static bool IsAcceptable(Exception ex)
+        {
+            foreach (Type acceptableType in AcceptableExceptionTypes)
+            {
+                if (acceptableType.IsInstanceOfType(ex))
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        // Flips 1-8 random bytes to random values; a copy so the seed itself is never mutated.
+        // Deliberately not cryptographically secure — CA5394 doesn't apply: a seeded, reproducible
+        // PRNG is exactly what makes a fuzz failure pinpoint-able, unlike a CSPRNG would be.
+        [SuppressMessage("Security", "CA5394:Do not use insecure randomness",
+            Justification = "Fuzzing needs a reproducible seeded PRNG, not cryptographic randomness.")]
+        [SuppressMessage("Performance", "HLQ013:Consider using 'foreach' loop instead of 'for' loop",
+            Justification = "Each iteration both reads (rng.Next) and writes positions[i] by index; foreach can't express the write.")]
+        internal static byte[] MutateCopy(byte[] seed, Random rng, out int[] positions)
+        {
+            byte[] copy = (byte[])seed.Clone();
+            int count = rng.Next(1, 9);
+            positions = new int[count];
+            for (int i = 0; i < count; i++)
+            {
+                int pos = rng.Next(copy.Length);
+                positions[i] = pos;
+                copy[pos] = (byte)rng.Next(256);
+            }
+            return copy;
+        }
+
+        // An attacker-controlled count driving an allocation the configured limits never see
+        // doesn't necessarily throw at all — it can succeed while
+        // burning far more time/memory than a few-KB seed file could ever legitimately need. A round
+        // that completes "successfully" after allocating hundreds of MB, or after seconds of spinning,
+        // is not a graceful rejection; it's the amplification attack working. The caps here are set
+        // generously above anything these tiny seeds should ever legitimately need (they normally
+        // allocate low hundreds of KB and run in low single-digit milliseconds), so tripping this is a
+        // real finding, not noise.
+        private const long MaxAllocatedBytesPerRound = 32L * 1024 * 1024;
+        private static readonly TimeSpan MaxDurationPerRound = TimeSpan.FromSeconds(2);
+
+        internal static void RunBounded(Action action)
+        {
+            long before = GC.GetAllocatedBytesForCurrentThread();
+            var stopwatch = Stopwatch.StartNew();
+            action();
+            stopwatch.Stop();
+            long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+            if (allocated > MaxAllocatedBytesPerRound)
+            {
+                throw new InvalidOperationException(
+                    string.Create(CultureInfo.InvariantCulture,
+                        $"Round allocated {allocated:N0} bytes, exceeding the {MaxAllocatedBytesPerRound:N0}-byte budget. This indicates an attacker-controlled size/count driving an allocation the configured limits never checked."));
+            }
+            if (stopwatch.Elapsed > MaxDurationPerRound)
+            {
+                throw new InvalidOperationException(
+                    string.Create(CultureInfo.InvariantCulture,
+                        $"Round took {stopwatch.Elapsed.TotalMilliseconds:N0}ms, exceeding the {MaxDurationPerRound.TotalMilliseconds:N0}ms budget. This indicates an unbounded loop or O(n^2) path reachable from untrusted input."));
+            }
+        }
+    }
+
     // Wraps a byte array as a read-only, forward-only stream (CanSeek == false), for exercising the
     // non-seekable-source code paths (buffered .xls loading, CSV single-pass enumeration, etc.).
     internal sealed class NonSeekableStream : Stream
@@ -67,6 +156,84 @@ namespace ExcelReader.Tests
                 _inner.Dispose();
             }
             base.Dispose(disposing);
+        }
+    }
+
+    // Was duplicated (CoverageGapTests, XlsReaderTests) with a naming split (Disposed vs
+    // WasDisposed) and a constructor split (parameterless vs byte[]). Both are kept here as overloads
+    // rather than picking one, so neither call site needed to change its construction style.
+    internal sealed class TrackingStream : MemoryStream
+    {
+        internal TrackingStream()
+        {
+        }
+
+        internal TrackingStream(byte[] bytes)
+            : base(bytes)
+        {
+        }
+
+        internal bool Disposed { get; private set; }
+
+        protected override void Dispose(bool disposing)
+        {
+            Disposed = true;
+            base.Dispose(disposing);
+        }
+    }
+
+    // Was duplicated identically in BufferedStreamCursorTests and MemoryZipParityTests
+    // (GetSpan-backed, no Memory override — exercises the GetSpan-based read path). A third,
+    // deliberately different copy in MemorySourceParityTests (Memory-backed, GetSpan throws — exercises
+    // the opposite path on purpose) is NOT folded in here; merging it would silently change which code
+    // path that test covers.
+    internal sealed class NonArrayMemoryManager : MemoryManager<byte>
+    {
+        private readonly byte[] _data;
+
+        internal NonArrayMemoryManager(byte[] data)
+        {
+            _data = data;
+        }
+
+        public override Span<byte> GetSpan()
+        {
+            return _data;
+        }
+
+        public override MemoryHandle Pin(int elementIndex = 0)
+        {
+            throw new NotSupportedException();
+        }
+
+        public override void Unpin()
+        {
+            throw new NotSupportedException();
+        }
+
+        [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP010:Call base.Dispose(disposing)",
+            Justification = "MemoryManager<byte>.Dispose(bool) is abstract — there is no base implementation to call.")]
+        protected override void Dispose(bool disposing)
+        {
+        }
+    }
+
+    // Was duplicated identically in MemoryZipParityTests and PrefetchDecompressionTests. A
+    // third, deliberately different copy in SyncAsyncParityTests (adds StyleIndex, and stores
+    // ValueBase64 instead of Value) is NOT folded in here for the same reason as NonArrayMemoryManager
+    // above — it snapshots more state than these two need.
+    internal readonly record struct CellSnapshot(
+        int Row,
+        int Column,
+        int ColumnCount,
+        CellType Type,
+        string Value,
+        bool HasDouble,
+        long DoubleBits)
+    {
+        internal static CellSnapshot RowMarker(int row, int columnCount)
+        {
+            return new CellSnapshot(row, -1, columnCount, CellType.Empty, string.Empty, false, 0);
         }
     }
 
@@ -222,6 +389,18 @@ namespace ExcelReader.Tests
             using var s = zip.CreateEntry(name).Open();
             byte[] bytes = Encoding.UTF8.GetBytes(content);
             s.Write(bytes, 0, bytes.Length);
+        }
+    }
+
+    // An IUtf8SpanFormattable that formats as non-numeric text, so XlsbRowWriter.ToDouble's
+    // final fallback (double.TryParse on the formatted bytes) fails and must throw rather than
+    // silently return 0.0. Shared by XlsWriterTests and XlsbWriterTests since both formats route
+    // Write<T> through the same XlsbRowWriter.ToDouble.
+    internal readonly struct NonNumericFormattable : IUtf8SpanFormattable
+    {
+        public bool TryFormat(Span<byte> utf8Destination, out int bytesWritten, ReadOnlySpan<char> format, IFormatProvider? provider)
+        {
+            return Encoding.UTF8.TryGetBytes("not-a-number", utf8Destination, out bytesWritten);
         }
     }
 }

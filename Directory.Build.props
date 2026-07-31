@@ -17,8 +17,6 @@
     <NoWarn>
       $(NoWarn);CA1062;RS0026;S1244;CA1819;CA1515</NoWarn>
     <NoWarn>$(NoWarn);MA0051;MA0048</NoWarn>
-    <!-- CS8032: a preview analyzer fails to instantiate in this SDK; analyzer-load noise, not our code. -->
-    <NoWarn>$(NoWarn);CS8032</NoWarn>
     <AccelerateBuildsInVisualStudio>true</AccelerateBuildsInVisualStudio>
     <AutoGenerateBindingRedirects>true</AutoGenerateBindingRedirects>
     <GenerateBindingRedirectsOutputType>true</GenerateBindingRedirectsOutputType>
@@ -38,11 +36,7 @@
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
-    <PackageReference Include="Microsoft.CodeAnalysis.BannedApiAnalyzers" Version="5.6.0">
-      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
-      <PrivateAssets>all</PrivateAssets>
-    </PackageReference>
-    <PackageReference Include="Microsoft.CodeAnalysis.NetAnalyzers" Version="11.0.100-preview.6.26359.118">
+    <PackageReference Include="Microsoft.CodeAnalysis.NetAnalyzers" Version="10.0.302">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>

@@ -73,7 +73,13 @@ namespace ExcelReader.Core.ValueObjects
                 value = _number;
                 return true;
             }
-            return FastDouble.TryParse(Value, out value) || double.TryParse(Value, CultureInfo.InvariantCulture, out value);
+            // NumberStyles.Float (no AllowThousands) — the default style lets a comma act as a
+            // thousands separator, so pt-BR comma-decimal text like "1,5" silently parsed as 15.0
+            // instead of failing. This method takes no IFormatProvider, so it can only ever be
+            // correct for genuine invariant-formatted text; rejecting ambiguous input is strictly
+            // better than silently returning a wrong number 10x off.
+            return FastDouble.TryParse(Value, out value)
+                || double.TryParse(Value, NumberStyles.Float, CultureInfo.InvariantCulture, out value);
         }
 
         /// <summary>

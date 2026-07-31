@@ -211,10 +211,22 @@ namespace ExcelReader.Core.Reader
                         date1904 = data.Length >= 2 && ReadU16(data, 0) != 0;
                         break;
                     case Rec.BoundSheet:
-                        if (TryParseBoundSheet(data, out var sheet))
+                        if (!TryParseBoundSheet(data, out var sheet))
                         {
-                            sheetList.Add(sheet);
+                            break;
                         }
+                        // BoundSheet8.lbPlyPos is attacker-controlled and later becomes a raw
+                        // BiffCursor.Position assignment (OpenCursor). Reject it here, at the point
+                        // it's read, rather than letting a negative or out-of-range value reach the
+                        // cursor — the Chained WorkbookStream kind resolved a negative position to a
+                        // valid-looking byte range elsewhere in the file (the OLE header/preceding
+                        // sectors) instead of throwing, returning wrong data silently instead of
+                        // failing loudly like the other two WorkbookStream kinds already did.
+                        if (sheet.Offset < 0 || sheet.Offset > cursor.Length)
+                        {
+                            throw new InvalidDataException("The OLE BoundSheet8 offset is out of range.");
+                        }
+                        sheetList.Add(sheet);
                         break;
                     case Rec.Sst:
                         DecodeSstFromCursor(cursor, data, options, out sharedFlat, out sharedOffsets);
@@ -311,6 +323,12 @@ namespace ExcelReader.Core.Reader
             while (cursor.PeekId() == Rec.Continue && cursor.TryReadRecord(out _, out ReadOnlySpan<byte> cont))
             {
                 boundaries.Add(len);
+                // A zero-length CONTINUE payload leaves `needed <= buffer.Length` in EnsureSharedCapacity
+                // forever, so its ThrowIfOverSharedStringLimit call never fires — but each CONTINUE record
+                // still costs 4 real bytes on disk (its own header) regardless of payload size, so an
+                // endless run of empty ones grows `boundaries` with no limit ever consulted.
+                // Charging that fixed per-record cost here closes the gap independent of payload length.
+                LimitChecks.ThrowIfOverSharedStringLimit(options, (long)boundaries.Count * ContinueRecordHeaderBytes);
                 EnsureSharedCapacity(options, ref buffer, len + cont.Length);
                 cont.CopyTo(buffer.AsSpan(len));
                 len += cont.Length;
@@ -328,7 +346,12 @@ namespace ExcelReader.Core.Reader
         private static void DecodeSharedStrings(ReadOnlySpan<byte> sst, ReadOnlySpan<int> boundaries, ExcelReaderOptions options, out byte[] sharedFlat, out int[] sharedOffsets)
         {
             LimitChecks.ThrowIfOverSharedStringLimit(options, sst.Length);
-            byte[] flat = ArrayPool<byte>.Shared.Rent(Math.Max(256, sst.Length * 3));
+            // `sst.Length * 3` as a plain int multiply wraps negative above ~715M, which used
+            // to silently degrade to `Rent(256)` — harmless (EnsureSharedCapacity's growth path still
+            // re-checks the limit and re-rents correctly) but defeats the point of pre-sizing for a
+            // legitimately huge SST. Widen to long first so the initial size request is always correct.
+            long estimatedFlatSize = Math.Max(256L, (long)sst.Length * 3);
+            byte[] flat = ArrayPool<byte>.Shared.Rent((int)Math.Min(estimatedFlatSize, Array.MaxLength));
             // One string's decoded UTF-16 units; each unit consumes >= 1 source byte, so sst.Length caps it.
             char[] scratch = ArrayPool<char>.Shared.Rent(Math.Max(64, sst.Length));
             int flatLen = 0;
@@ -438,6 +461,9 @@ namespace ExcelReader.Core.Reader
         private const int Biff8Version = 0x0600;
         private const int SubstreamGlobals = 0x0005;
         private const int SubstreamWorksheet = 0x0010;
+        // BIFF8 record header: 2-byte id + 2-byte length, the fixed cost every CONTINUE record incurs
+        // regardless of payload size (see DecodeSstFromCursor's boundaries-growth limit check).
+        private const int ContinueRecordHeaderBytes = 4;
 
         // BIFF8 record type IDs (see [MS-XLS]).
         private static class Rec

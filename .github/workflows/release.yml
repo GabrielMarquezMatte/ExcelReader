@@ -98,10 +98,19 @@ jobs:
       - name: Promote unshipped API entries
         id: promote
         run: |
-          if python3 .github/scripts/promote_public_api.py; then
+          set +e
+          python3 .github/scripts/promote_public_api.py
+          code=$?
+          set -e
+          # Exit 2 means "nothing to promote", a real no-op, not a failure. Any other
+          # nonzero code is an actual crash (missing file, permission error, etc.) and must fail
+          # the job instead of being silently absorbed into changed=false.
+          if [ "$code" -eq 0 ]; then
             echo "changed=true" >> "$GITHUB_OUTPUT"
-          else
+          elif [ "$code" -eq 2 ]; then
             echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            exit "$code"
           fi
 
       - name: Open PR

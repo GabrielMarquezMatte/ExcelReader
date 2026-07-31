@@ -170,6 +170,7 @@ namespace ExcelReader.Core.Reader
                     uniqueCount = XlsxXml.ParseIntOr(XlsxXml.Attr(io.Buf.AsSpan(sstPos, sstEnd - sstPos), " uniqueCount="u8), 0);
                 }
             }
+            LimitChecks.ThrowIfSharedStringCountImplausible(uniqueCount, partLength);
 
             int[] offsets = new int[uniqueCount > 0 ? uniqueCount + 1 : Math.Max(16, partLength / 64)];
             int offsetCount = 1;
@@ -214,6 +215,7 @@ namespace ExcelReader.Core.Reader
                     uniqueCount = XlsxXml.ParseIntOr(XlsxXml.Attr(io.Buf.AsSpan(sstPos, sstEnd - sstPos), " uniqueCount="u8), 0);
                 }
             }
+            LimitChecks.ThrowIfSharedStringCountImplausible(uniqueCount, partLength);
 
             int[] offsets = new int[uniqueCount > 0 ? uniqueCount + 1 : Math.Max(16, partLength / 64)];
             int offsetCount = 1;
