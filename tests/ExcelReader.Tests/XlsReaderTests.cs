@@ -464,7 +464,7 @@ namespace ExcelReader.Tests
             {
                 // nothing
             }
-            Assert.True(stream.WasDisposed);
+            Assert.True(stream.Disposed);
         }
 
         [Fact]
@@ -686,22 +686,6 @@ namespace ExcelReader.Tests
             for (int i = 0; i < values.Length; i++)
             {
                 Assert.Equal(values[i], row[i].GetString());
-            }
-        }
-
-        private sealed class TrackingStream : MemoryStream
-        {
-            internal TrackingStream(byte[] bytes)
-                : base(bytes)
-            {
-            }
-
-            internal bool WasDisposed { get; private set; }
-
-            protected override void Dispose(bool disposing)
-            {
-                WasDisposed = true;
-                base.Dispose(disposing);
             }
         }
     }

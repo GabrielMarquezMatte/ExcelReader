@@ -236,6 +236,57 @@ namespace ExcelReader.Tests
             Assert.Contains("central directory", ex.Message, StringComparison.OrdinalIgnoreCase);
         }
 
+        [Fact]
+        public void ZipEntryBytesReadThrowsInvalidDataWhenEntryUnderDelivers()
+        {
+            // PERF-3: the streamed path (ZipEntryBytes.Read, used via a real ZipArchive) previously let
+            // a raw EndOfStreamException escape here instead of the Reader-layer's InvalidDataException
+            // convention — the in-memory twin (ZipMemoryIndex.InflateToPart) already rewrapped it.
+            using MemoryStream built = WorkbookBuilder.Build("""<row r="1"><c r="A1"><v>1</v></c></row>""");
+            byte[] zipBytes = built.ToArray();
+            uint realLength = ReadDeclaredUncompressedSize(zipBytes, "xl/workbook.xml");
+            PatchCentralDirectoryUInt32(zipBytes, "xl/workbook.xml", fieldOffset: 24, realLength + 64);
+
+            using var ms = new MemoryStream(zipBytes);
+            using var zip = new ZipArchive(ms, ZipArchiveMode.Read);
+            InvalidDataException ex = Assert.Throws<InvalidDataException>(
+                () => ZipEntryBytes.Read(zip, "xl/workbook.xml", new DecompressedByteCounter(0)));
+            Assert.Contains("less data", ex.Message, StringComparison.OrdinalIgnoreCase);
+        }
+
+        [Fact]
+        public void ZipArchiveEntryOpenSilentlyTruncatesAtDeclaredLengthUnderOverDelivery()
+        {
+            // PERF-3 investigation: attempted an over-delivery check (declared size smaller than what
+            // actually decompresses) mirroring ZipMemoryIndex.InflateToPart's trailing ReadByte() check,
+            // symmetric with the under-delivery fix below. Verified by direct experiment that
+            // ZipArchiveEntry.Open() itself silently stops the stream at the entry's declared Length —
+            // the extra real decompressed byte here is simply never exposed, so a "read one more, expect
+            // EOF" check always passes and can never catch this. This documents that BCL behavior so it
+            // isn't rediscovered as a bug in ZipEntryBytes.Read: over-delivery is not detectable on this
+            // path without bypassing ZipArchiveEntry.Open() and driving DeflateStream directly, the way
+            // ZipMemoryIndex.InflateToPart already does for the in-memory path.
+            using MemoryStream built = WorkbookBuilder.Build("""<row r="1"><c r="A1"><v>1</v></c></row>""");
+            byte[] zipBytes = built.ToArray();
+            uint realLength = ReadDeclaredUncompressedSize(zipBytes, "xl/workbook.xml");
+            Assert.True(realLength > 0);
+            PatchCentralDirectoryUInt32(zipBytes, "xl/workbook.xml", fieldOffset: 24, realLength - 1);
+
+            using var ms = new MemoryStream(zipBytes);
+            using var zip = new ZipArchive(ms, ZipArchiveMode.Read);
+            ZipArchiveEntry entry = zip.GetEntry("xl/workbook.xml")!;
+            using Stream stream = entry.Open();
+            byte[] buffer = new byte[(int)entry.Length];
+            stream.ReadExactly(buffer);
+            Assert.Equal(-1, stream.ReadByte());
+        }
+
+        private static uint ReadDeclaredUncompressedSize(byte[] zipBytes, string entryName)
+        {
+            int cdOffset = FindCentralDirectoryOffset(zipBytes, entryName);
+            return BinaryPrimitives.ReadUInt32LittleEndian(zipBytes.AsSpan(cdOffset + 24, 4));
+        }
+
         private static byte[] ReadViaZipArchive(byte[] zipBytes, string entryName)
         {
             using var ms = new MemoryStream(zipBytes);

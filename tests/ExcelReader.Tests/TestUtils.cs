@@ -1,8 +1,10 @@
+using System.Buffers;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.IO.Compression;
 using System.Text;
+using ExcelReader.Core.Enums;
 using ExcelReader.Core.Reader;
 using ExcelReader.Core.Writer;
 
@@ -154,6 +156,84 @@ namespace ExcelReader.Tests
                 _inner.Dispose();
             }
             base.Dispose(disposing);
+        }
+    }
+
+    // TEST-6: was triplicated (CoverageGapTests, XlsReaderTests) with a naming split (Disposed vs
+    // WasDisposed) and a constructor split (parameterless vs byte[]). Both are kept here as overloads
+    // rather than picking one, so neither call site needed to change its construction style.
+    internal sealed class TrackingStream : MemoryStream
+    {
+        internal TrackingStream()
+        {
+        }
+
+        internal TrackingStream(byte[] bytes)
+            : base(bytes)
+        {
+        }
+
+        internal bool Disposed { get; private set; }
+
+        protected override void Dispose(bool disposing)
+        {
+            Disposed = true;
+            base.Dispose(disposing);
+        }
+    }
+
+    // TEST-6: was duplicated identically in BufferedStreamCursorTests and MemoryZipParityTests
+    // (GetSpan-backed, no Memory override — exercises the GetSpan-based read path). A third,
+    // deliberately different copy in MemorySourceParityTests (Memory-backed, GetSpan throws — exercises
+    // the opposite path on purpose) is NOT folded in here; merging it would silently change which code
+    // path that test covers.
+    internal sealed class NonArrayMemoryManager : MemoryManager<byte>
+    {
+        private readonly byte[] _data;
+
+        internal NonArrayMemoryManager(byte[] data)
+        {
+            _data = data;
+        }
+
+        public override Span<byte> GetSpan()
+        {
+            return _data;
+        }
+
+        public override MemoryHandle Pin(int elementIndex = 0)
+        {
+            throw new NotSupportedException();
+        }
+
+        public override void Unpin()
+        {
+            throw new NotSupportedException();
+        }
+
+        [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP010:Call base.Dispose(disposing)",
+            Justification = "MemoryManager<byte>.Dispose(bool) is abstract — there is no base implementation to call.")]
+        protected override void Dispose(bool disposing)
+        {
+        }
+    }
+
+    // TEST-6: was duplicated identically in MemoryZipParityTests and PrefetchDecompressionTests. A
+    // third, deliberately different copy in SyncAsyncParityTests (adds StyleIndex, and stores
+    // ValueBase64 instead of Value) is NOT folded in here for the same reason as NonArrayMemoryManager
+    // above — it snapshots more state than these two need.
+    internal readonly record struct CellSnapshot(
+        int Row,
+        int Column,
+        int ColumnCount,
+        CellType Type,
+        string Value,
+        bool HasDouble,
+        long DoubleBits)
+    {
+        internal static CellSnapshot RowMarker(int row, int columnCount)
+        {
+            return new CellSnapshot(row, -1, columnCount, CellType.Empty, string.Empty, false, 0);
         }
     }
 

@@ -103,14 +103,13 @@ namespace ExcelReader.Core.Reader
             int count;
             try
             {
-                count = WalkCentralDirectory(span, cdOffset, cdSize, ref entries);
+                count = WalkCentralDirectory(span, cdOffset, cdSize, ref entries, options);
             }
             catch
             {
                 ArrayPool<ZipEntryRef>.Shared.Return(entries);
                 throw;
             }
-            LimitChecks.ThrowIfTooManyEntries(count, options);
             return new ZipMemoryIndex(file, entries, count);
         }
 
@@ -297,7 +296,7 @@ namespace ExcelReader.Core.Reader
             return (cdOffset, cdSize, count);
         }
 
-        private static int WalkCentralDirectory(ReadOnlySpan<byte> span, long cdOffset, long cdSize, ref ZipEntryRef[] entries)
+        private static int WalkCentralDirectory(ReadOnlySpan<byte> span, long cdOffset, long cdSize, ref ZipEntryRef[] entries, ExcelReaderOptions options)
         {
             long end = cdOffset + cdSize;
             long pos = cdOffset;
@@ -341,6 +340,10 @@ namespace ExcelReader.Core.Reader
                     Flags = fields.Flags,
                 };
                 count++;
+                // SEC-6: was previously enforced only after the whole central directory had been
+                // walked and every entry materialized into `entries` — a huge malicious CD count still
+                // paid the full walk/grow cost before rejection. Check as each entry lands instead.
+                LimitChecks.ThrowIfTooManyEntries(count, options);
                 pos = recordEnd;
             }
             return count;

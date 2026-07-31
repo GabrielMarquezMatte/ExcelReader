@@ -3,7 +3,14 @@
 
 Run after a release ships: everything that was "unshipped" at release time is now part of
 the public API contract. Operates on every TFM folder under src/*/PublicAPI/*/.
-Exits with status 1 if nothing needed promoting, so the caller can skip the rest of the job.
+
+Exit codes: 0 = promoted something, 2 = nothing needed promoting (not an error — the caller
+skips the rest of the job), 1 = an actual failure (an uncaught exception, same as Python's
+default for any unhandled error). BLD-1: 2 is deliberately not 1 - an uncaught exception used
+to exit 1 exactly like the intentional "nothing to promote" case, so release.yml's `if
+python3 ...; then changed=true; else changed=false; fi` silently treated a crash (missing
+file, permission error) the same as a no-op success, disarming the next release's
+breaking-change detection instead of failing the job.
 """
 
 import glob
@@ -28,7 +35,7 @@ def main():
     unshipped_files = sorted(glob.glob("src/*/PublicAPI/*/PublicAPI.Unshipped.txt"))
     if not unshipped_files:
         print("No PublicAPI/*/PublicAPI.Unshipped.txt files found.")
-        return 1
+        return 2
 
     promoted_any = False
     for unshipped_path in unshipped_files:
@@ -45,7 +52,7 @@ def main():
         print(f"{unshipped_path}: promoted {len(new_entries)} entries to {shipped_path}.")
         promoted_any = True
 
-    return 0 if promoted_any else 1
+    return 0 if promoted_any else 2
 
 
 if __name__ == "__main__":
