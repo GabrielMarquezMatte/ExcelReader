@@ -511,50 +511,5 @@ namespace ExcelReader.Tests
             }
         }
 
-        private readonly record struct CellSnapshot(
-            int Row,
-            int Column,
-            int ColumnCount,
-            CellType Type,
-            string Value,
-            bool HasDouble,
-            long DoubleBits)
-        {
-            public static CellSnapshot RowMarker(int row, int columnCount)
-            {
-                return new CellSnapshot(row, -1, columnCount, CellType.Empty, string.Empty, false, 0);
-            }
-        }
-
-        private sealed class NonArrayMemoryManager : MemoryManager<byte>
-        {
-            private readonly byte[] _data;
-
-            internal NonArrayMemoryManager(byte[] data)
-            {
-                _data = data;
-            }
-
-            public override Span<byte> GetSpan()
-            {
-                return _data;
-            }
-
-            public override MemoryHandle Pin(int elementIndex = 0)
-            {
-                throw new NotSupportedException();
-            }
-
-            public override void Unpin()
-            {
-                throw new NotSupportedException();
-            }
-
-            [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP010:Call base.Dispose(disposing)",
-                Justification = "MemoryManager<byte>.Dispose(bool) is abstract — there is no base implementation to call.")]
-            protected override void Dispose(bool disposing)
-            {
-            }
-        }
     }
 }

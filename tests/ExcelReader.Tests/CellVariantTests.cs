@@ -46,6 +46,23 @@ namespace ExcelReader.Tests
         }
 
         [Fact]
+        public void TryGetDoubleRejectsCommaDecimalInsteadOfMisreadingIt()
+        {
+            // COR-2: text-backed cell (t="str", not Number-typed, so TryGetDouble falls through to its
+            // text-parsing branch). Default NumberStyles treats ',' as a thousands separator, so a
+            // pt-BR-formatted "1,5" used to silently parse as 15.0 instead of failing.
+            using var ms = WorkbookBuilder.Build(
+                """<row r="1"><c r="A1" t="str"><v>1,5</v></c><c r="B1" t="str"><v>1.5</v></c></row>""");
+            using var reader = Excel.From(ms);
+            using var e = reader.GetEnumerator();
+            Assert.True(e.MoveNext());
+            Assert.False(e.Current[0].TryGetDouble(out double ambiguous));
+            Assert.Equal(0.0, ambiguous);
+            Assert.True(e.Current[1].TryGetDouble(out double unambiguous));
+            Assert.Equal(1.5, unambiguous);
+        }
+
+        [Fact]
         public async Task EmptyWorksheetYieldsNoRows()
         {
             await using var ms = await TypedWorkbook.BuildAsync();

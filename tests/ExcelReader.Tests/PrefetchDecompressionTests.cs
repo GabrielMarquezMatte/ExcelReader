@@ -512,19 +512,5 @@ namespace ExcelReader.Tests
             }
         }
 
-        private readonly record struct CellSnapshot(
-            int Row,
-            int Column,
-            int ColumnCount,
-            CellType Type,
-            string Value,
-            bool HasDouble,
-            long DoubleBits)
-        {
-            public static CellSnapshot RowMarker(int row, int columnCount)
-            {
-                return new CellSnapshot(row, -1, columnCount, CellType.Empty, string.Empty, false, 0);
-            }
-        }
     }
 }

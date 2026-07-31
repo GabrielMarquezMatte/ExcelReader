@@ -346,7 +346,12 @@ namespace ExcelReader.Core.Reader
         private static void DecodeSharedStrings(ReadOnlySpan<byte> sst, ReadOnlySpan<int> boundaries, ExcelReaderOptions options, out byte[] sharedFlat, out int[] sharedOffsets)
         {
             LimitChecks.ThrowIfOverSharedStringLimit(options, sst.Length);
-            byte[] flat = ArrayPool<byte>.Shared.Rent(Math.Max(256, sst.Length * 3));
+            // PERF-3: `sst.Length * 3` as a plain int multiply wraps negative above ~715M, which used
+            // to silently degrade to `Rent(256)` — harmless (EnsureSharedCapacity's growth path still
+            // re-checks the limit and re-rents correctly) but defeats the point of pre-sizing for a
+            // legitimately huge SST. Widen to long first so the initial size request is always correct.
+            long estimatedFlatSize = Math.Max(256L, (long)sst.Length * 3);
+            byte[] flat = ArrayPool<byte>.Shared.Rent((int)Math.Min(estimatedFlatSize, Array.MaxLength));
             // One string's decoded UTF-16 units; each unit consumes >= 1 source byte, so sst.Length caps it.
             char[] scratch = ArrayPool<char>.Shared.Rent(Math.Max(64, sst.Length));
             int flatLen = 0;
