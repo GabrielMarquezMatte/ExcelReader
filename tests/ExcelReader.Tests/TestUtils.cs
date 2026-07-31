@@ -311,4 +311,16 @@ namespace ExcelReader.Tests
             s.Write(bytes, 0, bytes.Length);
         }
     }
+
+    // COR-5: an IUtf8SpanFormattable that formats as non-numeric text, so XlsbRowWriter.ToDouble's
+    // final fallback (double.TryParse on the formatted bytes) fails and must throw rather than
+    // silently return 0.0. Shared by XlsWriterTests and XlsbWriterTests since both formats route
+    // Write<T> through the same XlsbRowWriter.ToDouble.
+    internal readonly struct NonNumericFormattable : IUtf8SpanFormattable
+    {
+        public bool TryFormat(Span<byte> utf8Destination, out int bytesWritten, ReadOnlySpan<char> format, IFormatProvider? provider)
+        {
+            return Encoding.UTF8.TryGetBytes("not-a-number", utf8Destination, out bytesWritten);
+        }
+    }
 }

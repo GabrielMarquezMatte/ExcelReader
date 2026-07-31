@@ -1,3 +1,4 @@
+using System.Buffers.Binary;
 using System.IO.Compression;
 using System.Text;
 using ExcelReader.Core.Enums;
@@ -188,6 +189,83 @@ namespace ExcelReader.Tests
                 () => Excel.FromXls(memoryBytes.AsMemory()));
 
             Assert.Equal(streamEx.Message, memoryEx.Message);
+        }
+
+        // SEC-3: the FAT sector immediately follows the 512-byte OLE header (XlsWorkbookBuilder.SectorSize),
+        // so sector index N sits at absolute byte offset (N + 1) * 512 — mirrors XlsCompoundFile.SectorOffset.
+        // Sector 0 is the FAT sector itself (marked FatSector by the builder); sector 1 is the directory.
+        // Overwriting both entries with each other's index turns the FAT into a 2-sector cycle.
+        private static void PatchFatCycle(byte[] oleBytes, int sectorA, int sectorB)
+        {
+            const int SectorSize = 512;
+            const int FatSectorOffset = SectorSize; // FAT sector sits right after the header
+            BinaryPrimitives.WriteInt32LittleEndian(oleBytes.AsSpan(FatSectorOffset + (sectorA * 4)), sectorB);
+            BinaryPrimitives.WriteInt32LittleEndian(oleBytes.AsSpan(FatSectorOffset + (sectorB * 4)), sectorA);
+        }
+
+        [Fact]
+        public void FatChainCycleThrowsInsteadOfUnboundedAllocation()
+        {
+            using MemoryStream built = XlsWorkbookBuilder.Build(sheets: [("S1", [["Alice", 1, true]])]);
+            byte[] bytes = built.ToArray();
+            // Directory (sector 1) -> FAT sector (sector 0) -> back to directory: a 2-sector cycle in
+            // the chain XlsCompoundFile.BuildWorkbook walks to read the OLE directory itself.
+            PatchFatCycle(bytes, sectorA: 1, sectorB: 0);
+
+            InvalidDataException ex = Assert.Throws<InvalidDataException>(
+                () => Excel.FromXls(new MemoryStream(bytes)));
+            Assert.Contains("cycle", ex.Message, StringComparison.OrdinalIgnoreCase);
+        }
+
+        // SEC-8: [MS-CFB] fixes the mini sector size at 64 bytes (shift = 6, header offset 0x20).
+        [Fact]
+        public void MiniSectorShiftOtherThan64BytesThrows()
+        {
+            using MemoryStream built = XlsWorkbookBuilder.Build(sheets: [("S1", [["Alice", 1, true]])]);
+            byte[] bytes = built.ToArray();
+            BinaryPrimitives.WriteUInt16LittleEndian(bytes.AsSpan(0x20), 7); // shift 7 -> 128-byte mini sectors
+
+            InvalidDataException ex = Assert.Throws<InvalidDataException>(
+                () => Excel.FromXls(new MemoryStream(bytes)));
+            Assert.Contains("sector size", ex.Message, StringComparison.OrdinalIgnoreCase);
+        }
+
+        // SEC-5: a run of zero-length CONTINUE records after an SST record never grows EnsureSharedCapacity's
+        // buffer (needed <= buffer.Length stays true), so only the boundaries.Count-based charge added in
+        // DecodeSstFromCursor can stop it. A tiny MaxSharedStringBytes makes this trip long before any real
+        // memory pressure, without needing millions of records to prove the point.
+        private static byte[] BuildFramedSstWithEmptyContinues(int continueCount)
+        {
+            using MemoryStream ms = new();
+            void WriteRecord(int id, int payloadLength)
+            {
+                Span<byte> header = stackalloc byte[4];
+                BinaryPrimitives.WriteUInt16LittleEndian(header, (ushort)id);
+                BinaryPrimitives.WriteUInt16LittleEndian(header[2..], (ushort)payloadLength);
+                ms.Write(header);
+                if (payloadLength > 0)
+                {
+                    ms.Write(new byte[payloadLength]);
+                }
+            }
+            WriteRecord(0x00FC, 8); // BIFF8 SST: cstTotal=0, cstUnique=0, no <si> data
+            for (int i = 0; i < continueCount; i++)
+            {
+                WriteRecord(0x003C, 0); // zero-length CONTINUE
+            }
+            return ms.ToArray();
+        }
+
+        [Fact]
+        public void ManyZeroLengthContinueRecordsTripSharedStringLimit()
+        {
+            byte[] framed = BuildFramedSstWithEmptyContinues(continueCount: 1000);
+            using MemoryStream ms = XlsWorkbookBuilder.BuildRawSst(framed, labelSstCount: 0);
+            var options = new ExcelReaderOptions { MaxSharedStringBytes = 100 };
+
+            ExcelLimitExceededException ex = Assert.Throws<ExcelLimitExceededException>(
+                () => Excel.FromXls(ms, options: options));
+            Assert.Equal(nameof(ExcelReaderOptions.MaxSharedStringBytes), ex.LimitName);
         }
 
         [Fact]
