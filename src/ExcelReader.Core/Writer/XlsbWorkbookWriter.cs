@@ -103,14 +103,17 @@ namespace ExcelReader.Core.Writer
             WriterStateGuard.ThrowIfEnded(_state, this);
             WriterStateGuard.RequireStarted(_state, nameof(XlsbWorkbookWriter), "ending");
             ct.ThrowIfCancellationRequested();
+            // COR-1: this must throw before _state flips to Ended (matches XlsxWorkbookWriter's
+            // ordering) — otherwise DisposeAsync's state check matches neither Started nor Created on
+            // the failure path, and _zip is never disposed.
+            if (_sheets.Count == 0)
+            {
+                throw new InvalidOperationException("A workbook must contain at least one sheet.");
+            }
             _state = WriterState.Ended;
             if (_activeSheet is not null)
             {
                 await _activeSheet.DisposeAsync().ConfigureAwait(false);
-            }
-            if (_sheets.Count == 0)
-            {
-                throw new InvalidOperationException("A workbook must contain at least one sheet.");
             }
 
             await WriteRootRelsAsync(ct).ConfigureAwait(false);

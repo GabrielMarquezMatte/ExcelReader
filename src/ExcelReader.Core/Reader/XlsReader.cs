@@ -323,6 +323,12 @@ namespace ExcelReader.Core.Reader
             while (cursor.PeekId() == Rec.Continue && cursor.TryReadRecord(out _, out ReadOnlySpan<byte> cont))
             {
                 boundaries.Add(len);
+                // A zero-length CONTINUE payload leaves `needed <= buffer.Length` in EnsureSharedCapacity
+                // forever, so its ThrowIfOverSharedStringLimit call never fires — but each CONTINUE record
+                // still costs 4 real bytes on disk (its own header) regardless of payload size, so an
+                // endless run of empty ones grows `boundaries` with no limit ever consulted (SEC-5).
+                // Charging that fixed per-record cost here closes the gap independent of payload length.
+                LimitChecks.ThrowIfOverSharedStringLimit(options, (long)boundaries.Count * ContinueRecordHeaderBytes);
                 EnsureSharedCapacity(options, ref buffer, len + cont.Length);
                 cont.CopyTo(buffer.AsSpan(len));
                 len += cont.Length;
@@ -450,6 +456,9 @@ namespace ExcelReader.Core.Reader
         private const int Biff8Version = 0x0600;
         private const int SubstreamGlobals = 0x0005;
         private const int SubstreamWorksheet = 0x0010;
+        // BIFF8 record header: 2-byte id + 2-byte length, the fixed cost every CONTINUE record incurs
+        // regardless of payload size (see DecodeSstFromCursor's boundaries-growth limit check).
+        private const int ContinueRecordHeaderBytes = 4;
 
         // BIFF8 record type IDs (see [MS-XLS]).
         private static class Rec

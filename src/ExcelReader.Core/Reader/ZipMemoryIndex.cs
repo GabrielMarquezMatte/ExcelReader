@@ -86,7 +86,12 @@ namespace ExcelReader.Core.Reader
             {
                 (cdOffset, cdSize, declaredCount) = ReadZip64Eocd(span, zip64EocdOffset);
             }
-            if (cdOffset < 0 || cdSize < 0 || cdOffset + cdSize > span.Length)
+            // cdOffset and cdSize are both attacker-controlled longs (straight from the ZIP64 EOCD when
+            // present); `cdOffset + cdSize` can overflow and wrap negative for a value near long.MaxValue,
+            // making this check pass when it should reject. Comparing via subtraction instead can never
+            // overflow: cdOffset is already bounded >= 0 here, and span.Length (an int) minus cdSize can
+            // go very negative for a huge cdSize but never wraps, so the comparison still rejects it.
+            if (cdOffset < 0 || cdSize < 0 || cdOffset > span.Length - cdSize)
             {
                 throw new InvalidDataException("The ZIP central directory is out of range.");
             }
@@ -271,7 +276,13 @@ namespace ExcelReader.Core.Reader
 
         private static (long CdOffset, long CdSize, long Count) ReadZip64Eocd(ReadOnlySpan<byte> span, long offset)
         {
-            if (offset < 0 || offset + Zip64EocdFixedSize > span.Length)
+            // SEC-6: offset comes straight from the ZIP64 locator's 8-byte field, so a value near
+            // long.MaxValue makes `offset + Zip64EocdFixedSize` overflow and wrap negative, passing this
+            // check when it should reject — then `(int)offset` truncates to an arbitrary value and
+            // Slice either throws a raw ArgumentOutOfRangeException or, worse, succeeds on the wrong
+            // range. The subtraction form below can't overflow (span.Length is a small int) and rejects
+            // the same inputs correctly.
+            if (offset < 0 || offset > span.Length - Zip64EocdFixedSize)
             {
                 throw new InvalidDataException("The ZIP64 end of central directory record is out of range.");
             }

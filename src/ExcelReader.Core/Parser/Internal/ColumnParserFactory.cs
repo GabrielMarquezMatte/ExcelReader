@@ -48,10 +48,20 @@ namespace ExcelReader.Core.Parser.Internal
                 nameof(BuildConverterCore),
                 BindingFlags.NonPublic | BindingFlags.Static)!;
 
+        // COR-3: sbyte, char, TimeSpan, DateTimeOffset, Half, Int128, UInt128 were previously absent
+        // from this set, so a property of one of these types silently bound to nothing — TypeMapper
+        // skips a null parser unless [ExcelRequired] (Cell.TryParse<T>'s IUtf8SpanParsable<T> generic
+        // path already supports all of them; sbyte in particular already had a TryParseIntegral fast
+        // path in Cell.cs that this factory never reached). Excel has no native serial-number concept
+        // for TimeSpan/DateTimeOffset the way it does for DateTime/DateOnly/TimeOnly, so — unlike those
+        // three, which get a dedicated serial-aware reader below — text parsing via this generic path is
+        // the only sensible interpretation for them.
         private static readonly HashSet<Type> _parsableTypes =
         [
             typeof(int), typeof(long), typeof(double), typeof(float), typeof(decimal),
             typeof(short), typeof(byte), typeof(uint), typeof(ulong), typeof(ushort),
+            typeof(sbyte), typeof(char), typeof(Half), typeof(Int128), typeof(UInt128),
+            typeof(TimeSpan), typeof(DateTimeOffset),
             // Guid is only reached here on net9+, where it implements IUtf8SpanParsable. On net8 the
             // dedicated Guid build paths (guarded by #if NET8_0 below) intercept it before this set.
             typeof(Guid),
