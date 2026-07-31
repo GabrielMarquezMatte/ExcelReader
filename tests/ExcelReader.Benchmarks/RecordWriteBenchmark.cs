@@ -59,7 +59,7 @@ namespace ExcelReader.Benchmarks
         public async Task<long> Csv()
         {
             await using var ms = new MemoryStream(4 * 1024 * 1024);
-            await using (var writer = RecordWriter.CreateCsv(ms, leaveOpen: true))
+            await using (var writer = await RecordWriter.CreateCsvAsync(ms, leaveOpen: true))
             {
                 await writer.WriteSheetAsync("S1", _records);
             }

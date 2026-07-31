@@ -379,7 +379,7 @@ namespace ExcelReader.Tests
 
             var ms = new MemoryStream();
             var ct = TestContext.Current.CancellationToken;
-            await using (var writer = RecordWriter.CreateCsv(ms, leaveOpen: true))
+            await using (var writer = await RecordWriter.CreateCsvAsync(ms, leaveOpen: true, ct: TestContext.Current.CancellationToken))
             {
                 await writer.WriteSheetAsync("People", people, ct);
             }
@@ -403,7 +403,7 @@ namespace ExcelReader.Tests
         {
             var ms = new MemoryStream();
             var ct = TestContext.Current.CancellationToken;
-            await using var writer = RecordWriter.CreateCsv(ms, leaveOpen: true);
+            await using var writer = await RecordWriter.CreateCsvAsync(ms, leaveOpen: true, ct: TestContext.Current.CancellationToken);
             await writer.WriteSheetAsync("One", Array.Empty<CsvPerson>(), ct);
 
             await Assert.ThrowsAsync<InvalidOperationException>(

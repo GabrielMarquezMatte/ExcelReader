@@ -159,20 +159,21 @@ namespace ExcelReader.Core.Writer
         }
 
         /// <summary>
-        /// Creates a record writer that produces a CSV file. Unlike the other formats, this is synchronous
-        /// (a CSV file has no archive/binary headers to write) and supports only a single sheet, since a
-        /// CSV file is inherently one sheet. The returned writer is still <see cref="IAsyncDisposable"/>.
+        /// Creates and starts a record writer that produces a CSV file. Supports only a single sheet,
+        /// since a CSV file is inherently one sheet. The returned writer is still <see cref="IAsyncDisposable"/>.
         /// </summary>
         /// <param name="stream">The destination stream; must support writing.</param>
         /// <param name="leaveOpen">If <see langword="true"/>, <paramref name="stream"/> is left open when the returned writer is disposed.</param>
         /// <param name="options">The delimiter/quote character to use; defaults to <see cref="CsvWriterOptions.Default"/> if <see langword="null"/>.</param>
-        /// <returns>A record writer ready to accept its single sheet.</returns>
+        /// <param name="ct">A token to cancel the operation.</param>
+        /// <returns>A started record writer ready to accept its single sheet.</returns>
         [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
             Justification = "Ownership of the workbook transfers to WorkbookRecordWriter, which disposes it.")]
-        public static WorkbookRecordWriter<CsvSheetWriter, CsvRowWriter> CreateCsv(
-            Stream stream, bool leaveOpen = false, CsvWriterOptions? options = null)
+        public static async ValueTask<WorkbookRecordWriter<CsvSheetWriter, CsvRowWriter>> CreateCsvAsync(
+            Stream stream, bool leaveOpen = false, CsvWriterOptions? options = null, CancellationToken ct = default)
         {
             var workbook = CsvWorkbookWriter.Create(stream, leaveOpen, options);
+            await workbook.StartAsync(ct).ConfigureAwait(false);
             return new WorkbookRecordWriter<CsvSheetWriter, CsvRowWriter>(workbook);
         }
 
