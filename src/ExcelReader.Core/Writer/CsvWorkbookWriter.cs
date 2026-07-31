@@ -1,4 +1,5 @@
 using System.Diagnostics.CodeAnalysis;
+using ExcelReader.Core.Writer.Internal;
 
 namespace ExcelReader.Core.Writer
 {
@@ -54,6 +55,7 @@ namespace ExcelReader.Core.Writer
     public sealed class CsvWorkbookWriter : IWorkbookWriter<CsvSheetWriter>
     {
         private readonly CsvWriter _writer;
+        private WriterState _state = WriterState.Created;
         private bool _sheetAdded;
 
         private CsvWorkbookWriter(CsvWriter writer)
@@ -75,15 +77,33 @@ namespace ExcelReader.Core.Writer
         }
 
         /// <inheritdoc/>
+        /// <exception cref="ObjectDisposedException">The workbook has already been ended.</exception>
+        /// <exception cref="InvalidOperationException">The workbook has already been started.</exception>
         public ValueTask StartAsync(CancellationToken ct = default)
         {
+            // COR-6: this used to do nothing at all — no state tracking, so AddSheet worked identically
+            // before StartAsync, after EndAsync, or called twice, unlike the other three workbook
+            // writers. WriterStateGuard is the shared machinery those three already use for exactly
+            // this.
+            WriterStateGuard.ThrowIfEnded(_state, this);
+            WriterStateGuard.RequireCreated(_state, nameof(CsvWorkbookWriter));
+            ct.ThrowIfCancellationRequested();
+            _state = WriterState.Started;
             return ValueTask.CompletedTask;
         }
 
         /// <inheritdoc/>
-        /// <exception cref="InvalidOperationException">A sheet was already added; a CSV file holds only one.</exception>
+        /// <exception cref="ArgumentNullException"><paramref name="name"/> is <see langword="null"/>.</exception>
+        /// <exception cref="ArgumentException"><paramref name="name"/> is empty, longer than 31 characters, or contains one of <c>: \ / ? * [ ]</c>.</exception>
+        /// <exception cref="ObjectDisposedException">The workbook has already been ended.</exception>
+        /// <exception cref="InvalidOperationException">The workbook has not been started, or a sheet was already added; a CSV file holds only one.</exception>
         public CsvSheetWriter AddSheet(string name)
         {
+            // sheetActive: false — CSV's "only one sheet" rule is the permanent _sheetAdded flag below,
+            // not a "previous sheet still open" check like the multi-sheet writers use this parameter
+            // for. Reused here for the null check, ThrowIfEnded/RequireStarted, and sheet-name validation
+            // every other writer already gets from this same call.
+            WriterStateGuard.RequireCanAddSheet(_state, this, nameof(CsvWorkbookWriter), name, sheetActive: false, nameof(CsvSheetWriter));
             if (_sheetAdded)
             {
                 throw new InvalidOperationException("A CSV file holds a single sheet; only one AddSheet call is supported.");
@@ -93,8 +113,14 @@ namespace ExcelReader.Core.Writer
         }
 
         /// <inheritdoc/>
+        /// <exception cref="ObjectDisposedException">The workbook has already been ended.</exception>
+        /// <exception cref="InvalidOperationException">The workbook has not been started.</exception>
         public ValueTask EndAsync(CancellationToken ct = default)
         {
+            WriterStateGuard.ThrowIfEnded(_state, this);
+            WriterStateGuard.RequireStarted(_state, nameof(CsvWorkbookWriter), "ending");
+            ct.ThrowIfCancellationRequested();
+            _state = WriterState.Ended;
             return _writer.FlushAsync(ct);
         }
 
@@ -107,6 +133,7 @@ namespace ExcelReader.Core.Writer
         /// <inheritdoc/>
         public ValueTask DisposeAsync()
         {
+            _state = WriterState.Ended;
             return _writer.DisposeAsync();
         }
     }

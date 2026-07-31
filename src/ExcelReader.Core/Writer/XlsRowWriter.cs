@@ -213,10 +213,22 @@ namespace ExcelReader.Core.Writer
         }
 
         /// <inheritdoc/>
+        /// <exception cref="InvalidOperationException">Skipping would advance past BIFF8's 256-column limit.</exception>
         public void Skip(int count = 1)
         {
             ThrowIfDisposed();
             ArgumentOutOfRangeException.ThrowIfNegative(count);
+            // COR-8: unbounded before — Skip(int.MaxValue) advanced _columnIndex with nothing checking
+            // it until the next actual cell Write eventually rejected it downstream (XlsSheetWriter's
+            // own ValidateColumn), or never did if no further Write followed. BIFF8's real grid is 256
+            // columns (XlsSheetWriter.MaxColumn), not the 16,384 of XLSX/XLSB — using that constant here
+            // (not ExcelLimits.MaxColumns) and InvalidOperationException matches ValidateColumn's own
+            // type for the identical limit, so a caller sees the same failure whether it comes from Skip
+            // or from Write.
+            if (count > 0 && _columnIndex > XlsSheetWriter.MaxColumn - count + 1)
+            {
+                throw new InvalidOperationException($"BIFF8 worksheets are limited to {XlsSheetWriter.MaxColumn + 1} columns.");
+            }
             _columnIndex += count;
         }
 
