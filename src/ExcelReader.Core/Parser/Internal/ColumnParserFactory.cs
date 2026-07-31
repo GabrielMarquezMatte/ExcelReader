@@ -48,7 +48,7 @@ namespace ExcelReader.Core.Parser.Internal
                 nameof(BuildConverterCore),
                 BindingFlags.NonPublic | BindingFlags.Static)!;
 
-        // COR-3: sbyte, char, TimeSpan, DateTimeOffset, Half, Int128, UInt128 were previously absent
+        // sbyte, char, TimeSpan, DateTimeOffset, Half, Int128, UInt128 were previously absent
         // from this set, so a property of one of these types silently bound to nothing — TypeMapper
         // skips a null parser unless [ExcelRequired] (Cell.TryParse<T>'s IUtf8SpanParsable<T> generic
         // path already supports all of them; sbyte in particular already had a TryParseIntegral fast

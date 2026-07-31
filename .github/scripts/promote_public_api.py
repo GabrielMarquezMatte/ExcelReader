@@ -6,7 +6,7 @@ the public API contract. Operates on every TFM folder under src/*/PublicAPI/*/.
 
 Exit codes: 0 = promoted something, 2 = nothing needed promoting (not an error — the caller
 skips the rest of the job), 1 = an actual failure (an uncaught exception, same as Python's
-default for any unhandled error). BLD-1: 2 is deliberately not 1 - an uncaught exception used
+default for any unhandled error). 2 is deliberately not 1 - an uncaught exception used
 to exit 1 exactly like the intentional "nothing to promote" case, so release.yml's `if
 python3 ...; then changed=true; else changed=false; fi` silently treated a crash (missing
 file, permission error) the same as a no-op success, disarming the next release's

@@ -114,7 +114,7 @@ namespace ExcelReader.Core.Reader
             return new ZipMemoryIndex(file, entries, count);
         }
 
-        // SEC-6: TryGetEntry returns the first name match, so two central-directory records sharing a
+        // TryGetEntry returns the first name match, so two central-directory records sharing a
         // name would silently make the second one unreachable - a spoofing vector (e.g. a real
         // xl/workbook.xml followed by a forged duplicate the reader never sees, or the reverse). Sorting
         // by name content first means every duplicate becomes an adjacent pair, so this is one O(n log n)
@@ -322,7 +322,7 @@ namespace ExcelReader.Core.Reader
 
         private static (long CdOffset, long CdSize, long Count) ReadZip64Eocd(ReadOnlySpan<byte> span, long offset)
         {
-            // SEC-6: offset comes straight from the ZIP64 locator's 8-byte field, so a value near
+            // offset comes straight from the ZIP64 locator's 8-byte field, so a value near
             // long.MaxValue makes `offset + Zip64EocdFixedSize` overflow and wrap negative, passing this
             // check when it should reject — then `(int)offset` truncates to an arbitrary value and
             // Slice either throws a raw ArgumentOutOfRangeException or, worse, succeeds on the wrong
@@ -387,7 +387,7 @@ namespace ExcelReader.Core.Reader
                     Flags = fields.Flags,
                 };
                 count++;
-                // SEC-6: was previously enforced only after the whole central directory had been
+                // The entry-count limit was previously enforced only after the whole central directory had been
                 // walked and every entry materialized into `entries` — a huge malicious CD count still
                 // paid the full walk/grow cost before rejection. Check as each entry lands instead.
                 LimitChecks.ThrowIfTooManyEntries(count, options);
@@ -513,7 +513,7 @@ namespace ExcelReader.Core.Reader
             {
                 throw new InvalidDataException("The ZIP local file header name runs past the end of the file.");
             }
-            // SEC-6: the central directory and local header each carry their own copy of the entry
+            // The central directory and local header each carry their own copy of the entry
             // name. A crafted file can make them disagree - the central directory says "this name"
             // points here, but the bytes physically at this offset carry a different name. Every
             // lookup (TryGetEntry) trusts the central directory's name; silently reading whatever the

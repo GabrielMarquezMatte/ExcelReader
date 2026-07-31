@@ -102,7 +102,7 @@ jobs:
           python3 .github/scripts/promote_public_api.py
           code=$?
           set -e
-          # BLD-1: exit 2 means "nothing to promote", a real no-op, not a failure. Any other
+          # Exit 2 means "nothing to promote", a real no-op, not a failure. Any other
           # nonzero code is an actual crash (missing file, permission error, etc.) and must fail
           # the job instead of being silently absorbed into changed=false.
           if [ "$code" -eq 0 ]; then

@@ -12,7 +12,7 @@ namespace ExcelReader.Tests
 {
     // Shared seeded-mutation fuzz harness used by FuzzTests, MemoryZipParityTests, and
     // ZipMemoryIndexTests. Previously each file had its own copy of MutateCopy and its own
-    // AcceptableExceptionTypes list, and the lists had already drifted apart (SEC-7): a
+    // AcceptableExceptionTypes list, and the lists had already drifted apart from each other:
     // Span-bounds violation surfacing as ArgumentOutOfRangeException, or an unchecked-arithmetic
     // wrap surfacing as OverflowException, is the same "parser forgot a check" bug class as
     // IndexOutOfRangeException — which none of the three lists ever accepted. Only exceptions
@@ -61,8 +61,8 @@ namespace ExcelReader.Tests
             return copy;
         }
 
-        // SEC-1/SEC-3/SEC-5-class bugs (an attacker-controlled count driving an allocation the
-        // configured limits never see) don't necessarily throw at all — they can succeed while
+        // An attacker-controlled count driving an allocation the configured limits never see
+        // doesn't necessarily throw at all — it can succeed while
         // burning far more time/memory than a few-KB seed file could ever legitimately need. A round
         // that completes "successfully" after allocating hundreds of MB, or after seconds of spinning,
         // is not a graceful rejection; it's the amplification attack working. The caps here are set
@@ -159,7 +159,7 @@ namespace ExcelReader.Tests
         }
     }
 
-    // TEST-6: was triplicated (CoverageGapTests, XlsReaderTests) with a naming split (Disposed vs
+    // Was duplicated (CoverageGapTests, XlsReaderTests) with a naming split (Disposed vs
     // WasDisposed) and a constructor split (parameterless vs byte[]). Both are kept here as overloads
     // rather than picking one, so neither call site needed to change its construction style.
     internal sealed class TrackingStream : MemoryStream
@@ -182,7 +182,7 @@ namespace ExcelReader.Tests
         }
     }
 
-    // TEST-6: was duplicated identically in BufferedStreamCursorTests and MemoryZipParityTests
+    // Was duplicated identically in BufferedStreamCursorTests and MemoryZipParityTests
     // (GetSpan-backed, no Memory override — exercises the GetSpan-based read path). A third,
     // deliberately different copy in MemorySourceParityTests (Memory-backed, GetSpan throws — exercises
     // the opposite path on purpose) is NOT folded in here; merging it would silently change which code
@@ -218,7 +218,7 @@ namespace ExcelReader.Tests
         }
     }
 
-    // TEST-6: was duplicated identically in MemoryZipParityTests and PrefetchDecompressionTests. A
+    // Was duplicated identically in MemoryZipParityTests and PrefetchDecompressionTests. A
     // third, deliberately different copy in SyncAsyncParityTests (adds StyleIndex, and stores
     // ValueBase64 instead of Value) is NOT folded in here for the same reason as NonArrayMemoryManager
     // above — it snapshots more state than these two need.
@@ -392,7 +392,7 @@ namespace ExcelReader.Tests
         }
     }
 
-    // COR-5: an IUtf8SpanFormattable that formats as non-numeric text, so XlsbRowWriter.ToDouble's
+    // An IUtf8SpanFormattable that formats as non-numeric text, so XlsbRowWriter.ToDouble's
     // final fallback (double.TryParse on the formatted bytes) fails and must throw rather than
     // silently return 0.0. Shared by XlsWriterTests and XlsbWriterTests since both formats route
     // Write<T> through the same XlsbRowWriter.ToDouble.

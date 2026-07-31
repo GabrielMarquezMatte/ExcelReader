@@ -59,7 +59,7 @@ namespace ExcelReader.Tests
         [Fact]
         public void CreateThrowsOnDuplicateCentralDirectoryEntryNames()
         {
-            // SEC-6: TryGetEntry returns the first name match, so a second central-directory record
+            // TryGetEntry returns the first name match, so a second central-directory record
             // sharing a name would silently be unreachable - reject the file outright instead.
             using var ms = new MemoryStream();
             using (var zip = new ZipArchive(ms, ZipArchiveMode.Create, leaveOpen: true))
@@ -83,7 +83,7 @@ namespace ExcelReader.Tests
         [Fact]
         public void OpenPartThrowsWhenLocalHeaderNameDoesNotMatchCentralDirectory()
         {
-            // SEC-6: the central directory and local header each carry their own copy of the entry
+            // The central directory and local header each carry their own copy of the entry
             // name. Patch only the local header's copy (same length, so no offset shifts) and confirm
             // the mismatch is rejected instead of silently reading the entry under the wrong identity.
             byte[] payload = Encoding.UTF8.GetBytes("hello world, stored and not deflated");
@@ -233,7 +233,7 @@ namespace ExcelReader.Tests
             }
         }
 
-        // SEC-6: hand-crafted ZIP64 EOCD structures, not producible via ZipArchive (which never emits
+        // Hand-crafted ZIP64 EOCD structures, not producible via ZipArchive (which never emits
         // absurd 64-bit offsets), that exercise the two overflow-prone additions fixed in ZipMemoryIndex:
         // ReadZip64Eocd's own `offset` bound, and Create's `cdOffset + cdSize` bound. Every multi-byte
         // field below is little-endian, matching BinaryPrimitives.ReadXLittleEndian on the reader side.
@@ -291,7 +291,7 @@ namespace ExcelReader.Tests
         [Fact]
         public void ZipEntryBytesReadThrowsInvalidDataWhenEntryUnderDelivers()
         {
-            // PERF-3: the streamed path (ZipEntryBytes.Read, used via a real ZipArchive) previously let
+            // The streamed path (ZipEntryBytes.Read, used via a real ZipArchive) previously let
             // a raw EndOfStreamException escape here instead of the Reader-layer's InvalidDataException
             // convention — the in-memory twin (ZipMemoryIndex.InflateToPart) already rewrapped it.
             using MemoryStream built = WorkbookBuilder.Build("""<row r="1"><c r="A1"><v>1</v></c></row>""");
@@ -309,7 +309,7 @@ namespace ExcelReader.Tests
         [Fact]
         public void ZipArchiveEntryOpenSilentlyTruncatesAtDeclaredLengthUnderOverDelivery()
         {
-            // PERF-3 investigation: attempted an over-delivery check (declared size smaller than what
+            // Attempted an over-delivery check (declared size smaller than what
             // actually decompresses) mirroring ZipMemoryIndex.InflateToPart's trailing ReadByte() check,
             // symmetric with the under-delivery fix below. Verified by direct experiment that
             // ZipArchiveEntry.Open() itself silently stops the stream at the entry's declared Length —

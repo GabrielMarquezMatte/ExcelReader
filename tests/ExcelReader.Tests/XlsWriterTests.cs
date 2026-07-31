@@ -275,7 +275,7 @@ namespace ExcelReader.Tests
             Assert.Throws<InvalidOperationException>(() => r.Write("x"));
         }
 
-        // COR-8: Skip itself does no I/O for XLS (unlike CSV), so the risk isn't write amplification —
+        // Skip itself does no I/O for XLS (unlike CSV), so the risk isn't write amplification —
         // it's that _columnIndex could advance unboundedly with nothing checking it until (if ever) a
         // later Write. Skip must now reject on its own once it would exceed BIFF8's 256-column grid.
         [Fact]
@@ -290,7 +290,7 @@ namespace ExcelReader.Tests
             Assert.Throws<InvalidOperationException>(() => r.Skip(257));
         }
 
-        // COR-5: XlsRowWriter.Write<T> routes through the same XlsbRowWriter.ToDouble as XlsbRowWriter
+        // XlsRowWriter.Write<T> routes through the same XlsbRowWriter.ToDouble as XlsbRowWriter
         // does, so a T that formats as non-numeric text must throw instead of silently writing 0.0.
         [Fact]
         public async Task WriteNonNumericFormattableThrowsArgumentException()

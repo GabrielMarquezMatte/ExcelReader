@@ -59,7 +59,7 @@ namespace ExcelReader.Core.Reader
             return new ZipPart(rented.AsMemory(0, length), rented);
         }
 
-        // PERF-3: an entry whose real decompressed data is *shorter* than its declared central-directory
+        // An entry whose real decompressed data is *shorter* than its declared central-directory
         // size is a malformed file, not a raw BCL stream-plumbing exception — matches
         // ZipMemoryIndex.InflateToPart's equivalent rewrap on the in-memory path. There is no equivalent
         // over-delivery check here (InflateToPart has one): confirmed by direct experiment that

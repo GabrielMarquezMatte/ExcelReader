@@ -73,7 +73,7 @@ namespace ExcelReader.Core.ValueObjects
                 value = _number;
                 return true;
             }
-            // COR-2: NumberStyles.Float (no AllowThousands) — the default style lets a comma act as a
+            // NumberStyles.Float (no AllowThousands) — the default style lets a comma act as a
             // thousands separator, so pt-BR comma-decimal text like "1,5" silently parsed as 15.0
             // instead of failing. This method takes no IFormatProvider, so it can only ever be
             // correct for genuine invariant-formatted text; rejecting ambiguous input is strictly

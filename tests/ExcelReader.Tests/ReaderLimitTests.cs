@@ -116,7 +116,7 @@ namespace ExcelReader.Tests
             Assert.Equal(50_000_000, ex.Actual);
         }
 
-        // SEC-1: <sst uniqueCount="…"> is attacker-controlled independent of the part's real byte
+        // <sst uniqueCount="…"> is attacker-controlled independent of the part's real byte
         // length — unlike ForgedOversizedSharedStringsEntryTripsSharedStringLimitBeforeReading above,
         // this entry's *declared central-directory size* is honest and tiny; only the XML attribute
         // lies. Before the fix, `new int[uniqueCount + 1]` sized the offsets array straight from this
@@ -150,7 +150,7 @@ namespace ExcelReader.Tests
             Assert.Equal(500_000_000, ex.Actual);
         }
 
-        // SEC-2: BoundSheet8.lbPlyPos is read as a raw signed int32 with no validation before it becomes
+        // BoundSheet8.lbPlyPos is read as a raw signed int32 with no validation before it becomes
         // a BiffCursor.Position assignment. On the Chained WorkbookStream kind, a negative position used
         // to resolve to a valid-looking byte range elsewhere in the file (the OLE header/preceding
         // sectors) and silently decode wrong bytes as BIFF records — no exception, wrong data — while
@@ -191,7 +191,7 @@ namespace ExcelReader.Tests
             Assert.Equal(streamEx.Message, memoryEx.Message);
         }
 
-        // SEC-3: the FAT sector immediately follows the 512-byte OLE header (XlsWorkbookBuilder.SectorSize),
+        // The FAT sector immediately follows the 512-byte OLE header (XlsWorkbookBuilder.SectorSize),
         // so sector index N sits at absolute byte offset (N + 1) * 512 — mirrors XlsCompoundFile.SectorOffset.
         // Sector 0 is the FAT sector itself (marked FatSector by the builder); sector 1 is the directory.
         // Overwriting both entries with each other's index turns the FAT into a 2-sector cycle.
@@ -217,7 +217,7 @@ namespace ExcelReader.Tests
             Assert.Contains("cycle", ex.Message, StringComparison.OrdinalIgnoreCase);
         }
 
-        // SEC-8: [MS-CFB] fixes the mini sector size at 64 bytes (shift = 6, header offset 0x20).
+        // [MS-CFB] fixes the mini sector size at 64 bytes (shift = 6, header offset 0x20).
         [Fact]
         public void MiniSectorShiftOtherThan64BytesThrows()
         {
@@ -230,7 +230,7 @@ namespace ExcelReader.Tests
             Assert.Contains("sector size", ex.Message, StringComparison.OrdinalIgnoreCase);
         }
 
-        // SEC-5: a run of zero-length CONTINUE records after an SST record never grows EnsureSharedCapacity's
+        // A run of zero-length CONTINUE records after an SST record never grows EnsureSharedCapacity's
         // buffer (needed <= buffer.Length stays true), so only the boundaries.Count-based charge added in
         // DecodeSstFromCursor can stop it. A tiny MaxSharedStringBytes makes this trip long before any real
         // memory pressure, without needing millions of records to prove the point.
