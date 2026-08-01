@@ -503,10 +503,13 @@ Compares ExcelReader against established XLSX libraries on the same generated wo
 | Cell-by-cell read async | 11.713 ms, 14.73 KB | - | - | - |
 | Typed row parsing | 14.918 ms, 3.88 MB | 152.026 ms, 197.78 MB | 56.588 ms, 10.47 MB | - |
 | Typed row parsing async | 16.620 ms, 3.88 MB | - | 58.203 ms, 10.48 MB | - |
+| Typed row parsing, shared strings | 11.532 ms, 2.30 MB | - | - | - |
 | Workbook writing | 14.468 ms, 4.02 MB | 286.460 ms, 84.89 MB | - | 15.414 ms, 15.84 MB |
 | Workbook writing, shared strings | 14.661 ms, 4.06 MB | - | - | - |
 
 ExcelReader is ~12.8x faster than MiniExcel and ~3.2x faster than Sylvan for raw XLSX reads, allocating ~16,985x and ~154x less respectively. For typed parsing, it is ~10.2x faster than MiniExcel and ~3.8x faster than Sylvan. For XLSX writing, ExcelReader is ~1.1x faster than SpreadCheetah and allocates ~3.9x less memory; it is ~19.8x faster than MiniExcel and allocates ~21x less.
+
+Reading a shared-strings XLSX workbook with typed parsing is ~23% faster than the inline-string sheet above (11.532 ms vs. 14.918 ms) and allocates ~40% less (2.30 MB vs. 3.88 MB) — each distinct string decodes once into the shared-string cache instead of once per cell occurrence.
 
 ### XLSB (BIFF12)
 
@@ -525,11 +528,11 @@ XLSB is the fastest generated Excel format in these results: raw reads are ~2.1x
 
 | Scenario | ExcelReader | Sylvan |
 |---|---:|---:|
-| Cell-by-cell read | 4.441 ms, 2.97 KB | 5.333 ms, 1,717.73 KB |
-| Cell-by-cell read async | 4.343 ms, 3.04 KB | - |
-| Workbook writing | 5.074 ms, 16.03 MB | - |
+| Cell-by-cell read | 3.762 ms, 2.91 KB | 5.306 ms, 1,717.73 KB |
+| Cell-by-cell read async | 3.786 ms, 2.98 KB | - |
+| Workbook writing | 5.664 ms, 16.03 MB | - |
 
-ExcelReader is ~1.2x faster than Sylvan for generated XLS reads while allocating ~578x less memory. The XLS writer is ~2.9x faster than the XLSX writer in this benchmark, but it allocates more because the BIFF8/OLE container is assembled in memory.
+ExcelReader is ~1.4x faster than Sylvan for generated XLS reads while allocating ~590x less memory. The XLS writer is ~2.5x faster than the XLSX writer in this benchmark, but it allocates more because the BIFF8/OLE container is assembled in memory.
 
 ### CSV
 
