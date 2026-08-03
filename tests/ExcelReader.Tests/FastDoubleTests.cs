@@ -43,6 +43,8 @@ namespace ExcelReader.Tests
         [InlineData("-0")]
         [InlineData("00042")]
         [InlineData("123456789.123456")] // 15 significant digits, mixed
+        [InlineData("000000000000000123")] // 15 leading zeros + 3 significant digits — must not hit the digit cap on padding alone
+        [InlineData("0.00000000000000123")] // leading zeros after the decimal point, same non-significance rule
         public void AcceptsAndMatchesPlainDecimals(string text)
         {
             AssertMatchesDoubleTryParse(text);

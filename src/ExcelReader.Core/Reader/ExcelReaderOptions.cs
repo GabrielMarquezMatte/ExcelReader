@@ -31,6 +31,19 @@ namespace ExcelReader.Core.Reader
         /// with work already saturating the CPU.</remarks>
         public bool PrefetchDecompression { get; init; }
 
+        /// <summary>
+        /// Gets a value indicating whether inline/formula-string text cells (cells not served by the
+        /// workbook's shared-string table) are deduplicated through a small content-keyed cache when
+        /// materialized via <see cref="ValueObjects.Cell.GetString"/>. Defaults to <see langword="false"/>.
+        /// Has no effect on shared-string cells, which already dedup through the shared-string table's
+        /// own index-keyed cache, nor on the zero-copy <see cref="ValueObjects.Cell.Value"/> span path —
+        /// only <c>GetString()</c> consults this cache. Worth enabling only when inline/formula-string
+        /// cells are known to repeat; for mostly-unique text the per-call hashing cost has no dedup
+        /// benefit to offset it (see <see cref="CsvReaderOptions.InternStrings"/> for measurements
+        /// against a real-world corpus — the risk is the same shape here).
+        /// </summary>
+        public bool InternStrings { get; init; }
+
         /// <summary>Gets the default options instance, used whenever a reader is opened without explicit options.</summary>
         public static ExcelReaderOptions Default { get; } = new();
     }

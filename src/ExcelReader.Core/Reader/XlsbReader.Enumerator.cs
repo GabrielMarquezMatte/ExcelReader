@@ -28,6 +28,9 @@ namespace ExcelReader.Core.Reader
             // Same hoist, for what PGO says is the hottest arm of ProcessCell (CellIsst): reaching the
             // offsets through _reader.SharedAt cost two dependent loads before the index could be read.
             private readonly int[] _sharedOffsets;
+            // Content-keyed dedup cache for inline/formula-string cells GetString() can't serve via
+            // the shared-string table; see ExcelReaderOptions.InternStrings.
+            private readonly Utf8StringCache? _contentCache;
             private bool _ended;
             // A BrtRowHdr for the NEXT row was already consumed while collecting cells for the current row.
             // On the next MoveNext call, skip the "seek to row header" step.
@@ -41,11 +44,12 @@ namespace ExcelReader.Core.Reader
                 _reader = reader;
                 _styleIsDate = reader._styleIsDate;
                 _sharedOffsets = reader._sharedOffsets;
+                _contentCache = reader._options.InternStrings ? new Utf8StringCache() : null;
             }
 
             /// <inheritdoc/>
             public Row Current =>
-                new(_acc.CellSpan, _acc.ValueSpan, _reader.SharedSpan, rowBuffer: default, _reader.SharedStringCache);
+                new(_acc.CellSpan, _acc.ValueSpan, _reader.SharedSpan, rowBuffer: default, _reader.SharedStringCache, _contentCache);
 
             /// <inheritdoc/>
             public bool MoveNext()

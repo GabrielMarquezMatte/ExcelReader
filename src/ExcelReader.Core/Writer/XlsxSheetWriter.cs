@@ -13,6 +13,7 @@ namespace ExcelReader.Core.Writer
         private readonly XlsxWorkbookWriter _owner;
         private readonly ZipArchive _zip;
         private readonly CompressionLevel _compression;
+        private readonly bool _offloadWrite;
         private readonly BiffBuffer _rowBuffer = new(512);
         // ponytail: flush to the deflate stream once buffered rows pass 64 KB — bounds memory on huge
         // sheets while turning ~50k tiny per-row Writes into a handful of big ones. Kept at/under the
@@ -28,13 +29,14 @@ namespace ExcelReader.Core.Writer
         private WriterState _state = WriterState.Created;
         private bool _rowActive;
 
-        internal XlsxSheetWriter(XlsxWorkbookWriter owner, ZipArchive zip, string name, int sheetId, CompressionLevel compression)
+        internal XlsxSheetWriter(XlsxWorkbookWriter owner, ZipArchive zip, string name, int sheetId, CompressionLevel compression, bool offloadWrite)
         {
             _owner = owner;
             _zip = zip;
             Name = name;
             SheetId = sheetId;
             _compression = compression;
+            _offloadWrite = offloadWrite;
         }
 
         internal string Name { get; }
@@ -51,6 +53,8 @@ namespace ExcelReader.Core.Writer
         /// <exception cref="InvalidOperationException">The sheet has already been started.</exception>
         [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP003:Dispose previous before re-assigning",
             Justification = "_stream is always null when StartAsync is called (state machine guarantees Created state).")]
+        [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
+            Justification = "Ownership of the optionally-wrapped stream transfers to _stream, which EndAsync/DisposeAsync disposes.")]
         public async ValueTask StartAsync(CancellationToken ct = default)
         {
             WriterStateGuard.ThrowIfEnded(_state, this);
@@ -63,7 +67,7 @@ namespace ExcelReader.Core.Writer
             ct.ThrowIfCancellationRequested();
             Stream stream = entry.Open();
 #endif
-            _stream = stream;
+            _stream = _offloadWrite ? new WriteOffloadStream(stream) : stream;
             _rowBuffer.Reset();
             _rowBuffer.WriteUtf8(
                 "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>" +

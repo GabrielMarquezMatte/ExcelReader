@@ -17,6 +17,7 @@ namespace ExcelReader.Core.Writer
         private readonly Stream _stream;
         private readonly bool _leaveOpen;
         private readonly CompressionLevel _compression;
+        private readonly bool _prefetchWrite;
         private readonly SharedStringTable? _sharedStrings;
         private readonly List<(string Name, int SheetId)> _sheets = [];
         private WriterState _state = WriterState.Created;
@@ -24,13 +25,14 @@ namespace ExcelReader.Core.Writer
         private XlsxSheetWriter? _activeSheet;
         private bool _disposed;
 
-        private XlsxWorkbookWriter(ZipArchive zip, Stream stream, bool leaveOpen, bool useSharedStrings, CompressionLevel compression)
+        private XlsxWorkbookWriter(ZipArchive zip, Stream stream, bool leaveOpen, bool useSharedStrings, CompressionLevel compression, bool prefetchWrite)
         {
             _zip = zip;
             _stream = stream;
             _leaveOpen = leaveOpen;
             UseSharedStrings = useSharedStrings;
             _compression = compression;
+            _prefetchWrite = prefetchWrite;
             _sharedStrings = useSharedStrings ? new SharedStringTable() : null;
         }
 
@@ -41,6 +43,14 @@ namespace ExcelReader.Core.Writer
         /// <param name="leaveOpen">When <see langword="true"/>, <paramref name="stream"/> is left open after the workbook is disposed.</param>
         /// <param name="compression">The compression level applied to each ZIP entry.</param>
         /// <param name="useSharedStrings">When <see langword="true"/>, string cells are deduplicated into a shared string table instead of being inlined.</param>
+        /// <param name="prefetchWrite">
+        /// When <see langword="true"/>, each sheet's deflate runs on a background thread instead of the
+        /// calling thread, overlapping compression with row serialization. Defaults to <see langword="false"/>.
+        /// Intended for single-file batch writing, where overlapping deflate with row-building shortens
+        /// one write's wall-clock time — not for concurrent server workloads, where the extra background
+        /// thread per sheet competes with work already saturating the CPU (mirrors
+        /// <see cref="Reader.ExcelReaderOptions.PrefetchDecompression"/>'s own tradeoff on the read side).
+        /// </param>
         /// <param name="ct">A token to cancel the operation before the archive is created.</param>
         /// <exception cref="ArgumentNullException"><paramref name="stream"/> is <see langword="null"/>.</exception>
         [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP001:Dispose created",
@@ -51,12 +61,13 @@ namespace ExcelReader.Core.Writer
             Stream stream, bool leaveOpen = false,
             CompressionLevel compression = CompressionLevel.Fastest,
             bool useSharedStrings = false,
+            bool prefetchWrite = false,
             CancellationToken ct = default)
         {
             ArgumentNullException.ThrowIfNull(stream);
             ct.ThrowIfCancellationRequested();
             ZipArchive zip = new(stream, ZipArchiveMode.Create, leaveOpen: true);
-            return ValueTask.FromResult(new XlsxWorkbookWriter(zip, stream, leaveOpen, useSharedStrings, compression));
+            return ValueTask.FromResult(new XlsxWorkbookWriter(zip, stream, leaveOpen, useSharedStrings, compression, prefetchWrite));
         }
 
         /// <inheritdoc/>
@@ -82,7 +93,7 @@ namespace ExcelReader.Core.Writer
                 _state, this, nameof(XlsxWorkbookWriter), name, _sheetActive, nameof(XlsxSheetWriter));
             _sheetActive = true;
             int sheetId = _sheets.Count + 1;
-            _activeSheet = new XlsxSheetWriter(this, _zip, name, sheetId, _compression);
+            _activeSheet = new XlsxSheetWriter(this, _zip, name, sheetId, _compression, _prefetchWrite);
             return _activeSheet;
         }
 

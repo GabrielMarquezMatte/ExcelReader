@@ -18,13 +18,14 @@ namespace ExcelReader.Core.Writer
         private readonly bool _leaveOpen;
         private readonly bool _date1904;
         private readonly CompressionLevel _compression;
+        private readonly bool _prefetchWrite;
         private readonly SharedStringTable? _sharedStrings;
         private readonly List<XlsbSheetWriter> _sheets = [];
         private WriterState _state = WriterState.Created;
         private XlsbSheetWriter? _activeSheet;
         private bool _disposed;
 
-        private XlsbWorkbookWriter(ZipArchive zip, Stream stream, bool leaveOpen, bool date1904, bool useSharedStrings, CompressionLevel compression)
+        private XlsbWorkbookWriter(ZipArchive zip, Stream stream, bool leaveOpen, bool date1904, bool useSharedStrings, CompressionLevel compression, bool prefetchWrite)
         {
             _zip = zip;
             _stream = stream;
@@ -32,6 +33,7 @@ namespace ExcelReader.Core.Writer
             _date1904 = date1904;
             UseSharedStrings = useSharedStrings;
             _compression = compression;
+            _prefetchWrite = prefetchWrite;
             _sharedStrings = useSharedStrings ? new SharedStringTable() : null;
         }
 
@@ -41,6 +43,13 @@ namespace ExcelReader.Core.Writer
         /// <param name="date1904">Whether the workbook uses the 1904 date system instead of the default 1900 system.</param>
         /// <param name="compression">The zip compression level to use for every part written.</param>
         /// <param name="useSharedStrings">Whether string cells are deduplicated through a shared string table instead of written inline.</param>
+        /// <param name="prefetchWrite">
+        /// When <see langword="true"/>, each sheet's deflate runs on a background thread instead of the
+        /// calling thread, overlapping compression with row serialization. Defaults to <see langword="false"/>.
+        /// Mirrors <see cref="Reader.ExcelReaderOptions.PrefetchDecompression"/>'s tradeoff on the read
+        /// side: worth it for single-file batch writing, not for a concurrent server workload already
+        /// saturating the CPU.
+        /// </param>
         /// <param name="ct">A token to cancel creation before any I/O has started.</param>
         [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP001:Dispose created",
             Justification = "Factory method transfers ZipArchive ownership to XlsbWorkbookWriter; caller disposes via DisposeAsync.")]
@@ -52,12 +61,13 @@ namespace ExcelReader.Core.Writer
             bool date1904 = false,
             CompressionLevel compression = CompressionLevel.Fastest,
             bool useSharedStrings = false,
+            bool prefetchWrite = false,
             CancellationToken ct = default)
         {
             ArgumentNullException.ThrowIfNull(stream);
             ct.ThrowIfCancellationRequested();
             ZipArchive zip = new(stream, ZipArchiveMode.Create, leaveOpen: true);
-            return ValueTask.FromResult(new XlsbWorkbookWriter(zip, stream, leaveOpen, date1904, useSharedStrings, compression));
+            return ValueTask.FromResult(new XlsbWorkbookWriter(zip, stream, leaveOpen, date1904, useSharedStrings, compression, prefetchWrite));
         }
 
         /// <inheritdoc/>
@@ -76,7 +86,7 @@ namespace ExcelReader.Core.Writer
             WriterStateGuard.RequireCanAddSheet(
                 _state, this, nameof(XlsbWorkbookWriter), name, _activeSheet is not null, nameof(XlsbSheetWriter));
             int sheetId = _sheets.Count + 1;
-            _activeSheet = new XlsbSheetWriter(this, _zip, name, sheetId, _date1904, _compression);
+            _activeSheet = new XlsbSheetWriter(this, _zip, name, sheetId, _date1904, _compression, _prefetchWrite);
             return _activeSheet;
         }
 

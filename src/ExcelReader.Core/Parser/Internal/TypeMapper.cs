@@ -1,4 +1,3 @@
-using System.Linq.Expressions;
 using System.Reflection;
 
 namespace ExcelReader.Core.Parser.Internal
@@ -94,9 +93,10 @@ namespace ExcelReader.Core.Parser.Internal
             // ordinary implicit one is invisible here, so this stays false for the common plain-struct
             // case and true (needing the compiled factory) only for a genuine user-defined constructor.
             bool useDefault = typeof(T).IsValueType && typeof(T).GetConstructor(Type.EmptyTypes) is null;
-            Func<T>? factory = useDefault
-                ? null
-                : Expression.Lambda<Func<T>>(Expression.New(typeof(T))).Compile();
+            // Activator.CreateInstance<T>() binds the parameterless constructor directly — no
+            // Expression.Compile() dynamic-method emission. Requires a public parameterless
+            // constructor, matching the GetConstructor(Type.EmptyTypes) lookup above (public-only).
+            Func<T>? factory = useDefault ? null : static () => Activator.CreateInstance<T>();
             return new TypeMapInfo<T>([.. propertyMaps], factory, useDefault);
         }
     }
