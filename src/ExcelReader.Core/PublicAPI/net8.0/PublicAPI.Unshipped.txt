@@ -1,2 +1,6 @@
 #nullable enable
 static ExcelReader.Core.Writer.RecordWriter.CreateCsvAsync(System.IO.Stream! stream, bool leaveOpen = false, ExcelReader.Core.Writer.CsvWriterOptions? options = null, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<ExcelReader.Core.Writer.WorkbookRecordWriter<ExcelReader.Core.Writer.CsvSheetWriter!, ExcelReader.Core.Writer.CsvRowWriter!>!>
+ExcelReader.Core.Reader.CsvReaderOptions.InternStrings.get -> bool
+ExcelReader.Core.Reader.CsvReaderOptions.InternStrings.init -> void
+ExcelReader.Core.Reader.ExcelReaderOptions.InternStrings.get -> bool
+ExcelReader.Core.Reader.ExcelReaderOptions.InternStrings.init -> void

@@ -17,6 +17,9 @@ namespace ExcelReader.Core.Reader
             private readonly CancellationToken _ct;
             private readonly BiffCursor _cursor;
             private readonly CellAccumulator _acc;
+            // Content-keyed dedup cache for literal (non-shared) Label cells GetString() can't serve
+            // via the shared-string table; see ExcelReaderOptions.InternStrings.
+            private readonly Utf8StringCache? _contentCache;
             private bool _ended;
             private int _row;
 
@@ -27,11 +30,12 @@ namespace ExcelReader.Core.Reader
                 _cursor = reader.OpenCursor(sheetOffset);
                 _row = -1;
                 _acc = new CellAccumulator(reader._options.MaxCellBytes, nameof(ExcelReaderOptions.MaxCellBytes));
+                _contentCache = reader._options.InternStrings ? new Utf8StringCache() : null;
             }
 
             /// <inheritdoc/>
             public Row Current =>
-                new(_acc.CellSpan, _acc.ValueSpan, _reader.SharedSpan, rowBuffer: default, _reader.SharedStringCache);
+                new(_acc.CellSpan, _acc.ValueSpan, _reader.SharedSpan, rowBuffer: default, _reader.SharedStringCache, _contentCache);
 
             /// <inheritdoc/>
             public bool MoveNext()

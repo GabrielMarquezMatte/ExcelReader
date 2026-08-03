@@ -23,20 +23,22 @@ namespace ExcelReader.Core.ValueObjects
         // (see WorkbookLookups.SharedAt), which Cell.GetString() treats as "no cache entry".
         public int SharedIndex { get; init; }
 
-        internal Cell ToCell(ReadOnlySpan<byte> rowValues, ReadOnlySpan<byte> shared, ReadOnlySpan<byte> rowBuffer, string?[]? sharedStringCache = null)
+        internal Cell ToCell(ReadOnlySpan<byte> rowValues, ReadOnlySpan<byte> shared, ReadOnlySpan<byte> rowBuffer,
+            string?[]? sharedStringCache = null, Utf8StringCache? contentCache = null)
         {
             // SharedIndex is only usable as a dedup-cache key when it indexes a stable, append-only,
             // cross-row shared-string table (XLSX/XLSB/XLS) — CSV reuses Source.Shared/Start for its own
-            // per-row materialized scratch buffer and never wires a cache (Row's 3-arg constructors leave
-            // sharedStringCache null), so this branch is unreachable for CSV regardless. RowBuffer cells
-            // (aliasing the live read buffer directly) are even less stable across rows and never use
-            // Source.Shared, so they always fall to the plain slice below.
+            // per-row materialized scratch buffer, so sharedStringCache is always null for it (Row's
+            // constructors default it so) and this cell falls through to contentCache instead, which
+            // has no such stability requirement. RowBuffer cells (aliasing the live read buffer
+            // directly) are even less stable across rows and never use Source.Shared, so they always
+            // fall to the plain slice below — contentCache still applies to them via Cell.GetString().
             if (Source == CellValueSource.Shared)
             {
-                return new Cell(Type, shared.Slice(Start, Length), Number, HasNumber, Style, SharedIndex, sharedStringCache);
+                return new Cell(Type, shared.Slice(Start, Length), Number, HasNumber, Style, SharedIndex, sharedStringCache, contentCache);
             }
             ReadOnlySpan<byte> buf = Source == CellValueSource.RowBuffer ? rowBuffer : rowValues;
-            return new Cell(Type, buf.Slice(Start, Length), Number, HasNumber, Style);
+            return new Cell(Type, buf.Slice(Start, Length), Number, HasNumber, Style, sharedIndex: -1, sharedCache: null, contentCache);
         }
     }
 }

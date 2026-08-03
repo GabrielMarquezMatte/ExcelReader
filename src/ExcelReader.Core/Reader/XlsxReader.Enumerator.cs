@@ -27,6 +27,9 @@ namespace ExcelReader.Core.Reader
             // constructing this enumerator, so the array reference captured here is always the final one.
             private readonly bool[] _styleIsDate;
             private readonly int[] _sharedOffsets;
+            // Content-keyed dedup cache for inline/formula-string cells GetString() can't serve via
+            // the shared-string table; see ExcelReaderOptions.InternStrings.
+            private readonly Utf8StringCache? _contentCache;
             // Owned: opened by Get(Async)Enumerator for this enumerator alone; disposed in Dispose(Async).
             private int _nextCol;
 
@@ -48,11 +51,12 @@ namespace ExcelReader.Core.Reader
                 _reader = reader;
                 _styleIsDate = reader._styleIsDate;
                 _sharedOffsets = reader._sharedOffsets;
+                _contentCache = reader._options.InternStrings ? new Utf8StringCache() : null;
             }
 
             /// <inheritdoc/>
             public Row Current =>
-                new(_acc.CellSpan, _acc.ValueSpan, _reader.SharedSpan, _buf.AsSpan(0, _len), _reader.SharedStringCache);
+                new(_acc.CellSpan, _acc.ValueSpan, _reader.SharedSpan, _buf.AsSpan(0, _len), _reader.SharedStringCache, _contentCache);
 
             // Top-level scanning (finding the next '<row>'/'</sheetData>'/markup between rows) differs
             // between sync and async only in whether the buffer refill (Fill / FillAsync) awaits — so
@@ -601,19 +605,19 @@ namespace ExcelReader.Core.Reader
                     return;
                 }
 
-                if (kind == Kind.Inline)
+                if (kind != Kind.Inline)
                 {
-                    int vStart = _acc.ValueLength;
-                    Span<byte> dst = _acc.ReserveValueSpan(inner.Length);
-                    int written = _ns is null
-                        ? XlsxXml.WriteTextRuns(inner, dst)
-                        : XlsxXml.WriteTextRuns(inner, dst, _ns.TOpen, _ns.TClose, _ns.RPhOpen, _ns.RPhClose);
-                    _acc.Advance(written);
-                    _acc.Add(col, vStart, _acc.ValueLength - vStart, CellType.ExcelString, style, CellValueSource.RowValues);
+                    EmitScalarValue(kind, ElementText(inner, VOpen, VClose), col, style);
                     return;
                 }
 
-                EmitScalarValue(kind, ElementText(inner, VOpen, VClose), col, style);
+                int vStart = _acc.ValueLength;
+                Span<byte> dst = _acc.ReserveValueSpan(inner.Length);
+                int written = _ns is null
+                    ? XlsxXml.WriteTextRuns(inner, dst)
+                    : XlsxXml.WriteTextRuns(inner, dst, _ns.TOpen, _ns.TClose, _ns.RPhOpen, _ns.RPhClose);
+                _acc.Advance(written);
+                _acc.Add(col, vStart, _acc.ValueLength - vStart, CellType.ExcelString, style, CellValueSource.RowValues);
             }
 
             // Handles every Kind whose content is bare "<v>...</v>" with no other wrapper: Number,
