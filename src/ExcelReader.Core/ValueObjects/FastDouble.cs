@@ -10,12 +10,6 @@ namespace ExcelReader.Core.ValueObjects
     // back to the general parser.
     internal static class FastDouble
     {
-        private static readonly double[] Pow10 =
-        [
-            1e0, 1e1, 1e2, 1e3, 1e4, 1e5, 1e6, 1e7, 1e8, 1e9, 1e10, 1e11,
-            1e12, 1e13, 1e14, 1e15, 1e16, 1e17, 1e18, 1e19, 1e20, 1e21, 1e22,
-        ];
-
         public static bool TryParse(ReadOnlySpan<byte> s, out double value)
         {
             value = 0;
@@ -52,12 +46,22 @@ namespace ExcelReader.Core.ValueObjects
                 {
                     return false; // exponent marker or anything else not handled here
                 }
-                digits++;
-                if (digits > 15)
-                {
-                    return false; // mantissa would no longer fit a double's exact integer range
-                }
                 sawDigit = true;
+                // A leading zero (mantissa still 0 and this digit is itself 0) contributes nothing to
+                // the value and isn't a significant digit, so it doesn't count against the 15-digit
+                // cap — only against `scale` if it happens to fall after the decimal point, which it
+                // still must (0.0000001 needs every one of those zeros to compute the right magnitude).
+                // Without this, a value like "000000000000000123" would hit the cap on padding alone
+                // and fall back to the general parser despite having only 3 significant digits.
+                bool leadingZero = mantissa == 0 && c == (byte)'0';
+                if (!leadingZero)
+                {
+                    digits++;
+                    if (digits > 15)
+                    {
+                        return false; // mantissa would no longer fit a double's exact integer range
+                    }
+                }
                 mantissa = (mantissa * 10) + (ulong)(c - (byte)'0');
                 if (sawDot)
                 {
@@ -72,10 +76,43 @@ namespace ExcelReader.Core.ValueObjects
             double result = mantissa;
             if (scale > 0)
             {
-                result /= Pow10[scale];
+                result /= Pow10(scale);
             }
             value = neg ? -result : result;
             return true;
+        }
+
+        // Every power of ten up to 1e22 is itself exactly representable as a double (see the class
+        // remarks); a switch lets the JIT emit a jump table of immediate constants instead of a static
+        // array load, skipping both the static-cctor-check and the bounds check an array indexer pays.
+        private static double Pow10(int scale)
+        {
+            return scale switch
+            {
+                0 => 1e0,
+                1 => 1e1,
+                2 => 1e2,
+                3 => 1e3,
+                4 => 1e4,
+                5 => 1e5,
+                6 => 1e6,
+                7 => 1e7,
+                8 => 1e8,
+                9 => 1e9,
+                10 => 1e10,
+                11 => 1e11,
+                12 => 1e12,
+                13 => 1e13,
+                14 => 1e14,
+                15 => 1e15,
+                16 => 1e16,
+                17 => 1e17,
+                18 => 1e18,
+                19 => 1e19,
+                20 => 1e20,
+                21 => 1e21,
+                _ => 1e22,
+            };
         }
     }
 }
