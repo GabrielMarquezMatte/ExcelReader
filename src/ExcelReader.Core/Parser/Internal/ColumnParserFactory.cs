@@ -2,7 +2,6 @@ using System.Buffers.Text;
 using System.Collections.Frozen;
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
-using System.Linq.Expressions;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Text;
@@ -221,7 +220,7 @@ namespace ExcelReader.Core.Parser.Internal
         private static ColumnParser<T> BuildSpanParser<T>(PropertyInfo prop)
             where T : allows ref struct
         {
-            RefAction<T, ReadOnlySpan<byte>> setter = CompileSetter<T, ReadOnlySpan<byte>>(prop);
+            RefAction<T, ReadOnlySpan<byte>> setter = CompileRefStructSetter<T, ReadOnlySpan<byte>>(prop);
             return (ref model, in cell, _, _) =>
             {
                 setter(ref model, cell.Value);
@@ -661,20 +660,42 @@ namespace ExcelReader.Core.Parser.Internal
             };
         }
 
+        // Binds the property setter directly via CreateDelegate instead of building and compiling an
+        // Expression tree — one dynamic-method/assembly emission avoided per bound column, which is
+        // what made first-use (cold start) cost dominated by map-building rather than parsing.
         private static RefAction<T, TProp> CompileSetter<T, TProp>(PropertyInfo prop)
 #if NET9_0_OR_GREATER
             where T : allows ref struct
-            where TProp : allows ref struct
 #endif
         {
-            ParameterExpression modelParam = Expression.Parameter(typeof(T).MakeByRefType(), "model");
-            ParameterExpression valueParam = Expression.Parameter(typeof(TProp), "value");
-            MemberExpression propAccess = Expression.Property(modelParam, prop);
-            BinaryExpression assign = Expression.Assign(propAccess, valueParam);
-            Type delegateType = typeof(RefAction<,>).MakeGenericType(typeof(T), typeof(TProp));
-            LambdaExpression lambda = Expression.Lambda(delegateType, assign, modelParam, valueParam);
-            return (RefAction<T, TProp>)lambda.Compile();
+            MethodInfo setter = prop.GetSetMethod()!;
+            if (typeof(T).IsValueType)
+            {
+                // A struct (or ref struct) instance method's implicit `this` is already `ref T` at
+                // the CLR level, so an open-instance delegate whose first parameter is `ref T` binds
+                // directly — CreateDelegate does exactly what the old Expression tree produced.
+                return setter.CreateDelegate<RefAction<T, TProp>>();
+            }
+            // Class model: the instance method's implicit `this` is a plain reference, so it binds
+            // to Action<T, TProp> instead; wrap once to match RefAction<T, TProp>'s ref-parameter shape.
+            Action<T, TProp> act = setter.CreateDelegate<Action<T, TProp>>();
+            return (ref T model, TProp value) => act(model, value);
         }
+
+#if NET9_0_OR_GREATER
+        // TProp = ReadOnlySpan<byte> only (BuildSpanParser). A class can never declare a
+        // ref-struct-typed property, so T here is always itself a ref struct — always takes the
+        // direct RefAction bind CompileSetter's IsValueType branch takes, and never needs its
+        // Action<T,TProp> fallback (which can't even name a ref-struct-allowing TProp). Kept as a
+        // separate method because Action<T,TProp> can't be written in a method generic over a TProp
+        // that allows ref struct, even on a branch that would never execute for TProp=ReadOnlySpan<byte>.
+        private static RefAction<T, TProp> CompileRefStructSetter<T, TProp>(PropertyInfo prop)
+            where T : allows ref struct
+            where TProp : allows ref struct
+        {
+            return prop.GetSetMethod()!.CreateDelegate<RefAction<T, TProp>>();
+        }
+#endif
 
         // Matches "1"/"0" and "true"/"false" case-insensitively (so .NET's own bool.ToString() form
         // "True"/"False" round-trips) and reports failure for anything else, so a nullable bool?

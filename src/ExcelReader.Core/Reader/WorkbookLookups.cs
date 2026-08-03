@@ -1,5 +1,6 @@
 using System.Diagnostics.CodeAnalysis;
 using System.IO.Compression;
+using System.Runtime.CompilerServices;
 using System.Text;
 
 namespace ExcelReader.Core.Reader
@@ -90,10 +91,18 @@ namespace ExcelReader.Core.Reader
         }
 
         // In-memory ZIP path twin of the ZipArchive overload above; same exception, same message shape.
+        // Encodes the part path on the stack instead of Encoding.UTF8.GetBytes(string) — this runs on
+        // every GetEnumerator() call (once per sheet switch), not just once at construction, so an
+        // avoidable heap allocation here would repeat for the reader's whole lifetime.
+        [SkipLocalsInit]
         internal static ZipEntryRef GetWorksheetEntry(ZipMemoryIndex memZip, (string Name, string Path)[] sheets, int current)
         {
             string path = sheets[current].Path;
-            return memZip.TryGetEntry(Encoding.UTF8.GetBytes(path), out ZipEntryRef entry)
+            Span<byte> stackBuffer = stackalloc byte[256];
+            ReadOnlySpan<byte> utf8Path = Encoding.UTF8.GetByteCount(path) <= stackBuffer.Length
+                ? stackBuffer[..Encoding.UTF8.GetBytes(path, stackBuffer)]
+                : Encoding.UTF8.GetBytes(path);
+            return memZip.TryGetEntry(utf8Path, out ZipEntryRef entry)
                 ? entry
                 : throw new InvalidDataException($"Worksheet part not found: {path}");
         }

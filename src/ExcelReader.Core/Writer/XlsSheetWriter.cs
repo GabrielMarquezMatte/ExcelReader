@@ -23,9 +23,16 @@ namespace ExcelReader.Core.Writer
         private readonly bool _date1904;
         private readonly bool _isContinuation;
         private readonly string _baseName;
+        // BiffBuffer's default 4 KB initial capacity means any real sheet (a 50k-row sheet is ~8 MB of
+        // records) pays ~11 doubling grows — each one a full memmove of everything written so far, to
+        // produce output BiffBuffer's own 32 MB dedicated pool (see BiffBuffer.Pool) would happily have
+        // rented in one shot. 256 KB collapses most of that to one or two grows without meaningfully
+        // over-allocating a small sheet (the pool bucket size only grows in powers of two anyway).
+        private const int InitialCellsCapacity = 256 * 1024;
+
         [SuppressMessage("Usage", "CA2213:Disposable fields should be disposed",
             Justification = "The cell buffer outlives Dispose; XlsWorkbookWriter releases it via ReleaseBuffer after writing the bytes in EndAsync.")]
-        private readonly BiffBuffer _cells = new();
+        private readonly BiffBuffer _cells = new(InitialCellsCapacity);
         private XlsSheetWriter? _continuation;
         private int _maxRow = -1;
         private int _maxCol = -1;

@@ -169,18 +169,21 @@ namespace ExcelReader.Core.Reader
                 _sorted = true;
                 return;
             }
-            int[] keys = ArrayPool<int>.Shared.Rent(Count);
-            try
+            // Insertion sort directly over CellDesc: rows needing this (XLS, whose cells can arrive
+            // out of order) are typically small and only mildly disordered, so this beats renting a
+            // parallel int[] key array for Array.Sort — no rent/return, and O(n) on the common
+            // near-sorted case instead of Array.Sort's O(n log n) regardless of input order.
+            Span<CellDesc> cells = _cells.AsSpan(0, Count);
+            for (int i = 1; i < cells.Length; i++)
             {
-                for (int i = 0; i < Count; i++)
+                CellDesc current = cells[i];
+                int j = i - 1;
+                while (j >= 0 && cells[j].Column > current.Column)
                 {
-                    keys[i] = _cells[i].Column;
+                    cells[j + 1] = cells[j];
+                    j--;
                 }
-                Array.Sort(keys, _cells, 0, Count);
-            }
-            finally
-            {
-                ArrayPool<int>.Shared.Return(keys);
+                cells[j + 1] = current;
             }
             _sorted = true;
         }

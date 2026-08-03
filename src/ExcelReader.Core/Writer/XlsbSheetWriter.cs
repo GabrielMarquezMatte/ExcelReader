@@ -17,6 +17,7 @@ namespace ExcelReader.Core.Writer
         private readonly ZipArchive _zip;
         private readonly bool _date1904;
         private readonly CompressionLevel _compression;
+        private readonly bool _offloadWrite;
         private readonly BiffBuffer _records = new(4096);
         private Stream? _stream;
         private WriterState _state = WriterState.Created;
@@ -32,7 +33,8 @@ namespace ExcelReader.Core.Writer
             string name,
             int sheetId,
             bool date1904,
-            CompressionLevel compression)
+            CompressionLevel compression,
+            bool offloadWrite)
         {
             _owner = owner;
             _zip = zip;
@@ -40,6 +42,7 @@ namespace ExcelReader.Core.Writer
             SheetId = sheetId;
             _date1904 = date1904;
             _compression = compression;
+            _offloadWrite = offloadWrite;
         }
 
         internal string Name { get; }
@@ -151,6 +154,8 @@ namespace ExcelReader.Core.Writer
 
         [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP003:Dispose previous before re-assigning",
             Justification = "The null-guard above means this only ever assigns _stream once, from null; never re-assigns a live stream.")]
+        [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
+            Justification = "Ownership of the optionally-wrapped stream transfers to _stream, which EndAsync disposes.")]
         private void EnsureStream()
         {
             if (_stream is not null)
@@ -158,7 +163,8 @@ namespace ExcelReader.Core.Writer
                 return;
             }
             ZipArchiveEntry entry = _zip.CreateEntry($"xl/worksheets/sheet{SheetId}.bin", _compression);
-            _stream = entry.Open();
+            Stream stream = entry.Open();
+            _stream = _offloadWrite ? new WriteOffloadStream(stream) : stream;
         }
 
         private void FlushRecords()
