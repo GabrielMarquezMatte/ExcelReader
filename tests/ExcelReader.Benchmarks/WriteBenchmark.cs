@@ -88,6 +88,39 @@ namespace ExcelReader.Benchmarks
         }
 
         [Benchmark]
+        public async Task<long> ExcelReaderWriterPrefetch()
+        {
+            // Pre-sized to the neighborhood of the actual output so MemoryStream's doubling growth
+            // (256B -> ... -> 4MB) doesn't dominate the GC/allocation numbers being measured.
+            await using var ms = new MemoryStream(4 * 1024 * 1024);
+            await using (XlsxWorkbookWriter wb = await XlsxWorkbookWriter.CreateAsync(ms, leaveOpen: true, prefetchWrite: true))
+            {
+                await wb.StartAsync();
+                XlsxSheetWriter sheet = wb.AddSheet("S1");
+                await sheet.StartAsync();
+                using (XlsxRowWriter header = sheet.StartRow())
+                {
+                    header.Write("Name");
+                    header.Write("Id");
+                    header.Write("Date");
+                    header.Write("Value");
+                }
+                for (int i = 0; i < _records.Count; i++)
+                {
+                    Record rec = _records[i];
+                    using XlsxRowWriter row = sheet.StartRow();
+                    row.Write(rec.Name);
+                    row.Write(rec.Id);
+                    row.Write(rec.Date);
+                    row.Write(rec.Value);
+                }
+                await sheet.EndAsync();
+                await wb.EndAsync();
+            }
+            return ms.Length;
+        }
+
+        [Benchmark]
         public async Task<long> ExcelReaderXlsbWriter()
         {
             // Pre-sized to the neighborhood of the actual output so MemoryStream's doubling growth
@@ -120,6 +153,32 @@ namespace ExcelReader.Benchmarks
             // (256B -> ... -> 4MB) doesn't dominate the GC/allocation numbers being measured.
             await using var ms = new MemoryStream(4 * 1024 * 1024);
             await using (XlsbWorkbookWriter wb = await XlsbWorkbookWriter.CreateAsync(ms, leaveOpen: true, useSharedStrings: true))
+            {
+                await wb.StartAsync();
+                XlsbSheetWriter sheet = wb.AddSheet("S1");
+                await sheet.StartAsync();
+                ReadOnlySpan<XlsbCell> header =
+                [
+                    XlsbCell.Create("Name"),
+                    XlsbCell.Create("Id"),
+                    XlsbCell.Create("Date"),
+                    XlsbCell.Create("Value"),
+                ];
+                sheet.WriteRow(header);
+                WorkbookGenerator.WriteXlsbRecords(sheet, _records);
+                await sheet.EndAsync();
+                await wb.EndAsync();
+            }
+            return ms.Length;
+        }
+
+        [Benchmark]
+        public async Task<long> ExcelReaderXlsbWriterPrefetch()
+        {
+            // Pre-sized to the neighborhood of the actual output so MemoryStream's doubling growth
+            // (256B -> ... -> 4MB) doesn't dominate the GC/allocation numbers being measured.
+            await using var ms = new MemoryStream(4 * 1024 * 1024);
+            await using (XlsbWorkbookWriter wb = await XlsbWorkbookWriter.CreateAsync(ms, leaveOpen: true, prefetchWrite: true))
             {
                 await wb.StartAsync();
                 XlsbSheetWriter sheet = wb.AddSheet("S1");

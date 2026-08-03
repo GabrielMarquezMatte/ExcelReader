@@ -129,13 +129,14 @@ namespace ExcelReader.Core.Writer
         /// <param name="leaveOpen">If <see langword="true"/>, <paramref name="stream"/> is left open when the returned writer is disposed.</param>
         /// <param name="compression">The ZIP compression level used for the XLSX package's entries.</param>
         /// <param name="useSharedStrings">If <see langword="true"/>, text cells are deduplicated into the shared-strings table instead of written inline.</param>
+        /// <param name="prefetchWrite">If <see langword="true"/>, each sheet's deflate runs on a background thread instead of the calling thread (see <see cref="XlsxWorkbookWriter.CreateAsync"/>).</param>
         /// <param name="ct">A token to cancel the operation.</param>
         /// <returns>A started record writer ready to accept sheets.</returns>
         public static async ValueTask<WorkbookRecordWriter<XlsxSheetWriter, XlsxRowWriter>> CreateXlsxAsync(
             Stream stream, bool leaveOpen = false, CompressionLevel compression = CompressionLevel.Fastest,
-            bool useSharedStrings = false, CancellationToken ct = default)
+            bool useSharedStrings = false, bool prefetchWrite = false, CancellationToken ct = default)
         {
-            var workbook = await XlsxWorkbookWriter.CreateAsync(stream, leaveOpen, compression, useSharedStrings, ct).ConfigureAwait(false);
+            var workbook = await XlsxWorkbookWriter.CreateAsync(stream, leaveOpen, compression, useSharedStrings, prefetchWrite, ct).ConfigureAwait(false);
             await workbook.StartAsync(ct).ConfigureAwait(false);
             return new WorkbookRecordWriter<XlsxSheetWriter, XlsxRowWriter>(workbook);
         }
@@ -146,14 +147,15 @@ namespace ExcelReader.Core.Writer
         /// <param name="date1904">If <see langword="true"/>, dates are serialized using the 1904 date system instead of the default 1900 system.</param>
         /// <param name="compression">The ZIP compression level used for the XLSB package's entries.</param>
         /// <param name="useSharedStrings">If <see langword="true"/>, text cells are deduplicated into the shared-strings table instead of written inline.</param>
+        /// <param name="prefetchWrite">If <see langword="true"/>, each sheet's deflate runs on a background thread instead of the calling thread (see <see cref="XlsbWorkbookWriter.CreateAsync"/>).</param>
         /// <param name="ct">A token to cancel the operation.</param>
         /// <returns>A started record writer ready to accept sheets.</returns>
         public static async ValueTask<WorkbookRecordWriter<XlsbSheetWriter, XlsbRowWriter>> CreateXlsbAsync(
             Stream stream, bool leaveOpen = false, bool date1904 = false,
             CompressionLevel compression = CompressionLevel.Fastest, bool useSharedStrings = false,
-            CancellationToken ct = default)
+            bool prefetchWrite = false, CancellationToken ct = default)
         {
-            var workbook = await XlsbWorkbookWriter.CreateAsync(stream, leaveOpen, date1904, compression, useSharedStrings, ct).ConfigureAwait(false);
+            var workbook = await XlsbWorkbookWriter.CreateAsync(stream, leaveOpen, date1904, compression, useSharedStrings, prefetchWrite, ct).ConfigureAwait(false);
             await workbook.StartAsync(ct).ConfigureAwait(false);
             return new WorkbookRecordWriter<XlsbSheetWriter, XlsbRowWriter>(workbook);
         }
