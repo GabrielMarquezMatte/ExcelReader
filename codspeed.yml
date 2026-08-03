@@ -1,0 +1,71 @@
+# CodSpeed benchmark definitions.
+#
+# CodSpeed has no dedicated .NET integration, so the benchmarks run through the CLI's command
+# harness: each entry below is one process that the CodSpeed CLI times end to end. The harness
+# (tests/ExcelReader.CodSpeed) repeats the workload internally so the measured work dominates
+# runtime startup and JIT; `--list` on the harness prints the scenario names used here.
+#
+# Build the harness first:
+#   dotnet build tests/ExcelReader.CodSpeed/ExcelReader.CodSpeed.csproj -c Release
+# Then run:
+#   codspeed run -m walltime
+$schema: https://raw.githubusercontent.com/CodSpeedHQ/codspeed/refs/heads/main/schemas/codspeed.schema.json
+
+options:
+  warmup-time: 1s
+  max-time: 8s
+
+benchmarks:
+  # --- readers: one pass over the 65K-row, 14-column real-world dataset ---
+  - name: read xlsx (stream)
+    exec: dotnet tests/ExcelReader.CodSpeed/bin/Release/net10.0/ExcelReader.CodSpeed.dll read-xlsx
+
+  - name: read xlsx (in-memory buffer)
+    exec: dotnet tests/ExcelReader.CodSpeed/bin/Release/net10.0/ExcelReader.CodSpeed.dll read-xlsx-memory
+
+  - name: read xlsx (prefetch decompression)
+    exec: dotnet tests/ExcelReader.CodSpeed/bin/Release/net10.0/ExcelReader.CodSpeed.dll read-xlsx-prefetch
+
+  - name: read xlsx (materialized strings)
+    exec: dotnet tests/ExcelReader.CodSpeed/bin/Release/net10.0/ExcelReader.CodSpeed.dll read-xlsx-materialized
+
+  - name: read xlsx (async)
+    exec: dotnet tests/ExcelReader.CodSpeed/bin/Release/net10.0/ExcelReader.CodSpeed.dll read-xlsx-async
+
+  - name: read xlsb
+    exec: dotnet tests/ExcelReader.CodSpeed/bin/Release/net10.0/ExcelReader.CodSpeed.dll read-xlsb
+
+  - name: read xls
+    exec: dotnet tests/ExcelReader.CodSpeed/bin/Release/net10.0/ExcelReader.CodSpeed.dll read-xls
+
+  - name: read csv
+    exec: dotnet tests/ExcelReader.CodSpeed/bin/Release/net10.0/ExcelReader.CodSpeed.dll read-csv
+
+  # --- typed parsing: same dataset bound to a 14-property model ---
+  - name: parse xlsx (class model)
+    exec: dotnet tests/ExcelReader.CodSpeed/bin/Release/net10.0/ExcelReader.CodSpeed.dll parse-xlsx-class
+
+  - name: parse xlsx (struct model)
+    exec: dotnet tests/ExcelReader.CodSpeed/bin/Release/net10.0/ExcelReader.CodSpeed.dll parse-xlsx-struct
+
+  - name: parse csv (class model)
+    exec: dotnet tests/ExcelReader.CodSpeed/bin/Release/net10.0/ExcelReader.CodSpeed.dll parse-csv-class
+
+  # --- writers: 50k records serialized to each supported format ---
+  - name: write xlsx
+    exec: dotnet tests/ExcelReader.CodSpeed/bin/Release/net10.0/ExcelReader.CodSpeed.dll write-xlsx
+
+  - name: write xlsx (shared strings)
+    exec: dotnet tests/ExcelReader.CodSpeed/bin/Release/net10.0/ExcelReader.CodSpeed.dll write-xlsx-shared-strings
+
+  - name: write xlsb
+    exec: dotnet tests/ExcelReader.CodSpeed/bin/Release/net10.0/ExcelReader.CodSpeed.dll write-xlsb
+
+  - name: write xls
+    exec: dotnet tests/ExcelReader.CodSpeed/bin/Release/net10.0/ExcelReader.CodSpeed.dll write-xls
+
+  - name: write csv
+    exec: dotnet tests/ExcelReader.CodSpeed/bin/Release/net10.0/ExcelReader.CodSpeed.dll write-csv
+
+  - name: write records (xlsx, POCO API)
+    exec: dotnet tests/ExcelReader.CodSpeed/bin/Release/net10.0/ExcelReader.CodSpeed.dll write-records-xlsx
