@@ -33,6 +33,11 @@ namespace ExcelReader.Core.Reader
 
             private int _col;
 
+            // Content-keyed dedup cache for GetString(); see CsvReaderOptions.InternStrings. CSV has
+            // no stable shared-string table index the way XLSX/XLSB/XLS do, so this is the only dedup
+            // path available to it.
+            private readonly Utf8StringCache? _contentCache;
+
             // Current field's bytes, built incrementally as either a single contiguous run in _buf
             // (the common case — zero-copy) or, once a discontiguous append is needed (a doubled ""
             // quote, or bytes trailing a closing quote), materialized into _acc's value buffer instead.
@@ -53,6 +58,7 @@ namespace ExcelReader.Core.Reader
                 _delimiter = options.Delimiter;
                 _quote = options.Quote;
                 _stripBom = options.DetectEncodingFromByteOrderMark;
+                _contentCache = options.InternStrings ? new Utf8StringCache() : null;
             }
 
             internal Enumerator(ReadOnlyMemory<byte> content, CsvReaderOptions options, CancellationToken ct = default)
@@ -61,6 +67,7 @@ namespace ExcelReader.Core.Reader
                 _delimiter = options.Delimiter;
                 _quote = options.Quote;
                 _stripBom = options.DetectEncodingFromByteOrderMark;
+                _contentCache = options.InternStrings ? new Utf8StringCache() : null;
             }
 
             // Cells point either into _buf (the common, zero-copy case: unquoted or plain-quoted
@@ -68,7 +75,7 @@ namespace ExcelReader.Core.Reader
             // buffer (only for fields needing unescaping, e.g. a doubled "" quote, or malformed
             // trailing bytes after a closing quote) — see CellDesc.Source / ToCell.
             /// <inheritdoc/>
-            public Row Current => new(_acc.CellSpan, _buf.AsSpan(0, _len), _acc.ValueSpan, rowBuffer: default);
+            public Row Current => new(_acc.CellSpan, _buf.AsSpan(0, _len), _acc.ValueSpan, rowBuffer: default, sharedStringCache: null, contentCache: _contentCache);
 
             // Dense field access for CsvEnumerable<T>: CSV cells are stored contiguously in column
             // order (no gaps), so field i is _acc.CellSpan[i] — O(1), skipping Row's binary search and
@@ -78,8 +85,7 @@ namespace ExcelReader.Core.Reader
             internal Cell FieldAt(int index)
             {
                 ref readonly CellDesc d = ref _acc.CellSpan[index];
-                ReadOnlySpan<byte> buf = d.Source == CellValueSource.Shared ? _acc.ValueSpan : _buf.AsSpan(0, _len);
-                return new Cell(d.Type, buf.Slice(d.Start, d.Length));
+                return d.ToCell(_buf.AsSpan(0, _len), _acc.ValueSpan, rowBuffer: default, sharedStringCache: null, contentCache: _contentCache);
             }
 
             // Fast-path gate mirrors MoveNextAsync's: once BOM-checked, a failed TryParseRecordFromBuffer

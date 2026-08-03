@@ -17,22 +17,26 @@ namespace ExcelReader.Core.ValueObjects
         // Non-null only for readers with a true, cross-row-stable shared-string table (XLSX/XLSB/XLS); see
         // CellDesc.ToCell. Defaults to null so existing 3-arg call sites (CSV) are unaffected.
         private readonly string?[]? _sharedStringCache;
+        // Content-keyed dedup cache (see Utf8StringCache) for cells _sharedStringCache can't serve —
+        // set only when the reader was constructed with string interning enabled.
+        private readonly Utf8StringCache? _contentCache;
 
         internal Row(ReadOnlySpan<CellDesc> cells, ReadOnlySpan<byte> rowValues, ReadOnlySpan<byte> shared,
-            ReadOnlySpan<byte> rowBuffer = default, string?[]? sharedStringCache = null)
+            ReadOnlySpan<byte> rowBuffer = default, string?[]? sharedStringCache = null, Utf8StringCache? contentCache = null)
         {
             _cells = cells;
             _rowValues = rowValues;
             _shared = shared;
             _rowBuffer = rowBuffer;
             _sharedStringCache = sharedStringCache;
+            _contentCache = contentCache;
         }
 
         /// <summary>One past the highest populated column index, so callers can iterate 0..ColumnCount.</summary>
         public int ColumnCount => _cells.IsEmpty ? 0 : _cells[^1].Column + 1;
 
         /// <summary>Enumerates only the populated cells in this row, in ascending column order.</summary>
-        public RowCellEnumerator Cells => new(_cells, _rowValues, _shared, _rowBuffer, _sharedStringCache);
+        public RowCellEnumerator Cells => new(_cells, _rowValues, _shared, _rowBuffer, _sharedStringCache, _contentCache);
 
         /// <summary>Gets the cell at the given column index, or an empty cell if the column has no value.</summary>
         public Cell this[int column]
@@ -44,13 +48,17 @@ namespace ExcelReader.Core.ValueObjects
                 {
                     return new Cell(CellType.Empty, default);
                 }
-                return _cells[i].ToCell(_rowValues, _shared, _rowBuffer, _sharedStringCache);
+                return _cells[i].ToCell(_rowValues, _shared, _rowBuffer, _sharedStringCache, _contentCache);
             }
         }
 
         // Binary search by Column (cells are sorted ascending) — keeps wide-row access O(log n).
         private int IndexOf(int column)
         {
+            if ((uint)column < (uint)_cells.Length && _cells[column].Column == column)
+            {
+                return column;
+            }
             int lo = 0, hi = _cells.Length - 1;
             while (lo <= hi)
             {

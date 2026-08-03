@@ -22,6 +22,12 @@ namespace ExcelReader.Core.ValueObjects
         // index (WorkbookLookups.SharedAt), which the bounds check in GetString() below excludes safely.
         private readonly int _sharedIndex;
         private readonly string?[]? _sharedCache;
+        // Content-keyed dedup cache (see Utf8StringCache), used for cells the index-keyed _sharedCache
+        // above can't serve — CSV has no stable shared-string index at all, and XLSX/XLSB/XLS
+        // inline/formula-string cells aren't part of the shared-string table either. Non-null only
+        // when the reader was constructed with string interning enabled; checked after _sharedCache in
+        // GetString() so a genuine shared-string hit is never routed through the slower content lookup.
+        private readonly Utf8StringCache? _contentCache;
 
         /// <summary>The kind of value this cell holds.</summary>
         public CellType Type { get; }
@@ -45,12 +51,18 @@ namespace ExcelReader.Core.ValueObjects
         }
 
         internal Cell(CellType type, ReadOnlySpan<byte> value, double number, bool hasNumber, int styleIndex)
-            : this(type, value, number, hasNumber, styleIndex, sharedIndex: -1, sharedCache: null)
+            : this(type, value, number, hasNumber, styleIndex, sharedIndex: -1, sharedCache: null, contentCache: null)
         {
         }
 
         internal Cell(CellType type, ReadOnlySpan<byte> value, double number, bool hasNumber, int styleIndex,
             int sharedIndex, string?[]? sharedCache)
+            : this(type, value, number, hasNumber, styleIndex, sharedIndex, sharedCache, contentCache: null)
+        {
+        }
+
+        internal Cell(CellType type, ReadOnlySpan<byte> value, double number, bool hasNumber, int styleIndex,
+            int sharedIndex, string?[]? sharedCache, Utf8StringCache? contentCache)
         {
             Type = type;
             Value = value;
@@ -59,6 +71,7 @@ namespace ExcelReader.Core.ValueObjects
             StyleIndex = styleIndex;
             _sharedIndex = sharedIndex;
             _sharedCache = sharedCache;
+            _contentCache = contentCache;
         }
 
         /// <summary>Reads the cell's value as a <see cref="double"/>; returns false if it isn't numeric.</summary>
@@ -311,6 +324,10 @@ namespace ExcelReader.Core.ValueObjects
             {
                 ref string? cached = ref _sharedCache[_sharedIndex];
                 return cached ??= Encoding.UTF8.GetString(Value);
+            }
+            if (_contentCache is not null && !Value.IsEmpty)
+            {
+                return _contentCache.GetOrAdd(Value);
             }
             return Encoding.UTF8.GetString(Value);
         }
