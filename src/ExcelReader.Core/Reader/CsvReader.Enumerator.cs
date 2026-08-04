@@ -15,7 +15,8 @@ namespace ExcelReader.Core.Reader
         /// across the compaction that the next <c>MoveNext</c> may trigger. Records are parsed from buffered bytes
         /// only, with no stream I/O; when a record is only partially buffered the parse restarts after a refill, so
         /// the synchronous and asynchronous paths share one parser and the async path awaits once per refill, not
-        /// per field.
+        /// per field. A quote-free record is emitted by <see cref="CsvControlScanner"/> in a single vectorized pass
+        /// over its bytes; only a record containing a quote falls back to the per-field scalar parser below.
         /// </remarks>
         [SuppressMessage("Design", "CA1034:Nested types should not be visible",
             Justification = "Public nested enumerator is the standard foreach pattern.")]
@@ -168,11 +169,6 @@ namespace ExcelReader.Core.Reader
 
             // --- record/field parsing (buffer-only, no stream I/O) ---
 
-            // Outcomes of TryScanUnquotedRun.
-            private const int NeedMore = 0;
-            private const int FieldEnd = 1;
-            private const int RecordEnd = 2;
-
             // Parses one full record from _buf[_pos.._len]. Returns false when the record is not
             // fully buffered yet (and not EOF); the caller restores _pos to the record start,
             // refills, and re-parses the record from scratch (BeginRecord resets _acc).
@@ -185,33 +181,25 @@ namespace ExcelReader.Core.Reader
                 int len = _len;
                 byte delim = _delimiter;
                 byte quote = _quote;
-                int pos = _pos;
+                int recordStart = _pos;
 
-                // Fast path: a single long-span IndexOfAny finds whichever of {CR, LF, quote} comes
-                // first — typically 50-200+ bytes, wide enough to actually engage the vectorized path
-                // (per-field spans below are 5-20 bytes and mostly don't). If a terminator is hit before
-                // any quote, the line up to it is provably quote-free, so it's split by delimiter
-                // directly with no FieldState/materialization machinery at all. Falls through to the
-                // general per-field parser when a quote is hit first, or when the terminator/EOF isn't
-                // resolvable yet.
-                ReadOnlySpan<byte> remaining = buf[pos..len];
-                int first = remaining.IndexOfAny(Cr, Lf, quote);
-                bool quoteFirst = first >= 0 && remaining[first] == quote;
-                int lineTerm = quoteFirst ? -1 : first;
-                bool ambiguousCr = lineTerm >= 0 && remaining[lineTerm] == Cr && lineTerm == remaining.Length - 1 && !_eof;
-                if (!quoteFirst && !ambiguousCr && (lineTerm >= 0 || _eof))
+                SimpleRecordOutcome simple = TryParseSimpleRecord(buf, len, recordStart);
+                if (simple == SimpleRecordOutcome.Done)
                 {
-                    ReadOnlySpan<byte> line = lineTerm >= 0 ? remaining[..lineTerm] : remaining;
-                    ParseUnquotedLine(line, pos);
-                    pos += line.Length;
-                    if (lineTerm >= 0)
-                    {
-                        pos += buf[pos] == Cr && pos + 1 < len && buf[pos + 1] == Lf ? 2 : 1;
-                    }
-                    _pos = pos;
                     return true;
                 }
+                if (simple == SimpleRecordOutcome.NeedMore)
+                {
+                    _pos = recordStart;
+                    return false;
+                }
 
+                // A quote turned up: the fields emitted above are discarded and the record is re-parsed
+                // from its start by the general per-field path. Costs no more than before the fused fast
+                // path existed — the old code also scanned for the quote and then re-parsed the record.
+                _acc.Reset();
+                _col = 0;
+                int pos = recordStart;
                 FieldState f = default;
 
                 while (true)
@@ -229,14 +217,14 @@ namespace ExcelReader.Core.Reader
                             return false;
                         }
                     }
-                    int term = TryScanUnquotedRun(buf, len, delim, ref pos, ref f);
-                    if (term == NeedMore)
+                    FieldScanOutcome term = TryScanUnquotedRun(buf, len, delim, ref pos, ref f);
+                    if (term == FieldScanOutcome.NeedMore)
                     {
                         _pos = pos;
                         return false;
                     }
                     CommitField(f);
-                    if (term == RecordEnd)
+                    if (term == FieldScanOutcome.RecordEnd)
                     {
                         _pos = pos;
                         return true;
@@ -244,26 +232,57 @@ namespace ExcelReader.Core.Reader
                 }
             }
 
-            // Splits an entire quote-free line (already known fully buffered) by delimiter in one tight
-            // loop — no FieldState, no materialization check, no quote branch per field, since none of
-            // that machinery can possibly be needed here. `lineStart` is the line's absolute offset in
-            // buf, so committed cells still point directly into it (zero-copy, same as the general path).
-            private void ParseUnquotedLine(ReadOnlySpan<byte> line, int lineStart)
+            // Emits every field of a quote-free record in one vectorized pass: CsvControlScanner reports
+            // delimiters and terminators in order from a single scan, so each byte is read once instead of
+            // twice (a line-terminator search followed by a per-field delimiter search). Bails out with
+            // SimpleQuoted the moment a quote is seen, since unescaping "" and honoring quoted
+            // delimiters/newlines is the general path's job.
+            // Measured (CsvReadBenchmark.ExcelReaderWide, 50000 rows x 32 columns, i7-1355U):
+            // 11.134 ms -> 8.119 ms, ~27% faster. The narrow 4-column shape (ExcelReader) is flat
+            // within noise (~4.0-4.4 ms either way) — expected, since mask reuse only pays off once
+            // a record has enough fields to amortize a vector load.
+            private SimpleRecordOutcome TryParseSimpleRecord(ReadOnlySpan<byte> buf, int len, int pos)
             {
-                byte delim = _delimiter;
-                int start = 0;
+                CsvControlScanner scanner = new(buf, pos, len, _delimiter, _quote);
+                int fieldStart = pos;
                 while (true)
                 {
-                    int rel = line[start..].IndexOf(delim);
-                    if (rel < 0)
+                    int stop = scanner.Next();
+                    if (stop < 0)
                     {
-                        int fieldLen = line.Length - start;
-                        _acc.Add(_col++, lineStart + start, fieldLen, fieldLen == 0 ? CellType.Empty : CellType.ExcelString, style: 0, CellValueSource.RowValues);
-                        return;
+                        if (!_eof)
+                        {
+                            return SimpleRecordOutcome.NeedMore;
+                        }
+                        AddField(fieldStart, len - fieldStart);
+                        _pos = len;
+                        return SimpleRecordOutcome.Done;
                     }
-                    _acc.Add(_col++, lineStart + start, rel, rel == 0 ? CellType.Empty : CellType.ExcelString, style: 0, CellValueSource.RowValues);
-                    start += rel + 1;
+                    byte b = buf[stop];
+                    if (b == _quote)
+                    {
+                        return SimpleRecordOutcome.Quoted;
+                    }
+                    if (b == _delimiter)
+                    {
+                        AddField(fieldStart, stop - fieldStart);
+                        fieldStart = stop + 1;
+                        continue;
+                    }
+                    if (b == Cr && stop + 1 >= len && !_eof)
+                    {
+                        return SimpleRecordOutcome.NeedMore; // can't tell a bare CR from CRLF yet
+                    }
+                    AddField(fieldStart, stop - fieldStart);
+                    _pos = stop + (b == Cr && stop + 1 < len && buf[stop + 1] == Lf ? 2 : 1);
+                    return SimpleRecordOutcome.Done;
                 }
+            }
+
+            private void AddField(int start, int length)
+            {
+                _acc.Add(_col++, start, length, length == 0 ? CellType.Empty : CellType.ExcelString,
+                         style: 0, CellValueSource.RowValues);
             }
 
             // `pos` is right after the opening quote. Appends unescaped content ("" -> ") to _acc
@@ -304,33 +323,33 @@ namespace ExcelReader.Core.Reader
 
             // Scans from `pos` (either the field's start, or right after a closing quote) for the
             // next delimiter/terminator, appending the run verbatim.
-            private int TryScanUnquotedRun(ReadOnlySpan<byte> buf, int len, byte delim, ref int pos, ref FieldState f)
+            private FieldScanOutcome TryScanUnquotedRun(ReadOnlySpan<byte> buf, int len, byte delim, ref int pos, ref FieldState f)
             {
                 int rel = pos < len ? buf[pos..len].IndexOfAny(delim, Cr, Lf) : -1;
                 if (rel < 0)
                 {
                     if (!_eof)
                     {
-                        return NeedMore;
+                        return FieldScanOutcome.NeedMore;
                     }
                     FieldAppendBufRun(buf, pos, len - pos, ref f);
                     pos = len;
-                    return RecordEnd;
+                    return FieldScanOutcome.RecordEnd;
                 }
                 int found = pos + rel;
                 byte b = buf[found];
                 if (b == Cr && found + 1 >= len && !_eof)
                 {
-                    return NeedMore; // can't tell a bare CR from CRLF yet
+                    return FieldScanOutcome.NeedMore; // can't tell a bare CR from CRLF yet
                 }
                 FieldAppendBufRun(buf, pos, found - pos, ref f);
                 if (b == delim)
                 {
                     pos = found + 1;
-                    return FieldEnd;
+                    return FieldScanOutcome.FieldEnd;
                 }
                 pos = found + (b == Cr && found + 1 < len && buf[found + 1] == Lf ? 2 : 1);
-                return RecordEnd;
+                return FieldScanOutcome.RecordEnd;
             }
 
             // The three-byte UTF-8 BOM, if present at the very start. Splitting this out of the

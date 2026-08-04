@@ -7,7 +7,6 @@
 [![Downloads](https://img.shields.io/nuget/dt/ExcelReader.NET.svg)](https://www.nuget.org/packages/ExcelReader.NET)
 [![License](https://img.shields.io/github/license/GabrielMarquezMatte/ExcelReader.svg)](LICENSE)
 [![Benchmarks](https://img.shields.io/badge/benchmarks-GitHub%20Pages-informational)](https://gabrielmarquezmatte.github.io/ExcelReader/dev/bench/)
-[![CodSpeed](https://img.shields.io/endpoint?url=https://codspeed.io/badge.json)](https://app.codspeed.io/GabrielMarquezMatte/ExcelReader?utm_source=badge)
 
 High-performance Excel reading and writing for .NET 10. Reads `.xlsx`, `.xlsb`, `.xls`, and `.csv`; writes `.xlsx`, `.xlsb`, `.xls`, and `.csv`.
 
@@ -668,32 +667,6 @@ Run the benchmarks locally:
 
 ```bash
 dotnet run --project tests/ExcelReader.Benchmarks/ExcelReader.Benchmarks.csproj --configuration Release -- --filter *
-```
-
-### Continuous performance tracking (CodSpeed)
-
-The tables above are point-in-time comparisons against other libraries. To catch regressions between
-commits, every push to `master` and every pull request also runs a second, self-comparing suite on
-[CodSpeed](https://app.codspeed.io/GabrielMarquezMatte/ExcelReader).
-
-CodSpeed has no .NET integration, so those benchmarks go through the CodSpeed CLI's command harness:
-[`codspeed.yml`](codspeed.yml) lists one command per scenario and
-[`tests/ExcelReader.CodSpeed`](tests/ExcelReader.CodSpeed) is the program those commands run. Each
-scenario reads or writes only through ExcelReader — no competitor libraries — and repeats its
-workload internally so the measured work dominates process startup and JIT. Reads and typed parses
-use the same real-world 65K-row, 14-column dataset as `RealDataReadBenchmark`; writes serialize
-50,000 records to each supported format.
-
-```bash
-# List the scenarios
-dotnet run --project tests/ExcelReader.CodSpeed/ExcelReader.CodSpeed.csproj --configuration Release -- --list
-
-# Run one scenario without CodSpeed
-dotnet run --project tests/ExcelReader.CodSpeed/ExcelReader.CodSpeed.csproj --configuration Release -- read-xlsx
-
-# Run the whole suite under the CodSpeed CLI (https://codspeed.io/docs/cli)
-dotnet build tests/ExcelReader.CodSpeed/ExcelReader.CodSpeed.csproj --configuration Release
-codspeed run -m walltime
 ```
 
 ## Notes

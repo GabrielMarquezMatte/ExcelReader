@@ -25,6 +25,27 @@ namespace ExcelReader.Benchmarks
             return Encoding.UTF8.GetBytes(sb.ToString());
         }
 
+        // 32-column headerless rows, for the CSV read benchmark: the vectorized scan amortizes one
+        // vector load over many fields, so a wide row is where the win is largest and a 4-column row
+        // (Build above) is where it is smallest. Both are measured so neither shape flatters the result.
+        public static byte[] BuildWide(int rows, int columns)
+        {
+            var sb = new StringBuilder(rows * columns * 6);
+            for (int r = 0; r < rows; r++)
+            {
+                for (int c = 0; c < columns; c++)
+                {
+                    if (c > 0)
+                    {
+                        sb.Append(',');
+                    }
+                    sb.Append(WorkbookGenerator.Pool[(r + c) % WorkbookGenerator.Pool.Length]);
+                }
+                sb.Append('\n');
+            }
+            return Encoding.UTF8.GetBytes(sb.ToString());
+        }
+
         // Header (Name,Id,Date,Value) + `rows` Records — mirrors WorkbookGenerator.BuildTypedAsync,
         // for the typed-parse benchmark.
         public static byte[] BuildTyped(int rows)
