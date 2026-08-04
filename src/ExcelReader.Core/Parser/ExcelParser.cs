@@ -10,11 +10,13 @@ namespace ExcelReader.Core.Parser
     /// </summary>
     /// <typeparam name="T">The model type to bind each row to.</typeparam>
     /// <remarks>
-    /// Reflects over <typeparamref name="T"/>'s properties (<c>GetProperties</c>) and compiles
-    /// per-property setters via <c>Expression.Compile</c> plus <c>MakeGenericMethod</c>, so it needs
-    /// runtime code generation and keeps <typeparamref name="T"/>'s members — not compatible with
-    /// Native AOT, and trimming can remove the properties it binds to. The raw <c>Excel.From*</c>
-    /// readers use no reflection and stay AOT/trim-safe; only this typed layer does not.
+    /// Reflects over <typeparamref name="T"/>'s properties (<c>GetProperties</c>) and binds each
+    /// per-property setter via <c>MethodInfo.CreateDelegate</c>, dispatched per property type through
+    /// <c>MakeGenericMethod</c> — needs runtime code generation and keeps <typeparamref name="T"/>'s
+    /// members, so it's not compatible with Native AOT, and trimming can remove the properties it binds
+    /// to. The raw <c>Excel.From*</c> readers use no reflection and stay AOT/trim-safe; only this typed
+    /// layer does not — <see cref="ExcelMappedParser{T}"/> is the AOT-clean alternative, driven by a
+    /// source-generated or hand-written <see cref="IExcelRowMap{T}"/> instead of reflection.
     /// <para>
     /// Column binding runs through <c>ref TModel</c> end to end (<c>ColumnParser&lt;T&gt;</c>,
     /// <c>RefAction&lt;T,TProperty&gt;</c> — see <c>Internal/Delegates.cs</c>), and <c>Row</c>/<c>RowCell</c>
@@ -29,7 +31,7 @@ namespace ExcelReader.Core.Parser
     /// </para>
     /// </remarks>
     [RequiresUnreferencedCode("Typed parsing reflects over T's public properties, which trimming may remove.")]
-    [RequiresDynamicCode("Typed parsing compiles property setters at runtime (Expression.Compile / MakeGenericMethod).")]
+    [RequiresDynamicCode("Typed parsing binds property setters at runtime (MethodInfo.CreateDelegate / MakeGenericMethod).")]
     public sealed class ExcelParser<T>
     {
         private readonly ExcelParserConfig _config;

@@ -35,6 +35,22 @@ namespace ExcelReader.AotSanity
                 return 1;
             }
 
+            // Feature A4: the public MappedRecordWriter.CreateMapped*Async write entries, driven by the
+            // same source-generated map (IExcelRecordMap<T>), also under PublishAot.
+            await using var writtenStream = new MemoryStream();
+            await using (var writer = await MappedRecordWriter.CreateMappedXlsxAsync(writtenStream, leaveOpen: true))
+            {
+                await writer.WriteSheetAsync("S1", [new GeneratedAotModel { Name = "Zoe", Age = 8, Active = true }]);
+            }
+            writtenStream.Position = 0;
+            await using XlsxReader writtenReader = await Excel.FromAsync(writtenStream);
+            var writtenRows = new ExcelMappedParser<GeneratedAotModel>().Parse(writtenReader).ToList();
+            if (writtenRows.Count != 1 || !string.Equals(writtenRows[0].Name, "Zoe", StringComparison.Ordinal) || writtenRows[0].Age != 8 || !writtenRows[0].Active)
+            {
+                Console.Error.WriteLine("Source-generated XLSX write+read round trip produced an unexpected result.");
+                return 1;
+            }
+
             ReadOnlyMemory<byte> csv = Encoding.UTF8.GetBytes("Name,Age\r\nBob,42\r\n");
             CsvReader csvReader = Excel.FromCsv(csv);
             CsvReader.Enumerator csvRows = csvReader.GetEnumerator();

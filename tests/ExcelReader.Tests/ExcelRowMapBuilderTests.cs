@@ -5,9 +5,9 @@ using ExcelReader.Core.Writer;
 
 namespace ExcelReader.Tests
 {
-    // Feature A0 (docs/v2-plan.md §2.4): proves the hand-written ExcelRowMapBuilder<T>/ExcelRecordMapBuilder<T>
-    // seam produces the exact same result as the reflection-based ExcelParser<T>/WorkbookRecordWriter for the
-    // same model, before any source generator exists to emit the map automatically.
+    // Proves the hand-written ExcelRowMapBuilder<T>/ExcelRecordMapBuilder<T> seam produces the exact
+    // same result as the reflection-based ExcelParser<T>/WorkbookRecordWriter for the same model — the
+    // seam a source generator can also emit into, without reflecting over the model at runtime.
     public class ExcelRowMapBuilderTests
     {
         private enum MapBuilderKind
@@ -168,6 +168,105 @@ namespace ExcelReader.Tests
             {
                 builder.WriteRow(row, record);
             }
+        }
+
+        // Feature A4: the public CreateMapped*Async entries, one per format (symmetry rule) — each
+        // writes through MappedWorkbookRecordWriter<TSheet,TRow> and reads back through
+        // ExcelMappedParser<T>, so both halves of the seam are exercised end to end via the real public
+        // API surface rather than the internal builder plumbing the earlier tests drive directly.
+        [Fact]
+        public async Task MappedRecordWriterRoundTripsThroughXlsx()
+        {
+            CancellationToken ct = TestContext.Current.CancellationToken;
+            var record = new MapBuilderTestModel { Name = "Carol", Age = 21, BirthDate = SampleBirthDate, Active = true, Kind = MapBuilderKind.Beta };
+
+            await using var stream = new MemoryStream();
+            await using (var writer = await MappedRecordWriter.CreateMappedXlsxAsync(stream, leaveOpen: true, ct: ct))
+            {
+                await writer.WriteSheetAsync("S1", [record], ct);
+            }
+
+            stream.Position = 0;
+            await using XlsxReader reader = await Excel.FromAsync(stream, ct: ct);
+            List<MapBuilderTestModel> results = new ExcelMappedParser<MapBuilderTestModel>().Parse(reader).ToList();
+
+            Assert.Single(results);
+            AssertMatches(record, results[0]);
+        }
+
+        [Fact]
+        public async Task MappedRecordWriterRoundTripsThroughXlsb()
+        {
+            CancellationToken ct = TestContext.Current.CancellationToken;
+            var record = new MapBuilderTestModel { Name = "Dave", Age = 55, BirthDate = SampleBirthDate, Active = false, Kind = MapBuilderKind.Alpha };
+
+            await using var stream = new MemoryStream();
+            await using (var writer = await MappedRecordWriter.CreateMappedXlsbAsync(stream, leaveOpen: true, ct: ct))
+            {
+                await writer.WriteSheetAsync("S1", [record], ct);
+            }
+
+            stream.Position = 0;
+            await using XlsbReader reader = await Excel.FromXlsbAsync(stream, leaveOpen: false, ct: ct);
+            List<MapBuilderTestModel> results = new ExcelMappedParser<MapBuilderTestModel>().Parse(reader).ToList();
+
+            Assert.Single(results);
+            AssertMatches(record, results[0]);
+        }
+
+        [Fact]
+        public async Task MappedRecordWriterRoundTripsThroughXls()
+        {
+            CancellationToken ct = TestContext.Current.CancellationToken;
+            var record = new MapBuilderTestModel { Name = "Erin", Age = 33, BirthDate = SampleBirthDate, Active = true, Kind = MapBuilderKind.Alpha };
+
+            await using var stream = new MemoryStream();
+            await using (var writer = await MappedRecordWriter.CreateMappedXlsAsync(stream, leaveOpen: true, ct: ct))
+            {
+                await writer.WriteSheetAsync("S1", [record], ct);
+            }
+
+            stream.Position = 0;
+            await using XlsReader reader = Excel.FromXls(stream, leaveOpen: false);
+            List<MapBuilderTestModel> results = new ExcelMappedParser<MapBuilderTestModel>().Parse(reader).ToList();
+
+            Assert.Single(results);
+            AssertMatches(record, results[0]);
+        }
+
+        [Fact]
+        public async Task MappedRecordWriterRoundTripsThroughCsv()
+        {
+            // CSV has no serial dates, so BirthDate round-trips as text — the model's map uses the
+            // serial-number reader/writer for it (matching every other format), so this asserts only the
+            // fields CSV can actually carry losslessly, same caveat ExcelMappedParser<T>'s own docs give.
+            CancellationToken ct = TestContext.Current.CancellationToken;
+            var record = new MapBuilderTestModel { Name = "Frank", Age = 19, BirthDate = SampleBirthDate, Active = false, Kind = MapBuilderKind.Beta };
+
+            await using var stream = new MemoryStream();
+            await using (var writer = await MappedRecordWriter.CreateMappedCsvAsync(stream, leaveOpen: true, ct: ct))
+            {
+                await writer.WriteSheetAsync("S1", [record], ct);
+            }
+
+            stream.Position = 0;
+            await using CsvReader reader = Excel.FromCsv(stream, leaveOpen: false);
+            List<MapBuilderTestModel> results = new ExcelMappedParser<MapBuilderTestModel>().Parse(reader).ToList();
+
+            Assert.Single(results);
+            Assert.Equal(record.Name, results[0].Name);
+            Assert.Equal(record.Age, results[0].Age);
+            Assert.Equal(record.Active, results[0].Active);
+            Assert.Equal(record.Kind, results[0].Kind);
+        }
+
+        private static void AssertMatches(MapBuilderTestModel expected, MapBuilderTestModel actual)
+        {
+            Assert.Equal(expected.Name, actual.Name);
+            Assert.Equal(expected.Age, actual.Age);
+            Assert.Equal(expected.BirthDate, actual.BirthDate);
+            Assert.Equal(expected.Active, actual.Active);
+            Assert.Equal(expected.Kind, actual.Kind);
         }
     }
 }

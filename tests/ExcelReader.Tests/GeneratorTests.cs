@@ -8,12 +8,12 @@ using Microsoft.CodeAnalysis.Emit;
 
 namespace ExcelReader.Tests
 {
-    // Feature A2 (docs/v2-plan.md §2.4): the generator's own plumbing — triggers on [ExcelSerializable],
-    // requires 'partial' up the containing-type chain (EXR001/EXR002), and emits code that type-checks
-    // against the real public ExcelRowMapBuilder<T>/ExcelRecordMapBuilder<T>/ExcelCellReaders surface.
-    // Runs ExcelRowMapGenerator directly via CSharpGeneratorDriver over an in-memory Compilation, rather
-    // than through the SDK's live build-time analyzer pipeline — a deliberately broken model (missing
-    // 'partial', for the EXR001/EXR002 cases) would otherwise fail this whole project's own build.
+    // Exercises the generator's own plumbing — triggers on [ExcelSerializable], requires 'partial' up
+    // the containing-type chain (EXR001/EXR002), and emits code that type-checks against the real public
+    // ExcelRowMapBuilder<T>/ExcelRecordMapBuilder<T>/ExcelCellReaders surface. Runs ExcelRowMapGenerator
+    // directly via CSharpGeneratorDriver over an in-memory Compilation, rather than through the SDK's
+    // live build-time analyzer pipeline — a deliberately broken model (missing 'partial', for the
+    // EXR001/EXR002 cases) would otherwise fail this whole project's own build.
     public class GeneratorTests
     {
         // #if NET9_0_OR_GREATER/NET8_0 in generator output (the Guid split) only resolves correctly if
