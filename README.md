@@ -458,6 +458,19 @@ Every CSV cell is text (`CellType.ExcelString`, or `CellType.Empty` for a blank 
 
 `Excel.Open`/`OpenAsync` do **not** auto-detect CSV — plain text has no magic-byte signature to sniff, so open CSV explicitly via `Excel.FromCsv*`.
 
+## Sniff a CSV dialect
+
+`CsvSniffer.Detect` infers the delimiter, quote character, and encoding (from a leading byte-order mark) from a sample of bytes, so a `;`-separated pt-BR export or a TSV can be read without the caller knowing the dialect up front. It is deterministic (ties break by candidate order) and never throws on arbitrary input — an indecisive sample returns `CsvDialect.Default` (comma, `"`, UTF-8).
+
+```csharp
+using ExcelReader.Core.Reader;
+
+CsvDialect dialect = Excel.SniffCsvDialectFromFile("export.csv");
+using var reader = Excel.FromCsvFile("export.csv", CsvReaderOptions.Default.WithDialect(dialect));
+```
+
+`Excel.SniffCsvDialect` mirrors the other CSV factories' shape: overloads for a seekable `Stream` and a `ReadOnlyMemory<byte>`, plus `SniffCsvDialectFromFile`, and async siblings for the stream/file overloads. The `Stream` overloads require a seekable source — they read a bounded sample and restore the stream's position — so a non-seekable stream throws `ArgumentException`; buffer it first, or pass the bytes as `ReadOnlyMemory<byte>` instead. Pass `CsvSnifferOptions` to change the candidate delimiters/quotes (and their priority order) or the number of sample lines considered.
+
 ## Write CSV
 
 `CsvWriter` emits RFC 4180 CSV: no sheets, styles, or shared strings, so rows stream straight to the output.

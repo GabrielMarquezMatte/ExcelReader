@@ -258,6 +258,93 @@ namespace ExcelReader.Core.Reader
             return CsvReader.CreateAsync(stream, leaveOpen, options, ct);
         }
 
+        // Bounds the amount of data read to infer a dialect, independent of CsvSnifferOptions.MaxSampleLines:
+        // that option bounds lines *within* the sample, this bounds how many bytes are pulled from an
+        // untrusted stream/file in the first place.
+        private const int CsvDialectSampleBytes = 64 * 1024;
+
+        /// <summary>Reads a sample from the start of a seekable stream and infers its CSV dialect. The stream's position is restored before returning.</summary>
+        /// <param name="stream">A seekable stream containing delimited-text data.</param>
+        /// <param name="options">Candidate delimiters/quotes and the sample-line cap; <see cref="CsvSnifferOptions.Default"/> when <see langword="null"/>.</param>
+        /// <exception cref="ArgumentNullException"><paramref name="stream"/> is <see langword="null"/>.</exception>
+        /// <exception cref="ArgumentException"><paramref name="stream"/> does not support seeking.</exception>
+        public static CsvDialect SniffCsvDialect(Stream stream, CsvSnifferOptions? options = null)
+        {
+            ArgumentNullException.ThrowIfNull(stream);
+            RequireSeekableForSniff(stream);
+            long start = stream.Position;
+            byte[] buffer = new byte[CsvDialectSampleBytes];
+            int read = stream.ReadAtLeast(buffer, buffer.Length, throwOnEndOfStream: false);
+            stream.Position = start;
+            return CsvSniffer.Detect(buffer.AsSpan(0, read), options ?? CsvSnifferOptions.Default);
+        }
+
+        /// <summary>Infers the CSV dialect of an in-memory buffer, from a sample of its leading bytes.</summary>
+        /// <param name="data">The delimited-text data.</param>
+        /// <param name="options">Candidate delimiters/quotes and the sample-line cap; <see cref="CsvSnifferOptions.Default"/> when <see langword="null"/>.</param>
+        public static CsvDialect SniffCsvDialect(ReadOnlyMemory<byte> data, CsvSnifferOptions? options = null)
+        {
+            ReadOnlySpan<byte> sample = data.Length > CsvDialectSampleBytes ? data.Span[..CsvDialectSampleBytes] : data.Span;
+            return CsvSniffer.Detect(sample, options ?? CsvSnifferOptions.Default);
+        }
+
+        /// <summary>Reads a sample from the start of a file and infers its CSV dialect.</summary>
+        /// <param name="path">The path to the delimited-text file.</param>
+        /// <param name="options">Candidate delimiters/quotes and the sample-line cap; <see cref="CsvSnifferOptions.Default"/> when <see langword="null"/>.</param>
+        /// <exception cref="ArgumentNullException"><paramref name="path"/> is <see langword="null"/>.</exception>
+        public static CsvDialect SniffCsvDialectFromFile(string path, CsvSnifferOptions? options = null)
+        {
+            ArgumentNullException.ThrowIfNull(path);
+            using FileStream stream = File.OpenRead(path);
+            return SniffCsvDialect(stream, options);
+        }
+
+        /// <summary>Asynchronously reads a sample from the start of a seekable stream and infers its CSV dialect. The stream's position is restored before returning.</summary>
+        /// <param name="stream">A seekable stream containing delimited-text data.</param>
+        /// <param name="options">Candidate delimiters/quotes and the sample-line cap; <see cref="CsvSnifferOptions.Default"/> when <see langword="null"/>.</param>
+        /// <param name="ct">A token to cancel the read.</param>
+        /// <exception cref="ArgumentNullException"><paramref name="stream"/> is <see langword="null"/>.</exception>
+        /// <exception cref="ArgumentException"><paramref name="stream"/> does not support seeking.</exception>
+        public static async ValueTask<CsvDialect> SniffCsvDialectAsync(Stream stream, CsvSnifferOptions? options = null, CancellationToken ct = default)
+        {
+            ArgumentNullException.ThrowIfNull(stream);
+            RequireSeekableForSniff(stream);
+            long start = stream.Position;
+            byte[] buffer = new byte[CsvDialectSampleBytes];
+            int read = await stream.ReadAtLeastAsync(buffer, buffer.Length, throwOnEndOfStream: false, ct).ConfigureAwait(false);
+            stream.Position = start;
+            return CsvSniffer.Detect(buffer.AsSpan(0, read), options ?? CsvSnifferOptions.Default);
+        }
+
+        /// <summary>Asynchronously reads a sample from the start of a file and infers its CSV dialect.</summary>
+        /// <param name="path">The path to the delimited-text file.</param>
+        /// <param name="options">Candidate delimiters/quotes and the sample-line cap; <see cref="CsvSnifferOptions.Default"/> when <see langword="null"/>.</param>
+        /// <param name="ct">A token to cancel the read.</param>
+        /// <exception cref="ArgumentNullException"><paramref name="path"/> is <see langword="null"/>.</exception>
+        public static async ValueTask<CsvDialect> SniffCsvDialectFromFileAsync(string path, CsvSnifferOptions? options = null, CancellationToken ct = default)
+        {
+            ArgumentNullException.ThrowIfNull(path);
+            FileStream stream = OpenAsyncFile(path);
+            try
+            {
+                return await SniffCsvDialectAsync(stream, options, ct).ConfigureAwait(false);
+            }
+            finally
+            {
+                await stream.DisposeAsync().ConfigureAwait(false);
+            }
+        }
+
+        private static void RequireSeekableForSniff(Stream stream)
+        {
+            if (!stream.CanSeek)
+            {
+                throw new ArgumentException(
+                    "SniffCsvDialect requires a seekable stream so a sample can be read and the position restored. Use the ReadOnlyMemory<byte> overload for a non-seekable source.",
+                    nameof(stream));
+            }
+        }
+
         // The leading bytes that distinguish container formats: XLSX and XLSB are ZIP ("PK\x03\x04"),
         // XLS is an OLE2/CFB compound document. XLSB is distinguished from XLSX by the presence of
         // "xl/workbook.bin" in the ZIP central directory.
