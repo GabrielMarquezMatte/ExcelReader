@@ -17,11 +17,17 @@ namespace ExcelReader.Benchmarks
         public int Rows { get; set; }
 
         private byte[] _csv = [];
+        private byte[] _csvWide = [];
 
         [GlobalSetup]
         public void Setup()
         {
             _csv = CsvGenerator.Build(Rows);
+            _csvWide = CsvGenerator.BuildWide(Rows, columns: 32);
+            if (_csvWide.Length == 0)
+            {
+                throw new InvalidOperationException("Wide CSV fixture must not be empty.");
+            }
         }
 
         [Benchmark(Baseline = true)]
@@ -33,6 +39,24 @@ namespace ExcelReader.Benchmarks
             foreach (var row in reader)
             {
                 acc += AccumulateRow(row);
+            }
+            return acc;
+        }
+
+        // 32-column rows: the vectorized scan amortizes one vector load over many fields, so this is
+        // where CsvControlScanner's mask-reuse win is largest — see CsvGenerator.BuildWide.
+        [Benchmark]
+        public long ExcelReaderWide()
+        {
+            using var ms = new MemoryStream(_csvWide, writable: false);
+            using var reader = Excel.FromCsv(ms);
+            long acc = 0;
+            foreach (var row in reader)
+            {
+                for (int i = 0; i < row.ColumnCount; i++)
+                {
+                    acc += row[i].Value.Length;
+                }
             }
             return acc;
         }
