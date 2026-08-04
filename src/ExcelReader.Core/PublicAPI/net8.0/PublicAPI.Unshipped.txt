@@ -1,1 +1,43 @@
 #nullable enable
+ExcelReader.Core.Reader.CsvDialect
+ExcelReader.Core.Reader.CsvDialect.CsvDialect() -> void
+ExcelReader.Core.Reader.CsvDialect.Delimiter.get -> byte
+ExcelReader.Core.Reader.CsvDialect.Delimiter.init -> void
+ExcelReader.Core.Reader.CsvDialect.Encoding.get -> System.Text.Encoding?
+ExcelReader.Core.Reader.CsvDialect.Encoding.init -> void
+ExcelReader.Core.Reader.CsvDialect.Equals(ExcelReader.Core.Reader.CsvDialect other) -> bool
+ExcelReader.Core.Reader.CsvDialect.HasByteOrderMark.get -> bool
+ExcelReader.Core.Reader.CsvDialect.HasByteOrderMark.init -> void
+ExcelReader.Core.Reader.CsvDialect.Quote.get -> byte
+ExcelReader.Core.Reader.CsvDialect.Quote.init -> void
+ExcelReader.Core.Reader.CsvReaderOptions.WithDialect(ExcelReader.Core.Reader.CsvDialect dialect) -> ExcelReader.Core.Reader.CsvReaderOptions!
+ExcelReader.Core.Reader.CsvSniffer
+ExcelReader.Core.Reader.CsvSnifferOptions
+ExcelReader.Core.Reader.CsvSnifferOptions.<Clone>$() -> ExcelReader.Core.Reader.CsvSnifferOptions!
+ExcelReader.Core.Reader.CsvSnifferOptions.CandidateDelimiters.get -> byte[]!
+ExcelReader.Core.Reader.CsvSnifferOptions.CandidateDelimiters.init -> void
+ExcelReader.Core.Reader.CsvSnifferOptions.CandidateQuotes.get -> byte[]!
+ExcelReader.Core.Reader.CsvSnifferOptions.CandidateQuotes.init -> void
+ExcelReader.Core.Reader.CsvSnifferOptions.CsvSnifferOptions() -> void
+ExcelReader.Core.Reader.CsvSnifferOptions.Equals(ExcelReader.Core.Reader.CsvSnifferOptions? other) -> bool
+ExcelReader.Core.Reader.CsvSnifferOptions.MaxSampleLines.get -> int
+ExcelReader.Core.Reader.CsvSnifferOptions.MaxSampleLines.init -> void
+override ExcelReader.Core.Reader.CsvDialect.GetHashCode() -> int
+override ExcelReader.Core.Reader.CsvSnifferOptions.Equals(object? obj) -> bool
+override ExcelReader.Core.Reader.CsvSnifferOptions.GetHashCode() -> int
+override ExcelReader.Core.Reader.CsvSnifferOptions.ToString() -> string!
+static ExcelReader.Core.Reader.CsvDialect.Default.get -> ExcelReader.Core.Reader.CsvDialect
+static ExcelReader.Core.Reader.CsvDialect.operator !=(ExcelReader.Core.Reader.CsvDialect left, ExcelReader.Core.Reader.CsvDialect right) -> bool
+static ExcelReader.Core.Reader.CsvDialect.operator ==(ExcelReader.Core.Reader.CsvDialect left, ExcelReader.Core.Reader.CsvDialect right) -> bool
+static ExcelReader.Core.Reader.CsvSniffer.Detect(System.ReadOnlySpan<byte> sample) -> ExcelReader.Core.Reader.CsvDialect
+static ExcelReader.Core.Reader.CsvSniffer.Detect(System.ReadOnlySpan<byte> sample, ExcelReader.Core.Reader.CsvSnifferOptions! options) -> ExcelReader.Core.Reader.CsvDialect
+static ExcelReader.Core.Reader.CsvSnifferOptions.Default.get -> ExcelReader.Core.Reader.CsvSnifferOptions!
+static ExcelReader.Core.Reader.CsvSnifferOptions.operator !=(ExcelReader.Core.Reader.CsvSnifferOptions? left, ExcelReader.Core.Reader.CsvSnifferOptions? right) -> bool
+static ExcelReader.Core.Reader.CsvSnifferOptions.operator ==(ExcelReader.Core.Reader.CsvSnifferOptions? left, ExcelReader.Core.Reader.CsvSnifferOptions? right) -> bool
+static ExcelReader.Core.Reader.Excel.SniffCsvDialect(System.IO.Stream! stream, ExcelReader.Core.Reader.CsvSnifferOptions? options = null) -> ExcelReader.Core.Reader.CsvDialect
+static ExcelReader.Core.Reader.Excel.SniffCsvDialect(System.ReadOnlyMemory<byte> data, ExcelReader.Core.Reader.CsvSnifferOptions? options = null) -> ExcelReader.Core.Reader.CsvDialect
+static ExcelReader.Core.Reader.Excel.SniffCsvDialectAsync(System.IO.Stream! stream, ExcelReader.Core.Reader.CsvSnifferOptions? options = null, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<ExcelReader.Core.Reader.CsvDialect>
+static ExcelReader.Core.Reader.Excel.SniffCsvDialectFromFile(string! path, ExcelReader.Core.Reader.CsvSnifferOptions? options = null) -> ExcelReader.Core.Reader.CsvDialect
+static ExcelReader.Core.Reader.Excel.SniffCsvDialectFromFileAsync(string! path, ExcelReader.Core.Reader.CsvSnifferOptions? options = null, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<ExcelReader.Core.Reader.CsvDialect>
+~override ExcelReader.Core.Reader.CsvDialect.Equals(object obj) -> bool
+~override ExcelReader.Core.Reader.CsvDialect.ToString() -> string
