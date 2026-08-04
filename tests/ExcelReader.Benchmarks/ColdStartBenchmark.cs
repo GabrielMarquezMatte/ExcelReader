@@ -88,5 +88,46 @@ namespace ExcelReader.Benchmarks
             }
             return ms.Length;
         }
+
+        // Cold cost of the plain ExcelFluentParser<T> constructor: no reflection at all — `configure`
+        // only allocates delegates and a PropertyMap<T>[] via ExcelRowMapBuilder<T>. Contrast with
+        // TypedParseFirstUse to check the "no reflection => faster cold start" claim empirically instead
+        // of by heuristic.
+        [Benchmark]
+        public long FluentParseFirstUse()
+        {
+            using var ms = new MemoryStream(_workbook, writable: false);
+            using var reader = Excel.From(ms);
+            var parser = new ExcelFluentParser<Record>(static builder => builder
+                .Factory(static () => new Record())
+                .Property(["Name"], ExcelCellReaders.String, static (ref Record r, string v) => r.Name = v)
+                .Property(["Id"], ExcelCellReaders.Parsable, static (ref Record r, int v) => r.Id = v)
+                .Property(["Date"], ExcelCellReaders.DateTimeSerial, static (ref Record r, DateTime v) => r.Date = v)
+                .Property(["Value"], ExcelCellReaders.Parsable, static (ref Record r, double v) => r.Value = v));
+            long acc = 0;
+            foreach (Record rec in parser.Parse(reader))
+            {
+                acc += rec.Id;
+            }
+            return acc;
+        }
+
+        // Cold cost of ExcelFluentParser<T>.WithAttributeFallback: it reflects via TypeMapper<T>.GetInfo()
+        // for the fallback half, so it pays the same reflection/setter-compilation cost as
+        // TypedParseFirstUse, plus the fluent build and merge on top.
+        [Benchmark]
+        public long FluentParseWithAttributeFallbackFirstUse()
+        {
+            using var ms = new MemoryStream(_workbook, writable: false);
+            using var reader = Excel.From(ms);
+            ExcelFluentParser<Record> parser = ExcelFluentParser<Record>.WithAttributeFallback(static builder => builder
+                .Property(["Id"], ExcelCellReaders.Parsable, static (ref Record r, int v) => r.Id = v));
+            long acc = 0;
+            foreach (Record rec in parser.Parse(reader))
+            {
+                acc += rec.Id;
+            }
+            return acc;
+        }
     }
 }

@@ -801,6 +801,16 @@ First use of `ExcelParser<T>`/`RecordWriter` in a process pays a one-time reflec
 
 This cost is paid once per type per process and cached thereafter — irrelevant for long-running services, worth knowing for CLI tools or serverless cold starts.
 
+`ExcelFluentParser<T>`'s plain constructor has no reflection at all — `configure` only allocates delegates and a `PropertyMap<T>[]` — so it skips this cost. `WithAttributeFallback` still reflects for its attribute-driven half, so it pays close to the same cost as `ExcelParser<T>`:
+
+| Scenario | Mean | Allocated |
+|---|---:|---:|
+| First typed parse (`ExcelParser<T>`) | 32.45 ms | 75.79 KB |
+| First fluent parse (`ExcelFluentParser<T>`, plain) | 28.99 ms | 78.45 KB |
+| First fluent parse (`WithAttributeFallback`) | 34.38 ms | 80.43 KB |
+
+The plain fluent constructor is ~11% faster than the reflection-based parser here; `WithAttributeFallback` is about as slow as reflection, since it runs the same `TypeMapper<T>.GetInfo()` path plus the fluent build on top.
+
 Run the benchmarks locally:
 
 ```bash
