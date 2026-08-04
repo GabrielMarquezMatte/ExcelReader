@@ -15,8 +15,8 @@ namespace ExcelReader.Core.Parser
     /// argument to <c>IEnumerable&lt;T&gt;</c>/<c>IAsyncEnumerable&lt;T&gt;</c> before this TFM. Uses the
     /// same <c>TypeMapper&lt;T&gt;</c>/<c>ColumnParserFactory</c> machinery as <see cref="ExcelParser{T}"/>,
     /// widened to <c>allows ref struct</c>. Not AOT/trim-safe for the same reason
-    /// <see cref="ExcelParser{T}"/> isn't (reflection + <c>Expression.Compile</c> at type-map-build
-    /// time, cached per closed <c>TModel</c> thereafter).
+    /// <see cref="ExcelParser{T}"/> isn't (reflection + <c>MethodInfo.CreateDelegate</c>/<c>MakeGenericMethod</c>
+    /// at type-map-build time, cached per closed <c>TModel</c> thereafter).
     /// <para>
     /// Sync-only, permanently: <c>IAsyncEnumerable&lt;TModel&gt;</c> cannot have a ref struct element type
     /// (CS9267), so there is no async counterpart here, ever — not merely unimplemented. Callers who need
@@ -43,7 +43,7 @@ namespace ExcelReader.Core.Parser
         /// <returns>An enumerable that yields one <typeparamref name="TModel"/> per data row.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="reader"/> is <see langword="null"/>.</exception>
         [RequiresUnreferencedCode("ParseNamed reflects over TModel's public properties, which trimming may remove.")]
-        [RequiresDynamicCode("ParseNamed compiles property setters at runtime (Expression.Compile / MakeGenericMethod).")]
+        [RequiresDynamicCode("ParseNamed binds property setters at runtime (MethodInfo.CreateDelegate / MakeGenericMethod).")]
         public static NamedRefRowEnumerable<TModel, XlsxReader, XlsxReader.Enumerator> ParseNamed<TModel>(
             XlsxReader reader, ExcelParserConfig? config = null)
             where TModel : allows ref struct
@@ -57,7 +57,7 @@ namespace ExcelReader.Core.Parser
         /// <returns>An enumerable that yields one <typeparamref name="TModel"/> per data row.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="reader"/> is <see langword="null"/>.</exception>
         [RequiresUnreferencedCode("ParseNamed reflects over TModel's public properties, which trimming may remove.")]
-        [RequiresDynamicCode("ParseNamed compiles property setters at runtime (Expression.Compile / MakeGenericMethod).")]
+        [RequiresDynamicCode("ParseNamed binds property setters at runtime (MethodInfo.CreateDelegate / MakeGenericMethod).")]
         public static NamedRefRowEnumerable<TModel, XlsbReader, XlsbReader.Enumerator> ParseNamed<TModel>(
             XlsbReader reader, ExcelParserConfig? config = null)
             where TModel : allows ref struct
@@ -71,7 +71,7 @@ namespace ExcelReader.Core.Parser
         /// <returns>An enumerable that yields one <typeparamref name="TModel"/> per data row.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="reader"/> is <see langword="null"/>.</exception>
         [RequiresUnreferencedCode("ParseNamed reflects over TModel's public properties, which trimming may remove.")]
-        [RequiresDynamicCode("ParseNamed compiles property setters at runtime (Expression.Compile / MakeGenericMethod).")]
+        [RequiresDynamicCode("ParseNamed binds property setters at runtime (MethodInfo.CreateDelegate / MakeGenericMethod).")]
         public static NamedRefRowEnumerable<TModel, XlsReader, XlsReader.Enumerator> ParseNamed<TModel>(
             XlsReader reader, ExcelParserConfig? config = null)
             where TModel : allows ref struct
@@ -90,7 +90,7 @@ namespace ExcelReader.Core.Parser
         /// an Excel serial number (see <c>TypeMapper.GetCsvInfo</c>).
         /// </remarks>
         [RequiresUnreferencedCode("ParseNamed reflects over TModel's public properties, which trimming may remove.")]
-        [RequiresDynamicCode("ParseNamed compiles property setters at runtime (Expression.Compile / MakeGenericMethod).")]
+        [RequiresDynamicCode("ParseNamed binds property setters at runtime (MethodInfo.CreateDelegate / MakeGenericMethod).")]
         public static NamedRefRowEnumerable<TModel, CsvReader, CsvReader.Enumerator> ParseNamed<TModel>(
             CsvReader reader, ExcelParserConfig? config = null)
             where TModel : allows ref struct
@@ -104,7 +104,7 @@ namespace ExcelReader.Core.Parser
         /// <returns>An enumerable that yields one <typeparamref name="TModel"/> per data row.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="reader"/> is <see langword="null"/>.</exception>
         [RequiresUnreferencedCode("ParseNamed reflects over TModel's public properties, which trimming may remove.")]
-        [RequiresDynamicCode("ParseNamed compiles property setters at runtime (Expression.Compile / MakeGenericMethod).")]
+        [RequiresDynamicCode("ParseNamed binds property setters at runtime (MethodInfo.CreateDelegate / MakeGenericMethod).")]
         public static NamedRefRowEnumerable<TModel, IExcelRowReader, IExcelRowEnumerator> ParseNamed<TModel>(
             IExcelRowReader reader, ExcelParserConfig? config = null)
             where TModel : allows ref struct

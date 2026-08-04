@@ -182,6 +182,45 @@ using IExcelRowReader reader = Excel.Open("changes.xlsx"); // or .xlsb / .xls
 foreach (var item in new ExcelParser<ChangeRow>().Parse(reader)) { /* ... */ }
 ```
 
+## Generate typed maps at compile time (Native AOT / trimming)
+
+`ExcelParser<T>` and `WorkbookRecordWriter<TSheet,TRow>` reflect over `T` (`GetProperties`, `MakeGenericMethod`), which trimming can break and Native AOT cannot run at all. The raw `Excel.From*` readers already use no reflection; mark a model `[ExcelSerializable]` to get the same guarantee for the typed layer — a source generator emits a compile-time map from the model's own `[ExcelColumn]`/`[ExcelRequired]`/`[ExcelConverter]`/`[ExcelIgnore]` attributes, and `ExcelMappedParser<T>`/`MappedRecordWriter` read and write through that map instead of reflection:
+
+```csharp
+using ExcelReader.Core.Parser;
+using ExcelReader.Core.Reader;
+using ExcelReader.Core.Writer;
+
+[ExcelSerializable]                       // the model must be declared partial
+public partial class ChangeRow
+{
+    [ExcelColumn("file")]
+    public string File { get; set; } = "";
+
+    [ExcelColumn("lines_added")]
+    public int LinesAdded { get; set; }
+}
+
+using var reader = Excel.FromFile("changes.xlsx");
+foreach (var item in new ExcelMappedParser<ChangeRow>().Parse(reader))
+{
+    Console.WriteLine($"{item.File}: +{item.LinesAdded}");
+}
+
+var changes = new[] { new ChangeRow { File = "README.md", LinesAdded = 12 } };
+await using var stream = File.Create("changes.xlsx");
+await using var writer = await MappedRecordWriter.CreateMappedXlsxAsync(stream);   // or CreateMappedXlsbAsync / CreateMappedXlsAsync / CreateMappedCsvAsync
+await writer.WriteSheetAsync("Changes", changes);
+```
+
+Notes:
+
+- `[ExcelSerializable]` requires the model — and every type it's nested inside, if any — to be `partial`; the generator emits into an additional part of the same declaration. A compile error (`EXR001`/`EXR002`) names exactly what to fix.
+- Supported property types match `ExcelParser<T>`'s: `string`, `bool`, `DateTime`, `DateOnly`, `TimeOnly`, `Guid`, every integral and floating type plus `decimal`, `enum`s, and `Nullable<T>` of each.
+- The generator requires a build via `dotnet build`/the .NET SDK. Visual Studio's or `MSBuild.exe`'s .NET Framework host can't load it, so a project built only through those tools won't see generated code — build via the SDK, or fall back to `ExcelParser<T>`/`WorkbookRecordWriter` for that build path.
+- `ExcelMappedParser<T>` builds one map per model and reuses it for every reader, including CSV — unlike `ExcelParser<T>`, which swaps in a text-based date reader specifically for CSV. A `[ExcelSerializable]` model always reads `DateTime`/`DateOnly`/`TimeOnly` as an Excel serial number, so it can't correctly read such a column from CSV; only a hand-written `IExcelRowMap<T>` can choose a text reader instead.
+- The attribute-based reflection path keeps working unchanged; `[ExcelSerializable]` is an additive, opt-in alternative for the same model shape, not a replacement.
+
 ## Parser configuration
 
 Pass an `ExcelParserConfig` to control header handling and culture:
@@ -460,6 +499,8 @@ Column behavior mirrors the parser attributes:
 - **`[ExcelConverter(typeof(MyConverter))]`** — if the converter also implements `IExcelCellWriter<T>`, it controls how the value is written, so a custom type round-trips through the same converter it reads with.
 
 `DateTime` and `DateOnly` are written as Excel date serials; `TimeOnly` as a time-of-day fraction. Numeric properties become number cells; any other type is written as its `ToString()` text. (`CreateCsvAsync` follows the CSV rules instead — see [Write CSV](#write-csv) — writing `DateTime`/`DateOnly` as ISO text and `TimeOnly` as a time-of-day fraction, all still round-tripping through `ExcelParser<T>`.)
+
+For a model marked `[ExcelSerializable]`, use `MappedRecordWriter.CreateMapped*Async` instead — same behavior, but driven by the source-generated map instead of reflection, so it stays Native AOT/trim-safe. See [Generate typed maps at compile time](#generate-typed-maps-at-compile-time-native-aot--trimming).
 
 ## Read CSV
 

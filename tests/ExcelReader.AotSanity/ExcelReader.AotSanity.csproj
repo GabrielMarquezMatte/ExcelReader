@@ -5,7 +5,7 @@
     <TargetFramework>net10.0</TargetFramework>
     <PublishAot>true</PublishAot>
     <!-- The point of this project: dotnet publish must be clean of every IL2xxx/IL3xxx trim/AOT
-         diagnostic (docs/v2-plan.md §0.4). A single-warning summary would hide that. -->
+         diagnostic. A single-warning summary would hide that. -->
     <TrimmerSingleWarn>false</TrimmerSingleWarn>
     <InvariantGlobalization>true</InvariantGlobalization>
     <!-- RS0016/RS0026/RS0037: public-API tracking is for ExcelReader.Core's shipped NuGet surface.
