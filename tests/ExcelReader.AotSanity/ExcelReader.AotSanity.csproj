@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <PublishAot>true</PublishAot>
+    <!-- The point of this project: dotnet publish must be clean of every IL2xxx/IL3xxx trim/AOT
+         diagnostic (docs/v2-plan.md §0.4). A single-warning summary would hide that. -->
+    <TrimmerSingleWarn>false</TrimmerSingleWarn>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <!-- RS0016/RS0026/RS0037: public-API tracking is for ExcelReader.Core's shipped NuGet surface.
+         This app is never packaged, so there's no PublicAPI.txt here by design. -->
+    <!-- CA2007/MA0004/CA1849/VSTHRD103/S6966/AsyncFixer02: this is a one-shot sanity check, not a
+         server app — no captured SynchronizationContext to protect, no benefit from splitting every
+         call onto its async overload. -->
+    <!-- IDISP001: the XLSX writer objects created here are owned and disposed by their parent, same
+         ownership-transfer pattern used throughout ExcelReader.Core's own tests. -->
+    <NoWarn>$(NoWarn);RS0016;RS0026;RS0037;CA2007;MA0004;CA1849;VSTHRD103;S6966;AsyncFixer02;IDISP001</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\ExcelReader.Core\ExcelReader.Core.csproj" />
+  </ItemGroup>
+
+</Project>

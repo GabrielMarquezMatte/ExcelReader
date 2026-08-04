@@ -132,6 +132,40 @@ jobs:
           --verbosity normal
           --no-build
 
+  aot-sanity:
+    name: AOT/trim sanity (win-x64)
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: |
+            8.0.x
+            10.0.x
+
+      - name: Cache NuGet packages
+        uses: actions/cache@v6
+        with:
+          path: ~/.nuget/packages
+          key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj', '**/Directory.Build.props') }}
+          restore-keys: |
+            ${{ runner.os }}-nuget-
+
+      - name: Restore
+        run: dotnet restore ExcelReader.slnx
+
+      # Any IL2xxx (trim) or IL3xxx (AOT) diagnostic here is a build error (TrimmerSingleWarn=false
+      # in the project so none of them get collapsed into one hidden summary line). This is the one
+      # thing that actually proves the mapped read path never reaches ExcelParser<T>'s reflection.
+      - name: Publish ExcelReader.AotSanity (PublishAot)
+        run: dotnet publish tests/ExcelReader.AotSanity/ExcelReader.AotSanity.csproj -c Release -r win-x64
+
+      - name: Run published binary
+        run: .\tests\ExcelReader.AotSanity\bin\Release\net10.0\win-x64\publish\ExcelReader.AotSanity.exe
+
   audit:
     name: Dependency audit
     runs-on: ubuntu-latest
