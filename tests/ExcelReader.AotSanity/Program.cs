@@ -24,6 +24,17 @@ namespace ExcelReader.AotSanity
                 return 1;
             }
 
+            // Same check, but through the source-generated IExcelRowMap<T> (ExcelSerializableAttribute)
+            // instead of the hand-written one above — proves the generator's own emitted code, not just
+            // the hand-written seam, survives PublishAot.
+            var generatedRows = new ExcelMappedParser<GeneratedAotModel>().Parse(reader).ToList();
+            if (generatedRows.Count != 1 || !string.Equals(generatedRows[0].Name, "Alice", StringComparison.Ordinal)
+                || generatedRows[0].Age != 30 || !generatedRows[0].Active)
+            {
+                Console.Error.WriteLine("Source-generated XLSX parse produced an unexpected result.");
+                return 1;
+            }
+
             ReadOnlyMemory<byte> csv = Encoding.UTF8.GetBytes("Name,Age\r\nBob,42\r\n");
             CsvReader csvReader = Excel.FromCsv(csv);
             CsvReader.Enumerator csvRows = csvReader.GetEnumerator();
@@ -84,5 +95,13 @@ namespace ExcelReader.AotSanity
                 .Property(["Age"], ExcelCellReaders.Parsable<int>, static (ref AotModel m, int v) => m.Age = v)
                 .Property(["Active"], ExcelCellReaders.Bool, static (ref AotModel m, bool v) => m.Active = v);
         }
+    }
+
+    [ExcelSerializable]
+    internal sealed partial class GeneratedAotModel
+    {
+        public string Name { get; set; } = "";
+        public int Age { get; set; }
+        public bool Active { get; set; }
     }
 }

@@ -52,6 +52,46 @@ namespace ExcelReader.Core.Parser
         }
 
         /// <summary>
+        /// Binds a <see cref="Nullable{TValue}"/> property to one or more header names, using
+        /// <paramref name="read"/> — one of the non-nullable built-in readers, e.g.
+        /// <see cref="ExcelCellReaders.Bool"/> or <see cref="ExcelCellReaders.Parsable{TValue}"/> — to
+        /// convert the matched cell, then wraps the result in <see cref="Nullable{TValue}"/> before
+        /// calling <paramref name="set"/>. There is no nullable-returning counterpart of the built-in
+        /// readers to plug into <see cref="Property{TValue}"/> directly, because the wrapping step is
+        /// identical for every value type — this method does it once, generically.
+        /// </summary>
+        /// <typeparam name="TValue">The property's underlying (non-nullable) value type.</typeparam>
+        /// <param name="names">The header name(s) that bind to this property; the first is used in error messages.</param>
+        /// <param name="read">Converts a matched, non-empty cell into a <typeparamref name="TValue"/>.</param>
+        /// <param name="set">Assigns the read value, wrapped in <see cref="Nullable{TValue}"/>, to the property.</param>
+        /// <param name="isRequired">Whether the header must be present.</param>
+        /// <param name="requireValue">Whether every data row's cell for this column must also be non-empty.</param>
+        /// <returns>This builder, for chaining.</returns>
+        public ExcelRowMapBuilder<T> PropertyNullable<TValue>(
+            string[] names,
+            ExcelCellReader<TValue> read,
+            ExcelPropertySetter<T, TValue?> set,
+            bool isRequired = false,
+            bool requireValue = false)
+            where TValue : struct
+        {
+            ArgumentNullException.ThrowIfNull(names);
+            ArgumentNullException.ThrowIfNull(read);
+            ArgumentNullException.ThrowIfNull(set);
+            bool parser(ref T model, in Cell cell, bool isDate1904, IFormatProvider provider)
+            {
+                if (!read(in cell, isDate1904, provider, out TValue value))
+                {
+                    return false;
+                }
+                set(ref model, value);
+                return true;
+            }
+            _properties.Add(new PropertyMap<T>(names, parser, isRequired, requireValue));
+            return this;
+        }
+
+        /// <summary>
         /// Binds a property to one or more header names via a <c>[ExcelConverter]</c>-style converter,
         /// for value types none of the built-in <see cref="ExcelCellReaders"/> cover. The generator emits
         /// <c>new MyConverter()</c> for <paramref name="converter"/> — nothing here uses <see cref="Activator"/>.
