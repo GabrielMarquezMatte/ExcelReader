@@ -14,6 +14,16 @@
          RS0016/RS0026/RS0037: public-API tracking is for ExcelReader.Core's shipped NuGet
          surface; this app is never packaged, so there is no PublicAPI.txt here by design. -->
     <NoWarn>$(NoWarn);CA1303;CA2007;MA0004;CA1849;VSTHRD103;S6966;IDISP001;CA1815;RS0016;RS0026;RS0037</NoWarn>
+
+    <!-- CodSpeed times the whole process, so any run-to-run jitter in the CLR itself (not the
+         benchmarked code) leaks straight into the numbers. Tiered compilation promotes hot
+         methods on a background timer, and concurrent/server GC run on their own threads: both
+         are scheduled by the OS, so their timing varies with host noise, not with the workload.
+         Fixing all three removes that source of variance. -->
+    <TieredCompilation>false</TieredCompilation>
+    <TieredPGO>false</TieredPGO>
+    <ConcurrentGarbageCollection>false</ConcurrentGarbageCollection>
+    <ServerGarbageCollection>false</ServerGarbageCollection>
   </PropertyGroup>
 
   <ItemGroup>
