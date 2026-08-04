@@ -12,6 +12,7 @@ namespace ExcelReader.Core.Writer
         private readonly BiffBuffer _row;
         private int _rowNumber;
         private int _columnIndex;
+        private int _rowStyleId;
         private bool _useCellReferences;
         private bool _disposed;
 
@@ -22,12 +23,21 @@ namespace ExcelReader.Core.Writer
         }
 
         // Reused across rows by XlsxSheetWriter: rents one instance per sheet instead of one per row.
-        internal void Reset(int rowNumber)
+        internal void Reset(int rowNumber, int styleId = 0)
         {
             _rowNumber = rowNumber;
             _columnIndex = 0;
+            _rowStyleId = styleId;
             _useCellReferences = false;
             _disposed = false;
+        }
+
+        // The row's own style (if set via StartRowAsync(int, ...)) always wins over a column style —
+        // both are user-configured, and the row is the more specific of the two. Falls back to 0 (no
+        // explicit style attribute) when neither is set, so an unstyled cell costs nothing extra.
+        private int EffectiveStyle()
+        {
+            return _rowStyleId != 0 ? _rowStyleId : _owner.GetColumnStyle(_columnIndex);
         }
 
         private void ThrowIfDisposed()
@@ -50,11 +60,11 @@ namespace ExcelReader.Core.Writer
             if (_owner.UseSharedStrings)
             {
                 int index = _owner.GetSharedStringIndex(value);
-                CellFormatter.WriteSharedString(_row, index, _columnIndex, _rowNumber, ConsumeCellReference());
+                CellFormatter.WriteSharedString(_row, index, _columnIndex, _rowNumber, ConsumeCellReference(), EffectiveStyle());
                 _columnIndex++;
                 return;
             }
-            CellFormatter.WriteString(_row, value, _columnIndex, _rowNumber, ConsumeCellReference());
+            CellFormatter.WriteString(_row, value, _columnIndex, _rowNumber, ConsumeCellReference(), EffectiveStyle());
             _columnIndex++;
         }
 
@@ -63,7 +73,7 @@ namespace ExcelReader.Core.Writer
         public void Write(bool value)
         {
             ThrowIfDisposed();
-            CellFormatter.WriteBool(_row, value, _columnIndex, _rowNumber, ConsumeCellReference());
+            CellFormatter.WriteBool(_row, value, _columnIndex, _rowNumber, ConsumeCellReference(), EffectiveStyle());
             _columnIndex++;
         }
 
@@ -85,7 +95,8 @@ namespace ExcelReader.Core.Writer
         public void Write(DateTime value)
         {
             ThrowIfDisposed();
-            CellFormatter.WriteDateTime(_row, value, _columnIndex, _rowNumber, ConsumeCellReference());
+            int styleId = EffectiveStyle();
+            CellFormatter.WriteDateTime(_row, value, _columnIndex, _rowNumber, ConsumeCellReference(), styleId == 0 ? 1 : styleId);
             _columnIndex++;
         }
 
@@ -110,7 +121,8 @@ namespace ExcelReader.Core.Writer
         public void Write(DateOnly value)
         {
             ThrowIfDisposed();
-            CellFormatter.WriteDateTime(_row, value.ToDateTime(TimeOnly.MinValue), _columnIndex, _rowNumber, ConsumeCellReference());
+            int styleId = EffectiveStyle();
+            CellFormatter.WriteDateTime(_row, value.ToDateTime(TimeOnly.MinValue), _columnIndex, _rowNumber, ConsumeCellReference(), styleId == 0 ? 1 : styleId);
             _columnIndex++;
         }
 
@@ -160,7 +172,7 @@ namespace ExcelReader.Core.Writer
         public void Write(int value)
         {
             ThrowIfDisposed();
-            CellFormatter.WriteNumber(_row, value, _columnIndex, _rowNumber, ConsumeCellReference());
+            CellFormatter.WriteNumber(_row, value, _columnIndex, _rowNumber, ConsumeCellReference(), EffectiveStyle());
             _columnIndex++;
         }
 
@@ -186,7 +198,7 @@ namespace ExcelReader.Core.Writer
         public void Write(long value)
         {
             ThrowIfDisposed();
-            CellFormatter.WriteNumber(_row, value, _columnIndex, _rowNumber, ConsumeCellReference());
+            CellFormatter.WriteNumber(_row, value, _columnIndex, _rowNumber, ConsumeCellReference(), EffectiveStyle());
             _columnIndex++;
         }
 
@@ -212,7 +224,7 @@ namespace ExcelReader.Core.Writer
         public void Write(double value)
         {
             ThrowIfDisposed();
-            CellFormatter.WriteNumber(_row, value, _columnIndex, _rowNumber, ConsumeCellReference());
+            CellFormatter.WriteNumber(_row, value, _columnIndex, _rowNumber, ConsumeCellReference(), EffectiveStyle());
             _columnIndex++;
         }
 
@@ -238,7 +250,7 @@ namespace ExcelReader.Core.Writer
         public void Write(decimal value)
         {
             ThrowIfDisposed();
-            CellFormatter.WriteNumber(_row, value, _columnIndex, _rowNumber, ConsumeCellReference());
+            CellFormatter.WriteNumber(_row, value, _columnIndex, _rowNumber, ConsumeCellReference(), EffectiveStyle());
             _columnIndex++;
         }
 
@@ -263,7 +275,7 @@ namespace ExcelReader.Core.Writer
             where T : IUtf8SpanFormattable
         {
             ThrowIfDisposed();
-            CellFormatter.WriteNumber(_row, value, _columnIndex, _rowNumber, ConsumeCellReference());
+            CellFormatter.WriteNumber(_row, value, _columnIndex, _rowNumber, ConsumeCellReference(), EffectiveStyle());
             _columnIndex++;
         }
 
@@ -314,7 +326,7 @@ namespace ExcelReader.Core.Writer
 
         private void WriteEmptyCell()
         {
-            CellFormatter.WriteEmpty(_row, _columnIndex, _rowNumber, includeReference: ConsumeCellReference());
+            CellFormatter.WriteEmpty(_row, _columnIndex, _rowNumber, includeReference: ConsumeCellReference(), styleId: EffectiveStyle());
             _columnIndex++;
         }
 

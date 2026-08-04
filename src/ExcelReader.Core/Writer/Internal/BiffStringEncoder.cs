@@ -17,6 +17,15 @@ namespace ExcelReader.Core.Writer.Internal
             WriteFlagsAndChars(buffer, value, compressed);
         }
 
+        // u16 char count + flags + chars — the XLUnicodeString shape most BIFF8 records outside
+        // Label/BoundSheet use (e.g. FORMAT's custom number-format string).
+        internal static void WriteLong(BiffBuffer buffer, ReadOnlySpan<char> value)
+        {
+            bool compressed = CanCompress(value);
+            buffer.WriteU16(value.Length);
+            WriteFlagsAndChars(buffer, value, compressed);
+        }
+
         private static void WriteFlagsAndChars(BiffBuffer buffer, ReadOnlySpan<char> value, bool compressed)
         {
             buffer.WriteByte((byte)(compressed ? 0 : 1));

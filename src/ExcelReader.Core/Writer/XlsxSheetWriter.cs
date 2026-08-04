@@ -1,5 +1,7 @@
 using System.Diagnostics.CodeAnalysis;
+using System.Globalization;
 using System.IO.Compression;
+using System.Text;
 using ExcelReader.Core.Reader;
 using ExcelReader.Core.Writer.Internal;
 
@@ -28,6 +30,8 @@ namespace ExcelReader.Core.Writer
         private int _rowNumber;
         private WriterState _state = WriterState.Created;
         private bool _rowActive;
+        private Dictionary<int, int>? _columnStyles;
+        private Dictionary<int, double>? _columnWidths;
 
         internal XlsxSheetWriter(XlsxWorkbookWriter owner, ZipArchive zip, string name, int sheetId, CompressionLevel compression, bool offloadWrite)
         {
@@ -46,6 +50,38 @@ namespace ExcelReader.Core.Writer
         internal int GetSharedStringIndex(string value)
         {
             return _owner.GetSharedStringIndex(value);
+        }
+
+        internal int GetColumnStyle(int columnIndex)
+        {
+            return _columnStyles is not null && _columnStyles.TryGetValue(columnIndex, out int styleId) ? styleId : 0;
+        }
+
+        /// <inheritdoc/>
+        /// <exception cref="InvalidOperationException">The sheet has already been started.</exception>
+        public void SetColumnStyle(int columnIndex, int styleId)
+        {
+            RequireNotStarted();
+            _columnStyles ??= [];
+            _columnStyles[columnIndex] = styleId;
+        }
+
+        /// <inheritdoc/>
+        /// <exception cref="InvalidOperationException">The sheet has already been started.</exception>
+        public void SetColumnWidth(int columnIndex, double width)
+        {
+            RequireNotStarted();
+            _columnWidths ??= [];
+            _columnWidths[columnIndex] = width;
+        }
+
+        private void RequireNotStarted()
+        {
+            WriterStateGuard.ThrowIfEnded(_state, this);
+            if (_state != WriterState.Created)
+            {
+                throw new InvalidOperationException($"{nameof(SetColumnStyle)}/{nameof(SetColumnWidth)} must be called before {nameof(StartAsync)}.");
+            }
         }
 
         /// <inheritdoc/>
@@ -71,11 +107,48 @@ namespace ExcelReader.Core.Writer
             _rowBuffer.Reset();
             _rowBuffer.WriteUtf8(
                 "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>" +
-                $"<worksheet xmlns=\"{XlsxConstants.MainNs}\"><sheetData>");
+                $"<worksheet xmlns=\"{XlsxConstants.MainNs}\">{BuildColsXml()}<sheetData>");
             await _stream.WriteAsync(_rowBuffer.Memory, ct).ConfigureAwait(false);
             _rowBuffer.Reset();
             _state = WriterState.Started;
             _owner.RegisterSheet(Name, SheetId);
+        }
+
+        // <cols> must precede <sheetData> in worksheet XML — hence built once, up front, from
+        // whatever SetColumnStyle/SetColumnWidth calls landed before StartAsync — inserting it later
+        // would mean buffering the whole sheet instead of streaming rows as they're written.
+        private string BuildColsXml()
+        {
+            if (_columnStyles is null && _columnWidths is null)
+            {
+                return string.Empty;
+            }
+            var columns = new SortedSet<int>();
+            if (_columnStyles is not null)
+            {
+                columns.UnionWith(_columnStyles.Keys);
+            }
+            if (_columnWidths is not null)
+            {
+                columns.UnionWith(_columnWidths.Keys);
+            }
+            var sb = new StringBuilder("<cols>");
+            foreach (int columnIndex in columns)
+            {
+                int oneBased = columnIndex + 1;
+                sb.Append(CultureInfo.InvariantCulture, $"<col min=\"{oneBased}\" max=\"{oneBased}\"");
+                if (_columnStyles is not null && _columnStyles.TryGetValue(columnIndex, out int styleId))
+                {
+                    sb.Append(CultureInfo.InvariantCulture, $" style=\"{styleId}\"");
+                }
+                if (_columnWidths is not null && _columnWidths.TryGetValue(columnIndex, out double width))
+                {
+                    sb.Append(CultureInfo.InvariantCulture, $" width=\"{width}\" customWidth=\"1\"");
+                }
+                sb.Append("/>");
+            }
+            sb.Append("</cols>");
+            return sb.ToString();
         }
 
         /// <inheritdoc/>
@@ -84,9 +157,18 @@ namespace ExcelReader.Core.Writer
         /// <exception cref="ExcelLimitExceededException">The worksheet's 1,048,576-row limit has been reached.</exception>
         public ValueTask<XlsxRowWriter> StartRowAsync(CancellationToken ct = default)
         {
-            int rowNumber = BeginRow(ct);
+            return StartRowAsync(styleId: 0, ct);
+        }
+
+        /// <inheritdoc/>
+        /// <exception cref="ObjectDisposedException">The sheet has already been ended.</exception>
+        /// <exception cref="InvalidOperationException">The sheet has not been started, or the previous <see cref="XlsxRowWriter"/> has not been disposed.</exception>
+        /// <exception cref="ExcelLimitExceededException">The worksheet's 1,048,576-row limit has been reached.</exception>
+        public ValueTask<XlsxRowWriter> StartRowAsync(int styleId, CancellationToken ct = default)
+        {
+            int rowNumber = BeginRow(styleId, ct);
             _rowWriter ??= new XlsxRowWriter(this, _rowBuffer);
-            _rowWriter.Reset(rowNumber);
+            _rowWriter.Reset(rowNumber, styleId);
             return ValueTask.FromResult(_rowWriter);
         }
 
@@ -106,9 +188,9 @@ namespace ExcelReader.Core.Writer
         /// <exception cref="ExcelLimitExceededException">The worksheet's 1,048,576-row limit has been reached.</exception>
         public XlsxRowWriter StartRow(CancellationToken ct = default)
         {
-            int rowNumber = BeginRow(ct);
+            int rowNumber = BeginRow(styleId: 0, ct);
             _rowWriter ??= new XlsxRowWriter(this, _rowBuffer);
-            _rowWriter.Reset(rowNumber);
+            _rowWriter.Reset(rowNumber, styleId: 0);
             return _rowWriter;
         }
 
@@ -147,7 +229,7 @@ namespace ExcelReader.Core.Writer
             }
         }
 
-        private int BeginRow(CancellationToken ct)
+        private int BeginRow(int styleId, CancellationToken ct)
         {
             WriterStateGuard.ThrowIfEnded(_state, this);
             WriterStateGuard.RequireStarted(_state, nameof(XlsxSheetWriter), "adding rows");
@@ -160,8 +242,16 @@ namespace ExcelReader.Core.Writer
             _rowNumber++;
             _rowActive = true;
             // The `r` attribute on <row> is optional per ECMA-376 (rows are positional); omitting it
-            // shrinks the XML fed to deflate and skips a Utf8Formatter call on every row.
-            _rowBuffer.Write("<row>"u8);
+            // shrinks the XML fed to deflate and skips a Utf8Formatter call on every row. `s`/`customFormat`
+            // are only added when a row style was actually requested, for the same reason.
+            if (styleId == 0)
+            {
+                _rowBuffer.Write("<row>"u8);
+            }
+            else
+            {
+                _rowBuffer.WriteUtf8($"<row s=\"{styleId}\" customFormat=\"1\">");
+            }
             return _rowNumber;
         }
 

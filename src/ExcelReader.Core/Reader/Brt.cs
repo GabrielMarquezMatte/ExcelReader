@@ -17,6 +17,7 @@ namespace ExcelReader.Core.Reader
         internal const int FmlaError = 11; // formula cell, cached error result
         internal const int CellRString = 62; // inline rich string
         internal const int SSTItem = 19;
+        internal const int ColInfo = 60;
         internal const int Font = 43;
         internal const int Fmt = 44;
         internal const int Fill = 45;

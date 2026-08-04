@@ -18,6 +18,7 @@ namespace ExcelReader.Core.Writer
         private readonly Stream _stream;
         private readonly bool _leaveOpen;
         private readonly bool _date1904;
+        private readonly StyleTable _styles = new();
         private readonly List<XlsSheetWriter> _sheets = [];
         private WriterState _state = WriterState.Created;
         private XlsSheetWriter? _activeSheet;
@@ -75,6 +76,12 @@ namespace ExcelReader.Core.Writer
 
         internal int SheetCount => _sheets.Count;
 
+        /// <inheritdoc/>
+        public int AddStyle(CellStyle style)
+        {
+            return _styles.Add(style);
+        }
+
         internal void RegisterSheet(XlsSheetWriter sheet)
         {
             _sheets.Add(sheet);
@@ -115,7 +122,7 @@ namespace ExcelReader.Core.Writer
                     names[i] = _sheets[i].Name;
                 }
 
-                int[] offsetPositions = XlsGlobals.Write(globals, names, _date1904);
+                int[] offsetPositions = XlsGlobals.Write(globals, names, _date1904, _styles);
                 int offset = globals.Length;
                 int workbookSize = offset;
                 for (int i = 0; i < _sheets.Count; i++)
@@ -136,6 +143,7 @@ namespace ExcelReader.Core.Writer
                         BiffRecordWriter.WriteDimension(frame, sheet.RowCount, sheet.ColCount);
                         BiffRecordWriter.WriteWindow2(frame);
                         await dest.WriteAsync(frame.Memory, canc).ConfigureAwait(false);
+                        await dest.WriteAsync(sheet.ColInfoMemory, canc).ConfigureAwait(false);
                         await dest.WriteAsync(sheet.CellsMemory, canc).ConfigureAwait(false);
                         frame.Reset();
                         BiffRecordWriter.WriteEof(frame);
