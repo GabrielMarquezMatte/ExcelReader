@@ -19,6 +19,7 @@ namespace ExcelReader.Core.Writer
         private readonly CompressionLevel _compression;
         private readonly bool _prefetchWrite;
         private readonly SharedStringTable? _sharedStrings;
+        private readonly StyleTable _styles = new();
         private readonly List<(string Name, int SheetId)> _sheets = [];
         private WriterState _state = WriterState.Created;
         private bool _sheetActive;
@@ -116,6 +117,12 @@ namespace ExcelReader.Core.Writer
         }
 
         /// <inheritdoc/>
+        public int AddStyle(CellStyle style)
+        {
+            return _styles.Add(style);
+        }
+
+        /// <inheritdoc/>
         /// <exception cref="ObjectDisposedException">The workbook has already been ended.</exception>
         /// <exception cref="InvalidOperationException">The workbook has not been started, or no sheet has been added yet.</exception>
         public async ValueTask EndAsync(CancellationToken ct = default)
@@ -194,21 +201,94 @@ namespace ExcelReader.Core.Writer
 
         private ValueTask WriteStylesAsync(CancellationToken ct)
         {
-            return WriteEntryAsync(
-                "xl/styles.xml",
-                "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>" +
-                $"<styleSheet xmlns=\"{XlsxConstants.MainNs}\">" +
-                "<numFmts count=\"1\"><numFmt numFmtId=\"14\" formatCode=\"mm-dd-yy\"/></numFmts>" +
-                "<fonts count=\"1\"><font/></fonts>" +
-                "<fills count=\"2\"><fill><patternFill patternType=\"none\"/></fill><fill><patternFill patternType=\"gray125\"/></fill></fills>" +
-                "<borders count=\"1\"><border/></borders>" +
-                "<cellStyleXfs count=\"1\"><xf numFmtId=\"0\" fontId=\"0\" fillId=\"0\" borderId=\"0\"/></cellStyleXfs>" +
-                "<cellXfs count=\"2\">" +
-                "<xf numFmtId=\"0\" fontId=\"0\" fillId=\"0\" borderId=\"0\" xfId=\"0\"/>" +
-                "<xf numFmtId=\"14\" fontId=\"0\" fillId=\"0\" borderId=\"0\" xfId=\"0\" applyNumberFormat=\"1\"/>" +
-                "</cellXfs>" +
-                "</styleSheet>",
-                ct);
+            return WriteEntryAsync("xl/styles.xml", BuildStylesXml(), ct);
+        }
+
+        // Reproduces the original hardcoded styles.xml byte-for-byte when no custom style was ever
+        // registered (the general/date pair are always present) — a workbook that doesn't use this
+        // feature pays nothing for it. Custom styles (index 2+) each append a numFmt/font/xf entry.
+        private string BuildStylesXml()
+        {
+            IReadOnlyList<CellStyle> styles = _styles.Styles;
+            Dictionary<string, int> numFmtIds = _styles.AssignCustomNumberFormatIds();
+            Dictionary<(bool Bold, bool Italic), int> fontIds = _styles.AssignFontIds();
+            var fontsByIndex = new (bool Bold, bool Italic)[fontIds.Count];
+            foreach (var (key, index) in fontIds)
+            {
+                fontsByIndex[index] = key;
+            }
+
+            var sb = new StringBuilder();
+            sb.Append("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>");
+            sb.Append(CultureInfo.InvariantCulture, $"<styleSheet xmlns=\"{XlsxConstants.MainNs}\">");
+            AppendNumFmts(sb, numFmtIds);
+            AppendFonts(sb, fontsByIndex);
+            sb.Append("<fills count=\"2\"><fill><patternFill patternType=\"none\"/></fill><fill><patternFill patternType=\"gray125\"/></fill></fills>");
+            sb.Append("<borders count=\"1\"><border/></borders>");
+            sb.Append("<cellStyleXfs count=\"1\"><xf numFmtId=\"0\" fontId=\"0\" fillId=\"0\" borderId=\"0\"/></cellStyleXfs>");
+            AppendCellXfs(sb, styles, numFmtIds, fontIds);
+            sb.Append("</styleSheet>");
+            return sb.ToString();
+        }
+
+        private static void AppendNumFmts(StringBuilder sb, Dictionary<string, int> numFmtIds)
+        {
+            sb.Append(CultureInfo.InvariantCulture, $"<numFmts count=\"{1 + numFmtIds.Count}\">");
+            sb.Append("<numFmt numFmtId=\"14\" formatCode=\"mm-dd-yy\"/>");
+            foreach (var (format, id) in numFmtIds)
+            {
+                sb.Append(CultureInfo.InvariantCulture, $"<numFmt numFmtId=\"{id}\" formatCode=\"{EscapeAttribute(format)}\"/>");
+            }
+            sb.Append("</numFmts>");
+        }
+
+        private static void AppendFonts(StringBuilder sb, (bool Bold, bool Italic)[] fontsByIndex)
+        {
+            sb.Append(CultureInfo.InvariantCulture, $"<fonts count=\"{fontsByIndex.Length}\">");
+            foreach ((bool bold, bool italic) in fontsByIndex)
+            {
+                if (!bold && !italic)
+                {
+                    sb.Append("<font/>");
+                    continue;
+                }
+                sb.Append("<font>");
+                if (bold)
+                {
+                    sb.Append("<b/>");
+                }
+                if (italic)
+                {
+                    sb.Append("<i/>");
+                }
+                sb.Append("</font>");
+            }
+            sb.Append("</fonts>");
+        }
+
+        private static void AppendCellXfs(StringBuilder sb, IReadOnlyList<CellStyle> styles,
+            Dictionary<string, int> numFmtIds, Dictionary<(bool Bold, bool Italic), int> fontIds)
+        {
+            sb.Append(CultureInfo.InvariantCulture, $"<cellXfs count=\"{styles.Count}\">");
+            sb.Append("<xf numFmtId=\"0\" fontId=\"0\" fillId=\"0\" borderId=\"0\" xfId=\"0\"/>");
+            sb.Append("<xf numFmtId=\"14\" fontId=\"0\" fillId=\"0\" borderId=\"0\" xfId=\"0\" applyNumberFormat=\"1\"/>");
+            for (int i = 2; i < styles.Count; i++)
+            {
+                CellStyle style = styles[i];
+                int numFmtId = style.NumberFormat is not null ? numFmtIds[style.NumberFormat] : 0;
+                int fontId = fontIds[(style.Bold, style.Italic)];
+                sb.Append(CultureInfo.InvariantCulture, $"<xf numFmtId=\"{numFmtId}\" fontId=\"{fontId}\" fillId=\"0\" borderId=\"0\" xfId=\"0\"");
+                if (style.NumberFormat is not null)
+                {
+                    sb.Append(" applyNumberFormat=\"1\"");
+                }
+                if (style.Bold || style.Italic)
+                {
+                    sb.Append(" applyFont=\"1\"");
+                }
+                sb.Append("/>");
+            }
+            sb.Append("</cellXfs>");
         }
 
         private async ValueTask WriteSharedStringsAsync(CancellationToken ct)

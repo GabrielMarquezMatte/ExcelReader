@@ -39,6 +39,9 @@ namespace ExcelReader.Core.Writer
         private int _rowNumber = -1;
         private WriterState _state = WriterState.Created;
         private bool _rowActive;
+        private Dictionary<int, int>? _columnStyles;
+        private Dictionary<int, double>? _columnWidths;
+        private int _activeRowStyle;
         [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP002:Dispose member",
             Justification = "Reused per row; the caller disposes it via using after each row, and End's _rowActive guard rejects ending the sheet with it still open.")]
         private XlsRowWriter? _rowWriter;
@@ -55,11 +58,61 @@ namespace ExcelReader.Core.Writer
         internal string Name { get; }
 
         // Full substream byte length once framed — used to compute BoundSheet offsets.
-        internal int SubstreamLength => FramingBytes + _cells.Length;
+        internal int SubstreamLength => FramingBytes + _colInfos.Length + _cells.Length;
 
         internal int RowCount => _maxRow + 1;
         internal int ColCount => _maxCol + 1;
         internal ReadOnlyMemory<byte> CellsMemory => _cells.Memory;
+        internal ReadOnlyMemory<byte> ColInfoMemory => _colInfos.Memory;
+
+        [SuppressMessage("Usage", "CA2213:Disposable fields should be disposed",
+            Justification = "Outlives Dispose; XlsWorkbookWriter releases it via ReleaseBuffer after writing the bytes in EndAsync, same as _cells.")]
+        private readonly BiffBuffer _colInfos = new(64);
+
+        /// <inheritdoc/>
+        /// <exception cref="InvalidOperationException">The sheet has already been started.</exception>
+        public void SetColumnStyle(int columnIndex, int styleId)
+        {
+            RequireNotStarted();
+            _columnStyles ??= [];
+            _columnStyles[columnIndex] = styleId;
+        }
+
+        /// <inheritdoc/>
+        /// <exception cref="InvalidOperationException">The sheet has already been started.</exception>
+        public void SetColumnWidth(int columnIndex, double width)
+        {
+            RequireNotStarted();
+            _columnWidths ??= [];
+            _columnWidths[columnIndex] = width;
+        }
+
+        private void RequireNotStarted()
+        {
+            WriterStateGuard.ThrowIfEnded(_state, this);
+            if (_state != WriterState.Created)
+            {
+                throw new InvalidOperationException($"{nameof(SetColumnStyle)}/{nameof(SetColumnWidth)} must be called before {nameof(Start)}.");
+            }
+        }
+
+        // The active row's own style always wins over a column style (both are user-configured; the
+        // row is the more specific of the two); falls back to 0 ("no override", i.e. the general XF)
+        // when neither is set. Every BIFF8 cell record carries a mandatory XF field, so this is
+        // consulted for every cell write, not only dates.
+        private int EffectiveStyle(int columnIndex)
+        {
+            int abstractStyle = 0;
+            if (_activeRowStyle != 0)
+            {
+                abstractStyle = _activeRowStyle;
+            }
+            else if (_columnStyles is not null && _columnStyles.TryGetValue(columnIndex, out int styleId))
+            {
+                abstractStyle = styleId;
+            }
+            return abstractStyle;
+        }
 
         /// <summary>
         /// Marks the sheet as started and registers it with the owning workbook.
@@ -69,7 +122,31 @@ namespace ExcelReader.Core.Writer
             WriterStateGuard.ThrowIfEnded(_state, this);
             WriterStateGuard.RequireCreated(_state, nameof(XlsSheetWriter));
             _state = WriterState.Started;
+            WriteColInfos();
             _owner.RegisterSheet(this);
+        }
+
+        private void WriteColInfos()
+        {
+            if (_columnStyles is null && _columnWidths is null)
+            {
+                return;
+            }
+            var columns = new SortedSet<int>();
+            if (_columnStyles is not null)
+            {
+                columns.UnionWith(_columnStyles.Keys);
+            }
+            if (_columnWidths is not null)
+            {
+                columns.UnionWith(_columnWidths.Keys);
+            }
+            foreach (int columnIndex in columns)
+            {
+                int abstractStyle = _columnStyles is not null && _columnStyles.TryGetValue(columnIndex, out int s) ? s : 0;
+                double width = _columnWidths is not null && _columnWidths.TryGetValue(columnIndex, out double w) ? w : 8.43;
+                BiffRecordWriter.WriteColInfo(_colInfos, columnIndex, (int)Math.Round(width * 256), XlsGlobals.CustomXf(abstractStyle));
+            }
         }
 
         /// <summary>
@@ -77,6 +154,15 @@ namespace ExcelReader.Core.Writer
         /// BIFF8 row cap is reached.
         /// </summary>
         public XlsRowWriter StartRow()
+        {
+            return StartRow(styleId: 0);
+        }
+
+        /// <summary>
+        /// Begins writing the next row with <paramref name="styleId"/> applied to its cells,
+        /// transparently spilling into a continuation sheet once the BIFF8 row cap is reached.
+        /// </summary>
+        public XlsRowWriter StartRow(int styleId)
         {
             WriterStateGuard.ThrowIfEnded(_state, this);
             WriterStateGuard.RequireStarted(_state, nameof(XlsSheetWriter), "adding rows");
@@ -86,8 +172,9 @@ namespace ExcelReader.Core.Writer
             {
                 // ponytail: auto-split into continuation sheets; BIFF8 row index is 16-bit so each sheet holds 65536 rows
                 _continuation ??= CreateContinuation();
-                return _continuation.StartRow();
+                return _continuation.StartRow(styleId);
             }
+            _activeRowStyle = styleId;
             _rowActive = true;
             _rowWriter ??= new XlsRowWriter(this, _rowNumber);
             _rowWriter.Reset(_rowNumber);
@@ -102,35 +189,40 @@ namespace ExcelReader.Core.Writer
         internal void EmitNumber(int row, int col, double value)
         {
             ValidateColumn(col);
-            BiffRecordWriter.WriteNumber(_cells, row, col, XlsGlobals.GeneralXf, value);
+            int abstractStyle = EffectiveStyle(col);
+            BiffRecordWriter.WriteNumber(_cells, row, col, abstractStyle == 0 ? XlsGlobals.GeneralXf : XlsGlobals.CustomXf(abstractStyle), value);
             Track(row, col);
         }
 
         internal void EmitDate(int row, int col, DateTime value)
         {
             ValidateColumn(col);
+            int abstractStyle = EffectiveStyle(col);
             double serial = ExcelEpoch.OADateToSerial(value.ToOADate(), _date1904);
-            BiffRecordWriter.WriteNumber(_cells, row, col, XlsGlobals.DateXf, serial);
+            BiffRecordWriter.WriteNumber(_cells, row, col, abstractStyle == 0 ? XlsGlobals.DateXf : XlsGlobals.CustomXf(abstractStyle), serial);
             Track(row, col);
         }
 
         internal void EmitLabel(int row, int col, ReadOnlySpan<char> value)
         {
             ValidateColumn(col);
-            BiffRecordWriter.WriteLabel(_cells, row, col, XlsGlobals.GeneralXf, value);
+            int abstractStyle = EffectiveStyle(col);
+            BiffRecordWriter.WriteLabel(_cells, row, col, abstractStyle == 0 ? XlsGlobals.GeneralXf : XlsGlobals.CustomXf(abstractStyle), value);
             Track(row, col);
         }
 
         internal void EmitBool(int row, int col, bool value)
         {
             ValidateColumn(col);
-            BiffRecordWriter.WriteBool(_cells, row, col, XlsGlobals.GeneralXf, value);
+            int abstractStyle = EffectiveStyle(col);
+            BiffRecordWriter.WriteBool(_cells, row, col, abstractStyle == 0 ? XlsGlobals.GeneralXf : XlsGlobals.CustomXf(abstractStyle), value);
             Track(row, col);
         }
 
         internal void ReleaseBuffer()
         {
             _cells.Dispose();
+            _colInfos.Dispose();
         }
 
         private void Track(int row, int col)
@@ -200,6 +292,13 @@ namespace ExcelReader.Core.Writer
         {
             ct.ThrowIfCancellationRequested();
             return ValueTask.FromResult(StartRow());
+        }
+
+        /// <inheritdoc/>
+        public ValueTask<XlsRowWriter> StartRowAsync(int styleId, CancellationToken ct = default)
+        {
+            ct.ThrowIfCancellationRequested();
+            return ValueTask.FromResult(StartRow(styleId));
         }
 
         /// <inheritdoc/>

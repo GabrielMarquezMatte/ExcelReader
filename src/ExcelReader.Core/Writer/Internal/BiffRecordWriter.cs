@@ -161,6 +161,16 @@ namespace ExcelReader.Core.Writer.Internal
             buffer.EndRecord(len);
         }
 
+        // Custom number format string, referenced by formatIndex from a subsequent Xf record.
+        // ifmt must be >=164 (0-163 are Excel's builtins) — enforced by the caller (StyleTable).
+        internal static void WriteFormat(BiffBuffer buffer, int formatIndex, ReadOnlySpan<char> formatCode)
+        {
+            int len = buffer.BeginRecord(BiffRecord.Format);
+            buffer.WriteU16(formatIndex);
+            BiffStringEncoder.WriteLong(buffer, formatCode);
+            buffer.EndRecord(len);
+        }
+
         internal static void WriteStyle(BiffBuffer buffer)
         {
             int len = buffer.BeginRecord(BiffRecord.Style);
@@ -176,6 +186,22 @@ namespace ExcelReader.Core.Writer.Internal
             buffer.WriteI32(sheetOffset);  // lbPlyPos
             buffer.WriteU16(0);            // grbit (visible worksheet)
             BiffStringEncoder.WriteShort(buffer, name);
+            buffer.EndRecord(len);
+        }
+
+        // ponytail: field layout (colFirst/colLast/coldx/ixfe/grbit/reserved, all u16) follows the
+        // commonly documented [MS-XLS] COLINFO shape but is unverified against a real Excel-written
+        // file — our own reader never parses column info (only per-cell XF matters for round-tripping
+        // through this library), so a wrong field here can't be caught by this library's own tests.
+        internal static void WriteColInfo(BiffBuffer buffer, int columnIndex, int width256ths, int xf)
+        {
+            int len = buffer.BeginRecord(BiffRecord.ColInfo);
+            buffer.WriteU16(columnIndex);
+            buffer.WriteU16(columnIndex);
+            buffer.WriteU16(width256ths);
+            buffer.WriteU16(xf);
+            buffer.WriteU16(0);
+            buffer.WriteU16(0);
             buffer.EndRecord(len);
         }
 

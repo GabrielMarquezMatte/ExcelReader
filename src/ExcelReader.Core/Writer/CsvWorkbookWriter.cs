@@ -34,6 +34,25 @@ namespace ExcelReader.Core.Writer
             return new ValueTask<CsvRowWriter>(_writer.StartRow());
         }
 
+        /// <summary>No-op: CSV has no cell styles. <paramref name="styleId"/> is ignored, silently, exactly like the parameterless overload.</summary>
+        /// <inheritdoc cref="ISheetWriter{TRow}.StartRowAsync(int, CancellationToken)"/>
+        public ValueTask<CsvRowWriter> StartRowAsync(int styleId, CancellationToken ct = default)
+        {
+            return StartRowAsync(ct);
+        }
+
+        /// <summary>No-op: CSV has no column styles.</summary>
+        /// <inheritdoc cref="ISheetWriter{TRow}.SetColumnStyle"/>
+        public void SetColumnStyle(int columnIndex, int styleId)
+        {
+        }
+
+        /// <summary>No-op: CSV has no column widths.</summary>
+        /// <inheritdoc cref="ISheetWriter{TRow}.SetColumnWidth"/>
+        public void SetColumnWidth(int columnIndex, double width)
+        {
+        }
+
         /// <inheritdoc/>
         public ValueTask EndAsync(CancellationToken ct = default)
         {
@@ -128,6 +147,13 @@ namespace ExcelReader.Core.Writer
         public ValueTask FlushAsync(CancellationToken ct = default)
         {
             return _writer.FlushAsync(ct);
+        }
+
+        /// <summary>No-op: CSV has no cell styles. Always returns 0.</summary>
+        /// <inheritdoc cref="IWorkbookWriter{TSheet}.AddStyle"/>
+        public int AddStyle(CellStyle style)
+        {
+            return 0;
         }
 
         /// <inheritdoc/>

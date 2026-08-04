@@ -20,6 +20,7 @@ namespace ExcelReader.Core.Writer
         private readonly CompressionLevel _compression;
         private readonly bool _prefetchWrite;
         private readonly SharedStringTable? _sharedStrings;
+        private readonly StyleTable _styles = new();
         private readonly List<XlsbSheetWriter> _sheets = [];
         private WriterState _state = WriterState.Created;
         private XlsbSheetWriter? _activeSheet;
@@ -105,6 +106,12 @@ namespace ExcelReader.Core.Writer
         internal int GetSharedStringIndex(string value)
         {
             return _sharedStrings!.GetOrAdd(value);
+        }
+
+        /// <inheritdoc/>
+        public int AddStyle(CellStyle style)
+        {
+            return _styles.Add(style);
         }
 
         /// <inheritdoc/>
@@ -234,12 +241,22 @@ namespace ExcelReader.Core.Writer
             return WriteEntryAsync("xl/_rels/workbook.bin.rels", sb.ToString(), ct);
         }
 
+        // Bold/italic are deliberately not represented here: BrtFont's payload is an opaque, byte-exact
+        // blob (DefaultFontPayload below) reverse-engineered from a real file, and no field in it is
+        // safe to flip without a verified [MS-XLSB] field map. Every custom style's Xf keeps font index
+        // 0; only its number format varies. XLSX gets full Bold/Italic support because its font XML
+        // element is self-describing (<b/>/<i/>) instead of an opaque binary blob.
         private async ValueTask WriteStylesAsync(CancellationToken ct)
         {
+            Dictionary<string, int> numFmtIds = _styles.AssignCustomNumberFormatIds();
             using BiffBuffer payload = new(96);
             using BiffBuffer data = new(512);
             Biff12RecordWriter.WriteRecord(data, Brt.BeginStyleSheet);
-            WriteCountedRecord(data, payload, Brt.BeginFmts, 0);
+            WriteCountedRecord(data, payload, Brt.BeginFmts, numFmtIds.Count);
+            foreach (var (format, id) in numFmtIds)
+            {
+                WriteFmt(data, payload, id, format);
+            }
             Biff12RecordWriter.WriteRecord(data, Brt.EndFmts);
             WriteCountedRecord(data, payload, Brt.BeginFonts, 1);
             WriteBlobRecord(data, payload, Brt.Font, DefaultFontPayload);
@@ -253,12 +270,26 @@ namespace ExcelReader.Core.Writer
             WriteCountedRecord(data, payload, Brt.BeginCellStyleXFs, 1);
             WriteXf(data, payload, 0, isStyleXf: true);
             Biff12RecordWriter.WriteRecord(data, Brt.EndCellStyleXFs);
-            WriteCountedRecord(data, payload, Brt.BeginCellXFs, 2);
+            IReadOnlyList<CellStyle> styles = _styles.Styles;
+            WriteCountedRecord(data, payload, Brt.BeginCellXFs, styles.Count);
             WriteXf(data, payload, 0);
             WriteXf(data, payload, 14);
+            for (int i = 2; i < styles.Count; i++)
+            {
+                int numFmtId = styles[i].NumberFormat is string format ? numFmtIds[format] : 0;
+                WriteXf(data, payload, numFmtId);
+            }
             Biff12RecordWriter.WriteRecord(data, Brt.EndCellXFs);
             Biff12RecordWriter.WriteRecord(data, Brt.EndStyleSheet);
             await WriteEntryAsync("xl/styles.bin", data.Memory, ct).ConfigureAwait(false);
+        }
+
+        private static void WriteFmt(BiffBuffer data, BiffBuffer payload, int numFmtId, string formatCode)
+        {
+            payload.Reset();
+            payload.WriteU16(numFmtId);
+            Biff12RecordWriter.WriteWideString(payload, formatCode);
+            Biff12RecordWriter.WriteRecord(data, Brt.Fmt, payload.Span);
         }
 
         private async ValueTask WriteSharedStringsAsync(CancellationToken ct)

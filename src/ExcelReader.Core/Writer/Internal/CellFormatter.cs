@@ -26,42 +26,38 @@ namespace ExcelReader.Core.Writer.Internal
             xml.Write(buf[..(len + rowLen)]);
         }
 
-        private static void WriteCellOpenWithRef(BiffBuffer xml, int columnIndex, int rowNumber, ReadOnlySpan<byte> tail)
+        // Writes "<c", the optional r="..." reference, the optional s="N" style (only when styleId is
+        // non-zero, so an unstyled cell costs exactly the bytes it cost before this attribute existed),
+        // then typeAttr (e.g. " t=\"b\"", or empty for a plain number), then the tag's closing ">"/"/>".
+        private static void WriteCellOpen(BiffBuffer xml, int columnIndex, int rowNumber, bool includeReference,
+            int styleId, ReadOnlySpan<byte> typeAttr, bool selfClose)
         {
-            xml.Write("<c r=\""u8);
-            WriteRef(xml, columnIndex, rowNumber);
-            xml.WriteByte((byte)'"');
-            xml.Write(tail);
-        }
-
-        private static void WriteCellOpen(BiffBuffer xml, int columnIndex, int rowNumber, bool includeReference, ReadOnlySpan<byte> tail)
-        {
+            xml.Write("<c"u8);
             if (includeReference)
             {
-                WriteCellOpenWithRef(xml, columnIndex, rowNumber, tail);
-                return;
+                xml.Write(" r=\""u8);
+                WriteRef(xml, columnIndex, rowNumber);
+                xml.WriteByte((byte)'"');
             }
-            xml.Write(tail);
+            if (styleId != 0)
+            {
+                xml.Write(" s=\""u8);
+                WriteValue(xml, styleId, sizeHint: 8);
+                xml.WriteByte((byte)'"');
+            }
+            xml.Write(typeAttr);
+            xml.Write(selfClose ? "/>"u8 : ">"u8);
         }
 
-        internal static void WriteEmpty(BiffBuffer xml, int columnIndex, int rowNumber, bool includeReference)
+        internal static void WriteEmpty(BiffBuffer xml, int columnIndex, int rowNumber, bool includeReference, int styleId = 0)
         {
-            WriteCellOpen(xml, columnIndex, rowNumber, includeReference, includeReference ? "/>"u8 : "<c/>"u8);
+            WriteCellOpen(xml, columnIndex, rowNumber, includeReference, styleId, default, selfClose: true);
         }
 
-        internal static void WriteString(BiffBuffer xml, string value, int columnIndex, int rowNumber, bool includeReference)
+        internal static void WriteString(BiffBuffer xml, string value, int columnIndex, int rowNumber, bool includeReference, int styleId = 0)
         {
-            bool preserve = HasEdgeWhitespace(value);
-            ReadOnlySpan<byte> tail;
-            if (includeReference)
-            {
-                tail = preserve ? " t=\"inlineStr\"><is><t xml:space=\"preserve\">"u8 : " t=\"inlineStr\"><is><t>"u8;
-            }
-            else
-            {
-                tail = preserve ? "<c t=\"inlineStr\"><is><t xml:space=\"preserve\">"u8 : "<c t=\"inlineStr\"><is><t>"u8;
-            }
-            WriteCellOpen(xml, columnIndex, rowNumber, includeReference, tail);
+            WriteCellOpen(xml, columnIndex, rowNumber, includeReference, styleId, " t=\"inlineStr\""u8, selfClose: false);
+            xml.Write(HasEdgeWhitespace(value) ? "<is><t xml:space=\"preserve\">"u8 : "<is><t>"u8);
             WriteEscaped(xml, value);
             xml.Write("</t></is></c>"u8);
         }
@@ -71,59 +67,70 @@ namespace ExcelReader.Core.Writer.Internal
             return value.Length != 0 && (char.IsWhiteSpace(value[0]) || char.IsWhiteSpace(value[^1]));
         }
 
-        internal static void WriteSharedString(BiffBuffer xml, int sharedStringIndex, int columnIndex, int rowNumber, bool includeReference)
+        internal static void WriteSharedString(BiffBuffer xml, int sharedStringIndex, int columnIndex, int rowNumber, bool includeReference, int styleId = 0)
         {
-            WriteCellOpen(xml, columnIndex, rowNumber, includeReference, includeReference ? " t=\"s\"><v>"u8 : "<c t=\"s\"><v>"u8);
+            WriteCellOpen(xml, columnIndex, rowNumber, includeReference, styleId, " t=\"s\""u8, selfClose: false);
+            xml.Write("<v>"u8);
             WriteValue(xml, sharedStringIndex, sizeHint: 16);
             xml.Write("</v></c>"u8);
         }
 
-        internal static void WriteBool(BiffBuffer xml, bool value, int columnIndex, int rowNumber, bool includeReference)
+        internal static void WriteBool(BiffBuffer xml, bool value, int columnIndex, int rowNumber, bool includeReference, int styleId = 0)
         {
-            WriteCellOpen(xml, columnIndex, rowNumber, includeReference, includeReference ? " t=\"b\"><v>"u8 : "<c t=\"b\"><v>"u8);
+            WriteCellOpen(xml, columnIndex, rowNumber, includeReference, styleId, " t=\"b\""u8, selfClose: false);
+            xml.Write("<v>"u8);
             xml.WriteByte(value ? (byte)'1' : (byte)'0');
             xml.Write("</v></c>"u8);
         }
 
-        internal static void WriteDateTime(BiffBuffer xml, DateTime value, int columnIndex, int rowNumber, bool includeReference)
+        // styleId has no zero-means-omit default here: a date cell always needs an explicit style (it
+        // is how the serial number renders as a date instead of a plain number), so the caller always
+        // passes either the builtin date style (1) or an active row/column style override.
+        internal static void WriteDateTime(BiffBuffer xml, DateTime value, int columnIndex, int rowNumber, bool includeReference, int styleId)
         {
-            WriteCellOpen(xml, columnIndex, rowNumber, includeReference, includeReference ? " s=\"1\"><v>"u8 : "<c s=\"1\"><v>"u8);
+            WriteCellOpen(xml, columnIndex, rowNumber, includeReference, styleId, default, selfClose: false);
+            xml.Write("<v>"u8);
             WriteValue(xml, ExcelEpoch.OADateToSerial(value.ToOADate(), date1904: false), sizeHint: 32);
             xml.Write("</v></c>"u8);
         }
 
-        internal static void WriteNumber<T>(BiffBuffer xml, T value, int columnIndex, int rowNumber, bool includeReference)
+        internal static void WriteNumber<T>(BiffBuffer xml, T value, int columnIndex, int rowNumber, bool includeReference, int styleId = 0)
             where T : IUtf8SpanFormattable
         {
-            WriteCellOpen(xml, columnIndex, rowNumber, includeReference, includeReference ? "><v>"u8 : "<c><v>"u8);
+            WriteCellOpen(xml, columnIndex, rowNumber, includeReference, styleId, default, selfClose: false);
+            xml.Write("<v>"u8);
             WriteValue(xml, value, sizeHint: 64);
             xml.Write("</v></c>"u8);
         }
 
-        internal static void WriteNumber(BiffBuffer xml, int value, int columnIndex, int rowNumber, bool includeReference)
+        internal static void WriteNumber(BiffBuffer xml, int value, int columnIndex, int rowNumber, bool includeReference, int styleId = 0)
         {
-            WriteCellOpen(xml, columnIndex, rowNumber, includeReference, includeReference ? "><v>"u8 : "<c><v>"u8);
+            WriteCellOpen(xml, columnIndex, rowNumber, includeReference, styleId, default, selfClose: false);
+            xml.Write("<v>"u8);
             WriteValue(xml, value, sizeHint: 16);
             xml.Write("</v></c>"u8);
         }
 
-        internal static void WriteNumber(BiffBuffer xml, long value, int columnIndex, int rowNumber, bool includeReference)
+        internal static void WriteNumber(BiffBuffer xml, long value, int columnIndex, int rowNumber, bool includeReference, int styleId = 0)
         {
-            WriteCellOpen(xml, columnIndex, rowNumber, includeReference, includeReference ? "><v>"u8 : "<c><v>"u8);
+            WriteCellOpen(xml, columnIndex, rowNumber, includeReference, styleId, default, selfClose: false);
+            xml.Write("<v>"u8);
             WriteValue(xml, value, sizeHint: 32);
             xml.Write("</v></c>"u8);
         }
 
-        internal static void WriteNumber(BiffBuffer xml, double value, int columnIndex, int rowNumber, bool includeReference)
+        internal static void WriteNumber(BiffBuffer xml, double value, int columnIndex, int rowNumber, bool includeReference, int styleId = 0)
         {
-            WriteCellOpen(xml, columnIndex, rowNumber, includeReference, includeReference ? "><v>"u8 : "<c><v>"u8);
+            WriteCellOpen(xml, columnIndex, rowNumber, includeReference, styleId, default, selfClose: false);
+            xml.Write("<v>"u8);
             WriteValue(xml, value, sizeHint: 32);
             xml.Write("</v></c>"u8);
         }
 
-        internal static void WriteNumber(BiffBuffer xml, decimal value, int columnIndex, int rowNumber, bool includeReference)
+        internal static void WriteNumber(BiffBuffer xml, decimal value, int columnIndex, int rowNumber, bool includeReference, int styleId = 0)
         {
-            WriteCellOpen(xml, columnIndex, rowNumber, includeReference, includeReference ? "><v>"u8 : "<c><v>"u8);
+            WriteCellOpen(xml, columnIndex, rowNumber, includeReference, styleId, default, selfClose: false);
+            xml.Write("<v>"u8);
             WriteValue(xml, value, sizeHint: 64);
             xml.Write("</v></c>"u8);
         }

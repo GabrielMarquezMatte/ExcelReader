@@ -41,3 +41,38 @@ static ExcelReader.Core.Reader.Excel.SniffCsvDialectFromFile(string! path, Excel
 static ExcelReader.Core.Reader.Excel.SniffCsvDialectFromFileAsync(string! path, ExcelReader.Core.Reader.CsvSnifferOptions? options = null, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<ExcelReader.Core.Reader.CsvDialect>
 ~override ExcelReader.Core.Reader.CsvDialect.Equals(object obj) -> bool
 ~override ExcelReader.Core.Reader.CsvDialect.ToString() -> string
+ExcelReader.Core.Writer.CellStyle
+ExcelReader.Core.Writer.CellStyle.Bold.get -> bool
+ExcelReader.Core.Writer.CellStyle.Bold.init -> void
+ExcelReader.Core.Writer.CellStyle.CellStyle() -> void
+ExcelReader.Core.Writer.CellStyle.Equals(ExcelReader.Core.Writer.CellStyle other) -> bool
+ExcelReader.Core.Writer.CellStyle.Italic.get -> bool
+ExcelReader.Core.Writer.CellStyle.Italic.init -> void
+ExcelReader.Core.Writer.CellStyle.NumberFormat.get -> string?
+ExcelReader.Core.Writer.CellStyle.NumberFormat.init -> void
+ExcelReader.Core.Writer.CsvSheetWriter.SetColumnStyle(int columnIndex, int styleId) -> void
+ExcelReader.Core.Writer.CsvSheetWriter.SetColumnWidth(int columnIndex, double width) -> void
+ExcelReader.Core.Writer.CsvSheetWriter.StartRowAsync(int styleId, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<ExcelReader.Core.Writer.CsvRowWriter!>
+ExcelReader.Core.Writer.CsvWorkbookWriter.AddStyle(ExcelReader.Core.Writer.CellStyle style) -> int
+ExcelReader.Core.Writer.ISheetWriter<TRow>.SetColumnStyle(int columnIndex, int styleId) -> void
+ExcelReader.Core.Writer.ISheetWriter<TRow>.SetColumnWidth(int columnIndex, double width) -> void
+ExcelReader.Core.Writer.ISheetWriter<TRow>.StartRowAsync(int styleId, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<TRow>
+ExcelReader.Core.Writer.IWorkbookWriter<TSheet>.AddStyle(ExcelReader.Core.Writer.CellStyle style) -> int
+ExcelReader.Core.Writer.XlsSheetWriter.SetColumnStyle(int columnIndex, int styleId) -> void
+ExcelReader.Core.Writer.XlsSheetWriter.SetColumnWidth(int columnIndex, double width) -> void
+ExcelReader.Core.Writer.XlsSheetWriter.StartRow(int styleId) -> ExcelReader.Core.Writer.XlsRowWriter!
+ExcelReader.Core.Writer.XlsSheetWriter.StartRowAsync(int styleId, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<ExcelReader.Core.Writer.XlsRowWriter!>
+ExcelReader.Core.Writer.XlsWorkbookWriter.AddStyle(ExcelReader.Core.Writer.CellStyle style) -> int
+ExcelReader.Core.Writer.XlsbSheetWriter.SetColumnStyle(int columnIndex, int styleId) -> void
+ExcelReader.Core.Writer.XlsbSheetWriter.SetColumnWidth(int columnIndex, double width) -> void
+ExcelReader.Core.Writer.XlsbSheetWriter.StartRowAsync(int styleId, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<ExcelReader.Core.Writer.XlsbRowWriter!>
+ExcelReader.Core.Writer.XlsbWorkbookWriter.AddStyle(ExcelReader.Core.Writer.CellStyle style) -> int
+ExcelReader.Core.Writer.XlsxSheetWriter.SetColumnStyle(int columnIndex, int styleId) -> void
+ExcelReader.Core.Writer.XlsxSheetWriter.SetColumnWidth(int columnIndex, double width) -> void
+ExcelReader.Core.Writer.XlsxSheetWriter.StartRowAsync(int styleId, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<ExcelReader.Core.Writer.XlsxRowWriter!>
+ExcelReader.Core.Writer.XlsxWorkbookWriter.AddStyle(ExcelReader.Core.Writer.CellStyle style) -> int
+override ExcelReader.Core.Writer.CellStyle.GetHashCode() -> int
+static ExcelReader.Core.Writer.CellStyle.operator !=(ExcelReader.Core.Writer.CellStyle left, ExcelReader.Core.Writer.CellStyle right) -> bool
+static ExcelReader.Core.Writer.CellStyle.operator ==(ExcelReader.Core.Writer.CellStyle left, ExcelReader.Core.Writer.CellStyle right) -> bool
+~override ExcelReader.Core.Writer.CellStyle.Equals(object obj) -> bool
+~override ExcelReader.Core.Writer.CellStyle.ToString() -> string

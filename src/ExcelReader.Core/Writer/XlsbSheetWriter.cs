@@ -26,6 +26,9 @@ namespace ExcelReader.Core.Writer
         private bool _buffersDisposed;
         private int _rowNumber = -1;
         private XlsbRowWriter? _rowWriter;
+        private Dictionary<int, int>? _columnStyles;
+        private Dictionary<int, double>? _columnWidths;
+        private int _activeRowStyle;
 
         internal XlsbSheetWriter(
             XlsbWorkbookWriter owner,
@@ -56,6 +59,46 @@ namespace ExcelReader.Core.Writer
         }
 
         /// <inheritdoc/>
+        /// <exception cref="InvalidOperationException">The sheet has already been started.</exception>
+        public void SetColumnStyle(int columnIndex, int styleId)
+        {
+            RequireNotStarted();
+            _columnStyles ??= [];
+            _columnStyles[columnIndex] = styleId;
+        }
+
+        /// <inheritdoc/>
+        /// <exception cref="InvalidOperationException">The sheet has already been started.</exception>
+        public void SetColumnWidth(int columnIndex, double width)
+        {
+            RequireNotStarted();
+            _columnWidths ??= [];
+            _columnWidths[columnIndex] = width;
+        }
+
+        private void RequireNotStarted()
+        {
+            WriterStateGuard.ThrowIfEnded(_state, this);
+            if (_state != WriterState.Created)
+            {
+                throw new InvalidOperationException($"{nameof(SetColumnStyle)}/{nameof(SetColumnWidth)} must be called before {nameof(StartAsync)}.");
+            }
+        }
+
+        // The active row's own style always wins over a column style (both are user-configured; the
+        // row is the more specific of the two); falls back to 0 ("no override") when neither is set.
+        // Every BIFF12 cell record carries a mandatory ixfe field (unlike XLSX's optional `s`
+        // attribute), so this is consulted for every cell write, not only dates.
+        private int EffectiveStyle(int columnIndex)
+        {
+            if (_activeRowStyle != 0)
+            {
+                return _activeRowStyle;
+            }
+            return _columnStyles is not null && _columnStyles.TryGetValue(columnIndex, out int styleId) ? styleId : 0;
+        }
+
+        /// <inheritdoc/>
         public ValueTask StartAsync(CancellationToken ct = default)
         {
             WriterStateGuard.ThrowIfEnded(_state, this);
@@ -65,15 +108,55 @@ namespace ExcelReader.Core.Writer
             WriteRecord(Brt.BeginSheet);
             WriteWorksheetView();
             WriteRecord(Brt.BeginColInfos);
+            WriteColInfos();
             WriteRecord(Brt.EndColInfos);
             WriteRecord(Brt.BeginSheetData);
             return ValueTask.CompletedTask;
         }
 
+        // ponytail: BrtColInfo's payload layout (colFirst/colLast/coldx u32, ixfe/flags u16) follows
+        // the commonly documented [MS-XLSB] shape but is unverified against a real Excel-written file
+        // — our own reader never parses column info (only per-cell style matters for round-tripping),
+        // so getting a field wrong here can't be caught by this library's own tests.
+        private void WriteColInfos()
+        {
+            if (_columnStyles is null && _columnWidths is null)
+            {
+                return;
+            }
+            var columns = new SortedSet<int>();
+            if (_columnStyles is not null)
+            {
+                columns.UnionWith(_columnStyles.Keys);
+            }
+            if (_columnWidths is not null)
+            {
+                columns.UnionWith(_columnWidths.Keys);
+            }
+            foreach (int columnIndex in columns)
+            {
+                int styleId = _columnStyles is not null && _columnStyles.TryGetValue(columnIndex, out int s) ? s : 0;
+                double width = _columnWidths is not null && _columnWidths.TryGetValue(columnIndex, out double w) ? w : 8.43;
+                Payload.Reset();
+                Payload.WriteU32((uint)columnIndex);
+                Payload.WriteU32((uint)columnIndex);
+                Payload.WriteU32((uint)Math.Round(width * 256));
+                Payload.WriteU16(styleId);
+                Payload.WriteU16(0);
+                WriteRecord(Brt.ColInfo, Payload.Span);
+            }
+        }
+
         /// <inheritdoc/>
         public ValueTask<XlsbRowWriter> StartRowAsync(CancellationToken ct = default)
         {
-            BeginRow();
+            return StartRowAsync(styleId: 0, ct);
+        }
+
+        /// <inheritdoc/>
+        public ValueTask<XlsbRowWriter> StartRowAsync(int styleId, CancellationToken ct = default)
+        {
+            BeginRow(styleId);
             _rowWriter ??= new XlsbRowWriter(this);
             _rowWriter.Reset();
             return ValueTask.FromResult(_rowWriter);
@@ -82,7 +165,7 @@ namespace ExcelReader.Core.Writer
         /// <summary>Writes an entire row in one call, mapping each element of <paramref name="values"/> to a column starting at 0.</summary>
         public void WriteRow(ReadOnlySpan<XlsbCell> values)
         {
-            BeginRow();
+            BeginRow(styleId: 0);
             for (int i = 0; i < values.Length; i++)
             {
                 WriteCell(i, values[i]);
@@ -203,7 +286,7 @@ namespace ExcelReader.Core.Writer
             Payload.Dispose();
         }
 
-        private void BeginRow()
+        private void BeginRow(int styleId)
         {
             WriterStateGuard.ThrowIfEnded(_state, this);
             WriterStateGuard.RequireStarted(_state, nameof(XlsbSheetWriter), "adding rows");
@@ -213,6 +296,7 @@ namespace ExcelReader.Core.Writer
                 ExcelLimits.ThrowRowLimit(_rowNumber + 1L);
             }
             _rowNumber++;
+            _activeRowStyle = styleId;
             WriteRowHeader(_rowNumber);
             _rowActive = true;
         }
@@ -277,7 +361,7 @@ namespace ExcelReader.Core.Writer
                     WriteBoolCell(columnIndex, cell.Boolean);
                     break;
                 case XlsbCellKind.Number:
-                    WriteDoubleCell(columnIndex, cell.Number, style: 0);
+                    WriteDoubleCell(columnIndex, cell.Number);
                     break;
                 case XlsbCellKind.Date:
                     WriteDateSerialCell(columnIndex, cell.Number);
@@ -299,11 +383,12 @@ namespace ExcelReader.Core.Writer
                 return;
             }
             ExcelLimits.ThrowIfCellTextTooLong(value.Length, nameof(value));
+            int style = EffectiveStyle(columnIndex);
             if (_owner.UseSharedStrings)
             {
                 const int Length = CellHeaderLength + 4; // + shared-string index u32
                 Biff12RecordWriter.WriteFixedRecord(_records, Brt.CellIsst, Length, out Span<byte> shared);
-                Biff12RecordWriter.WriteCellHeader(shared, columnIndex, 0);
+                Biff12RecordWriter.WriteCellHeader(shared, columnIndex, style);
                 BinaryPrimitives.WriteUInt32LittleEndian(shared.Slice(8, 4), (uint)_owner.GetSharedStringIndex(value));
                 MaybeFlush();
                 return;
@@ -311,7 +396,7 @@ namespace ExcelReader.Core.Writer
             // Wide-string payload is u32 length + UTF-16LE chars: an exact, known-upfront byte count.
             int length = CellHeaderLength + 4 + checked(value.Length * 2);
             Biff12RecordWriter.WriteFixedRecord(_records, Brt.CellSt, length, out Span<byte> p);
-            Biff12RecordWriter.WriteCellHeader(p, columnIndex, 0);
+            Biff12RecordWriter.WriteCellHeader(p, columnIndex, style);
             BinaryPrimitives.WriteUInt32LittleEndian(p.Slice(8, 4), (uint)value.Length);
             MemoryMarshal.AsBytes(value.AsSpan()).CopyTo(p[12..]);
             MaybeFlush();
@@ -322,17 +407,23 @@ namespace ExcelReader.Core.Writer
             ValidateColumn(columnIndex);
             const int Length = CellHeaderLength + 1; // + bool byte
             Biff12RecordWriter.WriteFixedRecord(_records, Brt.CellBool, Length, out Span<byte> p);
-            Biff12RecordWriter.WriteCellHeader(p, columnIndex, 0);
+            Biff12RecordWriter.WriteCellHeader(p, columnIndex, EffectiveStyle(columnIndex));
             p[8] = value ? (byte)1 : (byte)0;
             MaybeFlush();
         }
 
         internal void WriteDateSerialCell(int columnIndex, double serial)
         {
-            WriteDoubleCell(columnIndex, ExcelEpoch.OADateToSerial(serial, _date1904), style: 1);
+            int styleId = EffectiveStyle(columnIndex);
+            WriteDoubleCellCore(columnIndex, ExcelEpoch.OADateToSerial(serial, _date1904), styleId == 0 ? 1 : styleId);
         }
 
-        internal void WriteDoubleCell(int columnIndex, double value, int style)
+        internal void WriteDoubleCell(int columnIndex, double value)
+        {
+            WriteDoubleCellCore(columnIndex, value, EffectiveStyle(columnIndex));
+        }
+
+        private void WriteDoubleCellCore(int columnIndex, double value, int style)
         {
             ValidateColumn(columnIndex);
             CellValueGuards.ThrowIfNonFinite(value, nameof(value));
