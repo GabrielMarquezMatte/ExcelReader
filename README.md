@@ -328,6 +328,42 @@ If your workbook repeats many strings and smaller files matter more than the ext
 await using var workbook = await XlsxWorkbookWriter.CreateAsync(stream, useSharedStrings: true);
 ```
 
+## Cell styles on write
+
+Every `IWorkbookWriter<TSheet>` supports column- and row-level styling: a number format (currency, date, percentage), bold, and italic. Register a `CellStyle` once with `AddStyle` and apply its returned index to a column (before the sheet is started) or to a whole row (when starting it):
+
+```csharp
+using ExcelReader.Core.Writer;
+
+await using var workbook = await XlsxWorkbookWriter.CreateAsync(stream);
+await workbook.StartAsync();
+
+int currency = workbook.AddStyle(new CellStyle { NumberFormat = "R$ #,##0.00" });
+int header = workbook.AddStyle(new CellStyle { Bold = true });
+
+await using var sheet = workbook.AddSheet("Summary");
+sheet.SetColumnStyle(columnIndex: 1, currency); // before StartAsync
+sheet.SetColumnWidth(columnIndex: 0, width: 20);
+await sheet.StartAsync();
+
+await using (var row = await sheet.StartRowAsync(header))
+{
+    row.Write("Product");
+    row.Write("Total");
+}
+await using (var row = await sheet.StartRowAsync())
+{
+    row.Write("Widget");
+    row.Write(1234.5);
+}
+
+await workbook.EndAsync();
+```
+
+`AddStyle` deduplicates by value: registering the same `CellStyle` twice returns the same index, and index 0 is always the general/default style. `SetColumnStyle`/`SetColumnWidth` must be called before `StartAsync` — the column layout (XLSX `<cols>`, XLSB `BrtColInfo`, XLS `COLINFO`) has to be written ahead of the row data. A row's style (from `StartRowAsync(int, CancellationToken)`) takes precedence over its column's style for any cell in that row. CSV has no cell concept of style: every style member is a documented no-op there.
+
+Cell-level styling (one specific cell rather than a whole column or row) is out of scope. Bold/italic render only in XLSX today; XLSB and XLS apply the number format but keep the default font, since their font records are opaque binary blobs this library isn't confident hand-editing without a verified field map.
+
 ## Read and write XLSB workbooks (BIFF12)
 
 Use `Excel.FromXlsbFile`, `Excel.FromXlsb`, `Excel.FromXlsbFileAsync`, or `Excel.FromXlsbAsync` to open XLSB directly. For writing, use `XlsbWorkbookWriter`, `XlsbSheetWriter`, and `XlsbRowWriter`.
