@@ -43,6 +43,23 @@
     <InternalsVisibleTo Include="ExcelReader.Tests" />
   </ItemGroup>
 
+  <!-- The source generator runs as an analyzer during this project's own build (and any consumer's),
+       never as an ordinary dependency — ReferenceOutputAssembly=false keeps its assembly out of this
+       project's own references. -->
+  <ItemGroup>
+    <ProjectReference Include="..\ExcelReader.Generator\ExcelReader.Generator.csproj"
+                      OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+  </ItemGroup>
+
+  <!-- Packs the generator's DLL into this package's analyzers folder so a consumer gets it just by
+       referencing ExcelReader.NET — release.yml only packs this project, not the generator separately.
+       A hardcoded bin/ path like this is fragile to configuration/TFM drift, so verify it actually
+       landed in the nupkg with a real `dotnet pack` + unzip after touching this. -->
+  <ItemGroup>
+    <None Include="..\ExcelReader.Generator\bin\$(Configuration)\netstandard2.0\ExcelReader.Generator.dll"
+          Pack="true" PackagePath="analyzers/dotnet/cs" Visible="false" />
+  </ItemGroup>
+
   <!-- Public API surface differs per TFM (RefParser/NamedRefRowEnumerable/ExcelRowContext are
        #if NET9_0_OR_GREATER only), so each target framework tracks its own Shipped/Unshipped
        files instead of sharing the root-level ones the analyzer picks up by convention. -->

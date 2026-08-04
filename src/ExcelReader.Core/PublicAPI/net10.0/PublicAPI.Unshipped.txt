@@ -115,3 +115,5 @@ static readonly ExcelReader.Core.Parser.ExcelCellReaders.TimeOnlySerial -> Excel
 static readonly ExcelReader.Core.Parser.ExcelCellReaders.TimeOnlyText -> ExcelReader.Core.Parser.ExcelCellReader<System.TimeOnly>!
 virtual ExcelReader.Core.Parser.ExcelCellReader<TValue>.Invoke(in ExcelReader.Core.ValueObjects.Cell cell, bool isDate1904, System.IFormatProvider! provider, out TValue value) -> bool
 virtual ExcelReader.Core.Parser.ExcelPropertySetter<TModel, TValue>.Invoke(ref TModel model, TValue value) -> void
+ExcelReader.Core.Parser.ExcelSerializableAttribute
+ExcelReader.Core.Parser.ExcelSerializableAttribute.ExcelSerializableAttribute() -> void
