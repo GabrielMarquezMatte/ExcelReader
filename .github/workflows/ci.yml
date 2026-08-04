@@ -79,6 +79,59 @@ jobs:
           files: ./TestResults/*.cobertura.xml
           fail_ci_if_error: false
 
+  test-simd-fallbacks:
+    name: Build & Test (${{ matrix.name }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Vector256 off, Vector128 still accelerated: exercises the SSE2 path on an AVX2 runner.
+          - name: sse2-only
+            enableAVX2: '0'
+            enableAVX512F: '0'
+            enableHWIntrinsic: '1'
+          # No hardware intrinsics at all: exercises the scalar fallback end to end.
+          - name: no-simd
+            enableAVX2: '1'
+            enableAVX512F: '1'
+            enableHWIntrinsic: '0'
+    env:
+      DOTNET_EnableAVX2: ${{ matrix.enableAVX2 }}
+      DOTNET_EnableAVX512F: ${{ matrix.enableAVX512F }}
+      DOTNET_EnableHWIntrinsic: ${{ matrix.enableHWIntrinsic }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: |
+            8.0.x
+            10.0.x
+
+      - name: Cache NuGet packages
+        uses: actions/cache@v6
+        with:
+          path: ~/.nuget/packages
+          key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj', '**/Directory.Build.props') }}
+          restore-keys: |
+            ${{ runner.os }}-nuget-
+
+      - name: Restore
+        run: dotnet restore ExcelReader.slnx
+
+      - name: Build (Release)
+        run: dotnet build ExcelReader.slnx --configuration Release --no-restore -p:DeterministicSourcePaths=false
+
+      - name: Test (Release)
+        run: >-
+          dotnet test --project tests/ExcelReader.Tests/ExcelReader.Tests.csproj
+          --configuration Release
+          --verbosity normal
+          --no-build
+
   audit:
     name: Dependency audit
     runs-on: ubuntu-latest
