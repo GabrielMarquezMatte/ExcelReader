@@ -33,15 +33,22 @@ namespace ExcelReader.Core.Parser.Internal
         private readonly TReader _reader;
         private readonly ExcelParserConfig _config;
         private readonly CancellationToken _ct;
-        // Non-null only for ExcelMappedParser<T> (feature A): a map built by ExcelRowMapBuilder<T>,
-        // used instead of TypeMapper<T>.GetInfo()'s reflection-built one. Null for every ExcelParser<T>
-        // caller, which keeps paying nothing for this.
-        private readonly TypeMapInfo<T>? _explicitInfo;
+        // Resolved once here, in the constructor — never in GetEnumerator()/GetAsyncEnumerator() — so
+        // that ExcelMappedParser<T>'s constructor overload below is the only path into this type whose
+        // *method bodies* ever mention TypeMapper<T>. A trimmer/AOT analyzer decides reachability per
+        // method, not per field: a `_info ?? TypeMapper<T>.GetInfo()` fallback living inside the shared
+        // GetEnumerator() would make the reflection-based TypeMapper<T>.Build() reachable from every
+        // caller, including ExcelMappedParser<T>'s, even though that field would always be non-null for
+        // it at runtime — trimming can't see that far. Keeping the two constructors as the only two call
+        // sites for the two info sources is what lets NativeAOT drop TypeMapper<T>'s reflection entirely
+        // when only the explicit-info constructor is ever called from a published app's reachable code.
+        private readonly TypeMapInfo<T> _info;
 
         internal ExcelEnumerable(TReader reader, ExcelParserConfig config, CancellationToken ct = default)
         {
             _reader = reader;
             _config = config;
+            _info = TypeMapper<T>.GetInfo();
             _ct = ct;
         }
 
@@ -49,7 +56,7 @@ namespace ExcelReader.Core.Parser.Internal
         {
             _reader = reader;
             _config = config;
-            _explicitInfo = explicitInfo;
+            _info = explicitInfo;
             _ct = ct;
         }
 
@@ -60,9 +67,8 @@ namespace ExcelReader.Core.Parser.Internal
             Justification = "T is intentionally unconstrained so a row model can be a class or a struct (see RefParser/struct-binding support); constraining it would break that.")]
         public Enumerator GetEnumerator()
         {
-            TypeMapInfo<T> info = _explicitInfo ?? TypeMapper<T>.GetInfo();
             TEnumerator rows = _reader.GetEnumerator();
-            return new Enumerator(rows, info, _config.ColumnNameComparer, _config.HeaderNormalization, _config.HeaderRow, _reader.IsDate1904, _config.Culture, _config.ThrowOnParseFailure);
+            return new Enumerator(rows, _info, _config.ColumnNameComparer, _config.HeaderNormalization, _config.HeaderRow, _reader.IsDate1904, _config.Culture, _config.ThrowOnParseFailure);
         }
 
         IEnumerator<T> IEnumerable<T>.GetEnumerator()
@@ -87,9 +93,8 @@ namespace ExcelReader.Core.Parser.Internal
             Justification = "T is intentionally unconstrained so a row model can be a class or a struct (see RefParser/struct-binding support); constraining it would break that.")]
         public AsyncEnumerator GetAsyncEnumerator(CancellationToken cancellationToken = default)
         {
-            TypeMapInfo<T> info = _explicitInfo ?? TypeMapper<T>.GetInfo();
             CancellationToken effective = cancellationToken.CanBeCanceled ? cancellationToken : _ct;
-            return new AsyncEnumerator(_reader, info, _config.ColumnNameComparer, _config.HeaderNormalization, _config.HeaderRow, _config.Culture, _config.ThrowOnParseFailure, effective);
+            return new AsyncEnumerator(_reader, _info, _config.ColumnNameComparer, _config.HeaderNormalization, _config.HeaderRow, _config.Culture, _config.ThrowOnParseFailure, effective);
         }
 
         /// <summary>Enumerates rows synchronously, projecting each into a <typeparamref name="T"/> instance.</summary>
