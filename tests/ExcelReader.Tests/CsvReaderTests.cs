@@ -661,6 +661,118 @@ namespace ExcelReader.Tests
             Assert.True(ms.CanRead);
         }
 
+        // --- CsvControlScanner integration boundaries (single-pass fused fast path) ---
+
+        [Theory]
+        [InlineData(14)]
+        [InlineData(15)]
+        [InlineData(16)]
+        [InlineData(17)]
+        [InlineData(18)]
+        [InlineData(30)]
+        [InlineData(31)]
+        [InlineData(32)]
+        [InlineData(33)]
+        [InlineData(34)]
+        public void FieldEndingExactlyAtVectorBoundaryIsRead(int fieldWidth)
+        {
+            string field = new('x', fieldWidth);
+            using var ms = Csv($"{field},tail\n");
+
+            var rows = ReadAll(Excel.FromCsv(ms));
+
+            Assert.Equal([field, "tail"], Assert.Single(rows));
+        }
+
+        [Theory]
+        [InlineData(14)]
+        [InlineData(15)]
+        [InlineData(16)]
+        [InlineData(17)]
+        [InlineData(18)]
+        [InlineData(30)]
+        [InlineData(31)]
+        [InlineData(32)]
+        [InlineData(33)]
+        [InlineData(34)]
+        public void RecordTerminatorAtVectorBoundaryIsRead(int fieldWidth)
+        {
+            string field = new('x', fieldWidth);
+            using var ms = Csv($"{field}\nsecond\n");
+
+            var rows = ReadAll(Excel.FromCsv(ms));
+
+            Assert.Equal([[field], ["second"]], rows);
+        }
+
+        [Fact]
+        public void CrLfSplitAcrossVectorBoundaryIsOneTerminator()
+        {
+            string field = new('x', 31);
+            using var ms = Csv($"{field}\r\nsecond\n");
+
+            var rows = ReadAll(Excel.FromCsv(ms));
+
+            Assert.Equal([[field], ["second"]], rows);
+        }
+
+        [Fact]
+        public async Task CrLfSplitAcrossVectorBoundaryIsOneTerminatorAsync()
+        {
+            string field = new('x', 31);
+            using var ms = Csv($"{field}\r\nsecond\n");
+
+            var rows = await ReadAllAsync(Excel.FromCsv(ms));
+
+            Assert.Equal([[field], ["second"]], rows);
+        }
+
+        [Fact]
+        public void QuoteAfterManyUnquotedFieldsFallsBackCorrectly()
+        {
+            string[] plainFields = [.. Enumerable.Range(0, 20).Select(i => $"f{i}")];
+            string csv = string.Join(',', plainFields) + ",\"quo\"\"ted\"\n";
+            using var ms = Csv(csv);
+
+            var rows = ReadAll(Excel.FromCsv(ms));
+
+            string[] expected = [.. plainFields, "quo\"ted"];
+            Assert.Equal(expected, Assert.Single(rows));
+        }
+
+        [Fact]
+        public void WideRowWithManyFieldsIsRead()
+        {
+            string[] fields = [.. Enumerable.Range(0, 200).Select(i => $"col{i}")];
+            using var ms = Csv(string.Join(',', fields) + "\n");
+
+            var rows = ReadAll(Excel.FromCsv(ms));
+
+            Assert.Equal(fields, Assert.Single(rows));
+        }
+
+        [Fact]
+        public void MultibyteUtf8CrossingVectorBoundaryIsPreserved()
+        {
+            string field = new string('x', 30) + "ã";
+            using var ms = Csv($"{field},tail\n");
+
+            var rows = ReadAll(Excel.FromCsv(ms));
+
+            Assert.Equal([field, "tail"], Assert.Single(rows));
+        }
+
+        [Fact]
+        public void LongUnquotedFieldSpanningManyChunksIsRead()
+        {
+            string field = new('x', 5000);
+            using var ms = Csv(field);
+
+            var rows = ReadAll(Excel.FromCsv(ms));
+
+            Assert.Equal([field], Assert.Single(rows));
+        }
+
         // --- explicit IExcelRowReader interface members (format-agnostic consumers) ---
 
         [Fact]
