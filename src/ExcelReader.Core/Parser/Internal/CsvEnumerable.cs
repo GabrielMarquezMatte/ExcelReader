@@ -172,6 +172,23 @@ namespace ExcelReader.Core.Parser.Internal
 
         internal ProjectionStep Advance(CsvReader.Enumerator rows, ref T model)
         {
+            if (_typeInfo.IsIndexBased)
+            {
+                if (_fieldParsers is null)
+                {
+                    BuildIndexColumnMap();
+                }
+                _rowNumber++;
+                // Same terminal-blank-line treatment as the header path below: a trailing empty line
+                // must not yield a phantom model or trip a required-column check.
+                if (rows.FieldCount == 1 && rows.FieldAt(0).Type == CellType.Empty)
+                {
+                    return ProjectionStep.Skip;
+                }
+                model = _typeInfo.CreateInstance();
+                ParseCurrentRow(rows, ref model);
+                return ProjectionStep.Yield;
+            }
             ProjectionStep step = ProjectionRules.ClassifyRow(ref _rowNumber, _headerRow, _fieldParsers is not null);
             if (step == ProjectionStep.BuildMap)
             {
@@ -248,6 +265,30 @@ namespace ExcelReader.Core.Parser.Internal
                 }
             }
 
+            _fieldParsers = parsers;
+            _fieldNames = names;
+            _fieldRequired = required;
+            _requiredFields = requiredFields is null ? [] : [.. requiredFields];
+        }
+
+        private void BuildIndexColumnMap()
+        {
+            ColumnBinding<T>[] bindings = _typeInfo.IndexBindings;
+            int width = bindings.Length == 0 ? 0 : bindings[^1].Column + 1;
+            var parsers = new ColumnParser<T>[width];
+            var names = new string?[width];
+            var required = new bool[width];
+            List<(int, string)>? requiredFields = null;
+            foreach (ColumnBinding<T> binding in bindings)
+            {
+                parsers[binding.Column] = binding.Parser;
+                names[binding.Column] = binding.Name;
+                required[binding.Column] = binding.RequireValue;
+                if (binding.RequireValue)
+                {
+                    (requiredFields ??= []).Add((binding.Column, binding.Name));
+                }
+            }
             _fieldParsers = parsers;
             _fieldNames = names;
             _fieldRequired = required;
