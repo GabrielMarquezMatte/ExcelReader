@@ -11,9 +11,9 @@ namespace ExcelReader.Generator
     /// <summary>
     /// Emits <c>IExcelRowMap&lt;T&gt;</c>/<c>IExcelRecordMap&lt;T&gt;</c> implementations for every type
     /// marked <c>[ExcelSerializable]</c>, from the same <c>[ExcelColumn]</c>/<c>[ExcelRequired]</c>/
-    /// <c>[ExcelIgnore]</c> attributes the reflection-based <c>TypeMapper&lt;T&gt;</c> reads — so typed
-    /// reading and writing work under trimming/Native AOT without reflecting over the marked type at
-    /// runtime.
+    /// <c>[ExcelConverter]</c>/<c>[ExcelIgnore]</c> attributes the reflection-based <c>TypeMapper&lt;T&gt;</c>
+    /// reads — so typed reading and writing work under trimming/Native AOT without reflecting over the
+    /// marked type at runtime.
     /// </summary>
     [Generator(LanguageNames.CSharp)]
     public sealed class ExcelRowMapGenerator : IIncrementalGenerator
@@ -22,6 +22,9 @@ namespace ExcelReader.Generator
         private const string ColumnAttribute = "ExcelReader.Core.Parser.ExcelColumnAttribute";
         private const string RequiredAttribute = "ExcelReader.Core.Parser.ExcelRequiredAttribute";
         private const string IgnoreAttribute = "ExcelReader.Core.Parser.ExcelIgnoreAttribute";
+        private const string ConverterAttribute = "ExcelReader.Core.Parser.ExcelConverterAttribute";
+        private const string CellConverterInterface = "ExcelReader.Core.Parser.IExcelCellConverter<T>";
+        private const string CellWriterInterface = "ExcelReader.Core.Writer.IExcelCellWriter<T>";
 
         private static readonly DiagnosticDescriptor NotPartialDescriptor = new(
             "EXR001",
@@ -38,6 +41,61 @@ namespace ExcelReader.Generator
             "ExcelReader.Generator",
             DiagnosticSeverity.Error,
             isEnabledByDefault: true);
+
+        private static readonly DiagnosticDescriptor RequiredWithNoParserDescriptor = new(
+            "EXR003",
+            "[ExcelRequired] property has no available reader",
+            "Property '{0}.{1}' is marked [ExcelRequired] but its type '{2}' has no built-in reader; add an [ExcelConverter] for it",
+            "ExcelReader.Generator",
+            DiagnosticSeverity.Error,
+            isEnabledByDefault: true);
+
+        private static readonly DiagnosticDescriptor ConverterTypeMismatchDescriptor = new(
+            "EXR004",
+            "[ExcelConverter] type does not implement IExcelCellConverter<T> for the property's exact type",
+            "Converter '{0}' must implement IExcelCellConverter<{1}> to convert property '{2}.{3}'",
+            "ExcelReader.Generator",
+            DiagnosticSeverity.Error,
+            isEnabledByDefault: true);
+
+        private static readonly DiagnosticDescriptor DuplicateHeaderDescriptor = new(
+            "EXR006",
+            "Two properties bind the same header name",
+            "Header name '{0}' is bound by more than one property of '{1}'; only the first one encountered will ever match",
+            "ExcelReader.Generator",
+            DiagnosticSeverity.Warning,
+            isEnabledByDefault: true);
+
+        private enum ReadKind
+        {
+            None,
+            Value,
+            Nullable,
+            GuidValue,
+            GuidNullable,
+            Converted,
+        }
+
+        private enum WriteKind
+        {
+            None,
+            Direct,
+            ToStringFallback,
+        }
+
+        // Matches RowWriteMethods<TRow>.Numeric exactly (the reflection write path's hashset) — only
+        // these get the generic, numeric-cell Write<T> overload. Everything else that's still writable
+        // (enum, Guid, char, Half, Int128, UInt128, TimeSpan, DateTimeOffset — every other
+        // IUtf8SpanParsable/enum type this generator's read side supports) writes as text via ToString(),
+        // even though several of them (Guid, TimeSpan, DateTimeOffset, char, Half, Int128, UInt128) also
+        // implement IUtf8SpanFormattable and so *could* go through the generic path — using that path for
+        // them anyway would write a different cell type than the reflection path does for the same model.
+        private static readonly HashSet<SpecialType> NumericWriteSpecialTypes =
+        [
+            SpecialType.System_Byte, SpecialType.System_SByte, SpecialType.System_Int16, SpecialType.System_UInt16,
+            SpecialType.System_Int32, SpecialType.System_UInt32, SpecialType.System_Int64, SpecialType.System_UInt64,
+            SpecialType.System_Single, SpecialType.System_Double, SpecialType.System_Decimal,
+        ];
 
         /// <inheritdoc/>
         public void Initialize(IncrementalGeneratorInitializationContext context)
@@ -67,13 +125,29 @@ namespace ExcelReader.Generator
                 }
             }
 
-            PropertyPlan[] properties = [.. symbol.GetMembers()
-                                                  .OfType<IPropertySymbol>()
-                                                  .Where(static p => !p.IsStatic && p.Parameters.Length == 0 && p.DeclaredAccessibility == Accessibility.Public && !HasAttribute(p, IgnoreAttribute))
-                                                  .Select(BuildPlan)
-                                                  .Where(static p => p.Read is not null || p.CanWrite)];
+            IPropertySymbol[] candidateProperties = [.. symbol.GetMembers()
+                .OfType<IPropertySymbol>()
+                .Where(static p => !p.IsStatic && p.Parameters.Length == 0 && p.DeclaredAccessibility == Accessibility.Public && !HasAttribute(p, IgnoreAttribute))];
 
-            string source = GenerateSource(symbol, properties);
+            var boundHeaders = new HashSet<string>(StringComparer.Ordinal);
+            var plans = new List<PropertyPlan>(candidateProperties.Length);
+            foreach (IPropertySymbol property in candidateProperties)
+            {
+                PropertyPlan plan = BuildPlan(context, symbol, property);
+                if (plan.Read.Kind != ReadKind.None)
+                {
+                    foreach (string name in plan.HeaderNames.Where(n => !boundHeaders.Add(n)))
+                    {
+                        context.ReportDiagnostic(Diagnostic.Create(DuplicateHeaderDescriptor, symbol.Locations.FirstOrDefault(), name, symbol.Name));
+                    }
+                }
+                if (plan.Read.Kind != ReadKind.None || plan.WriteEmit is not null)
+                {
+                    plans.Add(plan);
+                }
+            }
+
+            string source = GenerateSource(symbol, plans);
             string hintName = symbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)
                 .Replace("global::", "")
                 .Replace('.', '_');
@@ -93,10 +167,7 @@ namespace ExcelReader.Generator
             return property.GetAttributes().Any(a => string.Equals(a.AttributeClass?.ToDisplayString(), fullName, StringComparison.Ordinal));
         }
 
-        // A2 scope: only string and int properties are supported so far — everything else is silently
-        // skipped (same "no parser, no binding" outcome the reflection path gives an unrecognized type),
-        // expanded to the rest of ColumnParserFactory's type table in a later phase.
-        private static PropertyPlan BuildPlan(IPropertySymbol property)
+        private static PropertyPlan BuildPlan(SourceProductionContext context, INamedTypeSymbol owner, IPropertySymbol property)
         {
             string[] names = [.. property.GetAttributes()
                 .Where(a => string.Equals(a.AttributeClass?.ToDisplayString(), ColumnAttribute, StringComparison.Ordinal))
@@ -113,27 +184,182 @@ namespace ExcelReader.Generator
             bool allowEmpty = required?.NamedArguments.FirstOrDefault(static kv => string.Equals(kv.Key, "AllowEmpty", StringComparison.Ordinal)).Value.Value is true;
             bool requireValue = isRequired && !allowEmpty;
 
-            string? reader = property.Type.SpecialType switch
+            bool canSet = property.SetMethod is { DeclaredAccessibility: Accessibility.Public };
+            bool canGet = property.GetMethod is { DeclaredAccessibility: Accessibility.Public };
+            string qualifiedProperty = property.Type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+
+            AttributeData? converterAttr = property.GetAttributes()
+                .FirstOrDefault(a => string.Equals(a.AttributeClass?.ToDisplayString(), ConverterAttribute, StringComparison.Ordinal));
+
+            ReadPlan read = default;
+            string? writeEmit = null;
+            string? converterFieldDecl = null;
+
+            if (converterAttr is not null && converterAttr.ConstructorArguments.FirstOrDefault().Value is ITypeSymbol converterType)
             {
-                SpecialType.System_String => "global::ExcelReader.Core.Parser.ExcelCellReaders.String",
-                SpecialType.System_Int32 => "global::ExcelReader.Core.Parser.ExcelCellReaders.Parsable<int>",
-                _ => null,
-            };
+                string converterQualified = converterType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+                string fieldName = $"s_converter_{property.Name}";
+                bool implementsConverter = ImplementsGenericInterface(converterType, CellConverterInterface, property.Type);
+                bool implementsWriter = ImplementsGenericInterface(converterType, CellWriterInterface, property.Type);
+                if (implementsConverter || implementsWriter)
+                {
+                    converterFieldDecl = $"    private static readonly {converterQualified} {fieldName} = new();";
+                }
+                if (implementsConverter && canSet)
+                {
+                    read = new ReadPlan(ReadKind.Converted, fieldName, qualifiedProperty);
+                }
+                else if (!implementsConverter)
+                {
+                    context.ReportDiagnostic(Diagnostic.Create(
+                        ConverterTypeMismatchDescriptor, property.Locations.FirstOrDefault(), converterQualified, qualifiedProperty, owner.Name, property.Name));
+                }
+                if (implementsWriter && canGet)
+                {
+                    writeEmit = $"            .Column(\"{names[0].Replace("\"", "\\\"")}\", static (row, m) => {fieldName}.Write(row, m.{property.Name}))";
+                }
+            }
+            else
+            {
+                bool isNullable = TryGetNullableUnderlying(property.Type, out ITypeSymbol underlying);
+                (string Reader, string ValueType, bool IsGuid)? builtin = TryGetBuiltInReader(underlying);
+                if (builtin is { } b && canSet)
+                {
+                    read = new ReadPlan(SelectReadKind(b.IsGuid, isNullable), b.Reader, b.ValueType);
+                }
+                else if (isRequired)
+                {
+                    context.ReportDiagnostic(Diagnostic.Create(
+                        RequiredWithNoParserDescriptor, property.Locations.FirstOrDefault(), owner.Name, property.Name, qualifiedProperty));
+                }
 
-            bool canRead = reader is not null && property.SetMethod is { DeclaredAccessibility: Accessibility.Public };
-            bool canWrite = (property.Type.SpecialType == SpecialType.System_String || property.Type.SpecialType == SpecialType.System_Int32)
-                && property.GetMethod is { DeclaredAccessibility: Accessibility.Public };
+                WriteKind writeKind = GetWriteKind(underlying);
+                if (canGet && writeKind != WriteKind.None)
+                {
+                    string valueExpr = WriteValueExpression(writeKind, isNullable, property.Name);
+                    writeEmit = $"            .Column(\"{names[0].Replace("\"", "\\\"")}\", static (row, m) => row.Write({valueExpr}))";
+                }
+            }
 
-            return new PropertyPlan(
-                property.Name,
-                names,
-                canRead ? reader : null,
-                canWrite,
-                isRequired,
-                requireValue);
+            return new PropertyPlan(property.Name, names, read, isRequired, requireValue, writeEmit, converterFieldDecl);
         }
 
-        private static string GenerateSource(INamedTypeSymbol symbol, PropertyPlan[] properties)
+        private static ReadKind SelectReadKind(bool isGuid, bool isNullable)
+        {
+            if (isGuid)
+            {
+                return isNullable ? ReadKind.GuidNullable : ReadKind.GuidValue;
+            }
+            return isNullable ? ReadKind.Nullable : ReadKind.Value;
+        }
+
+        private static string WriteValueExpression(WriteKind kind, bool isNullable, string propertyName)
+        {
+            if (kind == WriteKind.Direct)
+            {
+                return $"m.{propertyName}";
+            }
+            return isNullable ? $"m.{propertyName}?.ToString()" : $"m.{propertyName}.ToString()";
+        }
+
+        private static WriteKind GetWriteKind(ITypeSymbol underlying)
+        {
+            if (underlying.SpecialType is SpecialType.System_String or SpecialType.System_Boolean
+                || IsSystemType(underlying, "DateTime") || IsSystemType(underlying, "DateOnly") || IsSystemType(underlying, "TimeOnly")
+                || NumericWriteSpecialTypes.Contains(underlying.SpecialType))
+            {
+                return WriteKind.Direct;
+            }
+            if (underlying.TypeKind == TypeKind.Enum || IsSystemType(underlying, "Guid") || IsUtf8SpanParsable(underlying))
+            {
+                return WriteKind.ToStringFallback;
+            }
+            return WriteKind.None;
+        }
+
+        // Guid implements IUtf8SpanParsable<Guid> starting only on the newer TFM ColumnParserFactory's
+        // own conditional compilation gates on; the generated code targets whatever TFM the *consumer*
+        // builds for, so both branches are emitted guarded the same way, and the C# compiler picks the
+        // live one per consumer TFM — mirroring ColumnParserFactory.ReadGuid/BuildParsableCore inside
+        // ExcelReader.Core itself.
+        private static (string Reader, string ValueType, bool IsGuid)? TryGetBuiltInReader(ITypeSymbol underlying)
+        {
+            if (underlying.SpecialType == SpecialType.System_String)
+            {
+                return ("global::ExcelReader.Core.Parser.ExcelCellReaders.String", "string", false);
+            }
+            if (underlying.SpecialType == SpecialType.System_Boolean)
+            {
+                return ("global::ExcelReader.Core.Parser.ExcelCellReaders.Bool", "bool", false);
+            }
+            if (IsSystemType(underlying, "DateTime"))
+            {
+                return ("global::ExcelReader.Core.Parser.ExcelCellReaders.DateTimeSerial", "global::System.DateTime", false);
+            }
+            if (IsSystemType(underlying, "DateOnly"))
+            {
+                return ("global::ExcelReader.Core.Parser.ExcelCellReaders.DateOnlySerial", "global::System.DateOnly", false);
+            }
+            if (IsSystemType(underlying, "TimeOnly"))
+            {
+                return ("global::ExcelReader.Core.Parser.ExcelCellReaders.TimeOnlySerial", "global::System.TimeOnly", false);
+            }
+            if (underlying.TypeKind == TypeKind.Enum)
+            {
+                string enumType = underlying.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+                return ($"global::ExcelReader.Core.Parser.ExcelCellReaders.Enum<{enumType}>", enumType, false);
+            }
+            if (IsSystemType(underlying, "Guid"))
+            {
+                return (string.Empty, "global::System.Guid", true);
+            }
+            if (IsUtf8SpanParsable(underlying))
+            {
+                string t = underlying.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+                return ($"global::ExcelReader.Core.Parser.ExcelCellReaders.Parsable<{t}>", t, false);
+            }
+            return null;
+        }
+
+        private static bool TryGetNullableUnderlying(ITypeSymbol type, out ITypeSymbol underlying)
+        {
+            if (type is INamedTypeSymbol { OriginalDefinition.SpecialType: SpecialType.System_Nullable_T } named)
+            {
+                underlying = named.TypeArguments[0];
+                return true;
+            }
+            underlying = type;
+            return false;
+        }
+
+        private static bool IsSystemType(ITypeSymbol type, string name)
+        {
+            return type is INamedTypeSymbol { ContainingNamespace: { IsGlobalNamespace: false } ns } named
+                && string.Equals(ns.ToDisplayString(), "System", StringComparison.Ordinal)
+                && string.Equals(named.Name, name, StringComparison.Ordinal);
+        }
+
+        private static bool IsUtf8SpanParsable(ITypeSymbol type)
+        {
+            return type.AllInterfaces.Any(i =>
+                string.Equals(i.OriginalDefinition.Name, "IUtf8SpanParsable", StringComparison.Ordinal)
+                && string.Equals(i.OriginalDefinition.ContainingNamespace?.ToDisplayString(), "System", StringComparison.Ordinal)
+                && i.TypeArguments.Length == 1
+                && SymbolEqualityComparer.Default.Equals(i.TypeArguments[0], type));
+        }
+
+        // Symbol-level equivalent of "converterType implements openInterface<exactArgument>" — used for
+        // both IExcelCellConverter<T> (read) and IExcelCellWriter<T> (write), each checked independently
+        // since a converter may implement only one of the two (a read-only converter has no write side).
+        private static bool ImplementsGenericInterface(ITypeSymbol converterType, string openInterfaceDisplay, ITypeSymbol exactArgument)
+        {
+            return converterType.AllInterfaces.Any(i =>
+                string.Equals(i.OriginalDefinition.ToDisplayString(), openInterfaceDisplay, StringComparison.Ordinal)
+                && i.TypeArguments.Length == 1
+                && SymbolEqualityComparer.Default.Equals(i.TypeArguments[0], exactArgument));
+        }
+
+        private static string GenerateSource(INamedTypeSymbol symbol, List<PropertyPlan> properties)
         {
             string qualifiedType = symbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
             var sb = new StringBuilder();
@@ -162,6 +388,11 @@ namespace ExcelReader.Generator
             sb.AppendLine($"partial {kind} {symbol.Name} : global::ExcelReader.Core.Parser.IExcelRowMap<{qualifiedType}>, global::ExcelReader.Core.Writer.IExcelRecordMap<{qualifiedType}>");
             sb.AppendLine("{");
 
+            foreach (string? decl in properties.Select(static p => p.ConverterFieldDecl).Where(static d => d is not null))
+            {
+                sb.AppendLine(decl);
+            }
+
             AppendRowMap(sb, symbol, qualifiedType, properties);
             AppendRecordMap(sb, qualifiedType, properties);
 
@@ -177,7 +408,7 @@ namespace ExcelReader.Generator
             return sb.ToString();
         }
 
-        private static void AppendRowMap(StringBuilder sb, INamedTypeSymbol symbol, string qualifiedType, PropertyPlan[] properties)
+        private static void AppendRowMap(StringBuilder sb, INamedTypeSymbol symbol, string qualifiedType, List<PropertyPlan> properties)
         {
             sb.AppendLine($"    public static void ConfigureExcelRowMap(global::ExcelReader.Core.Parser.ExcelRowMapBuilder<{qualifiedType}> builder)");
             sb.AppendLine("    {");
@@ -188,39 +419,59 @@ namespace ExcelReader.Generator
                 : $"        builder.Factory(static () => new {qualifiedType}())");
             foreach (PropertyPlan p in properties)
             {
-                if (p.Read is null)
-                {
-                    continue;
-                }
-                string names = string.Join(", ", p.HeaderNames.Select(static n => $"\"{n.Replace("\"", "\\\"")}\""));
-                sb.AppendLine($"            .Property([{names}], {p.Read}, static (ref {qualifiedType} m, {PropertyValueType(p)} v) => m.{p.PropertyName} = v, isRequired: {Bool(p.IsRequired)}, requireValue: {Bool(p.RequireValue)})");
+                EmitReadFragment(sb, qualifiedType, p);
             }
             sb.AppendLine("        ;");
             sb.AppendLine("    }");
         }
 
-        private static void AppendRecordMap(StringBuilder sb, string qualifiedType, PropertyPlan[] properties)
+        private static void EmitReadFragment(StringBuilder sb, string qualifiedType, PropertyPlan p)
+        {
+            string namesLiteral = string.Join(", ", p.HeaderNames.Select(static n => $"\"{n.Replace("\"", "\\\"")}\""));
+            string req = $"isRequired: {Bool(p.IsRequired)}, requireValue: {Bool(p.RequireValue)}";
+            switch (p.Read.Kind)
+            {
+                case ReadKind.None:
+                    return;
+                case ReadKind.Value:
+                    sb.AppendLine($"            .Property([{namesLiteral}], {p.Read.Reader}, static (ref {qualifiedType} m, {p.Read.ValueType} v) => m.{p.PropertyName} = v, {req})");
+                    return;
+                case ReadKind.Nullable:
+                    sb.AppendLine($"            .PropertyNullable([{namesLiteral}], {p.Read.Reader}, static (ref {qualifiedType} m, {p.Read.ValueType}? v) => m.{p.PropertyName} = v, {req})");
+                    return;
+                case ReadKind.Converted:
+                    sb.AppendLine($"            .Converted([{namesLiteral}], {p.Read.Reader}, static (ref {qualifiedType} m, {p.Read.ValueType} v) => m.{p.PropertyName} = v, {req})");
+                    return;
+                case ReadKind.GuidValue:
+                    sb.AppendLine("#if NET9_0_OR_GREATER");
+                    sb.AppendLine($"            .Property([{namesLiteral}], global::ExcelReader.Core.Parser.ExcelCellReaders.Parsable<global::System.Guid>, static (ref {qualifiedType} m, global::System.Guid v) => m.{p.PropertyName} = v, {req})");
+                    sb.AppendLine("#else");
+                    sb.AppendLine($"            .Property([{namesLiteral}], global::ExcelReader.Core.Parser.ExcelCellReaders.Guid, static (ref {qualifiedType} m, global::System.Guid v) => m.{p.PropertyName} = v, {req})");
+                    sb.AppendLine("#endif");
+                    return;
+                case ReadKind.GuidNullable:
+                    sb.AppendLine("#if NET9_0_OR_GREATER");
+                    sb.AppendLine($"            .PropertyNullable([{namesLiteral}], global::ExcelReader.Core.Parser.ExcelCellReaders.Parsable<global::System.Guid>, static (ref {qualifiedType} m, global::System.Guid? v) => m.{p.PropertyName} = v, {req})");
+                    sb.AppendLine("#else");
+                    sb.AppendLine($"            .PropertyNullable([{namesLiteral}], global::ExcelReader.Core.Parser.ExcelCellReaders.Guid, static (ref {qualifiedType} m, global::System.Guid? v) => m.{p.PropertyName} = v, {req})");
+                    sb.AppendLine("#endif");
+                    return;
+                default:
+                    return;
+            }
+        }
+
+        private static void AppendRecordMap(StringBuilder sb, string qualifiedType, List<PropertyPlan> properties)
         {
             sb.AppendLine($"    public static void ConfigureExcelRecordMap(global::ExcelReader.Core.Writer.ExcelRecordMapBuilder<{qualifiedType}> builder)");
             sb.AppendLine("    {");
             sb.AppendLine("        builder");
-            foreach (PropertyPlan p in properties)
+            foreach (string? writeEmit in properties.Select(static p => p.WriteEmit).Where(static w => w is not null))
             {
-                if (!p.CanWrite)
-                {
-                    continue;
-                }
-                string header = p.HeaderNames[0].Replace("\"", "\\\"");
-                sb.AppendLine($"            .Column(\"{header}\", static (row, m) => row.Write(m.{p.PropertyName}))");
+                sb.AppendLine(writeEmit);
             }
             sb.AppendLine("        ;");
             sb.AppendLine("    }");
-        }
-
-        // Only string/int are supported (A2 scope), so the setter's value type is always one of these two.
-        private static string PropertyValueType(PropertyPlan p)
-        {
-            return string.Equals(p.Read, "global::ExcelReader.Core.Parser.ExcelCellReaders.String", StringComparison.Ordinal) ? "string" : "int";
         }
 
         private static string Bool(bool value)
@@ -228,26 +479,42 @@ namespace ExcelReader.Generator
             return value ? "true" : "false";
         }
 
-        // netstandard2.1 has no IsExternalInit, so record struct (init-only accessors) isn't available
-        // here — a plain constructor-initialized struct does the same job.
+        // netstandard2.0 has no record types (IsExternalInit lives in netstandard2.1+), so plain
+        // constructor-initialized structs do the same job as record struct here.
+        private readonly struct ReadPlan
+        {
+            internal ReadPlan(ReadKind kind, string reader, string valueType)
+            {
+                Kind = kind;
+                Reader = reader;
+                ValueType = valueType;
+            }
+
+            internal ReadKind Kind { get; }
+            internal string Reader { get; }
+            internal string ValueType { get; }
+        }
+
         private readonly struct PropertyPlan
         {
-            internal PropertyPlan(string propertyName, string[] headerNames, string? read, bool canWrite, bool isRequired, bool requireValue)
+            internal PropertyPlan(string propertyName, string[] headerNames, ReadPlan read, bool isRequired, bool requireValue, string? writeEmit, string? converterFieldDecl)
             {
                 PropertyName = propertyName;
                 HeaderNames = headerNames;
                 Read = read;
-                CanWrite = canWrite;
                 IsRequired = isRequired;
                 RequireValue = requireValue;
+                WriteEmit = writeEmit;
+                ConverterFieldDecl = converterFieldDecl;
             }
 
             internal string PropertyName { get; }
             internal string[] HeaderNames { get; }
-            internal string? Read { get; }
-            internal bool CanWrite { get; }
+            internal ReadPlan Read { get; }
             internal bool IsRequired { get; }
             internal bool RequireValue { get; }
+            internal string? WriteEmit { get; }
+            internal string? ConverterFieldDecl { get; }
         }
     }
 }

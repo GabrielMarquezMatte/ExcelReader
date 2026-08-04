@@ -20,6 +20,8 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\ExcelReader.Core\ExcelReader.Core.csproj" />
+    <ProjectReference Include="..\..\src\ExcelReader.Generator\ExcelReader.Generator.csproj"
+                      OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
   </ItemGroup>
 
 </Project>

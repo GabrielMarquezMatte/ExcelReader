@@ -118,3 +118,4 @@ virtual ExcelReader.Core.Parser.ExcelCellReader<TValue>.Invoke(in ExcelReader.Co
 virtual ExcelReader.Core.Parser.ExcelPropertySetter<TModel, TValue>.Invoke(ref TModel model, TValue value) -> void
 ExcelReader.Core.Parser.ExcelSerializableAttribute
 ExcelReader.Core.Parser.ExcelSerializableAttribute.ExcelSerializableAttribute() -> void
+ExcelReader.Core.Parser.ExcelRowMapBuilder<T>.PropertyNullable<TValue>(string![]! names, ExcelReader.Core.Parser.ExcelCellReader<TValue>! read, ExcelReader.Core.Parser.ExcelPropertySetter<T, TValue?>! set, bool isRequired = false, bool requireValue = false) -> ExcelReader.Core.Parser.ExcelRowMapBuilder<T>!
