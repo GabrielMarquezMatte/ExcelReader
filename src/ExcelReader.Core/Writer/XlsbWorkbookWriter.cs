@@ -47,7 +47,7 @@ namespace ExcelReader.Core.Writer
         /// <param name="prefetchWrite">
         /// When <see langword="true"/>, each sheet's deflate runs on a background thread instead of the
         /// calling thread, overlapping compression with row serialization. Defaults to <see langword="false"/>.
-        /// Mirrors <see cref="Reader.ExcelReaderOptions.PrefetchDecompression"/>'s tradeoff on the read
+        /// Mirrors <see cref="ExcelReaderOptions.PrefetchDecompression"/>'s tradeoff on the read
         /// side: worth it for single-file batch writing, not for a concurrent server workload already
         /// saturating the CPU.
         /// </param>

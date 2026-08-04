@@ -22,11 +22,25 @@ namespace ExcelReader.Core.Parser.Internal
         private readonly CsvReader _reader;
         private readonly ExcelParserConfig _config;
         private readonly CancellationToken _ct;
+        // Non-null only for ExcelMappedParser<T> (feature A) — see ExcelEnumerable<T,TReader,TEnumerator>'s
+        // matching field for why. The mapped path uses one map for every reader, so unlike the reflection
+        // path's dedicated _csvInfo (TypeMapper<T>.GetCsvInfo()), a CSV date property here reads with
+        // whatever reader its ConfigureExcelRowMap chose — a caller who wants text dates from CSV picks
+        // ExcelCellReaders.DateTimeText explicitly.
+        private readonly TypeMapInfo<T>? _explicitInfo;
 
         internal CsvEnumerable(CsvReader reader, ExcelParserConfig config, CancellationToken ct = default)
         {
             _reader = reader;
             _config = config;
+            _ct = ct;
+        }
+
+        internal CsvEnumerable(CsvReader reader, ExcelParserConfig config, TypeMapInfo<T> explicitInfo, CancellationToken ct = default)
+        {
+            _reader = reader;
+            _config = config;
+            _explicitInfo = explicitInfo;
             _ct = ct;
         }
 
@@ -37,7 +51,7 @@ namespace ExcelReader.Core.Parser.Internal
             Justification = "rows is handed to the returned Enumerator, which owns and disposes it.")]
         public Enumerator GetEnumerator()
         {
-            TypeMapInfo<T> info = TypeMapper<T>.GetCsvInfo();
+            TypeMapInfo<T> info = _explicitInfo ?? TypeMapper<T>.GetCsvInfo();
             CsvReader.Enumerator rows = _reader.GetEnumerator();
             return new Enumerator(rows, info, _config.ColumnNameComparer, _config.HeaderNormalization, _config.HeaderRow, _config.Culture, _config.ThrowOnParseFailure);
         }
@@ -62,7 +76,7 @@ namespace ExcelReader.Core.Parser.Internal
             Justification = "Async enumerator requires a class to host the async state machine.")]
         public AsyncEnumerator GetAsyncEnumerator(CancellationToken cancellationToken = default)
         {
-            TypeMapInfo<T> info = TypeMapper<T>.GetCsvInfo();
+            TypeMapInfo<T> info = _explicitInfo ?? TypeMapper<T>.GetCsvInfo();
             CancellationToken effective = cancellationToken.CanBeCanceled ? cancellationToken : _ct;
             return new AsyncEnumerator(_reader, info, _config.ColumnNameComparer, _config.HeaderNormalization, _config.HeaderRow, _config.Culture, _config.ThrowOnParseFailure, effective);
         }

@@ -13,6 +13,11 @@ namespace ExcelReader.Core.Parser.Internal
             : base(reader, config, ct)
         {
         }
+
+        internal ExcelEnumerable(XlsxReader reader, ExcelParserConfig config, TypeMapInfo<T> explicitInfo, CancellationToken ct = default)
+            : base(reader, config, explicitInfo, ct)
+        {
+        }
     }
 
     /// <summary>Lazily projects rows read by a given reader/enumerator pair into <typeparamref name="T"/> instances, for both synchronous and asynchronous enumeration.</summary>
@@ -28,11 +33,23 @@ namespace ExcelReader.Core.Parser.Internal
         private readonly TReader _reader;
         private readonly ExcelParserConfig _config;
         private readonly CancellationToken _ct;
+        // Non-null only for ExcelMappedParser<T> (feature A): a map built by ExcelRowMapBuilder<T>,
+        // used instead of TypeMapper<T>.GetInfo()'s reflection-built one. Null for every ExcelParser<T>
+        // caller, which keeps paying nothing for this.
+        private readonly TypeMapInfo<T>? _explicitInfo;
 
         internal ExcelEnumerable(TReader reader, ExcelParserConfig config, CancellationToken ct = default)
         {
             _reader = reader;
             _config = config;
+            _ct = ct;
+        }
+
+        internal ExcelEnumerable(TReader reader, ExcelParserConfig config, TypeMapInfo<T> explicitInfo, CancellationToken ct = default)
+        {
+            _reader = reader;
+            _config = config;
+            _explicitInfo = explicitInfo;
             _ct = ct;
         }
 
@@ -43,7 +60,7 @@ namespace ExcelReader.Core.Parser.Internal
             Justification = "T is intentionally unconstrained so a row model can be a class or a struct (see RefParser/struct-binding support); constraining it would break that.")]
         public Enumerator GetEnumerator()
         {
-            TypeMapInfo<T> info = TypeMapper<T>.GetInfo();
+            TypeMapInfo<T> info = _explicitInfo ?? TypeMapper<T>.GetInfo();
             TEnumerator rows = _reader.GetEnumerator();
             return new Enumerator(rows, info, _config.ColumnNameComparer, _config.HeaderNormalization, _config.HeaderRow, _reader.IsDate1904, _config.Culture, _config.ThrowOnParseFailure);
         }
@@ -70,7 +87,7 @@ namespace ExcelReader.Core.Parser.Internal
             Justification = "T is intentionally unconstrained so a row model can be a class or a struct (see RefParser/struct-binding support); constraining it would break that.")]
         public AsyncEnumerator GetAsyncEnumerator(CancellationToken cancellationToken = default)
         {
-            TypeMapInfo<T> info = TypeMapper<T>.GetInfo();
+            TypeMapInfo<T> info = _explicitInfo ?? TypeMapper<T>.GetInfo();
             CancellationToken effective = cancellationToken.CanBeCanceled ? cancellationToken : _ct;
             return new AsyncEnumerator(_reader, info, _config.ColumnNameComparer, _config.HeaderNormalization, _config.HeaderRow, _config.Culture, _config.ThrowOnParseFailure, effective);
         }
