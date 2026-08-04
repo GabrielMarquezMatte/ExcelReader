@@ -23,7 +23,7 @@
   <!-- No PublicAPI.txt: an IIncrementalGenerator is never consumed as an ordinary library API — its
        only public surface is the [Generator] attribute the SDK discovers via reflection. -->
   <PropertyGroup>
-    <NoWarn>$(NoWarn);RS0016;RS0026;RS0037</NoWarn>
+    <NoWarn>$(NoWarn);RS0016;RS0026;RS0037;HLQ012</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>

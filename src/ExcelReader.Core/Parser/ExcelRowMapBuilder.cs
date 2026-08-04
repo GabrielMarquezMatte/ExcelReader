@@ -15,6 +15,7 @@ namespace ExcelReader.Core.Parser
 #endif
     {
         private readonly List<PropertyMap<T>> _properties = [];
+        private readonly List<ColumnBinding<T>> _indexBindings = [];
         private Func<T>? _factory;
 
         /// <summary>
@@ -127,6 +128,44 @@ namespace ExcelReader.Core.Parser
         }
 
         /// <summary>
+        /// Binds a property to a fixed 0-based column index instead of a header name, so rows with no
+        /// header at all (or a header the caller doesn't want matched by text) can still be mapped.
+        /// </summary>
+        /// <remarks>
+        /// A builder that uses this method exclusively produces a map with no header-row step at all —
+        /// the first row is already a data row. Mixing this with <see cref="Property{TValue}"/>/
+        /// <see cref="PropertyNullable{TValue}"/>/<see cref="Converted{TValue}"/> on the same builder is
+        /// not supported, since one map can't both wait for a header row and skip it.
+        /// </remarks>
+        /// <typeparam name="TValue">The property's value type.</typeparam>
+        /// <param name="columnIndex">The 0-based column index to read from.</param>
+        /// <param name="read">Converts a matched, non-empty cell into a <typeparamref name="TValue"/>; see <see cref="ExcelCellReaders"/> for the built-in readers.</param>
+        /// <param name="set">Assigns the read value to the property.</param>
+        /// <param name="requireValue">Whether the cell at <paramref name="columnIndex"/> must be non-empty in every data row.</param>
+        /// <returns>This builder, for chaining.</returns>
+        public ExcelRowMapBuilder<T> PropertyAt<TValue>(
+            int columnIndex,
+            ExcelCellReader<TValue> read,
+            ExcelPropertySetter<T, TValue> set,
+            bool requireValue = false)
+        {
+            ArgumentOutOfRangeException.ThrowIfNegative(columnIndex);
+            ArgumentNullException.ThrowIfNull(read);
+            ArgumentNullException.ThrowIfNull(set);
+            bool parser(ref T model, in Cell cell, bool isDate1904, IFormatProvider provider)
+            {
+                if (!read(in cell, isDate1904, provider, out TValue value))
+                {
+                    return false;
+                }
+                set(ref model, value);
+                return true;
+            }
+            _indexBindings.Add(new ColumnBinding<T>(columnIndex, parser, requireValue, $"Column {columnIndex}"));
+            return this;
+        }
+
+        /// <summary>
         /// Sets the factory used to create a fresh <typeparamref name="T"/> instance per row.
         /// <see langword="null"/> means <c>default(T)</c> — use this for a plain struct with no
         /// explicit parameterless constructor, matching <c>TypeMapper&lt;T&gt;.Build()</c>'s own rule.
@@ -144,7 +183,18 @@ namespace ExcelReader.Core.Parser
 
         internal TypeMapInfo<T> Build()
         {
-            return new TypeMapInfo<T>([.. _properties], _factory, useDefault: _factory is null);
+            if (_indexBindings.Count == 0)
+            {
+                return new TypeMapInfo<T>([.. _properties], _factory, useDefault: _factory is null);
+            }
+            if (_properties.Count > 0)
+            {
+                throw new InvalidOperationException(
+                    "Cannot mix Property/PropertyNullable/Converted with PropertyAt on the same ExcelRowMapBuilder<T>.");
+            }
+            ColumnBinding<T>[] bindings = [.. _indexBindings];
+            Array.Sort(bindings, static (left, right) => left.Column.CompareTo(right.Column));
+            return new TypeMapInfo<T>(bindings, _factory, useDefault: _factory is null);
         }
     }
 }

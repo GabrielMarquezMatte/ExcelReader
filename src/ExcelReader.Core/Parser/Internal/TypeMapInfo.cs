@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Linq;
 
 namespace ExcelReader.Core.Parser.Internal
 {
@@ -16,6 +17,10 @@ namespace ExcelReader.Core.Parser.Internal
         private readonly Func<T>? _factory;
         private readonly bool _useDefault;
         private readonly ConcurrentDictionary<(StringComparer, HeaderNormalization), Dictionary<string, HeaderMatch<T>>> _lookupCache;
+        // Non-null exactly for a fluent map built entirely from ExcelRowMapBuilder<T>.PropertyAt: fixed
+        // column index, no header row involved at all. Already sorted by Column — the shape RowProjector/
+        // CsvRowProjector need directly, with no per-row header lookup step (see IsIndexBased).
+        private readonly ColumnBinding<T>[]? _indexBindings;
 
         internal TypeMapInfo(PropertyMap<T>[] properties, Func<T>? factory, bool useDefault)
         {
@@ -25,7 +30,24 @@ namespace ExcelReader.Core.Parser.Internal
             _lookupCache = new ConcurrentDictionary<(StringComparer, HeaderNormalization), Dictionary<string, HeaderMatch<T>>>();
         }
 
+        internal TypeMapInfo(ColumnBinding<T>[] indexBindings, Func<T>? factory, bool useDefault)
+        {
+            _properties = [];
+            _factory = factory;
+            _useDefault = useDefault;
+            _lookupCache = new ConcurrentDictionary<(StringComparer, HeaderNormalization), Dictionary<string, HeaderMatch<T>>>();
+            _indexBindings = indexBindings;
+        }
+
         internal int PropertyCount => _properties.Length;
+
+        // True for a map built purely by ExcelRowMapBuilder<T>.PropertyAt (§4.4.2): no header row exists
+        // to wait for, so RowProjector/CsvRowProjector build the column map immediately instead of at
+        // ProjectionRules.ClassifyRow's usual header-row step (R-C3 — HeaderRow is never repurposed to
+        // mean this).
+        internal bool IsIndexBased => _indexBindings is not null;
+
+        internal ColumnBinding<T>[] IndexBindings => _indexBindings!;
 
         // Creates a fresh model instance per row without a `where T : new()` constraint, so types with
         // required members (which the new() constraint forbids) can still be parsed. For a plain struct
@@ -65,6 +87,39 @@ namespace ExcelReader.Core.Parser.Internal
             {
                 throw new ExcelParseException(missing);
             }
+        }
+
+        // Fluent overrides attribute, per property (§4.4.3): a property configured in `fluent` fully
+        // replaces whatever attribute-driven property shares one of its header names, regardless of
+        // comparer/normalization used later at parse time — the same identity a header row itself would
+        // use to pick between two same-named bindings. A property the builder never touched keeps its
+        // attribute-driven behavior untouched.
+        internal static TypeMapInfo<T> MergeFluentOverAttributes(TypeMapInfo<T> fluent, TypeMapInfo<T> attributeFallback, StringComparer comparer, HeaderNormalization normalization)
+        {
+            var configuredNames = new HashSet<string>(comparer);
+            foreach (PropertyMap<T> property in fluent._properties)
+            {
+                foreach (string name in property.Names)
+                {
+                    configuredNames.Add(normalization.Apply(name));
+                }
+            }
+            List<PropertyMap<T>> merged = [.. fluent._properties];
+            foreach (PropertyMap<T> attributeProperty in attributeFallback._properties)
+            {
+                bool overridden = attributeProperty.Names.Any(name => configuredNames.Contains(normalization.Apply(name)));
+                if (!overridden)
+                {
+                    merged.Add(attributeProperty);
+                }
+            }
+
+            // A fluent builder that never called Factory() has _useDefault = true (see
+            // ExcelRowMapBuilder<T>.Factory's doc comment) — fall back to the attribute map's factory
+            // rather than silently defaulting a class T to null.
+            Func<T>? factory = fluent._useDefault ? attributeFallback._factory : fluent._factory;
+            bool useDefault = fluent._useDefault && attributeFallback._useDefault;
+            return new TypeMapInfo<T>([.. merged], factory, useDefault);
         }
 
         internal bool TryFindHeader(string headerName, StringComparer comparer, HeaderNormalization normalization, out HeaderMatch<T> match)

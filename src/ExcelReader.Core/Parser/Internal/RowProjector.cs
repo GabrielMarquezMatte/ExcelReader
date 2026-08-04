@@ -35,6 +35,17 @@ namespace ExcelReader.Core.Parser.Internal
         // the header, build the column map at the header row, then project each subsequent row.
         internal ProjectionStep Advance(in Row row, ref T model)
         {
+            if (_typeInfo.IsIndexBased)
+            {
+                if (_bindings is null)
+                {
+                    BuildIndexColumnMap();
+                }
+                _rowNumber++;
+                model = _typeInfo.CreateInstance();
+                ParseCurrentRow(in row, ref model);
+                return ProjectionStep.Yield;
+            }
             ProjectionStep step = ProjectionRules.ClassifyRow(ref _rowNumber, _headerRow, _bindings is not null);
             if (step == ProjectionStep.BuildMap)
             {
@@ -53,6 +64,21 @@ namespace ExcelReader.Core.Parser.Internal
         private void BuildColumnMap(in Row row)
         {
             _bindings = SparseRowProjection.BuildColumnMap(in row, _typeInfo, _comparer, _normalization, out int requireValueCount);
+            _requireValueCount = requireValueCount;
+            _seen = requireValueCount > 0 ? new bool[_bindings.Length] : [];
+        }
+
+        private void BuildIndexColumnMap()
+        {
+            _bindings = _typeInfo.IndexBindings;
+            int requireValueCount = 0;
+            foreach (ColumnBinding<T> binding in _bindings)
+            {
+                if (binding.RequireValue)
+                {
+                    requireValueCount++;
+                }
+            }
             _requireValueCount = requireValueCount;
             _seen = requireValueCount > 0 ? new bool[_bindings.Length] : [];
         }

@@ -221,6 +221,54 @@ Notes:
 - `ExcelMappedParser<T>` builds one map per model and reuses it for every reader, including CSV — unlike `ExcelParser<T>`, which swaps in a text-based date reader specifically for CSV. A `[ExcelSerializable]` model always reads `DateTime`/`DateOnly`/`TimeOnly` as an Excel serial number, so it can't correctly read such a column from CSV; only a hand-written `IExcelRowMap<T>` can choose a text reader instead.
 - The attribute-based reflection path keeps working unchanged; `[ExcelSerializable]` is an additive, opt-in alternative for the same model shape, not a replacement.
 
+## Map columns at runtime (fluent API)
+
+`[ExcelColumn]`/`[ExcelRequired]` fix the mapping at compile time. When the mapping itself is a runtime decision — loaded from a config file, chosen by a user in a UI, or different per input file — build it with `ExcelRowMapBuilder<T>` through `ExcelFluentParser<T>` instead:
+
+```csharp
+using ExcelReader.Core.Parser;
+using ExcelReader.Core.Reader;
+
+public sealed class ChangeRow
+{
+    public string File { get; set; } = "";
+    public int LinesAdded { get; set; }
+}
+
+var parser = new ExcelFluentParser<ChangeRow>(builder => builder
+    .Factory(() => new ChangeRow())
+    .Property(["file"], ExcelCellReaders.String, (ref ChangeRow r, string v) => r.File = v)
+    .Property(["lines_added"], ExcelCellReaders.Parsable, (ref ChangeRow r, int v) => r.LinesAdded = v));
+
+using var reader = Excel.FromFile("changes.xlsx");
+foreach (var item in parser.Parse(reader))
+{
+    Console.WriteLine($"{item.File}: +{item.LinesAdded}");
+}
+```
+
+The map is built once, in the constructor, from a fresh builder instance — never from a static per-type cache, so two `ExcelFluentParser<T>` instances configured differently for the same `T` give different, correct results in the same process.
+
+Bind a fixed column index instead of a header name with `PropertyAt` — for files with no header row at all:
+
+```csharp
+var parser = new ExcelFluentParser<ChangeRow>(builder => builder
+    .Factory(() => new ChangeRow())
+    .PropertyAt(0, ExcelCellReaders.String, (ref ChangeRow r, string v) => r.File = v)
+    .PropertyAt(1, ExcelCellReaders.Parsable, (ref ChangeRow r, int v) => r.LinesAdded = v));
+```
+
+A builder that uses `PropertyAt` skips the header-row step entirely — the first row is already data. Mixing `PropertyAt` with `Property`/`PropertyNullable`/`Converted` on the same builder throws, since one map can't both wait for a header row and skip it.
+
+`ExcelFluentParser<T>.WithAttributeFallback` merges the builder's bindings with `[ExcelColumn]`/`[ExcelRequired]`-driven ones reflected from `T`: a property the builder configures fully replaces its attribute (matched by shared header name); a property the builder never mentions keeps its attribute-driven behavior. Useful for overriding just the one column that's a runtime decision without redeclaring the whole model:
+
+```csharp
+var parser = ExcelFluentParser<ChangeRow>.WithAttributeFallback(builder => builder
+    .Property(["file"], ExcelCellReaders.String, (ref ChangeRow r, string v) => r.File = v.ToUpperInvariant()));
+```
+
+The plain constructor is AOT-clean — `configure` is caller-written code wiring hand-picked readers and setters, no reflection. `WithAttributeFallback` also reflects over `T` for the fallback half, so it carries the same `[RequiresUnreferencedCode]`/`[RequiresDynamicCode]` annotations as `ExcelParser<T>`.
+
 ## Parser configuration
 
 Pass an `ExcelParserConfig` to control header handling and culture:
