@@ -9,7 +9,9 @@
     <!-- SharpFuzz instruments the assembly under test in place; keeping the fuzz driver itself
          unoptimized-away and non-trimmed avoids surprises when the harness is republished. -->
     <PublishTrimmed>false</PublishTrimmed>
-    <InvariantGlobalization>true</InvariantGlobalization>
+    <!-- Deliberately NOT InvariantGlobalization: the harness must run the same configuration a
+         consumer does, or it fuzzes a runtime nobody ships. (It also broke the XLSX writer outright
+         when it was set here.) -->
     <!-- CA1031: a fuzz harness must catch broadly and then classify — that IS the oracle. -->
     <!-- CA1812/S1144: harness entry points are reached through a name-based dispatch table. -->
     <!-- CA2007/MA0004: no sync context in a console fuzz driver. -->
