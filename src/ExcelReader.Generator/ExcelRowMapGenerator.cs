@@ -331,7 +331,12 @@ namespace ExcelReader.Generator
                 WriteKind writeKind = GetWriteKind(underlying);
                 if (canGet && writeKind != WriteKind.None)
                 {
-                    string valueExpr = WriteValueExpression(writeKind, isNullable, property.Name);
+                    // A Nullable<T> (isNullable) or a reference type (!underlying.IsValueType) can be
+                    // null at runtime — matches RecordColumns<T>.ToStringExpression's reflection-path
+                    // rule exactly (Plan<TRow>.Build in WorkbookRecordWriter.cs): a genuinely non-null
+                    // value type calls ToString() directly, everything else null-conditionally.
+                    bool needsNullConditional = isNullable || !underlying.IsValueType;
+                    string valueExpr = WriteValueExpression(writeKind, needsNullConditional, property.Name);
                     writeEmit = $"            .Column(\"{names[0].Replace("\"", "\\\"")}\", static (row, m) => row.Write({valueExpr}))";
                 }
             }
@@ -348,15 +353,20 @@ namespace ExcelReader.Generator
             return isNullable ? ReadKind.Nullable : ReadKind.Value;
         }
 
-        private static string WriteValueExpression(WriteKind kind, bool isNullable, string propertyName)
+        private static string WriteValueExpression(WriteKind kind, bool needsNullConditional, string propertyName)
         {
             if (kind == WriteKind.Direct)
             {
                 return $"m.{propertyName}";
             }
-            return isNullable ? $"m.{propertyName}?.ToString()" : $"m.{propertyName}.ToString()";
+            return needsNullConditional ? $"m.{propertyName}?.ToString()" : $"m.{propertyName}.ToString()";
         }
 
+        // Direct for the fixed set RowWriteMethods<TRow> has a dedicated Write overload for; every
+        // other type — enum, Guid, char, Half, Int128, UInt128, TimeSpan, DateTimeOffset, a plain
+        // reference type with no built-in reader, anything — falls back to ToString(), exactly like
+        // RecordColumns<T>.Plan<TRow>.Build's reflection path (RowWriteMethods<TRow>.Select's
+        // asString=true default). No type is ever omitted from the written columns.
         private static WriteKind GetWriteKind(ITypeSymbol underlying)
         {
             if (underlying.SpecialType is SpecialType.System_String or SpecialType.System_Boolean
@@ -365,11 +375,7 @@ namespace ExcelReader.Generator
             {
                 return WriteKind.Direct;
             }
-            if (underlying.TypeKind == TypeKind.Enum || IsSystemType(underlying, "Guid") || IsUtf8SpanParsable(underlying))
-            {
-                return WriteKind.ToStringFallback;
-            }
-            return WriteKind.None;
+            return WriteKind.ToStringFallback;
         }
 
         // Guid implements IUtf8SpanParsable<Guid> starting only on the newer TFM ColumnParserFactory's

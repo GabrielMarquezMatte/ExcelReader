@@ -5,18 +5,17 @@ using ExcelReader.Core.ValueObjects;
 
 namespace ExcelReader.Tests
 {
-    // Read-side parity between the reflection path (ExcelParser<T>) and the source-generated path
-    // (ExcelMappedParser<T>, requiring [ExcelSerializable]) — the generator's own tabela de decisão
-    // (type -> reader) is a second, independent copy of ColumnParserFactory's, and the two can diverge
-    // silently (see GeneratorTests.InheritedPropertiesAreMapped's history). Every model here is declared
-    // directly in this file, not as a string literal fed to CSharpGeneratorDriver, so the real
-    // build-time analyzer (wired into ExcelReader.Tests.csproj with OutputItemType="Analyzer") produces
-    // its IExcelRowMap<T>/IExcelRecordMap<T> for it — ExcelMappedParser<T> resolves as ordinary
-    // compile-time generics, no reflection-over-a-synthetic-assembly gymnastics needed.
-    //
-    // Every fixture here is built with TypedWorkbook/raw writers rather than MappedRecordWriter, so this
-    // file exercises only the read side; write-side parity is GeneratedRecordMapMatchesReflectionOnWrite
-    // in WriterStyleTests-adjacent coverage (a separate task).
+    // Parity between the reflection path (ExcelParser<T>/WorkbookRecordWriter<TSheet,TRow>) and the
+    // source-generated path (ExcelMappedParser<T>/MappedWorkbookRecordWriter<TSheet,TRow>, requiring
+    // [ExcelSerializable]) — the generator's own tabela de decisão (type -> reader/writer) is a second,
+    // independent copy of ColumnParserFactory's/RecordColumns<T>'s, and the two can diverge silently
+    // (see GeneratorTests.InheritedPropertiesAreMapped's history, and GeneratedRecordMapHeadersMatchReflectionHeaders
+    // below, which failed before the generator's write side stopped omitting unsupported-type columns).
+    // Every model here is declared directly in this file, not as a string literal fed to
+    // CSharpGeneratorDriver, so the real build-time analyzer (wired into ExcelReader.Tests.csproj with
+    // OutputItemType="Analyzer") produces its IExcelRowMap<T>/IExcelRecordMap<T> for it —
+    // ExcelMappedParser<T>/MappedRecordWriter resolve as ordinary compile-time generics, no
+    // reflection-over-a-synthetic-assembly gymnastics needed.
     public partial class GeneratedMapParityTests
     {
         public enum ParityKind { Alpha, Beta, Gamma }
@@ -95,6 +94,33 @@ namespace ExcelReader.Tests
         public partial class InheritedModel : InheritedBaseRow
         {
             public int Own { get; set; }
+        }
+
+        // A plain class with no built-in reader and no [ExcelConverter] — reflection's write side
+        // (RecordColumns<T>.Plan<TRow>.Build) always writes it via ToString(); before the generator's
+        // GetWriteKind stopped defaulting to WriteKind.None, the generated write side silently omitted
+        // this column instead. Read side is untouched: neither path can read it back typed, which is
+        // fine — this model only exercises the write side (GeneratedRecordMapHeadersMatchReflectionHeaders).
+        public sealed class CustomTag
+        {
+            private readonly string _text;
+
+            public CustomTag(string text)
+            {
+                _text = text;
+            }
+
+            public override string ToString()
+            {
+                return _text;
+            }
+        }
+
+        [ExcelSerializable]
+        public partial class WriteOnlyTypeModel : InheritedBaseRow
+        {
+            public string Name { get; set; } = "";
+            public CustomTag Tag { get; set; } = new("");
         }
 
         [ExcelSerializable]
@@ -438,6 +464,210 @@ namespace ExcelReader.Tests
             ms.Position = 0;
             await using XlsxReader reader = await Excel.FromAsync(ms, ct: TestContext.Current.CancellationToken);
             return parse(reader).First();
+        }
+
+        // T10: write-side parity. WorkbookRecordWriter<TSheet,TRow> (reflection, RecordColumns<T>) vs
+        // MappedWorkbookRecordWriter<TSheet,TRow> (generated, IExcelRecordMap<T>) writing the same
+        // record — read back through the raw, untyped Row/Cell API (not a typed parser) so a column
+        // neither path can read back typed (WriteOnlyTypeModel.Tag) still gets compared, text for text.
+        private static string[] ReadRowText(Row row)
+        {
+            var values = new string[row.ColumnCount];
+            for (int i = 0; i < row.ColumnCount; i++)
+            {
+                values[i] = row[i].GetString();
+            }
+            return values;
+        }
+
+        [Fact]
+        public async Task GeneratedRecordMapMatchesReflectionOnWriteXlsx()
+        {
+            CancellationToken ct = TestContext.Current.CancellationToken;
+            CrossFormatModel record = SampleCrossFormatValue();
+
+            await using var reflectionMs = new MemoryStream();
+            await using (WorkbookRecordWriter<XlsxSheetWriter, XlsxRowWriter> writer = await RecordWriter.CreateXlsxAsync(reflectionMs, leaveOpen: true, ct: ct))
+            {
+                await writer.WriteSheetAsync("S1", new[] { record }, ct);
+            }
+            await using var generatedMs = new MemoryStream();
+            await using (MappedWorkbookRecordWriter<XlsxSheetWriter, XlsxRowWriter> writer = await MappedRecordWriter.CreateMappedXlsxAsync(generatedMs, leaveOpen: true, ct: ct))
+            {
+                await writer.WriteSheetAsync("S1", new[] { record }, ct);
+            }
+
+            reflectionMs.Position = 0;
+            using XlsxReader reflectionReader = Excel.From(reflectionMs);
+            using XlsxReader.Enumerator reflectionEnum = reflectionReader.GetEnumerator();
+            Assert.True(reflectionEnum.MoveNext());
+            string[] reflectionHeaders = ReadRowText(reflectionEnum.Current);
+            Assert.True(reflectionEnum.MoveNext());
+            string[] reflectionValues = ReadRowText(reflectionEnum.Current);
+
+            generatedMs.Position = 0;
+            using XlsxReader generatedReader = Excel.From(generatedMs);
+            using XlsxReader.Enumerator generatedEnum = generatedReader.GetEnumerator();
+            Assert.True(generatedEnum.MoveNext());
+            string[] generatedHeaders = ReadRowText(generatedEnum.Current);
+            Assert.True(generatedEnum.MoveNext());
+            string[] generatedValues = ReadRowText(generatedEnum.Current);
+
+            Assert.Equal(reflectionHeaders, generatedHeaders);
+            Assert.Equal(reflectionValues, generatedValues);
+        }
+
+        [Fact]
+        public async Task GeneratedRecordMapMatchesReflectionOnWriteXlsb()
+        {
+            CancellationToken ct = TestContext.Current.CancellationToken;
+            CrossFormatModel record = SampleCrossFormatValue();
+
+            await using var reflectionMs = new MemoryStream();
+            await using (WorkbookRecordWriter<XlsbSheetWriter, XlsbRowWriter> writer = await RecordWriter.CreateXlsbAsync(reflectionMs, leaveOpen: true, ct: ct))
+            {
+                await writer.WriteSheetAsync("S1", new[] { record }, ct);
+            }
+            await using var generatedMs = new MemoryStream();
+            await using (MappedWorkbookRecordWriter<XlsbSheetWriter, XlsbRowWriter> writer = await MappedRecordWriter.CreateMappedXlsbAsync(generatedMs, leaveOpen: true, ct: ct))
+            {
+                await writer.WriteSheetAsync("S1", new[] { record }, ct);
+            }
+
+            reflectionMs.Position = 0;
+            using XlsbReader reflectionReader = Excel.FromXlsb(reflectionMs);
+            using XlsbReader.Enumerator reflectionEnum = reflectionReader.GetEnumerator();
+            Assert.True(reflectionEnum.MoveNext());
+            string[] reflectionHeaders = ReadRowText(reflectionEnum.Current);
+            Assert.True(reflectionEnum.MoveNext());
+            string[] reflectionValues = ReadRowText(reflectionEnum.Current);
+
+            generatedMs.Position = 0;
+            using XlsbReader generatedReader = Excel.FromXlsb(generatedMs);
+            using XlsbReader.Enumerator generatedEnum = generatedReader.GetEnumerator();
+            Assert.True(generatedEnum.MoveNext());
+            string[] generatedHeaders = ReadRowText(generatedEnum.Current);
+            Assert.True(generatedEnum.MoveNext());
+            string[] generatedValues = ReadRowText(generatedEnum.Current);
+
+            Assert.Equal(reflectionHeaders, generatedHeaders);
+            Assert.Equal(reflectionValues, generatedValues);
+        }
+
+        [Fact]
+        public async Task GeneratedRecordMapMatchesReflectionOnWriteXls()
+        {
+            CancellationToken ct = TestContext.Current.CancellationToken;
+            CrossFormatModel record = SampleCrossFormatValue();
+
+            await using var reflectionMs = new MemoryStream();
+            await using (WorkbookRecordWriter<XlsSheetWriter, XlsRowWriter> writer = await RecordWriter.CreateXlsAsync(reflectionMs, leaveOpen: true, ct: ct))
+            {
+                await writer.WriteSheetAsync("S1", new[] { record }, ct);
+            }
+            await using var generatedMs = new MemoryStream();
+            await using (MappedWorkbookRecordWriter<XlsSheetWriter, XlsRowWriter> writer = await MappedRecordWriter.CreateMappedXlsAsync(generatedMs, leaveOpen: true, ct: ct))
+            {
+                await writer.WriteSheetAsync("S1", new[] { record }, ct);
+            }
+
+            reflectionMs.Position = 0;
+            using XlsReader reflectionReader = Excel.FromXls(reflectionMs);
+            using XlsReader.Enumerator reflectionEnum = reflectionReader.GetEnumerator();
+            Assert.True(reflectionEnum.MoveNext());
+            string[] reflectionHeaders = ReadRowText(reflectionEnum.Current);
+            Assert.True(reflectionEnum.MoveNext());
+            string[] reflectionValues = ReadRowText(reflectionEnum.Current);
+
+            generatedMs.Position = 0;
+            using XlsReader generatedReader = Excel.FromXls(generatedMs);
+            using XlsReader.Enumerator generatedEnum = generatedReader.GetEnumerator();
+            Assert.True(generatedEnum.MoveNext());
+            string[] generatedHeaders = ReadRowText(generatedEnum.Current);
+            Assert.True(generatedEnum.MoveNext());
+            string[] generatedValues = ReadRowText(generatedEnum.Current);
+
+            Assert.Equal(reflectionHeaders, generatedHeaders);
+            Assert.Equal(reflectionValues, generatedValues);
+        }
+
+        [Fact]
+        public async Task GeneratedRecordMapMatchesReflectionOnWriteCsv()
+        {
+            CancellationToken ct = TestContext.Current.CancellationToken;
+            CrossFormatModel record = SampleCrossFormatValue();
+
+            await using var reflectionMs = new MemoryStream();
+            await using (WorkbookRecordWriter<CsvSheetWriter, CsvRowWriter> writer = await RecordWriter.CreateCsvAsync(reflectionMs, leaveOpen: true, ct: ct))
+            {
+                await writer.WriteSheetAsync("S1", new[] { record }, ct);
+            }
+            await using var generatedMs = new MemoryStream();
+            await using (MappedWorkbookRecordWriter<CsvSheetWriter, CsvRowWriter> writer = await MappedRecordWriter.CreateMappedCsvAsync(generatedMs, leaveOpen: true, ct: ct))
+            {
+                await writer.WriteSheetAsync("S1", new[] { record }, ct);
+            }
+
+            reflectionMs.Position = 0;
+            using CsvReader reflectionReader = Excel.FromCsv(reflectionMs);
+            using CsvReader.Enumerator reflectionEnum = reflectionReader.GetEnumerator();
+            Assert.True(reflectionEnum.MoveNext());
+            string[] reflectionHeaders = ReadRowText(reflectionEnum.Current);
+            Assert.True(reflectionEnum.MoveNext());
+            string[] reflectionValues = ReadRowText(reflectionEnum.Current);
+
+            generatedMs.Position = 0;
+            using CsvReader generatedReader = Excel.FromCsv(generatedMs);
+            using CsvReader.Enumerator generatedEnum = generatedReader.GetEnumerator();
+            Assert.True(generatedEnum.MoveNext());
+            string[] generatedHeaders = ReadRowText(generatedEnum.Current);
+            Assert.True(generatedEnum.MoveNext());
+            string[] generatedValues = ReadRowText(generatedEnum.Current);
+
+            Assert.Equal(reflectionHeaders, generatedHeaders);
+            Assert.Equal(reflectionValues, generatedValues);
+        }
+
+        [Fact]
+        public async Task GeneratedRecordMapHeadersMatchReflectionHeaders()
+        {
+            CancellationToken ct = TestContext.Current.CancellationToken;
+            var record = new WriteOnlyTypeModel { Inherited = "BaseValue", Name = "Alice", Tag = new CustomTag("T1") };
+
+            await using var reflectionMs = new MemoryStream();
+            await using (WorkbookRecordWriter<XlsxSheetWriter, XlsxRowWriter> writer = await RecordWriter.CreateXlsxAsync(reflectionMs, leaveOpen: true, ct: ct))
+            {
+                await writer.WriteSheetAsync("S1", new[] { record }, ct);
+            }
+            await using var generatedMs = new MemoryStream();
+            await using (MappedWorkbookRecordWriter<XlsxSheetWriter, XlsxRowWriter> writer = await MappedRecordWriter.CreateMappedXlsxAsync(generatedMs, leaveOpen: true, ct: ct))
+            {
+                await writer.WriteSheetAsync("S1", new[] { record }, ct);
+            }
+
+            reflectionMs.Position = 0;
+            using XlsxReader reflectionReader = Excel.From(reflectionMs);
+            using XlsxReader.Enumerator reflectionEnum = reflectionReader.GetEnumerator();
+            Assert.True(reflectionEnum.MoveNext());
+            string[] reflectionHeaders = ReadRowText(reflectionEnum.Current);
+            Assert.True(reflectionEnum.MoveNext());
+            string[] reflectionValues = ReadRowText(reflectionEnum.Current);
+
+            generatedMs.Position = 0;
+            using XlsxReader generatedReader = Excel.From(generatedMs);
+            using XlsxReader.Enumerator generatedEnum = generatedReader.GetEnumerator();
+            Assert.True(generatedEnum.MoveNext());
+            string[] generatedHeaders = ReadRowText(generatedEnum.Current);
+            Assert.True(generatedEnum.MoveNext());
+            string[] generatedValues = ReadRowText(generatedEnum.Current);
+
+            // Before the generator's GetWriteKind stopped defaulting to WriteKind.None for an
+            // unrecognized type, "Tag" would be missing entirely from generatedHeaders/generatedValues
+            // here, and the header-count mismatch alone would fail this assertion.
+            Assert.Equal(reflectionHeaders, generatedHeaders);
+            Assert.Equal(reflectionValues, generatedValues);
+            Assert.Contains("Tag", generatedHeaders, StringComparer.Ordinal);
+            Assert.Contains("T1", generatedValues, StringComparer.Ordinal);
         }
     }
 }
