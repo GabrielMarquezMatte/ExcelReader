@@ -166,6 +166,28 @@ jobs:
       - name: Run published binary
         run: .\tests\ExcelReader.AotSanity\bin\Release\net10.0\win-x64\publish\ExcelReader.AotSanity.exe
 
+      # R-A6: the generator is packed into ExcelReader.Core's nupkg via a hardcoded bin/ path
+      # (ExcelReader.Core.csproj's `None Include`), which is fragile to configuration/TFM drift with
+      # no build error if it silently stops matching — a consumer would only find out when their own
+      # [ExcelSerializable] model fails with "does not implement IExcelRowMap<T>", with nothing pointing
+      # at the real cause. This step is what actually catches that drift, by unzipping the real .nupkg
+      # release.yml would ship and checking analyzers/dotnet/cs/ExcelReader.Generator.dll is in it.
+      - name: Pack and verify the generator ships inside the nupkg
+        shell: pwsh
+        run: |
+          dotnet pack src/ExcelReader.Core/ExcelReader.Core.csproj -c Release -o ./artifacts
+          $pkg = Get-ChildItem ./artifacts/*.nupkg | Select-Object -First 1
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
+          $zip = [System.IO.Compression.ZipFile]::OpenRead($pkg.FullName)
+          try {
+            $entry = $zip.Entries | Where-Object { $_.FullName -eq 'analyzers/dotnet/cs/ExcelReader.Generator.dll' }
+          } finally {
+            $zip.Dispose()
+          }
+          if (-not $entry) {
+            throw "ExcelReader.Generator.dll is missing from analyzers/dotnet/cs in $($pkg.Name) — the generator will not reach consumers of this package."
+          }
+
   audit:
     name: Dependency audit
     runs-on: ubuntu-latest
