@@ -26,17 +26,34 @@ namespace ExcelReader.Core.Parser
         /// <summary>Reads a cell as date/time text (ISO or culture format) rather than a serial number — the only option for CSV, which has no serial date form.</summary>
         public static readonly ExcelCellReader<DateTime> DateTimeText = ColumnParserFactory.ReadTextDateTime;
 
+        /// <summary>
+        /// Reads a cell as an Excel date/time serial number, falling back to date/time text when the
+        /// cell isn't numeric. Used where a single map has to work for both a serial-number source
+        /// (XLSX/XLSB/XLS) and CSV (which has no serial date form and writes ISO text instead) — see
+        /// <see cref="ExcelReader.Core.Parser.ExcelMappedParser{T}"/>, which builds one map for every
+        /// reader. The cost: a CSV cell that is only digits (e.g. an Excel serial typed as plain text)
+        /// is read as a serial number, not as date text — there is no way to tell those two apart from
+        /// the cell alone.
+        /// </summary>
+        public static readonly ExcelCellReader<DateTime> DateTimeAuto = ReadDateTimeAuto;
+
         /// <summary>Reads a cell as an Excel date serial number, truncated to its date component.</summary>
         public static readonly ExcelCellReader<DateOnly> DateOnlySerial = ColumnParserFactory.ReadDateOnly;
 
         /// <summary>Reads a cell as date-only text rather than a serial number — the only option for CSV.</summary>
         public static readonly ExcelCellReader<DateOnly> DateOnlyText = ColumnParserFactory.ReadTextDateOnly;
 
+        /// <summary>Reads a cell as an Excel date serial number, falling back to date-only text when the cell isn't numeric — the <see cref="DateOnly"/> counterpart of <see cref="DateTimeAuto"/>, same trade-off.</summary>
+        public static readonly ExcelCellReader<DateOnly> DateOnlyAuto = ReadDateOnlyAuto;
+
         /// <summary>Reads a cell as an Excel time-of-day serial number (the fractional part of a day).</summary>
         public static readonly ExcelCellReader<TimeOnly> TimeOnlySerial = ColumnParserFactory.ReadTimeOnly;
 
         /// <summary>Reads a cell as time-only text rather than a serial number — the only option for CSV.</summary>
         public static readonly ExcelCellReader<TimeOnly> TimeOnlyText = ColumnParserFactory.ReadTextTimeOnly;
+
+        /// <summary>Reads a cell as an Excel time-of-day serial number, falling back to time-only text when the cell isn't numeric — the <see cref="TimeOnly"/> counterpart of <see cref="DateTimeAuto"/>, same trade-off.</summary>
+        public static readonly ExcelCellReader<TimeOnly> TimeOnlyAuto = ReadTimeOnlyAuto;
 
 #if NET8_0
         /// <summary>Reads a cell as a <see cref="System.Guid"/> (net8.0 only — net9.0+ uses <see cref="Parsable{TValue}"/> instead, since <see cref="System.Guid"/> implements <see cref="IUtf8SpanParsable{TSelf}"/> there).</summary>
@@ -49,6 +66,24 @@ namespace ExcelReader.Core.Parser
         {
             value = cell.GetString();
             return true;
+        }
+
+        private static bool ReadDateTimeAuto(in Cell cell, bool isDate1904, IFormatProvider provider, out DateTime value)
+        {
+            return ColumnParserFactory.ReadDateTime(in cell, isDate1904, provider, out value)
+                || ColumnParserFactory.ReadTextDateTime(in cell, isDate1904, provider, out value);
+        }
+
+        private static bool ReadDateOnlyAuto(in Cell cell, bool isDate1904, IFormatProvider provider, out DateOnly value)
+        {
+            return ColumnParserFactory.ReadDateOnly(in cell, isDate1904, provider, out value)
+                || ColumnParserFactory.ReadTextDateOnly(in cell, isDate1904, provider, out value);
+        }
+
+        private static bool ReadTimeOnlyAuto(in Cell cell, bool isDate1904, IFormatProvider provider, out TimeOnly value)
+        {
+            return ColumnParserFactory.ReadTimeOnly(in cell, isDate1904, provider, out value)
+                || ColumnParserFactory.ReadTextTimeOnly(in cell, isDate1904, provider, out value);
         }
 
         /// <summary>
