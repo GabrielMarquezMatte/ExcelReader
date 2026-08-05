@@ -93,6 +93,35 @@ namespace ExcelReader.Core.Parser
         }
 
         /// <summary>
+        /// Binds a header to a single already-fused read+assign delegate, instead of the separate
+        /// <see cref="ExcelCellReader{TValue}"/> + <see cref="ExcelPropertySetter{TModel, TValue}"/> pair
+        /// <see cref="Property{TValue}"/>/<see cref="PropertyNullable{TValue}"/> compose internally. Every
+        /// bound cell costs one indirect call instead of two (read, then set) — the source generator uses
+        /// this for <c>[ExcelSerializable]</c> models. Prefer <see cref="Property{TValue}"/> for hand-written
+        /// maps unless the extra call genuinely matters for your workload; it's a small, row-count-proportional
+        /// cost, not a correctness concern either way.
+        /// </summary>
+        /// <param name="names">The header name(s) that bind to this property; the first is used in error messages.</param>
+        /// <param name="parse">Reads a matched, non-empty cell and assigns it directly onto the model.</param>
+        /// <param name="isRequired">Whether the header must be present.</param>
+        /// <param name="requireValue">Whether every data row's cell for this column must also be non-empty.</param>
+        /// <returns>This builder, for chaining.</returns>
+        public ExcelRowMapBuilder<T> PropertyRaw(
+            string[] names,
+            ExcelRowParser<T> parse,
+            bool isRequired = false,
+            bool requireValue = false)
+        {
+            ArgumentNullException.ThrowIfNull(names);
+            ArgumentNullException.ThrowIfNull(parse);
+            // ExcelRowParser<T> and the internal ColumnParser<T> share an identical invoke signature, so
+            // this constructs a new delegate instance targeting the same method/closure directly — not a
+            // wrapper that calls through parse.Invoke(...). No extra indirection at row-parse time.
+            _properties.Add(new PropertyMap<T>(names, new ColumnParser<T>(parse), isRequired, requireValue));
+            return this;
+        }
+
+        /// <summary>
         /// Binds a property to one or more header names via a <c>[ExcelConverter]</c>-style converter,
         /// for value types none of the built-in <see cref="ExcelCellReaders"/> cover. The generator emits
         /// <c>new MyConverter()</c> for <paramref name="converter"/> — nothing here uses <see cref="Activator"/>.

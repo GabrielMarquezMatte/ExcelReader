@@ -14,8 +14,10 @@ namespace ExcelReader.Core.Writer.Internal
         internal static async ValueTask WriteTextAsync(ZipArchive zip, string entryName, string content, CompressionLevel compression, CancellationToken ct)
         {
             // The caller already holds the full content as one string, so encode it in a single pass
-            // instead of routing it through StreamWriter's small internal buffer.
-            byte[] rented = ArrayPool<byte>.Shared.Rent(Utf8NoBom.GetByteCount(content));
+            // instead of routing it through StreamWriter's small internal buffer. GetMaxByteCount is
+            // O(1) (unlike GetByteCount's full scan) at the cost of over-renting up to 3x on non-ASCII
+            // text — fine for these one-time small workbook parts, pooled anyway.
+            byte[] rented = ArrayPool<byte>.Shared.Rent(Utf8NoBom.GetMaxByteCount(content.Length));
             try
             {
                 int written = Utf8NoBom.GetBytes(content, rented);

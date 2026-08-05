@@ -270,10 +270,24 @@ namespace ExcelReader.Core.Writer
             _rowBuffer.Write("</row>"u8);
             if (_rowBuffer.Length >= FlushThreshold)
             {
-                _stream!.Write(_rowBuffer.Span);
-                _rowBuffer.Reset();
+                FlushRowBuffer();
             }
             _rowActive = false;
+        }
+
+        // When offloading, hands the buffer's backing array to the background writer directly
+        // (BiffBuffer.Detach) instead of copying it into a fresh rental — see WriteOffloadStream's
+        // EnqueueOwned. _rowBuffer keeps working immediately: Detach rents its own replacement.
+        private void FlushRowBuffer()
+        {
+            if (_stream is WriteOffloadStream offload)
+            {
+                byte[] detached = _rowBuffer.Detach(out int length);
+                offload.EnqueueOwned(detached, length);
+                return;
+            }
+            _stream!.Write(_rowBuffer.Span);
+            _rowBuffer.Reset();
         }
 
         internal ValueTask EndBufferedRowAsync(CancellationToken ct = default)
@@ -289,6 +303,13 @@ namespace ExcelReader.Core.Writer
 
         private async ValueTask FlushRowBufferAsync(CancellationToken ct)
         {
+            if (_stream is WriteOffloadStream offload)
+            {
+                byte[] detached = _rowBuffer.Detach(out int length);
+                await offload.EnqueueOwnedAsync(detached, length, ct).ConfigureAwait(false);
+                _rowActive = false;
+                return;
+            }
 #pragma warning disable CS8602 // Dereference of a possibly null reference.
             await _stream.WriteAsync(_rowBuffer.Memory, ct).ConfigureAwait(false);
 #pragma warning restore CS8602 // Dereference of a possibly null reference.
