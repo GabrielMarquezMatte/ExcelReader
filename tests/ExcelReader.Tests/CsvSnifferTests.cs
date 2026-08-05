@@ -133,6 +133,52 @@ namespace ExcelReader.Tests
             Assert.Equal((byte)'\'', dialect.Quote);
         }
 
+        [Theory]
+        [InlineData((byte)',')]
+        [InlineData((byte)';')]
+        [InlineData((byte)'\t')]
+        [InlineData((byte)'|')]
+        public void SingleLineSampleDetectsDelimiter(byte delimiter)
+        {
+            char d = (char)delimiter;
+            byte[] sample = Bytes($"a{d}b{d}c\n");
+            CsvDialect dialect = CsvSniffer.Detect(sample);
+            Assert.Equal(delimiter, dialect.Delimiter);
+        }
+
+        [Fact]
+        public void SingleLineWithoutTrailingNewlineReturnsDefault()
+        {
+            // No newline at all: the whole sample is the unterminated trailing segment, which
+            // CountFieldsPerLine never counts (it might be truncated mid-field) — so no candidate ever
+            // scores, and this is Default by design, not a bug. TruncatedLastLineDoesNotChangeResult
+            // covers the "it was actually truncated" case; this one is genuinely a single, complete,
+            // un-terminated line.
+            byte[] sample = Bytes("a;b;c");
+            CsvDialect dialect = CsvSniffer.Detect(sample);
+            Assert.Equal(CsvDialect.Default, dialect);
+        }
+
+        [Fact]
+        public void HeaderOnlySampleDetectsDelimiter()
+        {
+            byte[] sample = Bytes("name;age;city\n");
+            CsvDialect dialect = CsvSniffer.Detect(sample);
+            Assert.Equal((byte)';', dialect.Delimiter);
+        }
+
+        [Fact]
+        public void UndecidableSampleKeepsDetectedEncoding()
+        {
+            byte[] bom = [0xFF, 0xFE];
+            byte[] body = Encoding.Unicode.GetBytes("onlyonecolumn\n");
+            byte[] sample = [.. bom, .. body];
+            CsvDialect dialect = CsvSniffer.Detect(sample);
+            Assert.Equal((byte)',', dialect.Delimiter);
+            Assert.True(dialect.HasByteOrderMark);
+            Assert.Equal(Encoding.Unicode, dialect.Encoding);
+        }
+
         [Fact]
         public void NonSeekableStreamThrowsArgumentException()
         {
