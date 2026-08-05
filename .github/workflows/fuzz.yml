@@ -65,6 +65,8 @@ jobs:
           # Excel-authored files make far better seeds than anything we can synthesise.
           cp RealExcel.xlsb RealExcel.xlsx corpus/ 2>/dev/null || true
           cp tests/ExcelReader.Tests/data/*.xlsx corpus/ 2>/dev/null || true
+          # Inputs that previously crashed a target: keeping them in the corpus guards those paths.
+          cp tests/ExcelReader.Fuzz/corpus/* corpus/ 2>/dev/null || true
           ls -la corpus
 
       # SharpFuzz rewrites the assembly under test to emit coverage. Only ExcelReader.Core is
@@ -128,6 +130,7 @@ jobs:
           dotnet run --project tests/ExcelReader.Fuzz -c Release --no-build -- seeds corpus
           cp RealExcel.xlsb RealExcel.xlsx corpus/ 2>/dev/null || true
           cp tests/ExcelReader.Tests/data/*.xlsx corpus/ 2>/dev/null || true
+          cp tests/ExcelReader.Fuzz/corpus/* corpus/ 2>/dev/null || true
 
       # No engine, no native tooling: runs every target over the corpus plus deterministic mutations,
       # and self-checks the oracle first so a green run cannot mean "the oracle accepts everything".
