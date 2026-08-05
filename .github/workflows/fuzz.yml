@@ -50,7 +50,9 @@ jobs:
           chmod +x libfuzzer-dotnet
 
       - name: Publish harness
-        run: dotnet publish tests/ExcelReader.Fuzz/ExcelReader.Fuzz.csproj -c Release -o fuzz-out
+        run: |
+          dotnet publish tests/ExcelReader.Fuzz/ExcelReader.Fuzz.csproj -c Release -o fuzz-out
+          chmod +x fuzz-out/ExcelReader.Fuzz
 
       # MUST run before instrumentation. Seed generation drives the writers through the ordinary
       # runtime, and an instrumented assembly writes coverage into a shared-memory region that only
@@ -72,11 +74,20 @@ jobs:
       - name: Instrument ExcelReader.Core
         run: sharpfuzz fuzz-out/ExcelReader.Core.dll
 
+      # Two things this invocation gets right, both of which fail confusingly otherwise:
+      #  * target_path is the published apphost, not `dotnet`. libfuzzer-dotnet passes --target_args
+      #    through as a SINGLE argv entry rather than splitting on spaces, so
+      #    `--target_path=dotnet --target_args="Foo.dll csv"` hands `dotnet` one bogus path; it
+      #    prints usage and exits, surfacing as "short read: expected 4 bytes, got 0 bytes".
+      #  * the target is selected via FUZZ_TARGET, not --target_args. SharpFuzz's
+      #    Fuzzer.LibFuzzer.Run parses argv itself and treats a lone argument as a single input file
+      #    to replay, so our own argument would be swallowed as a corpus path.
       - name: Fuzz
+        env:
+          FUZZ_TARGET: ${{ matrix.target }}
         run: |
           ./libfuzzer-dotnet \
-            --target_path=dotnet \
-            --target_args="fuzz-out/ExcelReader.Fuzz.dll ${{ matrix.target }}" \
+            --target_path=fuzz-out/ExcelReader.Fuzz \
             corpus \
             -max_total_time=${{ github.event.inputs.seconds || '600' }} \
             -max_len=131072 \
