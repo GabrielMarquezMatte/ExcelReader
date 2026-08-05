@@ -103,6 +103,26 @@ repeated shared-string cells via an internal cache), `TryFormat` copies raw text
 buffer without allocating a `string`, and `TryGetDouble`/`TryParse<T>`/`TryGetDateTime` extract plain
 value types — all safe to keep past the row's lifetime since none of them are spans.
 
+## Typed-model instantiation: three tiers, different tradeoffs
+
+`ExcelParser<T>`/`ExcelEnumerable<T>` create one row model per row via `TypeMapInfo<T>.CreateInstance()`
+(`Parser/Internal/TypeMapInfo.cs`), and how that instance gets created depends on how `T` was mapped:
+
+- **`[ExcelSerializable]` (source-generated) or a fluent map that called `.Factory(static () => new T())`**
+  — the factory is a plain compiled `new T()`, the cheapest possible per-row allocation.
+- **A plain struct with no explicit parameterless constructor** — no factory at all; `default(T)` is
+  used directly, since it's byte-for-byte what `new T()` would produce.
+- **Attribute/reflection-driven mapping of a class `T`** (`TypeMapper<T>.Build`, `Parser/Internal/TypeMapper.cs`)
+  — falls back to `Activator.CreateInstance<T>()` per row. This is deliberately *not* an
+  `Expression.Compile()`-built factory: that was tried and reverted because the JIT/expression-tree
+  compilation cost dominated cold start (first-use latency), which matters more for this reflection
+  path's typical caller (one-off scripts, not long-running services) than the steady-state per-row
+  cost of `Activator` dispatch.
+
+If per-row allocation throughput matters more than cold start for your workload, prefer
+`[ExcelSerializable]` or an explicit `.Factory(...)` over plain attribute/reflection binding on a
+class model — it sidesteps `Activator.CreateInstance<T>()` entirely.
+
 ## Further reading
 
 - [`SECURITY.md`](SECURITY.md) — supported versions and how to report a vulnerability.
