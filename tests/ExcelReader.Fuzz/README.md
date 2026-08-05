@@ -53,13 +53,22 @@ wget https://raw.githubusercontent.com/Metalnem/libfuzzer-dotnet/master/libfuzze
 clang -fsanitize=fuzzer libfuzzer-dotnet.cc -o libfuzzer-dotnet
 
 dotnet publish tests/ExcelReader.Fuzz -c Release -o fuzz-out
-sharpfuzz fuzz-out/ExcelReader.Core.dll        # instrument the code under test, not the harness
+
+# Seeds FIRST — see the warning below.
 dotnet fuzz-out/ExcelReader.Fuzz.dll seeds corpus
+
+sharpfuzz fuzz-out/ExcelReader.Core.dll        # instrument the code under test, not the harness
 
 ./libfuzzer-dotnet --target_path=dotnet \
   --target_args="fuzz-out/ExcelReader.Fuzz.dll xlsb" \
   corpus -max_len=131072 -timeout=25 -rss_limit_mb=2048
 ```
+
+> **Once `sharpfuzz` has run, that build may only be launched by `libfuzzer-dotnet`.** The
+> instrumentation writes coverage into a shared-memory region the engine sets up; running the
+> instrumented assembly standalone — `seeds`, `check`, or anything else — dies with
+> `AccessViolationException: Attempted to read or write protected memory`. Generate seeds before
+> instrumenting, and use a separate ordinary build (`dotnet run --project`) for `check`.
 
 Shrink a bloated corpus with `-merge=1`; minimise a crashing input with `-minimize_crash=1`.
 
@@ -74,6 +83,8 @@ match the current writers. CI additionally seeds from `RealExcel.xlsx`/`RealExce
 ## When a crash is found
 
 1. The engine writes the input to `crash-*` (CI uploads these as artifacts).
-2. Reproduce: `dotnet fuzz-out/ExcelReader.Fuzz.dll check <dir-with-just-that-file> 0 1`.
+2. Reproduce on an **uninstrumented** build — put the file alone in a directory and run
+   `dotnet run --project tests/ExcelReader.Fuzz -c Release -- check <that-dir> 0 1`. Reusing
+   `fuzz-out/` here would hit the AccessViolationException above instead of the real failure.
 3. Add it as a regression test in `ExcelReader.Tests`, then fix.
 4. Keep the input in the corpus — it now guards that path.

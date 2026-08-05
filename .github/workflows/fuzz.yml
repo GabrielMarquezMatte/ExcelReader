@@ -52,12 +52,10 @@ jobs:
       - name: Publish harness
         run: dotnet publish tests/ExcelReader.Fuzz/ExcelReader.Fuzz.csproj -c Release -o fuzz-out
 
-      # SharpFuzz rewrites the assembly under test to emit coverage. Only ExcelReader.Core is
-      # instrumented: the harness itself is not the code under test, and instrumenting it would
-      # dilute the coverage signal the engine steers by.
-      - name: Instrument ExcelReader.Core
-        run: sharpfuzz fuzz-out/ExcelReader.Core.dll
-
+      # MUST run before instrumentation. Seed generation drives the writers through the ordinary
+      # runtime, and an instrumented assembly writes coverage into a shared-memory region that only
+      # exists when libfuzzer-dotnet is the one launching the process — running it standalone kills
+      # the process with an AccessViolationException. Do not reorder these two steps.
       - name: Generate seed corpus
         run: |
           mkdir -p corpus
@@ -66,6 +64,13 @@ jobs:
           cp RealExcel.xlsb RealExcel.xlsx corpus/ 2>/dev/null || true
           cp tests/ExcelReader.Tests/data/*.xlsx corpus/ 2>/dev/null || true
           ls -la corpus
+
+      # SharpFuzz rewrites the assembly under test to emit coverage. Only ExcelReader.Core is
+      # instrumented: the harness itself is not the code under test, and instrumenting it would
+      # dilute the coverage signal the engine steers by. Everything after this step must run under
+      # libfuzzer-dotnet.
+      - name: Instrument ExcelReader.Core
+        run: sharpfuzz fuzz-out/ExcelReader.Core.dll
 
       - name: Fuzz
         run: |
