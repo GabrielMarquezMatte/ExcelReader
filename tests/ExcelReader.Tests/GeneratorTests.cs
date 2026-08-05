@@ -28,6 +28,15 @@ namespace ExcelReader.Tests
 
         private static (ImmutableCompilationResult Result, ImmutableArray<Diagnostic> GeneratorDiagnostics) RunGenerator(string source)
         {
+            (ImmutableCompilationResult result, ImmutableArray<Diagnostic> diagnostics, string _) = RunGeneratorWithSource(source);
+            return (result, diagnostics);
+        }
+
+        // Same as RunGenerator, but also returns the generator's own emitted source (every AddSource'd
+        // tree beyond the original one, concatenated) — for tests that need to inspect what was actually
+        // generated rather than just whether it compiles.
+        private static (ImmutableCompilationResult Result, ImmutableArray<Diagnostic> GeneratorDiagnostics, string GeneratedSource) RunGeneratorWithSource(string source)
+        {
             var parseOptions = new CSharpParseOptions(preprocessorSymbols: _preprocessorSymbols);
             SyntaxTree tree = CSharpSyntaxTree.ParseText(source, parseOptions);
             MetadataReference[] references = [.. AppDomain.CurrentDomain.GetAssemblies()
@@ -45,7 +54,8 @@ namespace ExcelReader.Tests
             // original tree above used, and the #else branch would always "win".
             GeneratorDriver driver = CSharpGeneratorDriver.Create([new ExcelRowMapGenerator().AsSourceGenerator()], parseOptions: parseOptions);
             _ = driver.RunGeneratorsAndUpdateCompilation(compilation, out Compilation outputCompilation, out ImmutableArray<Diagnostic> generatorDiagnostics);
-            return (new ImmutableCompilationResult((CSharpCompilation)outputCompilation), generatorDiagnostics);
+            string generatedSource = string.Join("\n----\n", outputCompilation.SyntaxTrees.Skip(1).Select(static t => t.ToString()));
+            return (new ImmutableCompilationResult((CSharpCompilation)outputCompilation), generatorDiagnostics, generatedSource);
         }
 
         // Wraps the updated Compilation so tests can Emit it without repeating the boilerplate.
@@ -464,6 +474,210 @@ namespace ExcelReader.Tests
             Assert.Equal("Beta", values[5]);
             Assert.Equal("7", values[6]);
             Assert.Equal("Alpha", values[7]);
+        }
+
+        [Fact]
+        public void GenericTypeReportsEXR007()
+        {
+            const string source = """
+                using ExcelReader.Core.Parser;
+
+                namespace GeneratorTests.Generic
+                {
+                    [ExcelSerializable]
+                    public partial class Box<TItem>
+                    {
+                        public string Name { get; set; } = "";
+                    }
+                }
+                """;
+            (_, ImmutableArray<Diagnostic> diagnostics) = RunGenerator(source);
+            Diagnostic diagnostic = Assert.Single(diagnostics);
+            Assert.Equal("EXR007", diagnostic.Id);
+            Assert.Equal(DiagnosticSeverity.Error, diagnostic.Severity);
+        }
+
+        [Fact]
+        public void GenericContainingTypeReportsEXR007()
+        {
+            const string source = """
+                using ExcelReader.Core.Parser;
+
+                namespace GeneratorTests.GenericContainer
+                {
+                    public partial class Outer<TItem>
+                    {
+                        [ExcelSerializable]
+                        public partial class Model
+                        {
+                            public string Name { get; set; } = "";
+                        }
+                    }
+                }
+                """;
+            (_, ImmutableArray<Diagnostic> diagnostics) = RunGenerator(source);
+            Diagnostic diagnostic = Assert.Single(diagnostics);
+            Assert.Equal("EXR007", diagnostic.Id);
+            Assert.Equal(DiagnosticSeverity.Error, diagnostic.Severity);
+        }
+
+        [Fact]
+        public void EmptyTypeReportsEXR005AndStillCompiles()
+        {
+            const string source = """
+                using ExcelReader.Core.Parser;
+
+                namespace GeneratorTests.Empty
+                {
+                    [ExcelSerializable]
+                    public partial class Model
+                    {
+                    }
+                }
+                """;
+            (ImmutableCompilationResult result, ImmutableArray<Diagnostic> diagnostics) = RunGenerator(source);
+            Diagnostic diagnostic = Assert.Single(diagnostics);
+            Assert.Equal("EXR005", diagnostic.Id);
+            Assert.Equal(DiagnosticSeverity.Warning, diagnostic.Severity);
+            EmitResult emit = result.Emit();
+            Assert.True(emit.Success, string.Join(Environment.NewLine, emit.Diagnostics.Select(static d => d.ToString())));
+        }
+
+        [Fact]
+        public void WriteOnlyPropertyStillCompiles()
+        {
+            const string source = """
+                using ExcelReader.Core.Parser;
+
+                namespace GeneratorTests.WriteOnly
+                {
+                    [ExcelSerializable]
+                    public partial class Model
+                    {
+                        private string _name = "";
+                        public string Name { set => _name = value; }
+                    }
+                }
+                """;
+            (ImmutableCompilationResult result, ImmutableArray<Diagnostic> diagnostics, string generated) = RunGeneratorWithSource(source);
+            Assert.Empty(diagnostics);
+            EmitResult emit = result.Emit();
+            Assert.True(emit.Success, string.Join(Environment.NewLine, emit.Diagnostics.Select(static d => d.ToString())));
+            Assert.Contains(".Property([\"Name\"]", generated, StringComparison.Ordinal);
+        }
+
+        [Fact]
+        public void RecordClassWithSettablePropertiesCompiles()
+        {
+            const string source = """
+                using ExcelReader.Core.Parser;
+
+                namespace GeneratorTests.RecordClass
+                {
+                    [ExcelSerializable]
+                    public partial record class Rec
+                    {
+                        public string Name { get; set; } = "";
+                    }
+                }
+                """;
+            (ImmutableCompilationResult result, ImmutableArray<Diagnostic> diagnostics) = RunGenerator(source);
+            Assert.Empty(diagnostics);
+            EmitResult emit = result.Emit();
+            Assert.True(emit.Success, string.Join(Environment.NewLine, emit.Diagnostics.Select(static d => d.ToString())));
+        }
+
+        [Fact]
+        public void RecordStructWithSettablePropertiesCompiles()
+        {
+            const string source = """
+                using ExcelReader.Core.Parser;
+
+                namespace GeneratorTests.RecordStruct
+                {
+                    [ExcelSerializable]
+                    public partial record struct Rec
+                    {
+                        public string Name { get; set; }
+                    }
+                }
+                """;
+            (ImmutableCompilationResult result, ImmutableArray<Diagnostic> diagnostics) = RunGenerator(source);
+            Assert.Empty(diagnostics);
+            EmitResult emit = result.Emit();
+            Assert.True(emit.Success, string.Join(Environment.NewLine, emit.Diagnostics.Select(static d => d.ToString())));
+        }
+
+        [Fact]
+        public void InitOnlyPropertyIsNotMappedForRead()
+        {
+            const string source = """
+                using ExcelReader.Core.Parser;
+
+                namespace GeneratorTests.InitOnly
+                {
+                    [ExcelSerializable]
+                    public partial class Model
+                    {
+                        public string Name { get; init; } = "";
+                    }
+                }
+                """;
+            (ImmutableCompilationResult result, ImmutableArray<Diagnostic> diagnostics, string generated) = RunGeneratorWithSource(source);
+            Assert.Empty(diagnostics);
+            EmitResult emit = result.Emit();
+            Assert.True(emit.Success, string.Join(Environment.NewLine, emit.Diagnostics.Select(static d => d.ToString())));
+            Assert.DoesNotContain(".Property([\"Name\"]", generated, StringComparison.Ordinal);
+            Assert.Contains(".Column(\"Name\"", generated, StringComparison.Ordinal);
+        }
+
+        [Fact]
+        public void PositionalRecordReportsEXR008()
+        {
+            const string source = """
+                using ExcelReader.Core.Parser;
+
+                namespace GeneratorTests.Positional
+                {
+                    [ExcelSerializable]
+                    public partial record Foo(string A);
+                }
+                """;
+            (_, ImmutableArray<Diagnostic> diagnostics) = RunGenerator(source);
+            Diagnostic diagnostic = Assert.Single(diagnostics);
+            Assert.Equal("EXR008", diagnostic.Id);
+            Assert.Equal(DiagnosticSeverity.Error, diagnostic.Severity);
+        }
+
+        [Fact]
+        public void InheritedPropertiesAreMapped()
+        {
+            const string source = """
+                using ExcelReader.Core.Parser;
+
+                namespace GeneratorTests.Inherited
+                {
+                    public class Base
+                    {
+                        public string Inherited { get; set; } = "";
+                    }
+
+                    [ExcelSerializable]
+                    public partial class Derived : Base
+                    {
+                        public int Own { get; set; }
+                    }
+                }
+                """;
+            (ImmutableCompilationResult result, ImmutableArray<Diagnostic> diagnostics, string generated) = RunGeneratorWithSource(source);
+            Assert.Empty(diagnostics);
+            EmitResult emit = result.Emit();
+            Assert.True(emit.Success, string.Join(Environment.NewLine, emit.Diagnostics.Select(static d => d.ToString())));
+            Assert.Contains(".Property([\"Own\"]", generated, StringComparison.Ordinal);
+            Assert.Contains(".Property([\"Inherited\"]", generated, StringComparison.Ordinal);
+            int ownIndex = generated.IndexOf(".Property([\"Own\"]", StringComparison.Ordinal);
+            int inheritedIndex = generated.IndexOf(".Property([\"Inherited\"]", StringComparison.Ordinal);
+            Assert.True(ownIndex < inheritedIndex, "Declared-on-type properties must be emitted before inherited ones.");
         }
     }
 }

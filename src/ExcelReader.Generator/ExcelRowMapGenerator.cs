@@ -66,6 +66,30 @@ namespace ExcelReader.Generator
             DiagnosticSeverity.Warning,
             isEnabledByDefault: true);
 
+        private static readonly DiagnosticDescriptor NoMappablePropertyDescriptor = new(
+            "EXR005",
+            "Type marked [ExcelSerializable] has no mappable property",
+            "Type '{0}' is marked [ExcelSerializable] but has no property that can be read or written; the generated map is empty",
+            "ExcelReader.Generator",
+            DiagnosticSeverity.Warning,
+            isEnabledByDefault: true);
+
+        private static readonly DiagnosticDescriptor GenericTypeNotSupportedDescriptor = new(
+            "EXR007",
+            "[ExcelSerializable] does not support generic types",
+            "Type '{0}' is generic; [ExcelSerializable] supports only non-generic types. Map it with ExcelFluentParser<T> or a hand-written IExcelRowMap<T> instead.",
+            "ExcelReader.Generator",
+            DiagnosticSeverity.Error,
+            isEnabledByDefault: true);
+
+        private static readonly DiagnosticDescriptor NoParameterlessConstructorDescriptor = new(
+            "EXR008",
+            "Type has no public parameterless constructor",
+            "Type '{0}' has no public parameterless constructor, so no row instance can be created for it; add one, or map it with ExcelFluentParser<T>",
+            "ExcelReader.Generator",
+            DiagnosticSeverity.Error,
+            isEnabledByDefault: true);
+
         private enum ReadKind
         {
             None,
@@ -103,7 +127,10 @@ namespace ExcelReader.Generator
             IncrementalValuesProvider<INamedTypeSymbol> candidates = context.SyntaxProvider
                 .ForAttributeWithMetadataName(
                     SerializableAttribute,
-                    predicate: static (node, _) => node is ClassDeclarationSyntax or StructDeclarationSyntax,
+                    // TypeDeclarationSyntax covers class/struct/record/record struct (but not enum,
+                    // which is a BaseTypeDeclarationSyntax, not a TypeDeclarationSyntax) — a record was
+                    // previously silently ignored here (ClassDeclarationSyntax does not cover it).
+                    predicate: static (node, _) => node is TypeDeclarationSyntax and not InterfaceDeclarationSyntax,
                     transform: static (ctx, _) => (INamedTypeSymbol)ctx.TargetSymbol);
 
             context.RegisterSourceOutput(candidates, static (spc, symbol) => Emit(spc, symbol));
@@ -124,16 +151,30 @@ namespace ExcelReader.Generator
                     return;
                 }
             }
+            // A generic hintName (AddSource's file name) is invalid, and the emitted declaration below
+            // has no way to carry the type parameters back — reject up front instead of letting AddSource
+            // throw (which the generator host reports as an opaque CS8785 with no diagnostic at all).
+            if (IsGenericTypeOrContainer(symbol))
+            {
+                context.ReportDiagnostic(Diagnostic.Create(GenericTypeNotSupportedDescriptor, symbol.Locations.FirstOrDefault(), symbol.Name));
+                return;
+            }
+            // A struct always has an implicit parameterless constructor; only a class/record class needs
+            // one to exist explicitly for `new T()` (AppendRowMap's factory) to compile.
+            if (symbol.TypeKind != TypeKind.Struct && !HasPublicParameterlessConstructor(symbol))
+            {
+                context.ReportDiagnostic(Diagnostic.Create(NoParameterlessConstructorDescriptor, symbol.Locations.FirstOrDefault(), symbol.Name));
+                return;
+            }
 
-            IPropertySymbol[] candidateProperties = [.. symbol.GetMembers()
-                .OfType<IPropertySymbol>()
-                .Where(static p => !p.IsStatic && p.Parameters.Length == 0 && p.DeclaredAccessibility == Accessibility.Public && !HasAttribute(p, IgnoreAttribute))];
+            IPropertySymbol[] candidateProperties = [.. CollectMappableProperties(symbol)];
 
             var boundHeaders = new HashSet<string>(StringComparer.Ordinal);
             var plans = new List<PropertyPlan>(candidateProperties.Length);
+            bool hadPropertyError = false;
             foreach (IPropertySymbol property in candidateProperties)
             {
-                PropertyPlan plan = BuildPlan(context, symbol, property);
+                PropertyPlan plan = BuildPlan(context, symbol, property, ref hadPropertyError);
                 if (plan.Read.Kind != ReadKind.None)
                 {
                     foreach (string name in plan.HeaderNames.Where(n => !boundHeaders.Add(n)))
@@ -147,11 +188,59 @@ namespace ExcelReader.Generator
                 }
             }
 
+            // Skip EXR005 when a more specific per-property error (EXR003/EXR004) already explains why
+            // nothing mapped — piling a generic "nothing mappable" warning on top of the real cause is
+            // noise, not information.
+            if (plans.Count == 0 && !hadPropertyError)
+            {
+                context.ReportDiagnostic(Diagnostic.Create(NoMappablePropertyDescriptor, symbol.Locations.FirstOrDefault(), symbol.Name));
+            }
+
             string source = GenerateSource(symbol, plans);
             string hintName = symbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)
                 .Replace("global::", "")
                 .Replace('.', '_');
             context.AddSource($"{hintName}.ExcelRowMap.g.cs", source);
+        }
+
+        private static bool IsGenericTypeOrContainer(INamedTypeSymbol symbol)
+        {
+            if (symbol.TypeParameters.Length > 0)
+            {
+                return true;
+            }
+            for (INamedTypeSymbol? outer = symbol.ContainingType; outer is not null; outer = outer.ContainingType)
+            {
+                if (outer.TypeParameters.Length > 0)
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        private static bool HasPublicParameterlessConstructor(INamedTypeSymbol symbol)
+        {
+            return symbol.Constructors.Any(static c => c.Parameters.Length == 0 && c.DeclaredAccessibility == Accessibility.Public);
+        }
+
+        // Mirrors TypeMapper<T>.Build()'s GetProperties(BindingFlags.Public | BindingFlags.Instance),
+        // which (unlike symbol.GetMembers()) walks inherited properties too — a property declared only
+        // on a base type was previously missing from the generated map (divergence from reflection).
+        // Declared-on-`symbol` properties come first, then each base type's in turn; a property that a
+        // derived type re-declares (`new`) shadows the base one, first occurrence by name wins.
+        private static IEnumerable<IPropertySymbol> CollectMappableProperties(INamedTypeSymbol symbol)
+        {
+            var seenNames = new HashSet<string>(StringComparer.Ordinal);
+            for (INamedTypeSymbol? current = symbol; current is not null && current.SpecialType != SpecialType.System_Object; current = current.BaseType)
+            {
+                foreach (IPropertySymbol property in current.GetMembers().OfType<IPropertySymbol>()
+                    .Where(p => !p.IsStatic && p.Parameters.Length == 0 && p.DeclaredAccessibility == Accessibility.Public
+                        && !HasAttribute(p, IgnoreAttribute) && seenNames.Add(p.Name)))
+                {
+                    yield return property;
+                }
+            }
         }
 
         private static bool IsPartial(INamedTypeSymbol symbol)
@@ -167,7 +256,7 @@ namespace ExcelReader.Generator
             return property.GetAttributes().Any(a => string.Equals(a.AttributeClass?.ToDisplayString(), fullName, StringComparison.Ordinal));
         }
 
-        private static PropertyPlan BuildPlan(SourceProductionContext context, INamedTypeSymbol owner, IPropertySymbol property)
+        private static PropertyPlan BuildPlan(SourceProductionContext context, INamedTypeSymbol owner, IPropertySymbol property, ref bool hadPropertyError)
         {
             string[] names = [.. property.GetAttributes()
                 .Where(a => string.Equals(a.AttributeClass?.ToDisplayString(), ColumnAttribute, StringComparison.Ordinal))
@@ -184,7 +273,11 @@ namespace ExcelReader.Generator
             bool allowEmpty = required?.NamedArguments.FirstOrDefault(static kv => string.Equals(kv.Key, "AllowEmpty", StringComparison.Ordinal)).Value.Value is true;
             bool requireValue = isRequired && !allowEmpty;
 
-            bool canSet = property.SetMethod is { DeclaredAccessibility: Accessibility.Public };
+            // An init-only setter (`{ get; init; }`, and every positional-record property) can be
+            // assigned through reflection's CreateDelegate, but the emitted `m.Prop = v` lambda cannot
+            // (CS8852) — such a property is write-only from the generator's perspective, so it's read
+            // through the record's write side only, not the row map.
+            bool canSet = property.SetMethod is { DeclaredAccessibility: Accessibility.Public, IsInitOnly: false };
             bool canGet = property.GetMethod is { DeclaredAccessibility: Accessibility.Public };
             string qualifiedProperty = property.Type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
 
@@ -213,6 +306,7 @@ namespace ExcelReader.Generator
                 {
                     context.ReportDiagnostic(Diagnostic.Create(
                         ConverterTypeMismatchDescriptor, property.Locations.FirstOrDefault(), converterQualified, qualifiedProperty, owner.Name, property.Name));
+                    hadPropertyError = true;
                 }
                 if (implementsWriter && canGet)
                 {
@@ -231,6 +325,7 @@ namespace ExcelReader.Generator
                 {
                     context.ReportDiagnostic(Diagnostic.Create(
                         RequiredWithNoParserDescriptor, property.Locations.FirstOrDefault(), owner.Name, property.Name, qualifiedProperty));
+                    hadPropertyError = true;
                 }
 
                 WriteKind writeKind = GetWriteKind(underlying);
@@ -359,6 +454,19 @@ namespace ExcelReader.Generator
                 && SymbolEqualityComparer.Default.Equals(i.TypeArguments[0], exactArgument));
         }
 
+        // Matches the original declaration's keyword so the emitted partial declares the same kind —
+        // "class" for a record class would compile but subtly change the type's semantics (no more
+        // synthesized Equals/ToString from a *second* declaration, though the original still has them),
+        // whereas "struct" for a record struct's partial would flat out fail to bind IsRecord's members.
+        private static string DeclarationKeyword(INamedTypeSymbol symbol)
+        {
+            if (symbol.TypeKind == TypeKind.Struct)
+            {
+                return symbol.IsRecord ? "record struct" : "struct";
+            }
+            return symbol.IsRecord ? "record" : "class";
+        }
+
         private static string GenerateSource(INamedTypeSymbol symbol, List<PropertyPlan> properties)
         {
             string qualifiedType = symbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
@@ -380,12 +488,11 @@ namespace ExcelReader.Generator
             }
             foreach (INamedTypeSymbol outer in containers)
             {
-                sb.AppendLine($"partial {(outer.TypeKind == TypeKind.Struct ? "struct" : "class")} {outer.Name}");
+                sb.AppendLine($"partial {DeclarationKeyword(outer)} {outer.Name}");
                 sb.AppendLine("{");
             }
 
-            string kind = symbol.TypeKind == TypeKind.Struct ? "struct" : "class";
-            sb.AppendLine($"partial {kind} {symbol.Name} : global::ExcelReader.Core.Parser.IExcelRowMap<{qualifiedType}>, global::ExcelReader.Core.Writer.IExcelRecordMap<{qualifiedType}>");
+            sb.AppendLine($"partial {DeclarationKeyword(symbol)} {symbol.Name} : global::ExcelReader.Core.Parser.IExcelRowMap<{qualifiedType}>, global::ExcelReader.Core.Writer.IExcelRecordMap<{qualifiedType}>");
             sb.AppendLine("{");
 
             foreach (string? decl in properties.Select(static p => p.ConverterFieldDecl).Where(static d => d is not null))
@@ -465,8 +572,17 @@ namespace ExcelReader.Generator
         {
             sb.AppendLine($"    public static void ConfigureExcelRecordMap(global::ExcelReader.Core.Writer.ExcelRecordMapBuilder<{qualifiedType}> builder)");
             sb.AppendLine("    {");
+            string[] writeEmits = [.. properties.Select(static p => p.WriteEmit).Where(static w => w is not null)!];
+            if (writeEmits.Length == 0)
+            {
+                // No `.Column(...)` calls to chain — `builder;` alone is not a valid statement
+                // (CS0201), and an unused parameter warning would fire without some use of it.
+                sb.AppendLine("        _ = builder;");
+                sb.AppendLine("    }");
+                return;
+            }
             sb.AppendLine("        builder");
-            foreach (string? writeEmit in properties.Select(static p => p.WriteEmit).Where(static w => w is not null))
+            foreach (string writeEmit in writeEmits)
             {
                 sb.AppendLine(writeEmit);
             }
