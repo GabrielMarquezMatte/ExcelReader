@@ -565,6 +565,14 @@ namespace ExcelReader.Generator
             sb.AppendLine("    }");
         }
 
+        // Emits a single fused .PropertyRaw(...) call per bound property instead of the two-delegate
+        // .Property/.PropertyNullable/.Converted composition ExcelRowMapBuilder<T> builds internally:
+        // one indirect call per bound cell per row (the ColumnParser<T> itself) instead of two (the
+        // ColumnParser<T> wrapper calling through to a separate read delegate, then a separate setter
+        // delegate). Assigning a non-nullable `v` straight into a `TValue?` property (the Nullable/
+        // GuidNullable cases) already implicitly wraps it, so those collapse into the same emission as
+        // their non-nullable counterparts — PropertyRaw needs no separate nullable overload the way
+        // Property/PropertyNullable do.
         private static void EmitReadFragment(StringBuilder sb, string qualifiedType, PropertyPlan p)
         {
             string namesLiteral = string.Join(", ", p.HeaderNames.Select(static n => $"\"{n.Replace("\"", "\\\"")}\""));
@@ -574,31 +582,41 @@ namespace ExcelReader.Generator
                 case ReadKind.None:
                     return;
                 case ReadKind.Value:
-                    sb.AppendLine($"            .Property([{namesLiteral}], {p.Read.Reader}, static (ref {qualifiedType} m, {p.Read.ValueType} v) => m.{p.PropertyName} = v, {req})");
-                    return;
                 case ReadKind.Nullable:
-                    sb.AppendLine($"            .PropertyNullable([{namesLiteral}], {p.Read.Reader}, static (ref {qualifiedType} m, {p.Read.ValueType}? v) => m.{p.PropertyName} = v, {req})");
+                    EmitPropertyRaw(sb, qualifiedType, namesLiteral, p.PropertyName, req,
+                        $"{p.Read.Reader}(in c, d, pr, out {p.Read.ValueType} v)");
                     return;
                 case ReadKind.Converted:
-                    sb.AppendLine($"            .Converted([{namesLiteral}], {p.Read.Reader}, static (ref {qualifiedType} m, {p.Read.ValueType} v) => m.{p.PropertyName} = v, {req})");
+                    EmitPropertyRaw(sb, qualifiedType, namesLiteral, p.PropertyName, req,
+                        $"{p.Read.Reader}.TryConvert(in c, d, pr, out {p.Read.ValueType} v)");
                     return;
                 case ReadKind.GuidValue:
-                    sb.AppendLine("#if NET9_0_OR_GREATER");
-                    sb.AppendLine($"            .Property([{namesLiteral}], global::ExcelReader.Core.Parser.ExcelCellReaders.Parsable<global::System.Guid>, static (ref {qualifiedType} m, global::System.Guid v) => m.{p.PropertyName} = v, {req})");
-                    sb.AppendLine("#else");
-                    sb.AppendLine($"            .Property([{namesLiteral}], global::ExcelReader.Core.Parser.ExcelCellReaders.Guid, static (ref {qualifiedType} m, global::System.Guid v) => m.{p.PropertyName} = v, {req})");
-                    sb.AppendLine("#endif");
-                    return;
                 case ReadKind.GuidNullable:
                     sb.AppendLine("#if NET9_0_OR_GREATER");
-                    sb.AppendLine($"            .PropertyNullable([{namesLiteral}], global::ExcelReader.Core.Parser.ExcelCellReaders.Parsable<global::System.Guid>, static (ref {qualifiedType} m, global::System.Guid? v) => m.{p.PropertyName} = v, {req})");
+                    EmitPropertyRaw(sb, qualifiedType, namesLiteral, p.PropertyName, req,
+                        "global::ExcelReader.Core.Parser.ExcelCellReaders.Parsable<global::System.Guid>(in c, d, pr, out global::System.Guid v)");
                     sb.AppendLine("#else");
-                    sb.AppendLine($"            .PropertyNullable([{namesLiteral}], global::ExcelReader.Core.Parser.ExcelCellReaders.Guid, static (ref {qualifiedType} m, global::System.Guid? v) => m.{p.PropertyName} = v, {req})");
+                    EmitPropertyRaw(sb, qualifiedType, namesLiteral, p.PropertyName, req,
+                        "global::ExcelReader.Core.Parser.ExcelCellReaders.Guid(in c, d, pr, out global::System.Guid v)");
                     sb.AppendLine("#endif");
                     return;
                 default:
                     return;
             }
+        }
+
+        // `tryReadExpr` is a full call expression evaluating a `bool`, binding `out {ValueType} v` — e.g.
+        // "global::...ExcelCellReaders.Bool(in c, d, pr, out bool v)" or "s_converter_Foo.TryConvert(in
+        // c, d, pr, out int v)". `c`/`d`/`pr` are this lambda's own parameter names (Cell/isDate1904/
+        // provider), matching ExcelRowParser<T>'s shape exactly so no wrapper indirection is introduced.
+        private static void EmitPropertyRaw(StringBuilder sb, string qualifiedType, string namesLiteral, string propertyName, string req, string tryReadExpr)
+        {
+            sb.AppendLine($"            .PropertyRaw([{namesLiteral}], static (ref {qualifiedType} m, in global::ExcelReader.Core.ValueObjects.Cell c, bool d, global::System.IFormatProvider pr) =>");
+            sb.AppendLine("            {");
+            sb.AppendLine($"                if (!{tryReadExpr}) {{ return false; }}");
+            sb.AppendLine($"                m.{propertyName} = v;");
+            sb.AppendLine("                return true;");
+            sb.AppendLine($"            }}, {req})");
         }
 
         private static void AppendRecordMap(StringBuilder sb, string qualifiedType, List<PropertyPlan> properties)

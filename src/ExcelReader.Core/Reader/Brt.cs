@@ -54,6 +54,12 @@ namespace ExcelReader.Core.Reader
         internal const int EndFmts = 616;
         internal const int BeginCellXFs = 617;
         internal const int EndCellXFs = 618;
+        // The STYLES production ([MS-XLSB] 2.1.7.50) is mandatory in a styles part, unlike the
+        // optional DXFS/TABLESTYLES blocks around it — Excel reports "Formato de parte de
+        // /xl/styles.bin" and repairs the file when it is missing.
+        internal const int BeginStyles = 619;
+        internal const int EndStyles = 620;
+        internal const int Style = 48;
         internal const int BeginCellStyleXFs = 626;
         internal const int EndCellStyleXFs = 627;
         internal const int BeginTableStyles = 648;
