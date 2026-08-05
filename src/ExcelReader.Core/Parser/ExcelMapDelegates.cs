@@ -32,4 +32,25 @@ namespace ExcelReader.Core.Parser
 #else
         ;
 #endif
+
+    /// <summary>
+    /// Reads a matched, non-empty cell and assigns the result directly onto <paramref name="model"/> in
+    /// one call, instead of going through a separate <see cref="ExcelCellReader{TValue}"/> +
+    /// <see cref="ExcelPropertySetter{TModel, TValue}"/> pair. Plug this into
+    /// <see cref="ExcelRowMapBuilder{T}.PropertyRaw"/> when a single fused delegate (e.g. one emitted by
+    /// the <c>[ExcelSerializable]</c> source generator) should replace what would otherwise be two
+    /// indirect calls per bound cell per row.
+    /// </summary>
+    /// <typeparam name="TModel">The row model type being read into.</typeparam>
+    /// <param name="model">The model instance to mutate.</param>
+    /// <param name="cell">The cell to read; callers only invoke this for a non-empty cell.</param>
+    /// <param name="isDate1904">True when the source workbook uses the 1904 date system.</param>
+    /// <param name="provider">The format provider configured for parsing.</param>
+    /// <returns><see langword="true"/> if the cell was read and assigned successfully.</returns>
+    public delegate bool ExcelRowParser<TModel>(ref TModel model, in Cell cell, bool isDate1904, IFormatProvider provider)
+#if NET9_0_OR_GREATER
+        where TModel : allows ref struct;
+#else
+        ;
+#endif
 }

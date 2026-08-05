@@ -125,7 +125,11 @@ namespace ExcelReader.Core.Reader
         private static List<int> CountFieldsPerLine(ReadOnlySpan<byte> sample, byte delimiter, byte quote, int maxLines)
         {
             var counts = new List<int>();
-            var scanner = new CsvControlScanner(sample, 0, sample.Length, delimiter, quote);
+            // CsvControlScanner is backed by a byte[] (so CsvReader.Enumerator can persist an instance
+            // as a field across records); sniffing is a one-shot, non-hot-path scan over a small sample,
+            // so copying it once here costs nothing worth avoiding.
+            var scanner = new CsvControlScanner(delimiter, quote);
+            scanner.Reset(sample.ToArray(), sample.Length, 0);
             bool inQuotes = false;
             int delimiterCount = 0;
             int lineStart = 0;

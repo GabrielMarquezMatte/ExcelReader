@@ -36,6 +36,30 @@ namespace ExcelReader.Core.Writer.Internal
             Length = 0;
         }
 
+        // Hands ownership of the current backing array to the caller (e.g. WriteOffloadStream,
+        // for a zero-copy handoff to a background writer) and immediately rents a fresh array of
+        // the same capacity so this buffer keeps working without any extra growth step. The caller
+        // becomes responsible for returning the detached array exactly once via ReturnDetached,
+        // once it is done with the bytes (e.g. after a background thread finishes writing them).
+        internal byte[] Detach(out int length)
+        {
+            byte[] detached = _buffer;
+            length = Length;
+            _buffer = Pool.Rent(detached.Length);
+            Length = 0;
+            return detached;
+        }
+
+        // Returns an array previously obtained from Detach() to this buffer's dedicated pool.
+        // Must be called exactly once per Detach() call.
+        internal static void ReturnDetached(byte[] buffer)
+        {
+            if (buffer.Length > 0)
+            {
+                Pool.Return(buffer);
+            }
+        }
+
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         internal void WriteByte(byte value)
         {

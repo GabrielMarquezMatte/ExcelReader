@@ -102,7 +102,7 @@ namespace ExcelReader.Tests
         public void CellDescSizeStaysWithinPaddingBudget()
         {
             int size = Unsafe.SizeOf<CellDesc>();
-            Assert.True(size <= 40, $"CellDesc grew to {size.ToString(Inv)} bytes.");
+            Assert.True(size <= 32, $"CellDesc grew to {size.ToString(Inv)} bytes.");
         }
 
         // --- HeaderNormalization ---

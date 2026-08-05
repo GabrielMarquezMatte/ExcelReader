@@ -264,8 +264,9 @@ namespace ExcelReader.Core.Writer
             WriteCountedRecord(data, payload, Brt.BeginFonts, 1);
             WriteBlobRecord(data, payload, Brt.Font, DefaultFontPayload);
             Biff12RecordWriter.WriteRecord(data, Brt.EndFonts);
-            WriteCountedRecord(data, payload, Brt.BeginFills, 1);
-            WriteBlobRecord(data, payload, Brt.Fill, DefaultFillPayload);
+            WriteCountedRecord(data, payload, Brt.BeginFills, 2);
+            WriteFill(data, payload, FillPatternNone);
+            WriteFill(data, payload, FillPatternGray125);
             Biff12RecordWriter.WriteRecord(data, Brt.EndFills);
             WriteCountedRecord(data, payload, Brt.BeginBorders, 1);
             WriteBlobRecord(data, payload, Brt.Border, DefaultBorderPayload);
@@ -283,9 +284,33 @@ namespace ExcelReader.Core.Writer
                 WriteXf(data, payload, numFmtId);
             }
             Biff12RecordWriter.WriteRecord(data, Brt.EndCellXFs);
+            WriteStyles(data, payload);
             Biff12RecordWriter.WriteRecord(data, Brt.EndStyleSheet);
             await WriteEntryAsync("xl/styles.bin", data.Memory, ct).ConfigureAwait(false);
         }
+
+        // The STYLES production is mandatory in a styles part — omitting it makes Excel report
+        // "Formato de parte de /xl/styles.bin" and silently repair the workbook on open. One built-in
+        // "Normal" cell style pointing at cellStyleXfs[0] is the minimum Excel accepts; the optional
+        // DXFS/TABLESTYLES/slicer blocks a full Excel-authored file also carries stay omitted.
+        //
+        // BrtStyle payload, verified byte-for-byte against a real Excel-authored .xlsb:
+        //   ixf (u32) | grbit (u16) | iStyBuiltIn (u8) | iLevel (u8) | stName (XLWideString)
+        private static void WriteStyles(BiffBuffer data, BiffBuffer payload)
+        {
+            WriteCountedRecord(data, payload, Brt.BeginStyles, 1);
+            payload.Reset();
+            payload.WriteU32(0);            // ixf -> cellStyleXfs[0]
+            payload.WriteU16(StyleBuiltIn); // grbit
+            payload.WriteByte(0);           // iStyBuiltIn: 0 == the "Normal" built-in style
+            payload.WriteByte(0);           // iLevel
+            Biff12RecordWriter.WriteWideString(payload, "Normal");
+            Biff12RecordWriter.WriteRecord(data, Brt.Style, payload.Span);
+            Biff12RecordWriter.WriteRecord(data, Brt.EndStyles);
+        }
+
+        // BrtStyle grbit bit 0: the style is one of Excel's built-ins rather than a user-defined one.
+        private const int StyleBuiltIn = 0x0001;
 
         private static void WriteFmt(BiffBuffer data, BiffBuffer payload, int numFmtId, string formatCode)
         {
@@ -336,17 +361,36 @@ namespace ExcelReader.Core.Writer
             0x00, 0x43, 0x00, 0x61, 0x00, 0x6C, 0x00, 0x69,
             0x00, 0x62, 0x00, 0x72, 0x00, 0x69, 0x00,
         ];
-        private static ReadOnlySpan<byte> DefaultFillPayload => [
-            0x00, 0x00, 0x00, 0x03, 0x40, 0x00, 0x00, 0x00,
-            0x00, 0x00, 0xFF, 0x03, 0x41, 0x00, 0x00, 0xFF,
-            0xFF, 0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00, 0x00,
+        // BrtFill is fls (u32 pattern type) followed by this 64-byte remainder — the fg/bg BrtColor
+        // pair plus the gradient-stop area a solid fill leaves zeroed. Verified byte-for-byte against
+        // a real Excel-authored .xlsb, whose two fills differ from each other in fls alone.
+        //
+        // This blob used to be written with its leading fls byte missing, shifting every field left by
+        // one so fls decoded as 0x03000000 instead of 0 — enough for Excel to reject the fills block
+        // and repair the workbook ("Formato de parte de /xl/styles.bin").
+        private static ReadOnlySpan<byte> FillPayloadAfterPattern => [
+            0x03, 0x40, 0x00, 0x00, 0x00, 0x00, 0x00, 0xFF,
+            0x03, 0x41, 0x00, 0x00, 0xFF, 0xFF, 0xFF, 0xFF,
             0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
             0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
             0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
             0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
             0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-            0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
         ];
+
+        // Excel requires the first two fills to be exactly these, in this order, in every styles part —
+        // the same fixed pair its own XLSX output always carries. A workbook with fewer is repaired.
+        private const uint FillPatternNone = 0x00;
+        private const uint FillPatternGray125 = 0x11;
+
+        private static void WriteFill(BiffBuffer data, BiffBuffer payload, uint pattern)
+        {
+            payload.Reset();
+            payload.WriteU32(pattern);
+            payload.Write(FillPayloadAfterPattern);
+            Biff12RecordWriter.WriteRecord(data, Brt.Fill, payload.Span);
+        }
         private static ReadOnlySpan<byte> DefaultBorderPayload => [
             0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00,
             0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00,
@@ -365,17 +409,33 @@ namespace ExcelReader.Core.Writer
             return WriteEntryAsync("docProps/app.xml", xml, ct);
         }
 
-        [SkipLocalsInit]
+        // BrtXF, 16 bytes ([MS-XLSB] 2.4.816). Field-by-field rather than a partial blob: this used to
+        // write its middle 10 bytes from `stackalloc byte[10]` under [SkipLocalsInit], which does NOT
+        // zero the allocation — so iFont/iFill/ixBorder/trot/indent/flags were filled with whatever
+        // happened to be on the stack. That produced indices pointing at fonts and fills the part never
+        // declared, which Excel repairs ("Formato de parte de /xl/styles.bin"). The values below are
+        // taken from a real Excel-authored .xlsb, whose style and cell XFs differ only in ixfeParent.
         private static void WriteXf(BiffBuffer data, BiffBuffer payload, int numFmtId, bool isStyleXf = false)
         {
             payload.Reset();
-            payload.WriteU16(isStyleXf ? ushort.MaxValue : (ushort)0);
-            payload.WriteU16(numFmtId);
-            ReadOnlySpan<byte> flags = stackalloc byte[10];
-            payload.Write(flags);
-            payload.WriteU16(1);
+            payload.WriteU16(isStyleXf ? ushort.MaxValue : 0); // ixfeParent (0xFFFF for a style XF)
+            payload.WriteU16(numFmtId);                        // iFmt
+            payload.WriteU16(0);                               // iFont
+            payload.WriteU16(0);                               // iFill
+            payload.WriteU16(0);                               // ixBorder
+            payload.WriteByte(0);                              // trot
+            payload.WriteByte(0);                              // indent
+            payload.WriteU16(XfDefaultFlags);
+            // xfGrbitAtr marks which attributes this XF overrides from its parent style; a custom
+            // number format is the only one this writer ever sets.
+            payload.WriteU16(numFmtId != 0 ? XfAttributeNumberFormat : 0);
             Biff12RecordWriter.WriteRecord(data, Brt.Xf, payload.Span);
         }
+
+        // Alignment/protection bits every XF in an Excel-written styles part carries: vertical
+        // alignment "bottom" plus fLocked, Excel's default cell protection state.
+        private const int XfDefaultFlags = 0x1010;
+        private const int XfAttributeNumberFormat = 0x0001;
 
         private ValueTask WriteContentTypesAsync(CancellationToken ct)
         {

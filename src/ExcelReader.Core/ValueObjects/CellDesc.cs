@@ -10,7 +10,8 @@ namespace ExcelReader.Core.ValueObjects
         public int Column { get; init; }
         public int Start { get; init; }
         public int Length { get; init; }
-        public CellType Type { get; init; }
+        private readonly byte _type;
+        public CellType Type { get => (CellType)_type; init => _type = (byte)value; }
         public int Style { get; init; }
         public CellValueSource Source { get; init; }
         // Raw numeric value, set when the source stored a binary double (XLS Number/RK/Date/Formula).
