@@ -53,16 +53,27 @@ wget https://raw.githubusercontent.com/Metalnem/libfuzzer-dotnet/master/libfuzze
 clang -fsanitize=fuzzer libfuzzer-dotnet.cc -o libfuzzer-dotnet
 
 dotnet publish tests/ExcelReader.Fuzz -c Release -o fuzz-out
+chmod +x fuzz-out/ExcelReader.Fuzz
 
 # Seeds FIRST — see the warning below.
 dotnet fuzz-out/ExcelReader.Fuzz.dll seeds corpus
 
 sharpfuzz fuzz-out/ExcelReader.Core.dll        # instrument the code under test, not the harness
 
-./libfuzzer-dotnet --target_path=dotnet \
-  --target_args="fuzz-out/ExcelReader.Fuzz.dll xlsb" \
+# target_path is the published apphost, NOT `dotnet`; the target comes from the environment.
+FUZZ_TARGET=xlsb ./libfuzzer-dotnet --target_path=fuzz-out/ExcelReader.Fuzz \
   corpus -max_len=131072 -timeout=25 -rss_limit_mb=2048
 ```
+
+> Two invocation traps, both of which fail in ways that do not name the real cause:
+>
+> * **`--target_path` must be the apphost, not `dotnet`.** libfuzzer-dotnet hands `--target_args` to
+>   the child as a *single* argv entry instead of splitting on spaces, so
+>   `--target_path=dotnet --target_args="Foo.dll xlsb"` gives `dotnet` one bogus path. It prints its
+>   usage text and exits, which surfaces as `short read: expected 4 bytes, got 0 bytes`.
+> * **Select the target with `FUZZ_TARGET`, not `--target_args`.** SharpFuzz's
+>   `Fuzzer.LibFuzzer.Run` parses argv itself and treats a lone argument as a single input file to
+>   replay, so our own argument gets swallowed as a corpus path.
 
 > **Once `sharpfuzz` has run, that build may only be launched by `libfuzzer-dotnet`.** The
 > instrumentation writes coverage into a shared-memory region the engine sets up; running the

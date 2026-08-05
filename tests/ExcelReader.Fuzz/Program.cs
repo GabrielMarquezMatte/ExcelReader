@@ -41,14 +41,23 @@ namespace ExcelReader.Fuzz
                 return SmokeRunner.Run(args[1], mutations, seed);
             }
 
-            // libfuzzer-dotnet forwards its own flags too, so match on the first argument only.
-            string? name = args.Length > 0 ? args[0] : Environment.GetEnvironmentVariable("FUZZ_TARGET");
+            // FUZZ_TARGET takes precedence over argv, and under libFuzzer it is the ONLY supported
+            // way to pick a target: SharpFuzz's Fuzzer.LibFuzzer.Run parses argv itself (a lone
+            // argument is treated as a single input file to replay), so an extra argument of ours
+            // would be misread as a corpus path. Passing the target through the environment leaves
+            // argv entirely to SharpFuzz. argv stays supported for the standalone modes above.
+            string? name = Environment.GetEnvironmentVariable("FUZZ_TARGET");
+            if (string.IsNullOrEmpty(name) && args.Length > 0)
+            {
+                name = args[0];
+            }
             if (name is null || !AllTargets.TryGetValue(name, out Action<ReadOnlySpan<byte>>? target))
             {
                 Console.Error.WriteLine("usage:");
                 Console.Error.WriteLine("  ExcelReader.Fuzz seeds <dir>                     write a starting corpus");
                 Console.Error.WriteLine("  ExcelReader.Fuzz check <dir> [mutations] [seed]  run every target, no engine");
-                Console.Error.WriteLine($"  ExcelReader.Fuzz <{string.Join('|', AllTargets.Keys)}>   run under libFuzzer");
+                Console.Error.WriteLine($"  FUZZ_TARGET=<{string.Join('|', AllTargets.Keys)}> ExcelReader.Fuzz");
+                Console.Error.WriteLine("                                                   run under libfuzzer-dotnet");
                 return 1;
             }
 
