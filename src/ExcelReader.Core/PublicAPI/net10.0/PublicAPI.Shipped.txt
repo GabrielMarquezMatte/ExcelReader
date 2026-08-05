@@ -97,6 +97,8 @@ ExcelReader.Core.Parser.ExcelRowMapBuilder<T>.Factory(System.Func<T>? factory) -
 ExcelReader.Core.Parser.ExcelRowMapBuilder<T>.Property<TValue>(string![]! names, ExcelReader.Core.Parser.ExcelCellReader<TValue>! read, ExcelReader.Core.Parser.ExcelPropertySetter<T, TValue>! set, bool isRequired = false, bool requireValue = false) -> ExcelReader.Core.Parser.ExcelRowMapBuilder<T>!
 ExcelReader.Core.Parser.ExcelRowMapBuilder<T>.PropertyAt<TValue>(int columnIndex, ExcelReader.Core.Parser.ExcelCellReader<TValue>! read, ExcelReader.Core.Parser.ExcelPropertySetter<T, TValue>! set, bool requireValue = false) -> ExcelReader.Core.Parser.ExcelRowMapBuilder<T>!
 ExcelReader.Core.Parser.ExcelRowMapBuilder<T>.PropertyNullable<TValue>(string![]! names, ExcelReader.Core.Parser.ExcelCellReader<TValue>! read, ExcelReader.Core.Parser.ExcelPropertySetter<T, TValue?>! set, bool isRequired = false, bool requireValue = false) -> ExcelReader.Core.Parser.ExcelRowMapBuilder<T>!
+ExcelReader.Core.Parser.ExcelRowMapBuilder<T>.PropertyRaw(string![]! names, ExcelReader.Core.Parser.ExcelRowParser<T>! parse, bool isRequired = false, bool requireValue = false) -> ExcelReader.Core.Parser.ExcelRowMapBuilder<T>!
+ExcelReader.Core.Parser.ExcelRowParser<TModel>
 ExcelReader.Core.Parser.ExcelSerializableAttribute
 ExcelReader.Core.Parser.ExcelSerializableAttribute.ExcelSerializableAttribute() -> void
 ExcelReader.Core.Parser.HeaderNormalization
@@ -670,6 +672,7 @@ static readonly ExcelReader.Core.Parser.ExcelCellReaders.TimeOnlySerial -> Excel
 static readonly ExcelReader.Core.Parser.ExcelCellReaders.TimeOnlyText -> ExcelReader.Core.Parser.ExcelCellReader<System.TimeOnly>!
 virtual ExcelReader.Core.Parser.ExcelCellReader<TValue>.Invoke(in ExcelReader.Core.ValueObjects.Cell cell, bool isDate1904, System.IFormatProvider! provider, out TValue value) -> bool
 virtual ExcelReader.Core.Parser.ExcelPropertySetter<TModel, TValue>.Invoke(ref TModel model, TValue value) -> void
+virtual ExcelReader.Core.Parser.ExcelRowParser<TModel>.Invoke(ref TModel model, in ExcelReader.Core.ValueObjects.Cell cell, bool isDate1904, System.IFormatProvider! provider) -> bool
 ~ExcelReader.Core.Parser.Internal.ExcelEnumerable<T, TReader, TEnumerator>.GetAsyncEnumerator(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> ExcelReader.Core.Parser.Internal.ExcelEnumerable<T, TReader, TEnumerator>.AsyncEnumerator!
 ~ExcelReader.Core.Parser.Internal.ExcelEnumerable<T, TReader, TEnumerator>.GetEnumerator() -> ExcelReader.Core.Parser.Internal.ExcelEnumerable<T, TReader, TEnumerator>.Enumerator!
 ~override ExcelReader.Core.Parser.ExcelRowContext.Equals(object obj) -> bool
