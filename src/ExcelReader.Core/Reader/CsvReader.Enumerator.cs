@@ -34,6 +34,14 @@ namespace ExcelReader.Core.Reader
 
             private int _col;
 
+            // Persisted across records within the same buffered window (see TryParseSimpleRecord):
+            // reusing pending vector-scan state avoids re-loading vectors over bytes already scanned
+            // when several small records share one already-loaded chunk. _scannerValid is false
+            // whenever the scanner's position/mask can't be trusted to continue from where the caller
+            // is about to resume — see every _scannerValid = false site below for why.
+            private CsvControlScanner _scanner;
+            private bool _scannerValid;
+
             // Content-keyed dedup cache for GetString(); see CsvReaderOptions.InternStrings. CSV has
             // no stable shared-string table index the way XLSX/XLSB/XLS do, so this is the only dedup
             // path available to it.
@@ -60,6 +68,7 @@ namespace ExcelReader.Core.Reader
                 _quote = options.Quote;
                 _stripBom = options.DetectEncodingFromByteOrderMark;
                 _contentCache = options.InternStrings ? new Utf8StringCache() : null;
+                _scanner = new CsvControlScanner(_delimiter, _quote);
             }
 
             internal Enumerator(ReadOnlyMemory<byte> content, CsvReaderOptions options, CancellationToken ct = default)
@@ -69,6 +78,7 @@ namespace ExcelReader.Core.Reader
                 _quote = options.Quote;
                 _stripBom = options.DetectEncodingFromByteOrderMark;
                 _contentCache = options.InternStrings ? new Utf8StringCache() : null;
+                _scanner = new CsvControlScanner(_delimiter, _quote);
             }
 
             // Cells point either into _buf (the common, zero-copy case: unquoted or plain-quoted
@@ -100,7 +110,7 @@ namespace ExcelReader.Core.Reader
                 if (!_bomChecked || _pos >= _len)
                 {
                     EnsureBomStripped();
-                    Ensure(1);
+                    EnsureInvalidatingScanner(1);
                     if (_pos >= _len)
                     {
                         return false;
@@ -115,7 +125,7 @@ namespace ExcelReader.Core.Reader
                         return true;
                     }
                     _pos = start;
-                    Fill();
+                    FillInvalidatingScanner();
                 }
             }
 
@@ -145,7 +155,7 @@ namespace ExcelReader.Core.Reader
                 await EnsureBomStrippedAsync().ConfigureAwait(false);
                 while (true)
                 {
-                    await EnsureAsync(1).ConfigureAwait(false);
+                    await EnsureInvalidatingScannerAsync(1).ConfigureAwait(false);
                     if (_pos >= _len)
                     {
                         return false;
@@ -157,8 +167,42 @@ namespace ExcelReader.Core.Reader
                         return true;
                     }
                     _pos = start;
-                    await FillAsync().ConfigureAwait(false);
+                    await FillInvalidatingScannerAsync().ConfigureAwait(false);
                 }
+            }
+
+            // --- scanner-invalidating Ensure/Fill wrappers ---
+            // Every Ensure/Fill call in this file may refill, compact, or grow the pooled buffer
+            // (BufferedStreamCursor.PrepareBuffer), any of which can move bytes _scanner's pending
+            // mask/position refer to, or replace the backing array outright. Rather than reasoning
+            // per call site about whether a particular Ensure/Fill will actually touch the buffer,
+            // every one is routed through here so none can be added later without also invalidating
+            // the scanner — an unconditional invalidation costs at most one skippable vector reload
+            // (Ensure/Fill only actually refill rarely — see TryParseSimpleRecord's own comment), so
+            // erring toward "invalidate too often" is free; erring the other way corrupts field data.
+
+            private void EnsureInvalidatingScanner(int count)
+            {
+                _scannerValid = false;
+                Ensure(count);
+            }
+
+            private ValueTask EnsureInvalidatingScannerAsync(int count)
+            {
+                _scannerValid = false;
+                return EnsureAsync(count);
+            }
+
+            private void FillInvalidatingScanner()
+            {
+                _scannerValid = false;
+                Fill();
+            }
+
+            private ValueTask FillInvalidatingScannerAsync()
+            {
+                _scannerValid = false;
+                return FillAsync();
             }
 
             private void BeginRecord()
@@ -177,23 +221,31 @@ namespace ExcelReader.Core.Reader
             // over trickling streams ever matter.
             private bool TryParseRecordFromBuffer()
             {
-                ReadOnlySpan<byte> buf = _buf.AsSpan(0, _len);
                 int len = _len;
                 byte delim = _delimiter;
                 byte quote = _quote;
                 int recordStart = _pos;
 
-                SimpleRecordOutcome simple = TryParseSimpleRecord(buf, len, recordStart);
+                SimpleRecordOutcome simple = TryParseSimpleRecord(len, recordStart);
                 if (simple == SimpleRecordOutcome.Done)
                 {
                     return true;
                 }
+                // NeedMore or Quoted: whatever happens next (a Fill-triggered retry, or the general
+                // per-field path below) does not resume through _scanner, so its pending position/mask
+                // must not be trusted by the next TryParseSimpleRecord call. NeedMore's own retry
+                // already goes through FillInvalidatingScanner/FillInvalidatingScannerAsync, but the
+                // Quoted case can fall straight through to a Done return below with no Fill at all if
+                // the whole record was already buffered — so this covers both explicitly rather than
+                // relying on a Fill happening to occur.
+                _scannerValid = false;
                 if (simple == SimpleRecordOutcome.NeedMore)
                 {
                     _pos = recordStart;
                     return false;
                 }
 
+                ReadOnlySpan<byte> buf = _buf.AsSpan(0, len);
                 // A quote turned up: the fields emitted above are discarded and the record is re-parsed
                 // from its start by the general per-field path. Costs no more than before the fused fast
                 // path existed — the old code also scanned for the quote and then re-parsed the record.
@@ -241,13 +293,30 @@ namespace ExcelReader.Core.Reader
             // 11.134 ms -> 8.119 ms, ~27% faster. The narrow 4-column shape (ExcelReader) is flat
             // within noise (~4.0-4.4 ms either way) — expected, since mask reuse only pays off once
             // a record has enough fields to amortize a vector load.
-            private SimpleRecordOutcome TryParseSimpleRecord(ReadOnlySpan<byte> buf, int len, int pos)
+            //
+            // _scanner persists across records within the same buffered window instead of being
+            // reconstructed per record (rebuilding it discarded any pending mask bits — control bytes a
+            // vector load already found for the *next* record — forcing a fresh vector load at almost
+            // every record boundary even when the current chunk already covered it). _scannerValid is
+            // true only when the caller is resuming from exactly the position _scanner last left off at
+            // — a clean (non-quoted, fully-buffered) record end with no Fill in between — every other
+            // exit path (NeedMore, Quoted, any Ensure/Fill call) clears it, forcing Reset() below.
+            private SimpleRecordOutcome TryParseSimpleRecord(int len, int pos)
             {
-                CsvControlScanner scanner = new(buf, pos, len, _delimiter, _quote);
+                if (_scannerValid)
+                {
+                    _scanner.Continue(_buf, len);
+                }
+                else
+                {
+                    _scanner.Reset(_buf, len, pos);
+                    _scannerValid = true;
+                }
+                byte[] buf = _buf;
                 int fieldStart = pos;
                 while (true)
                 {
-                    int stop = scanner.Next();
+                    int stop = _scanner.Next();
                     if (stop < 0)
                     {
                         if (!_eof)
@@ -274,7 +343,16 @@ namespace ExcelReader.Core.Reader
                         return SimpleRecordOutcome.NeedMore; // can't tell a bare CR from CRLF yet
                     }
                     AddField(fieldStart, stop - fieldStart);
-                    _pos = stop + (b == Cr && stop + 1 < len && buf[stop + 1] == Lf ? 2 : 1);
+                    bool isCrLf = b == Cr && stop + 1 < len && buf[stop + 1] == Lf;
+                    if (isCrLf)
+                    {
+                        // The scanner already consumed the CR's own bit via Next() above; the LF is a
+                        // second byte the caller is skipping without asking the scanner for it, so
+                        // reconcile it explicitly (see SkipByte) instead of leaving stale state behind
+                        // for the next record to trip over.
+                        _scanner.SkipByte(stop + 1);
+                    }
+                    _pos = stop + (isCrLf ? 2 : 1);
                     return SimpleRecordOutcome.Done;
                 }
             }
@@ -375,7 +453,7 @@ namespace ExcelReader.Core.Reader
                 {
                     return;
                 }
-                Ensure(3);
+                EnsureInvalidatingScanner(3);
                 StripBomFromBuffer();
             }
 
@@ -390,7 +468,7 @@ namespace ExcelReader.Core.Reader
                 {
                     return;
                 }
-                await EnsureAsync(3).ConfigureAwait(false);
+                await EnsureInvalidatingScannerAsync(3).ConfigureAwait(false);
                 StripBomFromBuffer();
             }
 
