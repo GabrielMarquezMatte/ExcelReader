@@ -563,7 +563,7 @@ namespace ExcelReader.Tests
             Assert.Empty(diagnostics);
             EmitResult emit = result.Emit();
             Assert.True(emit.Success, string.Join(Environment.NewLine, emit.Diagnostics.Select(static d => d.ToString())));
-            Assert.Contains(".Property([\"Name\"]", generated, StringComparison.Ordinal);
+            Assert.Contains(".PropertyRaw([\"Name\"]", generated, StringComparison.Ordinal);
         }
 
         [Fact]
@@ -627,7 +627,7 @@ namespace ExcelReader.Tests
             Assert.Empty(diagnostics);
             EmitResult emit = result.Emit();
             Assert.True(emit.Success, string.Join(Environment.NewLine, emit.Diagnostics.Select(static d => d.ToString())));
-            Assert.DoesNotContain(".Property([\"Name\"]", generated, StringComparison.Ordinal);
+            Assert.DoesNotContain(".PropertyRaw([\"Name\"]", generated, StringComparison.Ordinal);
             Assert.Contains(".Column(\"Name\"", generated, StringComparison.Ordinal);
         }
 
@@ -673,10 +673,10 @@ namespace ExcelReader.Tests
             Assert.Empty(diagnostics);
             EmitResult emit = result.Emit();
             Assert.True(emit.Success, string.Join(Environment.NewLine, emit.Diagnostics.Select(static d => d.ToString())));
-            Assert.Contains(".Property([\"Own\"]", generated, StringComparison.Ordinal);
-            Assert.Contains(".Property([\"Inherited\"]", generated, StringComparison.Ordinal);
-            int ownIndex = generated.IndexOf(".Property([\"Own\"]", StringComparison.Ordinal);
-            int inheritedIndex = generated.IndexOf(".Property([\"Inherited\"]", StringComparison.Ordinal);
+            Assert.Contains(".PropertyRaw([\"Own\"]", generated, StringComparison.Ordinal);
+            Assert.Contains(".PropertyRaw([\"Inherited\"]", generated, StringComparison.Ordinal);
+            int ownIndex = generated.IndexOf(".PropertyRaw([\"Own\"]", StringComparison.Ordinal);
+            int inheritedIndex = generated.IndexOf(".PropertyRaw([\"Inherited\"]", StringComparison.Ordinal);
             Assert.True(ownIndex < inheritedIndex, "Declared-on-type properties must be emitted before inherited ones.");
         }
     }

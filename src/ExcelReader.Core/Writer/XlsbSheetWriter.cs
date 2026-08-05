@@ -260,6 +260,9 @@ namespace ExcelReader.Core.Writer
             _stream = _offloadWrite ? new WriteOffloadStream(stream) : stream;
         }
 
+        // When offloading, hands the buffer's backing array to the background writer directly
+        // (BiffBuffer.Detach) instead of copying it into a fresh rental — see WriteOffloadStream's
+        // EnqueueOwned. _records keeps working immediately: Detach rents its own replacement.
         private void FlushRecords()
         {
             if (_records.Length == 0)
@@ -267,6 +270,12 @@ namespace ExcelReader.Core.Writer
                 return;
             }
             EnsureStream();
+            if (_stream is WriteOffloadStream offload)
+            {
+                byte[] detached = _records.Detach(out int length);
+                offload.EnqueueOwned(detached, length);
+                return;
+            }
             _stream!.Write(_records.Span);
             _records.Reset();
         }

@@ -12,15 +12,22 @@ namespace ExcelReader.Core.Writer.Internal
     // thread lets the caller keep building the next batch of rows concurrently instead of blocking on
     // compression.
     //
-    // Every write is copied into a pooled buffer before this returns, since the caller (XlsxSheetWriter/
-    // XlsbSheetWriter) reuses its own row buffer immediately after handing bytes here — unlike
-    // PrefetchStream's read side, where each chunk is a fresh buffer the consumer takes ownership of.
+    // The ordinary Write/WriteAsync overrides copy into a pooled buffer before returning, since a
+    // generic Stream caller may reuse its source span/memory immediately afterward. XlsxSheetWriter/
+    // XlsbSheetWriter instead call EnqueueOwned(Async): their row/record buffer is a BiffBuffer, whose
+    // Detach() hands over its backing array and rents a fresh one in the same call — so those callers
+    // transfer ownership with no copy at all, mirroring how PrefetchStream's read side hands each
+    // decompressed chunk to the consumer without copying it either.
     internal sealed class WriteOffloadStream : Stream
     {
         private const int ChannelCapacity = 4;
 
         private readonly Stream _inner;
-        private readonly Channel<(byte[] Buffer, int Length)> _channel;
+        // Owned=true means the buffer came from BiffBuffer.Detach (its own dedicated pool) and must
+        // be returned via BiffBuffer.ReturnDetached; Owned=false means it was rented here from
+        // ArrayPool<byte>.Shared for the ordinary copying Write/WriteAsync path. Mixing the two
+        // without this tag would return an array to the wrong pool.
+        private readonly Channel<(byte[] Buffer, int Length, bool Owned)> _channel;
         private readonly Task _consumer;
         private ExceptionDispatchInfo? _consumerException;
         private bool _writerCompleted;
@@ -31,7 +38,7 @@ namespace ExcelReader.Core.Writer.Internal
         internal WriteOffloadStream(Stream inner)
         {
             _inner = inner;
-            _channel = Channel.CreateBounded<(byte[] Buffer, int Length)>(new BoundedChannelOptions(ChannelCapacity)
+            _channel = Channel.CreateBounded<(byte[] Buffer, int Length, bool Owned)>(new BoundedChannelOptions(ChannelCapacity)
             {
                 SingleReader = true,
                 SingleWriter = true,
@@ -87,12 +94,27 @@ namespace ExcelReader.Core.Writer.Internal
             }
             byte[] rented = ArrayPool<byte>.Shared.Rent(buffer.Length);
             buffer.CopyTo(rented);
-            EnqueueSync((rented, buffer.Length));
+            EnqueueSync((rented, buffer.Length, Owned: false));
+        }
+
+        // Zero-copy counterpart to Write: takes ownership of `buffer` (obtained from
+        // BiffBuffer.Detach) instead of renting a fresh ArrayPool<byte>.Shared array and copying
+        // into it. The consumer thread returns it via BiffBuffer.ReturnDetached once written.
+        // Caller must never touch `buffer` again after this call returns.
+        internal void EnqueueOwned(byte[] buffer, int length)
+        {
+            ThrowIfFaulted();
+            if (length == 0)
+            {
+                BiffBuffer.ReturnDetached(buffer);
+                return;
+            }
+            EnqueueSync((buffer, length, Owned: true));
         }
 
         [SuppressMessage("VisualStudio.Threading", "VSTHRD002:Avoid problematic synchronous waits",
             Justification = "Sync Write must block on the bounded channel by design; it never blocks on I/O.")]
-        private void EnqueueSync((byte[] Buffer, int Length) item)
+        private void EnqueueSync((byte[] Buffer, int Length, bool Owned) item)
         {
             try
             {
@@ -104,11 +126,21 @@ namespace ExcelReader.Core.Writer.Internal
             }
             catch (ChannelClosedException)
             {
-                ArrayPool<byte>.Shared.Return(item.Buffer);
+                ReturnBuffer(item.Buffer, item.Owned);
                 ThrowIfFaulted();
                 throw;
             }
             ThrowIfFaulted();
+        }
+
+        private static void ReturnBuffer(byte[] buffer, bool owned)
+        {
+            if (owned)
+            {
+                BiffBuffer.ReturnDetached(buffer);
+                return;
+            }
+            ArrayPool<byte>.Shared.Return(buffer);
         }
 
         public override Task WriteAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken)
@@ -127,11 +159,33 @@ namespace ExcelReader.Core.Writer.Internal
             buffer.Span.CopyTo(rented);
             try
             {
-                await _channel.Writer.WriteAsync((rented, buffer.Length), cancellationToken).ConfigureAwait(false);
+                await _channel.Writer.WriteAsync((rented, buffer.Length, Owned: false), cancellationToken).ConfigureAwait(false);
             }
             catch (ChannelClosedException)
             {
                 ArrayPool<byte>.Shared.Return(rented);
+                ThrowIfFaulted();
+                throw;
+            }
+            ThrowIfFaulted();
+        }
+
+        // Async, zero-copy counterpart to EnqueueOwned. See EnqueueOwned's remarks.
+        internal async ValueTask EnqueueOwnedAsync(byte[] buffer, int length, CancellationToken cancellationToken = default)
+        {
+            ThrowIfFaulted();
+            if (length == 0)
+            {
+                BiffBuffer.ReturnDetached(buffer);
+                return;
+            }
+            try
+            {
+                await _channel.Writer.WriteAsync((buffer, length, Owned: true), cancellationToken).ConfigureAwait(false);
+            }
+            catch (ChannelClosedException)
+            {
+                BiffBuffer.ReturnDetached(buffer);
                 ThrowIfFaulted();
                 throw;
             }
@@ -184,7 +238,7 @@ namespace ExcelReader.Core.Writer.Internal
         {
             try
             {
-                await foreach ((byte[] buf, int len) in _channel.Reader.ReadAllAsync().ConfigureAwait(false))
+                await foreach ((byte[] buf, int len, bool owned) in _channel.Reader.ReadAllAsync().ConfigureAwait(false))
                 {
                     try
                     {
@@ -192,7 +246,7 @@ namespace ExcelReader.Core.Writer.Internal
                     }
                     finally
                     {
-                        ArrayPool<byte>.Shared.Return(buf);
+                        ReturnBuffer(buf, owned);
                     }
                 }
             }
