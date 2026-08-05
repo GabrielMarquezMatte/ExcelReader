@@ -56,6 +56,10 @@ namespace ExcelReader.Core.ValueObjects
             {
                 return false; // can't match: re-encoding could only add bytes, never fewer
             }
+            if (cached.Length == utf8.Length && Ascii.Equals(cached, utf8))
+            {
+                return true; // fast path for ASCII-only strings
+            }
             Span<byte> buffer = stackalloc byte[MaxKeyLength];
             return Encoding.UTF8.TryGetBytes(cached, buffer, out int written)
                 && buffer[..written].SequenceEqual(utf8);

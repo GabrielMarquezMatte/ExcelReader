@@ -183,12 +183,12 @@ namespace ExcelReader.Core.Reader
                     break;
                 }
                 io.Pos = si;
-                int open = EnsureSiBuffered(io, stream, tok.SiClose);
+                (int open, int close) = EnsureSiBuffered(io, stream, tok.SiClose);
                 if (open < 0)
                 {
                     break;
                 }
-                flat = AppendSharedEntry(io, tok, open, flat, out int nextPos);
+                flat = AppendSharedEntry(io, tok, open, close, flat, out int nextPos);
                 AddSharedOffset(ref offsets, ref offsetCount, flat);
                 io.Pos = nextPos;
             }
@@ -228,12 +228,12 @@ namespace ExcelReader.Core.Reader
                     break;
                 }
                 io.Pos = si;
-                int open = await EnsureSiBufferedAsync(io, stream, tok.SiClose, ct).ConfigureAwait(false);
+                (int open, int close) = await EnsureSiBufferedAsync(io, stream, tok.SiClose, ct).ConfigureAwait(false);
                 if (open < 0)
                 {
                     break;
                 }
-                flat = AppendSharedEntry(io, tok, open, flat, out int nextPos);
+                flat = AppendSharedEntry(io, tok, open, close, flat, out int nextPos);
                 AddSharedOffset(ref offsets, ref offsetCount, flat);
                 io.Pos = nextPos;
             }
@@ -246,21 +246,23 @@ namespace ExcelReader.Core.Reader
 
         // Decodes the <si> element starting at `open` (the '>' ending its open tag — self-closing or
         // not, already guaranteed fully buffered by EnsureSiBuffered(Async)) into _sharedFlat, and
-        // reports where the next element search should resume via `nextPos`. No Fill/FillAsync happens
-        // here, so plain bounded index math is safe exactly like ParseRow's post-EnsureRowBuffered body.
-        private int AppendSharedEntry(BufferedStreamCursor io, SharedStringTokens tok, int open, int flat, out int nextPos)
+        // reports where the next element search should resume via `nextPos`. `close` is the absolute
+        // position of "</si>"'s own '<' as already located by EnsureSiBuffered(Async) — passed through
+        // instead of re-running the same IndexOf(siClose) scan a second time (-1 for a self-closing
+        // <si/>, which has no body to locate). No Fill/FillAsync happens here, so plain bounded index
+        // math is safe exactly like ParseRow's post-EnsureRowBuffered body.
+        private int AppendSharedEntry(BufferedStreamCursor io, SharedStringTokens tok, int open, int close, int flat, out int nextPos)
         {
-            if (io.Buf[open - 1] == (byte)'/') // <si/>: no body
+            if (close < 0) // <si/>: no body
             {
                 nextPos = open + 1;
                 return flat;
             }
-            int end = open + io.Buf.AsSpan(open, io.Len - open).IndexOf(tok.SiClose);
-            int inner = end - open - 1;
+            int inner = close - open - 1;
             EnsureSharedFlat(flat + inner, flat);
             int written = XlsxXml.WriteTextRuns(io.Buf.AsSpan(open + 1, inner), _sharedFlat.AsSpan(flat),
                 tok.TOpen, tok.TClose, tok.RPhOpen, tok.RPhClose);
-            nextPos = end + tok.SiClose.Length;
+            nextPos = close + tok.SiClose.Length;
             return flat + written;
         }
 
@@ -345,20 +347,28 @@ namespace ExcelReader.Core.Reader
 
         // The '>' that closes the <si ...> open tag, but only once the whole element is contiguous in
         // the buffer: either the tag self-closes (<si/>) or its matching "</si>" is already buffered
-        // too. -1 means "keep filling" — same contract as FindSeqInWindow.
-        private static int FindSiEndInWindow(BufferedStreamCursor io, byte[] siClose)
+        // too. Open is -1 when "keep filling" — same contract as FindSeqInWindow. Close carries the
+        // absolute position of "</si>"'s own '<' (found by this same scan) so AppendSharedEntry never
+        // has to re-run the identical IndexOf(siClose) search a second time; -1 for a self-closing
+        // <si/>, which has no body to locate.
+        private static (int Open, int Close) FindSiEndInWindow(BufferedStreamCursor io, byte[] siClose)
         {
             int openRel = io.Buf.AsSpan(io.Pos, io.Len - io.Pos).IndexOf((byte)'>');
             if (openRel < 0)
             {
-                return -1;
+                return (-1, -1);
             }
             int open = io.Pos + openRel;
-            if (io.Buf[open - 1] == (byte)'/' || io.Buf.AsSpan(open, io.Len - open).IndexOf(siClose) >= 0)
+            if (io.Buf[open - 1] == (byte)'/')
             {
-                return open;
+                return (open, -1); // self-closing, no body
             }
-            return -1;
+            int rel = io.Buf.AsSpan(open, io.Len - open).IndexOf(siClose);
+            if (rel < 0)
+            {
+                return (-1, -1);
+            }
+            return (open, open + rel);
         }
 
         // Grows io (io.Pos already anchored at the '<si' tag's start by the caller) until the whole
@@ -366,35 +376,35 @@ namespace ExcelReader.Core.Reader
         // contiguously in io.Buf. Mirrors XlsxReader.Enumerator.EnsureRowBuffered's "buffer the whole
         // element before parsing it" contract; returns -1 on a truncated file, matching the original
         // ParseShared's own break-on-truncation behavior instead of throwing.
-        private static int EnsureSiBuffered(BufferedStreamCursor io, Stream? stream, byte[] siClose)
+        private static (int Open, int Close) EnsureSiBuffered(BufferedStreamCursor io, Stream? stream, byte[] siClose)
         {
             while (true)
             {
-                int open = FindSiEndInWindow(io, siClose);
+                (int open, int close) = FindSiEndInWindow(io, siClose);
                 if (open >= 0)
                 {
-                    return open;
+                    return (open, close);
                 }
                 if (io.Eof)
                 {
-                    return -1;
+                    return (-1, -1);
                 }
                 io.Fill(stream);
             }
         }
 
-        private static async ValueTask<int> EnsureSiBufferedAsync(BufferedStreamCursor io, Stream stream, byte[] siClose, CancellationToken ct)
+        private static async ValueTask<(int Open, int Close)> EnsureSiBufferedAsync(BufferedStreamCursor io, Stream stream, byte[] siClose, CancellationToken ct)
         {
             while (true)
             {
-                int open = FindSiEndInWindow(io, siClose);
+                (int open, int close) = FindSiEndInWindow(io, siClose);
                 if (open >= 0)
                 {
-                    return open;
+                    return (open, close);
                 }
                 if (io.Eof)
                 {
-                    return -1;
+                    return (-1, -1);
                 }
                 await io.FillAsync(stream, ct).ConfigureAwait(false);
             }
