@@ -121,10 +121,21 @@ namespace ExcelReader.Core.Writer
             return ValueTask.CompletedTask;
         }
 
-        // ponytail: BrtColInfo's payload layout (colFirst/colLast/coldx u32, ixfe/flags u16) follows
-        // the commonly documented [MS-XLSB] shape but is unverified against a real Excel-written file
-        // — our own reader never parses column info (only per-cell style matters for round-tripping),
-        // so getting a field wrong here can't be caught by this library's own tests.
+        // Excel's own default column width, in characters — what a column with a style but no
+        // explicit SetColumnWidth reports, so the record carries a plausible coldx either way.
+        private const double DefaultColumnWidth = 8.43;
+
+        // BrtColInfo flags (2 bytes, [MS-XLSB] 2.4.667): bit 1 is fUserSet, "the column width was set
+        // by the user". Excel ignores coldx on a column that doesn't claim it, so an explicit
+        // SetColumnWidth must set this or the width silently has no effect in Excel.
+        private const int ColInfoUserSet = 0x0002;
+
+        // Payload layout verified byte-for-byte against a real Excel-authored .xlsb (18 bytes:
+        // colFirst/colLast/coldx/ixfe as u32, then flags as u16). Note ixfe is a *u32*, not the u16
+        // this used to write — the old 16-byte record was 2 bytes short of what Excel emits, and left
+        // fUserSet clear so a SetColumnWidth never took effect. This library's own reader never parses
+        // column info (only per-cell style matters for round-tripping), so no round-trip test can catch
+        // a regression here; XlsbColInfoTests asserts the byte layout directly instead.
         private void WriteColInfos()
         {
             if (_columnStyles is null && _columnWidths is null)
@@ -143,13 +154,19 @@ namespace ExcelReader.Core.Writer
             foreach (int columnIndex in columns)
             {
                 int styleId = _columnStyles is not null && _columnStyles.TryGetValue(columnIndex, out int s) ? s : 0;
-                double width = _columnWidths is not null && _columnWidths.TryGetValue(columnIndex, out double w) ? w : 8.43;
+                bool hasWidth = false;
+                double width = DefaultColumnWidth;
+                if (_columnWidths is not null && _columnWidths.TryGetValue(columnIndex, out double explicitWidth))
+                {
+                    hasWidth = true;
+                    width = explicitWidth;
+                }
                 Payload.Reset();
-                Payload.WriteU32((uint)columnIndex);
-                Payload.WriteU32((uint)columnIndex);
-                Payload.WriteU32((uint)Math.Round(width * 256));
-                Payload.WriteU16(styleId);
-                Payload.WriteU16(0);
+                Payload.WriteU32((uint)columnIndex);                 // colFirst
+                Payload.WriteU32((uint)columnIndex);                 // colLast
+                Payload.WriteU32((uint)Math.Round(width * 256));     // coldx (1/256th of a character)
+                Payload.WriteU32((uint)styleId);                     // ixfe
+                Payload.WriteU16(hasWidth ? ColInfoUserSet : 0);     // flags
                 WriteRecord(Brt.ColInfo, Payload.Span);
             }
         }
@@ -260,6 +277,9 @@ namespace ExcelReader.Core.Writer
             _stream = _offloadWrite ? new WriteOffloadStream(stream) : stream;
         }
 
+        // When offloading, hands the buffer's backing array to the background writer directly
+        // (BiffBuffer.Detach) instead of copying it into a fresh rental — see WriteOffloadStream's
+        // EnqueueOwned. _records keeps working immediately: Detach rents its own replacement.
         private void FlushRecords()
         {
             if (_records.Length == 0)
@@ -267,6 +287,12 @@ namespace ExcelReader.Core.Writer
                 return;
             }
             EnsureStream();
+            if (_stream is WriteOffloadStream offload)
+            {
+                byte[] detached = _records.Detach(out int length);
+                offload.EnqueueOwned(detached, length);
+                return;
+            }
             _stream!.Write(_records.Span);
             _records.Reset();
         }
