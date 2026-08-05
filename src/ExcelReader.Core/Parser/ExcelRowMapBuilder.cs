@@ -181,8 +181,21 @@ namespace ExcelReader.Core.Parser
             return this;
         }
 
-        internal TypeMapInfo<T> Build()
+        // requireFactory: false for ExcelFluentParser<T>.WithAttributeFallback's fluent-only builder —
+        // that path builds this map before merging it with the attribute-driven one, and
+        // TypeMapInfo<T>.MergeFluentOverAttributes already falls back to the attribute map's factory
+        // when this one has none (see its own comment on _useDefault). Checking here unconditionally
+        // would reject that legitimate, already-rescued case before the merge ever runs.
+        internal TypeMapInfo<T> Build(bool requireFactory = true)
         {
+            // A null factory means default(T); for a reference type that's always null, and every row
+            // would throw NullReferenceException on the first property assignment instead of at Build()
+            // time, where the real mistake (forgetting to call Factory(...)) is far easier to see.
+            if (requireFactory && _factory is null && !typeof(T).IsValueType)
+            {
+                throw new InvalidOperationException(
+                    $"ExcelRowMapBuilder<{typeof(T)}> has no factory: {typeof(T)} is a reference type, so default(T) is null and every row would fail on the first property assignment. Call Factory(...) with a real instance factory.");
+            }
             if (_indexBindings.Count == 0)
             {
                 return new TypeMapInfo<T>([.. _properties], _factory, useDefault: _factory is null);

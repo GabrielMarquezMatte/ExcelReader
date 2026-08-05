@@ -1,8 +1,10 @@
+using System.Collections.Immutable;
 using System.Diagnostics.CodeAnalysis;
 using System.Text;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
+using Microsoft.CodeAnalysis.Text;
 
 [assembly: SuppressMessage("Globalization", "CA1307:Specify StringComparison for clarity",
     Justification = "The string.Replace(string,string,StringComparison) overload doesn't exist on netstandard2.0, this project's required TFM (see the .csproj comment). The 2-arg overload is already ordinal.")]
@@ -124,31 +126,48 @@ namespace ExcelReader.Generator
         /// <inheritdoc/>
         public void Initialize(IncrementalGeneratorInitializationContext context)
         {
-            IncrementalValuesProvider<INamedTypeSymbol> candidates = context.SyntaxProvider
+            IncrementalValuesProvider<GeneratedResult> results = context.SyntaxProvider
                 .ForAttributeWithMetadataName(
                     SerializableAttribute,
                     // TypeDeclarationSyntax covers class/struct/record/record struct (but not enum,
                     // which is a BaseTypeDeclarationSyntax, not a TypeDeclarationSyntax) — a record was
                     // previously silently ignored here (ClassDeclarationSyntax does not cover it).
                     predicate: static (node, _) => node is TypeDeclarationSyntax and not InterfaceDeclarationSyntax,
-                    transform: static (ctx, _) => (INamedTypeSymbol)ctx.TargetSymbol);
+                    transform: static (ctx, _) => Analyze((INamedTypeSymbol)ctx.TargetSymbol));
 
-            context.RegisterSourceOutput(candidates, static (spc, symbol) => Emit(spc, symbol));
+            // The transform above does the actual analysis and returns a plain-data, value-equatable
+            // result — RegisterSourceOutput's callback only replays it. ForAttributeWithMetadataName's
+            // incremental cache compares that result to the previous run's by Equals: an ISymbol/
+            // Compilation carried past the transform stage is reference-equality-only across
+            // compilations, so it would never hit the cache and this generator would re-run on every
+            // keystroke, not just when a marked type's own declaration actually changes.
+            context.RegisterSourceOutput(results, static (spc, result) =>
+            {
+                foreach (DiagnosticInfo diagnostic in result.Diagnostics.Items)
+                {
+                    spc.ReportDiagnostic(diagnostic.ToDiagnostic());
+                }
+                if (result.Source is not null)
+                {
+                    spc.AddSource($"{result.HintName}.ExcelRowMap.g.cs", result.Source);
+                }
+            });
         }
 
-        private static void Emit(SourceProductionContext context, INamedTypeSymbol symbol)
+        private static GeneratedResult Analyze(INamedTypeSymbol symbol)
         {
+            var diagnostics = new List<DiagnosticInfo>();
             if (!IsPartial(symbol))
             {
-                context.ReportDiagnostic(Diagnostic.Create(NotPartialDescriptor, symbol.Locations.FirstOrDefault(), symbol.Name));
-                return;
+                diagnostics.Add(DiagnosticInfo.Create(NotPartialDescriptor, symbol.Locations.FirstOrDefault(), symbol.Name));
+                return NoSource(diagnostics);
             }
             for (INamedTypeSymbol? outer = symbol.ContainingType; outer is not null; outer = outer.ContainingType)
             {
                 if (!IsPartial(outer))
                 {
-                    context.ReportDiagnostic(Diagnostic.Create(ContainingTypeNotPartialDescriptor, symbol.Locations.FirstOrDefault(), symbol.Name, outer.Name));
-                    return;
+                    diagnostics.Add(DiagnosticInfo.Create(ContainingTypeNotPartialDescriptor, symbol.Locations.FirstOrDefault(), symbol.Name, outer.Name));
+                    return NoSource(diagnostics);
                 }
             }
             // A generic hintName (AddSource's file name) is invalid, and the emitted declaration below
@@ -156,15 +175,15 @@ namespace ExcelReader.Generator
             // throw (which the generator host reports as an opaque CS8785 with no diagnostic at all).
             if (IsGenericTypeOrContainer(symbol))
             {
-                context.ReportDiagnostic(Diagnostic.Create(GenericTypeNotSupportedDescriptor, symbol.Locations.FirstOrDefault(), symbol.Name));
-                return;
+                diagnostics.Add(DiagnosticInfo.Create(GenericTypeNotSupportedDescriptor, symbol.Locations.FirstOrDefault(), symbol.Name));
+                return NoSource(diagnostics);
             }
             // A struct always has an implicit parameterless constructor; only a class/record class needs
             // one to exist explicitly for `new T()` (AppendRowMap's factory) to compile.
             if (symbol.TypeKind != TypeKind.Struct && !HasPublicParameterlessConstructor(symbol))
             {
-                context.ReportDiagnostic(Diagnostic.Create(NoParameterlessConstructorDescriptor, symbol.Locations.FirstOrDefault(), symbol.Name));
-                return;
+                diagnostics.Add(DiagnosticInfo.Create(NoParameterlessConstructorDescriptor, symbol.Locations.FirstOrDefault(), symbol.Name));
+                return NoSource(diagnostics);
             }
 
             IPropertySymbol[] candidateProperties = [.. CollectMappableProperties(symbol)];
@@ -174,12 +193,12 @@ namespace ExcelReader.Generator
             bool hadPropertyError = false;
             foreach (IPropertySymbol property in candidateProperties)
             {
-                PropertyPlan plan = BuildPlan(context, symbol, property, ref hadPropertyError);
+                PropertyPlan plan = BuildPlan(diagnostics, symbol, property, ref hadPropertyError);
                 if (plan.Read.Kind != ReadKind.None)
                 {
                     foreach (string name in plan.HeaderNames.Where(n => !boundHeaders.Add(n)))
                     {
-                        context.ReportDiagnostic(Diagnostic.Create(DuplicateHeaderDescriptor, symbol.Locations.FirstOrDefault(), name, symbol.Name));
+                        diagnostics.Add(DiagnosticInfo.Create(DuplicateHeaderDescriptor, symbol.Locations.FirstOrDefault(), name, symbol.Name));
                     }
                 }
                 if (plan.Read.Kind != ReadKind.None || plan.WriteEmit is not null)
@@ -193,14 +212,19 @@ namespace ExcelReader.Generator
             // noise, not information.
             if (plans.Count == 0 && !hadPropertyError)
             {
-                context.ReportDiagnostic(Diagnostic.Create(NoMappablePropertyDescriptor, symbol.Locations.FirstOrDefault(), symbol.Name));
+                diagnostics.Add(DiagnosticInfo.Create(NoMappablePropertyDescriptor, symbol.Locations.FirstOrDefault(), symbol.Name));
             }
 
             string source = GenerateSource(symbol, plans);
             string hintName = symbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)
                 .Replace("global::", "")
                 .Replace('.', '_');
-            context.AddSource($"{hintName}.ExcelRowMap.g.cs", source);
+            return new GeneratedResult(hintName, source, new EquatableArray<DiagnosticInfo>([.. diagnostics]));
+        }
+
+        private static GeneratedResult NoSource(List<DiagnosticInfo> diagnostics)
+        {
+            return new GeneratedResult(null, null, new EquatableArray<DiagnosticInfo>([.. diagnostics]));
         }
 
         private static bool IsGenericTypeOrContainer(INamedTypeSymbol symbol)
@@ -256,7 +280,7 @@ namespace ExcelReader.Generator
             return property.GetAttributes().Any(a => string.Equals(a.AttributeClass?.ToDisplayString(), fullName, StringComparison.Ordinal));
         }
 
-        private static PropertyPlan BuildPlan(SourceProductionContext context, INamedTypeSymbol owner, IPropertySymbol property, ref bool hadPropertyError)
+        private static PropertyPlan BuildPlan(List<DiagnosticInfo> diagnostics, INamedTypeSymbol owner, IPropertySymbol property, ref bool hadPropertyError)
         {
             string[] names = [.. property.GetAttributes()
                 .Where(a => string.Equals(a.AttributeClass?.ToDisplayString(), ColumnAttribute, StringComparison.Ordinal))
@@ -304,7 +328,7 @@ namespace ExcelReader.Generator
                 }
                 else if (!implementsConverter)
                 {
-                    context.ReportDiagnostic(Diagnostic.Create(
+                    diagnostics.Add(DiagnosticInfo.Create(
                         ConverterTypeMismatchDescriptor, property.Locations.FirstOrDefault(), converterQualified, qualifiedProperty, owner.Name, property.Name));
                     hadPropertyError = true;
                 }
@@ -323,7 +347,7 @@ namespace ExcelReader.Generator
                 }
                 else if (isRequired)
                 {
-                    context.ReportDiagnostic(Diagnostic.Create(
+                    diagnostics.Add(DiagnosticInfo.Create(
                         RequiredWithNoParserDescriptor, property.Locations.FirstOrDefault(), owner.Name, property.Name, qualifiedProperty));
                     hadPropertyError = true;
                 }
@@ -640,6 +664,198 @@ namespace ExcelReader.Generator
             internal bool RequireValue { get; }
             internal string? WriteEmit { get; }
             internal string? ConverterFieldDecl { get; }
+        }
+
+        // Everything Analyze() produces for one [ExcelSerializable] type, carrying no ISymbol/
+        // Compilation/live Location past the transform stage — plain strings and EquatableArray, so two
+        // runs whose underlying declaration didn't change compare Equals and RegisterSourceOutput's
+        // callback is skipped for that type, instead of re-running on every keystroke regardless of
+        // whether anything relevant changed. A plain struct, not a record: netstandard2.0 (this
+        // project's required TFM, see the .csproj comment) has no IsExternalInit, so record/record
+        // struct's compiler-synthesized init-setters don't compile here — same reason ReadPlan/
+        // PropertyPlan above are plain structs.
+        private readonly struct GeneratedResult : IEquatable<GeneratedResult>
+        {
+            internal GeneratedResult(string? hintName, string? source, EquatableArray<DiagnosticInfo> diagnostics)
+            {
+                HintName = hintName;
+                Source = source;
+                Diagnostics = diagnostics;
+            }
+
+            internal string? HintName { get; }
+            internal string? Source { get; }
+            internal EquatableArray<DiagnosticInfo> Diagnostics { get; }
+
+            public bool Equals(GeneratedResult other)
+            {
+                return string.Equals(HintName, other.HintName, StringComparison.Ordinal)
+                    && string.Equals(Source, other.Source, StringComparison.Ordinal)
+                    && Diagnostics.Equals(other.Diagnostics);
+            }
+
+            public override bool Equals(object? obj)
+            {
+                return obj is GeneratedResult other && Equals(other);
+            }
+
+            public override int GetHashCode()
+            {
+                int hintHash = HintName is null ? 0 : StringComparer.Ordinal.GetHashCode(HintName);
+                int sourceHash = Source is null ? 0 : StringComparer.Ordinal.GetHashCode(Source);
+                return CombineHash(CombineHash(hintHash, sourceHash), Diagnostics.GetHashCode());
+            }
+        }
+
+        // Location.Create(filePath, textSpan, lineSpan) — the "external file" flavor — captures the
+        // same information a real syntax Location does, but as plain value data with no reference to
+        // the SyntaxTree/Compilation that produced it, which is what makes it safe to compare across
+        // incremental runs. The real, tree-bound Location that comes out of the symbol API is exactly
+        // the kind of thing that would otherwise pin the whole Analyze() result to reference equality.
+        private readonly struct LocationInfo : IEquatable<LocationInfo>
+        {
+            private LocationInfo(string filePath, TextSpan span, LinePositionSpan lineSpan)
+            {
+                FilePath = filePath;
+                Span = span;
+                LineSpan = lineSpan;
+            }
+
+            private string FilePath { get; }
+            private TextSpan Span { get; }
+            private LinePositionSpan LineSpan { get; }
+
+            internal Location ToLocation()
+            {
+                return Location.Create(FilePath, Span, LineSpan);
+            }
+
+            internal static LocationInfo? From(Location? location)
+            {
+                if (location?.SourceTree is null)
+                {
+                    return null;
+                }
+                return new LocationInfo(location.SourceTree.FilePath, location.SourceSpan, location.GetLineSpan().Span);
+            }
+
+            public bool Equals(LocationInfo other)
+            {
+                return string.Equals(FilePath, other.FilePath, StringComparison.Ordinal)
+                    && Span.Equals(other.Span) && LineSpan.Equals(other.LineSpan);
+            }
+
+            public override bool Equals(object? obj)
+            {
+                return obj is LocationInfo other && Equals(other);
+            }
+
+            public override int GetHashCode()
+            {
+                return CombineHash(CombineHash(StringComparer.Ordinal.GetHashCode(FilePath), Span.GetHashCode()), LineSpan.GetHashCode());
+            }
+        }
+
+        private readonly struct DiagnosticInfo : IEquatable<DiagnosticInfo>
+        {
+            private DiagnosticInfo(DiagnosticDescriptor descriptor, LocationInfo? location, EquatableArray<string> messageArgs)
+            {
+                Descriptor = descriptor;
+                Location = location;
+                MessageArgs = messageArgs;
+            }
+
+            private DiagnosticDescriptor Descriptor { get; }
+            private LocationInfo? Location { get; }
+            private EquatableArray<string> MessageArgs { get; }
+
+            internal static DiagnosticInfo Create(DiagnosticDescriptor descriptor, Location? location, params string[] messageArgs)
+            {
+                return new DiagnosticInfo(descriptor, LocationInfo.From(location), new EquatableArray<string>([.. messageArgs]));
+            }
+
+            internal Diagnostic ToDiagnostic()
+            {
+                return Diagnostic.Create(Descriptor, Location?.ToLocation(), [.. MessageArgs.Items]);
+            }
+
+            public bool Equals(DiagnosticInfo other)
+            {
+                return Descriptor.Equals(other.Descriptor) && Nullable.Equals(Location, other.Location) && MessageArgs.Equals(other.MessageArgs);
+            }
+
+            public override bool Equals(object? obj)
+            {
+                return obj is DiagnosticInfo other && Equals(other);
+            }
+
+            public override int GetHashCode()
+            {
+                return CombineHash(Descriptor.GetHashCode(), MessageArgs.GetHashCode());
+            }
+        }
+
+        // ImmutableArray<T>'s own Equals is reference-equality on the backing array, not structural —
+        // exactly wrong for an incremental-generator cache key, where two runs' arrays are never the
+        // same instance even when their content is identical. This wrapper is the standard fix.
+        private readonly struct EquatableArray<T> : IEquatable<EquatableArray<T>>
+            where T : IEquatable<T>
+        {
+            internal EquatableArray(ImmutableArray<T> items)
+            {
+                Items = items;
+            }
+
+            internal ImmutableArray<T> Items { get; }
+
+            public bool Equals(EquatableArray<T> other)
+            {
+                if (Items.IsDefault || other.Items.IsDefault)
+                {
+                    return Items.IsDefault == other.Items.IsDefault;
+                }
+                if (Items.Length != other.Items.Length)
+                {
+                    return false;
+                }
+                for (int i = 0; i < Items.Length; i++)
+                {
+                    if (!Items[i].Equals(other.Items[i]))
+                    {
+                        return false;
+                    }
+                }
+                return true;
+            }
+
+            public override bool Equals(object? obj)
+            {
+                return obj is EquatableArray<T> other && Equals(other);
+            }
+
+            public override int GetHashCode()
+            {
+                if (Items.IsDefault)
+                {
+                    return 0;
+                }
+                int hash = 17;
+                foreach (T item in Items)
+                {
+                    hash = CombineHash(hash, item.GetHashCode());
+                }
+                return hash;
+            }
+        }
+
+        // System.HashCode isn't available on netstandard2.0 (this project's required TFM) — the
+        // classic combine formula does the same job without it.
+        private static int CombineHash(int h1, int h2)
+        {
+            unchecked
+            {
+                return (h1 * 397) ^ h2;
+            }
         }
     }
 }

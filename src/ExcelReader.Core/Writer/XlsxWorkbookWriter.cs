@@ -238,9 +238,13 @@ namespace ExcelReader.Core.Writer
         {
             sb.Append(CultureInfo.InvariantCulture, $"<numFmts count=\"{1 + numFmtIds.Count}\">");
             sb.Append("<numFmt numFmtId=\"14\" formatCode=\"mm-dd-yy\"/>");
-            foreach (var (format, id) in numFmtIds)
+            // Dictionary<TKey,TValue> enumeration order is an implementation detail, not part of its
+            // contract — ordering by id (already unique and assigned sequentially from 164) is what
+            // makes this XML deterministic across runs, which StyledWorkbookOpensWithoutRepairXlsx
+            // compares byte-for-byte against a literal.
+            foreach (KeyValuePair<string, int> entry in numFmtIds.OrderBy(static kv => kv.Value))
             {
-                sb.Append(CultureInfo.InvariantCulture, $"<numFmt numFmtId=\"{id}\" formatCode=\"{EscapeAttribute(format)}\"/>");
+                sb.Append(CultureInfo.InvariantCulture, $"<numFmt numFmtId=\"{entry.Value}\" formatCode=\"{EscapeAttribute(entry.Key)}\"/>");
             }
             sb.Append("</numFmts>");
         }

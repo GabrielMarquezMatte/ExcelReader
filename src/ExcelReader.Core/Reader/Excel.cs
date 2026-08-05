@@ -1,3 +1,4 @@
+using System.Buffers;
 using System.Diagnostics.CodeAnalysis;
 using System.IO.Compression;
 using System.Runtime.CompilerServices;
@@ -273,10 +274,17 @@ namespace ExcelReader.Core.Reader
             ArgumentNullException.ThrowIfNull(stream);
             RequireSeekableForSniff(stream);
             long start = stream.Position;
-            byte[] buffer = new byte[CsvDialectSampleBytes];
-            int read = stream.ReadAtLeast(buffer, buffer.Length, throwOnEndOfStream: false);
-            stream.Position = start;
-            return CsvSniffer.Detect(buffer.AsSpan(0, read), options ?? CsvSnifferOptions.Default);
+            byte[] buffer = ArrayPool<byte>.Shared.Rent(CsvDialectSampleBytes);
+            try
+            {
+                int read = stream.ReadAtLeast(buffer, CsvDialectSampleBytes, throwOnEndOfStream: false);
+                stream.Position = start;
+                return CsvSniffer.Detect(buffer.AsSpan(0, read), options ?? CsvSnifferOptions.Default);
+            }
+            finally
+            {
+                ArrayPool<byte>.Shared.Return(buffer);
+            }
         }
 
         /// <summary>Infers the CSV dialect of an in-memory buffer, from a sample of its leading bytes.</summary>
@@ -310,10 +318,17 @@ namespace ExcelReader.Core.Reader
             ArgumentNullException.ThrowIfNull(stream);
             RequireSeekableForSniff(stream);
             long start = stream.Position;
-            byte[] buffer = new byte[CsvDialectSampleBytes];
-            int read = await stream.ReadAtLeastAsync(buffer, buffer.Length, throwOnEndOfStream: false, ct).ConfigureAwait(false);
-            stream.Position = start;
-            return CsvSniffer.Detect(buffer.AsSpan(0, read), options ?? CsvSnifferOptions.Default);
+            byte[] buffer = ArrayPool<byte>.Shared.Rent(CsvDialectSampleBytes);
+            try
+            {
+                int read = await stream.ReadAtLeastAsync(buffer, CsvDialectSampleBytes, throwOnEndOfStream: false, ct).ConfigureAwait(false);
+                stream.Position = start;
+                return CsvSniffer.Detect(buffer.AsSpan(0, read), options ?? CsvSnifferOptions.Default);
+            }
+            finally
+            {
+                ArrayPool<byte>.Shared.Return(buffer);
+            }
         }
 
         /// <summary>Asynchronously reads a sample from the start of a file and infers its CSV dialect.</summary>
