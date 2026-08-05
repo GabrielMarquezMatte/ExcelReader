@@ -25,7 +25,7 @@ jobs:
   libfuzzer:
     name: libFuzzer (${{ matrix.target }})
     # Too slow to gate a pull request; PRs get the `check` job instead.
-    if: github.event_name != 'pull_request'
+    # if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
