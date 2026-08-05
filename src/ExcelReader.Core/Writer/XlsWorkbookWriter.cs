@@ -82,6 +82,9 @@ namespace ExcelReader.Core.Writer
             return _styles.Add(style);
         }
 
+        // Valid styleId range for SetColumnStyle/StartRow(int)/StartRowAsync(int,...) is [0, StyleCount).
+        internal int StyleCount => _styles.Count;
+
         internal void RegisterSheet(XlsSheetWriter sheet)
         {
             _sheets.Add(sheet);

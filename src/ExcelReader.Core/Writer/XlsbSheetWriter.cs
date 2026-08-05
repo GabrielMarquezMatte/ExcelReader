@@ -59,18 +59,25 @@ namespace ExcelReader.Core.Writer
         }
 
         /// <inheritdoc/>
+        /// <exception cref="ArgumentOutOfRangeException"><paramref name="columnIndex"/> is negative, or <paramref name="styleId"/> is negative or was never returned by <see cref="XlsbWorkbookWriter.AddStyle"/>.</exception>
         /// <exception cref="InvalidOperationException">The sheet has already been started.</exception>
         public void SetColumnStyle(int columnIndex, int styleId)
         {
+            ArgumentOutOfRangeException.ThrowIfNegative(columnIndex);
+            ArgumentOutOfRangeException.ThrowIfNegative(styleId);
+            ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(styleId, _owner.StyleCount);
             RequireNotStarted();
             _columnStyles ??= [];
             _columnStyles[columnIndex] = styleId;
         }
 
         /// <inheritdoc/>
+        /// <exception cref="ArgumentOutOfRangeException"><paramref name="columnIndex"/> or <paramref name="width"/> is negative.</exception>
         /// <exception cref="InvalidOperationException">The sheet has already been started.</exception>
         public void SetColumnWidth(int columnIndex, double width)
         {
+            ArgumentOutOfRangeException.ThrowIfNegative(columnIndex);
+            ArgumentOutOfRangeException.ThrowIfNegative(width);
             RequireNotStarted();
             _columnWidths ??= [];
             _columnWidths[columnIndex] = width;
@@ -154,8 +161,11 @@ namespace ExcelReader.Core.Writer
         }
 
         /// <inheritdoc/>
+        /// <exception cref="ArgumentOutOfRangeException"><paramref name="styleId"/> is negative or was never returned by <see cref="XlsbWorkbookWriter.AddStyle"/>.</exception>
         public ValueTask<XlsbRowWriter> StartRowAsync(int styleId, CancellationToken ct = default)
         {
+            ArgumentOutOfRangeException.ThrowIfNegative(styleId);
+            ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(styleId, _owner.StyleCount);
             BeginRow(styleId);
             _rowWriter ??= new XlsbRowWriter(this);
             _rowWriter.Reset();

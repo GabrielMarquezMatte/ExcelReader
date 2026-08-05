@@ -122,6 +122,9 @@ namespace ExcelReader.Core.Writer
             return _styles.Add(style);
         }
 
+        // Valid styleId range for SetColumnStyle/StartRowAsync(int,...) is [0, StyleCount).
+        internal int StyleCount => _styles.Count;
+
         /// <inheritdoc/>
         /// <exception cref="ObjectDisposedException">The workbook has already been ended.</exception>
         /// <exception cref="InvalidOperationException">The workbook has not been started, or no sheet has been added yet.</exception>

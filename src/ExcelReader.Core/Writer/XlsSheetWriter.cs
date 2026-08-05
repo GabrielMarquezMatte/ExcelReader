@@ -70,18 +70,25 @@ namespace ExcelReader.Core.Writer
         private readonly BiffBuffer _colInfos = new(64);
 
         /// <inheritdoc/>
+        /// <exception cref="ArgumentOutOfRangeException"><paramref name="columnIndex"/> is negative, or <paramref name="styleId"/> is negative or was never returned by <see cref="XlsWorkbookWriter.AddStyle"/>.</exception>
         /// <exception cref="InvalidOperationException">The sheet has already been started.</exception>
         public void SetColumnStyle(int columnIndex, int styleId)
         {
+            ArgumentOutOfRangeException.ThrowIfNegative(columnIndex);
+            ArgumentOutOfRangeException.ThrowIfNegative(styleId);
+            ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(styleId, _owner.StyleCount);
             RequireNotStarted();
             _columnStyles ??= [];
             _columnStyles[columnIndex] = styleId;
         }
 
         /// <inheritdoc/>
+        /// <exception cref="ArgumentOutOfRangeException"><paramref name="columnIndex"/> or <paramref name="width"/> is negative.</exception>
         /// <exception cref="InvalidOperationException">The sheet has already been started.</exception>
         public void SetColumnWidth(int columnIndex, double width)
         {
+            ArgumentOutOfRangeException.ThrowIfNegative(columnIndex);
+            ArgumentOutOfRangeException.ThrowIfNegative(width);
             RequireNotStarted();
             _columnWidths ??= [];
             _columnWidths[columnIndex] = width;
@@ -162,8 +169,11 @@ namespace ExcelReader.Core.Writer
         /// Begins writing the next row with <paramref name="styleId"/> applied to its cells,
         /// transparently spilling into a continuation sheet once the BIFF8 row cap is reached.
         /// </summary>
+        /// <exception cref="ArgumentOutOfRangeException"><paramref name="styleId"/> is negative or was never returned by <see cref="XlsWorkbookWriter.AddStyle"/>.</exception>
         public XlsRowWriter StartRow(int styleId)
         {
+            ArgumentOutOfRangeException.ThrowIfNegative(styleId);
+            ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(styleId, _owner.StyleCount);
             WriterStateGuard.ThrowIfEnded(_state, this);
             WriterStateGuard.RequireStarted(_state, nameof(XlsSheetWriter), "adding rows");
             WriterStateGuard.RequireNoActiveRowForStart(_rowActive, nameof(XlsRowWriter));

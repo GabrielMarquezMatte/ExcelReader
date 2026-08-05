@@ -391,5 +391,88 @@ namespace ExcelReader.Tests
                 "</styleSheet>";
             Assert.Equal(expected, styles);
         }
+
+        [Fact]
+        public async Task InvalidStyleArgumentsThrowXlsx()
+        {
+            await using var ms = new MemoryStream();
+            await using var wb = await XlsxWorkbookWriter.CreateAsync(ms, leaveOpen: true, ct: TestContext.Current.CancellationToken);
+            await wb.StartAsync(TestContext.Current.CancellationToken);
+            XlsxSheetWriter sheet = wb.AddSheet("Sheet1");
+
+            Assert.Throws<ArgumentOutOfRangeException>(() => sheet.SetColumnStyle(-1, 0));
+            Assert.Throws<ArgumentOutOfRangeException>(() => sheet.SetColumnStyle(0, -1));
+            Assert.Throws<ArgumentOutOfRangeException>(() => sheet.SetColumnStyle(0, 1000));
+            Assert.Throws<ArgumentOutOfRangeException>(() => sheet.SetColumnWidth(-1, 12));
+            Assert.Throws<ArgumentOutOfRangeException>(() => sheet.SetColumnWidth(0, -1));
+
+            await sheet.StartAsync(TestContext.Current.CancellationToken);
+            await Assert.ThrowsAsync<ArgumentOutOfRangeException>(async () => await sheet.StartRowAsync(-1, TestContext.Current.CancellationToken));
+            await Assert.ThrowsAsync<ArgumentOutOfRangeException>(async () => await sheet.StartRowAsync(1000, TestContext.Current.CancellationToken));
+        }
+
+        [Fact]
+        public async Task InvalidStyleArgumentsThrowXlsb()
+        {
+            await using var ms = new MemoryStream();
+            await using var wb = await XlsbWorkbookWriter.CreateAsync(ms, leaveOpen: true, ct: TestContext.Current.CancellationToken);
+            await wb.StartAsync(TestContext.Current.CancellationToken);
+            XlsbSheetWriter sheet = wb.AddSheet("Sheet1");
+
+            Assert.Throws<ArgumentOutOfRangeException>(() => sheet.SetColumnStyle(-1, 0));
+            Assert.Throws<ArgumentOutOfRangeException>(() => sheet.SetColumnStyle(0, -1));
+            Assert.Throws<ArgumentOutOfRangeException>(() => sheet.SetColumnStyle(0, 1000));
+            Assert.Throws<ArgumentOutOfRangeException>(() => sheet.SetColumnWidth(-1, 12));
+            Assert.Throws<ArgumentOutOfRangeException>(() => sheet.SetColumnWidth(0, -1));
+
+            await sheet.StartAsync(TestContext.Current.CancellationToken);
+            await Assert.ThrowsAsync<ArgumentOutOfRangeException>(async () => await sheet.StartRowAsync(-1, TestContext.Current.CancellationToken));
+            await Assert.ThrowsAsync<ArgumentOutOfRangeException>(async () => await sheet.StartRowAsync(1000, TestContext.Current.CancellationToken));
+        }
+
+        [Fact]
+        public async Task InvalidStyleArgumentsThrowXls()
+        {
+            await using var ms = new MemoryStream();
+            await using var wb = XlsWorkbookWriter.Create(ms, leaveOpen: true);
+            wb.Start();
+            XlsSheetWriter sheet = wb.AddSheet("Sheet1");
+
+            Assert.Throws<ArgumentOutOfRangeException>(() => sheet.SetColumnStyle(-1, 0));
+            Assert.Throws<ArgumentOutOfRangeException>(() => sheet.SetColumnStyle(0, -1));
+            Assert.Throws<ArgumentOutOfRangeException>(() => sheet.SetColumnStyle(0, 1000));
+            Assert.Throws<ArgumentOutOfRangeException>(() => sheet.SetColumnWidth(-1, 12));
+            Assert.Throws<ArgumentOutOfRangeException>(() => sheet.SetColumnWidth(0, -1));
+
+            sheet.Start();
+            Assert.Throws<ArgumentOutOfRangeException>(() => sheet.StartRow(-1));
+            Assert.Throws<ArgumentOutOfRangeException>(() => sheet.StartRow(1000));
+        }
+
+        // CSV only rejects negative arguments — a styleId that no format's AddStyle ever handed out
+        // still no-ops here rather than throwing (CsvWorkbookWriter.AddStyle's doc comment / the
+        // SetColumnStyle no-op above explain why: CSV never writes styleId anywhere, so a caller
+        // sharing one styleId literal across all four formats must not have the CSV leg alone reject it).
+        [Fact]
+        public async Task InvalidStyleArgumentsThrowCsv()
+        {
+            await using var ms = new MemoryStream();
+            CsvWorkbookWriter wb = CsvWorkbookWriter.Create(ms, leaveOpen: true);
+            await wb.StartAsync(TestContext.Current.CancellationToken);
+            CsvSheetWriter sheet = wb.AddSheet("Sheet1");
+
+            Assert.Throws<ArgumentOutOfRangeException>(() => sheet.SetColumnStyle(-1, 0));
+            Assert.Throws<ArgumentOutOfRangeException>(() => sheet.SetColumnStyle(0, -1));
+            Assert.Throws<ArgumentOutOfRangeException>(() => sheet.SetColumnWidth(-1, 12));
+            Assert.Throws<ArgumentOutOfRangeException>(() => sheet.SetColumnWidth(0, -1));
+
+            await sheet.StartAsync(TestContext.Current.CancellationToken);
+            await Assert.ThrowsAsync<ArgumentOutOfRangeException>(async () => await sheet.StartRowAsync(-1, TestContext.Current.CancellationToken));
+            // Unregistered but non-negative: no-op, not an exception.
+            await using (CsvRowWriter row = await sheet.StartRowAsync(1000, TestContext.Current.CancellationToken))
+            {
+                row.Write(1);
+            }
+        }
     }
 }

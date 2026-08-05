@@ -11,7 +11,11 @@ namespace ExcelReader.Core.Parser
     /// </summary>
     /// <typeparam name="T">
     /// The model type to bind each row to; must implement <see cref="IExcelRowMap{T}"/>. Not implementing
-    /// it is a compile error here, rather than a silent runtime fallback to reflection.
+    /// it is a compile error here, rather than a silent runtime fallback to reflection. Must not be a
+    /// <see langword="ref struct"/>: unlike <see cref="ExcelParser{T}"/>/<c>RefParser</c> (net9.0+
+    /// only), this map-based path has no <see langword="ref struct"/>-model entry — see the "fora de
+    /// escopo" note in docs/v2-plan.md §2.3.3 for why. A <see langword="ref struct"/> model, or a
+    /// <c>ReadOnlySpan&lt;byte&gt;</c> property, stays exclusive to <c>RefParser</c>'s reflection-based path.
     /// </typeparam>
     /// <remarks>
     /// No <c>[RequiresUnreferencedCode]</c>/<c>[RequiresDynamicCode]</c>: the <c>where T : IExcelRowMap&lt;T&gt;</c>
@@ -22,10 +26,14 @@ namespace ExcelReader.Core.Parser
     /// <para>
     /// Unlike <see cref="ExcelParser{T}"/>, which builds a separate CSV-specific map with text-based date
     /// parsing (<c>TypeMapper&lt;T&gt;.GetCsvInfo()</c>), this type builds <typeparamref name="T"/>'s map
-    /// exactly once and reuses it for every reader, including <see cref="Parse(CsvReader)"/>. A
-    /// model with a date property meant to be read from CSV should bind it with
+    /// exactly once and reuses it for every reader, including <see cref="Parse(CsvReader)"/>. The
+    /// source generator handles this by emitting <see cref="ExcelCellReaders.DateTimeAuto"/>/
+    /// <see cref="ExcelCellReaders.DateOnlyAuto"/>/<see cref="ExcelCellReaders.TimeOnlyAuto"/> for
+    /// <see cref="DateTime"/>/<see cref="DateOnly"/>/<see cref="TimeOnly"/> properties — serial number
+    /// first, text as a fallback — so those round-trip through the library's own writer in every format.
+    /// A hand-written <see cref="IExcelRowMap{T}"/> that only ever reads CSV can instead bind
     /// <see cref="ExcelCellReaders.DateTimeText"/>/<see cref="ExcelCellReaders.DateOnlyText"/>/<see cref="ExcelCellReaders.TimeOnlyText"/>
-    /// rather than the serial-number readers.
+    /// directly.
     /// </para>
     /// </remarks>
     public sealed class ExcelMappedParser<T> where T : IExcelRowMap<T>
