@@ -104,10 +104,10 @@ namespace ExcelReader.Tests
             public string Name { get; set; } = "";
         }
 
-        // Deliberately excludes DateTime/DateOnly: CsvRowWriter writes them as ISO text, but the
-        // generated map always reads DateTime/DateOnly as an Excel serial number (no csvTextDates
-        // equivalent yet — see docs/v2-audit-fixes.md T8). TimeOnly is unaffected: every format writes
-        // it as the same numeric day-fraction, so it round-trips through CSV today.
+        // Includes DateTime/DateOnly: CsvRowWriter writes them as ISO text while XLSX/XLSB/XLS write an
+        // Excel serial number — ExcelCellReaders.DateTimeAuto/DateOnlyAuto (T8) is what lets one
+        // generated map read both shapes, since ExcelMappedParser<T> reuses a single map across every
+        // reader (unlike the reflection path's dedicated csvTextDates map for CSV).
         [ExcelSerializable]
         public partial class CrossFormatModel
         {
@@ -116,6 +116,8 @@ namespace ExcelReader.Tests
             public int Age { get; set; }
             public decimal Balance { get; set; }
             public ParityKind Category { get; set; }
+            public DateTime BirthDate { get; set; }
+            public DateOnly BirthDay { get; set; }
             public TimeOnly Clock { get; set; }
             public Guid Id { get; set; }
             public int? OptionalAge { get; set; }
@@ -377,6 +379,8 @@ namespace ExcelReader.Tests
                 Age = 30,
                 Balance = 12.5m,
                 Category = ParityKind.Beta,
+                BirthDate = new DateTime(2024, 5, 6),
+                BirthDay = new DateOnly(2024, 5, 6),
                 Clock = new TimeOnly(13, 45, 0),
                 Id = Guid.Parse("11111111-2222-3333-4444-555555555555"),
                 OptionalAge = 7,
@@ -390,6 +394,8 @@ namespace ExcelReader.Tests
             row.Write("Age");
             row.Write("Balance");
             row.Write("Category");
+            row.Write("BirthDate");
+            row.Write("BirthDay");
             row.Write("Clock");
             row.Write("Id");
             row.Write("OptionalAge");
@@ -402,6 +408,8 @@ namespace ExcelReader.Tests
             row.Write(value.Age);
             row.Write(value.Balance);
             row.Write(value.Category.ToString());
+            row.Write(value.BirthDate);
+            row.Write(value.BirthDay);
             row.Write(value.Clock);
             row.Write(value.Id.ToString());
             row.Write(value.OptionalAge);
@@ -414,6 +422,8 @@ namespace ExcelReader.Tests
             Assert.Equal(reflectionResult.Age, generatedResult.Age);
             Assert.Equal(reflectionResult.Balance, generatedResult.Balance);
             Assert.Equal(reflectionResult.Category, generatedResult.Category);
+            Assert.Equal(reflectionResult.BirthDate, generatedResult.BirthDate);
+            Assert.Equal(reflectionResult.BirthDay, generatedResult.BirthDay);
             Assert.Equal(reflectionResult.Clock, generatedResult.Clock);
             Assert.Equal(reflectionResult.Id, generatedResult.Id);
             Assert.Equal(reflectionResult.OptionalAge, generatedResult.OptionalAge);

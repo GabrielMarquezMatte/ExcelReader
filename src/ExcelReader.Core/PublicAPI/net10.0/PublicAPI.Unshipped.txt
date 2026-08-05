@@ -106,11 +106,14 @@ ExcelReader.Core.Writer.IExcelRecordMap<T>.ConfigureExcelRecordMap(ExcelReader.C
 static ExcelReader.Core.Parser.ExcelCellReaders.Enum<TEnum>(in ExcelReader.Core.ValueObjects.Cell cell, bool isDate1904, System.IFormatProvider! provider, out TEnum value) -> bool
 static ExcelReader.Core.Parser.ExcelCellReaders.Parsable<TValue>(in ExcelReader.Core.ValueObjects.Cell cell, bool isDate1904, System.IFormatProvider! provider, out TValue value) -> bool
 static readonly ExcelReader.Core.Parser.ExcelCellReaders.Bool -> ExcelReader.Core.Parser.ExcelCellReader<bool>!
+static readonly ExcelReader.Core.Parser.ExcelCellReaders.DateOnlyAuto -> ExcelReader.Core.Parser.ExcelCellReader<System.DateOnly>!
 static readonly ExcelReader.Core.Parser.ExcelCellReaders.DateOnlySerial -> ExcelReader.Core.Parser.ExcelCellReader<System.DateOnly>!
 static readonly ExcelReader.Core.Parser.ExcelCellReaders.DateOnlyText -> ExcelReader.Core.Parser.ExcelCellReader<System.DateOnly>!
+static readonly ExcelReader.Core.Parser.ExcelCellReaders.DateTimeAuto -> ExcelReader.Core.Parser.ExcelCellReader<System.DateTime>!
 static readonly ExcelReader.Core.Parser.ExcelCellReaders.DateTimeSerial -> ExcelReader.Core.Parser.ExcelCellReader<System.DateTime>!
 static readonly ExcelReader.Core.Parser.ExcelCellReaders.DateTimeText -> ExcelReader.Core.Parser.ExcelCellReader<System.DateTime>!
 static readonly ExcelReader.Core.Parser.ExcelCellReaders.String -> ExcelReader.Core.Parser.ExcelCellReader<string!>!
+static readonly ExcelReader.Core.Parser.ExcelCellReaders.TimeOnlyAuto -> ExcelReader.Core.Parser.ExcelCellReader<System.TimeOnly>!
 static readonly ExcelReader.Core.Parser.ExcelCellReaders.TimeOnlySerial -> ExcelReader.Core.Parser.ExcelCellReader<System.TimeOnly>!
 static readonly ExcelReader.Core.Parser.ExcelCellReaders.TimeOnlyText -> ExcelReader.Core.Parser.ExcelCellReader<System.TimeOnly>!
 virtual ExcelReader.Core.Parser.ExcelCellReader<TValue>.Invoke(in ExcelReader.Core.ValueObjects.Cell cell, bool isDate1904, System.IFormatProvider! provider, out TValue value) -> bool

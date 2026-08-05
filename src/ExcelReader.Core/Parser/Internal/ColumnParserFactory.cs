@@ -134,7 +134,12 @@ namespace ExcelReader.Core.Parser.Internal
             }
             if (propType == typeof(TimeOnly))
             {
-                return BuildValue<T, TimeOnly>(prop, TimeOnlyReader(textDates));
+                // Always serial, regardless of textDates: CsvWriter's own TimeOnly output is a numeric
+                // day-fraction in every format (unlike DateTime/DateOnly, CSV has no distinct textual
+                // form for it), so forcing the text reader here — as this used to do — broke reading a
+                // TimeOnly column back from CSV whenever the same model also had a DateTime/DateOnly
+                // property (which is what flips csvTextDates on for the whole map).
+                return BuildValue<T, TimeOnly>(prop, ReadTimeOnly);
             }
 #if NET8_0
             if (propType == typeof(Guid))
@@ -182,7 +187,8 @@ namespace ExcelReader.Core.Parser.Internal
             }
             if (innerType == typeof(TimeOnly))
             {
-                return BuildNullableValue<T, TimeOnly>(prop, TimeOnlyReader(textDates));
+                // See BuildConcreteParser's TimeOnly case: always serial, never the csvTextDates text reader.
+                return BuildNullableValue<T, TimeOnly>(prop, ReadTimeOnly);
             }
             if (innerType.IsEnum)
             {
@@ -341,11 +347,6 @@ namespace ExcelReader.Core.Parser.Internal
         private static CellReader<DateOnly> DateOnlyReader(bool textDates)
         {
             return textDates ? ReadTextDateOnly : ReadDateOnly;
-        }
-
-        private static CellReader<TimeOnly> TimeOnlyReader(bool textDates)
-        {
-            return textDates ? ReadTextTimeOnly : ReadTimeOnly;
         }
 
         // Excel time serial -> TimeOnly: the fractional part of the day, rounded to the nearest tick to

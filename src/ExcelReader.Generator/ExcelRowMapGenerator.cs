@@ -387,17 +387,20 @@ namespace ExcelReader.Generator
             {
                 return ("global::ExcelReader.Core.Parser.ExcelCellReaders.Bool", "bool", false);
             }
+            // *Auto, not *Serial: ExcelMappedParser<T> builds one map and reuses it for every reader
+            // (unlike the reflection path's dedicated csvTextDates map for CSV), so a date property has
+            // to read a serial number from XLSX/XLSB/XLS and ISO text from CSV through the same reader.
             if (IsSystemType(underlying, "DateTime"))
             {
-                return ("global::ExcelReader.Core.Parser.ExcelCellReaders.DateTimeSerial", "global::System.DateTime", false);
+                return ("global::ExcelReader.Core.Parser.ExcelCellReaders.DateTimeAuto", "global::System.DateTime", false);
             }
             if (IsSystemType(underlying, "DateOnly"))
             {
-                return ("global::ExcelReader.Core.Parser.ExcelCellReaders.DateOnlySerial", "global::System.DateOnly", false);
+                return ("global::ExcelReader.Core.Parser.ExcelCellReaders.DateOnlyAuto", "global::System.DateOnly", false);
             }
             if (IsSystemType(underlying, "TimeOnly"))
             {
-                return ("global::ExcelReader.Core.Parser.ExcelCellReaders.TimeOnlySerial", "global::System.TimeOnly", false);
+                return ("global::ExcelReader.Core.Parser.ExcelCellReaders.TimeOnlyAuto", "global::System.TimeOnly", false);
             }
             if (underlying.TypeKind == TypeKind.Enum)
             {
