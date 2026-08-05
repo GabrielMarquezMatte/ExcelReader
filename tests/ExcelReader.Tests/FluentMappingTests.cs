@@ -207,6 +207,16 @@ namespace ExcelReader.Tests
             AssertMatches(record, new ExcelFluentParser<AttributedModel>(configure).Parse(csvReader).Single());
         }
 
+        [Fact]
+        public void WithAttributeFallbackRejectsIndexBasedMap()
+        {
+            InvalidOperationException ex = Assert.Throws<InvalidOperationException>(() =>
+                ExcelFluentParser<AttributedModel>.WithAttributeFallback(static b => b
+                    .PropertyAt(0, ExcelCellReaders.String, static (ref AttributedModel m, string v) => m.Name = v)));
+
+            Assert.Contains("PropertyAt", ex.Message, StringComparison.Ordinal);
+        }
+
         private static void AssertMatches(AttributedModel expected, AttributedModel actual)
         {
             Assert.Equal(expected.Name, actual.Name);

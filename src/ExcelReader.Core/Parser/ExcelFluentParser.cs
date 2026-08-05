@@ -71,6 +71,7 @@ namespace ExcelReader.Core.Parser
         /// <param name="config">The options controlling header matching, culture, and parse-failure behavior. Defaults to a new <see cref="ExcelParserConfig"/> when <see langword="null"/>.</param>
         /// <exception cref="ArgumentNullException"><paramref name="configure"/> is <see langword="null"/>.</exception>
         /// <exception cref="ArgumentOutOfRangeException"><paramref name="config"/> has <see cref="ExcelParserConfig.HeaderRow"/> less than 1.</exception>
+        /// <exception cref="InvalidOperationException"><paramref name="configure"/> calls <see cref="ExcelRowMapBuilder{T}.PropertyAt{TValue}"/>: an index-based map has no header row to match attribute-driven properties against, so it cannot merge with them.</exception>
         [RequiresUnreferencedCode("WithAttributeFallback reflects over T's public properties for the attribute-driven fallback, which trimming may remove.")]
         [RequiresDynamicCode("WithAttributeFallback binds attribute-driven property setters at runtime (MethodInfo.CreateDelegate / MakeGenericMethod).")]
         [SuppressMessage("Design", "CA1000:Do not declare static members on generic types",

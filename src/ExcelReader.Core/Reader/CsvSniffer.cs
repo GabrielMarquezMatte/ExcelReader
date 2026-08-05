@@ -61,7 +61,10 @@ namespace ExcelReader.Core.Reader
             }
             if (!found)
             {
-                return CsvDialect.Default;
+                // Delimiter/quote fall back to the default, but a BOM was already decoded from the
+                // sample's actual bytes above — throwing that away here would make an undecidable UTF-16
+                // sample silently read as UTF-8 through CsvReaderOptions.WithDialect.
+                return CsvDialect.Default with { Encoding = encoding, HasByteOrderMark = hasBom };
             }
             return new CsvDialect
             {
@@ -72,9 +75,9 @@ namespace ExcelReader.Core.Reader
             };
         }
 
-        // A candidate scores only when at least two usable lines remain after discarding the
-        // (possibly truncated) last one, and the average field count exceeds 1 — a delimiter that
-        // never appears yields a field count of 1 on every line and must lose to one that does.
+        // A candidate scores only when at least one complete (newline-terminated) line was counted, and
+        // the average field count exceeds 1 — a delimiter that never appears yields a field count of 1
+        // on every line and must lose to one that does.
         private static bool TryScore(ReadOnlySpan<byte> sample, byte delimiter, byte quote, int maxLines, out double variance)
         {
             variance = 0;
@@ -113,9 +116,12 @@ namespace ExcelReader.Core.Reader
             return sumSquares / counts.Count;
         }
 
-        // Counts fields per line, respecting quotes, up to `maxLines` lines, then always drops the
-        // last one collected: it is either capped mid-sample or trailing an amount of unterminated
-        // bytes, and in both cases may be truncated mid-field.
+        // Counts fields per line, respecting quotes, up to `maxLines` complete lines. The trailing
+        // segment after the last newline in the sample — capped mid-sample or simply the source's last
+        // line with no terminator — is never counted: it may be truncated mid-field, and counting it
+        // would previously corrupt a single-line (no trailing newline) or exactly-maxLines sample,
+        // discarding a real, complete line instead of a truncated one (R-D3's protection, applied only
+        // to the segment that actually needs it).
         private static List<int> CountFieldsPerLine(ReadOnlySpan<byte> sample, byte delimiter, byte quote, int maxLines)
         {
             var counts = new List<int>();
@@ -127,14 +133,6 @@ namespace ExcelReader.Core.Reader
             while (stop >= 0 && counts.Count < maxLines)
             {
                 stop = ProcessControlByte(sample, ref scanner, stop, delimiter, quote, ref inQuotes, ref delimiterCount, ref lineStart, counts);
-            }
-            if (stop < 0 && lineStart < sample.Length)
-            {
-                counts.Add(delimiterCount + 1);
-            }
-            if (counts.Count > 0)
-            {
-                counts.RemoveAt(counts.Count - 1);
             }
             return counts;
         }

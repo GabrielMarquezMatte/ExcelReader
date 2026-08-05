@@ -96,6 +96,15 @@ namespace ExcelReader.Core.Parser.Internal
         // attribute-driven behavior untouched.
         internal static TypeMapInfo<T> MergeFluentOverAttributes(TypeMapInfo<T> fluent, TypeMapInfo<T> attributeFallback, StringComparer comparer, HeaderNormalization normalization)
         {
+            // An index-based map (ExcelRowMapBuilder<T>.PropertyAt) has no header row to match
+            // attribute-driven properties against — it stores its bindings in _indexBindings and leaves
+            // _properties empty, so silently ignoring them here would drop every PropertyAt binding
+            // rather than merge it. The two shapes can't compose; fail loud instead.
+            if (fluent.IsIndexBased)
+            {
+                throw new InvalidOperationException(
+                    "WithAttributeFallback cannot merge a PropertyAt (index-based) map with attribute-driven properties: an index-based map has no header row to match attributes against. Use the ExcelFluentParser<T> constructor instead.");
+            }
             var configuredNames = new HashSet<string>(comparer);
             foreach (PropertyMap<T> property in fluent._properties)
             {
