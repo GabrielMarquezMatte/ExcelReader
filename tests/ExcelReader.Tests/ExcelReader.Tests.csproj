@@ -48,7 +48,11 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\ExcelReader.Core\ExcelReader.Core.csproj" />
-    <ProjectReference Include="..\..\src\ExcelReader.Generator\ExcelReader.Generator.csproj" />
+    <!-- OutputItemType="Analyzer" makes the generator actually run over this project's own compilation
+         (so a [ExcelSerializable] model declared here gets real generated code, exercised by
+         GeneratedMapParityTests.cs) — without it, only the assembly reference existed, and the
+         generator ran solely through GeneratorTests.cs's in-memory CSharpGeneratorDriver harness. -->
+    <ProjectReference Include="..\..\src\ExcelReader.Generator\ExcelReader.Generator.csproj" OutputItemType="Analyzer" />
   </ItemGroup>
 
 </Project>
