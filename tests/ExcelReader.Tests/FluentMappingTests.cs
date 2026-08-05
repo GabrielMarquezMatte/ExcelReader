@@ -245,6 +245,43 @@ namespace ExcelReader.Tests
             Assert.Contains("PropertyAt", ex.Message, StringComparison.Ordinal);
         }
 
+        [Fact]
+        public void PlainConstructorRejectsReferenceTypeModelWithNoFactory()
+        {
+            // AttributedModel is a class; default(T) is null. Not calling Factory(...) used to build
+            // successfully and only fail with a NullReferenceException on the first row parsed —
+            // rejecting it here, at construction, is what makes the actual mistake (forgetting
+            // Factory(...)) visible instead of a confusing NRE deep inside SparseRowProjection.
+            InvalidOperationException ex = Assert.Throws<InvalidOperationException>(() =>
+                new ExcelFluentParser<AttributedModel>(static b => b
+                    .Property(["Name"], ExcelCellReaders.String, static (ref AttributedModel m, string v) => m.Name = v)));
+
+            Assert.Contains("Factory", ex.Message, StringComparison.Ordinal);
+        }
+
+        [Fact]
+        public async Task PlainConstructorAllowsValueTypeModelWithNoFactory()
+        {
+            // SharedModel is a struct with no explicit parameterless constructor here — default(T) is
+            // the correct, zero-cost instance, exactly like TypeMapper<T>.Build()'s own rule for a plain
+            // struct. Skipping Factory(...) must still work for this case.
+            CancellationToken ct = TestContext.Current.CancellationToken;
+            await using MemoryStream ms = await TypedWorkbook.BuildAsync(["Age"], [42]);
+
+            var parser = new ExcelFluentParser<StructModel>(static b => b
+                .Property(["Age"], ExcelCellReaders.Parsable, static (ref StructModel m, int v) => m.Age = v));
+            await using XlsxReader reader = await Excel.FromAsync(ms, ct: ct);
+            List<StructModel> results = parser.Parse(reader).ToList();
+
+            Assert.Single(results);
+            Assert.Equal(42, results[0].Age);
+        }
+
+        private struct StructModel
+        {
+            public int Age { get; set; }
+        }
+
         private static void AssertMatches(AttributedModel expected, AttributedModel actual)
         {
             Assert.Equal(expected.Name, actual.Name);
