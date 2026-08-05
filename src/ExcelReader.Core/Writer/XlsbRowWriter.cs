@@ -100,7 +100,7 @@ namespace ExcelReader.Core.Writer
         public void Write(TimeOnly value)
         {
             ThrowIfDisposed();
-            WriteDouble(value.Ticks / (double)TimeSpan.TicksPerDay, style: 0);
+            WriteDouble(value.Ticks / (double)TimeSpan.TicksPerDay);
         }
 
         /// <inheritdoc/>
@@ -118,7 +118,7 @@ namespace ExcelReader.Core.Writer
         public void Write(int value)
         {
             ThrowIfDisposed();
-            WriteDouble(value, style: 0);
+            WriteDouble(value);
         }
 
         /// <summary>Writes <paramref name="value"/> as a numeric cell, or an empty cell if it has no value, advancing to the next column.</summary>
@@ -127,7 +127,7 @@ namespace ExcelReader.Core.Writer
             ThrowIfDisposed();
             if (value is not null)
             {
-                WriteDouble(value.Value, style: 0);
+                WriteDouble(value.Value);
                 return;
             }
             _columnIndex++;
@@ -137,7 +137,7 @@ namespace ExcelReader.Core.Writer
         public void Write(long value)
         {
             ThrowIfDisposed();
-            WriteDouble(value, style: 0);
+            WriteDouble(value);
         }
 
         /// <summary>Writes <paramref name="value"/> as a numeric cell, or an empty cell if it has no value, advancing to the next column.</summary>
@@ -146,7 +146,7 @@ namespace ExcelReader.Core.Writer
             ThrowIfDisposed();
             if (value is not null)
             {
-                WriteDouble(value.Value, style: 0);
+                WriteDouble(value.Value);
                 return;
             }
             _columnIndex++;
@@ -156,7 +156,7 @@ namespace ExcelReader.Core.Writer
         public void Write(double value)
         {
             ThrowIfDisposed();
-            WriteDouble(value, style: 0);
+            WriteDouble(value);
         }
 
         /// <summary>Writes <paramref name="value"/> as a numeric cell, or an empty cell if it has no value, advancing to the next column.</summary>
@@ -165,7 +165,7 @@ namespace ExcelReader.Core.Writer
             ThrowIfDisposed();
             if (value is not null)
             {
-                WriteDouble(value.Value, style: 0);
+                WriteDouble(value.Value);
                 return;
             }
             _columnIndex++;
@@ -175,7 +175,7 @@ namespace ExcelReader.Core.Writer
         public void Write(decimal value)
         {
             ThrowIfDisposed();
-            WriteDouble((double)value, style: 0);
+            WriteDouble((double)value);
         }
 
         /// <summary>Writes <paramref name="value"/> as a numeric cell, or an empty cell if it has no value, advancing to the next column.</summary>
@@ -184,7 +184,7 @@ namespace ExcelReader.Core.Writer
             ThrowIfDisposed();
             if (value is not null)
             {
-                WriteDouble((double)value.Value, style: 0);
+                WriteDouble((double)value.Value);
                 return;
             }
             _columnIndex++;
@@ -195,7 +195,7 @@ namespace ExcelReader.Core.Writer
             where T : IUtf8SpanFormattable
         {
             ThrowIfDisposed();
-            WriteDouble(ToDouble(value), style: 0);
+            WriteDouble(ToDouble(value));
         }
 
         /// <inheritdoc/>
@@ -225,9 +225,9 @@ namespace ExcelReader.Core.Writer
             _columnIndex += count;
         }
 
-        private void WriteDouble(double value, int style)
+        private void WriteDouble(double value)
         {
-            _owner.WriteDoubleCell(_columnIndex, value, style);
+            _owner.WriteDoubleCell(_columnIndex, value);
             _columnIndex++;
         }
 

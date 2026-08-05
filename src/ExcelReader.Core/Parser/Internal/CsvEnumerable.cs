@@ -22,11 +22,29 @@ namespace ExcelReader.Core.Parser.Internal
         private readonly CsvReader _reader;
         private readonly ExcelParserConfig _config;
         private readonly CancellationToken _ct;
+        // Resolved once here, in the constructor — never in GetEnumerator()/GetAsyncEnumerator() — see
+        // ExcelEnumerable<T,TReader,TEnumerator>'s matching field for why: a trimmer/AOT analyzer decides
+        // reachability per method, not per field, so TypeMapper<T>.GetCsvInfo()'s reflection must live
+        // only in the constructor ExcelParser<T> uses, never in a method the AOT-clean ExcelMappedParser<T>
+        // path also calls. The mapped path also uses one map for every reader, so unlike the reflection
+        // path's dedicated CSV map (TypeMapper<T>.GetCsvInfo()), a CSV date property here reads with
+        // whatever reader its ConfigureExcelRowMap chose — a caller who wants text dates from CSV picks
+        // ExcelCellReaders.DateTimeText explicitly.
+        private readonly TypeMapInfo<T> _info;
 
         internal CsvEnumerable(CsvReader reader, ExcelParserConfig config, CancellationToken ct = default)
         {
             _reader = reader;
             _config = config;
+            _info = TypeMapper<T>.GetCsvInfo();
+            _ct = ct;
+        }
+
+        internal CsvEnumerable(CsvReader reader, ExcelParserConfig config, TypeMapInfo<T> explicitInfo, CancellationToken ct = default)
+        {
+            _reader = reader;
+            _config = config;
+            _info = explicitInfo;
             _ct = ct;
         }
 
@@ -37,9 +55,8 @@ namespace ExcelReader.Core.Parser.Internal
             Justification = "rows is handed to the returned Enumerator, which owns and disposes it.")]
         public Enumerator GetEnumerator()
         {
-            TypeMapInfo<T> info = TypeMapper<T>.GetCsvInfo();
             CsvReader.Enumerator rows = _reader.GetEnumerator();
-            return new Enumerator(rows, info, _config.ColumnNameComparer, _config.HeaderNormalization, _config.HeaderRow, _config.Culture, _config.ThrowOnParseFailure);
+            return new Enumerator(rows, _info, _config.ColumnNameComparer, _config.HeaderNormalization, _config.HeaderRow, _config.Culture, _config.ThrowOnParseFailure);
         }
 
         IEnumerator<T> IEnumerable<T>.GetEnumerator()
@@ -62,9 +79,8 @@ namespace ExcelReader.Core.Parser.Internal
             Justification = "Async enumerator requires a class to host the async state machine.")]
         public AsyncEnumerator GetAsyncEnumerator(CancellationToken cancellationToken = default)
         {
-            TypeMapInfo<T> info = TypeMapper<T>.GetCsvInfo();
             CancellationToken effective = cancellationToken.CanBeCanceled ? cancellationToken : _ct;
-            return new AsyncEnumerator(_reader, info, _config.ColumnNameComparer, _config.HeaderNormalization, _config.HeaderRow, _config.Culture, _config.ThrowOnParseFailure, effective);
+            return new AsyncEnumerator(_reader, _info, _config.ColumnNameComparer, _config.HeaderNormalization, _config.HeaderRow, _config.Culture, _config.ThrowOnParseFailure, effective);
         }
 
         /// <summary>Enumerates CSV rows synchronously, projecting each into a <typeparamref name="T"/> instance by fixed field index.</summary>
@@ -156,6 +172,23 @@ namespace ExcelReader.Core.Parser.Internal
 
         internal ProjectionStep Advance(CsvReader.Enumerator rows, ref T model)
         {
+            if (_typeInfo.IsIndexBased)
+            {
+                if (_fieldParsers is null)
+                {
+                    BuildIndexColumnMap();
+                }
+                _rowNumber++;
+                // Same terminal-blank-line treatment as the header path below: a trailing empty line
+                // must not yield a phantom model or trip a required-column check.
+                if (rows.FieldCount == 1 && rows.FieldAt(0).Type == CellType.Empty)
+                {
+                    return ProjectionStep.Skip;
+                }
+                model = _typeInfo.CreateInstance();
+                ParseCurrentRow(rows, ref model);
+                return ProjectionStep.Yield;
+            }
             ProjectionStep step = ProjectionRules.ClassifyRow(ref _rowNumber, _headerRow, _fieldParsers is not null);
             if (step == ProjectionStep.BuildMap)
             {
@@ -232,6 +265,30 @@ namespace ExcelReader.Core.Parser.Internal
                 }
             }
 
+            _fieldParsers = parsers;
+            _fieldNames = names;
+            _fieldRequired = required;
+            _requiredFields = requiredFields is null ? [] : [.. requiredFields];
+        }
+
+        private void BuildIndexColumnMap()
+        {
+            ColumnBinding<T>[] bindings = _typeInfo.IndexBindings;
+            int width = bindings.Length == 0 ? 0 : bindings[^1].Column + 1;
+            var parsers = new ColumnParser<T>[width];
+            var names = new string?[width];
+            var required = new bool[width];
+            List<(int, string)>? requiredFields = null;
+            foreach (ColumnBinding<T> binding in bindings)
+            {
+                parsers[binding.Column] = binding.Parser;
+                names[binding.Column] = binding.Name;
+                required[binding.Column] = binding.RequireValue;
+                if (binding.RequireValue)
+                {
+                    (requiredFields ??= []).Add((binding.Column, binding.Name));
+                }
+            }
             _fieldParsers = parsers;
             _fieldNames = names;
             _fieldRequired = required;

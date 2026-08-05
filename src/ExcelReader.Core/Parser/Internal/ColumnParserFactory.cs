@@ -134,7 +134,12 @@ namespace ExcelReader.Core.Parser.Internal
             }
             if (propType == typeof(TimeOnly))
             {
-                return BuildValue<T, TimeOnly>(prop, TimeOnlyReader(textDates));
+                // Always serial, regardless of textDates: CsvWriter's own TimeOnly output is a numeric
+                // day-fraction in every format (unlike DateTime/DateOnly, CSV has no distinct textual
+                // form for it), so forcing the text reader here — as this used to do — broke reading a
+                // TimeOnly column back from CSV whenever the same model also had a DateTime/DateOnly
+                // property (which is what flips csvTextDates on for the whole map).
+                return BuildValue<T, TimeOnly>(prop, ReadTimeOnly);
             }
 #if NET8_0
             if (propType == typeof(Guid))
@@ -182,7 +187,8 @@ namespace ExcelReader.Core.Parser.Internal
             }
             if (innerType == typeof(TimeOnly))
             {
-                return BuildNullableValue<T, TimeOnly>(prop, TimeOnlyReader(textDates));
+                // See BuildConcreteParser's TimeOnly case: always serial, never the csvTextDates text reader.
+                return BuildNullableValue<T, TimeOnly>(prop, ReadTimeOnly);
             }
             if (innerType.IsEnum)
             {
@@ -271,17 +277,20 @@ namespace ExcelReader.Core.Parser.Internal
         }
 
 #pragma warning disable S1172 // CellReader has one fixed signature for all typed cell readers.
-        private static bool ReadBool(in Cell cell, bool isDate1904, IFormatProvider provider, out bool value)
+        // internal (not private): ExcelCellReaders forwards these to the public ExcelCellReader<T>
+        // surface the source generator (feature A) and hand-written IExcelRowMap<T> maps plug into,
+        // so the generator never needs to reimplement this conversion logic.
+        internal static bool ReadBool(in Cell cell, bool isDate1904, IFormatProvider provider, out bool value)
         {
             return TryParseBool(in cell, out value);
         }
 
-        private static bool ReadDateTime(in Cell cell, bool isDate1904, IFormatProvider _, out DateTime value)
+        internal static bool ReadDateTime(in Cell cell, bool isDate1904, IFormatProvider _, out DateTime value)
         {
             return cell.TryGetDateTime(isDate1904, out value);
         }
 
-        private static bool ReadDateOnly(in Cell cell, bool isDate1904, IFormatProvider _, out DateOnly value)
+        internal static bool ReadDateOnly(in Cell cell, bool isDate1904, IFormatProvider _, out DateOnly value)
         {
             if (!cell.TryGetDateTime(isDate1904, out DateTime dt))
             {
@@ -294,7 +303,7 @@ namespace ExcelReader.Core.Parser.Internal
 
         // TryGetDouble reads the binary double (XLS/XLSB) or parses the text invariantly (XLSX),
         // matching how the serial is written; a culture-aware parse would misread "0.5" cells.
-        private static bool ReadTimeOnly(in Cell cell, bool isDate1904, IFormatProvider provider, out TimeOnly value)
+        internal static bool ReadTimeOnly(in Cell cell, bool isDate1904, IFormatProvider provider, out TimeOnly value)
         {
             if (!cell.TryGetDouble(out double serial))
             {
@@ -305,21 +314,30 @@ namespace ExcelReader.Core.Parser.Internal
             return true;
         }
 
-        private static bool ReadTextDateTime(in Cell cell, bool _, IFormatProvider provider, out DateTime value)
+        internal static bool ReadTextDateTime(in Cell cell, bool _, IFormatProvider provider, out DateTime value)
         {
             return TryParseDateTimeText(in cell, provider, out value);
         }
 
-        private static bool ReadTextDateOnly(in Cell cell, bool _, IFormatProvider provider, out DateOnly value)
+        internal static bool ReadTextDateOnly(in Cell cell, bool _, IFormatProvider provider, out DateOnly value)
         {
             return TryParseDateOnlyText(in cell, provider, out value);
         }
 
-        private static bool ReadTextTimeOnly(in Cell cell, bool _, IFormatProvider provider, out TimeOnly value)
+        internal static bool ReadTextTimeOnly(in Cell cell, bool _, IFormatProvider provider, out TimeOnly value)
         {
             return TryParseTimeOnlyText(in cell, provider, out value);
         }
 #pragma warning restore S1172
+
+        // Forwards to EnumCache<TEnum>, which stays private (it caches per-TEnum lookup tables and has
+        // no reason to be part of the factory's own surface) — this is the seam ExcelCellReaders.Enum
+        // uses instead of duplicating the name/value lookup.
+        internal static bool TryParseEnum<TEnum>(in Cell cell, out TEnum value)
+            where TEnum : struct, Enum
+        {
+            return EnumCache<TEnum>.TryParse(in cell, out value);
+        }
 
         private static CellReader<DateTime> DateTimeReader(bool textDates)
         {
@@ -329,11 +347,6 @@ namespace ExcelReader.Core.Parser.Internal
         private static CellReader<DateOnly> DateOnlyReader(bool textDates)
         {
             return textDates ? ReadTextDateOnly : ReadDateOnly;
-        }
-
-        private static CellReader<TimeOnly> TimeOnlyReader(bool textDates)
-        {
-            return textDates ? ReadTextTimeOnly : ReadTimeOnly;
         }
 
         // Excel time serial -> TimeOnly: the fractional part of the day, rounded to the nearest tick to
@@ -473,7 +486,7 @@ namespace ExcelReader.Core.Parser.Internal
             }
         }
 
-        private static bool ReadGuid(in Cell cell, bool isDate1904, IFormatProvider provider, out Guid value)
+        internal static bool ReadGuid(in Cell cell, bool isDate1904, IFormatProvider provider, out Guid value)
         {
             return TryParseGuid(in cell, out value);
         }
@@ -679,7 +692,7 @@ namespace ExcelReader.Core.Parser.Internal
             // Class model: the instance method's implicit `this` is a plain reference, so it binds
             // to Action<T, TProp> instead; wrap once to match RefAction<T, TProp>'s ref-parameter shape.
             Action<T, TProp> act = setter.CreateDelegate<Action<T, TProp>>();
-            return (ref T model, TProp value) => act(model, value);
+            return (ref model, value) => act(model, value);
         }
 
 #if NET9_0_OR_GREATER
