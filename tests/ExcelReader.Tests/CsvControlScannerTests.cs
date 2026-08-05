@@ -153,8 +153,7 @@ namespace ExcelReader.Tests
         }
 
         // --- Continue/SkipByte: the persistence machinery CsvReader.Enumerator relies on to reuse a
-        // scanner instance across records within the same buffered window (see R-5 in
-        // docs/PERFORMANCE_AUDIT.md). Next()/Reset() above are exercised extensively already; these
+        // scanner instance across records within the same buffered window. Next()/Reset() above are exercised extensively already; these
         // target the two new entry points specifically, since a bug here would silently misreport
         // control-byte positions rather than throw. ---
 

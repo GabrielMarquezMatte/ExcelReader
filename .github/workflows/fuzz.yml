@@ -1,0 +1,119 @@
+name: Fuzz
+
+on:
+  pull_request:
+    branches: [master, develop]
+  schedule:
+    # Nightly. Coverage-guided fuzzing is only useful with sustained runtime, so this is where the
+    # real budget goes; the `check` job below is what gates pull requests.
+    - cron: '0 3 * * *'
+  workflow_dispatch:
+    inputs:
+      seconds:
+        description: Seconds to fuzz each target
+        required: false
+        default: '600'
+
+concurrency:
+  group: fuzz-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  libfuzzer:
+    name: libFuzzer (${{ matrix.target }})
+    # Too slow to gate a pull request; PRs get the `check` job instead.
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [xlsx, xlsx-memory, xlsb, xlsb-memory, xls, csv, csv-sniff]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Install SharpFuzz CLI
+        run: dotnet tool install --global SharpFuzz.CommandLine
+
+      - name: Build libfuzzer-dotnet
+        run: |
+          wget -q https://raw.githubusercontent.com/Metalnem/libfuzzer-dotnet/master/libfuzzer-dotnet.cc
+          clang -fsanitize=fuzzer libfuzzer-dotnet.cc -o libfuzzer-dotnet
+          chmod +x libfuzzer-dotnet
+
+      - name: Publish harness
+        run: dotnet publish tests/ExcelReader.Fuzz/ExcelReader.Fuzz.csproj -c Release -o fuzz-out
+
+      # SharpFuzz rewrites the assembly under test to emit coverage. Only ExcelReader.Core is
+      # instrumented: the harness itself is not the code under test, and instrumenting it would
+      # dilute the coverage signal the engine steers by.
+      - name: Instrument ExcelReader.Core
+        run: sharpfuzz fuzz-out/ExcelReader.Core.dll
+
+      - name: Generate seed corpus
+        run: |
+          mkdir -p corpus
+          dotnet fuzz-out/ExcelReader.Fuzz.dll seeds corpus
+          # Excel-authored files make far better seeds than anything we can synthesise.
+          cp RealExcel.xlsb RealExcel.xlsx corpus/ 2>/dev/null || true
+          cp tests/ExcelReader.Tests/data/*.xlsx corpus/ 2>/dev/null || true
+          ls -la corpus
+
+      - name: Fuzz
+        run: |
+          ./libfuzzer-dotnet \
+            --target_path=dotnet \
+            --target_args="fuzz-out/ExcelReader.Fuzz.dll ${{ matrix.target }}" \
+            corpus \
+            -max_total_time=${{ github.event.inputs.seconds || '600' }} \
+            -max_len=131072 \
+            -timeout=25 \
+            -rss_limit_mb=2048 \
+            -print_final_stats=1 \
+            -artifact_prefix=crash-
+
+      - name: Upload crashes
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fuzz-crashes-${{ matrix.target }}
+          path: |
+            crash-*
+            timeout-*
+            oom-*
+          if-no-files-found: ignore
+
+  check:
+    name: Harness smoke check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Build
+        run: dotnet build tests/ExcelReader.Fuzz/ExcelReader.Fuzz.csproj -c Release
+
+      - name: Generate corpus
+        run: |
+          mkdir -p corpus
+          dotnet run --project tests/ExcelReader.Fuzz -c Release --no-build -- seeds corpus
+          cp RealExcel.xlsb RealExcel.xlsx corpus/ 2>/dev/null || true
+          cp tests/ExcelReader.Tests/data/*.xlsx corpus/ 2>/dev/null || true
+
+      # No engine, no native tooling: runs every target over the corpus plus deterministic mutations,
+      # and self-checks the oracle first so a green run cannot mean "the oracle accepts everything".
+      - name: Run every target over mutated corpus
+        run: dotnet run --project tests/ExcelReader.Fuzz -c Release --no-build -- check corpus 200 1
