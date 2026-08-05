@@ -34,6 +34,40 @@ namespace ExcelReader.Core.Writer
             return new ValueTask<CsvRowWriter>(_writer.StartRow());
         }
 
+        // No upper-bound ("was this styleId ever registered?") check here, unlike the other three
+        // formats' SetColumnStyle/StartRowAsync(int,...): CSV never writes styleId anywhere, so a
+        // caller reusing a styleId obtained from another format's AddStyle (a common cross-format
+        // pattern — see FluentMapWorksAcrossAllFourFormats-style tests) must still no-op cleanly here,
+        // not throw just because CSV's own AddStyle never handed out that number. Negative values are
+        // still rejected: no format can make sense of those.
+
+        /// <summary>Validates <paramref name="styleId"/> is not negative, then no-ops: CSV has no cell styles.</summary>
+        /// <inheritdoc cref="ISheetWriter{TRow}.StartRowAsync(int, CancellationToken)"/>
+        /// <exception cref="ArgumentOutOfRangeException"><paramref name="styleId"/> is negative.</exception>
+        public ValueTask<CsvRowWriter> StartRowAsync(int styleId, CancellationToken ct = default)
+        {
+            ArgumentOutOfRangeException.ThrowIfNegative(styleId);
+            return StartRowAsync(ct);
+        }
+
+        /// <summary>Validates its arguments are not negative, then no-ops: CSV has no column styles.</summary>
+        /// <inheritdoc cref="ISheetWriter{TRow}.SetColumnStyle"/>
+        /// <exception cref="ArgumentOutOfRangeException"><paramref name="columnIndex"/> or <paramref name="styleId"/> is negative.</exception>
+        public void SetColumnStyle(int columnIndex, int styleId)
+        {
+            ArgumentOutOfRangeException.ThrowIfNegative(columnIndex);
+            ArgumentOutOfRangeException.ThrowIfNegative(styleId);
+        }
+
+        /// <summary>Validates its arguments, then no-ops: CSV has no column widths.</summary>
+        /// <inheritdoc cref="ISheetWriter{TRow}.SetColumnWidth"/>
+        /// <exception cref="ArgumentOutOfRangeException"><paramref name="columnIndex"/> or <paramref name="width"/> is negative.</exception>
+        public void SetColumnWidth(int columnIndex, double width)
+        {
+            ArgumentOutOfRangeException.ThrowIfNegative(columnIndex);
+            ArgumentOutOfRangeException.ThrowIfNegative(width);
+        }
+
         /// <inheritdoc/>
         public ValueTask EndAsync(CancellationToken ct = default)
         {
@@ -128,6 +162,13 @@ namespace ExcelReader.Core.Writer
         public ValueTask FlushAsync(CancellationToken ct = default)
         {
             return _writer.FlushAsync(ct);
+        }
+
+        /// <summary>No-op: CSV has no cell styles. Always returns 0.</summary>
+        /// <inheritdoc cref="IWorkbookWriter{TSheet}.AddStyle"/>
+        public int AddStyle(CellStyle style)
+        {
+            return 0;
         }
 
         /// <inheritdoc/>

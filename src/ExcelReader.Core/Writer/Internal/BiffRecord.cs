@@ -15,9 +15,11 @@ namespace ExcelReader.Core.Writer.Internal
         internal const int Dsf = 0x0161;
         internal const int Date1904 = 0x0022;
         internal const int Font = 0x0031;
+        internal const int Format = 0x041E;
         internal const int Xf = 0x00E0;
         internal const int Style = 0x0293;
         internal const int BoundSheet = 0x0085;
+        internal const int ColInfo = 0x007D;
         internal const int TabId = 0x013D;
         internal const int FnGroupCount = 0x009C;
         internal const int Window1 = 0x003D;

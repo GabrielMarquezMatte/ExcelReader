@@ -39,10 +39,20 @@
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
     <PackageReference Include="xunit.v3.mtp-v2" Version="3.2.2" />
+    <!-- Drives ExcelRowMapGenerator directly (CSharpGeneratorDriver over an in-memory Compilation) in
+         GeneratorTests.cs, instead of relying on the live build-time analyzer pipeline — a deliberately
+         broken test model (e.g. missing 'partial', for the EXR001 test) would otherwise fail this
+         project's own compilation. -->
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="5.6.0" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\ExcelReader.Core\ExcelReader.Core.csproj" />
+    <!-- OutputItemType="Analyzer" makes the generator actually run over this project's own compilation
+         (so a [ExcelSerializable] model declared here gets real generated code, exercised by
+         GeneratedMapParityTests.cs) — without it, only the assembly reference existed, and the
+         generator ran solely through GeneratorTests.cs's in-memory CSharpGeneratorDriver harness. -->
+    <ProjectReference Include="..\..\src\ExcelReader.Generator\ExcelReader.Generator.csproj" OutputItemType="Analyzer" />
   </ItemGroup>
 
 </Project>

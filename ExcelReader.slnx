@@ -1,9 +1,11 @@
 <Solution>
   <Folder Name="/src/">
     <Project Path="src/ExcelReader.Core/ExcelReader.Core.csproj" />
+    <Project Path="src/ExcelReader.Generator/ExcelReader.Generator.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/ExcelReader.Tests/ExcelReader.Tests.csproj" />
     <Project Path="tests/ExcelReader.Benchmarks/ExcelReader.Benchmarks.csproj" />
+    <Project Path="tests/ExcelReader.AotSanity/ExcelReader.AotSanity.csproj" />
   </Folder>
 </Solution>

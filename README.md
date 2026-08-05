@@ -182,6 +182,95 @@ using IExcelRowReader reader = Excel.Open("changes.xlsx"); // or .xlsb / .xls
 foreach (var item in new ExcelParser<ChangeRow>().Parse(reader)) { /* ... */ }
 ```
 
+## Generate typed maps at compile time (Native AOT / trimming)
+
+`ExcelParser<T>` and `WorkbookRecordWriter<TSheet,TRow>` reflect over `T` (`GetProperties`, `MakeGenericMethod`), which trimming can break and Native AOT cannot run at all. The raw `Excel.From*` readers already use no reflection; mark a model `[ExcelSerializable]` to get the same guarantee for the typed layer — a source generator emits a compile-time map from the model's own `[ExcelColumn]`/`[ExcelRequired]`/`[ExcelConverter]`/`[ExcelIgnore]` attributes, and `ExcelMappedParser<T>`/`MappedRecordWriter` read and write through that map instead of reflection:
+
+```csharp
+using ExcelReader.Core.Parser;
+using ExcelReader.Core.Reader;
+using ExcelReader.Core.Writer;
+
+[ExcelSerializable]                       // the model must be declared partial
+public partial class ChangeRow
+{
+    [ExcelColumn("file")]
+    public string File { get; set; } = "";
+
+    [ExcelColumn("lines_added")]
+    public int LinesAdded { get; set; }
+}
+
+using var reader = Excel.FromFile("changes.xlsx");
+foreach (var item in new ExcelMappedParser<ChangeRow>().Parse(reader))
+{
+    Console.WriteLine($"{item.File}: +{item.LinesAdded}");
+}
+
+var changes = new[] { new ChangeRow { File = "README.md", LinesAdded = 12 } };
+await using var stream = File.Create("changes.xlsx");
+await using var writer = await MappedRecordWriter.CreateMappedXlsxAsync(stream);   // or CreateMappedXlsbAsync / CreateMappedXlsAsync / CreateMappedCsvAsync
+await writer.WriteSheetAsync("Changes", changes);
+```
+
+Notes:
+
+- `[ExcelSerializable]` requires the model — and every type it's nested inside, if any — to be `partial`; the generator emits into an additional part of the same declaration. A compile error (`EXR001`/`EXR002`) names exactly what to fix.
+- Supported property types match `ExcelParser<T>`'s: `string`, `bool`, `DateTime`, `DateOnly`, `TimeOnly`, `Guid`, every integral and floating type plus `decimal`, `enum`s, and `Nullable<T>` of each. Not supported: a `ref struct` model or a `ReadOnlySpan<byte>` property — those stay exclusive to `RefParser`'s reflection-based path (net9.0+); `ExcelMappedParser<T>`/`ExcelFluentParser<T>` have no AOT-clean entry for them.
+- The generator requires a build via `dotnet build`/the .NET SDK. Visual Studio's or `MSBuild.exe`'s .NET Framework host can't load it, so a project built only through those tools won't see generated code — build via the SDK, or fall back to `ExcelParser<T>`/`WorkbookRecordWriter` for that build path.
+- `ExcelMappedParser<T>` builds one map per model and reuses it for every reader, including CSV — unlike `ExcelParser<T>`, which swaps in a text-based date reader specifically for CSV. A `[ExcelSerializable]` model reads `DateTime`/`DateOnly`/`TimeOnly` via `ExcelCellReaders.DateTimeAuto`/`DateOnlyAuto`/`TimeOnlyAuto`: an Excel serial number first, falling back to date/time text when the cell isn't numeric — so a CSV column round-trips through the library's own writer either way. The one edge case this can't distinguish: a CSV cell that's only digits (e.g. an Excel serial number typed as plain text) is always read as a serial number, never as date text.
+- The attribute-based reflection path keeps working unchanged; `[ExcelSerializable]` is an additive, opt-in alternative for the same model shape, not a replacement.
+
+## Map columns at runtime (fluent API)
+
+`[ExcelColumn]`/`[ExcelRequired]` fix the mapping at compile time. When the mapping itself is a runtime decision — loaded from a config file, chosen by a user in a UI, or different per input file — build it with `ExcelRowMapBuilder<T>` through `ExcelFluentParser<T>` instead:
+
+```csharp
+using ExcelReader.Core.Parser;
+using ExcelReader.Core.Reader;
+
+public sealed class ChangeRow
+{
+    public string File { get; set; } = "";
+    public int LinesAdded { get; set; }
+}
+
+var parser = new ExcelFluentParser<ChangeRow>(builder => builder
+    .Factory(() => new ChangeRow())
+    .Property(["file"], ExcelCellReaders.String, (ref ChangeRow r, string v) => r.File = v)
+    .Property(["lines_added"], ExcelCellReaders.Parsable, (ref ChangeRow r, int v) => r.LinesAdded = v));
+
+using var reader = Excel.FromFile("changes.xlsx");
+foreach (var item in parser.Parse(reader))
+{
+    Console.WriteLine($"{item.File}: +{item.LinesAdded}");
+}
+```
+
+The map is built once, in the constructor, from a fresh builder instance — never from a static per-type cache, so two `ExcelFluentParser<T>` instances configured differently for the same `T` give different, correct results in the same process.
+
+Bind a fixed column index instead of a header name with `PropertyAt` — for files with no header row at all:
+
+```csharp
+var parser = new ExcelFluentParser<ChangeRow>(builder => builder
+    .Factory(() => new ChangeRow())
+    .PropertyAt(0, ExcelCellReaders.String, (ref ChangeRow r, string v) => r.File = v)
+    .PropertyAt(1, ExcelCellReaders.Parsable, (ref ChangeRow r, int v) => r.LinesAdded = v));
+```
+
+A builder that uses `PropertyAt` skips the header-row step entirely — the first row is already data. Mixing `PropertyAt` with `Property`/`PropertyNullable`/`Converted` on the same builder throws, since one map can't both wait for a header row and skip it.
+
+`ExcelFluentParser<T>.WithAttributeFallback` merges the builder's bindings with `[ExcelColumn]`/`[ExcelRequired]`-driven ones reflected from `T`: a builder binding replaces every attribute-driven property that shares one of its header names; a property whose header names none of the builder's bindings mention keeps its attribute-driven behavior. Useful for overriding just the one column that's a runtime decision without redeclaring the whole model — reuse one of the property's existing `[ExcelColumn]` names in the builder:
+
+```csharp
+var parser = ExcelFluentParser<ChangeRow>.WithAttributeFallback(builder => builder
+    .Property(["file"], ExcelCellReaders.String, (ref ChangeRow r, string v) => r.File = v.ToUpperInvariant()));
+```
+
+The match is by header name, not by property identity: configuring a *different* header name for `File` would not override its attribute — both bindings would survive and `File` would be assigned twice on the same row.
+
+The plain constructor is AOT-clean — `configure` is caller-written code wiring hand-picked readers and setters, no reflection. `WithAttributeFallback` also reflects over `T` for the fallback half, so it carries the same `[RequiresUnreferencedCode]`/`[RequiresDynamicCode]` annotations as `ExcelParser<T>`.
+
 ## Parser configuration
 
 Pass an `ExcelParserConfig` to control header handling and culture:
@@ -328,6 +417,42 @@ If your workbook repeats many strings and smaller files matter more than the ext
 await using var workbook = await XlsxWorkbookWriter.CreateAsync(stream, useSharedStrings: true);
 ```
 
+## Cell styles on write
+
+Every `IWorkbookWriter<TSheet>` supports column- and row-level styling: a number format (currency, date, percentage), bold, and italic. Register a `CellStyle` once with `AddStyle` and apply its returned index to a column (before the sheet is started) or to a whole row (when starting it):
+
+```csharp
+using ExcelReader.Core.Writer;
+
+await using var workbook = await XlsxWorkbookWriter.CreateAsync(stream);
+await workbook.StartAsync();
+
+int currency = workbook.AddStyle(new CellStyle { NumberFormat = "R$ #,##0.00" });
+int header = workbook.AddStyle(new CellStyle { Bold = true });
+
+await using var sheet = workbook.AddSheet("Summary");
+sheet.SetColumnStyle(columnIndex: 1, currency); // before StartAsync
+sheet.SetColumnWidth(columnIndex: 0, width: 20);
+await sheet.StartAsync();
+
+await using (var row = await sheet.StartRowAsync(header))
+{
+    row.Write("Product");
+    row.Write("Total");
+}
+await using (var row = await sheet.StartRowAsync())
+{
+    row.Write("Widget");
+    row.Write(1234.5);
+}
+
+await workbook.EndAsync();
+```
+
+`AddStyle` deduplicates by value: registering the same `CellStyle` twice returns the same index, and index 0 is always the general/default style. `SetColumnStyle`/`SetColumnWidth` must be called before `StartAsync` — the column layout (XLSX `<cols>`, XLSB `BrtColInfo`, XLS `COLINFO`) has to be written ahead of the row data. A row's style (from `StartRowAsync(int, CancellationToken)`) takes precedence over its column's style for any cell in that row. CSV has no cell concept of style: every style member is a documented no-op there.
+
+Cell-level styling (one specific cell rather than a whole column or row) is out of scope. Bold/italic render only in XLSX today; XLSB and XLS apply the number format but keep the default font, since their font records are opaque binary blobs this library isn't confident hand-editing without a verified field map.
+
 ## Read and write XLSB workbooks (BIFF12)
 
 Use `Excel.FromXlsbFile`, `Excel.FromXlsb`, `Excel.FromXlsbFileAsync`, or `Excel.FromXlsbAsync` to open XLSB directly. For writing, use `XlsbWorkbookWriter`, `XlsbSheetWriter`, and `XlsbRowWriter`.
@@ -425,6 +550,8 @@ Column behavior mirrors the parser attributes:
 
 `DateTime` and `DateOnly` are written as Excel date serials; `TimeOnly` as a time-of-day fraction. Numeric properties become number cells; any other type is written as its `ToString()` text. (`CreateCsvAsync` follows the CSV rules instead — see [Write CSV](#write-csv) — writing `DateTime`/`DateOnly` as ISO text and `TimeOnly` as a time-of-day fraction, all still round-tripping through `ExcelParser<T>`.)
 
+For a model marked `[ExcelSerializable]`, use `MappedRecordWriter.CreateMapped*Async` instead — same behavior, but driven by the source-generated map instead of reflection, so it stays Native AOT/trim-safe. See [Generate typed maps at compile time](#generate-typed-maps-at-compile-time-native-aot--trimming).
+
 ## Read CSV
 
 `CsvReader` streams RFC 4180 CSV (quoted fields, embedded delimiters/newlines, `""`-escaped quotes) through the same `Row`/`Cell` model as the Excel readers, so `ExcelParser<T>` works on it unchanged.
@@ -457,6 +584,19 @@ using var reader = Excel.FromCsvFile("relatorio.csv", options);
 Every CSV cell is text (`CellType.ExcelString`, or `CellType.Empty` for a blank field); at the reader level there is no binary numeric or date representation, so `Cell.TryGetDateTime`/`IsDate1904` (always `false` for CSV) do not apply. The typed parser, however, is CSV-specialized: `ExcelParser<T>.Parse(CsvReader)` parses `DateTime`/`DateOnly` columns directly from the cell text (ISO or culture format, honoring `Culture` — e.g. pt-BR `02/07/2026`), so no `[ExcelConverter]` is needed for dates. All the usual attributes work unchanged (`[ExcelColumn]` aliases, `[ExcelRequired]`, `[ExcelConverter]`), and a converter still takes precedence over the built-in date parsing. (Holding the reader as `IExcelRowReader` instead routes through the generic Excel pipeline, where dates use serial-number semantics — prefer the concrete `Parse(CsvReader)` overload for CSV.)
 
 `Excel.Open`/`OpenAsync` do **not** auto-detect CSV — plain text has no magic-byte signature to sniff, so open CSV explicitly via `Excel.FromCsv*`.
+
+## Sniff a CSV dialect
+
+`CsvSniffer.Detect` infers the delimiter, quote character, and encoding (from a leading byte-order mark) from a sample of bytes, so a `;`-separated pt-BR export or a TSV can be read without the caller knowing the dialect up front. It is deterministic (ties break by candidate order) and never throws on arbitrary input — an indecisive sample returns `CsvDialect.Default` (comma, `"`, UTF-8).
+
+```csharp
+using ExcelReader.Core.Reader;
+
+CsvDialect dialect = Excel.SniffCsvDialectFromFile("export.csv");
+using var reader = Excel.FromCsvFile("export.csv", CsvReaderOptions.Default.WithDialect(dialect));
+```
+
+`Excel.SniffCsvDialect` mirrors the other CSV factories' shape: overloads for a seekable `Stream` and a `ReadOnlyMemory<byte>`, plus `SniffCsvDialectFromFile`, and async siblings for the stream/file overloads. The `Stream` overloads require a seekable source — they read a bounded sample and restore the stream's position — so a non-seekable stream throws `ArgumentException`; buffer it first, or pass the bytes as `ReadOnlyMemory<byte>` instead. Pass `CsvSnifferOptions` to change the candidate delimiters/quotes (and their priority order) or the number of sample lines considered.
 
 ## Write CSV
 
@@ -662,6 +802,16 @@ First use of `ExcelParser<T>`/`RecordWriter` in a process pays a one-time reflec
 | First typed record write | 20.76 ms | 79.41 KB |
 
 This cost is paid once per type per process and cached thereafter — irrelevant for long-running services, worth knowing for CLI tools or serverless cold starts.
+
+`ExcelFluentParser<T>`'s plain constructor has no reflection at all — `configure` only allocates delegates and a `PropertyMap<T>[]` — so it skips this cost. `WithAttributeFallback` still reflects for its attribute-driven half, so it pays close to the same cost as `ExcelParser<T>`:
+
+| Scenario | Mean | Allocated |
+|---|---:|---:|
+| First typed parse (`ExcelParser<T>`) | 32.45 ms | 75.79 KB |
+| First fluent parse (`ExcelFluentParser<T>`, plain) | 28.99 ms | 78.45 KB |
+| First fluent parse (`WithAttributeFallback`) | 34.38 ms | 80.43 KB |
+
+The plain fluent constructor is ~11% faster than the reflection-based parser here; `WithAttributeFallback` is about as slow as reflection, since it runs the same `TypeMapper<T>.GetInfo()` path plus the fluent build on top.
 
 Run the benchmarks locally:
 

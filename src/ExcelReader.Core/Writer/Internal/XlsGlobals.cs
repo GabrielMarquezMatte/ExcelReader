@@ -10,8 +10,15 @@ namespace ExcelReader.Core.Writer.Internal
         internal const int DateXf = 17;
         private const int BuiltinDateFormat = 14;
 
+        // A custom style's native XF index: the two builtin XFs (general, date) occupy 16 and 17,
+        // so StyleTable's abstract index 2 (its first custom entry) lands at 18, 3 at 19, and so on.
+        internal static int CustomXf(int abstractStyleIndex)
+        {
+            return GeneralXf + abstractStyleIndex;
+        }
+
         // Returns the buffer position of each BoundSheet's lbPlyPos field, in sheet order.
-        internal static int[] Write(BiffBuffer buffer, ReadOnlySpan<string> sheetNames, bool date1904)
+        internal static int[] Write(BiffBuffer buffer, ReadOnlySpan<string> sheetNames, bool date1904, StyleTable styles)
         {
             BiffRecordWriter.WriteBof(buffer, BiffRecord.SubstreamGlobals);
             BiffRecordWriter.WriteInterfaceHdr(buffer, 1200);
@@ -33,12 +40,25 @@ namespace ExcelReader.Core.Writer.Internal
             BiffRecordWriter.WriteRefreshAll(buffer);
             BiffRecordWriter.WriteBookBool(buffer);
             BiffRecordWriter.WriteFont(buffer);
+            Dictionary<string, int> numFmtIds = styles.AssignCustomNumberFormatIds();
+            foreach (var (format, id) in numFmtIds)
+            {
+                BiffRecordWriter.WriteFormat(buffer, id, format);
+            }
             for (int i = 0; i < GeneralXf; i++)
             {
                 BiffRecordWriter.WriteStyleXf(buffer, formatIndex: 0);
             }
             BiffRecordWriter.WriteCellXf(buffer, formatIndex: 0);
             BiffRecordWriter.WriteCellXf(buffer, formatIndex: BuiltinDateFormat);
+            // Bold/Italic are not represented here (see XlsbWorkbookWriter.WriteStylesAsync for why
+            // binary formats keep every custom style on the default font); only NumberFormat varies.
+            IReadOnlyList<CellStyle> styleList = styles.Styles;
+            for (int i = 2; i < styleList.Count; i++)
+            {
+                int formatIndex = styleList[i].NumberFormat is string format ? numFmtIds[format] : 0;
+                BiffRecordWriter.WriteCellXf(buffer, formatIndex);
+            }
             BiffRecordWriter.WriteStyle(buffer);
 
             int[] offsetPositions = new int[sheetNames.Length];

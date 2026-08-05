@@ -46,18 +46,27 @@ namespace ExcelReader.Core.Writer
         /// </summary>
         /// <param name="ct">A token to cancel the operation.</param>
         ValueTask FlushAsync(CancellationToken ct = default);
+
+        /// <summary>
+        /// Registers <paramref name="style"/> and returns its index, reusing the index of an
+        /// already-registered style with the same value. Index 0 is always the general/default
+        /// style; index 1 is always the builtin date style every date cell already uses.
+        /// </summary>
+        /// <param name="style">The number format/bold/italic combination to register.</param>
+        /// <returns>The style's index, for use with <see cref="ISheetWriter{TRow}.SetColumnStyle"/> and <see cref="ISheetWriter{TRow}.StartRowAsync(int, CancellationToken)"/>.</returns>
+        int AddStyle(CellStyle style);
     }
 
     /// <summary>
     /// Writes one sheet's rows to the workbook. Obtained from <see cref="IWorkbookWriter{TSheet}.AddSheet"/>;
-    /// a caller starts the sheet, writes rows in order via <see cref="StartRowAsync"/>, then ends the sheet.
+    /// a caller starts the sheet, writes rows in order via <see cref="StartRowAsync(CancellationToken)"/>, then ends the sheet.
     /// </summary>
     /// <typeparam name="TRow">The concrete <see cref="IRowWriter"/> this sheet produces.</typeparam>
     public interface ISheetWriter<TRow> : IAsyncDisposable
     {
         /// <summary>
         /// Writes the sheet's leading structure and moves it into the started state. Must be called
-        /// exactly once, before <see cref="StartRowAsync"/>.
+        /// exactly once, before <see cref="StartRowAsync(CancellationToken)"/>.
         /// </summary>
         /// <param name="ct">A token to cancel the operation.</param>
         ValueTask StartAsync(CancellationToken ct = default);
@@ -72,6 +81,36 @@ namespace ExcelReader.Core.Writer
         ValueTask<TRow> StartRowAsync(CancellationToken ct = default);
 
         /// <summary>
+        /// Begins the next row, applying <paramref name="styleId"/> (from <see cref="IWorkbookWriter{TSheet}.AddStyle"/>)
+        /// to its cells.
+        /// </summary>
+        /// <param name="styleId">The style to apply to every cell of this row.</param>
+        /// <param name="ct">A token to cancel the operation.</param>
+        /// <returns>The writer for the new row.</returns>
+        /// <exception cref="ArgumentOutOfRangeException"><paramref name="styleId"/> is negative or was never returned by <see cref="IWorkbookWriter{TSheet}.AddStyle"/>.</exception>
+        ValueTask<TRow> StartRowAsync(int styleId, CancellationToken ct = default);
+
+        /// <summary>
+        /// Applies <paramref name="styleId"/> to every cell of column <paramref name="columnIndex"/>
+        /// that does not carry its own row style. Must be called before <see cref="StartAsync"/>.
+        /// </summary>
+        /// <param name="columnIndex">The 0-based column index.</param>
+        /// <param name="styleId">The style to apply, from <see cref="IWorkbookWriter{TSheet}.AddStyle"/>.</param>
+        /// <exception cref="ArgumentOutOfRangeException"><paramref name="columnIndex"/> is negative, or <paramref name="styleId"/> is negative or was never returned by <see cref="IWorkbookWriter{TSheet}.AddStyle"/>.</exception>
+        /// <exception cref="InvalidOperationException">The sheet has already been started.</exception>
+        void SetColumnStyle(int columnIndex, int styleId);
+
+        /// <summary>
+        /// Sets the display width, in characters, of column <paramref name="columnIndex"/>. Must be
+        /// called before <see cref="StartAsync"/>.
+        /// </summary>
+        /// <param name="columnIndex">The 0-based column index.</param>
+        /// <param name="width">The column width, in characters.</param>
+        /// <exception cref="ArgumentOutOfRangeException"><paramref name="columnIndex"/> or <paramref name="width"/> is negative.</exception>
+        /// <exception cref="InvalidOperationException">The sheet has already been started.</exception>
+        void SetColumnWidth(int columnIndex, double width);
+
+        /// <summary>
         /// Finalizes the sheet, writing any trailing structure so the sheet is complete within the
         /// workbook. The active row writer, if any, must already be disposed. No further rows may be
         /// started afterward.
@@ -82,7 +121,7 @@ namespace ExcelReader.Core.Writer
 
     /// <summary>
     /// Writes one row's cells in column order, starting at the first column. Obtained from
-    /// <see cref="ISheetWriter{TRow}.StartRowAsync"/>; each <c>Write</c>/<see cref="Skip"/> call advances
+    /// <see cref="ISheetWriter{TRow}.StartRowAsync(CancellationToken)"/>; each <c>Write</c>/<see cref="Skip"/> call advances
     /// to the next column, so cells must be written left-to-right with no way to revisit an earlier
     /// column. Disposing the row writer (sync or async) finalizes the row and returns it to the sheet.
     /// Calling any member after disposal throws <see cref="ObjectDisposedException"/>.
