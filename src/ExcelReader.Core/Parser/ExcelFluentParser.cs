@@ -62,11 +62,22 @@ namespace ExcelReader.Core.Parser
 
         /// <summary>
         /// Creates a parser whose map merges <paramref name="configure"/>'s bindings with attribute-driven
-        /// ones reflected from <typeparamref name="T"/>: a property the builder configures fully replaces
-        /// its attribute (matched by shared header name), and a property the builder never mentions keeps
-        /// its attribute-driven behavior. Lets a caller override just the one column that's a runtime
-        /// decision without redeclaring the whole model.
+        /// ones reflected from <typeparamref name="T"/>: a builder binding fully replaces every
+        /// attribute-driven property that shares one of its header names, and a property whose header
+        /// names none of the builder's bindings mention keeps its attribute-driven behavior untouched.
+        /// Lets a caller override just the one column that's a runtime decision without redeclaring the
+        /// whole model.
         /// </summary>
+        /// <remarks>
+        /// The match is by header name, not by property identity — the builder only receives a setter
+        /// lambda, with no reflection to tell which property it assigns. To override property
+        /// <c>P</c>'s attribute-driven binding, configure the builder with (at least) one of the header
+        /// names <c>P</c>'s <c>[ExcelColumn]</c> attributes already use. Configuring a <em>different</em>
+        /// header name for <c>P</c> does not override anything: both bindings survive, and <c>P</c> gets
+        /// assigned twice on the same row (whichever column is processed last wins) — a model where a
+        /// builder-configured property's header genuinely has no attribute counterpart should mark that
+        /// property <c>[ExcelIgnore]</c> instead of relying on this method to suppress it.
+        /// </remarks>
         /// <param name="configure">Configures the properties that should override their attribute-driven binding.</param>
         /// <param name="config">The options controlling header matching, culture, and parse-failure behavior. Defaults to a new <see cref="ExcelParserConfig"/> when <see langword="null"/>.</param>
         /// <exception cref="ArgumentNullException"><paramref name="configure"/> is <see langword="null"/>.</exception>

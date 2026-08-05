@@ -114,6 +114,9 @@ namespace ExcelReader.Core.Writer
             return _styles.Add(style);
         }
 
+        // Valid styleId range for SetColumnStyle/StartRowAsync(int,...) is [0, StyleCount).
+        internal int StyleCount => _styles.Count;
+
         /// <inheritdoc/>
         public async ValueTask EndAsync(CancellationToken ct = default)
         {

@@ -25,6 +25,14 @@ namespace ExcelReader.Tests
             public int Age { get; set; }
         }
 
+        // For FluentBindingWithDifferentHeaderDoesNotOverrideAttribute: the attribute's own header name
+        // ("file") differs from whatever the builder is configured with, on purpose.
+        private sealed class AliasedModel
+        {
+            [ExcelColumn("file")]
+            public string Name { get; set; } = "";
+        }
+
         [Fact]
         public async Task TwoDifferentMapsForSameModelInOneProcess()
         {
@@ -205,6 +213,26 @@ namespace ExcelReader.Tests
             csvStream.Position = 0;
             using CsvReader csvReader = Excel.FromCsv(csvStream, leaveOpen: false);
             AssertMatches(record, new ExcelFluentParser<AttributedModel>(configure).Parse(csvReader).Single());
+        }
+
+        [Fact]
+        public async Task FluentBindingWithDifferentHeaderDoesNotOverrideAttribute()
+        {
+            CancellationToken ct = TestContext.Current.CancellationToken;
+            // "file" is the attribute's own header name; "arquivo" is a different name the builder
+            // configures for the same property. Precedence is by header name, not property identity
+            // (docs/v2-plan.md §4.4.3), so neither binding is suppressed — both survive, and whichever
+            // column comes later in the row wins the assignment. Reusing "file" in the builder instead
+            // of "arquivo" is what would actually override the attribute.
+            await using MemoryStream ms = await TypedWorkbook.BuildAsync(["file", "arquivo"], ["FromAttribute", "FromFluent"]);
+
+            ExcelFluentParser<AliasedModel> parser = ExcelFluentParser<AliasedModel>.WithAttributeFallback(static b => b
+                .Property(["arquivo"], ExcelCellReaders.String, static (ref AliasedModel m, string v) => m.Name = v));
+            await using XlsxReader reader = await Excel.FromAsync(ms, ct: ct);
+            List<AliasedModel> results = parser.Parse(reader).ToList();
+
+            Assert.Single(results);
+            Assert.Equal("FromFluent", results[0].Name);
         }
 
         [Fact]

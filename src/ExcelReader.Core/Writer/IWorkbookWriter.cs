@@ -87,6 +87,7 @@ namespace ExcelReader.Core.Writer
         /// <param name="styleId">The style to apply to every cell of this row.</param>
         /// <param name="ct">A token to cancel the operation.</param>
         /// <returns>The writer for the new row.</returns>
+        /// <exception cref="ArgumentOutOfRangeException"><paramref name="styleId"/> is negative or was never returned by <see cref="IWorkbookWriter{TSheet}.AddStyle"/>.</exception>
         ValueTask<TRow> StartRowAsync(int styleId, CancellationToken ct = default);
 
         /// <summary>
@@ -95,6 +96,7 @@ namespace ExcelReader.Core.Writer
         /// </summary>
         /// <param name="columnIndex">The 0-based column index.</param>
         /// <param name="styleId">The style to apply, from <see cref="IWorkbookWriter{TSheet}.AddStyle"/>.</param>
+        /// <exception cref="ArgumentOutOfRangeException"><paramref name="columnIndex"/> is negative, or <paramref name="styleId"/> is negative or was never returned by <see cref="IWorkbookWriter{TSheet}.AddStyle"/>.</exception>
         /// <exception cref="InvalidOperationException">The sheet has already been started.</exception>
         void SetColumnStyle(int columnIndex, int styleId);
 
@@ -104,6 +106,7 @@ namespace ExcelReader.Core.Writer
         /// </summary>
         /// <param name="columnIndex">The 0-based column index.</param>
         /// <param name="width">The column width, in characters.</param>
+        /// <exception cref="ArgumentOutOfRangeException"><paramref name="columnIndex"/> or <paramref name="width"/> is negative.</exception>
         /// <exception cref="InvalidOperationException">The sheet has already been started.</exception>
         void SetColumnWidth(int columnIndex, double width);
 

@@ -58,18 +58,25 @@ namespace ExcelReader.Core.Writer
         }
 
         /// <inheritdoc/>
+        /// <exception cref="ArgumentOutOfRangeException"><paramref name="columnIndex"/> is negative, or <paramref name="styleId"/> is negative or was never returned by <see cref="XlsxWorkbookWriter.AddStyle"/>.</exception>
         /// <exception cref="InvalidOperationException">The sheet has already been started.</exception>
         public void SetColumnStyle(int columnIndex, int styleId)
         {
+            ArgumentOutOfRangeException.ThrowIfNegative(columnIndex);
+            ArgumentOutOfRangeException.ThrowIfNegative(styleId);
+            ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(styleId, _owner.StyleCount);
             RequireNotStarted();
             _columnStyles ??= [];
             _columnStyles[columnIndex] = styleId;
         }
 
         /// <inheritdoc/>
+        /// <exception cref="ArgumentOutOfRangeException"><paramref name="columnIndex"/> or <paramref name="width"/> is negative.</exception>
         /// <exception cref="InvalidOperationException">The sheet has already been started.</exception>
         public void SetColumnWidth(int columnIndex, double width)
         {
+            ArgumentOutOfRangeException.ThrowIfNegative(columnIndex);
+            ArgumentOutOfRangeException.ThrowIfNegative(width);
             RequireNotStarted();
             _columnWidths ??= [];
             _columnWidths[columnIndex] = width;
@@ -161,11 +168,14 @@ namespace ExcelReader.Core.Writer
         }
 
         /// <inheritdoc/>
+        /// <exception cref="ArgumentOutOfRangeException"><paramref name="styleId"/> is negative or was never returned by <see cref="XlsxWorkbookWriter.AddStyle"/>.</exception>
         /// <exception cref="ObjectDisposedException">The sheet has already been ended.</exception>
         /// <exception cref="InvalidOperationException">The sheet has not been started, or the previous <see cref="XlsxRowWriter"/> has not been disposed.</exception>
         /// <exception cref="ExcelLimitExceededException">The worksheet's 1,048,576-row limit has been reached.</exception>
         public ValueTask<XlsxRowWriter> StartRowAsync(int styleId, CancellationToken ct = default)
         {
+            ArgumentOutOfRangeException.ThrowIfNegative(styleId);
+            ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(styleId, _owner.StyleCount);
             int rowNumber = BeginRow(styleId, ct);
             _rowWriter ??= new XlsxRowWriter(this, _rowBuffer);
             _rowWriter.Reset(rowNumber, styleId);

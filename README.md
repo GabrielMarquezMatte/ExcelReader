@@ -216,7 +216,7 @@ await writer.WriteSheetAsync("Changes", changes);
 Notes:
 
 - `[ExcelSerializable]` requires the model — and every type it's nested inside, if any — to be `partial`; the generator emits into an additional part of the same declaration. A compile error (`EXR001`/`EXR002`) names exactly what to fix.
-- Supported property types match `ExcelParser<T>`'s: `string`, `bool`, `DateTime`, `DateOnly`, `TimeOnly`, `Guid`, every integral and floating type plus `decimal`, `enum`s, and `Nullable<T>` of each.
+- Supported property types match `ExcelParser<T>`'s: `string`, `bool`, `DateTime`, `DateOnly`, `TimeOnly`, `Guid`, every integral and floating type plus `decimal`, `enum`s, and `Nullable<T>` of each. Not supported: a `ref struct` model or a `ReadOnlySpan<byte>` property — those stay exclusive to `RefParser`'s reflection-based path (net9.0+); `ExcelMappedParser<T>`/`ExcelFluentParser<T>` have no AOT-clean entry for them.
 - The generator requires a build via `dotnet build`/the .NET SDK. Visual Studio's or `MSBuild.exe`'s .NET Framework host can't load it, so a project built only through those tools won't see generated code — build via the SDK, or fall back to `ExcelParser<T>`/`WorkbookRecordWriter` for that build path.
 - `ExcelMappedParser<T>` builds one map per model and reuses it for every reader, including CSV — unlike `ExcelParser<T>`, which swaps in a text-based date reader specifically for CSV. A `[ExcelSerializable]` model reads `DateTime`/`DateOnly`/`TimeOnly` via `ExcelCellReaders.DateTimeAuto`/`DateOnlyAuto`/`TimeOnlyAuto`: an Excel serial number first, falling back to date/time text when the cell isn't numeric — so a CSV column round-trips through the library's own writer either way. The one edge case this can't distinguish: a CSV cell that's only digits (e.g. an Excel serial number typed as plain text) is always read as a serial number, never as date text.
 - The attribute-based reflection path keeps working unchanged; `[ExcelSerializable]` is an additive, opt-in alternative for the same model shape, not a replacement.
@@ -260,12 +260,14 @@ var parser = new ExcelFluentParser<ChangeRow>(builder => builder
 
 A builder that uses `PropertyAt` skips the header-row step entirely — the first row is already data. Mixing `PropertyAt` with `Property`/`PropertyNullable`/`Converted` on the same builder throws, since one map can't both wait for a header row and skip it.
 
-`ExcelFluentParser<T>.WithAttributeFallback` merges the builder's bindings with `[ExcelColumn]`/`[ExcelRequired]`-driven ones reflected from `T`: a property the builder configures fully replaces its attribute (matched by shared header name); a property the builder never mentions keeps its attribute-driven behavior. Useful for overriding just the one column that's a runtime decision without redeclaring the whole model:
+`ExcelFluentParser<T>.WithAttributeFallback` merges the builder's bindings with `[ExcelColumn]`/`[ExcelRequired]`-driven ones reflected from `T`: a builder binding replaces every attribute-driven property that shares one of its header names; a property whose header names none of the builder's bindings mention keeps its attribute-driven behavior. Useful for overriding just the one column that's a runtime decision without redeclaring the whole model — reuse one of the property's existing `[ExcelColumn]` names in the builder:
 
 ```csharp
 var parser = ExcelFluentParser<ChangeRow>.WithAttributeFallback(builder => builder
     .Property(["file"], ExcelCellReaders.String, (ref ChangeRow r, string v) => r.File = v.ToUpperInvariant()));
 ```
+
+The match is by header name, not by property identity: configuring a *different* header name for `File` would not override its attribute — both bindings would survive and `File` would be assigned twice on the same row.
 
 The plain constructor is AOT-clean — `configure` is caller-written code wiring hand-picked readers and setters, no reflection. `WithAttributeFallback` also reflects over `T` for the fallback half, so it carries the same `[RequiresUnreferencedCode]`/`[RequiresDynamicCode]` annotations as `ExcelParser<T>`.
 

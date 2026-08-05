@@ -24,6 +24,11 @@ namespace ExcelReader.Core.Writer.Internal
 
         internal IReadOnlyList<CellStyle> Styles => _styles;
 
+        // The valid range of style indices this table has actually registered — [0, Count) — used to
+        // validate a caller-supplied styleId before it reaches XML/BIFF output (an unregistered index
+        // would otherwise produce a file the target application flags for repair).
+        internal int Count => _styles.Count;
+
         internal int Add(CellStyle style)
         {
             if (_indices.TryGetValue(style, out int index))
