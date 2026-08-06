@@ -210,5 +210,30 @@ namespace ExcelReader.Tests
             Assert.Equal(1.5, d);
             Assert.Equal("1.50", e.Current[0].GetString());
         }
+
+        // Regression: found by the XLSX fuzz target. ParseStyleDateFlags located "<cellXfs", then
+        // anchored the search for "</cellXfs>" on the result of searching for '>' — without first
+        // checking that '>' was found. A styles part truncated mid-open-tag left that at -1, which
+        // sliced out of range and threw ArgumentOutOfRangeException out of the XlsxReader constructor
+        // instead of the reader simply reporting no date styles.
+        [Theory]
+        // Truncated mid-open-tag: no '>' anywhere after "<cellXfs".
+        [InlineData("<styleSheet><cellXfs")]
+        [InlineData("<styleSheet><cellXfs count=\"1\"")]
+        // Open tag closes, but the element never does.
+        [InlineData("<styleSheet><cellXfs count=\"1\"><xf numFmtId=\"14\"/>")]
+        public void TruncatedCellXfsIsNotFatal(string styles)
+        {
+            using MemoryStream ms = WorkbookBuilder.Build(
+                """<row r="1"><c r="A1"><v>1</v></c></row>""",
+                styles: styles);
+
+            // The workbook must still open and read; the styles part simply yields no date flags,
+            // so the cell reads as a plain number.
+            using XlsxReader reader = Excel.From(ms);
+            using XlsxReader.Enumerator e = reader.GetEnumerator();
+            Assert.True(e.MoveNext());
+            Assert.Equal(CellType.Number, e.Current[0].Type);
+        }
     }
 }

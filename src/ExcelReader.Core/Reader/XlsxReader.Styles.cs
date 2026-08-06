@@ -41,9 +41,16 @@ namespace ExcelReader.Core.Reader
             {
                 return [];
             }
+            // `open` must be validated before it anchors the next search: a truncated "<cellXfs" with
+            // no closing '>' leaves it at -1, and passing that as the `from` index sliced out of range.
+            // Found by the XLSX fuzz target.
             int open = IdxOf(src, region, (byte)'>');
+            if (open < 0)
+            {
+                return [];
+            }
             int end = IdxOf(src, open, cellXfsClose);
-            if (open < 0 || end < 0)
+            if (end < 0)
             {
                 return [];
             }
