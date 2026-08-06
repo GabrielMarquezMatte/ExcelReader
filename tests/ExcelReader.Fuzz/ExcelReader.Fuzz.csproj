@@ -1,0 +1,36 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>false</IsPackable>
+    <AssemblyName>ExcelReader.Fuzz</AssemblyName>
+    <RootNamespace>ExcelReader.Fuzz</RootNamespace>
+    <!-- SharpFuzz instruments the assembly under test in place; keeping the fuzz driver itself
+         unoptimized-away and non-trimmed avoids surprises when the harness is republished. -->
+    <PublishTrimmed>false</PublishTrimmed>
+    <!-- Deliberately NOT InvariantGlobalization: the harness must run the same configuration a
+         consumer does, or it fuzzes a runtime nobody ships. (It also broke the XLSX writer outright
+         when it was set here.) -->
+    <!-- CA1031: a fuzz harness must catch broadly and then classify — that IS the oracle. -->
+    <!-- CA1812/S1144: harness entry points are reached through a name-based dispatch table. -->
+    <!-- CA2007/MA0004: no sync context in a console fuzz driver. -->
+    <!-- CA5394: the mutation engine needs a *seeded, reproducible* PRNG — a failing input has to be
+         replayable from its seed, which a CSPRNG would not give. Project-wide, not per-method. -->
+    <!-- CA2201/MA0015/S3928/S3267: FuzzOracle.SelfCheck deliberately constructs runtime-reserved
+         exception types as test data. Testing by Type instead would miss the subtlety it exists to
+         pin down — ArgumentOutOfRangeException derives from ArgumentException, so only a real
+         instance proves the oracle distinguishes them. -->
+    <!-- RS0016/RS0026/RS0037: never packaged, so there is no PublicAPI.txt here by design. -->
+    <NoWarn>$(NoWarn);CA1031;CA1812;S1144;CA2007;MA0004;RS0016;RS0026;RS0037;CA1303;S2139;CA1849;S6966;VSTHRD103;IDISP001;CA2000;CA5394;S2245;CA2201;MA0015;S3928;S3267</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\ExcelReader.Core\ExcelReader.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="SharpFuzz" Version="2.1.1" />
+  </ItemGroup>
+
+</Project>

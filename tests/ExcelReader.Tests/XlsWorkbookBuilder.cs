@@ -112,6 +112,7 @@ namespace ExcelReader.Tests
         internal const int SectorShiftOffset = 0x1E;     // log2(sector size); valid is 9 -> 512
         internal const int FatSectorCountOffset = 0x2C;  // header DIFAT lists this many FAT sectors
         internal const int MiniCutoffOffset = 0x38;      // header's mini stream cutoff field (Int32)
+        internal const int MiniFatSectorCountOffset = 0x40; // number of mini-FAT sectors (Int32)
         internal const int SignatureOffset = 0x00;
         // Directory is sector 1: header (512) + FAT sector (512) = byte 1024. The Workbook entry
         // is the second 128-byte directory entry, so its UTF-16 name starts at 1024 + 128.
