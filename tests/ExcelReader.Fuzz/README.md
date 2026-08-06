@@ -91,6 +91,7 @@ the working corpus for both jobs.
 | File | Target | Was |
 |---|---|---|
 | `xls-minifat-overflow.bin` | `xls` | `OverflowException` out of `XlsCompoundFile.ReadIntSectors`. `miniFatSectorCount` (16,777,215 in a 3.4 KB file) was the one header sector count not bounded against the container length, and `ReadIntSectors` multiplies it by `sectorSize` inside a `checked` block. Now rejected as `InvalidDataException`; regression test in `ExcelOpenAndOleErrorTests`. |
+| `xlsx-truncated-cellxfs.bin` | `xlsx` | `ArgumentOutOfRangeException` out of `XlsxReader.ParseStyleDateFlags`. A styles part truncated mid-`<cellXfs` open tag left the `'>'` search at -1, which then anchored the search for `</cellXfs>` before being checked. Now returns no date flags; the `IdxOf` helpers also treat a negative anchor as "not found". Regression test in `XlsxReaderTests`. |
 
 ## Seeds
 
