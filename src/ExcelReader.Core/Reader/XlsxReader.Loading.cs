@@ -419,14 +419,28 @@ namespace ExcelReader.Core.Reader
             offsets[count++] = value;
         }
 
+        // A negative `from` means the search that produced this anchor found nothing, so the answer
+        // here is also "not found" rather than an out-of-range slice. Callers chain these searches,
+        // with one result anchoring the next, and on malformed input any link in that chain can come
+        // back negative. Making the helpers total means a missed check at a call site degrades to an
+        // empty result instead of throwing ArgumentOutOfRangeException out of the reader, which is
+        // what a fuzzed styles part with a truncated cellXfs open tag used to do.
         private static int IdxOf(ReadOnlySpan<byte> s, int from, ReadOnlySpan<byte> seq)
         {
+            if (from < 0)
+            {
+                return -1;
+            }
             int r = s[from..].IndexOf(seq);
             return r < 0 ? -1 : r + from;
         }
 
         private static int IdxOf(ReadOnlySpan<byte> s, int from, byte b)
         {
+            if (from < 0)
+            {
+                return -1;
+            }
             int r = s[from..].IndexOf(b);
             return r < 0 ? -1 : r + from;
         }

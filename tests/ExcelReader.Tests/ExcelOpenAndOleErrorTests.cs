@@ -285,6 +285,22 @@ namespace ExcelReader.Tests
             Assert.Throws<InvalidDataException>(() => Excel.FromXls(ms));
         }
 
+        // Regression: found by the XLS fuzz target. miniFatSectorCount was the one sector count the
+        // header validation skipped, and ReadIntSectors multiplies it by sectorSize inside a `checked`
+        // block — so a large value escaped as an OverflowException (an arithmetic fault leaking out of
+        // the parser) instead of the InvalidDataException malformed input is contracted to produce.
+        // The crashing input carried miniFatSectorCount = 16,777,215 against a 3.4 KB file.
+        [Theory]
+        [InlineData(16777215)] // the value libFuzzer actually found; * 512 overflows Int32
+        [InlineData(int.MaxValue)]
+        [InlineData(-1)]
+        public void OutOfRangeMiniFatSectorCountThrowsInvalidData(int miniFatSectorCount)
+        {
+            using MemoryStream ms = XlsWorkbookBuilder.BuildPatched(
+                XlsWorkbookBuilder.MiniFatSectorCountOffset, XlsWorkbookBuilder.LE32(miniFatSectorCount));
+            Assert.Throws<InvalidDataException>(() => Excel.FromXls(ms));
+        }
+
         [Fact]
         public void IncompleteDifatThrows()
         {

@@ -141,12 +141,19 @@ namespace ExcelReader.Core.Reader
             {
                 throw new InvalidDataException("Unsupported OLE mini stream cutoff.");
             }
-            // A file cannot hold more sectors than its length allows, so a FAT/DIFAT sector count above
-            // that is a crafted header. Reject it before allocating, or `new int[fatSectorCount]` below
-            // would let a bogus count force a multi-GB allocation / OOM on untrusted input.
+            // A file cannot hold more sectors than its length allows, so a FAT/DIFAT/mini-FAT sector
+            // count above that is a crafted header. Reject it before allocating, or `new
+            // int[fatSectorCount]` below would let a bogus count force a multi-GB allocation / OOM on
+            // untrusted input.
+            //
+            // miniFatSectorCount belongs here for a second reason: it is multiplied by sectorSize in
+            // ReadIntSectors, and a large value overflows that `checked` product into an
+            // OverflowException — a leaked arithmetic fault rather than the InvalidDataException a
+            // malformed file is supposed to produce. Found by the XLS fuzz target.
             long maxSectors = source.Length / sectorSize;
             if (fatSectorCount < 0 || fatSectorCount > maxSectors ||
-                difatSectorCount < 0 || difatSectorCount > maxSectors)
+                difatSectorCount < 0 || difatSectorCount > maxSectors ||
+                miniFatSectorCount < 0 || miniFatSectorCount > maxSectors)
             {
                 throw new InvalidDataException("The OLE FAT sector count is out of range.");
             }
