@@ -159,6 +159,39 @@ namespace ExcelReader.Tests
             Assert.Equal("not-a-date", e.Current[0].GetString());
         }
 
+        // Regression: found by the xlsx-memory fuzz target. DateTime spans years 1..9999 but
+        // ToOADate only accepts 0100-01-01 and later, so a t="d" whose text parsed into an earlier
+        // year threw OverflowException ("Not a legal OleAut date") out of MoveNext. Such a value has
+        // no Excel serial at all, so it is kept verbatim as text like any other unparseable t="d".
+        [Theory]
+        [InlineData("0024-02-29T21:00:00.000Z")]
+        [InlineData("0001-01-01")]
+        [InlineData("0099-12-31T23:59:59")]
+        public void IsoDateBelowOaDateRangeIsKeptAsString(string text)
+        {
+            using MemoryStream ms = WorkbookBuilder.Build(
+                $"""<row r="1"><c r="A1" t="d"><v>{text}</v></c></row>""");
+            using XlsxReader reader = Excel.From(ms);
+            using XlsxReader.Enumerator e = reader.GetEnumerator();
+
+            Assert.True(e.MoveNext());
+            Assert.Equal(CellType.ExcelString, e.Current[0].Type);
+            Assert.Equal(text, e.Current[0].GetString());
+        }
+
+        // The first legal OADate value still round-trips as a date, so the guard is not off by a day.
+        [Fact]
+        public void IsoDateAtOaDateFloorIsStillParsedAsDate()
+        {
+            using MemoryStream ms = WorkbookBuilder.Build(
+                """<row r="1"><c r="A1" t="d"><v>0100-01-01</v></c></row>""");
+            using XlsxReader reader = Excel.From(ms);
+            using XlsxReader.Enumerator e = reader.GetEnumerator();
+
+            Assert.True(e.MoveNext());
+            Assert.Equal(CellType.Date, e.Current[0].Type);
+        }
+
         [Fact]
         public async Task IsoDateCellIsParsedAsDateAsync()
         {
