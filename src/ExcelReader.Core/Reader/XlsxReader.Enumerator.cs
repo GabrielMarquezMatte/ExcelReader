@@ -726,8 +726,21 @@ namespace ExcelReader.Core.Reader
                 {
                     chars[i] = (char)utf8[i];
                 }
-                return DateTime.TryParse(chars[..utf8.Length], CultureInfo.InvariantCulture,
-                    DateTimeStyles.RoundtripKind | DateTimeStyles.AllowWhiteSpaces, out value);
+                const DateTimeStyles dateParseFlag = DateTimeStyles.RoundtripKind | DateTimeStyles.AllowWhiteSpaces;
+                if (!DateTime.TryParse(chars[..utf8.Length], CultureInfo.InvariantCulture, dateParseFlag, out value))
+                {
+                    return false;
+                }
+                // DateTime spans years 1..9999 but ToOADate only accepts 0100-01-01 and later — it
+                // throws OverflowException ("Not a legal OleAut date") below that. A hand-written
+                // t="d" like "0024-02-29" parses fine and would have taken down the whole read, so
+                // treat anything with no serial representation as unparseable and keep it as text.
+                if (value.Year < 100)
+                {
+                    value = default;
+                    return false;
+                }
+                return true;
             }
 
             private static ReadOnlySpan<byte> ElementText(ReadOnlySpan<byte> inner, ReadOnlySpan<byte> openTag, ReadOnlySpan<byte> closeTag)
