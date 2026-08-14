@@ -495,5 +495,8 @@ $RECYCLE.BIN/
 *.swp
 graphify-out
 
-# Native binary copied into the Python package by python/scripts/build_native.py
-python/src/excelreader/_lib/
+# Native binary copied into the Python package by python/scripts/build_native.py. The directory
+# itself must stay tracked (via .gitkeep) so a fresh clone still has it: hatchling's force-include
+# requires it to exist at build time, before build_native.py has ever run.
+python/src/excelreader/_lib/*
+!python/src/excelreader/_lib/.gitkeep

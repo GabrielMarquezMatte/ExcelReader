@@ -1,3 +1,6 @@
+import gc
+import shutil
+
 import pytest
 
 from excelreader import Cell, CellType, ExcelReaderError, open_bytes, open_workbook
@@ -104,6 +107,22 @@ def test_rows_iterator_raises_after_close_mid_iteration(xlsx_path):
 
     with pytest.raises(ExcelReaderError):
         next(rows)
+
+
+def test_dropping_a_workbook_without_close_still_releases_the_file(xlsx_path, tmp_path):
+    # Work on a copy — never touch the real fixture, and a copy also lets us assert the OS-level
+    # file lock is actually gone by deleting it afterwards.
+    copy_path = tmp_path / "dropped.xlsx"
+    shutil.copyfile(xlsx_path, copy_path)
+
+    workbook = open_workbook(copy_path)
+    next(workbook.rows())
+    del workbook
+    gc.collect()
+
+    # If __del__ didn't close the native handle, the native side still holds the file open and this
+    # raises PermissionError on Windows (the platform where an open-file lock is actually enforced).
+    copy_path.unlink()
 
 
 def test_excel_serial_dates_convert_with_the_documented_recipe(xlsx_path):

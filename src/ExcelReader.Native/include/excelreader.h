@@ -38,6 +38,9 @@ int32_t xl_open_file(const uint8_t* path, int32_t path_len, int32_t format, void
 /* Copies the data; the caller may free it on return. */
 int32_t xl_open_memory(const uint8_t* data, int32_t data_len, int32_t format, void** out_handle);
 
+/* A handle is valid until this call succeeds. Calling anything on a handle afterwards - including a
+ * second xl_close on the same value - is undefined behavior; the caller must null its own copy of
+ * the pointer immediately after a successful xl_close so it can never be reused or double-closed. */
 int32_t xl_close(void* handle);
 
 int32_t xl_sheet_count(void* handle, int32_t* out_count);
@@ -45,7 +48,8 @@ int32_t xl_sheet_count(void* handle, int32_t* out_count);
 /* On XL_BUFFER_TOO_SMALL, *out_len holds the required byte count. */
 int32_t xl_sheet_name(void* handle, uint8_t* buffer, int32_t capacity, int32_t* out_len);
 
-/* Resets row enumeration to the start of the selected sheet. */
+/* Resets row enumeration to the start of the selected sheet, dropping any row held pending from a
+ * prior XL_BUFFER_TOO_SMALL on xl_next_row - that row is not replayed after the sheet changes. */
 int32_t xl_move_to_sheet(void* handle, int32_t index);
 
 int32_t xl_is_date1904(void* handle, int32_t* out_flag);

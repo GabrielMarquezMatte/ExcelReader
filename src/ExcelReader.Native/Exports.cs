@@ -44,10 +44,15 @@ namespace ExcelReader.Native
                 return NativeStatus.InvalidHandle;
             }
 
-            GCHandle gcHandle = GCHandle.FromIntPtr(handle);
-            int status = NativeApi.Close(gcHandle.Target as NativeHandle);
-            gcHandle.Free();
-            return status;
+            // A stale/garbage handle value makes GCHandle.FromIntPtr throw InvalidOperationException.
+            // That must not become an unhandled exception crossing the boundary (it would crash the
+            // process), so a bad handle here is reported the same way a null handle is: InvalidHandle.
+            if (!TryFree(handle, out NativeHandle? target))
+            {
+                return NativeStatus.InvalidHandle;
+            }
+
+            return NativeApi.Close(target);
         }
 
         [UnmanagedCallersOnly(EntryPoint = "xl_sheet_count")]
@@ -121,9 +126,47 @@ namespace ExcelReader.Native
             return status;
         }
 
-        private static NativeHandle? Resolve(nint handle)
+        // Internal (not private) so tests can exercise the stale/garbage-handle path directly: the
+        // [UnmanagedCallersOnly] entry points above cannot be invoked from managed code, but a plain
+        // helper method can.
+        internal static NativeHandle? Resolve(nint handle)
         {
-            return handle == 0 ? null : GCHandle.FromIntPtr(handle).Target as NativeHandle;
+            if (handle == 0)
+            {
+                return null;
+            }
+
+            try
+            {
+                return GCHandle.FromIntPtr(handle).Target as NativeHandle;
+            }
+            catch (InvalidOperationException)
+            {
+                // The handle value doesn't correspond to a live GCHandle allocation (stale, already
+                // freed, or outright garbage). Every caller already treats a null result as
+                // InvalidHandle, so surfacing null here keeps a bad handle a clean error instead of
+                // a process crash.
+                return null;
+            }
+        }
+
+        internal static bool TryFree(nint handle, out NativeHandle? target)
+        {
+            // GCHandle.FromIntPtr never validates by itself (it only rejects IntPtr.Zero) — the
+            // actual validity check happens in the VM when .Target or .Free() touches the handle
+            // table, so both must be inside the try, not just the FromIntPtr call.
+            try
+            {
+                GCHandle gcHandle = GCHandle.FromIntPtr(handle);
+                target = gcHandle.Target as NativeHandle;
+                gcHandle.Free();
+                return true;
+            }
+            catch (InvalidOperationException)
+            {
+                target = null;
+                return false;
+            }
         }
     }
 }
