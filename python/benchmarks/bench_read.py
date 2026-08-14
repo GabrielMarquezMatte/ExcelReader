@@ -10,6 +10,8 @@ script asserts against that instead of silently publishing a zero.
 NOTE: read_all()/rows() build one Cell tuple per cell; polars.read_excel returns a typed columnar
 DataFrame with type inference. That is not matched work (see STYLEGUIDE.md "Tests and
 Benchmarks") — this script labels the comparison, it does not pretend it is apples-to-apples.
+The parse_typed/to_arrow variants are the closest thing to matched work against polars: they
+do real native-side type conversion into columns, against a fixed schema rather than inferring one.
 """
 
 from __future__ import annotations
@@ -54,6 +56,43 @@ def bench_read_all_columnar(path: Path) -> tuple[int, int]:
     with excelreader.open_workbook(path, format="xlsb") as workbook:
         sheet = workbook.read_all_columnar()
     return len(sheet.row_offsets) - 1, len(sheet.columns)
+
+
+# The 14 columns of the default fixture, in file order. parse_typed()/to_arrow() take a schema;
+# this is the schema that matches 65K_Records_Data.xlsb. Passing --path a different file makes both
+# typed variants meaningless, so they are skipped there rather than silently benchmarking a failure.
+_T = excelreader.ColumnType
+_FIXTURE_SCHEMA = [
+    excelreader.ColumnSpec(type_, name=name)
+    for name, type_ in [
+        ("Region", _T.STRING),
+        ("Country", _T.STRING),
+        ("Item Type", _T.STRING),
+        ("Sales Channel", _T.STRING),
+        ("Order Priority", _T.STRING),
+        ("Order Date", _T.DATE),
+        ("Order ID", _T.I64),
+        ("Ship Date", _T.DATE),
+        ("Units Sold", _T.I64),
+        ("Unit Price", _T.F64),
+        ("Unit Cost", _T.F64),
+        ("Total Revenue", _T.F64),
+        ("Total Cost", _T.F64),
+        ("Total Profit", _T.F64),
+    ]
+]
+
+
+def bench_parse_typed(path: Path) -> tuple[int, int]:
+    with excelreader.open_workbook(path, format="xlsb") as workbook:
+        table = workbook.parse_typed(_FIXTURE_SCHEMA)
+    return table.row_count, table.row_count * len(table.columns)
+
+
+def bench_to_arrow(path: Path) -> tuple[int, int]:
+    with excelreader.open_workbook(path, format="xlsb") as workbook:
+        array = workbook.to_arrow(_FIXTURE_SCHEMA)
+    return len(array), len(array) * array.type.num_fields
 
 
 def bench_polars(path: Path) -> tuple[int, int]:
@@ -102,6 +141,24 @@ def main() -> int:
     print("excelreader.read_all_columnar() [no per-cell Cell/str objects — the fast path]:")
     _time_and_assert("  read_all_columnar", bench_read_all_columnar, args.path, args.n)
     print()
+
+    if args.path.resolve() == DEFAULT_PATH.resolve():
+        print("parse_typed() [schema-driven typed columns, native-side conversion]:")
+        _time_and_assert("  parse_typed", bench_parse_typed, args.path, args.n)
+        print()
+
+        try:
+            import pyarrow  # noqa: F401
+        except ImportError:
+            print("pyarrow not installed — skipping the to_arrow() variant")
+            print()
+        else:
+            print("to_arrow() [same parse, handed to pyarrow zero-copy]:")
+            _time_and_assert("  to_arrow", bench_to_arrow, args.path, args.n)
+            print()
+    else:
+        print("typed/Arrow variants skipped — their schema only matches the default fixture")
+        print()
 
     try:
         import polars  # noqa: F401

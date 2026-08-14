@@ -80,6 +80,59 @@ first_cell = decode_cell(sheet, 0)
 Each array is a stdlib `array.array('i')`, or a NumPy `int32` array if NumPy is installed
 (`pip install -e "python[numpy]"`) — NumPy is optional and never required.
 
+### Typed columns — the fastest path
+
+Everything above hands back cell *text*, which means the library formats every value to a string on
+the way out. `parse_typed()` skips that entirely: you give it a schema, and the conversion happens
+natively, straight into typed column buffers. On a 65,536 × 14 sheet it is ~8× faster than
+`read_all_columnar()`, ~25× faster than `read_all()`, and faster than `polars.read_excel()` — see
+[docs/NATIVE_BASELINE.md](../docs/NATIVE_BASELINE.md).
+
+```python
+from excelreader import ColumnSpec, ColumnType
+
+with open_workbook("sales.xlsb") as workbook:
+    table = workbook.parse_typed([
+        ColumnSpec(ColumnType.STRING, name="Region"),
+        ColumnSpec(ColumnType.DATE, name="Order Date"),
+        ColumnSpec(ColumnType.F64, name="Total Revenue", nullable=True),
+    ])
+
+table.row_count            # rows read
+table.names                # ["Region", "Order Date", "Total Revenue"]
+region, day, revenue = table.columns
+region[0]                  # "Asia" — strings decode on demand, not one str per row up front
+day[0]                     # 15477 — days since 1970-01-01
+revenue[0]                 # 14862.69
+table.validity[2]          # bit-packed nulls, or None when the column has none
+```
+
+Leave `name` out to resolve a column by position instead: `ColumnSpec(ColumnType.I64, index=3)`.
+`header_row` defaults to 1 (the first row names the columns); pass `header_row=0` for a sheet with no
+header, where every spec must resolve by index.
+
+A column that fails to convert is an error unless its spec sets `nullable=True`, which records the
+failure in `table.validity` and keeps reading.
+
+Note that `parse_typed()` always reads the whole sheet from its first row, independent of how far
+`rows()` has advanced — and it leaves that cursor alone.
+
+### Arrow
+
+With `pyarrow` installed, `to_arrow()` runs the same read and hands the buffers to pyarrow zero-copy
+over the Arrow C Data Interface:
+
+```python
+import pyarrow as pa
+
+with open_workbook("sales.xlsb") as workbook:
+    array = workbook.to_arrow(schema)
+
+batch = pa.RecordBatch.from_struct_array(array)
+```
+
+pyarrow owns the buffers from that point on, so the result stays valid after the workbook is closed.
+
 ### From memory
 
 ```python

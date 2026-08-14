@@ -5,13 +5,22 @@ from __future__ import annotations
 import ctypes
 import struct
 from array import array
-from collections.abc import Iterator
+from collections.abc import Iterator, Sequence
 from pathlib import Path
 
 from typing_extensions import Self
 
 from excelreader import _native
-from excelreader.types import Cell, CellType, ColumnarSheet, ExcelReaderError
+from excelreader.types import (
+    Cell,
+    CellType,
+    ColumnarSheet,
+    ColumnSpec,
+    ColumnType,
+    ExcelReaderError,
+    StringColumn,
+    TypedTable,
+)
 
 try:
     import numpy as _numpy
@@ -181,6 +190,54 @@ class Workbook:
         _check(status)
         return _decode_columnar(buffer.raw, written.value)
 
+    def parse_typed(self, schema: Sequence[ColumnSpec], header_row: int = 1) -> TypedTable:
+        """Reads the whole current sheet into typed columns, converting values on the native side.
+
+        By far the fastest path in this library: unlike every other read method, no cell is ever
+        formatted to text, so a large sheet costs a fraction of `read_all_columnar()`. It reads the
+        sheet from its first row regardless of how far `rows()` has advanced, and does not disturb
+        that cursor.
+
+        `header_row` is a 1-based row number whose values name the columns (that row is skipped and
+        never yielded as data); 0 means the sheet has no header, in which case every spec must
+        resolve by `index`.
+        """
+        handle = self._require_handle()
+        specs = _build_specs(schema)
+        table = _native.NativeTable()
+        _check(self._lib.xl_parse_typed(handle, specs, len(specs), header_row, ctypes.byref(table)))
+        try:
+            return _decode_table(schema, table)
+        finally:
+            # Every column is copied out above, so the native table is dead the moment we return —
+            # nothing this method hands back points into it.
+            self._lib.xl_free_table(ctypes.byref(table))
+
+    def to_arrow(self, schema: Sequence[ColumnSpec], header_row: int = 1) -> object:
+        """The same read as `parse_typed()`, handed to pyarrow as one `StructArray`, zero-copy.
+
+        Requires pyarrow. The returned array owns the native buffers through the Arrow C Data
+        Interface's release callback, so it stays valid after this workbook is closed. Wrap it with
+        `pyarrow.RecordBatch.from_struct_array()` for a column-named batch.
+        """
+        try:
+            import pyarrow
+        except ImportError:
+            raise ImportError(
+                "to_arrow() requires pyarrow — install it with `pip install pyarrow`, or use "
+                "parse_typed(), which returns the same data with no third-party dependency."
+            ) from None
+
+        handle = self._require_handle()
+        specs = _build_specs(schema)
+        array = _native.ArrowArray()
+        arrow_schema = _native.ArrowSchema()
+        _check(self._lib.xl_parse_arrow(handle, specs, len(specs), header_row, ctypes.byref(array), ctypes.byref(arrow_schema)))
+        # _import_from_c takes ownership of both structs' release callbacks — releasing either one
+        # here as well would be a double free. On failure _check raised above and the native side
+        # exported nothing, so there is no leak on that path either.
+        return pyarrow.Array._import_from_c(ctypes.addressof(array), ctypes.addressof(arrow_schema))
+
     def close(self) -> None:
         if self._handle is None:
             return
@@ -282,6 +339,80 @@ def _decode_columnar(blob: bytes, length: int) -> ColumnarSheet:
         value_offsets=_to_columnar_array(value_offsets),
         values=bytes(values),
     )
+
+
+def _build_specs(schema: Sequence[ColumnSpec]) -> ctypes.Array:
+    if not schema:
+        raise ValueError("schema must name at least one column")
+    specs = (_native.NativeColumnSpec * len(schema))()
+    for index, spec in enumerate(schema):
+        if spec.name is None:
+            specs[index] = _native.column_spec_by_index(spec.index, int(spec.type), nullable=spec.nullable)
+        else:
+            specs[index] = _native.column_spec_by_name(spec.name, int(spec.type), nullable=spec.nullable)
+    return specs
+
+
+# ColumnType -> (ctypes element type, array.array typecode, NumPy dtype name). STRING is absent on
+# purpose: it is the one type whose `values` buffer is offsets rather than data, handled separately.
+_COLUMN_BUFFERS = {
+    ColumnType.I64: (ctypes.c_int64, "q", "int64"),
+    ColumnType.F64: (ctypes.c_double, "d", "float64"),
+    ColumnType.BOOL: (ctypes.c_uint8, "b", "int8"),
+    ColumnType.DATE: (ctypes.c_int32, "i", "int32"),
+    ColumnType.TIME: (ctypes.c_int64, "q", "int64"),
+    ColumnType.TIMESTAMP: (ctypes.c_int64, "q", "int64"),
+}
+
+
+def _decode_table(schema: Sequence[ColumnSpec], table: _native.NativeTable) -> TypedTable:
+    row_count = int(table.row_count)
+    names: list[str] = []
+    columns: list[object] = []
+    validity: list[bytes | None] = []
+
+    for index, spec in enumerate(schema):
+        column = table.columns[index]
+        names.append(spec.name if spec.name is not None else str(spec.index))
+        if ColumnType(column.type) is ColumnType.STRING:
+            columns.append(_decode_string_column(column, row_count))
+        else:
+            columns.append(_decode_value_column(column, row_count))
+        validity.append(_decode_validity(column, row_count))
+
+    return TypedTable(row_count=row_count, names=names, columns=columns, validity=validity)
+
+
+def _decode_value_column(column: _native.NativeColumn, row_count: int) -> object:
+    element, typecode, dtype = _COLUMN_BUFFERS[ColumnType(column.type)]
+    raw = ctypes.string_at(column.values, row_count * ctypes.sizeof(element))
+    if _numpy is not None:
+        # frombuffer over `raw` is a view on that bytes object, which keeps it alive — the native
+        # block it was copied from is already out of the picture by then.
+        return _numpy.frombuffer(raw, dtype=dtype)
+    values = array(typecode)
+    values.frombytes(raw)
+    return values
+
+
+def _decode_string_column(column: _native.NativeColumn, row_count: int) -> StringColumn:
+    # xl_column's STRING layout: `values` is (row_count + 1) int32 offsets, and `data` points just
+    # past them INTO THE SAME allocation (see excelreader.h) — one copy each, not one per row.
+    offsets_bytes = ctypes.string_at(column.values, (row_count + 1) * ctypes.sizeof(ctypes.c_int32))
+    data = ctypes.string_at(column.data, int(column.data_len)) if column.data_len else b""
+    if _numpy is not None:
+        offsets = _numpy.frombuffer(offsets_bytes, dtype="int32")
+    else:
+        offsets = array("i")
+        offsets.frombytes(offsets_bytes)
+    return StringColumn(offsets, data)
+
+
+def _decode_validity(column: _native.NativeColumn, row_count: int) -> bytes | None:
+    # A NULL validity pointer is the native side's "this column has no nulls" signal, not an error.
+    if not column.validity:
+        return None
+    return ctypes.string_at(column.validity, (row_count + 7) // 8)
 
 
 def _to_columnar_array(values: array) -> object:
