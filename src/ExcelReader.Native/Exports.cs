@@ -1,4 +1,5 @@
 using System.Runtime.InteropServices;
+using System.Text;
 
 namespace ExcelReader.Native
 {
@@ -23,6 +24,20 @@ namespace ExcelReader.Native
             return status;
         }
 
+        [UnmanagedCallersOnly(EntryPoint = "xl_open_file_ex")]
+        public static int OpenFileEx(byte* path, int pathLength, int format, NativeOpenOptionsRaw* options, nint* outHandle)
+        {
+            if (path is null || pathLength < 0 || outHandle is null)
+            {
+                return NativeStatus.InvalidArgument;
+            }
+
+            NativeOpenOptionsRaw? rawOptions = options is null ? null : *options;
+            int status = NativeApi.OpenFileEx(new ReadOnlySpan<byte>(path, pathLength), format, rawOptions, out NativeHandle? handle);
+            *outHandle = handle is null ? 0 : GCHandle.ToIntPtr(GCHandle.Alloc(handle));
+            return status;
+        }
+
         [UnmanagedCallersOnly(EntryPoint = "xl_open_memory")]
         public static int OpenMemory(byte* data, int dataLength, int format, nint* outHandle)
         {
@@ -32,6 +47,20 @@ namespace ExcelReader.Native
             }
 
             int status = NativeApi.OpenMemory(new ReadOnlySpan<byte>(data, dataLength), format, out NativeHandle? handle);
+            *outHandle = handle is null ? 0 : GCHandle.ToIntPtr(GCHandle.Alloc(handle));
+            return status;
+        }
+
+        [UnmanagedCallersOnly(EntryPoint = "xl_open_memory_ex")]
+        public static int OpenMemoryEx(byte* data, int dataLength, int format, NativeOpenOptionsRaw* options, nint* outHandle)
+        {
+            if (data is null || dataLength < 0 || outHandle is null)
+            {
+                return NativeStatus.InvalidArgument;
+            }
+
+            NativeOpenOptionsRaw? rawOptions = options is null ? null : *options;
+            int status = NativeApi.OpenMemoryEx(new ReadOnlySpan<byte>(data, dataLength), format, rawOptions, out NativeHandle? handle);
             *outHandle = handle is null ? 0 : GCHandle.ToIntPtr(GCHandle.Alloc(handle));
             return status;
         }
@@ -180,6 +209,41 @@ namespace ExcelReader.Native
             if (rows is not null)
             {
                 NativeApi.FreeRows(ref *rows);
+            }
+        }
+
+        [UnmanagedCallersOnly(EntryPoint = "xl_parse_typed")]
+        public static int ParseTyped(nint handle, NativeColumnSpecRaw* specs, int specCount, int headerRow, NativeTable* outTable)
+        {
+            if (specs is null || specCount <= 0 || outTable is null)
+            {
+                return NativeStatus.InvalidArgument;
+            }
+
+            NativeColumnSpec[] decoded = new NativeColumnSpec[specCount];
+            for (int i = 0; i < specCount; i++)
+            {
+                NativeColumnSpecRaw raw = specs[i];
+                decoded[i] = new NativeColumnSpec
+                {
+                    Name = raw.Name is null ? null : Encoding.UTF8.GetString(raw.Name, raw.NameLen),
+                    Index = raw.Index,
+                    Type = raw.Type,
+                    Nullable = raw.Nullable != 0,
+                };
+            }
+
+            int status = NativeApi.ParseTyped(Resolve(handle), decoded, headerRow, out NativeTable table);
+            *outTable = table;
+            return status;
+        }
+
+        [UnmanagedCallersOnly(EntryPoint = "xl_free_table")]
+        public static void FreeTable(NativeTable* table)
+        {
+            if (table is not null)
+            {
+                NativeApi.FreeTable(ref *table);
             }
         }
 
