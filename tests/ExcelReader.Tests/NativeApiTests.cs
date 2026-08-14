@@ -366,5 +366,44 @@ namespace ExcelReader.Tests
         {
             Assert.Equal(NativeStatus.InvalidHandle, NativeApi.NextRow(null, new byte[16], out _));
         }
+
+        [Fact]
+        public void NextRow_Should_Serialize_Xlsb_Numeric_Cells_With_A_Nonempty_Value()
+        {
+            Assert.Equal(NativeStatus.Ok, OpenPath(XlsbFixture, NativeFormat.Xlsb, out NativeHandle? handle));
+            try
+            {
+                byte[] buffer = new byte[1 << 20];
+                bool foundNumericCell = false;
+
+                // Read rows until we find a Number or Date typed cell with a non-empty value
+                while (NativeApi.NextRow(handle, buffer, out int written) == NativeStatus.Ok)
+                {
+                    List<DecodedCell> cells = DecodeRow(buffer.AsSpan(0, written));
+#pragma warning disable HLQ012
+                    foreach (DecodedCell cell in cells)
+                    {
+                        // CellType.Number = 0, CellType.Date = 2 (from the XLSX/XLSB reader)
+                        if ((cell.Type == 0 || cell.Type == 2) && !string.IsNullOrEmpty(cell.Value))
+                        {
+                            foundNumericCell = true;
+                            break;
+                        }
+                    }
+#pragma warning restore HLQ012
+                    if (foundNumericCell)
+                    {
+                        break;
+                    }
+                }
+
+                // RealExcel.xlsb is known to contain numeric cells; we must find at least one
+                Assert.True(foundNumericCell, "XLSB fixture must contain at least one numeric cell with a non-empty serialized value");
+            }
+            finally
+            {
+                NativeApi.Close(handle);
+            }
+        }
     }
 }

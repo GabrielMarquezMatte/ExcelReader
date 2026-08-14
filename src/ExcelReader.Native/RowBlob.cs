@@ -16,6 +16,7 @@ namespace ExcelReader.Native
     internal static class RowBlob
     {
         private const int CellHeaderSize = 3 * sizeof(int);
+        private const int MaxFormattedValueLength = 32;
 
         /// <summary>Writes <paramref name="row"/> into <paramref name="scratch"/>, growing it if needed. Returns the byte count.</summary>
         internal static int Serialize(in Row row, ref byte[] scratch)
@@ -23,7 +24,8 @@ namespace ExcelReader.Native
             int required = sizeof(int);
             foreach (RowCell cell in row.Cells)
             {
-                required += CellHeaderSize + cell.Value.Value.Length;
+                int valueEstimate = cell.Value.Value.IsEmpty ? MaxFormattedValueLength : cell.Value.Value.Length;
+                required += CellHeaderSize + valueEstimate;
             }
 
             if (scratch.Length < required)
@@ -36,13 +38,14 @@ namespace ExcelReader.Native
             int count = 0;
             foreach (RowCell cell in row.Cells)
             {
-                ReadOnlySpan<byte> value = cell.Value.Value;
+                if (!cell.Value.TryFormat(destination[(offset + CellHeaderSize)..], out int bytesWritten))
+                {
+                    throw new InvalidOperationException("Cell format buffer too small");
+                }
                 BinaryPrimitives.WriteInt32LittleEndian(destination[offset..], cell.ColumnIndex);
                 BinaryPrimitives.WriteInt32LittleEndian(destination[(offset + 4)..], (int)cell.Value.Type);
-                BinaryPrimitives.WriteInt32LittleEndian(destination[(offset + 8)..], value.Length);
-                offset += CellHeaderSize;
-                value.CopyTo(destination[offset..]);
-                offset += value.Length;
+                BinaryPrimitives.WriteInt32LittleEndian(destination[(offset + 8)..], bytesWritten);
+                offset += CellHeaderSize + bytesWritten;
                 count++;
             }
 
