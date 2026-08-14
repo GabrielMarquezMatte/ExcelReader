@@ -231,9 +231,19 @@ namespace ExcelReader.Native
             return new NativeTable { ColumnCount = columnCount, RowCount = rowCount, Columns = columnsBlock };
         }
 
-        // A validity bitmap and Arrow's canonical boolean layout are the same thing — one LSB-first bit
-        // per row in a native block sized (n + 7) / 8 — so both go through here; the callers differ only
-        // in where their one-byte-per-row source lives.
+        // Every buffer this layer hands across the boundary is the same move: one native block holding a
+        // verbatim copy of a managed span. Never returns a zero-size allocation, since a column with no
+        // rows still needs a non-null pointer the caller can free.
+        private static IntPtr CopyToNativeBlock(ReadOnlySpan<byte> source)
+        {
+            IntPtr block = Marshal.AllocHGlobal(Math.Max(source.Length, 1));
+            source.CopyTo(new Span<byte>((void*)block, source.Length));
+            return block;
+        }
+
+        // Arrow's canonical boolean layout is one LSB-first bit per row — the same shape a validity
+        // bitmap has. ColumnBuilder accumulates validity already packed, so this is only for converting
+        // a one-byte-per-row bool column on the way out to Arrow.
         private static IntPtr PackBitsLsbFirst(ReadOnlySpan<byte> flags)
         {
             int byteLength = Math.Max((flags.Length + 7) / 8, 1);
@@ -259,11 +269,18 @@ namespace ExcelReader.Native
         /// </summary>
         private sealed class ColumnBuilder(int type, bool nullable)
         {
-            private readonly List<byte> _validity = []; // 1 = valid, 0 = null; one entry per row
+            // Already in the layout the ABI hands out: one LSB-first bit per row, 1 = valid, 0 = null.
+            // Accumulating packed rather than a byte per row keeps this eight times smaller for a tall
+            // sheet, so Build just copies it instead of converting. Together with accumulating Date as
+            // int rather than long, this took NativeTypedParseBenchmark from 23.61 MB down to 20.58 MB
+            // allocated; wall clock did not move, since neither change removes work, only bytes.
+            private readonly List<byte> _validity = [];
+            private int _rowCount;
             private bool _anyNull;
 
             // Only one of these is populated, chosen by `type` — see AppendFrom.
-            private readonly List<long> _longs = []; // Int64, Date (truncated to int32 on marshal), Time, Timestamp
+            private readonly List<long> _longs = []; // Int64, Time, Timestamp — all 8-byte
+            private readonly List<int> _ints = []; // Date, which the ABI defines as a 4-byte day count
             private readonly List<double> _doubles = []; // Float64
             private readonly List<byte> _bools = []; // Bool, one byte (0/1) per row
             private readonly List<int> _stringOffsets = [0]; // String
@@ -277,7 +294,7 @@ namespace ExcelReader.Native
             {
                 get
                 {
-                    return _validity.Count;
+                    return _rowCount;
                 }
             }
 
@@ -313,6 +330,11 @@ namespace ExcelReader.Native
                 // It also stops sanitizing: the old round trip replaced malformed UTF-8 with U+FFFD,
                 // this copies the file's bytes through unchanged, matching what every other read path
                 // in this library (xl_next_row, xl_read_all_blob) already hands back.
+                //
+                // NativeTypedParseBenchmark, Data/65K_Records_Data.xlsb (5 string columns of 65535 rows,
+                // Ryzen 7 5700X, .NET 10.0.10, 15 iterations): 34.89 MB -> 23.61 MB allocated and
+                // 62.01 ms -> 48.58 ms. The largest single win on this path, and unlike the marshalling
+                // cleanups it moves wall clock too, well outside the +/-0.9 ms error.
                 int capacity = Math.Max(cell.Value.Length, NumberFormatMaxBytes);
                 if (_scratch.Length < capacity)
                 {
@@ -324,7 +346,7 @@ namespace ExcelReader.Native
                 }
                 _stringData.AddRange(_scratch.AsSpan(0, written));
                 _stringOffsets.Add(_stringData.Count);
-                _validity.Add(1);
+                RecordValidity(valid: true);
                 return true;
             }
 
@@ -333,9 +355,9 @@ namespace ExcelReader.Native
             private bool AppendDate(in Cell cell, bool isDate1904)
             {
                 bool ok = ExcelCellReaders.DateOnlyAuto(in cell, isDate1904, CultureInfo.InvariantCulture, out DateOnly value);
-                // Excel's own date range (1900-9999) is nowhere near int32's day-count range, so this
-                // narrowing is always exact for real data - no `checked` needed here.
-                return Append(_longs, ok, value.DayNumber - UnixEpochDayNumber);
+                // DateOnly.DayNumber is already an int and the ABI's Date column is 4-byte, so this
+                // accumulates as int end to end — no widening to long and narrowing back on marshal.
+                return Append(_ints, ok, value.DayNumber - UnixEpochDayNumber);
             }
 
             private bool AppendTime(in Cell cell, bool isDate1904)
@@ -366,8 +388,19 @@ namespace ExcelReader.Native
 
             private void RecordValidity(bool valid)
             {
-                _validity.Add(valid ? (byte)1 : (byte)0);
-                _anyNull |= !valid;
+                if ((_rowCount & 7) == 0)
+                {
+                    _validity.Add(0); // every eighth row opens a fresh byte, zeroed so only set bits matter
+                }
+                if (valid)
+                {
+                    CollectionsMarshal.AsSpan(_validity)[^1] |= (byte)(1 << (_rowCount & 7));
+                }
+                else
+                {
+                    _anyNull = true;
+                }
+                _rowCount++;
             }
 
             internal NativeColumn Build()
@@ -375,15 +408,17 @@ namespace ExcelReader.Native
                 IntPtr validity = IntPtr.Zero;
                 if (_anyNull)
                 {
-                    validity = PackBitsLsbFirst(CollectionsMarshal.AsSpan(_validity));
+                    // A NULL validity pointer is the ABI's "no nulls in this column" signal, so the
+                    // bitmap only crosses the boundary when at least one row actually needs it.
+                    validity = CopyToNativeBlock(CollectionsMarshal.AsSpan(_validity));
                 }
                 return type switch
                 {
                     NativeColumnType.String => BuildStringColumn(validity),
                     NativeColumnType.Bool => BuildFixedWidthColumn(CollectionsMarshal.AsSpan(_bools), validity),
                     NativeColumnType.Float64 => BuildFixedWidthColumn(CollectionsMarshal.AsSpan(_doubles), validity),
-                    NativeColumnType.Date => BuildDateColumn(validity),
-                    _ => BuildFixedWidthColumn(CollectionsMarshal.AsSpan(_longs), validity), // Int64, Time, Timestamp — all 8-byte, unlike Date
+                    NativeColumnType.Date => BuildFixedWidthColumn(CollectionsMarshal.AsSpan(_ints), validity),
+                    _ => BuildFixedWidthColumn(CollectionsMarshal.AsSpan(_longs), validity), // Int64, Time, Timestamp — all 8-byte
                 };
             }
 
@@ -396,23 +431,8 @@ namespace ExcelReader.Native
             // Wall clock did not move outside the noise, so this is a GC-pressure win, not a speed one.
             private NativeColumn BuildFixedWidthColumn<T>(ReadOnlySpan<T> values, IntPtr validity) where T : unmanaged
             {
-                ReadOnlySpan<byte> source = MemoryMarshal.AsBytes(values);
-                IntPtr block = Marshal.AllocHGlobal(Math.Max(source.Length, 1));
-                source.CopyTo(new Span<byte>((void*)block, source.Length));
+                IntPtr block = CopyToNativeBlock(MemoryMarshal.AsBytes(values));
                 return new NativeColumn { Type = type, Length = RowCount, Values = block, Validity = validity, Data = IntPtr.Zero, DataLen = 0 };
-            }
-
-            // Excel's own date range (1900-9999) is nowhere near int32's day-count range, so the
-            // narrowing from _longs (accumulated as long for every non-Float64/Bool/String type) is
-            // always exact for real data - no `checked` needed here.
-            private NativeColumn BuildDateColumn(IntPtr validity)
-            {
-                int[] values = new int[_longs.Count];
-                for (int i = 0; i < values.Length; i++)
-                {
-                    values[i] = unchecked((int)_longs[i]);
-                }
-                return BuildFixedWidthColumn(values, validity);
             }
 
             // The one type that is not a plain BuildFixedWidthColumn: offsets and data share a single

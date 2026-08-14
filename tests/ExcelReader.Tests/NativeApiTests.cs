@@ -1,4 +1,5 @@
 using System.Diagnostics.CodeAnalysis;
+using System.Globalization;
 using System.Runtime.InteropServices;
 using System.Text;
 using ExcelReader.Core.Reader;
@@ -1351,6 +1352,64 @@ namespace ExcelReader.Tests
                     Marshal.Copy(ColumnAt(table, 1).Values, timestamp, 0, 1);
                     DateTime expected = new(2024, 1, 15, 13, 45, 30, DateTimeKind.Unspecified);
                     Assert.Equal((expected - DateTime.UnixEpoch).Ticks / 10, timestamp[0]);
+                }
+                finally
+                {
+                    NativeApi.FreeTable(ref table);
+                    NativeApi.Close(handle);
+                }
+            }
+            finally
+            {
+                File.Delete(path);
+            }
+        }
+
+        // The validity bitmap is accumulated eight rows to a byte, so every bug it can have lives at a
+        // byte boundary: the last bit of a byte, the first bit of the next, and a final partial byte.
+        // 20 rows with nulls at 0, 7, 8, 15, 16 and 19 put a null on each of those, which a three-row
+        // fixture (see the test below) can never reach.
+        [Fact]
+        public void ParseTyped_Validity_Bitmap_Should_Survive_Byte_Boundaries()
+        {
+            const int rowCount = 20;
+            int[] nullRows = [0, 7, 8, 15, 16, 19];
+
+            StringBuilder csv = new("qty\n");
+            for (int i = 0; i < rowCount; i++)
+            {
+                csv.Append(nullRows.Contains(i) ? "notanumber" : i.ToString(CultureInfo.InvariantCulture)).Append('\n');
+            }
+
+            string path = Path.Combine(Path.GetTempPath(), $"excelreader-native-{Guid.NewGuid():N}.csv");
+            File.WriteAllText(path, csv.ToString());
+            try
+            {
+                Assert.Equal(NativeStatus.Ok, OpenPath(path, NativeFormat.Csv, out NativeHandle? handle));
+                NativeColumnSpec[] specs = [new() { Name = "qty", Type = NativeColumnType.Int64, Nullable = true }];
+                Assert.Equal(NativeStatus.Ok, NativeApi.ParseTyped(handle, specs, headerRow: 1, out NativeTable table));
+                try
+                {
+                    NativeColumn column = ColumnAt(table, 0);
+                    Assert.Equal(rowCount, column.Length);
+                    Assert.NotEqual(IntPtr.Zero, column.Validity);
+
+                    bool[] expected = new bool[rowCount];
+                    Array.Fill(expected, true);
+                    foreach (int row in nullRows)
+                    {
+                        expected[row] = false;
+                    }
+                    Assert.Equal(expected, DecodeValidity(column));
+
+                    // The values themselves must stay row-aligned with the bitmap: a null still occupies
+                    // its slot, so a packing bug that shifted rows would show up here and not above.
+                    long[] values = new long[rowCount];
+                    Marshal.Copy(column.Values, values, 0, rowCount);
+                    for (int i = 0; i < rowCount; i++)
+                    {
+                        Assert.Equal(nullRows.Contains(i) ? 0L : i, values[i]);
+                    }
                 }
                 finally
                 {
