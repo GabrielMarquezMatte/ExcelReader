@@ -86,6 +86,7 @@ jobs:
 
   publish-python:
     name: Build Python wheel (${{ matrix.os }})
+    needs: publish
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
@@ -119,6 +120,12 @@ jobs:
       - name: Build the native library
         run: python python/scripts/build_native.py
 
+      - name: Install test dependencies
+        run: pip install -e "python[dev]"
+
+      - name: Test (Python)
+        run: pytest python/tests
+
       - name: Build the wheel
         run: |
           pip install build
@@ -136,6 +143,7 @@ jobs:
     needs: publish-python
     runs-on: ubuntu-latest
     permissions:
+      contents: read
       id-token: write
 
     steps:
