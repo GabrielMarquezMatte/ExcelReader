@@ -4,7 +4,7 @@ NativeAOT shared library exposing ExcelReader's readers over a C ABI, so non-.NE
 (Python, C, C++, Go, Node) can read XLSX, XLSB, XLS and CSV without a .NET runtime.
 
 - ABI reference: `include/excelreader.h`
-- Full contract and rationale: `docs/plans/2026-08-13-native-ffi-python-reading.md`
+- Full contract and rationale: `docs/NATIVE_BINDINGS_PLAN.md`, `docs/NATIVE_HARDENING_PLAN.md`
 - Python binding: `python/`
 
 ## Build
@@ -19,6 +19,7 @@ Output lands in `bin/Release/net10.0/<rid>/publish/ExcelReader.Native.{dll,so,dy
 |---|---|
 | `NativeApi*.cs` | Internal span-based implementation. This is what the tests drive. |
 | `Exports.cs` | `[UnmanagedCallersOnly]` pointer wrappers. Keep logic out of here — it is untestable from managed code. |
+| `NativeHandleTable.cs` | Maps the opaque handle ids callers see onto `NativeHandle` instances. Ids are never reissued after `xl_close`, so a stale handle stays invalid permanently. |
 | `RowBlob.cs` | Row serialization. |
 | `include/excelreader.h` | Hand-written C header; keep in sync with `Exports.cs`. |
 
