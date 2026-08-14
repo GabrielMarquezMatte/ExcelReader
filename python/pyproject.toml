@@ -24,6 +24,10 @@ Homepage = "https://github.com/GabrielMarquezMatte/ExcelReader"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/excelreader"]
+# .gitkeep only exists so the gitignored _lib/ directory survives a fresh clone;
+# force-include below adds the real native library from the same path, so without
+# this exclude hatchling sees .gitkeep twice and refuses to build.
+exclude = ["src/excelreader/_lib/.gitkeep"]
 
 [tool.hatch.build.targets.wheel.force-include]
 "src/excelreader/_lib" = "excelreader/_lib"
