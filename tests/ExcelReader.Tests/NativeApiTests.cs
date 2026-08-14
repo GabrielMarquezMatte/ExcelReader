@@ -1,5 +1,7 @@
 using System.Runtime.InteropServices;
 using System.Text;
+using ExcelReader.Core.Reader;
+using ExcelReader.Core.ValueObjects;
 using ExcelReader.Native;
 
 namespace ExcelReader.Tests
@@ -542,5 +544,111 @@ namespace ExcelReader.Tests
         {
             Assert.Equal(NativeStatus.InvalidHandle, NativeApi.ReadAllDecoded(null, out _));
         }
+
+        [Fact]
+        public void ReadAllDecoded_Should_Free_Already_Decoded_Rows_When_A_Later_Row_Fails_To_Decode()
+        {
+            // Regression test for a leak: a mid-loop decode error used to `return status;` straight out
+            // of ReadAllDecoded's try block, skipping the catch block that frees every row already
+            // decoded. This reader succeeds for the first two rows, then throws on the third row's
+            // MoveNext(), reproducing that exact "some rows decoded, then a real failure" shape without
+            // needing a genuinely malformed file. NextRow's own try/catch turns that thrown exception
+            // into a plain NativeStatus.Error return, so this exercises the non-exceptional mid-loop
+            // error path in ReadAllDecoded, not its outer catch block.
+            string path = Path.Combine(Path.GetTempPath(), $"excelreader-native-{Guid.NewGuid():N}.csv");
+            File.WriteAllText(path, "name,qty\nwidget,7\ngadget,9\ndoohickey,3\n");
+            try
+            {
+                using (FileStream stream = File.OpenRead(path))
+                {
+                    // leaveOpen: true — the enclosing `using FileStream` owns the stream; NativeHandle.Dispose
+                    // (via NativeApi.Close below) owns disposing the FailAfterNRowsReader/CsvReader chain.
+                    var reader = new FailAfterNRowsReader(Excel.FromCsv(stream, leaveOpen: true), failAfter: 2);
+                    NativeHandle handle = NativeHandle_Create(reader);
+                    try
+                    {
+                        int status = NativeApi.ReadAllDecoded(handle, out NativeRows rows);
+
+                        Assert.Equal(NativeStatus.Error, status);
+                        Assert.Equal(0, rows.RowCount);
+                        Assert.Equal(IntPtr.Zero, rows.Rows);
+
+                        NativeApi.FreeRows(ref rows); // must still be safe/no-op on the zeroed result
+                    }
+                    finally
+                    {
+                        NativeApi.Close(handle);
+                    }
+                }
+            }
+            finally
+            {
+                File.Delete(path);
+            }
+        }
+
+        // NativeHandle's constructor is internal; this project has InternalsVisibleTo access to it, so
+        // tests can hand it a reader that isn't produced by NativeApi.OpenFile/OpenMemory.
+        private static NativeHandle NativeHandle_Create(IExcelRowReader reader)
+        {
+            return new NativeHandle(reader);
+        }
+
+        /// <summary>
+        /// Wraps a real <see cref="IExcelRowReader"/>, forwarding everything except row enumeration:
+        /// its enumerator yields <paramref name="failAfter"/> real rows and then throws, simulating a
+        /// genuine mid-sheet decode failure for <see cref="ReadAllDecoded_Should_Free_Already_Decoded_Rows_When_A_Later_Row_Fails_To_Decode"/>.
+        /// </summary>
+#pragma warning disable IDISP007 // Don't dispose injected: this wrapper owns `inner` for the test's duration by construction — nothing else disposes it.
+#pragma warning disable HLQ006 // A reference-type enumerator is intentional here: this decorates the format-agnostic IExcelRowEnumerator interface, not a zero-allocation hot path.
+        private sealed class FailAfterNRowsReader(IExcelRowReader inner, int failAfter) : IExcelRowReader
+        {
+            public bool IsDate1904 => inner.IsDate1904;
+            public string SheetName => inner.SheetName;
+            public int SheetCount => inner.SheetCount;
+
+            public bool TryMoveToSheet(ReadOnlySpan<char> name) => inner.TryMoveToSheet(name);
+            public void MoveToSheet(int index) => inner.MoveToSheet(index);
+
+            public IExcelRowEnumerator GetEnumerator() => new FailAfterNRowsEnumerator(inner.GetEnumerator(), failAfter);
+            public IExcelRowEnumerator GetAsyncEnumerator() => new FailAfterNRowsEnumerator(inner.GetAsyncEnumerator(), failAfter);
+            public ValueTask<IExcelRowEnumerator> GetAsyncEnumeratorAsync(CancellationToken ct = default) =>
+                new(new FailAfterNRowsEnumerator(inner.GetAsyncEnumerator(), failAfter));
+
+            public void Dispose() => inner.Dispose();
+            public ValueTask DisposeAsync() => inner.DisposeAsync();
+        }
+#pragma warning restore HLQ006
+#pragma warning restore IDISP007
+
+#pragma warning disable IDISP007 // Don't dispose injected: this wrapper owns `inner` for the test's duration by construction — nothing else disposes it.
+        private sealed class FailAfterNRowsEnumerator(IExcelRowEnumerator inner, int failAfter) : IExcelRowEnumerator
+        {
+            private int _moveNextCalls;
+
+            public Row Current => inner.Current;
+
+            public bool MoveNext()
+            {
+                if (_moveNextCalls++ >= failAfter)
+                {
+                    throw new InvalidOperationException("Forced decode failure for test purposes.");
+                }
+                return inner.MoveNext();
+            }
+
+            public ValueTask<bool> MoveNextAsync()
+            {
+                if (_moveNextCalls++ >= failAfter)
+                {
+                    throw new InvalidOperationException("Forced decode failure for test purposes.");
+                }
+                return inner.MoveNextAsync();
+            }
+
+            public void Dispose() => inner.Dispose();
+            public ValueTask DisposeAsync() => inner.DisposeAsync();
+        }
+#pragma warning restore IDISP007
     }
 }
