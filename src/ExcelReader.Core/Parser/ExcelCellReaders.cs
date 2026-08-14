@@ -30,7 +30,7 @@ namespace ExcelReader.Core.Parser
         /// Reads a cell as an Excel date/time serial number, falling back to date/time text when the
         /// cell isn't numeric. Used where a single map has to work for both a serial-number source
         /// (XLSX/XLSB/XLS) and CSV (which has no serial date form and writes ISO text instead) — see
-        /// <see cref="ExcelReader.Core.Parser.ExcelMappedParser{T}"/>, which builds one map for every
+        /// <see cref="ExcelMappedParser{T}"/>, which builds one map for every
         /// reader. The cost: a CSV cell that is only digits (e.g. an Excel serial typed as plain text)
         /// is read as a serial number, not as date text — there is no way to tell those two apart from
         /// the cell alone.

@@ -50,7 +50,7 @@ namespace ExcelReader.Core.Writer
             {
                 await sheet.StartAsync(ct).ConfigureAwait(false);
                 await WriteHeaderAsync<T>(sheet, ct).ConfigureAwait(false);
-                await sheet.WriteRecordsAsync(records, static (TRow row, T record) => MappedRecordColumns<T>.WriteRow(row, record), ct).ConfigureAwait(false);
+                await sheet.WriteRecordsAsync(records, static (row, record) => MappedRecordColumns<T>.WriteRow(row, record), ct).ConfigureAwait(false);
                 await sheet.EndAsync(ct).ConfigureAwait(false);
             }
         }
@@ -73,7 +73,7 @@ namespace ExcelReader.Core.Writer
             {
                 await sheet.StartAsync(ct).ConfigureAwait(false);
                 await WriteHeaderAsync<T>(sheet, ct).ConfigureAwait(false);
-                await sheet.WriteRecordsAsync(records, static (TRow row, T record) => MappedRecordColumns<T>.WriteRow(row, record), ct).ConfigureAwait(false);
+                await sheet.WriteRecordsAsync(records, static (row, record) => MappedRecordColumns<T>.WriteRow(row, record), ct).ConfigureAwait(false);
                 await sheet.EndAsync(ct).ConfigureAwait(false);
             }
         }

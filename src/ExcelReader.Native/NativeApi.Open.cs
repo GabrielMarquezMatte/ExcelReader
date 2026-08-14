@@ -70,9 +70,9 @@ namespace ExcelReader.Native
             {
                 NativeFormat.Auto => Excel.Open(path),
                 NativeFormat.Xlsx => Excel.FromXlsxFile(path),
-                NativeFormat.Xlsb => (IExcelRowReader)Excel.FromXlsb(File.OpenRead(path), leaveOpen: false),
-                NativeFormat.Xls => (IExcelRowReader)Excel.FromXls(File.OpenRead(path), leaveOpen: false),
-                _ => (IExcelRowReader)Excel.FromCsv(File.OpenRead(path), leaveOpen: false),
+                NativeFormat.Xlsb => Excel.FromXlsb(File.OpenRead(path), leaveOpen: false),
+                NativeFormat.Xls => Excel.FromXls(File.OpenRead(path), leaveOpen: false),
+                _ => Excel.FromCsv(File.OpenRead(path), leaveOpen: false),
             };
         }
 
@@ -82,9 +82,9 @@ namespace ExcelReader.Native
             {
                 NativeFormat.Auto => Excel.Open(data),
                 NativeFormat.Xlsx => Excel.FromXlsx(data),
-                NativeFormat.Xlsb => (IExcelRowReader)Excel.FromXlsb(new MemoryStream(data, writable: false), leaveOpen: false),
-                NativeFormat.Xls => (IExcelRowReader)Excel.FromXls(new MemoryStream(data, writable: false), leaveOpen: false),
-                _ => (IExcelRowReader)Excel.FromCsv(new MemoryStream(data, writable: false), leaveOpen: false),
+                NativeFormat.Xlsb => Excel.FromXlsb(new MemoryStream(data, writable: false), leaveOpen: false),
+                NativeFormat.Xls => Excel.FromXls(new MemoryStream(data, writable: false), leaveOpen: false),
+                _ => Excel.FromCsv(new MemoryStream(data, writable: false), leaveOpen: false),
             };
         }
 

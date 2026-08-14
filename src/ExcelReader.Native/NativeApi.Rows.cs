@@ -29,21 +29,21 @@ namespace ExcelReader.Native
         /// <summary>Releases all memory allocated for a row returned by <see cref="NextRowDecoded"/>.</summary>
         internal static void FreeRow(ref NativeRow row)
         {
-            if (row.Cells != IntPtr.Zero)
+            if (row.Cells == IntPtr.Zero)
             {
-                for (int index = 0; index < row.CellCount; index++)
-                {
-                    NativeRowCell cell = Marshal.PtrToStructure<NativeRowCell>(IntPtr.Add(row.Cells, index * Marshal.SizeOf<NativeRowCell>()));
-                    IntPtr value = cell.Value;
-                    if (value != IntPtr.Zero)
-                    {
-                        Marshal.FreeHGlobal(value);
-                    }
-                }
-
-                Marshal.FreeHGlobal(row.Cells);
+                row = default;
+                return;
             }
-
+            for (int index = 0; index < row.CellCount; index++)
+            {
+                NativeRowCell cell = Marshal.PtrToStructure<NativeRowCell>(IntPtr.Add(row.Cells, index * Marshal.SizeOf<NativeRowCell>()));
+                IntPtr value = cell.Value;
+                if (value != IntPtr.Zero)
+                {
+                    Marshal.FreeHGlobal(value);
+                }
+            }
+            Marshal.FreeHGlobal(row.Cells);
             row = default;
         }
 
