@@ -77,7 +77,13 @@ struct ArrowArray {
  * `out_schema->release(out_schema)` yourself (the standard Arrow consumer contract) - there is no
  * separate xl_free_* for these; do not call xl_free_table on anything reached through them.
  *
- * On any failure, neither out param is touched-check the return status before using either. */
+ * Only read the out params when the call returns XL_OK. On failure they are either zeroed or left
+ * untouched, depending on how early the failure was caught, and in neither case do they describe a
+ * result - a zeroed struct has a NULL `release`, so releasing one is a no-op rather than a crash,
+ * but nothing about it is meaningful.
+ *
+ * `spec_count` and each spec's `name_len` are bounded by XL_MAX_COLUMN_SPECS and
+ * XL_MAX_COLUMN_NAME_BYTES (see excelreader.h); anything past either is XL_INVALID_ARGUMENT. */
 int32_t xl_parse_arrow(xl_workbook* handle, const xl_column_spec* specs, int32_t spec_count,
                        int32_t header_row, struct ArrowArray* out_array, struct ArrowSchema* out_schema);
 

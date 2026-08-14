@@ -1365,6 +1365,66 @@ namespace ExcelReader.Tests
             }
         }
 
+        // The ABI's spec_count/name_len ceilings. xl_parse_typed and xl_parse_arrow enforce these
+        // before either value sizes an allocation or drives a walk over caller memory, but those entry
+        // points are [UnmanagedCallersOnly] and unreachable from managed code — so the predicate is
+        // pinned here and the entry points themselves are covered by tests/ExcelReader.NativeSmoke.
+        [Theory]
+        [InlineData(int.MinValue, false)]
+        [InlineData(-1, false)]
+        [InlineData(0, false)] // a parse of zero columns is a caller mistake, not an empty result
+        [InlineData(1, true)]
+        [InlineData(16_384, true)] // A..XFD, the widest a real sheet can be
+        [InlineData(16_385, false)]
+        [InlineData(int.MaxValue, false)] // the shape that used to reach `new NativeColumnSpec[specCount]`
+        public void IsValidSpecCount_Should_Accept_Only_One_Through_Excels_Column_Ceiling(int specCount, bool expected)
+        {
+            Assert.Equal(expected, NativeApi.IsValidSpecCount(specCount));
+        }
+
+        [Theory]
+        [InlineData(int.MinValue, false)]
+        [InlineData(-1, false)] // would reach Encoding.UTF8.GetString as a negative length
+        [InlineData(0, true)] // an empty name is length-valid; TryValidateArguments rejects it later
+        [InlineData(131_068, true)] // 32,767 chars at UTF-8's 4-byte worst case
+        [InlineData(131_069, false)]
+        [InlineData(int.MaxValue, false)]
+        public void IsValidNameLength_Should_Bound_What_Becomes_A_Read_Length(int nameLength, bool expected)
+        {
+            Assert.Equal(expected, NativeApi.IsValidNameLength(nameLength));
+        }
+
+        [Fact]
+        public void ParseTyped_Should_Reject_A_Blank_Column_Name()
+        {
+            string path = Path.Combine(Path.GetTempPath(), $"excelreader-native-{Guid.NewGuid():N}.csv");
+            // A blank header sits in column 1: without the guard, the blank spec name would trim to ""
+            // and resolve to it, silently reading a column the caller never named.
+            File.WriteAllText(path, "name,,qty\nwidget,x,3\n");
+            try
+            {
+                Assert.Equal(NativeStatus.Ok, OpenPath(path, NativeFormat.Csv, out NativeHandle? handle));
+                NativeColumnSpec[] specs = [new() { Name = "   ", Type = NativeColumnType.String }];
+                try
+                {
+                    Assert.Equal(NativeStatus.InvalidArgument, NativeApi.ParseTyped(handle, specs, headerRow: 1, out NativeTable table));
+                    Assert.Equal(IntPtr.Zero, table.Columns);
+
+                    Span<byte> buffer = stackalloc byte[256];
+                    Assert.Equal(NativeStatus.Ok, NativeApi.LastError(buffer, out int length));
+                    Assert.Contains("blank name", Encoding.UTF8.GetString(buffer[..length]), StringComparison.Ordinal);
+                }
+                finally
+                {
+                    NativeApi.Close(handle);
+                }
+            }
+            finally
+            {
+                File.Delete(path);
+            }
+        }
+
         // The validity bitmap is accumulated eight rows to a byte, so every bug it can have lives at a
         // byte boundary: the last bit of a byte, the first bit of the next, and a final partial byte.
         // 20 rows with nulls at 0, 7, 8, 15, 16 and 19 put a null on each of those, which a three-row

@@ -211,15 +211,32 @@ namespace ExcelReader.Native
         [UnmanagedCallersOnly(EntryPoint = "xl_parse_typed")]
         public static int ParseTyped(nint handle, NativeColumnSpecRaw* specs, int specCount, int headerRow, NativeTable* outTable)
         {
-            if (specs is null || specCount <= 0 || outTable is null)
+            if (specs is null || outTable is null || !NativeApi.IsValidSpecCount(specCount))
             {
                 return NativeStatus.InvalidArgument;
             }
 
-            NativeColumnSpec[] decoded = DecodeColumnSpecs(specs, specCount);
-            int status = NativeApi.ParseTyped(Resolve(handle), decoded, headerRow, out NativeTable table);
-            *outTable = table;
-            return status;
+            try
+            {
+                if (!TryDecodeColumnSpecs(specs, specCount, out NativeColumnSpec[] decoded))
+                {
+                    *outTable = default;
+                    return NativeStatus.InvalidArgument;
+                }
+
+                int status = NativeApi.ParseTyped(Resolve(handle), decoded, headerRow, out NativeTable table);
+                *outTable = table;
+                return status;
+            }
+            catch (Exception exception)
+            {
+                // Decoding walks caller memory and allocates from a caller-supplied count, so it can
+                // still fail in ways the guards above cannot see. Letting that escape would unwind
+                // through the C caller's frame.
+                NativeApi.SetLastError(exception.Message);
+                *outTable = default;
+                return NativeStatus.Error;
+            }
         }
 
         [UnmanagedCallersOnly(EntryPoint = "xl_free_table")]
@@ -234,16 +251,34 @@ namespace ExcelReader.Native
         [UnmanagedCallersOnly(EntryPoint = "xl_parse_arrow")]
         public static int ParseArrow(nint handle, NativeColumnSpecRaw* specs, int specCount, int headerRow, ArrowArray* outArray, ArrowSchema* outSchema)
         {
-            if (specs is null || specCount <= 0 || outArray is null || outSchema is null)
+            if (specs is null || outArray is null || outSchema is null || !NativeApi.IsValidSpecCount(specCount))
             {
                 return NativeStatus.InvalidArgument;
             }
 
-            NativeColumnSpec[] decoded = DecodeColumnSpecs(specs, specCount);
-            int status = NativeApi.ParseArrow(Resolve(handle), decoded, headerRow, out ArrowArray array, out ArrowSchema schema);
-            *outArray = array;
-            *outSchema = schema;
-            return status;
+            try
+            {
+                if (!TryDecodeColumnSpecs(specs, specCount, out NativeColumnSpec[] decoded))
+                {
+                    *outArray = default;
+                    *outSchema = default;
+                    return NativeStatus.InvalidArgument;
+                }
+
+                int status = NativeApi.ParseArrow(Resolve(handle), decoded, headerRow, out ArrowArray array, out ArrowSchema schema);
+                *outArray = array;
+                *outSchema = schema;
+                return status;
+            }
+            catch (Exception exception)
+            {
+                // Same hard-boundary reasoning as xl_parse_typed: spec decoding can throw on input the
+                // guards above cannot rule out, and an escaping exception would unwind through C.
+                NativeApi.SetLastError(exception.Message);
+                *outArray = default;
+                *outSchema = default;
+                return NativeStatus.Error;
+            }
         }
 
         // The argument contract every open entry point shares: a real source buffer, a non-negative
@@ -274,13 +309,20 @@ namespace ExcelReader.Native
             return status;
         }
 
-        // Shared by xl_parse_typed and xl_parse_arrow, whose column-spec input is identical.
-        private static NativeColumnSpec[] DecodeColumnSpecs(NativeColumnSpecRaw* specs, int specCount)
+        // Shared by xl_parse_typed and xl_parse_arrow, whose column-spec input is identical. Returns
+        // false for a name length that cannot describe a real header rather than passing it to
+        // GetString, where it would become a read length over however much caller memory it names.
+        private static bool TryDecodeColumnSpecs(NativeColumnSpecRaw* specs, int specCount, out NativeColumnSpec[] decoded)
         {
-            NativeColumnSpec[] decoded = new NativeColumnSpec[specCount];
+            decoded = new NativeColumnSpec[specCount];
             for (int i = 0; i < specCount; i++)
             {
                 NativeColumnSpecRaw raw = specs[i];
+                if (raw.Name is not null && !NativeApi.IsValidNameLength(raw.NameLen))
+                {
+                    decoded = [];
+                    return false;
+                }
                 decoded[i] = new NativeColumnSpec
                 {
                     Name = raw.Name is null ? null : Encoding.UTF8.GetString(raw.Name, raw.NameLen),
@@ -289,7 +331,7 @@ namespace ExcelReader.Native
                     Nullable = raw.Nullable != 0,
                 };
             }
-            return decoded;
+            return true;
         }
 
         // Invoked ONLY as a native function pointer value (ArrowSchema.Release) computed in

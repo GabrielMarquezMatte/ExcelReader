@@ -37,6 +37,14 @@ extern "C" {
 #define XL_CELL_FORMULA 5
 #define XL_CELL_ERROR   6
 
+/* Ceilings on what xl_parse_typed/xl_parse_arrow accept, taken from Excel's own limits: a request
+ * naming more columns than a sheet holds (A..XFD), or a header name longer than a cell holds
+ * (32,767 characters, at UTF-8's 4-byte worst case), cannot describe a real workbook. Both counts
+ * size an allocation and drive a read over YOUR memory, so anything past them is rejected with
+ * XL_INVALID_ARGUMENT rather than trusted. */
+#define XL_MAX_COLUMN_SPECS      16384
+#define XL_MAX_COLUMN_NAME_BYTES 131068
+
 /* Opaque workbook handle. Never dereferenced by the caller; only ever passed back to xl_*. */
 typedef struct xl_workbook xl_workbook;
 
@@ -230,9 +238,13 @@ typedef struct xl_table {
  * `header_row` is the 1-based row number used to resolve name-based specs (rows before it are
  * skipped, and it is never itself yielded as a data row); 0 means "no header" and every spec must be
  * index-based. XL_INVALID_ARGUMENT for a bad spec (unknown type, negative index with no name, a
- * name-based spec with header_row == 0) or an unmatched header name; XL_ERROR (detail in
+ * blank name, a name-based spec with header_row == 0), an unmatched header name, a `spec_count`
+ * outside 1..XL_MAX_COLUMN_SPECS, or a `name_len` past XL_MAX_COLUMN_NAME_BYTES; XL_ERROR (detail in
  * xl_last_error) for a non-nullable column whose value failed to convert, or a sheet with fewer than
- * header_row rows. The caller owns the returned table and must call xl_free_table. */
+ * header_row rows. The caller owns the returned table and must call xl_free_table.
+ *
+ * Only read *out_table when the call returns XL_OK; on failure it is zeroed, and xl_free_table on a
+ * zeroed table is a no-op. */
 int32_t xl_parse_typed(xl_workbook* handle, const xl_column_spec* specs, int32_t spec_count,
                        int32_t header_row, xl_table* out_table);
 

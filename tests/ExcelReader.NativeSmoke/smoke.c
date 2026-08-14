@@ -433,6 +433,82 @@ static int build_specs(xl_column_spec* specs)
     return 0;
 }
 
+/* The counts xl_parse_typed/xl_parse_arrow take are the only numbers a C caller hands over that
+ * size an allocation AND drive a read across this process's memory. This is the only layer that can
+ * test that guard: those entry points are [UnmanagedCallersOnly], so no managed test can invoke them
+ * (the predicate itself is unit-tested in NativeApiTests).
+ *
+ * Every call below passes a ONE-element spec array while claiming more. Before the bound existed
+ * these walked off the end of `specs` and sized an array from the claimed count — so a regression
+ * here does not fail an assertion, it takes the process down, which CI reports just as loudly. */
+static int test_parse_rejects_hostile_counts(const api_t* api, const char* fixture)
+{
+    xl_workbook* handle = NULL;
+    CHECK(open_fixture(api, fixture, &handle) == XL_OK, "xl_open_file must succeed");
+
+    xl_column_spec one_spec;
+    memset(&one_spec, 0, sizeof(one_spec));
+    one_spec.name = (const uint8_t*)"Coluna1";
+    one_spec.name_len = 7;
+    one_spec.type = XL_T_STRING;
+
+    xl_table table;
+    memset(&table, 0, sizeof(table));
+
+    CHECK(api->parse_typed(handle, &one_spec, INT32_MAX, 1, &table) == XL_INVALID_ARGUMENT,
+          "xl_parse_typed must reject spec_count == INT32_MAX");
+    CHECK(table.columns == NULL, "a rejected xl_parse_typed must leave the out table zeroed");
+
+    CHECK(api->parse_typed(handle, &one_spec, XL_MAX_COLUMN_SPECS + 1, 1, &table) == XL_INVALID_ARGUMENT,
+          "xl_parse_typed must reject spec_count one past XL_MAX_COLUMN_SPECS");
+    CHECK(api->parse_typed(handle, &one_spec, 0, 1, &table) == XL_INVALID_ARGUMENT,
+          "xl_parse_typed must reject spec_count == 0");
+    CHECK(api->parse_typed(handle, &one_spec, -1, 1, &table) == XL_INVALID_ARGUMENT,
+          "xl_parse_typed must reject a negative spec_count");
+
+    /* A plausible count with an implausible name_len: the bound has to cover both, since name_len is
+     * what becomes a read length over the caller's string. */
+    xl_column_spec wide_name = one_spec;
+    wide_name.name_len = XL_MAX_COLUMN_NAME_BYTES + 1;
+    CHECK(api->parse_typed(handle, &wide_name, 1, 1, &table) == XL_INVALID_ARGUMENT,
+          "xl_parse_typed must reject a name_len past XL_MAX_COLUMN_NAME_BYTES");
+
+    wide_name.name_len = -1;
+    CHECK(api->parse_typed(handle, &wide_name, 1, 1, &table) == XL_INVALID_ARGUMENT,
+          "xl_parse_typed must reject a negative name_len");
+
+    /* xl_parse_arrow decodes the same specs through the same path, so it needs the same guard. */
+    struct ArrowArray array;
+    struct ArrowSchema schema;
+    memset(&array, 0, sizeof(array));
+    memset(&schema, 0, sizeof(schema));
+    CHECK(api->parse_arrow(handle, &one_spec, INT32_MAX, 1, &array, &schema) == XL_INVALID_ARGUMENT,
+          "xl_parse_arrow must reject spec_count == INT32_MAX");
+    CHECK(array.release == NULL && schema.release == NULL,
+          "a rejected xl_parse_arrow must leave both out params releasable-as-no-op");
+
+    /* A blank name would otherwise trim to "" and match the first empty header cell. */
+    xl_column_spec blank_name;
+    memset(&blank_name, 0, sizeof(blank_name));
+    blank_name.name = (const uint8_t*)"   ";
+    blank_name.name_len = 3;
+    blank_name.type = XL_T_STRING;
+    CHECK(api->parse_typed(handle, &blank_name, 1, 1, &table) == XL_INVALID_ARGUMENT,
+          "xl_parse_typed must reject a blank column name");
+
+    /* The handle must still be usable: every rejection above is an argument error, not a fault that
+     * leaves the workbook in a broken state. */
+    xl_column_spec specs[3];
+    build_specs(specs);
+    CHECK(api->parse_typed(handle, specs, 3, 1, &table) == XL_OK,
+          "a valid xl_parse_typed after the rejections must still succeed");
+    CHECK(table.row_count == 100, "the recovered parse must still return all 100 data rows");
+    api->free_table(&table);
+
+    CHECK(api->close_(handle) == XL_OK, "xl_close must succeed");
+    return 0;
+}
+
 static int test_parse_typed_and_cursor_independence(const api_t* api, const char* fixture)
 {
     xl_workbook* handle = NULL;
@@ -586,6 +662,7 @@ int main(int argc, char** argv)
     failures += test_next_row_decoded(&api, fixture_path);
     failures += test_read_all_blob_and_decoded(&api, fixture_path);
     failures += test_open_file_ex(&api, fixture_path);
+    failures += test_parse_rejects_hostile_counts(&api, fixture_path);
     failures += test_parse_typed_and_cursor_independence(&api, fixture_path);
     failures += test_parse_arrow(&api, fixture_path);
     failures += test_double_close_is_rejected(&api, fixture_path);
