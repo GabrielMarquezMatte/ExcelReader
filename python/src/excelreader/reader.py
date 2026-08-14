@@ -229,6 +229,28 @@ class Workbook:
         # exported nothing, so there is no leak on that path either.
         return pyarrow.Array._import_from_c(ctypes.addressof(array), ctypes.addressof(arrow_schema))
 
+    def infer_schema(self, header_row: int = 1, sample_size: int = 100) -> list[ColumnSpec]:
+        """Guesses a `parse_typed()`/`to_arrow()` schema by sampling this sheet's cells.
+
+        Reads `header_row` for column names (0 means no header — every returned spec resolves by
+        `index` instead) and up to `sample_size` rows after it, guessing each column's type from
+        Excel's own per-cell type tag — no text sniffing. A column with a real mix of kinds, only
+        formula/error results, or nothing sampled falls back to `ColumnType.STRING`; `nullable` is set
+        when any sampled row left the column empty.
+
+        This is a guess over a sample, not a guarantee — a column that looks like `ColumnType.I64` in
+        the sample can still hold a fractional value further down the sheet, which `parse_typed()`
+        would then reject unless the spec is `nullable`. Reads from the sheet's first row regardless of
+        how far `rows()` has advanced, and does not disturb that cursor — same as `parse_typed()`.
+        """
+        handle = self._require_handle()
+        schema = _native.NativeInferredSchema()
+        _check(self._lib.xl_infer_schema(handle, header_row, sample_size, ctypes.byref(schema)))
+        try:
+            return _decode_inferred_schema(schema)
+        finally:
+            self._lib.xl_free_schema(ctypes.byref(schema))
+
     def close(self) -> None:
         if self._handle is None:
             return
@@ -330,6 +352,15 @@ def _decode_columnar(blob: bytes, length: int) -> ColumnarSheet:
         value_offsets=_to_columnar_array(value_offsets),
         values=bytes(values),
     )
+
+
+def _decode_inferred_schema(schema: _native.NativeInferredSchema) -> list[ColumnSpec]:
+    specs: list[ColumnSpec] = []
+    for index in range(schema.column_count):
+        raw = schema.columns[index]
+        name = ctypes.string_at(raw.name, raw.name_len).decode("utf-8") if raw.name else None
+        specs.append(ColumnSpec(ColumnType(raw.type), name=name, index=raw.index, nullable=bool(raw.nullable)))
+    return specs
 
 
 def _build_specs(schema: Sequence[ColumnSpec]) -> ctypes.Array:

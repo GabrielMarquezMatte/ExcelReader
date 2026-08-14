@@ -75,6 +75,10 @@ XL_STATIC_ASSERT(offsetof(xl_table, row_count) == 8, table_row_count);
 XL_STATIC_ASSERT(offsetof(xl_table, columns) == 16, table_columns);
 XL_STATIC_ASSERT(sizeof(xl_table) == 24, table_size);
 
+XL_STATIC_ASSERT(offsetof(xl_inferred_schema, columns) == 0, inferred_schema_columns);
+XL_STATIC_ASSERT(offsetof(xl_inferred_schema, column_count) == 8, inferred_schema_column_count);
+XL_STATIC_ASSERT(sizeof(xl_inferred_schema) == 16, inferred_schema_size);
+
 XL_STATIC_ASSERT(offsetof(struct ArrowSchema, format) == 0, arrow_schema_format);
 XL_STATIC_ASSERT(offsetof(struct ArrowSchema, name) == 8, arrow_schema_name);
 XL_STATIC_ASSERT(offsetof(struct ArrowSchema, metadata) == 16, arrow_schema_metadata);
@@ -134,6 +138,8 @@ typedef int32_t (*xl_read_all_decoded_fn)(xl_workbook*, xl_rows*);
 typedef void (*xl_free_rows_fn)(xl_rows*);
 typedef int32_t (*xl_parse_typed_fn)(xl_workbook*, const xl_column_spec*, int32_t, int32_t, xl_table*);
 typedef void (*xl_free_table_fn)(xl_table*);
+typedef int32_t (*xl_infer_schema_fn)(xl_workbook*, int32_t, int32_t, xl_inferred_schema*);
+typedef void (*xl_free_schema_fn)(xl_inferred_schema*);
 typedef const uint8_t* (*xl_last_error_ptr_fn)(int32_t*);
 typedef int32_t (*xl_parse_arrow_fn)(xl_workbook*, const xl_column_spec*, int32_t, int32_t, struct ArrowArray*, struct ArrowSchema*);
 
@@ -155,6 +161,8 @@ typedef struct
     xl_free_rows_fn free_rows;
     xl_parse_typed_fn parse_typed;
     xl_free_table_fn free_table;
+    xl_infer_schema_fn infer_schema;
+    xl_free_schema_fn free_schema;
     xl_last_error_ptr_fn last_error_ptr;
     xl_parse_arrow_fn parse_arrow;
 } api_t;
@@ -188,6 +196,8 @@ static int bind_all(xl_lib_handle lib, api_t* api)
     BIND(free_rows, xl_free_rows_fn, "xl_free_rows");
     BIND(parse_typed, xl_parse_typed_fn, "xl_parse_typed");
     BIND(free_table, xl_free_table_fn, "xl_free_table");
+    BIND(infer_schema, xl_infer_schema_fn, "xl_infer_schema");
+    BIND(free_schema, xl_free_schema_fn, "xl_free_schema");
     BIND(last_error_ptr, xl_last_error_ptr_fn, "xl_last_error_ptr");
     BIND(parse_arrow, xl_parse_arrow_fn, "xl_parse_arrow");
     return 1;
@@ -620,6 +630,86 @@ static int test_parse_arrow(const api_t* api, const char* fixture)
     return 0;
 }
 
+static int test_infer_schema(const api_t* api, const char* fixture)
+{
+    xl_workbook* handle = NULL;
+    CHECK(open_fixture(api, fixture, &handle) == XL_OK, "xl_open_file must succeed");
+
+    /* Advance the shared row cursor past the header, same setup as
+     * test_parse_typed_and_cursor_independence, to prove xl_infer_schema reads from the sheet's
+     * first row independent of it. */
+    uint8_t scratch[4096];
+    int32_t written = 0;
+    CHECK(api->next_row(handle, scratch, (int32_t)sizeof(scratch), &written) == XL_OK,
+          "reading the header row via xl_next_row must succeed");
+
+    xl_inferred_schema schema;
+    memset(&schema, 0, sizeof(schema));
+    CHECK(api->infer_schema(handle, 1, 100, &schema) == XL_OK, "xl_infer_schema must succeed");
+    CHECK(schema.column_count == 18, "RealExcel.xlsb's header row has 18 columns");
+
+    xl_column_spec coluna1 = schema.columns[0];
+    CHECK(coluna1.name_len == 7 && memcmp(coluna1.name, "Coluna1", 7) == 0, "column 0 must be named Coluna1");
+    CHECK(coluna1.type == XL_T_STRING, "Coluna1 must be guessed as XL_T_STRING");
+    CHECK(coluna1.index == 0, "column 0's index must be 0 regardless of its name");
+
+    xl_column_spec coluna2 = schema.columns[1];
+    CHECK(coluna2.name_len == 7 && memcmp(coluna2.name, "Coluna2", 7) == 0, "column 1 must be named Coluna2");
+    CHECK(coluna2.type == XL_T_DATE, "Coluna2 must be guessed as XL_T_DATE");
+
+    xl_column_spec coluna3 = schema.columns[2];
+    CHECK(coluna3.name_len == 7 && memcmp(coluna3.name, "Coluna3", 7) == 0, "column 2 must be named Coluna3");
+    CHECK(coluna3.type == XL_T_I64, "Coluna3 must be guessed as XL_T_I64 - every sampled value is a whole number");
+
+    /* The row cursor must still be positioned right after the header row. */
+    CHECK(api->next_row(handle, scratch, (int32_t)sizeof(scratch), &written) == XL_OK,
+          "xl_next_row after xl_infer_schema must still succeed");
+    int32_t value_len = 0;
+    memcpy(&value_len, scratch + 12, sizeof(int32_t));
+    CHECK(value_len == 6 && memcmp(scratch + 16, "Valor1", 6) == 0,
+          "xl_infer_schema must not have disturbed the xl_next_row cursor - this must be the first data row");
+
+    /* The whole point of the shape match: an inferred schema is directly usable by xl_parse_typed. */
+    xl_column_spec first_three[3];
+    memcpy(first_three, schema.columns, 3 * sizeof(xl_column_spec));
+    api->free_schema(&schema);
+
+    xl_table table;
+    memset(&table, 0, sizeof(table));
+    CHECK(api->parse_typed(handle, first_three, 3, 1, &table) == XL_OK,
+          "an inferred schema must be directly usable by xl_parse_typed");
+    CHECK(table.row_count == 100, "xl_parse_typed with the inferred schema must return all 100 data rows");
+    api->free_table(&table);
+
+    CHECK(api->close_(handle) == XL_OK, "xl_close must succeed");
+    return 0;
+}
+
+static int test_infer_schema_rejects_bad_arguments(const api_t* api, const char* fixture)
+{
+    xl_workbook* handle = NULL;
+    CHECK(open_fixture(api, fixture, &handle) == XL_OK, "xl_open_file must succeed");
+
+    xl_inferred_schema schema;
+    memset(&schema, 0, sizeof(schema));
+    CHECK(api->infer_schema(handle, -1, 100, &schema) == XL_INVALID_ARGUMENT,
+          "xl_infer_schema must reject a negative header_row");
+    CHECK(schema.columns == NULL, "a rejected xl_infer_schema must leave the out schema zeroed");
+
+    CHECK(api->infer_schema(handle, 1, 0, &schema) == XL_INVALID_ARGUMENT,
+          "xl_infer_schema must reject sample_size == 0");
+    CHECK(api->infer_schema(handle, 1, -1, &schema) == XL_INVALID_ARGUMENT,
+          "xl_infer_schema must reject a negative sample_size");
+
+    /* Documented safe on a zeroed value. */
+    xl_inferred_schema zeroed;
+    memset(&zeroed, 0, sizeof(zeroed));
+    api->free_schema(&zeroed);
+
+    CHECK(api->close_(handle) == XL_OK, "xl_close must succeed");
+    return 0;
+}
+
 static int test_double_close_is_rejected(const api_t* api, const char* fixture)
 {
     xl_workbook* handle = NULL;
@@ -665,6 +755,8 @@ int main(int argc, char** argv)
     failures += test_parse_rejects_hostile_counts(&api, fixture_path);
     failures += test_parse_typed_and_cursor_independence(&api, fixture_path);
     failures += test_parse_arrow(&api, fixture_path);
+    failures += test_infer_schema(&api, fixture_path);
+    failures += test_infer_schema_rejects_bad_arguments(&api, fixture_path);
     failures += test_double_close_is_rejected(&api, fixture_path);
 
     if (failures == 0)

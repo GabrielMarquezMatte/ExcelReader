@@ -117,6 +117,24 @@ failure in `table.validity` and keeps reading.
 Note that `parse_typed()` always reads the whole sheet from its first row, independent of how far
 `rows()` has advanced — and it leaves that cursor alone.
 
+#### Guessing a schema
+
+Writing the `ColumnSpec` list by hand means already knowing every column's name and type. When you
+don't, `infer_schema()` samples the sheet and guesses one for you:
+
+```python
+with open_workbook("sales.xlsb") as workbook:
+    schema = workbook.infer_schema()   # header_row=1, sample_size=100 by default
+    table = workbook.parse_typed(schema)
+```
+
+Each column's type comes from the `CellType` Excel already stored for its sampled cells — not text
+sniffing — so it costs nothing beyond the sample and is exact for XLSX/XLSB/XLS. A column with a real
+mix of kinds, only formula/error results, or nothing sampled falls back to `ColumnType.STRING`;
+`nullable` is set when any sampled row left the column empty. CSV cells carry no such type tag, so
+every CSV column is guessed `ColumnType.STRING` — inspect the result (or just try parsing) before
+trusting it, especially past the sample.
+
 ### Arrow
 
 With `pyarrow` installed, `to_arrow()` runs the same read and hands the buffers to pyarrow zero-copy

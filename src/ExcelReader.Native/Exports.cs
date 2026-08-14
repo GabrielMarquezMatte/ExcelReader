@@ -248,6 +248,28 @@ namespace ExcelReader.Native
             }
         }
 
+        [UnmanagedCallersOnly(EntryPoint = "xl_infer_schema")]
+        public static int InferSchema(nint handle, int headerRow, int sampleSize, NativeInferredSchema* outSchema)
+        {
+            if (outSchema is null)
+            {
+                return NativeStatus.InvalidArgument;
+            }
+
+            int status = NativeApi.InferSchema(Resolve(handle), headerRow, sampleSize, out NativeInferredSchema schema);
+            *outSchema = schema;
+            return status;
+        }
+
+        [UnmanagedCallersOnly(EntryPoint = "xl_free_schema")]
+        public static void FreeSchema(NativeInferredSchema* schema)
+        {
+            if (schema is not null)
+            {
+                NativeApi.FreeSchema(ref *schema);
+            }
+        }
+
         [UnmanagedCallersOnly(EntryPoint = "xl_parse_arrow")]
         public static int ParseArrow(nint handle, NativeColumnSpecRaw* specs, int specCount, int headerRow, ArrowArray* outArray, ArrowSchema* outSchema)
         {
