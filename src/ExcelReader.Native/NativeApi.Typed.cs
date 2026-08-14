@@ -269,6 +269,10 @@ namespace ExcelReader.Native
             private readonly List<int> _stringOffsets = [0]; // String
             private readonly List<byte> _stringData = []; // String
 
+            // Reused across every row of a string column: one cell's UTF-8 lands here before being
+            // appended, so no per-row buffer is allocated. Grows to the widest cell seen, never shrinks.
+            private byte[] _scratch = [];
+
             internal int RowCount
             {
                 get
@@ -291,12 +295,34 @@ namespace ExcelReader.Native
                 };
             }
 
+            // Cell.GetString's own stack buffer for the format-a-number branch. Matched here so an
+            // unformattable number lands on the same empty result it would have through GetString.
+            private const int NumberFormatMaxBytes = 32;
+
             private bool AppendString(in Cell cell)
             {
-                // ExcelCellReaders.String (cell.GetString()) always succeeds, including for an empty
-                // cell (-> ""), so a string column is never null regardless of `nullable`.
-                byte[] utf8 = Encoding.UTF8.GetBytes(cell.GetString());
-                _stringData.AddRange(utf8);
+                // Reading a string column always succeeds, including for an empty cell (-> ""), so it is
+                // never null regardless of `nullable`.
+                //
+                // Cell.TryFormat emits exactly the bytes GetString would have decoded — the number branch
+                // formats, every other cell copies Value verbatim, and for a shared string Value already
+                // holds the resolved text rather than its index. Going through it drops a string AND a
+                // byte array per row per column: this used to decode UTF-8 into a string and immediately
+                // encode it back, which was the single largest allocation in this whole path.
+                //
+                // It also stops sanitizing: the old round trip replaced malformed UTF-8 with U+FFFD,
+                // this copies the file's bytes through unchanged, matching what every other read path
+                // in this library (xl_next_row, xl_read_all_blob) already hands back.
+                int capacity = Math.Max(cell.Value.Length, NumberFormatMaxBytes);
+                if (_scratch.Length < capacity)
+                {
+                    _scratch = new byte[capacity];
+                }
+                if (!cell.TryFormat(_scratch, out int written))
+                {
+                    written = 0;
+                }
+                _stringData.AddRange(_scratch.AsSpan(0, written));
                 _stringOffsets.Add(_stringData.Count);
                 _validity.Add(1);
                 return true;
