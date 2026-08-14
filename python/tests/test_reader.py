@@ -2,7 +2,6 @@ import gc
 import shutil
 
 import pytest
-
 from excelreader import Cell, CellType, ExcelReaderError, open_bytes, open_workbook
 
 
@@ -90,7 +89,7 @@ def test_use_after_close_raises(xlsx_path):
     workbook.close()
 
     with pytest.raises(ExcelReaderError):
-        workbook.sheet_count
+        workbook.sheet_count  # noqa: B018
 
 
 def test_close_is_idempotent(xlsx_path):
