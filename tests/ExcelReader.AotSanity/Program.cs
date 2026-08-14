@@ -107,9 +107,9 @@ namespace ExcelReader.AotSanity
         {
             builder
                 .Factory(static () => new AotModel())
-                .Property(["Name"], ExcelCellReaders.String, static (ref AotModel m, string v) => m.Name = v)
-                .Property(["Age"], ExcelCellReaders.Parsable<int>, static (ref AotModel m, int v) => m.Age = v)
-                .Property(["Active"], ExcelCellReaders.Bool, static (ref AotModel m, bool v) => m.Active = v);
+                .Property(["Name"], ExcelCellReaders.String, static (ref m, v) => m.Name = v)
+                .Property(["Age"], ExcelCellReaders.Parsable, static (ref AotModel m, int v) => m.Age = v)
+                .Property(["Active"], ExcelCellReaders.Bool, static (ref m, v) => m.Active = v);
         }
     }
 

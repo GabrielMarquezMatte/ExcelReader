@@ -13,7 +13,7 @@ namespace ExcelReader.Native
 
     /// <summary>
     /// Format selectors accepted by the open functions. Values 1-3 deliberately match
-    /// <see cref="ExcelReader.Core.Enums.ExcelFileFormat"/>; CSV has no signature to sniff, so it
+    /// <see cref="Core.Enums.ExcelFileFormat"/>; CSV has no signature to sniff, so it
     /// has no counterpart there and must always be requested explicitly.
     /// </summary>
     internal static class NativeFormat
