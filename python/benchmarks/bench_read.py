@@ -10,7 +10,7 @@ script asserts against that instead of silently publishing a zero.
 NOTE: read_all()/rows() build one Cell tuple per cell; polars.read_excel returns a typed columnar
 DataFrame with type inference. That is not matched work (see STYLEGUIDE.md "Tests and
 Benchmarks") — this script labels the comparison, it does not pretend it is apples-to-apples.
-The parse_typed/to_arrow variants are the closest thing to matched work against polars: they
+The parse_typed/parse_arrow variants are the closest thing to matched work against polars: they
 do real native-side type conversion into columns, against a fixed schema rather than inferring one.
 """
 

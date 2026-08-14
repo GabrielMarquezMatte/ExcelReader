@@ -1642,6 +1642,225 @@ namespace ExcelReader.Tests
             Assert.Equal(IntPtr.Zero, table.Columns);
         }
 
+        // Column layout: A=Name (string), B=Qty (whole numbers), C=Price (fractional numbers),
+        // D=Active (bool), E=Mixed (a string in one row, a number in the other), F=Extra (a number
+        // that only row 2 populates, and that never appears in the header at all).
+        private static MemoryStream BuildInferSchemaFixture()
+        {
+            return WorkbookBuilder.Build(
+                """
+                <row r="1">
+                    <c r="A1" t="inlineStr"><is><t>Name</t></is></c>
+                    <c r="B1" t="inlineStr"><is><t>Qty</t></is></c>
+                    <c r="C1" t="inlineStr"><is><t>Price</t></is></c>
+                    <c r="D1" t="inlineStr"><is><t>Active</t></is></c>
+                    <c r="E1" t="inlineStr"><is><t>Mixed</t></is></c>
+                </row>
+                <row r="2">
+                    <c r="A2" t="inlineStr"><is><t>Alice</t></is></c>
+                    <c r="B2"><v>3</v></c>
+                    <c r="C2"><v>1.5</v></c>
+                    <c r="D2" t="b"><v>1</v></c>
+                    <c r="E2" t="inlineStr"><is><t>oops</t></is></c>
+                    <c r="F2"><v>10</v></c>
+                </row>
+                <row r="3">
+                    <c r="A3" t="inlineStr"><is><t>Bob</t></is></c>
+                    <c r="B3"><v>7</v></c>
+                    <c r="C3"><v>4.5</v></c>
+                    <c r="D3" t="b"><v>0</v></c>
+                    <c r="E3"><v>2</v></c>
+                </row>
+                """);
+        }
+
+        [Fact]
+        public void InferSchema_Should_Guess_Types_From_Sampled_Cells()
+        {
+            using MemoryStream ms = BuildInferSchemaFixture();
+            Assert.Equal(NativeStatus.Ok, NativeApi.OpenMemory(ms.ToArray(), NativeFormat.Xlsx, out NativeHandle? handle));
+            try
+            {
+                Assert.Equal(NativeStatus.Ok, NativeApi.InferSchema(handle, headerRow: 1, sampleSize: 100, out NativeInferredSchema schema));
+                try
+                {
+                    Assert.Equal(6, schema.ColumnCount);
+                    (string? Name, int Index, int Type, bool Nullable)[] columns = DecodeSchema(schema);
+
+                    AssertSpec(columns[0], "Name", NativeColumnType.String, nullable: false);
+                    AssertSpec(columns[1], "Qty", NativeColumnType.Int64, nullable: false);
+                    AssertSpec(columns[2], "Price", NativeColumnType.Float64, nullable: false);
+                    AssertSpec(columns[3], "Active", NativeColumnType.Bool, nullable: false);
+                    // A string in one sampled row and a number in the other is a real mix - no single
+                    // type describes both, so this falls back to STRING.
+                    AssertSpec(columns[4], "Mixed", NativeColumnType.String, nullable: false);
+                    // Never named in the header, and only row 2 populates it - the missing value in
+                    // row 3 must be caught even though no row's cells enumerator ever visits column F.
+                    AssertSpec(columns[5], name: null, NativeColumnType.Int64, nullable: true);
+                    Assert.Equal(5, columns[5].Index);
+                }
+                finally
+                {
+                    NativeApi.FreeSchema(ref schema);
+                }
+            }
+            finally
+            {
+                NativeApi.Close(handle);
+            }
+        }
+
+        [Fact]
+        public void InferSchema_Should_Resolve_By_Index_When_Header_Row_Is_Zero()
+        {
+            using MemoryStream ms = BuildInferSchemaFixture();
+            Assert.Equal(NativeStatus.Ok, NativeApi.OpenMemory(ms.ToArray(), NativeFormat.Xlsx, out NativeHandle? handle));
+            try
+            {
+                Assert.Equal(NativeStatus.Ok, NativeApi.InferSchema(handle, headerRow: 0, sampleSize: 100, out NativeInferredSchema schema));
+                try
+                {
+                    // Every row (including what would have been the header) is now sampled as data, so
+                    // row 1's inline strings make every column look like STRING with no header names.
+                    foreach ((string? name, _, _, _) in DecodeSchema(schema))
+                    {
+                        Assert.Null(name);
+                    }
+                }
+                finally
+                {
+                    NativeApi.FreeSchema(ref schema);
+                }
+            }
+            finally
+            {
+                NativeApi.Close(handle);
+            }
+        }
+
+        [Fact]
+        public void InferSchema_Should_Reject_A_Negative_Header_Row()
+        {
+            using MemoryStream ms = BuildInferSchemaFixture();
+            Assert.Equal(NativeStatus.Ok, NativeApi.OpenMemory(ms.ToArray(), NativeFormat.Xlsx, out NativeHandle? handle));
+            try
+            {
+                Assert.Equal(NativeStatus.InvalidArgument, NativeApi.InferSchema(handle, headerRow: -1, sampleSize: 100, out NativeInferredSchema schema));
+                Assert.Equal(IntPtr.Zero, schema.Columns);
+            }
+            finally
+            {
+                NativeApi.Close(handle);
+            }
+        }
+
+        [Theory]
+        [InlineData(0)]
+        [InlineData(-1)]
+        public void InferSchema_Should_Reject_A_NonPositive_Sample_Size(int sampleSize)
+        {
+            using MemoryStream ms = BuildInferSchemaFixture();
+            Assert.Equal(NativeStatus.Ok, NativeApi.OpenMemory(ms.ToArray(), NativeFormat.Xlsx, out NativeHandle? handle));
+            try
+            {
+                Assert.Equal(NativeStatus.InvalidArgument, NativeApi.InferSchema(handle, headerRow: 1, sampleSize, out NativeInferredSchema schema));
+                Assert.Equal(IntPtr.Zero, schema.Columns);
+            }
+            finally
+            {
+                NativeApi.Close(handle);
+            }
+        }
+
+        [Fact]
+        public void InferSchema_Should_Reject_A_Null_Handle()
+        {
+            Assert.Equal(NativeStatus.InvalidHandle, NativeApi.InferSchema(null, headerRow: 1, sampleSize: 100, out _));
+        }
+
+        [Fact]
+        public void InferSchema_Should_Report_An_Error_When_The_Sheet_Has_Fewer_Rows_Than_Header_Row()
+        {
+            using MemoryStream ms = WorkbookBuilder.Build("""<row r="1"><c r="A1"><v>1</v></c></row>""");
+            Assert.Equal(NativeStatus.Ok, NativeApi.OpenMemory(ms.ToArray(), NativeFormat.Xlsx, out NativeHandle? handle));
+            try
+            {
+                int status = NativeApi.InferSchema(handle, headerRow: 5, sampleSize: 100, out NativeInferredSchema schema);
+
+                Assert.Equal(NativeStatus.InvalidArgument, status);
+                Assert.Equal(IntPtr.Zero, schema.Columns);
+                Span<byte> buffer = stackalloc byte[256];
+                Assert.Equal(NativeStatus.Ok, NativeApi.LastError(buffer, out int length));
+                Assert.Contains("fewer than", Encoding.UTF8.GetString(buffer[..length]), StringComparison.Ordinal);
+            }
+            finally
+            {
+                NativeApi.Close(handle);
+            }
+        }
+
+        [Fact]
+        public void InferSchema_Should_Not_Disturb_The_Row_Cursor()
+        {
+            using MemoryStream ms = BuildInferSchemaFixture();
+            Assert.Equal(NativeStatus.Ok, NativeApi.OpenMemory(ms.ToArray(), NativeFormat.Xlsx, out NativeHandle? handle));
+            try
+            {
+                Assert.Equal(NativeStatus.Ok, NativeApi.NextRow(handle, new byte[4096], out _)); // header
+
+                Assert.Equal(NativeStatus.Ok, NativeApi.InferSchema(handle, headerRow: 1, sampleSize: 100, out NativeInferredSchema schema));
+                NativeApi.FreeSchema(ref schema);
+
+                // InferSchema reads the WHOLE sheet through its own independent enumerator - the
+                // xl_next_row cursor above must still be sitting right after the header row.
+                byte[] buffer = new byte[4096];
+                Assert.Equal(NativeStatus.Ok, NativeApi.NextRow(handle, buffer, out int written));
+                Assert.Equal("Alice", DecodeRow(buffer.AsSpan(0, written))[0].Value);
+            }
+            finally
+            {
+                NativeApi.Close(handle);
+            }
+        }
+
+        [Fact]
+        public void FreeSchema_Should_Be_Idempotent_On_A_Zeroed_Schema()
+        {
+            NativeInferredSchema schema = default;
+            NativeApi.FreeSchema(ref schema);
+            NativeApi.FreeSchema(ref schema);
+            Assert.Equal(IntPtr.Zero, schema.Columns);
+        }
+
+        private static void AssertSpec((string? Name, int Index, int Type, bool Nullable) spec, string? name, int type, bool nullable)
+        {
+            Assert.Equal(name, spec.Name);
+            Assert.Equal(type, spec.Type);
+            Assert.Equal(nullable, spec.Nullable);
+        }
+
+        // Reads the native xl_column_spec array by hand rather than via NativeColumnSpecRaw's `byte*
+        // Name` field - this project has no AllowUnsafeBlocks, and Marshal.PtrToStringUTF8 already
+        // decodes exactly `length` bytes regardless of a trailing NUL (there isn't one; see
+        // NativeApi.Schema.cs's BuildSpec), so there is nothing an unsafe pointer read would add here.
+        private static (string? Name, int Index, int Type, bool Nullable)[] DecodeSchema(NativeInferredSchema schema)
+        {
+            int specSize = Marshal.SizeOf<NativeColumnSpecRaw>(); // name(8) + name_len(4) + index(4) + type(4) + nullable(4)
+            var columns = new (string?, int, int, bool)[schema.ColumnCount];
+            for (int i = 0; i < columns.Length; i++)
+            {
+                IntPtr spec = IntPtr.Add(schema.Columns, i * specSize);
+                IntPtr namePtr = Marshal.ReadIntPtr(spec, 0);
+                int nameLen = Marshal.ReadInt32(spec, 8);
+                int index = Marshal.ReadInt32(spec, 12);
+                int type = Marshal.ReadInt32(spec, 16);
+                int nullable = Marshal.ReadInt32(spec, 20);
+                string? name = namePtr == IntPtr.Zero ? null : Marshal.PtrToStringUTF8(namePtr, nameLen);
+                columns[i] = (name, index, type, nullable != 0);
+            }
+            return columns;
+        }
+
         private static ArrowSchema ArrowChildSchema(ArrowSchema schema, int index)
         {
             return Marshal.PtrToStructure<ArrowSchema>(Marshal.ReadIntPtr(schema.Children, index * IntPtr.Size));

@@ -251,6 +251,37 @@ int32_t xl_parse_typed(xl_workbook* handle, const xl_column_spec* specs, int32_t
 /* Releases a result returned by xl_parse_typed and resets it to zero. Safe on a zeroed value. */
 void xl_free_table(xl_table* table);
 
+/* Result of xl_infer_schema: one xl_column_spec per column the sheet appears to have, in ascending
+ * column order. Each spec's `type`/`nullable` is a guess from the sampled cells' own XL_CELL_* tags
+ * (no text sniffing) and can be handed straight to xl_parse_typed/xl_parse_arrow; `name` is set from
+ * the header row, or NULL (resolve by `index`) when header_row == 0, the header cell was blank, or
+ * the column was never seen in the header at all. `columns` is one allocation of `column_count`
+ * xl_column_spec values; each non-NULL `name` is its own separate allocation. */
+typedef struct xl_inferred_schema {
+    xl_column_spec* columns;
+    int32_t column_count;
+} xl_inferred_schema;
+
+/* Guesses a xl_parse_typed/xl_parse_arrow schema by sampling the WHOLE current sheet, from its first
+ * row - independent of, and never disturbing, the row cursor xl_next_row/xl_next_row_decoded/
+ * xl_read_all_blob share on `handle`. `header_row` has the same meaning as in xl_parse_typed (0 = no
+ * header). `sample_size` bounds how many rows after the header are inspected; a column is guessed
+ * XL_T_STRING with nullable = 1 when its sampled cells mix kinds, are all XL_CELL_FORMULA/ERROR, or
+ * were never populated. XL_T_I64 vs XL_T_F64 is decided by whether every sampled numeric cell parses
+ * as an integer. `nullable` is 1 when any sampled row left the column empty (including a row
+ * narrower than the widest one seen). This is a guess over a sample, not a guarantee - always check
+ * it fits before trusting it against the full sheet.
+ *
+ * XL_INVALID_ARGUMENT for a negative header_row, a non-positive sample_size, or a sheet with fewer
+ * than header_row rows. The caller owns the returned schema and must call xl_free_schema.
+ *
+ * Only read *out_schema when the call returns XL_OK; on failure it is zeroed, and xl_free_schema on a
+ * zeroed schema is a no-op. */
+int32_t xl_infer_schema(xl_workbook* handle, int32_t header_row, int32_t sample_size, xl_inferred_schema* out_schema);
+
+/* Releases a result returned by xl_infer_schema and resets it to zero. Safe on a zeroed value. */
+void xl_free_schema(xl_inferred_schema* schema);
+
 /* Last error on the CALLING thread. */
 int32_t xl_last_error(uint8_t* buffer, int32_t capacity, int32_t* out_len);
 

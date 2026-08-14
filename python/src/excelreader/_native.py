@@ -88,6 +88,34 @@ def column_spec_by_index(index: int, type_: int, *, nullable: bool = False) -> N
     return NativeColumnSpec(name=None, name_len=0, index=index, type=type_, nullable=int(nullable))
 
 
+class NativeInferredColumnSpec(ctypes.Structure):
+    """Mirrors xl_column_spec's layout exactly, for the OUTPUT direction (xl_infer_schema).
+
+    Unlike `NativeColumnSpec` above, `name` is a raw pointer here rather than `c_char_p`: a guessed
+    name is exactly `name_len` bytes with no guaranteed NUL terminator, so reading the attribute as a
+    string would let ctypes scan past the allocation looking for one. Decode it with
+    `ctypes.string_at(name, name_len)` instead.
+    """
+
+    _fields_ = [
+        ("name", ctypes.POINTER(ctypes.c_uint8)),
+        ("name_len", ctypes.c_int32),
+        ("index", ctypes.c_int32),
+        ("type", ctypes.c_int32),
+        ("nullable", ctypes.c_int32),
+    ]
+
+
+class NativeInferredSchema(ctypes.Structure):
+    """Mirrors xl_inferred_schema. `columns` is a native-owned array of `column_count` values, freed
+    (along with each column's own `name`) by `xl_free_schema`."""
+
+    _fields_ = [
+        ("columns", ctypes.POINTER(NativeInferredColumnSpec)),
+        ("column_count", ctypes.c_int32),
+    ]
+
+
 class NativeColumn(ctypes.Structure):
     """Mirrors xl_column. `data`/`data_len` are only meaningful for XL_T_STRING columns; `values` is
     always the ONE allocation this column owns directly (see xl_column's doc comment in the header —
@@ -325,6 +353,10 @@ def _bind(lib: ctypes.CDLL) -> ctypes.CDLL:
     lib.xl_parse_typed.restype = c_int
     lib.xl_free_table.argtypes = [ctypes.POINTER(NativeTable)]
     lib.xl_free_table.restype = None
+    lib.xl_infer_schema.argtypes = [p_void, c_int, c_int, ctypes.POINTER(NativeInferredSchema)]
+    lib.xl_infer_schema.restype = c_int
+    lib.xl_free_schema.argtypes = [ctypes.POINTER(NativeInferredSchema)]
+    lib.xl_free_schema.restype = None
     lib.xl_parse_arrow.argtypes = [p_void, ctypes.POINTER(NativeColumnSpec), c_int, c_int, ctypes.POINTER(ArrowArray), ctypes.POINTER(ArrowSchema)]
     lib.xl_parse_arrow.restype = c_int
     lib.xl_abi_version.argtypes = []
