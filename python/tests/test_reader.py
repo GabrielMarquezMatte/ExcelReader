@@ -2,7 +2,16 @@ import gc
 import shutil
 
 import pytest
-from excelreader import Cell, CellType, ExcelReaderError, decode_cell, open_bytes, open_workbook
+from excelreader import (
+    Cell,
+    CellType,
+    ColumnSpec,
+    ColumnType,
+    ExcelReaderError,
+    decode_cell,
+    open_bytes,
+    open_workbook,
+)
 from excelreader import reader as reader_module
 
 
@@ -243,3 +252,146 @@ def test_read_all_columnar_on_empty_sheet(xlsx_path):
     assert list(sheet.row_offsets) == [0]
     assert len(sheet.columns) == 0
     assert sheet.values == b""
+
+
+# --- parse_typed / to_arrow ---------------------------------------------------------------------
+
+
+@pytest.fixture
+def typed_csv(tmp_path):
+    path = tmp_path / "typed.csv"
+    path.write_text(
+        "name,qty,price,flag,day,clock,stamp\n"
+        "widget,3,1.5,TRUE,2020-01-02,01:00:00,2020-01-02 01:00:00\n"
+        "gadget,7,2.5,FALSE,1970-01-01,00:00:01,1970-01-01 00:00:01\n",
+        encoding="utf-8",
+    )
+    return path
+
+
+_TYPED_SCHEMA = [
+    ColumnSpec(ColumnType.STRING, name="name"),
+    ColumnSpec(ColumnType.I64, name="qty"),
+    ColumnSpec(ColumnType.F64, name="price"),
+    ColumnSpec(ColumnType.BOOL, name="flag"),
+    ColumnSpec(ColumnType.DATE, name="day"),
+    ColumnSpec(ColumnType.TIME, name="clock"),
+    ColumnSpec(ColumnType.TIMESTAMP, name="stamp"),
+]
+
+
+def test_parse_typed_returns_every_column_type(typed_csv):
+    with open_workbook(typed_csv) as workbook:
+        table = workbook.parse_typed(_TYPED_SCHEMA)
+
+    assert table.row_count == 2
+    assert table.names == ["name", "qty", "price", "flag", "day", "clock", "stamp"]
+    name, qty, price, flag, day, clock, stamp = table.columns
+    assert list(name) == ["widget", "gadget"]
+    assert list(qty) == [3, 7]
+    assert list(price) == [1.5, 2.5]
+    assert list(flag) == [1, 0]
+    assert list(day) == [18263, 0]  # days since 1970-01-01
+    assert list(clock) == [3_600_000_000, 1_000_000]  # microseconds since midnight
+    assert list(stamp) == [1_577_926_800_000_000, 1_000_000]  # microseconds since the epoch
+
+
+def test_parse_typed_resolves_columns_by_index_when_name_is_none(typed_csv):
+    with open_workbook(typed_csv) as workbook:
+        table = workbook.parse_typed([ColumnSpec(ColumnType.I64, index=1)])
+
+    assert list(table.columns[0]) == [3, 7]
+    assert table.names == ["1"]
+
+
+def test_parse_typed_string_column_supports_len_and_indexing(typed_csv):
+    with open_workbook(typed_csv) as workbook:
+        table = workbook.parse_typed([ColumnSpec(ColumnType.STRING, name="name")])
+
+    column = table.columns[0]
+    assert len(column) == 2
+    assert column[0] == "widget"
+    assert column[-1] == "gadget"
+
+
+def test_parse_typed_reports_no_validity_bitmap_when_nothing_is_null(typed_csv):
+    with open_workbook(typed_csv) as workbook:
+        table = workbook.parse_typed([ColumnSpec(ColumnType.I64, name="qty")])
+
+    assert table.validity == [None]
+
+
+def test_parse_typed_builds_a_validity_bitmap_for_a_nullable_column(tmp_path):
+    path = tmp_path / "nullable.csv"
+    path.write_text("qty\n3\n\n9\n", encoding="utf-8")
+
+    with open_workbook(path) as workbook:
+        table = workbook.parse_typed([ColumnSpec(ColumnType.I64, name="qty", nullable=True)])
+
+    assert table.row_count == 3
+    assert list(table.columns[0]) == [3, 0, 9]
+    # Arrow-style bit-packed, least-significant bit first: valid, null, valid.
+    assert table.validity[0][0] & 0b111 == 0b101
+
+
+def test_parse_typed_raises_when_a_non_nullable_column_fails_to_convert(tmp_path):
+    path = tmp_path / "bad.csv"
+    path.write_text("qty\n3\nnot-a-number\n", encoding="utf-8")
+
+    with open_workbook(path) as workbook, pytest.raises(ExcelReaderError):
+        workbook.parse_typed([ColumnSpec(ColumnType.I64, name="qty")])
+
+
+def test_parse_typed_raises_for_an_unknown_column_name(typed_csv):
+    with open_workbook(typed_csv) as workbook, pytest.raises(ExcelReaderError):
+        workbook.parse_typed([ColumnSpec(ColumnType.I64, name="nope")])
+
+
+def test_parse_typed_rejects_an_empty_schema(typed_csv):
+    with open_workbook(typed_csv) as workbook, pytest.raises(ValueError):
+        workbook.parse_typed([])
+
+
+def test_parse_typed_reads_the_whole_sheet_regardless_of_the_row_cursor(typed_csv):
+    # xl_parse_typed restarts at the sheet's first row — an advanced rows() cursor must not shorten it.
+    with open_workbook(typed_csv) as workbook:
+        next(workbook.rows())
+        table = workbook.parse_typed([ColumnSpec(ColumnType.I64, name="qty")])
+
+    assert table.row_count == 2
+
+
+def test_to_arrow_returns_a_struct_array_matching_parse_typed(typed_csv):
+    pa = pytest.importorskip("pyarrow")
+
+    with open_workbook(typed_csv) as workbook:
+        array = workbook.to_arrow(_TYPED_SCHEMA)
+
+    assert isinstance(array, pa.StructArray)
+    assert len(array) == 2
+    batch = pa.RecordBatch.from_struct_array(array)
+    assert batch.schema.names == ["name", "qty", "price", "flag", "day", "clock", "stamp"]
+    assert batch.column("name").to_pylist() == ["widget", "gadget"]
+    assert batch.column("qty").to_pylist() == [3, 7]
+    assert batch.column("price").to_pylist() == [1.5, 2.5]
+    assert batch.column("flag").to_pylist() == [True, False]
+    assert [d.isoformat() for d in batch.column("day").to_pylist()] == ["2020-01-02", "1970-01-01"]
+
+
+def test_to_arrow_survives_the_workbook_being_closed(typed_csv):
+    # pyarrow owns the exported buffers via ArrowArray.release, not the workbook handle — the data
+    # must stay readable after close(), which is the whole point of handing ownership over.
+    pytest.importorskip("pyarrow")
+
+    with open_workbook(typed_csv) as workbook:
+        array = workbook.to_arrow([ColumnSpec(ColumnType.I64, name="qty")])
+
+    gc.collect()
+    assert array.field(0).to_pylist() == [3, 7]
+
+
+def test_to_arrow_raises_for_an_unknown_column_name(typed_csv):
+    pytest.importorskip("pyarrow")
+
+    with open_workbook(typed_csv) as workbook, pytest.raises(ExcelReaderError):
+        workbook.to_arrow([ColumnSpec(ColumnType.I64, name="nope")])
