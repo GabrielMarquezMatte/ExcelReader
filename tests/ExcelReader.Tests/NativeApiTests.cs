@@ -1,3 +1,4 @@
+using System.Runtime.InteropServices;
 using System.Text;
 using ExcelReader.Native;
 
@@ -295,6 +296,76 @@ namespace ExcelReader.Tests
         }
 
         [Fact]
+        public void NextRowDecoded_Should_Expose_Values_Through_A_C_Struct()
+        {
+            string path = Path.Combine(Path.GetTempPath(), $"excelreader-native-{Guid.NewGuid():N}.csv");
+            File.WriteAllText(path, "name,qty\nwidget,7\n");
+            Assert.Equal(NativeStatus.Ok, OpenPath(path, NativeFormat.Csv, out NativeHandle? handle));
+            try
+            {
+                Assert.Equal(NativeStatus.Ok, NativeApi.NextRowDecoded(handle, out NativeRow row));
+                try
+                {
+                    Assert.Equal(2, row.CellCount);
+                    Assert.NotEqual(IntPtr.Zero, row.Cells);
+
+                    int cellSize = Marshal.SizeOf<NativeRowCell>();
+                    NativeRowCell[] cells =
+                    [
+                        Marshal.PtrToStructure<NativeRowCell>(row.Cells),
+                        Marshal.PtrToStructure<NativeRowCell>(IntPtr.Add(row.Cells, cellSize)),
+                    ];
+                    Assert.Equal(0, cells[0].Column);
+                    Assert.Equal(1, cells[1].Column);
+                    Assert.Equal("name", Marshal.PtrToStringUTF8(cells[0].Value, cells[0].ValueLength));
+                    Assert.Equal("qty", Marshal.PtrToStringUTF8(cells[1].Value, cells[1].ValueLength));
+                }
+                finally
+                {
+                    NativeApi.FreeRow(ref row);
+                }
+
+                Assert.Equal(NativeStatus.Ok, NativeApi.NextRow(handle, new byte[4096], out _));
+                Assert.Equal(NativeStatus.Eof, NativeApi.NextRow(handle, new byte[4096], out _));
+            }
+            finally
+            {
+                NativeApi.Close(handle);
+                File.Delete(path);
+            }
+        }
+
+        [Fact]
+        public void NextRowDecoded_Should_Resume_A_Row_Pending_From_The_Blob_API()
+        {
+            string path = Path.Combine(Path.GetTempPath(), $"excelreader-native-{Guid.NewGuid():N}.csv");
+            File.WriteAllText(path, "name\n");
+            Assert.Equal(NativeStatus.Ok, OpenPath(path, NativeFormat.Csv, out NativeHandle? handle));
+            try
+            {
+                Assert.Equal(NativeStatus.BufferTooSmall, NativeApi.NextRow(handle, Span<byte>.Empty, out _));
+
+                Assert.Equal(NativeStatus.Ok, NativeApi.NextRowDecoded(handle, out NativeRow row));
+                try
+                {
+                    NativeRowCell cell = Marshal.PtrToStructure<NativeRowCell>(row.Cells);
+                    Assert.Equal("name", Marshal.PtrToStringUTF8(cell.Value, cell.ValueLength));
+                }
+                finally
+                {
+                    NativeApi.FreeRow(ref row);
+                }
+
+                Assert.Equal(NativeStatus.Eof, NativeApi.NextRowDecoded(handle, out _));
+            }
+            finally
+            {
+                NativeApi.Close(handle);
+                File.Delete(path);
+            }
+        }
+
+        [Fact]
         public void NextRow_Should_Reserve_The_Row_When_The_Buffer_Is_Too_Small()
         {
             string path = Path.Combine(Path.GetTempPath(), $"excelreader-native-{Guid.NewGuid():N}.csv");
@@ -365,6 +436,7 @@ namespace ExcelReader.Tests
         public void NextRow_Should_Reject_A_Null_Handle()
         {
             Assert.Equal(NativeStatus.InvalidHandle, NativeApi.NextRow(null, new byte[16], out _));
+            Assert.Equal(NativeStatus.InvalidHandle, NativeApi.NextRowDecoded(null, out _));
         }
 
         [Fact]

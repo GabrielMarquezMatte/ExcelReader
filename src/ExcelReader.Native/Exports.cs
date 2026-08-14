@@ -113,6 +113,28 @@ namespace ExcelReader.Native
             return status;
         }
 
+        [UnmanagedCallersOnly(EntryPoint = "xl_next_row_decoded")]
+        public static int NextRowDecoded(nint handle, NativeRow* outRow)
+        {
+            if (outRow is null)
+            {
+                return NativeStatus.InvalidArgument;
+            }
+
+            int status = NativeApi.NextRowDecoded(Resolve(handle), out NativeRow row);
+            *outRow = row;
+            return status;
+        }
+
+        [UnmanagedCallersOnly(EntryPoint = "xl_free_row")]
+        public static void FreeRow(NativeRow* row)
+        {
+            if (row is not null)
+            {
+                NativeApi.FreeRow(ref *row);
+            }
+        }
+
         [UnmanagedCallersOnly(EntryPoint = "xl_last_error")]
         public static int LastError(byte* buffer, int capacity, int* outLength)
         {

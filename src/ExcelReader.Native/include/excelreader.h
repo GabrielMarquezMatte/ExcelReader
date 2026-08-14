@@ -32,6 +32,21 @@ extern "C" {
 #define XL_CELL_FORMULA 5
 #define XL_CELL_ERROR   6
 
+/* One UTF-8 cell value returned by xl_next_row_decoded. value_len excludes the trailing NUL;
+ * use it when the value could contain an embedded NUL. */
+typedef struct xl_row_cell {
+    int32_t column;
+    int32_t type;
+    int32_t value_len;
+    const uint8_t* value;
+} xl_row_cell;
+
+/* A decoded row returned by xl_next_row_decoded. Its contents remain valid until xl_free_row. */
+typedef struct xl_row {
+    int32_t cell_count;
+    xl_row_cell* cells;
+} xl_row;
+
 /* Copies the path; the caller may free it on return. */
 int32_t xl_open_file(const uint8_t* path, int32_t path_len, int32_t format, void** out_handle);
 
@@ -60,6 +75,13 @@ int32_t xl_is_date1904(void* handle, int32_t* out_flag);
  * Returns XL_EOF at the end of the sheet. On XL_BUFFER_TOO_SMALL, *out_written holds the required
  * byte count and the row is held until the next call - no row is ever lost. */
 int32_t xl_next_row(void* handle, uint8_t* buffer, int32_t capacity, int32_t* out_written);
+
+/* Reads one row into C-friendly structs. Returns XL_EOF at the end of the sheet. The caller owns
+ * the returned allocation and must call xl_free_row, including after partially processing a row. */
+int32_t xl_next_row_decoded(void* handle, xl_row* out_row);
+
+/* Releases a row returned by xl_next_row_decoded and resets it to zero. Safe to call on a zeroed row. */
+void xl_free_row(xl_row* row);
 
 /* Last error on the CALLING thread. */
 int32_t xl_last_error(uint8_t* buffer, int32_t capacity, int32_t* out_len);
