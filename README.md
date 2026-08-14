@@ -839,6 +839,24 @@ dotnet build ExcelReader.slnx --configuration Release
 dotnet test --project tests/ExcelReader.Tests/ExcelReader.Tests.csproj --configuration Release
 ```
 
+## Other languages
+
+ExcelReader ships a NativeAOT shared library with a C ABI, so non-.NET languages can read XLSX,
+XLSB, XLS and CSV without a .NET runtime installed.
+
+- C ABI header: [`src/ExcelReader.Native/include/excelreader.h`](src/ExcelReader.Native/include/excelreader.h)
+- Python package: [`python/`](python/README.md)
+
+```python
+from excelreader import open_workbook
+
+with open_workbook("book.xlsx") as workbook:
+    for row in workbook.rows():
+        print([cell.value for cell in row])
+```
+
+Reading only — the writers are not exposed across the ABI yet.
+
 ## Contributing
 
 See [ARCHITECTURE.md](ARCHITECTURE.md) for a map of the codebase, [STYLEGUIDE.md](STYLEGUIDE.md) for
