@@ -19,7 +19,9 @@
          corrupt the caller's stack, so catch-all plus a status code is the required behavior. -->
     <!-- CA2000/IDISP001/IDISP004: file streams handed to Excel.From*(leaveOpen: false) are owned
          and disposed by the reader — the same ownership-transfer pattern used across the tests. -->
-    <NoWarn>$(NoWarn);RS0016;RS0026;RS0037;CA1031;S2221;CA2000;IDISP001;IDISP004;IDISP007</NoWarn>
+    <!-- S6640: Exports.cs is the C ABI boundary — [UnmanagedCallersOnly] methods require pointer
+         parameters, so "avoid unsafe" does not apply to this file's entire reason for existing. -->
+    <NoWarn>$(NoWarn);RS0016;RS0026;RS0037;CA1031;S2221;CA2000;IDISP001;IDISP004;IDISP007;S6640</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>
