@@ -123,6 +123,27 @@ namespace ExcelReader.Native
             table = default;
         }
 
+        /// <summary>
+        /// Bounds the spec count xl_parse_typed/xl_parse_arrow receive before it sizes an array and
+        /// drives a walk over the caller's spec block.
+        /// </summary>
+        /// <remarks>
+        /// Internal rather than private so tests can pin the boundary directly: the
+        /// [UnmanagedCallersOnly] entry points that enforce this cannot be invoked from managed code,
+        /// so the predicate is the only part of that guard a unit test can reach. The C smoke test
+        /// covers the entry points themselves.
+        /// </remarks>
+        internal static bool IsValidSpecCount(int specCount)
+        {
+            return specCount is > 0 and <= NativeLimits.MaxColumnSpecs;
+        }
+
+        /// <summary>Bounds one spec's name length before it becomes a read length over caller memory.</summary>
+        internal static bool IsValidNameLength(int nameLength)
+        {
+            return nameLength is >= 0 and <= NativeLimits.MaxColumnNameBytes;
+        }
+
         private static bool TryValidateArguments(NativeColumnSpec[] specs, int headerRow, out string? error)
         {
             error = null;
@@ -146,6 +167,13 @@ namespace ExcelReader.Native
                 if (spec.Name is not null && headerRow == 0)
                 {
                     error = $"column \"{spec.Name}\" is name-based, but header_row is 0 (no header row to match it against).";
+                    return false;
+                }
+                // FindHeaderColumn trims before comparing, so a blank name would match the first empty
+                // header cell — resolving to a column the caller never asked for instead of failing.
+                if (spec.Name is not null && spec.Name.AsSpan().Trim().IsEmpty)
+                {
+                    error = "a name-based column spec cannot have a blank name.";
                     return false;
                 }
                 if (spec.Type is < NativeColumnType.String or > NativeColumnType.Timestamp)
