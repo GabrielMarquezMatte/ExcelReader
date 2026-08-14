@@ -24,6 +24,29 @@ XL_FORMAT_XLSX = 2
 XL_FORMAT_XLSB = 3
 XL_FORMAT_CSV = 4
 
+class NativeRowCell(ctypes.Structure):
+    _fields_ = [
+        ("column", ctypes.c_int32),
+        ("type", ctypes.c_int32),
+        ("value_len", ctypes.c_int32),
+        ("value", ctypes.POINTER(ctypes.c_uint8)),
+    ]
+
+
+class NativeRow(ctypes.Structure):
+    _fields_ = [
+        ("cell_count", ctypes.c_int32),
+        ("cells", ctypes.POINTER(NativeRowCell)),
+    ]
+
+
+class NativeRows(ctypes.Structure):
+    _fields_ = [
+        ("row_count", ctypes.c_int32),
+        ("rows", ctypes.POINTER(NativeRow)),
+    ]
+
+
 _LIB_NAMES = {
     "Windows": "ExcelReader.Native.dll",
     "Linux": "ExcelReader.Native.so",
@@ -86,4 +109,8 @@ def _bind(lib: ctypes.CDLL) -> ctypes.CDLL:
     lib.xl_next_row.restype = c_int
     lib.xl_last_error.argtypes = [p_bytes, c_int, p_int]
     lib.xl_last_error.restype = c_int
+    lib.xl_read_all_decoded.argtypes = [p_void, ctypes.POINTER(NativeRows)]
+    lib.xl_read_all_decoded.restype = c_int
+    lib.xl_free_rows.argtypes = [ctypes.POINTER(NativeRows)]
+    lib.xl_free_rows.restype = None
     return lib
