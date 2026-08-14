@@ -38,14 +38,23 @@ open_workbook("data.txt", format="csv")
 ### Dates
 
 `cell.value` is always the raw text as stored, so `CellType.DATE` cells hold Excel serial numbers.
-Convert them yourself:
+Use `Cell.as_date()` to convert, passing the workbook's epoch flag:
 
 ```python
-from datetime import date, timedelta
-
-epoch = date(1904, 1, 1) if workbook.is_date1904 else date(1899, 12, 30)
-as_date = epoch + timedelta(days=int(float(cell.value)))
+as_date = cell.as_date(workbook.is_date1904)
 ```
+
+`as_date()` returns `None` for any cell that isn't `CellType.DATE`.
+
+### Reading everything at once
+
+`rows()` iterates row-by-row; `read_all()` materializes the whole sheet in one call:
+
+```python
+all_rows = workbook.read_all()
+```
+
+This holds every row in memory at once, so prefer `rows()` for very large sheets.
 
 ### From memory
 
