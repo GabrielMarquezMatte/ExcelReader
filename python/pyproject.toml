@@ -3,7 +3,7 @@ requires = ["hatchling", "packaging"]
 build-backend = "hatchling.build"
 
 [project]
-name = "excelreader"
+name = "excelreader-native"
 version = "0.1.0"
 description = "Read XLSX, XLSB, XLS and CSV through the ExcelReader NativeAOT library"
 readme = "README.md"
