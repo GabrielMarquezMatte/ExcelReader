@@ -83,6 +83,20 @@ int32_t xl_next_row_decoded(void* handle, xl_row* out_row);
 /* Releases a row returned by xl_next_row_decoded and resets it to zero. Safe to call on a zeroed row. */
 void xl_free_row(xl_row* row);
 
+/* A decoded sheet returned by xl_read_all_decoded. Rows remain valid until xl_free_rows. */
+typedef struct xl_rows {
+    int32_t row_count;
+    xl_row* rows;
+} xl_rows;
+
+/* Decodes every remaining row of the current sheet in one call, avoiding one native round-trip
+ * per row. XL_EOF is never returned here - an empty remainder comes back as XL_OK with
+ * row_count == 0. The caller owns the returned allocation and must call xl_free_rows. */
+int32_t xl_read_all_decoded(void* handle, xl_rows* out_rows);
+
+/* Releases a result returned by xl_read_all_decoded and resets it to zero. Safe on a zeroed value. */
+void xl_free_rows(xl_rows* rows);
+
 /* Last error on the CALLING thread. */
 int32_t xl_last_error(uint8_t* buffer, int32_t capacity, int32_t* out_len);
 

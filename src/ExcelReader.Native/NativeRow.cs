@@ -21,4 +21,11 @@ namespace ExcelReader.Native
         public int CellCount;
         public IntPtr Cells;
     }
+
+    [StructLayout(LayoutKind.Sequential)]
+    internal struct NativeRows
+    {
+        public int RowCount;
+        public IntPtr Rows;
+    }
 }
