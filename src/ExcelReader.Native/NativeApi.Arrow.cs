@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Numerics;
 using System.Runtime.InteropServices;
 using System.Text;
 
@@ -42,17 +43,10 @@ namespace ExcelReader.Native
                 SetLastError(exception.Message);
                 // schema may already hold a partially- or fully-built result if BuildArrowArray threw
                 // after BuildArrowSchema succeeded — release it via the same path a real consumer would
-                // use. ReleaseArrowSchema takes an address, not a value, so round-trip through a
-                // throwaway native block rather than pinning this local.
-                IntPtr temp = Marshal.AllocHGlobal(Marshal.SizeOf<ArrowSchema>());
-                try
+                // use. ReleaseArrowSchema takes an address, not a value, hence pinning it here.
+                fixed (ArrowSchema* pinned = &schema)
                 {
-                    Marshal.StructureToPtr(schema, temp, false);
-                    ReleaseArrowSchema(temp);
-                }
-                finally
-                {
-                    Marshal.FreeHGlobal(temp);
+                    ReleaseArrowSchema((IntPtr)pinned);
                 }
                 array = default;
                 schema = default;
@@ -82,16 +76,7 @@ namespace ExcelReader.Native
                 return;
             }
 
-            for (long i = 0; i < schema.NChildren; i++)
-            {
-                IntPtr child = Marshal.ReadIntPtr(schema.Children, (int)(i * IntPtr.Size));
-                ReleaseArrowSchema(child);
-                Marshal.FreeHGlobal(child);
-            }
-            if (schema.NChildren > 0)
-            {
-                Marshal.FreeHGlobal(schema.Children);
-            }
+            ReleaseChildren(schema.Children, schema.NChildren, &ReleaseArrowSchema);
             FreeIfSet(schema.Format);
             FreeIfSet(schema.Name);
 
@@ -99,8 +84,9 @@ namespace ExcelReader.Native
             Marshal.StructureToPtr(schema, schemaPtr, false);
         }
 
-        /// <summary>The <see cref="ArrowArray"/> half of <see cref="ReleaseArrowSchema"/> — same
-        /// recursive-children, then-buffers, then-idempotent-mark shape.</summary>
+        /// <summary>The <see cref="ArrowArray"/> half of <see cref="ReleaseArrowSchema"/>: the same
+        /// recursive-children walk (shared via <see cref="ReleaseChildren"/>) and idempotent release
+        /// mark, plus the buffers block, which a schema has no counterpart for.</summary>
         internal static void ReleaseArrowArray(IntPtr arrayPtr)
         {
             if (arrayPtr == IntPtr.Zero)
@@ -113,16 +99,7 @@ namespace ExcelReader.Native
                 return;
             }
 
-            for (long i = 0; i < array.NChildren; i++)
-            {
-                IntPtr child = Marshal.ReadIntPtr(array.Children, (int)(i * IntPtr.Size));
-                ReleaseArrowArray(child);
-                Marshal.FreeHGlobal(child);
-            }
-            if (array.NChildren > 0)
-            {
-                Marshal.FreeHGlobal(array.Children);
-            }
+            ReleaseChildren(array.Children, array.NChildren, &ReleaseArrowArray);
             for (long i = 0; i < array.NBuffers; i++)
             {
                 FreeIfSet(Marshal.ReadIntPtr(array.Buffers, (int)(i * IntPtr.Size)));
@@ -134,6 +111,23 @@ namespace ExcelReader.Native
 
             array.Release = IntPtr.Zero;
             Marshal.StructureToPtr(array, arrayPtr, false);
+        }
+
+        // Both release paths walk their children identically — release each, free each child's own
+        // block, then free the child pointer array. Only the per-child release differs, so it arrives
+        // as a function pointer, which in this unsafe context allocates no delegate.
+        private static void ReleaseChildren(IntPtr children, long count, delegate*<IntPtr, void> release)
+        {
+            for (long i = 0; i < count; i++)
+            {
+                IntPtr child = Marshal.ReadIntPtr(children, (int)(i * IntPtr.Size));
+                release(child);
+                Marshal.FreeHGlobal(child);
+            }
+            if (count > 0)
+            {
+                Marshal.FreeHGlobal(children);
+            }
         }
 
         private static void FreeIfSet(IntPtr pointer)
@@ -241,16 +235,15 @@ namespace ExcelReader.Native
             {
                 return 0;
             }
-            long unset = 0;
-            for (long i = 0; i < length; i++)
+            // PackBitsLsbFirst zero-fills the block and only ever sets bits below `length`, so every bit
+            // past it is already 0 and popcount over whole bytes needs no tail mask.
+            ReadOnlySpan<byte> bits = new((void*)validity, (int)((length + 7) / 8));
+            long set = 0;
+            foreach (ref readonly byte packed in bits)
             {
-                byte b = Marshal.ReadByte(validity, (int)(i >> 3));
-                if ((b & (1 << (int)(i & 7))) == 0)
-                {
-                    unset++;
-                }
+                set += BitOperations.PopCount(packed);
             }
-            return unset;
+            return length - set;
         }
 
         private static IntPtr CopyBuffer(IntPtr source, long byteLength)
@@ -265,26 +258,20 @@ namespace ExcelReader.Native
 
         private static IntPtr CopyOptionalBuffer(IntPtr source, long byteLength)
         {
-            return source == IntPtr.Zero ? IntPtr.Zero : CopyBuffer(source, byteLength);
+            if (source == IntPtr.Zero)
+            {
+                return IntPtr.Zero;
+            }
+            return CopyBuffer(source, byteLength);
         }
 
         // xl_column's XL_T_BOOL is one byte per row (see NativeApi.Typed.cs); Arrow's canonical boolean
-        // layout is bit-packed, LSB-first, same convention as a validity bitmap — this is the one
-        // column type that cannot be a straight byte-for-byte copy.
+        // layout is bit-packed, LSB-first, the same convention as a validity bitmap — so this is the one
+        // column type that cannot be a straight byte-for-byte copy, and the one place outside
+        // ColumnBuilder that needs the shared packer.
         private static IntPtr BitPackBoolColumn(IntPtr byteValues, long length)
         {
-            long byteLength = Math.Max((length + 7) / 8, 1);
-            IntPtr destination = Marshal.AllocHGlobal((nint)byteLength);
-            new Span<byte>((void*)destination, (int)byteLength).Clear();
-            for (long i = 0; i < length; i++)
-            {
-                if (Marshal.ReadByte(byteValues, (int)i) != 0)
-                {
-                    byte* bytePtr = (byte*)destination + (i >> 3);
-                    *bytePtr |= (byte)(1 << (int)(i & 7));
-                }
-            }
-            return destination;
+            return PackBitsLsbFirst(new ReadOnlySpan<byte>((void*)byteValues, (int)length));
         }
 
         private static string ArrowFormatCode(int type)
@@ -312,12 +299,23 @@ namespace ExcelReader.Native
 
         private static NativeColumn ColumnAt(NativeTable table, int index)
         {
-            int columnSize = Marshal.SizeOf<NativeColumn>();
-            return Marshal.PtrToStructure<NativeColumn>(IntPtr.Add(table.Columns, index * columnSize));
+            return ((NativeColumn*)table.Columns)[index];
         }
 
-        private static IntPtr SchemaReleaseCallback => (IntPtr)(delegate* unmanaged<ArrowSchema*, void>)&Exports.ReleaseArrowSchemaCallback;
+        private static IntPtr SchemaReleaseCallback
+        {
+            get
+            {
+                return (IntPtr)(delegate* unmanaged<ArrowSchema*, void>)&Exports.ReleaseArrowSchemaCallback;
+            }
+        }
 
-        private static IntPtr ArrayReleaseCallback => (IntPtr)(delegate* unmanaged<ArrowArray*, void>)&Exports.ReleaseArrowArrayCallback;
+        private static IntPtr ArrayReleaseCallback
+        {
+            get
+            {
+                return (IntPtr)(delegate* unmanaged<ArrowArray*, void>)&Exports.ReleaseArrowArrayCallback;
+            }
+        }
     }
 }

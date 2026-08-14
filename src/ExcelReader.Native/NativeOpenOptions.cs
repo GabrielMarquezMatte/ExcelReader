@@ -1,3 +1,4 @@
+using System.Numerics;
 using System.Runtime.InteropServices;
 using ExcelReader.Core.Reader;
 
@@ -137,8 +138,8 @@ namespace ExcelReader.Native
                 || !TryDecodeNonNegative(raw.CsvMaxCellBytes, "csv_max_cell_bytes", out int? csvMaxCellBytes, out error)
                 || !TryDecodeNonNegative(raw.MaxCellBytes, "max_cell_bytes", out int? maxCellBytes, out error)
                 || !TryDecodeNonNegative(raw.MaxZipEntries, "max_zip_entries", out int? maxZipEntries, out error)
-                || !TryDecodeNonNegativeLong(raw.MaxTotalDecompressedBytes, "max_total_decompressed_bytes", out long? maxTotal, out error)
-                || !TryDecodeNonNegativeLong(raw.MaxSharedStringBytes, "max_shared_string_bytes", out long? maxSharedStrings, out error))
+                || !TryDecodeNonNegative(raw.MaxTotalDecompressedBytes, "max_total_decompressed_bytes", out long? maxTotal, out error)
+                || !TryDecodeNonNegative(raw.MaxSharedStringBytes, "max_shared_string_bytes", out long? maxSharedStrings, out error))
             {
                 return false;
             }
@@ -187,32 +188,18 @@ namespace ExcelReader.Native
             return true;
         }
 
-        private static bool TryDecodeNonNegative(int value, string fieldName, out int? decoded, out string? error)
+        // Serves both the int and long fields: the rule ("0 means default, negative is a caller error")
+        // and its message are identical, and only the width differed.
+        private static bool TryDecodeNonNegative<T>(T value, string fieldName, out T? decoded, out string? error)
+            where T : struct, INumberBase<T>
         {
             decoded = null;
             error = null;
-            if (value == 0)
+            if (T.IsZero(value))
             {
                 return true;
             }
-            if (value < 0)
-            {
-                error = $"xl_open_options.{fieldName} must be 0 (default) or a positive value; got {value}.";
-                return false;
-            }
-            decoded = value;
-            return true;
-        }
-
-        private static bool TryDecodeNonNegativeLong(long value, string fieldName, out long? decoded, out string? error)
-        {
-            decoded = null;
-            error = null;
-            if (value == 0)
-            {
-                return true;
-            }
-            if (value < 0)
+            if (T.IsNegative(value))
             {
                 error = $"xl_open_options.{fieldName} must be 0 (default) or a positive value; got {value}.";
                 return false;
@@ -223,18 +210,16 @@ namespace ExcelReader.Native
 
         private static bool TryDecodeState(int value, string fieldName, out bool? decoded, out string? error)
         {
-            decoded = value switch
-            {
-                NativeOptionState.Default => null,
-                NativeOptionState.False => false,
-                NativeOptionState.True => true,
-                _ => null,
-            };
+            decoded = null;
             error = null;
             if (value is not (NativeOptionState.Default or NativeOptionState.False or NativeOptionState.True))
             {
                 error = $"xl_open_options.{fieldName} must be XL_OPT_DEFAULT/FALSE/TRUE (0/1/2); got {value}.";
                 return false;
+            }
+            if (value != NativeOptionState.Default)
+            {
+                decoded = value == NativeOptionState.True;
             }
             return true;
         }

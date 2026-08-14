@@ -27,7 +27,7 @@ namespace ExcelReader.Tests
                     rowCount++;
                 }
 
-                Assert.Equal(101, rowCount); // 1 header + 100 data rows, same fixture every other reader test uses
+                Assert.Equal(3, rowCount); // 1 header + 2 data rows — see SampleTest for this fixture's actual shape
                 Assert.Equal(NativeStatus.Ok, NativeApi.Close(handle));
             }));
 

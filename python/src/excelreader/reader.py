@@ -26,7 +26,7 @@ try:
     import numpy as _numpy
 except ImportError:
     _numpy = None  # NumPy is an optional extra (pip install excelreader-native[numpy]) — see
-    # read_all_columnar()/_to_columnar_arrays() below, the only two places that consult it.
+    # _buffer_to_array()/_to_columnar_array() below, the only two places that consult it.
 
 _FORMATS = {
     "auto": _native.XL_FORMAT_AUTO,
@@ -95,34 +95,33 @@ class Workbook:
         _check(self._lib.xl_sheet_count(self._require_handle(), ctypes.byref(count)))
         return count.value
 
-    @property
-    def sheet_name(self) -> str:
-        handle = self._require_handle()
+    def _fill_buffer(self, fn: object, *args: object, initial: int) -> tuple[bytes, int]:
+        # Every buffer-returning export shares one convention: on XL_BUFFER_TOO_SMALL it reports the
+        # size it needs through the out-length and holds the result, so growing and retrying once is
+        # always enough and never re-reads.
         length = ctypes.c_int32()
-        buffer = ctypes.create_string_buffer(256)
-        status = self._lib.xl_sheet_name(handle, buffer, len(buffer), ctypes.byref(length))
+        buffer = ctypes.create_string_buffer(initial)
+        status = fn(*args, buffer, len(buffer), ctypes.byref(length))
         if status == _native.XL_BUFFER_TOO_SMALL:
             buffer = ctypes.create_string_buffer(length.value)
-            status = self._lib.xl_sheet_name(handle, buffer, len(buffer), ctypes.byref(length))
+            status = fn(*args, buffer, len(buffer), ctypes.byref(length))
         _check(status)
-        return buffer.raw[: length.value].decode("utf-8")
+        return buffer.raw, length.value
+
+    @property
+    def sheet_name(self) -> str:
+        raw, length = self._fill_buffer(self._lib.xl_sheet_name, self._require_handle(), initial=256)
+        return raw[:length].decode("utf-8")
 
     def sheet_name_at(self, index: int) -> str:
         """Name of the sheet at `index`, without changing the current sheet or disturbing row enumeration."""
-        handle = self._require_handle()
-        length = ctypes.c_int32()
-        buffer = ctypes.create_string_buffer(256)
-        status = self._lib.xl_sheet_name_at(handle, index, buffer, len(buffer), ctypes.byref(length))
-        if status == _native.XL_BUFFER_TOO_SMALL:
-            buffer = ctypes.create_string_buffer(length.value)
-            status = self._lib.xl_sheet_name_at(handle, index, buffer, len(buffer), ctypes.byref(length))
-        _check(status)
-        return buffer.raw[: length.value].decode("utf-8")
+        raw, length = self._fill_buffer(self._lib.xl_sheet_name_at, self._require_handle(), index, initial=256)
+        return raw[:length].decode("utf-8")
 
     @property
     def sheet_names(self) -> list[str]:
         """Every sheet's name, in order. Does not change the current sheet or disturb row enumeration."""
-        return [self.sheet_name_at(index) for index in range(self.sheet_count)]
+        return [name for _, name in self.sheets()]
 
     def sheets(self) -> Iterator[tuple[int, str]]:
         """(index, name) for every sheet, in order. Does not change the current sheet or disturb row enumeration."""
@@ -176,19 +175,10 @@ class Workbook:
         The fast path for large sheets: unlike `read_all()`, this never constructs a `Cell`/`str`
         per cell. Use `decode_cell()` to materialize one cell on demand.
         """
-        written = ctypes.c_int32()
-        capacity = _INITIAL_ALL_ROWS_BUFFER
-        buffer = ctypes.create_string_buffer(capacity)
-        handle = self._require_handle()
-        status = self._lib.xl_read_all_blob(handle, buffer, capacity, ctypes.byref(written))
-        if status == _native.XL_BUFFER_TOO_SMALL:
-            # xl_read_all_blob guarantees the accumulated result is held, not lost, on a too-small
-            # buffer — growing and retrying costs one copy, not a re-read.
-            capacity = written.value
-            buffer = ctypes.create_string_buffer(capacity)
-            status = self._lib.xl_read_all_blob(handle, buffer, capacity, ctypes.byref(written))
-        _check(status)
-        return _decode_columnar(buffer.raw, written.value)
+        raw, written = self._fill_buffer(
+            self._lib.xl_read_all_blob, self._require_handle(), initial=_INITIAL_ALL_ROWS_BUFFER
+        )
+        return _decode_columnar(raw, written)
 
     def parse_typed(self, schema: Sequence[ColumnSpec], header_row: int = 1) -> TypedTable:
         """Reads the whole current sheet into typed columns, converting values on the native side.
@@ -383,16 +373,22 @@ def _decode_table(schema: Sequence[ColumnSpec], table: _native.NativeTable) -> T
     return TypedTable(row_count=row_count, names=names, columns=columns, validity=validity)
 
 
-def _decode_value_column(column: _native.NativeColumn, row_count: int) -> object:
-    element, typecode, dtype = _COLUMN_BUFFERS[ColumnType(column.type)]
-    raw = ctypes.string_at(column.values, row_count * ctypes.sizeof(element))
+def _buffer_to_array(raw: bytes, typecode: str, dtype: str) -> object:
+    # NumPy is optional, so every buffer decoded here lands as either an ndarray or an array.array;
+    # both give callers the same len()/index/slice interface, so nothing downstream has to branch.
+    # frombuffer over `raw` is a view on that bytes object, which keeps it alive — the native block
+    # it was copied from is already out of the picture by then.
     if _numpy is not None:
-        # frombuffer over `raw` is a view on that bytes object, which keeps it alive — the native
-        # block it was copied from is already out of the picture by then.
         return _numpy.frombuffer(raw, dtype=dtype)
     values = array(typecode)
     values.frombytes(raw)
     return values
+
+
+def _decode_value_column(column: _native.NativeColumn, row_count: int) -> object:
+    element, typecode, dtype = _COLUMN_BUFFERS[ColumnType(column.type)]
+    raw = ctypes.string_at(column.values, row_count * ctypes.sizeof(element))
+    return _buffer_to_array(raw, typecode, dtype)
 
 
 def _decode_string_column(column: _native.NativeColumn, row_count: int) -> StringColumn:
@@ -400,12 +396,7 @@ def _decode_string_column(column: _native.NativeColumn, row_count: int) -> Strin
     # past them INTO THE SAME allocation (see excelreader.h) — one copy each, not one per row.
     offsets_bytes = ctypes.string_at(column.values, (row_count + 1) * ctypes.sizeof(ctypes.c_int32))
     data = ctypes.string_at(column.data, int(column.data_len)) if column.data_len else b""
-    if _numpy is not None:
-        offsets = _numpy.frombuffer(offsets_bytes, dtype="int32")
-    else:
-        offsets = array("i")
-        offsets.frombytes(offsets_bytes)
-    return StringColumn(offsets, data)
+    return StringColumn(_buffer_to_array(offsets_bytes, "i", "int32"), data)
 
 
 def _decode_validity(column: _native.NativeColumn, row_count: int) -> bytes | None:
@@ -416,8 +407,8 @@ def _decode_validity(column: _native.NativeColumn, row_count: int) -> bytes | No
 
 
 def _to_columnar_array(values: array) -> object:
-    # NumPy is optional; array('i') already gives every ColumnarSheet field a shared int32-ish
-    # len()/index/slice interface either way, so callers don't need to branch on which one they got.
+    # The already-an-array('i') counterpart to _buffer_to_array: with NumPy absent the accumulator is
+    # already the right type, so it is handed back untouched rather than round-tripped through bytes.
     if _numpy is None:
         return values
     return _numpy.frombuffer(values, dtype=_numpy.int32)

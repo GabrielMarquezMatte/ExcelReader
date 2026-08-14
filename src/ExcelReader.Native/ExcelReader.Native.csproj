@@ -33,9 +33,11 @@
   </ItemGroup>
 
   <!-- The span-based NativeApi is the tested surface; [UnmanagedCallersOnly] exports cannot be
-       invoked from managed code, so the tests drive the layer underneath them. -->
+       invoked from managed code, so the tests drive the layer underneath them. The benchmarks are
+       here for the same reason: measuring xl_parse_typed means calling NativeApi.ParseTyped. -->
   <ItemGroup>
     <InternalsVisibleTo Include="ExcelReader.Tests" />
+    <InternalsVisibleTo Include="ExcelReader.Benchmarks" />
   </ItemGroup>
 
 </Project>
