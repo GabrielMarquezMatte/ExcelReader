@@ -220,6 +220,39 @@ namespace ExcelReader.Native
                 return NativeStatus.InvalidArgument;
             }
 
+            NativeColumnSpec[] decoded = DecodeColumnSpecs(specs, specCount);
+            int status = NativeApi.ParseTyped(Resolve(handle), decoded, headerRow, out NativeTable table);
+            *outTable = table;
+            return status;
+        }
+
+        [UnmanagedCallersOnly(EntryPoint = "xl_free_table")]
+        public static void FreeTable(NativeTable* table)
+        {
+            if (table is not null)
+            {
+                NativeApi.FreeTable(ref *table);
+            }
+        }
+
+        [UnmanagedCallersOnly(EntryPoint = "xl_parse_arrow")]
+        public static int ParseArrow(nint handle, NativeColumnSpecRaw* specs, int specCount, int headerRow, ArrowArray* outArray, ArrowSchema* outSchema)
+        {
+            if (specs is null || specCount <= 0 || outArray is null || outSchema is null)
+            {
+                return NativeStatus.InvalidArgument;
+            }
+
+            NativeColumnSpec[] decoded = DecodeColumnSpecs(specs, specCount);
+            int status = NativeApi.ParseArrow(Resolve(handle), decoded, headerRow, out ArrowArray array, out ArrowSchema schema);
+            *outArray = array;
+            *outSchema = schema;
+            return status;
+        }
+
+        // Shared by xl_parse_typed and xl_parse_arrow, whose column-spec input is identical.
+        private static NativeColumnSpec[] DecodeColumnSpecs(NativeColumnSpecRaw* specs, int specCount)
+        {
             NativeColumnSpec[] decoded = new NativeColumnSpec[specCount];
             for (int i = 0; i < specCount; i++)
             {
@@ -232,18 +265,27 @@ namespace ExcelReader.Native
                     Nullable = raw.Nullable != 0,
                 };
             }
-
-            int status = NativeApi.ParseTyped(Resolve(handle), decoded, headerRow, out NativeTable table);
-            *outTable = table;
-            return status;
+            return decoded;
         }
 
-        [UnmanagedCallersOnly(EntryPoint = "xl_free_table")]
-        public static void FreeTable(NativeTable* table)
+        // Invoked ONLY as a native function pointer value (ArrowSchema.Release) computed in
+        // NativeApi.Arrow.cs — never called directly from managed code, so (like every other member
+        // here) the actual free logic lives in the testable NativeApi layer.
+        [UnmanagedCallersOnly]
+        public static void ReleaseArrowSchemaCallback(ArrowSchema* schema)
         {
-            if (table is not null)
+            if (schema is not null)
             {
-                NativeApi.FreeTable(ref *table);
+                NativeApi.ReleaseArrowSchema((IntPtr)schema);
+            }
+        }
+
+        [UnmanagedCallersOnly]
+        public static void ReleaseArrowArrayCallback(ArrowArray* array)
+        {
+            if (array is not null)
+            {
+                NativeApi.ReleaseArrowArray((IntPtr)array);
             }
         }
 
