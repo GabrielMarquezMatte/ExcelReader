@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import ctypes
 import struct
+from collections.abc import Iterator
 from pathlib import Path
-from typing import Iterator, Optional, Union
+
+from typing_extensions import Self
 
 from excelreader import _native
 from excelreader.types import Cell, CellType, ExcelReaderError
@@ -42,7 +44,7 @@ def _check(status: int) -> None:
     raise ExcelReaderError(_last_error() or f"native call failed with status {status}")
 
 
-def _resolve_format(name: Optional[str], path: Optional[Path]) -> int:
+def _resolve_format(name: str | None, path: Path | None) -> int:
     if name is not None:
         try:
             return _FORMATS[name.lower()]
@@ -60,7 +62,7 @@ class Workbook:
 
     def __init__(self, handle: ctypes.c_void_p) -> None:
         self._lib = _native.load_library()
-        self._handle: Optional[ctypes.c_void_p] = handle
+        self._handle: ctypes.c_void_p | None = handle
 
     def _require_handle(self) -> ctypes.c_void_p:
         if self._handle is None:
@@ -118,7 +120,7 @@ class Workbook:
         handle, self._handle = self._handle, None
         _check(self._lib.xl_close(handle))
 
-    def __enter__(self) -> "Workbook":
+    def __enter__(self) -> Self:
         return self
 
     def __exit__(self, *_exc_info: object) -> None:
@@ -132,7 +134,7 @@ class Workbook:
         # which is the standard, accepted exception to "never bare-except" for __del__ specifically.
         try:
             self.close()
-        except Exception:
+        except Exception:  # noqa: BLE001, S110
             pass
 
 
@@ -151,7 +153,7 @@ def _decode_row(blob: bytes, length: int) -> list[Cell]:
     return cells
 
 
-def open_workbook(path: Union[str, Path], format: Optional[str] = None) -> Workbook:
+def open_workbook(path: str | Path, format: str | None = None) -> Workbook:
     """Opens a workbook from disk. `format` is one of auto/xls/xlsx/xlsb/csv; None infers it."""
     resolved = Path(path)
     encoded = str(resolved).encode("utf-8")
@@ -161,7 +163,7 @@ def open_workbook(path: Union[str, Path], format: Optional[str] = None) -> Workb
     return Workbook(handle)
 
 
-def open_bytes(data: bytes, format: Optional[str] = None) -> Workbook:
+def open_bytes(data: bytes, format: str | None = None) -> Workbook:
     """Opens a workbook from an in-memory buffer. The native side copies `data` immediately."""
     handle = ctypes.c_void_p()
     lib = _native.load_library()
