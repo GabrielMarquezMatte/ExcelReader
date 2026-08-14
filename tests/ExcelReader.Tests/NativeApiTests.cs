@@ -477,5 +477,70 @@ namespace ExcelReader.Tests
                 NativeApi.Close(handle);
             }
         }
+
+        [Fact]
+        public void ReadAllDecoded_Should_Return_Every_Remaining_Row_In_One_Call()
+        {
+            string path = Path.Combine(Path.GetTempPath(), $"excelreader-native-{Guid.NewGuid():N}.csv");
+            File.WriteAllText(path, "name,qty\nwidget,7\ngadget,9\n");
+            Assert.Equal(NativeStatus.Ok, OpenPath(path, NativeFormat.Csv, out NativeHandle? handle));
+            try
+            {
+                Assert.Equal(NativeStatus.Ok, NativeApi.ReadAllDecoded(handle, out NativeRows rows));
+                try
+                {
+                    Assert.Equal(3, rows.RowCount);
+                    Assert.NotEqual(IntPtr.Zero, rows.Rows);
+
+                    int rowSize = Marshal.SizeOf<NativeRow>();
+                    NativeRow first = Marshal.PtrToStructure<NativeRow>(rows.Rows);
+                    Assert.Equal(2, first.CellCount);
+                    NativeRowCell firstCell = Marshal.PtrToStructure<NativeRowCell>(first.Cells);
+                    Assert.Equal("name", Marshal.PtrToStringUTF8(firstCell.Value, firstCell.ValueLength));
+
+                    NativeRow last = Marshal.PtrToStructure<NativeRow>(IntPtr.Add(rows.Rows, 2 * rowSize));
+                    NativeRowCell lastCell = Marshal.PtrToStructure<NativeRowCell>(last.Cells);
+                    Assert.Equal("gadget", Marshal.PtrToStringUTF8(lastCell.Value, lastCell.ValueLength));
+                }
+                finally
+                {
+                    NativeApi.FreeRows(ref rows);
+                }
+            }
+            finally
+            {
+                NativeApi.Close(handle);
+                File.Delete(path);
+            }
+        }
+
+        [Fact]
+        public void ReadAllDecoded_Should_Return_Zero_Rows_At_End_Of_Sheet()
+        {
+            string path = Path.Combine(Path.GetTempPath(), $"excelreader-native-{Guid.NewGuid():N}.csv");
+            File.WriteAllText(path, "name\n");
+            Assert.Equal(NativeStatus.Ok, OpenPath(path, NativeFormat.Csv, out NativeHandle? handle));
+            try
+            {
+                Assert.Equal(NativeStatus.Ok, NativeApi.ReadAllDecoded(handle, out NativeRows first));
+                NativeApi.FreeRows(ref first);
+
+                Assert.Equal(NativeStatus.Ok, NativeApi.ReadAllDecoded(handle, out NativeRows second));
+                Assert.Equal(0, second.RowCount);
+                Assert.Equal(IntPtr.Zero, second.Rows);
+                NativeApi.FreeRows(ref second); // must be a no-op on a zeroed value, not throw
+            }
+            finally
+            {
+                NativeApi.Close(handle);
+                File.Delete(path);
+            }
+        }
+
+        [Fact]
+        public void ReadAllDecoded_Should_Return_InvalidHandle_For_A_Null_Handle()
+        {
+            Assert.Equal(NativeStatus.InvalidHandle, NativeApi.ReadAllDecoded(null, out _));
+        }
     }
 }
