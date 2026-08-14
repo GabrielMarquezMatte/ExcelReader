@@ -210,6 +210,186 @@ namespace ExcelReader.Tests
             Assert.Equal(NativeStatus.Ok, NativeApi.Close(handle));
         }
 
+        private static NativeOpenOptionsRaw DefaultRawOptions()
+        {
+            return new NativeOpenOptionsRaw { StructSize = Marshal.SizeOf<NativeOpenOptionsRaw>() };
+        }
+
+        [Fact]
+        public void OpenFileEx_With_Null_Options_Behaves_Like_OpenFile()
+        {
+            int status = NativeApi.OpenFileEx(Encoding.UTF8.GetBytes(XlsxFixture), NativeFormat.Auto, null, out NativeHandle? handle);
+
+            Assert.Equal(NativeStatus.Ok, status);
+            Assert.NotNull(handle);
+            Assert.Equal(NativeStatus.Ok, NativeApi.Close(handle));
+        }
+
+        [Fact]
+        public void OpenMemoryEx_With_Null_Options_Behaves_Like_OpenMemory()
+        {
+            byte[] bytes = File.ReadAllBytes(XlsxFixture);
+
+            int status = NativeApi.OpenMemoryEx(bytes, NativeFormat.Auto, null, out NativeHandle? handle);
+
+            Assert.Equal(NativeStatus.Ok, status);
+            Assert.NotNull(handle);
+            Assert.Equal(NativeStatus.Ok, NativeApi.Close(handle));
+        }
+
+        [Fact]
+        public void OpenFileEx_With_An_Unrecognized_Struct_Size_Is_Invalid_Argument()
+        {
+            NativeOpenOptionsRaw options = DefaultRawOptions() with { StructSize = 1 };
+
+            int status = NativeApi.OpenFileEx(Encoding.UTF8.GetBytes(XlsxFixture), NativeFormat.Auto, options, out NativeHandle? handle);
+
+            Assert.Equal(NativeStatus.InvalidArgument, status);
+            Assert.Null(handle);
+            Span<byte> buffer = stackalloc byte[256];
+            Assert.Equal(NativeStatus.Ok, NativeApi.LastError(buffer, out int length));
+            Assert.Contains("struct_size", Encoding.UTF8.GetString(buffer[..length]), StringComparison.Ordinal);
+        }
+
+        [Theory]
+        [InlineData(-1)]
+        [InlineData(256)]
+        public void OpenFileEx_Rejects_An_Out_Of_Range_Csv_Delimiter(int delimiter)
+        {
+            NativeOpenOptionsRaw options = DefaultRawOptions() with { CsvDelimiter = delimiter };
+
+            int status = NativeApi.OpenFileEx(Encoding.UTF8.GetBytes(XlsxFixture), NativeFormat.Csv, options, out NativeHandle? handle);
+
+            Assert.Equal(NativeStatus.InvalidArgument, status);
+            Assert.Null(handle);
+        }
+
+        [Fact]
+        public void OpenFileEx_Rejects_A_Negative_Numeric_Option()
+        {
+            NativeOpenOptionsRaw options = DefaultRawOptions() with { MaxZipEntries = -5 };
+
+            int status = NativeApi.OpenFileEx(Encoding.UTF8.GetBytes(XlsxFixture), NativeFormat.Auto, options, out NativeHandle? handle);
+
+            Assert.Equal(NativeStatus.InvalidArgument, status);
+            Assert.Null(handle);
+        }
+
+        [Fact]
+        public void OpenFileEx_Rejects_An_Out_Of_Range_Csv_Sniff_Dialect_State()
+        {
+            NativeOpenOptionsRaw options = DefaultRawOptions() with { CsvSniffDialect = 99 };
+
+            int status = NativeApi.OpenFileEx(Encoding.UTF8.GetBytes(XlsxFixture), NativeFormat.Csv, options, out NativeHandle? handle);
+
+            Assert.Equal(NativeStatus.InvalidArgument, status);
+            Assert.Null(handle);
+        }
+
+        [Fact]
+        public void OpenFileEx_Applies_An_Explicit_Csv_Delimiter()
+        {
+            string path = Path.Combine(Path.GetTempPath(), $"excelreader-native-{Guid.NewGuid():N}.csv");
+            File.WriteAllText(path, "name;qty\nwidget;7\n");
+            try
+            {
+                NativeOpenOptionsRaw options = DefaultRawOptions() with { CsvDelimiter = (byte)';' };
+                Assert.Equal(NativeStatus.Ok, NativeApi.OpenFileEx(Encoding.UTF8.GetBytes(path), NativeFormat.Csv, options, out NativeHandle? handle));
+                try
+                {
+                    byte[] buffer = new byte[4096];
+                    Assert.Equal(NativeStatus.Ok, NativeApi.NextRow(handle, buffer, out int written));
+                    List<DecodedCell> row = DecodeRow(buffer.AsSpan(0, written));
+                    Assert.Equal(2, row.Count);
+                    Assert.Equal("name", row[0].Value);
+                    Assert.Equal("qty", row[1].Value);
+                }
+                finally
+                {
+                    NativeApi.Close(handle);
+                }
+            }
+            finally
+            {
+                File.Delete(path);
+            }
+        }
+
+        [Fact]
+        public void OpenFileEx_Sniffs_The_Csv_Dialect_When_Requested()
+        {
+            // Same semicolon-delimited file as the explicit-delimiter test above, but with no delimiter
+            // given at all — csv_sniff_dialect must infer it via Excel.SniffCsvDialectFromFile.
+            string path = Path.Combine(Path.GetTempPath(), $"excelreader-native-{Guid.NewGuid():N}.csv");
+            File.WriteAllText(path, "name;qty\nwidget;7\ngadget;9\n");
+            try
+            {
+                NativeOpenOptionsRaw options = DefaultRawOptions() with { CsvSniffDialect = NativeOptionState.True };
+                Assert.Equal(NativeStatus.Ok, NativeApi.OpenFileEx(Encoding.UTF8.GetBytes(path), NativeFormat.Csv, options, out NativeHandle? handle));
+                try
+                {
+                    byte[] buffer = new byte[4096];
+                    Assert.Equal(NativeStatus.Ok, NativeApi.NextRow(handle, buffer, out int written));
+                    List<DecodedCell> row = DecodeRow(buffer.AsSpan(0, written));
+                    Assert.Equal(2, row.Count);
+                    Assert.Equal("name", row[0].Value);
+                    Assert.Equal("qty", row[1].Value);
+                }
+                finally
+                {
+                    NativeApi.Close(handle);
+                }
+            }
+            finally
+            {
+                File.Delete(path);
+            }
+        }
+
+        [Fact]
+        public void OpenFileEx_Applies_A_Tiny_Max_Total_Decompressed_Bytes_To_A_Real_Xlsx()
+        {
+            // Proves max_total_decompressed_bytes actually reaches XlsxReader: a cap this small fails
+            // before even xl/workbook.xml can be read.
+            NativeOpenOptionsRaw options = DefaultRawOptions() with { MaxTotalDecompressedBytes = 1 };
+
+            int status = NativeApi.OpenFileEx(Encoding.UTF8.GetBytes(XlsxFixture), NativeFormat.Xlsx, options, out NativeHandle? handle);
+
+            Assert.Equal(NativeStatus.Error, status);
+            Assert.Null(handle);
+        }
+
+        [Fact]
+        public void OpenFileEx_Applies_A_Tiny_Csv_Max_Cell_Bytes()
+        {
+            // Proves csv_max_cell_bytes actually reaches CsvReader. A plain (unquoted) field is read
+            // zero-copy straight out of the stream's own read buffer (CsvReader.Enumerator's "simple
+            // record" fast path) without ever touching CellAccumulator's separate value buffer — so the
+            // cap only has anything to enforce once the record forces BufferedStreamCursor's raw read
+            // buffer to grow past its 64 KiB initial size. The field below (100,000 bytes) guarantees
+            // that grow happens; the cap (4) guarantees it throws when it does.
+            string path = Path.Combine(Path.GetTempPath(), $"excelreader-native-{Guid.NewGuid():N}.csv");
+            File.WriteAllText(path, "name\n" + new string('x', 100_000) + "\n");
+            try
+            {
+                NativeOpenOptionsRaw options = DefaultRawOptions() with { CsvMaxCellBytes = 4 };
+                Assert.Equal(NativeStatus.Ok, NativeApi.OpenFileEx(Encoding.UTF8.GetBytes(path), NativeFormat.Csv, options, out NativeHandle? handle));
+                try
+                {
+                    Assert.Equal(NativeStatus.Ok, NativeApi.NextRow(handle, new byte[128 * 1024], out _)); // header row, short enough
+                    Assert.Equal(NativeStatus.Error, NativeApi.NextRow(handle, new byte[128 * 1024], out _)); // data row, forces a grow past the cap
+                }
+                finally
+                {
+                    NativeApi.Close(handle);
+                }
+            }
+            finally
+            {
+                File.Delete(path);
+            }
+        }
+
         [Fact]
         public void Close_Should_Reject_A_Null_Handle()
         {
@@ -1014,6 +1194,333 @@ namespace ExcelReader.Tests
         public void ReadAllBlob_Should_Reject_A_Null_Handle()
         {
             Assert.Equal(NativeStatus.InvalidHandle, NativeApi.ReadAllBlob(null, new byte[64], out _));
+        }
+
+        private static NativeColumn ColumnAt(NativeTable table, int index)
+        {
+            int columnSize = Marshal.SizeOf<NativeColumn>();
+            return Marshal.PtrToStructure<NativeColumn>(IntPtr.Add(table.Columns, index * columnSize));
+        }
+
+        private static List<string> DecodeStringColumn(NativeColumn column)
+        {
+            int rowCount = (int)column.Length;
+            int[] offsets = new int[rowCount + 1];
+            Marshal.Copy(column.Values, offsets, 0, rowCount + 1);
+            byte[] data = new byte[column.DataLen];
+            if (data.Length > 0)
+            {
+                Marshal.Copy(column.Data, data, 0, data.Length);
+            }
+            List<string> values = [];
+            for (int i = 0; i < rowCount; i++)
+            {
+                values.Add(Encoding.UTF8.GetString(data, offsets[i], offsets[i + 1] - offsets[i]));
+            }
+            return values;
+        }
+
+        private static bool[] DecodeValidity(NativeColumn column)
+        {
+            int rowCount = (int)column.Length;
+            bool[] result = new bool[rowCount];
+            if (column.Validity == IntPtr.Zero)
+            {
+                Array.Fill(result, true); // NULL validity means every value is valid
+                return result;
+            }
+            byte[] bitmap = new byte[(rowCount + 7) / 8];
+            Marshal.Copy(column.Validity, bitmap, 0, bitmap.Length);
+            for (int i = 0; i < rowCount; i++)
+            {
+                result[i] = (bitmap[i >> 3] & (1 << (i & 7))) != 0;
+            }
+            return result;
+        }
+
+        [Fact]
+        public void ParseTyped_Should_Return_Typed_Columns_By_Name()
+        {
+            string path = Path.Combine(Path.GetTempPath(), $"excelreader-native-{Guid.NewGuid():N}.csv");
+            File.WriteAllText(path, "name,qty,price,active,joined\nwidget,3,9.99,true,2024-01-15\ngadget,7,4.5,false,2024-02-20\n");
+            try
+            {
+                Assert.Equal(NativeStatus.Ok, OpenPath(path, NativeFormat.Csv, out NativeHandle? handle));
+                NativeColumnSpec[] specs =
+                [
+                    new() { Name = "name", Type = NativeColumnType.String },
+                    new() { Name = "qty", Type = NativeColumnType.Int64 },
+                    new() { Name = "price", Type = NativeColumnType.Float64 },
+                    new() { Name = "active", Type = NativeColumnType.Bool },
+                    new() { Name = "joined", Type = NativeColumnType.Date },
+                ];
+                Assert.Equal(NativeStatus.Ok, NativeApi.ParseTyped(handle, specs, headerRow: 1, out NativeTable table));
+                try
+                {
+                    Assert.Equal(5, table.ColumnCount);
+                    Assert.Equal(2, table.RowCount);
+                    Assert.Equal(["widget", "gadget"], DecodeStringColumn(ColumnAt(table, 0)));
+
+                    long[] qty = new long[2];
+                    Marshal.Copy(ColumnAt(table, 1).Values, qty, 0, 2);
+                    Assert.Equal([3L, 7L], qty);
+
+                    double[] prices = new double[2];
+                    Marshal.Copy(ColumnAt(table, 2).Values, prices, 0, 2);
+                    Assert.Equal([9.99, 4.5], prices);
+
+                    byte[] flags = new byte[2];
+                    Marshal.Copy(ColumnAt(table, 3).Values, flags, 0, 2);
+                    Assert.Equal([(byte)1, (byte)0], flags);
+
+                    int[] days = new int[2];
+                    Marshal.Copy(ColumnAt(table, 4).Values, days, 0, 2);
+                    int epoch = new DateOnly(1970, 1, 1).DayNumber;
+                    Assert.Equal(new DateOnly(2024, 1, 15).DayNumber - epoch, days[0]);
+                    Assert.Equal(new DateOnly(2024, 2, 20).DayNumber - epoch, days[1]);
+                }
+                finally
+                {
+                    NativeApi.FreeTable(ref table);
+                    NativeApi.Close(handle);
+                }
+            }
+            finally
+            {
+                File.Delete(path);
+            }
+        }
+
+        [Fact]
+        public void ParseTyped_Should_Resolve_By_Index_When_Header_Row_Is_Zero()
+        {
+            string path = Path.Combine(Path.GetTempPath(), $"excelreader-native-{Guid.NewGuid():N}.csv");
+            File.WriteAllText(path, "1,2\n3,4\n");
+            try
+            {
+                Assert.Equal(NativeStatus.Ok, OpenPath(path, NativeFormat.Csv, out NativeHandle? handle));
+                NativeColumnSpec[] specs =
+                [
+                    new() { Index = 0, Type = NativeColumnType.Int64 },
+                    new() { Index = 1, Type = NativeColumnType.Int64 },
+                ];
+                Assert.Equal(NativeStatus.Ok, NativeApi.ParseTyped(handle, specs, headerRow: 0, out NativeTable table));
+                try
+                {
+                    Assert.Equal(2, table.RowCount); // header_row == 0 means BOTH rows are data
+                    long[] first = new long[2];
+                    Marshal.Copy(ColumnAt(table, 0).Values, first, 0, 2);
+                    long[] second = new long[2];
+                    Marshal.Copy(ColumnAt(table, 1).Values, second, 0, 2);
+                    Assert.Equal([1L, 3L], first);
+                    Assert.Equal([2L, 4L], second);
+                }
+                finally
+                {
+                    NativeApi.FreeTable(ref table);
+                    NativeApi.Close(handle);
+                }
+            }
+            finally
+            {
+                File.Delete(path);
+            }
+        }
+
+        [Fact]
+        public void ParseTyped_Should_Compute_Time_And_Timestamp_As_Microseconds()
+        {
+            string path = Path.Combine(Path.GetTempPath(), $"excelreader-native-{Guid.NewGuid():N}.csv");
+            File.WriteAllText(path, "at,logged\n13:45:30,2024-01-15T13:45:30\n");
+            try
+            {
+                Assert.Equal(NativeStatus.Ok, OpenPath(path, NativeFormat.Csv, out NativeHandle? handle));
+                NativeColumnSpec[] specs =
+                [
+                    new() { Name = "at", Type = NativeColumnType.Time },
+                    new() { Name = "logged", Type = NativeColumnType.Timestamp },
+                ];
+                Assert.Equal(NativeStatus.Ok, NativeApi.ParseTyped(handle, specs, headerRow: 1, out NativeTable table));
+                try
+                {
+                    long[] time = new long[1];
+                    Marshal.Copy(ColumnAt(table, 0).Values, time, 0, 1);
+                    Assert.Equal(new TimeOnly(13, 45, 30).ToTimeSpan().Ticks / 10, time[0]);
+
+                    long[] timestamp = new long[1];
+                    Marshal.Copy(ColumnAt(table, 1).Values, timestamp, 0, 1);
+                    DateTime expected = new(2024, 1, 15, 13, 45, 30, DateTimeKind.Unspecified);
+                    Assert.Equal((expected - DateTime.UnixEpoch).Ticks / 10, timestamp[0]);
+                }
+                finally
+                {
+                    NativeApi.FreeTable(ref table);
+                    NativeApi.Close(handle);
+                }
+            }
+            finally
+            {
+                File.Delete(path);
+            }
+        }
+
+        [Fact]
+        public void ParseTyped_Should_Mark_Failed_Nullable_Conversions_In_The_Validity_Bitmap()
+        {
+            string path = Path.Combine(Path.GetTempPath(), $"excelreader-native-{Guid.NewGuid():N}.csv");
+            File.WriteAllText(path, "qty\n5\n\nnotanumber\n");
+            try
+            {
+                Assert.Equal(NativeStatus.Ok, OpenPath(path, NativeFormat.Csv, out NativeHandle? handle));
+                NativeColumnSpec[] specs = [new() { Name = "qty", Type = NativeColumnType.Int64, Nullable = true }];
+                Assert.Equal(NativeStatus.Ok, NativeApi.ParseTyped(handle, specs, headerRow: 1, out NativeTable table));
+                try
+                {
+                    NativeColumn column = ColumnAt(table, 0);
+                    Assert.NotEqual(IntPtr.Zero, column.Validity);
+                    Assert.Equal([true, false, false], DecodeValidity(column));
+
+                    long[] values = new long[3];
+                    Marshal.Copy(column.Values, values, 0, 3);
+                    Assert.Equal(5L, values[0]);
+                }
+                finally
+                {
+                    NativeApi.FreeTable(ref table);
+                    NativeApi.Close(handle);
+                }
+            }
+            finally
+            {
+                File.Delete(path);
+            }
+        }
+
+        [Fact]
+        public void ParseTyped_Should_Fail_For_A_Non_Nullable_Conversion_Failure()
+        {
+            string path = Path.Combine(Path.GetTempPath(), $"excelreader-native-{Guid.NewGuid():N}.csv");
+            File.WriteAllText(path, "qty\n5\nnotanumber\n");
+            try
+            {
+                Assert.Equal(NativeStatus.Ok, OpenPath(path, NativeFormat.Csv, out NativeHandle? handle));
+                NativeColumnSpec[] specs = [new() { Name = "qty", Type = NativeColumnType.Int64, Nullable = false }];
+
+                int status = NativeApi.ParseTyped(handle, specs, headerRow: 1, out NativeTable table);
+
+                Assert.Equal(NativeStatus.Error, status);
+                Assert.Equal(IntPtr.Zero, table.Columns);
+                Span<byte> buffer = stackalloc byte[256];
+                Assert.Equal(NativeStatus.Ok, NativeApi.LastError(buffer, out int length));
+                Assert.True(length > 0);
+                NativeApi.Close(handle);
+            }
+            finally
+            {
+                File.Delete(path);
+            }
+        }
+
+        [Fact]
+        public void ParseTyped_Should_Reject_A_Name_Based_Spec_When_Header_Row_Is_Zero()
+        {
+            Assert.Equal(NativeStatus.Ok, OpenPath(XlsxFixture, NativeFormat.Auto, out NativeHandle? handle));
+            try
+            {
+                NativeColumnSpec[] specs = [new() { Name = "anything", Type = NativeColumnType.String }];
+                Assert.Equal(NativeStatus.InvalidArgument, NativeApi.ParseTyped(handle, specs, headerRow: 0, out NativeTable table));
+                Assert.Equal(IntPtr.Zero, table.Columns);
+            }
+            finally
+            {
+                NativeApi.Close(handle);
+            }
+        }
+
+        [Fact]
+        public void ParseTyped_Should_Reject_An_Unmatched_Header_Name()
+        {
+            string path = Path.Combine(Path.GetTempPath(), $"excelreader-native-{Guid.NewGuid():N}.csv");
+            File.WriteAllText(path, "name,qty\nwidget,3\n");
+            try
+            {
+                Assert.Equal(NativeStatus.Ok, OpenPath(path, NativeFormat.Csv, out NativeHandle? handle));
+                NativeColumnSpec[] specs = [new() { Name = "does-not-exist", Type = NativeColumnType.String }];
+
+                int status = NativeApi.ParseTyped(handle, specs, headerRow: 1, out NativeTable table);
+
+                Assert.Equal(NativeStatus.InvalidArgument, status);
+                Assert.Equal(IntPtr.Zero, table.Columns);
+                NativeApi.Close(handle);
+            }
+            finally
+            {
+                File.Delete(path);
+            }
+        }
+
+        [Fact]
+        public void ParseTyped_Should_Reject_Zero_Specs()
+        {
+            Assert.Equal(NativeStatus.Ok, OpenPath(XlsxFixture, NativeFormat.Auto, out NativeHandle? handle));
+            try
+            {
+                Assert.Equal(NativeStatus.InvalidArgument, NativeApi.ParseTyped(handle, [], headerRow: 1, out NativeTable table));
+                Assert.Equal(IntPtr.Zero, table.Columns);
+            }
+            finally
+            {
+                NativeApi.Close(handle);
+            }
+        }
+
+        [Fact]
+        public void ParseTyped_Should_Reject_A_Null_Handle()
+        {
+            NativeColumnSpec[] specs = [new() { Index = 0, Type = NativeColumnType.String }];
+            Assert.Equal(NativeStatus.InvalidHandle, NativeApi.ParseTyped(null, specs, headerRow: 1, out _));
+        }
+
+        [Fact]
+        public void ParseTyped_Should_Not_Disturb_The_Row_Cursor()
+        {
+            string path = Path.Combine(Path.GetTempPath(), $"excelreader-native-{Guid.NewGuid():N}.csv");
+            File.WriteAllText(path, "name\nfirst\nsecond\n");
+            try
+            {
+                Assert.Equal(NativeStatus.Ok, OpenPath(path, NativeFormat.Csv, out NativeHandle? handle));
+                try
+                {
+                    Assert.Equal(NativeStatus.Ok, NativeApi.NextRow(handle, new byte[4096], out _)); // header
+
+                    NativeColumnSpec[] specs = [new() { Name = "name", Type = NativeColumnType.String }];
+                    Assert.Equal(NativeStatus.Ok, NativeApi.ParseTyped(handle, specs, headerRow: 1, out NativeTable table));
+                    NativeApi.FreeTable(ref table);
+
+                    // ParseTyped reads the WHOLE sheet through its own independent enumerator - the
+                    // xl_next_row cursor above must still be sitting right after the header row.
+                    byte[] buffer = new byte[4096];
+                    Assert.Equal(NativeStatus.Ok, NativeApi.NextRow(handle, buffer, out int written));
+                    Assert.Equal("first", DecodeRow(buffer.AsSpan(0, written))[0].Value);
+                }
+                finally
+                {
+                    NativeApi.Close(handle);
+                }
+            }
+            finally
+            {
+                File.Delete(path);
+            }
+        }
+
+        [Fact]
+        public void FreeTable_Should_Be_Idempotent_On_A_Zeroed_Table()
+        {
+            NativeTable table = default;
+            NativeApi.FreeTable(ref table);
+            NativeApi.FreeTable(ref table);
+            Assert.Equal(IntPtr.Zero, table.Columns);
         }
 
         // NativeHandle's constructor is internal; this project has InternalsVisibleTo access to it, so

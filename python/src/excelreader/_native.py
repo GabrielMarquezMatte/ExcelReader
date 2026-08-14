@@ -28,6 +28,23 @@ XL_FORMAT_XLSX = 2
 XL_FORMAT_XLSB = 3
 XL_FORMAT_CSV = 4
 
+# Every boolean-shaped NativeOpenOptions field uses one of these three states, never a plain 0/1 -
+# several of them default to true, so a bare 0 would be ambiguous between "off" and "use the library
+# default". Mirrors XL_OPT_* in include/excelreader.h.
+XL_OPT_DEFAULT = 0
+XL_OPT_FALSE = 1
+XL_OPT_TRUE = 2
+
+# xl_column_spec.type / xl_column.type. Mirrors XL_T_* in include/excelreader.h.
+XL_T_STRING = 0
+XL_T_I64 = 1
+XL_T_F64 = 2
+XL_T_BOOL = 3
+XL_T_DATE = 4
+XL_T_TIME = 5
+XL_T_TIMESTAMP = 6
+
+
 class NativeRowCell(ctypes.Structure):
     _fields_ = [
         ("column", ctypes.c_int32),
@@ -44,11 +61,85 @@ class NativeRow(ctypes.Structure):
     ]
 
 
+class NativeColumnSpec(ctypes.Structure):
+    """Mirrors xl_column_spec. `name`/`name_len` may be left NULL/0 to resolve by `index` instead."""
+
+    _fields_ = [
+        ("name", ctypes.c_char_p),
+        ("name_len", ctypes.c_int32),
+        ("index", ctypes.c_int32),
+        ("type", ctypes.c_int32),
+        ("nullable", ctypes.c_int32),
+    ]
+
+
+def column_spec_by_name(name: str, type_: int, *, nullable: bool = False) -> NativeColumnSpec:
+    encoded = name.encode("utf-8")
+    return NativeColumnSpec(name=encoded, name_len=len(encoded), index=0, type=type_, nullable=int(nullable))
+
+
+def column_spec_by_index(index: int, type_: int, *, nullable: bool = False) -> NativeColumnSpec:
+    return NativeColumnSpec(name=None, name_len=0, index=index, type=type_, nullable=int(nullable))
+
+
+class NativeColumn(ctypes.Structure):
+    """Mirrors xl_column. `data`/`data_len` are only meaningful for XL_T_STRING columns; `values` is
+    always the ONE allocation this column owns directly (see xl_column's doc comment in the header —
+    `data` is an interior pointer into `values` for strings, never a separate allocation)."""
+
+    _fields_ = [
+        ("type", ctypes.c_int32),
+        ("length", ctypes.c_int64),
+        ("values", ctypes.c_void_p),
+        ("validity", ctypes.POINTER(ctypes.c_uint8)),
+        ("data", ctypes.POINTER(ctypes.c_uint8)),
+        ("data_len", ctypes.c_int64),
+    ]
+
+
+class NativeTable(ctypes.Structure):
+    _fields_ = [
+        ("column_count", ctypes.c_int32),
+        ("row_count", ctypes.c_int64),
+        ("columns", ctypes.POINTER(NativeColumn)),
+    ]
+
+
 class NativeRows(ctypes.Structure):
     _fields_ = [
         ("row_count", ctypes.c_int32),
         ("rows", ctypes.POINTER(NativeRow)),
     ]
+
+
+class NativeOpenOptions(ctypes.Structure):
+    """Mirrors xl_open_options. `struct_size` is set for you by `default_open_options()`; every other
+    numeric field is 0 (use the library default), and every XL_OPT_* field starts at XL_OPT_DEFAULT."""
+
+    _fields_ = [
+        ("struct_size", ctypes.c_int32),
+        ("csv_sniff_dialect", ctypes.c_int32),
+        ("csv_delimiter", ctypes.c_int32),
+        ("csv_quote", ctypes.c_int32),
+        ("csv_detect_bom", ctypes.c_int32),
+        ("csv_max_cell_bytes", ctypes.c_int32),
+        ("csv_intern_strings", ctypes.c_int32),
+        ("max_total_decompressed_bytes", ctypes.c_int64),
+        ("max_cell_bytes", ctypes.c_int32),
+        ("max_shared_string_bytes", ctypes.c_int64),
+        ("max_zip_entries", ctypes.c_int32),
+        ("prefetch_decompression", ctypes.c_int32),
+        ("intern_strings", ctypes.c_int32),
+    ]
+
+
+def default_open_options() -> NativeOpenOptions:
+    """A NativeOpenOptions with every field at its "use the library default" value and struct_size
+    filled in — start from this rather than constructing NativeOpenOptions() directly, since the raw
+    zero-value for struct_size is never valid."""
+    options = NativeOpenOptions()
+    options.struct_size = ctypes.sizeof(NativeOpenOptions)
+    return options
 
 
 _LIB_NAMES = {
@@ -99,10 +190,16 @@ def _bind(lib: ctypes.CDLL) -> ctypes.CDLL:
     pp_void = ctypes.POINTER(ctypes.c_void_p)
     p_bytes = ctypes.c_char_p
 
+    p_open_options = ctypes.POINTER(NativeOpenOptions)
+
     lib.xl_open_file.argtypes = [p_bytes, c_int, c_int, pp_void]
     lib.xl_open_file.restype = c_int
+    lib.xl_open_file_ex.argtypes = [p_bytes, c_int, c_int, p_open_options, pp_void]
+    lib.xl_open_file_ex.restype = c_int
     lib.xl_open_memory.argtypes = [p_bytes, c_int, c_int, pp_void]
     lib.xl_open_memory.restype = c_int
+    lib.xl_open_memory_ex.argtypes = [p_bytes, c_int, c_int, p_open_options, pp_void]
+    lib.xl_open_memory_ex.restype = c_int
     lib.xl_close.argtypes = [p_void]
     lib.xl_close.restype = c_int
     lib.xl_sheet_count.argtypes = [p_void, p_int]
@@ -135,6 +232,10 @@ def _bind(lib: ctypes.CDLL) -> ctypes.CDLL:
     lib.xl_read_all_decoded.restype = c_int
     lib.xl_free_rows.argtypes = [ctypes.POINTER(NativeRows)]
     lib.xl_free_rows.restype = None
+    lib.xl_parse_typed.argtypes = [p_void, ctypes.POINTER(NativeColumnSpec), c_int, c_int, ctypes.POINTER(NativeTable)]
+    lib.xl_parse_typed.restype = c_int
+    lib.xl_free_table.argtypes = [ctypes.POINTER(NativeTable)]
+    lib.xl_free_table.restype = None
     lib.xl_abi_version.argtypes = []
     lib.xl_abi_version.restype = c_int
     return lib
