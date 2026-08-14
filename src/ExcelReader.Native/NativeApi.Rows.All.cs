@@ -30,6 +30,10 @@ namespace ExcelReader.Native
                     }
                     if (status != NativeStatus.Ok)
                     {
+                        // A real decode error mid-loop is a normal return, not a thrown exception —
+                        // the catch block below won't run, so every row already decoded must be
+                        // freed right here or it leaks.
+                        FreeAll(decoded);
                         return status;
                     }
                     decoded.Add(row);
@@ -53,14 +57,21 @@ namespace ExcelReader.Native
             catch (Exception exception)
             {
                 // Free whatever rows were already decoded before the failure — nothing leaks.
-                foreach (ref readonly var row in CollectionsMarshal.AsSpan(decoded))
+                FreeAll(decoded);
+                SetLastError(exception.Message);
+                rows = default;
+                return NativeStatus.Error;
+            }
+
+            // Shared by both the mid-loop non-Ok/non-Eof return and the catch above, so the "free
+            // everything decoded so far" behavior can't drift between the two paths.
+            static void FreeAll(List<NativeRow> rowsToFree)
+            {
+                foreach (ref readonly NativeRow row in CollectionsMarshal.AsSpan(rowsToFree))
                 {
                     NativeRow toFree = row;
                     FreeRow(ref toFree);
                 }
-                SetLastError(exception.Message);
-                rows = default;
-                return NativeStatus.Error;
             }
         }
 
