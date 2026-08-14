@@ -143,3 +143,19 @@ def test_as_date_returns_none_for_non_date_cells(xlsx_path):
         first_data_row = next(rows)
 
     assert first_data_row[0].as_date() is None
+
+
+def test_read_all_matches_row_by_row_iteration(xlsx_path):
+    with open_workbook(xlsx_path) as workbook:
+        all_rows = list(workbook.rows())
+
+    with open_workbook(xlsx_path) as workbook:
+        bulk_rows = workbook.read_all()
+
+    assert bulk_rows == all_rows
+
+
+def test_read_all_returns_empty_list_at_end_of_sheet(xlsx_path):
+    with open_workbook(xlsx_path) as workbook:
+        workbook.read_all()  # drain the sheet
+        assert workbook.read_all() == []

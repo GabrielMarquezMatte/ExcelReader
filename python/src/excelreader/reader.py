@@ -114,6 +114,16 @@ class Workbook:
             _check(status)
             yield _decode_row(buffer.raw, written.value)
 
+    def read_all(self) -> list[list[Cell]]:
+        """Materializes every remaining row of the current sheet in one native call."""
+        handle = self._require_handle()
+        rows = _native.NativeRows()
+        _check(self._lib.xl_read_all_decoded(handle, ctypes.byref(rows)))
+        try:
+            return [_decode_native_row(rows.rows[index]) for index in range(rows.row_count)]
+        finally:
+            self._lib.xl_free_rows(ctypes.byref(rows))
+
     def close(self) -> None:
         if self._handle is None:
             return
@@ -150,6 +160,15 @@ def _decode_row(blob: bytes, length: int) -> list[Cell]:
         cells.append(Cell(column=column, type=CellType(cell_type), value=value))
     if offset != length:
         raise ExcelReaderError(f"row blob is malformed: consumed {offset} of {length} bytes")
+    return cells
+
+
+def _decode_native_row(row: _native.NativeRow) -> list[Cell]:
+    cells: list[Cell] = []
+    for index in range(row.cell_count):
+        cell = row.cells[index]
+        value = ctypes.string_at(cell.value, cell.value_len).decode("utf-8")
+        cells.append(Cell(column=cell.column, type=CellType(cell.type), value=value))
     return cells
 
 
