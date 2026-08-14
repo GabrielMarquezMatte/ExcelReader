@@ -494,3 +494,6 @@ $RECYCLE.BIN/
 # Vim temporary swap files
 *.swp
 graphify-out
+
+# Native binary copied into the Python package by python/scripts/build_native.py
+python/src/excelreader/_lib/
