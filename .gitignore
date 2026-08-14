@@ -6,6 +6,9 @@
 # dotenv files
 .env
 
+# Git worktrees used for isolated feature work
+.worktrees/
+
 # User-specific files
 *.rsuser
 *.suo
