@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1786688970869,
+  "lastUpdate": 1786714544550,
   "repoUrl": "https://github.com/GabrielMarquezMatte/ExcelReader",
   "entries": {
     "Benchmark": [
@@ -14382,6 +14382,504 @@ window.BENCHMARK_DATA = {
             "value": 24422493.346875,
             "unit": "ns",
             "range": "± 40143.643830273875"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "gabrielandremarquez.matte@gmail.com",
+            "name": "Gabriel Matte",
+            "username": "GabrielMarquezMatte"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "860a049fce9c0f294fe8d7b55c0ca9ba119aa67e",
+          "message": "Merge pull request #80 from GabrielMarquezMatte/develop\n\nChanging python project name",
+          "timestamp": "2026-08-14T10:28:30-03:00",
+          "tree_id": "6c622a7cc1a786ddf4b28ac7998392650bb13368",
+          "url": "https://github.com/GabrielMarquezMatte/ExcelReader/commit/860a049fce9c0f294fe8d7b55c0ca9ba119aa67e"
+        },
+        "date": 1786714543527,
+        "tool": "benchmarkdotnet",
+        "benches": [
+          {
+            "name": "ExcelReader.Benchmarks.ColdStartBenchmark.TypedParseFirstUse(Rows: 200)",
+            "value": 40236160.875,
+            "unit": "ns",
+            "range": "± 672797.1554039028"
+          },
+          {
+            "name": "ExcelReader.Benchmarks.ColdStartBenchmark.RecordWriteFirstUse(Rows: 200)",
+            "value": 28035184.0625,
+            "unit": "ns",
+            "range": "± 1980324.3263206978"
+          },
+          {
+            "name": "ExcelReader.Benchmarks.ColdStartBenchmark.FluentParseFirstUse(Rows: 200)",
+            "value": 37137172.0625,
+            "unit": "ns",
+            "range": "± 596863.6221833224"
+          },
+          {
+            "name": "ExcelReader.Benchmarks.ColdStartBenchmark.FluentParseWithAttributeFallbackFirstUse(Rows: 200)",
+            "value": 44181259.1875,
+            "unit": "ns",
+            "range": "± 1158382.7303268535"
+          },
+          {
+            "name": "ExcelReader.Benchmarks.CsvParseBenchmark.ExcelParserSync(Rows: 50000)",
+            "value": 8870278.4578125,
+            "unit": "ns",
+            "range": "± 44598.46442306448"
+          },
+          {
+            "name": "ExcelReader.Benchmarks.CsvParseBenchmark.ExcelParserAsync(Rows: 50000)",
+            "value": 8864516.203125,
+            "unit": "ns",
+            "range": "± 51557.62917413553"
+          },
+          {
+            "name": "ExcelReader.Benchmarks.CsvParseBenchmark.Sep(Rows: 50000)",
+            "value": 14803027.559027778,
+            "unit": "ns",
+            "range": "± 26307.105842405283"
+          },
+          {
+            "name": "ExcelReader.Benchmarks.CsvParseBenchmark.Sylvan(Rows: 50000)",
+            "value": 19603323.8875,
+            "unit": "ns",
+            "range": "± 108049.77734811715"
+          },
+          {
+            "name": "ExcelReader.Benchmarks.CsvParseBenchmark.CsvHelperLib(Rows: 50000)",
+            "value": 35065713.17037037,
+            "unit": "ns",
+            "range": "± 134680.47626096476"
+          },
+          {
+            "name": "ExcelReader.Benchmarks.CsvReadBenchmark.ExcelReader(Rows: 50000)",
+            "value": 5814037.04296875,
+            "unit": "ns",
+            "range": "± 75312.74692783548"
+          },
+          {
+            "name": "ExcelReader.Benchmarks.CsvReadBenchmark.ExcelReaderWide(Rows: 50000)",
+            "value": 12852690.665625,
+            "unit": "ns",
+            "range": "± 37948.60203039952"
+          },
+          {
+            "name": "ExcelReader.Benchmarks.CsvReadBenchmark.ExcelReaderAsync(Rows: 50000)",
+            "value": 5468831.800347222,
+            "unit": "ns",
+            "range": "± 11264.014001543726"
+          },
+          {
+            "name": "ExcelReader.Benchmarks.CsvReadBenchmark.Sep(Rows: 50000)",
+            "value": 13687091.1859375,
+            "unit": "ns",
+            "range": "± 17022.822010620486"
+          },
+          {
+            "name": "ExcelReader.Benchmarks.CsvReadBenchmark.Sylvan(Rows: 50000)",
+            "value": 6652690.2625,
+            "unit": "ns",
+            "range": "± 17341.39413092429"
+          },
+          {
+            "name": "ExcelReader.Benchmarks.CsvReadBenchmark.CsvHelperLib(Rows: 50000)",
+            "value": 37863847.91428571,
+            "unit": "ns",
+            "range": "± 94919.01500085891"
+          },
+          {
+            "name": "ExcelReader.Benchmarks.CsvWriteBenchmark.ExcelReaderWriter(Rows: 50000)",
+            "value": 9539102.5046875,
+            "unit": "ns",
+            "range": "± 64128.564776306914"
+          },
+          {
+            "name": "ExcelReader.Benchmarks.CsvWriteBenchmark.Sep(Rows: 50000)",
+            "value": 9905070.2,
+            "unit": "ns",
+            "range": "± 124072.215921603"
+          },
+          {
+            "name": "ExcelReader.Benchmarks.CsvWriteBenchmark.SylvanWriter(Rows: 50000)",
+            "value": 10007900.06640625,
+            "unit": "ns",
+            "range": "± 22372.922273357977"
+          },
+          {
+            "name": "ExcelReader.Benchmarks.CsvWriteBenchmark.CsvHelperLib(Rows: 50000)",
+            "value": 22159716.82222222,
+            "unit": "ns",
+            "range": "± 67197.82262971341"
+          },
+          {
+            "name": "ExcelReader.Benchmarks.ParseBenchmark.ExcelParserSync(Rows: 50000)",
+            "value": 25200059.73828125,
+            "unit": "ns",
+            "range": "± 20234.65172717514"
+          },
+          {
+            "name": "ExcelReader.Benchmarks.ParseBenchmark.ExcelParserSyncSharedStrings(Rows: 50000)",
+            "value": 19097165.541666668,
+            "unit": "ns",
+            "range": "± 20629.44507349937"
+          },
+          {
+            "name": "ExcelReader.Benchmarks.ParseBenchmark.ExcelParserStructSync(Rows: 50000)",
+            "value": 21461179.666666668,
+            "unit": "ns",
+            "range": "± 23117.18146913997"
+          },
+          {
+            "name": "ExcelReader.Benchmarks.ParseBenchmark.RefParserParseNamedSync(Rows: 50000)",
+            "value": 19864654.194444444,
+            "unit": "ns",
+            "range": "± 53914.14272292607"
+          },
+          {
+            "name": "ExcelReader.Benchmarks.ParseBenchmark.ExcelParserAsync(Rows: 50000)",
+            "value": 23479264.82421875,
+            "unit": "ns",
+            "range": "± 15478.670395556212"
+          },
+          {
+            "name": "ExcelReader.Benchmarks.ParseBenchmark.ExcelParserXlsbSync(Rows: 50000)",
+            "value": 10898504.720486112,
+            "unit": "ns",
+            "range": "± 20836.25244138918"
+          },
+          {
+            "name": "ExcelReader.Benchmarks.ParseBenchmark.ExcelParserXlsbAsync(Rows: 50000)",
+            "value": 11276337.103125,
+            "unit": "ns",
+            "range": "± 31561.843624807632"
+          },
+          {
+            "name": "ExcelReader.Benchmarks.ParseBenchmark.MiniExcel(Rows: 50000)",
+            "value": 230875888.3,
+            "unit": "ns",
+            "range": "± 5257038.025870441"
+          },
+          {
+            "name": "ExcelReader.Benchmarks.ParseBenchmark.Sylvan(Rows: 50000)",
+            "value": 86262609.77777778,
+            "unit": "ns",
+            "range": "± 465714.2471029789"
+          },
+          {
+            "name": "ExcelReader.Benchmarks.ParseBenchmark.SylvanAsync(Rows: 50000)",
+            "value": 90900938,
+            "unit": "ns",
+            "range": "± 555997.1649508913"
+          },
+          {
+            "name": "ExcelReader.Benchmarks.ReadBenchmark.ExcelReader(Rows: 50000)",
+            "value": 16646693.725694444,
+            "unit": "ns",
+            "range": "± 20862.03814271183"
+          },
+          {
+            "name": "ExcelReader.Benchmarks.ReadBenchmark.ExcelReaderAsync(Rows: 50000)",
+            "value": 17336534.8875,
+            "unit": "ns",
+            "range": "± 71334.00262566023"
+          },
+          {
+            "name": "ExcelReader.Benchmarks.ReadBenchmark.ExcelReaderXlsb(Rows: 50000)",
+            "value": 6417483.815625,
+            "unit": "ns",
+            "range": "± 10817.301495612894"
+          },
+          {
+            "name": "ExcelReader.Benchmarks.ReadBenchmark.ExcelReaderXlsbAsync(Rows: 50000)",
+            "value": 6735901.06171875,
+            "unit": "ns",
+            "range": "± 13888.178608622578"
+          },
+          {
+            "name": "ExcelReader.Benchmarks.ReadBenchmark.ExcelReaderMaterialized(Rows: 50000)",
+            "value": 19554790.46875,
+            "unit": "ns",
+            "range": "± 38631.22833396204"
+          },
+          {
+            "name": "ExcelReader.Benchmarks.ReadBenchmark.MiniExcel(Rows: 50000)",
+            "value": 230505634.81481484,
+            "unit": "ns",
+            "range": "± 1007415.1709431413"
+          },
+          {
+            "name": "ExcelReader.Benchmarks.ReadBenchmark.Sylvan(Rows: 50000)",
+            "value": 56820209.345679015,
+            "unit": "ns",
+            "range": "± 94701.71573286387"
+          },
+          {
+            "name": "ExcelReader.Benchmarks.RealDataReadBenchmark.Xlsx_ExcelReader",
+            "value": 99956259.62962963,
+            "unit": "ns",
+            "range": "± 483564.1615749783"
+          },
+          {
+            "name": "ExcelReader.Benchmarks.RealDataReadBenchmark.Xlsx_Sylvan",
+            "value": 322292331.9,
+            "unit": "ns",
+            "range": "± 1707150.4322981355"
+          },
+          {
+            "name": "ExcelReader.Benchmarks.RealDataReadBenchmark.Xlsx_ExcelReader_Materialized",
+            "value": 96662053.56666666,
+            "unit": "ns",
+            "range": "± 146780.41698841073"
+          },
+          {
+            "name": "ExcelReader.Benchmarks.RealDataReadBenchmark.Xlsx_ExcelReader_Prefetch",
+            "value": 71307055.4,
+            "unit": "ns",
+            "range": "± 2620659.2566394564"
+          },
+          {
+            "name": "ExcelReader.Benchmarks.RealDataReadBenchmark.Xlsx_ExcelReader_Memory",
+            "value": 93457459.44444446,
+            "unit": "ns",
+            "range": "± 279788.24294039636"
+          },
+          {
+            "name": "ExcelReader.Benchmarks.RealDataReadBenchmark.Xlsx_ExcelReader_Memory_Prefetch",
+            "value": 71498682.15,
+            "unit": "ns",
+            "range": "± 2429742.9180166"
+          },
+          {
+            "name": "ExcelReader.Benchmarks.RealDataReadBenchmark.Xlsm_ExcelReader",
+            "value": 96261334.25,
+            "unit": "ns",
+            "range": "± 137732.31152831845"
+          },
+          {
+            "name": "ExcelReader.Benchmarks.RealDataReadBenchmark.Xlsm_Sylvan",
+            "value": 310931333.6875,
+            "unit": "ns",
+            "range": "± 538013.1961466412"
+          },
+          {
+            "name": "ExcelReader.Benchmarks.RealDataReadBenchmark.Xlsm_ExcelReader_Materialized",
+            "value": 95937541.97916666,
+            "unit": "ns",
+            "range": "± 100818.84250143163"
+          },
+          {
+            "name": "ExcelReader.Benchmarks.RealDataReadBenchmark.Xlsm_ExcelReader_Prefetch",
+            "value": 68890440.015625,
+            "unit": "ns",
+            "range": "± 1411593.6194813875"
+          },
+          {
+            "name": "ExcelReader.Benchmarks.RealDataReadBenchmark.Xlsm_ExcelReader_Memory",
+            "value": 97584560.78333333,
+            "unit": "ns",
+            "range": "± 361537.1444080916"
+          },
+          {
+            "name": "ExcelReader.Benchmarks.RealDataReadBenchmark.Xlsm_ExcelReader_Memory_Prefetch",
+            "value": 69785910.55,
+            "unit": "ns",
+            "range": "± 2819834.7429420818"
+          },
+          {
+            "name": "ExcelReader.Benchmarks.RealDataReadBenchmark.Xlsb_ExcelReader",
+            "value": 33746870.970370375,
+            "unit": "ns",
+            "range": "± 80932.31572931955"
+          },
+          {
+            "name": "ExcelReader.Benchmarks.RealDataReadBenchmark.Xlsb_Sylvan",
+            "value": 44654030.28333334,
+            "unit": "ns",
+            "range": "± 346268.1466839799"
+          },
+          {
+            "name": "ExcelReader.Benchmarks.RealDataReadBenchmark.Xlsb_ExcelReader_Materialized",
+            "value": 36440015.12857143,
+            "unit": "ns",
+            "range": "± 48860.740294257484"
+          },
+          {
+            "name": "ExcelReader.Benchmarks.RealDataReadBenchmark.Xlsb_ExcelReader_Prefetch",
+            "value": 20126878.890625,
+            "unit": "ns",
+            "range": "± 496839.68359942274"
+          },
+          {
+            "name": "ExcelReader.Benchmarks.RealDataReadBenchmark.Xlsb_ExcelReader_Memory",
+            "value": 33727883.66666667,
+            "unit": "ns",
+            "range": "± 41437.61878197044"
+          },
+          {
+            "name": "ExcelReader.Benchmarks.RealDataReadBenchmark.Xlsb_ExcelReader_Memory_Prefetch",
+            "value": 20686126.515625,
+            "unit": "ns",
+            "range": "± 318720.42266399966"
+          },
+          {
+            "name": "ExcelReader.Benchmarks.RealDataReadBenchmark.Xls_ExcelReader",
+            "value": 20665347.045138888,
+            "unit": "ns",
+            "range": "± 50757.01829454101"
+          },
+          {
+            "name": "ExcelReader.Benchmarks.RealDataReadBenchmark.Xls_Sylvan",
+            "value": 27102653.846875,
+            "unit": "ns",
+            "range": "± 95847.11126007244"
+          },
+          {
+            "name": "ExcelReader.Benchmarks.RealDataReadBenchmark.Xls_ExcelReader_Materialized",
+            "value": 23173555.209375,
+            "unit": "ns",
+            "range": "± 59121.31074175308"
+          },
+          {
+            "name": "ExcelReader.Benchmarks.RealDataReadBenchmark.Xls_ExcelReader_Memory",
+            "value": 15549963.771484375,
+            "unit": "ns",
+            "range": "± 8910.42037491322"
+          },
+          {
+            "name": "ExcelReader.Benchmarks.RealDataReadBenchmark.Csv_ExcelReader",
+            "value": 8260647.54375,
+            "unit": "ns",
+            "range": "± 18519.622448051425"
+          },
+          {
+            "name": "ExcelReader.Benchmarks.RealDataReadBenchmark.Csv_Sylvan",
+            "value": 16767520.3,
+            "unit": "ns",
+            "range": "± 161326.3095290897"
+          },
+          {
+            "name": "ExcelReader.Benchmarks.RealDataReadBenchmark.Csv_ExcelReader_Materialized",
+            "value": 30836769.6875,
+            "unit": "ns",
+            "range": "± 185809.7497441496"
+          },
+          {
+            "name": "ExcelReader.Benchmarks.RealDataReadBenchmark.Csv_ExcelReader_Memory",
+            "value": 8034851.556640625,
+            "unit": "ns",
+            "range": "± 9852.314293273936"
+          },
+          {
+            "name": "ExcelReader.Benchmarks.RecordWriteBenchmark.Xlsx(Rows: 50000)",
+            "value": 25689429.868055556,
+            "unit": "ns",
+            "range": "± 20142.578866714193"
+          },
+          {
+            "name": "ExcelReader.Benchmarks.RecordWriteBenchmark.Xlsb(Rows: 50000)",
+            "value": 10133473.084375,
+            "unit": "ns",
+            "range": "± 162866.69099681664"
+          },
+          {
+            "name": "ExcelReader.Benchmarks.RecordWriteBenchmark.Xls(Rows: 50000)",
+            "value": 6402137.459375,
+            "unit": "ns",
+            "range": "± 64644.06390999016"
+          },
+          {
+            "name": "ExcelReader.Benchmarks.RecordWriteBenchmark.Csv(Rows: 50000)",
+            "value": 10526321.2375,
+            "unit": "ns",
+            "range": "± 161109.0581657242"
+          },
+          {
+            "name": "ExcelReader.Benchmarks.WriteBenchmark.ExcelReaderWriter(Rows: 50000)",
+            "value": 22413000.871875,
+            "unit": "ns",
+            "range": "± 174362.66867194368"
+          },
+          {
+            "name": "ExcelReader.Benchmarks.WriteBenchmark.ExcelReaderWriterSharedStrings(Rows: 50000)",
+            "value": 22358190.55859375,
+            "unit": "ns",
+            "range": "± 29666.228062162318"
+          },
+          {
+            "name": "ExcelReader.Benchmarks.WriteBenchmark.ExcelReaderWriterPrefetch(Rows: 50000)",
+            "value": 21596825.760416668,
+            "unit": "ns",
+            "range": "± 609003.0726039751"
+          },
+          {
+            "name": "ExcelReader.Benchmarks.WriteBenchmark.ExcelReaderXlsbWriter(Rows: 50000)",
+            "value": 9640214.5765625,
+            "unit": "ns",
+            "range": "± 110687.05587938412"
+          },
+          {
+            "name": "ExcelReader.Benchmarks.WriteBenchmark.ExcelReaderXlsbWriterSharedStrings(Rows: 50000)",
+            "value": 9426513.2359375,
+            "unit": "ns",
+            "range": "± 141939.65437275774"
+          },
+          {
+            "name": "ExcelReader.Benchmarks.WriteBenchmark.ExcelReaderXlsbWriterPrefetch(Rows: 50000)",
+            "value": 8459825.8625,
+            "unit": "ns",
+            "range": "± 172468.2264540438"
+          },
+          {
+            "name": "ExcelReader.Benchmarks.WriteBenchmark.MiniExcel(Rows: 50000)",
+            "value": 98800912.575,
+            "unit": "ns",
+            "range": "± 1210970.8835150348"
+          },
+          {
+            "name": "ExcelReader.Benchmarks.WriteBenchmark.SpreadCheetah(Rows: 50000)",
+            "value": 22042079.121527776,
+            "unit": "ns",
+            "range": "± 93234.98649459767"
+          },
+          {
+            "name": "ExcelReader.Benchmarks.XlsReadBenchmark.ExcelReader(Rows: 50000)",
+            "value": 5705765.903125,
+            "unit": "ns",
+            "range": "± 13493.511864021739"
+          },
+          {
+            "name": "ExcelReader.Benchmarks.XlsReadBenchmark.ExcelReaderAsync(Rows: 50000)",
+            "value": 5527886.88203125,
+            "unit": "ns",
+            "range": "± 19317.88302778623"
+          },
+          {
+            "name": "ExcelReader.Benchmarks.XlsReadBenchmark.Sylvan(Rows: 50000)",
+            "value": 8654277.828125,
+            "unit": "ns",
+            "range": "± 15180.490713757481"
+          },
+          {
+            "name": "ExcelReader.Benchmarks.XlsWriteBenchmark.XlsWriter(Rows: 50000)",
+            "value": 5767317.8234375,
+            "unit": "ns",
+            "range": "± 52280.55951237429"
+          },
+          {
+            "name": "ExcelReader.Benchmarks.XlsWriteBenchmark.XlsxWriter(Rows: 50000)",
+            "value": 22772698.833333332,
+            "unit": "ns",
+            "range": "± 82407.53968293338"
           }
         ]
       }
