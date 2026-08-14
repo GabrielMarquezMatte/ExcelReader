@@ -72,6 +72,10 @@ def _bind(lib: ctypes.CDLL) -> ctypes.CDLL:
     lib.xl_close.restype = c_int
     lib.xl_sheet_count.argtypes = [p_void, p_int]
     lib.xl_sheet_count.restype = c_int
+    # xl_sheet_name / xl_next_row / xl_last_error write INTO their buffer argument.
+    # Callers MUST pass ctypes.create_string_buffer(n), never a bytes literal — bytes
+    # objects are immutable/interned in CPython, and letting native code write into
+    # one is undefined behavior.
     lib.xl_sheet_name.argtypes = [p_void, p_bytes, c_int, p_int]
     lib.xl_sheet_name.restype = c_int
     lib.xl_move_to_sheet.argtypes = [p_void, c_int]
