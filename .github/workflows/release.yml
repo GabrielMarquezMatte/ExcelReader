@@ -171,10 +171,12 @@ jobs:
           path: dist/
           merge-multiple: true
 
-      - name: Build the sdist
-        run: |
-          pip install build
-          python -m build --sdist python/ --outdir dist/
+      # No sdist: this package has no pure-Python fallback path. _lib/ ships only a
+      # per-platform native binary that build_native.py produces at build time - a
+      # sdist built here would carry an empty _lib/ (just .gitkeep, since the real
+      # binary is gitignored) and would install "successfully" while being unusable
+      # at import time. Publishing wheels only means an unsupported platform/Python
+      # combination fails at install time instead.
 
       - name: Publish to PyPI (Trusted Publishing)
         uses: pypa/gh-action-pypi-publish@release/v1
