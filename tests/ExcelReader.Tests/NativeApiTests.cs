@@ -241,5 +241,130 @@ namespace ExcelReader.Tests
             Assert.Equal(NativeStatus.InvalidHandle, NativeApi.MoveToSheet(null, 0));
             Assert.Equal(NativeStatus.InvalidHandle, NativeApi.IsDate1904(null, out _));
         }
+
+        private sealed record DecodedCell(int Column, int Type, string Value);
+
+        private static List<DecodedCell> DecodeRow(ReadOnlySpan<byte> blob)
+        {
+            List<DecodedCell> cells = [];
+            int count = BitConverter.ToInt32(blob[..4]);
+            int offset = 4;
+            for (int i = 0; i < count; i++)
+            {
+                int column = BitConverter.ToInt32(blob[offset..]);
+                int type = BitConverter.ToInt32(blob[(offset + 4)..]);
+                int valueLength = BitConverter.ToInt32(blob[(offset + 8)..]);
+                offset += 12;
+                cells.Add(new DecodedCell(column, type, Encoding.UTF8.GetString(blob.Slice(offset, valueLength))));
+                offset += valueLength;
+            }
+
+            return cells;
+        }
+
+        [Fact]
+        public void NextRow_Should_Decode_A_Csv_Row_Exactly()
+        {
+            string path = Path.Combine(Path.GetTempPath(), $"excelreader-native-{Guid.NewGuid():N}.csv");
+            File.WriteAllText(path, "name,qty\nwidget,7\n");
+            Assert.Equal(NativeStatus.Ok, OpenPath(path, NativeFormat.Csv, out NativeHandle? handle));
+            try
+            {
+                byte[] buffer = new byte[4096];
+
+                Assert.Equal(NativeStatus.Ok, NativeApi.NextRow(handle, buffer, out int first));
+                List<DecodedCell> header = DecodeRow(buffer.AsSpan(0, first));
+                Assert.Equal(2, header.Count);
+                Assert.Equal(0, header[0].Column);
+                Assert.Equal("name", header[0].Value);
+                Assert.Equal(1, header[1].Column);
+                Assert.Equal("qty", header[1].Value);
+
+                Assert.Equal(NativeStatus.Ok, NativeApi.NextRow(handle, buffer, out int second));
+                List<DecodedCell> data = DecodeRow(buffer.AsSpan(0, second));
+                Assert.Equal("widget", data[0].Value);
+                Assert.Equal("7", data[1].Value);
+
+                Assert.Equal(NativeStatus.Eof, NativeApi.NextRow(handle, buffer, out _));
+            }
+            finally
+            {
+                NativeApi.Close(handle);
+                File.Delete(path);
+            }
+        }
+
+        [Fact]
+        public void NextRow_Should_Reserve_The_Row_When_The_Buffer_Is_Too_Small()
+        {
+            string path = Path.Combine(Path.GetTempPath(), $"excelreader-native-{Guid.NewGuid():N}.csv");
+            File.WriteAllText(path, "name,qty\n");
+            Assert.Equal(NativeStatus.Ok, OpenPath(path, NativeFormat.Csv, out NativeHandle? handle));
+            try
+            {
+                byte[] tiny = new byte[3];
+                Assert.Equal(NativeStatus.BufferTooSmall, NativeApi.NextRow(handle, tiny, out int required));
+                Assert.True(required > 3);
+
+                // The same row must come back — a caller that grows its buffer must not lose data.
+                byte[] big = new byte[required];
+                Assert.Equal(NativeStatus.Ok, NativeApi.NextRow(handle, big, out int written));
+                Assert.Equal(required, written);
+                Assert.Equal("name", DecodeRow(big.AsSpan(0, written))[0].Value);
+            }
+            finally
+            {
+                NativeApi.Close(handle);
+                File.Delete(path);
+            }
+        }
+
+        [Fact]
+        public void NextRow_Should_Read_Every_Row_Of_The_Xlsx_Fixture()
+        {
+            Assert.Equal(NativeStatus.Ok, OpenPath(XlsxFixture, NativeFormat.Auto, out NativeHandle? handle));
+            try
+            {
+                byte[] buffer = new byte[1 << 20];
+                int rows = 0;
+                while (NativeApi.NextRow(handle, buffer, out int written) == NativeStatus.Ok)
+                {
+                    Assert.True(written >= 4);
+                    rows++;
+                }
+
+                Assert.True(rows > 0);
+            }
+            finally
+            {
+                NativeApi.Close(handle);
+            }
+        }
+
+        [Fact]
+        public void NextRow_Should_Restart_After_MoveToSheet()
+        {
+            Assert.Equal(NativeStatus.Ok, OpenPath(XlsxFixture, NativeFormat.Auto, out NativeHandle? handle));
+            try
+            {
+                byte[] buffer = new byte[1 << 20];
+                Assert.Equal(NativeStatus.Ok, NativeApi.NextRow(handle, buffer, out int firstPass));
+
+                Assert.Equal(NativeStatus.Ok, NativeApi.MoveToSheet(handle, 0));
+
+                Assert.Equal(NativeStatus.Ok, NativeApi.NextRow(handle, buffer, out int secondPass));
+                Assert.Equal(firstPass, secondPass);
+            }
+            finally
+            {
+                NativeApi.Close(handle);
+            }
+        }
+
+        [Fact]
+        public void NextRow_Should_Reject_A_Null_Handle()
+        {
+            Assert.Equal(NativeStatus.InvalidHandle, NativeApi.NextRow(null, new byte[16], out _));
+        }
     }
 }
