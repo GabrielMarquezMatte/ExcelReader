@@ -108,9 +108,11 @@ int32_t xl_open_file_ex(const uint8_t* path, int32_t path_len, int32_t format,
 int32_t xl_open_memory_ex(const uint8_t* data, int32_t data_len, int32_t format,
                           const xl_open_options* options, xl_workbook** out_handle);
 
-/* A handle is valid until this call succeeds. Calling anything on a handle afterwards - including a
- * second xl_close on the same value - is undefined behavior; the caller must null its own copy of
- * the pointer immediately after a successful xl_close so it can never be reused or double-closed. */
+/* A handle is valid until this call succeeds. Once xl_close succeeds, the handle value is retired
+ * permanently: any later call with it (including a second xl_close on the same value) returns
+ * XL_INVALID_HANDLE, never undefined behavior. The caller should still null its own copy of the
+ * pointer immediately after a successful xl_close - good practice, just no longer load-bearing for
+ * memory safety. */
 int32_t xl_close(xl_workbook* handle);
 
 int32_t xl_sheet_count(xl_workbook* handle, int32_t* out_count);

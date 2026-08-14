@@ -1,39 +1,22 @@
-using System.Runtime.InteropServices;
 using System.Text;
 using ExcelReader.Native;
 
 namespace ExcelReader.Tests
 {
     /// <summary>
-    /// Exercises the raw GCHandle handling in <see cref="Exports"/> directly. The
-    /// [UnmanagedCallersOnly] entry points themselves cannot be called from managed code, but the
-    /// internal <c>Resolve</c>/<c>TryFree</c> helpers behind them can — this is where the stale-handle
-    /// bug lived (Exports.cs did GCHandle.FromIntPtr outside any try/catch, which crashes the process
-    /// on an invalid handle value instead of returning InvalidHandle).
+    /// Exercises <see cref="NativeHandleTable"/> through <see cref="Exports"/>'s <c>Resolve</c>/
+    /// <c>TryFree</c> helpers — the [UnmanagedCallersOnly] entry points themselves cannot be called
+    /// from managed code, but these internal helpers behind them can.
     /// </summary>
     /// <remarks>
-    /// <para>
-    /// Deliberately does NOT test a totally arbitrary bit-pattern handle (e.g. 0x12345678): that
-    /// reliably access-violates the whole test process rather than throwing a catchable
-    /// InvalidOperationException — GCHandle.FromIntPtr only validates cheaply for values that were
-    /// at least once a real handle (already-freed/reused), which is also the only realistic case an
-    /// ABI caller can produce by using a handle after xl_close. A value fabricated out of thin air is
-    /// undefined behavior by the C ABI's own contract (see excelreader.h) and is not defensible from
-    /// managed code.
-    /// </para>
-    /// <para>
-    /// Also deliberately does NOT drive <see cref="Exports.TryFree"/> with an already-freed handle
-    /// value under the real xUnit process: this test host is itself heavily GCHandle-churning (IPC
-    /// marshaling on background threads), so the exact freed slot can legitimately be handed back out
-    /// to some unrelated live object before the very next line runs. Reading that slot
-    /// (<see cref="Exports.Resolve"/>) is harmless either way, but <c>TryFree</c> would call
-    /// <c>GCHandle.Free()</c> on it — freeing a live object that belongs to something else entirely.
-    /// That reliably corrupted the process during development of this fix (unrelated fuzz tests
-    /// elsewhere in the suite started crashing with "Internal CLR error"). <c>TryFree</c>'s stale-path
-    /// is instead covered by symmetry: it wraps GCHandle.FromIntPtr/.Target/.Free() in the exact same
-    /// try/catch(InvalidOperationException) shape as <c>Resolve</c> (see Exports.cs), which this file
-    /// does verify end to end via the zero-handle and live-handle-round-trip cases below.
-    /// </para>
+    /// Handle values used to be raw GCHandle pointers, and GCHandle table slots are recycled — a
+    /// value could stop being invalid and silently start naming a different, live workbook after
+    /// enough churn. That made "does a double-close ever resolve the wrong object" untestable: the
+    /// real hazard could not be reproduced deterministically, and probing near it under the xUnit
+    /// test host (itself heavily GCHandle-churning) risked corrupting unrelated tests. Handle values
+    /// are now ids from a monotonic counter in <see cref="NativeHandleTable"/> that are never
+    /// reissued once retired, so the actual guarantee — a closed id stays invalid forever — is
+    /// directly, deterministically testable below.
     /// </remarks>
     public sealed class ExportsHandleSafetyTests
     {
@@ -46,41 +29,93 @@ namespace ExcelReader.Tests
         }
 
         [Fact]
-        public void Resolve_Should_Return_Null_Instead_Of_Throwing_For_An_Already_Freed_Handle()
+        public void Register_Then_Resolve_Should_Round_Trip_The_Same_Instance()
         {
-            // Read-only (no Free() call), so even in the rare case the process reuses this exact
-            // slot for something else before the check runs, this only ever reads a value — it
-            // cannot corrupt or free anyone else's object. That is what makes this scenario safe to
-            // retry, unlike the TryFree case documented on the class above: a real bug in the catch
-            // logic fails every attempt, a slot legitimately reused by unrelated concurrent activity
-            // clears on the next one.
-            bool sawNull = false;
-            for (int attempt = 0; attempt < 25 && !sawNull; attempt++)
-            {
-                nint stale = GCHandle.ToIntPtr(GCHandle.Alloc(new object()));
-                GCHandle.FromIntPtr(stale).Free();
+            NativeHandle handle = OpenRealHandle();
+            nint id = NativeHandleTable.Register(handle);
 
-                // Must not throw InvalidOperationException across what would be the ABI boundary.
-                sawNull = Exports.Resolve(stale) is null;
-            }
+            Assert.Same(handle, Exports.Resolve(id));
 
-            Assert.True(sawNull);
+            Assert.True(Exports.TryFree(id, out NativeHandle? freed));
+            NativeApi.Close(freed);
         }
 
         [Fact]
-        public void TryFree_Should_Free_And_Return_The_Target_For_A_Live_Handle()
+        public void TryFree_Should_Fail_The_Second_Time_On_The_Same_Id()
         {
-            // Mirrors what Exports.OpenFile actually does: open a real workbook, then wrap its
-            // NativeHandle in a GCHandle by hand so this test controls the raw pointer.
+            NativeHandle handle = OpenRealHandle();
+            nint id = NativeHandleTable.Register(handle);
+
+            Assert.True(Exports.TryFree(id, out NativeHandle? target));
+            NativeApi.Close(target);
+
+            // The double-close case: a second TryFree on the same id must fail cleanly, never
+            // resolve to (or free) some other, unrelated live handle.
+            Assert.False(Exports.TryFree(id, out NativeHandle? second));
+            Assert.Null(second);
+        }
+
+        [Fact]
+        public void Resolve_Should_Return_Null_For_A_Retired_Id_Even_After_Further_Registrations()
+        {
+            NativeHandle handle = OpenRealHandle();
+            nint retiredId = NativeHandleTable.Register(handle);
+            Assert.True(Exports.TryFree(retiredId, out NativeHandle? target));
+            NativeApi.Close(target);
+
+            for (int i = 0; i < 1000; i++)
+            {
+                NativeHandle other = OpenRealHandle();
+                nint otherId = NativeHandleTable.Register(other);
+
+                // The retired id must never be handed back out, and must never resolve again.
+                Assert.NotEqual(retiredId, otherId);
+                Assert.Null(Exports.Resolve(retiredId));
+
+                Assert.True(Exports.TryFree(otherId, out NativeHandle? freed));
+                NativeApi.Close(freed);
+            }
+        }
+
+        [Fact]
+        public void Concurrent_Register_Should_Produce_Distinct_Ids_And_Lose_None()
+        {
+            const int perThread = 200;
+            const int threadCount = 8;
+            var ids = new nint[threadCount][];
+            var handles = new NativeHandle[threadCount][];
+
+            Parallel.For(0, threadCount, threadIndex =>
+            {
+                ids[threadIndex] = new nint[perThread];
+                handles[threadIndex] = new NativeHandle[perThread];
+                for (int i = 0; i < perThread; i++)
+                {
+                    NativeHandle handle = OpenRealHandle();
+                    handles[threadIndex][i] = handle;
+                    ids[threadIndex][i] = NativeHandleTable.Register(handle);
+                }
+            });
+
+            var allIds = ids.SelectMany(x => x).ToArray();
+            Assert.Equal(threadCount * perThread, allIds.Distinct().Count());
+
+            for (int threadIndex = 0; threadIndex < threadCount; threadIndex++)
+            {
+                for (int i = 0; i < perThread; i++)
+                {
+                    Assert.Same(handles[threadIndex][i], Exports.Resolve(ids[threadIndex][i]));
+                    Assert.True(Exports.TryFree(ids[threadIndex][i], out NativeHandle? freed));
+                    NativeApi.Close(freed);
+                }
+            }
+        }
+
+        private static NativeHandle OpenRealHandle()
+        {
             Assert.Equal(NativeStatus.Ok, NativeApi.OpenFile(Encoding.UTF8.GetBytes(XlsxFixture), NativeFormat.Auto, out NativeHandle? handle));
             Assert.NotNull(handle);
-            nint pointer = GCHandle.ToIntPtr(GCHandle.Alloc(handle));
-
-            bool ok = Exports.TryFree(pointer, out NativeHandle? target);
-
-            Assert.True(ok);
-            Assert.Same(handle, target);
-            NativeApi.Close(target);
+            return handle;
         }
     }
 }
