@@ -23,6 +23,10 @@ dev = ["pytest>=7.0"]
 # optional on purpose: the package's whole selling point is a ctypes-only, interpreter-independent
 # wheel with no compiled Python extension of its own.
 numpy = ["numpy>=1.21"]
+# Optional: consumes xl_parse_arrow's Arrow C Data Interface export (see _native.py's ArrowSchema/
+# ArrowArray ctypes.Structure mirrors) via pyarrow.Array._import_from_c for a genuinely zero-copy
+# handoff into pyarrow/polars/duckdb. Not required to call xl_parse_arrow directly via ctypes.
+pyarrow = ["pyarrow>=14.0"]
 
 [project.urls]
 Homepage = "https://github.com/GabrielMarquezMatte/ExcelReader"

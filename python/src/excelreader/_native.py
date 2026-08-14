@@ -105,6 +105,48 @@ class NativeTable(ctypes.Structure):
     ]
 
 
+# Mirrors the Arrow C Data Interface's struct ArrowSchema/struct ArrowArray (see
+# excelreader_arrow.h) — a fixed, versioned ABI shared across every Arrow producer/consumer, not an
+# ExcelReader invention. Defined here (not left to pyarrow) so xl_parse_arrow is usable via plain
+# ctypes even without pyarrow installed; pyarrow.Array._import_from_c consumes the same layout for a
+# zero-copy handoff when it IS installed.
+class ArrowSchema(ctypes.Structure):
+    pass
+
+
+class ArrowArray(ctypes.Structure):
+    pass
+
+
+ArrowSchema._fields_ = [
+    ("format", ctypes.c_char_p),
+    ("name", ctypes.c_char_p),
+    ("metadata", ctypes.c_char_p),
+    ("flags", ctypes.c_int64),
+    ("n_children", ctypes.c_int64),
+    ("children", ctypes.POINTER(ctypes.POINTER(ArrowSchema))),
+    ("dictionary", ctypes.POINTER(ArrowSchema)),
+    ("release", ctypes.c_void_p),
+    ("private_data", ctypes.c_void_p),
+]
+
+ArrowArray._fields_ = [
+    ("length", ctypes.c_int64),
+    ("null_count", ctypes.c_int64),
+    ("offset", ctypes.c_int64),
+    ("n_buffers", ctypes.c_int64),
+    ("n_children", ctypes.c_int64),
+    ("buffers", ctypes.POINTER(ctypes.c_void_p)),
+    ("children", ctypes.POINTER(ctypes.POINTER(ArrowArray))),
+    ("dictionary", ctypes.POINTER(ArrowArray)),
+    ("release", ctypes.c_void_p),
+    ("private_data", ctypes.c_void_p),
+]
+
+# ARROW_FLAG_NULLABLE from the Arrow C Data Interface spec.
+ARROW_FLAG_NULLABLE = 2
+
+
 class NativeRows(ctypes.Structure):
     _fields_ = [
         ("row_count", ctypes.c_int32),
@@ -236,6 +278,8 @@ def _bind(lib: ctypes.CDLL) -> ctypes.CDLL:
     lib.xl_parse_typed.restype = c_int
     lib.xl_free_table.argtypes = [ctypes.POINTER(NativeTable)]
     lib.xl_free_table.restype = None
+    lib.xl_parse_arrow.argtypes = [p_void, ctypes.POINTER(NativeColumnSpec), c_int, c_int, ctypes.POINTER(ArrowArray), ctypes.POINTER(ArrowSchema)]
+    lib.xl_parse_arrow.restype = c_int
     lib.xl_abi_version.argtypes = []
     lib.xl_abi_version.restype = c_int
     return lib

@@ -38,6 +38,7 @@ def test_exported_functions_are_present():
         "xl_free_rows",
         "xl_parse_typed",
         "xl_free_table",
+        "xl_parse_arrow",
         "xl_last_error",
         "xl_last_error_ptr",
         "xl_abi_version",
@@ -161,6 +162,65 @@ def test_parse_typed_returns_typed_columns_by_name(tmp_path):
     assert names == ["widget", "gadget"]
 
     lib.xl_free_table(ctypes.byref(table))
+    lib.xl_close(handle)
+
+
+def test_parse_arrow_returns_a_struct_array_with_a_matching_schema(tmp_path):
+    # Exercises the ArrowSchema/ArrowArray ctypes.Structure layouts end-to-end against the real
+    # library — same rationale as test_open_file_ex_with_default_options_opens_like_open_file and
+    # test_parse_typed_returns_typed_columns_by_name: a layout mismatch here would surface as garbage
+    # values or a crash, not a clean assertion failure.
+    lib = _native.load_library()
+    csv_file = tmp_path / "typed.csv"
+    csv_file.write_text("name,qty\nwidget,3\ngadget,7\n", encoding="utf-8")
+    path = str(csv_file).encode("utf-8")
+    handle = ctypes.c_void_p()
+    assert lib.xl_open_file(path, len(path), _native.XL_FORMAT_CSV, ctypes.byref(handle)) == _native.XL_OK
+
+    specs = (_native.NativeColumnSpec * 2)(
+        _native.column_spec_by_name("name", _native.XL_T_STRING),
+        _native.column_spec_by_name("qty", _native.XL_T_I64),
+    )
+    array = _native.ArrowArray()
+    schema = _native.ArrowSchema()
+    status = lib.xl_parse_arrow(handle, specs, len(specs), 1, ctypes.byref(array), ctypes.byref(schema))
+    assert status == _native.XL_OK
+
+    assert schema.format == b"+s"
+    assert schema.n_children == 2
+    name_schema = schema.children[0].contents
+    qty_schema = schema.children[1].contents
+    assert name_schema.format == b"u"
+    assert name_schema.name == b"name"
+    assert qty_schema.format == b"l"
+
+    assert array.length == 2
+    assert array.n_children == 2
+    name_array = array.children[0].contents
+    qty_array = array.children[1].contents
+
+    offsets = ctypes.cast(qty_array.buffers[0], ctypes.c_void_p)  # qty has no nulls -> validity is NULL
+    assert not offsets.value
+    qty_values = ctypes.cast(qty_array.buffers[1], ctypes.POINTER(ctypes.c_int64))
+    assert [qty_values[i] for i in range(2)] == [3, 7]
+
+    name_offsets = ctypes.cast(name_array.buffers[1], ctypes.POINTER(ctypes.c_int32))
+    name_data = ctypes.string_at(name_array.buffers[2], name_offsets[2])
+    names = [name_data[name_offsets[i] : name_offsets[i + 1]].decode("utf-8") for i in range(2)]
+    assert names == ["widget", "gadget"]
+
+    # release() is a real native function pointer, callable from Python via ctypes just like any
+    # other Arrow consumer would — this is the actual consumer contract, not merely a symbol check.
+    array_release = ctypes.CFUNCTYPE(None, ctypes.POINTER(_native.ArrowArray))(array.release)
+    schema_release = ctypes.CFUNCTYPE(None, ctypes.POINTER(_native.ArrowSchema))(schema.release)
+    array_release(ctypes.byref(array))
+    schema_release(ctypes.byref(schema))
+    assert not array.release
+    assert not schema.release
+    # A second release must be a harmless no-op, matching every other xl_free_*'s idempotency.
+    array_release(ctypes.byref(array))
+    schema_release(ctypes.byref(schema))
+
     lib.xl_close(handle)
 
 
