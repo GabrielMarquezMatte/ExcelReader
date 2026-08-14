@@ -124,14 +124,22 @@ def test_dropping_a_workbook_without_close_still_releases_the_file(xlsx_path, tm
     copy_path.unlink()
 
 
-def test_excel_serial_dates_convert_with_the_documented_recipe(xlsx_path):
-    from datetime import date, timedelta
+def test_as_date_converts_the_serial_value(xlsx_path):
+    from datetime import date
 
     with open_workbook(xlsx_path) as workbook:
         rows = workbook.rows()
         next(rows)
         first_data_row = next(rows)
-        epoch = date(1904, 1, 1) if workbook.is_date1904 else date(1899, 12, 30)
+        date1904 = workbook.is_date1904
 
-    serial = int(float(first_data_row[1].value))
-    assert epoch + timedelta(days=serial) == date(2026, 1, 1)
+    assert first_data_row[1].as_date(date1904) == date(2026, 1, 1)
+
+
+def test_as_date_returns_none_for_non_date_cells(xlsx_path):
+    with open_workbook(xlsx_path) as workbook:
+        rows = workbook.rows()
+        next(rows)
+        first_data_row = next(rows)
+
+    assert first_data_row[0].as_date() is None
