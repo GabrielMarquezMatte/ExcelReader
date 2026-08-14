@@ -1,1 +1,6 @@
 #nullable enable
+ExcelReader.Core.Reader.CsvReader.SheetNameAt(int index) -> string!
+ExcelReader.Core.Reader.IExcelRowReader.SheetNameAt(int index) -> string!
+ExcelReader.Core.Reader.XlsReader.SheetNameAt(int index) -> string!
+ExcelReader.Core.Reader.XlsbReader.SheetNameAt(int index) -> string!
+ExcelReader.Core.Reader.XlsxReader.SheetNameAt(int index) -> string!

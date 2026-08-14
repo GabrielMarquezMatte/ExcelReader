@@ -9,6 +9,11 @@ namespace ExcelReader.Native
         internal const int InvalidHandle = -3;
         internal const int InvalidArgument = -4;
         internal const int Error = -5;
+
+        /// <summary>ABI revision returned by <c>xl_abi_version</c>. Mirrors XL_ABI_VERSION in include/excelreader.h.
+        /// Bump on any change to a struct layout, a status code, or the meaning of an existing function; adding a
+        /// new function does not bump it.</summary>
+        internal const int AbiVersion = 1;
     }
 
     /// <summary>

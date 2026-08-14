@@ -56,6 +56,30 @@ all_rows = workbook.read_all()
 
 This holds every row in memory at once, so prefer `rows()` for very large sheets.
 
+### Reading everything at once, faster
+
+`read_all()`/`rows()` build one `Cell`/`str` object per cell, which dominates wall-clock time on a
+large sheet. `read_all_columnar()` decodes the same data into parallel flat arrays instead — no
+per-cell object construction — and is several times faster on large sheets:
+
+```python
+sheet = workbook.read_all_columnar()
+# sheet.row_offsets[i]:row_offsets[i+1]  -> cell indices for row i
+# sheet.columns[j] / sheet.types[j]      -> cell j's column index / CellType
+# sheet.value_offsets[j]:[j+1]           -> cell j's byte slice into sheet.values
+```
+
+Materialize a single cell on demand instead of decoding every value up front:
+
+```python
+from excelreader import decode_cell
+
+first_cell = decode_cell(sheet, 0)
+```
+
+Each array is a stdlib `array.array('i')`, or a NumPy `int32` array if NumPy is installed
+(`pip install -e "python[numpy]"`) — NumPy is optional and never required.
+
 ### From memory
 
 ```python

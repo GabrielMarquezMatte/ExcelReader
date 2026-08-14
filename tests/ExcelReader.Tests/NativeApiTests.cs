@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Runtime.InteropServices;
 using System.Text;
 using ExcelReader.Core.Reader;
@@ -52,6 +53,82 @@ namespace ExcelReader.Tests
 
             Assert.Equal(NativeStatus.Ok, status);
             Assert.Equal(0, length);
+        }
+
+        [Fact]
+        public void LastErrorPtr_Should_Return_The_Stored_Message()
+        {
+            NativeApi.SetLastError("boom");
+
+            nint pointer = NativeApi.LastErrorPtr(out int length);
+
+            Assert.NotEqual(IntPtr.Zero, pointer);
+            Assert.Equal(4, length);
+            byte[] bytes = new byte[length];
+            Marshal.Copy(pointer, bytes, 0, length);
+            Assert.Equal("boom", Encoding.UTF8.GetString(bytes));
+        }
+
+        [Fact]
+        public void LastErrorPtr_Should_Return_Zero_Length_When_Cleared()
+        {
+            NativeApi.SetLastError("boom");
+            NativeApi.ClearLastError();
+
+            nint pointer = NativeApi.LastErrorPtr(out int length);
+
+            Assert.Equal(IntPtr.Zero, pointer);
+            Assert.Equal(0, length);
+        }
+
+        [Fact]
+        [SuppressMessage("Reliability", "S1215:GC.Collect should not be called",
+            Justification = "This test's entire purpose is to prove the pointer survives a forced gen2 collection — that is the property under test, not incidental cleanup.")]
+        public void LastErrorPtr_Should_Survive_A_Gen2_Collection()
+        {
+            // Catches an unpinned implementation: if the byte[] backing the pointer weren't allocated
+            // pinned, a blocking gen2 collection could relocate it and the pointer taken before the
+            // collection would now point at stale/reused memory.
+            NativeApi.SetLastError("boom");
+            nint pointer = NativeApi.LastErrorPtr(out int length);
+
+            GC.Collect(2, GCCollectionMode.Forced, blocking: true);
+            GC.WaitForPendingFinalizers();
+
+            byte[] bytes = new byte[length];
+            Marshal.Copy(pointer, bytes, 0, length);
+            Assert.Equal("boom", Encoding.UTF8.GetString(bytes));
+        }
+
+        [Fact]
+        public void LastErrorPtr_Should_Be_Thread_Local()
+        {
+            nint[] pointers = new nint[2];
+            int[] lengths = new int[2];
+
+            var first = new Thread(() =>
+            {
+                NativeApi.SetLastError("thread-one");
+                pointers[0] = NativeApi.LastErrorPtr(out lengths[0]);
+            });
+            var second = new Thread(() =>
+            {
+                NativeApi.SetLastError("thread-two-error");
+                pointers[1] = NativeApi.LastErrorPtr(out lengths[1]);
+            });
+
+            first.Start();
+            first.Join();
+            second.Start();
+            second.Join();
+
+            byte[] firstBytes = new byte[lengths[0]];
+            Marshal.Copy(pointers[0], firstBytes, 0, lengths[0]);
+            byte[] secondBytes = new byte[lengths[1]];
+            Marshal.Copy(pointers[1], secondBytes, 0, lengths[1]);
+
+            Assert.Equal("thread-one", Encoding.UTF8.GetString(firstBytes));
+            Assert.Equal("thread-two-error", Encoding.UTF8.GetString(secondBytes));
         }
 
         [Theory]
@@ -221,6 +298,97 @@ namespace ExcelReader.Tests
         }
 
         [Fact]
+        public void SheetNameAt_Should_Return_Each_Name_Without_Moving_The_Cursor()
+        {
+            using MemoryStream ms = WorkbookBuilder.BuildMultiSheet(
+            [
+                ("First", """<row r="1"><c r="A1"><v>1</v></c></row><row r="2"><c r="A2"><v>2</v></c></row>"""),
+                ("Second", """<row r="1"><c r="A1"><v>10</v></c></row>"""),
+            ]);
+            Assert.Equal(NativeStatus.Ok, NativeApi.OpenMemory(ms.ToArray(), NativeFormat.Xlsx, out NativeHandle? handle));
+            try
+            {
+                // Read the first row of sheet 0 before listing names, then confirm the second row of the
+                // SAME sheet still comes back afterward — SheetNameAt must not move the cursor or the
+                // current sheet, unlike xl_move_to_sheet.
+                Assert.Equal(NativeStatus.Ok, NativeApi.NextRow(handle, new byte[4096], out _));
+
+                Span<byte> buffer = stackalloc byte[64];
+                Assert.Equal(NativeStatus.Ok, NativeApi.SheetNameAt(handle, 0, buffer, out int firstLength));
+                Assert.Equal("First", Encoding.UTF8.GetString(buffer[..firstLength]));
+                Assert.Equal(NativeStatus.Ok, NativeApi.SheetNameAt(handle, 1, buffer, out int secondLength));
+                Assert.Equal("Second", Encoding.UTF8.GetString(buffer[..secondLength]));
+
+                // The current sheet is still 0, and its second row is still next — SheetNameAt must not
+                // have reset row enumeration the way xl_move_to_sheet does.
+                Assert.Equal(NativeStatus.Ok, NativeApi.SheetName(handle, buffer, out int currentLength));
+                Assert.Equal("First", Encoding.UTF8.GetString(buffer[..currentLength]));
+                byte[] rowBuffer = new byte[4096];
+                Assert.Equal(NativeStatus.Ok, NativeApi.NextRow(handle, rowBuffer, out int written));
+                Assert.Equal("2", DecodeRow(rowBuffer.AsSpan(0, written))[0].Value);
+            }
+            finally
+            {
+                NativeApi.Close(handle);
+            }
+        }
+
+        [Fact]
+        public void SheetNameAt_Should_Report_Required_Size_When_Buffer_Too_Small()
+        {
+            using MemoryStream ms = WorkbookBuilder.BuildMultiSheet([("VeryLongSheetName", "")]);
+            Assert.Equal(NativeStatus.Ok, NativeApi.OpenMemory(ms.ToArray(), NativeFormat.Xlsx, out NativeHandle? handle));
+            try
+            {
+                Span<byte> tiny = stackalloc byte[2];
+                Assert.Equal(NativeStatus.BufferTooSmall, NativeApi.SheetNameAt(handle, 0, tiny, out int required));
+                Assert.Equal("VeryLongSheetName".Length, required);
+
+                Span<byte> big = stackalloc byte[required];
+                Assert.Equal(NativeStatus.Ok, NativeApi.SheetNameAt(handle, 0, big, out int written));
+                Assert.Equal("VeryLongSheetName", Encoding.UTF8.GetString(big[..written]));
+            }
+            finally
+            {
+                NativeApi.Close(handle);
+            }
+        }
+
+        [Fact]
+        public void SheetNameAt_Should_Reject_A_Negative_Index()
+        {
+            Assert.Equal(NativeStatus.Ok, OpenPath(XlsxFixture, NativeFormat.Auto, out NativeHandle? handle));
+            try
+            {
+                Assert.Equal(NativeStatus.InvalidArgument, NativeApi.SheetNameAt(handle, -1, stackalloc byte[64], out _));
+            }
+            finally
+            {
+                NativeApi.Close(handle);
+            }
+        }
+
+        [Fact]
+        public void SheetNameAt_Should_Error_On_An_Index_Past_The_Last_Sheet()
+        {
+            Assert.Equal(NativeStatus.Ok, OpenPath(XlsxFixture, NativeFormat.Auto, out NativeHandle? handle));
+            try
+            {
+                Assert.Equal(NativeStatus.Error, NativeApi.SheetNameAt(handle, 9999, stackalloc byte[64], out _));
+            }
+            finally
+            {
+                NativeApi.Close(handle);
+            }
+        }
+
+        [Fact]
+        public void SheetNameAt_Should_Reject_A_Null_Handle()
+        {
+            Assert.Equal(NativeStatus.InvalidHandle, NativeApi.SheetNameAt(null, 0, stackalloc byte[64], out _));
+        }
+
+        [Fact]
         public void IsDate1904_Should_Report_Zero_For_A_1900_Based_Workbook()
         {
             Assert.Equal(NativeStatus.Ok, OpenPath(XlsxFixture, NativeFormat.Auto, out NativeHandle? handle));
@@ -365,6 +533,115 @@ namespace ExcelReader.Tests
                 NativeApi.Close(handle);
                 File.Delete(path);
             }
+        }
+
+        [Fact]
+        public void NextRowDecoded_Should_Place_Every_Value_Inside_The_Row_Allocation()
+        {
+            string path = Path.Combine(Path.GetTempPath(), $"excelreader-native-{Guid.NewGuid():N}.csv");
+            File.WriteAllText(path, "name,qty,note\nwidget,7,fragile\n");
+            Assert.Equal(NativeStatus.Ok, OpenPath(path, NativeFormat.Csv, out NativeHandle? handle));
+            try
+            {
+                // Skip the header row; assert on the data row, which has three non-empty cells.
+                Assert.Equal(NativeStatus.Ok, NativeApi.NextRow(handle, new byte[4096], out _));
+                Assert.Equal(NativeStatus.Ok, NativeApi.NextRowDecoded(handle, out NativeRow row));
+                try
+                {
+                    Assert.Equal(3, row.CellCount);
+                    int cellSize = Marshal.SizeOf<NativeRowCell>();
+                    NativeRowCell[] cells = new NativeRowCell[row.CellCount];
+                    int totalValueBytes = 0;
+                    for (int index = 0; index < row.CellCount; index++)
+                    {
+                        cells[index] = Marshal.PtrToStructure<NativeRowCell>(IntPtr.Add(row.Cells, index * cellSize));
+                        totalValueBytes += cells[index].ValueLength + 1; // +1 for the NUL terminator.
+                    }
+
+                    // Every value pointer must land inside the single row allocation: at or after where the
+                    // cell array ends, and before the block's end (cell array + every value + its NUL).
+                    IntPtr valuesStart = IntPtr.Add(row.Cells, row.CellCount * cellSize);
+                    IntPtr blockEnd = IntPtr.Add(valuesStart, totalValueBytes);
+                    long previousEnd = valuesStart.ToInt64();
+                    foreach (NativeRowCell cell in cells)
+                    {
+                        Assert.True(cell.Value.ToInt64() >= previousEnd, "value must not overlap the previous cell's value");
+                        Assert.True(cell.Value.ToInt64() + cell.ValueLength < blockEnd.ToInt64(), "value must stay inside the row allocation");
+                        previousEnd = cell.Value.ToInt64() + cell.ValueLength + 1;
+                    }
+                    Assert.Equal(blockEnd.ToInt64(), previousEnd);
+                }
+                finally
+                {
+                    NativeApi.FreeRow(ref row);
+                }
+            }
+            finally
+            {
+                NativeApi.Close(handle);
+                File.Delete(path);
+            }
+        }
+
+        [Fact]
+        public void NextRowDecoded_Should_NUL_Terminate_Every_Value()
+        {
+            string path = Path.Combine(Path.GetTempPath(), $"excelreader-native-{Guid.NewGuid():N}.csv");
+            File.WriteAllText(path, "name\nwidget\n");
+            Assert.Equal(NativeStatus.Ok, OpenPath(path, NativeFormat.Csv, out NativeHandle? handle));
+            try
+            {
+                Assert.Equal(NativeStatus.Ok, NativeApi.NextRow(handle, new byte[4096], out _));
+                Assert.Equal(NativeStatus.Ok, NativeApi.NextRowDecoded(handle, out NativeRow row));
+                try
+                {
+                    NativeRowCell cell = Marshal.PtrToStructure<NativeRowCell>(row.Cells);
+                    Assert.Equal((byte)0, Marshal.ReadByte(cell.Value, cell.ValueLength));
+                }
+                finally
+                {
+                    NativeApi.FreeRow(ref row);
+                }
+            }
+            finally
+            {
+                NativeApi.Close(handle);
+                File.Delete(path);
+            }
+        }
+
+        [Fact]
+        public void NextRowDecoded_Should_Return_A_Null_Cells_Pointer_For_An_Empty_Row()
+        {
+            // Self-closing <row/> is a raw-XML shape with zero cells (see CellVariantTests.SelfClosingRowYieldsZeroColumnCount).
+            // A blank CSV line does not test this: it yields one empty field, not zero cells (see
+            // CsvReaderTests.BlankLineYieldsOneEmptyField).
+            using MemoryStream ms = WorkbookBuilder.Build("""<row r="1"/>""");
+            Assert.Equal(NativeStatus.Ok, NativeApi.OpenMemory(ms.ToArray(), NativeFormat.Xlsx, out NativeHandle? handle));
+            try
+            {
+                Assert.Equal(NativeStatus.Ok, NativeApi.NextRowDecoded(handle, out NativeRow row));
+                Assert.Equal(0, row.CellCount);
+                Assert.Equal(IntPtr.Zero, row.Cells);
+
+                // FreeRow on an already-empty row must be a harmless no-op, not a crash.
+                NativeApi.FreeRow(ref row);
+                Assert.Equal(IntPtr.Zero, row.Cells);
+            }
+            finally
+            {
+                NativeApi.Close(handle);
+            }
+        }
+
+        [Fact]
+        public void FreeRow_Should_Be_Idempotent_On_A_Zeroed_Row()
+        {
+            NativeRow row = default;
+            NativeApi.FreeRow(ref row);
+            NativeApi.FreeRow(ref row);
+            Assert.Equal(IntPtr.Zero, row.Cells);
+            Assert.Equal(0, row.CellCount);
         }
 
         [Fact]
@@ -587,6 +864,158 @@ namespace ExcelReader.Tests
             }
         }
 
+        // Decodes the xl_read_all_blob layout: int32 row_count, then row_count * {int32 row_length, row blob}.
+        // Reuses DecodeRow (the single-row blob decoder already used above) for each entry.
+        private static List<List<DecodedCell>> DecodeAllRowsBlob(ReadOnlySpan<byte> blob)
+        {
+            List<List<DecodedCell>> rows = [];
+            int rowCount = BitConverter.ToInt32(blob[..4]);
+            int offset = 4;
+            for (int i = 0; i < rowCount; i++)
+            {
+                int rowLength = BitConverter.ToInt32(blob[offset..]);
+                offset += 4;
+                rows.Add(DecodeRow(blob.Slice(offset, rowLength)));
+                offset += rowLength;
+            }
+
+            return rows;
+        }
+
+        [Fact]
+        public void ReadAllBlob_Should_Contain_Every_Remaining_Row()
+        {
+            string path = Path.Combine(Path.GetTempPath(), $"excelreader-native-{Guid.NewGuid():N}.csv");
+            File.WriteAllText(path, "name,qty\nwidget,7\ngadget,9\n");
+            Assert.Equal(NativeStatus.Ok, OpenPath(path, NativeFormat.Csv, out NativeHandle? handle));
+            try
+            {
+                byte[] buffer = new byte[8192];
+                Assert.Equal(NativeStatus.Ok, NativeApi.ReadAllBlob(handle, buffer, out int written));
+
+                List<List<DecodedCell>> rows = DecodeAllRowsBlob(buffer.AsSpan(0, written));
+                Assert.Equal(3, rows.Count);
+                Assert.Equal("name", rows[0][0].Value);
+                Assert.Equal("qty", rows[0][1].Value);
+                Assert.Equal("widget", rows[1][0].Value);
+                Assert.Equal("gadget", rows[2][0].Value);
+            }
+            finally
+            {
+                NativeApi.Close(handle);
+                File.Delete(path);
+            }
+        }
+
+        [Fact]
+        public void ReadAllBlob_Should_Include_A_Row_Already_Pending_From_NextRow()
+        {
+            // A row held pending from a prior xl_next_row that returned XL_BUFFER_TOO_SMALL must still
+            // show up in xl_read_all_blob's result — it hasn't been consumed by any successful call yet.
+            string path = Path.Combine(Path.GetTempPath(), $"excelreader-native-{Guid.NewGuid():N}.csv");
+            File.WriteAllText(path, "name\nwidget\ngadget\n");
+            Assert.Equal(NativeStatus.Ok, OpenPath(path, NativeFormat.Csv, out NativeHandle? handle));
+            try
+            {
+                Assert.Equal(NativeStatus.BufferTooSmall, NativeApi.NextRow(handle, Span<byte>.Empty, out _));
+
+                byte[] buffer = new byte[8192];
+                Assert.Equal(NativeStatus.Ok, NativeApi.ReadAllBlob(handle, buffer, out int written));
+
+                List<List<DecodedCell>> rows = DecodeAllRowsBlob(buffer.AsSpan(0, written));
+                Assert.Equal(3, rows.Count);
+                Assert.Equal("name", rows[0][0].Value);
+                Assert.Equal("widget", rows[1][0].Value);
+                Assert.Equal("gadget", rows[2][0].Value);
+            }
+            finally
+            {
+                NativeApi.Close(handle);
+                File.Delete(path);
+            }
+        }
+
+        [Fact]
+        public void ReadAllBlob_Should_Not_Lose_Rows_When_The_Buffer_Is_Too_Small()
+        {
+            string path = Path.Combine(Path.GetTempPath(), $"excelreader-native-{Guid.NewGuid():N}.csv");
+            File.WriteAllText(path, "name,qty\nwidget,7\ngadget,9\n");
+            Assert.Equal(NativeStatus.Ok, OpenPath(path, NativeFormat.Csv, out NativeHandle? handle));
+            try
+            {
+                Assert.Equal(NativeStatus.BufferTooSmall, NativeApi.ReadAllBlob(handle, Span<byte>.Empty, out int required));
+                Assert.True(required > 0);
+
+                byte[] big = new byte[required];
+                Assert.Equal(NativeStatus.Ok, NativeApi.ReadAllBlob(handle, big, out int written));
+                Assert.Equal(required, written);
+
+                List<List<DecodedCell>> rows = DecodeAllRowsBlob(big.AsSpan(0, written));
+                Assert.Equal(3, rows.Count);
+                Assert.Equal("gadget", rows[2][0].Value);
+            }
+            finally
+            {
+                NativeApi.Close(handle);
+                File.Delete(path);
+            }
+        }
+
+        [Fact]
+        public void ReadAllBlob_Should_Return_Zero_Rows_At_End_Of_Sheet()
+        {
+            string path = Path.Combine(Path.GetTempPath(), $"excelreader-native-{Guid.NewGuid():N}.csv");
+            File.WriteAllText(path, "name\n");
+            Assert.Equal(NativeStatus.Ok, OpenPath(path, NativeFormat.Csv, out NativeHandle? handle));
+            try
+            {
+                Assert.Equal(NativeStatus.Ok, NativeApi.ReadAllBlob(handle, new byte[4096], out _));
+
+                byte[] buffer = new byte[4096];
+                Assert.Equal(NativeStatus.Ok, NativeApi.ReadAllBlob(handle, buffer, out int written));
+                Assert.Equal(0, BitConverter.ToInt32(buffer.AsSpan(0, written)));
+            }
+            finally
+            {
+                NativeApi.Close(handle);
+                File.Delete(path);
+            }
+        }
+
+        [Fact]
+        public void ReadAllBlob_Should_Drop_Pending_Bytes_On_Sheet_Change()
+        {
+            using MemoryStream ms = WorkbookBuilder.BuildMultiSheet(
+            [
+                ("First", """<row r="1"><c r="A1"><v>1</v></c></row>"""),
+                ("Second", """<row r="1"><c r="A1"><v>99</v></c></row>"""),
+            ]);
+            Assert.Equal(NativeStatus.Ok, NativeApi.OpenMemory(ms.ToArray(), NativeFormat.Xlsx, out NativeHandle? handle));
+            try
+            {
+                // Force a too-small result so accumulated bytes for sheet 0 are held pending.
+                Assert.Equal(NativeStatus.BufferTooSmall, NativeApi.ReadAllBlob(handle, Span<byte>.Empty, out _));
+
+                Assert.Equal(NativeStatus.Ok, NativeApi.MoveToSheet(handle, 1));
+
+                byte[] buffer = new byte[4096];
+                Assert.Equal(NativeStatus.Ok, NativeApi.ReadAllBlob(handle, buffer, out int written));
+                List<List<DecodedCell>> rows = DecodeAllRowsBlob(buffer.AsSpan(0, written));
+                Assert.Single(rows);
+                Assert.Equal("99", rows[0][0].Value);
+            }
+            finally
+            {
+                NativeApi.Close(handle);
+            }
+        }
+
+        [Fact]
+        public void ReadAllBlob_Should_Reject_A_Null_Handle()
+        {
+            Assert.Equal(NativeStatus.InvalidHandle, NativeApi.ReadAllBlob(null, new byte[64], out _));
+        }
+
         // NativeHandle's constructor is internal; this project has InternalsVisibleTo access to it, so
         // tests can hand it a reader that isn't produced by NativeApi.OpenFile/OpenMemory.
         private static NativeHandle NativeHandle_Create(IExcelRowReader reader)
@@ -606,6 +1035,7 @@ namespace ExcelReader.Tests
             public bool IsDate1904 => inner.IsDate1904;
             public string SheetName => inner.SheetName;
             public int SheetCount => inner.SheetCount;
+            public string SheetNameAt(int index) => inner.SheetNameAt(index);
 
             public bool TryMoveToSheet(ReadOnlySpan<char> name) => inner.TryMoveToSheet(name);
             public void MoveToSheet(int index) => inner.MoveToSheet(index);

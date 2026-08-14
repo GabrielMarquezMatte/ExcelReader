@@ -69,6 +69,13 @@ namespace ExcelReader.Core.Reader
         public int SheetCount => _sheets.Length;
 
         /// <inheritdoc/>
+        public string SheetNameAt(int index)
+        {
+            WorkbookLookups.ValidateSheetIndex(index, _sheets.Length);
+            return _sheets[index].Name;
+        }
+
+        /// <inheritdoc/>
         public bool IsDate1904 => _date1904;
 
         internal ReadOnlySpan<byte> SharedSpan => _sharedFlat;

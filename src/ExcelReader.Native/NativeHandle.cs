@@ -30,12 +30,25 @@ namespace ExcelReader.Native
 
         internal bool HasPending { get; set; }
 
+        /// <summary>Backs xl_read_all_blob: every remaining row of the sheet, concatenated, from the last
+        /// accumulation. Held across a <see cref="NativeStatus.BufferTooSmall"/> return the same way
+        /// <see cref="Scratch"/>/<see cref="HasPending"/> hold a single row — so a caller that retries
+        /// with a bigger buffer loses nothing, even though accumulation has already fully drained the
+        /// underlying row enumerator by the time the first too-small result comes back.</summary>
+        internal byte[] AllRowsScratch { get; set; } = [];
+
+        internal int AllRowsLength { get; set; }
+
+        internal bool AllRowsPending { get; set; }
+
         internal void ResetRows()
         {
             Rows?.Dispose();
             Rows = null;
             HasPending = false;
             PendingLength = 0;
+            AllRowsPending = false;
+            AllRowsLength = 0;
         }
 
         public void Dispose()

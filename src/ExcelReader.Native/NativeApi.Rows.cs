@@ -1,9 +1,10 @@
+using System.Buffers.Binary;
 using System.Runtime.InteropServices;
 using ExcelReader.Core.ValueObjects;
 
 namespace ExcelReader.Native
 {
-    internal static partial class NativeApi
+    internal static unsafe partial class NativeApi
     {
         internal static int NextRowDecoded(NativeHandle? handle, out NativeRow row)
         {
@@ -26,24 +27,18 @@ namespace ExcelReader.Native
             }
         }
 
-        /// <summary>Releases all memory allocated for a row returned by <see cref="NextRowDecoded"/>.</summary>
+        /// <summary>
+        /// Releases the single block allocated by <see cref="DecodePendingRow"/>. Every
+        /// <see cref="NativeRowCell.Value"/> points INTO that block (see <see cref="DecodePendingRow"/>), so
+        /// freeing them individually would be a double free — this one <see cref="Marshal.FreeHGlobal(IntPtr)"/>
+        /// covers the cell array and every value.
+        /// </summary>
         internal static void FreeRow(ref NativeRow row)
         {
-            if (row.Cells == IntPtr.Zero)
+            if (row.Cells != IntPtr.Zero)
             {
-                row = default;
-                return;
+                Marshal.FreeHGlobal(row.Cells);
             }
-            for (int index = 0; index < row.CellCount; index++)
-            {
-                NativeRowCell cell = Marshal.PtrToStructure<NativeRowCell>(IntPtr.Add(row.Cells, index * Marshal.SizeOf<NativeRowCell>()));
-                IntPtr value = cell.Value;
-                if (value != IntPtr.Zero)
-                {
-                    Marshal.FreeHGlobal(value);
-                }
-            }
-            Marshal.FreeHGlobal(row.Cells);
             row = default;
         }
 
@@ -90,55 +85,57 @@ namespace ExcelReader.Native
             }
         }
 
+        /// <summary>
+        /// Decodes the row blob held pending in <paramref name="handle"/>'s scratch buffer into a
+        /// <see cref="NativeRow"/> backed by a SINGLE allocation: the <see cref="NativeRowCell"/> array
+        /// followed immediately by every cell's value bytes (each NUL-terminated), laid out back to back.
+        /// Every <see cref="NativeRowCell.Value"/> pointer is an interior pointer into that one block — this
+        /// is what lets <see cref="FreeRow"/> release a whole row with one <see cref="Marshal.FreeHGlobal"/>
+        /// instead of one call per cell, cutting a 65K-row/10-column sheet from ~650K native allocations to
+        /// one per row (see docs/NATIVE_BINDINGS_PLAN.md Task 1).
+        /// </summary>
         private static int DecodePendingRow(NativeHandle handle, out NativeRow row)
         {
+            row = default;
             ReadOnlySpan<byte> blob = handle.Scratch.AsSpan(0, handle.PendingLength);
-            int cellCount = BitConverter.ToInt32(blob);
-            int cellSize = Marshal.SizeOf<NativeRowCell>();
-            IntPtr cells = IntPtr.Zero;
-            if (cellCount > 0)
+            int cellCount = BinaryPrimitives.ReadInt32LittleEndian(blob);
+            if (cellCount == 0)
             {
-                cells = Marshal.AllocHGlobal(checked(cellCount * cellSize));
-            }
-
-            NativeRow result = new()
-            {
-                Cells = cells,
-            };
-
-            try
-            {
-                int offset = sizeof(int);
-                for (int index = 0; index < cellCount; index++)
-                {
-                    int column = BitConverter.ToInt32(blob[offset..]);
-                    int type = BitConverter.ToInt32(blob[(offset + sizeof(int))..]);
-                    int valueLength = BitConverter.ToInt32(blob[(offset + (2 * sizeof(int)))..]);
-                    offset += 3 * sizeof(int);
-
-                    IntPtr value = Marshal.AllocHGlobal(checked(valueLength + 1));
-                    Marshal.Copy(blob.Slice(offset, valueLength).ToArray(), 0, value, valueLength);
-                    Marshal.WriteByte(value, valueLength, 0);
-                    Marshal.StructureToPtr(new NativeRowCell
-                    {
-                        Column = column,
-                        Type = type,
-                        ValueLength = valueLength,
-                        Value = value,
-                    }, IntPtr.Add(result.Cells, index * cellSize), false);
-                    result.CellCount++;
-                    offset += valueLength;
-                }
-
                 handle.HasPending = false;
-                row = result;
                 return NativeStatus.Ok;
             }
-            catch
+
+            int cellSize = sizeof(NativeRowCell);
+            int valueBytes = handle.PendingLength - sizeof(int) - checked(cellCount * RowBlob.CellHeaderSize);
+            IntPtr block = Marshal.AllocHGlobal(checked((cellCount * cellSize) + valueBytes + cellCount));
+
+            NativeRowCell* cells = (NativeRowCell*)block;
+            byte* values = (byte*)block + (cellCount * cellSize);
+            int offset = sizeof(int);
+            int valueOffset = 0;
+            for (int index = 0; index < cellCount; index++)
             {
-                FreeRow(ref result);
-                throw;
+                int column = BinaryPrimitives.ReadInt32LittleEndian(blob[offset..]);
+                int type = BinaryPrimitives.ReadInt32LittleEndian(blob[(offset + 4)..]);
+                int length = BinaryPrimitives.ReadInt32LittleEndian(blob[(offset + 8)..]);
+                offset += RowBlob.CellHeaderSize;
+
+                blob.Slice(offset, length).CopyTo(new Span<byte>(values + valueOffset, length));
+                values[valueOffset + length] = 0;
+                cells[index] = new NativeRowCell
+                {
+                    Column = column,
+                    Type = type,
+                    ValueLength = length,
+                    Value = (IntPtr)(values + valueOffset),
+                };
+                offset += length;
+                valueOffset += length + 1;
             }
+
+            handle.HasPending = false;
+            row = new NativeRow { CellCount = cellCount, Cells = block };
+            return NativeStatus.Ok;
         }
     }
 }
