@@ -8,6 +8,7 @@ from excelreader.types import (
     ColumnSpec,
     ColumnType,
     ExcelReaderError,
+    OpenOptions,
     StringColumn,
     TypedTable,
 )
@@ -19,6 +20,7 @@ __all__ = [
     "ColumnType",
     "ColumnarSheet",
     "ExcelReaderError",
+    "OpenOptions",
     "StringColumn",
     "TypedTable",
     "Workbook",

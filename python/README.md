@@ -142,6 +142,39 @@ with open_bytes(payload) as workbook:
     ...
 ```
 
+### Reader options
+
+`open_workbook()`/`open_bytes()` take an optional `OpenOptions` for CSV dialect settings and reader
+resource limits. Every field defaults to `None`, meaning "use the library default", so you set only
+what you want to change.
+
+```python
+from excelreader import OpenOptions, open_workbook
+
+# A semicolon-delimited CSV, which the default comma dialect would read as one column per row.
+with open_workbook("export.csv", format="csv", options=OpenOptions(csv_delimiter=ord(";"))) as workbook:
+    for row in workbook.rows():
+        ...
+```
+
+`csv_delimiter` and `csv_quote` are byte values, so pass `ord(";")` rather than `";"`.
+
+The `max_*` fields are resource limits rather than tuning knobs: they bound what a malformed or
+hostile file can make the reader allocate, and exceeding one raises `ExcelReaderError`. Lower them
+when parsing untrusted uploads.
+
+```python
+options = OpenOptions(
+    max_total_decompressed_bytes=64 * 1024 * 1024,  # zip-bomb budget for XLSX/XLSB
+    max_cell_bytes=1024 * 1024,
+    max_zip_entries=1024,
+)
+```
+
+`prefetch_decompression=True` overlaps inflating an XLSX/XLSB sheet with parsing it — worth it for
+single-file batch work, not for a server already reading many files in parallel. See the root README
+for the measured trade.
+
 ## Notes
 
 - A `Workbook` is **not** thread-safe. Use one per thread.
