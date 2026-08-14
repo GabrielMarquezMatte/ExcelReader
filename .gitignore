@@ -500,3 +500,7 @@ graphify-out
 # requires it to exist at build time, before build_native.py has ever run.
 python/src/excelreader/_lib/*
 !python/src/excelreader/_lib/.gitkeep
+
+# CMake build output (tests/ExcelReader.NativeSmoke and any other CMake-configured project). Never
+# built to a path inside the source tree other than this, so a plain top-level rule is enough.
+build/

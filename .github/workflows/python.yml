@@ -1,4 +1,4 @@
-name: Python bindings
+name: Native bindings
 
 on:
   push:
@@ -15,7 +15,7 @@ concurrency:
 
 jobs:
   test:
-    name: Native + Python (${{ matrix.os }})
+    name: Native + Python + C smoke (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -44,3 +44,11 @@ jobs:
 
       - name: Run the Python tests
         run: pytest python/tests -v
+
+      - name: Build the C smoke test
+        run: |
+          cmake -S tests/ExcelReader.NativeSmoke -B build/nativesmoke -DCMAKE_BUILD_TYPE=Release
+          cmake --build build/nativesmoke --config Release
+
+      - name: Run the C smoke test
+        run: ctest --test-dir build/nativesmoke --output-on-failure -C Release
