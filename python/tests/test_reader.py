@@ -104,3 +104,16 @@ def test_rows_iterator_raises_after_close_mid_iteration(xlsx_path):
 
     with pytest.raises(ExcelReaderError):
         next(rows)
+
+
+def test_excel_serial_dates_convert_with_the_documented_recipe(xlsx_path):
+    from datetime import date, timedelta
+
+    with open_workbook(xlsx_path) as workbook:
+        rows = workbook.rows()
+        next(rows)
+        first_data_row = next(rows)
+        epoch = date(1904, 1, 1) if workbook.is_date1904 else date(1899, 12, 30)
+
+    serial = int(float(first_data_row[1].value))
+    assert epoch + timedelta(days=serial) == date(2026, 1, 1)
