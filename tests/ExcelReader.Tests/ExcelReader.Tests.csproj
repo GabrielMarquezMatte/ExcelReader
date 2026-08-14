@@ -25,6 +25,8 @@
   <ItemGroup>
     <Content Include="xunit.runner.json" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="data\**" CopyToOutputDirectory="PreserveNewest" />
+    <!-- Ground-truth XLSB produced by Excel itself; the native FFI tests open it by path. -->
+    <Content Include="..\..\RealExcel.xlsb" Link="data\RealExcel.xlsb" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>
