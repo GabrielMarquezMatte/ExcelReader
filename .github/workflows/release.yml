@@ -84,6 +84,106 @@ jobs:
           path: ./artifacts/*
           if-no-files-found: warn
 
+  publish-python:
+    name: Build Python wheel (${{ matrix.os }})
+    needs: publish
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+
+      - name: Setup Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      - name: Derive version from tag
+        id: version
+        shell: bash
+        run: echo "value=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Set package version
+        shell: bash
+        run: |
+          sed -i.bak "s/^version = \".*\"/version = \"${{ steps.version.outputs.value }}\"/" python/pyproject.toml
+          rm -f python/pyproject.toml.bak
+
+      - name: Build the native library
+        run: python python/scripts/build_native.py
+
+      - name: Install test dependencies
+        run: pip install -e "python[dev]"
+
+      - name: Test (Python)
+        run: pytest python/tests
+
+      - name: Build the wheel
+        run: |
+          pip install build
+          python -m build --wheel python/ --outdir dist/
+
+      - name: Upload wheel artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: wheel-${{ matrix.os }}
+          path: dist/*.whl
+          if-no-files-found: error
+
+  publish-pypi:
+    name: Publish to PyPI
+    needs: publish-python
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      - name: Derive version from tag
+        id: version
+        run: echo "value=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Set package version
+        run: |
+          sed -i.bak "s/^version = \".*\"/version = \"${{ steps.version.outputs.value }}\"/" python/pyproject.toml
+          rm -f python/pyproject.toml.bak
+
+      - name: Download wheel artifacts
+        uses: actions/download-artifact@v6
+        with:
+          pattern: wheel-*
+          path: dist/
+          merge-multiple: true
+
+      # No sdist: this package has no pure-Python fallback path. _lib/ ships only a
+      # per-platform native binary that build_native.py produces at build time - a
+      # sdist built here would carry an empty _lib/ (just .gitkeep, since the real
+      # binary is gitignored) and would install "successfully" while being unusable
+      # at import time. Publishing wheels only means an unsupported platform/Python
+      # combination fails at install time instead.
+
+      - name: Publish to PyPI (Trusted Publishing)
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: dist/
+          skip-existing: true
+
   promote-public-api:
     name: Promote PublicAPI.Unshipped -> Shipped
     needs: publish

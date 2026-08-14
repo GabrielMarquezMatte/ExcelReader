@@ -25,6 +25,8 @@
   <ItemGroup>
     <Content Include="xunit.runner.json" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="data\**" CopyToOutputDirectory="PreserveNewest" />
+    <!-- Ground-truth XLSB produced by Excel itself; the native FFI tests open it by path. -->
+    <Content Include="..\..\RealExcel.xlsb" Link="data\RealExcel.xlsb" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>
@@ -48,6 +50,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\ExcelReader.Core\ExcelReader.Core.csproj" />
+    <ProjectReference Include="..\..\src\ExcelReader.Native\ExcelReader.Native.csproj" />
     <!-- OutputItemType="Analyzer" makes the generator actually run over this project's own compilation
          (so a [ExcelSerializable] model declared here gets real generated code, exercised by
          GeneratedMapParityTests.cs) — without it, only the assembly reference existed, and the

@@ -1,0 +1,41 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFrameworks>net10.0;net8.0</TargetFrameworks>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <IsPackable>false</IsPackable>
+    <!-- Publishing this project with -r <rid> produces the C-ABI shared library
+         (ExcelReader.Native.dll/.so/.dylib). Ordinary `dotnet build` still produces a normal
+         managed assembly, which is what ExcelReader.Tests references. -->
+    <PublishAot>true</PublishAot>
+    <NativeLib>Shared</NativeLib>
+    <TrimmerSingleWarn>false</TrimmerSingleWarn>
+    <!-- Keeps ICU out of the shared library; this layer does no culture-sensitive formatting. -->
+    <InvariantGlobalization>true</InvariantGlobalization>
+
+    <!-- RS0016/RS0026/RS0037: public-API tracking is for ExcelReader.Core's shipped NuGet surface.
+         This project is never packed — its C ABI is tracked by include/excelreader.h instead. -->
+    <!-- CA1031/S2221: every exported function is a hard boundary. An escaping exception would
+         corrupt the caller's stack, so catch-all plus a status code is the required behavior. -->
+    <!-- CA2000/IDISP001/IDISP004: file streams handed to Excel.From*(leaveOpen: false) are owned
+         and disposed by the reader — the same ownership-transfer pattern used across the tests.
+         IDISP007: NativeHandle.Dispose disposes the IExcelRowReader it was constructed with — same
+         ownership-transfer pattern; the analyzer only sees a field assignment, not the transfer. -->
+    <!-- S6640: Exports.cs is the C ABI boundary — [UnmanagedCallersOnly] methods require pointer
+         parameters, so "avoid unsafe" does not apply to this file's entire reason for existing. -->
+    <NoWarn>$(NoWarn);RS0016;RS0026;RS0037;CA1031;S2221;CA2000;IDISP001;IDISP004;IDISP007;S6640</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\ExcelReader.Core\ExcelReader.Core.csproj" />
+    <ProjectReference Include="..\ExcelReader.Generator\ExcelReader.Generator.csproj"
+                      OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+  </ItemGroup>
+
+  <!-- The span-based NativeApi is the tested surface; [UnmanagedCallersOnly] exports cannot be
+       invoked from managed code, so the tests drive the layer underneath them. -->
+  <ItemGroup>
+    <InternalsVisibleTo Include="ExcelReader.Tests" />
+  </ItemGroup>
+
+</Project>
