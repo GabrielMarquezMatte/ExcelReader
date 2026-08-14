@@ -204,6 +204,12 @@ namespace ExcelReader.Core.Reader
         public string SheetName => _sheets![_current].Name;
         /// <inheritdoc/>
         public int SheetCount => _sheets!.Length;
+        /// <inheritdoc/>
+        public string SheetNameAt(int index)
+        {
+            WorkbookLookups.ValidateSheetIndex(index, _sheets!.Length);
+            return _sheets[index].Name;
+        }
 
         /// <inheritdoc/>
         public bool TryMoveToSheet(ReadOnlySpan<char> name)

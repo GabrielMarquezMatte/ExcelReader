@@ -15,7 +15,9 @@ namespace ExcelReader.Native
     /// </remarks>
     internal static class RowBlob
     {
-        private const int CellHeaderSize = 3 * sizeof(int);
+        /// <summary>Byte size of one cell header (column, type, value_len) in the row blob. Shared with
+        /// <see cref="NativeApi"/>'s decoder so the two can never disagree about the layout.</summary>
+        internal const int CellHeaderSize = 3 * sizeof(int);
         private const int MaxFormattedValueLength = 32;
 
         /// <summary>Writes <paramref name="row"/> into <paramref name="scratch"/>, growing it if needed. Returns the byte count.</summary>

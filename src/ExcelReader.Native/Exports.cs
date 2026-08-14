@@ -81,6 +81,19 @@ namespace ExcelReader.Native
             return status;
         }
 
+        [UnmanagedCallersOnly(EntryPoint = "xl_sheet_name_at")]
+        public static int SheetNameAt(nint handle, int index, byte* buffer, int capacity, int* outLength)
+        {
+            if (capacity < 0 || outLength is null || (buffer is null && capacity > 0))
+            {
+                return NativeStatus.InvalidArgument;
+            }
+
+            int status = NativeApi.SheetNameAt(Resolve(handle), index, new Span<byte>(buffer, capacity), out int length);
+            *outLength = length;
+            return status;
+        }
+
         [UnmanagedCallersOnly(EntryPoint = "xl_move_to_sheet")]
         public static int MoveToSheet(nint handle, int index)
         {
@@ -109,6 +122,19 @@ namespace ExcelReader.Native
             }
 
             int status = NativeApi.NextRow(Resolve(handle), new Span<byte>(buffer, capacity), out int written);
+            *outWritten = written;
+            return status;
+        }
+
+        [UnmanagedCallersOnly(EntryPoint = "xl_read_all_blob")]
+        public static int ReadAllBlob(nint handle, byte* buffer, int capacity, int* outWritten)
+        {
+            if (capacity < 0 || outWritten is null || (buffer is null && capacity > 0))
+            {
+                return NativeStatus.InvalidArgument;
+            }
+
+            int status = NativeApi.ReadAllBlob(Resolve(handle), new Span<byte>(buffer, capacity), out int written);
             *outWritten = written;
             return status;
         }
@@ -168,6 +194,25 @@ namespace ExcelReader.Native
             int status = NativeApi.LastError(new Span<byte>(buffer, capacity), out int length);
             *outLength = length;
             return status;
+        }
+
+        [UnmanagedCallersOnly(EntryPoint = "xl_last_error_ptr")]
+        public static byte* LastErrorPtr(int* outLength)
+        {
+            if (outLength is null)
+            {
+                return null;
+            }
+
+            nint pointer = NativeApi.LastErrorPtr(out int length);
+            *outLength = length;
+            return (byte*)pointer;
+        }
+
+        [UnmanagedCallersOnly(EntryPoint = "xl_abi_version")]
+        public static int AbiVersion()
+        {
+            return NativeStatus.AbiVersion;
         }
 
         // Internal (not private) so tests can exercise the stale/garbage-handle path directly: the

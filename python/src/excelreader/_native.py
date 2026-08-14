@@ -18,6 +18,10 @@ XL_INVALID_HANDLE = -3
 XL_INVALID_ARGUMENT = -4
 XL_ERROR = -5
 
+# Bumped on any change to a struct layout, a status code, or the meaning of an existing function;
+# adding a new function does not bump it. Mirrors XL_ABI_VERSION in include/excelreader.h.
+XL_ABI_VERSION = 1
+
 XL_FORMAT_AUTO = 0
 XL_FORMAT_XLS = 1
 XL_FORMAT_XLSX = 2
@@ -71,8 +75,16 @@ def _candidate_paths() -> list[Path]:
 @lru_cache(maxsize=1)
 def load_library() -> ctypes.CDLL:
     for path in _candidate_paths():
-        if path.exists():
-            return _bind(ctypes.CDLL(str(path)))
+        if not path.exists():
+            continue
+        lib = _bind(ctypes.CDLL(str(path)))
+        version = lib.xl_abi_version()
+        if version != XL_ABI_VERSION:
+            raise RuntimeError(
+                f"{path} is ABI version {version}, but this package expects {XL_ABI_VERSION}. "
+                f"Rebuild the native library with python python/scripts/build_native.py."
+            )
+        return lib
     raise RuntimeError(
         f"{library_filename()} not found. Build it with:\n"
         f"    python python/scripts/build_native.py\n"
@@ -101,16 +113,28 @@ def _bind(lib: ctypes.CDLL) -> ctypes.CDLL:
     # one is undefined behavior.
     lib.xl_sheet_name.argtypes = [p_void, p_bytes, c_int, p_int]
     lib.xl_sheet_name.restype = c_int
+    lib.xl_sheet_name_at.argtypes = [p_void, c_int, p_bytes, c_int, p_int]
+    lib.xl_sheet_name_at.restype = c_int
     lib.xl_move_to_sheet.argtypes = [p_void, c_int]
     lib.xl_move_to_sheet.restype = c_int
     lib.xl_is_date1904.argtypes = [p_void, p_int]
     lib.xl_is_date1904.restype = c_int
     lib.xl_next_row.argtypes = [p_void, p_bytes, c_int, p_int]
     lib.xl_next_row.restype = c_int
+    lib.xl_read_all_blob.argtypes = [p_void, p_bytes, c_int, p_int]
+    lib.xl_read_all_blob.restype = c_int
+    lib.xl_next_row_decoded.argtypes = [p_void, ctypes.POINTER(NativeRow)]
+    lib.xl_next_row_decoded.restype = c_int
+    lib.xl_free_row.argtypes = [ctypes.POINTER(NativeRow)]
+    lib.xl_free_row.restype = None
     lib.xl_last_error.argtypes = [p_bytes, c_int, p_int]
     lib.xl_last_error.restype = c_int
+    lib.xl_last_error_ptr.argtypes = [p_int]
+    lib.xl_last_error_ptr.restype = ctypes.POINTER(ctypes.c_uint8)
     lib.xl_read_all_decoded.argtypes = [p_void, ctypes.POINTER(NativeRows)]
     lib.xl_read_all_decoded.restype = c_int
     lib.xl_free_rows.argtypes = [ctypes.POINTER(NativeRows)]
     lib.xl_free_rows.restype = None
+    lib.xl_abi_version.argtypes = []
+    lib.xl_abi_version.restype = c_int
     return lib
