@@ -14,55 +14,51 @@ namespace ExcelReader.Native
         [UnmanagedCallersOnly(EntryPoint = "xl_open_file")]
         public static int OpenFile(byte* path, int pathLength, int format, nint* outHandle)
         {
-            if (path is null || pathLength < 0 || outHandle is null)
+            if (!IsValidOpenRequest(path, pathLength, outHandle))
             {
                 return NativeStatus.InvalidArgument;
             }
 
             int status = NativeApi.OpenFile(new ReadOnlySpan<byte>(path, pathLength), format, out NativeHandle? handle);
-            *outHandle = handle is null ? 0 : NativeHandleTable.Register(handle);
-            return status;
+            return RegisterOpened(status, handle, outHandle);
         }
 
         [UnmanagedCallersOnly(EntryPoint = "xl_open_file_ex")]
         public static int OpenFileEx(byte* path, int pathLength, int format, NativeOpenOptionsRaw* options, nint* outHandle)
         {
-            if (path is null || pathLength < 0 || outHandle is null)
+            if (!IsValidOpenRequest(path, pathLength, outHandle))
             {
                 return NativeStatus.InvalidArgument;
             }
 
             NativeOpenOptionsRaw? rawOptions = options is null ? null : *options;
             int status = NativeApi.OpenFileEx(new ReadOnlySpan<byte>(path, pathLength), format, rawOptions, out NativeHandle? handle);
-            *outHandle = handle is null ? 0 : NativeHandleTable.Register(handle);
-            return status;
+            return RegisterOpened(status, handle, outHandle);
         }
 
         [UnmanagedCallersOnly(EntryPoint = "xl_open_memory")]
         public static int OpenMemory(byte* data, int dataLength, int format, nint* outHandle)
         {
-            if (data is null || dataLength < 0 || outHandle is null)
+            if (!IsValidOpenRequest(data, dataLength, outHandle))
             {
                 return NativeStatus.InvalidArgument;
             }
 
             int status = NativeApi.OpenMemory(new ReadOnlySpan<byte>(data, dataLength), format, out NativeHandle? handle);
-            *outHandle = handle is null ? 0 : NativeHandleTable.Register(handle);
-            return status;
+            return RegisterOpened(status, handle, outHandle);
         }
 
         [UnmanagedCallersOnly(EntryPoint = "xl_open_memory_ex")]
         public static int OpenMemoryEx(byte* data, int dataLength, int format, NativeOpenOptionsRaw* options, nint* outHandle)
         {
-            if (data is null || dataLength < 0 || outHandle is null)
+            if (!IsValidOpenRequest(data, dataLength, outHandle))
             {
                 return NativeStatus.InvalidArgument;
             }
 
             NativeOpenOptionsRaw? rawOptions = options is null ? null : *options;
             int status = NativeApi.OpenMemoryEx(new ReadOnlySpan<byte>(data, dataLength), format, rawOptions, out NativeHandle? handle);
-            *outHandle = handle is null ? 0 : NativeHandleTable.Register(handle);
-            return status;
+            return RegisterOpened(status, handle, outHandle);
         }
 
         [UnmanagedCallersOnly(EntryPoint = "xl_close")]
@@ -100,7 +96,7 @@ namespace ExcelReader.Native
         [UnmanagedCallersOnly(EntryPoint = "xl_sheet_name")]
         public static int SheetName(nint handle, byte* buffer, int capacity, int* outLength)
         {
-            if (capacity < 0 || outLength is null || (buffer is null && capacity > 0))
+            if (!IsValidOutBuffer(buffer, capacity, outLength))
             {
                 return NativeStatus.InvalidArgument;
             }
@@ -113,7 +109,7 @@ namespace ExcelReader.Native
         [UnmanagedCallersOnly(EntryPoint = "xl_sheet_name_at")]
         public static int SheetNameAt(nint handle, int index, byte* buffer, int capacity, int* outLength)
         {
-            if (capacity < 0 || outLength is null || (buffer is null && capacity > 0))
+            if (!IsValidOutBuffer(buffer, capacity, outLength))
             {
                 return NativeStatus.InvalidArgument;
             }
@@ -145,7 +141,7 @@ namespace ExcelReader.Native
         [UnmanagedCallersOnly(EntryPoint = "xl_next_row")]
         public static int NextRow(nint handle, byte* buffer, int capacity, int* outWritten)
         {
-            if (capacity < 0 || outWritten is null || (buffer is null && capacity > 0))
+            if (!IsValidOutBuffer(buffer, capacity, outWritten))
             {
                 return NativeStatus.InvalidArgument;
             }
@@ -158,7 +154,7 @@ namespace ExcelReader.Native
         [UnmanagedCallersOnly(EntryPoint = "xl_read_all_blob")]
         public static int ReadAllBlob(nint handle, byte* buffer, int capacity, int* outWritten)
         {
-            if (capacity < 0 || outWritten is null || (buffer is null && capacity > 0))
+            if (!IsValidOutBuffer(buffer, capacity, outWritten))
             {
                 return NativeStatus.InvalidArgument;
             }
@@ -250,6 +246,34 @@ namespace ExcelReader.Native
             return status;
         }
 
+        // The argument contract every open entry point shares: a real source buffer, a non-negative
+        // length for it, and somewhere to put the resulting handle id.
+        private static bool IsValidOpenRequest(byte* source, int sourceLength, nint* outHandle)
+        {
+            return source is not null && sourceLength >= 0 && outHandle is not null;
+        }
+
+        // The argument contract every caller-supplied-buffer entry point shares. Kept in one place
+        // because the expensive mistake at an ABI edge is a guard that gets tightened at four of its
+        // five call sites.
+        private static bool IsValidOutBuffer(byte* buffer, int capacity, int* outLength)
+        {
+            return capacity >= 0 && outLength is not null && (buffer is not null || capacity == 0);
+        }
+
+        // Every open path ends the same way: publish the new handle's id — 0 when the open failed and
+        // produced none — and hand the status back untouched.
+        private static int RegisterOpened(int status, NativeHandle? handle, nint* outHandle)
+        {
+            nint id = 0;
+            if (handle is not null)
+            {
+                id = NativeHandleTable.Register(handle);
+            }
+            *outHandle = id;
+            return status;
+        }
+
         // Shared by xl_parse_typed and xl_parse_arrow, whose column-spec input is identical.
         private static NativeColumnSpec[] DecodeColumnSpecs(NativeColumnSpecRaw* specs, int specCount)
         {
@@ -292,7 +316,7 @@ namespace ExcelReader.Native
         [UnmanagedCallersOnly(EntryPoint = "xl_last_error")]
         public static int LastError(byte* buffer, int capacity, int* outLength)
         {
-            if (capacity < 0 || outLength is null || (buffer is null && capacity > 0))
+            if (!IsValidOutBuffer(buffer, capacity, outLength))
             {
                 return NativeStatus.InvalidArgument;
             }
