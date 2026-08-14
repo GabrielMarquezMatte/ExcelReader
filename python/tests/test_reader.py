@@ -94,3 +94,13 @@ def test_close_is_idempotent(xlsx_path):
     workbook = open_workbook(xlsx_path)
     workbook.close()
     workbook.close()
+
+
+def test_rows_iterator_raises_after_close_mid_iteration(xlsx_path):
+    workbook = open_workbook(xlsx_path)
+    rows = workbook.rows()
+    next(rows)
+    workbook.close()
+
+    with pytest.raises(ExcelReaderError):
+        next(rows)

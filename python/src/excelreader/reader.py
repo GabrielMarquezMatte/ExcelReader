@@ -96,11 +96,11 @@ class Workbook:
         _check(self._lib.xl_move_to_sheet(self._require_handle(), index))
 
     def rows(self) -> Iterator[list[Cell]]:
-        handle = self._require_handle()
         written = ctypes.c_int32()
         capacity = _INITIAL_ROW_BUFFER
         buffer = ctypes.create_string_buffer(capacity)
         while True:
+            handle = self._require_handle()
             status = self._lib.xl_next_row(handle, buffer, capacity, ctypes.byref(written))
             if status == _native.XL_EOF:
                 return
