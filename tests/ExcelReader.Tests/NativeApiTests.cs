@@ -135,5 +135,111 @@ namespace ExcelReader.Tests
         {
             Assert.Equal(NativeStatus.InvalidHandle, NativeApi.Close(null));
         }
+
+        [Fact]
+        public void SheetCount_Should_Report_At_Least_One_Sheet()
+        {
+            Assert.Equal(NativeStatus.Ok, OpenPath(XlsxFixture, NativeFormat.Auto, out NativeHandle? handle));
+            try
+            {
+                int status = NativeApi.SheetCount(handle, out int count);
+
+                Assert.Equal(NativeStatus.Ok, status);
+                Assert.True(count >= 1);
+            }
+            finally
+            {
+                NativeApi.Close(handle);
+            }
+        }
+
+        [Fact]
+        public void SheetName_Should_Return_A_Non_Empty_Utf8_Name()
+        {
+            Assert.Equal(NativeStatus.Ok, OpenPath(XlsxFixture, NativeFormat.Auto, out NativeHandle? handle));
+            try
+            {
+                Span<byte> buffer = stackalloc byte[256];
+                int status = NativeApi.SheetName(handle, buffer, out int length);
+
+                Assert.Equal(NativeStatus.Ok, status);
+                Assert.True(length > 0);
+                Assert.NotEmpty(Encoding.UTF8.GetString(buffer[..length]));
+            }
+            finally
+            {
+                NativeApi.Close(handle);
+            }
+        }
+
+        [Fact]
+        public void SheetName_Should_Report_Required_Size_When_Buffer_Too_Small()
+        {
+            Assert.Equal(NativeStatus.Ok, OpenPath(XlsxFixture, NativeFormat.Auto, out NativeHandle? handle));
+            try
+            {
+                int status = NativeApi.SheetName(handle, Span<byte>.Empty, out int length);
+
+                Assert.Equal(NativeStatus.BufferTooSmall, status);
+                Assert.True(length > 0);
+            }
+            finally
+            {
+                NativeApi.Close(handle);
+            }
+        }
+
+        [Fact]
+        public void MoveToSheet_Should_Accept_The_First_Sheet()
+        {
+            Assert.Equal(NativeStatus.Ok, OpenPath(XlsxFixture, NativeFormat.Auto, out NativeHandle? handle));
+            try
+            {
+                Assert.Equal(NativeStatus.Ok, NativeApi.MoveToSheet(handle, 0));
+            }
+            finally
+            {
+                NativeApi.Close(handle);
+            }
+        }
+
+        [Fact]
+        public void MoveToSheet_Should_Fail_For_An_Out_Of_Range_Index()
+        {
+            Assert.Equal(NativeStatus.Ok, OpenPath(XlsxFixture, NativeFormat.Auto, out NativeHandle? handle));
+            try
+            {
+                Assert.Equal(NativeStatus.Error, NativeApi.MoveToSheet(handle, 9999));
+            }
+            finally
+            {
+                NativeApi.Close(handle);
+            }
+        }
+
+        [Fact]
+        public void IsDate1904_Should_Report_Zero_For_A_1900_Based_Workbook()
+        {
+            Assert.Equal(NativeStatus.Ok, OpenPath(XlsxFixture, NativeFormat.Auto, out NativeHandle? handle));
+            try
+            {
+                int status = NativeApi.IsDate1904(handle, out int flag);
+
+                Assert.Equal(NativeStatus.Ok, status);
+                Assert.Equal(0, flag);
+            }
+            finally
+            {
+                NativeApi.Close(handle);
+            }
+        }
+
+        [Fact]
+        public void Sheet_Functions_Should_Reject_A_Null_Handle()
+        {
+            Assert.Equal(NativeStatus.InvalidHandle, NativeApi.SheetCount(null, out _));
+            Assert.Equal(NativeStatus.InvalidHandle, NativeApi.MoveToSheet(null, 0));
+            Assert.Equal(NativeStatus.InvalidHandle, NativeApi.IsDate1904(null, out _));
+        }
     }
 }
