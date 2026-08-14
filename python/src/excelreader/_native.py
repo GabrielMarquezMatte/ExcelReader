@@ -10,6 +10,12 @@ import os
 import platform
 from functools import lru_cache
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    # Import-time only: types.py imports nothing from this module, but keeping the dependency out of
+    # the runtime path keeps this file loadable on its own, the way the rest of it already is.
+    from excelreader.types import OpenOptions
 
 XL_OK = 0
 XL_EOF = -1
@@ -182,6 +188,47 @@ def default_open_options() -> NativeOpenOptions:
     options = NativeOpenOptions()
     options.struct_size = ctypes.sizeof(NativeOpenOptions)
     return options
+
+
+def _opt_state(value: bool | None) -> int:
+    if value is None:
+        return XL_OPT_DEFAULT
+    return XL_OPT_TRUE if value else XL_OPT_FALSE
+
+
+def _opt_number(value: int | None) -> int:
+    # Explicit None test rather than `value or 0`: the latter would also collapse a caller's
+    # deliberate 0, and a limit silently turning into "use the default" is exactly the kind of
+    # quiet semantic change the reader's own rules forbid.
+    return 0 if value is None else value
+
+
+def to_native_open_options(options: OpenOptions) -> NativeOpenOptions:
+    """Converts a public `OpenOptions` into the raw ABI struct.
+
+    This is where the public API's single "None means default" convention splits back into the two
+    the ABI uses: 0 for an unset number, XL_OPT_DEFAULT for an unset boolean. Note the numeric
+    fields cannot express a deliberate 0 — the ABI spends that value on "default" — but no field
+    here has a meaningful 0 (a zero delimiter, or a zero-byte cell limit, is not a setting).
+
+    Values are passed through unvalidated on purpose: the native side owns the real bounds and
+    reports a rejection through xl_last_error, so checking them here too would give those bounds a
+    second place to drift from.
+    """
+    raw = default_open_options()
+    raw.csv_sniff_dialect = _opt_state(options.csv_sniff_dialect)
+    raw.csv_detect_bom = _opt_state(options.csv_detect_bom)
+    raw.csv_intern_strings = _opt_state(options.csv_intern_strings)
+    raw.prefetch_decompression = _opt_state(options.prefetch_decompression)
+    raw.intern_strings = _opt_state(options.intern_strings)
+    raw.csv_delimiter = _opt_number(options.csv_delimiter)
+    raw.csv_quote = _opt_number(options.csv_quote)
+    raw.csv_max_cell_bytes = _opt_number(options.csv_max_cell_bytes)
+    raw.max_total_decompressed_bytes = _opt_number(options.max_total_decompressed_bytes)
+    raw.max_cell_bytes = _opt_number(options.max_cell_bytes)
+    raw.max_shared_string_bytes = _opt_number(options.max_shared_string_bytes)
+    raw.max_zip_entries = _opt_number(options.max_zip_entries)
+    return raw
 
 
 _LIB_NAMES = {

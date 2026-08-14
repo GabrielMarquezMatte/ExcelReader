@@ -18,6 +18,7 @@ from excelreader.types import (
     ColumnSpec,
     ColumnType,
     ExcelReaderError,
+    OpenOptions,
     StringColumn,
     TypedTable,
 )
@@ -421,19 +422,42 @@ def decode_cell(sheet: ColumnarSheet, index: int) -> Cell:
     return Cell(column=int(sheet.columns[index]), type=CellType(int(sheet.types[index])), value=value)
 
 
-def open_workbook(path: str | Path, format: str | None = None) -> Workbook:
-    """Opens a workbook from disk. `format` is one of auto/xls/xlsx/xlsb/csv; None infers it."""
+def _raw_options(options: OpenOptions | None) -> object:
+    # A NULL options pointer means "every library default" on the native side — identical to calling
+    # the non-_ex entry point — so both paths can go through xl_open_*_ex and there is only one call
+    # site to keep correct.
+    if options is None:
+        return None
+    return ctypes.byref(_native.to_native_open_options(options))
+
+
+def open_workbook(path: str | Path, format: str | None = None, *, options: OpenOptions | None = None) -> Workbook:
+    """Opens a workbook from disk. `format` is one of auto/xls/xlsx/xlsb/csv; None infers it.
+
+    `options` overrides reader limits and CSV dialect settings; see `OpenOptions`.
+    """
     resolved = Path(path)
     encoded = str(resolved).encode("utf-8")
     handle = ctypes.c_void_p()
     lib = _native.load_library()
-    _check(lib.xl_open_file(encoded, len(encoded), _resolve_format(format, resolved), ctypes.byref(handle)))
+    _check(
+        lib.xl_open_file_ex(
+            encoded, len(encoded), _resolve_format(format, resolved), _raw_options(options), ctypes.byref(handle)
+        )
+    )
     return Workbook(handle)
 
 
-def open_bytes(data: bytes, format: str | None = None) -> Workbook:
-    """Opens a workbook from an in-memory buffer. The native side copies `data` immediately."""
+def open_bytes(data: bytes, format: str | None = None, *, options: OpenOptions | None = None) -> Workbook:
+    """Opens a workbook from an in-memory buffer. The native side copies `data` immediately.
+
+    `options` overrides reader limits and CSV dialect settings; see `OpenOptions`.
+    """
     handle = ctypes.c_void_p()
     lib = _native.load_library()
-    _check(lib.xl_open_memory(data, len(data), _resolve_format(format, None), ctypes.byref(handle)))
+    _check(
+        lib.xl_open_memory_ex(
+            data, len(data), _resolve_format(format, None), _raw_options(options), ctypes.byref(handle)
+        )
+    )
     return Workbook(handle)

@@ -90,6 +90,38 @@ class ColumnSpec(NamedTuple):
     nullable: bool = False
 
 
+class OpenOptions(NamedTuple):
+    """Reader limits and dialect settings for `open_workbook()`/`open_bytes()`.
+
+    Every field is None for "use the library default", so you only set what you actually want to
+    override. That single convention replaces two the C ABI uses internally: numeric fields there
+    treat 0 as "default" (making 0 unsettable), and boolean fields carry a third XL_OPT_DEFAULT state
+    because several of them default to true. Neither leaks up here.
+
+    The `max_*` fields are resource limits, not tuning knobs — they bound what a malformed or hostile
+    file can make the reader allocate. Lower them when parsing untrusted uploads.
+
+    `csv_delimiter` and `csv_quote` are byte values, not strings: pass `ord(';')`, not `';'`.
+
+    Validation happens on the native side, which owns the real limits; an out-of-range value raises
+    `ExcelReaderError` with the reason. Fields mirror xl_open_options in
+    src/ExcelReader.Native/include/excelreader.h.
+    """
+
+    csv_sniff_dialect: bool | None = None
+    csv_delimiter: int | None = None
+    csv_quote: int | None = None
+    csv_detect_bom: bool | None = None
+    csv_max_cell_bytes: int | None = None
+    csv_intern_strings: bool | None = None
+    max_total_decompressed_bytes: int | None = None
+    max_cell_bytes: int | None = None
+    max_shared_string_bytes: int | None = None
+    max_zip_entries: int | None = None
+    prefetch_decompression: bool | None = None
+    intern_strings: bool | None = None
+
+
 class StringColumn:
     """A `ColumnType.STRING` column, held as UTF-8 bytes plus offsets rather than one `str` per row.
 

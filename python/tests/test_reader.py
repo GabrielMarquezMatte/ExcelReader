@@ -8,6 +8,7 @@ from excelreader import (
     ColumnSpec,
     ColumnType,
     ExcelReaderError,
+    OpenOptions,
     decode_cell,
     open_bytes,
     open_workbook,
@@ -395,3 +396,56 @@ def test_to_arrow_raises_for_an_unknown_column_name(typed_csv):
 
     with open_workbook(typed_csv) as workbook, pytest.raises(ExcelReaderError):
         workbook.to_arrow([ColumnSpec(ColumnType.I64, name="nope")])
+
+
+def test_open_options_reaches_the_csv_reader(tmp_path):
+    # A semicolon file parses as ONE column under the default comma dialect and as three under the
+    # override. Asserting the column split, rather than just that the call succeeded, is what proves
+    # the option travelled all the way into the reader instead of being silently dropped.
+    path = tmp_path / "semicolons.csv"
+    path.write_text("name;qty;price\nwidget;3;9.99\n", encoding="utf-8")
+
+    with open_workbook(path, format="csv") as workbook:
+        assert [cell.value for cell in next(workbook.rows())] == ["name;qty;price"]
+
+    with open_workbook(path, format="csv", options=OpenOptions(csv_delimiter=ord(";"))) as workbook:
+        assert [cell.value for cell in next(workbook.rows())] == ["name", "qty", "price"]
+
+
+def test_open_options_apply_to_open_bytes_too(tmp_path):
+    data = "name;qty\nwidget;3\n".encode("utf-8")
+
+    with open_bytes(data, format="csv", options=OpenOptions(csv_delimiter=ord(";"))) as workbook:
+        assert [cell.value for cell in next(workbook.rows())] == ["name", "qty"]
+
+
+def test_open_options_default_to_the_library_defaults(xlsx_path):
+    # An all-None OpenOptions must behave exactly like passing none at all: every field decodes to
+    # the ABI's "use the default" sentinel rather than to a zero that means something else.
+    with open_workbook(xlsx_path) as plain, open_workbook(xlsx_path, options=OpenOptions()) as explicit:
+        assert [c.value for c in next(plain.rows())] == [c.value for c in next(explicit.rows())]
+
+
+def test_open_options_rejects_an_out_of_range_value(csv_path):
+    # Validation lives on the native side; the wrapper's job is to surface its reason, not to
+    # re-implement the bound.
+    with pytest.raises(ExcelReaderError):
+        open_workbook(csv_path, format="csv", options=OpenOptions(csv_delimiter=999))
+
+
+def test_open_options_limit_actually_aborts_an_oversized_read(tmp_path):
+    # The max_* fields are resource limits, not tuning knobs, so this asserts one BITES: the same file
+    # reads fine at the default and raises under a lower cap. Only the pair proves the limit did the
+    # rejecting rather than the file simply being broken.
+    #
+    # The cell has to exceed the reader's 64 KiB starting buffer, because these caps bound buffer
+    # GROWTH — a value that fits the initial allocation never consults them.
+    path = tmp_path / "wide-cell.csv"
+    path.write_text("value\n" + ("x" * 200_000) + "\n", encoding="utf-8")
+
+    with open_workbook(path, format="csv") as workbook:
+        assert len(list(workbook.rows())[1][0].value) == 200_000
+
+    with pytest.raises(ExcelReaderError):
+        with open_workbook(path, format="csv", options=OpenOptions(csv_max_cell_bytes=100_000)) as workbook:
+            list(workbook.rows())
