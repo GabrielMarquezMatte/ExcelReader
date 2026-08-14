@@ -88,7 +88,19 @@ namespace ExcelReader.Native
         // Appends one `int32 row_length` + `row blob` entry to `output`, growing it if needed.
         private static void AppendRow(ref byte[] output, ref int offset, ReadOnlySpan<byte> rowBlob)
         {
-            EnsureCapacity(ref output, offset + sizeof(int) + rowBlob.Length);
+            // offset/capacity are int32 throughout this API (see excelreader.h on xl_read_all_blob),
+            // so compute the next required size in a wider type first and give a precise message
+            // when a sheet's accumulated blob would exceed that limit, rather than letting Array.Resize
+            // fail on an oversized request with a generic "array too large" message.
+            long required = (long)offset + sizeof(int) + rowBlob.Length;
+            if (required > int.MaxValue)
+            {
+                throw new InvalidOperationException(
+                    "xl_read_all_blob's accumulated result exceeds the 2 GiB int32 limit of this API; " +
+                    "use xl_parse_typed instead, which is columnar, uses int64_t lengths, and is markedly faster.");
+            }
+
+            EnsureCapacity(ref output, (int)required);
             BinaryPrimitives.WriteInt32LittleEndian(output.AsSpan(offset), rowBlob.Length);
             rowBlob.CopyTo(output.AsSpan(offset + sizeof(int)));
             offset += sizeof(int) + rowBlob.Length;

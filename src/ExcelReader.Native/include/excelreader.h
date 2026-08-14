@@ -135,7 +135,12 @@ int32_t xl_is_date1904(xl_workbook* handle, int32_t* out_flag);
  *     int32 cell_count
  *     repeated: int32 column, int32 type, int32 value_len, uint8 value[value_len]
  * Returns XL_EOF at the end of the sheet. On XL_BUFFER_TOO_SMALL, *out_written holds the required
- * byte count and the row is held until the next call - no row is ever lost. */
+ * byte count and the row is held until the next call - no row is ever lost.
+ *
+ * `capacity`/`*out_written` are int32_t: a single row whose blob would exceed INT32_MAX bytes cannot
+ * be returned through this function. That is XL_ERROR (detail in xl_last_error), not silent
+ * truncation. No real spreadsheet row approaches this size; xl_parse_typed uses int64_t lengths and
+ * is columnar (and faster) if you ever need to plan around it regardless. */
 int32_t xl_next_row(xl_workbook* handle, uint8_t* buffer, int32_t capacity, int32_t* out_written);
 
 /* Writes every remaining row of the current sheet into `buffer` as:
@@ -147,7 +152,12 @@ int32_t xl_next_row(xl_workbook* handle, uint8_t* buffer, int32_t capacity, int3
  * Returns XL_OK with *out_written set to the bytes used. On XL_BUFFER_TOO_SMALL, *out_written holds
  * a sufficient (not necessarily minimal) required capacity and NO rows have been lost - the
  * accumulated result is held until the next call, so the caller can retry with a bigger buffer.
- * An empty remainder is XL_OK with row_count == 0; XL_EOF is never returned here. */
+ * An empty remainder is XL_OK with row_count == 0; XL_EOF is never returned here.
+ *
+ * `capacity`/`*out_written` are int32_t: a sheet whose ENTIRE accumulated blob would exceed
+ * INT32_MAX bytes cannot be returned through this function - that is XL_ERROR (detail in
+ * xl_last_error), not silent truncation or a wrapped/negative count. xl_parse_typed uses int64_t
+ * lengths, is columnar, and is markedly faster - prefer it for a sheet anywhere near this size. */
 int32_t xl_read_all_blob(xl_workbook* handle, uint8_t* buffer, int32_t capacity, int32_t* out_written);
 
 /* Reads one row into C-friendly structs. Returns XL_EOF at the end of the sheet. The caller owns
