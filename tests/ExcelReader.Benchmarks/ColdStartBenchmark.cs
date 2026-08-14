@@ -100,9 +100,9 @@ namespace ExcelReader.Benchmarks
             using var reader = Excel.From(ms);
             var parser = new ExcelFluentParser<Record>(static builder => builder
                 .Factory(static () => new Record())
-                .Property(["Name"], ExcelCellReaders.String, static (ref Record r, string v) => r.Name = v)
+                .Property(["Name"], ExcelCellReaders.String, static (ref r, v) => r.Name = v)
                 .Property(["Id"], ExcelCellReaders.Parsable, static (ref Record r, int v) => r.Id = v)
-                .Property(["Date"], ExcelCellReaders.DateTimeSerial, static (ref Record r, DateTime v) => r.Date = v)
+                .Property(["Date"], ExcelCellReaders.DateTimeSerial, static (ref r, v) => r.Date = v)
                 .Property(["Value"], ExcelCellReaders.Parsable, static (ref Record r, double v) => r.Value = v));
             long acc = 0;
             foreach (Record rec in parser.Parse(reader))
