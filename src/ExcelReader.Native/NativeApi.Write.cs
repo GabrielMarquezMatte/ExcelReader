@@ -1,9 +1,305 @@
 using System.Diagnostics.CodeAnalysis;
+using System.Text;
+using ExcelReader.Core.Writer;
 
 namespace ExcelReader.Native
 {
     internal static unsafe partial class NativeApi
     {
+        /// <summary>Style index 1 is always the builtin date style (see IWorkbookWriter.AddStyle).</summary>
+        private const int BuiltinDateStyleId = 1;
+
+        // Named distinctly from NativeApi.Typed.cs's nested-class field of the same value: both are
+        // static members reachable from the outer NativeApi partial class, and reusing the name there
+        // trips S3218 (field shadows an outer-class member).
+        private static readonly int WriteUnixEpochDayNumber = new DateOnly(1970, 1, 1).DayNumber;
+
+        /// <summary>
+        /// Writes <paramref name="table"/> to <paramref name="path"/> as one sheet. Mirrors
+        /// <see cref="ParseTyped"/> in reverse and consumes the exact structs it produces.
+        /// </summary>
+        /// <remarks>
+        /// Every buffer reachable from <paramref name="table"/> is borrowed, never copied and never
+        /// freed here. Validation runs to completion before the file is created, so a rejected call
+        /// leaves nothing behind on disk.
+        /// </remarks>
+        internal static int WriteTyped(ReadOnlySpan<byte> path, int format, NativeColumnSpec[] specs, NativeTable table, NativeWriteOptions options)
+        {
+            if (path.IsEmpty || !IsWritableFormat(format))
+            {
+                SetLastError($"xl_write_typed needs a non-empty path and an explicit format (XLS/XLSX/XLSB/CSV); got format {format}.");
+                return NativeStatus.InvalidArgument;
+            }
+            if (!TryValidateWriteTable(specs, table, out bool hasHeader, out string? validationError))
+            {
+                SetLastError(validationError);
+                return NativeStatus.InvalidArgument;
+            }
+
+            ClearLastError();
+            try
+            {
+                string filePath = Encoding.UTF8.GetString(path);
+                string sheetName = options.SheetName ?? "Sheet1";
+                using FileStream stream = new(filePath, FileMode.Create, FileAccess.Write, FileShare.None);
+                WriteToStream(stream, format, specs, table, options, sheetName, hasHeader);
+                return NativeStatus.Ok;
+            }
+            catch (Exception exception)
+            {
+                SetLastError(exception.Message);
+                return NativeStatus.Error;
+            }
+        }
+
+        // XL_FORMAT_AUTO is deliberately absent: sniffing reads an existing file's signature bytes, and
+        // a file being created has none.
+        private static bool IsWritableFormat(int format)
+        {
+            return format is NativeFormat.Xls or NativeFormat.Xlsx or NativeFormat.Xlsb or NativeFormat.Csv;
+        }
+
+        // The four writers share no non-generic base (IWorkbookWriter<out TSheet> is generic in the
+        // sheet type), so each branch contributes only its construction line and hands off to the one
+        // generic body below. leaveOpen: false transfers the stream to the writer, matching the
+        // ownership pattern NativeApi.Open.cs already uses on the read side.
+        private static void WriteToStream(Stream stream, int format, NativeColumnSpec[] specs, NativeTable table, NativeWriteOptions options, string sheetName, bool hasHeader)
+        {
+            bool date1904 = options.Date1904 ?? false;
+            bool sharedStrings = options.UseSharedStrings ?? false;
+            switch (format)
+            {
+                case NativeFormat.Xlsx:
+                    WriteWorkbook<XlsxSheetWriter, XlsxRowWriter>(
+                        Block(XlsxWorkbookWriter.CreateAsync(stream, useSharedStrings: sharedStrings)), specs, table, sheetName, hasHeader);
+                    return;
+                case NativeFormat.Xlsb:
+                    WriteWorkbook<XlsbSheetWriter, XlsbRowWriter>(
+                        Block(XlsbWorkbookWriter.CreateAsync(stream, date1904: date1904, useSharedStrings: sharedStrings)), specs, table, sheetName, hasHeader);
+                    return;
+                case NativeFormat.Xls:
+                    WriteWorkbook<XlsSheetWriter, XlsRowWriter>(
+                        XlsWorkbookWriter.Create(stream, date1904: date1904), specs, table, sheetName, hasHeader);
+                    return;
+                default:
+                    WriteWorkbook<CsvSheetWriter, CsvRowWriter>(
+                        CsvWorkbookWriter.Create(stream, options: options.ToCsvWriterOptions()), specs, table, sheetName, hasHeader);
+                    return;
+            }
+        }
+
+        private static void WriteWorkbook<TSheet, TRow>(IWorkbookWriter<TSheet> workbook, NativeColumnSpec[] specs, NativeTable table, string sheetName, bool hasHeader)
+            where TSheet : ISheetWriter<TRow>
+            where TRow : IRowWriter
+        {
+            try
+            {
+                Block(workbook.StartAsync());
+                TSheet sheet = workbook.AddSheet(sheetName);
+                ApplyTemporalStyles<TSheet, TRow>(workbook, sheet, table);
+                Block(sheet.StartAsync());
+
+                if (hasHeader)
+                {
+                    WriteHeaderRow<TSheet, TRow>(sheet, specs);
+                }
+                for (long row = 0; row < table.RowCount; row++)
+                {
+                    WriteDataRow<TSheet, TRow>(sheet, table, row);
+                }
+
+                Block(sheet.EndAsync());
+                Block(sheet.DisposeAsync());
+                Block(workbook.EndAsync());
+            }
+            finally
+            {
+                Block(workbook.DisposeAsync());
+            }
+        }
+
+        // Must run before sheet.StartAsync (ISheetWriter.SetColumnStyle throws afterward). Without a
+        // number format a temporal cell renders in Excel as its raw serial number.
+        private static void ApplyTemporalStyles<TSheet, TRow>(IWorkbookWriter<TSheet> workbook, TSheet sheet, NativeTable table)
+            where TSheet : ISheetWriter<TRow>
+            where TRow : IRowWriter
+        {
+            int timeStyle = -1;
+            int timestampStyle = -1;
+            for (int index = 0; index < table.ColumnCount; index++)
+            {
+                switch (ColumnAt(table, index).Type)
+                {
+                    case NativeColumnType.Date:
+                        sheet.SetColumnStyle(index, BuiltinDateStyleId);
+                        break;
+                    case NativeColumnType.Time:
+                        timeStyle = timeStyle < 0 ? workbook.AddStyle(new CellStyle { NumberFormat = "hh:mm:ss" }) : timeStyle;
+                        sheet.SetColumnStyle(index, timeStyle);
+                        break;
+                    case NativeColumnType.Timestamp:
+                        timestampStyle = timestampStyle < 0 ? workbook.AddStyle(new CellStyle { NumberFormat = "yyyy-mm-dd hh:mm:ss" }) : timestampStyle;
+                        sheet.SetColumnStyle(index, timestampStyle);
+                        break;
+                    default:
+                        break;
+                }
+            }
+        }
+
+        private static void WriteHeaderRow<TSheet, TRow>(TSheet sheet, NativeColumnSpec[] specs)
+            where TSheet : ISheetWriter<TRow>
+            where TRow : IRowWriter
+        {
+            TRow row = Block(sheet.StartRowAsync());
+            try
+            {
+                foreach (NativeColumnSpec spec in specs)
+                {
+                    row.Write(spec.Name);
+                }
+            }
+            finally
+            {
+                Block(row.DisposeAsync());
+            }
+        }
+
+        private static void WriteDataRow<TSheet, TRow>(TSheet sheet, NativeTable table, long rowIndex)
+            where TSheet : ISheetWriter<TRow>
+            where TRow : IRowWriter
+        {
+            TRow row = Block(sheet.StartRowAsync());
+            try
+            {
+                for (int index = 0; index < table.ColumnCount; index++)
+                {
+                    WriteCell(row, ColumnAt(table, index), rowIndex);
+                }
+            }
+            finally
+            {
+                Block(row.DisposeAsync());
+            }
+        }
+
+        private static void WriteCell(IRowWriter row, NativeColumn column, long rowIndex)
+        {
+            if (!IsValidAt(column, rowIndex))
+            {
+                WriteNullCell(row, column.Type);
+                return;
+            }
+            switch (column.Type)
+            {
+                case NativeColumnType.String:
+                    // ponytail: one managed string per cell — IRowWriter has no UTF-8/span overload.
+                    // Upgrade path is a Write(ReadOnlySpan<byte>) overload in ExcelReader.Core, which is
+                    // a public-API change and out of this plan's scope.
+                    int* offsets = (int*)column.Values;
+                    int start = offsets[rowIndex];
+                    row.Write(Encoding.UTF8.GetString((byte*)column.Data + start, offsets[rowIndex + 1] - start));
+                    return;
+                case NativeColumnType.Int64:
+                    row.Write(((long*)column.Values)[rowIndex]);
+                    return;
+                case NativeColumnType.Float64:
+                    row.Write(((double*)column.Values)[rowIndex]);
+                    return;
+                case NativeColumnType.Bool:
+                    row.Write(((byte*)column.Values)[rowIndex] != 0);
+                    return;
+                case NativeColumnType.Date:
+                    row.Write(DateOnly.FromDayNumber(WriteUnixEpochDayNumber + ((int*)column.Values)[rowIndex]));
+                    return;
+                case NativeColumnType.Time:
+                {
+                    // checked: an unchecked overflow here would silently write the wrong time instead of
+                    // failing the call. The pointer cast happens outside the checked block: CA2020 treats
+                    // a checked native-int-to-pointer conversion as throwing on overflow starting in .NET
+                    // 7, which is not what this line means to check (the multiplication is).
+                    long* values = (long*)column.Values;
+                    row.Write(new TimeOnly(checked(values[rowIndex] * TimeSpan.TicksPerMicrosecond)));
+                    return;
+                }
+                default:
+                {
+                    long* values = (long*)column.Values;
+                    row.Write(DateTime.UnixEpoch.AddTicks(checked(values[rowIndex] * TimeSpan.TicksPerMicrosecond)));
+                    return;
+                }
+            }
+        }
+
+        // The nullable overloads are what make a blank cell; passing a default value would write a real
+        // 0/false/epoch-date instead.
+        private static void WriteNullCell(IRowWriter row, int type)
+        {
+            switch (type)
+            {
+                case NativeColumnType.String:
+                    row.Write((string?)null);
+                    return;
+                case NativeColumnType.Int64:
+                    row.Write((long?)null);
+                    return;
+                case NativeColumnType.Float64:
+                    row.Write((double?)null);
+                    return;
+                case NativeColumnType.Bool:
+                    row.Write((bool?)null);
+                    return;
+                case NativeColumnType.Date:
+                    row.Write((DateOnly?)null);
+                    return;
+                case NativeColumnType.Time:
+                    row.Write((TimeOnly?)null);
+                    return;
+                default:
+                    row.Write((DateTime?)null);
+                    return;
+            }
+        }
+
+        // A NULL validity pointer is the "no nulls in this column" signal, not an error — same
+        // convention xl_parse_typed emits.
+        private static bool IsValidAt(NativeColumn column, long rowIndex)
+        {
+            if (column.Validity == IntPtr.Zero)
+            {
+                return true;
+            }
+            byte* bitmap = (byte*)column.Validity;
+            return (bitmap[rowIndex >> 3] & (1 << (int)(rowIndex & 7))) != 0;
+        }
+
+        // The C ABI is synchronous and NativeAOT installs no SynchronizationContext, so blocking here
+        // cannot deadlock. Guarding on IsCompletedSuccessfully first matters: StartRowAsync runs once
+        // per row and a buffered write almost never goes async. Same pattern as
+        // ExcelReader.Core's Writer/Internal/WriteOffloadStream.cs.
+        [SuppressMessage("VisualStudio.Threading", "VSTHRD002:Avoid problematic synchronous waits",
+            Justification = "The C ABI is synchronous by contract; NativeAOT installs no SynchronizationContext, so this cannot deadlock.")]
+        private static void Block(ValueTask task)
+        {
+            if (!task.IsCompletedSuccessfully)
+            {
+                task.AsTask().GetAwaiter().GetResult();
+            }
+        }
+
+        [SuppressMessage("VisualStudio.Threading", "VSTHRD002:Avoid problematic synchronous waits",
+            Justification = "The C ABI is synchronous by contract; NativeAOT installs no SynchronizationContext, so this cannot deadlock.")]
+        [SuppressMessage("Reliability", "S5034:Refactor this ValueTask usage",
+            Justification = "The Result branch is only reached after IsCompletedSuccessfully is checked, per ValueTask's own documented fast path.")]
+        private static T Block<T>(ValueTask<T> task)
+        {
+            if (task.IsCompletedSuccessfully)
+            {
+                return task.Result;
+            }
+            return task.AsTask().GetAwaiter().GetResult();
+        }
+
         /// <summary>
         /// Validates a caller-supplied write table before a single byte is written.
         /// </summary>
