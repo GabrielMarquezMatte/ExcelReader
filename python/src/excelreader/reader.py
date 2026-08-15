@@ -229,6 +229,40 @@ class Workbook:
         # exported nothing, so there is no leak on that path either.
         return pyarrow.Array._import_from_c(ctypes.addressof(array), ctypes.addressof(arrow_schema))
 
+    def to_record_batch(self, schema: Sequence[ColumnSpec], header_row: int = 1) -> object:
+        """Same read as `to_arrow()`, wrapped as a column-named `pyarrow.RecordBatch`.
+
+        Requires pyarrow — see `to_arrow()`.
+        """
+        # to_arrow() runs first so its own ImportError message (naming the exact install command)
+        # is what a pyarrow-less caller sees, not a bare "no module named pyarrow" from the import below.
+        array = self.to_arrow(schema, header_row=header_row)
+        import pyarrow
+
+        return pyarrow.RecordBatch.from_struct_array(array)
+
+    def to_pandas(self, schema: Sequence[ColumnSpec], header_row: int = 1) -> object:
+        """Same read as `to_arrow()`, materialized as a `pandas.DataFrame`.
+
+        Requires pyarrow and pandas.
+        """
+        return self.to_record_batch(schema, header_row=header_row).to_pandas()
+
+    def to_polars(self, schema: Sequence[ColumnSpec], header_row: int = 1) -> object:
+        """Same read as `to_arrow()`, materialized as a `polars.DataFrame`, zero-copy.
+
+        Requires pyarrow and polars.
+        """
+        try:
+            import polars
+        except ImportError:
+            raise ImportError(
+                "to_polars() requires polars — install it with `pip install polars`, or use "
+                "to_arrow()/to_record_batch(), which return the same data with no polars dependency."
+            ) from None
+
+        return polars.from_arrow(self.to_record_batch(schema, header_row=header_row))
+
     def infer_schema(self, header_row: int = 1, sample_size: int = 100) -> list[ColumnSpec]:
         """Guesses a `parse_typed()`/`to_arrow()` schema by sampling this sheet's cells.
 

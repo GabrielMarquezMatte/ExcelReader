@@ -398,6 +398,51 @@ def test_to_arrow_raises_for_an_unknown_column_name(typed_csv):
         workbook.to_arrow([ColumnSpec(ColumnType.I64, name="nope")])
 
 
+def test_to_record_batch_returns_a_column_named_batch_matching_parse_typed(typed_csv):
+    pa = pytest.importorskip("pyarrow")
+
+    with open_workbook(typed_csv) as workbook:
+        batch = workbook.to_record_batch(_TYPED_SCHEMA)
+
+    assert isinstance(batch, pa.RecordBatch)
+    assert batch.schema.names == ["name", "qty", "price", "flag", "day", "clock", "stamp"]
+    assert batch.column("qty").to_pylist() == [3, 7]
+
+
+def test_to_pandas_returns_a_dataframe_matching_parse_typed(typed_csv):
+    pytest.importorskip("pyarrow")
+    pd = pytest.importorskip("pandas")
+
+    with open_workbook(typed_csv) as workbook:
+        df = workbook.to_pandas(_TYPED_SCHEMA)
+
+    assert isinstance(df, pd.DataFrame)
+    assert list(df.columns) == ["name", "qty", "price", "flag", "day", "clock", "stamp"]
+    assert df["name"].tolist() == ["widget", "gadget"]
+    assert df["qty"].tolist() == [3, 7]
+
+
+def test_to_polars_returns_a_dataframe_matching_parse_typed(typed_csv):
+    pytest.importorskip("pyarrow")
+    pl = pytest.importorskip("polars")
+
+    with open_workbook(typed_csv) as workbook:
+        df = workbook.to_polars(_TYPED_SCHEMA)
+
+    assert isinstance(df, pl.DataFrame)
+    assert df.columns == ["name", "qty", "price", "flag", "day", "clock", "stamp"]
+    assert df["name"].to_list() == ["widget", "gadget"]
+    assert df["qty"].to_list() == [3, 7]
+
+
+def test_to_polars_raises_for_an_unknown_column_name(typed_csv):
+    pytest.importorskip("pyarrow")
+    pytest.importorskip("polars")
+
+    with open_workbook(typed_csv) as workbook, pytest.raises(ExcelReaderError):
+        workbook.to_polars([ColumnSpec(ColumnType.I64, name="nope")])
+
+
 def test_open_options_reaches_the_csv_reader(tmp_path):
     # A semicolon file parses as ONE column under the default comma dialect and as three under the
     # override. Asserting the column split, rather than just that the call succeeded, is what proves
