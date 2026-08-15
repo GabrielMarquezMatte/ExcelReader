@@ -1,3 +1,5 @@
+using System.Diagnostics.CodeAnalysis;
+
 namespace ExcelReader.Core.Writer
 {
     /// <summary>
@@ -13,8 +15,15 @@ namespace ExcelReader.Core.Writer
     /// sheet/row, buffered output) with no synchronization. Use one workbook writer per thread; do not
     /// call into a writer, its current sheet, or its current row from more than one thread at a time.
     /// </remarks>
-    public interface IWorkbookWriter<out TSheet> : IAsyncDisposable
+    public interface IWorkbookWriter<out TSheet> : IDisposable, IAsyncDisposable
     {
+        /// <summary>
+        /// Synchronous counterpart to <see cref="StartAsync"/>: writes the workbook's leading structure
+        /// and moves the writer into the started state, without the async/await machinery, for native/
+        /// unmanaged callers whose ABI is synchronous. Must be called exactly once, before <see cref="AddSheet"/>.
+        /// </summary>
+        void Start();
+
         /// <summary>
         /// Writes the workbook's leading structure (e.g. archive/package headers) and moves the writer
         /// into the started state. Must be called exactly once, before <see cref="AddSheet"/>.
@@ -33,6 +42,14 @@ namespace ExcelReader.Core.Writer
         TSheet AddSheet(string name);
 
         /// <summary>
+        /// Synchronous counterpart to <see cref="EndAsync"/>: finalizes the workbook without the
+        /// async/await machinery, for native/unmanaged callers whose ABI is synchronous.
+        /// </summary>
+        [SuppressMessage("Naming", "CA1716:Identifiers should not match keywords",
+            Justification = "'End' is not reserved in C#, this project's primary language; matches the sync/async naming pair (End/EndAsync) already used throughout this codebase (e.g. XlsSheetWriter.End).")]
+        void End();
+
+        /// <summary>
         /// Finalizes the workbook, writing any trailing structure (e.g. the workbook manifest/index)
         /// so the destination stream contains a complete, readable file. No further sheets may be added
         /// afterward. Idempotent with disposal: disposing an already-ended workbook is a no-op beyond
@@ -40,6 +57,12 @@ namespace ExcelReader.Core.Writer
         /// </summary>
         /// <param name="ct">A token to cancel the operation.</param>
         ValueTask EndAsync(CancellationToken ct = default);
+
+        /// <summary>
+        /// Synchronous counterpart to <see cref="FlushAsync"/>: flushes any buffered output for the
+        /// workbook and its current sheet to the destination stream, without the async/await machinery.
+        /// </summary>
+        void Flush();
 
         /// <summary>
         /// Flushes any buffered output for the workbook and its current sheet to the destination stream.
@@ -62,14 +85,37 @@ namespace ExcelReader.Core.Writer
     /// a caller starts the sheet, writes rows in order via <see cref="StartRowAsync(CancellationToken)"/>, then ends the sheet.
     /// </summary>
     /// <typeparam name="TRow">The concrete <see cref="IRowWriter"/> this sheet produces.</typeparam>
-    public interface ISheetWriter<TRow> : IAsyncDisposable
+    public interface ISheetWriter<TRow> : IDisposable, IAsyncDisposable
     {
+        /// <summary>
+        /// Synchronous counterpart to <see cref="StartAsync"/>: writes the sheet's leading structure and
+        /// moves it into the started state, without the async/await machinery, for native/unmanaged
+        /// callers whose ABI is synchronous. Must be called exactly once, before <see cref="StartRow()"/>.
+        /// </summary>
+        void Start();
+
         /// <summary>
         /// Writes the sheet's leading structure and moves it into the started state. Must be called
         /// exactly once, before <see cref="StartRowAsync(CancellationToken)"/>.
         /// </summary>
         /// <param name="ct">A token to cancel the operation.</param>
         ValueTask StartAsync(CancellationToken ct = default);
+
+        /// <summary>
+        /// Synchronous counterpart to <see cref="StartRowAsync(CancellationToken)"/>: begins the next
+        /// row, without the async/await machinery, for native/unmanaged callers whose ABI is synchronous.
+        /// </summary>
+        /// <returns>The writer for the new row.</returns>
+        TRow StartRow();
+
+        /// <summary>
+        /// Synchronous counterpart to <see cref="StartRowAsync(int, CancellationToken)"/>: begins the
+        /// next row with <paramref name="styleId"/> applied to its cells, without the async/await machinery.
+        /// </summary>
+        /// <param name="styleId">The style to apply to every cell of this row.</param>
+        /// <returns>The writer for the new row.</returns>
+        /// <exception cref="ArgumentOutOfRangeException"><paramref name="styleId"/> is negative or was never returned by <see cref="IWorkbookWriter{TSheet}.AddStyle"/>.</exception>
+        TRow StartRow(int styleId);
 
         /// <summary>
         /// Begins the next row, in order starting from the first, and returns its writer. Only one row
@@ -111,6 +157,14 @@ namespace ExcelReader.Core.Writer
         void SetColumnWidth(int columnIndex, double width);
 
         /// <summary>
+        /// Synchronous counterpart to <see cref="EndAsync"/>: finalizes the sheet without the
+        /// async/await machinery, for native/unmanaged callers whose ABI is synchronous.
+        /// </summary>
+        [SuppressMessage("Naming", "CA1716:Identifiers should not match keywords",
+            Justification = "'End' is not reserved in C#, this project's primary language; matches the sync/async naming pair (End/EndAsync) already used throughout this codebase (e.g. XlsSheetWriter.End).")]
+        void End();
+
+        /// <summary>
         /// Finalizes the sheet, writing any trailing structure so the sheet is complete within the
         /// workbook. The active row writer, if any, must already be disposed. No further rows may be
         /// started afterward.
@@ -132,7 +186,7 @@ namespace ExcelReader.Core.Writer
     /// blank cell or omits a cell record entirely for that column is implementation-defined — either
     /// way, reading the cell back yields an empty/blank value.
     /// </remarks>
-    public interface IRowWriter : IAsyncDisposable
+    public interface IRowWriter : IDisposable, IAsyncDisposable
     {
         /// <summary>Writes a text cell, or a blank/empty cell if <paramref name="value"/> is <see langword="null"/>.</summary>
         /// <param name="value">The text to write.</param>

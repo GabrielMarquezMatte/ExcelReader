@@ -91,6 +91,33 @@ namespace ExcelReader.Core.Writer
             }
         }
 
+        /// <summary>
+        /// Synchronous counterpart to <see cref="StartAsync"/>, for native/unmanaged callers whose ABI
+        /// is synchronous.
+        /// </summary>
+        /// <exception cref="ObjectDisposedException">The sheet has already been ended.</exception>
+        /// <exception cref="InvalidOperationException">The sheet has already been started.</exception>
+        [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP003:Dispose previous before re-assigning",
+            Justification = "_stream is always null when Start is called (state machine guarantees Created state).")]
+        [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
+            Justification = "Ownership of the optionally-wrapped stream transfers to _stream, which End/Dispose disposes.")]
+        public void Start()
+        {
+            WriterStateGuard.ThrowIfEnded(_state, this);
+            WriterStateGuard.RequireCreated(_state, nameof(XlsxSheetWriter));
+            ZipArchiveEntry entry = _zip.CreateEntry($"xl/worksheets/sheet{SheetId}.xml", _compression);
+            Stream stream = entry.Open();
+            _stream = _offloadWrite ? new WriteOffloadStream(stream) : stream;
+            _rowBuffer.Reset();
+            _rowBuffer.WriteUtf8(
+                "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>" +
+                $"<worksheet xmlns=\"{XlsxConstants.MainNs}\">{BuildColsXml()}<sheetData>");
+            _stream.Write(_rowBuffer.Span);
+            _rowBuffer.Reset();
+            _state = WriterState.Started;
+            _owner.RegisterSheet(Name, SheetId);
+        }
+
         /// <inheritdoc/>
         /// <exception cref="ObjectDisposedException">The sheet has already been ended.</exception>
         /// <exception cref="InvalidOperationException">The sheet has already been started.</exception>
@@ -176,10 +203,7 @@ namespace ExcelReader.Core.Writer
         {
             ArgumentOutOfRangeException.ThrowIfNegative(styleId);
             ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(styleId, _owner.StyleCount);
-            int rowNumber = BeginRow(styleId, ct);
-            _rowWriter ??= new XlsxRowWriter(this, _rowBuffer);
-            _rowWriter.Reset(rowNumber, styleId);
-            return ValueTask.FromResult(_rowWriter);
+            return ValueTask.FromResult(StartRow(styleId, ct));
         }
 
         /// <summary>
@@ -198,10 +222,57 @@ namespace ExcelReader.Core.Writer
         /// <exception cref="ExcelLimitExceededException">The worksheet's 1,048,576-row limit has been reached.</exception>
         public XlsxRowWriter StartRow(CancellationToken ct = default)
         {
-            int rowNumber = BeginRow(styleId: 0, ct);
+            return StartRow(styleId: 0, ct);
+        }
+
+        private XlsxRowWriter StartRow(int styleId, CancellationToken ct)
+        {
+            int rowNumber = BeginRow(styleId, ct);
             _rowWriter ??= new XlsxRowWriter(this, _rowBuffer);
-            _rowWriter.Reset(rowNumber, styleId: 0);
+            _rowWriter.Reset(rowNumber, styleId);
             return _rowWriter;
+        }
+
+        // Explicit interface implementations (not public overloads): XlsxSheetWriter already ships a
+        // public StartRow(CancellationToken ct = default) — a public zero-arg or int-only StartRow
+        // alongside it would collide with that optional parameter under this repo's back-compat/overload
+        // analyzers (RS0027/S3427). Native/unmanaged callers reach these through the ISheetWriter<TRow>
+        // constraint (see NativeApi.Write.cs), which dispatches to an explicit implementation exactly
+        // the same as a public one; only direct-XlsxSheetWriter-typed callers can't see it by this name,
+        // and they already have StartRow()/StartRow(ct) via the pre-existing overload.
+        XlsxRowWriter ISheetWriter<XlsxRowWriter>.StartRow()
+        {
+            return StartRow(styleId: 0, default);
+        }
+
+        XlsxRowWriter ISheetWriter<XlsxRowWriter>.StartRow(int styleId)
+        {
+            ArgumentOutOfRangeException.ThrowIfNegative(styleId);
+            ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(styleId, _owner.StyleCount);
+            return StartRow(styleId, default(CancellationToken));
+        }
+
+        /// <summary>
+        /// Synchronous counterpart to <see cref="EndAsync"/>, for native/unmanaged callers whose ABI is
+        /// synchronous.
+        /// </summary>
+        /// <exception cref="ObjectDisposedException">The sheet has already been ended.</exception>
+        /// <exception cref="InvalidOperationException">The sheet has not been started, or the active <see cref="XlsxRowWriter"/> has not been disposed.</exception>
+        public void End()
+        {
+            WriterStateGuard.ThrowIfEnded(_state, this);
+            WriterStateGuard.RequireStarted(_state, nameof(XlsxSheetWriter), "ending");
+            WriterStateGuard.RequireNoActiveRowForEnd(_rowActive, nameof(XlsxRowWriter));
+            _state = WriterState.Ended;
+            _rowBuffer.Write("</sheetData></worksheet>"u8);
+#pragma warning disable CS8602 // Dereference of a possibly null reference.
+            _stream.Write(_rowBuffer.Span);
+            _stream.Flush();
+            _stream.Dispose();
+#pragma warning restore CS8602 // Dereference of a possibly null reference.
+            _stream = null;
+            _rowBuffer.Dispose();
+            _owner.NotifySheetEnded();
         }
 
         /// <inheritdoc/>
@@ -223,6 +294,23 @@ namespace ExcelReader.Core.Writer
             _stream = null;
             _rowBuffer.Dispose();
             _owner.NotifySheetEnded();
+        }
+
+        /// <summary>
+        /// Synchronous counterpart to <see cref="DisposeAsync"/>, for native/unmanaged callers whose ABI
+        /// is synchronous.
+        /// </summary>
+        public void Dispose()
+        {
+            if (_state == WriterState.Started)
+            {
+                End();
+            }
+            else if (_state == WriterState.Created)
+            {
+                _state = WriterState.Ended;
+                _rowBuffer.Dispose();
+            }
         }
 
         /// <inheritdoc/>

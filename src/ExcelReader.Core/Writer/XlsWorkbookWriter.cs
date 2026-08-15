@@ -96,6 +96,78 @@ namespace ExcelReader.Core.Writer
             _activeSheet = null;
         }
 
+        // Shared by End/EndAsync: computes the BoundSheet offsets/workbook size and returns the globals
+        // buffer, which the caller streams into OleCompoundWriter and disposes afterward.
+        private BiffBuffer BuildGlobals(out int workbookSize)
+        {
+            BiffBuffer globals = new(1024);
+            string[] names = new string[_sheets.Count];
+            for (int i = 0; i < _sheets.Count; i++)
+            {
+                names[i] = _sheets[i].Name;
+            }
+
+            int[] offsetPositions = XlsGlobals.Write(globals, names, _date1904, _styles);
+            int offset = globals.Length;
+            workbookSize = offset;
+            for (int i = 0; i < _sheets.Count; i++)
+            {
+                globals.PatchI32(offsetPositions[i], offset);
+                offset += _sheets[i].SubstreamLength;
+                workbookSize += _sheets[i].SubstreamLength;
+            }
+            return globals;
+        }
+
+        /// <summary>
+        /// Synchronous counterpart to <see cref="EndAsync"/>, for native/unmanaged callers whose ABI is
+        /// synchronous.
+        /// </summary>
+        /// <exception cref="InvalidOperationException">No sheet was ever added to the workbook.</exception>
+        public void End()
+        {
+            WriterStateGuard.ThrowIfEnded(_state, this);
+            WriterStateGuard.RequireStarted(_state, nameof(XlsWorkbookWriter), "ending");
+            _state = WriterState.Ended;
+            _activeSheet?.Dispose();
+            if (_sheets.Count == 0)
+            {
+                throw new InvalidOperationException("A workbook must contain at least one sheet.");
+            }
+
+            BiffBuffer globals = BuildGlobals(out int workbookSize);
+            BiffBuffer frame = new(64);
+            try
+            {
+                OleCompoundWriter.Write(_stream, workbookSize, dest =>
+                {
+                    dest.Write(globals.Span);
+                    foreach (ref readonly var sheet in CollectionsMarshal.AsSpan(_sheets))
+                    {
+                        frame.Reset();
+                        BiffRecordWriter.WriteBof(frame, BiffRecord.SubstreamWorksheet);
+                        BiffRecordWriter.WriteDimension(frame, sheet.RowCount, sheet.ColCount);
+                        BiffRecordWriter.WriteWindow2(frame);
+                        dest.Write(frame.Span);
+                        dest.Write(sheet.ColInfoMemory.Span);
+                        dest.Write(sheet.CellsMemory.Span);
+                        frame.Reset();
+                        BiffRecordWriter.WriteEof(frame);
+                        dest.Write(frame.Span);
+                    }
+                });
+            }
+            finally
+            {
+                globals.Dispose();
+                frame.Dispose();
+                foreach (ref readonly var sheet in CollectionsMarshal.AsSpan(_sheets))
+                {
+                    sheet.ReleaseBuffer();
+                }
+            }
+        }
+
         /// <inheritdoc/>
         /// <exception cref="InvalidOperationException">No sheet was ever added to the workbook.</exception>
         public async ValueTask EndAsync(CancellationToken ct = default)
@@ -113,28 +185,10 @@ namespace ExcelReader.Core.Writer
                 throw new InvalidOperationException("A workbook must contain at least one sheet.");
             }
 
-            // Globals are small (BOF/CODEPAGE/XFs/BoundSheets/EOF); only this buffer plus each
-            // sheet's already-accumulated cell buffer live at finalize — no combined workbook copy.
-            BiffBuffer globals = new(1024);
+            BiffBuffer globals = BuildGlobals(out int workbookSize);
             BiffBuffer frame = new(64);
             try
             {
-                string[] names = new string[_sheets.Count];
-                for (int i = 0; i < _sheets.Count; i++)
-                {
-                    names[i] = _sheets[i].Name;
-                }
-
-                int[] offsetPositions = XlsGlobals.Write(globals, names, _date1904, _styles);
-                int offset = globals.Length;
-                int workbookSize = offset;
-                for (int i = 0; i < _sheets.Count; i++)
-                {
-                    globals.PatchI32(offsetPositions[i], offset);
-                    offset += _sheets[i].SubstreamLength;
-                    workbookSize += _sheets[i].SubstreamLength;
-                }
-
                 await OleCompoundWriter.WriteAsync(_stream, workbookSize, async (dest, canc) =>
                 {
                     await dest.WriteAsync(globals.Memory, canc).ConfigureAwait(false);
@@ -166,11 +220,50 @@ namespace ExcelReader.Core.Writer
             }
         }
 
+        /// <summary>
+        /// Synchronous counterpart to <see cref="FlushAsync"/>, for native/unmanaged callers whose ABI
+        /// is synchronous.
+        /// </summary>
+        public void Flush()
+        {
+            _stream.Flush();
+        }
+
         /// <inheritdoc/>
         public ValueTask FlushAsync(CancellationToken ct = default)
         {
             ct.ThrowIfCancellationRequested();
             return new ValueTask(_stream.FlushAsync(ct));
+        }
+
+        /// <summary>
+        /// Synchronous counterpart to <see cref="DisposeAsync"/>, for native/unmanaged callers whose ABI
+        /// is synchronous.
+        /// </summary>
+        public void Dispose()
+        {
+            if (_disposed)
+            {
+                return;
+            }
+            _disposed = true;
+            if (_state == WriterState.Started)
+            {
+                // Auto-finalize only a usable workbook; an unused/sheet-less one is abandoned
+                // quietly so disposal never throws over cleanup.
+                if (_sheets.Count > 0)
+                {
+                    End();
+                }
+                else
+                {
+                    _state = WriterState.Ended;
+                }
+            }
+            if (!_leaveOpen)
+            {
+                _stream.Dispose();
+            }
         }
 
         /// <inheritdoc/>
