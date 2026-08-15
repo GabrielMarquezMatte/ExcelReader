@@ -458,7 +458,7 @@ def test_open_options_reaches_the_csv_reader(tmp_path):
 
 
 def test_open_options_apply_to_open_bytes_too(tmp_path):
-    data = "name;qty\nwidget;3\n".encode("utf-8")
+    data = b"name;qty\nwidget;3\n"
 
     with open_bytes(data, format="csv", options=OpenOptions(csv_delimiter=ord(";"))) as workbook:
         assert [cell.value for cell in next(workbook.rows())] == ["name", "qty"]
@@ -491,6 +491,5 @@ def test_open_options_limit_actually_aborts_an_oversized_read(tmp_path):
     with open_workbook(path, format="csv") as workbook:
         assert len(list(workbook.rows())[1][0].value) == 200_000
 
-    with pytest.raises(ExcelReaderError):
-        with open_workbook(path, format="csv", options=OpenOptions(csv_max_cell_bytes=100_000)) as workbook:
+    with pytest.raises(ExcelReaderError), open_workbook(path, format="csv", options=OpenOptions(csv_max_cell_bytes=100_000)) as workbook:
             list(workbook.rows())

@@ -296,7 +296,10 @@ def to_native_write_options(options: WriteOptions) -> NativeWriteOptions:
         encoded = options.sheet_name.encode("utf-8")
         raw.sheet_name = encoded
         raw.sheet_name_len = len(encoded)
-        # ctypes.c_char_p copies the bytes into the struct, so `encoded` needs no separate keepalive.
+        # No separate keepalive is needed, but NOT because anything is copied: assigning a bytes
+        # object to a c_char_p field stores a POINTER into that object's buffer and files the object
+        # in the structure's `_objects` dict, so `raw` itself keeps `encoded` alive. Drop `raw` (or
+        # rebuild the field from a temporary) and the pointer dangles.
     raw.csv_delimiter = _opt_number(options.csv_delimiter)
     raw.csv_quote = _opt_number(options.csv_quote)
     raw.date1904 = _opt_state(options.date1904)

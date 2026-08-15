@@ -1,4 +1,5 @@
 using System.Buffers;
+using System.Diagnostics.CodeAnalysis;
 using System.Runtime.InteropServices;
 using ExcelReader.Core.Writer;
 
@@ -64,11 +65,8 @@ namespace ExcelReader.Native
         internal static bool TryDecode(NativeWriteOptionsRaw raw, string? sheetName, out NativeWriteOptions options, out string? error)
         {
             options = default;
-            error = null;
-            int expectedSize = Marshal.SizeOf<NativeWriteOptionsRaw>();
-            if (raw.StructSize != expectedSize)
+            if (!TryValidateStructSize(raw, out error))
             {
-                error = $"xl_write_options.struct_size is {raw.StructSize}, but this library expects {expectedSize}.";
                 return false;
             }
 
@@ -89,6 +87,28 @@ namespace ExcelReader.Native
                 Date1904 = date1904,
                 UseSharedStrings = sharedStrings,
             };
+            return true;
+        }
+
+        /// <summary>
+        /// The very first check any caller-supplied <see cref="NativeWriteOptionsRaw"/> must pass.
+        /// </summary>
+        /// <remarks>
+        /// A struct_size that disagrees IS the "our two struct layouts differ" signal, so every other
+        /// field — <c>sheet_name_len</c> and <c>sheet_name</c> above all — is at that point just bytes
+        /// at an offset this library guessed. <see cref="Exports"/> calls this before it dereferences
+        /// the sheet-name pointer, and <see cref="TryDecode"/> calls it again for callers that reach
+        /// the decoder directly; both share this one copy so the check cannot drift.
+        /// </remarks>
+        internal static bool TryValidateStructSize(NativeWriteOptionsRaw raw, [NotNullWhen(false)] out string? error)
+        {
+            error = null;
+            int expectedSize = Marshal.SizeOf<NativeWriteOptionsRaw>();
+            if (raw.StructSize != expectedSize)
+            {
+                error = $"xl_write_options.struct_size is {raw.StructSize}, but this library expects {expectedSize}.";
+                return false;
+            }
             return true;
         }
 

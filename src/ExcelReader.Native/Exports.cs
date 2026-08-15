@@ -285,12 +285,21 @@ namespace ExcelReader.Native
             NativeWriteOptionsRaw raw = options is null
                 ? new NativeWriteOptionsRaw { StructSize = Marshal.SizeOf<NativeWriteOptionsRaw>() }
                 : *options;
+            decoded = default;
+            // struct_size is checked BEFORE sheet_name is touched: a size that disagrees means the
+            // caller's struct layout is not this one, so the bytes sitting where sheet_name_len and
+            // sheet_name should be cannot be trusted as a length and a pointer to dereference.
+            if (!NativeWriteOptions.TryValidateStructSize(raw, out string? sizeError))
+            {
+                NativeApi.SetLastError(sizeError);
+                return false;
+            }
             string? sheetName = null;
             if (raw.SheetName is not null)
             {
                 if (!NativeApi.IsValidNameLength(raw.SheetNameLen))
                 {
-                    decoded = default;
+                    NativeApi.SetLastError($"xl_write_options.sheet_name_len is out of range; got {raw.SheetNameLen}.");
                     return false;
                 }
                 sheetName = Encoding.UTF8.GetString(raw.SheetName, raw.SheetNameLen);
