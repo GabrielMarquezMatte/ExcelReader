@@ -39,6 +39,7 @@ def test_exported_functions_are_present():
         "xl_parse_typed",
         "xl_free_table",
         "xl_parse_arrow",
+        "xl_write_typed",
         "xl_last_error",
         "xl_last_error_ptr",
         "xl_abi_version",
@@ -222,6 +223,36 @@ def test_parse_arrow_returns_a_struct_array_with_a_matching_schema(tmp_path):
     schema_release(ctypes.byref(schema))
 
     lib.xl_close(handle)
+
+
+def test_write_typed_round_trips_through_parse_typed(tmp_path):
+    # Exercises the NativeWriteOptions ctypes layout end-to-end against the real library, the same way
+    # test_open_file_ex_with_default_options_opens_like_open_file does for NativeOpenOptions — a field
+    # mismatch with the C# NativeWriteOptionsRaw surfaces as XL_INVALID_ARGUMENT, not a missing symbol.
+    lib = _native.load_library()
+    out_path = tmp_path / "written.csv"
+
+    values = (ctypes.c_int64 * 2)(3, 7)
+    column = _native.NativeColumn(
+        type=_native.XL_T_I64,
+        length=2,
+        values=ctypes.cast(values, ctypes.c_void_p),
+        validity=None,
+        data=None,
+        data_len=0,
+    )
+    columns = (_native.NativeColumn * 1)(column)
+    table = _native.NativeTable(column_count=1, row_count=2, columns=columns)
+    specs = (_native.NativeColumnSpec * 1)(_native.column_spec_by_name("qty", _native.XL_T_I64))
+    options = _native.default_write_options()
+
+    encoded = str(out_path).encode("utf-8")
+    status = lib.xl_write_typed(
+        encoded, len(encoded), _native.XL_FORMAT_CSV, specs, ctypes.byref(table), ctypes.byref(options)
+    )
+
+    assert status == _native.XL_OK
+    assert out_path.read_text(encoding="utf-8").replace("\r\n", "\n") == "qty\n3\n7\n"
 
 
 def test_abi_version_matches_the_header():

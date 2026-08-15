@@ -15,7 +15,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     # Import-time only: types.py imports nothing from this module, but keeping the dependency out of
     # the runtime path keeps this file loadable on its own, the way the rest of it already is.
-    from excelreader.types import OpenOptions
+    from excelreader.types import OpenOptions, WriteOptions
 
 XL_OK = 0
 XL_EOF = -1
@@ -259,6 +259,51 @@ def to_native_open_options(options: OpenOptions) -> NativeOpenOptions:
     return raw
 
 
+class NativeWriteOptions(ctypes.Structure):
+    """Mirrors xl_write_options. `struct_size` is set for you by `default_write_options()`; every other
+    numeric field is 0 (use the library default), and every XL_OPT_* field starts at XL_OPT_DEFAULT."""
+
+    _fields_ = [
+        ("struct_size", ctypes.c_int32),
+        ("sheet_name_len", ctypes.c_int32),
+        ("sheet_name", ctypes.c_char_p),
+        ("csv_delimiter", ctypes.c_int32),
+        ("csv_quote", ctypes.c_int32),
+        ("date1904", ctypes.c_int32),
+        ("use_shared_strings", ctypes.c_int32),
+    ]
+
+
+def default_write_options() -> NativeWriteOptions:
+    """A NativeWriteOptions with every field at its "use the library default" value and struct_size
+    filled in — start from this rather than constructing NativeWriteOptions() directly, since the raw
+    zero-value for struct_size is never valid."""
+    options = NativeWriteOptions()
+    options.struct_size = ctypes.sizeof(NativeWriteOptions)
+    return options
+
+
+def to_native_write_options(options: WriteOptions) -> NativeWriteOptions:
+    """Converts a public `WriteOptions` into the raw ABI struct.
+
+    Same split as `to_native_open_options()`: the public API's single "None means default" convention
+    becomes 0 for an unset number and XL_OPT_DEFAULT for an unset boolean. Values are passed through
+    unvalidated on purpose — the native side owns the real bounds and reports a rejection through
+    xl_last_error, so checking them here too would give those bounds a second place to drift from.
+    """
+    raw = default_write_options()
+    if options.sheet_name is not None:
+        encoded = options.sheet_name.encode("utf-8")
+        raw.sheet_name = encoded
+        raw.sheet_name_len = len(encoded)
+        # ctypes.c_char_p copies the bytes into the struct, so `encoded` needs no separate keepalive.
+    raw.csv_delimiter = _opt_number(options.csv_delimiter)
+    raw.csv_quote = _opt_number(options.csv_quote)
+    raw.date1904 = _opt_state(options.date1904)
+    raw.use_shared_strings = _opt_state(options.use_shared_strings)
+    return raw
+
+
 _LIB_NAMES = {
     "Windows": "ExcelReader.Native.dll",
     "Linux": "ExcelReader.Native.so",
@@ -359,6 +404,11 @@ def _bind(lib: ctypes.CDLL) -> ctypes.CDLL:
     lib.xl_free_schema.restype = None
     lib.xl_parse_arrow.argtypes = [p_void, ctypes.POINTER(NativeColumnSpec), c_int, c_int, ctypes.POINTER(ArrowArray), ctypes.POINTER(ArrowSchema)]
     lib.xl_parse_arrow.restype = c_int
+    lib.xl_write_typed.argtypes = [
+        p_bytes, c_int, c_int,
+        ctypes.POINTER(NativeColumnSpec), ctypes.POINTER(NativeTable), ctypes.POINTER(NativeWriteOptions),
+    ]
+    lib.xl_write_typed.restype = c_int
     lib.xl_abi_version.argtypes = []
     lib.xl_abi_version.restype = c_int
     return lib

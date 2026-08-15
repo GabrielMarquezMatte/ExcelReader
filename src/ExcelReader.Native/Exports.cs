@@ -248,6 +248,61 @@ namespace ExcelReader.Native
             }
         }
 
+        [UnmanagedCallersOnly(EntryPoint = "xl_write_typed")]
+        public static int WriteTyped(byte* path, int pathLength, int format, NativeColumnSpecRaw* specs, NativeTable* table, NativeWriteOptionsRaw* options)
+        {
+            if (path is null || pathLength <= 0 || specs is null || table is null
+                || !NativeApi.IsValidSpecCount(table->ColumnCount))
+            {
+                return NativeStatus.InvalidArgument;
+            }
+
+            try
+            {
+                if (!TryDecodeColumnSpecs(specs, table->ColumnCount, out NativeColumnSpec[] decoded))
+                {
+                    return NativeStatus.InvalidArgument;
+                }
+                if (!TryDecodeWriteOptions(options, out NativeWriteOptions decodedOptions))
+                {
+                    return NativeStatus.InvalidArgument;
+                }
+                return NativeApi.WriteTyped(new ReadOnlySpan<byte>(path, pathLength), format, decoded, *table, decodedOptions);
+            }
+            catch (Exception exception)
+            {
+                // Decoding walks caller memory and allocates from a caller-supplied count, so it can
+                // still fail in ways the guards above cannot see.
+                NativeApi.SetLastError(exception.Message);
+                return NativeStatus.Error;
+            }
+        }
+
+        // A NULL options pointer means "every default", identical to xl_open_file_ex's contract. The
+        // sheet name is UTF-8-decoded here because everything below this layer stays pointer-free.
+        private static bool TryDecodeWriteOptions(NativeWriteOptionsRaw* options, out NativeWriteOptions decoded)
+        {
+            NativeWriteOptionsRaw raw = options is null
+                ? new NativeWriteOptionsRaw { StructSize = Marshal.SizeOf<NativeWriteOptionsRaw>() }
+                : *options;
+            string? sheetName = null;
+            if (raw.SheetName is not null)
+            {
+                if (!NativeApi.IsValidNameLength(raw.SheetNameLen))
+                {
+                    decoded = default;
+                    return false;
+                }
+                sheetName = Encoding.UTF8.GetString(raw.SheetName, raw.SheetNameLen);
+            }
+            if (!NativeWriteOptions.TryDecode(raw, sheetName, out decoded, out string? error))
+            {
+                NativeApi.SetLastError(error!);
+                return false;
+            }
+            return true;
+        }
+
         [UnmanagedCallersOnly(EntryPoint = "xl_infer_schema")]
         public static int InferSchema(nint handle, int headerRow, int sampleSize, NativeInferredSchema* outSchema)
         {
