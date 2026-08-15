@@ -23,7 +23,16 @@ Output lands in `bin/Release/net10.0/<rid>/publish/ExcelReader.Native.{dll,so,dy
 | `RowBlob.cs` | Row serialization. |
 | `include/excelreader.h` | Hand-written C header; keep in sync with `Exports.cs`. |
 
-Writing is not exposed yet — reading only.
+Writing is exposed through a single one-shot export, `xl_write_typed`, alongside the reading exports
+above (`xl_open_file`, `xl_open_file_ex`, `xl_close`, `xl_sheet_count`, `xl_sheet_name`,
+`xl_sheet_name_at`, `xl_is_date1904`, `xl_next_row`, `xl_read_all_blob`, `xl_next_row_decoded`,
+`xl_free_row`, `xl_read_all_decoded`, `xl_free_rows`, `xl_parse_typed`, `xl_free_table`,
+`xl_infer_schema`, `xl_free_schema`, `xl_last_error_ptr`, `xl_parse_arrow`). `xl_write_typed` takes an
+`xl_write_options*` that follows the exact same `struct_size` contract as `xl_open_options`: the
+caller sets `options->struct_size = sizeof(xl_write_options)` before the call, and a mismatched value
+is rejected with `XL_INVALID_ARGUMENT` before anything else is inspected. Phase 1 is single-sheet,
+whole-table-in-memory, no styling beyond the temporal number formats — see `include/excelreader.h` for
+the full contract.
 
 ## Consuming from C
 
