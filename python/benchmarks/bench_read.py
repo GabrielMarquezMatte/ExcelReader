@@ -94,6 +94,11 @@ def bench_to_arrow(path: Path) -> tuple[int, int]:
         array = workbook.to_arrow(_FIXTURE_SCHEMA)
     return len(array), len(array) * array.type.num_fields
 
+def bench_to_polars(path: Path) -> tuple[int, int]:
+    with excelreader.open_workbook(path, format="xlsb") as workbook:
+        schema = workbook.infer_schema(sample_size=10)
+        table = workbook.to_polars(schema)
+        return table.shape[0], table.shape[0] * table.shape[1]
 
 def bench_polars(path: Path) -> tuple[int, int]:
     import polars as pl
@@ -165,6 +170,10 @@ def main() -> int:
     except ImportError:
         print("polars not installed — skipping polars.read_excel comparison")
         return 0
+
+    print("excelreader.to_polars() [typed columnar DataFrame with schema inference]:")
+    _time_and_assert("  to_polars", bench_to_polars, args.path, args.n)
+    print()
 
     print("polars.read_excel() [NOTE: typed columnar DataFrame with type inference — not matched work]:")
     _time_and_assert("  polars", bench_polars, args.path, args.n)
