@@ -13,7 +13,7 @@ from excelreader.types import (
     TypedTable,
     WriteOptions,
 )
-from excelreader.writer import write_workbook
+from excelreader.writer import write_arrow, write_pandas, write_polars, write_workbook
 
 __all__ = [
     "Cell",
@@ -30,5 +30,8 @@ __all__ = [
     "decode_cell",
     "open_bytes",
     "open_workbook",
+    "write_arrow",
+    "write_pandas",
+    "write_polars",
     "write_workbook",
 ]
