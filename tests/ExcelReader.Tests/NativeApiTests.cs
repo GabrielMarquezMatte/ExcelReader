@@ -2353,6 +2353,289 @@ namespace ExcelReader.Tests
             Assert.Equal((byte)'\'', csv.Quote);
         }
 
+        private static NativeWriteOptions DefaultWriteOptions()
+        {
+            Assert.True(NativeWriteOptions.TryDecode(DefaultWriteOptionsRaw(), null, out NativeWriteOptions options, out _));
+            return options;
+        }
+
+        [Theory]
+        [InlineData(NativeFormat.Xlsx, "xlsx")]
+        [InlineData(NativeFormat.Xlsb, "xlsb")]
+        [InlineData(NativeFormat.Xls, "xls")]
+        [InlineData(NativeFormat.Csv, "csv")]
+        public void WriteTyped_Should_Round_Trip_Through_ParseTyped(int format, string extension)
+        {
+            string path = Path.Combine(Path.GetTempPath(), $"excelreader-native-{Guid.NewGuid():N}.{extension}");
+            NativeTable table = BuildInt64Table([3L, 7L]);
+            try
+            {
+                NativeColumnSpec[] specs = [new() { Name = "qty", Type = NativeColumnType.Int64 }];
+
+                Assert.Equal(NativeStatus.Ok, NativeApi.WriteTyped(
+                    Encoding.UTF8.GetBytes(path), format, specs, table, DefaultWriteOptions()));
+
+                Assert.Equal(NativeStatus.Ok, OpenPath(path, format, out NativeHandle? handle));
+                try
+                {
+                    Assert.Equal(NativeStatus.Ok, NativeApi.ParseTyped(handle, specs, headerRow: 1, out NativeTable read));
+                    try
+                    {
+                        Assert.Equal(2, read.RowCount);
+                        long[] values = new long[2];
+                        Marshal.Copy(ColumnAt(read, 0).Values, values, 0, 2);
+                        Assert.Equal([3L, 7L], values);
+                    }
+                    finally
+                    {
+                        NativeApi.FreeTable(ref read);
+                    }
+                }
+                finally
+                {
+                    NativeApi.Close(handle);
+                }
+            }
+            finally
+            {
+                FreeBuiltTable(ref table);
+                File.Delete(path);
+            }
+        }
+
+        [Fact]
+        public void WriteTyped_Should_Round_Trip_Strings_And_Nulls()
+        {
+            string path = Path.Combine(Path.GetTempPath(), $"excelreader-native-{Guid.NewGuid():N}.xlsx");
+            NativeTable table = BuildStringTable([0, 6, 6, 12], "widgetgadget"u8.ToArray());
+            try
+            {
+                // Row 1 is null (bit 1 clear), rows 0 and 2 are valid: 0b101.
+                NativeColumn column = Marshal.PtrToStructure<NativeColumn>(table.Columns);
+                column.Validity = Marshal.AllocHGlobal(1);
+                Marshal.WriteByte(column.Validity, 0b101);
+                Marshal.StructureToPtr(column, table.Columns, false);
+
+                NativeColumnSpec[] specs = [new() { Name = "name", Type = NativeColumnType.String }];
+                Assert.Equal(NativeStatus.Ok, NativeApi.WriteTyped(
+                    Encoding.UTF8.GetBytes(path), NativeFormat.Xlsx, specs, table, DefaultWriteOptions()));
+
+                Assert.Equal(NativeStatus.Ok, OpenPath(path, NativeFormat.Xlsx, out NativeHandle? handle));
+                try
+                {
+                    NativeColumnSpec[] readSpecs = [new() { Name = "name", Type = NativeColumnType.String, Nullable = true }];
+                    Assert.Equal(NativeStatus.Ok, NativeApi.ParseTyped(handle, readSpecs, headerRow: 1, out NativeTable read));
+                    try
+                    {
+                        Assert.Equal(["widget", "", "gadget"], DecodeStringColumn(ColumnAt(read, 0)));
+                    }
+                    finally
+                    {
+                        NativeApi.FreeTable(ref read);
+                    }
+                }
+                finally
+                {
+                    NativeApi.Close(handle);
+                }
+            }
+            finally
+            {
+                FreeBuiltTable(ref table);
+                File.Delete(path);
+            }
+        }
+
+        [Fact]
+        public void WriteTyped_Should_Round_Trip_Every_Temporal_Type()
+        {
+            string path = Path.Combine(Path.GetTempPath(), $"excelreader-native-{Guid.NewGuid():N}.xlsx");
+            int epoch = new DateOnly(1970, 1, 1).DayNumber;
+            int day = new DateOnly(2024, 1, 15).DayNumber - epoch;
+            long clock = 3_600_000_000L;                                   // 01:00:00
+            long stamp = 1_705_280_400_000_000L;                           // 2024-01-15T01:00:00Z
+
+            NativeTable table = BuildTemporalTable(day, clock, stamp);
+            try
+            {
+                NativeColumnSpec[] specs =
+                [
+                    new() { Name = "day", Type = NativeColumnType.Date },
+                    new() { Name = "clock", Type = NativeColumnType.Time },
+                    new() { Name = "stamp", Type = NativeColumnType.Timestamp },
+                ];
+                Assert.Equal(NativeStatus.Ok, NativeApi.WriteTyped(
+                    Encoding.UTF8.GetBytes(path), NativeFormat.Xlsx, specs, table, DefaultWriteOptions()));
+
+                Assert.Equal(NativeStatus.Ok, OpenPath(path, NativeFormat.Xlsx, out NativeHandle? handle));
+                try
+                {
+                    Assert.Equal(NativeStatus.Ok, NativeApi.ParseTyped(handle, specs, headerRow: 1, out NativeTable read));
+                    try
+                    {
+                        int[] days = new int[1];
+                        Marshal.Copy(ColumnAt(read, 0).Values, days, 0, 1);
+                        long[] clocks = new long[1];
+                        Marshal.Copy(ColumnAt(read, 1).Values, clocks, 0, 1);
+                        long[] stamps = new long[1];
+                        Marshal.Copy(ColumnAt(read, 2).Values, stamps, 0, 1);
+
+                        Assert.Equal(day, days[0]);
+                        Assert.Equal(clock, clocks[0]);
+                        Assert.Equal(stamp, stamps[0]);
+                    }
+                    finally
+                    {
+                        NativeApi.FreeTable(ref read);
+                    }
+                }
+                finally
+                {
+                    NativeApi.Close(handle);
+                }
+            }
+            finally
+            {
+                FreeBuiltTable(ref table);
+                File.Delete(path);
+            }
+        }
+
+        private static NativeTable BuildTemporalTable(int day, long clock, long stamp)
+        {
+            NativeColumn[] columns =
+            [
+                new() { Type = NativeColumnType.Date, Length = 1, Values = Marshal.AllocHGlobal(sizeof(int)) },
+                new() { Type = NativeColumnType.Time, Length = 1, Values = Marshal.AllocHGlobal(sizeof(long)) },
+                new() { Type = NativeColumnType.Timestamp, Length = 1, Values = Marshal.AllocHGlobal(sizeof(long)) },
+            ];
+            Marshal.WriteInt32(columns[0].Values, day);
+            Marshal.WriteInt64(columns[1].Values, clock);
+            Marshal.WriteInt64(columns[2].Values, stamp);
+
+            int size = Marshal.SizeOf<NativeColumn>();
+            IntPtr block = Marshal.AllocHGlobal(size * columns.Length);
+            for (int index = 0; index < columns.Length; index++)
+            {
+                Marshal.StructureToPtr(columns[index], IntPtr.Add(block, index * size), false);
+            }
+            return new NativeTable { ColumnCount = columns.Length, RowCount = 1, Columns = block };
+        }
+
+        [Fact]
+        public void WriteTyped_Should_Write_No_Header_Row_When_Specs_Are_Unnamed()
+        {
+            string path = Path.Combine(Path.GetTempPath(), $"excelreader-native-{Guid.NewGuid():N}.csv");
+            NativeTable table = BuildInt64Table([3L, 7L]);
+            try
+            {
+                NativeColumnSpec[] specs = [new() { Name = null, Type = NativeColumnType.Int64 }];
+                Assert.Equal(NativeStatus.Ok, NativeApi.WriteTyped(
+                    Encoding.UTF8.GetBytes(path), NativeFormat.Csv, specs, table, DefaultWriteOptions()));
+
+                Assert.Equal("3\n7\n", File.ReadAllText(path).ReplaceLineEndings("\n"));
+            }
+            finally
+            {
+                FreeBuiltTable(ref table);
+                File.Delete(path);
+            }
+        }
+
+        [Fact]
+        public void WriteTyped_Should_Apply_The_Csv_Delimiter_Override()
+        {
+            string path = Path.Combine(Path.GetTempPath(), $"excelreader-native-{Guid.NewGuid():N}.csv");
+            NativeTable table = BuildInt64Table([3L]);
+            try
+            {
+                NativeWriteOptionsRaw raw = DefaultWriteOptionsRaw();
+                raw.CsvDelimiter = ';';
+                Assert.True(NativeWriteOptions.TryDecode(raw, null, out NativeWriteOptions options, out _));
+                NativeColumnSpec[] specs = [new() { Name = "qty", Type = NativeColumnType.Int64 }];
+
+                Assert.Equal(NativeStatus.Ok, NativeApi.WriteTyped(
+                    Encoding.UTF8.GetBytes(path), NativeFormat.Csv, specs, table, options));
+
+                Assert.StartsWith("qty", File.ReadAllText(path), StringComparison.Ordinal);
+            }
+            finally
+            {
+                FreeBuiltTable(ref table);
+                File.Delete(path);
+            }
+        }
+
+        [Fact]
+        public void WriteTyped_Should_Reject_Auto_Format_And_Create_No_File()
+        {
+            string path = Path.Combine(Path.GetTempPath(), $"excelreader-native-{Guid.NewGuid():N}.xlsx");
+            NativeTable table = BuildInt64Table([3L]);
+            try
+            {
+                NativeColumnSpec[] specs = [new() { Name = "qty", Type = NativeColumnType.Int64 }];
+
+                Assert.Equal(NativeStatus.InvalidArgument, NativeApi.WriteTyped(
+                    Encoding.UTF8.GetBytes(path), NativeFormat.Auto, specs, table, DefaultWriteOptions()));
+                Assert.False(File.Exists(path));
+            }
+            finally
+            {
+                FreeBuiltTable(ref table);
+            }
+        }
+
+        [Fact]
+        public void WriteTyped_Should_Create_No_File_When_The_Table_Is_Rejected()
+        {
+            string path = Path.Combine(Path.GetTempPath(), $"excelreader-native-{Guid.NewGuid():N}.xlsx");
+            NativeTable table = BuildStringTable([0, 9, 6], "widgetgadget"u8.ToArray());
+            try
+            {
+                NativeColumnSpec[] specs = [new() { Name = "name", Type = NativeColumnType.String }];
+
+                Assert.Equal(NativeStatus.InvalidArgument, NativeApi.WriteTyped(
+                    Encoding.UTF8.GetBytes(path), NativeFormat.Xlsx, specs, table, DefaultWriteOptions()));
+                Assert.False(File.Exists(path));
+            }
+            finally
+            {
+                FreeBuiltTable(ref table);
+            }
+        }
+
+        [Fact]
+        public void WriteTyped_Should_Use_The_Requested_Sheet_Name()
+        {
+            string path = Path.Combine(Path.GetTempPath(), $"excelreader-native-{Guid.NewGuid():N}.xlsx");
+            NativeTable table = BuildInt64Table([3L]);
+            try
+            {
+                Assert.True(NativeWriteOptions.TryDecode(DefaultWriteOptionsRaw(), "Vendas", out NativeWriteOptions options, out _));
+                NativeColumnSpec[] specs = [new() { Name = "qty", Type = NativeColumnType.Int64 }];
+
+                Assert.Equal(NativeStatus.Ok, NativeApi.WriteTyped(
+                    Encoding.UTF8.GetBytes(path), NativeFormat.Xlsx, specs, table, options));
+
+                Assert.Equal(NativeStatus.Ok, OpenPath(path, NativeFormat.Xlsx, out NativeHandle? handle));
+                try
+                {
+                    byte[] name = new byte[64];
+                    Assert.Equal(NativeStatus.Ok, NativeApi.SheetNameAt(handle, 0, name, out int written));
+                    Assert.Equal("Vendas", Encoding.UTF8.GetString(name, 0, written));
+                }
+                finally
+                {
+                    NativeApi.Close(handle);
+                }
+            }
+            finally
+            {
+                FreeBuiltTable(ref table);
+                File.Delete(path);
+            }
+        }
+
         // Releases via the same IntPtr round-trip real Arrow consumers use (their own storage, not a
         // pointer to this ref struct) - NativeApi.ReleaseArrowArray/Schema take an address, and `array`/
         // `schema` here are plain locals with no fixed address of their own.

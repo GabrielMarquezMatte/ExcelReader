@@ -1,4 +1,4 @@
-"""Python bindings for ExcelReader. Reading only — writing is not exposed yet."""
+"""Python bindings for ExcelReader."""
 
 from excelreader.reader import Workbook, decode_cell, open_bytes, open_workbook
 from excelreader.types import (
@@ -11,7 +11,9 @@ from excelreader.types import (
     OpenOptions,
     StringColumn,
     TypedTable,
+    WriteOptions,
 )
+from excelreader.writer import write_workbook
 
 __all__ = [
     "Cell",
@@ -24,7 +26,9 @@ __all__ = [
     "StringColumn",
     "TypedTable",
     "Workbook",
+    "WriteOptions",
     "decode_cell",
     "open_bytes",
     "open_workbook",
+    "write_workbook",
 ]
