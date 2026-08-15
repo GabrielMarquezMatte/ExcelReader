@@ -6,6 +6,9 @@ from excelreader import (
     ExcelReaderError,
     WriteOptions,
     open_workbook,
+    write_arrow,
+    write_pandas,
+    write_polars,
     write_workbook,
 )
 
@@ -83,3 +86,54 @@ def test_write_workbook_reports_a_native_rejection(source_csv, tmp_path):
 
     with pytest.raises(ExcelReaderError):
         write_workbook(tmp_path / "out.xlsx", table, _TYPES, options=WriteOptions(sheet_name="has/slash"))
+
+
+def test_write_arrow_round_trips(tmp_path):
+    pa = pytest.importorskip("pyarrow")
+
+    batch = pa.RecordBatch.from_pydict({"name": ["widget", "gadget"], "qty": [3, 7]})
+    out = tmp_path / "arrow.xlsx"
+    write_arrow(out, batch)
+
+    with open_workbook(out) as workbook:
+        result = workbook.parse_typed(_SCHEMA)
+
+    assert list(result.columns[0]) == ["widget", "gadget"]
+    assert list(result.columns[1]) == [3, 7]
+
+
+def test_write_pandas_round_trips(tmp_path):
+    pytest.importorskip("pyarrow")
+    pd = pytest.importorskip("pandas")
+
+    out = tmp_path / "pandas.xlsx"
+    write_pandas(out, pd.DataFrame({"name": ["widget", "gadget"], "qty": [3, 7]}))
+
+    with open_workbook(out) as workbook:
+        result = workbook.parse_typed(_SCHEMA)
+
+    assert list(result.columns[0]) == ["widget", "gadget"]
+    assert list(result.columns[1]) == [3, 7]
+
+
+def test_write_polars_round_trips(tmp_path):
+    pytest.importorskip("pyarrow")
+    pl = pytest.importorskip("polars")
+
+    out = tmp_path / "polars.xlsx"
+    write_polars(out, pl.DataFrame({"name": ["widget", "gadget"], "qty": [3, 7]}))
+
+    with open_workbook(out) as workbook:
+        result = workbook.parse_typed(_SCHEMA)
+
+    assert list(result.columns[0]) == ["widget", "gadget"]
+    assert list(result.columns[1]) == [3, 7]
+
+
+def test_write_arrow_rejects_an_unsupported_arrow_type(tmp_path):
+    pa = pytest.importorskip("pyarrow")
+
+    batch = pa.RecordBatch.from_pydict({"nested": [[1, 2], [3]]})
+
+    with pytest.raises(ValueError, match="type"):
+        write_arrow(tmp_path / "bad.xlsx", batch)

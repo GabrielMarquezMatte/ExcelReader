@@ -7,6 +7,7 @@ already holds, so nothing is re-encoded on the way out.
 from __future__ import annotations
 
 import ctypes
+import datetime
 from array import array
 from pathlib import Path
 from typing import Any
@@ -145,3 +146,139 @@ def write_workbook(
             encoded, len(encoded), format_id, specs, ctypes.byref(native_table), ctypes.byref(raw_options)
         )
     )
+
+
+# Arrow type id -> the ColumnType whose buffer layout matches it exactly. Only the seven types
+# xl_write_typed accepts are listed; anything else is rejected by name rather than coerced, so a
+# caller learns what happened instead of getting a silently stringified column.
+_ARROW_TYPES = {
+    "string": ColumnType.STRING,
+    "large_string": ColumnType.STRING,
+    "int64": ColumnType.I64,
+    "int32": ColumnType.I64,
+    "double": ColumnType.F64,
+    "float": ColumnType.F64,
+    "bool": ColumnType.BOOL,
+    "date32[day]": ColumnType.DATE,
+    "time64[us]": ColumnType.TIME,
+    "timestamp[us]": ColumnType.TIMESTAMP,
+}
+
+_ARRAY_TYPECODES = {
+    ColumnType.I64: "q",
+    ColumnType.TIME: "q",
+    ColumnType.TIMESTAMP: "q",
+    ColumnType.F64: "d",
+    ColumnType.BOOL: "b",
+    ColumnType.DATE: "i",
+}
+
+_EPOCH_DATE = datetime.date(1970, 1, 1)
+
+
+def _arrow_column_type(field: Any) -> ColumnType:
+    key = str(field.type)
+    try:
+        return _ARROW_TYPES[key]
+    except KeyError:
+        raise ValueError(
+            f"column {field.name!r} has Arrow type {key!r}, which xl_write_typed cannot write; "
+            f"cast it to one of {sorted(set(str(t) for t in _ARROW_TYPES))} first"
+        ) from None
+
+
+def _column_from_pylist(values: list[Any], column_type: ColumnType, row_count: int) -> tuple[Any, bytes | None]:
+    """Builds one column's native buffer layout from a plain Python list, as `to_pylist()` returns it.
+
+    Returns `(column, validity)`: `column` is a `StringColumn` for `ColumnType.STRING` (UTF-8 data plus
+    an `array("i")` of `row_count + 1` offsets), or an `array.array` of the typecode matching
+    `column_type` otherwise. `validity` is an Arrow-style LSB-first bitmap — `(row_count + 7) // 8`
+    bytes, bit `r` set when row `r` is valid — or `None` when no value in `values` was ever `None`,
+    matching `TypedTable.validity`'s "None means no nulls" convention. A `None` value contributes a
+    zero/empty placeholder to `column` and a cleared bit to the bitmap.
+    """
+    validity = bytearray((row_count + 7) // 8)
+    has_null = False
+
+    if column_type is ColumnType.STRING:
+        offsets = array("i", [0])
+        chunks: list[bytes] = []
+        total = 0
+        for row, value in enumerate(values):
+            if value is None:
+                has_null = True
+            else:
+                validity[row // 8] |= 1 << (row % 8)
+                encoded = value.encode("utf-8")
+                chunks.append(encoded)
+                total += len(encoded)
+            offsets.append(total)
+        string_column: Any = StringColumn(offsets, b"".join(chunks))
+        return string_column, (bytes(validity) if has_null else None)
+
+    data_array = array(_ARRAY_TYPECODES[column_type])
+    for row, value in enumerate(values):
+        if value is None:
+            has_null = True
+            data_array.append(0)
+            continue
+        validity[row // 8] |= 1 << (row % 8)
+        if column_type is ColumnType.DATE:
+            data_array.append((value - _EPOCH_DATE).days)
+        elif column_type is ColumnType.TIME:
+            data_array.append(
+                value.hour * 3_600_000_000
+                + value.minute * 60_000_000
+                + value.second * 1_000_000
+                + value.microsecond
+            )
+        elif column_type is ColumnType.TIMESTAMP:
+            data_array.append(int(value.replace(tzinfo=datetime.timezone.utc).timestamp() * 1_000_000))
+        elif column_type is ColumnType.BOOL:
+            data_array.append(1 if value else 0)
+        else:
+            data_array.append(value)
+
+    return data_array, (bytes(validity) if has_null else None)
+
+
+def write_arrow(path: str | Path, batch: Any, **kwargs: Any) -> None:
+    """Writes a `pyarrow.RecordBatch` (or `Table`) to `path`.
+
+    Converts through Python lists rather than borrowing Arrow's buffers directly: Arrow's null
+    representation, offset conventions and chunking are the producer's choice, and reproducing all of
+    them faithfully is exactly the parser this package deliberately does not have. The conversion is
+    one pass and keeps the native side reading only layouts it produced itself.
+    """
+    import pyarrow
+
+    if isinstance(batch, pyarrow.Table):
+        batch = batch.combine_chunks().to_batches()[0]
+
+    types = [_arrow_column_type(field) for field in batch.schema]
+    columns: list[Any] = []
+    validity: list[bytes | None] = []
+    for index, column in enumerate(batch.columns):
+        built, mask = _column_from_pylist(column.to_pylist(), types[index], batch.num_rows)
+        columns.append(built)
+        validity.append(mask)
+
+    table = TypedTable(
+        row_count=batch.num_rows,
+        names=list(batch.schema.names),
+        columns=columns,
+        validity=validity,
+    )
+    write_workbook(path, table, types, **kwargs)
+
+
+def write_pandas(path: str | Path, df: Any, **kwargs: Any) -> None:
+    """Writes a `pandas.DataFrame` to `path`. Requires pyarrow and pandas."""
+    import pyarrow
+
+    write_arrow(path, pyarrow.RecordBatch.from_pandas(df, preserve_index=False), **kwargs)
+
+
+def write_polars(path: str | Path, df: Any, **kwargs: Any) -> None:
+    """Writes a `polars.DataFrame` to `path`. Requires pyarrow and polars."""
+    write_arrow(path, df.to_arrow(), **kwargs)
