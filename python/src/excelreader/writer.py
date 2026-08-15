@@ -1,7 +1,10 @@
 """Writing a columnar table to a workbook file. Read cursors live in reader.py; this module has none.
 
-Everything here funnels into the single `xl_write_typed` export: it borrows the buffers a `TypedTable`
-already holds, so nothing is re-encoded on the way out.
+Everything here funnels into the single `xl_write_typed` export. Each column's buffer is copied once
+into a ctypes block that this module owns for the duration of the call: `xl_write_typed` borrows
+whatever it is handed and never frees it, so the pointers it reads must outlive the call and must not
+be invalidated by anything Python does to the original object meanwhile. Budget for one extra copy of
+the data being written.
 """
 
 from __future__ import annotations
@@ -52,9 +55,11 @@ def _resolve_write_format(name: str | None, path: Path) -> int:
 def _buffer_of(values: Any) -> tuple[Any, int]:
     """Returns (ctypes-addressable buffer, byte length) for one column's values.
 
-    NumPy arrays, `array.array` and `bytes` all expose the buffer protocol, so
-    `ctypes.c_char.from_buffer` borrows them without copying. The caller must keep the returned
-    object alive for as long as the pointer is in use — the native side copies nothing.
+    NumPy arrays, `array.array` and `bytes` all expose the buffer protocol, so one `memoryview` reads
+    every input shape the same way. The bytes are then COPIED into a ctypes block rather than
+    borrowed: the copy is owned by this module and cannot be moved or freed out from under the native
+    side while the call runs. The caller must keep the returned object alive for as long as the
+    pointer is in use.
     """
     if isinstance(values, (bytes, bytearray)):
         raw: Any = values
@@ -62,13 +67,13 @@ def _buffer_of(values: Any) -> tuple[Any, int]:
         raw = values
     else:
         raw = getattr(values, "data", values)  # numpy ndarray -> memoryview
-    buffer = (ctypes.c_char * len(memoryview(raw).tobytes())).from_buffer_copy(memoryview(raw).tobytes())
-    return buffer, len(buffer)
+    blob = memoryview(raw).tobytes()
+    return (ctypes.c_char * len(blob)).from_buffer_copy(blob), len(blob)
 
 
 def _native_column(column: Any, column_type: ColumnType, validity: bytes | None, row_count: int, keepalive: list[Any]) -> _native.NativeColumn:
     if isinstance(column, StringColumn):
-        offsets, offsets_len = _buffer_of(column.offsets)
+        offsets, _ = _buffer_of(column.offsets)
         data, data_len = _buffer_of(column.data)
         keepalive += [offsets, data]
         return _native.NativeColumn(
@@ -174,6 +179,7 @@ _ARRAY_TYPECODES = {
 }
 
 _EPOCH_DATE = datetime.date(1970, 1, 1)
+_EPOCH_DATETIME = datetime.datetime(1970, 1, 1, tzinfo=datetime.timezone.utc)
 
 
 def _arrow_column_type(field: Any) -> ColumnType:
@@ -183,7 +189,7 @@ def _arrow_column_type(field: Any) -> ColumnType:
     except KeyError:
         raise ValueError(
             f"column {field.name!r} has Arrow type {key!r}, which xl_write_typed cannot write; "
-            f"cast it to one of {sorted(set(str(t) for t in _ARROW_TYPES))} first"
+            f"cast it to one of {sorted({str(t) for t in _ARROW_TYPES})} first"
         ) from None
 
 
@@ -233,7 +239,11 @@ def _column_from_pylist(values: list[Any], column_type: ColumnType, row_count: i
                 + value.microsecond
             )
         elif column_type is ColumnType.TIMESTAMP:
-            data_array.append(int(value.replace(tzinfo=datetime.timezone.utc).timestamp() * 1_000_000))
+            # timedelta arithmetic, not datetime.timestamp(): that returns a float whose ULP is
+            # already ~0.24 us at 2024-era magnitudes, so int() truncation would silently shift a
+            # microsecond-precision value by one microsecond.
+            delta = value.replace(tzinfo=datetime.timezone.utc) - _EPOCH_DATETIME
+            data_array.append(delta.days * 86_400_000_000 + delta.seconds * 1_000_000 + delta.microseconds)
         elif column_type is ColumnType.BOOL:
             data_array.append(1 if value else 0)
         else:

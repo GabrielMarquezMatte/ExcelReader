@@ -1,5 +1,4 @@
 import pytest
-
 from excelreader import (
     ColumnSpec,
     ColumnType,

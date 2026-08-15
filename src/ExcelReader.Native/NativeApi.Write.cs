@@ -25,9 +25,16 @@ namespace ExcelReader.Native
         /// </remarks>
         internal static int WriteTyped(ReadOnlySpan<byte> path, int format, NativeColumnSpec[] specs, NativeTable table, NativeWriteOptions options)
         {
-            if (path.IsEmpty || !IsWritableFormat(format))
+            // Two guards, not one: a caller who passed a good path with XL_FORMAT_AUTO must not read a
+            // message implicating the path.
+            if (path.IsEmpty)
             {
-                SetLastError($"xl_write_typed needs a non-empty path and an explicit format (XLS/XLSX/XLSB/CSV); got format {format}.");
+                SetLastError("xl_write_typed needs a non-empty path.");
+                return NativeStatus.InvalidArgument;
+            }
+            if (!IsWritableFormat(format))
+            {
+                SetLastError($"xl_write_typed needs an explicit format (XLS/XLSX/XLSB/CSV); got format {format}.");
                 return NativeStatus.InvalidArgument;
             }
             if (!TryValidateWriteTable(specs, table, out bool hasHeader, out string? validationError))
@@ -198,7 +205,11 @@ namespace ExcelReader.Native
                     // a public-API change and out of this plan's scope.
                     int* offsets = (int*)column.Values;
                     int start = offsets[rowIndex];
-                    row.Write(Encoding.UTF8.GetString((byte*)column.Data + start, offsets[rowIndex + 1] - start));
+                    // Length first: TryValidateStringOffsets permits Data == NULL when data_len is 0 (a
+                    // legal all-empty-strings column), and Encoding.UTF8.GetString null-checks its
+                    // pointer BEFORE its zero-count fast path, so it would throw on that valid input.
+                    int length = offsets[rowIndex + 1] - start;
+                    row.Write(length == 0 ? string.Empty : Encoding.UTF8.GetString((byte*)column.Data + start, length));
                     return;
                 case NativeColumnType.Int64:
                     row.Write(((long*)column.Values)[rowIndex]);
@@ -277,7 +288,7 @@ namespace ExcelReader.Native
         // cannot deadlock. Guarding on IsCompletedSuccessfully first matters: StartRowAsync runs once
         // per row and a buffered write almost never goes async. Same pattern as
         // ExcelReader.Core's Writer/Internal/WriteOffloadStream.cs.
-        [SuppressMessage("VisualStudio.Threading", "VSTHRD002:Avoid problematic synchronous waits",
+        [SuppressMessage("Usage", "VSTHRD002:Avoid problematic synchronous waits",
             Justification = "The C ABI is synchronous by contract; NativeAOT installs no SynchronizationContext, so this cannot deadlock.")]
         private static void Block(ValueTask task)
         {
@@ -287,10 +298,11 @@ namespace ExcelReader.Native
             }
         }
 
-        [SuppressMessage("VisualStudio.Threading", "VSTHRD002:Avoid problematic synchronous waits",
+        // No S5034 suppression: Sonar's ValueTask rule understands the IsCompletedSuccessfully guard
+        // below and does not fire here (verified by building with the attribute removed on both target
+        // frameworks), so an attribute for it would suppress nothing.
+        [SuppressMessage("Usage", "VSTHRD002:Avoid problematic synchronous waits",
             Justification = "The C ABI is synchronous by contract; NativeAOT installs no SynchronizationContext, so this cannot deadlock.")]
-        [SuppressMessage("Reliability", "S5034:Refactor this ValueTask usage",
-            Justification = "The Result branch is only reached after IsCompletedSuccessfully is checked, per ValueTask's own documented fast path.")]
         private static T Block<T>(ValueTask<T> task)
         {
             if (task.IsCompletedSuccessfully)
