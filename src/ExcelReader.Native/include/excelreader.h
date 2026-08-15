@@ -251,6 +251,60 @@ int32_t xl_parse_typed(xl_workbook* handle, const xl_column_spec* specs, int32_t
 /* Releases a result returned by xl_parse_typed and resets it to zero. Safe on a zeroed value. */
 void xl_free_table(xl_table* table);
 
+/* ---- Writing --------------------------------------------------------------------------------- */
+
+/* Optional overrides for xl_write_typed. Every numeric field is 0 for "use the library default";
+ * struct_size must equal sizeof(xl_write_options) exactly, same contract as xl_open_options. */
+typedef struct xl_write_options {
+    int32_t struct_size;
+    int32_t sheet_name_len;
+    const uint8_t* sheet_name;    /* UTF-8; NULL = "Sheet1". Excel's rules: 1-31 characters, none of
+                                    * : \ / ? * [ ] . Ignored for XL_FORMAT_CSV. */
+
+    /* CSV only; ignored for every other format. */
+    int32_t csv_delimiter;        /* byte value 1-255, 0 = default ',' */
+    int32_t csv_quote;            /* byte value 1-255, 0 = default '"' */
+
+    /* XLS/XLSB only; ignored for XLSX and CSV. */
+    int32_t date1904;             /* XL_OPT_*; default FALSE */
+
+    /* XLSX/XLSB only; ignored for XLS and CSV. */
+    int32_t use_shared_strings;   /* XL_OPT_*; default FALSE */
+} xl_write_options;
+
+/* Writes `table` to `path` as a single sheet, then closes the file. One-shot: no writer handle exists
+ * before or after this call, and nothing in `specs`, `table` or `options` is retained.
+ *
+ * `specs` is a parallel array of table->column_count entries supplying each column's NAME. Only
+ * name/name_len/type are read - `index` is ignored (columns are written left to right in array order)
+ * and `nullable` is ignored (a column is nullable iff its xl_column.validity is non-NULL). spec.type
+ * must equal the matching column.type, or XL_INVALID_ARGUMENT: the redundancy is checked rather than
+ * silently resolved, so the two can never disagree.
+ *
+ * Column names are all-or-nothing: either every spec has name == NULL (no header row) or every spec
+ * has a non-NULL name (one header row is written first). A mix is XL_INVALID_ARGUMENT.
+ *
+ * `format` must be XL_FORMAT_XLS/XLSX/XLSB/CSV. XL_FORMAT_AUTO is XL_INVALID_ARGUMENT: sniffing reads
+ * a file's existing signature bytes, and a file being created has none.
+ *
+ * `options` may be NULL, meaning every default.
+ *
+ * Every buffer reachable from `specs`, `table` and `options` is BORROWED for the duration of the call
+ * and never freed by this library. Unlike the xl_table xl_parse_typed produces, an INPUT column's
+ * `data` need not be interior to its `values` allocation - the two are read independently.
+ *
+ * XL_T_DATE/TIME/TIMESTAMP columns are written with a number format attached (the builtin date style
+ * for DATE, "hh:mm:ss" for TIME, "yyyy-mm-dd hh:mm:ss" for TIMESTAMP), so Excel shows a date rather
+ * than a serial number. CSV ignores styling.
+ *
+ * On any failure the destination file may exist and be incomplete; the caller owns cleaning it up.
+ * Detail is in xl_last_error. */
+int32_t xl_write_typed(const uint8_t* path, int32_t path_len,
+                       int32_t format,
+                       const xl_column_spec* specs,
+                       const xl_table* table,
+                       const xl_write_options* options);
+
 /* Result of xl_infer_schema: one xl_column_spec per column the sheet appears to have, in ascending
  * column order. Each spec's `type`/`nullable` is a guess from the sampled cells' own XL_CELL_* tags
  * (no text sniffing) and can be handed straight to xl_parse_typed/xl_parse_arrow; `name` is set from

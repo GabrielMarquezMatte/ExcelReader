@@ -4,6 +4,7 @@ using System.Runtime.InteropServices;
 using System.Text;
 using ExcelReader.Core.Reader;
 using ExcelReader.Core.ValueObjects;
+using ExcelReader.Core.Writer;
 using ExcelReader.Native;
 
 namespace ExcelReader.Tests
@@ -2053,6 +2054,76 @@ namespace ExcelReader.Tests
             {
                 File.Delete(path);
             }
+        }
+
+        private static NativeWriteOptionsRaw DefaultWriteOptionsRaw()
+        {
+            return new NativeWriteOptionsRaw { StructSize = Marshal.SizeOf<NativeWriteOptionsRaw>() };
+        }
+
+        [Fact]
+        public void WriteOptions_Should_Decode_An_All_Defaults_Struct()
+        {
+            Assert.True(NativeWriteOptions.TryDecode(DefaultWriteOptionsRaw(), null, out NativeWriteOptions options, out string? error));
+
+            Assert.Null(error);
+            Assert.Null(options.SheetName);
+            Assert.Null(options.CsvDelimiter);
+            Assert.Null(options.CsvQuote);
+            Assert.Null(options.Date1904);
+            Assert.Null(options.UseSharedStrings);
+        }
+
+        [Fact]
+        public void WriteOptions_Should_Reject_An_Unrecognized_Struct_Size()
+        {
+            NativeWriteOptionsRaw raw = DefaultWriteOptionsRaw();
+            raw.StructSize = 1;
+
+            Assert.False(NativeWriteOptions.TryDecode(raw, null, out _, out string? error));
+            Assert.Contains("struct_size", error, StringComparison.Ordinal);
+        }
+
+        [Fact]
+        public void WriteOptions_Should_Reject_A_Csv_Delimiter_Outside_A_Byte()
+        {
+            NativeWriteOptionsRaw raw = DefaultWriteOptionsRaw();
+            raw.CsvDelimiter = 300;
+
+            Assert.False(NativeWriteOptions.TryDecode(raw, null, out _, out string? error));
+            Assert.Contains("csv_delimiter", error, StringComparison.Ordinal);
+        }
+
+        [Fact]
+        public void WriteOptions_Should_Reject_A_Sheet_Name_Excel_Cannot_Store()
+        {
+            NativeWriteOptionsRaw raw = DefaultWriteOptionsRaw();
+
+            Assert.False(NativeWriteOptions.TryDecode(raw, "has/slash", out _, out string? error));
+            Assert.Contains("sheet_name", error, StringComparison.Ordinal);
+            Assert.False(NativeWriteOptions.TryDecode(raw, "", out _, out error));
+            Assert.Contains("sheet_name", error, StringComparison.Ordinal);
+            Assert.False(NativeWriteOptions.TryDecode(raw, new string('x', 32), out _, out error));
+            Assert.Contains("sheet_name", error, StringComparison.Ordinal);
+        }
+
+        [Fact]
+        public void WriteOptions_Should_Carry_Overrides_Into_CsvWriterOptions()
+        {
+            NativeWriteOptionsRaw raw = DefaultWriteOptionsRaw();
+            raw.CsvDelimiter = ';';
+            raw.CsvQuote = '\'';
+            raw.Date1904 = NativeOptionState.True;
+            raw.UseSharedStrings = NativeOptionState.True;
+
+            Assert.True(NativeWriteOptions.TryDecode(raw, "Data", out NativeWriteOptions options, out _));
+
+            Assert.Equal("Data", options.SheetName);
+            Assert.True(options.Date1904);
+            Assert.True(options.UseSharedStrings);
+            CsvWriterOptions csv = options.ToCsvWriterOptions();
+            Assert.Equal((byte)';', csv.Delimiter);
+            Assert.Equal((byte)'\'', csv.Quote);
         }
 
         // Releases via the same IntPtr round-trip real Arrow consumers use (their own storage, not a
