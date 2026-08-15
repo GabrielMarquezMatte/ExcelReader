@@ -377,7 +377,9 @@ static int test_read_all_blob_and_decoded(const api_t* api, const char* fixture)
     xl_workbook* handle = NULL;
     CHECK(open_fixture(api, fixture, &handle) == XL_OK, "xl_open_file must succeed");
 
-    uint8_t buffer[1 << 20];
+    /* static, not stack-local: 1 MiB blows past MSVC's default 1 MiB thread stack reserve
+     * and faults with a stack overflow in Release builds. */
+    static uint8_t buffer[1 << 20];
     int32_t written = 0;
     CHECK(api->read_all_blob(handle, buffer, (int32_t)sizeof(buffer), &written) == XL_OK,
           "xl_read_all_blob must succeed with a generously sized buffer");
