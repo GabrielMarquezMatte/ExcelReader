@@ -122,6 +122,27 @@ class OpenOptions(NamedTuple):
     intern_strings: bool | None = None
 
 
+class WriteOptions(NamedTuple):
+    """Sheet name and dialect settings for `write_workbook()`.
+
+    Every field is None for "use the library default", the same convention `OpenOptions` uses.
+
+    `csv_delimiter` and `csv_quote` are byte values, not strings: pass `ord(';')`, not `';'`. They
+    apply to CSV output only. `date1904` applies to xls/xlsb only; `use_shared_strings` to
+    xlsx/xlsb only, where it shrinks files with many repeated strings at the cost of a string table.
+
+    Validation happens on the native side; an out-of-range value or an invalid sheet name raises
+    `ExcelReaderError`. Fields mirror xl_write_options in
+    src/ExcelReader.Native/include/excelreader.h.
+    """
+
+    sheet_name: str | None = None
+    csv_delimiter: int | None = None
+    csv_quote: int | None = None
+    date1904: bool | None = None
+    use_shared_strings: bool | None = None
+
+
 class StringColumn:
     """A `ColumnType.STRING` column, held as UTF-8 bytes plus offsets rather than one `str` per row.
 
