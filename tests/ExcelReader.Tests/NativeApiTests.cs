@@ -1198,6 +1198,233 @@ namespace ExcelReader.Tests
             Assert.Equal(NativeStatus.InvalidHandle, NativeApi.ReadAllBlob(null, new byte[64], out _));
         }
 
+        // Builds a native table whose buffers live in unmanaged memory, so write-path tests exercise
+        // the same pointer walk the ABI does. Every allocation is released by FreeBuiltTable.
+        private static NativeTable BuildInt64Table(long[] values, byte[]? validity = null)
+        {
+            NativeColumn column = new()
+            {
+                Type = NativeColumnType.Int64,
+                Length = values.LongLength,
+                Values = Marshal.AllocHGlobal(values.Length * sizeof(long)),
+                Validity = IntPtr.Zero,
+                Data = IntPtr.Zero,
+                DataLen = 0,
+            };
+            Marshal.Copy(values, 0, column.Values, values.Length);
+            if (validity is not null)
+            {
+                column.Validity = Marshal.AllocHGlobal(validity.Length);
+                Marshal.Copy(validity, 0, column.Validity, validity.Length);
+            }
+
+            IntPtr columns = Marshal.AllocHGlobal(Marshal.SizeOf<NativeColumn>());
+            Marshal.StructureToPtr(column, columns, false);
+            return new NativeTable { ColumnCount = 1, RowCount = values.LongLength, Columns = columns };
+        }
+
+        // Mirrors BuildInt64Table for XL_T_STRING: `offsets` and `data` are two INDEPENDENT
+        // allocations here, which the write direction explicitly permits (unlike ParseTyped's output,
+        // where Data is interior to Values).
+        private static NativeTable BuildStringTable(int[] offsets, byte[] data)
+        {
+            NativeColumn column = new()
+            {
+                Type = NativeColumnType.String,
+                Length = offsets.Length - 1,
+                Values = Marshal.AllocHGlobal(offsets.Length * sizeof(int)),
+                Validity = IntPtr.Zero,
+                Data = data.Length == 0 ? IntPtr.Zero : Marshal.AllocHGlobal(data.Length),
+                DataLen = data.Length,
+            };
+            Marshal.Copy(offsets, 0, column.Values, offsets.Length);
+            if (data.Length > 0)
+            {
+                Marshal.Copy(data, 0, column.Data, data.Length);
+            }
+
+            IntPtr columns = Marshal.AllocHGlobal(Marshal.SizeOf<NativeColumn>());
+            Marshal.StructureToPtr(column, columns, false);
+            return new NativeTable { ColumnCount = 1, RowCount = offsets.Length - 1, Columns = columns };
+        }
+
+        private static void FreeBuiltTable(ref NativeTable table)
+        {
+            // Deliberately NOT NativeApi.FreeTable: that one knows Data is interior to Values, which is
+            // true of ParseTyped's output but not of the independently-allocated tables built above.
+            for (int index = 0; index < table.ColumnCount; index++)
+            {
+                NativeColumn column = Marshal.PtrToStructure<NativeColumn>(
+                    IntPtr.Add(table.Columns, index * Marshal.SizeOf<NativeColumn>()));
+                foreach (IntPtr block in new[] { column.Values, column.Validity, column.Data })
+                {
+                    if (block != IntPtr.Zero)
+                    {
+                        Marshal.FreeHGlobal(block);
+                    }
+                }
+            }
+            Marshal.FreeHGlobal(table.Columns);
+            table = default;
+        }
+
+        [Fact]
+        public void ValidateWriteTable_Should_Accept_A_Well_Formed_Named_Table()
+        {
+            NativeTable table = BuildInt64Table([1L, 2L]);
+            try
+            {
+                NativeColumnSpec[] specs = [new() { Name = "qty", Type = NativeColumnType.Int64 }];
+
+                Assert.True(NativeApi.TryValidateWriteTable(specs, table, out bool hasHeader, out string? error));
+                Assert.True(hasHeader);
+                Assert.Null(error);
+            }
+            finally
+            {
+                FreeBuiltTable(ref table);
+            }
+        }
+
+        [Fact]
+        public void ValidateWriteTable_Should_Report_No_Header_When_Every_Spec_Is_Unnamed()
+        {
+            NativeTable table = BuildInt64Table([1L]);
+            try
+            {
+                NativeColumnSpec[] specs = [new() { Name = null, Type = NativeColumnType.Int64 }];
+
+                Assert.True(NativeApi.TryValidateWriteTable(specs, table, out bool hasHeader, out _));
+                Assert.False(hasHeader);
+            }
+            finally
+            {
+                FreeBuiltTable(ref table);
+            }
+        }
+
+        [Fact]
+        public void ValidateWriteTable_Should_Reject_A_Mix_Of_Named_And_Unnamed_Specs()
+        {
+            NativeTable table = BuildInt64Table([1L]);
+            table.ColumnCount = 2;
+            try
+            {
+                NativeColumnSpec[] specs =
+                [
+                    new() { Name = "qty", Type = NativeColumnType.Int64 },
+                    new() { Name = null, Type = NativeColumnType.Int64 },
+                ];
+
+                Assert.False(NativeApi.TryValidateWriteTable(specs, table, out _, out string? error));
+                Assert.Contains("name", error, StringComparison.Ordinal);
+            }
+            finally
+            {
+                table.ColumnCount = 1;
+                FreeBuiltTable(ref table);
+            }
+        }
+
+        [Fact]
+        public void ValidateWriteTable_Should_Reject_A_Spec_Type_That_Disagrees_With_Its_Column()
+        {
+            NativeTable table = BuildInt64Table([1L]);
+            try
+            {
+                NativeColumnSpec[] specs = [new() { Name = "qty", Type = NativeColumnType.Float64 }];
+
+                Assert.False(NativeApi.TryValidateWriteTable(specs, table, out _, out string? error));
+                Assert.Contains("type", error, StringComparison.Ordinal);
+            }
+            finally
+            {
+                FreeBuiltTable(ref table);
+            }
+        }
+
+        [Fact]
+        public void ValidateWriteTable_Should_Reject_A_Column_Whose_Length_Is_Not_The_Row_Count()
+        {
+            NativeTable table = BuildInt64Table([1L, 2L]);
+            table.RowCount = 3;
+            try
+            {
+                NativeColumnSpec[] specs = [new() { Name = "qty", Type = NativeColumnType.Int64 }];
+
+                Assert.False(NativeApi.TryValidateWriteTable(specs, table, out _, out string? error));
+                Assert.Contains("length", error, StringComparison.Ordinal);
+            }
+            finally
+            {
+                table.RowCount = 2;
+                FreeBuiltTable(ref table);
+            }
+        }
+
+        [Fact]
+        public void ValidateWriteTable_Should_Accept_Well_Formed_String_Offsets()
+        {
+            NativeTable table = BuildStringTable([0, 6, 12], "widgetgadget"u8.ToArray());
+            try
+            {
+                NativeColumnSpec[] specs = [new() { Name = "name", Type = NativeColumnType.String }];
+
+                Assert.True(NativeApi.TryValidateWriteTable(specs, table, out _, out string? error));
+                Assert.Null(error);
+            }
+            finally
+            {
+                FreeBuiltTable(ref table);
+            }
+        }
+
+        [Theory]
+        [InlineData(new[] { 1, 6, 12 })]                 // does not start at 0
+        [InlineData(new[] { 0, -1, 12 })]                // negative offset
+        [InlineData(new[] { 0, 9, 6 })]                  // not monotonic
+        [InlineData(new[] { 0, 6, 13 })]                 // last offset past data_len
+        [InlineData(new[] { 0, 6, 11 })]                 // last offset short of data_len
+        public void ValidateWriteTable_Should_Reject_Malformed_String_Offsets(int[] offsets)
+        {
+            NativeTable table = BuildStringTable(offsets, "widgetgadget"u8.ToArray());
+            try
+            {
+                NativeColumnSpec[] specs = [new() { Name = "name", Type = NativeColumnType.String }];
+
+                Assert.False(NativeApi.TryValidateWriteTable(specs, table, out _, out string? error));
+                Assert.Contains("offset", error, StringComparison.Ordinal);
+            }
+            finally
+            {
+                FreeBuiltTable(ref table);
+            }
+        }
+
+        [Fact]
+        public void ValidateWriteTable_Should_Reject_A_Null_Values_Pointer_With_Rows()
+        {
+            NativeTable table = BuildInt64Table([1L]);
+            try
+            {
+                IntPtr original = Marshal.ReadIntPtr(table.Columns, sizeof(long) * 2);
+                NativeColumn column = Marshal.PtrToStructure<NativeColumn>(table.Columns);
+                column.Values = IntPtr.Zero;
+                Marshal.StructureToPtr(column, table.Columns, false);
+                NativeColumnSpec[] specs = [new() { Name = "qty", Type = NativeColumnType.Int64 }];
+
+                Assert.False(NativeApi.TryValidateWriteTable(specs, table, out _, out string? error));
+                Assert.Contains("values", error, StringComparison.Ordinal);
+
+                column.Values = original;
+                Marshal.StructureToPtr(column, table.Columns, false);
+            }
+            finally
+            {
+                FreeBuiltTable(ref table);
+            }
+        }
+
         private static NativeColumn ColumnAt(NativeTable table, int index)
         {
             int columnSize = Marshal.SizeOf<NativeColumn>();
