@@ -62,6 +62,15 @@ XL_STATIC_ASSERT(offsetof(xl_column_spec, type) == 16, column_spec_type);
 XL_STATIC_ASSERT(offsetof(xl_column_spec, nullable) == 20, column_spec_nullable);
 XL_STATIC_ASSERT(sizeof(xl_column_spec) == 24, column_spec_size);
 
+XL_STATIC_ASSERT(offsetof(xl_write_options, struct_size) == 0, write_options_struct_size);
+XL_STATIC_ASSERT(offsetof(xl_write_options, sheet_name_len) == 4, write_options_sheet_name_len);
+XL_STATIC_ASSERT(offsetof(xl_write_options, sheet_name) == 8, write_options_sheet_name);
+XL_STATIC_ASSERT(offsetof(xl_write_options, csv_delimiter) == 16, write_options_csv_delimiter);
+XL_STATIC_ASSERT(offsetof(xl_write_options, csv_quote) == 20, write_options_csv_quote);
+XL_STATIC_ASSERT(offsetof(xl_write_options, date1904) == 24, write_options_date1904);
+XL_STATIC_ASSERT(offsetof(xl_write_options, use_shared_strings) == 28, write_options_use_shared_strings);
+XL_STATIC_ASSERT(sizeof(xl_write_options) == 32, write_options_size);
+
 XL_STATIC_ASSERT(offsetof(xl_column, type) == 0, column_type);
 XL_STATIC_ASSERT(offsetof(xl_column, length) == 8, column_length);
 XL_STATIC_ASSERT(offsetof(xl_column, values) == 16, column_values);
@@ -142,6 +151,8 @@ typedef int32_t (*xl_infer_schema_fn)(xl_workbook*, int32_t, int32_t, xl_inferre
 typedef void (*xl_free_schema_fn)(xl_inferred_schema*);
 typedef const uint8_t* (*xl_last_error_ptr_fn)(int32_t*);
 typedef int32_t (*xl_parse_arrow_fn)(xl_workbook*, const xl_column_spec*, int32_t, int32_t, struct ArrowArray*, struct ArrowSchema*);
+typedef int32_t (*xl_write_typed_fn)(const uint8_t*, int32_t, int32_t, const xl_column_spec*,
+                                     const xl_table*, const xl_write_options*);
 
 typedef struct
 {
@@ -165,6 +176,7 @@ typedef struct
     xl_free_schema_fn free_schema;
     xl_last_error_ptr_fn last_error_ptr;
     xl_parse_arrow_fn parse_arrow;
+    xl_write_typed_fn write_typed;
 } api_t;
 
 #define BIND(field, type, name)                                                                     \
@@ -200,6 +212,7 @@ static int bind_all(xl_lib_handle lib, api_t* api)
     BIND(free_schema, xl_free_schema_fn, "xl_free_schema");
     BIND(last_error_ptr, xl_last_error_ptr_fn, "xl_last_error_ptr");
     BIND(parse_arrow, xl_parse_arrow_fn, "xl_parse_arrow");
+    BIND(write_typed, xl_write_typed_fn, "xl_write_typed");
     return 1;
 }
 
@@ -725,6 +738,59 @@ static int test_double_close_is_rejected(const api_t* api, const char* fixture)
     return 0;
 }
 
+/* Writes a two-row table through xl_write_typed, reads it back with the existing read exports, and
+ * asserts on the values. Layer 1's static asserts prove the header's own layout; only running real
+ * data through both directions proves excelreader.h, the C# structs and the writer agree. */
+static int test_write_typed(const api_t* api)
+{
+    const char* out_path = "excelreader_smoke_write.csv";
+    int64_t qty[2] = { 3, 7 };
+    xl_column column;
+    xl_table table;
+    xl_column_spec spec;
+    xl_write_options options;
+    xl_workbook* handle = NULL;
+    xl_table read_back;
+    int32_t status;
+
+    memset(&column, 0, sizeof(column));
+    column.type = XL_T_I64;
+    column.length = 2;
+    column.values = qty;
+
+    memset(&table, 0, sizeof(table));
+    table.column_count = 1;
+    table.row_count = 2;
+    table.columns = &column;
+
+    memset(&spec, 0, sizeof(spec));
+    spec.name = (const uint8_t*)"qty";
+    spec.name_len = 3;
+    spec.type = XL_T_I64;
+
+    memset(&options, 0, sizeof(options));
+    options.struct_size = (int32_t)sizeof(xl_write_options);
+
+    status = api->write_typed((const uint8_t*)out_path, (int32_t)strlen(out_path),
+                              XL_FORMAT_CSV, &spec, &table, &options);
+    CHECK(status == XL_OK, "xl_write_typed should write a CSV");
+
+    status = api->open_file((const uint8_t*)out_path, (int32_t)strlen(out_path), XL_FORMAT_CSV, &handle);
+    CHECK(status == XL_OK, "the written CSV should reopen");
+
+    memset(&read_back, 0, sizeof(read_back));
+    status = api->parse_typed(handle, &spec, 1, 1, &read_back);
+    CHECK(status == XL_OK, "the written CSV should parse back");
+    CHECK(read_back.row_count == 2, "the written CSV should hold two rows");
+    CHECK(((const int64_t*)read_back.columns[0].values)[0] == 3, "row 0 should round-trip as 3");
+    CHECK(((const int64_t*)read_back.columns[0].values)[1] == 7, "row 1 should round-trip as 7");
+
+    api->free_table(&read_back);
+    api->close_(handle);
+    remove(out_path);
+    return 0;
+}
+
 int main(int argc, char** argv)
 {
     const char* library_path = argc > 1 ? argv[1] : EXCELREADER_LIB_PATH_DEFAULT;
@@ -758,6 +824,7 @@ int main(int argc, char** argv)
     failures += test_infer_schema(&api, fixture_path);
     failures += test_infer_schema_rejects_bad_arguments(&api, fixture_path);
     failures += test_double_close_is_rejected(&api, fixture_path);
+    failures += test_write_typed(&api);
 
     if (failures == 0)
     {

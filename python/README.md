@@ -1,7 +1,7 @@
 # excelreader (Python)
 
-Read XLSX, XLSB, XLS and CSV through ExcelReader's NativeAOT library. No .NET runtime required —
-the shared library is self-contained. Reading only; writing is not exposed yet.
+Read and write XLSX, XLSB, XLS and CSV through ExcelReader's NativeAOT library. No .NET runtime
+required — the shared library is self-contained.
 
 ## Install (from source)
 
@@ -134,6 +134,56 @@ mix of kinds, only formula/error results, or nothing sampled falls back to `Colu
 `nullable` is set when any sampled row left the column empty. CSV cells carry no such type tag, so
 every CSV column is guessed `ColumnType.STRING` — inspect the result (or just try parsing) before
 trusting it, especially past the sample.
+
+### Writing
+
+`write_workbook()` writes a `TypedTable` (what `parse_typed()` returns) back out as a single sheet,
+through the same `xl_write_typed` native export — one-shot, no writer handle before or after the call:
+
+```python
+from excelreader import ColumnType, write_workbook
+
+with open_workbook("sales.xlsb") as workbook:
+    table = workbook.parse_typed(workbook.infer_schema())
+
+types = [ColumnType.STRING, ColumnType.DATE, ColumnType.F64]  # one per table.columns, in order
+write_workbook("sales_copy.xlsx", table, types)
+```
+
+`types` is required because a `TypedTable` column is a raw buffer (`array`/`StringColumn`/NumPy
+array) and nothing about the buffer alone tells I64 from TIME apart — both are 8-byte-per-row
+arrays. `format` is inferred from the path's extension (one of xlsx/xlsb/xls/csv) or set explicitly:
+
+```python
+write_workbook("report.dat", table, types, format="csv")
+```
+
+`write_pandas()` and `write_polars()` build the table from a DataFrame instead (both go through
+`write_arrow()`, so `pyarrow` must be installed):
+
+```python
+from excelreader import write_pandas, write_polars
+
+write_pandas("report.xlsx", df)          # requires pandas + pyarrow
+write_polars("report.xlsx", polars_df)   # requires polars + pyarrow
+```
+
+`WriteOptions` sets the sheet name and CSV dialect, mirroring `xl_write_options` — every field
+defaults to `None`, meaning "use the library default":
+
+```python
+from excelreader import WriteOptions
+
+write_workbook(
+    "report.xlsx", table, types,
+    options=WriteOptions(sheet_name="Q3 Results", use_shared_strings=True),
+)
+```
+
+**Phase-1 limits, stated plainly:** a single sheet only (no multi-sheet workbooks); the whole table
+must already be in memory (no streaming/chunked writes); no styling beyond the temporal number
+formats `xl_write_typed` applies to DATE/TIME/TIMESTAMP columns. `format="auto"` is not accepted —
+sniffing reads a file's existing signature bytes, and a file being created has none.
 
 ### Arrow
 
