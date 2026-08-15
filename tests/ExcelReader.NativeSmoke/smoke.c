@@ -682,15 +682,17 @@ static int test_infer_schema(const api_t* api, const char* fixture)
     CHECK(value_len == 6 && memcmp(scratch + 16, "Valor1", 6) == 0,
           "xl_infer_schema must not have disturbed the xl_next_row cursor - this must be the first data row");
 
-    /* The whole point of the shape match: an inferred schema is directly usable by xl_parse_typed. */
+    /* The whole point of the shape match: an inferred schema is directly usable by xl_parse_typed.
+     * Each spec's name pointer is only valid until xl_free_schema runs, so parse_typed must be
+     * called first - copying the specs does not copy the name bytes they point to. */
     xl_column_spec first_three[3];
     memcpy(first_three, schema.columns, 3 * sizeof(xl_column_spec));
-    api->free_schema(&schema);
 
     xl_table table;
     memset(&table, 0, sizeof(table));
     CHECK(api->parse_typed(handle, first_three, 3, 1, &table) == XL_OK,
           "an inferred schema must be directly usable by xl_parse_typed");
+    api->free_schema(&schema);
     CHECK(table.row_count == 100, "xl_parse_typed with the inferred schema must return all 100 data rows");
     api->free_table(&table);
 
