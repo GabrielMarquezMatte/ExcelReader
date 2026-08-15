@@ -78,11 +78,11 @@ namespace ExcelReader.Native
             {
                 case NativeFormat.Xlsx:
                     WriteWorkbook<XlsxSheetWriter, XlsxRowWriter>(
-                        Block(XlsxWorkbookWriter.CreateAsync(stream, useSharedStrings: sharedStrings)), specs, table, sheetName, hasHeader);
+                        XlsxWorkbookWriter.Create(stream, useSharedStrings: sharedStrings), specs, table, sheetName, hasHeader);
                     return;
                 case NativeFormat.Xlsb:
                     WriteWorkbook<XlsbSheetWriter, XlsbRowWriter>(
-                        Block(XlsbWorkbookWriter.CreateAsync(stream, date1904: date1904, useSharedStrings: sharedStrings)), specs, table, sheetName, hasHeader);
+                        XlsbWorkbookWriter.Create(stream, date1904: date1904, useSharedStrings: sharedStrings), specs, table, sheetName, hasHeader);
                     return;
                 case NativeFormat.Xls:
                     WriteWorkbook<XlsSheetWriter, XlsRowWriter>(
@@ -101,10 +101,10 @@ namespace ExcelReader.Native
         {
             try
             {
-                Block(workbook.StartAsync());
+                workbook.Start();
                 TSheet sheet = workbook.AddSheet(sheetName);
                 ApplyTemporalStyles<TSheet, TRow>(workbook, sheet, table);
-                Block(sheet.StartAsync());
+                sheet.Start();
 
                 if (hasHeader)
                 {
@@ -115,13 +115,13 @@ namespace ExcelReader.Native
                     WriteDataRow<TSheet, TRow>(sheet, table, row);
                 }
 
-                Block(sheet.EndAsync());
-                Block(sheet.DisposeAsync());
-                Block(workbook.EndAsync());
+                sheet.End();
+                sheet.Dispose();
+                workbook.End();
             }
             finally
             {
-                Block(workbook.DisposeAsync());
+                workbook.Dispose();
             }
         }
 
@@ -158,17 +158,10 @@ namespace ExcelReader.Native
             where TSheet : ISheetWriter<TRow>
             where TRow : IRowWriter
         {
-            TRow row = Block(sheet.StartRowAsync());
-            try
+            using TRow row = sheet.StartRow();
+            foreach (NativeColumnSpec spec in specs)
             {
-                foreach (NativeColumnSpec spec in specs)
-                {
-                    row.Write(spec.Name);
-                }
-            }
-            finally
-            {
-                Block(row.DisposeAsync());
+                row.Write(spec.Name);
             }
         }
 
@@ -176,17 +169,10 @@ namespace ExcelReader.Native
             where TSheet : ISheetWriter<TRow>
             where TRow : IRowWriter
         {
-            TRow row = Block(sheet.StartRowAsync());
-            try
+            using TRow row = sheet.StartRow();
+            for (int index = 0; index < table.ColumnCount; index++)
             {
-                for (int index = 0; index < table.ColumnCount; index++)
-                {
-                    WriteCell(row, ColumnAt(table, index), rowIndex);
-                }
-            }
-            finally
-            {
-                Block(row.DisposeAsync());
+                WriteCell(row, ColumnAt(table, index), rowIndex);
             }
         }
 
@@ -282,34 +268,6 @@ namespace ExcelReader.Native
             }
             byte* bitmap = (byte*)column.Validity;
             return (bitmap[rowIndex >> 3] & (1 << (int)(rowIndex & 7))) != 0;
-        }
-
-        // The C ABI is synchronous and NativeAOT installs no SynchronizationContext, so blocking here
-        // cannot deadlock. Guarding on IsCompletedSuccessfully first matters: StartRowAsync runs once
-        // per row and a buffered write almost never goes async. Same pattern as
-        // ExcelReader.Core's Writer/Internal/WriteOffloadStream.cs.
-        [SuppressMessage("Usage", "VSTHRD002:Avoid problematic synchronous waits",
-            Justification = "The C ABI is synchronous by contract; NativeAOT installs no SynchronizationContext, so this cannot deadlock.")]
-        private static void Block(ValueTask task)
-        {
-            if (!task.IsCompletedSuccessfully)
-            {
-                task.AsTask().GetAwaiter().GetResult();
-            }
-        }
-
-        // No S5034 suppression: Sonar's ValueTask rule understands the IsCompletedSuccessfully guard
-        // below and does not fire here (verified by building with the attribute removed on both target
-        // frameworks), so an attribute for it would suppress nothing.
-        [SuppressMessage("Usage", "VSTHRD002:Avoid problematic synchronous waits",
-            Justification = "The C ABI is synchronous by contract; NativeAOT installs no SynchronizationContext, so this cannot deadlock.")]
-        private static T Block<T>(ValueTask<T> task)
-        {
-            if (task.IsCompletedSuccessfully)
-            {
-                return task.Result;
-            }
-            return task.AsTask().GetAwaiter().GetResult();
         }
 
         /// <summary>

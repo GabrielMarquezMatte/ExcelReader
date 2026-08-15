@@ -3,7 +3,7 @@ namespace ExcelReader.Core.Writer
     /// <summary>
     /// Writes the cells of a single row of a BIFF8 (.xls) sheet.
     /// </summary>
-    public sealed class XlsRowWriter : IDisposable, IRowWriter
+    public sealed class XlsRowWriter : IRowWriter
     {
         private readonly XlsSheetWriter _owner;
         private int _rowNumber;

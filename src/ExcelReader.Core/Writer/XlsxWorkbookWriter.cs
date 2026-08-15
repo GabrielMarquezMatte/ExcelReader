@@ -56,6 +56,8 @@ namespace ExcelReader.Core.Writer
         /// <exception cref="ArgumentNullException"><paramref name="stream"/> is <see langword="null"/>.</exception>
         [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP001:Dispose created",
             Justification = "Factory method transfers ZipArchive ownership to XlsxWorkbookWriter; caller disposes via DisposeAsync.")]
+        [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP004:Don't ignore created IDisposable",
+            Justification = "Factory method transfers ZipArchive ownership to XlsxWorkbookWriter; caller disposes via DisposeAsync.")]
         [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
             Justification = "XlsxWorkbookWriter takes ownership of ZipArchive and disposes it in DisposeAsync/EndAsync.")]
         public static ValueTask<XlsxWorkbookWriter> CreateAsync(
@@ -69,6 +71,41 @@ namespace ExcelReader.Core.Writer
             ct.ThrowIfCancellationRequested();
             ZipArchive zip = new(stream, ZipArchiveMode.Create, leaveOpen: true);
             return ValueTask.FromResult(new XlsxWorkbookWriter(zip, stream, leaveOpen, useSharedStrings, compression, prefetchWrite));
+        }
+
+        /// <summary>
+        /// Synchronous counterpart to <see cref="CreateAsync"/>, for native/unmanaged callers whose ABI
+        /// is synchronous. Parameters mirror <see cref="CreateAsync"/> exactly, minus <c>ct</c>.
+        /// </summary>
+        [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP001:Dispose created",
+            Justification = "Factory method transfers ZipArchive ownership to XlsxWorkbookWriter; caller disposes via Dispose/DisposeAsync.")]
+        [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP004:Don't ignore created IDisposable",
+            Justification = "Factory method transfers ZipArchive ownership to XlsxWorkbookWriter; caller disposes via Dispose/DisposeAsync.")]
+        [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
+            Justification = "XlsxWorkbookWriter takes ownership of ZipArchive and disposes it in Dispose(Async)/End(Async).")]
+        public static XlsxWorkbookWriter Create(
+            Stream stream, bool leaveOpen = false,
+            CompressionLevel compression = CompressionLevel.Fastest,
+            bool useSharedStrings = false,
+            bool prefetchWrite = false)
+        {
+            ArgumentNullException.ThrowIfNull(stream);
+            ZipArchive zip = new(stream, ZipArchiveMode.Create, leaveOpen: true);
+            return new XlsxWorkbookWriter(zip, stream, leaveOpen, useSharedStrings, compression, prefetchWrite);
+        }
+
+        /// <summary>
+        /// Synchronous counterpart to <see cref="StartAsync"/>, for native/unmanaged callers whose ABI
+        /// is synchronous.
+        /// </summary>
+        /// <exception cref="ObjectDisposedException">The workbook has already been ended.</exception>
+        /// <exception cref="InvalidOperationException">The workbook has already been started.</exception>
+        public void Start()
+        {
+            WriterStateGuard.ThrowIfEnded(_state, this);
+            WriterStateGuard.RequireCreated(_state, nameof(XlsxWorkbookWriter));
+            _state = WriterState.Started;
+            WriteRootRels();
         }
 
         /// <inheritdoc/>
@@ -88,6 +125,8 @@ namespace ExcelReader.Core.Writer
         /// <exception cref="ArgumentException"><paramref name="name"/> is empty, longer than 31 characters, or contains one of <c>: \ / ? * [ ]</c>.</exception>
         /// <exception cref="ObjectDisposedException">The workbook has already been ended.</exception>
         /// <exception cref="InvalidOperationException">The workbook has not been started, or the previously added sheet has not been ended.</exception>
+        [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP003:Dispose previous before re-assigning",
+            Justification = "RequireCanAddSheet above guarantees _activeSheet is null (any previous sheet was already ended and disposed) before this assigns a new one.")]
         public XlsxSheetWriter AddSheet(string name)
         {
             WriterStateGuard.RequireCanAddSheet(
@@ -103,6 +142,8 @@ namespace ExcelReader.Core.Writer
             _sheets.Add((name, sheetId));
         }
 
+        [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP003:Dispose previous before re-assigning",
+            Justification = "Called only after the active sheet's own End/Dispose has already run (from End/Dispose below); this just clears the now-stale reference.")]
         internal void NotifySheetEnded()
         {
             _sheetActive = false;
@@ -124,6 +165,37 @@ namespace ExcelReader.Core.Writer
 
         // Valid styleId range for SetColumnStyle/StartRowAsync(int,...) is [0, StyleCount).
         internal int StyleCount => _styles.Count;
+
+        /// <summary>
+        /// Synchronous counterpart to <see cref="EndAsync"/>, for native/unmanaged callers whose ABI is
+        /// synchronous.
+        /// </summary>
+        /// <exception cref="ObjectDisposedException">The workbook has already been ended.</exception>
+        /// <exception cref="InvalidOperationException">The workbook has not been started, or no sheet has been added yet.</exception>
+        public void End()
+        {
+            WriterStateGuard.ThrowIfEnded(_state, this);
+            WriterStateGuard.RequireStarted(_state, nameof(XlsxWorkbookWriter), "ending");
+            if (_sheets.Count == 0)
+            {
+                throw new InvalidOperationException("An XLSX workbook must contain at least one sheet.");
+            }
+            _state = WriterState.Ended;
+            if (_activeSheet is not null)
+            {
+                _activeSheet.Dispose();
+            }
+            WriteEntry("xl/styles.xml", BuildStylesXml());
+            if (_sharedStrings is not null)
+            {
+                using var bytes = _sharedStrings.ToXlsxBytes();
+                WriteEntry("xl/sharedStrings.xml", bytes.Memory.Span);
+            }
+            WriteEntry("xl/workbook.xml", BuildWorkbookXml());
+            WriteEntry("xl/_rels/workbook.xml.rels", BuildWorkbookRelsXml());
+            WriteEntry("[Content_Types].xml", BuildContentTypesXml());
+            ZipArchiveDisposal.Dispose(_zip);
+        }
 
         /// <inheritdoc/>
         /// <exception cref="ObjectDisposedException">The workbook has already been ended.</exception>
@@ -153,10 +225,56 @@ namespace ExcelReader.Core.Writer
             await ZipArchiveDisposal.DisposeAsync(_zip).ConfigureAwait(false);
         }
 
+        /// <summary>
+        /// Synchronous counterpart to <see cref="FlushAsync"/>, for native/unmanaged callers whose ABI
+        /// is synchronous.
+        /// </summary>
+        public void Flush()
+        {
+            _stream.Flush();
+        }
+
         /// <inheritdoc/>
         public ValueTask FlushAsync(CancellationToken ct = default)
         {
             return ZipEntryWriter.FlushAsync(_stream, ct);
+        }
+
+        /// <summary>
+        /// Synchronous counterpart to <see cref="DisposeAsync"/>, for native/unmanaged callers whose ABI
+        /// is synchronous.
+        /// </summary>
+        [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP021:Call this.Dispose(true)",
+            Justification = "Sealed type, no finalizer, no Dispose(bool) pattern to route through — this is the only Dispose overload.")]
+        public void Dispose()
+        {
+            if (_disposed)
+            {
+                return;
+            }
+            _disposed = true;
+            if (_state == WriterState.Started)
+            {
+                // End deliberately rejects a zero-sheet workbook. Disposal still must release
+                // a partially configured writer (for example after an earlier validation failure).
+                if (_sheets.Count == 0)
+                {
+                    _state = WriterState.Ended;
+                    ZipArchiveDisposal.Dispose(_zip);
+                }
+                else
+                {
+                    End();
+                }
+            }
+            else if (_state == WriterState.Created)
+            {
+                ZipArchiveDisposal.Dispose(_zip);
+            }
+            if (!_leaveOpen)
+            {
+                _stream.Dispose();
+            }
         }
 
         /// <inheritdoc/>
@@ -191,15 +309,22 @@ namespace ExcelReader.Core.Writer
             }
         }
 
-        private ValueTask WriteRootRelsAsync(CancellationToken ct)
+        private static string BuildRootRelsXml()
         {
-            return WriteEntryAsync(
-                "_rels/.rels",
-                "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>" +
+            return "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>" +
                 $"<Relationships xmlns=\"{XlsxConstants.PackageRelationshipsNs}\">" +
                 $"<Relationship Id=\"rId1\" Type=\"{XlsxConstants.WorkbookRelType}\" Target=\"xl/workbook.xml\"/>" +
-                "</Relationships>",
-                ct);
+                "</Relationships>";
+        }
+
+        private void WriteRootRels()
+        {
+            WriteEntry("_rels/.rels", BuildRootRelsXml());
+        }
+
+        private ValueTask WriteRootRelsAsync(CancellationToken ct)
+        {
+            return WriteEntryAsync("_rels/.rels", BuildRootRelsXml(), ct);
         }
 
         private ValueTask WriteStylesAsync(CancellationToken ct)
@@ -304,7 +429,7 @@ namespace ExcelReader.Core.Writer
             await WriteEntryAsync("xl/sharedStrings.xml", bytes.Memory, ct).ConfigureAwait(false);
         }
 
-        private ValueTask WriteWorkbookAsync(CancellationToken ct)
+        private string BuildWorkbookXml()
         {
             StringBuilder sb = new();
             sb.Append("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>");
@@ -315,10 +440,15 @@ namespace ExcelReader.Core.Writer
                 sb.Append(CultureInfo.InvariantCulture, $"<sheet name=\"{EscapeAttribute(name)}\" sheetId=\"{sheetId}\" r:id=\"rId{sheetId + 1}\"/>");
             }
             sb.Append("</sheets></workbook>");
-            return WriteEntryAsync("xl/workbook.xml", sb.ToString(), ct);
+            return sb.ToString();
         }
 
-        private ValueTask WriteWorkbookRelsAsync(CancellationToken ct)
+        private ValueTask WriteWorkbookAsync(CancellationToken ct)
+        {
+            return WriteEntryAsync("xl/workbook.xml", BuildWorkbookXml(), ct);
+        }
+
+        private string BuildWorkbookRelsXml()
         {
             StringBuilder sb = new();
             sb.Append("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>");
@@ -333,10 +463,15 @@ namespace ExcelReader.Core.Writer
                 sb.Append(CultureInfo.InvariantCulture, $"<Relationship Id=\"rId{sheetId + 1}\" Type=\"{XlsxConstants.WorksheetRelType}\" Target=\"worksheets/sheet{sheetId}.xml\"/>");
             }
             sb.Append("</Relationships>");
-            return WriteEntryAsync("xl/_rels/workbook.xml.rels", sb.ToString(), ct);
+            return sb.ToString();
         }
 
-        private ValueTask WriteContentTypesAsync(CancellationToken ct)
+        private ValueTask WriteWorkbookRelsAsync(CancellationToken ct)
+        {
+            return WriteEntryAsync("xl/_rels/workbook.xml.rels", BuildWorkbookRelsXml(), ct);
+        }
+
+        private string BuildContentTypesXml()
         {
             StringBuilder sb = new();
             sb.Append("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>");
@@ -354,7 +489,12 @@ namespace ExcelReader.Core.Writer
                 sb.Append(CultureInfo.InvariantCulture, $"<Override PartName=\"/xl/worksheets/sheet{sheetId}.xml\" ContentType=\"{XlsxConstants.WorksheetContentType}\"/>");
             }
             sb.Append("</Types>");
-            return WriteEntryAsync("[Content_Types].xml", sb.ToString(), ct);
+            return sb.ToString();
+        }
+
+        private ValueTask WriteContentTypesAsync(CancellationToken ct)
+        {
+            return WriteEntryAsync("[Content_Types].xml", BuildContentTypesXml(), ct);
         }
 
         private ValueTask WriteEntryAsync(string entryName, string content, CancellationToken ct)
@@ -365,6 +505,16 @@ namespace ExcelReader.Core.Writer
         private ValueTask WriteEntryAsync(string entryName, ReadOnlyMemory<byte> content, CancellationToken ct)
         {
             return ZipEntryWriter.WriteBytesAsync(_zip, entryName, content, _compression, ct);
+        }
+
+        private void WriteEntry(string entryName, string content)
+        {
+            ZipEntryWriter.WriteText(_zip, entryName, content, _compression);
+        }
+
+        private void WriteEntry(string entryName, ReadOnlySpan<byte> content)
+        {
+            ZipEntryWriter.WriteBytes(_zip, entryName, content, _compression);
         }
 
         private static string EscapeAttribute(string value)

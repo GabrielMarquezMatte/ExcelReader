@@ -25,6 +25,8 @@ namespace ExcelReader.Core.Writer
         private bool _registered;
         private bool _buffersDisposed;
         private int _rowNumber = -1;
+        [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP002:Dispose member",
+            Justification = "Reused per row; the caller disposes it via using after each row, and End's _rowActive guard rejects ending the sheet with it still open.")]
         private XlsbRowWriter? _rowWriter;
         private Dictionary<int, int>? _columnStyles;
         private Dictionary<int, double>? _columnWidths;
@@ -105,12 +107,8 @@ namespace ExcelReader.Core.Writer
             return _columnStyles is not null && _columnStyles.TryGetValue(columnIndex, out int styleId) ? styleId : 0;
         }
 
-        /// <inheritdoc/>
-        public ValueTask StartAsync(CancellationToken ct = default)
+        private void StartCore()
         {
-            WriterStateGuard.ThrowIfEnded(_state, this);
-            WriterStateGuard.RequireCreated(_state, nameof(XlsbSheetWriter));
-            ct.ThrowIfCancellationRequested();
             _state = WriterState.Started;
             WriteRecord(Brt.BeginSheet);
             WriteWorksheetView();
@@ -118,6 +116,26 @@ namespace ExcelReader.Core.Writer
             WriteColInfos();
             WriteRecord(Brt.EndColInfos);
             WriteRecord(Brt.BeginSheetData);
+        }
+
+        /// <summary>
+        /// Synchronous counterpart to <see cref="StartAsync"/>, for native/unmanaged callers whose ABI
+        /// is synchronous.
+        /// </summary>
+        public void Start()
+        {
+            WriterStateGuard.ThrowIfEnded(_state, this);
+            WriterStateGuard.RequireCreated(_state, nameof(XlsbSheetWriter));
+            StartCore();
+        }
+
+        /// <inheritdoc/>
+        public ValueTask StartAsync(CancellationToken ct = default)
+        {
+            WriterStateGuard.ThrowIfEnded(_state, this);
+            WriterStateGuard.RequireCreated(_state, nameof(XlsbSheetWriter));
+            ct.ThrowIfCancellationRequested();
+            StartCore();
             return ValueTask.CompletedTask;
         }
 
@@ -181,12 +199,31 @@ namespace ExcelReader.Core.Writer
         /// <exception cref="ArgumentOutOfRangeException"><paramref name="styleId"/> is negative or was never returned by <see cref="XlsbWorkbookWriter.AddStyle"/>.</exception>
         public ValueTask<XlsbRowWriter> StartRowAsync(int styleId, CancellationToken ct = default)
         {
+            return ValueTask.FromResult(StartRow(styleId));
+        }
+
+        /// <summary>
+        /// Synchronous counterpart to <see cref="ISheetWriter{TRow}.StartRow()"/>, for native/unmanaged
+        /// callers whose ABI is synchronous.
+        /// </summary>
+        public XlsbRowWriter StartRow()
+        {
+            return StartRow(styleId: 0);
+        }
+
+        /// <summary>
+        /// Synchronous counterpart to <see cref="ISheetWriter{TRow}.StartRow(int)"/>, for native/unmanaged
+        /// callers whose ABI is synchronous.
+        /// </summary>
+        /// <exception cref="ArgumentOutOfRangeException"><paramref name="styleId"/> is negative or was never returned by <see cref="XlsbWorkbookWriter.AddStyle"/>.</exception>
+        public XlsbRowWriter StartRow(int styleId)
+        {
             ArgumentOutOfRangeException.ThrowIfNegative(styleId);
             ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(styleId, _owner.StyleCount);
             BeginRow(styleId);
             _rowWriter ??= new XlsbRowWriter(this);
             _rowWriter.Reset();
-            return ValueTask.FromResult(_rowWriter);
+            return _rowWriter;
         }
 
         /// <summary>Writes an entire row in one call, mapping each element of <paramref name="values"/> to a column starting at 0.</summary>
@@ -203,6 +240,38 @@ namespace ExcelReader.Core.Writer
         internal void NotifyRowEnded()
         {
             _rowActive = false;
+        }
+
+        /// <summary>
+        /// Synchronous counterpart to <see cref="EndAsync"/>, for native/unmanaged callers whose ABI is
+        /// synchronous.
+        /// </summary>
+        public void End()
+        {
+            WriterStateGuard.ThrowIfEnded(_state, this);
+            WriterStateGuard.RequireStarted(_state, nameof(XlsbSheetWriter), "ending");
+            WriterStateGuard.RequireNoActiveRowForEnd(_rowActive, nameof(XlsbRowWriter));
+            _state = WriterState.Ended;
+            WriteRecord(Brt.EndSheetData);
+            WriteSheetMetadata();
+            WriteRecord(Brt.EndSheet);
+            if (_stream is null)
+            {
+                WriteBufferedSheet();
+            }
+            else
+            {
+                FlushRecords();
+                _stream.Dispose();
+                _stream = null;
+            }
+            ReleaseBuffers();
+            if (!_registered)
+            {
+                _owner.RegisterSheet(this);
+                _registered = true;
+            }
+            _owner.NotifySheetEnded();
         }
 
         /// <inheritdoc/>
@@ -233,6 +302,22 @@ namespace ExcelReader.Core.Writer
                 _registered = true;
             }
             _owner.NotifySheetEnded();
+        }
+
+        /// <summary>
+        /// Synchronous counterpart to <see cref="DisposeAsync"/>, for native/unmanaged callers whose ABI
+        /// is synchronous.
+        /// </summary>
+        public void Dispose()
+        {
+            if (_state == WriterState.Started)
+            {
+                End();
+            }
+            else if (_state == WriterState.Created)
+            {
+                ReleaseBuffers();
+            }
         }
 
         /// <inheritdoc/>
@@ -295,6 +380,13 @@ namespace ExcelReader.Core.Writer
             }
             _stream!.Write(_records.Span);
             _records.Reset();
+        }
+
+        private void WriteBufferedSheet()
+        {
+            ZipArchiveEntry entry = _zip.CreateEntry($"xl/worksheets/sheet{SheetId}.bin", _compression);
+            using Stream stream = entry.Open();
+            stream.Write(_records.Span);
         }
 
         private async ValueTask WriteBufferedSheetAsync(CancellationToken ct)
