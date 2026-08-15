@@ -1,3 +1,4 @@
+using System.Buffers;
 using System.Runtime.InteropServices;
 using ExcelReader.Core.Writer;
 
@@ -34,9 +35,7 @@ namespace ExcelReader.Native
         // Excel's reserved sheet-name characters. Kept as a literal rather than reaching into Core:
         // IWorkbookWriter.AddSheet documents exactly this set, and the writer enforces it too.
         private const string ForbiddenSheetNameCharacters = @":\/?*[]";
-        private static readonly System.Buffers.SearchValues<char> ForbiddenSheetNameCharactersSearchValues =
-            System.Buffers.SearchValues.Create(ForbiddenSheetNameCharacters);
-
+        private static readonly SearchValues<char> ForbiddenSheetNameCharactersSearchValues = SearchValues.Create(ForbiddenSheetNameCharacters);
         internal string? SheetName { get; init; }
         internal byte? CsvDelimiter { get; init; }
         internal byte? CsvQuote { get; init; }
