@@ -8,7 +8,7 @@ namespace ExcelReader.Core.Writer
     /// workbook is finalized. Rows beyond the BIFF8 65,536-row cap spill into an auto-generated
     /// continuation sheet.
     /// </summary>
-    public sealed class XlsSheetWriter : IDisposable, ISheetWriter<XlsRowWriter>
+    public sealed class XlsSheetWriter : ISheetWriter<XlsRowWriter>
     {
         private const int MaxRow = 65535;
         // Internal (not private) so XlsRowWriter.Skip can bound itself against the same limit instead

@@ -6,7 +6,7 @@ namespace ExcelReader.Core.Writer
     /// <summary>
     /// Writes the cells of a single worksheet row into an XLSX row buffer; reused across rows by <see cref="XlsxSheetWriter"/>.
     /// </summary>
-    public sealed class XlsxRowWriter : IRowWriter, IDisposable
+    public sealed class XlsxRowWriter : IRowWriter
     {
         private readonly XlsxSheetWriter _owner;
         private readonly BiffBuffer _row;

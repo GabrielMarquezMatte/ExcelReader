@@ -18,5 +18,13 @@ namespace ExcelReader.Core.Internal
             return ValueTask.CompletedTask;
 #endif
         }
+
+        // Synchronous counterpart, for native/unmanaged callers whose ABI is synchronous.
+        [System.Diagnostics.CodeAnalysis.SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP007:Don't dispose injected",
+            Justification = "Disposal helper: disposing the caller-owned ZipArchive is its sole purpose — callers delegate their own zip's disposal here.")]
+        internal static void Dispose(ZipArchive zip)
+        {
+            zip.Dispose();
+        }
     }
 }

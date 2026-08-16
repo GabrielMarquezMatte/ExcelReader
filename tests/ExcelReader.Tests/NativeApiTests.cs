@@ -1,7 +1,12 @@
+using System.Diagnostics.CodeAnalysis;
+using System.Globalization;
+using System.IO.Compression;
 using System.Runtime.InteropServices;
 using System.Text;
+using ExcelReader.Core.Enums;
 using ExcelReader.Core.Reader;
 using ExcelReader.Core.ValueObjects;
+using ExcelReader.Core.Writer;
 using ExcelReader.Native;
 
 namespace ExcelReader.Tests
@@ -52,6 +57,82 @@ namespace ExcelReader.Tests
 
             Assert.Equal(NativeStatus.Ok, status);
             Assert.Equal(0, length);
+        }
+
+        [Fact]
+        public void LastErrorPtr_Should_Return_The_Stored_Message()
+        {
+            NativeApi.SetLastError("boom");
+
+            nint pointer = NativeApi.LastErrorPtr(out int length);
+
+            Assert.NotEqual(IntPtr.Zero, pointer);
+            Assert.Equal(4, length);
+            byte[] bytes = new byte[length];
+            Marshal.Copy(pointer, bytes, 0, length);
+            Assert.Equal("boom", Encoding.UTF8.GetString(bytes));
+        }
+
+        [Fact]
+        public void LastErrorPtr_Should_Return_Zero_Length_When_Cleared()
+        {
+            NativeApi.SetLastError("boom");
+            NativeApi.ClearLastError();
+
+            nint pointer = NativeApi.LastErrorPtr(out int length);
+
+            Assert.Equal(IntPtr.Zero, pointer);
+            Assert.Equal(0, length);
+        }
+
+        [Fact]
+        [SuppressMessage("Reliability", "S1215:GC.Collect should not be called",
+            Justification = "This test's entire purpose is to prove the pointer survives a forced gen2 collection — that is the property under test, not incidental cleanup.")]
+        public void LastErrorPtr_Should_Survive_A_Gen2_Collection()
+        {
+            // Catches an unpinned implementation: if the byte[] backing the pointer weren't allocated
+            // pinned, a blocking gen2 collection could relocate it and the pointer taken before the
+            // collection would now point at stale/reused memory.
+            NativeApi.SetLastError("boom");
+            nint pointer = NativeApi.LastErrorPtr(out int length);
+
+            GC.Collect(2, GCCollectionMode.Forced, blocking: true);
+            GC.WaitForPendingFinalizers();
+
+            byte[] bytes = new byte[length];
+            Marshal.Copy(pointer, bytes, 0, length);
+            Assert.Equal("boom", Encoding.UTF8.GetString(bytes));
+        }
+
+        [Fact]
+        public void LastErrorPtr_Should_Be_Thread_Local()
+        {
+            nint[] pointers = new nint[2];
+            int[] lengths = new int[2];
+
+            var first = new Thread(() =>
+            {
+                NativeApi.SetLastError("thread-one");
+                pointers[0] = NativeApi.LastErrorPtr(out lengths[0]);
+            });
+            var second = new Thread(() =>
+            {
+                NativeApi.SetLastError("thread-two-error");
+                pointers[1] = NativeApi.LastErrorPtr(out lengths[1]);
+            });
+
+            first.Start();
+            first.Join();
+            second.Start();
+            second.Join();
+
+            byte[] firstBytes = new byte[lengths[0]];
+            Marshal.Copy(pointers[0], firstBytes, 0, lengths[0]);
+            byte[] secondBytes = new byte[lengths[1]];
+            Marshal.Copy(pointers[1], secondBytes, 0, lengths[1]);
+
+            Assert.Equal("thread-one", Encoding.UTF8.GetString(firstBytes));
+            Assert.Equal("thread-two-error", Encoding.UTF8.GetString(secondBytes));
         }
 
         [Theory]
@@ -131,6 +212,186 @@ namespace ExcelReader.Tests
             Assert.Equal(NativeStatus.Ok, status);
             Assert.NotNull(handle);
             Assert.Equal(NativeStatus.Ok, NativeApi.Close(handle));
+        }
+
+        private static NativeOpenOptionsRaw DefaultRawOptions()
+        {
+            return new NativeOpenOptionsRaw { StructSize = Marshal.SizeOf<NativeOpenOptionsRaw>() };
+        }
+
+        [Fact]
+        public void OpenFileEx_With_Null_Options_Behaves_Like_OpenFile()
+        {
+            int status = NativeApi.OpenFileEx(Encoding.UTF8.GetBytes(XlsxFixture), NativeFormat.Auto, null, out NativeHandle? handle);
+
+            Assert.Equal(NativeStatus.Ok, status);
+            Assert.NotNull(handle);
+            Assert.Equal(NativeStatus.Ok, NativeApi.Close(handle));
+        }
+
+        [Fact]
+        public void OpenMemoryEx_With_Null_Options_Behaves_Like_OpenMemory()
+        {
+            byte[] bytes = File.ReadAllBytes(XlsxFixture);
+
+            int status = NativeApi.OpenMemoryEx(bytes, NativeFormat.Auto, null, out NativeHandle? handle);
+
+            Assert.Equal(NativeStatus.Ok, status);
+            Assert.NotNull(handle);
+            Assert.Equal(NativeStatus.Ok, NativeApi.Close(handle));
+        }
+
+        [Fact]
+        public void OpenFileEx_With_An_Unrecognized_Struct_Size_Is_Invalid_Argument()
+        {
+            NativeOpenOptionsRaw options = DefaultRawOptions() with { StructSize = 1 };
+
+            int status = NativeApi.OpenFileEx(Encoding.UTF8.GetBytes(XlsxFixture), NativeFormat.Auto, options, out NativeHandle? handle);
+
+            Assert.Equal(NativeStatus.InvalidArgument, status);
+            Assert.Null(handle);
+            Span<byte> buffer = stackalloc byte[256];
+            Assert.Equal(NativeStatus.Ok, NativeApi.LastError(buffer, out int length));
+            Assert.Contains("struct_size", Encoding.UTF8.GetString(buffer[..length]), StringComparison.Ordinal);
+        }
+
+        [Theory]
+        [InlineData(-1)]
+        [InlineData(256)]
+        public void OpenFileEx_Rejects_An_Out_Of_Range_Csv_Delimiter(int delimiter)
+        {
+            NativeOpenOptionsRaw options = DefaultRawOptions() with { CsvDelimiter = delimiter };
+
+            int status = NativeApi.OpenFileEx(Encoding.UTF8.GetBytes(XlsxFixture), NativeFormat.Csv, options, out NativeHandle? handle);
+
+            Assert.Equal(NativeStatus.InvalidArgument, status);
+            Assert.Null(handle);
+        }
+
+        [Fact]
+        public void OpenFileEx_Rejects_A_Negative_Numeric_Option()
+        {
+            NativeOpenOptionsRaw options = DefaultRawOptions() with { MaxZipEntries = -5 };
+
+            int status = NativeApi.OpenFileEx(Encoding.UTF8.GetBytes(XlsxFixture), NativeFormat.Auto, options, out NativeHandle? handle);
+
+            Assert.Equal(NativeStatus.InvalidArgument, status);
+            Assert.Null(handle);
+        }
+
+        [Fact]
+        public void OpenFileEx_Rejects_An_Out_Of_Range_Csv_Sniff_Dialect_State()
+        {
+            NativeOpenOptionsRaw options = DefaultRawOptions() with { CsvSniffDialect = 99 };
+
+            int status = NativeApi.OpenFileEx(Encoding.UTF8.GetBytes(XlsxFixture), NativeFormat.Csv, options, out NativeHandle? handle);
+
+            Assert.Equal(NativeStatus.InvalidArgument, status);
+            Assert.Null(handle);
+        }
+
+        [Fact]
+        public void OpenFileEx_Applies_An_Explicit_Csv_Delimiter()
+        {
+            string path = Path.Combine(Path.GetTempPath(), $"excelreader-native-{Guid.NewGuid():N}.csv");
+            File.WriteAllText(path, "name;qty\nwidget;7\n");
+            try
+            {
+                NativeOpenOptionsRaw options = DefaultRawOptions() with { CsvDelimiter = (byte)';' };
+                Assert.Equal(NativeStatus.Ok, NativeApi.OpenFileEx(Encoding.UTF8.GetBytes(path), NativeFormat.Csv, options, out NativeHandle? handle));
+                try
+                {
+                    byte[] buffer = new byte[4096];
+                    Assert.Equal(NativeStatus.Ok, NativeApi.NextRow(handle, buffer, out int written));
+                    List<DecodedCell> row = DecodeRow(buffer.AsSpan(0, written));
+                    Assert.Equal(2, row.Count);
+                    Assert.Equal("name", row[0].Value);
+                    Assert.Equal("qty", row[1].Value);
+                }
+                finally
+                {
+                    NativeApi.Close(handle);
+                }
+            }
+            finally
+            {
+                File.Delete(path);
+            }
+        }
+
+        [Fact]
+        public void OpenFileEx_Sniffs_The_Csv_Dialect_When_Requested()
+        {
+            // Same semicolon-delimited file as the explicit-delimiter test above, but with no delimiter
+            // given at all — csv_sniff_dialect must infer it via Excel.SniffCsvDialectFromFile.
+            string path = Path.Combine(Path.GetTempPath(), $"excelreader-native-{Guid.NewGuid():N}.csv");
+            File.WriteAllText(path, "name;qty\nwidget;7\ngadget;9\n");
+            try
+            {
+                NativeOpenOptionsRaw options = DefaultRawOptions() with { CsvSniffDialect = NativeOptionState.True };
+                Assert.Equal(NativeStatus.Ok, NativeApi.OpenFileEx(Encoding.UTF8.GetBytes(path), NativeFormat.Csv, options, out NativeHandle? handle));
+                try
+                {
+                    byte[] buffer = new byte[4096];
+                    Assert.Equal(NativeStatus.Ok, NativeApi.NextRow(handle, buffer, out int written));
+                    List<DecodedCell> row = DecodeRow(buffer.AsSpan(0, written));
+                    Assert.Equal(2, row.Count);
+                    Assert.Equal("name", row[0].Value);
+                    Assert.Equal("qty", row[1].Value);
+                }
+                finally
+                {
+                    NativeApi.Close(handle);
+                }
+            }
+            finally
+            {
+                File.Delete(path);
+            }
+        }
+
+        [Fact]
+        public void OpenFileEx_Applies_A_Tiny_Max_Total_Decompressed_Bytes_To_A_Real_Xlsx()
+        {
+            // Proves max_total_decompressed_bytes actually reaches XlsxReader: a cap this small fails
+            // before even xl/workbook.xml can be read.
+            NativeOpenOptionsRaw options = DefaultRawOptions() with { MaxTotalDecompressedBytes = 1 };
+
+            int status = NativeApi.OpenFileEx(Encoding.UTF8.GetBytes(XlsxFixture), NativeFormat.Xlsx, options, out NativeHandle? handle);
+
+            Assert.Equal(NativeStatus.Error, status);
+            Assert.Null(handle);
+        }
+
+        [Fact]
+        public void OpenFileEx_Applies_A_Tiny_Csv_Max_Cell_Bytes()
+        {
+            // Proves csv_max_cell_bytes actually reaches CsvReader. A plain (unquoted) field is read
+            // zero-copy straight out of the stream's own read buffer (CsvReader.Enumerator's "simple
+            // record" fast path) without ever touching CellAccumulator's separate value buffer — so the
+            // cap only has anything to enforce once the record forces BufferedStreamCursor's raw read
+            // buffer to grow past its 64 KiB initial size. The field below (100,000 bytes) guarantees
+            // that grow happens; the cap (4) guarantees it throws when it does.
+            string path = Path.Combine(Path.GetTempPath(), $"excelreader-native-{Guid.NewGuid():N}.csv");
+            File.WriteAllText(path, "name\n" + new string('x', 100_000) + "\n");
+            try
+            {
+                NativeOpenOptionsRaw options = DefaultRawOptions() with { CsvMaxCellBytes = 4 };
+                Assert.Equal(NativeStatus.Ok, NativeApi.OpenFileEx(Encoding.UTF8.GetBytes(path), NativeFormat.Csv, options, out NativeHandle? handle));
+                try
+                {
+                    Assert.Equal(NativeStatus.Ok, NativeApi.NextRow(handle, new byte[128 * 1024], out _)); // header row, short enough
+                    Assert.Equal(NativeStatus.Error, NativeApi.NextRow(handle, new byte[128 * 1024], out _)); // data row, forces a grow past the cap
+                }
+                finally
+                {
+                    NativeApi.Close(handle);
+                }
+            }
+            finally
+            {
+                File.Delete(path);
+            }
         }
 
         [Fact]
@@ -218,6 +479,97 @@ namespace ExcelReader.Tests
             {
                 NativeApi.Close(handle);
             }
+        }
+
+        [Fact]
+        public void SheetNameAt_Should_Return_Each_Name_Without_Moving_The_Cursor()
+        {
+            using MemoryStream ms = WorkbookBuilder.BuildMultiSheet(
+            [
+                ("First", """<row r="1"><c r="A1"><v>1</v></c></row><row r="2"><c r="A2"><v>2</v></c></row>"""),
+                ("Second", """<row r="1"><c r="A1"><v>10</v></c></row>"""),
+            ]);
+            Assert.Equal(NativeStatus.Ok, NativeApi.OpenMemory(ms.ToArray(), NativeFormat.Xlsx, out NativeHandle? handle));
+            try
+            {
+                // Read the first row of sheet 0 before listing names, then confirm the second row of the
+                // SAME sheet still comes back afterward — SheetNameAt must not move the cursor or the
+                // current sheet, unlike xl_move_to_sheet.
+                Assert.Equal(NativeStatus.Ok, NativeApi.NextRow(handle, new byte[4096], out _));
+
+                Span<byte> buffer = stackalloc byte[64];
+                Assert.Equal(NativeStatus.Ok, NativeApi.SheetNameAt(handle, 0, buffer, out int firstLength));
+                Assert.Equal("First", Encoding.UTF8.GetString(buffer[..firstLength]));
+                Assert.Equal(NativeStatus.Ok, NativeApi.SheetNameAt(handle, 1, buffer, out int secondLength));
+                Assert.Equal("Second", Encoding.UTF8.GetString(buffer[..secondLength]));
+
+                // The current sheet is still 0, and its second row is still next — SheetNameAt must not
+                // have reset row enumeration the way xl_move_to_sheet does.
+                Assert.Equal(NativeStatus.Ok, NativeApi.SheetName(handle, buffer, out int currentLength));
+                Assert.Equal("First", Encoding.UTF8.GetString(buffer[..currentLength]));
+                byte[] rowBuffer = new byte[4096];
+                Assert.Equal(NativeStatus.Ok, NativeApi.NextRow(handle, rowBuffer, out int written));
+                Assert.Equal("2", DecodeRow(rowBuffer.AsSpan(0, written))[0].Value);
+            }
+            finally
+            {
+                NativeApi.Close(handle);
+            }
+        }
+
+        [Fact]
+        public void SheetNameAt_Should_Report_Required_Size_When_Buffer_Too_Small()
+        {
+            using MemoryStream ms = WorkbookBuilder.BuildMultiSheet([("VeryLongSheetName", "")]);
+            Assert.Equal(NativeStatus.Ok, NativeApi.OpenMemory(ms.ToArray(), NativeFormat.Xlsx, out NativeHandle? handle));
+            try
+            {
+                Span<byte> tiny = stackalloc byte[2];
+                Assert.Equal(NativeStatus.BufferTooSmall, NativeApi.SheetNameAt(handle, 0, tiny, out int required));
+                Assert.Equal("VeryLongSheetName".Length, required);
+
+                Span<byte> big = stackalloc byte[required];
+                Assert.Equal(NativeStatus.Ok, NativeApi.SheetNameAt(handle, 0, big, out int written));
+                Assert.Equal("VeryLongSheetName", Encoding.UTF8.GetString(big[..written]));
+            }
+            finally
+            {
+                NativeApi.Close(handle);
+            }
+        }
+
+        [Fact]
+        public void SheetNameAt_Should_Reject_A_Negative_Index()
+        {
+            Assert.Equal(NativeStatus.Ok, OpenPath(XlsxFixture, NativeFormat.Auto, out NativeHandle? handle));
+            try
+            {
+                Assert.Equal(NativeStatus.InvalidArgument, NativeApi.SheetNameAt(handle, -1, stackalloc byte[64], out _));
+            }
+            finally
+            {
+                NativeApi.Close(handle);
+            }
+        }
+
+        [Fact]
+        public void SheetNameAt_Should_Error_On_An_Index_Past_The_Last_Sheet()
+        {
+            Assert.Equal(NativeStatus.Ok, OpenPath(XlsxFixture, NativeFormat.Auto, out NativeHandle? handle));
+            try
+            {
+                Assert.Equal(NativeStatus.Error, NativeApi.SheetNameAt(handle, 9999, stackalloc byte[64], out _));
+            }
+            finally
+            {
+                NativeApi.Close(handle);
+            }
+        }
+
+        [Fact]
+        public void SheetNameAt_Should_Reject_A_Null_Handle()
+        {
+            Assert.Equal(NativeStatus.InvalidHandle, NativeApi.SheetNameAt(null, 0, stackalloc byte[64], out _));
         }
 
         [Fact]
@@ -365,6 +717,115 @@ namespace ExcelReader.Tests
                 NativeApi.Close(handle);
                 File.Delete(path);
             }
+        }
+
+        [Fact]
+        public void NextRowDecoded_Should_Place_Every_Value_Inside_The_Row_Allocation()
+        {
+            string path = Path.Combine(Path.GetTempPath(), $"excelreader-native-{Guid.NewGuid():N}.csv");
+            File.WriteAllText(path, "name,qty,note\nwidget,7,fragile\n");
+            Assert.Equal(NativeStatus.Ok, OpenPath(path, NativeFormat.Csv, out NativeHandle? handle));
+            try
+            {
+                // Skip the header row; assert on the data row, which has three non-empty cells.
+                Assert.Equal(NativeStatus.Ok, NativeApi.NextRow(handle, new byte[4096], out _));
+                Assert.Equal(NativeStatus.Ok, NativeApi.NextRowDecoded(handle, out NativeRow row));
+                try
+                {
+                    Assert.Equal(3, row.CellCount);
+                    int cellSize = Marshal.SizeOf<NativeRowCell>();
+                    NativeRowCell[] cells = new NativeRowCell[row.CellCount];
+                    int totalValueBytes = 0;
+                    for (int index = 0; index < row.CellCount; index++)
+                    {
+                        cells[index] = Marshal.PtrToStructure<NativeRowCell>(IntPtr.Add(row.Cells, index * cellSize));
+                        totalValueBytes += cells[index].ValueLength + 1; // +1 for the NUL terminator.
+                    }
+
+                    // Every value pointer must land inside the single row allocation: at or after where the
+                    // cell array ends, and before the block's end (cell array + every value + its NUL).
+                    IntPtr valuesStart = IntPtr.Add(row.Cells, row.CellCount * cellSize);
+                    IntPtr blockEnd = IntPtr.Add(valuesStart, totalValueBytes);
+                    long previousEnd = valuesStart.ToInt64();
+                    foreach (NativeRowCell cell in cells)
+                    {
+                        Assert.True(cell.Value.ToInt64() >= previousEnd, "value must not overlap the previous cell's value");
+                        Assert.True(cell.Value.ToInt64() + cell.ValueLength < blockEnd.ToInt64(), "value must stay inside the row allocation");
+                        previousEnd = cell.Value.ToInt64() + cell.ValueLength + 1;
+                    }
+                    Assert.Equal(blockEnd.ToInt64(), previousEnd);
+                }
+                finally
+                {
+                    NativeApi.FreeRow(ref row);
+                }
+            }
+            finally
+            {
+                NativeApi.Close(handle);
+                File.Delete(path);
+            }
+        }
+
+        [Fact]
+        public void NextRowDecoded_Should_NUL_Terminate_Every_Value()
+        {
+            string path = Path.Combine(Path.GetTempPath(), $"excelreader-native-{Guid.NewGuid():N}.csv");
+            File.WriteAllText(path, "name\nwidget\n");
+            Assert.Equal(NativeStatus.Ok, OpenPath(path, NativeFormat.Csv, out NativeHandle? handle));
+            try
+            {
+                Assert.Equal(NativeStatus.Ok, NativeApi.NextRow(handle, new byte[4096], out _));
+                Assert.Equal(NativeStatus.Ok, NativeApi.NextRowDecoded(handle, out NativeRow row));
+                try
+                {
+                    NativeRowCell cell = Marshal.PtrToStructure<NativeRowCell>(row.Cells);
+                    Assert.Equal((byte)0, Marshal.ReadByte(cell.Value, cell.ValueLength));
+                }
+                finally
+                {
+                    NativeApi.FreeRow(ref row);
+                }
+            }
+            finally
+            {
+                NativeApi.Close(handle);
+                File.Delete(path);
+            }
+        }
+
+        [Fact]
+        public void NextRowDecoded_Should_Return_A_Null_Cells_Pointer_For_An_Empty_Row()
+        {
+            // Self-closing <row/> is a raw-XML shape with zero cells (see CellVariantTests.SelfClosingRowYieldsZeroColumnCount).
+            // A blank CSV line does not test this: it yields one empty field, not zero cells (see
+            // CsvReaderTests.BlankLineYieldsOneEmptyField).
+            using MemoryStream ms = WorkbookBuilder.Build("""<row r="1"/>""");
+            Assert.Equal(NativeStatus.Ok, NativeApi.OpenMemory(ms.ToArray(), NativeFormat.Xlsx, out NativeHandle? handle));
+            try
+            {
+                Assert.Equal(NativeStatus.Ok, NativeApi.NextRowDecoded(handle, out NativeRow row));
+                Assert.Equal(0, row.CellCount);
+                Assert.Equal(IntPtr.Zero, row.Cells);
+
+                // FreeRow on an already-empty row must be a harmless no-op, not a crash.
+                NativeApi.FreeRow(ref row);
+                Assert.Equal(IntPtr.Zero, row.Cells);
+            }
+            finally
+            {
+                NativeApi.Close(handle);
+            }
+        }
+
+        [Fact]
+        public void FreeRow_Should_Be_Idempotent_On_A_Zeroed_Row()
+        {
+            NativeRow row = default;
+            NativeApi.FreeRow(ref row);
+            NativeApi.FreeRow(ref row);
+            Assert.Equal(IntPtr.Zero, row.Cells);
+            Assert.Equal(0, row.CellCount);
         }
 
         [Fact]
@@ -587,6 +1048,2165 @@ namespace ExcelReader.Tests
             }
         }
 
+        // Decodes the xl_read_all_blob layout: int32 row_count, then row_count * {int32 row_length, row blob}.
+        // Reuses DecodeRow (the single-row blob decoder already used above) for each entry.
+        private static List<List<DecodedCell>> DecodeAllRowsBlob(ReadOnlySpan<byte> blob)
+        {
+            List<List<DecodedCell>> rows = [];
+            int rowCount = BitConverter.ToInt32(blob[..4]);
+            int offset = 4;
+            for (int i = 0; i < rowCount; i++)
+            {
+                int rowLength = BitConverter.ToInt32(blob[offset..]);
+                offset += 4;
+                rows.Add(DecodeRow(blob.Slice(offset, rowLength)));
+                offset += rowLength;
+            }
+
+            return rows;
+        }
+
+        [Fact]
+        public void ReadAllBlob_Should_Contain_Every_Remaining_Row()
+        {
+            string path = Path.Combine(Path.GetTempPath(), $"excelreader-native-{Guid.NewGuid():N}.csv");
+            File.WriteAllText(path, "name,qty\nwidget,7\ngadget,9\n");
+            Assert.Equal(NativeStatus.Ok, OpenPath(path, NativeFormat.Csv, out NativeHandle? handle));
+            try
+            {
+                byte[] buffer = new byte[8192];
+                Assert.Equal(NativeStatus.Ok, NativeApi.ReadAllBlob(handle, buffer, out int written));
+
+                List<List<DecodedCell>> rows = DecodeAllRowsBlob(buffer.AsSpan(0, written));
+                Assert.Equal(3, rows.Count);
+                Assert.Equal("name", rows[0][0].Value);
+                Assert.Equal("qty", rows[0][1].Value);
+                Assert.Equal("widget", rows[1][0].Value);
+                Assert.Equal("gadget", rows[2][0].Value);
+            }
+            finally
+            {
+                NativeApi.Close(handle);
+                File.Delete(path);
+            }
+        }
+
+        [Fact]
+        public void ReadAllBlob_Should_Include_A_Row_Already_Pending_From_NextRow()
+        {
+            // A row held pending from a prior xl_next_row that returned XL_BUFFER_TOO_SMALL must still
+            // show up in xl_read_all_blob's result — it hasn't been consumed by any successful call yet.
+            string path = Path.Combine(Path.GetTempPath(), $"excelreader-native-{Guid.NewGuid():N}.csv");
+            File.WriteAllText(path, "name\nwidget\ngadget\n");
+            Assert.Equal(NativeStatus.Ok, OpenPath(path, NativeFormat.Csv, out NativeHandle? handle));
+            try
+            {
+                Assert.Equal(NativeStatus.BufferTooSmall, NativeApi.NextRow(handle, Span<byte>.Empty, out _));
+
+                byte[] buffer = new byte[8192];
+                Assert.Equal(NativeStatus.Ok, NativeApi.ReadAllBlob(handle, buffer, out int written));
+
+                List<List<DecodedCell>> rows = DecodeAllRowsBlob(buffer.AsSpan(0, written));
+                Assert.Equal(3, rows.Count);
+                Assert.Equal("name", rows[0][0].Value);
+                Assert.Equal("widget", rows[1][0].Value);
+                Assert.Equal("gadget", rows[2][0].Value);
+            }
+            finally
+            {
+                NativeApi.Close(handle);
+                File.Delete(path);
+            }
+        }
+
+        [Fact]
+        public void ReadAllBlob_Should_Not_Lose_Rows_When_The_Buffer_Is_Too_Small()
+        {
+            string path = Path.Combine(Path.GetTempPath(), $"excelreader-native-{Guid.NewGuid():N}.csv");
+            File.WriteAllText(path, "name,qty\nwidget,7\ngadget,9\n");
+            Assert.Equal(NativeStatus.Ok, OpenPath(path, NativeFormat.Csv, out NativeHandle? handle));
+            try
+            {
+                Assert.Equal(NativeStatus.BufferTooSmall, NativeApi.ReadAllBlob(handle, Span<byte>.Empty, out int required));
+                Assert.True(required > 0);
+
+                byte[] big = new byte[required];
+                Assert.Equal(NativeStatus.Ok, NativeApi.ReadAllBlob(handle, big, out int written));
+                Assert.Equal(required, written);
+
+                List<List<DecodedCell>> rows = DecodeAllRowsBlob(big.AsSpan(0, written));
+                Assert.Equal(3, rows.Count);
+                Assert.Equal("gadget", rows[2][0].Value);
+            }
+            finally
+            {
+                NativeApi.Close(handle);
+                File.Delete(path);
+            }
+        }
+
+        [Fact]
+        public void ReadAllBlob_Should_Return_Zero_Rows_At_End_Of_Sheet()
+        {
+            string path = Path.Combine(Path.GetTempPath(), $"excelreader-native-{Guid.NewGuid():N}.csv");
+            File.WriteAllText(path, "name\n");
+            Assert.Equal(NativeStatus.Ok, OpenPath(path, NativeFormat.Csv, out NativeHandle? handle));
+            try
+            {
+                Assert.Equal(NativeStatus.Ok, NativeApi.ReadAllBlob(handle, new byte[4096], out _));
+
+                byte[] buffer = new byte[4096];
+                Assert.Equal(NativeStatus.Ok, NativeApi.ReadAllBlob(handle, buffer, out int written));
+                Assert.Equal(0, BitConverter.ToInt32(buffer.AsSpan(0, written)));
+            }
+            finally
+            {
+                NativeApi.Close(handle);
+                File.Delete(path);
+            }
+        }
+
+        [Fact]
+        public void ReadAllBlob_Should_Drop_Pending_Bytes_On_Sheet_Change()
+        {
+            using MemoryStream ms = WorkbookBuilder.BuildMultiSheet(
+            [
+                ("First", """<row r="1"><c r="A1"><v>1</v></c></row>"""),
+                ("Second", """<row r="1"><c r="A1"><v>99</v></c></row>"""),
+            ]);
+            Assert.Equal(NativeStatus.Ok, NativeApi.OpenMemory(ms.ToArray(), NativeFormat.Xlsx, out NativeHandle? handle));
+            try
+            {
+                // Force a too-small result so accumulated bytes for sheet 0 are held pending.
+                Assert.Equal(NativeStatus.BufferTooSmall, NativeApi.ReadAllBlob(handle, Span<byte>.Empty, out _));
+
+                Assert.Equal(NativeStatus.Ok, NativeApi.MoveToSheet(handle, 1));
+
+                byte[] buffer = new byte[4096];
+                Assert.Equal(NativeStatus.Ok, NativeApi.ReadAllBlob(handle, buffer, out int written));
+                List<List<DecodedCell>> rows = DecodeAllRowsBlob(buffer.AsSpan(0, written));
+                Assert.Single(rows);
+                Assert.Equal("99", rows[0][0].Value);
+            }
+            finally
+            {
+                NativeApi.Close(handle);
+            }
+        }
+
+        [Fact]
+        public void ReadAllBlob_Should_Reject_A_Null_Handle()
+        {
+            Assert.Equal(NativeStatus.InvalidHandle, NativeApi.ReadAllBlob(null, new byte[64], out _));
+        }
+
+        // Builds a native table whose buffers live in unmanaged memory, so write-path tests exercise
+        // the same pointer walk the ABI does. Every allocation is released by FreeBuiltTable.
+        private static NativeTable BuildInt64Table(long[] values, byte[]? validity = null)
+        {
+            NativeColumn column = new()
+            {
+                Type = NativeColumnType.Int64,
+                Length = values.LongLength,
+                Values = Marshal.AllocHGlobal(values.Length * sizeof(long)),
+                Validity = IntPtr.Zero,
+                Data = IntPtr.Zero,
+                DataLen = 0,
+            };
+            Marshal.Copy(values, 0, column.Values, values.Length);
+            if (validity is not null)
+            {
+                column.Validity = Marshal.AllocHGlobal(validity.Length);
+                Marshal.Copy(validity, 0, column.Validity, validity.Length);
+            }
+
+            IntPtr columns = Marshal.AllocHGlobal(Marshal.SizeOf<NativeColumn>());
+            Marshal.StructureToPtr(column, columns, false);
+            return new NativeTable { ColumnCount = 1, RowCount = values.LongLength, Columns = columns };
+        }
+
+        // Mirrors BuildInt64Table for XL_T_STRING: `offsets` and `data` are two INDEPENDENT
+        // allocations here, which the write direction explicitly permits (unlike ParseTyped's output,
+        // where Data is interior to Values).
+        private static NativeTable BuildStringTable(int[] offsets, byte[] data)
+        {
+            NativeColumn column = new()
+            {
+                Type = NativeColumnType.String,
+                Length = offsets.Length - 1,
+                Values = Marshal.AllocHGlobal(offsets.Length * sizeof(int)),
+                Validity = IntPtr.Zero,
+                Data = data.Length == 0 ? IntPtr.Zero : Marshal.AllocHGlobal(data.Length),
+                DataLen = data.Length,
+            };
+            Marshal.Copy(offsets, 0, column.Values, offsets.Length);
+            if (data.Length > 0)
+            {
+                Marshal.Copy(data, 0, column.Data, data.Length);
+            }
+
+            IntPtr columns = Marshal.AllocHGlobal(Marshal.SizeOf<NativeColumn>());
+            Marshal.StructureToPtr(column, columns, false);
+            return new NativeTable { ColumnCount = 1, RowCount = offsets.Length - 1, Columns = columns };
+        }
+
+        // One I64 column beside one STRING column. The CSV dialect tests need at least two fields per
+        // row before a delimiter (or a quoted field) exists in the output to assert on.
+        private static NativeTable BuildQtyNameTable(long[] quantities, string[] names)
+        {
+            byte[] data = Encoding.UTF8.GetBytes(string.Concat(names));
+            int[] offsets = new int[names.Length + 1];
+            for (int index = 0; index < names.Length; index++)
+            {
+                offsets[index + 1] = offsets[index] + Encoding.UTF8.GetByteCount(names[index]);
+            }
+
+            NativeColumn qty = new()
+            {
+                Type = NativeColumnType.Int64,
+                Length = quantities.LongLength,
+                Values = Marshal.AllocHGlobal(quantities.Length * sizeof(long)),
+            };
+            Marshal.Copy(quantities, 0, qty.Values, quantities.Length);
+            NativeColumn name = new()
+            {
+                Type = NativeColumnType.String,
+                Length = names.LongLength,
+                Values = Marshal.AllocHGlobal(offsets.Length * sizeof(int)),
+                Data = data.Length == 0 ? IntPtr.Zero : Marshal.AllocHGlobal(data.Length),
+                DataLen = data.Length,
+            };
+            Marshal.Copy(offsets, 0, name.Values, offsets.Length);
+            if (data.Length > 0)
+            {
+                Marshal.Copy(data, 0, name.Data, data.Length);
+            }
+
+            int size = Marshal.SizeOf<NativeColumn>();
+            IntPtr block = Marshal.AllocHGlobal(size * 2);
+            Marshal.StructureToPtr(qty, block, false);
+            Marshal.StructureToPtr(name, IntPtr.Add(block, size), false);
+            return new NativeTable { ColumnCount = 2, RowCount = quantities.LongLength, Columns = block };
+        }
+
+        private static NativeColumnSpec[] QtyNameSpecs()
+        {
+            return
+            [
+                new() { Name = "qty", Type = NativeColumnType.Int64 },
+                new() { Name = "name", Type = NativeColumnType.String },
+            ];
+        }
+
+        // XL_T_BOOL is one BYTE per row on this ABI, deliberately NOT Arrow's bit-packing (design §4),
+        // so the builder writes plain 0/1 bytes.
+        private static NativeTable BuildBoolTable(bool[] values)
+        {
+            NativeColumn column = new()
+            {
+                Type = NativeColumnType.Bool,
+                Length = values.LongLength,
+                Values = Marshal.AllocHGlobal(values.Length),
+            };
+            for (int index = 0; index < values.Length; index++)
+            {
+                Marshal.WriteByte(column.Values, index, values[index] ? (byte)1 : (byte)0);
+            }
+            return SingleColumnTable(column, values.LongLength);
+        }
+
+        private static NativeTable BuildFloat64Table(double[] values)
+        {
+            NativeColumn column = new()
+            {
+                Type = NativeColumnType.Float64,
+                Length = values.LongLength,
+                Values = Marshal.AllocHGlobal(values.Length * sizeof(double)),
+            };
+            Marshal.Copy(values, 0, column.Values, values.Length);
+            return SingleColumnTable(column, values.LongLength);
+        }
+
+        private static NativeTable BuildDateTable(int[] days)
+        {
+            NativeColumn column = new()
+            {
+                Type = NativeColumnType.Date,
+                Length = days.LongLength,
+                Values = Marshal.AllocHGlobal(days.Length * sizeof(int)),
+            };
+            Marshal.Copy(days, 0, column.Values, days.Length);
+            return SingleColumnTable(column, days.LongLength);
+        }
+
+        private static NativeTable SingleColumnTable(NativeColumn column, long rowCount)
+        {
+            IntPtr columns = Marshal.AllocHGlobal(Marshal.SizeOf<NativeColumn>());
+            Marshal.StructureToPtr(column, columns, false);
+            return new NativeTable { ColumnCount = 1, RowCount = rowCount, Columns = columns };
+        }
+
+        private static void FreeBuiltTable(ref NativeTable table)
+        {
+            // Deliberately NOT NativeApi.FreeTable: that one knows Data is interior to Values, which is
+            // true of ParseTyped's output but not of the independently-allocated tables built above.
+            for (int index = 0; index < table.ColumnCount; index++)
+            {
+                NativeColumn column = Marshal.PtrToStructure<NativeColumn>(
+                    IntPtr.Add(table.Columns, index * Marshal.SizeOf<NativeColumn>()));
+                foreach (IntPtr block in new[] { column.Values, column.Validity, column.Data })
+                {
+                    if (block != IntPtr.Zero)
+                    {
+                        Marshal.FreeHGlobal(block);
+                    }
+                }
+            }
+            Marshal.FreeHGlobal(table.Columns);
+            table = default;
+        }
+
+        [Fact]
+        public void ValidateWriteTable_Should_Accept_A_Well_Formed_Named_Table()
+        {
+            NativeTable table = BuildInt64Table([1L, 2L]);
+            try
+            {
+                NativeColumnSpec[] specs = [new() { Name = "qty", Type = NativeColumnType.Int64 }];
+
+                Assert.True(NativeApi.TryValidateWriteTable(specs, table, out bool hasHeader, out string? error));
+                Assert.True(hasHeader);
+                Assert.Null(error);
+            }
+            finally
+            {
+                FreeBuiltTable(ref table);
+            }
+        }
+
+        [Fact]
+        public void ValidateWriteTable_Should_Report_No_Header_When_Every_Spec_Is_Unnamed()
+        {
+            NativeTable table = BuildInt64Table([1L]);
+            try
+            {
+                NativeColumnSpec[] specs = [new() { Name = null, Type = NativeColumnType.Int64 }];
+
+                Assert.True(NativeApi.TryValidateWriteTable(specs, table, out bool hasHeader, out _));
+                Assert.False(hasHeader);
+            }
+            finally
+            {
+                FreeBuiltTable(ref table);
+            }
+        }
+
+        [Fact]
+        public void ValidateWriteTable_Should_Reject_A_Mix_Of_Named_And_Unnamed_Specs()
+        {
+            NativeTable table = BuildInt64Table([1L]);
+            table.ColumnCount = 2;
+            try
+            {
+                NativeColumnSpec[] specs =
+                [
+                    new() { Name = "qty", Type = NativeColumnType.Int64 },
+                    new() { Name = null, Type = NativeColumnType.Int64 },
+                ];
+
+                Assert.False(NativeApi.TryValidateWriteTable(specs, table, out _, out string? error));
+                Assert.Contains("name", error, StringComparison.Ordinal);
+            }
+            finally
+            {
+                table.ColumnCount = 1;
+                FreeBuiltTable(ref table);
+            }
+        }
+
+        [Fact]
+        public void ValidateWriteTable_Should_Reject_A_Spec_Type_That_Disagrees_With_Its_Column()
+        {
+            NativeTable table = BuildInt64Table([1L]);
+            try
+            {
+                NativeColumnSpec[] specs = [new() { Name = "qty", Type = NativeColumnType.Float64 }];
+
+                Assert.False(NativeApi.TryValidateWriteTable(specs, table, out _, out string? error));
+                Assert.Contains("type", error, StringComparison.Ordinal);
+            }
+            finally
+            {
+                FreeBuiltTable(ref table);
+            }
+        }
+
+        [Fact]
+        public void ValidateWriteTable_Should_Reject_A_Column_Whose_Length_Is_Not_The_Row_Count()
+        {
+            NativeTable table = BuildInt64Table([1L, 2L]);
+            table.RowCount = 3;
+            try
+            {
+                NativeColumnSpec[] specs = [new() { Name = "qty", Type = NativeColumnType.Int64 }];
+
+                Assert.False(NativeApi.TryValidateWriteTable(specs, table, out _, out string? error));
+                Assert.Contains("length", error, StringComparison.Ordinal);
+            }
+            finally
+            {
+                table.RowCount = 2;
+                FreeBuiltTable(ref table);
+            }
+        }
+
+        [Fact]
+        public void ValidateWriteTable_Should_Accept_Well_Formed_String_Offsets()
+        {
+            NativeTable table = BuildStringTable([0, 6, 12], "widgetgadget"u8.ToArray());
+            try
+            {
+                NativeColumnSpec[] specs = [new() { Name = "name", Type = NativeColumnType.String }];
+
+                Assert.True(NativeApi.TryValidateWriteTable(specs, table, out _, out string? error));
+                Assert.Null(error);
+            }
+            finally
+            {
+                FreeBuiltTable(ref table);
+            }
+        }
+
+        [Theory]
+        [InlineData(new[] { 1, 6, 12 })]                 // does not start at 0
+        [InlineData(new[] { 0, -1, 12 })]                // negative offset
+        [InlineData(new[] { 0, 9, 6 })]                  // not monotonic
+        [InlineData(new[] { 0, 6, 13 })]                 // last offset past data_len
+        [InlineData(new[] { 0, 6, 11 })]                 // last offset short of data_len
+        public void ValidateWriteTable_Should_Reject_Malformed_String_Offsets(int[] offsets)
+        {
+            NativeTable table = BuildStringTable(offsets, "widgetgadget"u8.ToArray());
+            try
+            {
+                NativeColumnSpec[] specs = [new() { Name = "name", Type = NativeColumnType.String }];
+
+                Assert.False(NativeApi.TryValidateWriteTable(specs, table, out _, out string? error));
+                Assert.Contains("offset", error, StringComparison.Ordinal);
+            }
+            finally
+            {
+                FreeBuiltTable(ref table);
+            }
+        }
+
+        [Fact]
+        public void ValidateWriteTable_Should_Reject_A_Non_Positive_Column_Count()
+        {
+            NativeTable table = BuildInt64Table([1L]);
+            table.ColumnCount = 0;
+            try
+            {
+                Assert.False(NativeApi.TryValidateWriteTable([], table, out _, out string? error));
+                Assert.Contains("column", error, StringComparison.Ordinal);
+            }
+            finally
+            {
+                table.ColumnCount = 1;
+                FreeBuiltTable(ref table);
+            }
+        }
+
+        [Fact]
+        public void ValidateWriteTable_Should_Reject_A_Negative_Row_Count()
+        {
+            NativeTable table = BuildInt64Table([1L]);
+            table.RowCount = -1;
+            try
+            {
+                NativeColumnSpec[] specs = [new() { Name = "qty", Type = NativeColumnType.Int64 }];
+
+                Assert.False(NativeApi.TryValidateWriteTable(specs, table, out _, out string? error));
+                Assert.Contains("row_count", error, StringComparison.Ordinal);
+            }
+            finally
+            {
+                table.RowCount = 1;
+                FreeBuiltTable(ref table);
+            }
+        }
+
+        [Fact]
+        public void ValidateWriteTable_Should_Reject_A_Column_Type_Outside_The_Enum()
+        {
+            NativeTable table = BuildInt64Table([1L]);
+            try
+            {
+                NativeColumn column = Marshal.PtrToStructure<NativeColumn>(table.Columns);
+                column.Type = 99;
+                Marshal.StructureToPtr(column, table.Columns, false);
+                NativeColumnSpec[] specs = [new() { Name = "qty", Type = 99 }];
+
+                Assert.False(NativeApi.TryValidateWriteTable(specs, table, out _, out string? error));
+                Assert.Contains("unknown type", error, StringComparison.Ordinal);
+            }
+            finally
+            {
+                FreeBuiltTable(ref table);
+            }
+        }
+
+        [Fact]
+        public void ValidateWriteTable_Should_Reject_A_Null_Values_Pointer_With_Rows()
+        {
+            NativeTable table = BuildInt64Table([1L]);
+            try
+            {
+                IntPtr original = Marshal.ReadIntPtr(table.Columns, sizeof(long) * 2);
+                NativeColumn column = Marshal.PtrToStructure<NativeColumn>(table.Columns);
+                column.Values = IntPtr.Zero;
+                Marshal.StructureToPtr(column, table.Columns, false);
+                NativeColumnSpec[] specs = [new() { Name = "qty", Type = NativeColumnType.Int64 }];
+
+                Assert.False(NativeApi.TryValidateWriteTable(specs, table, out _, out string? error));
+                Assert.Contains("values", error, StringComparison.Ordinal);
+
+                column.Values = original;
+                Marshal.StructureToPtr(column, table.Columns, false);
+            }
+            finally
+            {
+                FreeBuiltTable(ref table);
+            }
+        }
+
+        private static NativeColumn ColumnAt(NativeTable table, int index)
+        {
+            int columnSize = Marshal.SizeOf<NativeColumn>();
+            return Marshal.PtrToStructure<NativeColumn>(IntPtr.Add(table.Columns, index * columnSize));
+        }
+
+        private static List<string> DecodeStringColumn(NativeColumn column)
+        {
+            int rowCount = (int)column.Length;
+            int[] offsets = new int[rowCount + 1];
+            Marshal.Copy(column.Values, offsets, 0, rowCount + 1);
+            byte[] data = new byte[column.DataLen];
+            if (data.Length > 0)
+            {
+                Marshal.Copy(column.Data, data, 0, data.Length);
+            }
+            List<string> values = [];
+            for (int i = 0; i < rowCount; i++)
+            {
+                values.Add(Encoding.UTF8.GetString(data, offsets[i], offsets[i + 1] - offsets[i]));
+            }
+            return values;
+        }
+
+        private static bool[] DecodeValidity(NativeColumn column)
+        {
+            int rowCount = (int)column.Length;
+            bool[] result = new bool[rowCount];
+            if (column.Validity == IntPtr.Zero)
+            {
+                Array.Fill(result, true); // NULL validity means every value is valid
+                return result;
+            }
+            byte[] bitmap = new byte[(rowCount + 7) / 8];
+            Marshal.Copy(column.Validity, bitmap, 0, bitmap.Length);
+            for (int i = 0; i < rowCount; i++)
+            {
+                result[i] = (bitmap[i >> 3] & (1 << (i & 7))) != 0;
+            }
+            return result;
+        }
+
+        [Fact]
+        public void ParseTyped_Should_Return_Typed_Columns_By_Name()
+        {
+            string path = Path.Combine(Path.GetTempPath(), $"excelreader-native-{Guid.NewGuid():N}.csv");
+            File.WriteAllText(path, "name,qty,price,active,joined\nwidget,3,9.99,true,2024-01-15\ngadget,7,4.5,false,2024-02-20\n");
+            try
+            {
+                Assert.Equal(NativeStatus.Ok, OpenPath(path, NativeFormat.Csv, out NativeHandle? handle));
+                NativeColumnSpec[] specs =
+                [
+                    new() { Name = "name", Type = NativeColumnType.String },
+                    new() { Name = "qty", Type = NativeColumnType.Int64 },
+                    new() { Name = "price", Type = NativeColumnType.Float64 },
+                    new() { Name = "active", Type = NativeColumnType.Bool },
+                    new() { Name = "joined", Type = NativeColumnType.Date },
+                ];
+                Assert.Equal(NativeStatus.Ok, NativeApi.ParseTyped(handle, specs, headerRow: 1, out NativeTable table));
+                try
+                {
+                    Assert.Equal(5, table.ColumnCount);
+                    Assert.Equal(2, table.RowCount);
+                    Assert.Equal(["widget", "gadget"], DecodeStringColumn(ColumnAt(table, 0)));
+
+                    long[] qty = new long[2];
+                    Marshal.Copy(ColumnAt(table, 1).Values, qty, 0, 2);
+                    Assert.Equal([3L, 7L], qty);
+
+                    double[] prices = new double[2];
+                    Marshal.Copy(ColumnAt(table, 2).Values, prices, 0, 2);
+                    Assert.Equal([9.99, 4.5], prices);
+
+                    byte[] flags = new byte[2];
+                    Marshal.Copy(ColumnAt(table, 3).Values, flags, 0, 2);
+                    Assert.Equal([(byte)1, (byte)0], flags);
+
+                    int[] days = new int[2];
+                    Marshal.Copy(ColumnAt(table, 4).Values, days, 0, 2);
+                    int epoch = new DateOnly(1970, 1, 1).DayNumber;
+                    Assert.Equal(new DateOnly(2024, 1, 15).DayNumber - epoch, days[0]);
+                    Assert.Equal(new DateOnly(2024, 2, 20).DayNumber - epoch, days[1]);
+                }
+                finally
+                {
+                    NativeApi.FreeTable(ref table);
+                    NativeApi.Close(handle);
+                }
+            }
+            finally
+            {
+                File.Delete(path);
+            }
+        }
+
+        [Fact]
+        public void ParseTyped_Should_Resolve_By_Index_When_Header_Row_Is_Zero()
+        {
+            string path = Path.Combine(Path.GetTempPath(), $"excelreader-native-{Guid.NewGuid():N}.csv");
+            File.WriteAllText(path, "1,2\n3,4\n");
+            try
+            {
+                Assert.Equal(NativeStatus.Ok, OpenPath(path, NativeFormat.Csv, out NativeHandle? handle));
+                NativeColumnSpec[] specs =
+                [
+                    new() { Index = 0, Type = NativeColumnType.Int64 },
+                    new() { Index = 1, Type = NativeColumnType.Int64 },
+                ];
+                Assert.Equal(NativeStatus.Ok, NativeApi.ParseTyped(handle, specs, headerRow: 0, out NativeTable table));
+                try
+                {
+                    Assert.Equal(2, table.RowCount); // header_row == 0 means BOTH rows are data
+                    long[] first = new long[2];
+                    Marshal.Copy(ColumnAt(table, 0).Values, first, 0, 2);
+                    long[] second = new long[2];
+                    Marshal.Copy(ColumnAt(table, 1).Values, second, 0, 2);
+                    Assert.Equal([1L, 3L], first);
+                    Assert.Equal([2L, 4L], second);
+                }
+                finally
+                {
+                    NativeApi.FreeTable(ref table);
+                    NativeApi.Close(handle);
+                }
+            }
+            finally
+            {
+                File.Delete(path);
+            }
+        }
+
+        [Fact]
+        public void ParseTyped_Should_Compute_Time_And_Timestamp_As_Microseconds()
+        {
+            string path = Path.Combine(Path.GetTempPath(), $"excelreader-native-{Guid.NewGuid():N}.csv");
+            File.WriteAllText(path, "at,logged\n13:45:30,2024-01-15T13:45:30\n");
+            try
+            {
+                Assert.Equal(NativeStatus.Ok, OpenPath(path, NativeFormat.Csv, out NativeHandle? handle));
+                NativeColumnSpec[] specs =
+                [
+                    new() { Name = "at", Type = NativeColumnType.Time },
+                    new() { Name = "logged", Type = NativeColumnType.Timestamp },
+                ];
+                Assert.Equal(NativeStatus.Ok, NativeApi.ParseTyped(handle, specs, headerRow: 1, out NativeTable table));
+                try
+                {
+                    long[] time = new long[1];
+                    Marshal.Copy(ColumnAt(table, 0).Values, time, 0, 1);
+                    Assert.Equal(new TimeOnly(13, 45, 30).ToTimeSpan().Ticks / 10, time[0]);
+
+                    long[] timestamp = new long[1];
+                    Marshal.Copy(ColumnAt(table, 1).Values, timestamp, 0, 1);
+                    DateTime expected = new(2024, 1, 15, 13, 45, 30, DateTimeKind.Unspecified);
+                    Assert.Equal((expected - DateTime.UnixEpoch).Ticks / 10, timestamp[0]);
+                }
+                finally
+                {
+                    NativeApi.FreeTable(ref table);
+                    NativeApi.Close(handle);
+                }
+            }
+            finally
+            {
+                File.Delete(path);
+            }
+        }
+
+        // The ABI's spec_count/name_len ceilings. xl_parse_typed and xl_parse_arrow enforce these
+        // before either value sizes an allocation or drives a walk over caller memory, but those entry
+        // points are [UnmanagedCallersOnly] and unreachable from managed code — so the predicate is
+        // pinned here and the entry points themselves are covered by tests/ExcelReader.NativeSmoke.
+        [Theory]
+        [InlineData(int.MinValue, false)]
+        [InlineData(-1, false)]
+        [InlineData(0, false)] // a parse of zero columns is a caller mistake, not an empty result
+        [InlineData(1, true)]
+        [InlineData(16_384, true)] // A..XFD, the widest a real sheet can be
+        [InlineData(16_385, false)]
+        [InlineData(int.MaxValue, false)] // the shape that used to reach `new NativeColumnSpec[specCount]`
+        public void IsValidSpecCount_Should_Accept_Only_One_Through_Excels_Column_Ceiling(int specCount, bool expected)
+        {
+            Assert.Equal(expected, NativeApi.IsValidSpecCount(specCount));
+        }
+
+        [Theory]
+        [InlineData(int.MinValue, false)]
+        [InlineData(-1, false)] // would reach Encoding.UTF8.GetString as a negative length
+        [InlineData(0, true)] // an empty name is length-valid; TryValidateArguments rejects it later
+        [InlineData(131_068, true)] // 32,767 chars at UTF-8's 4-byte worst case
+        [InlineData(131_069, false)]
+        [InlineData(int.MaxValue, false)]
+        public void IsValidNameLength_Should_Bound_What_Becomes_A_Read_Length(int nameLength, bool expected)
+        {
+            Assert.Equal(expected, NativeApi.IsValidNameLength(nameLength));
+        }
+
+        [Fact]
+        public void ParseTyped_Should_Reject_A_Blank_Column_Name()
+        {
+            string path = Path.Combine(Path.GetTempPath(), $"excelreader-native-{Guid.NewGuid():N}.csv");
+            // A blank header sits in column 1: without the guard, the blank spec name would trim to ""
+            // and resolve to it, silently reading a column the caller never named.
+            File.WriteAllText(path, "name,,qty\nwidget,x,3\n");
+            try
+            {
+                Assert.Equal(NativeStatus.Ok, OpenPath(path, NativeFormat.Csv, out NativeHandle? handle));
+                NativeColumnSpec[] specs = [new() { Name = "   ", Type = NativeColumnType.String }];
+                try
+                {
+                    Assert.Equal(NativeStatus.InvalidArgument, NativeApi.ParseTyped(handle, specs, headerRow: 1, out NativeTable table));
+                    Assert.Equal(IntPtr.Zero, table.Columns);
+
+                    Span<byte> buffer = stackalloc byte[256];
+                    Assert.Equal(NativeStatus.Ok, NativeApi.LastError(buffer, out int length));
+                    Assert.Contains("blank name", Encoding.UTF8.GetString(buffer[..length]), StringComparison.Ordinal);
+                }
+                finally
+                {
+                    NativeApi.Close(handle);
+                }
+            }
+            finally
+            {
+                File.Delete(path);
+            }
+        }
+
+        // The validity bitmap is accumulated eight rows to a byte, so every bug it can have lives at a
+        // byte boundary: the last bit of a byte, the first bit of the next, and a final partial byte.
+        // 20 rows with nulls at 0, 7, 8, 15, 16 and 19 put a null on each of those, which a three-row
+        // fixture (see the test below) can never reach.
+        [Fact]
+        public void ParseTyped_Validity_Bitmap_Should_Survive_Byte_Boundaries()
+        {
+            const int rowCount = 20;
+            int[] nullRows = [0, 7, 8, 15, 16, 19];
+
+            StringBuilder csv = new("qty\n");
+            for (int i = 0; i < rowCount; i++)
+            {
+                csv.Append(nullRows.Contains(i) ? "notanumber" : i.ToString(CultureInfo.InvariantCulture)).Append('\n');
+            }
+
+            string path = Path.Combine(Path.GetTempPath(), $"excelreader-native-{Guid.NewGuid():N}.csv");
+            File.WriteAllText(path, csv.ToString());
+            try
+            {
+                Assert.Equal(NativeStatus.Ok, OpenPath(path, NativeFormat.Csv, out NativeHandle? handle));
+                NativeColumnSpec[] specs = [new() { Name = "qty", Type = NativeColumnType.Int64, Nullable = true }];
+                Assert.Equal(NativeStatus.Ok, NativeApi.ParseTyped(handle, specs, headerRow: 1, out NativeTable table));
+                try
+                {
+                    NativeColumn column = ColumnAt(table, 0);
+                    Assert.Equal(rowCount, column.Length);
+                    Assert.NotEqual(IntPtr.Zero, column.Validity);
+
+                    bool[] expected = new bool[rowCount];
+                    Array.Fill(expected, true);
+                    foreach (int row in nullRows)
+                    {
+                        expected[row] = false;
+                    }
+                    Assert.Equal(expected, DecodeValidity(column));
+
+                    // The values themselves must stay row-aligned with the bitmap: a null still occupies
+                    // its slot, so a packing bug that shifted rows would show up here and not above.
+                    long[] values = new long[rowCount];
+                    Marshal.Copy(column.Values, values, 0, rowCount);
+                    for (int i = 0; i < rowCount; i++)
+                    {
+                        Assert.Equal(nullRows.Contains(i) ? 0L : i, values[i]);
+                    }
+                }
+                finally
+                {
+                    NativeApi.FreeTable(ref table);
+                    NativeApi.Close(handle);
+                }
+            }
+            finally
+            {
+                File.Delete(path);
+            }
+        }
+
+        [Fact]
+        public void ParseTyped_Should_Mark_Failed_Nullable_Conversions_In_The_Validity_Bitmap()
+        {
+            string path = Path.Combine(Path.GetTempPath(), $"excelreader-native-{Guid.NewGuid():N}.csv");
+            File.WriteAllText(path, "qty\n5\n\nnotanumber\n");
+            try
+            {
+                Assert.Equal(NativeStatus.Ok, OpenPath(path, NativeFormat.Csv, out NativeHandle? handle));
+                NativeColumnSpec[] specs = [new() { Name = "qty", Type = NativeColumnType.Int64, Nullable = true }];
+                Assert.Equal(NativeStatus.Ok, NativeApi.ParseTyped(handle, specs, headerRow: 1, out NativeTable table));
+                try
+                {
+                    NativeColumn column = ColumnAt(table, 0);
+                    Assert.NotEqual(IntPtr.Zero, column.Validity);
+                    Assert.Equal([true, false, false], DecodeValidity(column));
+
+                    long[] values = new long[3];
+                    Marshal.Copy(column.Values, values, 0, 3);
+                    Assert.Equal(5L, values[0]);
+                }
+                finally
+                {
+                    NativeApi.FreeTable(ref table);
+                    NativeApi.Close(handle);
+                }
+            }
+            finally
+            {
+                File.Delete(path);
+            }
+        }
+
+        [Fact]
+        public void ParseTyped_Should_Fail_For_A_Non_Nullable_Conversion_Failure()
+        {
+            string path = Path.Combine(Path.GetTempPath(), $"excelreader-native-{Guid.NewGuid():N}.csv");
+            File.WriteAllText(path, "qty\n5\nnotanumber\n");
+            try
+            {
+                Assert.Equal(NativeStatus.Ok, OpenPath(path, NativeFormat.Csv, out NativeHandle? handle));
+                NativeColumnSpec[] specs = [new() { Name = "qty", Type = NativeColumnType.Int64, Nullable = false }];
+
+                int status = NativeApi.ParseTyped(handle, specs, headerRow: 1, out NativeTable table);
+
+                Assert.Equal(NativeStatus.Error, status);
+                Assert.Equal(IntPtr.Zero, table.Columns);
+                Span<byte> buffer = stackalloc byte[256];
+                Assert.Equal(NativeStatus.Ok, NativeApi.LastError(buffer, out int length));
+                Assert.True(length > 0);
+                NativeApi.Close(handle);
+            }
+            finally
+            {
+                File.Delete(path);
+            }
+        }
+
+        [Fact]
+        public void ParseTyped_Should_Reject_A_Name_Based_Spec_When_Header_Row_Is_Zero()
+        {
+            Assert.Equal(NativeStatus.Ok, OpenPath(XlsxFixture, NativeFormat.Auto, out NativeHandle? handle));
+            try
+            {
+                NativeColumnSpec[] specs = [new() { Name = "anything", Type = NativeColumnType.String }];
+                Assert.Equal(NativeStatus.InvalidArgument, NativeApi.ParseTyped(handle, specs, headerRow: 0, out NativeTable table));
+                Assert.Equal(IntPtr.Zero, table.Columns);
+            }
+            finally
+            {
+                NativeApi.Close(handle);
+            }
+        }
+
+        [Fact]
+        public void ParseTyped_Should_Reject_An_Unmatched_Header_Name()
+        {
+            string path = Path.Combine(Path.GetTempPath(), $"excelreader-native-{Guid.NewGuid():N}.csv");
+            File.WriteAllText(path, "name,qty\nwidget,3\n");
+            try
+            {
+                Assert.Equal(NativeStatus.Ok, OpenPath(path, NativeFormat.Csv, out NativeHandle? handle));
+                NativeColumnSpec[] specs = [new() { Name = "does-not-exist", Type = NativeColumnType.String }];
+
+                int status = NativeApi.ParseTyped(handle, specs, headerRow: 1, out NativeTable table);
+
+                Assert.Equal(NativeStatus.InvalidArgument, status);
+                Assert.Equal(IntPtr.Zero, table.Columns);
+                NativeApi.Close(handle);
+            }
+            finally
+            {
+                File.Delete(path);
+            }
+        }
+
+        [Fact]
+        public void ParseTyped_Should_Reject_Zero_Specs()
+        {
+            Assert.Equal(NativeStatus.Ok, OpenPath(XlsxFixture, NativeFormat.Auto, out NativeHandle? handle));
+            try
+            {
+                Assert.Equal(NativeStatus.InvalidArgument, NativeApi.ParseTyped(handle, [], headerRow: 1, out NativeTable table));
+                Assert.Equal(IntPtr.Zero, table.Columns);
+            }
+            finally
+            {
+                NativeApi.Close(handle);
+            }
+        }
+
+        [Fact]
+        public void ParseTyped_Should_Reject_A_Null_Handle()
+        {
+            NativeColumnSpec[] specs = [new() { Index = 0, Type = NativeColumnType.String }];
+            Assert.Equal(NativeStatus.InvalidHandle, NativeApi.ParseTyped(null, specs, headerRow: 1, out _));
+        }
+
+        [Fact]
+        public void ParseTyped_Should_Not_Disturb_The_Row_Cursor()
+        {
+            string path = Path.Combine(Path.GetTempPath(), $"excelreader-native-{Guid.NewGuid():N}.csv");
+            File.WriteAllText(path, "name\nfirst\nsecond\n");
+            try
+            {
+                Assert.Equal(NativeStatus.Ok, OpenPath(path, NativeFormat.Csv, out NativeHandle? handle));
+                try
+                {
+                    Assert.Equal(NativeStatus.Ok, NativeApi.NextRow(handle, new byte[4096], out _)); // header
+
+                    NativeColumnSpec[] specs = [new() { Name = "name", Type = NativeColumnType.String }];
+                    Assert.Equal(NativeStatus.Ok, NativeApi.ParseTyped(handle, specs, headerRow: 1, out NativeTable table));
+                    NativeApi.FreeTable(ref table);
+
+                    // ParseTyped reads the WHOLE sheet through its own independent enumerator - the
+                    // xl_next_row cursor above must still be sitting right after the header row.
+                    byte[] buffer = new byte[4096];
+                    Assert.Equal(NativeStatus.Ok, NativeApi.NextRow(handle, buffer, out int written));
+                    Assert.Equal("first", DecodeRow(buffer.AsSpan(0, written))[0].Value);
+                }
+                finally
+                {
+                    NativeApi.Close(handle);
+                }
+            }
+            finally
+            {
+                File.Delete(path);
+            }
+        }
+
+        [Fact]
+        public void FreeTable_Should_Be_Idempotent_On_A_Zeroed_Table()
+        {
+            NativeTable table = default;
+            NativeApi.FreeTable(ref table);
+            NativeApi.FreeTable(ref table);
+            Assert.Equal(IntPtr.Zero, table.Columns);
+        }
+
+        // Column layout: A=Name (string), B=Qty (whole numbers), C=Price (fractional numbers),
+        // D=Active (bool), E=Mixed (a string in one row, a number in the other), F=Extra (a number
+        // that only row 2 populates, and that never appears in the header at all).
+        private static MemoryStream BuildInferSchemaFixture()
+        {
+            return WorkbookBuilder.Build(
+                """
+                <row r="1">
+                    <c r="A1" t="inlineStr"><is><t>Name</t></is></c>
+                    <c r="B1" t="inlineStr"><is><t>Qty</t></is></c>
+                    <c r="C1" t="inlineStr"><is><t>Price</t></is></c>
+                    <c r="D1" t="inlineStr"><is><t>Active</t></is></c>
+                    <c r="E1" t="inlineStr"><is><t>Mixed</t></is></c>
+                </row>
+                <row r="2">
+                    <c r="A2" t="inlineStr"><is><t>Alice</t></is></c>
+                    <c r="B2"><v>3</v></c>
+                    <c r="C2"><v>1.5</v></c>
+                    <c r="D2" t="b"><v>1</v></c>
+                    <c r="E2" t="inlineStr"><is><t>oops</t></is></c>
+                    <c r="F2"><v>10</v></c>
+                </row>
+                <row r="3">
+                    <c r="A3" t="inlineStr"><is><t>Bob</t></is></c>
+                    <c r="B3"><v>7</v></c>
+                    <c r="C3"><v>4.5</v></c>
+                    <c r="D3" t="b"><v>0</v></c>
+                    <c r="E3"><v>2</v></c>
+                </row>
+                """);
+        }
+
+        [Fact]
+        public void InferSchema_Should_Guess_Types_From_Sampled_Cells()
+        {
+            using MemoryStream ms = BuildInferSchemaFixture();
+            Assert.Equal(NativeStatus.Ok, NativeApi.OpenMemory(ms.ToArray(), NativeFormat.Xlsx, out NativeHandle? handle));
+            try
+            {
+                Assert.Equal(NativeStatus.Ok, NativeApi.InferSchema(handle, headerRow: 1, sampleSize: 100, out NativeInferredSchema schema));
+                try
+                {
+                    Assert.Equal(6, schema.ColumnCount);
+                    (string? Name, int Index, int Type, bool Nullable)[] columns = DecodeSchema(schema);
+
+                    AssertSpec(columns[0], "Name", NativeColumnType.String, nullable: false);
+                    AssertSpec(columns[1], "Qty", NativeColumnType.Int64, nullable: false);
+                    AssertSpec(columns[2], "Price", NativeColumnType.Float64, nullable: false);
+                    AssertSpec(columns[3], "Active", NativeColumnType.Bool, nullable: false);
+                    // A string in one sampled row and a number in the other is a real mix - no single
+                    // type describes both, so this falls back to STRING.
+                    AssertSpec(columns[4], "Mixed", NativeColumnType.String, nullable: false);
+                    // Never named in the header, and only row 2 populates it - the missing value in
+                    // row 3 must be caught even though no row's cells enumerator ever visits column F.
+                    AssertSpec(columns[5], name: null, NativeColumnType.Int64, nullable: true);
+                    Assert.Equal(5, columns[5].Index);
+                }
+                finally
+                {
+                    NativeApi.FreeSchema(ref schema);
+                }
+            }
+            finally
+            {
+                NativeApi.Close(handle);
+            }
+        }
+
+        [Fact]
+        public void InferSchema_Should_Resolve_By_Index_When_Header_Row_Is_Zero()
+        {
+            using MemoryStream ms = BuildInferSchemaFixture();
+            Assert.Equal(NativeStatus.Ok, NativeApi.OpenMemory(ms.ToArray(), NativeFormat.Xlsx, out NativeHandle? handle));
+            try
+            {
+                Assert.Equal(NativeStatus.Ok, NativeApi.InferSchema(handle, headerRow: 0, sampleSize: 100, out NativeInferredSchema schema));
+                try
+                {
+                    // Every row (including what would have been the header) is now sampled as data, so
+                    // row 1's inline strings make every column look like STRING with no header names.
+                    foreach ((string? name, _, _, _) in DecodeSchema(schema))
+                    {
+                        Assert.Null(name);
+                    }
+                }
+                finally
+                {
+                    NativeApi.FreeSchema(ref schema);
+                }
+            }
+            finally
+            {
+                NativeApi.Close(handle);
+            }
+        }
+
+        [Fact]
+        public void InferSchema_Should_Reject_A_Negative_Header_Row()
+        {
+            using MemoryStream ms = BuildInferSchemaFixture();
+            Assert.Equal(NativeStatus.Ok, NativeApi.OpenMemory(ms.ToArray(), NativeFormat.Xlsx, out NativeHandle? handle));
+            try
+            {
+                Assert.Equal(NativeStatus.InvalidArgument, NativeApi.InferSchema(handle, headerRow: -1, sampleSize: 100, out NativeInferredSchema schema));
+                Assert.Equal(IntPtr.Zero, schema.Columns);
+            }
+            finally
+            {
+                NativeApi.Close(handle);
+            }
+        }
+
+        [Theory]
+        [InlineData(0)]
+        [InlineData(-1)]
+        public void InferSchema_Should_Reject_A_NonPositive_Sample_Size(int sampleSize)
+        {
+            using MemoryStream ms = BuildInferSchemaFixture();
+            Assert.Equal(NativeStatus.Ok, NativeApi.OpenMemory(ms.ToArray(), NativeFormat.Xlsx, out NativeHandle? handle));
+            try
+            {
+                Assert.Equal(NativeStatus.InvalidArgument, NativeApi.InferSchema(handle, headerRow: 1, sampleSize, out NativeInferredSchema schema));
+                Assert.Equal(IntPtr.Zero, schema.Columns);
+            }
+            finally
+            {
+                NativeApi.Close(handle);
+            }
+        }
+
+        [Fact]
+        public void InferSchema_Should_Reject_A_Null_Handle()
+        {
+            Assert.Equal(NativeStatus.InvalidHandle, NativeApi.InferSchema(null, headerRow: 1, sampleSize: 100, out _));
+        }
+
+        [Fact]
+        public void InferSchema_Should_Report_An_Error_When_The_Sheet_Has_Fewer_Rows_Than_Header_Row()
+        {
+            using MemoryStream ms = WorkbookBuilder.Build("""<row r="1"><c r="A1"><v>1</v></c></row>""");
+            Assert.Equal(NativeStatus.Ok, NativeApi.OpenMemory(ms.ToArray(), NativeFormat.Xlsx, out NativeHandle? handle));
+            try
+            {
+                int status = NativeApi.InferSchema(handle, headerRow: 5, sampleSize: 100, out NativeInferredSchema schema);
+
+                Assert.Equal(NativeStatus.InvalidArgument, status);
+                Assert.Equal(IntPtr.Zero, schema.Columns);
+                Span<byte> buffer = stackalloc byte[256];
+                Assert.Equal(NativeStatus.Ok, NativeApi.LastError(buffer, out int length));
+                Assert.Contains("fewer than", Encoding.UTF8.GetString(buffer[..length]), StringComparison.Ordinal);
+            }
+            finally
+            {
+                NativeApi.Close(handle);
+            }
+        }
+
+        [Fact]
+        public void InferSchema_Should_Not_Disturb_The_Row_Cursor()
+        {
+            using MemoryStream ms = BuildInferSchemaFixture();
+            Assert.Equal(NativeStatus.Ok, NativeApi.OpenMemory(ms.ToArray(), NativeFormat.Xlsx, out NativeHandle? handle));
+            try
+            {
+                Assert.Equal(NativeStatus.Ok, NativeApi.NextRow(handle, new byte[4096], out _)); // header
+
+                Assert.Equal(NativeStatus.Ok, NativeApi.InferSchema(handle, headerRow: 1, sampleSize: 100, out NativeInferredSchema schema));
+                NativeApi.FreeSchema(ref schema);
+
+                // InferSchema reads the WHOLE sheet through its own independent enumerator - the
+                // xl_next_row cursor above must still be sitting right after the header row.
+                byte[] buffer = new byte[4096];
+                Assert.Equal(NativeStatus.Ok, NativeApi.NextRow(handle, buffer, out int written));
+                Assert.Equal("Alice", DecodeRow(buffer.AsSpan(0, written))[0].Value);
+            }
+            finally
+            {
+                NativeApi.Close(handle);
+            }
+        }
+
+        [Fact]
+        public void FreeSchema_Should_Be_Idempotent_On_A_Zeroed_Schema()
+        {
+            NativeInferredSchema schema = default;
+            NativeApi.FreeSchema(ref schema);
+            NativeApi.FreeSchema(ref schema);
+            Assert.Equal(IntPtr.Zero, schema.Columns);
+        }
+
+        private static void AssertSpec((string? Name, int Index, int Type, bool Nullable) spec, string? name, int type, bool nullable)
+        {
+            Assert.Equal(name, spec.Name);
+            Assert.Equal(type, spec.Type);
+            Assert.Equal(nullable, spec.Nullable);
+        }
+
+        // Reads the native xl_column_spec array by hand rather than via NativeColumnSpecRaw's `byte*
+        // Name` field - this project has no AllowUnsafeBlocks, and Marshal.PtrToStringUTF8 already
+        // decodes exactly `length` bytes regardless of a trailing NUL (there isn't one; see
+        // NativeApi.Schema.cs's BuildSpec), so there is nothing an unsafe pointer read would add here.
+        private static (string? Name, int Index, int Type, bool Nullable)[] DecodeSchema(NativeInferredSchema schema)
+        {
+            int specSize = Marshal.SizeOf<NativeColumnSpecRaw>(); // name(8) + name_len(4) + index(4) + type(4) + nullable(4)
+            var columns = new (string?, int, int, bool)[schema.ColumnCount];
+            for (int i = 0; i < columns.Length; i++)
+            {
+                IntPtr spec = IntPtr.Add(schema.Columns, i * specSize);
+                IntPtr namePtr = Marshal.ReadIntPtr(spec, 0);
+                int nameLen = Marshal.ReadInt32(spec, 8);
+                int index = Marshal.ReadInt32(spec, 12);
+                int type = Marshal.ReadInt32(spec, 16);
+                int nullable = Marshal.ReadInt32(spec, 20);
+                string? name = namePtr == IntPtr.Zero ? null : Marshal.PtrToStringUTF8(namePtr, nameLen);
+                columns[i] = (name, index, type, nullable != 0);
+            }
+            return columns;
+        }
+
+        private static ArrowSchema ArrowChildSchema(ArrowSchema schema, int index)
+        {
+            return Marshal.PtrToStructure<ArrowSchema>(Marshal.ReadIntPtr(schema.Children, index * IntPtr.Size));
+        }
+
+        private static ArrowArray ArrowChildArray(ArrowArray array, int index)
+        {
+            return Marshal.PtrToStructure<ArrowArray>(Marshal.ReadIntPtr(array.Children, index * IntPtr.Size));
+        }
+
+        private static IntPtr ArrowBuffer(ArrowArray array, int index)
+        {
+            return Marshal.ReadIntPtr(array.Buffers, index * IntPtr.Size);
+        }
+
+        [Fact]
+        public void ParseArrow_Should_Return_A_Struct_Array_With_A_Matching_Schema()
+        {
+            string path = Path.Combine(Path.GetTempPath(), $"excelreader-native-{Guid.NewGuid():N}.csv");
+            File.WriteAllText(path, "name,qty\nwidget,3\ngadget,7\n");
+            try
+            {
+                Assert.Equal(NativeStatus.Ok, OpenPath(path, NativeFormat.Csv, out NativeHandle? handle));
+                NativeColumnSpec[] specs =
+                [
+                    new() { Name = "name", Type = NativeColumnType.String },
+                    new() { Name = "qty", Type = NativeColumnType.Int64 },
+                ];
+                Assert.Equal(NativeStatus.Ok, NativeApi.ParseArrow(handle, specs, headerRow: 1, out ArrowArray array, out ArrowSchema schema));
+                try
+                {
+                    Assert.Equal("+s", Marshal.PtrToStringUTF8(schema.Format));
+                    Assert.Equal(2, schema.NChildren);
+                    Assert.Equal("u", Marshal.PtrToStringUTF8(ArrowChildSchema(schema, 0).Format));
+                    Assert.Equal("name", Marshal.PtrToStringUTF8(ArrowChildSchema(schema, 0).Name));
+                    Assert.Equal("l", Marshal.PtrToStringUTF8(ArrowChildSchema(schema, 1).Format));
+
+                    Assert.Equal(2, array.Length); // row count
+                    Assert.Equal(2, array.NChildren);
+                    Assert.Equal(1, array.NBuffers); // top-level struct array: validity only, always absent here
+                    Assert.Equal(IntPtr.Zero, ArrowBuffer(array, 0));
+
+                    ArrowArray nameColumn = ArrowChildArray(array, 0);
+                    Assert.Equal(2, nameColumn.Length);
+                    Assert.Equal(0, nameColumn.NullCount);
+                    Assert.Equal(3, nameColumn.NBuffers); // validity, offsets, data
+                    Assert.Equal(IntPtr.Zero, ArrowBuffer(nameColumn, 0)); // never null
+                    int[] offsets = new int[3];
+                    Marshal.Copy(ArrowBuffer(nameColumn, 1), offsets, 0, 3);
+                    byte[] data = new byte[offsets[2]];
+                    Marshal.Copy(ArrowBuffer(nameColumn, 2), data, 0, data.Length);
+                    Assert.Equal("widget", Encoding.UTF8.GetString(data, offsets[0], offsets[1] - offsets[0]));
+                    Assert.Equal("gadget", Encoding.UTF8.GetString(data, offsets[1], offsets[2] - offsets[1]));
+
+                    ArrowArray qtyColumn = ArrowChildArray(array, 1);
+                    Assert.Equal(2, qtyColumn.NBuffers); // validity, values
+                    long[] qty = new long[2];
+                    Marshal.Copy(ArrowBuffer(qtyColumn, 1), qty, 0, 2);
+                    Assert.Equal([3L, 7L], qty);
+                }
+                finally
+                {
+                    ExercisedReleaseArrow(ref array, ref schema);
+                    NativeApi.Close(handle);
+                }
+            }
+            finally
+            {
+                File.Delete(path);
+            }
+        }
+
+        [Fact]
+        public void ParseArrow_Should_Bit_Pack_Bool_Columns()
+        {
+            string path = Path.Combine(Path.GetTempPath(), $"excelreader-native-{Guid.NewGuid():N}.csv");
+            // 10 values so the bitmap spans two bytes: true,false alternating plus a tail.
+            File.WriteAllText(path, "flag\ntrue\nfalse\ntrue\nfalse\ntrue\nfalse\ntrue\nfalse\ntrue\ntrue\n");
+            try
+            {
+                Assert.Equal(NativeStatus.Ok, OpenPath(path, NativeFormat.Csv, out NativeHandle? handle));
+                NativeColumnSpec[] specs = [new() { Name = "flag", Type = NativeColumnType.Bool }];
+                Assert.Equal(NativeStatus.Ok, NativeApi.ParseArrow(handle, specs, headerRow: 1, out ArrowArray array, out ArrowSchema schema));
+                try
+                {
+                    ArrowArray column = ArrowChildArray(array, 0);
+                    Assert.Equal(10, column.Length);
+                    Assert.Equal("b", Marshal.PtrToStringUTF8(ArrowChildSchema(schema, 0).Format));
+
+                    byte[] bitmap = new byte[2];
+                    Marshal.Copy(ArrowBuffer(column, 1), bitmap, 0, 2);
+                    bool[] expected = [true, false, true, false, true, false, true, false, true, true];
+                    for (int i = 0; i < expected.Length; i++)
+                    {
+                        bool bit = (bitmap[i >> 3] & (1 << (i & 7))) != 0;
+                        Assert.Equal(expected[i], bit);
+                    }
+                }
+                finally
+                {
+                    ExercisedReleaseArrow(ref array, ref schema);
+                    NativeApi.Close(handle);
+                }
+            }
+            finally
+            {
+                File.Delete(path);
+            }
+        }
+
+        [Fact]
+        public void ParseArrow_Should_Report_Null_Count_From_The_Validity_Bitmap()
+        {
+            string path = Path.Combine(Path.GetTempPath(), $"excelreader-native-{Guid.NewGuid():N}.csv");
+            File.WriteAllText(path, "qty\n5\n\nnotanumber\n");
+            try
+            {
+                Assert.Equal(NativeStatus.Ok, OpenPath(path, NativeFormat.Csv, out NativeHandle? handle));
+                NativeColumnSpec[] specs = [new() { Name = "qty", Type = NativeColumnType.Int64, Nullable = true }];
+                Assert.Equal(NativeStatus.Ok, NativeApi.ParseArrow(handle, specs, headerRow: 1, out ArrowArray array, out ArrowSchema schema));
+                try
+                {
+                    ArrowArray column = ArrowChildArray(array, 0);
+                    Assert.NotEqual(IntPtr.Zero, ArrowBuffer(column, 0));
+                    Assert.Equal(2, column.NullCount);
+                    Assert.True((ArrowChildSchema(schema, 0).Flags & ArrowFlags.Nullable) != 0);
+                }
+                finally
+                {
+                    ExercisedReleaseArrow(ref array, ref schema);
+                    NativeApi.Close(handle);
+                }
+            }
+            finally
+            {
+                File.Delete(path);
+            }
+        }
+
+        [Fact]
+        public void ParseArrow_Should_Propagate_A_Non_Nullable_Conversion_Failure()
+        {
+            string path = Path.Combine(Path.GetTempPath(), $"excelreader-native-{Guid.NewGuid():N}.csv");
+            File.WriteAllText(path, "qty\nnotanumber\n");
+            try
+            {
+                Assert.Equal(NativeStatus.Ok, OpenPath(path, NativeFormat.Csv, out NativeHandle? handle));
+                NativeColumnSpec[] specs = [new() { Name = "qty", Type = NativeColumnType.Int64 }];
+
+                int status = NativeApi.ParseArrow(handle, specs, headerRow: 1, out ArrowArray array, out ArrowSchema schema);
+
+                Assert.Equal(NativeStatus.Error, status);
+                Assert.Equal(IntPtr.Zero, array.Release);
+                Assert.Equal(IntPtr.Zero, schema.Release);
+                NativeApi.Close(handle);
+            }
+            finally
+            {
+                File.Delete(path);
+            }
+        }
+
+        [Fact]
+        public void ParseArrow_Should_Reject_A_Null_Handle()
+        {
+            NativeColumnSpec[] specs = [new() { Index = 0, Type = NativeColumnType.String }];
+            Assert.Equal(NativeStatus.InvalidHandle, NativeApi.ParseArrow(null, specs, headerRow: 1, out _, out _));
+        }
+
+        [Fact]
+        public void ReleaseArrowArray_And_ReleaseArrowSchema_Are_Idempotent()
+        {
+            string path = Path.Combine(Path.GetTempPath(), $"excelreader-native-{Guid.NewGuid():N}.csv");
+            File.WriteAllText(path, "name\nwidget\n");
+            try
+            {
+                Assert.Equal(NativeStatus.Ok, OpenPath(path, NativeFormat.Csv, out NativeHandle? handle));
+                NativeColumnSpec[] specs = [new() { Name = "name", Type = NativeColumnType.String }];
+                Assert.Equal(NativeStatus.Ok, NativeApi.ParseArrow(handle, specs, headerRow: 1, out ArrowArray array, out ArrowSchema schema));
+
+                ExercisedReleaseArrow(ref array, ref schema);
+                // A second release on the same (now-zeroed-release) struct must be a harmless no-op.
+                ExercisedReleaseArrow(ref array, ref schema);
+
+                Assert.Equal(IntPtr.Zero, array.Release);
+                Assert.Equal(IntPtr.Zero, schema.Release);
+                NativeApi.Close(handle);
+            }
+            finally
+            {
+                File.Delete(path);
+            }
+        }
+
+        private static NativeWriteOptionsRaw DefaultWriteOptionsRaw()
+        {
+            return new NativeWriteOptionsRaw { StructSize = Marshal.SizeOf<NativeWriteOptionsRaw>() };
+        }
+
+        [Fact]
+        public void WriteOptions_Should_Decode_An_All_Defaults_Struct()
+        {
+            Assert.True(NativeWriteOptions.TryDecode(DefaultWriteOptionsRaw(), null, out NativeWriteOptions options, out string? error));
+
+            Assert.Null(error);
+            Assert.Null(options.SheetName);
+            Assert.Null(options.CsvDelimiter);
+            Assert.Null(options.CsvQuote);
+            Assert.Null(options.Date1904);
+            Assert.Null(options.UseSharedStrings);
+        }
+
+        [Fact]
+        public void WriteOptions_Should_Reject_An_Unrecognized_Struct_Size()
+        {
+            NativeWriteOptionsRaw raw = DefaultWriteOptionsRaw();
+            raw.StructSize = 1;
+
+            Assert.False(NativeWriteOptions.TryDecode(raw, null, out _, out string? error));
+            Assert.Contains("struct_size", error, StringComparison.Ordinal);
+        }
+
+        // struct_size IS the "our two struct layouts differ" signal, so it has to be settled before any
+        // other field is read — above all sheet_name_len/sheet_name, which Exports would otherwise take
+        // as a length and a pointer to dereference. Exports.TryDecodeWriteOptions calls
+        // TryValidateStructSize first for exactly that reason; it is [UnmanagedCallersOnly]-adjacent
+        // private code and unreachable from managed tests, so the ordering is asserted here, on the one
+        // shared copy of the check both paths use.
+        [Fact]
+        public void WriteOptions_Should_Reject_A_Bad_Struct_Size_Before_Any_Other_Field()
+        {
+            NativeWriteOptionsRaw raw = DefaultWriteOptionsRaw();
+            raw.StructSize = 1;
+            raw.SheetNameLen = int.MaxValue;    // the length Exports would hand to Encoding.UTF8.GetString
+            raw.CsvDelimiter = 300;             // and a second field that is itself invalid
+
+            Assert.False(NativeWriteOptions.TryValidateStructSize(raw, out string? error));
+            Assert.Contains("struct_size", error, StringComparison.Ordinal);
+
+            // TryDecode routes through the same helper, so a size mismatch is still reported as a size
+            // mismatch — nothing downstream of it was consulted first.
+            Assert.False(NativeWriteOptions.TryDecode(raw, "has/slash", out _, out string? decodeError));
+            Assert.Contains("struct_size", decodeError, StringComparison.Ordinal);
+        }
+
+        [Fact]
+        public void WriteOptions_Should_Reject_A_Csv_Delimiter_Outside_A_Byte()
+        {
+            NativeWriteOptionsRaw raw = DefaultWriteOptionsRaw();
+            raw.CsvDelimiter = 300;
+
+            Assert.False(NativeWriteOptions.TryDecode(raw, null, out _, out string? error));
+            Assert.Contains("csv_delimiter", error, StringComparison.Ordinal);
+        }
+
+        [Fact]
+        public void WriteOptions_Should_Reject_A_Sheet_Name_Excel_Cannot_Store()
+        {
+            NativeWriteOptionsRaw raw = DefaultWriteOptionsRaw();
+
+            Assert.False(NativeWriteOptions.TryDecode(raw, "has/slash", out _, out string? error));
+            Assert.Contains("sheet_name", error, StringComparison.Ordinal);
+            Assert.False(NativeWriteOptions.TryDecode(raw, "", out _, out error));
+            Assert.Contains("sheet_name", error, StringComparison.Ordinal);
+            Assert.False(NativeWriteOptions.TryDecode(raw, new string('x', 32), out _, out error));
+            Assert.Contains("sheet_name", error, StringComparison.Ordinal);
+        }
+
+        [Fact]
+        public void WriteOptions_Should_Carry_Overrides_Into_CsvWriterOptions()
+        {
+            NativeWriteOptionsRaw raw = DefaultWriteOptionsRaw();
+            raw.CsvDelimiter = ';';
+            raw.CsvQuote = '\'';
+            raw.Date1904 = NativeOptionState.True;
+            raw.UseSharedStrings = NativeOptionState.True;
+
+            Assert.True(NativeWriteOptions.TryDecode(raw, "Data", out NativeWriteOptions options, out _));
+
+            Assert.Equal("Data", options.SheetName);
+            Assert.True(options.Date1904);
+            Assert.True(options.UseSharedStrings);
+            CsvWriterOptions csv = options.ToCsvWriterOptions();
+            Assert.Equal((byte)';', csv.Delimiter);
+            Assert.Equal((byte)'\'', csv.Quote);
+        }
+
+        private static NativeWriteOptions DefaultWriteOptions()
+        {
+            Assert.True(NativeWriteOptions.TryDecode(DefaultWriteOptionsRaw(), null, out NativeWriteOptions options, out _));
+            return options;
+        }
+
+        [Theory]
+        [InlineData(NativeFormat.Xlsx, "xlsx")]
+        [InlineData(NativeFormat.Xlsb, "xlsb")]
+        [InlineData(NativeFormat.Xls, "xls")]
+        [InlineData(NativeFormat.Csv, "csv")]
+        public void WriteTyped_Should_Round_Trip_Through_ParseTyped(int format, string extension)
+        {
+            string path = Path.Combine(Path.GetTempPath(), $"excelreader-native-{Guid.NewGuid():N}.{extension}");
+            NativeTable table = BuildInt64Table([3L, 7L]);
+            try
+            {
+                NativeColumnSpec[] specs = [new() { Name = "qty", Type = NativeColumnType.Int64 }];
+
+                Assert.Equal(NativeStatus.Ok, NativeApi.WriteTyped(
+                    Encoding.UTF8.GetBytes(path), format, specs, table, DefaultWriteOptions()));
+
+                Assert.Equal(NativeStatus.Ok, OpenPath(path, format, out NativeHandle? handle));
+                try
+                {
+                    Assert.Equal(NativeStatus.Ok, NativeApi.ParseTyped(handle, specs, headerRow: 1, out NativeTable read));
+                    try
+                    {
+                        Assert.Equal(2, read.RowCount);
+                        long[] values = new long[2];
+                        Marshal.Copy(ColumnAt(read, 0).Values, values, 0, 2);
+                        Assert.Equal([3L, 7L], values);
+                    }
+                    finally
+                    {
+                        NativeApi.FreeTable(ref read);
+                    }
+                }
+                finally
+                {
+                    NativeApi.Close(handle);
+                }
+            }
+            finally
+            {
+                FreeBuiltTable(ref table);
+                File.Delete(path);
+            }
+        }
+
+        [Theory]
+        [InlineData(NativeFormat.Xlsx, "xlsx")]
+        [InlineData(NativeFormat.Xlsb, "xlsb")]
+        [InlineData(NativeFormat.Xls, "xls")]
+        [InlineData(NativeFormat.Csv, "csv")]
+        public void WriteTyped_Should_Round_Trip_Bools_Through_ParseTyped(int format, string extension)
+        {
+            string path = Path.Combine(Path.GetTempPath(), $"excelreader-native-{Guid.NewGuid():N}.{extension}");
+            NativeTable table = BuildBoolTable([true, false, true]);
+            try
+            {
+                NativeColumnSpec[] specs = [new() { Name = "flag", Type = NativeColumnType.Bool }];
+
+                Assert.Equal(NativeStatus.Ok, NativeApi.WriteTyped(
+                    Encoding.UTF8.GetBytes(path), format, specs, table, DefaultWriteOptions()));
+
+                Assert.Equal(NativeStatus.Ok, OpenPath(path, format, out NativeHandle? handle));
+                try
+                {
+                    Assert.Equal(NativeStatus.Ok, NativeApi.ParseTyped(handle, specs, headerRow: 1, out NativeTable read));
+                    try
+                    {
+                        Assert.Equal(3, read.RowCount);
+                        // One byte per row on the way out and on the way back — not a bit-packed mask.
+                        NativeColumn column = ColumnAt(read, 0);
+                        byte[] flags = [Marshal.ReadByte(column.Values, 0), Marshal.ReadByte(column.Values, 1), Marshal.ReadByte(column.Values, 2)];
+                        Assert.Equal<byte>([1, 0, 1], flags);
+                    }
+                    finally
+                    {
+                        NativeApi.FreeTable(ref read);
+                    }
+                }
+                finally
+                {
+                    NativeApi.Close(handle);
+                }
+            }
+            finally
+            {
+                FreeBuiltTable(ref table);
+                File.Delete(path);
+            }
+        }
+
+        [Theory]
+        [InlineData(NativeFormat.Xlsx, "xlsx")]
+        [InlineData(NativeFormat.Xlsb, "xlsb")]
+        [InlineData(NativeFormat.Xls, "xls")]
+        [InlineData(NativeFormat.Csv, "csv")]
+        public void WriteTyped_Should_Round_Trip_Doubles_Through_ParseTyped(int format, string extension)
+        {
+            string path = Path.Combine(Path.GetTempPath(), $"excelreader-native-{Guid.NewGuid():N}.{extension}");
+            // Exactly representable in binary64, so the comparison below is exact rather than epsilon-based.
+            NativeTable table = BuildFloat64Table([3.5, -0.25]);
+            try
+            {
+                NativeColumnSpec[] specs = [new() { Name = "rate", Type = NativeColumnType.Float64 }];
+
+                Assert.Equal(NativeStatus.Ok, NativeApi.WriteTyped(
+                    Encoding.UTF8.GetBytes(path), format, specs, table, DefaultWriteOptions()));
+
+                Assert.Equal(NativeStatus.Ok, OpenPath(path, format, out NativeHandle? handle));
+                try
+                {
+                    Assert.Equal(NativeStatus.Ok, NativeApi.ParseTyped(handle, specs, headerRow: 1, out NativeTable read));
+                    try
+                    {
+                        Assert.Equal(2, read.RowCount);
+                        double[] values = new double[2];
+                        Marshal.Copy(ColumnAt(read, 0).Values, values, 0, 2);
+                        Assert.Equal([3.5, -0.25], values);
+                    }
+                    finally
+                    {
+                        NativeApi.FreeTable(ref read);
+                    }
+                }
+                finally
+                {
+                    NativeApi.Close(handle);
+                }
+            }
+            finally
+            {
+                FreeBuiltTable(ref table);
+                File.Delete(path);
+            }
+        }
+
+        [Fact]
+        public void WriteTyped_Should_Round_Trip_Strings_And_Nulls()
+        {
+            string path = Path.Combine(Path.GetTempPath(), $"excelreader-native-{Guid.NewGuid():N}.xlsx");
+            NativeTable table = BuildStringTable([0, 0, 6, 12, 12], "widgetgadget"u8.ToArray());
+            try
+            {
+                // Nulls in the FIRST and LAST row (design §8), valid values between: bits 1 and 2 set.
+                NativeColumn column = Marshal.PtrToStructure<NativeColumn>(table.Columns);
+                column.Validity = Marshal.AllocHGlobal(1);
+                Marshal.WriteByte(column.Validity, 0b0110);
+                Marshal.StructureToPtr(column, table.Columns, false);
+
+                NativeColumnSpec[] specs = [new() { Name = "name", Type = NativeColumnType.String }];
+                Assert.Equal(NativeStatus.Ok, NativeApi.WriteTyped(
+                    Encoding.UTF8.GetBytes(path), NativeFormat.Xlsx, specs, table, DefaultWriteOptions()));
+
+                Assert.Equal(NativeStatus.Ok, OpenPath(path, NativeFormat.Xlsx, out NativeHandle? handle));
+                try
+                {
+                    NativeColumnSpec[] readSpecs = [new() { Name = "name", Type = NativeColumnType.String, Nullable = true }];
+                    Assert.Equal(NativeStatus.Ok, NativeApi.ParseTyped(handle, readSpecs, headerRow: 1, out NativeTable read));
+                    try
+                    {
+                        Assert.Equal(4, read.RowCount);
+                        Assert.Equal(["", "widget", "gadget", ""], DecodeStringColumn(ColumnAt(read, 0)));
+                        // A written null and a written "" are indistinguishable on the way back for a
+                        // STRING column by design — NativeApi.Typed.cs's AppendString records every
+                        // string cell as valid, empty or not, regardless of `nullable`. The bitmap
+                        // round-trip is therefore asserted on a nullable I64 column instead, below.
+                        Assert.Equal([true, true, true, true], DecodeValidity(ColumnAt(read, 0)));
+                    }
+                    finally
+                    {
+                        NativeApi.FreeTable(ref read);
+                    }
+                }
+                finally
+                {
+                    NativeApi.Close(handle);
+                }
+            }
+            finally
+            {
+                FreeBuiltTable(ref table);
+                File.Delete(path);
+            }
+        }
+
+        // Design §8: "a nullable column's validity bitmap survives the round-trip, including a null in
+        // the first and last row". I64 rather than STRING because a string cell is never read back as
+        // null (see WriteTyped_Should_Round_Trip_Strings_And_Nulls).
+        [Fact]
+        public void WriteTyped_Should_Round_Trip_A_Validity_Bitmap_With_Nulls_At_Both_Ends()
+        {
+            string path = Path.Combine(Path.GetTempPath(), $"excelreader-native-{Guid.NewGuid():N}.xlsx");
+            // Bit 1 set only: null, 7, null.
+            NativeTable table = BuildInt64Table([0L, 7L, 0L], [0b010]);
+            try
+            {
+                NativeColumnSpec[] specs = [new() { Name = "qty", Type = NativeColumnType.Int64, Nullable = true }];
+                Assert.Equal(NativeStatus.Ok, NativeApi.WriteTyped(
+                    Encoding.UTF8.GetBytes(path), NativeFormat.Xlsx, specs, table, DefaultWriteOptions()));
+
+                Assert.Equal(NativeStatus.Ok, OpenPath(path, NativeFormat.Xlsx, out NativeHandle? handle));
+                try
+                {
+                    Assert.Equal(NativeStatus.Ok, NativeApi.ParseTyped(handle, specs, headerRow: 1, out NativeTable read));
+                    try
+                    {
+                        Assert.Equal(3, read.RowCount);
+                        Assert.Equal([false, true, false], DecodeValidity(ColumnAt(read, 0)));
+                        long[] values = new long[3];
+                        Marshal.Copy(ColumnAt(read, 0).Values, values, 0, 3);
+                        Assert.Equal(7L, values[1]);
+                    }
+                    finally
+                    {
+                        NativeApi.FreeTable(ref read);
+                    }
+                }
+                finally
+                {
+                    NativeApi.Close(handle);
+                }
+            }
+            finally
+            {
+                FreeBuiltTable(ref table);
+                File.Delete(path);
+            }
+        }
+
+        // data == NULL with data_len == 0 is a legal all-empty-strings column (TryValidateStringOffsets
+        // permits it), and Encoding.UTF8.GetString null-checks its pointer before its zero-count fast
+        // path — so this used to fail the whole write with XL_ERROR and leave a truncated file behind.
+        [Fact]
+        public void WriteTyped_Should_Round_Trip_A_String_Column_That_Is_Entirely_Empty()
+        {
+            string path = Path.Combine(Path.GetTempPath(), $"excelreader-native-{Guid.NewGuid():N}.xlsx");
+            NativeTable table = BuildStringTable([0, 0, 0], []);
+            try
+            {
+                NativeColumnSpec[] specs = [new() { Name = "name", Type = NativeColumnType.String }];
+
+                Assert.Equal(NativeStatus.Ok, NativeApi.WriteTyped(
+                    Encoding.UTF8.GetBytes(path), NativeFormat.Xlsx, specs, table, DefaultWriteOptions()));
+
+                Assert.Equal(NativeStatus.Ok, OpenPath(path, NativeFormat.Xlsx, out NativeHandle? handle));
+                try
+                {
+                    Assert.Equal(NativeStatus.Ok, NativeApi.ParseTyped(handle, specs, headerRow: 1, out NativeTable read));
+                    try
+                    {
+                        Assert.Equal(2, read.RowCount);
+                        Assert.Equal(["", ""], DecodeStringColumn(ColumnAt(read, 0)));
+                    }
+                    finally
+                    {
+                        NativeApi.FreeTable(ref read);
+                    }
+                }
+                finally
+                {
+                    NativeApi.Close(handle);
+                }
+            }
+            finally
+            {
+                FreeBuiltTable(ref table);
+                File.Delete(path);
+            }
+        }
+
+        [Fact]
+        public void WriteTyped_Should_Round_Trip_Every_Temporal_Type()
+        {
+            string path = Path.Combine(Path.GetTempPath(), $"excelreader-native-{Guid.NewGuid():N}.xlsx");
+            int epoch = new DateOnly(1970, 1, 1).DayNumber;
+            int day = new DateOnly(2024, 1, 15).DayNumber - epoch;
+            long clock = 3_600_000_000L;                                   // 01:00:00
+            long stamp = 1_705_280_400_000_000L;                           // 2024-01-15T01:00:00Z
+
+            NativeTable table = BuildTemporalTable(day, clock, stamp);
+            try
+            {
+                NativeColumnSpec[] specs =
+                [
+                    new() { Name = "day", Type = NativeColumnType.Date },
+                    new() { Name = "clock", Type = NativeColumnType.Time },
+                    new() { Name = "stamp", Type = NativeColumnType.Timestamp },
+                ];
+                Assert.Equal(NativeStatus.Ok, NativeApi.WriteTyped(
+                    Encoding.UTF8.GetBytes(path), NativeFormat.Xlsx, specs, table, DefaultWriteOptions()));
+
+                Assert.Equal(NativeStatus.Ok, OpenPath(path, NativeFormat.Xlsx, out NativeHandle? handle));
+                try
+                {
+                    Assert.Equal(NativeStatus.Ok, NativeApi.ParseTyped(handle, specs, headerRow: 1, out NativeTable read));
+                    try
+                    {
+                        int[] days = new int[1];
+                        Marshal.Copy(ColumnAt(read, 0).Values, days, 0, 1);
+                        long[] clocks = new long[1];
+                        Marshal.Copy(ColumnAt(read, 1).Values, clocks, 0, 1);
+                        long[] stamps = new long[1];
+                        Marshal.Copy(ColumnAt(read, 2).Values, stamps, 0, 1);
+
+                        Assert.Equal(day, days[0]);
+                        Assert.Equal(clock, clocks[0]);
+                        Assert.Equal(stamp, stamps[0]);
+                    }
+                    finally
+                    {
+                        NativeApi.FreeTable(ref read);
+                    }
+                }
+                finally
+                {
+                    NativeApi.Close(handle);
+                }
+
+                AssertTemporalColumnsCarryANumberFormat(path);
+            }
+            finally
+            {
+                FreeBuiltTable(ref table);
+                File.Delete(path);
+            }
+        }
+
+        // Design §5: without a number format a temporal cell renders in Excel as its raw serial number.
+        // The TYPED reader cannot see a number format at all — it converts whatever serial it is given
+        // for a column the caller already declared temporal — so this goes through the row reader,
+        // whose CellType.Date is derived from the cell's own style, plus the file itself for the one
+        // column that has no cell-level style to look at.
+        private static void AssertTemporalColumnsCarryANumberFormat(string path)
+        {
+            using (FileStream file = File.OpenRead(path))
+            using (XlsxReader reader = Excel.From(file))
+            using (XlsxReader.Enumerator rows = reader.GetEnumerator())
+            {
+                Assert.True(rows.MoveNext());   // header
+                Assert.True(rows.MoveNext());   // the one data row
+                Assert.Equal(CellType.Date, rows.Current[0].Type);   // XL_T_DATE  -> builtin style 1
+                Assert.Equal(CellType.Date, rows.Current[2].Type);   // XL_T_TIMESTAMP -> AddStyle
+                // XL_T_TIME is the exception, and deliberately so on Core's side: XlsxRowWriter's
+                // Write(TimeOnly) emits the day fraction as a plain number cell with no style
+                // attribute at all, so ApplyTemporalStyles' "hh:mm:ss" only ever reaches the <cols>
+                // element. Excel applies a column style to cells that carry none; this library's row
+                // reader reads only the cell's own `s`, hence Number here.
+                Assert.Equal(CellType.Number, rows.Current[1].Type);
+            }
+
+            // So the TIME half of §5 is asserted where it actually lands. Both custom formats are
+            // registered by ApplyTemporalStyles and by nothing else, and <cols> exists only because
+            // SetColumnStyle was called: delete ApplyTemporalStyles and all three assertions fail.
+            using ZipArchive archive = ZipFile.OpenRead(path);
+            string styles = ReadZipEntry(archive, "xl/styles.xml");
+            Assert.Contains("hh:mm:ss", styles, StringComparison.Ordinal);
+            Assert.Contains("yyyy-mm-dd hh:mm:ss", styles, StringComparison.Ordinal);
+            Assert.Contains("<cols>", ReadZipEntry(archive, "xl/worksheets/sheet1.xml"), StringComparison.Ordinal);
+        }
+
+        private static string ReadZipEntry(ZipArchive archive, string entryName)
+        {
+            ZipArchiveEntry entry = Assert.IsType<ZipArchiveEntry>(archive.GetEntry(entryName));
+            using StreamReader reader = new(entry.Open(), Encoding.UTF8);
+            return reader.ReadToEnd();
+        }
+
+        // date1904 is the flag whose omission is silent data corruption (design §2), so it needs a test
+        // that fails when the option stops reaching XlsbWorkbookWriter.CreateAsync: the written file's
+        // own epoch flag is the most direct thing the read side exposes.
+        [Fact]
+        public void WriteTyped_Should_Carry_Date1904_Into_The_Written_Xlsb()
+        {
+            string path = Path.Combine(Path.GetTempPath(), $"excelreader-native-{Guid.NewGuid():N}.xlsb");
+            int day = new DateOnly(2024, 1, 15).DayNumber - new DateOnly(1970, 1, 1).DayNumber;
+            NativeTable table = BuildDateTable([day]);
+            try
+            {
+                NativeWriteOptionsRaw raw = DefaultWriteOptionsRaw();
+                raw.Date1904 = NativeOptionState.True;
+                Assert.True(NativeWriteOptions.TryDecode(raw, null, out NativeWriteOptions options, out _));
+                NativeColumnSpec[] specs = [new() { Name = "day", Type = NativeColumnType.Date }];
+
+                Assert.Equal(NativeStatus.Ok, NativeApi.WriteTyped(
+                    Encoding.UTF8.GetBytes(path), NativeFormat.Xlsb, specs, table, options));
+
+                Assert.Equal(NativeStatus.Ok, OpenPath(path, NativeFormat.Xlsb, out NativeHandle? handle));
+                try
+                {
+                    Assert.Equal(NativeStatus.Ok, NativeApi.IsDate1904(handle, out int flag));
+                    Assert.Equal(1, flag);
+
+                    // And the serial stored under that epoch still decodes to the same calendar day:
+                    // a 1904 workbook read as 1900 would come back 1462 days later.
+                    Assert.Equal(NativeStatus.Ok, NativeApi.ParseTyped(handle, specs, headerRow: 1, out NativeTable read));
+                    try
+                    {
+                        int[] days = new int[1];
+                        Marshal.Copy(ColumnAt(read, 0).Values, days, 0, 1);
+                        Assert.Equal(day, days[0]);
+                    }
+                    finally
+                    {
+                        NativeApi.FreeTable(ref read);
+                    }
+                }
+                finally
+                {
+                    NativeApi.Close(handle);
+                }
+            }
+            finally
+            {
+                FreeBuiltTable(ref table);
+                File.Delete(path);
+            }
+        }
+
+        // The 1900-epoch write of the same day must produce a DIFFERENT stored serial — otherwise the
+        // assertion above could pass with date1904 silently ignored on both sides.
+        [Fact]
+        public void WriteTyped_Should_Store_A_Different_Serial_Under_The_1904_Epoch()
+        {
+            string epoch1900 = Path.Combine(Path.GetTempPath(), $"excelreader-native-{Guid.NewGuid():N}.xlsb");
+            string epoch1904 = Path.Combine(Path.GetTempPath(), $"excelreader-native-{Guid.NewGuid():N}.xlsb");
+            int day = new DateOnly(2024, 1, 15).DayNumber - new DateOnly(1970, 1, 1).DayNumber;
+            NativeTable table = BuildDateTable([day]);
+            try
+            {
+                NativeWriteOptionsRaw raw = DefaultWriteOptionsRaw();
+                raw.Date1904 = NativeOptionState.True;
+                Assert.True(NativeWriteOptions.TryDecode(raw, null, out NativeWriteOptions options1904, out _));
+                NativeColumnSpec[] specs = [new() { Name = "day", Type = NativeColumnType.Date }];
+
+                Assert.Equal(NativeStatus.Ok, NativeApi.WriteTyped(
+                    Encoding.UTF8.GetBytes(epoch1900), NativeFormat.Xlsb, specs, table, DefaultWriteOptions()));
+                Assert.Equal(NativeStatus.Ok, NativeApi.WriteTyped(
+                    Encoding.UTF8.GetBytes(epoch1904), NativeFormat.Xlsb, specs, table, options1904));
+
+                Assert.Equal(1462.0, ReadFirstDataSerial(epoch1900) - ReadFirstDataSerial(epoch1904));
+            }
+            finally
+            {
+                FreeBuiltTable(ref table);
+                File.Delete(epoch1900);
+                File.Delete(epoch1904);
+            }
+        }
+
+        // The raw serial as stored, read without the workbook's epoch applied — the only way to see
+        // that the two files really differ by the 1462-day shift.
+        private static double ReadFirstDataSerial(string path)
+        {
+            using FileStream file = File.OpenRead(path);
+            using XlsbReader reader = Excel.FromXlsb(file);
+            using XlsbReader.Enumerator rows = reader.GetEnumerator();
+
+            Assert.True(rows.MoveNext());   // header
+            Assert.True(rows.MoveNext());   // the one data row
+            Assert.True(rows.Current[0].TryGetDouble(out double serial));
+            return serial;
+        }
+
+        private static NativeTable BuildTemporalTable(int day, long clock, long stamp)
+        {
+            NativeColumn[] columns =
+            [
+                new() { Type = NativeColumnType.Date, Length = 1, Values = Marshal.AllocHGlobal(sizeof(int)) },
+                new() { Type = NativeColumnType.Time, Length = 1, Values = Marshal.AllocHGlobal(sizeof(long)) },
+                new() { Type = NativeColumnType.Timestamp, Length = 1, Values = Marshal.AllocHGlobal(sizeof(long)) },
+            ];
+            Marshal.WriteInt32(columns[0].Values, day);
+            Marshal.WriteInt64(columns[1].Values, clock);
+            Marshal.WriteInt64(columns[2].Values, stamp);
+
+            int size = Marshal.SizeOf<NativeColumn>();
+            IntPtr block = Marshal.AllocHGlobal(size * columns.Length);
+            for (int index = 0; index < columns.Length; index++)
+            {
+                Marshal.StructureToPtr(columns[index], IntPtr.Add(block, index * size), false);
+            }
+            return new NativeTable { ColumnCount = columns.Length, RowCount = 1, Columns = block };
+        }
+
+        [Fact]
+        public void WriteTyped_Should_Write_No_Header_Row_When_Specs_Are_Unnamed()
+        {
+            string path = Path.Combine(Path.GetTempPath(), $"excelreader-native-{Guid.NewGuid():N}.csv");
+            NativeTable table = BuildInt64Table([3L, 7L]);
+            try
+            {
+                NativeColumnSpec[] specs = [new() { Name = null, Type = NativeColumnType.Int64 }];
+                Assert.Equal(NativeStatus.Ok, NativeApi.WriteTyped(
+                    Encoding.UTF8.GetBytes(path), NativeFormat.Csv, specs, table, DefaultWriteOptions()));
+
+                Assert.Equal("3\n7\n", File.ReadAllText(path).ReplaceLineEndings("\n"));
+            }
+            finally
+            {
+                FreeBuiltTable(ref table);
+                File.Delete(path);
+            }
+        }
+
+        // Two columns, deliberately: a single-column CSV contains no delimiter at all, so a test over
+        // one column cannot fail when the override is dropped.
+        [Fact]
+        public void WriteTyped_Should_Apply_The_Csv_Delimiter_Override()
+        {
+            string path = Path.Combine(Path.GetTempPath(), $"excelreader-native-{Guid.NewGuid():N}.csv");
+            NativeTable table = BuildQtyNameTable([3L], ["widget"]);
+            try
+            {
+                NativeWriteOptionsRaw raw = DefaultWriteOptionsRaw();
+                raw.CsvDelimiter = ';';
+                Assert.True(NativeWriteOptions.TryDecode(raw, null, out NativeWriteOptions options, out _));
+                NativeColumnSpec[] specs = QtyNameSpecs();
+
+                Assert.Equal(NativeStatus.Ok, NativeApi.WriteTyped(
+                    Encoding.UTF8.GetBytes(path), NativeFormat.Csv, specs, table, options));
+
+                Assert.Equal("qty;name\n3;widget\n", File.ReadAllText(path).ReplaceLineEndings("\n"));
+            }
+            finally
+            {
+                FreeBuiltTable(ref table);
+                File.Delete(path);
+            }
+        }
+
+        // The value contains the (default) delimiter, so the writer must quote the field — which is
+        // the only way the custom quote character can show up in the output at all.
+        [Fact]
+        public void WriteTyped_Should_Apply_The_Csv_Quote_Override()
+        {
+            string path = Path.Combine(Path.GetTempPath(), $"excelreader-native-{Guid.NewGuid():N}.csv");
+            NativeTable table = BuildQtyNameTable([3L], ["wid,get"]);
+            try
+            {
+                NativeWriteOptionsRaw raw = DefaultWriteOptionsRaw();
+                raw.CsvQuote = '\'';
+                Assert.True(NativeWriteOptions.TryDecode(raw, null, out NativeWriteOptions options, out _));
+                NativeColumnSpec[] specs = QtyNameSpecs();
+
+                Assert.Equal(NativeStatus.Ok, NativeApi.WriteTyped(
+                    Encoding.UTF8.GetBytes(path), NativeFormat.Csv, specs, table, options));
+
+                Assert.Equal("qty,name\n3,'wid,get'\n", File.ReadAllText(path).ReplaceLineEndings("\n"));
+            }
+            finally
+            {
+                FreeBuiltTable(ref table);
+                File.Delete(path);
+            }
+        }
+
+        [Fact]
+        public void WriteTyped_Should_Reject_Auto_Format_And_Create_No_File()
+        {
+            string path = Path.Combine(Path.GetTempPath(), $"excelreader-native-{Guid.NewGuid():N}.xlsx");
+            NativeTable table = BuildInt64Table([3L]);
+            try
+            {
+                NativeColumnSpec[] specs = [new() { Name = "qty", Type = NativeColumnType.Int64 }];
+
+                Assert.Equal(NativeStatus.InvalidArgument, NativeApi.WriteTyped(
+                    Encoding.UTF8.GetBytes(path), NativeFormat.Auto, specs, table, DefaultWriteOptions()));
+                Assert.False(File.Exists(path));
+            }
+            finally
+            {
+                FreeBuiltTable(ref table);
+                File.Delete(path); // a regression that starts creating the file must not also leak it
+            }
+        }
+
+        // Every non-AUTO value outside the five format constants is rejected the same way — AUTO is the
+        // documented special case, not the only one.
+        [Fact]
+        public void WriteTyped_Should_Reject_A_Format_Outside_Every_Constant()
+        {
+            string path = Path.Combine(Path.GetTempPath(), $"excelreader-native-{Guid.NewGuid():N}.xlsx");
+            NativeTable table = BuildInt64Table([3L]);
+            try
+            {
+                NativeColumnSpec[] specs = [new() { Name = "qty", Type = NativeColumnType.Int64 }];
+
+                Assert.Equal(NativeStatus.InvalidArgument, NativeApi.WriteTyped(
+                    Encoding.UTF8.GetBytes(path), format: 99, specs, table, DefaultWriteOptions()));
+                Assert.False(File.Exists(path));
+            }
+            finally
+            {
+                FreeBuiltTable(ref table);
+                File.Delete(path);
+            }
+        }
+
+        [Fact]
+        public void WriteTyped_Should_Create_No_File_When_The_Table_Is_Rejected()
+        {
+            string path = Path.Combine(Path.GetTempPath(), $"excelreader-native-{Guid.NewGuid():N}.xlsx");
+            NativeTable table = BuildStringTable([0, 9, 6], "widgetgadget"u8.ToArray());
+            try
+            {
+                NativeColumnSpec[] specs = [new() { Name = "name", Type = NativeColumnType.String }];
+
+                Assert.Equal(NativeStatus.InvalidArgument, NativeApi.WriteTyped(
+                    Encoding.UTF8.GetBytes(path), NativeFormat.Xlsx, specs, table, DefaultWriteOptions()));
+                Assert.False(File.Exists(path));
+            }
+            finally
+            {
+                FreeBuiltTable(ref table);
+                File.Delete(path); // a regression that starts creating the file must not also leak it
+            }
+        }
+
+        [Fact]
+        public void WriteTyped_Should_Use_The_Requested_Sheet_Name()
+        {
+            string path = Path.Combine(Path.GetTempPath(), $"excelreader-native-{Guid.NewGuid():N}.xlsx");
+            NativeTable table = BuildInt64Table([3L]);
+            try
+            {
+                Assert.True(NativeWriteOptions.TryDecode(DefaultWriteOptionsRaw(), "Vendas", out NativeWriteOptions options, out _));
+                NativeColumnSpec[] specs = [new() { Name = "qty", Type = NativeColumnType.Int64 }];
+
+                Assert.Equal(NativeStatus.Ok, NativeApi.WriteTyped(
+                    Encoding.UTF8.GetBytes(path), NativeFormat.Xlsx, specs, table, options));
+
+                Assert.Equal(NativeStatus.Ok, OpenPath(path, NativeFormat.Xlsx, out NativeHandle? handle));
+                try
+                {
+                    byte[] name = new byte[64];
+                    Assert.Equal(NativeStatus.Ok, NativeApi.SheetNameAt(handle, 0, name, out int written));
+                    Assert.Equal("Vendas", Encoding.UTF8.GetString(name, 0, written));
+                }
+                finally
+                {
+                    NativeApi.Close(handle);
+                }
+            }
+            finally
+            {
+                FreeBuiltTable(ref table);
+                File.Delete(path);
+            }
+        }
+
+        // Releases via the same IntPtr round-trip real Arrow consumers use (their own storage, not a
+        // pointer to this ref struct) - NativeApi.ReleaseArrowArray/Schema take an address, and `array`/
+        // `schema` here are plain locals with no fixed address of their own.
+        private static void ExercisedReleaseArrow(ref ArrowArray array, ref ArrowSchema schema)
+        {
+            IntPtr arrayBlock = Marshal.AllocHGlobal(Marshal.SizeOf<ArrowArray>());
+            IntPtr schemaBlock = Marshal.AllocHGlobal(Marshal.SizeOf<ArrowSchema>());
+            try
+            {
+                Marshal.StructureToPtr(array, arrayBlock, false);
+                Marshal.StructureToPtr(schema, schemaBlock, false);
+                NativeApi.ReleaseArrowArray(arrayBlock);
+                NativeApi.ReleaseArrowSchema(schemaBlock);
+                array = Marshal.PtrToStructure<ArrowArray>(arrayBlock);
+                schema = Marshal.PtrToStructure<ArrowSchema>(schemaBlock);
+            }
+            finally
+            {
+                Marshal.FreeHGlobal(arrayBlock);
+                Marshal.FreeHGlobal(schemaBlock);
+            }
+        }
+
         // NativeHandle's constructor is internal; this project has InternalsVisibleTo access to it, so
         // tests can hand it a reader that isn't produced by NativeApi.OpenFile/OpenMemory.
         private static NativeHandle NativeHandle_Create(IExcelRowReader reader)
@@ -606,17 +3226,45 @@ namespace ExcelReader.Tests
             public bool IsDate1904 => inner.IsDate1904;
             public string SheetName => inner.SheetName;
             public int SheetCount => inner.SheetCount;
+            public string SheetNameAt(int index)
+            {
+                return inner.SheetNameAt(index);
+            }
 
-            public bool TryMoveToSheet(ReadOnlySpan<char> name) => inner.TryMoveToSheet(name);
-            public void MoveToSheet(int index) => inner.MoveToSheet(index);
+            public bool TryMoveToSheet(ReadOnlySpan<char> name)
+            {
+                return inner.TryMoveToSheet(name);
+            }
 
-            public IExcelRowEnumerator GetEnumerator() => new FailAfterNRowsEnumerator(inner.GetEnumerator(), failAfter);
-            public IExcelRowEnumerator GetAsyncEnumerator() => new FailAfterNRowsEnumerator(inner.GetAsyncEnumerator(), failAfter);
-            public ValueTask<IExcelRowEnumerator> GetAsyncEnumeratorAsync(CancellationToken ct = default) =>
-                new(new FailAfterNRowsEnumerator(inner.GetAsyncEnumerator(), failAfter));
+            public void MoveToSheet(int index)
+            {
+                inner.MoveToSheet(index);
+            }
 
-            public void Dispose() => inner.Dispose();
-            public ValueTask DisposeAsync() => inner.DisposeAsync();
+            public IExcelRowEnumerator GetEnumerator()
+            {
+                return new FailAfterNRowsEnumerator(inner.GetEnumerator(), failAfter);
+            }
+
+            public IExcelRowEnumerator GetAsyncEnumerator()
+            {
+                return new FailAfterNRowsEnumerator(inner.GetAsyncEnumerator(), failAfter);
+            }
+
+            public ValueTask<IExcelRowEnumerator> GetAsyncEnumeratorAsync(CancellationToken ct = default)
+            {
+                return new(new FailAfterNRowsEnumerator(inner.GetAsyncEnumerator(), failAfter));
+            }
+
+            public void Dispose()
+            {
+                inner.Dispose();
+            }
+
+            public ValueTask DisposeAsync()
+            {
+                return inner.DisposeAsync();
+            }
         }
 #pragma warning restore HLQ006
 #pragma warning restore IDISP007
@@ -646,8 +3294,15 @@ namespace ExcelReader.Tests
                 return inner.MoveNextAsync();
             }
 
-            public void Dispose() => inner.Dispose();
-            public ValueTask DisposeAsync() => inner.DisposeAsync();
+            public void Dispose()
+            {
+                inner.Dispose();
+            }
+
+            public ValueTask DisposeAsync()
+            {
+                return inner.DisposeAsync();
+            }
         }
 #pragma warning restore IDISP007
     }
