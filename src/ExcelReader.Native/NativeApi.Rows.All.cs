@@ -124,6 +124,17 @@ namespace ExcelReader.Native
         /// <see cref="NativeStatus.Ok"/> with <see cref="NativeRows.RowCount"/> equal to zero, since
         /// there's no per-call "keep going" signal here to distinguish EOF from an empty result.
         /// </summary>
+        /// <remarks>
+        /// Each row keeps its own native block, exactly as <see cref="NextRowDecoded"/> hands it out.
+        /// Consolidating the whole sheet into one block was tried and reverted: it costs one native
+        /// allocation instead of 65K, but the cells and value bytes then have to accumulate in
+        /// MANAGED memory first, because the block cannot be sized until the last row is read.
+        /// Measured by NativeRowReadBenchmark on Data/65K_Records_Data.xlsb (Ryzen 7 5700X,
+        /// .NET 10.0.10, --job Medium): 92.86 ms / 5.72 MB managed for this version against
+        /// 88.39 ms / 32.97 MB for the consolidated one — 5% of wall clock for six times the
+        /// managed allocation and a third more Gen2 collections. Not a trade worth making, and worth
+        /// recording so it isn't re-attempted from the same reasoning.
+        /// </remarks>
         internal static int ReadAllDecoded(NativeHandle? handle, out NativeRows rows)
         {
             rows = default;

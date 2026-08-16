@@ -60,7 +60,7 @@ namespace ExcelReader.Tests
             {
                 buffer.Add((byte)i);
                 expected.Add((byte)i);
-                buffer.AddRange(new byte[] { 1, 2, 3 });
+                buffer.AddRange([1, 2, 3]);
                 expected.AddRange([1, 2, 3]);
             }
 
