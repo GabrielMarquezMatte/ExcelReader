@@ -3226,18 +3226,45 @@ namespace ExcelReader.Tests
             public bool IsDate1904 => inner.IsDate1904;
             public string SheetName => inner.SheetName;
             public int SheetCount => inner.SheetCount;
-            public string SheetNameAt(int index) => inner.SheetNameAt(index);
+            public string SheetNameAt(int index)
+            {
+                return inner.SheetNameAt(index);
+            }
 
-            public bool TryMoveToSheet(ReadOnlySpan<char> name) => inner.TryMoveToSheet(name);
-            public void MoveToSheet(int index) => inner.MoveToSheet(index);
+            public bool TryMoveToSheet(ReadOnlySpan<char> name)
+            {
+                return inner.TryMoveToSheet(name);
+            }
 
-            public IExcelRowEnumerator GetEnumerator() => new FailAfterNRowsEnumerator(inner.GetEnumerator(), failAfter);
-            public IExcelRowEnumerator GetAsyncEnumerator() => new FailAfterNRowsEnumerator(inner.GetAsyncEnumerator(), failAfter);
-            public ValueTask<IExcelRowEnumerator> GetAsyncEnumeratorAsync(CancellationToken ct = default) =>
-                new(new FailAfterNRowsEnumerator(inner.GetAsyncEnumerator(), failAfter));
+            public void MoveToSheet(int index)
+            {
+                inner.MoveToSheet(index);
+            }
 
-            public void Dispose() => inner.Dispose();
-            public ValueTask DisposeAsync() => inner.DisposeAsync();
+            public IExcelRowEnumerator GetEnumerator()
+            {
+                return new FailAfterNRowsEnumerator(inner.GetEnumerator(), failAfter);
+            }
+
+            public IExcelRowEnumerator GetAsyncEnumerator()
+            {
+                return new FailAfterNRowsEnumerator(inner.GetAsyncEnumerator(), failAfter);
+            }
+
+            public ValueTask<IExcelRowEnumerator> GetAsyncEnumeratorAsync(CancellationToken ct = default)
+            {
+                return new(new FailAfterNRowsEnumerator(inner.GetAsyncEnumerator(), failAfter));
+            }
+
+            public void Dispose()
+            {
+                inner.Dispose();
+            }
+
+            public ValueTask DisposeAsync()
+            {
+                return inner.DisposeAsync();
+            }
         }
 #pragma warning restore HLQ006
 #pragma warning restore IDISP007
@@ -3267,8 +3294,15 @@ namespace ExcelReader.Tests
                 return inner.MoveNextAsync();
             }
 
-            public void Dispose() => inner.Dispose();
-            public ValueTask DisposeAsync() => inner.DisposeAsync();
+            public void Dispose()
+            {
+                inner.Dispose();
+            }
+
+            public ValueTask DisposeAsync()
+            {
+                return inner.DisposeAsync();
+            }
         }
 #pragma warning restore IDISP007
     }
