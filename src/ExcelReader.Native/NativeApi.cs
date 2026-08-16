@@ -10,7 +10,7 @@ namespace ExcelReader.Native
     /// This split exists because managed code cannot call an [UnmanagedCallersOnly] method, so the
     /// exports themselves are untestable — this layer is what the test suite drives.
     /// </summary>
-    internal static unsafe partial class NativeApi
+    internal static partial class NativeApi
     {
         // Thread-local because handles are single-threaded by contract: an error raised on one
         // thread must not be observable from another.
@@ -19,13 +19,25 @@ namespace ExcelReader.Native
 
         // Backs xl_last_error_ptr: a borrowed-pointer alternative to xl_last_error that skips the
         // ask-the-size-then-copy round trip. A managed string has no stable address, so the UTF-8 bytes
-        // are kept in a separate, pinned (GC never relocates it), thread-static array the pointer can
-        // point straight into. Grown, never shrunk, so a pointer handed out by an earlier call before a
-        // regrow would dangle — LastErrorPtr always re-reads the current array, so that never happens
-        // across a single call, but a caller must not cache the pointer past its own thread's next
-        // ExcelReader call (documented on xl_last_error_ptr in excelreader.h).
+        // are kept in a separate, pinned, thread-static buffer the pointer can point straight into.
+        // Grown, never shrunk, so a pointer handed out by an earlier call before a regrow would dangle —
+        // LastErrorPtr always re-reads the current buffer, so that never happens across a single call,
+        // but a caller must not cache the pointer past its own thread's next ExcelReader call (documented
+        // on xl_last_error_ptr in excelreader.h).
+        //
+        // Held via a pinned GCHandle, not a plain `byte[]` field: pinning only stops the GC from
+        // *relocating* an object, not from *collecting* it, and a [ThreadStatic] field's storage is
+        // reclaimed once its owning thread exits — a caller that reads xl_last_error_ptr from a
+        // short-lived worker thread and copies it after that thread has already terminated would then
+        // dereference collected/reused memory (observed as the buffer reading back all zero bytes).
+        // GCHandle.Alloc roots the target in the runtime's handle table independent of any managed
+        // reference to the handle itself, so the buffer survives its producing thread's death.
+        // ponytail: the handle for a thread that errors once and never calls again leaks for the
+        // process lifetime (a few hundred bytes, bounded by the number of distinct threads that ever
+        // called SetLastError) — upgrade path is a bounded per-thread handle registry with cleanup on
+        // thread exit, not worth the complexity for a native error-message buffer.
         [ThreadStatic]
-        private static byte[]? _lastErrorUtf8;
+        private static GCHandle _lastErrorHandle;
         [ThreadStatic]
         private static int _lastErrorUtf8Length;
 
@@ -33,12 +45,17 @@ namespace ExcelReader.Native
         {
             _lastError = message;
             int required = Encoding.UTF8.GetByteCount(message);
-            if (_lastErrorUtf8 is null || _lastErrorUtf8.Length < required)
+            byte[]? current = _lastErrorHandle.IsAllocated ? Unsafe.As<byte[]>(_lastErrorHandle.Target) : null;
+            if (current is null || current.Length < required)
             {
-                // Pinned so xl_last_error_ptr can hand out a stable address; the GC must not relocate it.
-                _lastErrorUtf8 = GC.AllocateArray<byte>(Math.Max(required, 256), pinned: true);
+                if (_lastErrorHandle.IsAllocated)
+                {
+                    _lastErrorHandle.Free();
+                }
+                current = new byte[Math.Max(required, 256)];
+                _lastErrorHandle = GCHandle.Alloc(current, GCHandleType.Pinned);
             }
-            _lastErrorUtf8Length = Encoding.UTF8.GetBytes(message, _lastErrorUtf8);
+            _lastErrorUtf8Length = Encoding.UTF8.GetBytes(message, current);
         }
 
         internal static void ClearLastError()
@@ -82,16 +99,16 @@ namespace ExcelReader.Native
         internal static nint LastErrorPtr(out int length)
         {
             length = _lastErrorUtf8Length;
-            if (length == 0 || _lastErrorUtf8 is null)
+            if (length == 0 || !_lastErrorHandle.IsAllocated)
             {
                 return IntPtr.Zero;
             }
 
-            // Safe without a `fixed` block: the array is allocated pinned (GC.AllocateArray with
-            // pinned: true), so its address is stable for the array's whole lifetime, not just for the
-            // scope of a `fixed` statement — which is exactly what a pointer surviving past this method
+            // Safe without a `fixed` block: the target is pinned by the GCHandle itself (allocated with
+            // GCHandleType.Pinned), so its address is stable for as long as the handle stays allocated —
+            // which outlives the producing thread, exactly what a pointer surviving past this method
             // return, into the ABI caller, requires.
-            return (nint)Unsafe.AsPointer(ref MemoryMarshal.GetArrayDataReference(_lastErrorUtf8));
+            return _lastErrorHandle.AddrOfPinnedObject();
         }
     }
 }
