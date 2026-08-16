@@ -210,21 +210,21 @@ namespace ExcelReader.Native
                     row.Write(DateOnly.FromDayNumber(WriteUnixEpochDayNumber + ((int*)column.Values)[rowIndex]));
                     return;
                 case NativeColumnType.Time:
-                {
-                    // checked: an unchecked overflow here would silently write the wrong time instead of
-                    // failing the call. The pointer cast happens outside the checked block: CA2020 treats
-                    // a checked native-int-to-pointer conversion as throwing on overflow starting in .NET
-                    // 7, which is not what this line means to check (the multiplication is).
-                    long* values = (long*)column.Values;
-                    row.Write(new TimeOnly(checked(values[rowIndex] * TimeSpan.TicksPerMicrosecond)));
-                    return;
-                }
+                    {
+                        // checked: an unchecked overflow here would silently write the wrong time instead of
+                        // failing the call. The pointer cast happens outside the checked block: CA2020 treats
+                        // a checked native-int-to-pointer conversion as throwing on overflow starting in .NET
+                        // 7, which is not what this line means to check (the multiplication is).
+                        long* values = (long*)column.Values;
+                        row.Write(new TimeOnly(checked(values[rowIndex] * TimeSpan.TicksPerMicrosecond)));
+                        return;
+                    }
                 default:
-                {
-                    long* values = (long*)column.Values;
-                    row.Write(DateTime.UnixEpoch.AddTicks(checked(values[rowIndex] * TimeSpan.TicksPerMicrosecond)));
-                    return;
-                }
+                    {
+                        long* values = (long*)column.Values;
+                        row.Write(DateTime.UnixEpoch.AddTicks(checked(values[rowIndex] * TimeSpan.TicksPerMicrosecond)));
+                        return;
+                    }
             }
         }
 
