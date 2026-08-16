@@ -8,8 +8,17 @@ namespace ExcelReader.Core.Reader
     // string i = Flat[Offsets[i]..Offsets[i+1]].
     internal static class XlsbSharedStrings
     {
-        // Retained as the reference decoder for focused tests. The workbook loader uses the streaming
-        // overloads below so it never needs an inflate-all temporary for sharedStrings.bin.
+        // Used by the memory-workbook path (the whole part is already decompressed and in hand, so
+        // there is no stream to read incrementally) and as the reference decoder XlsbPartsTests
+        // checks the streaming overloads' output against.
+        //
+        // Builds through the same ArrayPool-backed growth ParseCore uses for the streamed variant
+        // (AppendItemPooled/PrepareOffsets/AddOffset below), rather than a plain array trimmed with
+        // Array.Resize at the end. UTF-8 almost always comes out smaller than the BIFF12 binary it
+        // was decoded from, so that trim fired on essentially every call — two full-size GC
+        // allocations per open (one of them immediately discarded), both large enough to land on the
+        // LOH for any real workbook. Now only the one the caller actually keeps is GC-owned; the
+        // growth buffer is a pool rental, returned once the exact-size result has been copied out.
         internal static (byte[] Flat, int[] Offsets) Parse(ReadOnlySpan<byte> sharedBin, ExcelReaderOptions? options = null)
         {
             ExcelReaderOptions effectiveOptions = options ?? ExcelReaderOptions.Default;
@@ -18,28 +27,36 @@ namespace ExcelReader.Core.Reader
                 return ([], [0]);
             }
             LimitChecks.ThrowIfOverSharedStringLimit(effectiveOptions, sharedBin.Length);
-            // UTF-8 is at most 1.5x the UTF-16 byte size; the part size is a fine starting hint and
-            // the buffer grows if a run of multi-byte characters overruns it.
-            byte[] flat = new byte[Math.Max(16, sharedBin.Length)];
-            int flatLen = 0;
-            List<int> offsets = [0];
-            var reader = new Biff12RecordReader(sharedBin);
-            while (reader.TryReadRecord(out int id, out ReadOnlySpan<byte> payload))
+
+            int[] offsets = [0];
+            int offsetCount = 1;
+            byte[] flat = ArrayPool<byte>.Shared.Rent(Math.Max(16, sharedBin.Length));
+            try
             {
-                if (id != Brt.SSTItem)
+                int flatLen = 0;
+                var reader = new Biff12RecordReader(sharedBin);
+                while (reader.TryReadRecord(out int id, out ReadOnlySpan<byte> payload))
                 {
-                    continue;
+                    if (id == Brt.BeginSst)
+                    {
+                        // The whole part is in hand, so its length stands in for the streaming path's
+                        // entryLength — both bound PrepareOffsets' sanity check the same way.
+                        PrepareOffsets(payload, sharedBin.Length, ref offsets, ref offsetCount);
+                    }
+                    else if (id == Brt.SSTItem)
+                    {
+                        flatLen = AppendItemPooled(payload, ref flat, flatLen, effectiveOptions);
+                        AddOffset(ref offsets, ref offsetCount, flatLen);
+                    }
                 }
-                flatLen = AppendItem(payload, ref flat, flatLen, effectiveOptions);
-                offsets.Add(flatLen);
+                byte[] result = new byte[flatLen];
+                flat.AsSpan(0, flatLen).CopyTo(result);
+                return (result, offsetCount == offsets.Length ? offsets : offsets[..offsetCount]);
             }
-            // Trim to the exact UTF-8 length: the worst-case sizing (and growth doubling) above almost
-            // always overshoots, and this buffer is retained for the reader's lifetime.
-            if (flatLen < flat.Length)
+            finally
             {
-                Array.Resize(ref flat, flatLen);
+                ArrayPool<byte>.Shared.Return(flat);
             }
-            return (flat, [.. offsets]);
         }
 
         // BrtSSTItem records carry their own payload length, so a BufferedStreamCursor can compact
@@ -205,23 +222,6 @@ namespace ExcelReader.Core.Reader
             return options.MaxSharedStringBytes <= 0
                 ? 0
                 : (int)Math.Min(options.MaxSharedStringBytes, Array.MaxLength);
-        }
-
-        // BrtSSTItem is a RichStr: 1 flags byte, then the text as a wide string; trailing rich/phonetic
-        // runs come after the text and are ignored (the record framing already bounds them).
-        private static int AppendItem(ReadOnlySpan<byte> payload, ref byte[] flat, int flatLen, ExcelReaderOptions options)
-        {
-            if (payload.Length < 1 || !Biff12.TryReadWideString(payload, 1, out ReadOnlySpan<char> chars, out _))
-            {
-                return flatLen;
-            }
-            int needed = flatLen + Encoding.UTF8.GetByteCount(chars);
-            LimitChecks.ThrowIfOverSharedStringLimit(options, needed);
-            if (needed > flat.Length)
-            {
-                Array.Resize(ref flat, Math.Max(flat.Length * 2, needed));
-            }
-            return flatLen + Encoding.UTF8.GetBytes(chars, flat.AsSpan(flatLen));
         }
     }
 }
