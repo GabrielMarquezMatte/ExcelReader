@@ -144,6 +144,12 @@ namespace ExcelReader.Core.Reader
         /// <inheritdoc/>
         public int SheetCount => _sheets.Length;
         /// <inheritdoc/>
+        public string SheetNameAt(int index)
+        {
+            WorkbookLookups.ValidateSheetIndex(index, _sheets.Length);
+            return _sheets[index].Name;
+        }
+        /// <inheritdoc/>
         public bool IsDate1904 { get; }
 
         // A numeric cell whose style index maps to a date/time format is reported as CellType.Date.

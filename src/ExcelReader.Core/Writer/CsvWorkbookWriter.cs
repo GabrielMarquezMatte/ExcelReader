@@ -21,10 +21,39 @@ namespace ExcelReader.Core.Writer
             _writer = writer;
         }
 
+        /// <summary>
+        /// Synchronous counterpart to <see cref="StartAsync"/>, for native/unmanaged callers whose ABI
+        /// is synchronous. CSV has no leading structure to write, so this is a no-op.
+        /// </summary>
+        public void Start()
+        {
+        }
+
         /// <inheritdoc/>
         public ValueTask StartAsync(CancellationToken ct = default)
         {
             return ValueTask.CompletedTask;
+        }
+
+        /// <summary>
+        /// Synchronous counterpart to <see cref="StartRowAsync(CancellationToken)"/>, for native/unmanaged
+        /// callers whose ABI is synchronous.
+        /// </summary>
+        public CsvRowWriter StartRow()
+        {
+            return _writer.StartRow();
+        }
+
+        /// <summary>
+        /// Validates <paramref name="styleId"/> is not negative, then no-ops on it: CSV has no cell
+        /// styles. Synchronous counterpart to <see cref="StartRowAsync(int, CancellationToken)"/>, for
+        /// native/unmanaged callers whose ABI is synchronous.
+        /// </summary>
+        /// <exception cref="ArgumentOutOfRangeException"><paramref name="styleId"/> is negative.</exception>
+        public CsvRowWriter StartRow(int styleId)
+        {
+            ArgumentOutOfRangeException.ThrowIfNegative(styleId);
+            return StartRow();
         }
 
         /// <inheritdoc/>
@@ -68,10 +97,28 @@ namespace ExcelReader.Core.Writer
             ArgumentOutOfRangeException.ThrowIfNegative(width);
         }
 
+        /// <summary>
+        /// Synchronous counterpart to <see cref="EndAsync"/>, for native/unmanaged callers whose ABI is
+        /// synchronous.
+        /// </summary>
+        public void End()
+        {
+            _writer.Flush();
+        }
+
         /// <inheritdoc/>
         public ValueTask EndAsync(CancellationToken ct = default)
         {
             return _writer.FlushAsync(ct);
+        }
+
+        /// <summary>
+        /// Synchronous counterpart to <see cref="DisposeAsync"/>, for native/unmanaged callers whose ABI
+        /// is synchronous. The workbook owns the <see cref="CsvWriter"/>'s lifetime; nothing to release
+        /// here.
+        /// </summary>
+        public void Dispose()
+        {
         }
 
         /// <inheritdoc/>
@@ -110,6 +157,19 @@ namespace ExcelReader.Core.Writer
             return new CsvWorkbookWriter(CsvWriter.Create(stream, leaveOpen, options));
         }
 
+        /// <summary>
+        /// Synchronous counterpart to <see cref="StartAsync"/>, for native/unmanaged callers whose ABI
+        /// is synchronous.
+        /// </summary>
+        /// <exception cref="ObjectDisposedException">The workbook has already been ended.</exception>
+        /// <exception cref="InvalidOperationException">The workbook has already been started.</exception>
+        public void Start()
+        {
+            WriterStateGuard.ThrowIfEnded(_state, this);
+            WriterStateGuard.RequireCreated(_state, nameof(CsvWorkbookWriter));
+            _state = WriterState.Started;
+        }
+
         /// <inheritdoc/>
         /// <exception cref="ObjectDisposedException">The workbook has already been ended.</exception>
         /// <exception cref="InvalidOperationException">The workbook has already been started.</exception>
@@ -146,6 +206,20 @@ namespace ExcelReader.Core.Writer
             return new CsvSheetWriter(_writer);
         }
 
+        /// <summary>
+        /// Synchronous counterpart to <see cref="EndAsync"/>, for native/unmanaged callers whose ABI is
+        /// synchronous.
+        /// </summary>
+        /// <exception cref="ObjectDisposedException">The workbook has already been ended.</exception>
+        /// <exception cref="InvalidOperationException">The workbook has not been started.</exception>
+        public void End()
+        {
+            WriterStateGuard.ThrowIfEnded(_state, this);
+            WriterStateGuard.RequireStarted(_state, nameof(CsvWorkbookWriter), "ending");
+            _state = WriterState.Ended;
+            _writer.Flush();
+        }
+
         /// <inheritdoc/>
         /// <exception cref="ObjectDisposedException">The workbook has already been ended.</exception>
         /// <exception cref="InvalidOperationException">The workbook has not been started.</exception>
@@ -156,6 +230,15 @@ namespace ExcelReader.Core.Writer
             ct.ThrowIfCancellationRequested();
             _state = WriterState.Ended;
             return _writer.FlushAsync(ct);
+        }
+
+        /// <summary>
+        /// Synchronous counterpart to <see cref="FlushAsync"/>, for native/unmanaged callers whose ABI
+        /// is synchronous.
+        /// </summary>
+        public void Flush()
+        {
+            _writer.Flush();
         }
 
         /// <inheritdoc/>
@@ -169,6 +252,16 @@ namespace ExcelReader.Core.Writer
         public int AddStyle(CellStyle style)
         {
             return 0;
+        }
+
+        /// <summary>
+        /// Synchronous counterpart to <see cref="DisposeAsync"/>, for native/unmanaged callers whose ABI
+        /// is synchronous.
+        /// </summary>
+        public void Dispose()
+        {
+            _state = WriterState.Ended;
+            _writer.Dispose();
         }
 
         /// <inheritdoc/>

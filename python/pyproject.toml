@@ -18,6 +18,15 @@ dependencies = ["typing_extensions>=4.0"]
 
 [project.optional-dependencies]
 dev = ["pytest>=7.0"]
+# Optional: Workbook.read_all_columnar() returns NumPy int32 arrays when this is installed, and
+# array('i') (stdlib, always available) otherwise — see reader.py's _to_columnar_array(). Kept
+# optional on purpose: the package's whole selling point is a ctypes-only, interpreter-independent
+# wheel with no compiled Python extension of its own.
+numpy = ["numpy>=1.21"]
+# Optional: consumes xl_parse_arrow's Arrow C Data Interface export (see _native.py's ArrowSchema/
+# ArrowArray ctypes.Structure mirrors) via pyarrow.Array._import_from_c for a genuinely zero-copy
+# handoff into pyarrow/polars/duckdb. Not required to call xl_parse_arrow directly via ctypes.
+pyarrow = ["pyarrow>=14.0"]
 
 [project.urls]
 Homepage = "https://github.com/GabrielMarquezMatte/ExcelReader"

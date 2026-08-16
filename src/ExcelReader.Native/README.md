@@ -4,7 +4,7 @@ NativeAOT shared library exposing ExcelReader's readers over a C ABI, so non-.NE
 (Python, C, C++, Go, Node) can read XLSX, XLSB, XLS and CSV without a .NET runtime.
 
 - ABI reference: `include/excelreader.h`
-- Full contract and rationale: `docs/plans/2026-08-13-native-ffi-python-reading.md`
+- Full contract and rationale: `docs/NATIVE_BINDINGS_PLAN.md`, `docs/NATIVE_HARDENING_PLAN.md`
 - Python binding: `python/`
 
 ## Build
@@ -19,7 +19,46 @@ Output lands in `bin/Release/net10.0/<rid>/publish/ExcelReader.Native.{dll,so,dy
 |---|---|
 | `NativeApi*.cs` | Internal span-based implementation. This is what the tests drive. |
 | `Exports.cs` | `[UnmanagedCallersOnly]` pointer wrappers. Keep logic out of here — it is untestable from managed code. |
+| `NativeHandleTable.cs` | Maps the opaque handle ids callers see onto `NativeHandle` instances. Ids are never reissued after `xl_close`, so a stale handle stays invalid permanently. |
 | `RowBlob.cs` | Row serialization. |
 | `include/excelreader.h` | Hand-written C header; keep in sync with `Exports.cs`. |
 
-Writing is not exposed yet — reading only.
+Writing is exposed through a single one-shot export, `xl_write_typed`, alongside the reading exports
+above (`xl_open_file`, `xl_open_file_ex`, `xl_close`, `xl_sheet_count`, `xl_sheet_name`,
+`xl_sheet_name_at`, `xl_is_date1904`, `xl_next_row`, `xl_read_all_blob`, `xl_next_row_decoded`,
+`xl_free_row`, `xl_read_all_decoded`, `xl_free_rows`, `xl_parse_typed`, `xl_free_table`,
+`xl_infer_schema`, `xl_free_schema`, `xl_last_error_ptr`, `xl_parse_arrow`). `xl_write_typed` takes an
+`xl_write_options*` that follows the exact same `struct_size` contract as `xl_open_options`: the
+caller sets `options->struct_size = sizeof(xl_write_options)` before the call, and a mismatched value
+is rejected with `XL_INVALID_ARGUMENT` before anything else is inspected. Phase 1 is single-sheet,
+whole-table-in-memory, no styling beyond the temporal number formats — see `include/excelreader.h` for
+the full contract.
+
+## Consuming from C
+
+Include `include/excelreader.h` (add `include/excelreader_arrow.h` too if you want the Arrow C Data
+Interface export). Every caller should check `xl_abi_version()` against `XL_ABI_VERSION` before doing
+anything else and refuse to proceed on a mismatch:
+
+```c
+#include "excelreader.h"
+
+if (xl_abi_version() != XL_ABI_VERSION) {
+    /* rebuild against a matching header, or refuse to proceed */
+}
+```
+
+**Linking.** NativeAOT's publish output ships no `ExcelReader.Native.lib` import library on Windows,
+so a normal link step against the DLL does not work with MSVC out of the box. The verified, portable
+approach — used by `tests/ExcelReader.NativeSmoke/`, the complete worked example — is to load the
+shared library dynamically instead of linking it at build time:
+
+- Windows: `LoadLibraryA` + `GetProcAddress`
+- Linux/macOS: `dlopen` + `dlsym` (link `libdl` on Linux; already part of libc on macOS)
+
+If your toolchain can produce an import library for the DLL (e.g. via a `.def` file and `lib.exe`), a
+normal link also works — this has not been set up or verified here.
+
+**Verifying it works:** `tests/ExcelReader.NativeSmoke/` is the reference consumer — it exercises
+every export against `RealExcel.xlsb` and pins the ABI structs' layout with `_STATIC_ASSERT`. Point a
+new integration at it before assuming your own linking approach is correct.

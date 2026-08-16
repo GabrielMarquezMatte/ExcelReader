@@ -98,6 +98,16 @@ namespace ExcelReader.Core.Reader
         /// <summary>Gets the sheet count. Always 1, since a CSV source has a single, unnamed sheet.</summary>
         public int SheetCount => 1;
 
+        /// <summary>Gets the sheet name at <paramref name="index"/>. Always the empty string, since a CSV source has a single, unnamed sheet.</summary>
+        /// <param name="index">The zero-based sheet index. Must be 0.</param>
+        /// <exception cref="ArgumentOutOfRangeException"><paramref name="index"/> is not 0.</exception>
+        public string SheetNameAt(int index)
+        {
+            ArgumentOutOfRangeException.ThrowIfNegative(index);
+            ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(index, SheetCount);
+            return "";
+        }
+
         /// <summary>Checks whether <paramref name="name"/> matches the (empty) CSV sheet name, case-insensitively.</summary>
         /// <param name="name">The sheet name to look for.</param>
         /// <returns><see langword="true"/> if <paramref name="name"/> is empty; otherwise <see langword="false"/>.</returns>

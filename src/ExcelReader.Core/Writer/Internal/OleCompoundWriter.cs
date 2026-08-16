@@ -55,6 +55,39 @@ namespace ExcelReader.Core.Writer.Internal
             }
         }
 
+        // Synchronous counterpart to WriteAsync, for native/unmanaged callers whose ABI is synchronous.
+        // Kept in lockstep with WriteAsync above: any change to the sector-count/layout math there must
+        // be mirrored here.
+        internal static void Write(Stream destination, int workbookSize, Action<Stream> writeBody)
+        {
+            int storedSize = Math.Max(CeilingDiv(workbookSize, SectorSize) * SectorSize, MiniCutoff);
+            int workbookSectors = storedSize / SectorSize;
+
+            (int fatCount, int difatCount) = ComputeSectorCounts(workbookSectors);
+
+            int firstDifatSector = fatCount;
+            int directorySector = fatCount + difatCount;
+            int workbookStart = directorySector + 1;
+
+            byte[] header = BuildHeader(fatCount, difatCount, difatCount > 0 ? firstDifatSector : EndOfChain, directorySector);
+            byte[] fat = BuildFat(fatCount, difatCount, directorySector, workbookStart, workbookSectors);
+            byte[] directory = BuildDirectory(workbookStart, storedSize);
+
+            destination.Write(header);
+            destination.Write(fat);
+            if (difatCount > 0)
+            {
+                destination.Write(BuildDifat(fatCount, difatCount, firstDifatSector));
+            }
+            destination.Write(directory);
+            writeBody(destination);
+            int padding = storedSize - workbookSize;
+            if (padding > 0)
+            {
+                destination.Write(new byte[padding]);
+            }
+        }
+
         // Iteratively resolves the circular dependency: more workbook data needs more FAT sectors,
         // more FAT sectors may require DIFAT sectors, and DIFAT sectors increase the total sector
         // count, which may require yet more FAT sectors. Converges in ≤ 2 iterations in practice.

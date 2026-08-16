@@ -300,6 +300,20 @@ namespace ExcelReader.Core.Writer
                 $"Cannot convert value of type '{typeof(T)}' to a numeric cell value.", nameof(value));
         }
 
+        /// <summary>
+        /// Synchronous counterpart to <see cref="DisposeAsync"/>, for native/unmanaged callers whose ABI
+        /// is synchronous.
+        /// </summary>
+        public void Dispose()
+        {
+            if (_disposed)
+            {
+                return;
+            }
+            _disposed = true;
+            _owner.NotifyRowEnded();
+        }
+
         /// <inheritdoc/>
         public ValueTask DisposeAsync()
         {

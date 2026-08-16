@@ -10,7 +10,7 @@ namespace ExcelReader.Core.Writer
     /// Writes the fields of a single CSV row, quoting a field only when it contains the delimiter,
     /// quote character, carriage return, or line feed.
     /// </summary>
-    public sealed class CsvRowWriter : IRowWriter, IDisposable
+    public sealed class CsvRowWriter : IRowWriter
     {
         // Numbers, dates, Guids, and every other BCL formattable fit an ASCII field well under this;
         // the rare overflow falls back to a rented buffer in WriteUtf8FieldSlow.

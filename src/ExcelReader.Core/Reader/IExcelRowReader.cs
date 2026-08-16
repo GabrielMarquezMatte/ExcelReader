@@ -51,6 +51,10 @@ namespace ExcelReader.Core.Reader
         /// <summary>Gets the number of sheets in the workbook.</summary>
         int SheetCount { get; }
 
+        /// <summary>Gets the name of the sheet at the given zero-based index, without changing the current sheet.</summary>
+        /// <param name="index">The zero-based sheet index. Must be within <c>[0, SheetCount)</c>.</param>
+        string SheetNameAt(int index);
+
         /// <summary>Attempts to select the sheet with the given name (case-insensitive) as the current sheet.</summary>
         /// <param name="name">The sheet name to look for.</param>
         /// <returns><see langword="true"/> if a matching sheet was found and selected; otherwise <see langword="false"/>.</returns>
