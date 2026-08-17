@@ -29,46 +29,23 @@ namespace ExcelReader.Native
         // threshold for every T this holds (8 bytes at most), and large enough that a 65K-row column
         // is a few dozen chunks rather than thousands of them.
         private const int MaxChunkBytes = 32 * 1024;
-
         // First chunk size, in elements. Small so a three-row sheet with 14 columns does not pay a
         // full-size chunk per column; chunks grow geometrically from here up to the cap, mirroring a
         // List's doubling without any of its copying.
         private const int InitialChunkLength = 256;
-
         private readonly List<T[]> _chunks = [];
         private T[] _current = [];
         private int _used; // elements written into _current
-        private int _count;
-
-        internal int Count
-        {
-            get
-            {
-                return _count;
-            }
-        }
-
+        internal int Count { get; private set; }
         /// <summary>Size of everything appended so far, in bytes — the exact size <see cref="CopyTo"/> needs.</summary>
-        internal int ByteLength
-        {
-            get
-            {
-                return checked(_count * Unsafe.SizeOf<T>());
-            }
-        }
+        internal int ByteLength => checked(Count * Unsafe.SizeOf<T>());
 
         /// <summary>
         /// The most recently appended element, by reference, for the read-modify-write the validity
         /// bitmap does on the byte it is currently filling. Only valid after at least one
         /// <see cref="Add"/>.
         /// </summary>
-        internal ref T Last
-        {
-            get
-            {
-                return ref _current[_used - 1];
-            }
-        }
+        internal ref T Last => ref _current[_used - 1];
 
         internal void Add(T value)
         {
@@ -77,7 +54,7 @@ namespace ExcelReader.Native
                 Grow();
             }
             _current[_used++] = value;
-            _count++;
+            Count++;
         }
 
         internal void AddRange(ReadOnlySpan<T> values)
@@ -91,7 +68,7 @@ namespace ExcelReader.Native
                 int take = Math.Min(_current.Length - _used, values.Length);
                 values[..take].CopyTo(_current.AsSpan(_used));
                 _used += take;
-                _count += take;
+                Count += take;
                 values = values[take..];
             }
         }
@@ -118,7 +95,7 @@ namespace ExcelReader.Native
         private void Grow()
         {
             int maxChunkLength = Math.Max(MaxChunkBytes / Unsafe.SizeOf<T>(), 1);
-            int length = Math.Min(Math.Max(_count, InitialChunkLength), maxChunkLength);
+            int length = Math.Min(Math.Max(Count, InitialChunkLength), maxChunkLength);
             _current = new T[length];
             _chunks.Add(_current);
             _used = 0;
