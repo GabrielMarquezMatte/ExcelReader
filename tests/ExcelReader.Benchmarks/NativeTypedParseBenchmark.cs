@@ -1,3 +1,4 @@
+using System.Runtime.InteropServices;
 using BenchmarkDotNet.Attributes;
 using ExcelReader.Native;
 
@@ -56,7 +57,7 @@ namespace ExcelReader.Benchmarks
             _xlsb = File.ReadAllBytes(Path.Combine(AppContext.BaseDirectory, "Data", "65K_Records_Data.xlsb"));
         }
 
-        [Benchmark]
+        [Benchmark(Baseline = true)]
         public long ParseTyped()
         {
             using NativeHandle handle = Open();
@@ -69,6 +70,57 @@ namespace ExcelReader.Benchmarks
             finally
             {
                 NativeApi.FreeTable(ref table);
+            }
+        }
+
+        // ParseTyped plus the Arrow export layered on top of it, so the difference between the two
+        // IS the cost of BuildArrowSchema/BuildArrowArray and the release walk — the part of
+        // xl_parse_arrow that ParseTyped's own number cannot attribute. Released through the same
+        // ArrowArray.release/ArrowSchema.release contract a real consumer uses, because that walk
+        // (Marshal.PtrToStructure per child, per buffer) is part of what the path costs.
+        [Benchmark]
+        public long ParseArrow()
+        {
+            using NativeHandle handle = Open();
+            int status = NativeApi.ParseArrow(handle, Schema, HeaderRow, out ArrowArray array, out ArrowSchema schema);
+            if (status != NativeStatus.Ok)
+            {
+                throw new InvalidOperationException($"xl_parse_arrow failed with status {status}.");
+            }
+            try
+            {
+                if (array.Length != ExpectedRows || array.NChildren != Schema.Length)
+                {
+                    throw new InvalidOperationException(
+                        $"expected {ExpectedRows} rows x {Schema.Length} columns, got {array.Length} x {array.NChildren}.");
+                }
+                return array.Length;
+            }
+            finally
+            {
+                Release(array, schema);
+            }
+        }
+
+        // ReleaseArrowArray/ReleaseArrowSchema take the ADDRESS of the struct — a C consumer passes
+        // the storage it owns, so that storage is modelled here with a native block rather than a
+        // pinned managed local, which would need this project to turn on unsafe code for two
+        // pointers. The two extra marshal calls are constant work against a 65K-row parse.
+        private static void Release(ArrowArray array, ArrowSchema schema)
+        {
+            IntPtr arrayPtr = Marshal.AllocHGlobal(Marshal.SizeOf<ArrowArray>());
+            IntPtr schemaPtr = Marshal.AllocHGlobal(Marshal.SizeOf<ArrowSchema>());
+            try
+            {
+                Marshal.StructureToPtr(array, arrayPtr, false);
+                Marshal.StructureToPtr(schema, schemaPtr, false);
+                NativeApi.ReleaseArrowArray(arrayPtr);
+                NativeApi.ReleaseArrowSchema(schemaPtr);
+            }
+            finally
+            {
+                Marshal.FreeHGlobal(arrayPtr);
+                Marshal.FreeHGlobal(schemaPtr);
             }
         }
 

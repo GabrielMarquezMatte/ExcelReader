@@ -36,7 +36,7 @@ namespace ExcelReader.Benchmarks
             _xlsx = await StringHeavyWorkbookGenerator.BuildXlsxAsync(Rows);
         }
 
-        [GlobalSetup(Targets = [nameof(Xlsb_ExcelReader), nameof(Xlsb_ExcelReader_Prefetch), nameof(Xlsb_Sylvan), nameof(Xlsb_ExcelReader_Materialized), nameof(Xlsb_ExcelReader_Materialized_Interned)])]
+        [GlobalSetup(Targets = [nameof(Xlsb_ExcelReader), nameof(Xlsb_ExcelReader_Prefetch), nameof(Xlsb_Sylvan), nameof(Xlsb_ExcelReader_Materialized), nameof(Xlsb_ExcelReader_Materialized_Interned), nameof(Xlsb_ExcelReader_Memory)])]
         public async Task SetupXlsbAsync()
         {
             _xlsb = await StringHeavyWorkbookGenerator.BuildXlsbAsync(Rows);
@@ -158,6 +158,27 @@ namespace ExcelReader.Benchmarks
             using XlsbReader reader = Excel.FromXlsb(ms, options: _internOptions);
             long acc = 0;
             foreach (Row row in reader) { acc += AccumulateRowMaterialized(row); }
+            return acc;
+        }
+
+        // Every other Xlsb_* benchmark above opens Excel.FromXlsb(Stream) — a MemoryStream over
+        // _xlsb, but still the stream-based reader, whose shared strings come from
+        // XlsbSharedStrings.ParseStreaming. That is a different code path from
+        // Excel.FromXlsb(ReadOnlyMemory<byte>) (used by auto-detecting Excel.From(ReadOnlyMemory)
+        // and by callers who hold the whole file in memory already), whose shared strings come from
+        // XlsbSharedStrings.Parse. This fixture's tens of thousands of distinct strings are exactly
+        // what makes the two decoders' allocation differ, so this is the one benchmark in the suite
+        // that actually exercises Parse's growth/trim behavior.
+        [Benchmark]
+        public long Xlsb_ExcelReader_Memory()
+        {
+            if (_xlsb.Length == 0)
+            {
+                throw new InvalidOperationException($"{nameof(Xlsb_ExcelReader_Memory)} is absent from every [GlobalSetup(Targets = ...)] list, so its fixture was never built.");
+            }
+            using XlsbReader reader = Excel.FromXlsb(new ReadOnlyMemory<byte>(_xlsb));
+            long acc = 0;
+            foreach (Row row in reader) { acc += AccumulateRow(row); }
             return acc;
         }
     }
