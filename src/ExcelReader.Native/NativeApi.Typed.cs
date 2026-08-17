@@ -1,7 +1,5 @@
 using System.Globalization;
 using System.Runtime.InteropServices;
-using System.Text;
-using ExcelReader.Core.Enums;
 using ExcelReader.Core.Parser;
 using ExcelReader.Core.Reader;
 using ExcelReader.Core.ValueObjects;
@@ -260,12 +258,13 @@ namespace ExcelReader.Native
         }
 
         // Every buffer this layer hands across the boundary is the same move: one native block holding a
-        // verbatim copy of a managed span. Never returns a zero-size allocation, since a column with no
-        // rows still needs a non-null pointer the caller can free.
-        private static IntPtr CopyToNativeBlock(ReadOnlySpan<byte> source)
+        // verbatim copy of an accumulated column. Never returns a zero-size allocation, since a column
+        // with no rows still needs a non-null pointer the caller can free.
+        private static IntPtr CopyToNativeBlock<T>(ChunkedBuffer<T> source) where T : unmanaged
         {
-            IntPtr block = Marshal.AllocHGlobal(Math.Max(source.Length, 1));
-            source.CopyTo(new Span<byte>((void*)block, source.Length));
+            int byteLength = source.ByteLength;
+            IntPtr block = Marshal.AllocHGlobal(Math.Max(byteLength, 1));
+            source.CopyTo(new Span<byte>((void*)block, byteLength));
             return block;
         }
 
@@ -302,17 +301,35 @@ namespace ExcelReader.Native
             // sheet, so Build just copies it instead of converting. Together with accumulating Date as
             // int rather than long, this took NativeTypedParseBenchmark from 23.61 MB down to 20.58 MB
             // allocated; wall clock did not move, since neither change removes work, only bytes.
-            private readonly List<byte> _validity = [];
+            private readonly ChunkedBuffer<byte> _validity = new();
             private int _rowCount;
             private bool _anyNull;
 
-            // Only one of these is populated, chosen by `type` — see AppendFrom.
-            private readonly List<long> _longs = []; // Int64, Time, Timestamp — all 8-byte
-            private readonly List<int> _ints = []; // Date, which the ABI defines as a 4-byte day count
-            private readonly List<double> _doubles = []; // Float64
-            private readonly List<byte> _bools = []; // Bool, one byte (0/1) per row
-            private readonly List<int> _stringOffsets = [0]; // String
-            private readonly List<byte> _stringData = []; // String
+            // Only one of these is populated, chosen by `type` — see AppendFrom. ChunkedBuffer rather
+            // than List<T> because a List regrows by copying the whole column and discarding the old
+            // array; see ChunkedBuffer's remarks. Measured by NativeTypedParseBenchmark on
+            // Data/65K_Records_Data.xlsb (14 columns, Ryzen 7 5700X, .NET 10.0.10, --job Medium):
+            // 20.58 MB -> 11.73 MB allocated and 48.58 ms -> 43.96 ms. The allocation figure is the
+            // load-bearing one; the timing gap is smaller than the run-to-run error on either side.
+            private readonly ChunkedBuffer<long> _longs = new(); // Int64, Time, Timestamp — all 8-byte
+            private readonly ChunkedBuffer<int> _ints = new(); // Date, which the ABI defines as a 4-byte day count
+            private readonly ChunkedBuffer<double> _doubles = new(); // Float64
+            private readonly ChunkedBuffer<byte> _bools = new(); // Bool, one byte (0/1) per row
+            private readonly ChunkedBuffer<int> _stringOffsets = NewStringOffsets(type); // String
+            private readonly ChunkedBuffer<byte> _stringData = new(); // String
+
+            // A string column's offset array is one longer than its row count, opening with 0. Seeded
+            // here rather than in the field initializer so a non-string column never allocates the
+            // buffer's first chunk for an entry it will never use.
+            private static ChunkedBuffer<int> NewStringOffsets(int type)
+            {
+                ChunkedBuffer<int> offsets = new();
+                if (type == NativeColumnType.String)
+                {
+                    offsets.Add(0);
+                }
+                return offsets;
+            }
 
             // Reused across every row of a string column: one cell's UTF-8 lands here before being
             // appended, so no per-row buffer is allocated. Grows to the widest cell seen, never shrinks.
@@ -331,8 +348,8 @@ namespace ExcelReader.Native
                 return type switch
                 {
                     NativeColumnType.String => AppendString(in cell),
-                    NativeColumnType.Int64 => Append(_longs, ExcelCellReaders.Parsable<long>(in cell, isDate1904, CultureInfo.InvariantCulture, out long i64), i64),
-                    NativeColumnType.Float64 => Append(_doubles, ExcelCellReaders.Parsable<double>(in cell, isDate1904, CultureInfo.InvariantCulture, out double f64), f64),
+                    NativeColumnType.Int64 => Append(_longs, ExcelCellReaders.Parsable(in cell, isDate1904, CultureInfo.InvariantCulture, out long i64), i64),
+                    NativeColumnType.Float64 => Append(_doubles, ExcelCellReaders.Parsable(in cell, isDate1904, CultureInfo.InvariantCulture, out double f64), f64),
                     NativeColumnType.Bool => Append(_bools, ExcelCellReaders.Bool(in cell, isDate1904, CultureInfo.InvariantCulture, out bool flag), (byte)(flag ? 1 : 0)),
                     NativeColumnType.Date => AppendDate(in cell, isDate1904),
                     NativeColumnType.Time => AppendTime(in cell, isDate1904),
@@ -403,7 +420,7 @@ namespace ExcelReader.Native
             // One append for every non-string type: a failed conversion is only tolerable on a nullable
             // column, and the slot it still occupies holds default(T) so every column stays row-aligned.
             // T is always a value type, so the JIT/AOT specializes this per instantiation — no boxing.
-            private bool Append<T>(List<T> target, bool converted, T value) where T : struct
+            private bool Append<T>(ChunkedBuffer<T> target, bool converted, T value) where T : unmanaged
             {
                 if (!converted && !nullable)
                 {
@@ -422,7 +439,7 @@ namespace ExcelReader.Native
                 }
                 if (valid)
                 {
-                    CollectionsMarshal.AsSpan(_validity)[^1] |= (byte)(1 << (_rowCount & 7));
+                    _validity.Last |= (byte)(1 << (_rowCount & 7));
                 }
                 else
                 {
@@ -438,44 +455,44 @@ namespace ExcelReader.Native
                 {
                     // A NULL validity pointer is the ABI's "no nulls in this column" signal, so the
                     // bitmap only crosses the boundary when at least one row actually needs it.
-                    validity = CopyToNativeBlock(CollectionsMarshal.AsSpan(_validity));
+                    validity = CopyToNativeBlock(_validity);
                 }
                 return type switch
                 {
                     NativeColumnType.String => BuildStringColumn(validity),
-                    NativeColumnType.Bool => BuildFixedWidthColumn(CollectionsMarshal.AsSpan(_bools), validity),
-                    NativeColumnType.Float64 => BuildFixedWidthColumn(CollectionsMarshal.AsSpan(_doubles), validity),
-                    NativeColumnType.Date => BuildFixedWidthColumn(CollectionsMarshal.AsSpan(_ints), validity),
-                    _ => BuildFixedWidthColumn(CollectionsMarshal.AsSpan(_longs), validity), // Int64, Time, Timestamp — all 8-byte
+                    NativeColumnType.Bool => BuildFixedWidthColumn(_bools, validity),
+                    NativeColumnType.Float64 => BuildFixedWidthColumn(_doubles, validity),
+                    NativeColumnType.Date => BuildFixedWidthColumn(_ints, validity),
+                    _ => BuildFixedWidthColumn(_longs, validity), // Int64, Time, Timestamp — all 8-byte
                 };
             }
 
             // Once the element type is known, every non-string column is the same operation: copy the
-            // accumulated values into one native block. Reading the backing List<T> as a span keeps that
-            // at a single copy — the `[.. list]` array each type used to build first was a second,
-            // full-size copy of the whole column, and at 65K rows x 8 bytes those landed on the LOH.
-            // Measured by NativeTypedParseBenchmark on Data/65K_Records_Data.xlsb (14 columns, Ryzen 7
-            // 5700X, .NET 10.0.10): managed allocation 42.18 MB -> 34.89 MB, Gen2 collections -33%.
-            // Wall clock did not move outside the noise, so this is a GC-pressure win, not a speed one.
-            private NativeColumn BuildFixedWidthColumn<T>(ReadOnlySpan<T> values, IntPtr validity) where T : unmanaged
+            // accumulated values into one native block — a single copy, straight from the chunks the
+            // rows were appended into. (The `[.. list]` array each type used to build first was a
+            // second, full-size copy of the whole column, and at 65K rows x 8 bytes those landed on
+            // the LOH. Measured by NativeTypedParseBenchmark on Data/65K_Records_Data.xlsb, 14
+            // columns, Ryzen 7 5700X, .NET 10.0.10: managed allocation 42.18 MB -> 34.89 MB, Gen2
+            // collections -33%. A GC-pressure win, not a speed one.)
+            private NativeColumn BuildFixedWidthColumn<T>(ChunkedBuffer<T> values, IntPtr validity) where T : unmanaged
             {
-                IntPtr block = CopyToNativeBlock(MemoryMarshal.AsBytes(values));
+                IntPtr block = CopyToNativeBlock(values);
                 return new NativeColumn { Type = type, Length = RowCount, Values = block, Validity = validity, Data = IntPtr.Zero, DataLen = 0 };
             }
 
             // The one type that is not a plain BuildFixedWidthColumn: offsets and data share a single
             // block, with Data an interior pointer just past the offsets (see NativeColumn's doc
-            // comment), so the two spans are copied into one allocation rather than two.
+            // comment), so the two buffers are copied into one allocation rather than two.
             private NativeColumn BuildStringColumn(IntPtr validity)
             {
-                ReadOnlySpan<byte> offsets = MemoryMarshal.AsBytes(CollectionsMarshal.AsSpan(_stringOffsets));
-                ReadOnlySpan<byte> data = CollectionsMarshal.AsSpan(_stringData);
-                int total = checked(offsets.Length + data.Length);
+                int offsetBytes = _stringOffsets.ByteLength;
+                int dataBytes = _stringData.ByteLength;
+                int total = checked(offsetBytes + dataBytes);
                 IntPtr block = Marshal.AllocHGlobal(total);
                 Span<byte> destination = new((void*)block, total);
-                offsets.CopyTo(destination);
-                data.CopyTo(destination[offsets.Length..]);
-                return new NativeColumn { Type = type, Length = RowCount, Values = block, Validity = validity, Data = IntPtr.Add(block, offsets.Length), DataLen = data.Length };
+                _stringOffsets.CopyTo(destination);
+                _stringData.CopyTo(destination[offsetBytes..]);
+                return new NativeColumn { Type = type, Length = RowCount, Values = block, Validity = validity, Data = IntPtr.Add(block, offsetBytes), DataLen = dataBytes };
             }
         }
     }
