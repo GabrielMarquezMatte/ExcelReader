@@ -1,7 +1,5 @@
 using System.Globalization;
 using System.Runtime.InteropServices;
-using System.Text;
-using ExcelReader.Core.Enums;
 using ExcelReader.Core.Parser;
 using ExcelReader.Core.Reader;
 using ExcelReader.Core.ValueObjects;
