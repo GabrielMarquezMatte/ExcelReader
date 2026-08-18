@@ -70,6 +70,10 @@ fn main() {
                 &dll_basename,
             );
         }
+        // The import library lives in OUT_DIR, not lib_dir (the DLL's own directory) - without
+        // this, the linker can locate the DLL for cargo:rustc-link-search purposes but never finds
+        // excelreader_native.lib/.a itself, so any real link step (e.g. `cargo test`) fails.
+        println!("cargo:rustc-link-search=native={}", out_dir.display());
         // The import library above is always generated with this fixed name, regardless of what
         // the underlying DLL is actually called (its LIBRARY line handles that indirection), so a
         // plain name-based link works here.
