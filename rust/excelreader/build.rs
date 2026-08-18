@@ -82,10 +82,14 @@ fn main() {
         // shared object under its own real name. That name is NOT a fixed `libexcelreader_native.*`
         // - it's `asset_name` on the download path (e.g. `excelreader-native-linux-x64.so`) or
         // whatever `find_native_lib` discovered on the `EXCELREADER_NATIVE_LIB_DIR` override path
-        // (e.g. `libExcelReader.Native.so`), neither of which fits the conventional `lib<name>.<ext>`
-        // pattern a plain `dylib=<name>` link line assumes. `:+verbatim` links against the exact
-        // filename instead of assuming that convention.
-        println!("cargo:rustc-link-lib=dylib:+verbatim={dll_basename}");
+        // (e.g. `ExcelReader.Native.dylib`), neither of which fits the conventional `lib<name>.<ext>`
+        // pattern a plain `-l<name>` link line assumes. `dylib:+verbatim=<name>` was tried here to
+        // link against the exact filename without that convention, but the `verbatim` modifier is
+        // only honored by linker flavors with a literal-name `-l` syntax (GNU ld/lld's `-l:name`);
+        // Apple's `ld` has none, silently falls back to its normal `-l<name>` mangling, and fails to
+        // find the file. Passing the full path directly as a link arg sidesteps `-l` name-mangling
+        // entirely, on every linker flavor.
+        println!("cargo:rustc-link-arg={}", lib_dir.join(&dll_basename).display());
     }
 }
 

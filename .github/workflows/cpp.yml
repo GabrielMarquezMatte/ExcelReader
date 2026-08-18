@@ -43,6 +43,10 @@ jobs:
         shell: bash
         run: python python/scripts/build_native.py
 
+      - name: Setup MSVC developer environment (Windows)
+        if: runner.os == 'Windows'
+        uses: ilammy/msvc-dev-cmd@v1
+
       - name: Locate published native library
         id: lib
         shell: bash
