@@ -70,9 +70,20 @@ fn main() {
                 &dll_basename,
             );
         }
+        // The import library above is always generated with this fixed name, regardless of what
+        // the underlying DLL is actually called (its LIBRARY line handles that indirection), so a
+        // plain name-based link works here.
+        println!("cargo:rustc-link-lib=dylib=excelreader_native");
+    } else {
+        // On macOS/Linux there's no import library indirection - rustc/the linker must find the
+        // shared object under its own real name. That name is NOT a fixed `libexcelreader_native.*`
+        // - it's `asset_name` on the download path (e.g. `excelreader-native-linux-x64.so`) or
+        // whatever `find_native_lib` discovered on the `EXCELREADER_NATIVE_LIB_DIR` override path
+        // (e.g. `libExcelReader.Native.so`), neither of which fits the conventional `lib<name>.<ext>`
+        // pattern a plain `dylib=<name>` link line assumes. `:+verbatim` links against the exact
+        // filename instead of assuming that convention.
+        println!("cargo:rustc-link-lib=dylib:+verbatim={dll_basename}");
     }
-
-    println!("cargo:rustc-link-lib=dylib=excelreader_native");
 }
 
 /// Scans `dir` for a single file with extension `ext` and returns its basename. Used for the
