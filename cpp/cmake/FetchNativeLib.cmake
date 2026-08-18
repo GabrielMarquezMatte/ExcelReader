@@ -38,6 +38,11 @@ function(excelreader_fetch_native_lib)
         if(NOT EXISTS "${_lib_path}")
             message(FATAL_ERROR "EXCELREADER_NATIVE_LIB=${_lib_path} does not exist")
         endif()
+        # A relative path resolves against the current working directory here (configure time),
+        # but is later baked verbatim into IMPORTED_LOCATION/IMPORTED_IMPLIB and re-resolved
+        # against the build directory - absolutize it now so it survives that. A no-op if
+        # _lib_path is already absolute.
+        get_filename_component(_lib_path "${_lib_path}" ABSOLUTE BASE_DIR "${CMAKE_BINARY_DIR}")
     else()
         set(_lib_path "${_cache_dir}/${_asset_name}")
         if(NOT EXISTS "${_lib_path}")
