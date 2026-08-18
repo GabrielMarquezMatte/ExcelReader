@@ -1,6 +1,8 @@
 //! Downloads the ExcelReader.Native shared library matching the build target, and (on
 //! windows-msvc/windows-gnu) generates the import library NativeAOT's publish output doesn't ship,
-//! from the phase-1 .def file next to excelreader.h.
+//! from `excelreader-phase1.def` (a checked-in copy of the phase-1 .def next to excelreader.h,
+//! kept inside this crate directory - see the comment on `PHASE1_DEF_EXPORTS` below - so it's
+//! embedded via `include_str!` and survives `cargo package`).
 //!
 //! Override EXCELREADER_NATIVE_LIB_DIR to point at a directory containing a locally-built
 //! ExcelReader.Native.{dll,so,dylib} instead of downloading a release asset - used by CI (see
@@ -59,10 +61,7 @@ fn main() {
     if target_os == "windows" {
         let implib = out_dir.join("excelreader_native.lib");
         if !implib.exists() {
-            let def_file = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap())
-                .join("../../src/ExcelReader.Native/include/excelreader-phase1.def");
             generate_windows_implib(
-                &def_file,
                 &implib,
                 &target_env,
                 &target_arch,
@@ -145,8 +144,19 @@ fn download(url: &str, dest: &Path) {
     }
 }
 
+// Embedded (not read from disk at build time) so the crate published to crates.io still has it:
+// `rust/excelreader/build.rs` itself gets shipped as source in the package tarball, and Cargo
+// compiles it fresh at the consumer's build time - `include_str!` is resolved then too, against
+// wherever this very build.rs file lives on disk. Reaching outside the crate directory (e.g.
+// `../../src/ExcelReader.Native/include/excelreader-phase1.def`) does not survive that: `cargo
+// package` only ships files under `rust/excelreader/`, so a path escaping the crate root doesn't
+// exist in the extracted tarball and the consumer's build fails. Keeping this copy inside the
+// crate directory (kept in sync with the canonical copy at
+// src/ExcelReader.Native/include/excelreader-phase1.def) makes `include_str!` resolve correctly
+// both in this repo checkout and in the packaged/published crate.
+const PHASE1_DEF_EXPORTS: &str = include_str!("excelreader-phase1.def");
+
 fn generate_windows_implib(
-    def_file: &Path,
     implib: &Path,
     target_env: &str,
     arch: &str,
@@ -160,10 +170,8 @@ fn generate_windows_implib(
     // whatever EXCELREADER_NATIVE_LIB_DIR points at (override, e.g. `ExcelReader.Native.dll`).
     // Generate a temporary copy of the .def with an explicit LIBRARY line naming the real file,
     // and feed that to both tools instead of the checked-in .def directly.
-    let def_contents = fs::read_to_string(def_file)
-        .unwrap_or_else(|e| panic!("failed to read {}: {e}", def_file.display()));
     let generated_def = out_dir.join("excelreader-phase1.generated.def");
-    fs::write(&generated_def, format!("LIBRARY {dll_basename}\n{def_contents}"))
+    fs::write(&generated_def, format!("LIBRARY {dll_basename}\n{PHASE1_DEF_EXPORTS}"))
         .unwrap_or_else(|e| panic!("failed to write {}: {e}", generated_def.display()));
 
     if target_env == "msvc" {
