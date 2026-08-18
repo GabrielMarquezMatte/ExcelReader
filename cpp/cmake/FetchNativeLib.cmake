@@ -57,8 +57,21 @@ function(excelreader_fetch_native_lib)
     set_target_properties(excelreader_native PROPERTIES IMPORTED_LOCATION "${_lib_path}")
 
     if(WIN32)
-        set(_def_file "${CMAKE_CURRENT_SOURCE_DIR}/include/excelreader-phase1.def")
+        set(_src_def_file "${CMAKE_CURRENT_SOURCE_DIR}/include/excelreader-phase1.def")
         set(_implib_path "${_cache_dir}/excelreader_native.lib")
+
+        # The checked-in .def has no LIBRARY statement, so neither lib.exe nor dlltool would
+        # otherwise know what DLL name to bake into the import descriptors of the generated
+        # import lib. That name MUST match the actual basename of the binary at _lib_path
+        # (which varies: a release asset like excelreader-native-win-x64.dll, or whatever
+        # EXCELREADER_NATIVE_LIB points at locally, e.g. ExcelReader.Native.dll) - not a fixed
+        # name - or the loader will look for a DLL that doesn't exist. So generate a temporary
+        # .def with an explicit LIBRARY line naming the real file, and feed that to both tools.
+        get_filename_component(_dll_basename "${_lib_path}" NAME)
+        set(_def_file "${_cache_dir}/excelreader-phase1.generated.def")
+        file(READ "${_src_def_file}" _def_contents)
+        file(WRITE "${_def_file}" "LIBRARY ${_dll_basename}\n${_def_contents}")
+
         if(NOT EXISTS "${_implib_path}")
             if(MSVC)
                 find_program(_lib_exe NAMES lib)
@@ -78,7 +91,7 @@ function(excelreader_fetch_native_lib)
                     message(FATAL_ERROR "dlltool not found - required to link against ExcelReader.Native.dll under MinGW")
                 endif()
                 execute_process(
-                    COMMAND "${_dlltool}" "-d" "${_def_file}" "-l" "${_implib_path}" "-D" "${_asset_name}"
+                    COMMAND "${_dlltool}" "-d" "${_def_file}" "-l" "${_implib_path}"
                     RESULT_VARIABLE _dlltool_result)
                 if(NOT _dlltool_result EQUAL 0)
                     message(FATAL_ERROR "dlltool failed generating the import library")
