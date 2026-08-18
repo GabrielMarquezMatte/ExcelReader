@@ -1,27 +1,11 @@
-use excelreader::workbook::{column_i64, column_str, parse_sheet, ColumnBinding, ExcelMapper, Workbook};
-use excelreader::{XL_T_I64, XL_T_STRING};
+use excelreader::workbook::{parse_sheet, ExcelMapper, Workbook};
 
-#[derive(Default)]
+#[derive(Default, ExcelMapper)]
 struct Row {
+    #[excel(name = "Coluna1")]
     coluna1: String,
+    #[excel(name = "Coluna3")]
     coluna3: i64,
-}
-
-impl ExcelMapper for Row {
-    fn bindings() -> Vec<ColumnBinding<Self>> {
-        vec![
-            ColumnBinding {
-                name: "Coluna1",
-                xl_type: XL_T_STRING,
-                assign: |r, col, row| r.coluna1 = column_str(col, row).to_string(),
-            },
-            ColumnBinding {
-                name: "Coluna3",
-                xl_type: XL_T_I64,
-                assign: |r, col, row| r.coluna3 = column_i64(col, row),
-            },
-        ]
-    }
 }
 
 fn fixture_path() -> String {
