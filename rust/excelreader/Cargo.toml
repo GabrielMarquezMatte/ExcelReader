@@ -1,0 +1,13 @@
+[package]
+name = "excelreader"
+version = "0.0.0"
+edition = "2021"
+license = "MIT"
+description = "Read Excel/CSV workbooks via ExcelReader's native ABI (open + schema-driven typed parse)."
+repository = "https://github.com/GabrielMarquezMatte/ExcelReader"
+readme = "README.md"
+build = "build.rs"
+
+[dependencies]
+
+[dev-dependencies]
