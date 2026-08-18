@@ -57,7 +57,7 @@ function(excelreader_fetch_native_lib)
     set_target_properties(excelreader_native PROPERTIES IMPORTED_LOCATION "${_lib_path}")
 
     if(WIN32)
-        set(_src_def_file "${CMAKE_CURRENT_SOURCE_DIR}/include/excelreader-phase1.def")
+        set(_src_def_file "${CMAKE_CURRENT_SOURCE_DIR}/include/xl/excelreader-phase1.def")
         set(_implib_path "${_cache_dir}/excelreader_native.lib")
 
         # The checked-in .def has no LIBRARY statement, so neither lib.exe nor dlltool would
