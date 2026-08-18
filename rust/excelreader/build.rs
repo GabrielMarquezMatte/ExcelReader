@@ -77,6 +77,21 @@ fn main() {
         // the underlying DLL is actually called (its LIBRARY line handles that indirection), so a
         // plain name-based link works here.
         println!("cargo:rustc-link-lib=dylib=excelreader_native");
+        // The two steps above only satisfy the *build-time* linker. Windows has no rpath
+        // equivalent - the loader searches the launching executable's own directory, then PATH,
+        // then a few system directories, none of which include lib_dir - so without this, running
+        // the built test binary fails with STATUS_DLL_NOT_FOUND even though linking succeeded.
+        // `cargo test` binaries live in `target/<profile>/deps`, reached from OUT_DIR
+        // (`target/<profile>/build/<pkg>-<hash>/out`) by going up three levels; copy the real DLL
+        // there so it's sitting next to the .exe that needs to load it.
+        if let Some(profile_dir) = out_dir.ancestors().nth(3) {
+            let deps_dir = profile_dir.join("deps");
+            fs::create_dir_all(&deps_dir)
+                .unwrap_or_else(|e| panic!("failed to create {}: {e}", deps_dir.display()));
+            let dest = deps_dir.join(&dll_basename);
+            fs::copy(lib_dir.join(&dll_basename), &dest)
+                .unwrap_or_else(|e| panic!("failed to copy {dll_basename} to {}: {e}", dest.display()));
+        }
     } else {
         // On macOS/Linux there's no import library indirection - rustc/the linker must find the
         // shared object under its own real name. That name is NOT a fixed `libexcelreader_native.*`
