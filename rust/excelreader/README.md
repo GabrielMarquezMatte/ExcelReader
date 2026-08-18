@@ -7,7 +7,7 @@ schema-driven typed parse only - no writing, no Arrow, no row-by-row decode.
 
 ```toml
 [dependencies]
-excelreader = "0.1"
+excelreader = "2.1"
 ```
 
 ```rust
