@@ -1,0 +1,15 @@
+[package]
+name = "excelreader-derive"
+version = "0.0.0"
+edition = "2021"
+license = "MIT"
+description = "Derive macro for excelreader's ExcelMapper trait - depend on excelreader instead, which re-exports this."
+repository = "https://github.com/GabrielMarquezMatte/ExcelReader"
+
+[lib]
+proc-macro = true
+
+[dependencies]
+syn = { version = "2", features = ["full"] }
+quote = "1"
+proc-macro2 = "1"
