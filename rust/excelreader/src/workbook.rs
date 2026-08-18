@@ -60,11 +60,14 @@ pub struct ColumnBinding<T> {
     pub assign: fn(&mut T, &XlColumn, i64),
 }
 
-/// Implemented by any struct `parse_sheet` can populate from a `parse_typed` result. No derive
-/// macro in v1 - implement `bindings()` by hand, mirroring `xl::ExcelMapper<T>` on the C++ side.
+/// Implemented by any struct `parse_sheet` can populate from a `parse_typed` result. Implement
+/// `bindings()` by hand (mirroring `xl::ExcelMapper<T>` on the C++ side), or derive it with
+/// `#[derive(ExcelMapper)]` (see `excelreader_derive`).
 pub trait ExcelMapper: Sized {
     fn bindings() -> Vec<ColumnBinding<Self>>;
 }
+
+pub use excelreader_derive::ExcelMapper;
 
 fn is_valid(col: &XlColumn, row: i64) -> bool {
     if col.validity.is_null() {

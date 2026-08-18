@@ -1,0 +1,5 @@
+error: unsupported field type for #[derive(ExcelMapper)] - supported types are String, i64, f64, bool, and Option<...> of those
+ --> tests/derive_ui/fail/unsupported_type.rs:6:11
+  |
+6 |     nome: u32,
+  |           ^^^
