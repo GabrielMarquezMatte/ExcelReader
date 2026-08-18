@@ -48,9 +48,9 @@ jobs:
         shell: bash
         run: |
           case "${{ runner.os }}" in
-            Windows) echo "path=python/src/excelreader/_lib/ExcelReader.Native.dll" >> "$GITHUB_OUTPUT" ;;
-            macOS)   echo "path=python/src/excelreader/_lib/ExcelReader.Native.dylib" >> "$GITHUB_OUTPUT" ;;
-            *)       echo "path=python/src/excelreader/_lib/ExcelReader.Native.so" >> "$GITHUB_OUTPUT" ;;
+            Windows) echo "path=${{ github.workspace }}/python/src/excelreader/_lib/ExcelReader.Native.dll" >> "$GITHUB_OUTPUT" ;;
+            macOS)   echo "path=${{ github.workspace }}/python/src/excelreader/_lib/ExcelReader.Native.dylib" >> "$GITHUB_OUTPUT" ;;
+            *)       echo "path=${{ github.workspace }}/python/src/excelreader/_lib/ExcelReader.Native.so" >> "$GITHUB_OUTPUT" ;;
           esac
 
       - name: Configure

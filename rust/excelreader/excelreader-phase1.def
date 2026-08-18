@@ -1,0 +1,8 @@
+EXPORTS
+    xl_abi_version
+    xl_open_file
+    xl_open_file_ex
+    xl_close
+    xl_parse_typed
+    xl_free_table
+    xl_last_error_ptr
