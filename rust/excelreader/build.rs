@@ -90,6 +90,15 @@ fn main() {
         // find the file. Passing the full path directly as a link arg sidesteps `-l` name-mangling
         // entirely, on every linker flavor.
         println!("cargo:rustc-link-arg={}", lib_dir.join(&dll_basename).display());
+        // The path above only satisfies the *build-time* linker. NativeAOT publishes macOS dylibs
+        // with their own install name set to `@rpath/<name>` (visible in `otool -D`/dyld errors),
+        // so whatever path we link against, the *runtime* dependency recorded in the test binary is
+        // always that `@rpath`-relative name, not our real path - `@rpath` resolves via `LC_RPATH`
+        // entries in the loading binary, and without one dyld falls back to a handful of unrelated
+        // default locations and never finds it. Embed lib_dir as an rpath entry so it does. Also
+        // covers the equivalent (if less commonly hit) case on Linux, where `DT_NEEDED` may likewise
+        // resolve to a bare name that only `DT_RUNPATH` steers back to a non-standard directory.
+        println!("cargo:rustc-link-arg=-Wl,-rpath,{}", lib_dir.display());
     }
 }
 

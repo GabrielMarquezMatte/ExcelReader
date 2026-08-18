@@ -40,6 +40,10 @@ jobs:
         shell: bash
         run: echo "dir=python/src/excelreader/_lib" >> "$GITHUB_OUTPUT"
 
+      - name: Setup MSVC developer environment (Windows)
+        if: runner.os == 'Windows'
+        uses: ilammy/msvc-dev-cmd@v1
+
       - name: cargo test
         working-directory: rust/excelreader
         env:
