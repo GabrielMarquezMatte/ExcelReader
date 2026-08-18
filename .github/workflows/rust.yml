@@ -45,7 +45,7 @@ jobs:
         uses: ilammy/msvc-dev-cmd@v1
 
       - name: cargo test
-        working-directory: rust/excelreader
+        working-directory: rust
         env:
           EXCELREADER_NATIVE_LIB_DIR: ${{ github.workspace }}/${{ steps.lib.outputs.dir }}
-        run: cargo test --verbose
+        run: cargo test --workspace --verbose

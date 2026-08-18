@@ -147,6 +147,9 @@ jobs:
           sed -i "s/^version = \".*\"/version = \"${{ steps.version.outputs.value }}\"/" rust/excelreader-derive/Cargo.toml
           sed -i "s/^version = \".*\"/version = \"${{ steps.version.outputs.value }}\"/" rust/excelreader/Cargo.toml
           sed -i "s/^excelreader-derive = { path = \"\.\.\/excelreader-derive\", version = \".*\" }/excelreader-derive = { path = \"..\/excelreader-derive\", version = \"${{ steps.version.outputs.value }}\" }/" rust/excelreader/Cargo.toml
+          grep -q "^version = \"${{ steps.version.outputs.value }}\"" rust/excelreader-derive/Cargo.toml || { echo "::error::failed to set version in rust/excelreader-derive/Cargo.toml"; exit 1; }
+          grep -q "^version = \"${{ steps.version.outputs.value }}\"" rust/excelreader/Cargo.toml || { echo "::error::failed to set version in rust/excelreader/Cargo.toml"; exit 1; }
+          grep -q "excelreader-derive = { path = \"../excelreader-derive\", version = \"${{ steps.version.outputs.value }}\" }" rust/excelreader/Cargo.toml || { echo "::error::failed to set excelreader-derive dependency version in rust/excelreader/Cargo.toml"; exit 1; }
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable

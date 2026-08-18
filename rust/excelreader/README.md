@@ -11,19 +11,14 @@ excelreader = "2.1"
 ```
 
 ```rust
-use excelreader::workbook::{column_str, column_i64, parse_sheet, ColumnBinding, ExcelMapper, Workbook};
-use excelreader::{XL_T_STRING, XL_T_I64};
+use excelreader::workbook::{parse_sheet, ExcelMapper, Workbook};
 
-#[derive(Default)]
-struct Row { name: String, count: i64 }
-
-impl ExcelMapper for Row {
-    fn bindings() -> Vec<ColumnBinding<Self>> {
-        vec![
-            ColumnBinding { name: "Name", xl_type: XL_T_STRING, assign: |r, c, i| r.name = column_str(c, i).to_string() },
-            ColumnBinding { name: "Count", xl_type: XL_T_I64, assign: |r, c, i| r.count = column_i64(c, i) },
-        ]
-    }
+#[derive(Default, ExcelMapper)]
+struct Row {
+    #[excel(name = "Name")]
+    name: String,
+    #[excel(name = "Count")]
+    count: i64,
 }
 
 let workbook = Workbook::open("book.xlsx")?;
