@@ -33,6 +33,7 @@
 #include <type_traits>
 #include <utility>
 #include <vector>
+#include <chrono>
 
 namespace xl
 {
@@ -54,11 +55,55 @@ namespace xl
             const uint8_t *ptr = xl_last_error_ptr(&len);
             std::string message = (ptr != nullptr && len > 0)
                                       ? std::string(reinterpret_cast<const char *>(ptr), static_cast<size_t>(len))
-                                      : std::string("unknown error");
+                                      : "unknown error";
             return Error{code, std::move(message)};
         }
 
     } // namespace detail
+
+    // ---- Open options ----------------------------------------------------------------------------
+
+    // C++ mirror of xl_open_options: same fields, same meaning (XL_OPT_DEFAULT/FALSE/TRUE for every
+    // tri-state field, 0 for "use the library default" on every numeric field), but with default
+    // member initializers so a caller only sets the fields they actually want to override - no
+    // memset, no struct_size bookkeeping (to_c() fills it in).
+    struct OpenOptions
+    {
+        // CSV only (format == XL_FORMAT_CSV); ignored for every other format.
+        int32_t csv_sniff_dialect = XL_OPT_DEFAULT;
+        int32_t csv_delimiter = 0;
+        int32_t csv_quote = 0;
+        int32_t csv_detect_bom = XL_OPT_DEFAULT;
+        int32_t csv_max_cell_bytes = 0;
+        int32_t csv_intern_strings = XL_OPT_DEFAULT;
+
+        // XLS/XLSX/XLSB only; ignored for CSV.
+        int64_t max_total_decompressed_bytes = 0;
+        int32_t max_cell_bytes = 0;
+        int64_t max_shared_string_bytes = 0;
+        int32_t max_zip_entries = 0;
+        int32_t prefetch_decompression = XL_OPT_DEFAULT;
+        int32_t intern_strings = XL_OPT_DEFAULT;
+
+        xl_open_options to_c() const noexcept
+        {
+            xl_open_options opts{};
+            opts.struct_size = sizeof(xl_open_options);
+            opts.csv_sniff_dialect = csv_sniff_dialect;
+            opts.csv_delimiter = csv_delimiter;
+            opts.csv_quote = csv_quote;
+            opts.csv_detect_bom = csv_detect_bom;
+            opts.csv_max_cell_bytes = csv_max_cell_bytes;
+            opts.csv_intern_strings = csv_intern_strings;
+            opts.max_total_decompressed_bytes = max_total_decompressed_bytes;
+            opts.max_cell_bytes = max_cell_bytes;
+            opts.max_shared_string_bytes = max_shared_string_bytes;
+            opts.max_zip_entries = max_zip_entries;
+            opts.prefetch_decompression = prefetch_decompression;
+            opts.intern_strings = intern_strings;
+            return opts;
+        }
+    };
 
     // ---- Workbook (RAII) ------------------------------------------------------------------------
 
@@ -81,11 +126,42 @@ namespace xl
 
         ~Workbook() { close(); }
 
-        static std::expected<Workbook, Error> open(std::string_view path, int32_t format = XL_FORMAT_AUTO)
+        static std::expected<Workbook, Error> open(std::string_view path, int32_t format = XL_FORMAT_AUTO,
+                                                   const OpenOptions *options = nullptr)
         {
             xl_workbook *handle = nullptr;
-            int32_t status = xl_open_file(reinterpret_cast<const uint8_t *>(path.data()),
-                                          static_cast<int32_t>(path.size()), format, &handle);
+            xl_open_options c_options{};
+            const xl_open_options *c_options_ptr = nullptr;
+            if (options != nullptr)
+            {
+                c_options = options->to_c();
+                c_options_ptr = &c_options;
+            }
+            int32_t status = xl_open_file_ex(reinterpret_cast<const uint8_t *>(path.data()),
+                                             static_cast<int32_t>(path.size()), format,
+                                             c_options_ptr, &handle);
+            if (status != XL_OK)
+            {
+                return std::unexpected(detail::make_error(status));
+            }
+            return Workbook(handle);
+        }
+
+        // In-memory equivalent of open(): `data` is copied by the native library, so it need not
+        // outlive this call.
+        static std::expected<Workbook, Error> open_memory(std::span<const uint8_t> data, int32_t format = XL_FORMAT_AUTO,
+                                                          const OpenOptions *options = nullptr)
+        {
+            xl_workbook *handle = nullptr;
+            xl_open_options c_options{};
+            const xl_open_options *c_options_ptr = nullptr;
+            if (options != nullptr)
+            {
+                c_options = options->to_c();
+                c_options_ptr = &c_options;
+            }
+            int32_t status = xl_open_memory_ex(data.data(), static_cast<int32_t>(data.size()), format,
+                                               c_options_ptr, &handle);
             if (status != XL_OK)
             {
                 return std::unexpected(detail::make_error(status));
@@ -127,14 +203,16 @@ namespace xl
         static constexpr int32_t value = XL_T_STRING;
     };
 
-    template <>
-    struct XlType<int64_t>
+    template <typename T>
+        requires std::is_integral_v<T>
+    struct XlType<T>
     {
         static constexpr int32_t value = XL_T_I64;
     };
 
-    template <>
-    struct XlType<double>
+    template <typename T>
+        requires std::is_floating_point_v<T>
+    struct XlType<T>
     {
         static constexpr int32_t value = XL_T_F64;
     };
@@ -143,6 +221,40 @@ namespace xl
     struct XlType<bool>
     {
         static constexpr int32_t value = XL_T_BOOL;
+    };
+
+    template <>
+    struct XlType<std::chrono::system_clock::time_point>
+    {
+        static constexpr int32_t value = XL_T_TIMESTAMP;
+    };
+
+    template <>
+    struct XlType<std::chrono::year_month_day>
+    {
+        static constexpr int32_t value = XL_T_DATE;
+    };
+
+    template <>
+    struct XlType<std::chrono::sys_days>
+    {
+        static constexpr int32_t value = XL_T_DATE;
+    };
+
+    // XL_T_TIME's native width is microseconds since midnight (see excelreader.h) - std::chrono::
+    // microseconds is the primary field type for it, matching that exactly with no conversion.
+    // hh_mm_ss<microseconds> is also supported, for callers who want hours/minutes/seconds broken
+    // out rather than a raw duration; its precision must match XL_T_TIME's for the same reason.
+    template <>
+    struct XlType<std::chrono::microseconds>
+    {
+        static constexpr int32_t value = XL_T_TIME;
+    };
+
+    template <>
+    struct XlType<std::chrono::hh_mm_ss<std::chrono::microseconds>>
+    {
+        static constexpr int32_t value = XL_T_TIME;
     };
 
     // ---- Struct <-> column bindings ---------------------------------------------------------------
@@ -211,17 +323,48 @@ namespace xl
                     instance.*(binding.member) = T(str_data, static_cast<size_t>(end - start));
                 }
             }
-            else if constexpr (std::is_same_v<T, int64_t>)
+            else if constexpr (std::is_integral_v<T>)
             {
-                instance.*(binding.member) = static_cast<const int64_t *>(col.values)[row];
+                instance.*(binding.member) = T(static_cast<const int64_t *>(col.values)[row]);
             }
-            else if constexpr (std::is_same_v<T, double>)
+            else if constexpr (std::is_floating_point_v<T>)
             {
-                instance.*(binding.member) = static_cast<const double *>(col.values)[row];
+                instance.*(binding.member) = T(static_cast<const double *>(col.values)[row]);
             }
             else if constexpr (std::is_same_v<T, bool>)
             {
                 instance.*(binding.member) = (static_cast<const uint8_t *>(col.values)[row] != 0);
+            }
+            else if constexpr (std::is_same_v<T, std::chrono::sys_days>)
+            {
+                int32_t days = static_cast<const int32_t *>(col.values)[row];
+                instance.*(binding.member) = std::chrono::sys_days{std::chrono::days{days}};
+            }
+            else if constexpr (std::is_same_v<T, std::chrono::year_month_day>)
+            {
+                int32_t days = static_cast<const int32_t *>(col.values)[row];
+                instance.*(binding.member) = std::chrono::year_month_day{std::chrono::sys_days{std::chrono::days{days}}};
+            }
+            else if constexpr (std::is_same_v<T, std::chrono::microseconds>)
+            {
+                int64_t micros = static_cast<const int64_t *>(col.values)[row];
+                instance.*(binding.member) = std::chrono::microseconds{micros};
+            }
+            else if constexpr (std::is_same_v<T, std::chrono::hh_mm_ss<std::chrono::microseconds>>)
+            {
+                int64_t micros = static_cast<const int64_t *>(col.values)[row];
+                instance.*(binding.member) = std::chrono::hh_mm_ss<std::chrono::microseconds>{std::chrono::microseconds{micros}};
+            }
+            else if constexpr (std::is_same_v<T, std::chrono::system_clock::time_point>)
+            {
+                // system_clock::time_point's own Duration is implementation-defined (nanoseconds on
+                // libstdc++/MSVC) - time_point_cast converts the microseconds XL_T_TIMESTAMP provides
+                // into whatever that is. sys_time<microseconds> is the time_point<system_clock,
+                // microseconds> alias; constructing through it (rather than time_point's raw Duration
+                // constructor) keeps the "microseconds since epoch" meaning explicit at the call site.
+                int64_t micros = static_cast<const int64_t *>(col.values)[row];
+                instance.*(binding.member) = std::chrono::time_point_cast<std::chrono::system_clock::duration>(
+                    std::chrono::sys_time<std::chrono::microseconds>{std::chrono::microseconds{micros}});
             }
         }
 
