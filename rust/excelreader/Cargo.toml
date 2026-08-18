@@ -9,5 +9,6 @@ readme = "README.md"
 build = "build.rs"
 
 [dependencies]
+excelreader-derive = { path = "../excelreader-derive", version = "0.0.0" }
 
 [dev-dependencies]
