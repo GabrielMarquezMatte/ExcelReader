@@ -1,0 +1,5 @@
+error: ExcelMapper can only be derived for structs with named fields
+ --> tests/derive_ui/fail/tuple_struct.rs:4:1
+  |
+4 | struct Row(String);
+  | ^^^^^^^^^^^^^^^^^^^

@@ -1,6 +1,6 @@
 //! Downloads the ExcelReader.Native shared library matching the build target, and (on
 //! windows-msvc/windows-gnu) generates the import library NativeAOT's publish output doesn't ship,
-//! from `excelreader-phase1.def` (a checked-in copy of the phase-1 .def next to excelreader.h,
+//! from `excelreader.def` (a checked-in copy of the phase-1 .def next to excelreader.h,
 //! kept inside this crate directory - see the comment on `PHASE1_DEF_EXPORTS` below - so it's
 //! embedded via `include_str!` and survives `cargo package`).
 //!
@@ -48,9 +48,8 @@ fn main() {
         let dest = out_dir.join(&asset_name);
         if !dest.exists() {
             let version = env::var("CARGO_PKG_VERSION").unwrap();
-            let url = format!(
-                "https://github.com/{REPO}/releases/download/v{version}/{asset_name}"
-            );
+            let url =
+                format!("https://github.com/{REPO}/releases/download/v{version}/{asset_name}");
             download(&url, &dest);
         }
         (out_dir.clone(), asset_name)
@@ -61,13 +60,7 @@ fn main() {
     if target_os == "windows" {
         let implib = out_dir.join("excelreader_native.lib");
         if !implib.exists() {
-            generate_windows_implib(
-                &implib,
-                &target_env,
-                &target_arch,
-                &out_dir,
-                &dll_basename,
-            );
+            generate_windows_implib(&implib, &target_env, &target_arch, &out_dir, &dll_basename);
         }
         // The import library lives in OUT_DIR, not lib_dir (the DLL's own directory) - without
         // this, the linker can locate the DLL for cargo:rustc-link-search purposes but never finds
@@ -89,8 +82,9 @@ fn main() {
             fs::create_dir_all(&deps_dir)
                 .unwrap_or_else(|e| panic!("failed to create {}: {e}", deps_dir.display()));
             let dest = deps_dir.join(&dll_basename);
-            fs::copy(lib_dir.join(&dll_basename), &dest)
-                .unwrap_or_else(|e| panic!("failed to copy {dll_basename} to {}: {e}", dest.display()));
+            fs::copy(lib_dir.join(&dll_basename), &dest).unwrap_or_else(|e| {
+                panic!("failed to copy {dll_basename} to {}: {e}", dest.display())
+            });
         }
     } else {
         // On macOS/Linux there's no import library indirection - rustc/the linker must find the
@@ -104,7 +98,10 @@ fn main() {
         // Apple's `ld` has none, silently falls back to its normal `-l<name>` mangling, and fails to
         // find the file. Passing the full path directly as a link arg sidesteps `-l` name-mangling
         // entirely, on every linker flavor.
-        println!("cargo:rustc-link-arg={}", lib_dir.join(&dll_basename).display());
+        println!(
+            "cargo:rustc-link-arg={}",
+            lib_dir.join(&dll_basename).display()
+        );
         // The path above only satisfies the *build-time* linker. NativeAOT publishes macOS dylibs
         // with their own install name set to `@rpath/<name>` (visible in `otool -D`/dyld errors),
         // so whatever path we link against, the *runtime* dependency recorded in the test binary is
@@ -122,7 +119,12 @@ fn main() {
 /// known ahead of time (unlike the download path, where it's always `asset_name`).
 fn find_native_lib(dir: &Path, ext: &str) -> String {
     let mut candidates: Vec<String> = fs::read_dir(dir)
-        .unwrap_or_else(|e| panic!("failed to read EXCELREADER_NATIVE_LIB_DIR {}: {e}", dir.display()))
+        .unwrap_or_else(|e| {
+            panic!(
+                "failed to read EXCELREADER_NATIVE_LIB_DIR {}: {e}",
+                dir.display()
+            )
+        })
         .filter_map(|entry| entry.ok())
         .filter_map(|entry| {
             let path = entry.path();
@@ -154,8 +156,12 @@ fn download(url: &str, dest: &Path) {
     let status = if cfg!(windows) {
         Command::new("powershell")
             .args([
-                "-NoProfile", "-Command",
-                &format!("Invoke-WebRequest -Uri '{url}' -OutFile '{}'", dest.display()),
+                "-NoProfile",
+                "-Command",
+                &format!(
+                    "Invoke-WebRequest -Uri '{url}' -OutFile '{}'",
+                    dest.display()
+                ),
             ])
             .status()
     } else {
@@ -176,13 +182,13 @@ fn download(url: &str, dest: &Path) {
 // `rust/excelreader/build.rs` itself gets shipped as source in the package tarball, and Cargo
 // compiles it fresh at the consumer's build time - `include_str!` is resolved then too, against
 // wherever this very build.rs file lives on disk. Reaching outside the crate directory (e.g.
-// `../../src/ExcelReader.Native/include/excelreader-phase1.def`) does not survive that: `cargo
+// `../../src/ExcelReader.Native/include/excelreader.def`) does not survive that: `cargo
 // package` only ships files under `rust/excelreader/`, so a path escaping the crate root doesn't
 // exist in the extracted tarball and the consumer's build fails. Keeping this copy inside the
 // crate directory (kept in sync with the canonical copy at
-// src/ExcelReader.Native/include/excelreader-phase1.def) makes `include_str!` resolve correctly
+// src/ExcelReader.Native/include/excelreader.def) makes `include_str!` resolve correctly
 // both in this repo checkout and in the packaged/published crate.
-const PHASE1_DEF_EXPORTS: &str = include_str!("excelreader-phase1.def");
+const PHASE1_DEF_EXPORTS: &str = include_str!("excelreader.def");
 
 fn generate_windows_implib(
     implib: &Path,
@@ -193,14 +199,17 @@ fn generate_windows_implib(
 ) {
     // The checked-in .def has no LIBRARY statement, so neither lib.exe nor dlltool would
     // otherwise know what DLL name to bake into the import descriptors of the generated import
-    // lib - they'd fall back to the .def file's own basename (`excelreader-phase1.dll`), which is
+    // lib - they'd fall back to the .def file's own basename (`excelreader.dll`), which is
     // wrong: the real binary is named `excelreader-native-<os>-<arch>.dll` (downloaded) or
     // whatever EXCELREADER_NATIVE_LIB_DIR points at (override, e.g. `ExcelReader.Native.dll`).
     // Generate a temporary copy of the .def with an explicit LIBRARY line naming the real file,
     // and feed that to both tools instead of the checked-in .def directly.
-    let generated_def = out_dir.join("excelreader-phase1.generated.def");
-    fs::write(&generated_def, format!("LIBRARY {dll_basename}\n{PHASE1_DEF_EXPORTS}"))
-        .unwrap_or_else(|e| panic!("failed to write {}: {e}", generated_def.display()));
+    let generated_def = out_dir.join("excelreader.generated.def");
+    fs::write(
+        &generated_def,
+        format!("LIBRARY {dll_basename}\n{PHASE1_DEF_EXPORTS}"),
+    )
+    .unwrap_or_else(|e| panic!("failed to write {}: {e}", generated_def.display()));
 
     if target_env == "msvc" {
         let lib_exe = "lib.exe";
@@ -209,7 +218,9 @@ fn generate_windows_implib(
             .arg(format!("/out:{}", implib.display()))
             .arg(format!("/machine:{arch}"))
             .status()
-            .unwrap_or_else(|e| panic!("failed to invoke {lib_exe} (run from a VS developer prompt): {e}"));
+            .unwrap_or_else(|e| {
+                panic!("failed to invoke {lib_exe} (run from a VS developer prompt): {e}")
+            });
         assert!(status.success(), "{lib_exe} /def failed");
     } else {
         // dlltool derives names for the temporary object files it generates internally from the

@@ -4,7 +4,7 @@
 #
 # On Windows, NativeAOT's publish output ships no import library (.lib) - direct linking needs one
 # regardless of compiler (MSVC or MinGW), unlike ELF/Mach-O shared libraries. This function
-# generates one from src/ExcelReader.Native/include/excelreader-phase1.def, the small hand-maintained
+# generates one from src/ExcelReader.Native/include/excelreader.def, the small hand-maintained
 # list of symbols this package's phase-1 API actually calls.
 #
 # Override EXCELREADER_NATIVE_LIB to point at a binary you built locally (e.g. via
@@ -62,7 +62,7 @@ function(excelreader_fetch_native_lib)
     set_target_properties(excelreader_native PROPERTIES IMPORTED_LOCATION "${_lib_path}")
 
     if(WIN32)
-        set(_src_def_file "${CMAKE_CURRENT_SOURCE_DIR}/include/xl/excelreader-phase1.def")
+        set(_src_def_file "${CMAKE_CURRENT_SOURCE_DIR}/include/xl/excelreader.def")
         set(_implib_path "${_cache_dir}/excelreader_native.lib")
 
         # The checked-in .def has no LIBRARY statement, so neither lib.exe nor dlltool would
@@ -73,7 +73,7 @@ function(excelreader_fetch_native_lib)
         # name - or the loader will look for a DLL that doesn't exist. So generate a temporary
         # .def with an explicit LIBRARY line naming the real file, and feed that to both tools.
         get_filename_component(_dll_basename "${_lib_path}" NAME)
-        set(_def_file "${_cache_dir}/excelreader-phase1.generated.def")
+        set(_def_file "${_cache_dir}/excelreader.generated.def")
         file(READ "${_src_def_file}" _def_contents)
         file(WRITE "${_def_file}" "LIBRARY ${_dll_basename}\n${_def_contents}")
 
