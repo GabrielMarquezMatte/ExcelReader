@@ -246,11 +246,17 @@ unsafe fn copy_inferred(schema: &XlInferredSchema) -> Vec<InferredColumn> {
         .map(|spec| InferredColumn {
             // A guessed name is exactly `name_len` bytes with no NUL terminator, and is NULL
             // whenever the column had no usable header cell.
-            name: if spec.name.is_null() || spec.name_len <= 0 {
+            name: if spec.name_count <= 0 || spec.names.is_null() || spec.name_lens.is_null() {
                 None
             } else {
-                let bytes = std::slice::from_raw_parts(spec.name, spec.name_len as usize);
-                Some(String::from_utf8_lossy(bytes).into_owned())
+                let name_ptr = *spec.names;
+                let name_len = *spec.name_lens;
+                if name_ptr.is_null() || name_len <= 0 {
+                    None
+                } else {
+                    let bytes = std::slice::from_raw_parts(name_ptr, name_len as usize);
+                    Some(String::from_utf8_lossy(bytes).into_owned())
+                }
             },
             index: spec.index,
             column_type: spec.r#type,
@@ -293,7 +299,8 @@ impl std::fmt::Debug for Workbook {
 
 /// One field <-> column binding for `T`. Construct via `ExcelMapper::bindings()`.
 pub struct ColumnBinding<T> {
-    pub name: &'static str,
+    /// Candidate header names, in priority order — the first one present in the header row wins.
+    pub names: &'static [&'static str],
     pub xl_type: i32,
     pub assign: fn(&mut T, &XlColumn, i64),
 }
@@ -501,17 +508,26 @@ pub fn parse_sheet<T: ExcelMapper>(
     header_row: i32,
 ) -> Result<TableView<T>, Error> {
     let bindings = T::bindings();
+    let name_ptrs: Vec<Vec<*const u8>> = bindings
+        .iter()
+        .map(|b| b.names.iter().map(|n| n.as_ptr()).collect())
+        .collect();
+    let name_lens: Vec<Vec<i32>> = bindings
+        .iter()
+        .map(|b| b.names.iter().map(|n| n.len() as i32).collect())
+        .collect();
     let specs: Vec<XlColumnSpec> = bindings
         .iter()
-        .map(|b| XlColumnSpec {
-            name: b.name.as_ptr(),
-            name_len: b.name.len() as i32,
+        .enumerate()
+        .map(|(i, b)| XlColumnSpec {
+            names: name_ptrs[i].as_ptr(),
+            name_lens: name_lens[i].as_ptr(),
+            name_count: b.names.len() as i32,
             index: 0,
             r#type: b.xl_type,
             nullable: 1,
         })
         .collect();
-
     let mut table = XlTable {
         column_count: 0,
         row_count: 0,

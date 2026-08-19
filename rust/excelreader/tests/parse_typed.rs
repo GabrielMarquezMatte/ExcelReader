@@ -23,6 +23,12 @@ struct WideRow {
     coluna16: f32,
 }
 
+#[derive(Default, ExcelMapper)]
+struct AliasRow {
+    #[excel(name = "ThisColumnDoesNotExist", alias = "Coluna1")]
+    coluna1: String,
+}
+
 fn fixture_path() -> String {
     concat!(env!("CARGO_MANIFEST_DIR"), "/../../RealExcel.xlsb").to_string()
 }
@@ -81,6 +87,15 @@ fn parses_integer_widths_floats_and_dates() {
     assert!((first.coluna16 - 0.1f32).abs() < f32::EPSILON);
     // 2026-01-01 is 20454 days after 1970-01-01.
     assert_eq!(first.coluna2, Date::new(20_454));
+}
+
+#[test]
+fn resolves_the_first_alias_present_in_the_header_row() {
+    let mut workbook = open_fixture();
+    let table = parse_sheet::<AliasRow>(&mut workbook, 1).expect("parse_sheet must succeed via alias");
+    assert_eq!(table.len(), 100);
+    let first = table.get(0).expect("row 0 is in bounds");
+    assert_eq!(first.coluna1, "Valor1");
 }
 
 #[cfg(feature = "chrono")]
