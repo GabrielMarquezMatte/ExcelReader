@@ -5,28 +5,54 @@
 #include <cstdlib>
 #include <string_view>
 
-struct Row {
+struct Row
+{
     std::string_view Coluna1;
     std::chrono::year_month_day Coluna2;
     int64_t Coluna3;
     double Coluna16;
 };
 
-template<> struct xl::ExcelMapper<Row> {
-    static constexpr auto get_bindings() {
+template <>
+struct xl::ExcelMapper<Row>
+{
+    static constexpr auto get_bindings()
+    {
         return std::make_tuple(
             xl::make_field("Coluna1", &Row::Coluna1),
             xl::make_field("Coluna2", &Row::Coluna2),
             xl::make_field("Coluna3", &Row::Coluna3),
-            xl::make_field("Coluna16", &Row::Coluna16)
-        );
+            xl::make_field("Coluna16", &Row::Coluna16));
     }
 };
 
-#define CHECK(cond, msg) \
-    do { if (!(cond)) { std::fprintf(stderr, "FAIL: %s (%s:%d)\n", msg, __FILE__, __LINE__); return 1; } } while (0)
+struct AliasRow
+{
+    std::string_view Coluna1;
+};
 
-static int test_parse(xl::Workbook& workbook) {
+template <>
+struct xl::ExcelMapper<AliasRow>
+{
+    static constexpr auto get_bindings()
+    {
+        return std::make_tuple(
+            xl::make_field({"ThisColumnDoesNotExist", "Coluna1"}, &AliasRow::Coluna1));
+    }
+};
+
+#define CHECK(cond, msg)                                                         \
+    do                                                                           \
+    {                                                                            \
+        if (!(cond))                                                             \
+        {                                                                        \
+            std::fprintf(stderr, "FAIL: %s (%s:%d)\n", msg, __FILE__, __LINE__); \
+            return 1;                                                            \
+        }                                                                        \
+    } while (0)
+
+static int test_parse(xl::Workbook &workbook)
+{
     auto table = xl::parse_sheet<Row>(workbook);
     CHECK(table.has_value(), "xl::parse_sheet<Row> must succeed");
     CHECK(table->size() == 100, "RealExcel.xlsb has 100 data rows");
@@ -34,7 +60,7 @@ static int test_parse(xl::Workbook& workbook) {
     auto it = table->begin();
     Row first = *it;
     CHECK(first.Coluna1 == "Valor1", "first row's Coluna1 must be Valor1");
-    CHECK(first.Coluna2 == std::chrono::year{2026}/std::chrono::month{1}/std::chrono::day{1}, "first row's Coluna2 must be 2026-01-01");
+    CHECK(first.Coluna2 == std::chrono::year{2026} / std::chrono::month{1} / std::chrono::day{1}, "first row's Coluna2 must be 2026-01-01");
     CHECK(first.Coluna3 == 1, "first row's Coluna3 must be 1");
     CHECK(first.Coluna16 == 0.1, "first row's Coluna16 must be 0.1");
 
@@ -49,7 +75,8 @@ static int test_parse(xl::Workbook& workbook) {
     return 0;
 }
 
-static int test_sheets(xl::Workbook& workbook) {
+static int test_sheets(xl::Workbook &workbook)
+{
     auto count = workbook.sheet_count();
     CHECK(count.has_value(), "sheet_count must succeed");
     CHECK(*count >= 1, "the fixture has at least one sheet");
@@ -70,7 +97,8 @@ static int test_sheets(xl::Workbook& workbook) {
     return 0;
 }
 
-static int test_infer_schema(const xl::Workbook& workbook) {
+static int test_infer_schema(const xl::Workbook &workbook)
+{
     auto schema = workbook.infer_schema(1, 100);
     CHECK(schema.has_value(), "infer_schema must succeed");
     CHECK(!schema->empty(), "the fixture has columns to infer");
@@ -80,10 +108,20 @@ static int test_infer_schema(const xl::Workbook& workbook) {
     return 0;
 }
 
-int main() {
+static int test_parse_with_alias(xl::Workbook &workbook)
+{
+    auto table = xl::parse_sheet<AliasRow>(workbook);
+    CHECK(table.has_value(), "xl::parse_sheet<AliasRow> must succeed by resolving the second candidate name");
+    CHECK(table->size() == 100, "RealExcel.xlsb has 100 data rows");
+    AliasRow first = *table->begin();
+    return 0;
+}
+
+int main()
+{
     CHECK(xl::abi_version() == XL_ABI_VERSION, "the linked native library must speak this header's ABI revision");
 
-    xl::OpenOptions options { .prefetch_decompression = 1};
+    xl::OpenOptions options{.prefetch_decompression = 1};
     auto workbook = xl::Workbook::open(EXCELREADER_FIXTURE_PATH, XL_FORMAT_XLSB, &options);
     CHECK(workbook.has_value(), "xl::Workbook::open must succeed on the RealExcel.xlsb fixture");
 
@@ -91,10 +129,19 @@ int main() {
     CHECK(!missing.has_value(), "opening a missing file must fail");
     CHECK(!missing.error().message.empty(), "a failure must carry the native error detail");
 
-    if (int failed = test_sheets(*workbook)) { return failed; }
-    if (int failed = test_infer_schema(*workbook)) { return failed; }
+    if (int failed = test_sheets(*workbook))
+    {
+        return failed;
+    }
+    if (int failed = test_infer_schema(*workbook))
+    {
+        return failed;
+    }
     // Last: parse_sheet consumes the workbook's shared row cursor.
-    if (int failed = test_parse(*workbook)) { return failed; }
+    if (int failed = test_parse(*workbook))
+    {
+        return failed;
+    }
 
     std::printf("OK: C++ smoke test passed\n");
     return 0;
