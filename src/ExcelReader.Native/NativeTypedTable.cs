@@ -19,15 +19,16 @@ namespace ExcelReader.Native
 
     /// <summary>
     /// Flat C ABI representation for one raw <c>xl_column_spec</c> as received across the boundary — the
-    /// <see cref="Name"/> pointer is only valid for the duration of the call, so <see cref="Exports"/>
-    /// decodes it into the UTF-8-decoded <see cref="NativeColumnSpec"/> before calling into
+    /// <see cref="Names"/> pointers are only valid for the duration of the call, so <see cref="Exports"/>
+    /// decodes them into the UTF-8-decoded <see cref="NativeColumnSpec"/> before calling into
     /// <see cref="NativeApi"/>.
     /// </summary>
     [StructLayout(LayoutKind.Sequential)]
     internal unsafe struct NativeColumnSpecRaw
     {
-        public byte* Name;
-        public int NameLen;
+        public byte** Names;
+        public int* NameLens;
+        public int NameCount;
         public int Index;
         public int Type;
         public int Nullable;
@@ -37,9 +38,13 @@ namespace ExcelReader.Native
     /// <see cref="NativeApi"/> and its tests actually work with.</summary>
     internal readonly struct NativeColumnSpec
     {
-        /// <summary>The header text to match (case-insensitively, trimmed), or <see langword="null"/> to
-        /// resolve by <see cref="Index"/> instead.</summary>
-        internal string? Name { get; init; }
+        public NativeColumnSpec()
+        {
+        }
+
+        /// <summary>Candidate header texts to match (case-insensitively, trimmed), tried in order — the
+        /// first one present in the header row wins. Empty to resolve by <see cref="Index"/> instead.</summary>
+        internal string[] Names { get; init; } = [];
         internal int Index { get; init; }
         internal int Type { get; init; }
         internal bool Nullable { get; init; }
