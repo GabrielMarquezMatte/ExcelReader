@@ -5,6 +5,7 @@ Everything here mirrors src/ExcelReader.Native/include/excelreader.h. If you cha
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 import ctypes
 import os
 import platform
@@ -26,7 +27,7 @@ XL_ERROR = -5
 
 # Bumped on any change to a struct layout, a status code, or the meaning of an existing function;
 # adding a new function does not bump it. Mirrors XL_ABI_VERSION in include/excelreader.h.
-XL_ABI_VERSION = 1
+XL_ABI_VERSION = 2
 
 XL_FORMAT_AUTO = 0
 XL_FORMAT_XLS = 1
@@ -68,38 +69,66 @@ class NativeRow(ctypes.Structure):
 
 
 class NativeColumnSpec(ctypes.Structure):
-    """Mirrors xl_column_spec. `name`/`name_len` may be left NULL/0 to resolve by `index` instead."""
+    """Mirrors xl_column_spec. `names`/`name_lens`/`name_count` may be left NULL/NULL/0 to resolve by
+    `index` instead. Build one with `column_spec_by_name`/`column_spec_by_names`, never directly —
+    the `names`/`name_lens` pointers must stay alive as long as the struct is in use, and those
+    helpers keep the backing buffers alive via ctypes' `_objects` mechanism."""
 
     _fields_ = [
-        ("name", ctypes.c_char_p),
-        ("name_len", ctypes.c_int32),
+        ("names", ctypes.POINTER(ctypes.POINTER(ctypes.c_uint8))),
+        ("name_lens", ctypes.POINTER(ctypes.c_int32)),
+        ("name_count", ctypes.c_int32),
         ("index", ctypes.c_int32),
         ("type", ctypes.c_int32),
         ("nullable", ctypes.c_int32),
     ]
 
 
+def column_spec_by_names(names: Sequence[str], type_: int, *, nullable: bool = False) -> NativeColumnSpec:
+    encoded = [name.encode("utf-8") for name in names]
+    # One ctypes buffer per name (kept alive by `spec._objects` through the pointer array below),
+    # plus the pointer array and length array themselves.
+    buffers = [ctypes.create_string_buffer(e, len(e)) for e in encoded]
+    name_ptrs = (ctypes.POINTER(ctypes.c_uint8) * len(buffers))(
+        *(ctypes.cast(b, ctypes.POINTER(ctypes.c_uint8)) for b in buffers)
+    )
+    name_lens = (ctypes.c_int32 * len(encoded))(*(len(e) for e in encoded))
+    spec = NativeColumnSpec(
+        names=ctypes.cast(name_ptrs, ctypes.POINTER(ctypes.POINTER(ctypes.c_uint8))),
+        name_lens=name_lens,
+        name_count=len(encoded),
+        index=0,
+        type=type_,
+        nullable=int(nullable),
+    )
+    # ctypes only auto-keeps-alive objects assigned directly to a field; `name_ptrs`/`name_lens`/
+    # `buffers` were only cast/wrapped, so pin them explicitly on the returned struct.
+    spec._name_storage = (buffers, name_ptrs, name_lens)  # type: ignore[attr-defined]
+    return spec
+
+
 def column_spec_by_name(name: str, type_: int, *, nullable: bool = False) -> NativeColumnSpec:
-    encoded = name.encode("utf-8")
-    return NativeColumnSpec(name=encoded, name_len=len(encoded), index=0, type=type_, nullable=int(nullable))
+    return column_spec_by_names([name], type_, nullable=nullable)
 
 
 def column_spec_by_index(index: int, type_: int, *, nullable: bool = False) -> NativeColumnSpec:
-    return NativeColumnSpec(name=None, name_len=0, index=index, type=type_, nullable=int(nullable))
+    return NativeColumnSpec(
+        names=None, name_lens=None, name_count=0, index=index, type=type_, nullable=int(nullable)
+    )
 
 
 class NativeInferredColumnSpec(ctypes.Structure):
     """Mirrors xl_column_spec's layout exactly, for the OUTPUT direction (xl_infer_schema).
 
-    Unlike `NativeColumnSpec` above, `name` is a raw pointer here rather than `c_char_p`: a guessed
-    name is exactly `name_len` bytes with no guaranteed NUL terminator, so reading the attribute as a
-    string would let ctypes scan past the allocation looking for one. Decode it with
-    `ctypes.string_at(name, name_len)` instead.
+    Always carries `name_count` 0 or 1 — inference never guesses more than one candidate name per
+    column. Unlike `column_spec_by_name`'s buffers, `names[0]` here is a raw pointer with no
+    guaranteed NUL terminator, so decode it with `ctypes.string_at(names[0], name_lens[0])`.
     """
 
     _fields_ = [
-        ("name", ctypes.POINTER(ctypes.c_uint8)),
-        ("name_len", ctypes.c_int32),
+        ("names", ctypes.POINTER(ctypes.POINTER(ctypes.c_uint8))),
+        ("name_lens", ctypes.POINTER(ctypes.c_int32)),
+        ("name_count", ctypes.c_int32),
         ("index", ctypes.c_int32),
         ("type", ctypes.c_int32),
         ("nullable", ctypes.c_int32),

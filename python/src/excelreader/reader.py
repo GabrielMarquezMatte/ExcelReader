@@ -392,7 +392,9 @@ def _decode_inferred_schema(schema: _native.NativeInferredSchema) -> list[Column
     specs: list[ColumnSpec] = []
     for index in range(schema.column_count):
         raw = schema.columns[index]
-        name = ctypes.string_at(raw.name, raw.name_len).decode("utf-8") if raw.name else None
+        name = None
+        if raw.name_count > 0:
+            name = ctypes.string_at(raw.names[0], raw.name_lens[0]).decode("utf-8")
         specs.append(ColumnSpec(ColumnType(raw.type), name=name, index=raw.index, nullable=bool(raw.nullable)))
     return specs
 
@@ -404,8 +406,11 @@ def _build_specs(schema: Sequence[ColumnSpec]) -> ctypes.Array:
     for index, spec in enumerate(schema):
         if spec.name is None:
             specs[index] = _native.column_spec_by_index(spec.index, int(spec.type), nullable=spec.nullable)
-        else:
+            continue
+        if isinstance(spec.name, str):
             specs[index] = _native.column_spec_by_name(spec.name, int(spec.type), nullable=spec.nullable)
+            continue
+        specs[index] = _native.column_spec_by_names(spec.name, int(spec.type), nullable=spec.nullable)
     return specs
 
 
