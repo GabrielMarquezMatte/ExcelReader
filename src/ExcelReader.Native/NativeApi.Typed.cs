@@ -56,7 +56,8 @@ namespace ExcelReader.Native
                     if (!TryAppendRow(builders, rows.Current, columnIndices, isDate1904, out int failedColumn))
                     {
                         NativeColumnSpec spec = specs[failedColumn];
-                        SetLastError($"column {failedColumn} (\"{spec.Name ?? spec.Index.ToString(CultureInfo.InvariantCulture)}\") has a value that failed to convert and is not nullable.");
+                        string columnLabel = spec.Names.Length > 0 ? string.Join(" / ", spec.Names) : spec.Index.ToString(CultureInfo.InvariantCulture);
+                        SetLastError($"column {failedColumn} (\"{columnLabel}\") has a value that failed to convert and is not nullable.");
                         return NativeStatus.Error;
                     }
                 }
@@ -157,22 +158,25 @@ namespace ExcelReader.Native
             }
             foreach (NativeColumnSpec spec in specs)
             {
-                if (spec.Name is null && spec.Index < 0)
+                if (spec.Names.Length == 0 && spec.Index < 0)
                 {
                     error = "a column spec with no name must have a non-negative index.";
                     return false;
                 }
-                if (spec.Name is not null && headerRow == 0)
+                if (spec.Names.Length > 0 && headerRow == 0)
                 {
-                    error = $"column \"{spec.Name}\" is name-based, but header_row is 0 (no header row to match it against).";
+                    error = $"column \"{spec.Names[0]}\" is name-based, but header_row is 0 (no header row to match it against).";
                     return false;
                 }
                 // FindHeaderColumn trims before comparing, so a blank name would match the first empty
                 // header cell — resolving to a column the caller never asked for instead of failing.
-                if (spec.Name is not null && spec.Name.AsSpan().Trim().IsEmpty)
+                foreach (string name in spec.Names)
                 {
-                    error = "a name-based column spec cannot have a blank name.";
-                    return false;
+                    if (name.AsSpan().Trim().IsEmpty)
+                    {
+                        error = "a name-based column spec cannot have a blank name.";
+                        return false;
+                    }
                 }
                 if (spec.Type is < NativeColumnType.String or > NativeColumnType.Timestamp)
                 {
@@ -210,20 +214,34 @@ namespace ExcelReader.Native
             Row header = rows.Current;
             for (int i = 0; i < specs.Length; i++)
             {
-                if (specs[i].Name is not string name)
+                string[] names = specs[i].Names;
+                if (names.Length == 0)
                 {
                     columnIndices[i] = specs[i].Index;
                     continue;
                 }
-                int found = FindHeaderColumn(header, name);
+                int found = -1;
+                foreach (string name in names)
+                {
+                    found = FindHeaderColumn(header, name);
+                    if (found >= 0)
+                    {
+                        break;
+                    }
+                }
                 if (found < 0)
                 {
-                    error = $"no column header matches \"{name}\".";
+                    error = $"no column header matches any of {FormatCandidates(names)}.";
                     return false;
                 }
                 columnIndices[i] = found;
             }
             return true;
+        }
+
+        private static string FormatCandidates(string[] names)
+        {
+            return string.Join(", ", Array.ConvertAll(names, n => $"\"{n}\""));
         }
 
         // Mirrors ExcelParserConfig's own defaults (HeaderNormalization.Trim, matched with

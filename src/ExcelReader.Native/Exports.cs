@@ -404,14 +404,24 @@ namespace ExcelReader.Native
             for (int i = 0; i < specCount; i++)
             {
                 NativeColumnSpecRaw raw = specs[i];
-                if (raw.Name is not null && !NativeApi.IsValidNameLength(raw.NameLen))
+                if (raw.NameCount < 0 || (raw.NameCount > 0 && (raw.Names is null || raw.NameLens is null)))
                 {
                     decoded = [];
                     return false;
                 }
+                string[] names = new string[raw.NameCount];
+                for (int n = 0; n < raw.NameCount; n++)
+                {
+                    if (!NativeApi.IsValidNameLength(raw.NameLens[n]))
+                    {
+                        decoded = [];
+                        return false;
+                    }
+                    names[n] = Encoding.UTF8.GetString(raw.Names[n], raw.NameLens[n]);
+                }
                 decoded[i] = new NativeColumnSpec
                 {
-                    Name = raw.Name is null ? null : Encoding.UTF8.GetString(raw.Name, raw.NameLen),
+                    Names = names,
                     Index = raw.Index,
                     Type = raw.Type,
                     Nullable = raw.Nullable != 0,
