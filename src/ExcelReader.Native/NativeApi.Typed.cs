@@ -143,6 +143,12 @@ namespace ExcelReader.Native
             return nameLength is >= 0 and <= NativeLimits.MaxColumnNameBytes;
         }
 
+        /// <summary>Bounds one spec's candidate-name count before it sizes an array and drives a walk over the caller's spec block.</summary>
+        internal static bool IsValidNameCount(int nameCount)
+        {
+            return nameCount is >= 0 and <= NativeLimits.MaxNamesPerSpec;
+        }
+
         private static bool TryValidateArguments(NativeColumnSpec[] specs, int headerRow, out string? error)
         {
             error = null;

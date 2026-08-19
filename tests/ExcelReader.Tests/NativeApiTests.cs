@@ -1776,6 +1776,18 @@ namespace ExcelReader.Tests
             Assert.Equal(expected, NativeApi.IsValidNameLength(nameLength));
         }
 
+        [Theory]
+        [InlineData(int.MinValue, false)]
+        [InlineData(-1, false)] // would reach `new string[nameCount]` as a negative length
+        [InlineData(0, true)] // index-based spec, no candidates
+        [InlineData(32, true)] // the generous ceiling on realistic alias lists
+        [InlineData(33, false)]
+        [InlineData(int.MaxValue, false)] // the shape that would otherwise reach `new string[raw.NameCount]`
+        public void IsValidNameCount_Should_Bound_What_Sizes_The_Candidate_Array(int nameCount, bool expected)
+        {
+            Assert.Equal(expected, NativeApi.IsValidNameCount(nameCount));
+        }
+
         [Fact]
         public void ParseTyped_Should_Reject_A_Blank_Column_Name()
         {

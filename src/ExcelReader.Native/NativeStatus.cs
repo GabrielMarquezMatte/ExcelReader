@@ -36,6 +36,9 @@ namespace ExcelReader.Native
 
         /// <summary>Excel's 32,767-character cell limit at UTF-8's 4-byte worst case.</summary>
         internal const int MaxColumnNameBytes = 131_068;
+
+        /// <summary>Bounds how many candidate names a single xl_column_spec may carry.</summary>
+        internal const int MaxNamesPerSpec = 32;
     }
 
     /// <summary>
