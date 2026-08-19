@@ -77,7 +77,7 @@ function(excelreader_fetch_native_lib)
         file(READ "${_src_def_file}" _def_contents)
         file(WRITE "${_def_file}" "LIBRARY ${_dll_basename}\n${_def_contents}")
 
-        if(NOT EXISTS "${_implib_path}")
+        if(NOT EXISTS "${_implib_path}" OR "${_def_file}" IS_NEWER_THAN "${_implib_path}")
             if(MSVC)
                 find_program(_lib_exe NAMES lib)
                 if(NOT _lib_exe)
