@@ -1,9 +1,9 @@
 # excelreader (C++)
 
-Header-only C++23 wrapper around ExcelReader's native C ABI (`xl_open_file`, `xl_parse_typed`).
-Phase 1: opening a workbook and schema-driven typed table parsing only — no writing, no Arrow, no
-row-by-row decode. See the root README's Python section for what those look like; C++ gets the same
-scope first.
+Header-only C++23 wrapper around ExcelReader's native C ABI: opening a workbook (from a path or
+memory, with the full open-options surface), sheet navigation, schema inference, and schema-driven
+typed table parsing. No writing, no Arrow, no row-by-row decode yet — see the root README's Python
+section for what those look like.
 
 ## Requirements
 
@@ -63,3 +63,27 @@ auto workbook = xl::Workbook::open("book.xlsx");
 auto table = xl::parse_sheet<Row>(*workbook);
 for (const auto& row : *table) { /* ... */ }
 ```
+
+### Sheets and schema inference
+
+```cpp
+for (const auto& name : *workbook->sheet_names()) { /* ... */ }
+workbook->move_to_sheet(1);
+
+// Guess a schema from the header row plus a sample of the data, before committing to one.
+for (const auto& column : *workbook->infer_schema(1, 100)) {
+    // column.name is nullopt when the column must be resolved by column.index instead.
+}
+```
+
+Every entry point returns `std::expected<T, xl::Error>` — this header throws nothing.
+
+## Bounds and ABI
+
+`TableView::operator[]` is unchecked, like `std::vector`'s. Use `TableView::at(row)`, which returns
+`std::optional<T>` and is `nullopt` outside `[0, size())`.
+
+`xl::Workbook::open`/`open_memory` first check the loaded library's `xl_abi_version()` against the
+`XL_ABI_VERSION` this header was compiled against, and fail with an explanatory `xl::Error` rather
+than reading native memory through a layout that may have changed. `xl::abi_version()` exposes the
+loaded revision directly.

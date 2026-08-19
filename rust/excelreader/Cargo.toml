@@ -8,8 +8,21 @@ repository = "https://github.com/GabrielMarquezMatte/ExcelReader"
 readme = "README.md"
 build = "build.rs"
 
+[features]
+default = []
+# Adds `From` conversions between the crate's Date/Time/Timestamp newtypes and chrono's
+# NaiveDate/NaiveTime/NaiveDateTime, so `#[derive(ExcelMapper)]` can populate chrono fields
+# directly. Off by default: the newtypes alone need no dependency at all.
+chrono = ["dep:chrono"]
+
 [dependencies]
 excelreader-derive = { path = "../excelreader-derive", version = "0.0.0" }
+# `default-features = false` drops chrono's `oldtime`/`clock` stack: this crate only converts
+# between integer counts and calendar types, and never reads the system clock or a timezone database.
+chrono = { version = "0.4", optional = true, default-features = false, features = ["std"] }
 
 [dev-dependencies]
 trybuild = "1"
+
+[package.metadata.docs.rs]
+all-features = true

@@ -26,6 +26,7 @@
 #include <cstring>
 #include <expected>
 #include <iterator>
+#include <optional>
 #include <span>
 #include <string>
 #include <string_view>
@@ -59,7 +60,83 @@ namespace xl
             return Error{code, std::move(message)};
         }
 
+        // Shared two-pass buffer dance for the xl_* functions that write a UTF-8 name into a caller
+        // buffer and report the required capacity through XL_BUFFER_TOO_SMALL.
+        template <typename Call>
+        std::expected<std::string, Error> fill_string(Call &&call)
+        {
+            // One sized attempt first: Excel caps sheet names at 31 characters, so 128 bytes clears
+            // even the 4-byte-per-character worst case and the retry never runs in practice.
+            std::string buffer(128, '\0');
+            int32_t len = 0;
+            int32_t status = call(reinterpret_cast<uint8_t *>(buffer.data()),
+                                  static_cast<int32_t>(buffer.size()), &len);
+            if (status == XL_BUFFER_TOO_SMALL)
+            {
+                buffer.assign(static_cast<size_t>(len > 0 ? len : 0), '\0');
+                status = call(reinterpret_cast<uint8_t *>(buffer.data()),
+                              static_cast<int32_t>(buffer.size()), &len);
+            }
+            if (status != XL_OK)
+            {
+                return std::unexpected(make_error(status));
+            }
+            buffer.resize(static_cast<size_t>(len > 0 ? len : 0));
+            return buffer;
+        }
+
     } // namespace detail
+
+    // ---- ABI guard -------------------------------------------------------------------------------
+
+    // Revision of the loaded shared library, to compare against XL_ABI_VERSION - the revision this
+    // header was compiled against.
+    inline int32_t abi_version() noexcept { return xl_abi_version(); }
+
+    namespace detail
+    {
+
+        // The native binary is resolved at build time from a GitHub release asset (see
+        // cmake/FetchNativeLib.cmake) or from EXCELREADER_NATIVE_LIB, so it can easily be built from
+        // a different ABI revision than this header. Every struct below is laid out against
+        // XL_ABI_VERSION, so proceeding past a mismatch would mean reading native memory through the
+        // wrong layout. Both Workbook constructors gate on this.
+        //
+        // The result is cached in a function-local static: it cannot change for the lifetime of the
+        // process, its initialization is thread-safe since C++11, and every open() would otherwise
+        // pay an FFI call for it.
+        inline const std::expected<void, Error> &check_abi_version()
+        {
+            static const std::expected<void, Error> result = []() -> std::expected<void, Error>
+            {
+                const int32_t loaded = xl_abi_version();
+                if (loaded == XL_ABI_VERSION)
+                {
+                    return {};
+                }
+                return std::unexpected(Error{
+                    XL_ERROR,
+                    "ExcelReader native library reports ABI version " + std::to_string(loaded) +
+                        ", but this header is version " + std::to_string(XL_ABI_VERSION) +
+                        ". Update the header and the native library together."});
+            }();
+            return result;
+        }
+
+    } // namespace detail
+
+    // ---- Inferred schema ---------------------------------------------------------------------------
+
+    // One column guessed by Workbook::infer_schema.
+    struct InferredColumn
+    {
+        // Header text, or nullopt when the column must be resolved by `index` instead (no header
+        // row was requested, the header cell was blank, or the column never appeared in it).
+        std::optional<std::string> name;
+        int32_t index = 0;
+        int32_t type = XL_T_STRING; // XL_T_*
+        bool nullable = false;
+    };
 
     // ---- Open options ----------------------------------------------------------------------------
 
@@ -129,6 +206,10 @@ namespace xl
         static std::expected<Workbook, Error> open(std::string_view path, int32_t format = XL_FORMAT_AUTO,
                                                    const OpenOptions *options = nullptr)
         {
+            if (const auto &abi = detail::check_abi_version(); !abi.has_value())
+            {
+                return std::unexpected(abi.error());
+            }
             xl_workbook *handle = nullptr;
             xl_open_options c_options{};
             const xl_open_options *c_options_ptr = nullptr;
@@ -152,6 +233,10 @@ namespace xl
         static std::expected<Workbook, Error> open_memory(std::span<const uint8_t> data, int32_t format = XL_FORMAT_AUTO,
                                                           const OpenOptions *options = nullptr)
         {
+            if (const auto &abi = detail::check_abi_version(); !abi.has_value())
+            {
+                return std::unexpected(abi.error());
+            }
             xl_workbook *handle = nullptr;
             xl_open_options c_options{};
             const xl_open_options *c_options_ptr = nullptr;
@@ -167,6 +252,127 @@ namespace xl
                 return std::unexpected(detail::make_error(status));
             }
             return Workbook(handle);
+        }
+
+        // ---- Sheet navigation --------------------------------------------------------------------
+
+        std::expected<int32_t, Error> sheet_count() const
+        {
+            int32_t count = 0;
+            int32_t status = xl_sheet_count(handle_, &count);
+            if (status != XL_OK)
+            {
+                return std::unexpected(detail::make_error(status));
+            }
+            return count;
+        }
+
+        // Name of the currently selected sheet.
+        std::expected<std::string, Error> sheet_name() const
+        {
+            return detail::fill_string([this](uint8_t *buffer, int32_t capacity, int32_t *out_len)
+                                       { return xl_sheet_name(handle_, buffer, capacity, out_len); });
+        }
+
+        // Name of the sheet at `index`, without changing the current sheet or disturbing row
+        // enumeration.
+        std::expected<std::string, Error> sheet_name_at(int32_t index) const
+        {
+            return detail::fill_string([this, index](uint8_t *buffer, int32_t capacity, int32_t *out_len)
+                                       { return xl_sheet_name_at(handle_, index, buffer, capacity, out_len); });
+        }
+
+        // Every sheet name, in workbook order.
+        std::expected<std::vector<std::string>, Error> sheet_names() const
+        {
+            auto count = sheet_count();
+            if (!count.has_value())
+            {
+                return std::unexpected(count.error());
+            }
+            std::vector<std::string> names;
+            names.reserve(static_cast<size_t>(*count > 0 ? *count : 0));
+            for (int32_t i = 0; i < *count; ++i)
+            {
+                auto name = sheet_name_at(i);
+                if (!name.has_value())
+                {
+                    return std::unexpected(name.error());
+                }
+                names.push_back(std::move(*name));
+            }
+            return names;
+        }
+
+        // Selects the sheet at `index`, resetting row enumeration to its first row. Non-const: it
+        // moves the cursor every subsequent read on this handle shares.
+        std::expected<void, Error> move_to_sheet(int32_t index)
+        {
+            int32_t status = xl_move_to_sheet(handle_, index);
+            if (status != XL_OK)
+            {
+                return std::unexpected(detail::make_error(status));
+            }
+            return {};
+        }
+
+        // Whether the workbook uses the 1904 date system - needed to interpret raw Excel serials.
+        std::expected<bool, Error> is_date1904() const
+        {
+            int32_t flag = 0;
+            int32_t status = xl_is_date1904(handle_, &flag);
+            if (status != XL_OK)
+            {
+                return std::unexpected(detail::make_error(status));
+            }
+            return flag != 0;
+        }
+
+        // ---- Schema inference --------------------------------------------------------------------
+
+        // Guesses a parse_sheet schema by sampling the current sheet. `header_row` has the same
+        // meaning as in parse_sheet (0 = no header); `sample_size` bounds how many rows after the
+        // header are inspected. A guess over a sample, not a guarantee - always check it fits before
+        // trusting it against the full sheet. Const: the native call samples independently of the
+        // shared row cursor and never disturbs it.
+        std::expected<std::vector<InferredColumn>, Error> infer_schema(int32_t header_row = 1,
+                                                                       int32_t sample_size = 100) const
+        {
+            xl_inferred_schema schema{};
+            int32_t status = xl_infer_schema(handle_, header_row, sample_size, &schema);
+            if (status != XL_OK)
+            {
+                return std::unexpected(detail::make_error(status));
+            }
+
+            // The schema is native-owned from here. This guard returns it on every exit path,
+            // including the one where the vector's own allocation throws - the only way out of this
+            // function that is not a plain return.
+            struct SchemaGuard
+            {
+                xl_inferred_schema *schema;
+                ~SchemaGuard() { xl_free_schema(schema); }
+            } guard{&schema};
+
+            std::vector<InferredColumn> columns;
+            columns.reserve(static_cast<size_t>(schema.column_count > 0 ? schema.column_count : 0));
+            for (int32_t i = 0; i < schema.column_count; ++i)
+            {
+                const xl_column_spec &spec = schema.columns[i];
+                InferredColumn column{};
+                // A guessed name is exactly name_len bytes with no NUL terminator, and is NULL
+                // whenever the column had no usable header cell.
+                if (spec.name != nullptr && spec.name_len > 0)
+                {
+                    column.name = std::string(reinterpret_cast<const char *>(spec.name),
+                                              static_cast<size_t>(spec.name_len));
+                }
+                column.index = spec.index;
+                column.type = spec.type;
+                column.nullable = spec.nullable != 0;
+                columns.push_back(std::move(column));
+            }
+            return columns;
         }
 
         xl_workbook *handle() const noexcept { return handle_; }
@@ -504,6 +710,10 @@ namespace xl
         bool empty() const noexcept { return table_.row_count == 0; }
 
         // Random access into the view itself, without going through an iterator.
+        //
+        // Unchecked, exactly like std::vector::operator[]: a `row` outside [0, size()) reads past
+        // the columnar buffers and returns whatever sits after the allocation. Use at() below unless
+        // the caller has already established the bound.
         T operator[](int64_t row) const
         {
             T instance{};
@@ -511,6 +721,17 @@ namespace xl
             static constexpr size_t num_fields = std::tuple_size_v<decltype(bindings)>;
             detail::populate_instance(instance, table_, row, bindings, std::make_index_sequence<num_fields>{});
             return instance;
+        }
+
+        // Bounds-checked counterpart to operator[]. Returns nullopt rather than throwing, since this
+        // header is exception-free by design (std::vector::at's out_of_range is not an option here).
+        std::optional<T> at(int64_t row) const
+        {
+            if (row < 0 || row >= table_.row_count)
+            {
+                return std::nullopt;
+            }
+            return (*this)[row];
         }
 
         // Opt-in materialization for callers who want an owned std::vector<T> instead of the

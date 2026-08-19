@@ -1,0 +1,5 @@
+error: unsupported field type for #[derive(ExcelMapper)] - supported types are String, bool, any integer (i8..i64/isize, u8..u64/usize), f32, f64, the temporal newtypes Date/Time/Timestamp (or chrono's NaiveDate/NaiveTime/NaiveDateTime with the `chrono` feature), and Option<...> of any of those
+ --> tests/derive_ui/fail/unsupported_type.rs:6:11
+  |
+6 |     nome: Vec<u8>,
+  |           ^^^^^^^
