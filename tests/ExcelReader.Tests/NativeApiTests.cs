@@ -1976,14 +1976,12 @@ namespace ExcelReader.Tests
         public void ParseTyped_Should_Resolve_The_First_Candidate_Name_Present_In_The_Header()
         {
             string path = Path.Combine(Path.GetTempPath(), $"excelreader-native-{Guid.NewGuid():N}.csv");
-            File.WriteAllText(path, "qty,quantity\n5\n");
+            File.WriteAllText(path, "qty,quantity\n0,5\n");
             try
             {
                 Assert.Equal(NativeStatus.Ok, OpenPath(path, NativeFormat.Csv, out NativeHandle? handle));
                 NativeColumnSpec[] specs = [new() { Names = ["does-not-exist", "quantity"], Type = NativeColumnType.Int64 }];
-
                 int status = NativeApi.ParseTyped(handle, specs, headerRow: 1, out NativeTable table);
-
                 Assert.Equal(NativeStatus.Ok, status);
                 Assert.Equal(1, table.RowCount);
                 long value = Marshal.ReadInt64(ColumnAt(table, 0).Values);
@@ -2014,8 +2012,8 @@ namespace ExcelReader.Tests
                 Span<byte> buffer = stackalloc byte[256];
                 NativeApi.LastError(buffer, out int length);
                 string message = Encoding.UTF8.GetString(buffer[..length]);
-                Assert.Contains("\"nope\"", message);
-                Assert.Contains("\"still-nope\"", message);
+                Assert.Contains("\"nope\"", message, StringComparison.Ordinal);
+                Assert.Contains("\"still-nope\"", message, StringComparison.Ordinal);
                 NativeApi.Close(handle);
             }
             finally
@@ -2285,23 +2283,37 @@ namespace ExcelReader.Tests
             Assert.Equal(nullable, spec.Nullable);
         }
 
-        // Reads the native xl_column_spec array by hand rather than via NativeColumnSpecRaw's `byte*
-        // Name` field - this project has no AllowUnsafeBlocks, and Marshal.PtrToStringUTF8 already
+        // Reads the native xl_column_spec array by hand rather than via NativeColumnSpecRaw's `byte**
+        // Names` field - this project has no AllowUnsafeBlocks, and Marshal.PtrToStringUTF8 already
         // decodes exactly `length` bytes regardless of a trailing NUL (there isn't one; see
         // NativeApi.Schema.cs's BuildSpec), so there is nothing an unsafe pointer read would add here.
         private static (string? Name, int Index, int Type, bool Nullable)[] DecodeSchema(NativeInferredSchema schema)
         {
-            int specSize = Marshal.SizeOf<NativeColumnSpecRaw>(); // name(8) + name_len(4) + index(4) + type(4) + nullable(4)
+            int specSize = Marshal.SizeOf<NativeColumnSpecRaw>();
+            int namesOffset = (int)Marshal.OffsetOf<NativeColumnSpecRaw>(nameof(NativeColumnSpecRaw.Names));
+            int nameLensOffset = (int)Marshal.OffsetOf<NativeColumnSpecRaw>(nameof(NativeColumnSpecRaw.NameLens));
+            int nameCountOffset = (int)Marshal.OffsetOf<NativeColumnSpecRaw>(nameof(NativeColumnSpecRaw.NameCount));
+            int indexOffset = (int)Marshal.OffsetOf<NativeColumnSpecRaw>(nameof(NativeColumnSpecRaw.Index));
+            int typeOffset = (int)Marshal.OffsetOf<NativeColumnSpecRaw>(nameof(NativeColumnSpecRaw.Type));
+            int nullableOffset = (int)Marshal.OffsetOf<NativeColumnSpecRaw>(nameof(NativeColumnSpecRaw.Nullable));
+
             var columns = new (string?, int, int, bool)[schema.ColumnCount];
             for (int i = 0; i < columns.Length; i++)
             {
                 IntPtr spec = IntPtr.Add(schema.Columns, i * specSize);
-                IntPtr namePtr = Marshal.ReadIntPtr(spec, 0);
-                int nameLen = Marshal.ReadInt32(spec, 8);
-                int index = Marshal.ReadInt32(spec, 12);
-                int type = Marshal.ReadInt32(spec, 16);
-                int nullable = Marshal.ReadInt32(spec, 20);
-                string? name = namePtr == IntPtr.Zero ? null : Marshal.PtrToStringUTF8(namePtr, nameLen);
+                int nameCount = Marshal.ReadInt32(spec, nameCountOffset);
+                string? name = null;
+                if (nameCount > 0)
+                {
+                    IntPtr namesArray = Marshal.ReadIntPtr(spec, namesOffset);
+                    IntPtr nameLensArray = Marshal.ReadIntPtr(spec, nameLensOffset);
+                    IntPtr namePtr = Marshal.ReadIntPtr(namesArray, 0);
+                    int nameLen = Marshal.ReadInt32(nameLensArray, 0);
+                    name = Marshal.PtrToStringUTF8(namePtr, nameLen);
+                }
+                int index = Marshal.ReadInt32(spec, indexOffset);
+                int type = Marshal.ReadInt32(spec, typeOffset);
+                int nullable = Marshal.ReadInt32(spec, nullableOffset);
                 columns[i] = (name, index, type, nullable != 0);
             }
             return columns;
@@ -3151,6 +3163,37 @@ namespace ExcelReader.Tests
             {
                 FreeBuiltTable(ref table);
                 File.Delete(path);
+            }
+        }
+
+        [Fact]
+        public void WriteTyped_Should_Reject_A_Spec_With_More_Than_One_Name()
+        {
+            // A well-formed 1-column, 1-row table: the point of this test is that TryValidateWriteTable
+            // rejects the name_count > 1 spec specifically, not that it rejects a malformed table for some
+            // unrelated reason first (e.g. a column-count mismatch).
+            NativeTable table = BuildInt64Table([1L]);
+            try
+            {
+                NativeColumnSpec[] specs = [new() { Names = ["qty", "quantity"], Type = NativeColumnType.Int64 }];
+                string path = Path.Combine(Path.GetTempPath(), $"excelreader-native-{Guid.NewGuid():N}.csv");
+                try
+                {
+                    int status = NativeApi.WriteTyped(Encoding.UTF8.GetBytes(path), NativeFormat.Csv, specs, table, new NativeWriteOptions());
+                    Assert.Equal(NativeStatus.InvalidArgument, status);
+                    Assert.False(File.Exists(path));
+                }
+                finally
+                {
+                    if (File.Exists(path))
+                    {
+                        File.Delete(path);
+                    }
+                }
+            }
+            finally
+            {
+                FreeBuiltTable(ref table);
             }
         }
 

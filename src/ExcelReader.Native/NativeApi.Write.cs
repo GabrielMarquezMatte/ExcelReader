@@ -161,7 +161,7 @@ namespace ExcelReader.Native
             using TRow row = sheet.StartRow();
             foreach (NativeColumnSpec spec in specs)
             {
-                row.Write(spec.Name);
+                row.Write(spec.Names[0]);
             }
         }
 
@@ -302,12 +302,18 @@ namespace ExcelReader.Native
                 return false;
             }
 
-            hasHeader = specs[0].Name is not null;
+            hasHeader = specs[0].Names.Length > 0;
             for (int index = 0; index < table.ColumnCount; index++)
             {
-                if ((specs[index].Name is not null) != hasHeader)
+                int nameCount = specs[index].Names.Length;
+                if ((nameCount > 0) != hasHeader)
                 {
                     error = "every column spec must have a name, or none may — xl_write_typed cannot write a partial header row.";
+                    return false;
+                }
+                if (nameCount > 1)
+                {
+                    error = $"column {index} is a write spec and must have exactly one name; got {nameCount}.";
                     return false;
                 }
                 if (!TryValidateWriteColumn(specs[index], ColumnAt(table, index), index, table.RowCount, out error))
