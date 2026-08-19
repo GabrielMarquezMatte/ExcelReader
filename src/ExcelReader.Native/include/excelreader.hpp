@@ -362,10 +362,10 @@ namespace xl
                 InferredColumn column{};
                 // A guessed name is exactly name_len bytes with no NUL terminator, and is NULL
                 // whenever the column had no usable header cell.
-                if (spec.name != nullptr && spec.name_len > 0)
+                if (spec.name_count > 0 && spec.names[0] != nullptr && spec.name_lens[0] > 0)
                 {
-                    column.name = std::string(reinterpret_cast<const char *>(spec.name),
-                                              static_cast<size_t>(spec.name_len));
+                    column.name = std::string(reinterpret_cast<const char *>(spec.names[0]),
+                                              static_cast<size_t>(spec.name_lens[0]));
                 }
                 column.index = spec.index;
                 column.type = spec.type;
@@ -465,10 +465,10 @@ namespace xl
 
     // ---- Struct <-> column bindings ---------------------------------------------------------------
 
-    template <typename Class, typename T>
+    template <typename Class, typename T, std::size_t N = 1>
     struct FieldBinding
     {
-        const char *column_name;
+        std::array<const char *, N> column_names;
         T Class::*member;
         using FieldType = T;
     };
@@ -476,7 +476,19 @@ namespace xl
     template <typename Class, typename T>
     constexpr FieldBinding<Class, T> make_field(const char *name, T Class::*member)
     {
-        return {name, member};
+        return {{name}, member};
+    }
+
+    template <typename Class, typename T, std::size_t N>
+    constexpr FieldBinding<Class, T, N> make_field(const char *(&&names)[N], T Class::*member)
+    {
+        FieldBinding<Class, T, N> result{};
+        for (std::size_t i = 0; i < N; ++i)
+        {
+            result.column_names[i] = names[i];
+        }
+        result.member = member;
+        return result;
     }
 
     // Users specialize this for each struct they want to parse into.
@@ -485,17 +497,27 @@ namespace xl
 
     namespace detail
     {
-
-        template <typename Tuple, std::size_t... Is>
-        std::array<xl_column_spec, sizeof...(Is)> build_specs(const Tuple &bindings, std::index_sequence<Is...>)
+        template <typename Class, typename T, std::size_t N>
+        xl_column_spec build_one_spec(const FieldBinding<Class, T, N> &binding, std::vector<int32_t> &name_lens_storage)
         {
-            return {xl_column_spec{
-                reinterpret_cast<const uint8_t *>(std::get<Is>(bindings).column_name),
-                static_cast<int32_t>(std::strlen(std::get<Is>(bindings).column_name)),
+            name_lens_storage.resize(N);
+            for (std::size_t i = 0; i < N; ++i)
+            {
+                name_lens_storage[i] = static_cast<int32_t>(std::strlen(binding.column_names[i]));
+            }
+            return xl_column_spec{
+                reinterpret_cast<const uint8_t *const *>(binding.column_names.data()),
+                name_lens_storage.data(),
+                static_cast<int32_t>(N),
                 0, // index is ignored: resolved by name
-                XlType<typename std::tuple_element_t<Is, Tuple>::FieldType>::value,
+                XlType<T>::value,
                 1 // nullable = 1 (safe default)
-            }...};
+            };
+        }
+        template <typename Tuple, std::size_t... Is>
+        std::array<xl_column_spec, sizeof...(Is)> build_specs(const Tuple &bindings, std::index_sequence<Is...>, std::array<std::vector<int32_t>, sizeof...(Is)> &name_lens_storage)
+        {
+            return {build_one_spec(std::get<Is>(bindings), name_lens_storage[Is])...};
         }
 
         // Whether row `row` is non-null in `col`; columns with no null values have validity == nullptr.
@@ -510,8 +532,8 @@ namespace xl
             return (col.validity[byte_idx] & (1 << bit_idx)) != 0;
         }
 
-        template <typename Class, typename T>
-        void assign_field(Class &instance, const xl_column &col, int64_t row, const FieldBinding<Class, T> &binding)
+        template <typename Class, typename T, std::size_t N>
+        void assign_field(Class &instance, const xl_column &col, int64_t row, const FieldBinding<Class, T, N> &binding)
         {
             if (!is_valid(col, row))
             {
@@ -765,9 +787,9 @@ namespace xl
     {
         static constexpr auto bindings = ExcelMapper<T>::get_bindings();
         static constexpr size_t num_fields = std::tuple_size_v<decltype(bindings)>;
-
+        std::array<std::vector<int32_t>, num_fields> name_lens_storage{};
         std::array<xl_column_spec, num_fields> specs_array =
-            detail::build_specs(bindings, std::make_index_sequence<num_fields>{});
+            detail::build_specs(bindings, std::make_index_sequence<num_fields>{}, name_lens_storage);
         std::span<const xl_column_spec> specs(specs_array);
 
         xl_table table{};
