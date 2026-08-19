@@ -57,7 +57,7 @@ fn named_fields(
 
 fn field_binding(field: &Field) -> syn::Result<proc_macro2::TokenStream> {
     let field_ident = field.ident.as_ref().expect("named_fields guarantees Some");
-    let name = excel_name(field)?;
+    let name = excel_names(field)?;
     let (inner_ty, is_option) = unwrap_option(&field.ty);
     let kind = FieldKind::from_type(inner_ty)?;
     let xl_type = kind.xl_type_tokens();
@@ -70,36 +70,41 @@ fn field_binding(field: &Field) -> syn::Result<proc_macro2::TokenStream> {
 
     Ok(quote! {
         ::excelreader::workbook::ColumnBinding {
-            name: #name,
+            names: &[#(#name),*],
             xl_type: #xl_type,
             assign: |r, col, row| r.#field_ident = #assign_value,
         }
     })
 }
 
-fn excel_name(field: &Field) -> syn::Result<LitStr> {
+fn excel_names(field: &Field) -> syn::Result<Vec<LitStr>> {
+    let mut name = None;
+    let mut aliases = Vec::new();
     for attr in &field.attrs {
         if !attr.path().is_ident("excel") {
             continue;
         }
-        let mut name = None;
         attr.parse_nested_meta(|meta| {
             if meta.path.is_ident("name") {
-                let value = meta.value()?;
-                name = Some(value.parse::<LitStr>()?);
-                Ok(())
-            } else {
-                Err(meta.error("unsupported #[excel(...)] key, expected `name`"))
+                name = Some(meta.value()?.parse::<LitStr>()?);
+                return Ok(());
             }
+            if meta.path.is_ident("alias") {
+                aliases.push(meta.value()?.parse::<LitStr>()?);
+                return Ok(());
+            }
+            Err(meta.error("unsupported #[excel(...)] key, expected `name` or `alias`"))
         })?;
-        if let Some(name) = name {
-            return Ok(name);
-        }
     }
-    Err(syn::Error::new(
-        field.span(),
-        "field is missing #[excel(name = \"...\")]",
-    ))
+    let Some(name) = name else {
+        return Err(syn::Error::new(
+            field.span(),
+            "field is missing #[excel(name = \"...\")]",
+        ));
+    };
+    let mut names = vec![name];
+    names.extend(aliases);
+    Ok(names)
 }
 
 /// Returns `(T, true)` for a field typed `Option<T>`, `(ty, false)` for anything else.
@@ -377,5 +382,23 @@ mod tests {
         assert!(err
             .to_string()
             .contains("can only be derived for structs with named fields"));
+    }
+    #[test]
+    fn collects_aliases_in_declared_order_after_the_primary_name() {
+        let output = expand_str(
+            r#"
+        struct Row {
+            #[excel(name = "Nome", alias = "Nom", alias = "Name")]
+            nome: String,
+        }
+        "#,
+        )
+        .expect("expand must succeed");
+
+        let nome_pos = output.find("\"Nome\"").expect("primary name must appear");
+        let nom_pos = output.find("\"Nom\"").expect("first alias must appear");
+        let name_pos = output.rfind("\"Name\"").expect("second alias must appear");
+        assert!(nome_pos < nom_pos, "primary name must precede its aliases");
+        assert!(nom_pos < name_pos, "aliases must stay in declared order");
     }
 }

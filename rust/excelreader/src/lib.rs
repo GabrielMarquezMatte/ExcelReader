@@ -22,7 +22,7 @@ pub const XL_ERROR: i32 = -5;
 
 /// ABI revision this crate is compiled against. `Workbook::open` refuses to proceed when the loaded
 /// library's `xl_abi_version()` disagrees - see `workbook::check_abi_version`.
-pub const XL_ABI_VERSION: i32 = 1;
+pub const XL_ABI_VERSION: i32 = 2;
 
 pub const XL_T_STRING: i32 = 0;
 pub const XL_T_I64: i32 = 1;
@@ -76,8 +76,9 @@ pub struct XlOpenOptions {
 
 #[repr(C)]
 pub struct XlColumnSpec {
-    pub name: *const u8,
-    pub name_len: i32,
+    pub names: *const *const u8,
+    pub name_lens: *const i32,
+    pub name_count: i32,
     pub index: i32,
     pub r#type: i32,
     pub nullable: i32,
