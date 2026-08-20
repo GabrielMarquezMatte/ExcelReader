@@ -5,7 +5,7 @@ use crate::{
 };
 use std::marker::PhantomData;
 
-fn last_error(code: i32) -> Error {
+pub(crate) fn last_error(code: i32) -> Error {
     unsafe {
         let mut len: i32 = 0;
         let ptr = crate::xl_last_error_ptr(&mut len);
@@ -19,7 +19,7 @@ fn last_error(code: i32) -> Error {
     }
 }
 
-fn check(code: i32) -> Result<(), Error> {
+pub(crate) fn check(code: i32) -> Result<(), Error> {
     if code == XL_OK {
         Ok(())
     } else {
@@ -37,7 +37,7 @@ fn check(code: i32) -> Result<(), Error> {
 ///
 /// The result is cached: it cannot change for the lifetime of the process, and every
 /// `Workbook::open` would otherwise pay an FFI call for it.
-fn check_abi_version() -> Result<(), Error> {
+pub(crate) fn check_abi_version() -> Result<(), Error> {
     use std::sync::OnceLock;
     static CHECKED: OnceLock<Result<(), Error>> = OnceLock::new();
 

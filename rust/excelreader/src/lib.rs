@@ -6,9 +6,10 @@ mod error;
 mod options;
 mod temporal;
 pub mod workbook;
+pub mod writer;
 
 pub use error::Error;
-pub use options::OpenOptions;
+pub use options::{OpenOptions, WriteOptions};
 pub use temporal::{Date, Time, Timestamp};
 
 use std::os::raw::{c_int, c_void};
@@ -72,6 +73,22 @@ pub struct XlOpenOptions {
     pub max_zip_entries: i32,
     pub prefetch_decompression: i32,
     pub intern_strings: i32,
+}
+
+/// Mirrors `xl_write_options`. Field ORDER is the C struct's, not a tidied-up version of it: with
+/// `repr(C)` the 4 bytes of padding after `sheet_name_len` land exactly where a C compiler puts
+/// them, giving the 32-byte x64 layout `tests/ExcelReader.NativeSmoke/smoke.c` static-asserts.
+/// Build one through [`WriteOptions`] rather than by hand.
+#[repr(C)]
+#[derive(Clone, Copy, Debug)]
+pub struct XlWriteOptions {
+    pub struct_size: i32,
+    pub sheet_name_len: i32,
+    pub sheet_name: *const u8,
+    pub csv_delimiter: i32,
+    pub csv_quote: i32,
+    pub date1904: i32,
+    pub use_shared_strings: i32,
 }
 
 #[repr(C)]
@@ -168,6 +185,14 @@ extern "C" {
     ) -> c_int;
 
     pub fn xl_free_schema(schema: *mut XlInferredSchema);
+    pub fn xl_write_typed(
+        path: *const u8,
+        path_len: i32,
+        format: i32,
+        specs: *const XlColumnSpec,
+        table: *const XlTable,
+        options: *const XlWriteOptions,
+    ) -> c_int;
 
     pub fn xl_last_error_ptr(out_len: *mut i32) -> *const u8;
 }
