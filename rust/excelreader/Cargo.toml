@@ -20,6 +20,7 @@ excelreader-derive = { path = "../excelreader-derive", version = "0.0.0" }
 # `default-features = false` drops chrono's `oldtime`/`clock` stack: this crate only converts
 # between integer counts and calendar types, and never reads the system clock or a timezone database.
 chrono = { version = "0.4", optional = true, default-features = false, features = ["std"] }
+rust_xlsxwriter = "0.98.2"
 
 [dev-dependencies]
 trybuild = "1"
@@ -32,6 +33,10 @@ harness = false
 
 [[bench]]
 name = "compare_bench"
+harness = false
+
+[[bench]]
+name = "write_bench"
 harness = false
 
 [package.metadata.docs.rs]
