@@ -19,7 +19,7 @@
 
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use excelreader::workbook::{parse_sheet, ExcelMapper, Workbook};
-use excelreader::writer::{write_columns, write_sheet, Column, ColumnData, OwnedColumn};
+use excelreader::writer::{write_columns, write_sheet, Column, OwnedColumn};
 use excelreader::{Date, XL_FORMAT_XLSX};
 use std::path::{Path, PathBuf};
 
