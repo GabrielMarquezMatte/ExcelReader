@@ -820,6 +820,10 @@ namespace xl
                     instance.*(binding.member) = T(str_data, static_cast<size_t>(end - start));
                 }
             }
+            else if constexpr (std::is_same_v<T, bool>)
+            {
+                instance.*(binding.member) = (static_cast<const uint8_t *>(col.values)[row] != 0);
+            }
             else if constexpr (std::is_integral_v<T>)
             {
                 instance.*(binding.member) = T(static_cast<const int64_t *>(col.values)[row]);
@@ -827,10 +831,6 @@ namespace xl
             else if constexpr (std::is_floating_point_v<T>)
             {
                 instance.*(binding.member) = T(static_cast<const double *>(col.values)[row]);
-            }
-            else if constexpr (std::is_same_v<T, bool>)
-            {
-                instance.*(binding.member) = (static_cast<const uint8_t *>(col.values)[row] != 0);
             }
             else if constexpr (std::is_same_v<T, std::chrono::sys_days>)
             {

@@ -78,7 +78,7 @@ static int test_write_columns_round_trip()
         auto table = xl::parse_sheet<WrittenRow>(*workbook);
         CHECK(table.has_value(), "the written file must parse back");
         CHECK(table->size() == 2, "two rows were written");
-    
+
         WrittenRow first = *table->begin();
         CHECK(first.texto == "uma", "row 0's string must round-trip");
         CHECK(first.inteiro == 1, "row 0's int64 must round-trip");
@@ -165,6 +165,44 @@ static int test_format_from_path()
     return 0;
 }
 
+struct FlagRow
+{
+    bool ativo;
+};
+
+template <>
+struct xl::ExcelMapper<FlagRow>
+{
+    static constexpr auto get_bindings()
+    {
+        return std::make_tuple(xl::make_field("ativo", &FlagRow::ativo));
+    }
+};
+
+static int test_bool_round_trip()
+{
+    // One byte per row, 0 or 1 - XL_T_BOOL's wire layout, not a bit-packed bitmap.
+    const std::vector<uint8_t> flags{1, 0, 1};
+    const std::array<xl::ColumnRef, 1> columns{xl::bool_column("ativo", flags)};
+
+    const std::filesystem::path path = temp_path("bools.xlsx");
+    CHECK(xl::write_columns(path.string(), XL_FORMAT_XLSX, columns).has_value(),
+          "writing a bool column must succeed");
+    {
+        auto workbook = xl::Workbook::open(path.string());
+        CHECK(workbook.has_value(), "the written file must open");
+        auto table = xl::parse_sheet<FlagRow>(*workbook);
+        CHECK(table.has_value(), "the written file must parse back");
+        CHECK(table->size() == 3, "three rows were written");
+
+        CHECK(table->at(0)->ativo, "row 0 was written true");
+        CHECK(!table->at(1)->ativo, "row 1 was written false");
+        CHECK(table->at(2)->ativo, "row 2 was written true");
+    }
+    std::filesystem::remove(path);
+    return 0;
+}
+
 int main()
 {
     if (test_write_options() != 0)
@@ -180,6 +218,10 @@ int main()
         return 1;
     }
     if (test_write_columns_rejects_bad_input() != 0)
+    {
+        return 1;
+    }
+    if (test_bool_round_trip() != 0)
     {
         return 1;
     }
