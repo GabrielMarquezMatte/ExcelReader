@@ -1,0 +1,5 @@
+error: unsupported #[excel(...)] key, expected `name` or `alias`
+ --> tests/derive_ui/fail/unknown_attribute_key.rs:5:13
+  |
+5 |     #[excel(column = "Nome")]
+  |             ^^^^^^

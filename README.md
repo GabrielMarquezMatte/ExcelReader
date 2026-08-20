@@ -819,6 +819,28 @@ Run the benchmarks locally:
 dotnet run --project tests/ExcelReader.Benchmarks/ExcelReader.Benchmarks.csproj --configuration Release -- --filter *
 ```
 
+### C++ and Rust bindings
+
+The C++ and Rust wrappers around the native library each have their own benchmark suite (Google
+Benchmark and Criterion respectively), measured on the same machine as the .NET results above.
+Full tables and how to run them locally: [`cpp/README.md#benchmarks`](cpp/README.md#benchmarks) and
+[`rust/excelreader/README.md#benchmarks`](rust/excelreader/README.md#benchmarks).
+
+Headline numbers, reading a real 65,535-row workbook in full (all 14 columns) against each
+language's own competing library, both sides decoding into owned values so neither gets a
+zero-copy advantage the other can't take:
+
+| Comparison | Format | ExcelReader | Competitor | Ratio |
+|---|---|---:|---:|---:|
+| vs. [calamine](https://github.com/tafia/calamine) (Rust) | XLSX | 123.5 ms | 273.4 ms | ~2.2x faster |
+| vs. calamine (Rust) | XLSB | 70.6 ms | 84.9 ms | ~1.2x faster |
+| vs. [xlsxio](https://github.com/brechtsanders/xlsxio) (C) | XLSX | 110.4 ms | 509.3 ms | ~4.6x faster |
+| vs. [xlnt](https://github.com/tfussell/xlnt) (C++) | XLSX | 110.4 ms | 2,335.9 ms | ~21x faster |
+
+Neither xlsxio nor xlnt reads `.xlsb`, so those two comparisons are XLSX-only. calamine is a fast,
+well-optimized reader in its own right — the gap there is real but not the order of magnitude seen
+against the C/C++ competitors.
+
 ## Notes
 
 - Reads `.xlsx`, `.xlsb` (BIFF12), `.xls` (BIFF8), and `.csv`; writes `.xlsx`, `.xlsb`, `.xls`, and `.csv`.
@@ -846,6 +868,8 @@ XLSB, XLS and CSV without a .NET runtime installed.
 
 - C ABI header: [`src/ExcelReader.Native/include/excelreader.h`](src/ExcelReader.Native/include/excelreader.h)
 - Python package: [`python/`](python/README.md)
+- C++ package: header-only CMake wrapper, `xl::Workbook`/`xl::parse_sheet` over the same ABI — see [`cpp/README.md`](cpp/README.md).
+- Rust crate: safe `Workbook`/`parse_sheet` bindings, downloadable via `cargo add excelreader` — see [`rust/excelreader/README.md`](rust/excelreader/README.md).
 
 ```python
 from excelreader import open_workbook

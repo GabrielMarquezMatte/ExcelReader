@@ -165,6 +165,26 @@ def test_parse_typed_returns_typed_columns_by_name(tmp_path):
     lib.xl_free_table(ctypes.byref(table))
     lib.xl_close(handle)
 
+def test_parse_typed_resolves_the_first_alias_present_in_the_header_row(tmp_path):
+    lib = _native.load_library()
+    csv_file = tmp_path / "typed.csv"
+    csv_file.write_text("name,qty\nwidget,3\ngadget,7\n", encoding="utf-8")
+    path = str(csv_file).encode("utf-8")
+    handle = ctypes.c_void_p()
+    assert lib.xl_open_file(path, len(path), _native.XL_FORMAT_CSV, ctypes.byref(handle)) == _native.XL_OK
+
+    specs = (_native.NativeColumnSpec * 2)(
+        _native.column_spec_by_names(["does-not-exist", "name"], _native.XL_T_STRING),
+        _native.column_spec_by_name("qty", _native.XL_T_I64),
+    )
+    table = _native.NativeTable()
+    status = lib.xl_parse_typed(handle, specs, len(specs), 1, ctypes.byref(table))
+    assert status == _native.XL_OK
+    assert table.row_count == 2
+
+    lib.xl_free_table(ctypes.byref(table))
+    lib.xl_close(handle)
+
 
 def test_parse_arrow_returns_a_struct_array_with_a_matching_schema(tmp_path):
     # Exercises the ArrowSchema/ArrowArray ctypes.Structure layouts end-to-end against the real

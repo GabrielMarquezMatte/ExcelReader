@@ -12,7 +12,12 @@
     <TrimmerSingleWarn>false</TrimmerSingleWarn>
     <!-- Keeps ICU out of the shared library; this layer does no culture-sensitive formatting. -->
     <InvariantGlobalization>true</InvariantGlobalization>
-
+    <OptimizationPreference>Speed</OptimizationPreference>
+    <IlcGenerateStackTraceData>false</IlcGenerateStackTraceData>
+    <StackTraceSupport>false</StackTraceSupport>
+    <UseSystemResourceKeys>true</UseSystemResourceKeys>
+    <EventSourceSupport>false</EventSourceSupport>
+    <IlcInstructionSet>native</IlcInstructionSet>
     <!-- RS0016/RS0026/RS0037: public-API tracking is for ExcelReader.Core's shipped NuGet surface.
          This project is never packed — its C ABI is tracked by include/excelreader.h instead. -->
     <!-- CA1031/S2221: every exported function is a hard boundary. An escaping exception would
@@ -24,6 +29,10 @@
     <!-- S6640: Exports.cs is the C ABI boundary — [UnmanagedCallersOnly] methods require pointer
          parameters, so "avoid unsafe" does not apply to this file's entire reason for existing. -->
     <NoWarn>$(NoWarn);RS0016;RS0026;RS0037;CA1031;S2221;CA2000;IDISP001;IDISP004;IDISP007;S6640</NoWarn>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Configuration)'=='Release'">
+    <DebuggerSupport>false</DebuggerSupport>
   </PropertyGroup>
 
   <ItemGroup>

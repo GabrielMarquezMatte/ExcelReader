@@ -55,12 +55,13 @@ XL_STATIC_ASSERT(offsetof(xl_rows, row_count) == 0, rows_row_count);
 XL_STATIC_ASSERT(offsetof(xl_rows, rows) == 8, rows_rows);
 XL_STATIC_ASSERT(sizeof(xl_rows) == 16, rows_size);
 
-XL_STATIC_ASSERT(offsetof(xl_column_spec, name) == 0, column_spec_name);
-XL_STATIC_ASSERT(offsetof(xl_column_spec, name_len) == 8, column_spec_name_len);
-XL_STATIC_ASSERT(offsetof(xl_column_spec, index) == 12, column_spec_index);
-XL_STATIC_ASSERT(offsetof(xl_column_spec, type) == 16, column_spec_type);
-XL_STATIC_ASSERT(offsetof(xl_column_spec, nullable) == 20, column_spec_nullable);
-XL_STATIC_ASSERT(sizeof(xl_column_spec) == 24, column_spec_size);
+XL_STATIC_ASSERT(offsetof(xl_column_spec, names) == 0, column_spec_names);
+XL_STATIC_ASSERT(offsetof(xl_column_spec, name_lens) == 8, column_spec_name_lens);
+XL_STATIC_ASSERT(offsetof(xl_column_spec, name_count) == 16, column_spec_name_count);
+XL_STATIC_ASSERT(offsetof(xl_column_spec, index) == 20, column_spec_index);
+XL_STATIC_ASSERT(offsetof(xl_column_spec, type) == 24, column_spec_type);
+XL_STATIC_ASSERT(offsetof(xl_column_spec, nullable) == 28, column_spec_nullable);
+XL_STATIC_ASSERT(sizeof(xl_column_spec) == 32, column_spec_size);
 
 XL_STATIC_ASSERT(offsetof(xl_write_options, struct_size) == 0, write_options_struct_size);
 XL_STATIC_ASSERT(offsetof(xl_write_options, sheet_name_len) == 4, write_options_sheet_name_len);
@@ -227,6 +228,18 @@ static int bind_all(xl_lib_handle lib, api_t* api)
             return 1;                                                                                 \
         }                                                                                              \
     } while (0)
+
+/* Fills `spec` as a single-candidate name-based spec, using `name_slot`/`len_slot` as the
+ * one-element backing storage `spec->names`/`spec->name_lens` point into — that storage must
+ * outlive every use of `spec` (the caller declares it in the same or an outer scope). */
+static void set_spec_name1(xl_column_spec* spec, const uint8_t** name_slot, int32_t* len_slot, const char* text)
+{
+    *name_slot = (const uint8_t*)text;
+    *len_slot = (int32_t)strlen(text);
+    spec->names = name_slot;
+    spec->name_lens = len_slot;
+    spec->name_count = 1;
+}
 
 static int32_t open_fixture(const api_t* api, const char* fixture, xl_workbook** out_handle)
 {
@@ -443,19 +456,19 @@ static int test_open_file_ex(const api_t* api, const char* fixture)
     return 0;
 }
 
-static int build_specs(xl_column_spec* specs)
+static int build_specs(xl_column_spec* specs, const uint8_t** name_ptrs, int32_t* name_lens)
 {
     memset(specs, 0, 3 * sizeof(xl_column_spec));
-    specs[0].name = (const uint8_t*)"Coluna1";
-    specs[0].name_len = 7;
+    set_spec_name1(&specs[0], &name_ptrs[0], &name_lens[0], "Coluna1");
     specs[0].type = XL_T_STRING;
-    specs[1].name = (const uint8_t*)"Coluna2";
-    specs[1].name_len = 7;
+    specs[0].nullable = 1;
+    set_spec_name1(&specs[1], &name_ptrs[1], &name_lens[1], "Coluna2");
     specs[1].type = XL_T_DATE;
-    specs[2].name = (const uint8_t*)"Coluna3";
-    specs[2].name_len = 7;
+    specs[1].nullable = 1;
+    set_spec_name1(&specs[2], &name_ptrs[2], &name_lens[2], "Coluna3");
     specs[2].type = XL_T_I64;
-    return 0;
+    specs[2].nullable = 1;
+    return 3;
 }
 
 /* The counts xl_parse_typed/xl_parse_arrow take are the only numbers a C caller hands over that
@@ -473,8 +486,9 @@ static int test_parse_rejects_hostile_counts(const api_t* api, const char* fixtu
 
     xl_column_spec one_spec;
     memset(&one_spec, 0, sizeof(one_spec));
-    one_spec.name = (const uint8_t*)"Coluna1";
-    one_spec.name_len = 7;
+    const uint8_t* one_spec_name;
+    int32_t one_spec_name_len;
+    set_spec_name1(&one_spec, &one_spec_name, &one_spec_name_len, "Coluna1");
     one_spec.type = XL_T_STRING;
 
     xl_table table;
@@ -494,11 +508,13 @@ static int test_parse_rejects_hostile_counts(const api_t* api, const char* fixtu
     /* A plausible count with an implausible name_len: the bound has to cover both, since name_len is
      * what becomes a read length over the caller's string. */
     xl_column_spec wide_name = one_spec;
-    wide_name.name_len = XL_MAX_COLUMN_NAME_BYTES + 1;
+    int32_t wide_name_len = XL_MAX_COLUMN_NAME_BYTES + 1;
+    wide_name.name_lens = &wide_name_len;
     CHECK(api->parse_typed(handle, &wide_name, 1, 1, &table) == XL_INVALID_ARGUMENT,
           "xl_parse_typed must reject a name_len past XL_MAX_COLUMN_NAME_BYTES");
 
-    wide_name.name_len = -1;
+    wide_name_len = -1;
+    wide_name.name_lens = &wide_name_len;
     CHECK(api->parse_typed(handle, &wide_name, 1, 1, &table) == XL_INVALID_ARGUMENT,
           "xl_parse_typed must reject a negative name_len");
 
@@ -515,8 +531,9 @@ static int test_parse_rejects_hostile_counts(const api_t* api, const char* fixtu
     /* A blank name would otherwise trim to "" and match the first empty header cell. */
     xl_column_spec blank_name;
     memset(&blank_name, 0, sizeof(blank_name));
-    blank_name.name = (const uint8_t*)"   ";
-    blank_name.name_len = 3;
+    const uint8_t* blank_name_name;
+    int32_t blank_name_len;
+    set_spec_name1(&blank_name, &blank_name_name, &blank_name_len, "   ");
     blank_name.type = XL_T_STRING;
     CHECK(api->parse_typed(handle, &blank_name, 1, 1, &table) == XL_INVALID_ARGUMENT,
           "xl_parse_typed must reject a blank column name");
@@ -524,7 +541,9 @@ static int test_parse_rejects_hostile_counts(const api_t* api, const char* fixtu
     /* The handle must still be usable: every rejection above is an argument error, not a fault that
      * leaves the workbook in a broken state. */
     xl_column_spec specs[3];
-    build_specs(specs);
+    const uint8_t* name_ptrs[3];
+    int32_t name_lens[3];
+    build_specs(specs, name_ptrs, name_lens);
     CHECK(api->parse_typed(handle, specs, 3, 1, &table) == XL_OK,
           "a valid xl_parse_typed after the rejections must still succeed");
     CHECK(table.row_count == 100, "the recovered parse must still return all 100 data rows");
@@ -548,7 +567,9 @@ static int test_parse_typed_and_cursor_independence(const api_t* api, const char
           "reading the header row via xl_next_row must succeed");
 
     xl_column_spec specs[3];
-    build_specs(specs);
+    const uint8_t* name_ptrs[3];
+    int32_t name_lens[3];
+    build_specs(specs, name_ptrs, name_lens);
 
     xl_table table;
     memset(&table, 0, sizeof(table));
@@ -609,7 +630,9 @@ static int test_parse_arrow(const api_t* api, const char* fixture)
     CHECK(open_fixture(api, fixture, &handle) == XL_OK, "xl_open_file must succeed");
 
     xl_column_spec specs[3];
-    build_specs(specs);
+    const uint8_t* name_ptrs[3];
+    int32_t name_lens[3];
+    build_specs(specs, name_ptrs, name_lens);
 
     struct ArrowArray array;
     struct ArrowSchema schema;
@@ -664,16 +687,16 @@ static int test_infer_schema(const api_t* api, const char* fixture)
     CHECK(schema.column_count == 18, "RealExcel.xlsb's header row has 18 columns");
 
     xl_column_spec coluna1 = schema.columns[0];
-    CHECK(coluna1.name_len == 7 && memcmp(coluna1.name, "Coluna1", 7) == 0, "column 0 must be named Coluna1");
+    CHECK(coluna1.name_count == 1 && coluna1.name_lens[0] == 7 && memcmp(coluna1.names[0], "Coluna1", 7) == 0, "column 0 must be named Coluna1");
     CHECK(coluna1.type == XL_T_STRING, "Coluna1 must be guessed as XL_T_STRING");
     CHECK(coluna1.index == 0, "column 0's index must be 0 regardless of its name");
 
     xl_column_spec coluna2 = schema.columns[1];
-    CHECK(coluna2.name_len == 7 && memcmp(coluna2.name, "Coluna2", 7) == 0, "column 1 must be named Coluna2");
+    CHECK(coluna2.name_count == 1 && coluna2.name_lens[0] == 7 && memcmp(coluna2.names[0], "Coluna2", 7) == 0, "column 1 must be named Coluna2");
     CHECK(coluna2.type == XL_T_DATE, "Coluna2 must be guessed as XL_T_DATE");
 
     xl_column_spec coluna3 = schema.columns[2];
-    CHECK(coluna3.name_len == 7 && memcmp(coluna3.name, "Coluna3", 7) == 0, "column 2 must be named Coluna3");
+    CHECK(coluna3.name_count == 1 && coluna3.name_lens[0] == 7 && memcmp(coluna3.names[0], "Coluna3", 7) == 0, "column 2 must be named Coluna3");
     CHECK(coluna3.type == XL_T_I64, "Coluna3 must be guessed as XL_T_I64 - every sampled value is a whole number");
 
     /* The row cursor must still be positioned right after the header row. */
@@ -768,8 +791,9 @@ static int test_write_typed(const api_t* api)
     table.columns = &column;
 
     memset(&spec, 0, sizeof(spec));
-    spec.name = (const uint8_t*)"qty";
-    spec.name_len = 3;
+    const uint8_t* spec_name;
+    int32_t spec_name_len;
+    set_spec_name1(&spec, &spec_name, &spec_name_len, "qty");
     spec.type = XL_T_I64;
 
     memset(&options, 0, sizeof(options));

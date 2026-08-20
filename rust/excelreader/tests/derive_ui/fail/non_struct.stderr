@@ -1,0 +1,7 @@
+error: ExcelMapper can only be derived for structs with named fields
+ --> tests/derive_ui/fail/non_struct.rs:4:1
+  |
+4 | / enum Row {
+5 | |     A,
+6 | | }
+  | |_^

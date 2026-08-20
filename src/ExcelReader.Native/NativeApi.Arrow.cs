@@ -160,7 +160,7 @@ namespace ExcelReader.Native
 
         private static ArrowSchema BuildChildSchema(NativeColumnSpec spec, int index)
         {
-            string name = spec.Name ?? index.ToString(CultureInfo.InvariantCulture);
+            string name = spec.Names.Length > 0 ? spec.Names[0] : index.ToString(CultureInfo.InvariantCulture);
             return new ArrowSchema
             {
                 Format = AllocUtf8Z(ArrowFormatCode(spec.Type)),

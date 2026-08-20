@@ -1,0 +1,6 @@
+/target/
+/Cargo.lock
+# Workspace members shouldn't have their own Cargo.lock or target/
+/excelreader/Cargo.lock
+/excelreader/target/
+/excelreader-derive/target/

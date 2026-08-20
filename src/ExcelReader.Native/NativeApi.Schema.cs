@@ -85,9 +85,12 @@ namespace ExcelReader.Native
             NativeColumnSpecRaw* columns = (NativeColumnSpecRaw*)schema.Columns;
             for (int i = 0; i < schema.ColumnCount; i++)
             {
-                if (columns[i].Name is not null)
+                NativeColumnSpecRaw spec = columns[i];
+                if (spec.NameCount > 0)
                 {
-                    Marshal.FreeHGlobal((IntPtr)columns[i].Name);
+                    Marshal.FreeHGlobal((IntPtr)spec.Names[0]);
+                    Marshal.FreeHGlobal((IntPtr)spec.Names);
+                    Marshal.FreeHGlobal((IntPtr)spec.NameLens);
                 }
             }
             Marshal.FreeHGlobal(schema.Columns);
@@ -183,18 +186,26 @@ namespace ExcelReader.Native
 
         private static NativeColumnSpecRaw BuildSpec(string? name, int index, ColumnStat stat)
         {
-            byte* namePtr = null;
-            int nameLen = 0;
+            byte** namesBlock = null;
+            int* lensBlock = null;
+            int nameCount = 0;
             if (name is not null)
             {
-                nameLen = Encoding.UTF8.GetByteCount(name);
-                namePtr = (byte*)Marshal.AllocHGlobal(Math.Max(nameLen, 1));
+                int nameLen = Encoding.UTF8.GetByteCount(name);
+                byte* namePtr = (byte*)Marshal.AllocHGlobal(Math.Max(nameLen, 1));
                 Encoding.UTF8.GetBytes(name, new Span<byte>(namePtr, nameLen));
+
+                namesBlock = (byte**)Marshal.AllocHGlobal(sizeof(byte*));
+                namesBlock[0] = namePtr;
+                lensBlock = (int*)Marshal.AllocHGlobal(sizeof(int));
+                lensBlock[0] = nameLen;
+                nameCount = 1;
             }
             return new NativeColumnSpecRaw
             {
-                Name = namePtr,
-                NameLen = nameLen,
+                Names = namesBlock,
+                NameLens = lensBlock,
+                NameCount = nameCount,
                 Index = index,
                 Type = stat.InferType(),
                 Nullable = stat.SawEmpty ? 1 : 0,

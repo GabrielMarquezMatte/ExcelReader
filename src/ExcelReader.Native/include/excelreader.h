@@ -21,7 +21,7 @@ extern "C" {
 /* ABI revision of this header. Bumped on any change to a struct layout, a status code, or the
  * meaning of an existing function; adding a new function does not bump it. A caller should refuse
  * to proceed if xl_abi_version() does not equal the XL_ABI_VERSION it was compiled against. */
-#define XL_ABI_VERSION 1
+#define XL_ABI_VERSION 2
 
 #define XL_FORMAT_AUTO  0  /* sniffs XLS/XLSX/XLSB; does NOT detect CSV */
 #define XL_FORMAT_XLS   1
@@ -197,14 +197,17 @@ void xl_free_rows(xl_rows* rows);
 #define XL_T_TIME      5   /* microseconds since midnight, int64 */
 #define XL_T_TIMESTAMP 6   /* microseconds since 1970-01-01T00:00:00Z, int64 */
 
-/* Describes one output column of xl_parse_typed. Resolve by header name (name != NULL, matched
- * case-insensitively and trimmed against the header row) or by physical column index (name == NULL). */
+/* Describes one output column of xl_parse_typed. Resolve by header name (names != NULL, matched
+ * case-insensitively and trimmed against the header row, trying each candidate in `names` in order
+ * and stopping at the first match) or by physical column index (name_count == 0). */
 typedef struct xl_column_spec {
-    const uint8_t* name;   /* header text to match, UTF-8; NULL to match by index instead */
-    int32_t name_len;
-    int32_t index;         /* zero-based column index, used when name == NULL */
-    int32_t type;          /* XL_T_* */
-    int32_t nullable;      /* 0 = a failed conversion is XL_ERROR; 1 = it becomes null (validity bit 0) */
+    const uint8_t* const* names; /* candidate header texts, UTF-8, in priority order; NULL when
+                                   * name_count == 0 to match by index instead */
+    const int32_t* name_lens;    /* one length per entry in `names` */
+    int32_t name_count;
+    int32_t index;                /* zero-based column index, used when name_count == 0 */
+    int32_t type;                 /* XL_T_* */
+    int32_t nullable;             /* 0 = a failed conversion is XL_ERROR; 1 = it becomes null (validity bit 0) */
 } xl_column_spec;
 
 /* One output column. `values` is the only allocation this column owns directly:
