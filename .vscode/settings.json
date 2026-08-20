@@ -1,0 +1,15 @@
+{
+    "cmake.sourceDirectory": "${workspaceFolder}/cpp",
+    "cmake.environment": {
+        "EXCELREADER_BUILD_BENCHMARKS": "ON",
+        "EXCELREADER_BUILD_BENCHMARKS_COMPARE": "ON",
+        "EXCELREADER_BUILD_TESTS": "ON",
+        "EXCELREADER_NATIVE_LIB": "${workspaceFolder}/src/ExcelReader.Native/bin/Release/net10.0/win-x64/native/ExcelReader.Native.dll"
+    },
+    "cmake.configureArgs": [
+        "-DEXCELREADER_BUILD_BENCHMARKS=ON",
+        "-DEXCELREADER_BUILD_BENCHMARKS_COMPARE=ON",
+        "-DEXCELREADER_BUILD_TESTS=ON",
+        "-DCMAKE_POLICY_VERSION_MINIMUM=3.5"
+    ]
+}
