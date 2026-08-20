@@ -190,6 +190,14 @@ columns, so the gap between them is only the cost of starting from row-shaped da
 is handed buffers that are already columnar, while `BM_WriteSheet` starts from a
 `std::vector<Row>` and pays the row-to-column transpose.
 
+| Benchmark | Time | Rows/s |
+|---|---:|---:|
+| `BM_WriteColumns` (pre-transposed) | 60.2 ms | 1.07 M/s |
+| `BM_WriteSheet` (from `std::vector<Row>`) | 67.4 ms | 961 k/s |
+
+The transpose costs ~12% here. It is not free, but it is far from the dominant cost of producing
+the file — see the comparison below, where the same two cases over 14 columns land within ~7%.
+
 `excelreader_cpp_write_compare_benchmarks` (under `-DEXCELREADER_BUILD_BENCHMARKS_COMPARE=ON`) puts
 that against xlnt and xlsxio's writer, all four writing the full 14-column, 65,535-row shape of
 `65K_Records_Data.xlsx` from the same in-memory rows:
