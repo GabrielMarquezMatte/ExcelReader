@@ -504,3 +504,5 @@ python/src/excelreader/_lib/*
 # CMake build output (tests/ExcelReader.NativeSmoke and any other CMake-configured project). Never
 # built to a path inside the source tree other than this, so a plain top-level rule is enough.
 build/
+# Subagent-driven-development scratch (per-plan ledgers, briefs, review packages)
+.superpowers/
