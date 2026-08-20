@@ -275,7 +275,10 @@ impl ExcelWriter for ManualRow {
         Ok(vec![
             OwnedColumn {
                 name: Some("nome"),
-                data: OwnedColumnData::Str { offsets: nome_offsets, data: nome_data },
+                data: OwnedColumnData::Str {
+                    offsets: nome_offsets,
+                    data: nome_data,
+                },
                 validity: None,
             },
             OwnedColumn {
@@ -305,8 +308,16 @@ struct ManualRowRead {
 #[test]
 fn write_sheet_round_trips_a_hand_written_excel_writer() {
     let rows = vec![
-        ManualRow { nome: "Ana".to_string(), idade: 30, peso: Some(62.5) },
-        ManualRow { nome: "Bruno".to_string(), idade: 41, peso: None },
+        ManualRow {
+            nome: "Ana".to_string(),
+            idade: 30,
+            peso: Some(62.5),
+        },
+        ManualRow {
+            nome: "Bruno".to_string(),
+            idade: 41,
+            peso: None,
+        },
     ];
 
     let path = temp_path("manual.xlsx");
@@ -329,5 +340,90 @@ fn write_sheet_round_trips_a_hand_written_excel_writer() {
     assert_eq!(second.peso, None);
 
     drop(table);
+    std::fs::remove_file(&path).ok();
+}
+
+#[derive(Default, Debug, PartialEq, ExcelMapper)]
+struct DerivedRow {
+    #[excel(name = "texto")]
+    texto: String,
+    #[excel(name = "inteiro", alias = "int")]
+    inteiro: i32,
+    #[excel(name = "numero")]
+    numero: f32,
+    #[excel(name = "ativo")]
+    ativo: bool,
+    #[excel(name = "data")]
+    data: Date,
+    #[excel(name = "hora")]
+    hora: Time,
+    #[excel(name = "instante")]
+    instante: Timestamp,
+    #[excel(name = "opcional")]
+    opcional: Option<i64>,
+}
+
+#[test]
+fn the_derive_round_trips_every_supported_field_type() {
+    let rows = vec![
+        DerivedRow {
+            texto: "uma".to_string(),
+            inteiro: 1,
+            numero: 0.5,
+            ativo: true,
+            data: Date::new(20454),
+            hora: Time::new(3_600_000_000),
+            instante: Timestamp::new(1_767_225_600_000_000),
+            opcional: Some(7),
+        },
+        DerivedRow {
+            texto: "duas".to_string(),
+            inteiro: 2,
+            numero: 1.5,
+            ativo: false,
+            data: Date::new(20455),
+            hora: Time::new(7_200_000_000),
+            instante: Timestamp::new(1_767_312_000_000_000),
+            opcional: None,
+        },
+    ];
+
+    let path = temp_path("derived.xlsx");
+    let target = path.to_str().expect("temp path must be UTF-8");
+    excelreader::writer::write_sheet(target, XL_FORMAT_XLSX, &rows, None)
+        .expect("write_sheet must succeed");
+
+    let mut workbook = Workbook::open(target).expect("the written file must open");
+    let table =
+        parse_sheet::<DerivedRow>(&mut workbook, 1).expect("the written file must parse back");
+    assert_eq!(table.len(), 2);
+    assert_eq!(table.get(0).expect("row 0"), rows[0]);
+    assert_eq!(table.get(1).expect("row 1"), rows[1]);
+
+    drop(table);
+    std::fs::remove_file(&path).ok();
+}
+
+/// The write side uses only the PRIMARY name. An alias that reached a write spec would be
+/// rejected by the ABI ("must have exactly one name"), so this asserts the header actually
+/// written is `inteiro`, never `int`.
+#[test]
+fn the_derive_writes_only_the_primary_column_name() {
+    #[derive(Default, Debug, ExcelMapper)]
+    struct AliasedRead {
+        #[excel(name = "inteiro")]
+        inteiro: i32,
+    }
+
+    let rows = vec![DerivedRow::default()];
+    let path = temp_path("aliased.xlsx");
+    let target = path.to_str().expect("temp path must be UTF-8");
+    excelreader::writer::write_sheet(target, XL_FORMAT_XLSX, &rows, None)
+        .expect("write_sheet must succeed");
+
+    let mut workbook = Workbook::open(target).expect("the written file must open");
+    parse_sheet::<AliasedRead>(&mut workbook, 1)
+        .expect("the header must carry the primary name, not the alias");
+
     std::fs::remove_file(&path).ok();
 }
