@@ -13,7 +13,7 @@ namespace ExcelReader.Native
         /// <summary>ABI revision returned by <c>xl_abi_version</c>. Mirrors XL_ABI_VERSION in include/excelreader.h.
         /// Bump on any change to a struct layout, a status code, or the meaning of an existing function; adding a
         /// new function does not bump it.</summary>
-        internal const int AbiVersion = 1;
+        internal const int AbiVersion = 2;
     }
 
     /// <summary>
@@ -36,6 +36,9 @@ namespace ExcelReader.Native
 
         /// <summary>Excel's 32,767-character cell limit at UTF-8's 4-byte worst case.</summary>
         internal const int MaxColumnNameBytes = 131_068;
+
+        /// <summary>Bounds how many candidate names a single xl_column_spec may carry.</summary>
+        internal const int MaxNamesPerSpec = 32;
     }
 
     /// <summary>

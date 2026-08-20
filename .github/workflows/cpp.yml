@@ -1,0 +1,69 @@
+name: C++ bindings
+
+on:
+  push:
+    branches: [master, develop]
+  pull_request:
+    branches: [master, develop]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cpp-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: C++ package + smoke test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Enable symlinks (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          git config core.symlinks true
+          git checkout -- cpp/include
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+
+      - name: Build the native library
+        shell: bash
+        run: python python/scripts/build_native.py
+
+      - name: Setup MSVC developer environment (Windows)
+        if: runner.os == 'Windows'
+        uses: ilammy/msvc-dev-cmd@v1
+
+      - name: Locate published native library
+        id: lib
+        shell: bash
+        run: |
+          case "${{ runner.os }}" in
+            Windows) echo "path=${{ github.workspace }}/python/src/excelreader/_lib/ExcelReader.Native.dll" >> "$GITHUB_OUTPUT" ;;
+            macOS)   echo "path=${{ github.workspace }}/python/src/excelreader/_lib/ExcelReader.Native.dylib" >> "$GITHUB_OUTPUT" ;;
+            *)       echo "path=${{ github.workspace }}/python/src/excelreader/_lib/ExcelReader.Native.so" >> "$GITHUB_OUTPUT" ;;
+          esac
+
+      - name: Configure
+        env:
+          EXCELREADER_NATIVE_LIB: ${{ steps.lib.outputs.path }}
+        run: cmake -S cpp -B build/cpp -DEXCELREADER_BUILD_TESTS=ON -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build
+        run: cmake --build build/cpp --config Release
+
+      - name: Test
+        run: ctest --test-dir build/cpp --output-on-failure -C Release

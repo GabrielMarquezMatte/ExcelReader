@@ -1293,8 +1293,8 @@ namespace ExcelReader.Tests
         {
             return
             [
-                new() { Name = "qty", Type = NativeColumnType.Int64 },
-                new() { Name = "name", Type = NativeColumnType.String },
+                new() { Names = ["qty"], Type = NativeColumnType.Int64 },
+                new() { Names = ["name"], Type = NativeColumnType.String },
             ];
         }
 
@@ -1372,7 +1372,7 @@ namespace ExcelReader.Tests
             NativeTable table = BuildInt64Table([1L, 2L]);
             try
             {
-                NativeColumnSpec[] specs = [new() { Name = "qty", Type = NativeColumnType.Int64 }];
+                NativeColumnSpec[] specs = [new() { Names = ["qty"], Type = NativeColumnType.Int64 }];
 
                 Assert.True(NativeApi.TryValidateWriteTable(specs, table, out bool hasHeader, out string? error));
                 Assert.True(hasHeader);
@@ -1390,7 +1390,7 @@ namespace ExcelReader.Tests
             NativeTable table = BuildInt64Table([1L]);
             try
             {
-                NativeColumnSpec[] specs = [new() { Name = null, Type = NativeColumnType.Int64 }];
+                NativeColumnSpec[] specs = [new() { Names = [], Type = NativeColumnType.Int64 }];
 
                 Assert.True(NativeApi.TryValidateWriteTable(specs, table, out bool hasHeader, out _));
                 Assert.False(hasHeader);
@@ -1410,8 +1410,8 @@ namespace ExcelReader.Tests
             {
                 NativeColumnSpec[] specs =
                 [
-                    new() { Name = "qty", Type = NativeColumnType.Int64 },
-                    new() { Name = null, Type = NativeColumnType.Int64 },
+                    new() { Names = ["qty"], Type = NativeColumnType.Int64 },
+                    new() { Names = [], Type = NativeColumnType.Int64 },
                 ];
 
                 Assert.False(NativeApi.TryValidateWriteTable(specs, table, out _, out string? error));
@@ -1430,7 +1430,7 @@ namespace ExcelReader.Tests
             NativeTable table = BuildInt64Table([1L]);
             try
             {
-                NativeColumnSpec[] specs = [new() { Name = "qty", Type = NativeColumnType.Float64 }];
+                NativeColumnSpec[] specs = [new() { Names = ["qty"], Type = NativeColumnType.Float64 }];
 
                 Assert.False(NativeApi.TryValidateWriteTable(specs, table, out _, out string? error));
                 Assert.Contains("type", error, StringComparison.Ordinal);
@@ -1448,7 +1448,7 @@ namespace ExcelReader.Tests
             table.RowCount = 3;
             try
             {
-                NativeColumnSpec[] specs = [new() { Name = "qty", Type = NativeColumnType.Int64 }];
+                NativeColumnSpec[] specs = [new() { Names = ["qty"], Type = NativeColumnType.Int64 }];
 
                 Assert.False(NativeApi.TryValidateWriteTable(specs, table, out _, out string? error));
                 Assert.Contains("length", error, StringComparison.Ordinal);
@@ -1466,7 +1466,7 @@ namespace ExcelReader.Tests
             NativeTable table = BuildStringTable([0, 6, 12], "widgetgadget"u8.ToArray());
             try
             {
-                NativeColumnSpec[] specs = [new() { Name = "name", Type = NativeColumnType.String }];
+                NativeColumnSpec[] specs = [new() { Names = ["name"], Type = NativeColumnType.String }];
 
                 Assert.True(NativeApi.TryValidateWriteTable(specs, table, out _, out string? error));
                 Assert.Null(error);
@@ -1488,7 +1488,7 @@ namespace ExcelReader.Tests
             NativeTable table = BuildStringTable(offsets, "widgetgadget"u8.ToArray());
             try
             {
-                NativeColumnSpec[] specs = [new() { Name = "name", Type = NativeColumnType.String }];
+                NativeColumnSpec[] specs = [new() { Names = ["name"], Type = NativeColumnType.String }];
 
                 Assert.False(NativeApi.TryValidateWriteTable(specs, table, out _, out string? error));
                 Assert.Contains("offset", error, StringComparison.Ordinal);
@@ -1523,7 +1523,7 @@ namespace ExcelReader.Tests
             table.RowCount = -1;
             try
             {
-                NativeColumnSpec[] specs = [new() { Name = "qty", Type = NativeColumnType.Int64 }];
+                NativeColumnSpec[] specs = [new() { Names = ["qty"], Type = NativeColumnType.Int64 }];
 
                 Assert.False(NativeApi.TryValidateWriteTable(specs, table, out _, out string? error));
                 Assert.Contains("row_count", error, StringComparison.Ordinal);
@@ -1544,7 +1544,7 @@ namespace ExcelReader.Tests
                 NativeColumn column = Marshal.PtrToStructure<NativeColumn>(table.Columns);
                 column.Type = 99;
                 Marshal.StructureToPtr(column, table.Columns, false);
-                NativeColumnSpec[] specs = [new() { Name = "qty", Type = 99 }];
+                NativeColumnSpec[] specs = [new() { Names = ["qty"], Type = 99 }];
 
                 Assert.False(NativeApi.TryValidateWriteTable(specs, table, out _, out string? error));
                 Assert.Contains("unknown type", error, StringComparison.Ordinal);
@@ -1565,7 +1565,7 @@ namespace ExcelReader.Tests
                 NativeColumn column = Marshal.PtrToStructure<NativeColumn>(table.Columns);
                 column.Values = IntPtr.Zero;
                 Marshal.StructureToPtr(column, table.Columns, false);
-                NativeColumnSpec[] specs = [new() { Name = "qty", Type = NativeColumnType.Int64 }];
+                NativeColumnSpec[] specs = [new() { Names = ["qty"], Type = NativeColumnType.Int64 }];
 
                 Assert.False(NativeApi.TryValidateWriteTable(specs, table, out _, out string? error));
                 Assert.Contains("values", error, StringComparison.Ordinal);
@@ -1631,11 +1631,11 @@ namespace ExcelReader.Tests
                 Assert.Equal(NativeStatus.Ok, OpenPath(path, NativeFormat.Csv, out NativeHandle? handle));
                 NativeColumnSpec[] specs =
                 [
-                    new() { Name = "name", Type = NativeColumnType.String },
-                    new() { Name = "qty", Type = NativeColumnType.Int64 },
-                    new() { Name = "price", Type = NativeColumnType.Float64 },
-                    new() { Name = "active", Type = NativeColumnType.Bool },
-                    new() { Name = "joined", Type = NativeColumnType.Date },
+                    new() { Names = ["name"], Type = NativeColumnType.String },
+                    new() { Names = ["qty"], Type = NativeColumnType.Int64 },
+                    new() { Names = ["price"], Type = NativeColumnType.Float64 },
+                    new() { Names = ["active"], Type = NativeColumnType.Bool },
+                    new() { Names = ["joined"], Type = NativeColumnType.Date },
                 ];
                 Assert.Equal(NativeStatus.Ok, NativeApi.ParseTyped(handle, specs, headerRow: 1, out NativeTable table));
                 try
@@ -1720,8 +1720,8 @@ namespace ExcelReader.Tests
                 Assert.Equal(NativeStatus.Ok, OpenPath(path, NativeFormat.Csv, out NativeHandle? handle));
                 NativeColumnSpec[] specs =
                 [
-                    new() { Name = "at", Type = NativeColumnType.Time },
-                    new() { Name = "logged", Type = NativeColumnType.Timestamp },
+                    new() { Names = ["at"], Type = NativeColumnType.Time },
+                    new() { Names = ["logged"], Type = NativeColumnType.Timestamp },
                 ];
                 Assert.Equal(NativeStatus.Ok, NativeApi.ParseTyped(handle, specs, headerRow: 1, out NativeTable table));
                 try
@@ -1776,6 +1776,18 @@ namespace ExcelReader.Tests
             Assert.Equal(expected, NativeApi.IsValidNameLength(nameLength));
         }
 
+        [Theory]
+        [InlineData(int.MinValue, false)]
+        [InlineData(-1, false)] // would reach `new string[nameCount]` as a negative length
+        [InlineData(0, true)] // index-based spec, no candidates
+        [InlineData(32, true)] // the generous ceiling on realistic alias lists
+        [InlineData(33, false)]
+        [InlineData(int.MaxValue, false)] // the shape that would otherwise reach `new string[raw.NameCount]`
+        public void IsValidNameCount_Should_Bound_What_Sizes_The_Candidate_Array(int nameCount, bool expected)
+        {
+            Assert.Equal(expected, NativeApi.IsValidNameCount(nameCount));
+        }
+
         [Fact]
         public void ParseTyped_Should_Reject_A_Blank_Column_Name()
         {
@@ -1786,7 +1798,7 @@ namespace ExcelReader.Tests
             try
             {
                 Assert.Equal(NativeStatus.Ok, OpenPath(path, NativeFormat.Csv, out NativeHandle? handle));
-                NativeColumnSpec[] specs = [new() { Name = "   ", Type = NativeColumnType.String }];
+                NativeColumnSpec[] specs = [new() { Names = ["   "], Type = NativeColumnType.String }];
                 try
                 {
                     Assert.Equal(NativeStatus.InvalidArgument, NativeApi.ParseTyped(handle, specs, headerRow: 1, out NativeTable table));
@@ -1828,7 +1840,7 @@ namespace ExcelReader.Tests
             try
             {
                 Assert.Equal(NativeStatus.Ok, OpenPath(path, NativeFormat.Csv, out NativeHandle? handle));
-                NativeColumnSpec[] specs = [new() { Name = "qty", Type = NativeColumnType.Int64, Nullable = true }];
+                NativeColumnSpec[] specs = [new() { Names = ["qty"], Type = NativeColumnType.Int64, Nullable = true }];
                 Assert.Equal(NativeStatus.Ok, NativeApi.ParseTyped(handle, specs, headerRow: 1, out NativeTable table));
                 try
                 {
@@ -1873,7 +1885,7 @@ namespace ExcelReader.Tests
             try
             {
                 Assert.Equal(NativeStatus.Ok, OpenPath(path, NativeFormat.Csv, out NativeHandle? handle));
-                NativeColumnSpec[] specs = [new() { Name = "qty", Type = NativeColumnType.Int64, Nullable = true }];
+                NativeColumnSpec[] specs = [new() { Names = ["qty"], Type = NativeColumnType.Int64, Nullable = true }];
                 Assert.Equal(NativeStatus.Ok, NativeApi.ParseTyped(handle, specs, headerRow: 1, out NativeTable table));
                 try
                 {
@@ -1905,7 +1917,7 @@ namespace ExcelReader.Tests
             try
             {
                 Assert.Equal(NativeStatus.Ok, OpenPath(path, NativeFormat.Csv, out NativeHandle? handle));
-                NativeColumnSpec[] specs = [new() { Name = "qty", Type = NativeColumnType.Int64, Nullable = false }];
+                NativeColumnSpec[] specs = [new() { Names = ["qty"], Type = NativeColumnType.Int64, Nullable = false }];
 
                 int status = NativeApi.ParseTyped(handle, specs, headerRow: 1, out NativeTable table);
 
@@ -1928,7 +1940,7 @@ namespace ExcelReader.Tests
             Assert.Equal(NativeStatus.Ok, OpenPath(XlsxFixture, NativeFormat.Auto, out NativeHandle? handle));
             try
             {
-                NativeColumnSpec[] specs = [new() { Name = "anything", Type = NativeColumnType.String }];
+                NativeColumnSpec[] specs = [new() { Names = ["anything"], Type = NativeColumnType.String }];
                 Assert.Equal(NativeStatus.InvalidArgument, NativeApi.ParseTyped(handle, specs, headerRow: 0, out NativeTable table));
                 Assert.Equal(IntPtr.Zero, table.Columns);
             }
@@ -1946,12 +1958,62 @@ namespace ExcelReader.Tests
             try
             {
                 Assert.Equal(NativeStatus.Ok, OpenPath(path, NativeFormat.Csv, out NativeHandle? handle));
-                NativeColumnSpec[] specs = [new() { Name = "does-not-exist", Type = NativeColumnType.String }];
+                NativeColumnSpec[] specs = [new() { Names = ["does-not-exist"], Type = NativeColumnType.String }];
 
                 int status = NativeApi.ParseTyped(handle, specs, headerRow: 1, out NativeTable table);
 
                 Assert.Equal(NativeStatus.InvalidArgument, status);
                 Assert.Equal(IntPtr.Zero, table.Columns);
+                NativeApi.Close(handle);
+            }
+            finally
+            {
+                File.Delete(path);
+            }
+        }
+
+        [Fact]
+        public void ParseTyped_Should_Resolve_The_First_Candidate_Name_Present_In_The_Header()
+        {
+            string path = Path.Combine(Path.GetTempPath(), $"excelreader-native-{Guid.NewGuid():N}.csv");
+            File.WriteAllText(path, "qty,quantity\n0,5\n");
+            try
+            {
+                Assert.Equal(NativeStatus.Ok, OpenPath(path, NativeFormat.Csv, out NativeHandle? handle));
+                NativeColumnSpec[] specs = [new() { Names = ["does-not-exist", "quantity"], Type = NativeColumnType.Int64 }];
+                int status = NativeApi.ParseTyped(handle, specs, headerRow: 1, out NativeTable table);
+                Assert.Equal(NativeStatus.Ok, status);
+                Assert.Equal(1, table.RowCount);
+                long value = Marshal.ReadInt64(ColumnAt(table, 0).Values);
+                Assert.Equal(5, value);
+                NativeApi.FreeTable(ref table);
+                NativeApi.Close(handle);
+            }
+            finally
+            {
+                File.Delete(path);
+            }
+        }
+
+        [Fact]
+        public void ParseTyped_Should_Fail_With_A_Message_Listing_Every_Candidate_When_None_Match()
+        {
+            string path = Path.Combine(Path.GetTempPath(), $"excelreader-native-{Guid.NewGuid():N}.csv");
+            File.WriteAllText(path, "qty\n5\n");
+            try
+            {
+                Assert.Equal(NativeStatus.Ok, OpenPath(path, NativeFormat.Csv, out NativeHandle? handle));
+                NativeColumnSpec[] specs = [new() { Names = ["nope", "still-nope"], Type = NativeColumnType.Int64 }];
+
+                int status = NativeApi.ParseTyped(handle, specs, headerRow: 1, out NativeTable table);
+
+                Assert.Equal(NativeStatus.InvalidArgument, status);
+                Assert.Equal(IntPtr.Zero, table.Columns);
+                Span<byte> buffer = stackalloc byte[256];
+                NativeApi.LastError(buffer, out int length);
+                string message = Encoding.UTF8.GetString(buffer[..length]);
+                Assert.Contains("\"nope\"", message, StringComparison.Ordinal);
+                Assert.Contains("\"still-nope\"", message, StringComparison.Ordinal);
                 NativeApi.Close(handle);
             }
             finally
@@ -1994,7 +2056,7 @@ namespace ExcelReader.Tests
                 {
                     Assert.Equal(NativeStatus.Ok, NativeApi.NextRow(handle, new byte[4096], out _)); // header
 
-                    NativeColumnSpec[] specs = [new() { Name = "name", Type = NativeColumnType.String }];
+                    NativeColumnSpec[] specs = [new() { Names = ["name"], Type = NativeColumnType.String }];
                     Assert.Equal(NativeStatus.Ok, NativeApi.ParseTyped(handle, specs, headerRow: 1, out NativeTable table));
                     NativeApi.FreeTable(ref table);
 
@@ -2221,23 +2283,37 @@ namespace ExcelReader.Tests
             Assert.Equal(nullable, spec.Nullable);
         }
 
-        // Reads the native xl_column_spec array by hand rather than via NativeColumnSpecRaw's `byte*
-        // Name` field - this project has no AllowUnsafeBlocks, and Marshal.PtrToStringUTF8 already
+        // Reads the native xl_column_spec array by hand rather than via NativeColumnSpecRaw's `byte**
+        // Names` field - this project has no AllowUnsafeBlocks, and Marshal.PtrToStringUTF8 already
         // decodes exactly `length` bytes regardless of a trailing NUL (there isn't one; see
         // NativeApi.Schema.cs's BuildSpec), so there is nothing an unsafe pointer read would add here.
         private static (string? Name, int Index, int Type, bool Nullable)[] DecodeSchema(NativeInferredSchema schema)
         {
-            int specSize = Marshal.SizeOf<NativeColumnSpecRaw>(); // name(8) + name_len(4) + index(4) + type(4) + nullable(4)
+            int specSize = Marshal.SizeOf<NativeColumnSpecRaw>();
+            int namesOffset = (int)Marshal.OffsetOf<NativeColumnSpecRaw>(nameof(NativeColumnSpecRaw.Names));
+            int nameLensOffset = (int)Marshal.OffsetOf<NativeColumnSpecRaw>(nameof(NativeColumnSpecRaw.NameLens));
+            int nameCountOffset = (int)Marshal.OffsetOf<NativeColumnSpecRaw>(nameof(NativeColumnSpecRaw.NameCount));
+            int indexOffset = (int)Marshal.OffsetOf<NativeColumnSpecRaw>(nameof(NativeColumnSpecRaw.Index));
+            int typeOffset = (int)Marshal.OffsetOf<NativeColumnSpecRaw>(nameof(NativeColumnSpecRaw.Type));
+            int nullableOffset = (int)Marshal.OffsetOf<NativeColumnSpecRaw>(nameof(NativeColumnSpecRaw.Nullable));
+
             var columns = new (string?, int, int, bool)[schema.ColumnCount];
             for (int i = 0; i < columns.Length; i++)
             {
                 IntPtr spec = IntPtr.Add(schema.Columns, i * specSize);
-                IntPtr namePtr = Marshal.ReadIntPtr(spec, 0);
-                int nameLen = Marshal.ReadInt32(spec, 8);
-                int index = Marshal.ReadInt32(spec, 12);
-                int type = Marshal.ReadInt32(spec, 16);
-                int nullable = Marshal.ReadInt32(spec, 20);
-                string? name = namePtr == IntPtr.Zero ? null : Marshal.PtrToStringUTF8(namePtr, nameLen);
+                int nameCount = Marshal.ReadInt32(spec, nameCountOffset);
+                string? name = null;
+                if (nameCount > 0)
+                {
+                    IntPtr namesArray = Marshal.ReadIntPtr(spec, namesOffset);
+                    IntPtr nameLensArray = Marshal.ReadIntPtr(spec, nameLensOffset);
+                    IntPtr namePtr = Marshal.ReadIntPtr(namesArray, 0);
+                    int nameLen = Marshal.ReadInt32(nameLensArray, 0);
+                    name = Marshal.PtrToStringUTF8(namePtr, nameLen);
+                }
+                int index = Marshal.ReadInt32(spec, indexOffset);
+                int type = Marshal.ReadInt32(spec, typeOffset);
+                int nullable = Marshal.ReadInt32(spec, nullableOffset);
                 columns[i] = (name, index, type, nullable != 0);
             }
             return columns;
@@ -2268,8 +2344,8 @@ namespace ExcelReader.Tests
                 Assert.Equal(NativeStatus.Ok, OpenPath(path, NativeFormat.Csv, out NativeHandle? handle));
                 NativeColumnSpec[] specs =
                 [
-                    new() { Name = "name", Type = NativeColumnType.String },
-                    new() { Name = "qty", Type = NativeColumnType.Int64 },
+                    new() { Names = ["name"], Type = NativeColumnType.String },
+                    new() { Names = ["qty"], Type = NativeColumnType.Int64 },
                 ];
                 Assert.Equal(NativeStatus.Ok, NativeApi.ParseArrow(handle, specs, headerRow: 1, out ArrowArray array, out ArrowSchema schema));
                 try
@@ -2324,7 +2400,7 @@ namespace ExcelReader.Tests
             try
             {
                 Assert.Equal(NativeStatus.Ok, OpenPath(path, NativeFormat.Csv, out NativeHandle? handle));
-                NativeColumnSpec[] specs = [new() { Name = "flag", Type = NativeColumnType.Bool }];
+                NativeColumnSpec[] specs = [new() { Names = ["flag"], Type = NativeColumnType.Bool }];
                 Assert.Equal(NativeStatus.Ok, NativeApi.ParseArrow(handle, specs, headerRow: 1, out ArrowArray array, out ArrowSchema schema));
                 try
                 {
@@ -2361,7 +2437,7 @@ namespace ExcelReader.Tests
             try
             {
                 Assert.Equal(NativeStatus.Ok, OpenPath(path, NativeFormat.Csv, out NativeHandle? handle));
-                NativeColumnSpec[] specs = [new() { Name = "qty", Type = NativeColumnType.Int64, Nullable = true }];
+                NativeColumnSpec[] specs = [new() { Names = ["qty"], Type = NativeColumnType.Int64, Nullable = true }];
                 Assert.Equal(NativeStatus.Ok, NativeApi.ParseArrow(handle, specs, headerRow: 1, out ArrowArray array, out ArrowSchema schema));
                 try
                 {
@@ -2390,7 +2466,7 @@ namespace ExcelReader.Tests
             try
             {
                 Assert.Equal(NativeStatus.Ok, OpenPath(path, NativeFormat.Csv, out NativeHandle? handle));
-                NativeColumnSpec[] specs = [new() { Name = "qty", Type = NativeColumnType.Int64 }];
+                NativeColumnSpec[] specs = [new() { Names = ["qty"], Type = NativeColumnType.Int64 }];
 
                 int status = NativeApi.ParseArrow(handle, specs, headerRow: 1, out ArrowArray array, out ArrowSchema schema);
 
@@ -2420,7 +2496,7 @@ namespace ExcelReader.Tests
             try
             {
                 Assert.Equal(NativeStatus.Ok, OpenPath(path, NativeFormat.Csv, out NativeHandle? handle));
-                NativeColumnSpec[] specs = [new() { Name = "name", Type = NativeColumnType.String }];
+                NativeColumnSpec[] specs = [new() { Names = ["name"], Type = NativeColumnType.String }];
                 Assert.Equal(NativeStatus.Ok, NativeApi.ParseArrow(handle, specs, headerRow: 1, out ArrowArray array, out ArrowSchema schema));
 
                 ExercisedReleaseArrow(ref array, ref schema);
@@ -2547,7 +2623,7 @@ namespace ExcelReader.Tests
             NativeTable table = BuildInt64Table([3L, 7L]);
             try
             {
-                NativeColumnSpec[] specs = [new() { Name = "qty", Type = NativeColumnType.Int64 }];
+                NativeColumnSpec[] specs = [new() { Names = ["qty"], Type = NativeColumnType.Int64 }];
 
                 Assert.Equal(NativeStatus.Ok, NativeApi.WriteTyped(
                     Encoding.UTF8.GetBytes(path), format, specs, table, DefaultWriteOptions()));
@@ -2591,7 +2667,7 @@ namespace ExcelReader.Tests
             NativeTable table = BuildBoolTable([true, false, true]);
             try
             {
-                NativeColumnSpec[] specs = [new() { Name = "flag", Type = NativeColumnType.Bool }];
+                NativeColumnSpec[] specs = [new() { Names = ["flag"], Type = NativeColumnType.Bool }];
 
                 Assert.Equal(NativeStatus.Ok, NativeApi.WriteTyped(
                     Encoding.UTF8.GetBytes(path), format, specs, table, DefaultWriteOptions()));
@@ -2637,7 +2713,7 @@ namespace ExcelReader.Tests
             NativeTable table = BuildFloat64Table([3.5, -0.25]);
             try
             {
-                NativeColumnSpec[] specs = [new() { Name = "rate", Type = NativeColumnType.Float64 }];
+                NativeColumnSpec[] specs = [new() { Names = ["rate"], Type = NativeColumnType.Float64 }];
 
                 Assert.Equal(NativeStatus.Ok, NativeApi.WriteTyped(
                     Encoding.UTF8.GetBytes(path), format, specs, table, DefaultWriteOptions()));
@@ -2683,14 +2759,14 @@ namespace ExcelReader.Tests
                 Marshal.WriteByte(column.Validity, 0b0110);
                 Marshal.StructureToPtr(column, table.Columns, false);
 
-                NativeColumnSpec[] specs = [new() { Name = "name", Type = NativeColumnType.String }];
+                NativeColumnSpec[] specs = [new() { Names = ["name"], Type = NativeColumnType.String }];
                 Assert.Equal(NativeStatus.Ok, NativeApi.WriteTyped(
                     Encoding.UTF8.GetBytes(path), NativeFormat.Xlsx, specs, table, DefaultWriteOptions()));
 
                 Assert.Equal(NativeStatus.Ok, OpenPath(path, NativeFormat.Xlsx, out NativeHandle? handle));
                 try
                 {
-                    NativeColumnSpec[] readSpecs = [new() { Name = "name", Type = NativeColumnType.String, Nullable = true }];
+                    NativeColumnSpec[] readSpecs = [new() { Names = ["name"], Type = NativeColumnType.String, Nullable = true }];
                     Assert.Equal(NativeStatus.Ok, NativeApi.ParseTyped(handle, readSpecs, headerRow: 1, out NativeTable read));
                     try
                     {
@@ -2730,7 +2806,7 @@ namespace ExcelReader.Tests
             NativeTable table = BuildInt64Table([0L, 7L, 0L], [0b010]);
             try
             {
-                NativeColumnSpec[] specs = [new() { Name = "qty", Type = NativeColumnType.Int64, Nullable = true }];
+                NativeColumnSpec[] specs = [new() { Names = ["qty"], Type = NativeColumnType.Int64, Nullable = true }];
                 Assert.Equal(NativeStatus.Ok, NativeApi.WriteTyped(
                     Encoding.UTF8.GetBytes(path), NativeFormat.Xlsx, specs, table, DefaultWriteOptions()));
 
@@ -2773,7 +2849,7 @@ namespace ExcelReader.Tests
             NativeTable table = BuildStringTable([0, 0, 0], []);
             try
             {
-                NativeColumnSpec[] specs = [new() { Name = "name", Type = NativeColumnType.String }];
+                NativeColumnSpec[] specs = [new() { Names = ["name"], Type = NativeColumnType.String }];
 
                 Assert.Equal(NativeStatus.Ok, NativeApi.WriteTyped(
                     Encoding.UTF8.GetBytes(path), NativeFormat.Xlsx, specs, table, DefaultWriteOptions()));
@@ -2818,9 +2894,9 @@ namespace ExcelReader.Tests
             {
                 NativeColumnSpec[] specs =
                 [
-                    new() { Name = "day", Type = NativeColumnType.Date },
-                    new() { Name = "clock", Type = NativeColumnType.Time },
-                    new() { Name = "stamp", Type = NativeColumnType.Timestamp },
+                    new() { Names = ["day"], Type = NativeColumnType.Date },
+                    new() { Names = ["clock"], Type = NativeColumnType.Time },
+                    new() { Names = ["stamp"], Type = NativeColumnType.Timestamp },
                 ];
                 Assert.Equal(NativeStatus.Ok, NativeApi.WriteTyped(
                     Encoding.UTF8.GetBytes(path), NativeFormat.Xlsx, specs, table, DefaultWriteOptions()));
@@ -2915,7 +2991,7 @@ namespace ExcelReader.Tests
                 NativeWriteOptionsRaw raw = DefaultWriteOptionsRaw();
                 raw.Date1904 = NativeOptionState.True;
                 Assert.True(NativeWriteOptions.TryDecode(raw, null, out NativeWriteOptions options, out _));
-                NativeColumnSpec[] specs = [new() { Name = "day", Type = NativeColumnType.Date }];
+                NativeColumnSpec[] specs = [new() { Names = ["day"], Type = NativeColumnType.Date }];
 
                 Assert.Equal(NativeStatus.Ok, NativeApi.WriteTyped(
                     Encoding.UTF8.GetBytes(path), NativeFormat.Xlsb, specs, table, options));
@@ -2966,7 +3042,7 @@ namespace ExcelReader.Tests
                 NativeWriteOptionsRaw raw = DefaultWriteOptionsRaw();
                 raw.Date1904 = NativeOptionState.True;
                 Assert.True(NativeWriteOptions.TryDecode(raw, null, out NativeWriteOptions options1904, out _));
-                NativeColumnSpec[] specs = [new() { Name = "day", Type = NativeColumnType.Date }];
+                NativeColumnSpec[] specs = [new() { Names = ["day"], Type = NativeColumnType.Date }];
 
                 Assert.Equal(NativeStatus.Ok, NativeApi.WriteTyped(
                     Encoding.UTF8.GetBytes(epoch1900), NativeFormat.Xlsb, specs, table, DefaultWriteOptions()));
@@ -3025,7 +3101,7 @@ namespace ExcelReader.Tests
             NativeTable table = BuildInt64Table([3L, 7L]);
             try
             {
-                NativeColumnSpec[] specs = [new() { Name = null, Type = NativeColumnType.Int64 }];
+                NativeColumnSpec[] specs = [new() { Names = [], Type = NativeColumnType.Int64 }];
                 Assert.Equal(NativeStatus.Ok, NativeApi.WriteTyped(
                     Encoding.UTF8.GetBytes(path), NativeFormat.Csv, specs, table, DefaultWriteOptions()));
 
@@ -3091,13 +3167,44 @@ namespace ExcelReader.Tests
         }
 
         [Fact]
+        public void WriteTyped_Should_Reject_A_Spec_With_More_Than_One_Name()
+        {
+            // A well-formed 1-column, 1-row table: the point of this test is that TryValidateWriteTable
+            // rejects the name_count > 1 spec specifically, not that it rejects a malformed table for some
+            // unrelated reason first (e.g. a column-count mismatch).
+            NativeTable table = BuildInt64Table([1L]);
+            try
+            {
+                NativeColumnSpec[] specs = [new() { Names = ["qty", "quantity"], Type = NativeColumnType.Int64 }];
+                string path = Path.Combine(Path.GetTempPath(), $"excelreader-native-{Guid.NewGuid():N}.csv");
+                try
+                {
+                    int status = NativeApi.WriteTyped(Encoding.UTF8.GetBytes(path), NativeFormat.Csv, specs, table, new NativeWriteOptions());
+                    Assert.Equal(NativeStatus.InvalidArgument, status);
+                    Assert.False(File.Exists(path));
+                }
+                finally
+                {
+                    if (File.Exists(path))
+                    {
+                        File.Delete(path);
+                    }
+                }
+            }
+            finally
+            {
+                FreeBuiltTable(ref table);
+            }
+        }
+
+        [Fact]
         public void WriteTyped_Should_Reject_Auto_Format_And_Create_No_File()
         {
             string path = Path.Combine(Path.GetTempPath(), $"excelreader-native-{Guid.NewGuid():N}.xlsx");
             NativeTable table = BuildInt64Table([3L]);
             try
             {
-                NativeColumnSpec[] specs = [new() { Name = "qty", Type = NativeColumnType.Int64 }];
+                NativeColumnSpec[] specs = [new() { Names = ["qty"], Type = NativeColumnType.Int64 }];
 
                 Assert.Equal(NativeStatus.InvalidArgument, NativeApi.WriteTyped(
                     Encoding.UTF8.GetBytes(path), NativeFormat.Auto, specs, table, DefaultWriteOptions()));
@@ -3119,7 +3226,7 @@ namespace ExcelReader.Tests
             NativeTable table = BuildInt64Table([3L]);
             try
             {
-                NativeColumnSpec[] specs = [new() { Name = "qty", Type = NativeColumnType.Int64 }];
+                NativeColumnSpec[] specs = [new() { Names = ["qty"], Type = NativeColumnType.Int64 }];
 
                 Assert.Equal(NativeStatus.InvalidArgument, NativeApi.WriteTyped(
                     Encoding.UTF8.GetBytes(path), format: 99, specs, table, DefaultWriteOptions()));
@@ -3139,7 +3246,7 @@ namespace ExcelReader.Tests
             NativeTable table = BuildStringTable([0, 9, 6], "widgetgadget"u8.ToArray());
             try
             {
-                NativeColumnSpec[] specs = [new() { Name = "name", Type = NativeColumnType.String }];
+                NativeColumnSpec[] specs = [new() { Names = ["name"], Type = NativeColumnType.String }];
 
                 Assert.Equal(NativeStatus.InvalidArgument, NativeApi.WriteTyped(
                     Encoding.UTF8.GetBytes(path), NativeFormat.Xlsx, specs, table, DefaultWriteOptions()));
@@ -3160,7 +3267,7 @@ namespace ExcelReader.Tests
             try
             {
                 Assert.True(NativeWriteOptions.TryDecode(DefaultWriteOptionsRaw(), "Vendas", out NativeWriteOptions options, out _));
-                NativeColumnSpec[] specs = [new() { Name = "qty", Type = NativeColumnType.Int64 }];
+                NativeColumnSpec[] specs = [new() { Names = ["qty"], Type = NativeColumnType.Int64 }];
 
                 Assert.Equal(NativeStatus.Ok, NativeApi.WriteTyped(
                     Encoding.UTF8.GetBytes(path), NativeFormat.Xlsx, specs, table, options));

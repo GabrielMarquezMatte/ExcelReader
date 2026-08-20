@@ -1,0 +1,17 @@
+EXPORTS
+    xl_abi_version
+    xl_open_file
+    xl_open_file_ex
+    xl_open_memory
+    xl_open_memory_ex
+    xl_close
+    xl_sheet_count
+    xl_sheet_name
+    xl_sheet_name_at
+    xl_move_to_sheet
+    xl_is_date1904
+    xl_parse_typed
+    xl_free_table
+    xl_infer_schema
+    xl_free_schema
+    xl_last_error_ptr

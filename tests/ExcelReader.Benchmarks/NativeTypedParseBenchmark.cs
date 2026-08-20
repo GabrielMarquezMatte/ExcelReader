@@ -126,7 +126,7 @@ namespace ExcelReader.Benchmarks
 
         private static NativeColumnSpec Spec(string name, int type)
         {
-            return new NativeColumnSpec { Name = name, Type = type, Nullable = false };
+            return new NativeColumnSpec { Names = [name], Type = type, Nullable = false };
         }
 
         private NativeHandle Open()

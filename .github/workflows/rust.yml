@@ -1,0 +1,82 @@
+name: Rust bindings
+
+on:
+  push:
+    branches: [master, develop]
+  pull_request:
+    branches: [master, develop]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: rust-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Rust crate (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      # Pinned explicitly rather than relying on the runner image's preinstalled Rust: the clippy
+      # step below needs the component to be present, and which components an image ships is not
+      # part of its compatibility promise.
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+
+      - name: Build the native library
+        shell: bash
+        run: python python/scripts/build_native.py
+
+      # rust/excelreader/excelreader.def is a hand-kept copy of the canonical list, needed
+      # because `cargo package` only ships files under the crate directory (see build.rs). A silent
+      # divergence would surface as an unresolved symbol at link time in a consumer's build, not here.
+      - name: Verify the .def copy matches the canonical one
+        shell: bash
+        run: diff src/ExcelReader.Native/include/excelreader.def rust/excelreader/excelreader.def
+
+      - name: Locate published native library directory
+        id: lib
+        shell: bash
+        run: echo "dir=python/src/excelreader/_lib" >> "$GITHUB_OUTPUT"
+
+      - name: Setup MSVC developer environment (Windows)
+        if: runner.os == 'Windows'
+        uses: ilammy/msvc-dev-cmd@v1
+
+      # --all-targets covers the integration and trybuild suites, not just the library; --all-features
+      # covers the optional `chrono` interop, which is otherwise never compiled.
+      - name: cargo clippy
+        working-directory: rust
+        env:
+          EXCELREADER_NATIVE_LIB_DIR: ${{ github.workspace }}/${{ steps.lib.outputs.dir }}
+        run: cargo clippy --workspace --all-targets --all-features -- -D warnings
+
+      - name: cargo test
+        working-directory: rust
+        env:
+          EXCELREADER_NATIVE_LIB_DIR: ${{ github.workspace }}/${{ steps.lib.outputs.dir }}
+        run: cargo test --workspace --all-features --verbose
+
+      # The default feature set is what crates.io consumers get by default, so it has to build on
+      # its own - `chrono` being the only feature makes it cheap to prove rather than assume.
+      - name: cargo build (default features)
+        working-directory: rust
+        env:
+          EXCELREADER_NATIVE_LIB_DIR: ${{ github.workspace }}/${{ steps.lib.outputs.dir }}
+        run: cargo build --workspace --verbose
