@@ -1183,4 +1183,311 @@ namespace xl
         return write_columns(path, format_from_path(path), columns, options);
     }
 
+    // ---- write_sheet<T>: transposing a range of structs into columns -----------------------------
+
+    namespace detail
+    {
+
+        // An XL_T_STRING column's two output buffers. `overflowed` latches rather than throwing:
+        // this header has no exceptions anywhere, and write_sheet checks it once before the write.
+        struct StringBuffer
+        {
+            std::vector<int32_t> offsets{0};
+            std::vector<uint8_t> data{};
+            bool overflowed = false;
+
+            void reserve(size_t rows)
+            {
+                offsets.reserve(rows + 1);
+            }
+
+            void push(std::string_view value)
+            {
+                if (data.size() + value.size() > static_cast<size_t>(INT32_MAX))
+                {
+                    // Record the failure and keep the offsets array well-formed, so nothing
+                    // downstream reads a half-built column before write_sheet bails out.
+                    overflowed = true;
+                    offsets.push_back(offsets.back());
+                    return;
+                }
+                const uint8_t *bytes = reinterpret_cast<const uint8_t *>(value.data());
+                data.insert(data.end(), bytes, bytes + value.size());
+                offsets.push_back(static_cast<int32_t>(data.size()));
+            }
+        };
+
+        // The output buffer each XL_T_* needs, at that type's exact wire width.
+        template <int32_t Type>
+        struct ColumnStorage;
+
+        template <>
+        struct ColumnStorage<XL_T_STRING>
+        {
+            using type = StringBuffer;
+        };
+        template <>
+        struct ColumnStorage<XL_T_I64>
+        {
+            using type = std::vector<int64_t>;
+        };
+        template <>
+        struct ColumnStorage<XL_T_F64>
+        {
+            using type = std::vector<double>;
+        };
+        template <>
+        struct ColumnStorage<XL_T_BOOL>
+        {
+            using type = std::vector<uint8_t>;
+        };
+        template <>
+        struct ColumnStorage<XL_T_DATE>
+        {
+            using type = std::vector<int32_t>;
+        };
+        template <>
+        struct ColumnStorage<XL_T_TIME>
+        {
+            using type = std::vector<int64_t>;
+        };
+        template <>
+        struct ColumnStorage<XL_T_TIMESTAMP>
+        {
+            using type = std::vector<int64_t>;
+        };
+
+        // One column's accumulating buffers, built from the FIELD type. `validity` stays empty
+        // unless the field is std::optional - the ABI reads validity == NULL as "no nulls", so a
+        // non-nullable column costs no bitmap at all.
+        template <typename T>
+        struct ColumnBuilder
+        {
+            using Field = unwrap_optional_t<T>;
+            static constexpr bool nullable = is_optional_v<T>;
+            static constexpr int32_t column_type = XlType<Field>::value;
+
+            typename ColumnStorage<column_type>::type storage{};
+            std::vector<uint8_t> validity{};
+            int64_t rows = 0;
+
+            void reserve(size_t count)
+            {
+                storage.reserve(count);
+                if constexpr (nullable)
+                {
+                    validity.reserve((count + 7) / 8);
+                }
+            }
+
+            void push(const T &value)
+            {
+                if constexpr (nullable)
+                {
+                    // Grows one byte every eight rows, so the bitmap is always exactly big enough
+                    // for the rows pushed so far.
+                    validity.resize(static_cast<size_t>((rows + 8) / 8), 0);
+                    if (value.has_value())
+                    {
+                        validity[static_cast<size_t>(rows / 8)] |=
+                            static_cast<uint8_t>(1u << static_cast<unsigned>(rows % 8));
+                        append(*value);
+                    }
+                    else
+                    {
+                        append_placeholder();
+                    }
+                }
+                else
+                {
+                    append(value);
+                }
+                ++rows;
+            }
+
+            bool overflowed() const
+            {
+                if constexpr (column_type == XL_T_STRING)
+                {
+                    return storage.overflowed;
+                }
+                else
+                {
+                    return false;
+                }
+            }
+
+            ColumnRef to_ref(std::string_view name) const
+            {
+                if constexpr (column_type == XL_T_STRING)
+                {
+                    return string_column(name, storage.offsets, storage.data, validity);
+                }
+                else if constexpr (column_type == XL_T_I64)
+                {
+                    return i64_column(name, storage, validity);
+                }
+                else if constexpr (column_type == XL_T_F64)
+                {
+                    return f64_column(name, storage, validity);
+                }
+                else if constexpr (column_type == XL_T_BOOL)
+                {
+                    return bool_column(name, storage, validity);
+                }
+                else if constexpr (column_type == XL_T_DATE)
+                {
+                    return date_column(name, storage, validity);
+                }
+                else if constexpr (column_type == XL_T_TIME)
+                {
+                    return time_column(name, storage, validity);
+                }
+                else
+                {
+                    return timestamp_column(name, storage, validity);
+                }
+            }
+
+        private:
+            // A null row still occupies a slot in the values buffer; its bit is what marks it
+            // absent. Zero (or the empty string) is the placeholder the writer never reads.
+            void append_placeholder()
+            {
+                if constexpr (column_type == XL_T_STRING)
+                {
+                    storage.push(std::string_view{});
+                }
+                else
+                {
+                    storage.push_back({});
+                }
+            }
+
+            // The exact inverse of detail::assign_field - same chain, same conversions, opposite
+            // direction. If one of them gains a type, so must the other.
+            void append(const Field &value)
+            {
+                if constexpr (std::is_same_v<Field, std::string> || std::is_same_v<Field, std::string_view>)
+                {
+                    storage.push(std::string_view(value));
+                }
+                else if constexpr (std::is_same_v<Field, bool>)
+                {
+                    storage.push_back(static_cast<uint8_t>(value ? 1 : 0));
+                }
+                else if constexpr (std::is_integral_v<Field>)
+                {
+                    storage.push_back(static_cast<int64_t>(value));
+                }
+                else if constexpr (std::is_floating_point_v<Field>)
+                {
+                    storage.push_back(static_cast<double>(value));
+                }
+                else if constexpr (std::is_same_v<Field, std::chrono::sys_days>)
+                {
+                    storage.push_back(static_cast<int32_t>(value.time_since_epoch().count()));
+                }
+                else if constexpr (std::is_same_v<Field, std::chrono::year_month_day>)
+                {
+                    storage.push_back(
+                        static_cast<int32_t>(std::chrono::sys_days{value}.time_since_epoch().count()));
+                }
+                else if constexpr (std::is_same_v<Field, std::chrono::microseconds>)
+                {
+                    storage.push_back(value.count());
+                }
+                else if constexpr (std::is_same_v<Field, std::chrono::hh_mm_ss<std::chrono::microseconds>>)
+                {
+                    storage.push_back(value.to_duration().count());
+                }
+                else if constexpr (std::is_same_v<Field, std::chrono::system_clock::time_point>)
+                {
+                    storage.push_back(std::chrono::time_point_cast<std::chrono::microseconds>(value)
+                                          .time_since_epoch()
+                                          .count());
+                }
+            }
+        };
+
+        // The tuple of ColumnBuilders matching a bindings tuple, one per field, in the same order.
+        template <typename Tuple, typename Indices>
+        struct BuildersFor;
+        template <typename Tuple, std::size_t... Is>
+        struct BuildersFor<Tuple, std::index_sequence<Is...>>
+        {
+            using type = std::tuple<ColumnBuilder<typename std::tuple_element_t<Is, Tuple>::FieldType>...>;
+        };
+
+        template <typename Builders, typename T, typename Tuple, std::size_t... Is>
+        void push_row(Builders &builders, const T &row, const Tuple &bindings, std::index_sequence<Is...>)
+        {
+            (..., std::get<Is>(builders).push(row.*(std::get<Is>(bindings).member)));
+        }
+
+        template <typename Builders, std::size_t... Is>
+        void reserve_all(Builders &builders, size_t count, std::index_sequence<Is...>)
+        {
+            (..., std::get<Is>(builders).reserve(count));
+        }
+
+        template <typename Builders, std::size_t... Is>
+        bool any_overflowed(const Builders &builders, std::index_sequence<Is...>)
+        {
+            return (... || std::get<Is>(builders).overflowed());
+        }
+
+        template <typename Builders, typename Tuple, std::size_t... Is>
+        std::array<ColumnRef, sizeof...(Is)> to_refs(const Builders &builders, const Tuple &bindings,
+                                                     std::index_sequence<Is...>)
+        {
+            // Only the FIRST candidate name is used: xl_write_typed rejects a write spec carrying
+            // more than one, and the alias list exists to resolve a header on the way IN.
+            return {std::get<Is>(builders).to_ref(std::string_view(std::get<Is>(bindings).column_names[0]))...};
+        }
+    } // namespace detail
+
+    // Writes `rows` to `path` as a single sheet, using the same xl::ExcelMapper<T> specialization
+    // that xl::parse_sheet<T> reads with - so reading a sheet into structs and writing it back out
+    // needs one mapping, not two.
+    //
+    // The range is walked ONCE, and each field is appended to its own column buffer through a
+    // compile-time dispatch. That transpose is the only copy this makes; it is what the ABI's
+    // columnar shape costs a row-shaped caller. If you already hold columnar buffers, call
+    // write_columns instead and pay nothing.
+    template <std::ranges::input_range R>
+    std::expected<void, Error> write_sheet(std::string_view path, int32_t format, R &&rows,
+                                           const WriteOptions *options = nullptr)
+    {
+        using T = std::remove_cvref_t<std::ranges::range_value_t<R>>;
+        static constexpr auto bindings = ExcelMapper<T>::get_bindings();
+        static constexpr size_t field_count = std::tuple_size_v<decltype(bindings)>;
+        static constexpr auto indices = std::make_index_sequence<field_count>{};
+        typename detail::BuildersFor<decltype(bindings), std::remove_cvref_t<decltype(indices)>>::type builders{};
+        if constexpr (std::ranges::sized_range<R>)
+        {
+            detail::reserve_all(builders, static_cast<size_t>(std::ranges::size(rows)), indices);
+        }
+        for (const auto &row : rows)
+        {
+            detail::push_row(builders, row, bindings, indices);
+        }
+
+        if (detail::any_overflowed(builders, indices))
+        {
+            return std::unexpected(Error{XL_INVALID_ARGUMENT,
+                                         "a string column exceeds 2 GiB, which int32 offsets cannot address."});
+        }
+
+        const std::array<ColumnRef, field_count> refs = detail::to_refs(builders, bindings, indices);
+        return write_columns(path, format, refs, options);
+    }
+
+    // Infers the format from the path's extension.
+    template <std::ranges::input_range R>
+    std::expected<void, Error> write_sheet(std::string_view path, R &&rows,
+                                           const WriteOptions *options = nullptr)
+    {
+        return write_sheet(path, format_from_path(path), std::forward<R>(rows), options);
+    }
 } // namespace xl

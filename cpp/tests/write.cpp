@@ -242,6 +242,104 @@ static int test_optional_round_trip()
     return 0;
 }
 
+struct FullRow
+{
+    std::string texto;
+    int64_t inteiro;
+    double numero;
+    bool ativo;
+    std::chrono::year_month_day data;
+    std::chrono::microseconds hora;
+    std::chrono::system_clock::time_point instante;
+    std::optional<int64_t> opcional;
+};
+
+template <>
+struct xl::ExcelMapper<FullRow>
+{
+    static constexpr auto get_bindings()
+    {
+        return std::make_tuple(
+            xl::make_field("texto", &FullRow::texto),
+            xl::make_field("inteiro", &FullRow::inteiro),
+            xl::make_field("numero", &FullRow::numero),
+            xl::make_field("ativo", &FullRow::ativo),
+            xl::make_field("data", &FullRow::data),
+            xl::make_field("hora", &FullRow::hora),
+            xl::make_field("instante", &FullRow::instante),
+            xl::make_field("opcional", &FullRow::opcional));
+    }
+};
+
+static int test_write_sheet_round_trip()
+{
+    const std::vector<FullRow> rows{
+        FullRow{"uma", 1, 0.5, true,
+                std::chrono::year{2026} / std::chrono::month{1} / std::chrono::day{1},
+                std::chrono::microseconds{3600000000},
+                std::chrono::system_clock::time_point{std::chrono::microseconds{1767225600000000}},
+                std::optional<int64_t>{7}},
+        FullRow{"duas", 2, 1.5, false,
+                std::chrono::year{2026} / std::chrono::month{1} / std::chrono::day{2},
+                std::chrono::microseconds{7200000000},
+                std::chrono::system_clock::time_point{std::chrono::microseconds{1767312000000000}},
+                std::nullopt}};
+
+    const std::filesystem::path path = temp_path("sheet.xlsx");
+    // The format is inferred from the .xlsx extension by this overload.
+    CHECK(xl::write_sheet(path.string(), rows).has_value(), "write_sheet must succeed");
+    {
+        auto workbook = xl::Workbook::open(path.string());
+        CHECK(workbook.has_value(), "the written file must open");
+        auto table = xl::parse_sheet<FullRow>(*workbook);
+        CHECK(table.has_value(), "the written file must parse back");
+        CHECK(table->size() == 2, "two rows were written");
+
+        auto first = table->at(0);
+        CHECK(first.has_value(), "row 0 must be in bounds");
+        CHECK(first->texto == "uma", "row 0's string must round-trip");
+        CHECK(first->inteiro == 1, "row 0's int64 must round-trip");
+        CHECK(first->numero == 0.5, "row 0's double must round-trip");
+        CHECK(first->ativo, "row 0's bool must round-trip");
+        CHECK(first->data == std::chrono::year{2026} / std::chrono::month{1} / std::chrono::day{1},
+              "row 0's date must round-trip");
+        CHECK(first->hora == std::chrono::microseconds{3600000000}, "row 0's time must round-trip");
+        CHECK(first->opcional == 7, "row 0's optional must round-trip its value");
+
+        auto second = table->at(1);
+        CHECK(second.has_value(), "row 1 must be in bounds");
+        CHECK(second->texto == "duas", "row 1's string must round-trip");
+        CHECK(!second->ativo, "row 1's bool must round-trip as false");
+        CHECK(!second->opcional.has_value(), "row 1's nullopt must come back empty");
+    }
+    std::filesystem::remove(path);
+    return 0;
+}
+
+static int test_write_sheet_options_and_csv()
+{
+    const std::vector<FullRow> rows{};
+
+    const std::filesystem::path path = temp_path("named.xlsx");
+    xl::WriteOptions options{};
+    options.sheet_name = "Dados";
+    CHECK(xl::write_sheet(path.string(), XL_FORMAT_XLSX, rows, &options).has_value(),
+          "writing an empty sheet with a custom name must succeed");
+    {
+        auto workbook = xl::Workbook::open(path.string());
+        CHECK(workbook.has_value(), "the written file must open");
+        auto name = workbook->sheet_name();
+        CHECK(name.has_value(), "the sheet name must be readable");
+        CHECK(*name == "Dados", "WriteOptions::sheet_name must reach the file");
+    }
+    std::filesystem::remove(path);
+
+    const std::filesystem::path csv = temp_path("sheet.csv");
+    CHECK(xl::write_sheet(csv.string(), rows).has_value(), "a .csv path must infer XL_FORMAT_CSV");
+    std::filesystem::remove(csv);
+    return 0;
+}
+
 int main()
 {
     if (test_write_options() != 0)
@@ -265,6 +363,14 @@ int main()
         return 1;
     }
     if (test_optional_round_trip() != 0)
+    {
+        return 1;
+    }
+    if (test_write_sheet_round_trip() != 0)
+    {
+        return 1;
+    }
+    if (test_write_sheet_options_and_csv() != 0)
     {
         return 1;
     }
