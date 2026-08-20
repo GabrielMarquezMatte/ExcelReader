@@ -145,20 +145,43 @@ if(EXCELREADER_BUILD_BENCHMARKS_COMPARE)
         PUBLIC BUILD_XLSXIO_STATIC)
     target_link_libraries(xlsxio_read PRIVATE MINIZIP::minizip expat::expat)
 
-    add_executable(excelreader_cpp_compare_benchmarks benchmark_compare.cpp)
-    target_link_libraries(excelreader_cpp_compare_benchmarks PRIVATE
-        xl::excelreader benchmark::benchmark_main xlnt xlsxio_read)
+    # xlsxio's write side is a separate translation unit from its read side, with no shared state -
+    # it needs minizip's zip.h (same compat shim as above) but not expat, since writing parses no
+    # XML.
+    add_library(xlsxio_write STATIC "${xlsxio_SOURCE_DIR}/lib/xlsxio_write.c")
+    target_include_directories(xlsxio_write
+        PUBLIC "${xlsxio_SOURCE_DIR}/include"
+        PRIVATE "${xlsxio_SOURCE_DIR}/lib" "${_xlsxio_minizip_shim}")
+    target_compile_definitions(xlsxio_write
+        PRIVATE BUILD_XLSXIO USE_MINIZIP
+        PUBLIC BUILD_XLSXIO_STATIC)
+    target_link_libraries(xlsxio_write PRIVATE MINIZIP::minizip)
 
     set(EXCELREADER_XLSX_FIXTURE_PATH
         "${CMAKE_CURRENT_SOURCE_DIR}/../../tests/ExcelReader.Benchmarks/Data/65K_Records_Data.xlsx"
         CACHE FILEPATH "Path to the 65K-row xlsx fixture the excelreader-vs-xlnt benchmark reads")
+
+    add_executable(excelreader_cpp_compare_benchmarks benchmark_compare.cpp)
+    target_link_libraries(excelreader_cpp_compare_benchmarks PRIVATE
+        xl::excelreader benchmark::benchmark_main xlnt xlsxio_read)
     target_compile_definitions(excelreader_cpp_compare_benchmarks PRIVATE
         EXCELREADER_XLSX_FIXTURE_PATH="${EXCELREADER_XLSX_FIXTURE_PATH}")
 
+    # Kept a separate executable from the read comparison rather than a second .cpp in the same
+    # one: both files define their own FullRow plus an xl::ExcelMapper specialization for it, and
+    # two targets keep that unambiguous.
+    add_executable(excelreader_cpp_write_compare_benchmarks benchmark_write_compare.cpp)
+    target_link_libraries(excelreader_cpp_write_compare_benchmarks PRIVATE
+        xl::excelreader benchmark::benchmark_main xlnt xlsxio_write)
+    target_compile_definitions(excelreader_cpp_write_compare_benchmarks PRIVATE
+        EXCELREADER_XLSX_FIXTURE_PATH="${EXCELREADER_XLSX_FIXTURE_PATH}")
+
     if(WIN32)
-        add_custom_command(TARGET excelreader_cpp_compare_benchmarks POST_BUILD
-            COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                "$<TARGET_PROPERTY:excelreader_native,IMPORTED_LOCATION>"
-                "$<TARGET_FILE_DIR:excelreader_cpp_compare_benchmarks>")
+        foreach(_compare_target excelreader_cpp_compare_benchmarks excelreader_cpp_write_compare_benchmarks)
+            add_custom_command(TARGET ${_compare_target} POST_BUILD
+                COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                    "$<TARGET_PROPERTY:excelreader_native,IMPORTED_LOCATION>"
+                    "$<TARGET_FILE_DIR:${_compare_target}>")
+        endforeach()
     endif()
 endif()

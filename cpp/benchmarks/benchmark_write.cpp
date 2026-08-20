@@ -1,13 +1,17 @@
 // Write benchmarks over tests/ExcelReader.Benchmarks/Data/65K_Records_Data.xlsb (65,535 data rows),
 // the same fixture the Rust, Python and .NET suites use.
 //
-// WORK IS NOT MATCHED between the two cases, by construction:
+// Both cases write the SAME seven columns, so the only difference between them is where the data
+// starts out - which is the one thing this file is measuring:
 //
 //   * write_columns is handed buffers that are already columnar - nothing is transposed and
 //     nothing is copied. It is the ceiling.
 //   * write_sheet starts from a std::vector<Row> and pays the row-to-column transpose. It is what
 //     a row-shaped caller actually experiences, and the number to compare against any cell-at-a-
 //     time writer.
+//
+// The gap between them is therefore the cost of holding row-shaped data, not a difference in how
+// much gets written. For the comparison against other libraries, see benchmark_write_compare.cpp.
 //
 // State the CPU, OS and compiler version alongside any number published from this file.
 
@@ -76,6 +80,30 @@ static std::filesystem::path bench_path(std::string_view name)
            std::filesystem::path(std::string("excelreader-bench-") + std::string(name));
 }
 
+namespace
+{
+    // The offsets/blob pair an XL_T_STRING column needs. xl::write_sheet builds one of these
+    // internally; the columnar benchmark below builds its own so both cases start from the same
+    // shape.
+    struct StringBuffer
+    {
+        std::vector<int32_t> offsets{0};
+        std::vector<uint8_t> data{};
+
+        void reserve(size_t count)
+        {
+            offsets.reserve(count + 1);
+        }
+
+        void push(std::string_view value)
+        {
+            const uint8_t *bytes = reinterpret_cast<const uint8_t *>(value.data());
+            data.insert(data.end(), bytes, bytes + value.size());
+            offsets.push_back(static_cast<int32_t>(data.size()));
+        }
+    };
+}
+
 static void BM_WriteSheet(benchmark::State &state)
 {
     const std::vector<Row> &rows = fixture_rows();
@@ -101,27 +129,40 @@ static void BM_WriteColumns(benchmark::State &state)
 
     // Transposed once, outside the measured region: this case exists to measure the write, not the
     // transpose BM_WriteSheet already covers.
-    std::vector<int32_t> region_offsets{0};
-    std::vector<uint8_t> region_data;
+    //
+    // ALL SEVEN columns, the same set BM_WriteSheet writes. An earlier version of this benchmark
+    // wrote only four, which made it look ~2x faster when a third of that gap was simply three
+    // fewer columns of work.
+    StringBuffer region;
+    StringBuffer country;
+    StringBuffer item_type;
+    std::vector<int32_t> order_dates;
     std::vector<int64_t> order_ids;
     std::vector<int64_t> units;
     std::vector<double> revenue;
+    region.reserve(rows.size());
+    country.reserve(rows.size());
+    item_type.reserve(rows.size());
+    order_dates.reserve(rows.size());
     order_ids.reserve(rows.size());
     units.reserve(rows.size());
     revenue.reserve(rows.size());
-    region_offsets.reserve(rows.size() + 1);
     for (const Row &row : rows)
     {
-        const uint8_t *bytes = reinterpret_cast<const uint8_t *>(row.region.data());
-        region_data.insert(region_data.end(), bytes, bytes + row.region.size());
-        region_offsets.push_back(static_cast<int32_t>(region_data.size()));
+        region.push(row.region);
+        country.push(row.country);
+        item_type.push(row.item_type);
+        order_dates.push_back(static_cast<int32_t>(row.order_date.time_since_epoch().count()));
         order_ids.push_back(row.order_id);
         units.push_back(row.units_sold);
         revenue.push_back(row.total_revenue);
     }
 
-    const std::array<xl::ColumnRef, 4> columns{
-        xl::string_column("Region", region_offsets, region_data),
+    const std::array<xl::ColumnRef, 7> columns{
+        xl::string_column("Region", region.offsets, region.data),
+        xl::string_column("Country", country.offsets, country.data),
+        xl::string_column("Item Type", item_type.offsets, item_type.data),
+        xl::date_column("Order Date", order_dates),
         xl::i64_column("Order ID", order_ids),
         xl::i64_column("Units Sold", units),
         xl::f64_column("Total Revenue", revenue)};

@@ -137,7 +137,8 @@ through a layout that may have changed.
 ## Benchmarks
 
 Criterion suite in `benches/`. Measured on Windows 10 (22H2), 16 logical CPUs @ 3.39 GHz,
-rustc 1.97.1 (Release), Criterion 0.5, 100 samples per benchmark (medians shown).
+rustc 1.97.1 (Release), Criterion 0.5, 100 samples per benchmark (medians shown). `write_bench`
+takes 20 samples instead — each of its iterations writes a whole 65,535-row file.
 
 `benches/parse_bench.rs` - `open`/`parse_sheet`/`infer_schema`, same methodology as the C++ suite:
 
@@ -166,12 +167,26 @@ calamine is a fast, well-optimized reader in its own right, so the gap is real b
 of magnitude seen against slower libraries.
 
 `benches/write_bench.rs` measures the two write layers and
-[rust_xlsxwriter](https://github.com/jmcnamara/rust_xlsxwriter) on the same rows. Work is **not**
-matched across all three, by construction: `columns` is handed buffers that are already columnar and
-transposes nothing, `sheet` starts from a `Vec<Row>` and pays the transpose, and `rust_xlsxwriter`
-writes cell by cell through an API that also owns styling this library does not expose. Read `sheet`
-against `rust_xlsxwriter`; read `columns` only against `sheet`, as the cost of having row-shaped
-data in the first place.
+[rust_xlsxwriter](https://github.com/jmcnamara/rust_xlsxwriter) writing the same 7 columns × 65,535
+rows to `.xlsx`, all three starting from the same in-memory `Vec<Row>`:
+
+| Benchmark | Median |
+|---|---:|
+| `columns` (`write_columns`, pre-transposed) | 62.1 ms |
+| `sheet` (`write_sheet`, from `Vec<Row>`) | 67.2 ms |
+| `rust_xlsxwriter` (cell-at-a-time) | 336.9 ms |
+
+`sheet` is the matched-work number — it starts from the same shape `rust_xlsxwriter` is handed and
+pays the row-to-column transpose itself — and is ~5.0x faster. `columns` is a ceiling no
+cell-at-a-time API can reach, since it is handed buffers that are already columnar; read it only
+against `sheet`, as the cost of having row-shaped data in the first place. That cost turns out to be
+about 8%: the transpose is nearly free next to producing the file.
+
+Two caveats, both running against the headline number rather than for it. ExcelReader does slightly
+*more* work here: it attaches a number format to the date column so Excel shows a date, and writes a
+header row, while the `rust_xlsxwriter` case writes that column as a bare serial number and no
+header. And `rust_xlsxwriter` carries formatting and formula support this library does not expose at
+all, so its number reflects a different feature set, not only a slower path.
 
 Run locally:
 

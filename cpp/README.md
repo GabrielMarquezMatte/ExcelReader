@@ -182,8 +182,44 @@ Add `-DEXCELREADER_BUILD_BENCHMARKS_COMPARE=ON -DCMAKE_POLICY_VERSION_MINIMUM=3.
 `CMakeLists.txt` predates CMake's minimum-version floor) and build/run
 `excelreader_cpp_compare_benchmarks` for the xlnt/xlsxio comparison.
 
+### Writing
+
 `excelreader_cpp_write_benchmarks` (same `-DEXCELREADER_BUILD_BENCHMARKS=ON` flag) measures the two
-write layers. Work is deliberately **not** matched between its two cases: `BM_WriteColumns` is
-handed buffers that are already columnar and transposes nothing, while `BM_WriteSheet` starts from a
-`std::vector<Row>` and pays the row-to-column transpose. Read the second as what a row-shaped caller
-actually experiences; read the first only as the ceiling.
+write layers against each other over 7 columns of the same fixture. Both cases write the same
+columns, so the gap between them is only the cost of starting from row-shaped data: `BM_WriteColumns`
+is handed buffers that are already columnar, while `BM_WriteSheet` starts from a
+`std::vector<Row>` and pays the row-to-column transpose.
+
+`excelreader_cpp_write_compare_benchmarks` (under `-DEXCELREADER_BUILD_BENCHMARKS_COMPARE=ON`) puts
+that against xlnt and xlsxio's writer, all four writing the full 14-column, 65,535-row shape of
+`65K_Records_Data.xlsx` from the same in-memory rows:
+
+| Library | Wall | CPU |
+|---|---:|---:|
+| ExcelReader (`xl::write_columns`, pre-transposed) | 127.8 ms | 127.6 ms |
+| ExcelReader (`xl::write_sheet<FullRow>`) | 136.5 ms | 137.5 ms |
+| xlsxio (`xlsxiowrite_add_cell_*`) | 2,383.5 ms | 843.8 ms |
+| xlnt (`worksheet::cell().value()` + `save()`) | 5,398.0 ms | 5,406.3 ms |
+
+Same machine as above; Google Benchmark's own iteration counts, no `--benchmark_repetitions` (each
+iteration writes a whole 65,535-row file, so the slower cases run once or twice).
+
+`write_sheet` — the matched-work number, since it starts from the same `std::vector<FullRow>` both
+competitors are handed — is ~17.5x faster than xlsxio and ~40x faster than xlnt on wall time.
+
+Three caveats, none of them optional when quoting these:
+
+- **xlsxio's wall time is two thirds I/O wait.** Its CPU time is 843.8 ms against 2,383.5 ms wall,
+  because it streams through a temp file; every other case here is CPU-bound (wall ≈ CPU). Against
+  CPU time the gap is ~6.1x, not ~17.5x. Which number is the honest one depends on what you are
+  asking — ~17.5x is what a caller waits, ~6.1x is what the library costs.
+- **ExcelReader does slightly more work here**, not less: it attaches a number format to the two
+  date columns so Excel shows a date, while both competitor cases write those as bare serial
+  numbers. That difference favours the competitors.
+- **xlnt builds a full document model** (styles, formats, formulas) before serializing, which is
+  more than this library exposes at all. Its number reflects a different feature set, not only a
+  slower path.
+
+The two ExcelReader cases land within ~7% of each other, which is the interesting internal result:
+the row-to-column transpose is nearly free next to the cost of producing the file. Reach for
+`write_columns` when your data is already columnar, but `write_sheet` is not the slow path.
