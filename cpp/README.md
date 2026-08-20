@@ -199,46 +199,90 @@ The transpose costs ~12% here. It is not free, but it is far from the dominant c
 the file — see the comparison below, where the same two cases over 14 columns land within ~7%.
 
 `excelreader_cpp_write_compare_benchmarks` (under `-DEXCELREADER_BUILD_BENCHMARKS_COMPARE=ON`) puts
-that against xlnt, xlsxio and [libxlsxwriter](https://github.com/jmcnamara/libxlsxwriter) — same
-author as rust_xlsxwriter, and, like xlsxio, a streaming C writer with no document-model overhead —
-all five writing the full 14-column, 65,535-row shape of `65K_Records_Data.xlsx` from the same
-in-memory rows:
+that against xlnt, xlsxio and [DuckDB](https://github.com/duckdb/duckdb)'s `excel` extension, all
+writing the full 14-column, 65,535-row shape of `65K_Records_Data.xlsx` from the same in-memory
+rows.
+[libxlsxwriter](https://github.com/jmcnamara/libxlsxwriter) — same author as rust_xlsxwriter, and,
+like xlsxio, a streaming C writer with no document-model overhead — is measured separately, by
+`excelreader_cpp_write_compare_lxw_benchmarks`: xlsxio and libxlsxwriter each vendor their own
+incompatible copy of minizip and export the same C symbols (`zipOpen`, `zipOpenNewFileInZip`, ...),
+so linking both into one binary let calls cross between the two implementations and corrupted
+xlsxio's output — see [Known issue](#known-issue-xlsxio--libxlsxwriter-cannot-share-a-binary) below.
+Building both write-compare targets and running them back to back is required to see every
+competitor.
 
 | Library | Wall | CPU |
 |---|---:|---:|
-| ExcelReader (`xl::write_columns`, pre-transposed) | 127.8 ms | 127.6 ms |
-| ExcelReader (`xl::write_sheet<FullRow>`) | 136.5–140.7 ms | 137.5–140.6 ms |
-| libxlsxwriter (`worksheet_write_string`/`_number`) | 1,226.9 ms | 1,234.4 ms |
-| xlsxio (`xlsxiowrite_add_cell_*`) | 2,383.5–2,453.9 ms | 843.8–906.3 ms |
-| xlnt (`worksheet::cell().value()` + `save()`) | 5,398.0–5,471.4 ms | 5,406.3–5,468.8 ms |
+| ExcelReader (`xl::write_columns`, pre-transposed) | 126.3–128.1 ms | 127.6 ms |
+| ExcelReader (`xl::write_sheet<FullRow>`) | 135.7–136.6 ms | 137.5 ms |
+| DuckDB (`COPY ... TO ... WITH (FORMAT xlsx)`) | 826.3–863.6 ms | 828.1–843.8 ms |
+| libxlsxwriter (`worksheet_write_string`/`_number`) | 1,188.0 ms | 1,187.5 ms |
+| xlsxio (`xlsxiowrite_add_cell_*`) | 2,450.6 ms | 1,171.9 ms |
+| xlnt (`worksheet::cell().value()` + `save()`) | 5,737.9 ms | 5,703.1 ms |
 
 Same machine as above; Google Benchmark's own iteration counts, no `--benchmark_repetitions` (each
-iteration writes a whole 65,535-row file, so the slower cases run once or a handful of times — the
-ranges above are two separate runs, shown as a range rather than picking one arbitrarily).
+iteration writes a whole 65,535-row file, so the slower cases run once or a handful of times). xlnt
+and xlsxio only build into `excelreader_cpp_write_compare_benchmarks`; libxlsxwriter only into
+`excelreader_cpp_write_compare_lxw_benchmarks` (see the known issue below) — the ExcelReader and
+DuckDB rows appear in both, and the small ranges above are those two independent runs, not repeated
+sampling within one run.
 
 `write_sheet` — the matched-work number, since it starts from the same `std::vector<FullRow>` every
-competitor is handed — is ~9.0x faster than libxlsxwriter, ~17.5x faster than xlsxio, and ~40x
-faster than xlnt on wall time.
+competitor is handed — is ~6.1–6.4x faster than DuckDB, ~8.7x faster than libxlsxwriter, ~18.1x
+faster than xlsxio, and ~42x faster than xlnt on wall time.
+
+### Known issue: xlsxio + libxlsxwriter cannot share a binary
+
+An earlier version of `excelreader_cpp_write_compare_benchmarks` linked xlnt, xlsxio,
+libxlsxwriter and DuckDB into one executable. xlsxio (built against minizip-ng's compat layer,
+whose `zipOpenNewFileInZip` takes `uint16_t` extrafield sizes) and libxlsxwriter (which vendors
+classic minizip, whose same-named function takes 32-bit `uInt` sizes and starts with `if
+(size_extrafield_local > 0xffff) return ZIP_PARAMERROR;` — a check that cannot exist in the
+minizip-ng version) both export identical C symbol names from a static library linked into that one
+binary. The linker kept exactly one definition of each name, so a call could resolve to the wrong
+implementation — a `zipFile` opened by one library's `zipOpen` got handed to the other library's
+`zipOpenNewFileInZip`, which read it through an incompatible struct layout. That is what produced
+`Error creating file "xl/workbook.xml" inside zip file` on xlsxio's background thread in Release
+builds (Debug's different link order happened not to trigger it) — and it was silent otherwise:
+`xlsxiowrite_close()` still returned success with the workbook.xml entry missing, so the benchmark
+published a timing for a file that was skipping work, not a valid xlsx.
+
+The fix is structural: xlsxio and libxlsxwriter now build into two separate executables
+(`excelreader_cpp_write_compare_benchmarks` and `excelreader_cpp_write_compare_lxw_benchmarks`,
+both compiled from `benchmark_write_compare.cpp` under an `#ifdef`) that are never linked together.
+Every case in both executables also reopens the file it just wrote, outside the timed loop, before
+trusting its own timing — a writer that silently drops a required part now fails the benchmark
+instead of publishing a number for a broken file.
+
+**libxlsxwriter's number barely moved after the fix** (1,188.0 ms wall vs. 1,226.9 ms pre-fix, ~3%,
+inside normal run-to-run noise) and its CPU stayed essentially equal to wall time both before and
+after — consistent with the corruption running through xlsxio's calls resolving into
+libxlsxwriter's minizip, not the reverse: libxlsxwriter's own output was apparently never affected.
+That is a plausible explanation for the asymmetry, not a second confirmed fact — the collision could
+in principle run either direction depending on link order, and this project isn't going to re-derive
+MSVC's exact symbol-resolution algorithm to be certain which way it went here.
 
 Caveats, none of them optional when quoting these:
 
-- **One xlsxio run logged `Error creating file "xl/workbook.xml" inside zip file` mid-benchmark**,
-  yet `xlsxiowrite_close()` still returned success and the timing came out in the same range as a
-  clean run. `SkipWithError` only fires on a non-zero return, so this specific case is not proof the
-  written file was intact — treat the xlsxio row as provisional until a run free of that message
-  confirms it.
-- **xlsxio's wall time is roughly two thirds I/O wait.** Its CPU time is well under half its wall
-  time, because it streams through a temp file; every other case here is CPU-bound (wall ≈ CPU).
-  Against CPU time the gap to `write_sheet` is ~6.1–6.6x, not ~17.5x. Which number is the honest one
-  depends on what you are asking — the wall-time ratio is what a caller waits, the CPU-time ratio is
-  what the library costs.
+- **xlsxio's CPU time moved after the fix**, from 843.8–906.3 ms (pre-fix, some runs missing the
+  workbook.xml entry) to a confirmed 1,171.9 ms — about 30% more real work, consistent with the
+  entry no longer being silently dropped. Wall time barely moved (2,450.6 ms vs. 2,383.5–2,453.9 ms),
+  because xlsxio's wall time is dominated by I/O wait either way: CPU is now ~48% of wall,
+  against every other case here being CPU-bound (wall ≈ CPU). Against CPU time the gap from
+  `write_sheet` to xlsxio is ~8.5x, not ~18.1x — which number is the honest one depends on what you
+  are asking: the wall-time ratio is what a caller waits, the CPU-time ratio is what the library
+  costs.
 - **ExcelReader does slightly more work here**, not less: it attaches a number format to the two
   date columns so Excel shows a date, while every competitor case writes those as bare serial
   numbers. That difference favours the competitors.
 - **xlnt builds a full document model** (styles, formats, formulas) before serializing, which is
   more than this library exposes at all. Its number reflects a different feature set, not only a
   slower path.
+- **DuckDB's rows are loaded via its Appender API before the timed region**, so its number measures
+  `COPY ... TO ... xlsx` alone — the same treatment `write_columns` gets for its transpose. DuckDB is
+  a full analytical query engine doing far more than any Excel-writing library here; this measures
+  one narrow slice of it, not "DuckDB" as a whole.
 
-The two ExcelReader cases land within ~7% of each other, which is the interesting internal result:
+The two ExcelReader cases land within ~6% of each other, which is the interesting internal result:
 the row-to-column transpose is nearly free next to the cost of producing the file. Reach for
 `write_columns` when your data is already columnar, but `write_sheet` is not the slow path.
