@@ -274,14 +274,29 @@ set(ZLIB_VERSION_STRING "1.3.1")
     # Kept a separate executable from the read comparison rather than a second .cpp in the same
     # one: both files define their own FullRow plus an xl::ExcelMapper specialization for it, and
     # two targets keep that unambiguous.
+    #
+    # The write comparison is then split AGAIN, into two executables built from the same source:
+    # xlsxio and libxlsxwriter each vendor an incompatible copy of minizip and export the same C
+    # symbols (zipOpen, zipOpenNewFileInZip, ...), so linking both into one binary lets calls cross
+    # between the two implementations - which corrupted xlsxio's output in Release. See the header
+    # comment in benchmark_write_compare.cpp. Do not merge these back into one target.
     add_executable(excelreader_cpp_write_compare_benchmarks benchmark_write_compare.cpp)
     target_link_libraries(excelreader_cpp_write_compare_benchmarks PRIVATE
-        xl::excelreader benchmark::benchmark_main xlnt xlsxio_write xlsxwriter duckdb)
+        xl::excelreader benchmark::benchmark_main xlnt xlsxio_write duckdb)
     target_compile_definitions(excelreader_cpp_write_compare_benchmarks PRIVATE
-        EXCELREADER_XLSX_FIXTURE_PATH="${EXCELREADER_XLSX_FIXTURE_PATH}")
+        EXCELREADER_XLSX_FIXTURE_PATH="${EXCELREADER_XLSX_FIXTURE_PATH}"
+        EXCELREADER_BENCH_XLSXIO)
+
+    add_executable(excelreader_cpp_write_compare_lxw_benchmarks benchmark_write_compare.cpp)
+    target_link_libraries(excelreader_cpp_write_compare_lxw_benchmarks PRIVATE
+        xl::excelreader benchmark::benchmark_main xlsxwriter duckdb)
+    target_compile_definitions(excelreader_cpp_write_compare_lxw_benchmarks PRIVATE
+        EXCELREADER_XLSX_FIXTURE_PATH="${EXCELREADER_XLSX_FIXTURE_PATH}"
+        EXCELREADER_BENCH_LIBXLSXWRITER)
 
     if(WIN32)
-        foreach(_compare_target excelreader_cpp_compare_benchmarks excelreader_cpp_write_compare_benchmarks)
+        foreach(_compare_target excelreader_cpp_compare_benchmarks excelreader_cpp_write_compare_benchmarks
+                                excelreader_cpp_write_compare_lxw_benchmarks)
             add_custom_command(TARGET ${_compare_target} POST_BUILD
                 COMMAND ${CMAKE_COMMAND} -E copy_if_different
                     "$<TARGET_PROPERTY:excelreader_native,IMPORTED_LOCATION>"
