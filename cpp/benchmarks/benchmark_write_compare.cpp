@@ -32,14 +32,41 @@
 //     doing far more than any Excel-writing library here, and this measures one narrow slice of it.
 //
 // State the CPU, OS and compiler version alongside any number published from this file.
+//
+// WHY THIS FILE IS COMPILED TWICE (see cpp/benchmarks/CMakeLists.txt): xlsxio and libxlsxwriter
+// each bring their own incompatible copy of minizip, and both export the SAME C symbols
+// (zipOpen, zipOpenNewFileInZip, zipWriteInFileInZip, ...) from a static library:
+//
+//   * xlsxio is built against minizip-ng's compat layer, whose zipOpenNewFileInZip takes
+//     uint16_t extrafield sizes.
+//   * libxlsxwriter vendors classic minizip (third_party/minizip/zip.c), whose signature takes
+//     32-bit uInt sizes and whose body starts with `if (size_extrafield_local > 0xffff) return
+//     ZIP_PARAMERROR;` - a check that cannot exist in the minizip-ng version.
+//
+// Linked into one executable, the linker keeps exactly one definition of each name, so calls can
+// cross between the two: a zipFile opened as minizip-ng's `mz_zip_compat*` gets read as classic
+// minizip's `zip64_internal*`. That is how a Release build produced "Error creating file
+// xl/workbook.xml inside zip file" on xlsxio's background thread - garbage read out of the wrong
+// struct tripping the 0xffff check - while a Debug build, with different link ordering, did not.
+// Neither library's numbers are trustworthy in that state.
+//
+// So each of the two gets its own executable, and this file's competitor cases are guarded to
+// match. Do not merge the targets back together.
 
 #include <xl/excelreader.hpp>
 
 #include <benchmark/benchmark.h>
 #include <duckdb.hpp>
+
+// xlsxio and libxlsxwriter MUST NOT be linked into the same executable - see the note above. This
+// file is compiled twice, once with each define, by cpp/benchmarks/CMakeLists.txt.
+#ifdef EXCELREADER_BENCH_XLSXIO
 #include <xlnt/xlnt.hpp>
 #include <xlsxio_write.h>
+#endif
+#ifdef EXCELREADER_BENCH_LIBXLSXWRITER
 #include <xlsxwriter.h>
+#endif
 
 #include <array>
 #include <chrono>
@@ -127,10 +154,15 @@ namespace
         return rows;
     }
 
+    // Suffixed with a steady_clock reading so concurrent or back-to-back runs of this executable
+    // cannot collide on one temp file. steady_clock rather than a process id needs no platform
+    // header (no <windows.h>, no <unistd.h>) - this file has neither today.
     std::filesystem::path bench_path(std::string_view name)
     {
+        const auto ticks = std::chrono::steady_clock::now().time_since_epoch().count();
         return std::filesystem::temp_directory_path() /
-               std::filesystem::path(std::string("excelreader-write-compare-") + std::string(name));
+               std::filesystem::path("excelreader-write-compare-" + std::to_string(ticks) + "-" +
+                                      std::string(name));
     }
 
     int32_t days(std::chrono::sys_days value)
@@ -263,6 +295,7 @@ static void BM_ExcelReader_WriteColumns(benchmark::State &state)
 }
 BENCHMARK(BM_ExcelReader_WriteColumns);
 
+#ifdef EXCELREADER_BENCH_XLSXIO
 static void BM_Xlnt_Write(benchmark::State &state)
 {
     const std::vector<FullRow> &rows = fixture_rows();
@@ -363,7 +396,9 @@ static void BM_Xlsxio_Write(benchmark::State &state)
     std::filesystem::remove(path);
 }
 BENCHMARK(BM_Xlsxio_Write);
+#endif // EXCELREADER_BENCH_XLSXIO
 
+#ifdef EXCELREADER_BENCH_LIBXLSXWRITER
 static void BM_Libxlsxwriter_Write(benchmark::State &state)
 {
     const std::vector<FullRow> &rows = fixture_rows();
@@ -417,6 +452,7 @@ static void BM_Libxlsxwriter_Write(benchmark::State &state)
     std::filesystem::remove(path);
 }
 BENCHMARK(BM_Libxlsxwriter_Write);
+#endif // EXCELREADER_BENCH_LIBXLSXWRITER
 
 // DuckDB (https://github.com/duckdb/duckdb) writes via its "excel" extension's
 // `COPY ... TO ... WITH (FORMAT xlsx)`. The rows are loaded into an in-memory DuckDB table via its
