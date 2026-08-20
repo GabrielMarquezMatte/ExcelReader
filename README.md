@@ -863,13 +863,13 @@ dotnet test --project tests/ExcelReader.Tests/ExcelReader.Tests.csproj --configu
 
 ## Other languages
 
-ExcelReader ships a NativeAOT shared library with a C ABI, so non-.NET languages can read XLSX,
-XLSB, XLS and CSV without a .NET runtime installed.
+ExcelReader ships a NativeAOT shared library with a C ABI, so non-.NET languages can read and write
+XLSX, XLSB, XLS and CSV without a .NET runtime installed.
 
 - C ABI header: [`src/ExcelReader.Native/include/excelreader.h`](src/ExcelReader.Native/include/excelreader.h)
 - Python package: [`python/`](python/README.md)
-- C++ package: header-only CMake wrapper, `xl::Workbook`/`xl::parse_sheet` over the same ABI — see [`cpp/README.md`](cpp/README.md).
-- Rust crate: safe `Workbook`/`parse_sheet` bindings, downloadable via `cargo add excelreader` — see [`rust/excelreader/README.md`](rust/excelreader/README.md).
+- C++ package: header-only CMake wrapper, `xl::Workbook`/`xl::parse_sheet`/`xl::write_sheet` over the same ABI — see [`cpp/README.md`](cpp/README.md).
+- Rust crate: safe `Workbook`/`parse_sheet`/`write_sheet` bindings, downloadable via `cargo add excelreader` — see [`rust/excelreader/README.md`](rust/excelreader/README.md).
 
 ```python
 from excelreader import open_workbook
@@ -879,7 +879,25 @@ with open_workbook("book.xlsx") as workbook:
         print([cell.value for cell in row])
 ```
 
-Reading only — the writers are not exposed across the ABI yet.
+Writing goes through one export, `xl_write_typed`: a whole sheet in a single call, from columnar
+buffers the ABI borrows rather than copies. All three bindings expose it — Python as
+`write_workbook`/`write_arrow`/`write_pandas`/`write_polars`, C++ as `xl::write_columns` and
+`xl::write_sheet<T>`, Rust as `writer::write_columns` and `writer::write_sheet`. In C++ and Rust the
+same struct mapping drives both directions, so reading a sheet and writing it back needs one
+mapping, not two:
+
+```rust
+use excelreader::writer::write_sheet;
+use excelreader::XL_FORMAT_XLSX;
+
+write_sheet("out.xlsx", XL_FORMAT_XLSX, &rows, None)?;
+```
+
+```cpp
+auto written = xl::write_sheet("out.xlsx", rows);   // format inferred from the extension
+```
+
+Row-by-row decoded reads and the Arrow export remain Python-only.
 
 ## Contributing
 

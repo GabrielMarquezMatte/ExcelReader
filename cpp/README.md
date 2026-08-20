@@ -1,9 +1,9 @@
 # excelreader (C++)
 
 Header-only C++23 wrapper around ExcelReader's native C ABI: opening a workbook (from a path or
-memory, with the full open-options surface), sheet navigation, schema inference, and schema-driven
-typed table parsing. No writing, no Arrow, no row-by-row decode yet — see the root README's Python
-section for what those look like.
+memory, with the full open-options surface), sheet navigation, schema inference, schema-driven
+typed table parsing, and schema-driven writing. No Arrow, no row-by-row decode yet — see the root
+README's Python section for what those look like.
 
 ## Requirements
 
@@ -78,6 +78,53 @@ for (const auto& column : *workbook->infer_schema(1, 100)) {
 
 Every entry point returns `std::expected<T, xl::Error>` — this header throws nothing.
 
+## Writing
+
+Two layers, mirroring the two on the reading side.
+
+`xl::write_sheet<T>` uses the same `xl::ExcelMapper<T>` specialization `xl::parse_sheet<T>` reads
+with, so a round trip needs one mapping, not two:
+
+```cpp
+std::vector<Row> rows = /* ... */;
+auto written = xl::write_sheet("out.xlsx", rows);   // format inferred from the extension
+if (!written) {
+    std::fprintf(stderr, "%s\n", written.error().message.c_str());
+}
+```
+
+If you already hold columnar buffers, `xl::write_columns` hands them to the ABI with **no copy** —
+they are borrowed for the duration of the call and must outlive it:
+
+```cpp
+std::vector<int64_t> ids{1, 2, 3};
+std::vector<double> values{0.5, 1.5, 2.5};
+std::array<xl::ColumnRef, 2> columns{
+    xl::i64_column("id", ids),
+    xl::f64_column("value", values)};
+
+auto written = xl::write_columns("out.xlsx", XL_FORMAT_XLSX, columns);
+```
+
+One constructor per column type: `i64_column`, `f64_column`, `bool_column`, `date_column`,
+`time_column`, `timestamp_column`, and `string_column` (which takes an `int32` offsets span of
+`rows + 1` entries plus the UTF-8 blob).
+
+A nullable column is a values buffer plus an LSB-first validity bitmap — bit set means the row is
+valid — passed as the last argument to any of those constructors. `write_columns` checks the bitmap
+is long enough for the row count before calling: the ABI takes it without a length and reads
+`(rows + 7) / 8` bytes on trust, so a short one would be a buffer overrun. On the struct side,
+declare the field `std::optional<T>` and `write_sheet` builds the bitmap for you.
+
+`xl::WriteOptions` sets the sheet name, the CSV dialect, and the XLS/XLSB and XLSX/XLSB toggles.
+`XL_FORMAT_AUTO` is rejected — a file being created has no signature bytes to sniff — so
+`xl::format_from_path` returning `XL_FORMAT_AUTO` for an unrecognized extension surfaces as a failed
+write rather than a silently chosen format.
+
+`write_sheet` walks the range once and appends each field to its own column buffer, with the
+per-field dispatch resolved at compile time. That transpose is the only copy it makes, and it is
+what the ABI's columnar shape costs a row-shaped caller; `write_columns` pays nothing.
+
 ## Bounds and ABI
 
 `TableView::operator[]` is unchecked, like `std::vector`'s. Use `TableView::at(row)`, which returns
@@ -134,3 +181,9 @@ cmake --build build --config Release --target excelreader_cpp_benchmarks
 Add `-DEXCELREADER_BUILD_BENCHMARKS_COMPARE=ON -DCMAKE_POLICY_VERSION_MINIMUM=3.5` (xlnt's own
 `CMakeLists.txt` predates CMake's minimum-version floor) and build/run
 `excelreader_cpp_compare_benchmarks` for the xlnt/xlsxio comparison.
+
+`excelreader_cpp_write_benchmarks` (same `-DEXCELREADER_BUILD_BENCHMARKS=ON` flag) measures the two
+write layers. Work is deliberately **not** matched between its two cases: `BM_WriteColumns` is
+handed buffers that are already columnar and transposes nothing, while `BM_WriteSheet` starts from a
+`std::vector<Row>` and pays the row-to-column transpose. Read the second as what a row-shaped caller
+actually experiences; read the first only as the ceiling.
