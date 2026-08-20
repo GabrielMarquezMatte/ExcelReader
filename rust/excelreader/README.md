@@ -88,3 +88,45 @@ download - useful when building from source before a release exists yet.
 Every constructor first checks the loaded library's `xl_abi_version()` against the `XL_ABI_VERSION`
 this crate was compiled against, and fails with a explanatory error rather than reading native memory
 through a layout that may have changed.
+
+## Benchmarks
+
+Criterion suite in `benches/`. Measured on Windows 10 (22H2), 16 logical CPUs @ 3.39 GHz,
+rustc 1.97.1 (Release), Criterion 0.5, 100 samples per benchmark (medians shown).
+
+`benches/parse_bench.rs` - `open`/`parse_sheet`/`infer_schema`, same methodology as the C++ suite:
+
+| Benchmark | RealExcel.xlsb (100 rows) | 65K_Records_Data.xlsb (65,535 rows) |
+|---|---:|---:|
+| `open` | 79.4 µs | 92.8 µs |
+| `parse_sheet` (2 or 6 bound columns) | 79.0 µs | 39.3 ms |
+| `infer_schema` (sample 100 / 1,000 rows) | 147.9 µs | 1.19 ms |
+
+`open` stays nearly flat across the 655x row-count jump (+17%) - XLSB's header carries its
+dimensions/index, so opening costs metadata, not row data. `parse_sheet` scales linearly with
+rows × columns; `infer_schema` scales with its sample size, not the file's total row count.
+
+`benches/compare_bench.rs` compares against [calamine](https://github.com/tafia/calamine) reading
+`65K_Records_Data.{xlsx,xlsb}` in full (all 14 columns, 65,535 rows). Both sides decode every cell
+into an owned value (`String` for text) and fold it into one accumulator, so neither side gets a
+zero-copy advantage the other can't take:
+
+| Format | ExcelReader (`parse_sheet::<FullRow>`) | calamine (`worksheet_range` + `Data` match) |
+|---|---:|---:|
+| XLSX | 123.5 ms | 273.4 ms |
+| XLSB | 70.6 ms | 84.9 ms |
+
+ExcelReader is ~2.2x faster than calamine for XLSX and ~1.2x faster for XLSB on this workload -
+calamine is a fast, well-optimized reader in its own right, so the gap is real but not the order
+of magnitude seen against slower libraries.
+
+Run locally:
+
+```bash
+cd rust
+EXCELREADER_NATIVE_LIB_DIR=/path/to/native/lib/dir cargo bench -p excelreader
+```
+
+`EXCELREADER_NATIVE_LIB_DIR` should point at a directory containing a locally-built
+`ExcelReader.Native.{dll,so,dylib}` - see [Build notes](#build-notes) above. Pass
+`--bench parse_bench` or `--bench compare_bench` to run one suite only.

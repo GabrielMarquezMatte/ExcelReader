@@ -23,6 +23,16 @@ chrono = { version = "0.4", optional = true, default-features = false, features 
 
 [dev-dependencies]
 trybuild = "1"
+criterion = "0.5"
+calamine = { version = "0.36.1", features = ["chrono"] }
+
+[[bench]]
+name = "parse_bench"
+harness = false
+
+[[bench]]
+name = "compare_bench"
+harness = false
 
 [package.metadata.docs.rs]
 all-features = true

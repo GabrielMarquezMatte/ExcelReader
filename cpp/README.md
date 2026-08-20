@@ -87,3 +87,50 @@ Every entry point returns `std::expected<T, xl::Error>` — this header throws n
 `XL_ABI_VERSION` this header was compiled against, and fail with an explanatory `xl::Error` rather
 than reading native memory through a layout that may have changed. `xl::abi_version()` exposes the
 loaded revision directly.
+
+## Benchmarks
+
+Google Benchmark suite in `benchmarks/`, opt-in via `-DEXCELREADER_BUILD_BENCHMARKS=ON`. Measured
+on Windows 10 (22H2), 16 logical CPUs @ 3.39 GHz, MSVC 19.51 (Release), Google Benchmark v1.9.1,
+`--benchmark_repetitions=10` (means shown).
+
+| Benchmark | RealExcel.xlsb (100 rows) | 65K_Records_Data.xlsb (65,535 rows) |
+|---|---:|---:|
+| `open` | 78.5 µs | 92.5 µs |
+| `parse_sheet` (4 or 6 bound columns) | 87.7 µs | 39.9 ms |
+| `infer_schema` (sample 100 / 1,000 rows) | 152.6 µs | 1.22 ms |
+
+`open` is nearly flat across a 655x row-count increase (+18%, not +65,435%) — XLSB keeps its
+dimensions/index up front, so opening costs header/metadata, not row data. `parse_sheet` scales
+linearly with rows × columns, at roughly 608 ns/row here. `infer_schema` scales with its sample
+size, not the file's total row count.
+
+A separate opt-in suite (`-DEXCELREADER_BUILD_BENCHMARKS_COMPARE=ON`, gated separately because it
+pulls in [xlnt](https://github.com/tfussell/xlnt) and [xlsxio](https://github.com/brechtsanders/xlsxio)
+as heavy source builds — xlsxio's own dependencies, expat and minizip, are fetched and compiled
+directly against it) compares against both reading `65K_Records_Data.xlsx` in full (all 14
+columns, 65,535 rows; neither competitor reads `.xlsb`, so this comparison is xlsx-only). All three
+sides decode every cell into an owned value (`std::string` for text, not the zero-copy
+`std::string_view` used above) so none gets a zero-copy advantage the others can't take:
+
+| Library | Mean |
+|---|---:|
+| ExcelReader (`parse_sheet<FullRow>`) | 110.4 ms |
+| xlsxio (`xlsxioread_sheet_next_cell_*`) | 509.3 ms |
+| xlnt (`worksheet::rows()` + `cell::to_string()`/`value<double>()`) | 2,335.9 ms |
+
+ExcelReader is ~4.6x faster than xlsxio and ~21x faster than xlnt on this workload. xlsxio is a
+lean, purpose-built C streaming reader — the same abstraction level as ExcelReader's own native
+core — so it was the strongest of the two competitors tested, though still well behind.
+
+Run locally:
+
+```bash
+cmake -S cpp -B build -DEXCELREADER_BUILD_BENCHMARKS=ON -DCMAKE_BUILD_TYPE=Release
+cmake --build build --config Release --target excelreader_cpp_benchmarks
+./build/benchmarks/excelreader_cpp_benchmarks --benchmark_repetitions=10 --benchmark_report_aggregates_only=true
+```
+
+Add `-DEXCELREADER_BUILD_BENCHMARKS_COMPARE=ON -DCMAKE_POLICY_VERSION_MINIMUM=3.5` (xlnt's own
+`CMakeLists.txt` predates CMake's minimum-version floor) and build/run
+`excelreader_cpp_compare_benchmarks` for the xlnt/xlsxio comparison.

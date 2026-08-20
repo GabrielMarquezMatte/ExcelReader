@@ -39,3 +39,8 @@ if(EXCELREADER_BUILD_TESTS)
     enable_testing()
     add_subdirectory(tests)
 endif()
+
+option(EXCELREADER_BUILD_BENCHMARKS "Build the excelreader C++ Google Benchmark suite" OFF)
+if(EXCELREADER_BUILD_BENCHMARKS)
+    add_subdirectory(benchmarks)
+endif()
