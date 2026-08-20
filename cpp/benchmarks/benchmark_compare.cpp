@@ -1,19 +1,22 @@
-// Compares ExcelReader against xlnt (https://github.com/tfussell/xlnt) and xlsxio
-// (https://github.com/brechtsanders/xlsxio) reading the full row shape of
-// tests/ExcelReader.Benchmarks/Data/65K_Records_Data.xlsx: all 14 columns, 65,535 data rows.
-// Neither competitor reads .xlsb, so this fixture is xlsx-only, unlike the RealExcel.xlsb fixture
-// the other benchmarks use.
+// Compares ExcelReader against xlnt (https://github.com/tfussell/xlnt), xlsxio
+// (https://github.com/brechtsanders/xlsxio) and DuckDB's (https://github.com/duckdb/duckdb)
+// "excel" extension reading the full row shape of
+// tests/ExcelReader.Benchmarks/Data/65K_Records_Data.xlsx: all 14 columns, 65,535 data rows. None
+// of the three competitors reads .xlsb, so this fixture is xlsx-only, unlike the RealExcel.xlsb
+// fixture the other benchmarks use.
 //
-// All three sides decode every cell into an owned value (std::string for text, matching xlnt's
-// cell::to_string() and xlsxio's xlsxioread_sheet_next_cell_string()) and fold it into one
-// accumulator - the ExcelReader side uses std::string bindings rather than the zero-copy
-// std::string_view used elsewhere in this suite, so no side gets an allocation-free advantage the
-// others can't take. Same methodology as BenchmarkAccumulators.cs (the .NET benchmark suite's
-// ExcelReader-vs-Sylvan comparison).
+// All four sides decode every cell into an owned value and fold it into one accumulator - the
+// ExcelReader side uses std::string bindings rather than the zero-copy std::string_view used
+// elsewhere in this suite, so no side gets an allocation-free advantage the others can't take.
+// DuckDB's case expresses the same accumulator as a single SQL aggregate query rather than a C++
+// loop, which is the idiomatic way to make a SQL engine touch every cell, not a concession to it.
+// Same methodology as BenchmarkAccumulators.cs (the .NET benchmark suite's ExcelReader-vs-Sylvan
+// comparison).
 
 #include <xl/excelreader.hpp>
 
 #include <benchmark/benchmark.h>
+#include <duckdb.hpp>
 #include <xlnt/xlnt.hpp>
 #include <xlsxio_read.h>
 
@@ -332,3 +335,48 @@ static void BM_Xlsxio_Xlsx_Full(benchmark::State &state)
     }
 }
 BENCHMARK(BM_Xlsxio_Xlsx_Full);
+
+// DuckDB (https://github.com/duckdb/duckdb) reads via its "excel" extension's read_xlsx() table
+// function, invoked here as a single aggregate query rather than pulled apart row by row in C++:
+// DuckDB is a SQL engine, and an aggregate over every column is the idiomatic way to make it
+// decode every cell, not an artificial concession to it. The expression matches
+// accumulate_full_row() exactly - same columns, same "text length, numeric value" split, same
+// epoch-days conversion for the two date columns - so the three sides remain the same "touch every
+// cell into one accumulator" methodology, just expressed once in SQL instead of once per row.
+static void BM_DuckDB_Xlsx_Full(benchmark::State &state)
+{
+    duckdb::DuckDB db(nullptr);
+    duckdb::Connection con(db);
+
+    // INSTALL pulls the extension from DuckDB's extension repository on first use and caches it
+    // locally afterward; done once per process, outside the timed region.
+    auto setup = con.Query("INSTALL excel; LOAD excel;");
+    if (setup->HasError())
+    {
+        state.SkipWithError(setup->GetError().c_str());
+        return;
+    }
+
+    const std::string query =
+        "SELECT sum(length(\"Region\")) + sum(length(\"Country\")) + sum(length(\"Item Type\")) + "
+        "sum(length(\"Sales Channel\")) + sum(length(\"Order Priority\")) + "
+        "sum(CAST(\"Order Date\" - DATE '1970-01-01' AS BIGINT)) + sum(\"Order ID\") + "
+        "sum(CAST(\"Ship Date\" - DATE '1970-01-01' AS BIGINT)) + sum(\"Units Sold\") + "
+        "sum(CAST(\"Unit Price\" AS BIGINT)) + sum(CAST(\"Unit Cost\" AS BIGINT)) + "
+        "sum(CAST(\"Total Revenue\" AS BIGINT)) + sum(CAST(\"Total Cost\" AS BIGINT)) + "
+        "sum(CAST(\"Total Profit\" AS BIGINT)) AS acc FROM read_xlsx('" +
+        std::string(EXCELREADER_XLSX_FIXTURE_PATH) + "', header = true)";
+
+    for (auto _ : state)
+    {
+        auto result = con.Query(query);
+        if (result->HasError())
+        {
+            state.SkipWithError(result->GetError().c_str());
+            return;
+        }
+        int64_t acc = result->GetValue<int64_t>(0, 0);
+        benchmark::DoNotOptimize(acc);
+    }
+}
+BENCHMARK(BM_DuckDB_Xlsx_Full);

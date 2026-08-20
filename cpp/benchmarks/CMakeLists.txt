@@ -49,7 +49,7 @@ endif()
 # (https://github.com/brechtsanders/xlsxio) and libxlsxwriter
 # (https://github.com/jmcnamara/libxlsxwriter) - separate opt-in flag because all three are much
 # heavier FetchContent builds (their own zip/xml stacks) than the suite above.
-option(EXCELREADER_BUILD_BENCHMARKS_COMPARE "Build the excelreader-vs-xlnt-vs-xlsxio-vs-libxlsxwriter comparison benchmark" OFF)
+option(EXCELREADER_BUILD_BENCHMARKS_COMPARE "Build the excelreader-vs-xlnt-vs-xlsxio-vs-libxlsxwriter-vs-duckdb comparison benchmark" OFF)
 if(EXCELREADER_BUILD_BENCHMARKS_COMPARE)
     set(STATIC ON CACHE BOOL "" FORCE)
     set(STATIC_CRT OFF CACHE BOOL "" FORCE)
@@ -213,13 +213,61 @@ set(ZLIB_VERSION_STRING "1.3.1")
     )
     FetchContent_MakeAvailable(libxlsxwriter)
 
+    # DuckDB (https://github.com/duckdb/duckdb) - via its "excel" extension, DuckDB reads and
+    # writes .xlsx through read_xlsx()/COPY ... TO ... WITH (FORMAT xlsx). Unlike xlnt/xlsxio/
+    # libxlsxwriter, this is NOT built from source: DuckDB publishes a prebuilt libduckdb.{dll,so,
+    # dylib} + duckdb.h/duckdb.hpp per platform as GitHub Release assets (same shape as this
+    # project's own excelreader-native-*.{dll,so,dylib} - see cmake/FetchNativeLib.cmake), so it is
+    # downloaded the same way rather than compiled - DuckDB's amalgamated source is enormous and
+    # would dwarf every other FetchContent build in this file.
+    #
+    # On Windows the zip already ships a real import library (duckdb.lib) - no lib.exe/dlltool
+    # workaround needed, unlike this project's own native library, which NativeAOT publishes
+    # without one.
+    if(WIN32)
+        set(_duckdb_asset "libduckdb-windows-amd64.zip")
+        set(_duckdb_lib_file "duckdb.dll")
+        set(_duckdb_implib_file "duckdb.lib")
+    elseif(APPLE)
+        set(_duckdb_asset "libduckdb-osx-universal.zip")
+        set(_duckdb_lib_file "libduckdb.dylib")
+    else()
+        set(_duckdb_asset "libduckdb-linux-amd64.zip")
+        set(_duckdb_lib_file "libduckdb.so")
+    endif()
+
+    set(_duckdb_version "1.5.5")
+    set(_duckdb_dir "${CMAKE_BINARY_DIR}/duckdb-download")
+    set(_duckdb_zip "${_duckdb_dir}/${_duckdb_asset}")
+    if(NOT EXISTS "${_duckdb_dir}/${_duckdb_lib_file}")
+        file(MAKE_DIRECTORY "${_duckdb_dir}")
+        set(_duckdb_url "https://github.com/duckdb/duckdb/releases/download/v${_duckdb_version}/${_duckdb_asset}")
+        message(STATUS "Downloading DuckDB: ${_duckdb_url}")
+        file(DOWNLOAD "${_duckdb_url}" "${_duckdb_zip}" STATUS _duckdb_status)
+        list(GET _duckdb_status 0 _duckdb_code)
+        if(NOT _duckdb_code EQUAL 0)
+            file(REMOVE "${_duckdb_zip}")
+            list(GET _duckdb_status 1 _duckdb_message)
+            message(FATAL_ERROR "Failed to download ${_duckdb_url}: ${_duckdb_message}")
+        endif()
+        file(ARCHIVE_EXTRACT INPUT "${_duckdb_zip}" DESTINATION "${_duckdb_dir}")
+    endif()
+
+    add_library(duckdb SHARED IMPORTED GLOBAL)
+    set_target_properties(duckdb PROPERTIES
+        IMPORTED_LOCATION "${_duckdb_dir}/${_duckdb_lib_file}"
+        INTERFACE_INCLUDE_DIRECTORIES "${_duckdb_dir}")
+    if(WIN32)
+        set_target_properties(duckdb PROPERTIES IMPORTED_IMPLIB "${_duckdb_dir}/${_duckdb_implib_file}")
+    endif()
+
     set(EXCELREADER_XLSX_FIXTURE_PATH
         "${CMAKE_CURRENT_SOURCE_DIR}/../../tests/ExcelReader.Benchmarks/Data/65K_Records_Data.xlsx"
         CACHE FILEPATH "Path to the 65K-row xlsx fixture the excelreader-vs-xlnt benchmark reads")
 
     add_executable(excelreader_cpp_compare_benchmarks benchmark_compare.cpp)
     target_link_libraries(excelreader_cpp_compare_benchmarks PRIVATE
-        xl::excelreader benchmark::benchmark_main xlnt xlsxio_read)
+        xl::excelreader benchmark::benchmark_main xlnt xlsxio_read duckdb)
     target_compile_definitions(excelreader_cpp_compare_benchmarks PRIVATE
         EXCELREADER_XLSX_FIXTURE_PATH="${EXCELREADER_XLSX_FIXTURE_PATH}")
 
@@ -228,7 +276,7 @@ set(ZLIB_VERSION_STRING "1.3.1")
     # two targets keep that unambiguous.
     add_executable(excelreader_cpp_write_compare_benchmarks benchmark_write_compare.cpp)
     target_link_libraries(excelreader_cpp_write_compare_benchmarks PRIVATE
-        xl::excelreader benchmark::benchmark_main xlnt xlsxio_write xlsxwriter)
+        xl::excelreader benchmark::benchmark_main xlnt xlsxio_write xlsxwriter duckdb)
     target_compile_definitions(excelreader_cpp_write_compare_benchmarks PRIVATE
         EXCELREADER_XLSX_FIXTURE_PATH="${EXCELREADER_XLSX_FIXTURE_PATH}")
 
@@ -237,6 +285,9 @@ set(ZLIB_VERSION_STRING "1.3.1")
             add_custom_command(TARGET ${_compare_target} POST_BUILD
                 COMMAND ${CMAKE_COMMAND} -E copy_if_different
                     "$<TARGET_PROPERTY:excelreader_native,IMPORTED_LOCATION>"
+                    "$<TARGET_FILE_DIR:${_compare_target}>"
+                COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                    "$<TARGET_PROPERTY:duckdb,IMPORTED_LOCATION>"
                     "$<TARGET_FILE_DIR:${_compare_target}>")
         endforeach()
     endif()

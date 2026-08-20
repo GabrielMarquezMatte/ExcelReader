@@ -1,11 +1,12 @@
 // Compares ExcelReader against xlnt (https://github.com/tfussell/xlnt), xlsxio
-// (https://github.com/brechtsanders/xlsxio) and libxlsxwriter
-// (https://github.com/jmcnamara/libxlsxwriter) WRITING the full row shape of
+// (https://github.com/brechtsanders/xlsxio), libxlsxwriter
+// (https://github.com/jmcnamara/libxlsxwriter) and DuckDB's (https://github.com/duckdb/duckdb)
+// "excel" extension WRITING the full row shape of
 // tests/ExcelReader.Benchmarks/Data/65K_Records_Data.xlsx: all 14 columns, 65,535 data rows plus a
 // header row. The rows are read once at startup with ExcelReader and then written back out by each
-// library in turn, so all four start from exactly the same in-memory data.
+// library in turn, so all five start from exactly the same in-memory data.
 //
-// WORK IS NOT MATCHED across all five cases, and the mismatch runs in both directions. Read the
+// WORK IS NOT MATCHED across all six cases, and the mismatch runs in both directions. Read the
 // table with the caveats, not without them:
 //
 //   * BM_ExcelReader_WriteColumns is handed buffers that are already columnar. Nothing is
@@ -15,7 +16,7 @@
 //     competitor below is handed - and pays the row-to-column transpose itself. THIS is the
 //     matched-work number, and the only one of ours that belongs next to the competitors.
 //   * ExcelReader attaches a number format to the two XL_T_DATE columns (so Excel shows a date
-//     rather than a serial), which every case below does NOT do: all three competitors write those
+//     rather than a serial), which every case below does NOT do: every competitor writes those
 //     columns as bare numbers, the cheaper option. That difference favours the competitors.
 //   * xlnt builds a full in-memory document model (styles, formats, formulas) before serializing.
 //     It is doing more than this library exposes, and its number reflects that.
@@ -25,12 +26,17 @@
 //     class of competitor as xlsxio - it is the one most worth comparing BM_ExcelReader_WriteSheet
 //     against, being C rather than C++ and, like ExcelReader's own core, built for throughput
 //     rather than a full object model.
+//   * DuckDB's rows are loaded into an in-memory table via its Appender API BEFORE the timed
+//     region, so BM_DuckDB_Write measures the COPY TO xlsx step alone - same treatment
+//     BM_ExcelReader_WriteColumns gets for its transpose. DuckDB is a full analytical query engine
+//     doing far more than any Excel-writing library here, and this measures one narrow slice of it.
 //
 // State the CPU, OS and compiler version alongside any number published from this file.
 
 #include <xl/excelreader.hpp>
 
 #include <benchmark/benchmark.h>
+#include <duckdb.hpp>
 #include <xlnt/xlnt.hpp>
 #include <xlsxio_write.h>
 #include <xlsxwriter.h>
@@ -411,3 +417,71 @@ static void BM_Libxlsxwriter_Write(benchmark::State &state)
     std::filesystem::remove(path);
 }
 BENCHMARK(BM_Libxlsxwriter_Write);
+
+// DuckDB (https://github.com/duckdb/duckdb) writes via its "excel" extension's
+// `COPY ... TO ... WITH (FORMAT xlsx)`. The rows are loaded into an in-memory DuckDB table via its
+// Appender API (DuckDB's own fast bulk-load path, not a parsed INSERT statement) BEFORE the timed
+// region starts - matching how BM_ExcelReader_WriteColumns transposes outside the loop - so what's
+// measured is the COPY itself, not building the table.
+static void BM_DuckDB_Write(benchmark::State &state)
+{
+    const std::vector<FullRow> &rows = fixture_rows();
+    const std::filesystem::path path = bench_path("duckdb.xlsx");
+    const std::string target = path.string();
+
+    duckdb::DuckDB db(nullptr);
+    duckdb::Connection con(db);
+
+    auto setup = con.Query("INSTALL excel; LOAD excel;");
+    if (setup->HasError())
+    {
+        state.SkipWithError(setup->GetError().c_str());
+        return;
+    }
+
+    auto create = con.Query(
+        "CREATE TABLE fixture ("
+        "\"Region\" VARCHAR, \"Country\" VARCHAR, \"Item Type\" VARCHAR, "
+        "\"Sales Channel\" VARCHAR, \"Order Priority\" VARCHAR, \"Order Date\" DATE, "
+        "\"Order ID\" BIGINT, \"Ship Date\" DATE, \"Units Sold\" BIGINT, "
+        "\"Unit Price\" DOUBLE, \"Unit Cost\" DOUBLE, \"Total Revenue\" DOUBLE, "
+        "\"Total Cost\" DOUBLE, \"Total Profit\" DOUBLE)");
+    if (create->HasError())
+    {
+        state.SkipWithError(create->GetError().c_str());
+        return;
+    }
+
+    {
+        duckdb::Appender appender(con, "fixture");
+        for (const FullRow &row : rows)
+        {
+            // .c_str() rather than the std::string itself: AppendRow deduces one Append<T>
+            // specialization per argument's exact type, and DuckDB only provides one for
+            // `const char *` (matching duckdb's own test suite), not for std::string.
+            appender.AppendRow(
+                row.Region.c_str(), row.Country.c_str(), row.ItemType.c_str(),
+                row.SalesChannel.c_str(), row.OrderPriority.c_str(),
+                duckdb::date_t(days(row.OrderDate)), row.OrderId, duckdb::date_t(days(row.ShipDate)),
+                row.UnitsSold, row.UnitPrice, row.UnitCost, row.TotalRevenue, row.TotalCost,
+                row.TotalProfit);
+        }
+        appender.Close();
+    }
+
+    const std::string copy_query =
+        "COPY fixture TO '" + target + "' WITH (FORMAT xlsx, HEADER true)";
+    for (auto _ : state)
+    {
+        auto result = con.Query(copy_query);
+        if (result->HasError())
+        {
+            state.SkipWithError(result->GetError().c_str());
+            return;
+        }
+        benchmark::DoNotOptimize(result);
+    }
+    state.SetItemsProcessed(static_cast<int64_t>(state.iterations()) * static_cast<int64_t>(rows.size()));
+    std::filesystem::remove(path);
+}
+BENCHMARK(BM_DuckDB_Write);
