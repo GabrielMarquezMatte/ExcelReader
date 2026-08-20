@@ -1,7 +1,7 @@
 /* Header-only C++ wrapper around excelreader.h (the C ABI).
  *
- * Scope of this first pass: opening a workbook and schema-driven typed table parsing
- * (xl_parse_typed) only - no writing, no row-by-row decoded reads.
+ * Scope: opening a workbook, schema-driven typed table parsing (xl_parse_typed), and
+ * schema-driven writing (xl_write_typed). No row-by-row decoded reads.
  *
  * Design constraints, matching the native library's own perf/memory posture:
  *   - No exceptions anywhere in this header. Every fallible operation returns
@@ -15,6 +15,10 @@
  *   - std::string_view fields are zero-copy views into the xl_table's own string blob:
  *     valid ONLY as long as the owning TableView<T> is alive. Use std::string for a
  *     field that needs to outlive the view (e.g. after to_vector()).
+ *   - Writing borrows. xl::write_columns hands xl_write_typed the caller's own buffers,
+ *     which the ABI reads without copying or freeing; they must outlive the call.
+ *     xl::write_sheet<T> is the one place a copy happens, and only because a range of
+ *     structs has to be transposed into columns.
  */
 #pragma once
 
@@ -27,6 +31,7 @@
 #include <expected>
 #include <iterator>
 #include <optional>
+#include <ranges>
 #include <span>
 #include <string>
 #include <string_view>
@@ -181,6 +186,270 @@ namespace xl
             return opts;
         }
     };
+
+    // ---- Write options ---------------------------------------------------------------------------
+
+    // C++ mirror of xl_write_options: same fields, same meaning (0 or XL_OPT_DEFAULT for "use the
+    // library default" on every field), with default member initializers so a caller sets only what
+    // they want to override. to_c() fills in struct_size.
+    //
+    // sheet_name is BORROWED, like every other buffer this library hands the ABI: the string it
+    // views must outlive the write call. Its rules (1-31 characters, none of : \ / ? * [ ]) are
+    // validated natively and reported through xl_last_error, so they are deliberately not
+    // re-checked here - one set of bounds, one place to change them.
+    struct WriteOptions
+    {
+        std::string_view sheet_name{}; // empty = "Sheet1". Ignored for XL_FORMAT_CSV.
+
+        // CSV only; ignored for every other format. Byte value 1-255; 0 = default (',' and '"').
+        int32_t csv_delimiter = 0;
+        int32_t csv_quote = 0;
+
+        int32_t date1904 = XL_OPT_DEFAULT;           // XLS/XLSB only
+        int32_t use_shared_strings = XL_OPT_DEFAULT; // XLSX/XLSB only
+
+        xl_write_options to_c() const noexcept
+        {
+            xl_write_options opts{};
+            opts.struct_size = sizeof(xl_write_options);
+            opts.sheet_name_len = static_cast<int32_t>(sheet_name.size());
+            opts.sheet_name = sheet_name.empty()
+                                  ? nullptr
+                                  : reinterpret_cast<const uint8_t *>(sheet_name.data());
+            opts.csv_delimiter = csv_delimiter;
+            opts.csv_quote = csv_quote;
+            opts.date1904 = date1904;
+            opts.use_shared_strings = use_shared_strings;
+            return opts;
+        }
+    };
+
+    namespace detail
+    {
+
+        // Case-insensitive suffix match over ASCII, which is all a file extension can be here.
+        // constexpr and allocation-free so format_from_path stays usable in a constant expression.
+        constexpr bool ends_with_ci(std::string_view text, std::string_view suffix) noexcept
+        {
+            if (text.size() < suffix.size())
+            {
+                return false;
+            }
+            const std::string_view tail = text.substr(text.size() - suffix.size());
+            for (size_t i = 0; i < suffix.size(); ++i)
+            {
+                const char c = tail[i];
+                const char lowered = (c >= 'A' && c <= 'Z') ? static_cast<char>(c - 'A' + 'a') : c;
+                if (lowered != suffix[i])
+                {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+    } // namespace detail
+
+    // Infers an XL_FORMAT_* from a path's extension. Returns XL_FORMAT_AUTO when the extension is
+    // absent or unrecognized - and since xl_write_typed rejects AUTO with a message of its own, an
+    // unrecognized path fails the write rather than silently picking a format.
+    constexpr int32_t format_from_path(std::string_view path) noexcept
+    {
+        const size_t separator = path.find_last_of("/\\");
+        const std::string_view name = (separator == std::string_view::npos)
+                                          ? path
+                                          : path.substr(separator + 1);
+        if (detail::ends_with_ci(name, ".xlsx"))
+        {
+            return XL_FORMAT_XLSX;
+        }
+        if (detail::ends_with_ci(name, ".xlsb"))
+        {
+            return XL_FORMAT_XLSB;
+        }
+        if (detail::ends_with_ci(name, ".xls"))
+        {
+            return XL_FORMAT_XLS;
+        }
+        if (detail::ends_with_ci(name, ".csv"))
+        {
+            return XL_FORMAT_CSV;
+        }
+        return XL_FORMAT_AUTO;
+    }
+
+    // ---- Columnar write --------------------------------------------------------------------------
+
+    // One INPUT column, pointing at the caller's own buffers. Nothing here is copied: every pointer
+    // must stay valid until write_columns returns.
+    //
+    // Build one through the typed constructors below rather than by hand - they derive `length`,
+    // `type` and `validity_len` from the spans they are handed, which is what makes the bounds check
+    // in write_columns possible at all.
+    struct ColumnRef
+    {
+        std::string_view name{}; // empty = no header row (all-or-nothing across the column set)
+        int32_t type = XL_T_STRING;
+        int64_t length = 0;
+        const void *values = nullptr;
+        const uint8_t *validity = nullptr; // nullptr = the column has no nulls
+        // NOT part of the ABI struct: xl_write_typed takes the bitmap without a length and reads
+        // (length + 7) / 8 bytes on trust. Carrying the length here is what lets write_columns
+        // refuse a short one instead of handing the native side a buffer overrun.
+        int64_t validity_len = 0;
+        const uint8_t *data = nullptr; // XL_T_STRING only: the UTF-8 blob
+        int64_t data_len = 0;
+    };
+
+    namespace detail
+    {
+
+        constexpr const uint8_t *validity_pointer(std::span<const uint8_t> validity) noexcept
+        {
+            return validity.empty() ? nullptr : validity.data();
+        }
+
+    } // namespace detail
+
+    // One constructor per column type rather than an overload set: XL_T_BOOL's buffer and a string
+    // blob are both std::span<const uint8_t>, and XL_T_I64/TIME/TIMESTAMP are all
+    // std::span<const int64_t>, so overload resolution could not tell them apart.
+    inline constexpr ColumnRef i64_column(std::string_view name, std::span<const int64_t> values,
+                                          std::span<const uint8_t> validity = {}) noexcept
+    {
+        return ColumnRef{name, XL_T_I64, static_cast<int64_t>(values.size()), values.data(),
+                         detail::validity_pointer(validity), static_cast<int64_t>(validity.size()),
+                         nullptr, 0};
+    }
+
+    inline constexpr ColumnRef f64_column(std::string_view name, std::span<const double> values,
+                                          std::span<const uint8_t> validity = {}) noexcept
+    {
+        return ColumnRef{name, XL_T_F64, static_cast<int64_t>(values.size()), values.data(),
+                         detail::validity_pointer(validity), static_cast<int64_t>(validity.size()),
+                         nullptr, 0};
+    }
+
+    // `values` is one byte per row, 0 or 1 - NOT a bit-packed bitmap.
+    inline constexpr ColumnRef bool_column(std::string_view name, std::span<const uint8_t> values,
+                                           std::span<const uint8_t> validity = {}) noexcept
+    {
+        return ColumnRef{name, XL_T_BOOL, static_cast<int64_t>(values.size()), values.data(),
+                         detail::validity_pointer(validity), static_cast<int64_t>(validity.size()),
+                         nullptr, 0};
+    }
+
+    inline constexpr ColumnRef date_column(std::string_view name, std::span<const int32_t> days_since_epoch,
+                                           std::span<const uint8_t> validity = {}) noexcept
+    {
+        return ColumnRef{name, XL_T_DATE, static_cast<int64_t>(days_since_epoch.size()),
+                         days_since_epoch.data(), detail::validity_pointer(validity),
+                         static_cast<int64_t>(validity.size()), nullptr, 0};
+    }
+
+    inline constexpr ColumnRef time_column(std::string_view name, std::span<const int64_t> micros_since_midnight,
+                                           std::span<const uint8_t> validity = {}) noexcept
+    {
+        return ColumnRef{name, XL_T_TIME, static_cast<int64_t>(micros_since_midnight.size()),
+                         micros_since_midnight.data(), detail::validity_pointer(validity),
+                         static_cast<int64_t>(validity.size()), nullptr, 0};
+    }
+
+    inline constexpr ColumnRef timestamp_column(std::string_view name, std::span<const int64_t> micros_since_epoch,
+                                                std::span<const uint8_t> validity = {}) noexcept
+    {
+        return ColumnRef{name, XL_T_TIMESTAMP, static_cast<int64_t>(micros_since_epoch.size()),
+                         micros_since_epoch.data(), detail::validity_pointer(validity),
+                         static_cast<int64_t>(validity.size()), nullptr, 0};
+    }
+
+    // `offsets` has length + 1 entries; `data` is every row's UTF-8 bytes concatenated. Unlike the
+    // table xl_parse_typed returns, `data` need not be interior to `offsets` here.
+    inline constexpr ColumnRef string_column(std::string_view name, std::span<const int32_t> offsets,
+                                             std::span<const uint8_t> data,
+                                             std::span<const uint8_t> validity = {}) noexcept
+    {
+        const int64_t rows = offsets.empty() ? 0 : static_cast<int64_t>(offsets.size()) - 1;
+        return ColumnRef{name, XL_T_STRING, rows, offsets.data(), detail::validity_pointer(validity),
+                         static_cast<int64_t>(validity.size()), data.empty() ? nullptr : data.data(),
+                         static_cast<int64_t>(data.size())};
+    }
+
+    namespace detail
+    {
+
+        // Split out of validate_write_columns to stay inside the style guide's nesting and length
+        // limits. Returns nullopt when the column is acceptable.
+        inline std::optional<Error> validate_one_write_column(const ColumnRef &column, size_t index,
+                                                              int64_t row_count, bool has_header)
+        {
+            const std::string at = " (column " + std::to_string(index) + ")";
+            if (column.length != row_count)
+            {
+                return Error{XL_INVALID_ARGUMENT,
+                             "every column must have the same length; column 0 has " +
+                                 std::to_string(row_count) + " rows but this one has " +
+                                 std::to_string(column.length) + at};
+            }
+            if (column.name.empty() == has_header)
+            {
+                return Error{XL_INVALID_ARGUMENT,
+                             "every column must have a name, or none may - xl_write_typed cannot write "
+                             "a partial header row" +
+                                 at};
+            }
+            if (column.validity != nullptr && column.validity_len < (row_count + 7) / 8)
+            {
+                return Error{XL_INVALID_ARGUMENT,
+                             "the validity bitmap is " + std::to_string(column.validity_len) +
+                                 " bytes, but " + std::to_string(row_count) + " rows need " +
+                                 std::to_string((row_count + 7) / 8) + at};
+            }
+            if (column.type == XL_T_STRING && column.data_len > INT32_MAX)
+            {
+                return Error{XL_INVALID_ARGUMENT,
+                             "the string blob is larger than 2 GiB, which int32 offsets cannot address" + at};
+            }
+            return std::nullopt;
+        }
+
+        // Returns the row count every column agreed on, or the first problem found. Runs to
+        // completion before anything reaches the native side, matching xl_write_typed's own
+        // "validate everything, then write" posture - a partially written file plus a buffer
+        // overrun is strictly worse than a rejected call.
+        inline std::expected<int64_t, Error> validate_write_columns(std::span<const ColumnRef> columns)
+        {
+            if (columns.empty())
+            {
+                return std::unexpected(Error{XL_INVALID_ARGUMENT, "write_columns needs at least one column."});
+            }
+            const int64_t row_count = columns.front().length;
+            const bool has_header = !columns.front().name.empty();
+            for (size_t i = 0; i < columns.size(); ++i)
+            {
+                std::optional<Error> problem = validate_one_write_column(columns[i], i, row_count, has_header);
+                if (problem.has_value())
+                {
+                    return std::unexpected(std::move(*problem));
+                }
+            }
+            return row_count;
+        }
+
+        // Lowers one ColumnRef into the two ABI structs. `name_slot` and `len_slot` are elements of
+        // arrays the caller keeps alive: xl_column_spec::names is a pointer to an ARRAY of name
+        // pointers, so each spec needs a stable address to point at, not a temporary.
+        inline void fill_write_column(const ColumnRef &column, const uint8_t *&name_slot, int32_t &len_slot,
+                                      xl_column_spec &spec, xl_column &raw) noexcept
+        {
+            name_slot = column.name.empty() ? nullptr : reinterpret_cast<const uint8_t *>(column.name.data());
+            len_slot = static_cast<int32_t>(column.name.size());
+            spec = xl_column_spec{&name_slot, &len_slot, column.name.empty() ? 0 : 1, 0, column.type, 0};
+            raw = xl_column{column.type, column.length, column.values, column.validity, column.data,
+                            column.data_len};
+        }
+
+    } // namespace detail
 
     // ---- Workbook (RAII) ------------------------------------------------------------------------
 
@@ -811,6 +1080,67 @@ namespace xl
             return std::unexpected(std::move(view.error()));
         }
         return view->to_vector();
+    }
+
+    // Writes `columns` to `path` as a single sheet, then closes the file. One-shot: no writer handle
+    // exists before or after, and every buffer reachable from `columns` and `options` is borrowed
+    // for the duration of the call and never freed by this library.
+    //
+    // `format` must be XL_FORMAT_XLS/XLSX/XLSB/CSV. XL_FORMAT_AUTO is an error, because a file being
+    // created has no signature bytes to sniff. On failure the destination may exist and be
+    // incomplete - cleaning it up is the caller's.
+    inline std::expected<void, Error> write_columns(std::string_view path, int32_t format,
+                                                    std::span<const ColumnRef> columns,
+                                                    const WriteOptions *options = nullptr)
+    {
+        const std::expected<void, Error> &abi = detail::check_abi_version();
+        if (!abi.has_value())
+        {
+            return std::unexpected(abi.error());
+        }
+        std::expected<int64_t, Error> row_count = detail::validate_write_columns(columns);
+        if (!row_count.has_value())
+        {
+            return std::unexpected(std::move(row_count.error()));
+        }
+
+        const size_t count = columns.size();
+        std::vector<const uint8_t *> name_slots(count);
+        std::vector<int32_t> name_lens(count);
+        std::vector<xl_column_spec> specs(count);
+        std::vector<xl_column> raw_columns(count);
+        for (size_t i = 0; i < count; ++i)
+        {
+            detail::fill_write_column(columns[i], name_slots[i], name_lens[i], specs[i], raw_columns[i]);
+        }
+
+        xl_table table{static_cast<int32_t>(count), *row_count, raw_columns.data()};
+        // A zeroed xl_write_options is NOT the same as no options: its struct_size of 0 is rejected.
+        // NULL is what means "every default".
+        xl_write_options raw_options{};
+        const xl_write_options *options_pointer = nullptr;
+        if (options != nullptr)
+        {
+            raw_options = options->to_c();
+            options_pointer = &raw_options;
+        }
+
+        const int32_t status = xl_write_typed(reinterpret_cast<const uint8_t *>(path.data()),
+                                              static_cast<int32_t>(path.size()), format, specs.data(),
+                                              &table, options_pointer);
+        if (status != XL_OK)
+        {
+            return std::unexpected(detail::make_error(status));
+        }
+        return {};
+    }
+
+    // Infers the format from the path's extension. An unrecognized extension yields XL_FORMAT_AUTO,
+    // which xl_write_typed then rejects by name.
+    inline std::expected<void, Error> write_columns(std::string_view path, std::span<const ColumnRef> columns,
+                                                    const WriteOptions *options = nullptr)
+    {
+        return write_columns(path, format_from_path(path), columns, options);
     }
 
 } // namespace xl
