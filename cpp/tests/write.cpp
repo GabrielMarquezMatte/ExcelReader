@@ -203,6 +203,45 @@ static int test_bool_round_trip()
     return 0;
 }
 
+struct NullableRow
+{
+    std::optional<int64_t> quantidade;
+};
+
+template <>
+struct xl::ExcelMapper<NullableRow>
+{
+    static constexpr auto get_bindings()
+    {
+        return std::make_tuple(xl::make_field("quantidade", &NullableRow::quantidade));
+    }
+};
+
+static int test_optional_round_trip()
+{
+    const std::vector<int64_t> valores{10, 0, 30};
+    // LSB-first: bit 0 and bit 2 set, bit 1 clear - row 1 is null.
+    const std::vector<uint8_t> validity{0b00000101};
+    const std::array<xl::ColumnRef, 1> columns{xl::i64_column("quantidade", valores, validity)};
+
+    const std::filesystem::path path = temp_path("nullable.xlsx");
+    CHECK(xl::write_columns(path.string(), XL_FORMAT_XLSX, columns).has_value(),
+          "writing a nullable column must succeed");
+    {
+        auto workbook = xl::Workbook::open(path.string());
+        CHECK(workbook.has_value(), "the written file must open");
+        auto table = xl::parse_sheet<NullableRow>(*workbook);
+        CHECK(table.has_value(), "the written file must parse back");
+        CHECK(table->size() == 3, "three rows were written");
+
+        CHECK(table->at(0)->quantidade == 10, "row 0 must round-trip its value");
+        CHECK(!table->at(1)->quantidade.has_value(), "row 1 was written null and must come back empty");
+        CHECK(table->at(2)->quantidade == 30, "row 2 must round-trip its value");
+    }
+    std::filesystem::remove(path);
+    return 0;
+}
+
 int main()
 {
     if (test_write_options() != 0)
@@ -222,6 +261,10 @@ int main()
         return 1;
     }
     if (test_bool_round_trip() != 0)
+    {
+        return 1;
+    }
+    if (test_optional_round_trip() != 0)
     {
         return 1;
     }

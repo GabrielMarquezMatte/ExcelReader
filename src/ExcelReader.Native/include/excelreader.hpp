@@ -732,6 +732,35 @@ namespace xl
         static constexpr int32_t value = XL_T_TIME;
     };
 
+    template <typename T>
+    struct XlType<std::optional<T>>
+    {
+        static constexpr int32_t value = XlType<T>::value;
+    };
+
+    namespace detail
+    {
+
+        template <typename T>
+        struct IsOptional : std::false_type
+        {
+            using Inner = T;
+        };
+
+        template <typename T>
+        struct IsOptional<std::optional<T>> : std::true_type
+        {
+            using Inner = T;
+        };
+
+        template <typename T>
+        inline constexpr bool is_optional_v = IsOptional<T>::value;
+
+        template <typename T>
+        using unwrap_optional_t = typename IsOptional<T>::Inner;
+
+    } // namespace detail
+
     // ---- Struct <-> column bindings ---------------------------------------------------------------
 
     template <typename Class, typename T, std::size_t N = 1>
@@ -808,8 +837,19 @@ namespace xl
             {
                 return; // leave the struct member default-initialized
             }
-
-            if constexpr (std::is_same_v<T, std::string> || std::is_same_v<T, std::string_view>)
+            if constexpr (detail::is_optional_v<T>)
+            {
+                using Inner = detail::unwrap_optional_t<T>;
+                struct Holder
+                {
+                    Inner value{};
+                };
+                Holder holder{};
+                const FieldBinding<Holder, Inner, N> inner_binding{binding.column_names, &Holder::value};
+                assign_field(holder, col, row, inner_binding);
+                instance.*(binding.member) = std::move(holder.value);
+            }
+            else if constexpr (std::is_same_v<T, std::string> || std::is_same_v<T, std::string_view>)
             {
                 const int32_t *offsets = static_cast<const int32_t *>(col.values);
                 int32_t start = offsets[row];
