@@ -199,30 +199,41 @@ The transpose costs ~12% here. It is not free, but it is far from the dominant c
 the file — see the comparison below, where the same two cases over 14 columns land within ~7%.
 
 `excelreader_cpp_write_compare_benchmarks` (under `-DEXCELREADER_BUILD_BENCHMARKS_COMPARE=ON`) puts
-that against xlnt and xlsxio's writer, all four writing the full 14-column, 65,535-row shape of
-`65K_Records_Data.xlsx` from the same in-memory rows:
+that against xlnt, xlsxio and [libxlsxwriter](https://github.com/jmcnamara/libxlsxwriter) — same
+author as rust_xlsxwriter, and, like xlsxio, a streaming C writer with no document-model overhead —
+all five writing the full 14-column, 65,535-row shape of `65K_Records_Data.xlsx` from the same
+in-memory rows:
 
 | Library | Wall | CPU |
 |---|---:|---:|
 | ExcelReader (`xl::write_columns`, pre-transposed) | 127.8 ms | 127.6 ms |
-| ExcelReader (`xl::write_sheet<FullRow>`) | 136.5 ms | 137.5 ms |
-| xlsxio (`xlsxiowrite_add_cell_*`) | 2,383.5 ms | 843.8 ms |
-| xlnt (`worksheet::cell().value()` + `save()`) | 5,398.0 ms | 5,406.3 ms |
+| ExcelReader (`xl::write_sheet<FullRow>`) | 136.5–140.7 ms | 137.5–140.6 ms |
+| libxlsxwriter (`worksheet_write_string`/`_number`) | 1,226.9 ms | 1,234.4 ms |
+| xlsxio (`xlsxiowrite_add_cell_*`) | 2,383.5–2,453.9 ms | 843.8–906.3 ms |
+| xlnt (`worksheet::cell().value()` + `save()`) | 5,398.0–5,471.4 ms | 5,406.3–5,468.8 ms |
 
 Same machine as above; Google Benchmark's own iteration counts, no `--benchmark_repetitions` (each
-iteration writes a whole 65,535-row file, so the slower cases run once or twice).
+iteration writes a whole 65,535-row file, so the slower cases run once or a handful of times — the
+ranges above are two separate runs, shown as a range rather than picking one arbitrarily).
 
-`write_sheet` — the matched-work number, since it starts from the same `std::vector<FullRow>` both
-competitors are handed — is ~17.5x faster than xlsxio and ~40x faster than xlnt on wall time.
+`write_sheet` — the matched-work number, since it starts from the same `std::vector<FullRow>` every
+competitor is handed — is ~9.0x faster than libxlsxwriter, ~17.5x faster than xlsxio, and ~40x
+faster than xlnt on wall time.
 
-Three caveats, none of them optional when quoting these:
+Caveats, none of them optional when quoting these:
 
-- **xlsxio's wall time is two thirds I/O wait.** Its CPU time is 843.8 ms against 2,383.5 ms wall,
-  because it streams through a temp file; every other case here is CPU-bound (wall ≈ CPU). Against
-  CPU time the gap is ~6.1x, not ~17.5x. Which number is the honest one depends on what you are
-  asking — ~17.5x is what a caller waits, ~6.1x is what the library costs.
+- **One xlsxio run logged `Error creating file "xl/workbook.xml" inside zip file` mid-benchmark**,
+  yet `xlsxiowrite_close()` still returned success and the timing came out in the same range as a
+  clean run. `SkipWithError` only fires on a non-zero return, so this specific case is not proof the
+  written file was intact — treat the xlsxio row as provisional until a run free of that message
+  confirms it.
+- **xlsxio's wall time is roughly two thirds I/O wait.** Its CPU time is well under half its wall
+  time, because it streams through a temp file; every other case here is CPU-bound (wall ≈ CPU).
+  Against CPU time the gap to `write_sheet` is ~6.1–6.6x, not ~17.5x. Which number is the honest one
+  depends on what you are asking — the wall-time ratio is what a caller waits, the CPU-time ratio is
+  what the library costs.
 - **ExcelReader does slightly more work here**, not less: it attaches a number format to the two
-  date columns so Excel shows a date, while both competitor cases write those as bare serial
+  date columns so Excel shows a date, while every competitor case writes those as bare serial
   numbers. That difference favours the competitors.
 - **xlnt builds a full document model** (styles, formats, formulas) before serializing, which is
   more than this library exposes at all. Its number reflects a different feature set, not only a

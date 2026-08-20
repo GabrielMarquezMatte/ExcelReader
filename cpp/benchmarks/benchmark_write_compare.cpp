@@ -1,25 +1,30 @@
-// Compares ExcelReader against xlnt (https://github.com/tfussell/xlnt) and xlsxio
-// (https://github.com/brechtsanders/xlsxio) WRITING the full row shape of
+// Compares ExcelReader against xlnt (https://github.com/tfussell/xlnt), xlsxio
+// (https://github.com/brechtsanders/xlsxio) and libxlsxwriter
+// (https://github.com/jmcnamara/libxlsxwriter) WRITING the full row shape of
 // tests/ExcelReader.Benchmarks/Data/65K_Records_Data.xlsx: all 14 columns, 65,535 data rows plus a
 // header row. The rows are read once at startup with ExcelReader and then written back out by each
-// library in turn, so all three start from exactly the same in-memory data.
+// library in turn, so all four start from exactly the same in-memory data.
 //
-// WORK IS NOT MATCHED across all four cases, and the mismatch runs in both directions. Read the
+// WORK IS NOT MATCHED across all five cases, and the mismatch runs in both directions. Read the
 // table with the caveats, not without them:
 //
 //   * BM_ExcelReader_WriteColumns is handed buffers that are already columnar. Nothing is
 //     transposed. No cell-at-a-time API can reach this shape at all, so it is a ceiling, not a
 //     competitor's number. Compare it only against BM_ExcelReader_WriteSheet.
-//   * BM_ExcelReader_WriteSheet starts from a std::vector<FullRow> - the same shape xlnt and
-//     xlsxio are handed - and pays the row-to-column transpose itself. THIS is the matched-work
-//     number, and the only one of ours that belongs next to the two competitors.
+//   * BM_ExcelReader_WriteSheet starts from a std::vector<FullRow> - the same shape every
+//     competitor below is handed - and pays the row-to-column transpose itself. THIS is the
+//     matched-work number, and the only one of ours that belongs next to the competitors.
 //   * ExcelReader attaches a number format to the two XL_T_DATE columns (so Excel shows a date
-//     rather than a serial), which the two cases below do NOT do: both write those columns as bare
-//     numbers, the cheaper option. That difference favours the competitors.
+//     rather than a serial), which every case below does NOT do: all three competitors write those
+//     columns as bare numbers, the cheaper option. That difference favours the competitors.
 //   * xlnt builds a full in-memory document model (styles, formats, formulas) before serializing.
 //     It is doing more than this library exposes, and its number reflects that.
 //   * xlsxio streams cells straight to the ZIP, the closest thing here to matched work on the
 //     competitor side - the same relationship it has to ExcelReader on the reading benchmark.
+//   * libxlsxwriter is also a straight streaming writer with no document-model overhead, same
+//     class of competitor as xlsxio - it is the one most worth comparing BM_ExcelReader_WriteSheet
+//     against, being C rather than C++ and, like ExcelReader's own core, built for throughput
+//     rather than a full object model.
 //
 // State the CPU, OS and compiler version alongside any number published from this file.
 
@@ -28,6 +33,7 @@
 #include <benchmark/benchmark.h>
 #include <xlnt/xlnt.hpp>
 #include <xlsxio_write.h>
+#include <xlsxwriter.h>
 
 #include <array>
 #include <chrono>
@@ -351,3 +357,57 @@ static void BM_Xlsxio_Write(benchmark::State &state)
     std::filesystem::remove(path);
 }
 BENCHMARK(BM_Xlsxio_Write);
+
+static void BM_Libxlsxwriter_Write(benchmark::State &state)
+{
+    const std::vector<FullRow> &rows = fixture_rows();
+    const std::filesystem::path path = bench_path("libxlsxwriter.xlsx");
+    const std::string target = path.string();
+    for (auto _ : state)
+    {
+        lxw_workbook *workbook = workbook_new(target.c_str());
+        if (!workbook)
+        {
+            state.SkipWithError("workbook_new failed");
+            return;
+        }
+        lxw_worksheet *sheet = workbook_add_worksheet(workbook, nullptr);
+
+        // Row/column indices are 0-based here, unlike xlnt's cell() above.
+        for (lxw_col_t column = 0; column < static_cast<lxw_col_t>(kHeaders.size()); ++column)
+        {
+            worksheet_write_string(sheet, 0, column, kHeaders[column], nullptr);
+        }
+
+        lxw_row_t row_index = 1;
+        for (const FullRow &row : rows)
+        {
+            worksheet_write_string(sheet, row_index, 0, row.Region.c_str(), nullptr);
+            worksheet_write_string(sheet, row_index, 1, row.Country.c_str(), nullptr);
+            worksheet_write_string(sheet, row_index, 2, row.ItemType.c_str(), nullptr);
+            worksheet_write_string(sheet, row_index, 3, row.SalesChannel.c_str(), nullptr);
+            worksheet_write_string(sheet, row_index, 4, row.OrderPriority.c_str(), nullptr);
+            // Bare serial numbers, same as the xlnt and xlsxio cases above: a formatted date write
+            // would be extra work neither of those pays either.
+            worksheet_write_number(sheet, row_index, 5, static_cast<double>(days(row.OrderDate)), nullptr);
+            worksheet_write_number(sheet, row_index, 6, static_cast<double>(row.OrderId), nullptr);
+            worksheet_write_number(sheet, row_index, 7, static_cast<double>(days(row.ShipDate)), nullptr);
+            worksheet_write_number(sheet, row_index, 8, static_cast<double>(row.UnitsSold), nullptr);
+            worksheet_write_number(sheet, row_index, 9, row.UnitPrice, nullptr);
+            worksheet_write_number(sheet, row_index, 10, row.UnitCost, nullptr);
+            worksheet_write_number(sheet, row_index, 11, row.TotalRevenue, nullptr);
+            worksheet_write_number(sheet, row_index, 12, row.TotalCost, nullptr);
+            worksheet_write_number(sheet, row_index, 13, row.TotalProfit, nullptr);
+            ++row_index;
+        }
+
+        if (workbook_close(workbook) != LXW_NO_ERROR)
+        {
+            state.SkipWithError("workbook_close failed");
+            return;
+        }
+    }
+    state.SetItemsProcessed(static_cast<int64_t>(state.iterations()) * static_cast<int64_t>(rows.size()));
+    std::filesystem::remove(path);
+}
+BENCHMARK(BM_Libxlsxwriter_Write);
