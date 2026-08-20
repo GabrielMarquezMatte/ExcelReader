@@ -33,6 +33,18 @@ if(WIN32)
             "$<TARGET_FILE_DIR:excelreader_cpp_benchmarks>")
 endif()
 
+add_executable(excelreader_cpp_write_benchmarks benchmark_write.cpp)
+target_link_libraries(excelreader_cpp_write_benchmarks PRIVATE xl::excelreader benchmark::benchmark_main)
+target_compile_definitions(excelreader_cpp_write_benchmarks PRIVATE
+    EXCELREADER_LARGE_FIXTURE_PATH="${EXCELREADER_LARGE_FIXTURE_PATH}")
+
+if(WIN32)
+    add_custom_command(TARGET excelreader_cpp_write_benchmarks POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "$<TARGET_PROPERTY:excelreader_native,IMPORTED_LOCATION>"
+            "$<TARGET_FILE_DIR:excelreader_cpp_write_benchmarks>")
+endif()
+
 # --- Comparison benchmark against xlnt (https://github.com/tfussell/xlnt) and xlsxio
 # (https://github.com/brechtsanders/xlsxio) - separate opt-in flag because both are much heavier
 # FetchContent builds (their own zip/xml stacks) than the suite above.
