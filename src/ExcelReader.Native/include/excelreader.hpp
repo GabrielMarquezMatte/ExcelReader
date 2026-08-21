@@ -227,6 +227,20 @@ namespace xl
     namespace detail
     {
 
+        // A NULL options pointer is the ABI's "every default", and is NOT the same as a zeroed
+        // struct (whose struct_size of 0 is rejected). `storage` is the caller's own local, which
+        // must outlive the FFI call the returned pointer is handed to.
+        template <typename Opts, typename Raw>
+        inline const Raw *lower_options(const Opts *options, Raw &storage) noexcept
+        {
+            if (options == nullptr)
+            {
+                return nullptr;
+            }
+            storage = options->to_c();
+            return &storage;
+        }
+
         // Case-insensitive suffix match over ASCII, which is all a file extension can be here.
         // constexpr and allocation-free so format_from_path stays usable in a constant expression.
         constexpr bool ends_with_ci(std::string_view text, std::string_view suffix) noexcept
@@ -483,12 +497,7 @@ namespace xl
             }
             xl_workbook *handle = nullptr;
             xl_open_options c_options{};
-            const xl_open_options *c_options_ptr = nullptr;
-            if (options != nullptr)
-            {
-                c_options = options->to_c();
-                c_options_ptr = &c_options;
-            }
+            const xl_open_options *c_options_ptr = detail::lower_options(options, c_options);
             int32_t status = xl_open_file_ex(reinterpret_cast<const uint8_t *>(path.data()),
                                              static_cast<int32_t>(path.size()), format,
                                              c_options_ptr, &handle);
@@ -510,12 +519,7 @@ namespace xl
             }
             xl_workbook *handle = nullptr;
             xl_open_options c_options{};
-            const xl_open_options *c_options_ptr = nullptr;
-            if (options != nullptr)
-            {
-                c_options = options->to_c();
-                c_options_ptr = &c_options;
-            }
+            const xl_open_options *c_options_ptr = detail::lower_options(options, c_options);
             int32_t status = xl_open_memory_ex(data.data(), static_cast<int32_t>(data.size()), format,
                                                c_options_ptr, &handle);
             if (status != XL_OK)
@@ -1160,12 +1164,7 @@ namespace xl
         // A zeroed xl_write_options is NOT the same as no options: its struct_size of 0 is rejected.
         // NULL is what means "every default".
         xl_write_options raw_options{};
-        const xl_write_options *options_pointer = nullptr;
-        if (options != nullptr)
-        {
-            raw_options = options->to_c();
-            options_pointer = &raw_options;
-        }
+        const xl_write_options *options_pointer = detail::lower_options(options, raw_options);
 
         const int32_t status = xl_write_typed(reinterpret_cast<const uint8_t *>(path.data()),
                                               static_cast<int32_t>(path.size()), format, specs.data(),
