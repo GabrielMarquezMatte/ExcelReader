@@ -309,58 +309,60 @@ namespace xl
             return validity.empty() ? nullptr : validity.data();
         }
 
+        // Every non-string column lowers identically: the values span supplies both the pointer and
+        // the row count, the validity span both the pointer and its length, and the only thing that
+        // varies per column type is the XL_T_* tag. The named factories below are one line each on
+        // top of this, so the wire layout lives in exactly one place.
+        template <int32_t Tag, typename E>
+        inline constexpr ColumnRef scalar_column(std::string_view name, std::span<const E> values,
+                                                 std::span<const uint8_t> validity) noexcept
+        {
+            return ColumnRef{name, Tag, static_cast<int64_t>(values.size()), values.data(),
+                             validity_pointer(validity), static_cast<int64_t>(validity.size()),
+                             nullptr, 0};
+        }
+
     } // namespace detail
 
     // One constructor per column type rather than an overload set: XL_T_BOOL's buffer and a string
     // blob are both std::span<const uint8_t>, and XL_T_I64/TIME/TIMESTAMP are all
-    // std::span<const int64_t>, so overload resolution could not tell them apart.
+    // std::span<const int64_t>, so overload resolution could not tell them apart. Each is one line
+    // over detail::scalar_column, which holds the shared lowering.
     inline constexpr ColumnRef i64_column(std::string_view name, std::span<const int64_t> values,
                                           std::span<const uint8_t> validity = {}) noexcept
     {
-        return ColumnRef{name, XL_T_I64, static_cast<int64_t>(values.size()), values.data(),
-                         detail::validity_pointer(validity), static_cast<int64_t>(validity.size()),
-                         nullptr, 0};
+        return detail::scalar_column<XL_T_I64>(name, values, validity);
     }
 
     inline constexpr ColumnRef f64_column(std::string_view name, std::span<const double> values,
                                           std::span<const uint8_t> validity = {}) noexcept
     {
-        return ColumnRef{name, XL_T_F64, static_cast<int64_t>(values.size()), values.data(),
-                         detail::validity_pointer(validity), static_cast<int64_t>(validity.size()),
-                         nullptr, 0};
+        return detail::scalar_column<XL_T_F64>(name, values, validity);
     }
 
     // `values` is one byte per row, 0 or 1 - NOT a bit-packed bitmap.
     inline constexpr ColumnRef bool_column(std::string_view name, std::span<const uint8_t> values,
                                            std::span<const uint8_t> validity = {}) noexcept
     {
-        return ColumnRef{name, XL_T_BOOL, static_cast<int64_t>(values.size()), values.data(),
-                         detail::validity_pointer(validity), static_cast<int64_t>(validity.size()),
-                         nullptr, 0};
+        return detail::scalar_column<XL_T_BOOL>(name, values, validity);
     }
 
     inline constexpr ColumnRef date_column(std::string_view name, std::span<const int32_t> days_since_epoch,
                                            std::span<const uint8_t> validity = {}) noexcept
     {
-        return ColumnRef{name, XL_T_DATE, static_cast<int64_t>(days_since_epoch.size()),
-                         days_since_epoch.data(), detail::validity_pointer(validity),
-                         static_cast<int64_t>(validity.size()), nullptr, 0};
+        return detail::scalar_column<XL_T_DATE>(name, days_since_epoch, validity);
     }
 
     inline constexpr ColumnRef time_column(std::string_view name, std::span<const int64_t> micros_since_midnight,
                                            std::span<const uint8_t> validity = {}) noexcept
     {
-        return ColumnRef{name, XL_T_TIME, static_cast<int64_t>(micros_since_midnight.size()),
-                         micros_since_midnight.data(), detail::validity_pointer(validity),
-                         static_cast<int64_t>(validity.size()), nullptr, 0};
+        return detail::scalar_column<XL_T_TIME>(name, micros_since_midnight, validity);
     }
 
     inline constexpr ColumnRef timestamp_column(std::string_view name, std::span<const int64_t> micros_since_epoch,
                                                 std::span<const uint8_t> validity = {}) noexcept
     {
-        return ColumnRef{name, XL_T_TIMESTAMP, static_cast<int64_t>(micros_since_epoch.size()),
-                         micros_since_epoch.data(), detail::validity_pointer(validity),
-                         static_cast<int64_t>(validity.size()), nullptr, 0};
+        return detail::scalar_column<XL_T_TIMESTAMP>(name, micros_since_epoch, validity);
     }
 
     // `offsets` has length + 1 entries; `data` is every row's UTF-8 bytes concatenated. Unlike the
