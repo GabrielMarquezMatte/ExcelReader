@@ -912,9 +912,22 @@ namespace xl
         }
 
         template <typename T, typename Tuple, std::size_t... Is>
-        void populate_instance(T &instance, const xl_table &table, int64_t row, const Tuple &bindings, std::index_sequence<Is...>)
+        inline void populate_instance(T &instance, const xl_table &table, int64_t row, const Tuple &bindings, std::index_sequence<Is...>)
         {
             (..., assign_field(instance, table.columns[Is], row, std::get<Is>(bindings)));
+        }
+
+        // The one place a T is built from a row of the columnar buffers. Both TableView<T>::operator[]
+        // and its iterator's operator*() go through this, so the bindings lookup and the index
+        // sequence are written once.
+        template <typename T>
+        inline T row_at(const xl_table &table, int64_t row)
+        {
+            T instance{};
+            static constexpr auto bindings = ExcelMapper<T>::get_bindings();
+            static constexpr size_t num_fields = std::tuple_size_v<decltype(bindings)>;
+            populate_instance(instance, table, row, bindings, std::make_index_sequence<num_fields>{});
+            return instance;
         }
 
     } // namespace detail
@@ -958,14 +971,7 @@ namespace xl
 
             iterator() = default;
 
-            T operator*() const
-            {
-                T instance{};
-                static constexpr auto bindings = ExcelMapper<T>::get_bindings();
-                static constexpr size_t num_fields = std::tuple_size_v<decltype(bindings)>;
-                detail::populate_instance(instance, *table_, row_, bindings, std::make_index_sequence<num_fields>{});
-                return instance;
-            }
+            T operator*() const { return detail::row_at<T>(*table_, row_); }
 
             T operator[](difference_type n) const { return *(*this + n); }
 
@@ -1051,14 +1057,7 @@ namespace xl
         // Unchecked, exactly like std::vector::operator[]: a `row` outside [0, size()) reads past
         // the columnar buffers and returns whatever sits after the allocation. Use at() below unless
         // the caller has already established the bound.
-        T operator[](int64_t row) const
-        {
-            T instance{};
-            static constexpr auto bindings = ExcelMapper<T>::get_bindings();
-            static constexpr size_t num_fields = std::tuple_size_v<decltype(bindings)>;
-            detail::populate_instance(instance, table_, row, bindings, std::make_index_sequence<num_fields>{});
-            return instance;
-        }
+        T operator[](int64_t row) const { return detail::row_at<T>(table_, row); }
 
         // Bounds-checked counterpart to operator[]. Returns nullopt rather than throwing, since this
         // header is exception-free by design (std::vector::at's out_of_range is not an option here).
