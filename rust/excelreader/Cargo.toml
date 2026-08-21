@@ -20,12 +20,13 @@ excelreader-derive = { path = "../excelreader-derive", version = "0.0.0" }
 # `default-features = false` drops chrono's `oldtime`/`clock` stack: this crate only converts
 # between integer counts and calendar types, and never reads the system clock or a timezone database.
 chrono = { version = "0.4", optional = true, default-features = false, features = ["std"] }
-rust_xlsxwriter = "0.98.2"
 
 [dev-dependencies]
 trybuild = "1"
 criterion = "0.5"
 calamine = { version = "0.36.1", features = ["chrono"] }
+# Comparison baseline for write_bench only — this crate's own write path never calls it.
+rust_xlsxwriter = "0.98.2"
 
 [[bench]]
 name = "parse_bench"
