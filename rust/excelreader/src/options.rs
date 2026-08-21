@@ -200,6 +200,14 @@ impl WriteOptions {
     }
 }
 
+/// The pointer an FFI options argument takes: a borrowed raw struct, or NULL for "every library
+/// default". `raw` must outlive the call the returned pointer is handed to - taking it by reference
+/// rather than by value is what makes the compiler check that.
+#[inline]
+pub(crate) fn ptr_or_null<T>(raw: &Option<T>) -> *const T {
+    raw.as_ref().map_or(std::ptr::null(), |value| value as *const T)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
