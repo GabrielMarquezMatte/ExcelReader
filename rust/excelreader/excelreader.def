@@ -12,6 +12,7 @@ EXPORTS
     xl_is_date1904
     xl_parse_typed
     xl_free_table
+    xl_parse_arrow
     xl_write_typed
     xl_infer_schema
     xl_free_schema
