@@ -15,6 +15,51 @@ namespace ExcelReader.Native
     }
 
     /// <summary>
+    /// Field-level decoding shared by <see cref="NativeOpenOptions"/> and
+    /// <see cref="NativeWriteOptions"/>. Both option structs carry the same two shapes of field — a
+    /// byte-valued one and a <see cref="NativeOptionState"/> tri-state — with the same rules and the
+    /// same messages; only the struct's own name differs, so it arrives as an argument.
+    /// </summary>
+    internal static class NativeOptionDecode
+    {
+        /// <summary>A byte-valued field: 0 means "use the library default", 1-255 is a real byte.</summary>
+        internal static bool TryByte(int value, string structName, string fieldName, out byte? decoded, out string? error)
+        {
+            decoded = null;
+            error = null;
+            if (value == 0)
+            {
+                return true;
+            }
+            if (value is < 1 or > 255)
+            {
+                error = $"{structName}.{fieldName} must be 0 (default) or a byte value 1-255; got {value}.";
+                return false;
+            }
+            decoded = (byte)value;
+            return true;
+        }
+
+        /// <summary>A boolean-shaped field, encoded as <see cref="NativeOptionState"/> rather than a plain
+        /// 0/1 because several of these default to true.</summary>
+        internal static bool TryState(int value, string structName, string fieldName, out bool? decoded, out string? error)
+        {
+            decoded = null;
+            error = null;
+            if (value is not (NativeOptionState.Default or NativeOptionState.False or NativeOptionState.True))
+            {
+                error = $"{structName}.{fieldName} must be XL_OPT_DEFAULT/FALSE/TRUE (0/1/2); got {value}.";
+                return false;
+            }
+            if (value != NativeOptionState.Default)
+            {
+                decoded = value == NativeOptionState.True;
+            }
+            return true;
+        }
+    }
+
+    /// <summary>
     /// Flat C ABI representation of <c>xl_open_options</c>. Every numeric field is 0 for "use the
     /// library default"; every boolean-shaped field uses <see cref="NativeOptionState"/> instead of a
     /// plain 0/1, since several of them default to true. See excelreader.h for the authoritative field
@@ -47,6 +92,9 @@ namespace ExcelReader.Native
     /// </summary>
     internal readonly struct NativeOpenOptions
     {
+        /// <summary>The C struct's name, as it appears in every message this type produces.</summary>
+        private const string OptionsName = "xl_open_options";
+
         internal bool CsvSniffDialect { get; init; }
         internal byte? CsvDelimiter { get; init; }
         internal byte? CsvQuote { get; init; }
@@ -129,12 +177,12 @@ namespace ExcelReader.Native
             int expectedSize = Marshal.SizeOf<NativeOpenOptionsRaw>();
             if (raw.StructSize != expectedSize)
             {
-                error = $"xl_open_options.struct_size is {raw.StructSize}, but this library expects {expectedSize}.";
+                error = $"{OptionsName}.struct_size is {raw.StructSize}, but this library expects {expectedSize}.";
                 return false;
             }
 
-            if (!TryDecodeByte(raw.CsvDelimiter, "csv_delimiter", out byte? delimiter, out error)
-                || !TryDecodeByte(raw.CsvQuote, "csv_quote", out byte? quote, out error)
+            if (!NativeOptionDecode.TryByte(raw.CsvDelimiter, OptionsName, "csv_delimiter", out byte? delimiter, out error)
+                || !NativeOptionDecode.TryByte(raw.CsvQuote, OptionsName, "csv_quote", out byte? quote, out error)
                 || !TryDecodeNonNegative(raw.CsvMaxCellBytes, "csv_max_cell_bytes", out int? csvMaxCellBytes, out error)
                 || !TryDecodeNonNegative(raw.MaxCellBytes, "max_cell_bytes", out int? maxCellBytes, out error)
                 || !TryDecodeNonNegative(raw.MaxZipEntries, "max_zip_entries", out int? maxZipEntries, out error)
@@ -144,11 +192,11 @@ namespace ExcelReader.Native
                 return false;
             }
 
-            if (!TryDecodeState(raw.CsvSniffDialect, "csv_sniff_dialect", out bool? sniffDialect, out error)
-                || !TryDecodeState(raw.CsvDetectBom, "csv_detect_bom", out bool? detectBom, out error)
-                || !TryDecodeState(raw.CsvInternStrings, "csv_intern_strings", out bool? csvInternStrings, out error)
-                || !TryDecodeState(raw.PrefetchDecompression, "prefetch_decompression", out bool? prefetch, out error)
-                || !TryDecodeState(raw.InternStrings, "intern_strings", out bool? internStrings, out error))
+            if (!NativeOptionDecode.TryState(raw.CsvSniffDialect, OptionsName, "csv_sniff_dialect", out bool? sniffDialect, out error)
+                || !NativeOptionDecode.TryState(raw.CsvDetectBom, OptionsName, "csv_detect_bom", out bool? detectBom, out error)
+                || !NativeOptionDecode.TryState(raw.CsvInternStrings, OptionsName, "csv_intern_strings", out bool? csvInternStrings, out error)
+                || !NativeOptionDecode.TryState(raw.PrefetchDecompression, OptionsName, "prefetch_decompression", out bool? prefetch, out error)
+                || !NativeOptionDecode.TryState(raw.InternStrings, OptionsName, "intern_strings", out bool? internStrings, out error))
             {
                 return false;
             }
@@ -171,23 +219,6 @@ namespace ExcelReader.Native
             return true;
         }
 
-        private static bool TryDecodeByte(int value, string fieldName, out byte? decoded, out string? error)
-        {
-            decoded = null;
-            error = null;
-            if (value == 0)
-            {
-                return true;
-            }
-            if (value is < 1 or > 255)
-            {
-                error = $"xl_open_options.{fieldName} must be 0 (default) or a byte value 1-255; got {value}.";
-                return false;
-            }
-            decoded = (byte)value;
-            return true;
-        }
-
         // Serves both the int and long fields: the rule ("0 means default, negative is a caller error")
         // and its message are identical, and only the width differed.
         private static bool TryDecodeNonNegative<T>(T value, string fieldName, out T? decoded, out string? error)
@@ -205,22 +236,6 @@ namespace ExcelReader.Native
                 return false;
             }
             decoded = value;
-            return true;
-        }
-
-        private static bool TryDecodeState(int value, string fieldName, out bool? decoded, out string? error)
-        {
-            decoded = null;
-            error = null;
-            if (value is not (NativeOptionState.Default or NativeOptionState.False or NativeOptionState.True))
-            {
-                error = $"xl_open_options.{fieldName} must be XL_OPT_DEFAULT/FALSE/TRUE (0/1/2); got {value}.";
-                return false;
-            }
-            if (value != NativeOptionState.Default)
-            {
-                decoded = value == NativeOptionState.True;
-            }
             return true;
         }
     }
