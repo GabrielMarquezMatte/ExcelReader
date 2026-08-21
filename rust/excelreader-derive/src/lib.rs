@@ -72,19 +72,19 @@ fn expand(input: DeriveInput) -> syn::Result<proc_macro2::TokenStream> {
 fn named_fields(
     input: &DeriveInput,
 ) -> syn::Result<&syn::punctuated::Punctuated<Field, syn::Token![,]>> {
-    match &input.data {
-        Data::Struct(data) => match &data.fields {
-            Fields::Named(fields) => Ok(&fields.named),
-            _ => Err(syn::Error::new_spanned(
-                input,
-                "ExcelMapper can only be derived for structs with named fields",
-            )),
-        },
-        _ => Err(syn::Error::new_spanned(
-            input,
-            "ExcelMapper can only be derived for structs with named fields",
-        )),
+    // One pattern, one message: a tuple struct, a unit struct and an enum are all the same rejection,
+    // and writing it twice is how the two copies eventually stop matching.
+    if let Data::Struct(syn::DataStruct {
+        fields: Fields::Named(fields),
+        ..
+    }) = &input.data
+    {
+        return Ok(&fields.named);
     }
+    Err(syn::Error::new_spanned(
+        input,
+        "ExcelMapper can only be derived for structs with named fields",
+    ))
 }
 
 fn field_binding(field: &Field) -> syn::Result<proc_macro2::TokenStream> {
@@ -358,13 +358,8 @@ impl FieldKind {
                 .map(|segment| segment.ident.to_string()),
             _ => None,
         };
-        let name = name.as_deref();
-        if let Some(name) = name {
-            if INT_TYPES.contains(&name) {
-                return Ok(FieldKind::Int);
-            }
-        }
-        match name {
+        match name.as_deref() {
+            Some(int) if INT_TYPES.contains(&int) => Ok(FieldKind::Int),
             Some("String") => Ok(FieldKind::Str),
             Some("f32" | "f64") => Ok(FieldKind::Float),
             Some("bool") => Ok(FieldKind::Bool),
