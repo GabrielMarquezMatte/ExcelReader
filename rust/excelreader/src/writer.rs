@@ -8,7 +8,7 @@
 
 use crate::workbook::{check, check_abi_version};
 use crate::{
-    Error, WriteOptions, XlColumn, XlColumnSpec, XlTable, XlWriteOptions, XL_FORMAT_AUTO,
+    Error, WriteOptions, XlColumn, XlColumnSpec, XlTable, XL_FORMAT_AUTO,
     XL_FORMAT_CSV, XL_FORMAT_XLS, XL_FORMAT_XLSB, XL_FORMAT_XLSX, XL_INVALID_ARGUMENT, XL_T_BOOL,
     XL_T_DATE, XL_T_F64, XL_T_I64, XL_T_STRING, XL_T_TIME, XL_T_TIMESTAMP,
 };
@@ -248,9 +248,7 @@ pub fn write_columns(
     // Lowered here rather than by the caller: the raw struct holds a pointer into
     // `options.sheet_name`, and this borrow provably covers the FFI call below.
     let raw_options = options.map(WriteOptions::to_raw);
-    let options_ptr = raw_options
-        .as_ref()
-        .map_or(std::ptr::null(), |o| o as *const XlWriteOptions);
+    let options_ptr = crate::options::ptr_or_null(&raw_options);
 
     let status = unsafe {
         crate::xl_write_typed(

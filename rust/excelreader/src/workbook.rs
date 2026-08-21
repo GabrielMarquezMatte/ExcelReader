@@ -1,6 +1,6 @@
 use crate::{
     Date, Error, OpenOptions, Time, Timestamp, XlColumn, XlColumnSpec, XlInferredSchema,
-    XlOpenOptions, XlTable, XlWorkbook, XL_BUFFER_TOO_SMALL, XL_ERROR, XL_FORMAT_AUTO, XL_OK,
+    XlTable, XlWorkbook, XL_BUFFER_TOO_SMALL, XL_ERROR, XL_FORMAT_AUTO, XL_OK,
     XL_T_BOOL, XL_T_DATE, XL_T_F64, XL_T_I64, XL_T_STRING, XL_T_TIME, XL_T_TIMESTAMP,
 };
 use std::marker::PhantomData;
@@ -83,9 +83,7 @@ impl Workbook {
     ) -> Result<Workbook, Error> {
         check_abi_version()?;
         let raw = options.map(OpenOptions::to_raw);
-        let raw_ptr = raw
-            .as_ref()
-            .map_or(std::ptr::null(), |o| o as *const XlOpenOptions);
+        let raw_ptr = crate::options::ptr_or_null(&raw);
         let mut handle: *mut XlWorkbook = std::ptr::null_mut();
         // `raw` outlives the call below, and the native side copies the path before returning.
         let status = unsafe {
@@ -110,9 +108,7 @@ impl Workbook {
     ) -> Result<Workbook, Error> {
         check_abi_version()?;
         let raw = options.map(OpenOptions::to_raw);
-        let raw_ptr = raw
-            .as_ref()
-            .map_or(std::ptr::null(), |o| o as *const XlOpenOptions);
+        let raw_ptr = crate::options::ptr_or_null(&raw);
         let mut handle: *mut XlWorkbook = std::ptr::null_mut();
         let status = unsafe {
             crate::xl_open_memory_ex(
