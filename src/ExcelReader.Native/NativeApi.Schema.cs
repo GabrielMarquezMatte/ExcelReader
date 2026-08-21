@@ -102,14 +102,9 @@ namespace ExcelReader.Native
         // empty string — an empty name would fail xl_parse_typed's own "blank name" validation later.
         private static bool TryReadHeader(IExcelRowEnumerator rows, int headerRow, List<string?> names, List<ColumnStat> stats, out string? error)
         {
-            error = null;
-            for (int rowNumber = 1; rowNumber <= headerRow; rowNumber++)
+            if (!TrySkipToHeaderRow(rows, headerRow, out error))
             {
-                if (!rows.MoveNext())
-                {
-                    error = $"sheet has fewer than {headerRow} row(s); cannot resolve header_row.";
-                    return false;
-                }
+                return false;
             }
             Row header = rows.Current;
             foreach (RowCell cell in header.Cells)
@@ -261,11 +256,9 @@ namespace ExcelReader.Native
             internal readonly int InferType()
             {
                 int kinds = (SawString ? 1 : 0) + (SawNumber ? 1 : 0) + (SawDate ? 1 : 0) + (SawBool ? 1 : 0);
-                if (SawFormulaOrError || kinds != 1)
-                {
-                    return NativeColumnType.String;
-                }
-                if (SawString)
+                // A mix of kinds, a formula/error result, nothing sampled at all, or plain text — all
+                // four fall back to the string type, the only one able to represent them verbatim.
+                if (SawFormulaOrError || kinds != 1 || SawString)
                 {
                     return NativeColumnType.String;
                 }
