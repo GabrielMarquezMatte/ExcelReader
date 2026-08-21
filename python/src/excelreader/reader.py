@@ -29,13 +29,7 @@ except ImportError:
     _numpy = None  # NumPy is an optional extra (pip install excelreader-native[numpy]) — see
     # _buffer_to_array()/_to_columnar_array() below, the only two places that consult it.
 
-_FORMATS = {
-    "auto": _native.XL_FORMAT_AUTO,
-    "xls": _native.XL_FORMAT_XLS,
-    "xlsx": _native.XL_FORMAT_XLSX,
-    "xlsb": _native.XL_FORMAT_XLSB,
-    "csv": _native.XL_FORMAT_CSV,
-}
+_FORMATS = _native.FORMATS
 
 _CELL_HEADER = struct.Struct("<iii")
 _INITIAL_ROW_BUFFER = 64 * 1024
