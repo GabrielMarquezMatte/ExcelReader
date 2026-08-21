@@ -193,6 +193,23 @@ namespace ExcelReader.Native
             return true;
         }
 
+        // Advances `rows` so that `rows.Current` is the header row itself. Shared with
+        // NativeApi.Schema.cs's TryReadHeader so the two cannot drift on the row arithmetic or on the
+        // message a too-short sheet produces.
+        private static bool TrySkipToHeaderRow(IExcelRowEnumerator rows, int headerRow, out string? error)
+        {
+            error = null;
+            for (int rowNumber = 1; rowNumber <= headerRow; rowNumber++)
+            {
+                if (!rows.MoveNext())
+                {
+                    error = $"sheet has fewer than {headerRow} row(s); cannot resolve header_row.";
+                    return false;
+                }
+            }
+            return true;
+        }
+
         // Advances `rows` past any skipped rows and the header row itself (headerRow > 0), or leaves it
         // untouched at the sheet's first row (headerRow == 0, index-only specs). Either way, `rows` is
         // positioned so the next MoveNext() yields the first DATA row.
@@ -208,13 +225,9 @@ namespace ExcelReader.Native
                 return true;
             }
 
-            for (int rowNumber = 1; rowNumber <= headerRow; rowNumber++)
+            if (!TrySkipToHeaderRow(rows, headerRow, out error))
             {
-                if (!rows.MoveNext())
-                {
-                    error = $"sheet has fewer than {headerRow} row(s); cannot resolve header_row.";
-                    return false;
-                }
+                return false;
             }
 
             Row header = rows.Current;
