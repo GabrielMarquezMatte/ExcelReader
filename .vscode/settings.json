@@ -11,5 +11,8 @@
         "-DEXCELREADER_BUILD_BENCHMARKS_COMPARE=ON",
         "-DEXCELREADER_BUILD_TESTS=ON",
         "-DCMAKE_POLICY_VERSION_MINIMUM=3.5"
-    ]
+    ],
+    "rust-analyzer.server.extraEnv": {
+        "EXCELREADER_NATIVE_LIB_DIR": "${workspaceFolder}/python/src/excelreader/_lib"
+    }
 }
