@@ -14,12 +14,16 @@ default = []
 # NaiveDate/NaiveTime/NaiveDateTime, so `#[derive(ExcelMapper)]` can populate chrono fields
 # directly. Off by default: the newtypes alone need no dependency at all.
 chrono = ["dep:chrono"]
+# Converts the native Arrow C Data Interface export into an `arrow::array::RecordBatch`. Off by
+# default: arrow-rs is a large dependency and the crate's typed-parse path needs none of it.
+arrow = ["dep:arrow"]
 
 [dependencies]
 excelreader-derive = { path = "../excelreader-derive", version = "0.0.0" }
 # `default-features = false` drops chrono's `oldtime`/`clock` stack: this crate only converts
 # between integer counts and calendar types, and never reads the system clock or a timezone database.
 chrono = { version = "0.4", optional = true, default-features = false, features = ["std"] }
+arrow = { version = "56", optional = true, default-features = false, features = ["ffi"] }
 
 [dev-dependencies]
 trybuild = "1"

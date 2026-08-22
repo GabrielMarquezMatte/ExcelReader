@@ -8,6 +8,9 @@ mod temporal;
 pub mod workbook;
 pub mod writer;
 
+#[cfg(feature = "arrow")]
+pub mod arrow;
+
 pub use error::Error;
 pub use options::{OpenOptions, WriteOptions};
 pub use temporal::{Date, Time, Timestamp};
@@ -173,6 +176,23 @@ extern "C" {
         spec_count: i32,
         header_row: i32,
         out_table: *mut XlTable,
+    ) -> c_int;
+
+    /// Same schema-driven parse as `xl_parse_typed`, exported as one top-level Arrow struct
+    /// array/schema. `out_array`/`out_schema` are `struct ArrowArray*`/`struct ArrowSchema*` from
+    /// the Arrow C Data Interface, typed here as `c_void` because arrow-rs's own `#[repr(C)]`
+    /// `FFI_ArrowArray`/`FFI_ArrowSchema` are ABI-identical to them - redeclaring the spec structs
+    /// would be a second source of truth for a fixed, versioned ABI.
+    ///
+    /// On `XL_OK` the caller owns both and releases each through its OWN `release` callback, never
+    /// through `xl_free_table`. On any other status both outputs are left untouched.
+    pub fn xl_parse_arrow(
+        handle: *mut XlWorkbook,
+        specs: *const XlColumnSpec,
+        spec_count: i32,
+        header_row: i32,
+        out_array: *mut c_void,
+        out_schema: *mut c_void,
     ) -> c_int;
 
     pub fn xl_free_table(table: *mut XlTable);
