@@ -897,7 +897,10 @@ write_sheet("out.xlsx", XL_FORMAT_XLSX, &rows, None)?;
 auto written = xl::write_sheet("out.xlsx", rows);   // format inferred from the extension
 ```
 
-Row-by-row decoded reads and the Arrow export remain Python-only.
+Row-by-row decoded reads remain Python-only. The Arrow export is available from Python
+(`to_arrow`/`to_record_batch`), C++ (`xl::parse_arrow<T>`, in the separate `<xl/excelreader_arrow.hpp>`
+header — no Apache Arrow C++ dependency, you get the raw C Data Interface pair), and Rust
+(`excelreader::arrow::parse_arrow`, behind the `arrow` cargo feature, returning an `arrow::array::RecordBatch`).
 
 ## Contributing
 
