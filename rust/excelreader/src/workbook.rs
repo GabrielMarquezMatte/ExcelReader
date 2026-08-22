@@ -496,13 +496,18 @@ impl<T: ExcelMapper + Default> Iterator for TableViewIter<'_, T> {
 
 impl<T: ExcelMapper + Default> ExactSizeIterator for TableViewIter<'_, T> {}
 
-/// Schema-driven columnar parse of the current sheet, matching C++'s `xl::parse_sheet<T>`.
-///
-/// Takes `&mut Workbook` because the parse consumes the workbook's shared row cursor.
-pub fn parse_sheet<T: ExcelMapper>(
-    workbook: &mut Workbook,
-    header_row: i32,
-) -> Result<TableView<T>, Error> {
+/// Keeps the per-column name pointer/length vectors alive for as long as the `XlColumnSpec` array
+/// that points into them. The two `_name_*` fields are never read - dropping them early would
+/// leave `specs` holding dangling pointers, which is the whole reason they are stored here.
+pub(crate) struct SpecArena {
+    pub(crate) specs: Vec<XlColumnSpec>,
+    _name_ptrs: Vec<Vec<*const u8>>,
+    _name_lens: Vec<Vec<i32>>,
+}
+
+/// Lowers `T`'s ExcelMapper bindings into the flat `xl_column_spec` array both `xl_parse_typed` and
+/// `xl_parse_arrow` take - their column-spec input is identical.
+pub(crate) fn build_specs<T: ExcelMapper>() -> SpecArena {
     let bindings = T::bindings();
     let name_ptrs: Vec<Vec<*const u8>> = bindings
         .iter()
@@ -524,6 +529,22 @@ pub fn parse_sheet<T: ExcelMapper>(
             nullable: 1,
         })
         .collect();
+    SpecArena {
+        specs,
+        _name_ptrs: name_ptrs,
+        _name_lens: name_lens,
+    }
+}
+
+/// Schema-driven columnar parse of the current sheet, matching C++'s `xl::parse_sheet<T>`.
+///
+/// Takes `&mut Workbook` because the parse consumes the workbook's shared row cursor.
+pub fn parse_sheet<T: ExcelMapper>(
+    workbook: &mut Workbook,
+    header_row: i32,
+) -> Result<TableView<T>, Error> {
+    let bindings = T::bindings();
+    let arena = build_specs::<T>();
     let mut table = XlTable {
         column_count: 0,
         row_count: 0,
@@ -532,8 +553,8 @@ pub fn parse_sheet<T: ExcelMapper>(
     unsafe {
         let status = crate::xl_parse_typed(
             workbook.handle,
-            specs.as_ptr(),
-            specs.len() as i32,
+            arena.specs.as_ptr(),
+            arena.specs.len() as i32,
             header_row,
             &mut table,
         );
