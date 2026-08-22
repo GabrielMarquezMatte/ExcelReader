@@ -41,4 +41,10 @@ fn parse_arrow_reports_an_error_without_leaving_a_half_built_batch() {
     // header_row is 1-based; a row number past the end of the sheet cannot resolve any column name.
     let result = parse_arrow::<Record>(&mut workbook, 1_000_000);
     assert!(result.is_err());
+
+    // The failed call must not have left the workbook or its shared row cursor in a broken state -
+    // a normal, valid parse right after the failure should succeed exactly as if the failed call
+    // had never happened.
+    let batch = parse_arrow::<Record>(&mut workbook, 1).expect("parse_arrow must succeed");
+    assert_eq!(batch.num_rows(), 100); // RealExcel.xlsb has 100 data rows.
 }
