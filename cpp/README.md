@@ -78,6 +78,21 @@ for (const auto& column : *workbook->infer_schema(1, 100)) {
 
 Every entry point returns `std::expected<T, xl::Error>` — this header throws nothing.
 
+### Arrow export
+
+`<xl/excelreader_arrow.hpp>` is a separate header — including `<xl/excelreader.hpp>` never pulls the
+Arrow C Data Interface declarations in. It does not depend on the Apache Arrow C++ library: you get
+the raw `ArrowArray`/`ArrowSchema` pair, owned by an RAII `xl::ArrowTable`, to hand to whichever
+Arrow implementation you already link.
+
+```cpp
+#include <xl/excelreader_arrow.hpp>
+
+auto workbook = xl::Workbook::open("book.xlsx").value();
+auto table = xl::parse_arrow<Record>(workbook).value();
+// table.array / table.schema are a top-level struct array; both release in ~ArrowTable.
+```
+
 ## Writing
 
 Two layers, mirroring the two on the reading side.

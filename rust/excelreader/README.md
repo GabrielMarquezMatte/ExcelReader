@@ -71,6 +71,23 @@ for column in workbook.infer_schema(1, 100)? {
 `Workbook::open_with` takes an explicit format and `OpenOptions`; `Workbook::open_memory` reads from
 a byte slice. Note that format sniffing does not detect CSV - pass `XL_FORMAT_CSV` explicitly.
 
+### Arrow export (`arrow` feature)
+
+```toml
+excelreader = { version = "0.0.0", features = ["arrow"] }
+```
+
+```rust
+use excelreader::arrow::parse_arrow;
+use excelreader::workbook::Workbook;
+
+let mut workbook = Workbook::open("book.xlsx")?;
+let batch = parse_arrow::<Record>(&mut workbook, 1)?;
+println!("{} rows x {} columns", batch.num_rows(), batch.num_columns());
+```
+
+Off by default — arrow-rs is a large dependency and the typed-parse path needs none of it.
+
 ## Writing
 
 `#[derive(ExcelMapper)]` generates both halves, so the same struct reads and writes - the field
