@@ -88,9 +88,9 @@ Arrow implementation you already link.
 ```cpp
 #include <xl/excelreader_arrow.hpp>
 
-auto workbook = xl::Workbook::open("book.xlsx").value();
-auto table = xl::parse_arrow<Record>(workbook).value();
-// table.array / table.schema are a top-level struct array; both release in ~ArrowTable.
+auto workbook = xl::Workbook::open("book.xlsx");
+auto table = xl::parse_arrow<Row>(*workbook);
+// table->array / table->schema are a top-level struct array; both release in ~ArrowTable.
 ```
 
 ## Writing
