@@ -506,15 +506,20 @@ impl<T: ExcelMapper + Default> ExactSizeIterator for TableViewIter<'_, T> {}
 /// Keeps the per-column name pointer/length vectors alive for as long as the `XlColumnSpec` array
 /// that points into them. The two `_name_*` fields are never read - dropping them early would
 /// leave `specs` holding dangling pointers, which is the whole reason they are stored here.
-pub(crate) struct SpecArena {
+///
+/// Also carries the `T::bindings()` this arena was built from, so callers that need both the flat
+/// spec array (for the FFI call) and the typed bindings (for result-column lookups) can get both
+/// from a single `T::bindings()` call instead of computing it twice.
+pub(crate) struct SpecArena<T: ExcelMapper> {
     pub(crate) specs: Vec<XlColumnSpec>,
+    pub(crate) bindings: Vec<ColumnBinding<T>>,
     _name_ptrs: Vec<Vec<*const u8>>,
     _name_lens: Vec<Vec<i32>>,
 }
 
 /// Lowers `T`'s ExcelMapper bindings into the flat `xl_column_spec` array both `xl_parse_typed` and
 /// `xl_parse_arrow` take - their column-spec input is identical.
-pub(crate) fn build_specs<T: ExcelMapper>() -> SpecArena {
+pub(crate) fn build_specs<T: ExcelMapper>() -> SpecArena<T> {
     let bindings = T::bindings();
     let name_ptrs: Vec<Vec<*const u8>> = bindings
         .iter()
@@ -538,6 +543,7 @@ pub(crate) fn build_specs<T: ExcelMapper>() -> SpecArena {
         .collect();
     SpecArena {
         specs,
+        bindings,
         _name_ptrs: name_ptrs,
         _name_lens: name_lens,
     }
@@ -550,8 +556,8 @@ pub fn parse_sheet<T: ExcelMapper>(
     workbook: &mut Workbook,
     header_row: i32,
 ) -> Result<TableView<T>, Error> {
-    let bindings = T::bindings();
     let arena = build_specs::<T>();
+    let bindings = arena.bindings;
     let mut table = XlTable {
         column_count: 0,
         row_count: 0,

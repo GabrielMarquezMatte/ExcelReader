@@ -16,11 +16,14 @@ namespace ExcelReader.Tests
             return dir.FullName;
         }
 
+        // There are only two physically distinct .def files in this repo. `cpp/include/xl` is a git
+        // symlink to `src/ExcelReader.Native/include`, so the C++ package reaches the canonical
+        // file through that symlink rather than through a maintained copy of its own - comparing it
+        // here would just compare the canonical file to itself and could never catch real drift.
         private static readonly string[] DefPaths =
         [
             Path.Combine("src", "ExcelReader.Native", "include", "excelreader.def"),
             Path.Combine("rust", "excelreader", "excelreader.def"),
-            Path.Combine("cpp", "include", "xl", "excelreader.def"),
         ];
 
         private static string[] ReadExports(string root, string relative)
@@ -31,7 +34,7 @@ namespace ExcelReader.Tests
         }
 
         [Fact]
-        public void Should_ListIdenticalExports_When_ComparingTheThreeDefCopies()
+        public void Should_ListIdenticalExports_When_ComparingTheCanonicalAndRustDefCopies()
         {
             string root = RepoRoot();
             string[] canonical = ReadExports(root, DefPaths[0]);

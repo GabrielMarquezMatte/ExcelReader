@@ -58,6 +58,13 @@ int main()
         CHECK(table->array.release == nullptr, "moved-from table must be released/inert");
     }
 
+    // An out-of-range header_row must fail cleanly, leaving no half-built ArrowTable behind - this
+    // matters here more than on the happy path because ~ArrowTable calls through the release
+    // function pointers it holds, so a half-initialized table on the failure path would mean the
+    // destructor walks into garbage.
+    auto failed = xl::parse_arrow<Record>(*workbook, 1'000'000);
+    CHECK(!failed.has_value(), "xl::parse_arrow<Record> must fail for an out-of-range header_row");
+
     std::printf("OK: C++ arrow test passed\n");
     return 0;
 }
