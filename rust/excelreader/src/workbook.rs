@@ -208,7 +208,7 @@ impl Workbook {
     ) -> Result<String, Error> {
         // One sized attempt first: Excel caps sheet names at 31 characters, so 128 bytes clears
         // even the 4-byte-per-character worst case and the retry never runs in practice.
-        let mut buffer = vec![0u8; 128];
+        let mut buffer = [0u8; 128];
         let mut len: i32 = 0;
         let mut status = call(
             self.handle,
@@ -216,18 +216,26 @@ impl Workbook {
             buffer.len() as i32,
             &mut len,
         );
-        if status == XL_BUFFER_TOO_SMALL {
-            buffer = vec![0u8; len.max(0) as usize];
-            status = call(
-                self.handle,
-                buffer.as_mut_ptr(),
-                buffer.len() as i32,
-                &mut len,
-            );
+        if status != XL_BUFFER_TOO_SMALL {
+            check(status)?;
+            let buffer_slice = &buffer[..len.max(0) as usize];
+            return str::from_utf8(buffer_slice)
+                .map(|s| s.to_string())
+                .map_err(|e| Error {
+                    code: XL_ERROR,
+                    message: format!("native library returned a non-UTF-8 name: {e}"),
+                });
         }
+        let mut vec_buffer = vec![0u8; len.max(0) as usize];
+        status = call(
+            self.handle,
+            vec_buffer.as_mut_ptr(),
+            vec_buffer.len() as i32,
+            &mut len,
+        );
         check(status)?;
-        buffer.truncate(len.max(0) as usize);
-        String::from_utf8(buffer).map_err(|e| Error {
+        vec_buffer.truncate(len.max(0) as usize);
+        String::from_utf8(vec_buffer).map_err(|e| Error {
             code: XL_ERROR,
             message: format!("native library returned a non-UTF-8 name: {e}"),
         })
