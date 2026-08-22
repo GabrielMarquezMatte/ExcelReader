@@ -82,7 +82,7 @@ use excelreader::arrow::parse_arrow;
 use excelreader::workbook::Workbook;
 
 let mut workbook = Workbook::open("book.xlsx")?;
-let batch = parse_arrow::<Record>(&mut workbook, 1)?;
+let batch = parse_arrow::<Row>(&mut workbook, 1)?;
 println!("{} rows x {} columns", batch.num_rows(), batch.num_columns());
 ```
 
