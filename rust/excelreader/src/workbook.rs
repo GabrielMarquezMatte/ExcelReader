@@ -193,6 +193,13 @@ impl Workbook {
         Ok(columns)
     }
 
+    /// The raw handle, for sibling modules (e.g. `arrow::parse_arrow`) that need to call an
+    /// `xl_*` function this struct has no wrapper for yet. Not part of the crate's public surface -
+    /// `pub(crate)`, not `pub`.
+    pub(crate) fn handle(&self) -> *mut XlWorkbook {
+        self.handle
+    }
+
     /// Shared two-pass buffer dance for the `xl_*` functions that write a UTF-8 name into a caller
     /// buffer and report the required capacity through `XL_BUFFER_TOO_SMALL`.
     fn fill_string(
