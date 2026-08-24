@@ -17,19 +17,20 @@ namespace ExcelReader.Cli
             return CliCommands.Sheets(path, Console.Out, Console.Error);
         }
 
-        /// <summary>Writes a sheet out as CSV, to a file or to standard output.</summary>
+        /// <summary>Writes a sheet out to another spreadsheet format, to a file or to standard output.</summary>
         /// <param name="path">Path to the workbook (.xlsx, .xlsb, .xls or .csv).</param>
         /// <param name="sheet">-s, Sheet to convert, by name or zero-based index. Defaults to the first.</param>
         /// <param name="output">-o, File to write to. Writes to standard output when omitted.</param>
-        /// <param name="delimiter">-d, CSV field separator. Defaults to a comma.</param>
+        /// <param name="format">-f, Output format: xlsx, xlsb, xls or csv. Defaults to --output's extension, or csv when writing to standard output.</param>
+        /// <param name="delimiter">-d, CSV field separator. Ignored for every other format. Defaults to a comma.</param>
         [Command("convert")]
-        public int Convert([Argument] string path, string? sheet = null, string? output = null, char? delimiter = null)
+        public int Convert([Argument] string path, string? sheet = null, string? output = null, string? format = null, char? delimiter = null)
         {
             // ConsoleAppFramework's source generator mis-emits a `char` parameter whose default
             // literal is itself a comma (the codegen that renders parameter defaults splits on ','),
             // so the default lives here instead of in the signature.
             using Stream stdout = Console.OpenStandardOutput();
-            return CliCommands.Convert(path, sheet, output, delimiter ?? ',', stdout, Console.Error);
+            return CliCommands.Convert(path, sheet, output, format, delimiter ?? ',', stdout, Console.Error);
         }
 
         /// <summary>Prints the inferred column schema, as "index[TAB]name[TAB]type", with a trailing ? for nullable columns.</summary>

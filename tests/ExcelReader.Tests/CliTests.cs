@@ -1,4 +1,5 @@
 using ExcelReader.Cli;
+using ExcelReader.Core.Reader;
 
 namespace ExcelReader.Tests
 {
@@ -47,10 +48,10 @@ namespace ExcelReader.Tests
         [Fact]
         public void Should_SelectBySheetName_When_SheetIsNotNumeric()
         {
-            using ExcelReader.Core.Reader.IExcelRowReader byIndex = CliCommands.Open(Fixture("RealExcel.xlsb"), "0");
+            using IExcelRowReader byIndex = CliCommands.Open(Fixture("RealExcel.xlsb"), "0");
             string firstSheetName = byIndex.SheetName;
 
-            using ExcelReader.Core.Reader.IExcelRowReader byName = CliCommands.Open(Fixture("RealExcel.xlsb"), firstSheetName);
+            using IExcelRowReader byName = CliCommands.Open(Fixture("RealExcel.xlsb"), firstSheetName);
             Assert.Equal(firstSheetName, byName.SheetName);
         }
 
@@ -66,17 +67,17 @@ namespace ExcelReader.Tests
         [Fact]
         public void Should_DefaultToTheFirstSheet_When_SheetIsNull()
         {
-            using ExcelReader.Core.Reader.IExcelRowReader reader = CliCommands.Open(Fixture("RealExcel.xlsb"), null);
+            using IExcelRowReader reader = CliCommands.Open(Fixture("RealExcel.xlsb"), null);
 
             Assert.Equal(reader.SheetNameAt(0), reader.SheetName);
         }
 
         private static (int Code, string Out, string Err) Convert(
-            string path, string? sheet = null, string? output = null, char delimiter = ',')
+            string path, string? sheet = null, string? output = null, string? format = null, char delimiter = ',')
         {
             using MemoryStream stdout = new();
             StringWriter stderr = new();
-            int code = CliCommands.Convert(path, sheet, output, delimiter, stdout, stderr);
+            int code = CliCommands.Convert(path, sheet, output, format, delimiter, stdout, stderr);
             return (code, System.Text.Encoding.UTF8.GetString(stdout.ToArray()), stderr.ToString());
         }
 
@@ -128,6 +129,76 @@ namespace ExcelReader.Tests
 
             Assert.Equal(1, code);
             Assert.Contains("NoSuchSheet", error, StringComparison.Ordinal);
+        }
+
+        [Theory]
+        [InlineData("xlsx")]
+        [InlineData("xlsb")]
+        [InlineData("xls")]
+        public void Should_ConvertToAnotherSpreadsheetFormat_When_OutputExtensionNamesOne(string extension)
+        {
+            string target = Path.Combine(Path.GetTempPath(), $"excelreader-cli-{Guid.NewGuid():N}.{extension}");
+            try
+            {
+                (int code, string output, string error) = Convert(Fixture("RealExcel.xlsb"), output: target);
+
+                Assert.Equal(0, code);
+                Assert.Empty(error);
+                Assert.Empty(output);
+
+                // Round-trip: what got written back opens and reports the same row/column shape as
+                // the source, proving the bytes are a real workbook in that format, not just an
+                // extension slapped on CSV.
+                using IExcelRowReader source = Excel.Open(Fixture("RealExcel.xlsb"));
+                using IExcelRowEnumerator sourceRows = source.GetEnumerator();
+                Assert.True(sourceRows.MoveNext());
+                int sourceColumnCount = sourceRows.Current.ColumnCount;
+
+                using IExcelRowReader written = Excel.Open(target);
+                using IExcelRowEnumerator writtenRows = written.GetEnumerator();
+                Assert.True(writtenRows.MoveNext());
+                Assert.Equal(sourceColumnCount, writtenRows.Current.ColumnCount);
+            }
+            finally
+            {
+                File.Delete(target);
+            }
+        }
+
+        [Fact]
+        public void Should_UseTheExplicitFormat_When_FormatOverridesTheOutputExtension()
+        {
+            // No --output at all (stdout), so extension-inference has nothing to go on - --format is
+            // the only way to ask for a binary target here.
+            (int code, string output, string error) = Convert(Fixture("RealExcel.xlsb"), format: "xlsx");
+
+            Assert.Equal(0, code);
+            Assert.Empty(error);
+            // XLSX is a ZIP container - "PK" is every ZIP's local-file-header signature.
+            Assert.StartsWith("PK", output, StringComparison.Ordinal);
+        }
+
+        [Fact]
+        public void Should_ReturnOneAndListValidExtensions_When_TheOutputExtensionIsUnrecognized()
+        {
+            string target = Path.Combine(Path.GetTempPath(), $"excelreader-cli-{Guid.NewGuid():N}.txt");
+
+            (int code, string output, string error) = Convert(Fixture("RealExcel.xlsb"), output: target);
+
+            Assert.Equal(1, code);
+            Assert.Empty(output);
+            Assert.Contains(".txt", error, StringComparison.Ordinal);
+            Assert.Contains(".xlsx", error, StringComparison.Ordinal);
+            Assert.False(File.Exists(target));
+        }
+
+        [Fact]
+        public void Should_ReturnOne_When_TheFormatNameIsUnknown()
+        {
+            (int code, _, string error) = Convert(Fixture("RealExcel.xlsb"), format: "pdf");
+
+            Assert.Equal(1, code);
+            Assert.Contains("pdf", error, StringComparison.Ordinal);
         }
 
         private static (int Code, string Out, string Err) Schema(
