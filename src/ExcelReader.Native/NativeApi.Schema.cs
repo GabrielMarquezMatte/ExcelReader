@@ -80,7 +80,12 @@ namespace ExcelReader.Native
             for (int i = 0; i < schema.ColumnCount; i++)
             {
                 NativeColumnSpecRaw spec = columns[i];
-                if (spec.NameCount > 0)
+                // NameCount > 0 is supposed to imply Names/NameLens are non-null (BuildSpec always
+                // allocates both together), but a caller that null-checked and swapped in its own
+                // freed-and-nulled Names field between InferSchema and this call would otherwise
+                // dereference a null byte**. FreeRows/FreeTable already check the array pointer
+                // first for the same reason; this matches them.
+                if (spec.NameCount > 0 && spec.Names is not null)
                 {
                     Marshal.FreeHGlobal((IntPtr)spec.Names[0]);
                     Marshal.FreeHGlobal((IntPtr)spec.Names);

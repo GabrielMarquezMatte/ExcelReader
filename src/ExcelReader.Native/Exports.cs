@@ -180,9 +180,24 @@ namespace ExcelReader.Native
         [UnmanagedCallersOnly(EntryPoint = "xl_free_row")]
         public static void FreeRow(NativeRow* row)
         {
-            if (row is not null)
+            if (row is null)
+            {
+                return;
+            }
+            // void in the ABI - no status code to report a failure through, and an exception
+            // escaping [UnmanagedCallersOnly] is a fail-fast/abort for the native caller,
+            // uncatchable in C/C++/Rust/Python. A caller that double-frees (holds a copy of an
+            // already-freed struct - the header documents every Free* as "safe on a zeroed value",
+            // not "safe on a stale copy") can make Marshal.FreeHGlobal throw; this keeps that from
+            // crashing the whole process. The message still reaches xl_last_error for a caller that
+            // checks after a free looked suspicious.
+            try
             {
                 NativeApi.FreeRow(ref *row);
+            }
+            catch (Exception exception)
+            {
+                NativeApi.SetLastError(exception.Message);
             }
         }
 
@@ -202,9 +217,18 @@ namespace ExcelReader.Native
         [UnmanagedCallersOnly(EntryPoint = "xl_free_rows")]
         public static void FreeRows(NativeRows* rows)
         {
-            if (rows is not null)
+            if (rows is null)
+            {
+                return;
+            }
+            // See FreeRow's remarks: void in the ABI, so an exception here must never escape.
+            try
             {
                 NativeApi.FreeRows(ref *rows);
+            }
+            catch (Exception exception)
+            {
+                NativeApi.SetLastError(exception.Message);
             }
         }
 
@@ -242,9 +266,18 @@ namespace ExcelReader.Native
         [UnmanagedCallersOnly(EntryPoint = "xl_free_table")]
         public static void FreeTable(NativeTable* table)
         {
-            if (table is not null)
+            if (table is null)
+            {
+                return;
+            }
+            // See FreeRow's remarks: void in the ABI, so an exception here must never escape.
+            try
             {
                 NativeApi.FreeTable(ref *table);
+            }
+            catch (Exception exception)
+            {
+                NativeApi.SetLastError(exception.Message);
             }
         }
 
@@ -328,9 +361,18 @@ namespace ExcelReader.Native
         [UnmanagedCallersOnly(EntryPoint = "xl_free_schema")]
         public static void FreeSchema(NativeInferredSchema* schema)
         {
-            if (schema is not null)
+            if (schema is null)
+            {
+                return;
+            }
+            // See FreeRow's remarks: void in the ABI, so an exception here must never escape.
+            try
             {
                 NativeApi.FreeSchema(ref *schema);
+            }
+            catch (Exception exception)
+            {
+                NativeApi.SetLastError(exception.Message);
             }
         }
 
@@ -441,18 +483,38 @@ namespace ExcelReader.Native
         [UnmanagedCallersOnly]
         public static void ReleaseArrowSchemaCallback(ArrowSchema* schema)
         {
-            if (schema is not null)
+            if (schema is null)
+            {
+                return;
+            }
+            // See FreeRow's remarks: void in the ABI (Arrow's own release-callback convention), so
+            // an exception here must never escape - doubly so for this one, since an Arrow consumer
+            // owns when this runs, not this library.
+            try
             {
                 NativeApi.ReleaseArrowSchema((IntPtr)schema);
+            }
+            catch (Exception exception)
+            {
+                NativeApi.SetLastError(exception.Message);
             }
         }
 
         [UnmanagedCallersOnly]
         public static void ReleaseArrowArrayCallback(ArrowArray* array)
         {
-            if (array is not null)
+            if (array is null)
+            {
+                return;
+            }
+            // See ReleaseArrowSchemaCallback's remarks.
+            try
             {
                 NativeApi.ReleaseArrowArray((IntPtr)array);
+            }
+            catch (Exception exception)
+            {
+                NativeApi.SetLastError(exception.Message);
             }
         }
 

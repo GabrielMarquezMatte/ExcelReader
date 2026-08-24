@@ -60,8 +60,24 @@ namespace ExcelReader.Native
                 return NativeStatus.InvalidHandle;
             }
 
-            handle.Dispose();
-            return NativeStatus.Ok;
+            // Every other NativeApi entry point wraps its body this way; this one didn't, so an
+            // IOException from the underlying FileStream's Dispose (e.g. the source volume went
+            // away between open and close) unwound straight through the [UnmanagedCallersOnly]
+            // frame instead of coming back as XL_ERROR - which is a fail-fast/abort for the native
+            // caller, uncatchable in C/C++/Rust/Python. The id is already retired by the time this
+            // runs (Exports.Close unregisters before calling here), so a failure here just means the
+            // caller learns about it via the return code instead of it staying invisible.
+            ClearLastError();
+            try
+            {
+                handle.Dispose();
+                return NativeStatus.Ok;
+            }
+            catch (Exception exception)
+            {
+                SetLastError(exception.Message);
+                return NativeStatus.Error;
+            }
         }
 
         private static IExcelRowReader OpenReader(string path, int format, NativeOpenOptions options)

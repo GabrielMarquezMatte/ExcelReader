@@ -45,6 +45,10 @@ namespace ExcelReader.Cli
 
         // The extensions/format names this command understands, and the only values --format
         // accepts. Order here is the order every "expected one of ..." error message lists them in.
+        // Not compile-time tied to anything else that names these four: Commands.cs's --format/path
+        // XML doc comments spell them out as prose for --help, and the switch in Convert below has
+        // its own case per format (guarded by an UnreachableException default, so THAT one fails
+        // loudly if it drifts). Adding a 5th format means updating all three by hand.
         private static readonly string[] _validFormats = ["xlsx", "xlsb", "xls", "csv"];
 
         internal static int Convert(string path, string? sheet, string? output, string? format, char delimiter, Stream stdout, TextWriter stderr, Action<int>? onProgress = null)
@@ -52,6 +56,7 @@ namespace ExcelReader.Cli
             return Execute(() =>
             {
                 string resolvedFormat = ResolveFormat(format, output);
+                ThrowIfOutputIsADirectory(output);
                 using IExcelRowReader reader = Open(path, sheet);
 
                 bool leaveOpen = output is null;
@@ -115,14 +120,35 @@ namespace ExcelReader.Cli
                 string extension = Path.GetExtension(output).TrimStart('.').ToLowerInvariant();
                 if (Array.IndexOf(_validFormats, extension) < 0)
                 {
+                    // Path.GetExtension("noext") and Path.GetExtension("some/dir/") both return "" -
+                    // reporting that as "unrecognized extension '.'" reads as if the user typed a
+                    // bare dot, when in fact they gave none. Name the actual problem instead.
+                    string problem = extension.Length == 0
+                        ? $"--output '{output}' has no file extension"
+                        : $"unrecognized output extension '.{extension}'";
                     throw new ArgumentException(
-                        $"unrecognized output extension '.{extension}'; expected one of {string.Join(", ", _validFormats.Select(static f => "." + f))}.",
+                        $"{problem}; expected one of {string.Join(", ", _validFormats.Select(static f => "." + f))}, or pass --format explicitly.",
                         nameof(output));
                 }
                 return extension;
             }
 
             return "csv";
+        }
+
+        /// <summary>
+        /// A directory whose name happens to end in a recognized extension (e.g. a folder literally
+        /// named "backup.xlsx") resolves a format fine, then fails <see cref="FileStream"/> with
+        /// "Access to the path is denied" - true, but it reads as a permissions problem rather than
+        /// naming the actual mistake.
+        /// </summary>
+        /// <exception cref="ArgumentException"><paramref name="output"/> names an existing directory.</exception>
+        private static void ThrowIfOutputIsADirectory(string? output)
+        {
+            if (output is not null && Directory.Exists(output))
+            {
+                throw new ArgumentException($"--output '{output}' is a directory, not a file.", nameof(output));
+            }
         }
 
         private static void WriteCsv(IExcelRowReader reader, Stream target, bool leaveOpen, char delimiter, Action<int>? onProgress)
@@ -182,10 +208,25 @@ namespace ExcelReader.Cli
                     switch (cellValue.Type)
                     {
                         case CellType.Boolean:
-                            row.Write(cellValue.GetString());
+                            // Every format's Boolean cell stores a single raw byte, '0' or '1'
+                            // (CellAccumulator.AddBool) - not the text "True"/"False" bool.TryParse
+                            // expects, so this reads the byte directly rather than going through
+                            // GetString()/Cell.TryParse<bool>. Writing a real bool cell (not text)
+                            // preserves the source's type in the converted workbook.
+                            row.Write(!cellValue.Value.IsEmpty && cellValue.Value[0] != (byte)'0');
                             break;
                         case CellType.Number:
-                            row.Write(cellValue.TryGetDouble(out double number) ? number.ToString(CultureInfo.InvariantCulture) : cellValue.GetString());
+                            // Writing a real numeric cell (not text) preserves the source's type -
+                            // a text fallback would make every number a left-aligned string cell in
+                            // the converted workbook.
+                            if (cellValue.TryGetDouble(out double number))
+                            {
+                                row.Write(number);
+                            }
+                            else
+                            {
+                                row.Write(cellValue.GetString());
+                            }
                             break;
                         case CellType.Date:
                             var dateValue = cellValue.TryGetDateTime(out var date) ? date : throw new InvalidOperationException($"cell {cell.ColumnIndex} is a date but TryGetDateTime failed to parse it.");

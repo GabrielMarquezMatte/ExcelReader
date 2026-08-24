@@ -26,10 +26,18 @@ namespace ExcelReader.Tests
             Assert.Equal(0, code);
             Assert.Empty(error);
 
-            // One line per sheet, "<index>\t<name>".
+            using IExcelRowReader reader = Excel.Open(Fixture("RealExcel.xlsb"));
+
+            // One line per sheet, "<index>\t<name>" - every sheet, not just the first.
             string[] lines = output.Split('\n', StringSplitOptions.RemoveEmptyEntries);
-            Assert.NotEmpty(lines);
-            Assert.StartsWith("0\t", lines[0], StringComparison.Ordinal);
+            Assert.Equal(reader.SheetCount, lines.Length);
+            for (int i = 0; i < lines.Length; i++)
+            {
+                string[] parts = lines[i].TrimEnd('\r').Split('\t');
+                Assert.Equal(2, parts.Length);
+                Assert.Equal(i.ToString(System.Globalization.CultureInfo.InvariantCulture), parts[0]);
+                Assert.Equal(reader.SheetNameAt(i), parts[1]);
+            }
         }
 
         [Fact]
@@ -116,10 +124,20 @@ namespace ExcelReader.Tests
         [Fact]
         public void Should_UseTheGivenDelimiter_When_DelimiterIsOverridden()
         {
+            (int commaCode, string commaOutput, _) = Convert(Fixture("RealExcel.xlsb"));
             (int code, string output, _) = Convert(Fixture("RealExcel.xlsb"), delimiter: ';');
 
+            Assert.Equal(0, commaCode);
             Assert.Equal(0, code);
-            Assert.Contains(";", output, StringComparison.Ordinal);
+
+            // Same header row, same field count either way - every comma became a semicolon, not
+            // just some stray one somewhere in the output (which "Contains(';')" alone would miss).
+            string commaHeader = commaOutput.Split('\n', StringSplitOptions.RemoveEmptyEntries)[0];
+            string semicolonHeader = output.Split('\n', StringSplitOptions.RemoveEmptyEntries)[0];
+            int fieldCount = commaHeader.Split(',').Length;
+            Assert.True(fieldCount > 1, "fixture's header row should have more than one field");
+            Assert.Equal(fieldCount, semicolonHeader.Split(';').Length);
+            Assert.DoesNotContain(",", semicolonHeader, StringComparison.Ordinal);
         }
 
         [Fact]
@@ -146,18 +164,29 @@ namespace ExcelReader.Tests
                 Assert.Empty(error);
                 Assert.Empty(output);
 
-                // Round-trip: what got written back opens and reports the same row/column shape as
-                // the source, proving the bytes are a real workbook in that format, not just an
-                // extension slapped on CSV.
+                // Round-trip: every row and every cell value in the written file matches the source
+                // exactly - not just the first row's column count, which a writer that emitted only
+                // one row (or wrong values) would still satisfy.
                 using IExcelRowReader source = Excel.Open(Fixture("RealExcel.xlsb"));
                 using IExcelRowEnumerator sourceRows = source.GetEnumerator();
-                Assert.True(sourceRows.MoveNext());
-                int sourceColumnCount = sourceRows.Current.ColumnCount;
-
                 using IExcelRowReader written = Excel.Open(target);
                 using IExcelRowEnumerator writtenRows = written.GetEnumerator();
-                Assert.True(writtenRows.MoveNext());
-                Assert.Equal(sourceColumnCount, writtenRows.Current.ColumnCount);
+
+                int rowCount = 0;
+                while (sourceRows.MoveNext())
+                {
+                    Assert.True(writtenRows.MoveNext(), $"written file ran out of rows at row {rowCount}");
+                    ExcelReader.Core.ValueObjects.Row sourceRow = sourceRows.Current;
+                    ExcelReader.Core.ValueObjects.Row writtenRow = writtenRows.Current;
+                    Assert.Equal(sourceRow.ColumnCount, writtenRow.ColumnCount);
+                    for (int column = 0; column < sourceRow.ColumnCount; column++)
+                    {
+                        Assert.Equal(sourceRow[column].GetString(), writtenRow[column].GetString());
+                    }
+                    rowCount++;
+                }
+                Assert.False(writtenRows.MoveNext(), "written file has more rows than the source");
+                Assert.True(rowCount > 1, "fixture should have more than a header row");
             }
             finally
             {

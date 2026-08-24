@@ -142,20 +142,41 @@ namespace ExcelReader.Native
         {
             int count = specs.Length;
             IntPtr children = Marshal.AllocHGlobal(checked(count * IntPtr.Size));
-            for (int i = 0; i < count; i++)
+            int built = 0;
+            try
             {
-                IntPtr child = Marshal.AllocHGlobal(Marshal.SizeOf<ArrowSchema>());
-                Marshal.StructureToPtr(BuildChildSchema(specs[i], i), child, false);
-                Marshal.WriteIntPtr(children, i * IntPtr.Size, child);
-            }
+                for (; built < count; built++)
+                {
+                    IntPtr child = Marshal.AllocHGlobal(Marshal.SizeOf<ArrowSchema>());
+                    Marshal.StructureToPtr(BuildChildSchema(specs[built], built), child, false);
+                    Marshal.WriteIntPtr(children, built * IntPtr.Size, child);
+                }
 
-            return new ArrowSchema
+                return new ArrowSchema
+                {
+                    Format = AllocUtf8Z("+s"),
+                    NChildren = count,
+                    Children = children,
+                    Release = SchemaReleaseCallback,
+                };
+            }
+            catch
             {
-                Format = AllocUtf8Z("+s"),
-                NChildren = count,
-                Children = children,
-                Release = SchemaReleaseCallback,
-            };
+                // Every child schema built before the throw (an AllocHGlobal OOM is the realistic
+                // trigger - xl_parse_arrow briefly holds both the intermediate NativeTable and this
+                // Arrow copy at once) is otherwise unreachable once this rethrows: it was never
+                // returned to the caller, and ParseArrow's own catch only knows how to release a
+                // *complete* schema via `schema`, which this method never got to assign. Release
+                // exactly what got built here instead, the same way a real consumer eventually would.
+                for (int i = 0; i < built; i++)
+                {
+                    IntPtr child = Marshal.ReadIntPtr(children, i * IntPtr.Size);
+                    ReleaseArrowSchema(child);
+                    Marshal.FreeHGlobal(child);
+                }
+                Marshal.FreeHGlobal(children);
+                throw;
+            }
         }
 
         private static ArrowSchema BuildChildSchema(NativeColumnSpec spec, int index)
@@ -174,29 +195,47 @@ namespace ExcelReader.Native
         {
             int count = table.ColumnCount;
             IntPtr children = Marshal.AllocHGlobal(checked(count * IntPtr.Size));
-            for (int i = 0; i < count; i++)
+            int built = 0;
+            try
             {
-                NativeColumn column = ColumnAt(table, i);
-                IntPtr child = Marshal.AllocHGlobal(Marshal.SizeOf<ArrowArray>());
-                Marshal.StructureToPtr(BuildChildArray(specs[i].Type, column), child, false);
-                Marshal.WriteIntPtr(children, i * IntPtr.Size, child);
+                for (; built < count; built++)
+                {
+                    NativeColumn column = ColumnAt(table, built);
+                    IntPtr child = Marshal.AllocHGlobal(Marshal.SizeOf<ArrowArray>());
+                    Marshal.StructureToPtr(BuildChildArray(specs[built].Type, column), child, false);
+                    Marshal.WriteIntPtr(children, built * IntPtr.Size, child);
+                }
+
+                // The top-level struct array has exactly one buffer slot (validity), per the Arrow
+                // convention for struct-typed arrays; a table-of-columns has no row-level nulls of its
+                // own, so that slot is always the zero/absent pointer.
+                IntPtr buffers = Marshal.AllocHGlobal(IntPtr.Size);
+                Marshal.WriteIntPtr(buffers, 0, IntPtr.Zero);
+
+                return new ArrowArray
+                {
+                    Length = table.RowCount,
+                    NBuffers = 1,
+                    Buffers = buffers,
+                    NChildren = count,
+                    Children = children,
+                    Release = ArrayReleaseCallback,
+                };
             }
-
-            // The top-level struct array has exactly one buffer slot (validity), per the Arrow
-            // convention for struct-typed arrays; a table-of-columns has no row-level nulls of its
-            // own, so that slot is always the zero/absent pointer.
-            IntPtr buffers = Marshal.AllocHGlobal(IntPtr.Size);
-            Marshal.WriteIntPtr(buffers, 0, IntPtr.Zero);
-
-            return new ArrowArray
+            catch
             {
-                Length = table.RowCount,
-                NBuffers = 1,
-                Buffers = buffers,
-                NChildren = count,
-                Children = children,
-                Release = ArrayReleaseCallback,
-            };
+                // See BuildArrowSchema's matching catch: every child array already copied out of
+                // `table` before the throw is otherwise unreachable once this rethrows, since `array`
+                // in ParseArrow is never assigned. Release exactly what got built.
+                for (int i = 0; i < built; i++)
+                {
+                    IntPtr child = Marshal.ReadIntPtr(children, i * IntPtr.Size);
+                    ReleaseArrowArray(child);
+                    Marshal.FreeHGlobal(child);
+                }
+                Marshal.FreeHGlobal(children);
+                throw;
+            }
         }
 
         private static ArrowArray BuildChildArray(int type, NativeColumn column)
