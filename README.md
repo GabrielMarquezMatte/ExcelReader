@@ -18,6 +18,25 @@ ExcelReader is built for streaming spreadsheet workloads where low allocations m
 dotnet add package ExcelReader.NET
 ```
 
+## Command line
+
+```bash
+dotnet tool install --global ExcelReader.NET.Cli
+```
+
+```bash
+excelreader sheets  book.xlsb                        # 0<TAB>Sheet1
+excelreader schema  book.xlsb --sample-size 500      # 0<TAB>Id<TAB>Int64
+excelreader convert book.xlsb --output data.csv      # stream a sheet out as CSV
+excelreader convert book.xlsb | head -3              # or to stdout
+```
+
+Flags: `--sheet|-s <name|index>`, `--header-row N` (0 = no header), `--sample-size N`,
+`--output|-o <file>`, `--delimiter|-d <char>`. Run `excelreader <command> --help` for the full list.
+
+Exit codes are `0` ok and `1` failure; results go to stdout and errors to stderr, so `convert` is
+safe to pipe. CSV is the only conversion target — the reader handles four formats and the writer one.
+
 ## Read rows
 
 ```csharp
