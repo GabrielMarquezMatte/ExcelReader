@@ -49,6 +49,11 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- ExcelReader.Cli is single-target (net10.0) - a dotnet tool has no reachable net8.0 consumer -
+         so only pull it into the net10.0 leg of this multi-targeted test project; CliTests.cs is
+         excluded from the net8.0 leg below for the same reason. -->
+    <ProjectReference Include="..\..\src\ExcelReader.Cli\ExcelReader.Cli.csproj" Condition="'$(TargetFramework)' == 'net10.0'" />
+    <Compile Remove="CliTests.cs" Condition="'$(TargetFramework)' != 'net10.0'" />
     <ProjectReference Include="..\..\src\ExcelReader.Core\ExcelReader.Core.csproj" />
     <ProjectReference Include="..\..\src\ExcelReader.Native\ExcelReader.Native.csproj" />
     <!-- OutputItemType="Analyzer" makes the generator actually run over this project's own compilation
