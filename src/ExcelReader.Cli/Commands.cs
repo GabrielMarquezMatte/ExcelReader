@@ -13,7 +13,9 @@ namespace ExcelReader.Cli
         /// <param name="path">Path to the workbook (.xlsx, .xlsb, .xls or .csv).</param>
         [Command("sheets")]
         public int Sheets([Argument] string path)
-            => CliCommands.Sheets(path, Console.Out, Console.Error);
+        {
+            return CliCommands.Sheets(path, Console.Out, Console.Error);
+        }
 
         /// <summary>Writes a sheet out as CSV, to a file or to standard output.</summary>
         /// <param name="path">Path to the workbook (.xlsx, .xlsb, .xls or .csv).</param>
@@ -37,6 +39,8 @@ namespace ExcelReader.Cli
         /// <param name="sampleSize">How many rows after the header to sample.</param>
         [Command("schema")]
         public int Schema([Argument] string path, string? sheet = null, int headerRow = 1, int sampleSize = 100)
-            => CliCommands.Schema(path, sheet, headerRow, sampleSize, Console.Out, Console.Error);
+        {
+            return CliCommands.Schema(path, sheet, headerRow, sampleSize, Console.Out, Console.Error);
+        }
     }
 }

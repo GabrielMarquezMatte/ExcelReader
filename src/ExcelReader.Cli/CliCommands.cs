@@ -14,7 +14,8 @@ namespace ExcelReader.Cli
     internal static class CliCommands
     {
         internal static int Sheets(string path, TextWriter stdout, TextWriter stderr)
-            => Execute(() =>
+        {
+            return Execute(() =>
             {
                 using IExcelRowReader reader = Open(path, sheet: null);
                 for (int i = 0; i < reader.SheetCount; i++)
@@ -25,9 +26,11 @@ namespace ExcelReader.Cli
                 }
                 return 0;
             }, stderr);
+        }
 
         internal static int Convert(string path, string? sheet, string? output, char delimiter, Stream stdout, TextWriter stderr)
-            => Execute(() =>
+        {
+            return Execute(() =>
             {
                 using IExcelRowReader reader = Open(path, sheet);
 
@@ -36,19 +39,17 @@ namespace ExcelReader.Cli
                     : new FileStream(output, FileMode.Create, FileAccess.Write, FileShare.None);
                 try
                 {
-                    using CsvWorkbookWriter workbook = CsvWorkbookWriter.Create(
-                        target,
-                        leaveOpen: output is null,
-                        new CsvWriterOptions { Delimiter = (byte)delimiter });
+                    CsvWriterOptions options = new() { Delimiter = (byte)delimiter };
+                    using var workbook = CsvWorkbookWriter.Create(target, leaveOpen: output is null, options);
 
                     workbook.Start();
-                    CsvSheetWriter sheetWriter = workbook.AddSheet(reader.SheetName);
+                    using var sheetWriter = workbook.AddSheet(reader.SheetName);
                     sheetWriter.Start();
 
                     using IExcelRowEnumerator rows = reader.GetEnumerator();
                     while (rows.MoveNext())
                     {
-                        CsvRowWriter row = sheetWriter.StartRow();
+                        using var row = sheetWriter.StartRow();
                         Row current = rows.Current;
                         for (int column = 0; column < current.ColumnCount; column++)
                         {
@@ -58,9 +59,7 @@ namespace ExcelReader.Cli
                             // not anything in this file. Not doing it on spec.
                             row.Write(current[column].GetString());
                         }
-                        row.Dispose();
                     }
-
                     sheetWriter.End();
                     workbook.End();
                 }
@@ -73,9 +72,11 @@ namespace ExcelReader.Cli
                 }
                 return 0;
             }, stderr);
+        }
 
         internal static int Schema(string path, string? sheet, int headerRow, int sampleSize, TextWriter stdout, TextWriter stderr)
-            => Execute(() =>
+        {
+            return Execute(() =>
             {
                 using IExcelRowReader reader = Open(path, sheet);
 
@@ -92,6 +93,7 @@ namespace ExcelReader.Cli
                 }
                 return 0;
             }, stderr);
+        }
 
         /// <summary>
         /// Runs <paramref name="body"/>, turning the failures a user can act on into exit code 1 plus
