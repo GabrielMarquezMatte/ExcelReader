@@ -65,7 +65,7 @@ namespace ExcelReader.Core.Writer.Internal
             }
         }
 
-        internal static void ValidateSheetName(string name)
+        private static void ValidateSheetName(string name)
         {
             if (name.Length is 0 or > 31)
             {

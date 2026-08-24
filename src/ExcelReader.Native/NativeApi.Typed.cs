@@ -271,9 +271,25 @@ namespace ExcelReader.Native
             long rowCount = columnCount > 0 ? builders[0].RowCount : 0;
             IntPtr columnsBlock = Marshal.AllocHGlobal(checked(columnCount * sizeof(NativeColumn)));
             NativeColumn* columns = (NativeColumn*)columnsBlock;
-            for (int i = 0; i < columnCount; i++)
+            int built = 0;
+            try
             {
-                columns[i] = builders[i].Build();
+                for (; built < columnCount; built++)
+                {
+                    columns[built] = builders[built].Build();
+                }
+            }
+            catch
+            {
+                // Every column before the one that threw (an AllocHGlobal OOM, or a ChunkedBuffer
+                // overflow past ~268M rows on one wide column) already has its own Values/Validity
+                // block allocated and assigned into `columns` - a bare rethrow here would leak all
+                // of them, plus columnsBlock itself. FreeTable already knows how to walk and release
+                // exactly that shape; hand it a table truncated to what actually got built (`built`
+                // columns are complete - the one that threw never got assigned, so it isn't touched).
+                NativeTable partial = new() { ColumnCount = built, RowCount = rowCount, Columns = columnsBlock };
+                FreeTable(ref partial);
+                throw;
             }
             return new NativeTable { ColumnCount = columnCount, RowCount = rowCount, Columns = columnsBlock };
         }
