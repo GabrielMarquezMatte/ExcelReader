@@ -238,8 +238,13 @@ namespace ExcelReader.Native
             // PackBitsLsbFirst zero-fills the block and only ever sets bits below `length`, so every bit
             // past it is already 0 and popcount over whole bytes needs no tail mask.
             ReadOnlySpan<byte> bits = new((void*)validity, (int)((length + 7) / 8));
+            var ulongs = MemoryMarshal.Cast<byte, ulong>(bits);
             long set = 0;
-            foreach (ref readonly byte packed in bits)
+            foreach (ref readonly ulong packed in ulongs)
+            {
+                set += BitOperations.PopCount(packed);
+            }
+            foreach (ref readonly byte packed in bits.Slice(ulongs.Length * sizeof(ulong)))
             {
                 set += BitOperations.PopCount(packed);
             }

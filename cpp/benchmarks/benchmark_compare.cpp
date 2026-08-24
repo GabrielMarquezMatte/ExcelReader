@@ -112,7 +112,7 @@ static void BM_ExcelReader_Xlsx_Full(benchmark::State &state)
     auto buffer_result = read_file_to_buffer(EXCELREADER_XLSX_FIXTURE_PATH);
     if (!buffer_result.has_value())
     {
-        state.SkipWithError(buffer_result.error().c_str());
+        state.SkipWithError(buffer_result.error());
         return;
     }
     for (auto _ : state)
@@ -120,13 +120,13 @@ static void BM_ExcelReader_Xlsx_Full(benchmark::State &state)
         auto workbook = xl::Workbook::open_memory(buffer_result.value(), XL_FORMAT_XLSX);
         if (!workbook.has_value())
         {
-            state.SkipWithError(workbook.error().message.c_str());
+            state.SkipWithError(workbook.error().message);
             return;
         }
         auto table = xl::parse_sheet<FullRow>(*workbook);
         if (!table.has_value())
         {
-            state.SkipWithError(table.error().message.c_str());
+            state.SkipWithError(table.error().message);
             return;
         }
         int64_t acc = 0;
@@ -149,7 +149,7 @@ static void BM_ExcelReader_Xlsx_ParseOnly(benchmark::State &state)
     auto buffer_result = read_file_to_buffer(EXCELREADER_XLSX_FIXTURE_PATH);
     if (!buffer_result.has_value())
     {
-        state.SkipWithError(buffer_result.error().c_str());
+        state.SkipWithError(buffer_result.error());
         return;
     }
     for (auto _ : state)
@@ -157,13 +157,13 @@ static void BM_ExcelReader_Xlsx_ParseOnly(benchmark::State &state)
         auto workbook = xl::Workbook::open_memory(buffer_result.value(), XL_FORMAT_XLSX);
         if (!workbook.has_value())
         {
-            state.SkipWithError(workbook.error().message.c_str());
+            state.SkipWithError(workbook.error().message);
             return;
         }
         auto table = xl::parse_sheet<FullRow>(*workbook);
         if (!table.has_value())
         {
-            state.SkipWithError(table.error().message.c_str());
+            state.SkipWithError(table.error().message);
             return;
         }
         benchmark::DoNotOptimize(table);
@@ -176,7 +176,7 @@ static void BM_Xlnt_Xlsx_Full(benchmark::State &state)
     auto buffer_result = read_file_to_buffer(EXCELREADER_XLSX_FIXTURE_PATH);
     if (!buffer_result.has_value())
     {
-        state.SkipWithError(buffer_result.error().c_str());
+        state.SkipWithError(buffer_result.error());
         return;
     }
     for (auto _ : state)
@@ -293,7 +293,7 @@ static void BM_Xlsxio_Xlsx_Full(benchmark::State &state)
     auto buffer_result = read_file_to_buffer(EXCELREADER_XLSX_FIXTURE_PATH);
     if (!buffer_result.has_value())
     {
-        state.SkipWithError(buffer_result.error().c_str());
+        state.SkipWithError(buffer_result.error());
         return;
     }
     auto &buffer = buffer_result.value();
@@ -353,7 +353,7 @@ static void BM_DuckDB_Xlsx_Full(benchmark::State &state)
     auto setup = con.Query("INSTALL excel; LOAD excel;");
     if (setup->HasError())
     {
-        state.SkipWithError(setup->GetError().c_str());
+        state.SkipWithError(setup->GetError());
         return;
     }
 
@@ -372,7 +372,7 @@ static void BM_DuckDB_Xlsx_Full(benchmark::State &state)
         auto result = con.Query(query);
         if (result->HasError())
         {
-            state.SkipWithError(result->GetError().c_str());
+            state.SkipWithError(result->GetError());
             return;
         }
         int64_t acc = result->GetValue<int64_t>(0, 0);

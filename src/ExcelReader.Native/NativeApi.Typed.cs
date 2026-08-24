@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Runtime.InteropServices;
 using ExcelReader.Core.Parser;
@@ -28,7 +29,7 @@ namespace ExcelReader.Native
             }
             if (!TryValidateArguments(specs, headerRow, out string? argumentError))
             {
-                SetLastError(argumentError!);
+                SetLastError(argumentError);
                 return NativeStatus.InvalidArgument;
             }
 
@@ -40,7 +41,7 @@ namespace ExcelReader.Native
                 int[] columnIndices = new int[specs.Length];
                 if (!TryResolveColumns(rows, specs, headerRow, columnIndices, out string? resolveError))
                 {
-                    SetLastError(resolveError!);
+                    SetLastError(resolveError);
                     return NativeStatus.InvalidArgument;
                 }
 
@@ -149,7 +150,7 @@ namespace ExcelReader.Native
             return nameCount is >= 0 and <= NativeLimits.MaxNamesPerSpec;
         }
 
-        private static bool TryValidateArguments(NativeColumnSpec[] specs, int headerRow, out string? error)
+        private static bool TryValidateArguments(NativeColumnSpec[] specs, int headerRow, [NotNullWhen(false)] out string? error)
         {
             error = null;
             if (specs.Length == 0)
@@ -193,27 +194,10 @@ namespace ExcelReader.Native
             return true;
         }
 
-        // Advances `rows` so that `rows.Current` is the header row itself. Shared with
-        // NativeApi.Schema.cs's TryReadHeader so the two cannot drift on the row arithmetic or on the
-        // message a too-short sheet produces.
-        private static bool TrySkipToHeaderRow(IExcelRowEnumerator rows, int headerRow, out string? error)
-        {
-            error = null;
-            for (int rowNumber = 1; rowNumber <= headerRow; rowNumber++)
-            {
-                if (!rows.MoveNext())
-                {
-                    error = $"sheet has fewer than {headerRow} row(s); cannot resolve header_row.";
-                    return false;
-                }
-            }
-            return true;
-        }
-
         // Advances `rows` past any skipped rows and the header row itself (headerRow > 0), or leaves it
         // untouched at the sheet's first row (headerRow == 0, index-only specs). Either way, `rows` is
         // positioned so the next MoveNext() yields the first DATA row.
-        private static bool TryResolveColumns(IExcelRowEnumerator rows, NativeColumnSpec[] specs, int headerRow, int[] columnIndices, out string? error)
+        private static bool TryResolveColumns(IExcelRowEnumerator rows, NativeColumnSpec[] specs, int headerRow, int[] columnIndices, [NotNullWhen(false)] out string? error)
         {
             error = null;
             if (headerRow == 0)
@@ -225,7 +209,7 @@ namespace ExcelReader.Native
                 return true;
             }
 
-            if (!TrySkipToHeaderRow(rows, headerRow, out error))
+            if (!SchemaInference.TrySkipToHeaderRow(rows, headerRow, out error))
             {
                 return false;
             }

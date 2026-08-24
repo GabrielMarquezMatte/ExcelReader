@@ -21,7 +21,7 @@ fn parse_arrow_returns_a_record_batch_with_one_column_per_field() {
     let mut workbook = Workbook::open(&fixture_path()).expect("open must succeed");
     let batch = parse_arrow::<Record>(&mut workbook, 1).expect("parse_arrow must succeed");
 
-    assert_eq!(batch.num_columns(), 2);
+    assert_eq!(batch.num_columns(), 2); 
     assert_eq!(batch.num_rows(), 100); // RealExcel.xlsb has 100 data rows.
     // Field names come from the column spec's source name (the `#[excel(name = "...")]` value),
     // not the Rust struct field identifier - the native side names each Arrow child field from

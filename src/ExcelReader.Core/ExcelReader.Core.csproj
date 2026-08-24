@@ -41,6 +41,9 @@
   <!-- Binary parsers (BIFF12 framing, etc.) are internal but warrant isolated unit tests. -->
   <ItemGroup>
     <InternalsVisibleTo Include="ExcelReader.Tests" />
+    <!-- NativeApi.Schema.cs / NativeApi.Typed.cs drive SchemaInference directly, so the C ABI and
+         Excel.InferSchema answer identically by construction rather than by two parallel copies. -->
+    <InternalsVisibleTo Include="ExcelReader.Native" />
   </ItemGroup>
 
   <!-- The source generator runs as an analyzer during this project's own build (and any consumer's),

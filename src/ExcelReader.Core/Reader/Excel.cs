@@ -360,6 +360,36 @@ namespace ExcelReader.Core.Reader
             }
         }
 
+        /// <summary>
+        /// Guesses a column schema for <paramref name="reader"/>'s current sheet by sampling it from
+        /// the first row, without disturbing any enumerator the caller already holds.
+        /// </summary>
+        /// <param name="reader">The reader whose current sheet is sampled.</param>
+        /// <param name="headerRow">1-based row number to take column names from; 0 means "no header",
+        /// so every returned schema is addressable only by <see cref="ExcelColumnSchema.Index"/>.</param>
+        /// <param name="sampleSize">How many rows after the header to inspect.</param>
+        /// <returns>One <see cref="ExcelColumnSchema"/> per column, in column order.</returns>
+        /// <remarks>
+        /// This is a guess over a bounded sample, not a guarantee about the whole sheet — a column
+        /// whose first <paramref name="sampleSize"/> rows are all integers is reported as
+        /// <see cref="ExcelColumnType.Int64Column"/> even if row 10,000 holds text. Verify it fits
+        /// before trusting it, and feed the result into <see cref="Parser.ExcelFluentParser{T}"/> to
+        /// build a real map.
+        /// </remarks>
+        /// <exception cref="ArgumentNullException"><paramref name="reader"/> is <see langword="null"/>.</exception>
+        /// <exception cref="ArgumentOutOfRangeException"><paramref name="headerRow"/> is negative, or
+        /// <paramref name="sampleSize"/> is not positive.</exception>
+        /// <exception cref="ArgumentException">The sheet has fewer rows than <paramref name="headerRow"/>.</exception>
+        public static ExcelColumnSchema[] InferSchema(IExcelRowReader reader, int headerRow = 1, int sampleSize = 100)
+        {
+            ArgumentNullException.ThrowIfNull(reader);
+
+            // A fresh enumerator, so sampling starts at row 1 and never touches a cursor the caller
+            // is already walking.
+            using IExcelRowEnumerator rows = reader.GetEnumerator();
+            return SchemaInference.Infer(rows, reader.IsDate1904, headerRow, sampleSize);
+        }
+
         // The leading bytes that distinguish container formats: XLSX and XLSB are ZIP ("PK\x03\x04"),
         // XLS is an OLE2/CFB compound document. XLSB is distinguished from XLSX by the presence of
         // "xl/workbook.bin" in the ZIP central directory.
