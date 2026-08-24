@@ -4,7 +4,10 @@ namespace ExcelReader.Tests
 {
     public sealed class CliTests
     {
-        private static string Fixture(string name) => Path.Combine("data", name);
+        private static string Fixture(string name)
+        {
+            return Path.Combine("data", name);
+        }
 
         private static (int Code, string Out, string Err) Sheets(string path)
         {
