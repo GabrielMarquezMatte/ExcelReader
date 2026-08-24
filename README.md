@@ -36,6 +36,11 @@ Flags: `--sheet|-s <name|index>`, `--header-row N` (0 = no header), `--sample-si
 `--output|-o <file>`, `--format|-f <xlsx|xlsb|xls|csv>` (defaults to `--output`'s extension, or csv
 for stdout), `--delimiter|-d <char>` (csv only). Run `excelreader <command> --help` for the full list.
 
+On a real terminal, `sheets`/`schema` render as a [Spectre.Console](https://spectreconsole.net) table
+and `convert` shows a progress spinner on stderr; piped or redirected (a script, `| head`, `2>file`),
+every command falls back to the same plain tab-separated text and stderr line it always wrote, so
+nothing here changes for anything already parsing this tool's output.
+
 Exit codes are `0` ok and `1` failure; results go to stdout and errors to stderr, so `convert` is
 safe to pipe.
 

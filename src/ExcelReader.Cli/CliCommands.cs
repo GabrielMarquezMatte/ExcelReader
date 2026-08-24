@@ -17,14 +17,27 @@ namespace ExcelReader.Cli
     {
         internal static int Sheets(string path, TextWriter stdout, TextWriter stderr)
         {
+            return Sheets(path, (index, name) =>
+            {
+                stdout.Write(index.ToString(CultureInfo.InvariantCulture));
+                stdout.Write('\t');
+                stdout.WriteLine(name);
+            }, stderr);
+        }
+
+        /// <summary>
+        /// Same command, reported through a callback instead of a fixed tab-separated line - the shape
+        /// Commands.cs's interactive (table-rendering) path needs, without a second implementation of
+        /// the sheet-listing loop or its error handling.
+        /// </summary>
+        internal static int Sheets(string path, Action<int, string> onSheet, TextWriter stderr)
+        {
             return Execute(() =>
             {
                 using IExcelRowReader reader = Open(path, sheet: null);
                 for (int i = 0; i < reader.SheetCount; i++)
                 {
-                    stdout.Write(i.ToString(CultureInfo.InvariantCulture));
-                    stdout.Write('\t');
-                    stdout.WriteLine(reader.SheetNameAt(i));
+                    onSheet(i, reader.SheetNameAt(i));
                 }
                 return 0;
             }, stderr);
@@ -34,7 +47,7 @@ namespace ExcelReader.Cli
         // accepts. Order here is the order every "expected one of ..." error message lists them in.
         private static readonly string[] _validFormats = ["xlsx", "xlsb", "xls", "csv"];
 
-        internal static int Convert(string path, string? sheet, string? output, string? format, char delimiter, Stream stdout, TextWriter stderr)
+        internal static int Convert(string path, string? sheet, string? output, string? format, char delimiter, Stream stdout, TextWriter stderr, Action<int>? onProgress = null)
         {
             return Execute(() =>
             {
@@ -50,16 +63,16 @@ namespace ExcelReader.Cli
                     switch (resolvedFormat)
                     {
                         case "csv":
-                            WriteCsv(reader, target, leaveOpen, delimiter);
+                            WriteCsv(reader, target, leaveOpen, delimiter, onProgress);
                             break;
                         case "xlsx":
-                            WriteXlsx(reader, target, leaveOpen);
+                            WriteXlsx(reader, target, leaveOpen, onProgress);
                             break;
                         case "xlsb":
-                            WriteXlsb(reader, target, leaveOpen);
+                            WriteXlsb(reader, target, leaveOpen, onProgress);
                             break;
                         case "xls":
-                            WriteXls(reader, target, leaveOpen);
+                            WriteXls(reader, target, leaveOpen, onProgress);
                             break;
                         default:
                             // Unreachable: ResolveFormat only ever returns one of the cases above.
@@ -112,28 +125,28 @@ namespace ExcelReader.Cli
             return "csv";
         }
 
-        private static void WriteCsv(IExcelRowReader reader, Stream target, bool leaveOpen, char delimiter)
+        private static void WriteCsv(IExcelRowReader reader, Stream target, bool leaveOpen, char delimiter, Action<int>? onProgress)
         {
             using CsvWorkbookWriter workbook = CsvWorkbookWriter.Create(target, leaveOpen, new CsvWriterOptions { Delimiter = (byte)delimiter });
-            WriteRows<CsvWorkbookWriter, CsvSheetWriter, CsvRowWriter>(workbook, reader);
+            WriteRows<CsvWorkbookWriter, CsvSheetWriter, CsvRowWriter>(workbook, reader, onProgress);
         }
 
-        private static void WriteXlsx(IExcelRowReader reader, Stream target, bool leaveOpen)
+        private static void WriteXlsx(IExcelRowReader reader, Stream target, bool leaveOpen, Action<int>? onProgress)
         {
             using XlsxWorkbookWriter workbook = XlsxWorkbookWriter.Create(target, leaveOpen);
-            WriteRows<XlsxWorkbookWriter, XlsxSheetWriter, XlsxRowWriter>(workbook, reader);
+            WriteRows<XlsxWorkbookWriter, XlsxSheetWriter, XlsxRowWriter>(workbook, reader, onProgress);
         }
 
-        private static void WriteXlsb(IExcelRowReader reader, Stream target, bool leaveOpen)
+        private static void WriteXlsb(IExcelRowReader reader, Stream target, bool leaveOpen, Action<int>? onProgress)
         {
             using XlsbWorkbookWriter workbook = XlsbWorkbookWriter.Create(target, leaveOpen, date1904: reader.IsDate1904);
-            WriteRows<XlsbWorkbookWriter, XlsbSheetWriter, XlsbRowWriter>(workbook, reader);
+            WriteRows<XlsbWorkbookWriter, XlsbSheetWriter, XlsbRowWriter>(workbook, reader, onProgress);
         }
 
-        private static void WriteXls(IExcelRowReader reader, Stream target, bool leaveOpen)
+        private static void WriteXls(IExcelRowReader reader, Stream target, bool leaveOpen, Action<int>? onProgress)
         {
             using XlsWorkbookWriter workbook = XlsWorkbookWriter.Create(target, leaveOpen, date1904: reader.IsDate1904);
-            WriteRows<XlsWorkbookWriter, XlsSheetWriter, XlsRowWriter>(workbook, reader);
+            WriteRows<XlsWorkbookWriter, XlsSheetWriter, XlsRowWriter>(workbook, reader, onProgress);
         }
 
         /// <summary>
@@ -143,7 +156,12 @@ namespace ExcelReader.Cli
         /// <c>Create</c> call above, since their constructor parameters (date1904, compression, ...)
         /// differ.
         /// </summary>
-        private static void WriteRows<TWorkbook, TSheet, TRow>(TWorkbook workbook, IExcelRowReader reader)
+        // How many rows between onProgress callbacks - frequent enough to look alive on a terminal
+        // (~a handful of updates per second on typical row-write throughput), rare enough that the
+        // callback (usually a Spectre.Console status refresh) never dominates the actual write.
+        private const int ProgressInterval = 500;
+
+        private static void WriteRows<TWorkbook, TSheet, TRow>(TWorkbook workbook, IExcelRowReader reader, Action<int>? onProgress)
             where TWorkbook : IWorkbookWriter<TSheet>
             where TSheet : ISheetWriter<TRow>
             where TRow : IRowWriter
@@ -152,6 +170,7 @@ namespace ExcelReader.Cli
             using TSheet sheetWriter = workbook.AddSheet(reader.SheetName);
             sheetWriter.Start();
 
+            int rowCount = 0;
             using IExcelRowEnumerator rows = reader.GetEnumerator();
             while (rows.MoveNext())
             {
@@ -177,12 +196,37 @@ namespace ExcelReader.Cli
                             break;
                     }
                 }
+                rowCount++;
+                if (onProgress is not null && rowCount % ProgressInterval == 0)
+                {
+                    onProgress(rowCount);
+                }
             }
+            onProgress?.Invoke(rowCount);
             sheetWriter.End();
             workbook.End();
         }
 
         internal static int Schema(string path, string? sheet, int headerRow, int sampleSize, TextWriter stdout, TextWriter stderr)
+        {
+            return Schema(path, sheet, headerRow, sampleSize, column =>
+            {
+                stdout.Write(column.Index.ToString(CultureInfo.InvariantCulture));
+                stdout.Write('\t');
+                // A null name means the column is addressable only by index - an empty field,
+                // never the literal "null", so the output stays machine-parseable.
+                stdout.Write(column.Name ?? string.Empty);
+                stdout.Write('\t');
+                stdout.Write(column.Type.ToString());
+                stdout.WriteLine(column.IsNullable ? "?" : string.Empty);
+            }, stderr);
+        }
+
+        /// <summary>
+        /// Same command, reported through a callback instead of a fixed tab-separated line - see the
+        /// <see cref="Sheets(string, Action{int, string}, TextWriter)"/> overload for why.
+        /// </summary>
+        internal static int Schema(string path, string? sheet, int headerRow, int sampleSize, Action<ExcelColumnSchema> onColumn, TextWriter stderr)
         {
             return Execute(() =>
             {
@@ -190,14 +234,7 @@ namespace ExcelReader.Cli
 
                 foreach (ExcelColumnSchema column in Excel.InferSchema(reader, headerRow, sampleSize))
                 {
-                    stdout.Write(column.Index.ToString(CultureInfo.InvariantCulture));
-                    stdout.Write('\t');
-                    // A null name means the column is addressable only by index - an empty field,
-                    // never the literal "null", so the output stays machine-parseable.
-                    stdout.Write(column.Name ?? string.Empty);
-                    stdout.Write('\t');
-                    stdout.Write(column.Type.ToString());
-                    stdout.WriteLine(column.IsNullable ? "?" : string.Empty);
+                    onColumn(column);
                 }
                 return 0;
             }, stderr);
