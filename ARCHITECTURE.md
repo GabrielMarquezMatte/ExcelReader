@@ -48,6 +48,16 @@ Reader internals that would otherwise be duplicated four times over live in one 
   the single buffer-growth-cap function (`NextBufferSize`) every pooled buffer in the stack grows
   through, so one limit policy governs all of them consistently.
 
+## The `excelreader` CLI
+
+`src/ExcelReader.Cli/` is a thin `dotnet tool` shell (`excelreader`) over Core's public API — it
+parses no spreadsheet bytes of its own. It splits in two on purpose: `Commands` is a one-line-per-
+command adapter whose XML doc comments ConsoleAppFramework's source generator turns into argument
+parsing, routing and `--help`, while `CliCommands` holds the bodies as plain functions over explicit
+writers. The split keeps the tested surface free of the framework's static output hooks, so the CLI
+tests run in parallel like every other test class. ConsoleAppFramework is compile-time only
+(`PrivateAssets`), so the published tool carries no dependency but ExcelReader.Core.
+
 ## Why readers are split into partial classes
 
 `XlsxReader` and `XlsbReader` are large enough that one file would be unwieldy, so each is split by
