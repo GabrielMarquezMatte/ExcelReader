@@ -27,15 +27,17 @@ dotnet tool install --global ExcelReader.NET.Cli
 ```bash
 excelreader sheets  book.xlsb                        # 0<TAB>Sheet1
 excelreader schema  book.xlsb --sample-size 500      # 0<TAB>Id<TAB>Int64
-excelreader convert book.xlsb --output data.csv      # stream a sheet out as CSV
-excelreader convert book.xlsb | head -3              # or to stdout
+excelreader convert book.xlsb --output data.csv      # convert to another format, by extension
+excelreader convert book.xlsb --output data.xlsx     # .xlsx, .xlsb, .xls and .csv all work
+excelreader convert book.xlsb --format xlsx | head -c 4   # to stdout, --format picks it instead
 ```
 
 Flags: `--sheet|-s <name|index>`, `--header-row N` (0 = no header), `--sample-size N`,
-`--output|-o <file>`, `--delimiter|-d <char>`. Run `excelreader <command> --help` for the full list.
+`--output|-o <file>`, `--format|-f <xlsx|xlsb|xls|csv>` (defaults to `--output`'s extension, or csv
+for stdout), `--delimiter|-d <char>` (csv only). Run `excelreader <command> --help` for the full list.
 
 Exit codes are `0` ok and `1` failure; results go to stdout and errors to stderr, so `convert` is
-safe to pipe. CSV is the only conversion target — the reader handles four formats and the writer one.
+safe to pipe.
 
 ## Read rows
 

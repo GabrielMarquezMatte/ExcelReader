@@ -1,4 +1,6 @@
+using System.Diagnostics;
 using System.Globalization;
+using System.Linq;
 using ExcelReader.Core.Enums;
 using ExcelReader.Core.Reader;
 using ExcelReader.Core.ValueObjects;
@@ -28,50 +30,156 @@ namespace ExcelReader.Cli
             }, stderr);
         }
 
-        internal static int Convert(string path, string? sheet, string? output, char delimiter, Stream stdout, TextWriter stderr)
+        // The extensions/format names this command understands, and the only values --format
+        // accepts. Order here is the order every "expected one of ..." error message lists them in.
+        private static readonly string[] _validFormats = ["xlsx", "xlsb", "xls", "csv"];
+
+        internal static int Convert(string path, string? sheet, string? output, string? format, char delimiter, Stream stdout, TextWriter stderr)
         {
             return Execute(() =>
             {
+                string resolvedFormat = ResolveFormat(format, output);
                 using IExcelRowReader reader = Open(path, sheet);
 
-                Stream target = output is null
+                bool leaveOpen = output is null;
+                Stream target = leaveOpen
                     ? stdout
-                    : new FileStream(output, FileMode.Create, FileAccess.Write, FileShare.None);
+                    : new FileStream(output!, FileMode.Create, FileAccess.Write, FileShare.None);
                 try
                 {
-                    CsvWriterOptions options = new() { Delimiter = (byte)delimiter };
-                    using var workbook = CsvWorkbookWriter.Create(target, leaveOpen: output is null, options);
-
-                    workbook.Start();
-                    using var sheetWriter = workbook.AddSheet(reader.SheetName);
-                    sheetWriter.Start();
-
-                    using IExcelRowEnumerator rows = reader.GetEnumerator();
-                    while (rows.MoveNext())
+                    switch (resolvedFormat)
                     {
-                        using var row = sheetWriter.StartRow();
-                        Row current = rows.Current;
-                        for (int column = 0; column < current.ColumnCount; column++)
-                        {
-                            // ponytail: GetString() allocates per non-shared cell. If profiling ever
-                            // shows this dominates a large convert, the fix is one
-                            // CsvRowWriter.Write(ReadOnlySpan<byte>) overload fed from Cell.Value -
-                            // not anything in this file. Not doing it on spec.
-                            row.Write(current[column].GetString());
-                        }
+                        case "csv":
+                            WriteCsv(reader, target, leaveOpen, delimiter);
+                            break;
+                        case "xlsx":
+                            WriteXlsx(reader, target, leaveOpen);
+                            break;
+                        case "xlsb":
+                            WriteXlsb(reader, target, leaveOpen);
+                            break;
+                        case "xls":
+                            WriteXls(reader, target, leaveOpen);
+                            break;
+                        default:
+                            // Unreachable: ResolveFormat only ever returns one of the cases above.
+                            throw new UnreachableException($"unresolved format '{resolvedFormat}'.");
                     }
-                    sheetWriter.End();
-                    workbook.End();
                 }
                 finally
                 {
-                    if (output is not null)
+                    if (!leaveOpen)
                     {
                         target.Dispose();
                     }
                 }
                 return 0;
             }, stderr);
+        }
+
+        /// <summary>
+        /// Picks the workbook format to write: <paramref name="format"/> wins when given; otherwise
+        /// it's inferred from <paramref name="output"/>'s extension; with neither (writing to
+        /// stdout with no override), it's CSV - the one format every shell can already consume.
+        /// </summary>
+        /// <exception cref="ArgumentException"><paramref name="format"/> isn't one of
+        /// <see cref="_validFormats"/>, or <paramref name="output"/>'s extension isn't either.</exception>
+        internal static string ResolveFormat(string? format, string? output)
+        {
+            if (format is not null)
+            {
+                string normalized = format.ToLowerInvariant();
+                if (Array.IndexOf(_validFormats, normalized) < 0)
+                {
+                    throw new ArgumentException(
+                        $"unknown format '{format}'; expected one of {string.Join(", ", _validFormats)}.", nameof(format));
+                }
+                return normalized;
+            }
+
+            if (output is not null)
+            {
+                string extension = Path.GetExtension(output).TrimStart('.').ToLowerInvariant();
+                if (Array.IndexOf(_validFormats, extension) < 0)
+                {
+                    throw new ArgumentException(
+                        $"unrecognized output extension '.{extension}'; expected one of {string.Join(", ", _validFormats.Select(static f => "." + f))}.",
+                        nameof(output));
+                }
+                return extension;
+            }
+
+            return "csv";
+        }
+
+        private static void WriteCsv(IExcelRowReader reader, Stream target, bool leaveOpen, char delimiter)
+        {
+            using CsvWorkbookWriter workbook = CsvWorkbookWriter.Create(target, leaveOpen, new CsvWriterOptions { Delimiter = (byte)delimiter });
+            WriteRows<CsvWorkbookWriter, CsvSheetWriter, CsvRowWriter>(workbook, reader);
+        }
+
+        private static void WriteXlsx(IExcelRowReader reader, Stream target, bool leaveOpen)
+        {
+            using XlsxWorkbookWriter workbook = XlsxWorkbookWriter.Create(target, leaveOpen);
+            WriteRows<XlsxWorkbookWriter, XlsxSheetWriter, XlsxRowWriter>(workbook, reader);
+        }
+
+        private static void WriteXlsb(IExcelRowReader reader, Stream target, bool leaveOpen)
+        {
+            using XlsbWorkbookWriter workbook = XlsbWorkbookWriter.Create(target, leaveOpen, date1904: reader.IsDate1904);
+            WriteRows<XlsbWorkbookWriter, XlsbSheetWriter, XlsbRowWriter>(workbook, reader);
+        }
+
+        private static void WriteXls(IExcelRowReader reader, Stream target, bool leaveOpen)
+        {
+            using XlsWorkbookWriter workbook = XlsWorkbookWriter.Create(target, leaveOpen, date1904: reader.IsDate1904);
+            WriteRows<XlsWorkbookWriter, XlsSheetWriter, XlsRowWriter>(workbook, reader);
+        }
+
+        /// <summary>
+        /// Copies every sampled row's cells across as text, one <see cref="IRowWriter.Write(string?)"/>
+        /// call per column. Generic over the four workbook/sheet/row writer triples so the loop - the
+        /// only part that actually varies by target - lives once; each format still gets its own
+        /// <c>Create</c> call above, since their constructor parameters (date1904, compression, ...)
+        /// differ.
+        /// </summary>
+        private static void WriteRows<TWorkbook, TSheet, TRow>(TWorkbook workbook, IExcelRowReader reader)
+            where TWorkbook : IWorkbookWriter<TSheet>
+            where TSheet : ISheetWriter<TRow>
+            where TRow : IRowWriter
+        {
+            workbook.Start();
+            using TSheet sheetWriter = workbook.AddSheet(reader.SheetName);
+            sheetWriter.Start();
+
+            using IExcelRowEnumerator rows = reader.GetEnumerator();
+            while (rows.MoveNext())
+            {
+                using TRow row = sheetWriter.StartRow();
+                Row current = rows.Current;
+                foreach(var cell in current.Cells)
+                {
+                    var cellValue = cell.Value;
+                    switch (cellValue.Type)
+                    {
+                        case CellType.Boolean:
+                            row.Write(cellValue.GetString());
+                            break;
+                        case CellType.Number:
+                            row.Write(cellValue.TryGetDouble(out double number) ? number.ToString(CultureInfo.InvariantCulture) : cellValue.GetString());
+                            break;
+                        case CellType.Date:
+                            var dateValue = cellValue.TryGetDateTime(out var date) ? date : throw new InvalidOperationException($"cell {cell.ColumnIndex} is a date but TryGetDateTime failed to parse it.");
+                            row.Write(dateValue);
+                            break;
+                        default:
+                            row.Write(cellValue.GetString());
+                            break;
+                    }
+                }
+            }
+            sheetWriter.End();
+            workbook.End();
         }
 
         internal static int Schema(string path, string? sheet, int headerRow, int sampleSize, TextWriter stdout, TextWriter stderr)
@@ -111,7 +219,11 @@ namespace ExcelReader.Cli
                                            or InvalidDataException
                                            or ArgumentException
                                            or NotSupportedException
-                                           or ExcelLimitExceededException)
+                                           or ExcelLimitExceededException
+                                           // A legacy XLS target rejects sheets wider than 256
+                                           // columns (BIFF8's own limit) - a real user-facing
+                                           // "this workbook doesn't fit that format" error, not a bug.
+                                           or InvalidOperationException)
             {
                 stderr.WriteLine(exception.Message);
                 return 1;
@@ -139,18 +251,19 @@ namespace ExcelReader.Cli
                 if (int.TryParse(sheet, CultureInfo.InvariantCulture, out int index))
                 {
                     reader.MoveToSheet(index);
+                    return reader;
                 }
-                else if (!reader.TryMoveToSheet(sheet))
+                if (!reader.TryMoveToSheet(sheet))
                 {
                     throw new ArgumentException($"no sheet named '{sheet}' in {path}.", nameof(sheet));
                 }
+                return reader;
             }
             catch
             {
                 reader.Dispose();
                 throw;
             }
-            return reader;
         }
     }
 }
