@@ -56,6 +56,19 @@ jobs:
           -p:Version=${{ steps.version.outputs.value }}
           --output ./artifacts
 
+      # Portable IL tool package (see the csproj: "a dotnet tool ships as IL and is launched by
+      # whatever SDK the user has") - not the self-contained AOT binaries publish-cli attaches to
+      # the GitHub Release below, which need no .NET runtime installed but must be built per-RID.
+      # `dotnet tool install --global ExcelReader.NET.Cli` (README's documented install command)
+      # resolves this package.
+      - name: Pack CLI
+        run: >-
+          dotnet pack src/ExcelReader.Cli/ExcelReader.Cli.csproj
+          --configuration Release
+          --no-restore
+          -p:Version=${{ steps.version.outputs.value }}
+          --output ./artifacts
+
       - name: Generate SBOM
         uses: anchore/sbom-action@v0
         with:

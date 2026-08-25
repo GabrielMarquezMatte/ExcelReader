@@ -21,7 +21,7 @@ extern "C" {
 /* ABI revision of this header. Bumped on any change to a struct layout, a status code, or the
  * meaning of an existing function; adding a new function does not bump it. A caller should refuse
  * to proceed if xl_abi_version() does not equal the XL_ABI_VERSION it was compiled against. */
-#define XL_ABI_VERSION 2
+#define XL_ABI_VERSION 3
 
 #define XL_FORMAT_AUTO  0  /* sniffs XLS/XLSX/XLSB; does NOT detect CSV */
 #define XL_FORMAT_XLS   1
@@ -48,7 +48,7 @@ extern "C" {
 /* Opaque workbook handle. Never dereferenced by the caller; only ever passed back to xl_*. */
 typedef struct xl_workbook xl_workbook;
 
-/* One UTF-8 cell value returned by xl_next_row_decoded. value_len excludes the trailing NUL;
+/* One UTF-8 cell value returned by xl_read_all_decoded. value_len excludes the trailing NUL;
  * use it when the value could contain an embedded NUL. */
 typedef struct xl_row_cell {
     int32_t column;
@@ -57,9 +57,10 @@ typedef struct xl_row_cell {
     const uint8_t* value;
 } xl_row_cell;
 
-/* A decoded row returned by xl_next_row_decoded. The cells array and every cell->value live in one
- * allocation owned by the row; they stay valid until xl_free_row and must never be freed
- * individually. Values are NUL-terminated in addition to carrying value_len. */
+/* A decoded row, as returned inside xl_rows by xl_read_all_decoded. The cells array and every
+ * cell->value live in one allocation owned by the row; they stay valid until xl_free_rows frees
+ * the enclosing xl_rows and must never be freed individually. Values are NUL-terminated in
+ * addition to carrying value_len. */
 typedef struct xl_row {
     int32_t cell_count;
     xl_row_cell* cells;
@@ -168,13 +169,6 @@ int32_t xl_next_row(xl_workbook* handle, uint8_t* buffer, int32_t capacity, int3
  * lengths, is columnar, and is markedly faster - prefer it for a sheet anywhere near this size. */
 int32_t xl_read_all_blob(xl_workbook* handle, uint8_t* buffer, int32_t capacity, int32_t* out_written);
 
-/* Reads one row into C-friendly structs. Returns XL_EOF at the end of the sheet. The caller owns
- * the returned allocation and must call xl_free_row, including after partially processing a row. */
-int32_t xl_next_row_decoded(xl_workbook* handle, xl_row* out_row);
-
-/* Releases a row returned by xl_next_row_decoded and resets it to zero. Safe to call on a zeroed row. */
-void xl_free_row(xl_row* row);
-
 /* A decoded sheet returned by xl_read_all_decoded. Rows remain valid until xl_free_rows. */
 typedef struct xl_rows {
     int32_t row_count;
@@ -237,7 +231,7 @@ typedef struct xl_table {
 } xl_table;
 
 /* Schema-driven columnar read of the WHOLE current sheet, from its first row - independent of, and
- * never disturbing, the row cursor xl_next_row/xl_next_row_decoded/xl_read_all_blob share on `handle`.
+ * never disturbing, the row cursor xl_next_row/xl_read_all_blob share on `handle`.
  * `header_row` is the 1-based row number used to resolve name-based specs (rows before it are
  * skipped, and it is never itself yielded as a data row); 0 means "no header" and every spec must be
  * index-based. XL_INVALID_ARGUMENT for a bad spec (unknown type, negative index with no name, a
@@ -345,8 +339,8 @@ typedef struct xl_inferred_schema {
 } xl_inferred_schema;
 
 /* Guesses a xl_parse_typed/xl_parse_arrow schema by sampling the WHOLE current sheet, from its first
- * row - independent of, and never disturbing, the row cursor xl_next_row/xl_next_row_decoded/
- * xl_read_all_blob share on `handle`. `header_row` has the same meaning as in xl_parse_typed (0 = no
+ * row - independent of, and never disturbing, the row cursor xl_next_row/xl_read_all_blob share
+ * on `handle`. `header_row` has the same meaning as in xl_parse_typed (0 = no
  * header). `sample_size` bounds how many rows after the header are inspected; a column is guessed
  * XL_T_STRING with nullable = 1 when its sampled cells mix kinds, are all XL_CELL_FORMULA/ERROR, or
  * were never populated. XL_T_I64 vs XL_T_F64 is decided by whether every sampled numeric cell parses

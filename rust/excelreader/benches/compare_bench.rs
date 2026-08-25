@@ -59,18 +59,20 @@ fn accumulate_full_row(row: &FullRow) -> i64 {
         + row.total_profit as i64
 }
 
-fn xlsx_path() -> &'static str {
+fn xlsx_path() -> String {
     concat!(
         env!("CARGO_MANIFEST_DIR"),
         "/../../tests/ExcelReader.Benchmarks/Data/65K_Records_Data.xlsx"
     )
+    .to_string()
 }
 
-fn xlsb_path() -> &'static str {
+fn xlsb_path() -> String {
     concat!(
         env!("CARGO_MANIFEST_DIR"),
         "/../../tests/ExcelReader.Benchmarks/Data/65K_Records_Data.xlsb"
     )
+    .to_string()
 }
 
 fn accumulate_data_cell(acc: &mut i64, cell: &Data) {
@@ -83,7 +85,7 @@ fn accumulate_data_cell(acc: &mut i64, cell: &Data) {
     }
 }
 
-fn bench_excelreader(c: &mut Criterion, group: &str, path: &str, format: i32) {
+fn bench_excelreader(c: &mut Criterion, group: &str, path: String, format: i32) {
     c.bench_function(group, |b| {
         b.iter_batched(
             || Workbook::open_with(&path, format, None).expect("open must succeed"),
@@ -106,7 +108,7 @@ fn bench_excelreader(c: &mut Criterion, group: &str, path: &str, format: i32) {
 // columnar native buffers before returning - so this measures the native parse plus the FFI
 // crossing alone, and the gap against bench_excelreader's number is exactly what materializing one
 // FullRow (with an owned String per text column) per row costs on the Rust side.
-fn bench_excelreader_parse_only(c: &mut Criterion, group: &str, path: &str, format: i32) {
+fn bench_excelreader_parse_only(c: &mut Criterion, group: &str, path: String, format: i32) {
     c.bench_function(group, |b| {
         b.iter_batched(
             || Workbook::open_with(&path, format, None).expect("open must succeed"),
@@ -121,7 +123,7 @@ fn bench_excelreader_parse_only(c: &mut Criterion, group: &str, path: &str, form
     });
 }
 
-fn bench_calamine(c: &mut Criterion, group: &str, path: &str) {
+fn bench_calamine(c: &mut Criterion, group: &str, path: String) {
     c.bench_function(group, |b| {
         b.iter(|| {
             let mut workbook = open_workbook_auto(&path).expect("open must succeed");
@@ -141,26 +143,26 @@ fn bench_calamine(c: &mut Criterion, group: &str, path: &str) {
 }
 
 fn bench_excelreader_xlsx(c: &mut Criterion) {
-    bench_excelreader(c, "excelreader_xlsx_full", &xlsx_path(), excelreader::XL_FORMAT_XLSX);
+    bench_excelreader(c, "excelreader_xlsx_full", xlsx_path(), excelreader::XL_FORMAT_XLSX);
 }
 
 fn bench_calamine_xlsx(c: &mut Criterion) {
-    bench_calamine(c, "calamine_xlsx_full", &xlsx_path());
+    bench_calamine(c, "calamine_xlsx_full", xlsx_path());
 }
 
 fn bench_excelreader_xlsb(c: &mut Criterion) {
-    bench_excelreader(c, "excelreader_xlsb_full", &xlsb_path(), excelreader::XL_FORMAT_XLSB);
+    bench_excelreader(c, "excelreader_xlsb_full", xlsb_path(), excelreader::XL_FORMAT_XLSB);
 }
 
 fn bench_calamine_xlsb(c: &mut Criterion) {
-    bench_calamine(c, "calamine_xlsb_full", &xlsb_path());
+    bench_calamine(c, "calamine_xlsb_full", xlsb_path());
 }
 
 fn bench_excelreader_xlsx_parse_only(c: &mut Criterion) {
     bench_excelreader_parse_only(
         c,
         "excelreader_xlsx_parse_only",
-        &xlsx_path(),
+        xlsx_path(),
         excelreader::XL_FORMAT_XLSX,
     );
 }
