@@ -8,7 +8,9 @@ namespace ExcelReader.Benchmarks
     // be read against each other and against ParseTyped's columnar number.
     //
     //   NextRowBlob      xl_next_row          — one crossing per row, caller-owned buffer
-    //   NextRowDecoded   xl_next_row_decoded  — one crossing per row, one native block per row
+    //   NextRowDecoded   (internal only)      — one crossing per row, one native block per row
+    //                                            ReadAllDecoded's per-row primitive, not itself an
+    //                                            exported ABI function
     //   ReadAllBlob      xl_read_all_blob     — one crossing for the sheet, caller-owned buffer
     //   ReadAllDecoded   xl_read_all_decoded  — one crossing for the sheet, one native block per row
     //

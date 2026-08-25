@@ -27,7 +27,7 @@ XL_ERROR = -5
 
 # Bumped on any change to a struct layout, a status code, or the meaning of an existing function;
 # adding a new function does not bump it. Mirrors XL_ABI_VERSION in include/excelreader.h.
-XL_ABI_VERSION = 2
+XL_ABI_VERSION = 3
 
 XL_FORMAT_AUTO = 0
 XL_FORMAT_XLS = 1
@@ -421,10 +421,6 @@ def _bind(lib: ctypes.CDLL) -> ctypes.CDLL:
     lib.xl_next_row.restype = c_int
     lib.xl_read_all_blob.argtypes = [p_void, p_bytes, c_int, p_int]
     lib.xl_read_all_blob.restype = c_int
-    lib.xl_next_row_decoded.argtypes = [p_void, ctypes.POINTER(NativeRow)]
-    lib.xl_next_row_decoded.restype = c_int
-    lib.xl_free_row.argtypes = [ctypes.POINTER(NativeRow)]
-    lib.xl_free_row.restype = None
     lib.xl_last_error.argtypes = [p_bytes, c_int, p_int]
     lib.xl_last_error.restype = c_int
     lib.xl_last_error_ptr.argtypes = [p_int]

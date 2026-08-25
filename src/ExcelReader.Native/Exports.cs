@@ -166,43 +166,6 @@ namespace ExcelReader.Native
             return status;
         }
 
-        [UnmanagedCallersOnly(EntryPoint = "xl_next_row_decoded")]
-        public static int NextRowDecoded(nint handle, NativeRow* outRow)
-        {
-            if (outRow is null)
-            {
-                return NativeStatus.InvalidArgument;
-            }
-
-            int status = NativeApi.NextRowDecoded(Resolve(handle), out NativeRow row);
-            *outRow = row;
-            return status;
-        }
-
-        [UnmanagedCallersOnly(EntryPoint = "xl_free_row")]
-        public static void FreeRow(NativeRow* row)
-        {
-            if (row is null)
-            {
-                return;
-            }
-            // void in the ABI - no status code to report a failure through, and an exception
-            // escaping [UnmanagedCallersOnly] is a fail-fast/abort for the native caller,
-            // uncatchable in C/C++/Rust/Python. A caller that double-frees (holds a copy of an
-            // already-freed struct - the header documents every Free* as "safe on a zeroed value",
-            // not "safe on a stale copy") can make Marshal.FreeHGlobal throw; this keeps that from
-            // crashing the whole process. The message still reaches xl_last_error for a caller that
-            // checks after a free looked suspicious.
-            try
-            {
-                NativeApi.FreeRow(ref *row);
-            }
-            catch (Exception exception)
-            {
-                NativeApi.SetLastError(exception.Message);
-            }
-        }
-
         [UnmanagedCallersOnly(EntryPoint = "xl_read_all_decoded")]
         public static int ReadAllDecoded(nint handle, NativeRows* outRows)
         {
@@ -223,7 +186,13 @@ namespace ExcelReader.Native
             {
                 return;
             }
-            // See FreeRow's remarks: void in the ABI, so an exception here must never escape.
+            // void in the ABI - no status code to report a failure through, and an exception
+            // escaping [UnmanagedCallersOnly] is a fail-fast/abort for the native caller,
+            // uncatchable in C/C++/Rust/Python. A caller that double-frees (holds a copy of an
+            // already-freed struct - the header documents every Free* as "safe on a zeroed value",
+            // not "safe on a stale copy") can make Marshal.FreeHGlobal throw; this keeps that from
+            // crashing the whole process. The message still reaches xl_last_error for a caller that
+            // checks after a free looked suspicious.
             try
             {
                 NativeApi.FreeRows(ref *rows);
@@ -272,7 +241,7 @@ namespace ExcelReader.Native
             {
                 return;
             }
-            // See FreeRow's remarks: void in the ABI, so an exception here must never escape.
+            // See FreeRows' remarks: void in the ABI, so an exception here must never escape.
             try
             {
                 NativeApi.FreeTable(ref *table);
@@ -427,7 +396,7 @@ namespace ExcelReader.Native
             {
                 return;
             }
-            // See FreeRow's remarks: void in the ABI, so an exception here must never escape.
+            // See FreeRows' remarks: void in the ABI, so an exception here must never escape.
             try
             {
                 NativeApi.FreeSchema(ref *schema);
@@ -549,7 +518,7 @@ namespace ExcelReader.Native
             {
                 return;
             }
-            // See FreeRow's remarks: void in the ABI (Arrow's own release-callback convention), so
+            // See FreeRows' remarks: void in the ABI (Arrow's own release-callback convention), so
             // an exception here must never escape - doubly so for this one, since an Arrow consumer
             // owns when this runs, not this library.
             try

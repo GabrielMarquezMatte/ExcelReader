@@ -10,8 +10,7 @@
  *     xl::TableView<T> that owns the raw xl_table (freed via xl_free_table) and builds
  *     one T per dereference of its iterator - the only allocation is the one
  *     xl_parse_typed itself already makes for the columnar buffers. Call
- *     TableView<T>::to_vector() (or the parse_sheet_vector<T> convenience) if you
- *     actually want a materialized vector.
+ *     TableView<T>::to_vector() if you actually want a materialized vector.
  *   - std::string_view fields are zero-copy views into the xl_table's own string blob:
  *     valid ONLY as long as the owning TableView<T> is alive. Use std::string for a
  *     field that needs to outlive the view (e.g. after to_vector()).
@@ -1115,22 +1114,9 @@ namespace xl
         return TableView<T>::from_raw(table);
     }
 
-    // Convenience for callers who want a materialized std::vector<T> up front.
-    template <typename T>
-    std::expected<std::vector<T>, Error> parse_sheet_vector(Workbook &workbook, int32_t header_row = 1)
-    {
-        auto view = parse_sheet<T>(workbook, header_row);
-        if (!view.has_value())
-        {
-            return std::unexpected(std::move(view.error()));
-        }
-        return view->to_vector();
-    }
-
     // Writes `columns` to `path` as a single sheet, then closes the file. One-shot: no writer handle
     // exists before or after, and every buffer reachable from `columns` and `options` is borrowed
     // for the duration of the call and never freed by this library.
-    //
     // `format` must be XL_FORMAT_XLS/XLSX/XLSB/CSV. XL_FORMAT_AUTO is an error, because a file being
     // created has no signature bytes to sniff. On failure the destination may exist and be
     // incomplete - cleaning it up is the caller's.

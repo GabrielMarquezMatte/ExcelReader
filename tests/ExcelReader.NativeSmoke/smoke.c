@@ -142,8 +142,6 @@ typedef int32_t (*xl_sheet_name_at_fn)(xl_workbook*, int32_t, uint8_t*, int32_t,
 typedef int32_t (*xl_is_date1904_fn)(xl_workbook*, int32_t*);
 typedef int32_t (*xl_next_row_fn)(xl_workbook*, uint8_t*, int32_t, int32_t*);
 typedef int32_t (*xl_read_all_blob_fn)(xl_workbook*, uint8_t*, int32_t, int32_t*);
-typedef int32_t (*xl_next_row_decoded_fn)(xl_workbook*, xl_row*);
-typedef void (*xl_free_row_fn)(xl_row*);
 typedef int32_t (*xl_read_all_decoded_fn)(xl_workbook*, xl_rows*);
 typedef void (*xl_free_rows_fn)(xl_rows*);
 typedef int32_t (*xl_parse_typed_fn)(xl_workbook*, const xl_column_spec*, int32_t, int32_t, xl_table*);
@@ -167,8 +165,6 @@ typedef struct
     xl_is_date1904_fn is_date1904;
     xl_next_row_fn next_row;
     xl_read_all_blob_fn read_all_blob;
-    xl_next_row_decoded_fn next_row_decoded;
-    xl_free_row_fn free_row;
     xl_read_all_decoded_fn read_all_decoded;
     xl_free_rows_fn free_rows;
     xl_parse_typed_fn parse_typed;
@@ -203,8 +199,6 @@ static int bind_all(xl_lib_handle lib, api_t* api)
     BIND(is_date1904, xl_is_date1904_fn, "xl_is_date1904");
     BIND(next_row, xl_next_row_fn, "xl_next_row");
     BIND(read_all_blob, xl_read_all_blob_fn, "xl_read_all_blob");
-    BIND(next_row_decoded, xl_next_row_decoded_fn, "xl_next_row_decoded");
-    BIND(free_row, xl_free_row_fn, "xl_free_row");
     BIND(read_all_decoded, xl_read_all_decoded_fn, "xl_read_all_decoded");
     BIND(free_rows, xl_free_rows_fn, "xl_free_rows");
     BIND(parse_typed, xl_parse_typed_fn, "xl_parse_typed");
@@ -342,44 +336,6 @@ static int test_next_row_blob_and_growth(const api_t* api, const char* fixture)
         row_count++;
     }
     CHECK(row_count == 101, "RealExcel.xlsb has 101 rows (1 header + 100 data)");
-
-    CHECK(api->close_(handle) == XL_OK, "xl_close must succeed");
-    return 0;
-}
-
-static int test_next_row_decoded(const api_t* api, const char* fixture)
-{
-    xl_workbook* handle = NULL;
-    CHECK(open_fixture(api, fixture, &handle) == XL_OK, "xl_open_file must succeed");
-
-    xl_row row;
-    memset(&row, 0, sizeof(row));
-    CHECK(api->next_row_decoded(handle, &row) == XL_OK, "xl_next_row_decoded must succeed for the header row");
-    CHECK(row.cell_count == 18, "the header row has 18 cells");
-    CHECK(row.cells[0].value_len == 7 && memcmp(row.cells[0].value, "Coluna1", 7) == 0,
-          "first decoded cell must read Coluna1");
-    api->free_row(&row);
-
-    int row_count = 1;
-    for (;;)
-    {
-        xl_row next;
-        memset(&next, 0, sizeof(next));
-        int32_t status = api->next_row_decoded(handle, &next);
-        if (status == XL_EOF)
-        {
-            break;
-        }
-        CHECK(status == XL_OK, "xl_next_row_decoded must succeed for every remaining row");
-        api->free_row(&next);
-        row_count++;
-    }
-    CHECK(row_count == 101, "xl_next_row_decoded must see the same 101 rows as xl_next_row");
-
-    /* Documented safe on a zeroed value. */
-    xl_row zeroed;
-    memset(&zeroed, 0, sizeof(zeroed));
-    api->free_row(&zeroed);
 
     CHECK(api->close_(handle) == XL_OK, "xl_close must succeed");
     return 0;
@@ -843,7 +799,6 @@ int main(int argc, char** argv)
     failures += test_open_missing_file_reports_an_error(&api);
     failures += test_sheets_and_flags(&api, fixture_path);
     failures += test_next_row_blob_and_growth(&api, fixture_path);
-    failures += test_next_row_decoded(&api, fixture_path);
     failures += test_read_all_blob_and_decoded(&api, fixture_path);
     failures += test_open_file_ex(&api, fixture_path);
     failures += test_parse_rejects_hostile_counts(&api, fixture_path);
