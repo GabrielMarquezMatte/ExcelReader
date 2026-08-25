@@ -2657,6 +2657,92 @@ namespace ExcelReader.Tests
         }
 
         [Theory]
+        [InlineData(NativeFormat.Xlsx)]
+        [InlineData(NativeFormat.Xlsb)]
+        [InlineData(NativeFormat.Xls)]
+        [InlineData(NativeFormat.Csv)]
+        public void WriteTypedToMemory_Should_Round_Trip_Through_OpenMemory(int format)
+        {
+            NativeTable table = BuildInt64Table([3L, 7L]);
+            try
+            {
+                NativeColumnSpec[] specs = [new() { Names = ["qty"], Type = NativeColumnType.Int64 }];
+
+                Assert.Equal(NativeStatus.Ok, NativeApi.WriteTypedToMemory(
+                    format, specs, table, DefaultWriteOptions(), out byte[]? bytes));
+                Assert.NotNull(bytes);
+                Assert.NotEmpty(bytes);
+
+                Assert.Equal(NativeStatus.Ok, NativeApi.OpenMemory(bytes, format, out NativeHandle? handle));
+                try
+                {
+                    Assert.Equal(NativeStatus.Ok, NativeApi.ParseTyped(handle, specs, headerRow: 1, out NativeTable read));
+                    try
+                    {
+                        Assert.Equal(2, read.RowCount);
+                        long[] values = new long[2];
+                        Marshal.Copy(ColumnAt(read, 0).Values, values, 0, 2);
+                        Assert.Equal([3L, 7L], values);
+                    }
+                    finally
+                    {
+                        NativeApi.FreeTable(ref read);
+                    }
+                }
+                finally
+                {
+                    NativeApi.Close(handle);
+                }
+            }
+            finally
+            {
+                FreeBuiltTable(ref table);
+            }
+        }
+
+        [Fact]
+        public void WriteTypedToMemory_Should_Reject_Auto_Format_And_Return_No_Bytes()
+        {
+            NativeTable table = BuildInt64Table([3L]);
+            try
+            {
+                NativeColumnSpec[] specs = [new() { Names = ["qty"], Type = NativeColumnType.Int64 }];
+
+                Assert.Equal(NativeStatus.InvalidArgument, NativeApi.WriteTypedToMemory(
+                    NativeFormat.Auto, specs, table, DefaultWriteOptions(), out byte[]? bytes));
+                Assert.Null(bytes);
+            }
+            finally
+            {
+                FreeBuiltTable(ref table);
+            }
+        }
+
+        [Fact]
+        public void WriteTypedToMemory_Should_Reject_A_Rejected_Table_The_Same_Way_As_WriteTyped()
+        {
+            NativeTable table = BuildInt64Table([3L]);
+            try
+            {
+                // Two specs for a one-column table: the same mismatch WriteTyped_Should_Create_No_File_
+                // When_The_Table_Is_Rejected exercises on the path-based entry point.
+                NativeColumnSpec[] specs =
+                [
+                    new() { Names = ["a"], Type = NativeColumnType.Int64 },
+                    new() { Names = ["b"], Type = NativeColumnType.Int64 },
+                ];
+
+                Assert.Equal(NativeStatus.InvalidArgument, NativeApi.WriteTypedToMemory(
+                    NativeFormat.Xlsx, specs, table, DefaultWriteOptions(), out byte[]? bytes));
+                Assert.Null(bytes);
+            }
+            finally
+            {
+                FreeBuiltTable(ref table);
+            }
+        }
+
+        [Theory]
         [InlineData(NativeFormat.Xlsx, "xlsx")]
         [InlineData(NativeFormat.Xlsb, "xlsb")]
         [InlineData(NativeFormat.Xls, "xls")]

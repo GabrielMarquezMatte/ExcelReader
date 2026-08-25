@@ -313,6 +313,66 @@ namespace ExcelReader.Native
             }
         }
 
+        [UnmanagedCallersOnly(EntryPoint = "xl_write_typed_to_memory")]
+        public static int WriteTypedToMemory(int format, NativeColumnSpecRaw* specs, NativeTable* table, NativeWriteOptionsRaw* options, NativeBuffer* outBuffer)
+        {
+            if (specs is null || table is null || outBuffer is null || !NativeApi.IsValidSpecCount(table->ColumnCount))
+            {
+                return NativeStatus.InvalidArgument;
+            }
+            *outBuffer = default;
+
+            try
+            {
+                if (!TryDecodeColumnSpecs(specs, table->ColumnCount, out NativeColumnSpec[] decoded))
+                {
+                    return NativeStatus.InvalidArgument;
+                }
+                if (!TryDecodeWriteOptions(options, out NativeWriteOptions decodedOptions))
+                {
+                    return NativeStatus.InvalidArgument;
+                }
+                int status = NativeApi.WriteTypedToMemory(format, decoded, *table, decodedOptions, out byte[]? bytes);
+                PublishBuffer(bytes, outBuffer);
+                return status;
+            }
+            catch (Exception exception)
+            {
+                // Same reasoning as xl_write_typed's catch: decoding walks caller memory and can still
+                // fail in ways the guards above cannot see.
+                NativeApi.SetLastError(exception.Message);
+                return NativeStatus.Error;
+            }
+        }
+
+        [UnmanagedCallersOnly(EntryPoint = "xl_free_buffer")]
+        public static void FreeBuffer(NativeBuffer* buffer)
+        {
+            if (buffer is null || buffer->Data == IntPtr.Zero)
+            {
+                return;
+            }
+            Marshal.FreeHGlobal(buffer->Data);
+            *buffer = default;
+        }
+
+        // Copies a managed byte[] into unmanaged memory the caller owns until it calls xl_free_buffer.
+        // Shared by xl_write_typed_to_memory and xl_write_handle_bytes. A null/empty result (including
+        // a failed call, which leaves bytes null) publishes a zeroed xl_buffer rather than a 0-length
+        // allocation - there is nothing for the caller to free either way, and NativeBuffer's default
+        // is already exactly that.
+        private static void PublishBuffer(byte[]? bytes, NativeBuffer* outBuffer)
+        {
+            if (bytes is null || bytes.Length == 0)
+            {
+                return;
+            }
+            IntPtr data = Marshal.AllocHGlobal(bytes.Length);
+            Marshal.Copy(bytes, 0, data, bytes.Length);
+            outBuffer->Data = data;
+            outBuffer->Length = bytes.Length;
+        }
+
         // A NULL options pointer means "every default", identical to xl_open_file_ex's contract. The
         // sheet name is UTF-8-decoded here because everything below this layer stays pointer-free.
         private static bool TryDecodeWriteOptions(NativeWriteOptionsRaw* options, out NativeWriteOptions decoded)
@@ -537,6 +597,44 @@ namespace ExcelReader.Native
             {
                 *outHandle = NativeHandleTable.Register(handle);
             }
+            return status;
+        }
+
+        [UnmanagedCallersOnly(EntryPoint = "xl_open_write_handle_to_memory")]
+        public static int OpenWriteHandleToMemory(int format, NativeWriteOptionsRaw* options, nint* outHandle)
+        {
+            if (outHandle is null)
+            {
+                return NativeStatus.InvalidArgument;
+            }
+            *outHandle = 0;
+            if (!TryDecodeWriteOptions(options, out NativeWriteOptions decodedOptions))
+            {
+                return NativeStatus.InvalidArgument;
+            }
+            int status = NativeApi.OpenWriteHandleToMemory(format, decodedOptions, out NativeWriterHandle? handle);
+            if (handle is not null)
+            {
+                *outHandle = NativeHandleTable.Register(handle);
+            }
+            return status;
+        }
+
+        [UnmanagedCallersOnly(EntryPoint = "xl_write_handle_bytes")]
+        public static int WriteHandleBytes(nint handle, NativeBuffer* outBuffer)
+        {
+            if (outBuffer is null)
+            {
+                return NativeStatus.InvalidArgument;
+            }
+            *outBuffer = default;
+            // Resolved directly (not via TryResolveWriter/RunWriterOp): those helpers return
+            // XL_INVALID_HANDLE for an id that resolves to nothing, but a wrong-kind handle here
+            // (opened via xl_open_write_handle, no MemoryStream) is a caller usage error against a
+            // handle that IS valid, which NativeApi.GetWriteHandleBytes reports as InvalidArgument.
+            NativeWriterHandle? writerHandle = NativeHandleTable.Resolve<NativeWriterHandle>(handle);
+            int status = NativeApi.GetWriteHandleBytes(writerHandle, out byte[]? bytes);
+            PublishBuffer(bytes, outBuffer);
             return status;
         }
 

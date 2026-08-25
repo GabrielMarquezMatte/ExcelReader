@@ -14,9 +14,12 @@ EXPORTS
     xl_free_table
     xl_parse_arrow
     xl_write_typed
+    xl_write_typed_to_memory
+    xl_free_buffer
     xl_infer_schema
     xl_free_schema
     xl_open_write_handle
+    xl_open_write_handle_to_memory
     xl_start_sheet
     xl_start_row
     xl_write_string
@@ -30,4 +33,5 @@ EXPORTS
     xl_end_row
     xl_end_sheet
     xl_close_write_handle
+    xl_write_handle_bytes
     xl_last_error_ptr
