@@ -60,6 +60,40 @@ namespace ExcelReader.Native
             }
         }
 
+        /// <summary>
+        /// Same as <see cref="WriteTyped"/>, except the result is returned as bytes rather than
+        /// written to a path — everything else about validation and content is identical.
+        /// </summary>
+        internal static int WriteTypedToMemory(int format, NativeColumnSpec[] specs, NativeTable table, NativeWriteOptions options, out byte[]? bytes)
+        {
+            bytes = null;
+            if (!IsWritableFormat(format))
+            {
+                SetLastError($"xl_write_typed_to_memory needs an explicit format (XLS/XLSX/XLSB/CSV); got format {format}.");
+                return NativeStatus.InvalidArgument;
+            }
+            if (!TryValidateWriteTable(specs, table, out bool hasHeader, out string? validationError))
+            {
+                SetLastError(validationError);
+                return NativeStatus.InvalidArgument;
+            }
+
+            ClearLastError();
+            try
+            {
+                string sheetName = options.SheetName ?? "Sheet1";
+                using MemoryStream stream = new();
+                WriteToStream(stream, format, specs, table, options, sheetName, hasHeader);
+                bytes = stream.ToArray();
+                return NativeStatus.Ok;
+            }
+            catch (Exception exception)
+            {
+                SetLastError(exception.Message);
+                return NativeStatus.Error;
+            }
+        }
+
         internal static int OpenWriteHandle(ReadOnlySpan<byte> path, int format, NativeWriteOptions options, out NativeWriterHandle? handle)
         {
             handle = null;
@@ -93,6 +127,34 @@ namespace ExcelReader.Native
         }
 
         /// <summary>
+        /// Same as <see cref="OpenWriteHandle"/>, except the handle is backed by an in-memory buffer
+        /// rather than a file — see <see cref="GetWriteHandleBytes"/> to read it out.
+        /// </summary>
+        internal static int OpenWriteHandleToMemory(int format, NativeWriteOptions options, out NativeWriterHandle? handle)
+        {
+            handle = null;
+            if (!IsWritableFormat(format))
+            {
+                SetLastError($"xl_open_write_handle_to_memory needs an explicit format (XLS/XLSX/XLSB/CSV); got format {format}.");
+                return NativeStatus.InvalidArgument;
+            }
+            ClearLastError();
+            MemoryStream stream = new();
+            try
+            {
+                handle = NativeWriterHandle.Create(stream, format, options);
+                handle.MemoryBuffer = stream;
+                return NativeStatus.Ok;
+            }
+            catch (Exception exception)
+            {
+                stream.Dispose();
+                SetLastError(exception.Message);
+                return NativeStatus.Error;
+            }
+        }
+
+        /// <summary>
         /// Finishes and releases a writer handle opened by <see cref="OpenWriteHandle"/>. Always
         /// disposes <paramref name="handle"/>, even when <see cref="NativeWriterHandle.Close"/> throws
         /// — an unregistered-but-undisposed handle would otherwise leak its open <see cref="FileStream"/>.
@@ -117,6 +179,40 @@ namespace ExcelReader.Native
             finally
             {
                 handle.Dispose();
+            }
+        }
+
+        /// <summary>
+        /// Reads back everything written so far to a handle opened by
+        /// <see cref="OpenWriteHandleToMemory"/>, ending the workbook's content first if that has not
+        /// already happened (see <see cref="NativeWriterHandle.Close"/> — idempotent, so this is safe
+        /// to call whether or not the caller ended every sheet/row itself). Does NOT dispose
+        /// <paramref name="handle"/>: the caller must still call <see cref="CloseWriteHandle"/>
+        /// afterward to release it, same as a file-backed handle.
+        /// </summary>
+        internal static int GetWriteHandleBytes(NativeWriterHandle? handle, out byte[]? bytes)
+        {
+            bytes = null;
+            if (handle is null)
+            {
+                return NativeStatus.InvalidHandle;
+            }
+            if (handle.MemoryBuffer is null)
+            {
+                SetLastError("xl_write_handle_bytes needs a handle opened by xl_open_write_handle_to_memory.");
+                return NativeStatus.InvalidArgument;
+            }
+            try
+            {
+                handle.Close();
+                bytes = handle.MemoryBuffer.ToArray();
+                ClearLastError();
+                return NativeStatus.Ok;
+            }
+            catch (Exception exception)
+            {
+                SetLastError(exception.Message);
+                return NativeStatus.Error;
             }
         }
 

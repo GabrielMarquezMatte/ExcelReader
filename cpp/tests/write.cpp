@@ -95,6 +95,40 @@ static int test_write_columns_round_trip()
     return 0;
 }
 
+static int test_write_columns_to_memory_round_trip()
+{
+    const std::vector<int32_t> offsets{0, 3, 6};
+    const std::vector<uint8_t> blob{'u', 'm', 'a', 'd', 'o', 'i'};
+    const std::vector<int64_t> inteiros{1, 2};
+    const std::vector<double> numeros{0.5, 1.5};
+    const std::vector<int32_t> datas{20454, 20455}; // 2026-01-01, 2026-01-02
+    const std::vector<int64_t> horas{3600000000, 7200000000};
+    const std::vector<int64_t> instantes{1767225600000000, 1767312000000000};
+
+    const std::array<xl::ColumnRef, 6> columns{
+        xl::string_column("texto", offsets, blob),
+        xl::i64_column("inteiro", inteiros),
+        xl::f64_column("numero", numeros),
+        xl::date_column("data", datas),
+        xl::time_column("hora", horas),
+        xl::timestamp_column("instante", instantes)};
+
+    auto bytes = xl::write_columns_to_memory(XL_FORMAT_XLSX, columns);
+    CHECK(bytes.has_value(), "write_columns_to_memory must succeed");
+    CHECK(!bytes->empty(), "write_columns_to_memory must return non-empty bytes");
+
+    auto workbook = xl::Workbook::open_memory(*bytes, XL_FORMAT_XLSX);
+    CHECK(workbook.has_value(), "the returned bytes must open");
+    auto table = xl::parse_sheet<WrittenRow>(*workbook);
+    CHECK(table.has_value(), "the returned bytes must parse back");
+    CHECK(table->size() == 2, "two rows were written");
+
+    WrittenRow first = *table->begin();
+    CHECK(first.texto == "uma", "row 0's string must round-trip");
+    CHECK(first.inteiro == 1, "row 0's int64 must round-trip");
+    return 0;
+}
+
 static int test_write_columns_rejects_bad_input()
 {
     const std::vector<int64_t> two{1, 2};
@@ -316,6 +350,39 @@ static int test_write_sheet_round_trip()
     return 0;
 }
 
+static int test_write_sheet_to_memory_round_trip()
+{
+    const std::vector<FullRow> rows{
+        FullRow{"uma", 1, 0.5, true,
+                std::chrono::year{2026} / std::chrono::month{1} / std::chrono::day{1},
+                std::chrono::microseconds{3600000000},
+                std::chrono::system_clock::time_point{std::chrono::microseconds{1767225600000000}},
+                std::optional<int64_t>{7}},
+        FullRow{"duas", 2, 1.5, false,
+                std::chrono::year{2026} / std::chrono::month{1} / std::chrono::day{2},
+                std::chrono::microseconds{7200000000},
+                std::chrono::system_clock::time_point{std::chrono::microseconds{1767312000000000}},
+                std::nullopt}};
+
+    auto bytes = xl::write_sheet_to_memory(XL_FORMAT_XLSX, rows);
+    CHECK(bytes.has_value(), "write_sheet_to_memory must succeed");
+
+    auto workbook = xl::Workbook::open_memory(*bytes, XL_FORMAT_XLSX);
+    CHECK(workbook.has_value(), "the returned bytes must open");
+    auto table = xl::parse_sheet<FullRow>(*workbook);
+    CHECK(table.has_value(), "the returned bytes must parse back");
+    CHECK(table->size() == 2, "two rows were written");
+
+    auto first = table->at(0);
+    CHECK(first.has_value(), "row 0 must be in bounds");
+    CHECK(first->texto == "uma", "row 0's string must round-trip");
+    CHECK(first->opcional == 7, "row 0's optional must round-trip its value");
+    auto second = table->at(1);
+    CHECK(second.has_value(), "row 1 must be in bounds");
+    CHECK(!second->opcional.has_value(), "row 1's nullopt must come back empty");
+    return 0;
+}
+
 static int test_write_sheet_options_and_csv()
 {
     const std::vector<FullRow> rows{};
@@ -347,20 +414,21 @@ static int test_write_sheet_options_and_csv()
 // trailing structure (a corrupt XLSX zip) would still have passed.
 static int test_writer_handle()
 {
-    static const auto write_str = [](xl_writer_handle* handle, std::string_view value) {
-        return xl_write_string(handle, reinterpret_cast<const uint8_t*>(value.data()),
-                                static_cast<int32_t>(value.size()));
+    static const auto write_str = [](xl_writer_handle *handle, std::string_view value)
+    {
+        return xl_write_string(handle, reinterpret_cast<const uint8_t *>(value.data()),
+                               static_cast<int32_t>(value.size()));
     };
 
     const std::filesystem::path path = temp_path("writer_handle.xlsx");
-    xl_writer_handle* handle = nullptr;
+    xl_writer_handle *handle = nullptr;
     const std::string c_path = path.string();
-    int status = xl_open_write_handle(reinterpret_cast<const uint8_t*>(c_path.data()),
-                                       static_cast<int32_t>(c_path.size()), XL_FORMAT_XLSX, nullptr, &handle);
+    int status = xl_open_write_handle(reinterpret_cast<const uint8_t *>(c_path.data()),
+                                      static_cast<int32_t>(c_path.size()), XL_FORMAT_XLSX, nullptr, &handle);
     CHECK(status == XL_OK, "xl_open_write_handle must succeed");
     CHECK(handle != nullptr, "the returned handle must be non-null");
 
-    status = xl_start_sheet(handle, reinterpret_cast<const uint8_t*>("Planilha1"), 9);
+    status = xl_start_sheet(handle, reinterpret_cast<const uint8_t *>("Planilha1"), 9);
     CHECK(status == XL_OK, "xl_start_sheet must succeed");
 
     status = xl_start_row(handle);
@@ -411,8 +479,8 @@ static int test_writer_handle()
 // XL_INVALID_ARGUMENT - the same convention xl_close uses on the reader side.
 static int test_writer_handle_rejects_bad_handle()
 {
-    xl_writer_handle* bogus = reinterpret_cast<xl_writer_handle*>(static_cast<std::uintptr_t>(0x1));
-    CHECK(xl_start_sheet(bogus, reinterpret_cast<const uint8_t*>("x"), 1) == XL_INVALID_HANDLE,
+    xl_writer_handle *bogus = reinterpret_cast<xl_writer_handle *>(static_cast<std::uintptr_t>(0x1));
+    CHECK(xl_start_sheet(bogus, reinterpret_cast<const uint8_t *>("x"), 1) == XL_INVALID_HANDLE,
           "xl_start_sheet on a bad handle must return XL_INVALID_HANDLE");
     CHECK(xl_start_row(bogus) == XL_INVALID_HANDLE, "xl_start_row on a bad handle must return XL_INVALID_HANDLE");
     CHECK(xl_write_int64(bogus, 1) == XL_INVALID_HANDLE, "xl_write_int64 on a bad handle must return XL_INVALID_HANDLE");
@@ -429,9 +497,9 @@ static int test_writer_handle_rejects_out_of_order_calls()
 {
     const std::filesystem::path path = temp_path("writer_handle_order.xlsx");
     const std::string c_path = path.string();
-    xl_writer_handle* handle = nullptr;
-    int status = xl_open_write_handle(reinterpret_cast<const uint8_t*>(c_path.data()),
-                                       static_cast<int32_t>(c_path.size()), XL_FORMAT_XLSX, nullptr, &handle);
+    xl_writer_handle *handle = nullptr;
+    int status = xl_open_write_handle(reinterpret_cast<const uint8_t *>(c_path.data()),
+                                      static_cast<int32_t>(c_path.size()), XL_FORMAT_XLSX, nullptr, &handle);
     CHECK(status == XL_OK, "xl_open_write_handle must succeed");
 
     CHECK(xl_start_row(handle) == XL_ERROR, "xl_start_row before xl_start_sheet must fail");
@@ -439,11 +507,136 @@ static int test_writer_handle_rejects_out_of_order_calls()
     CHECK(xl_end_row(handle) == XL_ERROR, "xl_end_row without an open row must fail");
     CHECK(xl_end_sheet(handle) == XL_ERROR, "xl_end_sheet without an open sheet must fail");
 
-    status = xl_start_sheet(handle, reinterpret_cast<const uint8_t*>("S"), 1);
+    status = xl_start_sheet(handle, reinterpret_cast<const uint8_t *>("S"), 1);
     CHECK(status == XL_OK, "xl_start_sheet must still succeed after the earlier rejected calls");
     status = xl_close_write_handle(handle);
     CHECK(status == XL_OK, "xl_close_write_handle must still succeed after the earlier rejected calls");
 
+    std::filesystem::remove(path);
+    return 0;
+}
+
+// Exercises xl::WriterHandle::open (file-backed) through every write<T> branch, including the
+// std::optional<T> null-cell path, then reopens the file to confirm the output matches what the
+// raw-C xl_writer_handle test above wrote by hand.
+static int test_writer_handle_class_round_trip()
+{
+    const std::filesystem::path path = temp_path("writer_handle_class.xlsx");
+    {
+        // Scoped so the destructor closes and releases the handle - including the exclusive file
+        // lock xl_open_write_handle takes - before Workbook::open reopens the same path below.
+        auto handle = xl::WriterHandle::open(path.string(), XL_FORMAT_XLSX);
+        CHECK(handle.has_value(), "WriterHandle::open must succeed");
+
+        CHECK(handle->start_sheet("Planilha1").has_value(), "start_sheet must succeed");
+
+        CHECK(handle->start_row().has_value(), "start_row must succeed for the header row");
+        for (std::string_view header : {"texto", "inteiro", "numero", "ativo", "data", "hora", "instante", "opcional"})
+        {
+            CHECK(handle->write(header).has_value(), "writing a header cell must succeed");
+        }
+        CHECK(handle->end_row().has_value(), "end_row must succeed for the header row");
+
+        CHECK(handle->start_row().has_value(), "start_row must succeed for the data row");
+        CHECK(handle->write(std::string_view("uma")).has_value(), "write(string_view) must succeed");
+        CHECK(handle->write(int64_t{1}).has_value(), "write(int64_t) must succeed");
+        CHECK(handle->write(0.5).has_value(), "write(double) must succeed");
+        CHECK(handle->write(true).has_value(), "write(bool) must succeed");
+        CHECK(handle->write(std::chrono::year{2026} / std::chrono::month{1} / std::chrono::day{1}).has_value(),
+              "write(year_month_day) must succeed");
+        CHECK(handle->write(std::chrono::microseconds{3600000000}).has_value(), "write(microseconds) must succeed");
+        CHECK(handle->write(std::chrono::system_clock::time_point{std::chrono::microseconds{1767225600000000}})
+                  .has_value(),
+              "write(time_point) must succeed");
+        CHECK(handle->write(std::optional<int64_t>{7}).has_value(), "write(optional<int64_t>{value}) must succeed");
+        CHECK(handle->end_row().has_value(), "end_row must succeed for the data row");
+
+        CHECK(handle->start_row().has_value(), "start_row must succeed for the null-cell row");
+        CHECK(handle->write(std::optional<std::string_view>{}).has_value(),
+              "write(optional<string_view>{}) must succeed");
+        CHECK(handle->write(std::optional<int64_t>{}).has_value(), "write(optional<int64_t>{}) must succeed");
+        CHECK(handle->write_null(XL_T_F64).has_value(), "write_null(XL_T_F64) must succeed");
+        for (int i = 0; i < 5; ++i)
+        {
+            CHECK(handle->write_null(XL_T_STRING).has_value(), "padding the null-cell row out must succeed");
+        }
+        CHECK(handle->end_row().has_value(), "end_row must succeed for the null-cell row");
+
+        CHECK(handle->end_sheet().has_value(), "end_sheet must succeed");
+    }
+    {
+        auto workbook = xl::Workbook::open(path.string());
+        CHECK(workbook.has_value(), "the file WriterHandle produced must open");
+        auto table = xl::parse_sheet<FullRow>(*workbook);
+        CHECK(table.has_value(), "the written file must parse back");
+        CHECK(table->size() == 2, "two data rows were written");
+
+        auto first = table->at(0);
+        CHECK(first.has_value(), "row 0 must be in bounds");
+        CHECK(first->texto == "uma", "the streamed string cell must round-trip");
+        CHECK(first->inteiro == 1, "the streamed int64 cell must round-trip");
+        CHECK(first->numero == 0.5, "the streamed double cell must round-trip");
+        CHECK(first->ativo, "the streamed bool cell must round-trip");
+        CHECK(first->opcional == 7, "the streamed optional cell must round-trip its value");
+
+        auto second = table->at(1);
+        CHECK(second.has_value(), "row 1 must be in bounds");
+        CHECK(second->texto.empty(), "write(optional<string_view>{}) must have written a blank cell");
+        CHECK(!second->opcional.has_value(), "write(optional<int64_t>{}) must have written a blank cell");
+    }
+    std::filesystem::remove(path);
+    return 0;
+}
+
+// Same as test_writer_handle_class_round_trip, but backed by open_memory()/bytes() instead of a
+// file.
+static int test_writer_handle_class_to_memory_round_trip()
+{
+    auto handle = xl::WriterHandle::open_memory(XL_FORMAT_XLSX);
+    CHECK(handle.has_value(), "WriterHandle::open_memory must succeed");
+
+    CHECK(handle->start_sheet("Dados").has_value(), "start_sheet must succeed");
+    CHECK(handle->start_row().has_value(), "start_row must succeed");
+    CHECK(handle->write(std::string_view("uma")).has_value(), "write(string_view) must succeed");
+    CHECK(handle->write(int64_t{3}).has_value(), "write(int64_t) must succeed");
+    CHECK(handle->end_row().has_value(), "end_row must succeed");
+
+    auto bytes = handle->bytes();
+    CHECK(bytes.has_value(), "bytes() must succeed");
+    CHECK(!bytes->empty(), "bytes() must return non-empty bytes");
+
+    auto workbook = xl::Workbook::open_memory(*bytes, XL_FORMAT_XLSX);
+    CHECK(workbook.has_value(), "the bytes bytes() returned must open");
+    auto sheet_name = workbook->sheet_name();
+    CHECK(sheet_name.has_value() && *sheet_name == "Dados", "start_sheet's name must reach the bytes");
+
+    // bytes() must not have released the handle - unlike end_sheet/start_sheet (bytes() already
+    // ended the sheet internally to produce a valid result, so calling those again would rightly
+    // fail), a second bytes() call is still valid and must return the same content.
+    auto bytes_again = handle->bytes();
+    CHECK(bytes_again.has_value(), "a second bytes() call must still succeed");
+    CHECK(*bytes_again == *bytes, "a second bytes() call must return the same content");
+    return 0;
+}
+
+// bytes() on a file-backed handle (opened via open(), not open_memory()) must fail cleanly - the
+// same XL_INVALID_ARGUMENT xl_write_handle_bytes itself returns for that case.
+static int test_writer_handle_class_bytes_rejects_a_file_backed_handle()
+{
+    const std::filesystem::path path = temp_path("writer_handle_class_file.xlsx");
+    {
+        // Scoped for the same reason as test_writer_handle_class_round_trip: the handle holds the
+        // path open exclusively until its destructor runs, and std::filesystem::remove below needs
+        // that lock released first.
+        auto handle = xl::WriterHandle::open(path.string(), XL_FORMAT_XLSX);
+        CHECK(handle.has_value(), "WriterHandle::open must succeed");
+        CHECK(handle->start_sheet("S").has_value(), "start_sheet must succeed");
+
+        auto bytes = handle->bytes();
+        CHECK(!bytes.has_value(), "bytes() on a file-backed handle must fail");
+        CHECK(bytes.error().code == XL_INVALID_ARGUMENT,
+              "bytes() on a file-backed handle must be XL_INVALID_ARGUMENT");
+    }
     std::filesystem::remove(path);
     return 0;
 }
@@ -459,6 +652,10 @@ int main()
         return 1;
     }
     if (test_write_columns_round_trip() != 0)
+    {
+        return 1;
+    }
+    if (test_write_columns_to_memory_round_trip() != 0)
     {
         return 1;
     }
@@ -478,6 +675,10 @@ int main()
     {
         return 1;
     }
+    if (test_write_sheet_to_memory_round_trip() != 0)
+    {
+        return 1;
+    }
     if (test_write_sheet_options_and_csv() != 0)
     {
         return 1;
@@ -491,6 +692,18 @@ int main()
         return 1;
     }
     if (test_writer_handle_rejects_out_of_order_calls() != 0)
+    {
+        return 1;
+    }
+    if (test_writer_handle_class_round_trip() != 0)
+    {
+        return 1;
+    }
+    if (test_writer_handle_class_to_memory_round_trip() != 0)
+    {
+        return 1;
+    }
+    if (test_writer_handle_class_bytes_rejects_a_file_backed_handle() != 0)
     {
         return 1;
     }

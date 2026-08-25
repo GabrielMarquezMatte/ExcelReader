@@ -1183,6 +1183,54 @@ namespace xl
         return write_columns(path, format_from_path(path), columns, options);
     }
 
+    // In-memory equivalent of write_columns: same validation and column lowering, but the workbook
+    // is built in memory and returned as bytes instead of being written to a path - so, unlike
+    // write_columns, there is no path to infer a format from and `format` cannot default to one.
+    // The native xl_buffer is copied into the returned vector and freed before this function
+    // returns, so the caller owns an ordinary std::vector<uint8_t> with nothing further to release.
+    inline std::expected<std::vector<uint8_t>, Error> write_columns_to_memory(int32_t format,
+                                                                              std::span<const ColumnRef> columns,
+                                                                              const WriteOptions *options = nullptr)
+    {
+        const std::expected<void, Error> &abi = detail::check_abi_version();
+        if (!abi.has_value())
+        {
+            return std::unexpected(abi.error());
+        }
+        std::expected<int64_t, Error> row_count = detail::validate_write_columns(columns);
+        if (!row_count.has_value())
+        {
+            return std::unexpected(std::move(row_count.error()));
+        }
+
+        const size_t count = columns.size();
+        std::vector<const uint8_t *> name_slots(count);
+        std::vector<int32_t> name_lens(count);
+        std::vector<xl_column_spec> specs(count);
+        std::vector<xl_column> raw_columns(count);
+        for (size_t i = 0; i < count; ++i)
+        {
+            detail::fill_write_column(columns[i], name_slots[i], name_lens[i], specs[i], raw_columns[i]);
+        }
+
+        xl_table table{static_cast<int32_t>(count), *row_count, raw_columns.data()};
+        xl_write_options raw_options{};
+        const xl_write_options *options_pointer = detail::lower_options(options, raw_options);
+
+        xl_buffer buffer{};
+        const int32_t status = xl_write_typed_to_memory(format, specs.data(), &table, options_pointer, &buffer);
+        if (status != XL_OK)
+        {
+            return std::unexpected(detail::make_error(status));
+        }
+        struct BufferGuard
+        {
+            xl_buffer *buffer;
+            ~BufferGuard() { xl_free_buffer(buffer); }
+        } guard{&buffer};
+        return std::vector<uint8_t>(buffer.data, buffer.data + buffer.len);
+    }
+
     // ---- write_sheet<T>: transposing a range of structs into columns -----------------------------
 
     namespace detail
@@ -1445,6 +1493,7 @@ namespace xl
             // more than one, and the alias list exists to resolve a header on the way IN.
             return {std::get<Is>(builders).to_ref(std::string_view(std::get<Is>(bindings).column_names[0]))...};
         }
+
     } // namespace detail
 
     // Writes `rows` to `path` as a single sheet, using the same xl::ExcelMapper<T> specialization
@@ -1455,6 +1504,13 @@ namespace xl
     // compile-time dispatch. That transpose is the only copy this makes; it is what the ABI's
     // columnar shape costs a row-shaped caller. If you already hold columnar buffers, call
     // write_columns instead and pay nothing.
+    //
+    // NOTE for write_sheet_to_memory below: this body is intentionally NOT factored into a shared
+    // helper returning just `refs`. Every ColumnRef in `refs` borrows pointers into `builders`'s own
+    // std::vectors (see detail::ColumnBuilder), so `refs` is only valid while `builders` is still
+    // alive - a helper that built `builders` and returned `refs` alone would hand back dangling
+    // pointers the moment it returned. `builders` and `refs` must stay in the same scope as the
+    // write_columns(_to_memory) call that consumes them.
     template <std::ranges::input_range R>
     std::expected<void, Error> write_sheet(std::string_view path, int32_t format, R &&rows,
                                            const WriteOptions *options = nullptr)
@@ -1490,4 +1546,242 @@ namespace xl
     {
         return write_sheet(path, format_from_path(path), std::forward<R>(rows), options);
     }
+
+    // In-memory equivalent of write_sheet: same transpose (see the NOTE on write_sheet above for why
+    // this body duplicates it instead of sharing it), but returns bytes instead of writing to a
+    // path - see write_columns_to_memory for why `format` has no default here.
+    template <std::ranges::input_range R>
+    std::expected<std::vector<uint8_t>, Error> write_sheet_to_memory(int32_t format, R &&rows,
+                                                                     const WriteOptions *options = nullptr)
+    {
+        using T = std::remove_cvref_t<std::ranges::range_value_t<R>>;
+        static constexpr auto bindings = ExcelMapper<T>::get_bindings();
+        static constexpr size_t field_count = std::tuple_size_v<decltype(bindings)>;
+        static constexpr auto indices = std::make_index_sequence<field_count>{};
+        typename detail::BuildersFor<decltype(bindings), std::remove_cvref_t<decltype(indices)>>::type builders{};
+        if constexpr (std::ranges::sized_range<R>)
+        {
+            detail::reserve_all(builders, static_cast<size_t>(std::ranges::size(rows)), indices);
+        }
+        for (const auto &row : rows)
+        {
+            detail::push_row(builders, row, bindings, indices);
+        }
+
+        if (detail::any_overflowed(builders, indices))
+        {
+            return std::unexpected(Error{XL_INVALID_ARGUMENT,
+                                         "a string column exceeds 2 GiB, which int32 offsets cannot address."});
+        }
+
+        const std::array<ColumnRef, field_count> refs = detail::to_refs(builders, bindings, indices);
+        return write_columns_to_memory(format, refs, options);
+    }
+
+    // ---- Streaming writer handle (RAII) ----------------------------------------------------------
+
+    // Row-by-row equivalent of write_columns/write_sheet<T>: xl_writer_handle wrapped for RAII, one
+    // sheet and one row open at a time. Call order mirrors the C ABI (see xl_writer_handle in
+    // excelreader.h): open()/open_memory(), then per sheet start_sheet()..end_sheet(), each
+    // containing start_row()..end_row() with one write() per cell in between, left to right. A call
+    // out of order returns an Error rather than crashing or corrupting output, and the handle stays
+    // usable afterward - fix the call order and continue, or let the destructor discard it.
+    //
+    // Unlike write_columns/write_sheet<T>, `format` is always explicit here: xl_open_write_handle
+    // and xl_open_write_handle_to_memory both reject XL_FORMAT_AUTO the same way xl_write_typed
+    // does, and a format_from_path(path)-inferring overload here would be genuinely ambiguous
+    // against open_memory's signature at literal 0/XL_FORMAT_AUTO (a null pointer constant matches
+    // both an int32_t format parameter and a defaulted `const WriteOptions*` one) - not merely
+    // confusing, an actual "call is ambiguous" compile error for that one call.
+    class WriterHandle
+    {
+    public:
+        WriterHandle(const WriterHandle &) = delete;
+        WriterHandle &operator=(const WriterHandle &) = delete;
+
+        WriterHandle(WriterHandle &&other) noexcept : handle_(std::exchange(other.handle_, nullptr)) {}
+        WriterHandle &operator=(WriterHandle &&other) noexcept
+        {
+            if (this != &other)
+            {
+                close();
+                handle_ = std::exchange(other.handle_, nullptr);
+            }
+            return *this;
+        }
+
+        ~WriterHandle() { close(); }
+
+        static std::expected<WriterHandle, Error> open(std::string_view path, int32_t format,
+                                                       const WriteOptions *options = nullptr)
+        {
+            if (const auto &abi = detail::check_abi_version(); !abi.has_value())
+            {
+                return std::unexpected(abi.error());
+            }
+            xl_writer_handle *handle = nullptr;
+            xl_write_options c_options{};
+            const xl_write_options *c_options_ptr = detail::lower_options(options, c_options);
+            int32_t status = xl_open_write_handle(reinterpret_cast<const uint8_t *>(path.data()),
+                                                  static_cast<int32_t>(path.size()), format,
+                                                  c_options_ptr, &handle);
+            if (status != XL_OK)
+            {
+                return std::unexpected(detail::make_error(status));
+            }
+            return WriterHandle(handle);
+        }
+
+        // In-memory equivalent of open(): read the result back with bytes(), then release the
+        // handle the same way as a file-backed one (destructor, or an explicit move-assignment).
+        static std::expected<WriterHandle, Error> open_memory(int32_t format,
+                                                              const WriteOptions *options = nullptr)
+        {
+            if (const auto &abi = detail::check_abi_version(); !abi.has_value())
+            {
+                return std::unexpected(abi.error());
+            }
+            xl_writer_handle *handle = nullptr;
+            xl_write_options c_options{};
+            const xl_write_options *c_options_ptr = detail::lower_options(options, c_options);
+            int32_t status = xl_open_write_handle_to_memory(format, c_options_ptr, &handle);
+            if (status != XL_OK)
+            {
+                return std::unexpected(detail::make_error(status));
+            }
+            return WriterHandle(handle);
+        }
+
+        std::expected<void, Error> start_sheet(std::string_view name)
+        {
+            return status_result(xl_start_sheet(handle_, reinterpret_cast<const uint8_t *>(name.data()),
+                                                static_cast<int32_t>(name.size())));
+        }
+
+        std::expected<void, Error> start_row() { return status_result(xl_start_row(handle_)); }
+
+        std::expected<void, Error> end_row() { return status_result(xl_end_row(handle_)); }
+
+        std::expected<void, Error> end_sheet() { return status_result(xl_end_sheet(handle_)); }
+
+        // Writes the next cell of the current row. T is deduced from `value` through the same
+        // XlType<T> mapping parse_sheet/write_sheet use: std::string/std::string_view for
+        // XL_T_STRING, an integral type for XL_T_I64, a floating-point type for XL_T_F64, bool for
+        // XL_T_BOOL, std::chrono::year_month_day/sys_days for XL_T_DATE,
+        // std::chrono::microseconds/hh_mm_ss<microseconds> for XL_T_TIME, and
+        // std::chrono::system_clock::time_point for XL_T_TIMESTAMP. Wrap any of those in
+        // std::optional<T> to write a blank cell for an empty one.
+        template <typename T>
+        std::expected<void, Error> write(const T &value)
+        {
+            using Value = std::remove_cvref_t<T>;
+            if constexpr (detail::is_optional_v<Value>)
+            {
+                if (!value.has_value())
+                {
+                    return write_null(XlType<Value>::value);
+                }
+                return write(*value);
+            }
+            else if constexpr (std::is_same_v<Value, std::string> || std::is_same_v<Value, std::string_view>)
+            {
+                const std::string_view text(value);
+                return status_result(xl_write_string(handle_, reinterpret_cast<const uint8_t *>(text.data()),
+                                                      static_cast<int32_t>(text.size())));
+            }
+            else if constexpr (std::is_same_v<Value, bool>)
+            {
+                return status_result(xl_write_bool(handle_, value ? 1 : 0));
+            }
+            else if constexpr (std::is_integral_v<Value>)
+            {
+                return status_result(xl_write_int64(handle_, static_cast<int64_t>(value)));
+            }
+            else if constexpr (std::is_floating_point_v<Value>)
+            {
+                return status_result(xl_write_float64(handle_, static_cast<double>(value)));
+            }
+            else if constexpr (std::is_same_v<Value, std::chrono::sys_days>)
+            {
+                return status_result(
+                    xl_write_date(handle_, static_cast<int32_t>(value.time_since_epoch().count())));
+            }
+            else if constexpr (std::is_same_v<Value, std::chrono::year_month_day>)
+            {
+                return status_result(xl_write_date(
+                    handle_, static_cast<int32_t>(std::chrono::sys_days{value}.time_since_epoch().count())));
+            }
+            else if constexpr (std::is_same_v<Value, std::chrono::microseconds>)
+            {
+                return status_result(xl_write_time(handle_, value.count()));
+            }
+            else if constexpr (std::is_same_v<Value, std::chrono::hh_mm_ss<std::chrono::microseconds>>)
+            {
+                return status_result(xl_write_time(handle_, value.to_duration().count()));
+            }
+            else if constexpr (std::is_same_v<Value, std::chrono::system_clock::time_point>)
+            {
+                return status_result(xl_write_timestamp(
+                    handle_,
+                    std::chrono::time_point_cast<std::chrono::microseconds>(value).time_since_epoch().count()));
+            }
+            else
+            {
+                // Dependent on Value so this only fires when write<T> is actually instantiated for
+                // an unsupported T, not on every parse of the template - same reasoning as XlType's
+                // "no default" comment: a type this cannot write is a compile error, not a silent
+                // no-op cell.
+                static_assert(sizeof(Value) == 0, "unsupported type for xl::WriterHandle::write");
+            }
+        }
+
+        // Writes a blank cell of the given XL_T_* type directly, for a caller that would rather
+        // pass the type explicitly than wrap a value in std::optional<T>.
+        std::expected<void, Error> write_null(int32_t type) { return status_result(xl_write_null(handle_, type)); }
+
+        // Reads back everything written so far - only valid for a handle from open_memory();
+        // XL_INVALID_ARGUMENT for one from open(). Ends the workbook's trailing structure if that
+        // has not already happened, but does NOT release the handle: it stays open (and closeable)
+        // exactly like a file-backed one. See xl_write_handle_bytes in excelreader.h.
+        std::expected<std::vector<uint8_t>, Error> bytes()
+        {
+            xl_buffer buffer{};
+            const int32_t status = xl_write_handle_bytes(handle_, &buffer);
+            if (status != XL_OK)
+            {
+                return std::unexpected(detail::make_error(status));
+            }
+            struct BufferGuard
+            {
+                xl_buffer *buffer;
+                ~BufferGuard() { xl_free_buffer(buffer); }
+            } guard{&buffer};
+            return std::vector<uint8_t>(buffer.data, buffer.data + buffer.len);
+        }
+
+        xl_writer_handle *handle() const noexcept { return handle_; }
+
+    private:
+        explicit WriterHandle(xl_writer_handle *handle) noexcept : handle_(handle) {}
+
+        static std::expected<void, Error> status_result(int32_t status)
+        {
+            if (status != XL_OK)
+            {
+                return std::unexpected(detail::make_error(status));
+            }
+            return {};
+        }
+
+        void close() noexcept
+        {
+            if (handle_ != nullptr)
+            {
+                xl_close_write_handle(handle_);
+                handle_ = nullptr;
+            }
+        }
+
+        xl_writer_handle *handle_ = nullptr;
+    };
 } // namespace xl

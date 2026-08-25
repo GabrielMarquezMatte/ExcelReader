@@ -56,9 +56,19 @@ namespace ExcelReader.Native.Writer
         /// Finishes the workbook: closes any row/sheet still open, then writes the workbook's trailing
         /// structure (<c>IWorkbookWriter.End</c>) — the zip central directory for XLSX/XLSB, the BIFF
         /// EOF record for XLS. Must run before <see cref="Dispose"/> for the output file to be valid;
-        /// <see cref="NativeApi.CloseWriteHandle"/> always calls both, in that order.
+        /// <see cref="NativeApi.CloseWriteHandle"/> always calls both, in that order. Idempotent: a
+        /// second call is a no-op, so <see cref="NativeApi.GetWriteHandleBytes"/> can call this to
+        /// guarantee a complete result without caring whether the caller already ended the workbook.
         /// </summary>
         internal abstract void Close();
+
+        /// <summary>
+        /// Set by <see cref="NativeApi.OpenWriteHandleToMemory"/> right after construction, to the
+        /// exact <see cref="MemoryStream"/> passed to <see cref="Create"/> — null for a file-backed
+        /// handle. <see cref="NativeApi.GetWriteHandleBytes"/> reads it back out; nothing else here
+        /// needs to know a handle is memory-backed rather than file-backed.
+        /// </summary>
+        internal MemoryStream? MemoryBuffer { get; set; }
 
         public void Dispose()
         {
@@ -104,6 +114,7 @@ namespace ExcelReader.Native.Writer
         private readonly IWorkbookWriter<TSheet> _workbook;
         private TSheet? _sheet;
         private TRow? _row;
+        private bool _closed;
 
         internal NativeWriterHandle(IWorkbookWriter<TSheet> workbook)
         {
@@ -208,6 +219,16 @@ namespace ExcelReader.Native.Writer
 
         internal override void Close()
         {
+            // Idempotent: GetWriteHandleBytes calls this to guarantee complete output regardless of
+            // whether the caller already ended the workbook, and CloseWriteHandle may then call it
+            // again on the same handle. A second _workbook.End() is not something every writer is
+            // guaranteed to tolerate, so the guard lives here rather than relying on that.
+            if (_closed)
+            {
+                return;
+            }
+            _closed = true;
+
             // Unlike EndRow/EndSheet, Close is the forceful "finish whatever is pending" step: a row
             // or sheet the caller forgot to end is closed here rather than rejected, since the whole
             // point of xl_close_write_handle is to always leave a valid file behind.
