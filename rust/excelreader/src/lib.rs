@@ -7,6 +7,7 @@ mod options;
 mod temporal;
 pub mod workbook;
 pub mod writer;
+pub mod writer_handle;
 
 #[cfg(feature = "arrow")]
 pub mod arrow;
@@ -128,6 +129,22 @@ pub struct XlInferredSchema {
     pub column_count: i32,
 }
 
+/// Mirrors `xl_buffer`: an owned block of native memory returned by `xl_write_typed_to_memory` or
+/// `xl_write_handle_bytes`. Released with `xl_free_buffer` - see `writer::buffer_to_vec`, the one
+/// place this crate touches the raw struct directly.
+#[repr(C)]
+pub struct XlBuffer {
+    pub data: *mut u8,
+    pub len: i64,
+}
+
+/// Opaque streaming writer handle - never dereferenced by Rust, only passed back to `xl_*`
+/// functions. See [`writer_handle::WriterHandle`] for the safe wrapper.
+#[repr(C)]
+pub struct XlWriterHandle {
+    _private: [u8; 0],
+}
+
 extern "C" {
     pub fn xl_abi_version() -> c_int;
 
@@ -213,6 +230,59 @@ extern "C" {
         table: *const XlTable,
         options: *const XlWriteOptions,
     ) -> c_int;
+
+    /// Same as `xl_write_typed`, except the result is returned as `out_buffer` instead of being
+    /// written to a path. Only read `*out_buffer` when the call returns `XL_OK`; on failure it is
+    /// zeroed, and `xl_free_buffer` on a zeroed buffer is a no-op.
+    pub fn xl_write_typed_to_memory(
+        format: i32,
+        specs: *const XlColumnSpec,
+        table: *const XlTable,
+        options: *const XlWriteOptions,
+        out_buffer: *mut XlBuffer,
+    ) -> c_int;
+
+    /// Releases a buffer returned by `xl_write_typed_to_memory` or `xl_write_handle_bytes` and
+    /// resets it to zero. Safe on a zeroed value.
+    pub fn xl_free_buffer(buffer: *mut XlBuffer);
+
+    // ---- Streaming writer handle: see writer_handle::WriterHandle for the call-order contract. ----
+
+    pub fn xl_open_write_handle(
+        path: *const u8,
+        path_len: i32,
+        format: i32,
+        options: *const XlWriteOptions,
+        out_handle: *mut *mut XlWriterHandle,
+    ) -> c_int;
+
+    pub fn xl_open_write_handle_to_memory(
+        format: i32,
+        options: *const XlWriteOptions,
+        out_handle: *mut *mut XlWriterHandle,
+    ) -> c_int;
+
+    pub fn xl_start_sheet(handle: *mut XlWriterHandle, name: *const u8, name_len: i32) -> c_int;
+    pub fn xl_start_row(handle: *mut XlWriterHandle) -> c_int;
+
+    pub fn xl_write_string(handle: *mut XlWriterHandle, value: *const u8, value_len: i32) -> c_int;
+    pub fn xl_write_int64(handle: *mut XlWriterHandle, value: i64) -> c_int;
+    pub fn xl_write_float64(handle: *mut XlWriterHandle, value: f64) -> c_int;
+    pub fn xl_write_bool(handle: *mut XlWriterHandle, value: i32) -> c_int;
+    pub fn xl_write_date(handle: *mut XlWriterHandle, days_since_epoch: i32) -> c_int;
+    pub fn xl_write_time(handle: *mut XlWriterHandle, micros_since_midnight: i64) -> c_int;
+    pub fn xl_write_timestamp(handle: *mut XlWriterHandle, micros_since_epoch: i64) -> c_int;
+    pub fn xl_write_null(handle: *mut XlWriterHandle, r#type: i32) -> c_int;
+
+    pub fn xl_end_row(handle: *mut XlWriterHandle) -> c_int;
+    pub fn xl_end_sheet(handle: *mut XlWriterHandle) -> c_int;
+    pub fn xl_close_write_handle(handle: *mut XlWriterHandle) -> c_int;
+
+    /// Reads back everything written so far to a handle opened by `xl_open_write_handle_to_memory`.
+    /// `XL_INVALID_ARGUMENT` for one from `xl_open_write_handle`. Only read `*out_buffer` when the
+    /// call returns `XL_OK`; on failure it is zeroed, and `xl_free_buffer` on a zeroed buffer is a
+    /// no-op.
+    pub fn xl_write_handle_bytes(handle: *mut XlWriterHandle, out_buffer: *mut XlBuffer) -> c_int;
 
     pub fn xl_last_error_ptr(out_len: *mut i32) -> *const u8;
 }

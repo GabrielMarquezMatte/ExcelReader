@@ -18,6 +18,13 @@ const REPO: &str = "GabrielMarquezMatte/ExcelReader";
 
 fn main() {
     println!("cargo:rerun-if-env-changed=EXCELREADER_NATIVE_LIB_DIR");
+    // PHASE1_DEF_EXPORTS below embeds this file's content via include_str! at build-script COMPILE
+    // time. Emitting any rerun-if-* directive opts this build script out of Cargo's default "rerun
+    // if any file in the package changed" fallback, so without this the compiled build-script-build
+    // binary keeps an outdated symbol list baked in after excelreader.def changes - it is not
+    // recompiled, and only re-*run*, which just regenerates the import lib from the same stale
+    // constant.
+    println!("cargo:rerun-if-changed=excelreader.def");
 
     let out_dir = PathBuf::from(env::var("OUT_DIR").unwrap());
     let target_os = env::var("CARGO_CFG_TARGET_OS").unwrap();

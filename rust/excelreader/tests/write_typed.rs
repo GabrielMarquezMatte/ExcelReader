@@ -120,6 +120,48 @@ fn write_columns_round_trips_every_column_type() {
 }
 
 #[test]
+fn write_columns_to_memory_round_trips_every_column_type() {
+    let offsets = [0i32, 3, 6];
+    let blob = b"umadoi";
+    let inteiros = [1i64, 2];
+
+    let columns = [
+        Column {
+            name: Some("texto"),
+            data: ColumnData::Str {
+                offsets: &offsets,
+                data: blob,
+            },
+            validity: None,
+        },
+        Column {
+            name: Some("inteiro"),
+            data: ColumnData::I64(&inteiros),
+            validity: None,
+        },
+    ];
+
+    let bytes = excelreader::writer::write_columns_to_memory(XL_FORMAT_XLSX, &columns, None)
+        .expect("write_columns_to_memory must succeed");
+    assert!(!bytes.is_empty());
+
+    let mut workbook =
+        Workbook::open_memory(&bytes, XL_FORMAT_XLSX, None).expect("the returned bytes must open");
+    #[derive(Default, Debug, ExcelMapper)]
+    struct TwoColumnRow {
+        #[excel(name = "texto")]
+        texto: String,
+        #[excel(name = "inteiro")]
+        inteiro: i64,
+    }
+    let table = parse_sheet::<TwoColumnRow>(&mut workbook, 1)
+        .expect("the returned bytes must parse back");
+    assert_eq!(table.len(), 2);
+    assert_eq!(table.get(0).expect("row 0").texto, "uma");
+    assert_eq!(table.get(0).expect("row 0").inteiro, 1);
+}
+
+#[test]
 fn write_columns_writes_nulls_from_the_validity_bitmap() {
     let valores = [10i64, 0, 30];
     // LSB-first: bits 0 and 2 set, bit 1 clear - row 1 is null.
@@ -402,6 +444,43 @@ fn the_derive_round_trips_every_supported_field_type() {
 
     drop(table);
     std::fs::remove_file(&path).ok();
+}
+
+#[test]
+fn write_sheet_to_memory_round_trips_the_derive() {
+    let rows = vec![
+        DerivedRow {
+            texto: "uma".to_string(),
+            inteiro: 1,
+            numero: 0.5,
+            ativo: true,
+            data: Date::new(20454),
+            hora: Time::new(3_600_000_000),
+            instante: Timestamp::new(1_767_225_600_000_000),
+            opcional: Some(7),
+        },
+        DerivedRow {
+            texto: "duas".to_string(),
+            inteiro: 2,
+            numero: 1.5,
+            ativo: false,
+            data: Date::new(20455),
+            hora: Time::new(7_200_000_000),
+            instante: Timestamp::new(1_767_312_000_000_000),
+            opcional: None,
+        },
+    ];
+
+    let bytes = excelreader::writer::write_sheet_to_memory(XL_FORMAT_XLSX, &rows, None)
+        .expect("write_sheet_to_memory must succeed");
+
+    let mut workbook =
+        Workbook::open_memory(&bytes, XL_FORMAT_XLSX, None).expect("the returned bytes must open");
+    let table =
+        parse_sheet::<DerivedRow>(&mut workbook, 1).expect("the returned bytes must parse back");
+    assert_eq!(table.len(), 2);
+    assert_eq!(table.get(0).expect("row 0"), rows[0]);
+    assert_eq!(table.get(1).expect("row 1"), rows[1]);
 }
 
 /// The write side uses only the PRIMARY name. An alias that reached a write spec would be
