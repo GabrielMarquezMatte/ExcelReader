@@ -262,7 +262,9 @@ typedef struct xl_write_options {
     int32_t struct_size;
     int32_t sheet_name_len;
     const uint8_t* sheet_name;    /* UTF-8; NULL = "Sheet1". Excel's rules: 1-31 characters, none of
-                                    * : \ / ? * [ ] . Ignored for XL_FORMAT_CSV. */
+                                    * : \ / ? * [ ] . Ignored for XL_FORMAT_CSV, and ignored entirely
+                                    * by xl_open_write_handle - each sheet is named by its own
+                                    * xl_start_sheet call instead. */
 
     /* CSV only; ignored for every other format. */
     int32_t csv_delimiter;        /* byte value 1-255, 0 = default ',' */
@@ -338,6 +340,69 @@ int32_t xl_infer_schema(xl_workbook* handle, int32_t header_row, int32_t sample_
 
 /* Releases a result returned by xl_infer_schema and resets it to zero. Safe on a zeroed value. */
 void xl_free_schema(xl_inferred_schema* schema);
+
+/* Streaming writer handle: one sheet and one row open at a time, written directly to disk as each
+ * call arrives instead of building an xl_table in memory first (see xl_write_typed for that
+ * alternative). The required call order is:
+ *
+ *   xl_open_write_handle
+ *     xl_start_sheet
+ *       xl_start_row
+ *         xl_write_string / xl_write_int64 / xl_write_float64 / xl_write_bool /
+ *         xl_write_date / xl_write_time / xl_write_timestamp / xl_write_null   (one call per cell,
+ *                                                                               left to right)
+ *       xl_end_row                                                            (repeat per row)
+ *     xl_end_sheet                                                            (repeat per sheet)
+ *   xl_close_write_handle
+ *
+ * Calling one of these out of order (e.g. a cell write before xl_start_row, or xl_start_sheet
+ * again before xl_end_sheet) returns XL_ERROR with a message from xl_last_error/xl_last_error_ptr;
+ * the handle itself is still usable afterward - fix the call order and continue, or give up and
+ * call xl_close_write_handle to discard it.
+ *
+ * xl_close_write_handle must be called exactly once to produce a valid file: it implicitly closes
+ * any row/sheet still open and writes the workbook's trailing structure (the zip central directory
+ * for XLSX/XLSB, the BIFF EOF record for XLS). It always releases the handle - including on
+ * XL_ERROR - so *handle must not be used again after calling it, successful or not. */
+typedef struct xl_writer_handle xl_writer_handle;
+
+/* Creates path (truncating it if it already exists) and returns a handle for it. options may be
+ * NULL for every default, same convention as xl_write_typed's options parameter. format must be
+ * one of XL_FORMAT_XLS/XLSX/XLSB/CSV (XL_FORMAT_AUTO is rejected - see xl_write_typed). */
+int32_t xl_open_write_handle(const uint8_t* path, int32_t path_len, int32_t format,
+                             const xl_write_options* options, xl_writer_handle** out_handle);
+
+/* Starts a new sheet named name (UTF-8, name_len bytes). Must not be called again before the
+ * current sheet, if any, has been ended with xl_end_sheet. */
+int32_t xl_start_sheet(xl_writer_handle* handle, const uint8_t* name, int32_t name_len);
+
+/* Starts a new row on the current sheet. Must not be called again before the current row, if any,
+ * has been ended with xl_end_row. */
+int32_t xl_start_row(xl_writer_handle* handle);
+
+/* Writes the next cell of the current row as text, or a blank cell when value is NULL. */
+int32_t xl_write_string(xl_writer_handle* handle, const uint8_t* value, int32_t value_len);
+/* Writes the next cell of the current row as an integer. */
+int32_t xl_write_int64(xl_writer_handle* handle, int64_t value);
+/* Writes the next cell of the current row as a floating-point number. */
+int32_t xl_write_float64(xl_writer_handle* handle, double value);
+/* Writes the next cell of the current row as a boolean (0/nonzero). */
+int32_t xl_write_bool(xl_writer_handle* handle, int32_t value);
+/* Writes the next cell of the current row as a date. See XL_T_DATE for the wire format. */
+int32_t xl_write_date(xl_writer_handle* handle, int32_t days_since_epoch);
+/* Writes the next cell of the current row as a time of day. See XL_T_TIME for the wire format. */
+int32_t xl_write_time(xl_writer_handle* handle, int64_t microseconds_since_midnight);
+/* Writes the next cell of the current row as a date/time. See XL_T_TIMESTAMP for the wire format. */
+int32_t xl_write_timestamp(xl_writer_handle* handle, int64_t microseconds_since_epoch);
+/* Writes the next cell of the current row as a blank cell of the given XL_T_* type. */
+int32_t xl_write_null(xl_writer_handle* handle, int32_t type);
+
+/* Ends the current row, started by xl_start_row. */
+int32_t xl_end_row(xl_writer_handle* handle);
+/* Ends the current sheet, started by xl_start_sheet. Must not be called with a row still open. */
+int32_t xl_end_sheet(xl_writer_handle* handle);
+/* Finishes and releases handle - see the call-order note above. */
+int32_t xl_close_write_handle(xl_writer_handle* handle);
 
 /* Last error on the CALLING thread. */
 int32_t xl_last_error(uint8_t* buffer, int32_t capacity, int32_t* out_len);
