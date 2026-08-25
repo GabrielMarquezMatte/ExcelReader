@@ -127,6 +127,76 @@ jobs:
           files: ${{ steps.asset.outputs.name }}
           fail_on_unmatched_files: true
 
+  publish-cli:
+    name: Publish excelreader CLI (${{ matrix.os }})
+    needs: publish
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: write
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+
+      - name: Derive version from tag
+        id: version
+        shell: bash
+        run: echo "value=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Determine RID
+        id: rid
+        shell: bash
+        run: |
+          arch=$([ "$(uname -m 2>/dev/null || echo x64)" = "arm64" ] && echo arm64 || echo x64)
+          case "${{ runner.os }}" in
+            Windows) os=win ;;
+            macOS)   os=osx ;;
+            *)       os=linux ;;
+          esac
+          echo "value=${os}-${arch}" >> "$GITHUB_OUTPUT"
+
+      # PublishAot/PackAsTool=false override the project's normal dotnet-tool packaging (a
+      # dotnet tool ships as IL, launched by the caller's own SDK) with a single self-contained
+      # native executable instead - no .NET runtime required on the machine that runs it.
+      # ConsoleAppFramework is already compile-time only and Spectre.Console is AOT-compatible,
+      # so this publishes clean with zero IL2xxx/IL3xxx trim warnings.
+      - name: Publish native AOT binary
+        shell: bash
+        run: >-
+          dotnet publish src/ExcelReader.Cli/ExcelReader.Cli.csproj
+          --configuration Release
+          -r ${{ steps.rid.outputs.value }}
+          -p:PublishAot=true
+          -p:PackAsTool=false
+          -p:Version=${{ steps.version.outputs.value }}
+          --output ./cli-publish
+
+      - name: Rename asset for this platform
+        id: asset
+        shell: bash
+        run: |
+          case "${{ runner.os }}" in
+            Windows) src=ExcelReader.Cli.exe; ext=.exe ;;
+            *)       src=ExcelReader.Cli;     ext= ;;
+          esac
+          name="excelreader-${{ steps.rid.outputs.value }}${ext}"
+          cp "./cli-publish/${src}" "${name}"
+          echo "name=${name}" >> "$GITHUB_OUTPUT"
+
+      - name: Upload to the GitHub Release
+        uses: softprops/action-gh-release@v3
+        with:
+          files: ${{ steps.asset.outputs.name }}
+          fail_on_unmatched_files: true
+
   publish-rust:
     name: Publish Rust crates
     needs: publish-native-assets
