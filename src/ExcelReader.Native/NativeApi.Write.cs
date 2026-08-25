@@ -1,6 +1,7 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Text;
 using ExcelReader.Core.Writer;
+using ExcelReader.Native.Writer;
 
 namespace ExcelReader.Native
 {
@@ -12,7 +13,7 @@ namespace ExcelReader.Native
         // Named distinctly from NativeApi.Typed.cs's nested-class field of the same value: both are
         // static members reachable from the outer NativeApi partial class, and reusing the name there
         // trips S3218 (field shadows an outer-class member).
-        private static readonly int WriteUnixEpochDayNumber = new DateOnly(1970, 1, 1).DayNumber;
+        internal static readonly int WriteUnixEpochDayNumber = new DateOnly(1970, 1, 1).DayNumber;
 
         /// <summary>
         /// Writes <paramref name="table"/> to <paramref name="path"/> as one sheet. Mirrors
@@ -56,6 +57,66 @@ namespace ExcelReader.Native
             {
                 SetLastError(exception.Message);
                 return NativeStatus.Error;
+            }
+        }
+
+        internal static int OpenWriteHandle(ReadOnlySpan<byte> path, int format, NativeWriteOptions options, out NativeWriterHandle? handle)
+        {
+            handle = null;
+            if (path.IsEmpty)
+            {
+                SetLastError("xl_open_write_handle needs a non-empty path.");
+                return NativeStatus.InvalidArgument;
+            }
+            if (!IsWritableFormat(format))
+            {
+                SetLastError($"xl_open_write_handle needs an explicit format (XLS/XLSX/XLSB/CSV); got format {format}.");
+                return NativeStatus.InvalidArgument;
+            }
+            ClearLastError();
+            string filePath = Encoding.UTF8.GetString(path);
+            FileStream stream = new(filePath, FileMode.Create, FileAccess.Write, FileShare.None);
+            try
+            {
+                handle = NativeWriterHandle.Create(stream, format, options);
+                return NativeStatus.Ok;
+            }
+            catch (Exception exception)
+            {
+                // NativeWriterHandle.Create has not taken ownership of stream if it throws (e.g. a
+                // workbook writer's Start() fails), so this is the only place left to close it — an
+                // un-disposed FileStream here leaks a locked file handle for the process lifetime.
+                stream.Dispose();
+                SetLastError(exception.Message);
+                return NativeStatus.Error;
+            }
+        }
+
+        /// <summary>
+        /// Finishes and releases a writer handle opened by <see cref="OpenWriteHandle"/>. Always
+        /// disposes <paramref name="handle"/>, even when <see cref="NativeWriterHandle.Close"/> throws
+        /// — an unregistered-but-undisposed handle would otherwise leak its open <see cref="FileStream"/>.
+        /// </summary>
+        internal static int CloseWriteHandle(NativeWriterHandle? handle)
+        {
+            if (handle is null)
+            {
+                return NativeStatus.InvalidHandle;
+            }
+            try
+            {
+                handle.Close();
+                ClearLastError();
+                return NativeStatus.Ok;
+            }
+            catch (Exception exception)
+            {
+                SetLastError(exception.Message);
+                return NativeStatus.Error;
+            }
+            finally
+            {
+                handle.Dispose();
             }
         }
 
@@ -176,7 +237,7 @@ namespace ExcelReader.Native
             }
         }
 
-        private static void WriteCell(IRowWriter row, NativeColumn column, long rowIndex)
+        internal static void WriteCell(IRowWriter row, NativeColumn column, long rowIndex)
         {
             if (!IsValidAt(column, rowIndex))
             {
@@ -230,7 +291,7 @@ namespace ExcelReader.Native
 
         // The nullable overloads are what make a blank cell; passing a default value would write a real
         // 0/false/epoch-date instead.
-        private static void WriteNullCell(IRowWriter row, int type)
+        internal static void WriteNullCell(IRowWriter row, int type)
         {
             switch (type)
             {

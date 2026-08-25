@@ -1,5 +1,7 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Runtime.InteropServices;
 using System.Text;
+using ExcelReader.Native.Writer;
 
 namespace ExcelReader.Native
 {
@@ -518,6 +520,178 @@ namespace ExcelReader.Native
             }
         }
 
+        [UnmanagedCallersOnly(EntryPoint = "xl_open_write_handle")]
+        public static int OpenWriteHandle(byte* path, int pathLength, int format, NativeWriteOptionsRaw* options, nint* outHandle)
+        {
+            if (!IsValidOpenRequest(path, pathLength, outHandle))
+            {
+                return NativeStatus.InvalidArgument;
+            }
+            *outHandle = 0;
+            if (!TryDecodeWriteOptions(options, out NativeWriteOptions decodedOptions))
+            {
+                return NativeStatus.InvalidArgument;
+            }
+            int status = NativeApi.OpenWriteHandle(new ReadOnlySpan<byte>(path, pathLength), format, decodedOptions, out NativeWriterHandle? handle);
+            if (handle is not null)
+            {
+                *outHandle = NativeHandleTable.Register(handle);
+            }
+            return status;
+        }
+
+        [UnmanagedCallersOnly(EntryPoint = "xl_start_sheet")]
+        public static int StartSheet(nint handle, byte* name, int nameLength)
+        {
+            if (name is null || !NativeApi.IsValidNameLength(nameLength))
+            {
+                NativeApi.SetLastError($"xl_start_sheet's name_len is out of range; got {nameLength}.");
+                return NativeStatus.InvalidArgument;
+            }
+            if (!TryResolveWriter(handle, out NativeWriterHandle? writerHandle))
+            {
+                return NativeStatus.InvalidHandle;
+            }
+            try
+            {
+                string sheetName = Encoding.UTF8.GetString(name, nameLength);
+                writerHandle.StartSheet(sheetName);
+                return NativeStatus.Ok;
+            }
+            catch (Exception exception)
+            {
+                NativeApi.SetLastError(exception.Message);
+                return NativeStatus.Error;
+            }
+        }
+
+        [UnmanagedCallersOnly(EntryPoint = "xl_start_row")]
+        public static int StartRow(nint handle)
+        {
+            return RunWriterOp(handle, static writerHandle => writerHandle.StartRow());
+        }
+
+        [UnmanagedCallersOnly(EntryPoint = "xl_write_string")]
+        public static int WriteString(nint handle, byte* value, int valueLength)
+        {
+            if (value is not null && !NativeApi.IsValidNameLength(valueLength))
+            {
+                NativeApi.SetLastError($"xl_write_string's value_len is out of range; got {valueLength}.");
+                return NativeStatus.InvalidArgument;
+            }
+            if (!TryResolveWriter(handle, out NativeWriterHandle? writerHandle))
+            {
+                return NativeStatus.InvalidHandle;
+            }
+            try
+            {
+                string? text = value is null ? null : Encoding.UTF8.GetString(value, valueLength);
+                writerHandle.WriteString(text);
+                return NativeStatus.Ok;
+            }
+            catch (Exception exception)
+            {
+                NativeApi.SetLastError(exception.Message);
+                return NativeStatus.Error;
+            }
+        }
+
+        [UnmanagedCallersOnly(EntryPoint = "xl_write_int64")]
+        public static int WriteInt64(nint handle, long value)
+        {
+            return RunWriterOp(handle, writerHandle => writerHandle.WriteInt64(value));
+        }
+
+        [UnmanagedCallersOnly(EntryPoint = "xl_write_float64")]
+        public static int WriteFloat64(nint handle, double value)
+        {
+            return RunWriterOp(handle, writerHandle => writerHandle.WriteFloat64(value));
+        }
+
+        [UnmanagedCallersOnly(EntryPoint = "xl_write_bool")]
+        public static int WriteBool(nint handle, int value)
+        {
+            return RunWriterOp(handle, writerHandle => writerHandle.WriteBool(value != 0));
+        }
+
+        [UnmanagedCallersOnly(EntryPoint = "xl_write_date")]
+        public static int WriteDate(nint handle, int daysSinceEpoch)
+        {
+            return RunWriterOp(handle, writerHandle => writerHandle.WriteDate(daysSinceEpoch));
+        }
+
+        [UnmanagedCallersOnly(EntryPoint = "xl_write_time")]
+        public static int WriteTime(nint handle, long microsecondsSinceMidnight)
+        {
+            return RunWriterOp(handle, writerHandle => writerHandle.WriteTime(microsecondsSinceMidnight));
+        }
+
+        [UnmanagedCallersOnly(EntryPoint = "xl_write_timestamp")]
+        public static int WriteTimestamp(nint handle, long microsecondsSinceEpoch)
+        {
+            return RunWriterOp(handle, writerHandle => writerHandle.WriteTimestamp(microsecondsSinceEpoch));
+        }
+
+        [UnmanagedCallersOnly(EntryPoint = "xl_write_null")]
+        public static int WriteNull(nint handle, int type)
+        {
+            return RunWriterOp(handle, writerHandle => writerHandle.WriteNull(type));
+        }
+
+        [UnmanagedCallersOnly(EntryPoint = "xl_end_row")]
+        public static int EndRow(nint handle)
+        {
+            return RunWriterOp(handle, static writerHandle => writerHandle.EndRow());
+        }
+
+        [UnmanagedCallersOnly(EntryPoint = "xl_end_sheet")]
+        public static int EndSheet(nint handle)
+        {
+            return RunWriterOp(handle, static writerHandle => writerHandle.EndSheet());
+        }
+
+        [UnmanagedCallersOnly(EntryPoint = "xl_close_write_handle")]
+        public static int CloseWriteHandle(nint handle)
+        {
+            if (handle == 0)
+            {
+                return NativeStatus.InvalidHandle;
+            }
+            if (!NativeHandleTable.TryUnregister(handle, out NativeWriterHandle? target))
+            {
+                return NativeStatus.InvalidHandle;
+            }
+            return NativeApi.CloseWriteHandle(target);
+        }
+
+        // Shared by every writer entry point above whose body is just "resolve, try the one call,
+        // translate an exception into Error". xl_start_sheet and xl_write_string are the exceptions:
+        // both also decode a caller buffer, which can itself throw on malformed UTF-8, so they keep
+        // their own inline try/catch around resolve-then-decode-then-call instead of using this helper.
+        private static int RunWriterOp(nint handle, Action<NativeWriterHandle> operation)
+        {
+            if (!TryResolveWriter(handle, out NativeWriterHandle? writerHandle))
+            {
+                return NativeStatus.InvalidHandle;
+            }
+            try
+            {
+                operation(writerHandle);
+                return NativeStatus.Ok;
+            }
+            catch (Exception exception)
+            {
+                NativeApi.SetLastError(exception.Message);
+                return NativeStatus.Error;
+            }
+        }
+
+        private static bool TryResolveWriter(nint handle, [NotNullWhen(true)] out NativeWriterHandle? writerHandle)
+        {
+            writerHandle = NativeHandleTable.Resolve<NativeWriterHandle>(handle);
+            return writerHandle is not null;
+        }
+
         [UnmanagedCallersOnly(EntryPoint = "xl_last_error")]
         public static int LastError(byte* buffer, int capacity, int* outLength)
         {
@@ -554,7 +728,7 @@ namespace ExcelReader.Native
         // points above cannot be invoked from managed code, but a plain helper method can.
         internal static NativeHandle? Resolve(nint handle)
         {
-            return NativeHandleTable.Resolve(handle);
+            return NativeHandleTable.Resolve<NativeHandle>(handle);
         }
 
         internal static bool TryFree(nint handle, out NativeHandle? target)

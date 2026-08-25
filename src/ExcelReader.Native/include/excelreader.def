@@ -16,4 +16,18 @@ EXPORTS
     xl_write_typed
     xl_infer_schema
     xl_free_schema
+    xl_open_write_handle
+    xl_start_sheet
+    xl_start_row
+    xl_write_string
+    xl_write_int64
+    xl_write_float64
+    xl_write_bool
+    xl_write_date
+    xl_write_time
+    xl_write_timestamp
+    xl_write_null
+    xl_end_row
+    xl_end_sheet
+    xl_close_write_handle
     xl_last_error_ptr

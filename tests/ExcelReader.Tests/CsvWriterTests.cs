@@ -165,7 +165,7 @@ namespace ExcelReader.Tests
             CsvRowWriter row = writer.StartRow(); // intentionally left un-disposed
             row.Write("a");
 
-            Assert.Throws<InvalidOperationException>(() => writer.StartRow());
+            Assert.Throws<InvalidOperationException>(writer.StartRow);
         }
 
         [Fact]

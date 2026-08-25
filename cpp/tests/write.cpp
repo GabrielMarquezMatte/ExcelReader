@@ -340,6 +340,114 @@ static int test_write_sheet_options_and_csv()
     return 0;
 }
 
+// Writes one header row plus one data row through the raw streaming C ABI (not the C++ wrapper,
+// which does not cover it), then reopens the file with xl::Workbook to prove xl_close_write_handle
+// actually produced a valid, readable workbook - not just a status code. This is what the earlier
+// version of this test skipped: it never opened the file it wrote, so a workbook left without its
+// trailing structure (a corrupt XLSX zip) would still have passed.
+static int test_writer_handle()
+{
+    static const auto write_str = [](xl_writer_handle* handle, std::string_view value) {
+        return xl_write_string(handle, reinterpret_cast<const uint8_t*>(value.data()),
+                                static_cast<int32_t>(value.size()));
+    };
+
+    const std::filesystem::path path = temp_path("writer_handle.xlsx");
+    xl_writer_handle* handle = nullptr;
+    const std::string c_path = path.string();
+    int status = xl_open_write_handle(reinterpret_cast<const uint8_t*>(c_path.data()),
+                                       static_cast<int32_t>(c_path.size()), XL_FORMAT_XLSX, nullptr, &handle);
+    CHECK(status == XL_OK, "xl_open_write_handle must succeed");
+    CHECK(handle != nullptr, "the returned handle must be non-null");
+
+    status = xl_start_sheet(handle, reinterpret_cast<const uint8_t*>("Planilha1"), 9);
+    CHECK(status == XL_OK, "xl_start_sheet must succeed");
+
+    status = xl_start_row(handle);
+    CHECK(status == XL_OK, "xl_start_row must succeed for the header row");
+    for (std::string_view header : {"texto", "inteiro", "numero", "data", "hora", "instante"})
+    {
+        CHECK(write_str(handle, header) == XL_OK, "writing a header cell must succeed");
+    }
+    status = xl_end_row(handle);
+    CHECK(status == XL_OK, "xl_end_row must succeed for the header row");
+
+    status = xl_start_row(handle);
+    CHECK(status == XL_OK, "xl_start_row must succeed for the data row");
+    CHECK(write_str(handle, "uma") == XL_OK, "xl_write_string must succeed");
+    CHECK(xl_write_int64(handle, 1) == XL_OK, "xl_write_int64 must succeed");
+    CHECK(xl_write_float64(handle, 0.5) == XL_OK, "xl_write_float64 must succeed");
+    CHECK(xl_write_date(handle, 20454) == XL_OK, "xl_write_date must succeed"); // 2026-01-01
+    CHECK(xl_write_time(handle, 3600000000) == XL_OK, "xl_write_time must succeed");
+    CHECK(xl_write_timestamp(handle, 1767225600000000) == XL_OK, "xl_write_timestamp must succeed");
+    status = xl_end_row(handle);
+    CHECK(status == XL_OK, "xl_end_row must succeed for the data row");
+
+    status = xl_end_sheet(handle);
+    CHECK(status == XL_OK, "xl_end_sheet must succeed");
+    status = xl_close_write_handle(handle);
+    CHECK(status == XL_OK, "xl_close_write_handle must succeed");
+    {
+        auto workbook = xl::Workbook::open(path.string());
+        CHECK(workbook.has_value(), "the file xl_close_write_handle produced must open");
+        auto name = workbook->sheet_name();
+        CHECK(name.has_value() && *name == "Planilha1", "xl_start_sheet's name must reach the file");
+        auto table = xl::parse_sheet<WrittenRow>(*workbook);
+        CHECK(table.has_value(), "the written file must parse back");
+        CHECK(table->size() == 1, "exactly one data row was written");
+        WrittenRow first = *table->begin();
+        CHECK(first.texto == "uma", "the streamed string cell must round-trip");
+        CHECK(first.inteiro == 1, "the streamed int64 cell must round-trip");
+        CHECK(first.numero == 0.5, "the streamed float64 cell must round-trip");
+        CHECK(first.data == std::chrono::year{2026} / std::chrono::month{1} / std::chrono::day{1},
+              "the streamed date cell must round-trip");
+        CHECK(first.hora == std::chrono::microseconds{3600000000}, "the streamed time cell must round-trip");
+    }
+    std::filesystem::remove(path);
+    return 0;
+}
+
+// Every writer entry point must resolve a bad/closed handle as XL_INVALID_HANDLE, not
+// XL_INVALID_ARGUMENT - the same convention xl_close uses on the reader side.
+static int test_writer_handle_rejects_bad_handle()
+{
+    xl_writer_handle* bogus = reinterpret_cast<xl_writer_handle*>(static_cast<std::uintptr_t>(0x1));
+    CHECK(xl_start_sheet(bogus, reinterpret_cast<const uint8_t*>("x"), 1) == XL_INVALID_HANDLE,
+          "xl_start_sheet on a bad handle must return XL_INVALID_HANDLE");
+    CHECK(xl_start_row(bogus) == XL_INVALID_HANDLE, "xl_start_row on a bad handle must return XL_INVALID_HANDLE");
+    CHECK(xl_write_int64(bogus, 1) == XL_INVALID_HANDLE, "xl_write_int64 on a bad handle must return XL_INVALID_HANDLE");
+    CHECK(xl_end_row(bogus) == XL_INVALID_HANDLE, "xl_end_row on a bad handle must return XL_INVALID_HANDLE");
+    CHECK(xl_end_sheet(bogus) == XL_INVALID_HANDLE, "xl_end_sheet on a bad handle must return XL_INVALID_HANDLE");
+    CHECK(xl_close_write_handle(bogus) == XL_INVALID_HANDLE, "xl_close_write_handle on a bad handle must return XL_INVALID_HANDLE");
+    CHECK(xl_close_write_handle(nullptr) == XL_INVALID_HANDLE, "xl_close_write_handle on a null handle must return XL_INVALID_HANDLE");
+    return 0;
+}
+
+// A row/sheet/write out of order must fail as XL_ERROR (not crash, not silently succeed) and must
+// leave the handle usable, per the call-order contract documented on xl_writer_handle.
+static int test_writer_handle_rejects_out_of_order_calls()
+{
+    const std::filesystem::path path = temp_path("writer_handle_order.xlsx");
+    const std::string c_path = path.string();
+    xl_writer_handle* handle = nullptr;
+    int status = xl_open_write_handle(reinterpret_cast<const uint8_t*>(c_path.data()),
+                                       static_cast<int32_t>(c_path.size()), XL_FORMAT_XLSX, nullptr, &handle);
+    CHECK(status == XL_OK, "xl_open_write_handle must succeed");
+
+    CHECK(xl_start_row(handle) == XL_ERROR, "xl_start_row before xl_start_sheet must fail");
+    CHECK(xl_write_int64(handle, 1) == XL_ERROR, "a cell write before xl_start_row must fail");
+    CHECK(xl_end_row(handle) == XL_ERROR, "xl_end_row without an open row must fail");
+    CHECK(xl_end_sheet(handle) == XL_ERROR, "xl_end_sheet without an open sheet must fail");
+
+    status = xl_start_sheet(handle, reinterpret_cast<const uint8_t*>("S"), 1);
+    CHECK(status == XL_OK, "xl_start_sheet must still succeed after the earlier rejected calls");
+    status = xl_close_write_handle(handle);
+    CHECK(status == XL_OK, "xl_close_write_handle must still succeed after the earlier rejected calls");
+
+    std::filesystem::remove(path);
+    return 0;
+}
+
 int main()
 {
     if (test_write_options() != 0)
@@ -371,6 +479,18 @@ int main()
         return 1;
     }
     if (test_write_sheet_options_and_csv() != 0)
+    {
+        return 1;
+    }
+    if (test_writer_handle() != 0)
+    {
+        return 1;
+    }
+    if (test_writer_handle_rejects_bad_handle() != 0)
+    {
+        return 1;
+    }
+    if (test_writer_handle_rejects_out_of_order_calls() != 0)
     {
         return 1;
     }
