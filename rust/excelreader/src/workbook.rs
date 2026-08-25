@@ -27,6 +27,24 @@ pub(crate) fn check(code: i32) -> Result<(), Error> {
     }
 }
 
+/// Copies a native `XlBuffer` into an owned `Vec<u8>` and releases the native allocation via
+/// `xl_free_buffer` - shared by `writer::write_columns_to_memory`/`write_sheet_to_memory` and
+/// `writer_handle::WriterHandle::bytes`, the two places `xl_write_typed_to_memory`/
+/// `xl_write_handle_bytes` hand back an owned buffer. `buffer.data` may be null (an empty result),
+/// which `from_raw_parts` cannot take - `slice::from_raw_parts` requires a non-null, well-aligned
+/// pointer even for a zero-length slice.
+pub(crate) fn buffer_to_vec(mut buffer: crate::XlBuffer) -> Vec<u8> {
+    let bytes = if buffer.data.is_null() || buffer.len <= 0 {
+        Vec::new()
+    } else {
+        unsafe { std::slice::from_raw_parts(buffer.data, buffer.len as usize).to_vec() }
+    };
+    unsafe {
+        crate::xl_free_buffer(&mut buffer);
+    }
+    bytes
+}
+
 /// Verifies the loaded shared library speaks the ABI revision this crate was compiled against.
 ///
 /// The native binary is resolved at build time from a GitHub release asset (or from

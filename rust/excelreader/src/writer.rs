@@ -263,6 +263,62 @@ pub fn write_columns(
     check(status)
 }
 
+/// In-memory equivalent of [`write_columns`]: same validation and column lowering, but the
+/// workbook is built in memory and returned as bytes instead of being written to a path - so,
+/// unlike [`write_columns`], there is no path to infer a format from and `format` is always
+/// required.
+///
+/// # Errors
+/// Anything [`write_columns`] reports.
+pub fn write_columns_to_memory(
+    format: i32,
+    columns: &[Column<'_>],
+    options: Option<&WriteOptions>,
+) -> Result<Vec<u8>, Error> {
+    check_abi_version()?;
+    let row_count = validate(columns)?;
+
+    let names: Vec<*const u8> = columns
+        .iter()
+        .map(|c| c.name.map_or(std::ptr::null(), str::as_ptr))
+        .collect();
+    let name_lens: Vec<i32> = columns
+        .iter()
+        .map(|c| c.name.map_or(0, |n| n.len() as i32))
+        .collect();
+    let specs: Vec<XlColumnSpec> = columns
+        .iter()
+        .enumerate()
+        .map(|(index, column)| XlColumnSpec {
+            names: &names[index],
+            name_lens: &name_lens[index],
+            name_count: i32::from(column.name.is_some()),
+            index: 0,
+            r#type: column.data.xl_type(),
+            nullable: 0,
+        })
+        .collect();
+    let raw_columns: Vec<XlColumn> = columns.iter().map(Column::to_raw).collect();
+
+    let table = XlTable {
+        column_count: columns.len() as i32,
+        row_count,
+        columns: raw_columns.as_ptr().cast_mut(),
+    };
+    let raw_options = options.map(WriteOptions::to_raw);
+    let options_ptr = crate::options::ptr_or_null(&raw_options);
+
+    let mut buffer = crate::XlBuffer {
+        data: std::ptr::null_mut(),
+        len: 0,
+    };
+    let status = unsafe {
+        crate::xl_write_typed_to_memory(format, specs.as_ptr(), &table, options_ptr, &mut buffer)
+    };
+    check(status)?;
+    Ok(crate::workbook::buffer_to_vec(buffer))
+}
+
 /// The owning twin of [`ColumnData`], produced by [`ExcelWriter::to_columns`]. A transposed range
 /// of structs has to own its columns somewhere; this is that somewhere.
 pub enum OwnedColumnData {
@@ -370,6 +426,21 @@ pub fn write_sheet<T: ExcelWriter>(
     let owned = T::to_columns(rows)?;
     let borrowed: Vec<Column<'_>> = owned.iter().map(OwnedColumn::as_column).collect();
     write_columns(path, format, &borrowed, options)
+}
+
+/// In-memory equivalent of [`write_sheet`]: same transpose, but returns bytes instead of writing
+/// to a path - see [`write_columns_to_memory`] for why `format` is always required here.
+///
+/// # Errors
+/// Anything [`ExcelWriter::to_columns`] or [`write_columns_to_memory`] reports.
+pub fn write_sheet_to_memory<T: ExcelWriter>(
+    format: i32,
+    rows: &[T],
+    options: Option<&WriteOptions>,
+) -> Result<Vec<u8>, Error> {
+    let owned = T::to_columns(rows)?;
+    let borrowed: Vec<Column<'_>> = owned.iter().map(OwnedColumn::as_column).collect();
+    write_columns_to_memory(format, &borrowed, options)
 }
 
 #[cfg(test)]
