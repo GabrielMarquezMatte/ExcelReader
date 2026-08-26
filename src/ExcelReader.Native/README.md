@@ -3,8 +3,7 @@
 NativeAOT shared library exposing ExcelReader's readers over a C ABI, so non-.NET languages
 (Python, C, C++, Go, Node) can read XLSX, XLSB, XLS and CSV without a .NET runtime.
 
-- ABI reference: `include/excelreader.h`
-- Full contract and rationale: `docs/NATIVE_BINDINGS_PLAN.md`, `docs/NATIVE_HARDENING_PLAN.md`
+- ABI reference and full contract: `include/excelreader.h` (doc comments cover every export)
 - Python binding: `python/`
 
 ## Build
@@ -23,16 +22,28 @@ Output lands in `bin/Release/net10.0/<rid>/publish/ExcelReader.Native.{dll,so,dy
 | `RowBlob.cs` | Row serialization. |
 | `include/excelreader.h` | Hand-written C header; keep in sync with `Exports.cs`. |
 
-Writing is exposed through a single one-shot export, `xl_write_typed`, alongside the reading exports
-above (`xl_open_file`, `xl_open_file_ex`, `xl_close`, `xl_sheet_count`, `xl_sheet_name`,
-`xl_sheet_name_at`, `xl_is_date1904`, `xl_next_row`, `xl_read_all_blob`, `xl_next_row_decoded`,
-`xl_free_row`, `xl_read_all_decoded`, `xl_free_rows`, `xl_parse_typed`, `xl_free_table`,
-`xl_infer_schema`, `xl_free_schema`, `xl_last_error_ptr`, `xl_parse_arrow`). `xl_write_typed` takes an
+Reading exports: `xl_open_file`, `xl_open_file_ex`, `xl_open_memory`, `xl_open_memory_ex`, `xl_close`,
+`xl_sheet_count`, `xl_sheet_name`, `xl_sheet_name_at`, `xl_move_to_sheet`, `xl_is_date1904`,
+`xl_next_row`, `xl_read_all_blob`, `xl_read_all_decoded`, `xl_free_rows`, `xl_parse_typed`,
+`xl_free_table`, `xl_infer_schema`, `xl_free_schema`, `xl_last_error`, `xl_last_error_ptr`,
+`xl_parse_arrow`.
+
+Writing has two layers. The one-shot export, `xl_write_typed` (plus its in-memory twin
+`xl_write_typed_to_memory`), takes a whole `xl_table` and writes it in a single call; it takes an
 `xl_write_options*` that follows the exact same `struct_size` contract as `xl_open_options`: the
 caller sets `options->struct_size = sizeof(xl_write_options)` before the call, and a mismatched value
-is rejected with `XL_INVALID_ARGUMENT` before anything else is inspected. Phase 1 is single-sheet,
+is rejected with `XL_INVALID_ARGUMENT` before anything else is inspected. It is single-sheet,
 whole-table-in-memory, no styling beyond the temporal number formats — see `include/excelreader.h` for
 the full contract.
+
+The streaming alternative is `xl_writer_handle`: one sheet and one row open at a time, written
+directly as each call arrives instead of building an `xl_table` up front. Call order is
+`xl_open_write_handle`/`xl_open_write_handle_to_memory`, then per sheet `xl_start_sheet`..`xl_end_sheet`,
+each containing `xl_start_row`..`xl_end_row` with one `xl_write_string`/`xl_write_int64`/
+`xl_write_float64`/`xl_write_bool`/`xl_write_date`/`xl_write_time`/`xl_write_timestamp`/`xl_write_null`
+call per cell, then `xl_close_write_handle`. `xl_write_handle_bytes` reads back a memory-backed
+handle's bytes so far without releasing it. Both write paths release their buffers with
+`xl_free_buffer` (`xl_table`/`xl_inferred_schema` keep their own `xl_free_table`/`xl_free_schema`).
 
 ## Consuming from C
 
