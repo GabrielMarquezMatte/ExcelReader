@@ -69,6 +69,8 @@ namespace ExcelReader.Core.Parser.Internal
         // When csvTextDates is true, DateTime and DateOnly parse the cell text (ISO or culture format)
         // rather than an Excel serial number. Only the CSV parser opts in, because CSV has no serial
         // date form. Every other reader leaves csvTextDates false and keeps the serial semantics.
+        [RequiresUnreferencedCode("Building a column parser reflects over the property's type and setter, which trimming may remove.")]
+        [RequiresDynamicCode("Building a column parser dispatches through MakeGenericMethod for the property's concrete type.")]
         internal static ColumnParser<T>? Build<T>(PropertyInfo prop, bool csvTextDates = false)
 #if NET9_0_OR_GREATER
             where T : allows ref struct
@@ -86,6 +88,8 @@ namespace ExcelReader.Core.Parser.Internal
         // Builds a parser from a user-supplied IExcelCellConverter<TProperty>. The converter type must
         // implement the interface for the property's exact type and have a public parameterless ctor
         // a single shared instance is created here and reused for every row.
+        [RequiresUnreferencedCode("Building a converter-backed parser instantiates converterType and dispatches through MakeGenericMethod, which trimming may remove.")]
+        [RequiresDynamicCode("Building a converter-backed parser calls MakeGenericType/MakeGenericMethod for the converter's concrete type.")]
         internal static ColumnParser<T> BuildConverter<T>(PropertyInfo prop, Type converterType)
 #if NET9_0_OR_GREATER
             where T : allows ref struct
@@ -105,6 +109,8 @@ namespace ExcelReader.Core.Parser.Internal
                 .Invoke(null, [prop, converter])!;
         }
 
+        [RequiresUnreferencedCode("Building a column parser reflects over the property's type and setter, which trimming may remove.")]
+        [RequiresDynamicCode("Building a column parser dispatches through MakeGenericMethod for the property's concrete type.")]
         private static ColumnParser<T>? BuildConcreteParser<T>(PropertyInfo prop, Type propType, bool textDates)
 #if NET9_0_OR_GREATER
             where T : allows ref struct
@@ -162,6 +168,8 @@ namespace ExcelReader.Core.Parser.Internal
                 .Invoke(null, [prop]);
         }
 
+        [RequiresUnreferencedCode("Building a column parser reflects over the property's type and setter, which trimming may remove.")]
+        [RequiresDynamicCode("Building a column parser dispatches through MakeGenericMethod for the property's concrete type.")]
         private static ColumnParser<T>? BuildNullableParser<T>(PropertyInfo prop, Type innerType, bool textDates)
 #if NET9_0_OR_GREATER
             where T : allows ref struct
