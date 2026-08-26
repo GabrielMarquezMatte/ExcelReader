@@ -201,6 +201,18 @@ namespace ExcelReader.Core.Crypto
             using Aes aes = Aes.Create();
             aes.Mode = CipherMode.CBC;
             aes.Padding = PaddingMode.None;
+            // EncryptionInfo is untrusted, attacker-controlled input parsed before any password
+            // check. Unpadded CBC decryption requires a whole number of blocks; TransformFinalBlock
+            // would otherwise throw a raw CryptographicException for a misaligned ciphertext, which
+            // no caller of this internal helper is set up to catch. Reject it the same way every
+            // other malformed EncryptionInfo value in this codebase is rejected (see
+            // EncryptionDescriptor.ReadCryptoParameters's bounds checks).
+            int blockBytes = aes.BlockSize / 8;
+            if (ciphertext.Length % blockBytes != 0)
+            {
+                throw new InvalidDataException(
+                    "The encryption descriptor contains a ciphertext whose length is not a multiple of the cipher block size.");
+            }
             aes.Key = key.ToArray();
             aes.IV = iv.ToArray();
             using ICryptoTransform decryptor = aes.CreateDecryptor();
