@@ -204,7 +204,8 @@ namespace ExcelReader.Core.Crypto
             };
             if (newPosition < 0)
             {
-                throw new IOException("An attempt was made to move the position before the beginning of the stream.");
+                throw new ArgumentOutOfRangeException(nameof(offset), offset,
+                    "An attempt was made to move the position before the beginning of the stream.");
             }
             _position = newPosition;
             return _position;
