@@ -20,6 +20,9 @@ namespace ExcelReader.Core.Crypto
     {
         private const int SegmentSize = 4096;
         private const int PrefixSize = 8;
+        // AES's block size is fixed at 128 bits regardless of key length (128/192/256), so this is a
+        // true constant, not something read off the descriptor.
+        private const int CipherBlockSize = 16;
 
         // Borrowed only long enough for Create's own reads/derivation; ownership of the ciphertext
         // view below is what actually gets disposed.
@@ -73,6 +76,20 @@ namespace ExcelReader.Core.Crypto
                 if (declared < 0 || declared > view.Length - PrefixSize)
                 {
                     throw new InvalidDataException("The encrypted package's declared size exceeds its ciphertext.");
+                }
+                // Every segment is decrypted with PaddingMode.None (see DecryptSegment), which requires
+                // a whole number of AES blocks. Real files satisfy this by construction (each segment's
+                // ciphertext is either a full 4096-byte multiple of 16, or the final segment's ciphertext
+                // padded up to the next 16-byte boundary), but the CFB entry size and this prefix are
+                // both attacker-controlled - a crafted file can make the total ciphertext land on a
+                // non-block boundary, which would otherwise surface as a raw ArgumentOutOfRangeException
+                // from TransformBlock deep inside EnsureSegment instead of a graceful rejection here. Same
+                // rationale as AgileKeyDerivation.DecryptNoPadding's block-alignment check.
+                long cipherTotal = view.Length - PrefixSize;
+                if (cipherTotal % CipherBlockSize != 0)
+                {
+                    throw new InvalidDataException(
+                        "The encrypted package's ciphertext length is not a multiple of the cipher block size.");
                 }
                 LimitChecks.ThrowIfEntryLengthExceeds(
                     declared, options.MaxTotalDecompressedBytes, nameof(ExcelReaderOptions.MaxTotalDecompressedBytes));
@@ -254,8 +271,9 @@ namespace ExcelReader.Core.Crypto
 
         // The ciphertext offset/length for segment `index`, bounded by however much ciphertext the
         // view actually holds from that point on - always a multiple of the 16-byte AES block size,
-        // since every segment boundary (a multiple of 4096) already is one, and the container's total
-        // ciphertext length was validated (in Create) to be block-aligned.
+        // since every segment boundary (a multiple of 4096) already is one, and Create already
+        // rejected a container whose total ciphertext length (view.Length - PrefixSize) is not itself
+        // block-aligned.
         private (long Offset, int Length) SegmentCiphertextRange(int index)
         {
             long segmentStart = (long)index * SegmentSize;
