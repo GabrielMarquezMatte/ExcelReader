@@ -176,6 +176,17 @@ jobs:
           esac
           echo "value=${os}-${arch}" >> "$GITHUB_OUTPUT"
 
+      # Restore first, without PublishAot/the RID: NuGet's restore-graph walk evaluates every
+      # ProjectReference (including ExcelReader.Generator, pulled in as an analyzer-only reference
+      # from ExcelReader.Core) with the SAME global properties as the entry project, ignoring the
+      # GlobalPropertiesToRemove metadata on that reference - so restoring with PublishAot=true set
+      # fails Generator's restore outright (NETSDK1207: AOT isn't supported for its netstandard2.0
+      # target). The ordinary build-time project-reference protocol (used below, via --no-restore)
+      # does honor that metadata, so splitting the two steps is the fix, not a workaround.
+      - name: Restore
+        shell: bash
+        run: dotnet restore src/ExcelReader.Cli/ExcelReader.Cli.csproj -r ${{ steps.rid.outputs.value }}
+
       # PublishAot/PackAsTool=false override the project's normal dotnet-tool packaging (a
       # dotnet tool ships as IL, launched by the caller's own SDK) with a single self-contained
       # native executable instead - no .NET runtime required on the machine that runs it.
@@ -191,6 +202,7 @@ jobs:
           -p:PackAsTool=false
           -p:Version=${{ steps.version.outputs.value }}
           --output ./cli-publish
+          --no-restore
 
       - name: Rename asset for this platform
         id: asset
