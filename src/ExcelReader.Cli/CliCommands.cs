@@ -202,7 +202,7 @@ namespace ExcelReader.Cli
             {
                 using TRow row = sheetWriter.StartRow();
                 Row current = rows.Current;
-                foreach(var cell in current.Cells)
+                foreach (var cell in current.Cells)
                 {
                     var cellValue = cell.Value;
                     switch (cellValue.Type)

@@ -74,7 +74,7 @@ a byte slice. Note that format sniffing does not detect CSV - pass `XL_FORMAT_CS
 ### Arrow export (`arrow` feature)
 
 ```toml
-excelreader = { version = "0.0.0", features = ["arrow"] }
+excelreader = { version = "2.1", features = ["arrow"] }
 ```
 
 ```rust
@@ -132,6 +132,31 @@ sniff, so there is nothing to fall back on.
 
 `write_sheet` walks the slice once and appends each field to its own buffer, monomorphized per
 field. That transpose is the only copy it makes; `write_columns` pays nothing.
+
+### Streaming writes
+
+`write_sheet`/`write_columns` build the whole table in memory first. `writer_handle::WriterHandle` is
+the row-by-row alternative, writing directly as each call arrives instead:
+
+```rust
+use excelreader::writer_handle::WriterHandle;
+
+let mut handle = WriterHandle::open("out.xlsx", None)?;
+handle.start_sheet("Summary")?;
+handle.start_row()?;
+handle.write_str(Some("Name"))?;
+handle.write_i64(Some(42))?;
+handle.end_row()?;
+handle.end_sheet()?;
+```
+
+Call order mirrors the C ABI's `xl_writer_handle`: `open`/`open_with`/`open_memory`, then per sheet
+`start_sheet..end_sheet`, each containing `start_row..end_row` with one `write_*` call per cell
+(`None` writes a blank cell), left to right. A call out of order returns `Err` rather than
+corrupting output. `open_memory` backs the handle with an in-memory buffer instead of a file; read
+it out with `bytes()`. Dropping a `WriterHandle` closes and releases it, same as `Workbook` — call
+`bytes()` (memory-backed) or reopen the path (file-backed) to observe the result rather than relying
+on the drop for that.
 
 ## Bounds and panics
 

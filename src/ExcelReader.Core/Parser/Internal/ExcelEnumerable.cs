@@ -9,6 +9,8 @@ namespace ExcelReader.Core.Parser.Internal
     /// <typeparam name="T">The row model type to bind each row to.</typeparam>
     public sealed class ExcelEnumerable<T> : ExcelEnumerable<T, XlsxReader, XlsxReader.Enumerator>
     {
+        [RequiresUnreferencedCode("Typed parsing reflects over T's public properties, which trimming may remove.")]
+        [RequiresDynamicCode("Typed parsing binds property setters at runtime (MethodInfo.CreateDelegate / MakeGenericMethod).")]
         internal ExcelEnumerable(XlsxReader reader, ExcelParserConfig config, CancellationToken ct = default)
             : base(reader, config, ct)
         {
@@ -44,6 +46,8 @@ namespace ExcelReader.Core.Parser.Internal
         // when only the explicit-info constructor is ever called from a published app's reachable code.
         private readonly TypeMapInfo<T> _info;
 
+        [RequiresUnreferencedCode("Typed parsing reflects over T's public properties, which trimming may remove.")]
+        [RequiresDynamicCode("Typed parsing binds property setters at runtime (MethodInfo.CreateDelegate / MakeGenericMethod).")]
         internal ExcelEnumerable(TReader reader, ExcelParserConfig config, CancellationToken ct = default)
         {
             _reader = reader;

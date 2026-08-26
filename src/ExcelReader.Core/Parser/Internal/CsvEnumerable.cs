@@ -32,6 +32,8 @@ namespace ExcelReader.Core.Parser.Internal
         // ExcelCellReaders.DateTimeText explicitly.
         private readonly TypeMapInfo<T> _info;
 
+        [RequiresUnreferencedCode("Typed parsing reflects over T's public properties, which trimming may remove.")]
+        [RequiresDynamicCode("Typed parsing binds property setters at runtime (MethodInfo.CreateDelegate / MakeGenericMethod).")]
         internal CsvEnumerable(CsvReader reader, ExcelParserConfig config, CancellationToken ct = default)
         {
             _reader = reader;

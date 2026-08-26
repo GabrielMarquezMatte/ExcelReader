@@ -95,6 +95,8 @@ namespace ExcelReader.Core.Writer
             return _workbook.AddSheet(sheetName);
         }
 
+        [RequiresUnreferencedCode("Record writing reflects over T's public properties, which trimming may remove.")]
+        [RequiresDynamicCode("Record writing compiles the per-type column writer at runtime (Expression.Compile / MakeGenericMethod).")]
         private static async ValueTask WriteHeaderAsync<T>(TSheet sheet, CancellationToken ct)
         {
             TRow row = await sheet.StartRowAsync(ct).ConfigureAwait(false);
@@ -203,6 +205,13 @@ namespace ExcelReader.Core.Writer
     // instead of an interface dispatch. Numeric properties go to the generic Write<U> (a number cell)
     // everything non-numeric/non-primitive is written as its ToString() text, since Write<U> only
     // produces valid numeric cells.
+    // WriteSheetAsync<T> (this file's own public entry point) already carries a matching
+    // [RequiresUnreferencedCode]/[RequiresDynamicCode] pair - this is what makes that annotation
+    // actually cover the reflection performed internally here, instead of just documenting an
+    // assumption at the outer boundary. Not shared with MappedRecordColumns<T> (the AOT-safe,
+    // source-generated counterpart in MappedWorkbookRecordWriter.cs), so this doesn't affect that path.
+    [RequiresUnreferencedCode("Record writing reflects over T's public properties, which trimming may remove.")]
+    [RequiresDynamicCode("Record writing compiles the per-type column writer at runtime (Expression.Compile / MakeGenericMethod).")]
     [SuppressMessage("Major Code Smell", "S2743:Static fields should not be used in generic types",
         Justification = "The per-closed-type static IS the design: headers/property plan are cached once per T, not shared across different T.")]
     internal static class RecordColumns<T>
@@ -235,6 +244,8 @@ namespace ExcelReader.Core.Writer
         }
 
         // Keyed by TRow: one compiled Action<TRow, T> per concrete row-writer type actually used with T.
+        [RequiresUnreferencedCode("Record writing reflects over T's public properties, which trimming may remove.")]
+        [RequiresDynamicCode("Record writing compiles the per-type column writer at runtime (Expression.Compile / MakeGenericMethod).")]
         private static class Plan<TRow> where TRow : IRowWriter
         {
             internal static readonly Action<TRow, T> Write = Build();
@@ -314,6 +325,10 @@ namespace ExcelReader.Core.Writer
     // Reflection resolved once per concrete TRow (XlsxRowWriter/XlsbRowWriter/XlsRowWriter — at most a
     // handful of instantiations for the whole process): the Write overloads declared on that concrete
     // type, plus the set of numeric property types that map to Write<U>.
+    // Reached only from RecordColumns<T>.Plan<TRow> (the reflection-based write path) - not shared with
+    // the AOT-safe MappedRecordColumns<T> path, so this annotation doesn't affect that one.
+    [RequiresUnreferencedCode("Record writing reflects over TRow's Write overloads, which trimming may remove.")]
+    [RequiresDynamicCode("Record writing dispatches through MakeGenericMethod for numeric column types.")]
     [SuppressMessage("Major Code Smell", "S2743:Static fields should not be used in generic types",
         Justification = "The per-closed-type static IS the design: the resolved MethodInfo set is cached once per concrete TRow, not shared across different TRow.")]
     internal static class RowWriteMethods<TRow> where TRow : IRowWriter
