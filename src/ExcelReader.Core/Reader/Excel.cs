@@ -49,7 +49,15 @@ namespace ExcelReader.Core.Reader
         /// <param name="options">Resource limits and behavior toggles; <see cref="ExcelReaderOptions.Default"/> when <see langword="null"/>. <see cref="ExcelReaderOptions.PrefetchDecompression"/> is ignored on this path — there is nothing left to overlap.</param>
         public static XlsxReader From(ReadOnlyMemory<byte> data, ExcelReaderOptions? options = null)
         {
-            return XlsxReader.CreateFromMemory(data, options);
+            ExcelReaderOptions effective = options ?? ExcelReaderOptions.Default;
+            // The memory overload documents that it never suspends, even under await foreach, which
+            // forces eager decryption here rather than a DecryptedPackageStream.
+            if (data.Span.StartsWith(XlsCompoundFile.Signature) && EncryptedPackageOpener.IsEncryptedMemory(data, effective))
+            {
+                ReadOnlyMemory<byte> plain = EncryptedPackageOpener.DecryptToMemory(data, effective);
+                return XlsxReader.CreateFromMemory(plain, effective);
+            }
+            return XlsxReader.CreateFromMemory(data, effective);
         }
 
         /// <summary>Opens an XLSX workbook from a file path, taking ownership of the file stream. Alias for <see cref="FromFile(string, ExcelReaderOptions?)"/>, for callers who grep for a format-named factory.</summary>
@@ -472,6 +480,13 @@ namespace ExcelReader.Core.Reader
         public static IExcelRowReader Open(ReadOnlyMemory<byte> data, ExcelReaderOptions? options = null)
         {
             ExcelReaderOptions effective = options ?? ExcelReaderOptions.Default;
+            // The memory overload documents that it never suspends, even under await foreach, which
+            // forces eager decryption here rather than a DecryptedPackageStream.
+            if (data.Span.StartsWith(XlsCompoundFile.Signature) && EncryptedPackageOpener.IsEncryptedMemory(data, effective))
+            {
+                ReadOnlyMemory<byte> plain = EncryptedPackageOpener.DecryptToMemory(data, effective);
+                return OpenFromPlainMemory(plain, effective);
+            }
             ExcelFileFormat format = ClassifyMemory(data, effective, out ZipMemoryIndex? memZip);
             if (format is ExcelFileFormat.Unknown)
             {
@@ -483,6 +498,31 @@ namespace ExcelReader.Core.Reader
                 ExcelFileFormat.Xls => new XlsReader(data, effective),
                 ExcelFileFormat.Xlsb => XlsbReader.CreateFromMemory(memZip!, effective),
                 ExcelFileFormat.Xlsx => XlsxReader.CreateFromMemory(memZip!, effective),
+                _ => throw new System.Diagnostics.UnreachableException(),
+            };
+        }
+
+        // Classifies and opens an already-decrypted plaintext ZIP buffer produced by
+        // EncryptedPackageOpener.DecryptToMemory. A genuinely decrypted OOXML package is always
+        // Xlsb/Xlsx (never Xls, which isn't ZIP-based, and Unknown only for a corrupt/garbage result) -
+        // so those are the only two branches handled; anything else means decryption produced
+        // something that isn't a workbook.
+        [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP001:Dispose created",
+            Justification = "memZip (when non-null) is handed to the chosen reader on success, which takes ownership; on Unknown it's disposed immediately above.")]
+        [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
+            Justification = "memZip (when non-null) is handed to the chosen reader on success, which takes ownership; on Unknown it's disposed immediately above.")]
+        private static IExcelRowReader OpenFromPlainMemory(ReadOnlyMemory<byte> plain, ExcelReaderOptions options)
+        {
+            ExcelFileFormat format = ClassifyMemory(plain, options, out ZipMemoryIndex? memZip);
+            if (format is not (ExcelFileFormat.Xlsb or ExcelFileFormat.Xlsx))
+            {
+                memZip?.Dispose();
+                UnknownFormatException();
+            }
+            return format switch
+            {
+                ExcelFileFormat.Xlsb => XlsbReader.CreateFromMemory(memZip!, options),
+                ExcelFileFormat.Xlsx => XlsxReader.CreateFromMemory(memZip!, options),
                 _ => throw new System.Diagnostics.UnreachableException(),
             };
         }

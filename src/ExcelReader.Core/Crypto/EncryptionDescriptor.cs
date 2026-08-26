@@ -251,7 +251,15 @@ namespace ExcelReader.Core.Crypto
         CryptoParameters KeyData,
         CryptoParameters PasswordEncryptor,
         byte[] EncryptedHmacKey,
-        byte[] EncryptedHmacValue) : EncryptionDescriptor;
+        byte[] EncryptedHmacValue) : EncryptionDescriptor
+    {
+        // ParseAgile defaults both fields to [] when the descriptor has no <dataIntegrity> element at
+        // all (older writers can omit it) — that's the one shape distinguishable from "present but
+        // empty", since a real element always carries both attributes. Callers use this to make
+        // opting into HMAC verification a documented no-op rather than a spurious failure for such a
+        // file (see PackageIntegrity/DecryptedPackageStream.Create/EncryptedPackageOpener.DecryptToMemory).
+        internal bool HasDataIntegrity => EncryptedHmacKey.Length > 0 && EncryptedHmacValue.Length > 0;
+    }
 
     internal enum HashKind
     {

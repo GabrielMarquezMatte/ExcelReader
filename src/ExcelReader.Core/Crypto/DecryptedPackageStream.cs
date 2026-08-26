@@ -95,6 +95,25 @@ namespace ExcelReader.Core.Crypto
                     declared, options.MaxTotalDecompressedBytes, nameof(ExcelReaderOptions.MaxTotalDecompressedBytes));
 
                 byte[] key = AgileKeyDerivation.DeriveIntermediateKey(agile, options.Password.Chars);
+                try
+                {
+                    // Opt-in only here: verifying needs a full pass over the ciphertext before the
+                    // first row, unlike the memory path (EncryptedPackageOpener.DecryptToMemory) where
+                    // it's nearly free because everything is already decrypted — see
+                    // ExcelReaderOptions.VerifyEncryptedIntegrity's remarks. A descriptor with no
+                    // dataIntegrity element (AgileDescriptor.HasDataIntegrity) makes opting in a
+                    // documented no-op rather than a spurious failure.
+                    if (agile.HasDataIntegrity && options.VerifyEncryptedIntegrity)
+                    {
+                        PackageIntegrity.Verify(view, agile, key);
+                    }
+                }
+                catch
+                {
+                    CryptographicOperations.ZeroMemory(key);
+                    throw;
+                }
+
                 byte[] segmentCache = ArrayPool<byte>.Shared.Rent(SegmentSize);
                 return new DecryptedPackageStream(view, agile, key, declared, segmentCache);
             }
