@@ -86,7 +86,7 @@ Everything above hands back cell *text*, which means the library formats every v
 the way out. `parse_typed()` skips that entirely: you give it a schema, and the conversion happens
 natively, straight into typed column buffers. On a 65,536 × 14 sheet it is ~8× faster than
 `read_all_columnar()`, ~25× faster than `read_all()`, and faster than `polars.read_excel()` — see
-[docs/NATIVE_BASELINE.md](../docs/NATIVE_BASELINE.md).
+[Reading](#reading) below for the measured numbers.
 
 ```python
 from excelreader import ColumnSpec, ColumnType
