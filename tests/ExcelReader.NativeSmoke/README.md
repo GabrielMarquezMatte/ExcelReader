@@ -12,7 +12,7 @@ Two layers, both in `smoke.c`:
    produces garbage values, and these assertions fail on the values.
 
 See `smoke.c`'s top comment for why the library is loaded dynamically (`LoadLibrary`/`dlopen`)
-instead of linked at build time, and `docs/NATIVE_HARDENING_PLAN.md` (task B) for the full rationale.
+instead of linked at build time.
 
 ## Build and run
 
