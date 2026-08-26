@@ -1,6 +1,16 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
+    <!-- A consumer's `dotnet publish -p:PublishAot=true -r <rid>` sets PublishAot as a global MSBuild
+         property, which propagates to every project in the graph — including this one, reached only as
+         an analyzer (ReferenceOutputAssembly=false in ExcelReader.Core.csproj). The SDK's own
+         _RequiresILLinkPack (Microsoft.NET.Publish.targets) is set once and only if still empty
+         ('$(_RequiresILLinkPack)' == ''), so fixing it to false here — an ordinary property, not a
+         caller-supplied global, so a plain assignment sticks even where TreatAsLocalProperty does not —
+         stops it from ever being computed true from PublishAot, which is what makes
+         ProcessFrameworkReferences skip its AOT-target-framework check for this netstandard2.0 project
+         instead of failing outright (NETSDK1207: AOT is not supported for netstandard2.0). -->
+    <_RequiresILLinkPack>false</_RequiresILLinkPack>
     <!-- netstandard2.0, not 2.1: an analyzer/generator loads into the *compiler host* process, not the
          consumer's app. Visual Studio (devenv) and MSBuild.exe still run on .NET Framework 4.8, which
          cannot load a netstandard2.1 assembly at all — that consumer would silently get no generated
