@@ -18,6 +18,19 @@ ExcelReader.Core.Reader.ExcelColumnSchema.Name.get -> string?
 ExcelReader.Core.Reader.ExcelColumnSchema.Name.init -> void
 ExcelReader.Core.Reader.ExcelColumnSchema.Type.get -> ExcelReader.Core.Enums.ExcelColumnType
 ExcelReader.Core.Reader.ExcelColumnSchema.Type.init -> void
+ExcelReader.Core.Reader.ExcelEncryptionException
+ExcelReader.Core.Reader.ExcelEncryptionException.ExcelEncryptionException() -> void
+ExcelReader.Core.Reader.ExcelEncryptionException.ExcelEncryptionException(ExcelReader.Core.Reader.ExcelEncryptionReason reason, string! message) -> void
+ExcelReader.Core.Reader.ExcelEncryptionException.ExcelEncryptionException(ExcelReader.Core.Reader.ExcelEncryptionReason reason, string! message, System.Exception! innerException) -> void
+ExcelReader.Core.Reader.ExcelEncryptionException.ExcelEncryptionException(string! message) -> void
+ExcelReader.Core.Reader.ExcelEncryptionException.ExcelEncryptionException(string! message, System.Exception! innerException) -> void
+ExcelReader.Core.Reader.ExcelEncryptionException.ExcelEncryptionException(string? message, int hresult) -> void
+ExcelReader.Core.Reader.ExcelEncryptionException.Reason.get -> ExcelReader.Core.Reader.ExcelEncryptionReason
+ExcelReader.Core.Reader.ExcelEncryptionReason
+ExcelReader.Core.Reader.ExcelEncryptionReason.IntegrityFailure = 3 -> ExcelReader.Core.Reader.ExcelEncryptionReason
+ExcelReader.Core.Reader.ExcelEncryptionReason.PasswordIncorrect = 1 -> ExcelReader.Core.Reader.ExcelEncryptionReason
+ExcelReader.Core.Reader.ExcelEncryptionReason.PasswordRequired = 0 -> ExcelReader.Core.Reader.ExcelEncryptionReason
+ExcelReader.Core.Reader.ExcelEncryptionReason.UnsupportedScheme = 2 -> ExcelReader.Core.Reader.ExcelEncryptionReason
 override ExcelReader.Core.Reader.ExcelColumnSchema.GetHashCode() -> int
 static ExcelReader.Core.Reader.Excel.InferSchema(ExcelReader.Core.Reader.IExcelRowReader! reader, int headerRow = 1, int sampleSize = 100) -> ExcelReader.Core.Reader.ExcelColumnSchema[]!
 static ExcelReader.Core.Reader.ExcelColumnSchema.operator !=(ExcelReader.Core.Reader.ExcelColumnSchema left, ExcelReader.Core.Reader.ExcelColumnSchema right) -> bool
