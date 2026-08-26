@@ -18,6 +18,32 @@ ExcelReader is built for streaming spreadsheet workloads where low allocations m
 dotnet add package ExcelReader.NET
 ```
 
+## Command line
+
+```bash
+dotnet tool install --global ExcelReader.NET.Cli
+```
+
+```bash
+excelreader sheets  book.xlsb                        # 0<TAB>Sheet1
+excelreader schema  book.xlsb --sample-size 500      # 0<TAB>Id<TAB>Int64
+excelreader convert book.xlsb --output data.csv      # convert to another format, by extension
+excelreader convert book.xlsb --output data.xlsx     # .xlsx, .xlsb, .xls and .csv all work
+excelreader convert book.xlsb --format xlsx | head -c 4   # to stdout, --format picks it instead
+```
+
+Flags: `--sheet|-s <name|index>`, `--header-row N` (0 = no header), `--sample-size N`,
+`--output|-o <file>`, `--format|-f <xlsx|xlsb|xls|csv>` (defaults to `--output`'s extension, or csv
+for stdout), `--delimiter|-d <char>` (csv only). Run `excelreader <command> --help` for the full list.
+
+On a real terminal, `sheets`/`schema` render as a [Spectre.Console](https://spectreconsole.net) table
+and `convert` shows a progress spinner on stderr; piped or redirected (a script, `| head`, `2>file`),
+every command falls back to the same plain tab-separated text and stderr line it always wrote, so
+nothing here changes for anything already parsing this tool's output.
+
+Exit codes are `0` ok and `1` failure; results go to stdout and errors to stderr, so `convert` is
+safe to pipe.
+
 ## Read rows
 
 ```csharp
@@ -863,13 +889,13 @@ dotnet test --project tests/ExcelReader.Tests/ExcelReader.Tests.csproj --configu
 
 ## Other languages
 
-ExcelReader ships a NativeAOT shared library with a C ABI, so non-.NET languages can read XLSX,
-XLSB, XLS and CSV without a .NET runtime installed.
+ExcelReader ships a NativeAOT shared library with a C ABI, so non-.NET languages can read and write
+XLSX, XLSB, XLS and CSV without a .NET runtime installed.
 
 - C ABI header: [`src/ExcelReader.Native/include/excelreader.h`](src/ExcelReader.Native/include/excelreader.h)
 - Python package: [`python/`](python/README.md)
-- C++ package: header-only CMake wrapper, `xl::Workbook`/`xl::parse_sheet` over the same ABI — see [`cpp/README.md`](cpp/README.md).
-- Rust crate: safe `Workbook`/`parse_sheet` bindings, downloadable via `cargo add excelreader` — see [`rust/excelreader/README.md`](rust/excelreader/README.md).
+- C++ package: header-only CMake wrapper, `xl::Workbook`/`xl::parse_sheet`/`xl::write_sheet` over the same ABI — see [`cpp/README.md`](cpp/README.md).
+- Rust crate: safe `Workbook`/`parse_sheet`/`write_sheet` bindings, downloadable via `cargo add excelreader` — see [`rust/excelreader/README.md`](rust/excelreader/README.md).
 
 ```python
 from excelreader import open_workbook
@@ -879,7 +905,28 @@ with open_workbook("book.xlsx") as workbook:
         print([cell.value for cell in row])
 ```
 
-Reading only — the writers are not exposed across the ABI yet.
+Writing goes through one export, `xl_write_typed`: a whole sheet in a single call, from columnar
+buffers the ABI borrows rather than copies. All three bindings expose it — Python as
+`write_workbook`/`write_arrow`/`write_pandas`/`write_polars`, C++ as `xl::write_columns` and
+`xl::write_sheet<T>`, Rust as `writer::write_columns` and `writer::write_sheet`. In C++ and Rust the
+same struct mapping drives both directions, so reading a sheet and writing it back needs one
+mapping, not two:
+
+```rust
+use excelreader::writer::write_sheet;
+use excelreader::XL_FORMAT_XLSX;
+
+write_sheet("out.xlsx", XL_FORMAT_XLSX, &rows, None)?;
+```
+
+```cpp
+auto written = xl::write_sheet("out.xlsx", rows);   // format inferred from the extension
+```
+
+Row-by-row decoded reads remain Python-only. The Arrow export is available from Python
+(`to_arrow`/`to_record_batch`), C++ (`xl::parse_arrow<T>`, in the separate `<xl/excelreader_arrow.hpp>`
+header — no Apache Arrow C++ dependency, you get the raw C Data Interface pair), and Rust
+(`excelreader::arrow::parse_arrow`, behind the `arrow` cargo feature, returning an `arrow::array::RecordBatch`).
 
 ## Contributing
 

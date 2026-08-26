@@ -1,11 +1,11 @@
 use crate::{
     Date, Error, OpenOptions, Time, Timestamp, XlColumn, XlColumnSpec, XlInferredSchema,
-    XlOpenOptions, XlTable, XlWorkbook, XL_BUFFER_TOO_SMALL, XL_ERROR, XL_FORMAT_AUTO, XL_OK,
+    XlTable, XlWorkbook, XL_BUFFER_TOO_SMALL, XL_ERROR, XL_FORMAT_AUTO, XL_OK,
     XL_T_BOOL, XL_T_DATE, XL_T_F64, XL_T_I64, XL_T_STRING, XL_T_TIME, XL_T_TIMESTAMP,
 };
 use std::marker::PhantomData;
 
-fn last_error(code: i32) -> Error {
+pub(crate) fn last_error(code: i32) -> Error {
     unsafe {
         let mut len: i32 = 0;
         let ptr = crate::xl_last_error_ptr(&mut len);
@@ -19,12 +19,30 @@ fn last_error(code: i32) -> Error {
     }
 }
 
-fn check(code: i32) -> Result<(), Error> {
+pub(crate) fn check(code: i32) -> Result<(), Error> {
     if code == XL_OK {
         Ok(())
     } else {
         Err(last_error(code))
     }
+}
+
+/// Copies a native `XlBuffer` into an owned `Vec<u8>` and releases the native allocation via
+/// `xl_free_buffer` - shared by `writer::write_columns_to_memory`/`write_sheet_to_memory` and
+/// `writer_handle::WriterHandle::bytes`, the two places `xl_write_typed_to_memory`/
+/// `xl_write_handle_bytes` hand back an owned buffer. `buffer.data` may be null (an empty result),
+/// which `from_raw_parts` cannot take - `slice::from_raw_parts` requires a non-null, well-aligned
+/// pointer even for a zero-length slice.
+pub(crate) fn buffer_to_vec(mut buffer: crate::XlBuffer) -> Vec<u8> {
+    let bytes = if buffer.data.is_null() || buffer.len <= 0 {
+        Vec::new()
+    } else {
+        unsafe { std::slice::from_raw_parts(buffer.data, buffer.len as usize).to_vec() }
+    };
+    unsafe {
+        crate::xl_free_buffer(&mut buffer);
+    }
+    bytes
 }
 
 /// Verifies the loaded shared library speaks the ABI revision this crate was compiled against.
@@ -37,7 +55,7 @@ fn check(code: i32) -> Result<(), Error> {
 ///
 /// The result is cached: it cannot change for the lifetime of the process, and every
 /// `Workbook::open` would otherwise pay an FFI call for it.
-fn check_abi_version() -> Result<(), Error> {
+pub(crate) fn check_abi_version() -> Result<(), Error> {
     use std::sync::OnceLock;
     static CHECKED: OnceLock<Result<(), Error>> = OnceLock::new();
 
@@ -83,9 +101,7 @@ impl Workbook {
     ) -> Result<Workbook, Error> {
         check_abi_version()?;
         let raw = options.map(OpenOptions::to_raw);
-        let raw_ptr = raw
-            .as_ref()
-            .map_or(std::ptr::null(), |o| o as *const XlOpenOptions);
+        let raw_ptr = crate::options::ptr_or_null(&raw);
         let mut handle: *mut XlWorkbook = std::ptr::null_mut();
         // `raw` outlives the call below, and the native side copies the path before returning.
         let status = unsafe {
@@ -110,9 +126,7 @@ impl Workbook {
     ) -> Result<Workbook, Error> {
         check_abi_version()?;
         let raw = options.map(OpenOptions::to_raw);
-        let raw_ptr = raw
-            .as_ref()
-            .map_or(std::ptr::null(), |o| o as *const XlOpenOptions);
+        let raw_ptr = crate::options::ptr_or_null(&raw);
         let mut handle: *mut XlWorkbook = std::ptr::null_mut();
         let status = unsafe {
             crate::xl_open_memory_ex(
@@ -197,6 +211,13 @@ impl Workbook {
         Ok(columns)
     }
 
+    /// The raw handle, for sibling modules (e.g. `arrow::parse_arrow`) that need to call an
+    /// `xl_*` function this struct has no wrapper for yet. Not part of the crate's public surface -
+    /// `pub(crate)`, not `pub`.
+    pub(crate) fn handle(&self) -> *mut XlWorkbook {
+        self.handle
+    }
+
     /// Shared two-pass buffer dance for the `xl_*` functions that write a UTF-8 name into a caller
     /// buffer and report the required capacity through `XL_BUFFER_TOO_SMALL`.
     fn fill_string(
@@ -205,7 +226,7 @@ impl Workbook {
     ) -> Result<String, Error> {
         // One sized attempt first: Excel caps sheet names at 31 characters, so 128 bytes clears
         // even the 4-byte-per-character worst case and the retry never runs in practice.
-        let mut buffer = vec![0u8; 128];
+        let mut buffer = [0u8; 128];
         let mut len: i32 = 0;
         let mut status = call(
             self.handle,
@@ -213,18 +234,26 @@ impl Workbook {
             buffer.len() as i32,
             &mut len,
         );
-        if status == XL_BUFFER_TOO_SMALL {
-            buffer = vec![0u8; len.max(0) as usize];
-            status = call(
-                self.handle,
-                buffer.as_mut_ptr(),
-                buffer.len() as i32,
-                &mut len,
-            );
+        if status != XL_BUFFER_TOO_SMALL {
+            check(status)?;
+            let buffer_slice = &buffer[..len.max(0) as usize];
+            return str::from_utf8(buffer_slice)
+                .map(|s| s.to_string())
+                .map_err(|e| Error {
+                    code: XL_ERROR,
+                    message: format!("native library returned a non-UTF-8 name: {e}"),
+                });
         }
+        let mut vec_buffer = vec![0u8; len.max(0) as usize];
+        status = call(
+            self.handle,
+            vec_buffer.as_mut_ptr(),
+            vec_buffer.len() as i32,
+            &mut len,
+        );
         check(status)?;
-        buffer.truncate(len.max(0) as usize);
-        String::from_utf8(buffer).map_err(|e| Error {
+        vec_buffer.truncate(len.max(0) as usize);
+        String::from_utf8(vec_buffer).map_err(|e| Error {
             code: XL_ERROR,
             message: format!("native library returned a non-UTF-8 name: {e}"),
         })
@@ -500,13 +529,23 @@ impl<T: ExcelMapper + Default> Iterator for TableViewIter<'_, T> {
 
 impl<T: ExcelMapper + Default> ExactSizeIterator for TableViewIter<'_, T> {}
 
-/// Schema-driven columnar parse of the current sheet, matching C++'s `xl::parse_sheet<T>`.
+/// Keeps the per-column name pointer/length vectors alive for as long as the `XlColumnSpec` array
+/// that points into them. The two `_name_*` fields are never read - dropping them early would
+/// leave `specs` holding dangling pointers, which is the whole reason they are stored here.
 ///
-/// Takes `&mut Workbook` because the parse consumes the workbook's shared row cursor.
-pub fn parse_sheet<T: ExcelMapper>(
-    workbook: &mut Workbook,
-    header_row: i32,
-) -> Result<TableView<T>, Error> {
+/// Also carries the `T::bindings()` this arena was built from, so callers that need both the flat
+/// spec array (for the FFI call) and the typed bindings (for result-column lookups) can get both
+/// from a single `T::bindings()` call instead of computing it twice.
+pub(crate) struct SpecArena<T: ExcelMapper> {
+    pub(crate) specs: Vec<XlColumnSpec>,
+    pub(crate) bindings: Vec<ColumnBinding<T>>,
+    _name_ptrs: Vec<Vec<*const u8>>,
+    _name_lens: Vec<Vec<i32>>,
+}
+
+/// Lowers `T`'s ExcelMapper bindings into the flat `xl_column_spec` array both `xl_parse_typed` and
+/// `xl_parse_arrow` take - their column-spec input is identical.
+pub(crate) fn build_specs<T: ExcelMapper>() -> SpecArena<T> {
     let bindings = T::bindings();
     let name_ptrs: Vec<Vec<*const u8>> = bindings
         .iter()
@@ -528,6 +567,23 @@ pub fn parse_sheet<T: ExcelMapper>(
             nullable: 1,
         })
         .collect();
+    SpecArena {
+        specs,
+        bindings,
+        _name_ptrs: name_ptrs,
+        _name_lens: name_lens,
+    }
+}
+
+/// Schema-driven columnar parse of the current sheet, matching C++'s `xl::parse_sheet<T>`.
+///
+/// Takes `&mut Workbook` because the parse consumes the workbook's shared row cursor.
+pub fn parse_sheet<T: ExcelMapper>(
+    workbook: &mut Workbook,
+    header_row: i32,
+) -> Result<TableView<T>, Error> {
+    let arena = build_specs::<T>();
+    let bindings = arena.bindings;
     let mut table = XlTable {
         column_count: 0,
         row_count: 0,
@@ -536,8 +592,8 @@ pub fn parse_sheet<T: ExcelMapper>(
     unsafe {
         let status = crate::xl_parse_typed(
             workbook.handle,
-            specs.as_ptr(),
-            specs.len() as i32,
+            arena.specs.as_ptr(),
+            arena.specs.len() as i32,
             header_row,
             &mut table,
         );

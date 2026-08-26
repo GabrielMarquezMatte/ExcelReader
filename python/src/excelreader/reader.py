@@ -7,8 +7,13 @@ import struct
 from array import array
 from collections.abc import Iterator, Sequence
 from pathlib import Path
+from typing import TYPE_CHECKING
 
-from typing_extensions import Self
+if TYPE_CHECKING:
+    # typing.Self is 3.11+; typing_extensions backports it for 3.9/3.10. Only needed for the
+    # annotation below, which `from __future__ import annotations` keeps unevaluated at runtime —
+    # so the wheel stays free of a runtime dependency on typing_extensions.
+    from typing_extensions import Self
 
 from excelreader import _native
 from excelreader.types import (
@@ -29,13 +34,7 @@ except ImportError:
     _numpy = None  # NumPy is an optional extra (pip install excelreader-native[numpy]) — see
     # _buffer_to_array()/_to_columnar_array() below, the only two places that consult it.
 
-_FORMATS = {
-    "auto": _native.XL_FORMAT_AUTO,
-    "xls": _native.XL_FORMAT_XLS,
-    "xlsx": _native.XL_FORMAT_XLSX,
-    "xlsb": _native.XL_FORMAT_XLSB,
-    "csv": _native.XL_FORMAT_CSV,
-}
+_FORMATS = _native.FORMATS
 
 _CELL_HEADER = struct.Struct("<iii")
 _INITIAL_ROW_BUFFER = 64 * 1024

@@ -33,10 +33,23 @@ if(WIN32)
             "$<TARGET_FILE_DIR:excelreader_cpp_benchmarks>")
 endif()
 
-# --- Comparison benchmark against xlnt (https://github.com/tfussell/xlnt) and xlsxio
-# (https://github.com/brechtsanders/xlsxio) - separate opt-in flag because both are much heavier
-# FetchContent builds (their own zip/xml stacks) than the suite above.
-option(EXCELREADER_BUILD_BENCHMARKS_COMPARE "Build the excelreader-vs-xlnt-vs-xlsxio comparison benchmark" OFF)
+add_executable(excelreader_cpp_write_benchmarks benchmark_write.cpp)
+target_link_libraries(excelreader_cpp_write_benchmarks PRIVATE xl::excelreader benchmark::benchmark_main)
+target_compile_definitions(excelreader_cpp_write_benchmarks PRIVATE
+    EXCELREADER_LARGE_FIXTURE_PATH="${EXCELREADER_LARGE_FIXTURE_PATH}")
+
+if(WIN32)
+    add_custom_command(TARGET excelreader_cpp_write_benchmarks POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "$<TARGET_PROPERTY:excelreader_native,IMPORTED_LOCATION>"
+            "$<TARGET_FILE_DIR:excelreader_cpp_write_benchmarks>")
+endif()
+
+# --- Comparison benchmark against xlnt (https://github.com/tfussell/xlnt), xlsxio
+# (https://github.com/brechtsanders/xlsxio) and libxlsxwriter
+# (https://github.com/jmcnamara/libxlsxwriter) - separate opt-in flag because all three are much
+# heavier FetchContent builds (their own zip/xml stacks) than the suite above.
+option(EXCELREADER_BUILD_BENCHMARKS_COMPARE "Build the excelreader-vs-xlnt-vs-xlsxio-vs-libxlsxwriter-vs-duckdb comparison benchmark" OFF)
 if(EXCELREADER_BUILD_BENCHMARKS_COMPARE)
     set(STATIC ON CACHE BOOL "" FORCE)
     set(STATIC_CRT OFF CACHE BOOL "" FORCE)
@@ -133,20 +146,164 @@ if(EXCELREADER_BUILD_BENCHMARKS_COMPARE)
         PUBLIC BUILD_XLSXIO_STATIC)
     target_link_libraries(xlsxio_read PRIVATE MINIZIP::minizip expat::expat)
 
-    add_executable(excelreader_cpp_compare_benchmarks benchmark_compare.cpp)
-    target_link_libraries(excelreader_cpp_compare_benchmarks PRIVATE
-        xl::excelreader benchmark::benchmark_main xlnt xlsxio_read)
+    # xlsxio's write side is a separate translation unit from its read side, with no shared state -
+    # it needs minizip's zip.h (same compat shim as above) but not expat, since writing parses no
+    # XML.
+    add_library(xlsxio_write STATIC "${xlsxio_SOURCE_DIR}/lib/xlsxio_write.c")
+    target_include_directories(xlsxio_write
+        PUBLIC "${xlsxio_SOURCE_DIR}/include"
+        PRIVATE "${xlsxio_SOURCE_DIR}/lib" "${_xlsxio_minizip_shim}")
+    target_compile_definitions(xlsxio_write
+        PRIVATE BUILD_XLSXIO USE_MINIZIP
+        PUBLIC BUILD_XLSXIO_STATIC)
+    target_link_libraries(xlsxio_write PRIVATE MINIZIP::minizip)
+
+    # libxlsxwriter (https://github.com/jmcnamara/libxlsxwriter) - unlike xlsxio, its own
+    # CMakeLists.txt IS FetchContent-friendly enough to add_subdirectory (no REQUIRED dependency on
+    # anything already installed except zlib), so it is consumed as-is rather than hand-compiled.
+    #
+    # Its one hard requirement is `find_package(ZLIB "1.2.8" REQUIRED)`, called from ITS OWN
+    # CMakeLists.txt with no FetchContent hook of its own. madler/zlib's CMakeLists.txt has no
+    # matching Config-mode package (find_package(ZLIB) resolves through CMake's bundled
+    # Modules/FindZLIB.cmake, a Find-module, not a Config file), so FetchContent's
+    # OVERRIDE_FIND_PACKAGE keyword - the usual fix for "vendored project calls find_package(X
+    # REQUIRED) with nothing to redirect to" - does not apply to it either.
+    #
+    # The fix: fetch zlib ourselves, then place our OWN FindZLIB.cmake ahead of CMake's built-in one
+    # on CMAKE_MODULE_PATH. find_package(ZLIB) is a MODULE-mode call, and MODULE mode searches
+    # CMAKE_MODULE_PATH before it ever reaches CMake's own Modules/ directory - so ours intercepts
+    # the call and just aliases the target we already built. An ALIAS (not a hardcoded file path)
+    # is what makes this work under a multi-config generator (Visual Studio): the actual .lib file
+    # only exists once a config is chosen at BUILD time, so anything resolved at CONFIGURE time
+    # (which is when find_library would run) cannot know its path - a target alias defers that
+    # resolution to build time, same as every other target reference in this file.
+    FetchContent_Declare(
+        zlib
+        GIT_REPOSITORY https://github.com/madler/zlib.git
+        GIT_TAG v1.3.1
+    )
+    FetchContent_MakeAvailable(zlib)
+    # madler/zlib's CMakeLists.txt sets its include path via the directory-scoped
+    # include_directories(), not target_include_directories(PUBLIC/INTERFACE) - so a target built
+    # OUTSIDE that subdirectory (libxlsxwriter's own sources, added via a separate add_subdirectory
+    # below) does NOT inherit it just by linking against zlibstatic. Add it back explicitly: zlib.h
+    # lives in the fetched source tree, zconf.h is generated into the build tree at configure time.
+    target_include_directories(zlibstatic INTERFACE "${zlib_SOURCE_DIR}" "${zlib_BINARY_DIR}")
+
+    set(_zlib_shim_dir "${CMAKE_CURRENT_BINARY_DIR}/zlib-find-module-shim")
+    file(MAKE_DIRECTORY "${_zlib_shim_dir}")
+    file(WRITE "${_zlib_shim_dir}/FindZLIB.cmake" [=[
+# Generated by cpp/benchmarks/CMakeLists.txt - redirects find_package(ZLIB) to the zlibstatic
+# target this build already fetched and compiled via FetchContent, instead of searching for an
+# installed system zlib. See the comment above FetchContent_Declare(zlib ...) for why this exists.
+if(NOT TARGET ZLIB::ZLIB)
+    add_library(ZLIB::ZLIB ALIAS zlibstatic)
+endif()
+set(ZLIB_FOUND TRUE)
+set(ZLIB_VERSION_STRING "1.3.1")
+]=])
+    list(PREPEND CMAKE_MODULE_PATH "${_zlib_shim_dir}")
+
+    set(BUILD_TESTS OFF CACHE BOOL "" FORCE)
+    set(BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+    FetchContent_Declare(
+        libxlsxwriter
+        GIT_REPOSITORY https://github.com/jmcnamara/libxlsxwriter.git
+        GIT_TAG v1.2.4
+    )
+    FetchContent_MakeAvailable(libxlsxwriter)
+
+    # DuckDB (https://github.com/duckdb/duckdb) - via its "excel" extension, DuckDB reads and
+    # writes .xlsx through read_xlsx()/COPY ... TO ... WITH (FORMAT xlsx). Unlike xlnt/xlsxio/
+    # libxlsxwriter, this is NOT built from source: DuckDB publishes a prebuilt libduckdb.{dll,so,
+    # dylib} + duckdb.h/duckdb.hpp per platform as GitHub Release assets (same shape as this
+    # project's own excelreader-native-*.{dll,so,dylib} - see cmake/FetchNativeLib.cmake), so it is
+    # downloaded the same way rather than compiled - DuckDB's amalgamated source is enormous and
+    # would dwarf every other FetchContent build in this file.
+    #
+    # On Windows the zip already ships a real import library (duckdb.lib) - no lib.exe/dlltool
+    # workaround needed, unlike this project's own native library, which NativeAOT publishes
+    # without one.
+    if(WIN32)
+        set(_duckdb_asset "libduckdb-windows-amd64.zip")
+        set(_duckdb_lib_file "duckdb.dll")
+        set(_duckdb_implib_file "duckdb.lib")
+    elseif(APPLE)
+        set(_duckdb_asset "libduckdb-osx-universal.zip")
+        set(_duckdb_lib_file "libduckdb.dylib")
+    else()
+        set(_duckdb_asset "libduckdb-linux-amd64.zip")
+        set(_duckdb_lib_file "libduckdb.so")
+    endif()
+
+    set(_duckdb_version "1.5.5")
+    set(_duckdb_dir "${CMAKE_BINARY_DIR}/duckdb-download")
+    set(_duckdb_zip "${_duckdb_dir}/${_duckdb_asset}")
+    if(NOT EXISTS "${_duckdb_dir}/${_duckdb_lib_file}")
+        file(MAKE_DIRECTORY "${_duckdb_dir}")
+        set(_duckdb_url "https://github.com/duckdb/duckdb/releases/download/v${_duckdb_version}/${_duckdb_asset}")
+        message(STATUS "Downloading DuckDB: ${_duckdb_url}")
+        file(DOWNLOAD "${_duckdb_url}" "${_duckdb_zip}" STATUS _duckdb_status)
+        list(GET _duckdb_status 0 _duckdb_code)
+        if(NOT _duckdb_code EQUAL 0)
+            file(REMOVE "${_duckdb_zip}")
+            list(GET _duckdb_status 1 _duckdb_message)
+            message(FATAL_ERROR "Failed to download ${_duckdb_url}: ${_duckdb_message}")
+        endif()
+        file(ARCHIVE_EXTRACT INPUT "${_duckdb_zip}" DESTINATION "${_duckdb_dir}")
+    endif()
+
+    add_library(duckdb SHARED IMPORTED GLOBAL)
+    set_target_properties(duckdb PROPERTIES
+        IMPORTED_LOCATION "${_duckdb_dir}/${_duckdb_lib_file}"
+        INTERFACE_INCLUDE_DIRECTORIES "${_duckdb_dir}")
+    if(WIN32)
+        set_target_properties(duckdb PROPERTIES IMPORTED_IMPLIB "${_duckdb_dir}/${_duckdb_implib_file}")
+    endif()
 
     set(EXCELREADER_XLSX_FIXTURE_PATH
         "${CMAKE_CURRENT_SOURCE_DIR}/../../tests/ExcelReader.Benchmarks/Data/65K_Records_Data.xlsx"
         CACHE FILEPATH "Path to the 65K-row xlsx fixture the excelreader-vs-xlnt benchmark reads")
+
+    add_executable(excelreader_cpp_compare_benchmarks benchmark_compare.cpp)
+    target_link_libraries(excelreader_cpp_compare_benchmarks PRIVATE
+        xl::excelreader benchmark::benchmark_main xlnt xlsxio_read duckdb)
     target_compile_definitions(excelreader_cpp_compare_benchmarks PRIVATE
         EXCELREADER_XLSX_FIXTURE_PATH="${EXCELREADER_XLSX_FIXTURE_PATH}")
 
+    # Kept a separate executable from the read comparison rather than a second .cpp in the same
+    # one: both files define their own FullRow plus an xl::ExcelMapper specialization for it, and
+    # two targets keep that unambiguous.
+    #
+    # The write comparison is then split AGAIN, into two executables built from the same source:
+    # xlsxio and libxlsxwriter each vendor an incompatible copy of minizip and export the same C
+    # symbols (zipOpen, zipOpenNewFileInZip, ...), so linking both into one binary lets calls cross
+    # between the two implementations - which corrupted xlsxio's output in Release. See the header
+    # comment in benchmark_write_compare.cpp. Do not merge these back into one target.
+    add_executable(excelreader_cpp_write_compare_benchmarks benchmark_write_compare.cpp)
+    target_link_libraries(excelreader_cpp_write_compare_benchmarks PRIVATE
+        xl::excelreader benchmark::benchmark_main xlnt xlsxio_write duckdb)
+    target_compile_definitions(excelreader_cpp_write_compare_benchmarks PRIVATE
+        EXCELREADER_XLSX_FIXTURE_PATH="${EXCELREADER_XLSX_FIXTURE_PATH}"
+        EXCELREADER_BENCH_XLSXIO)
+
+    add_executable(excelreader_cpp_write_compare_lxw_benchmarks benchmark_write_compare.cpp)
+    target_link_libraries(excelreader_cpp_write_compare_lxw_benchmarks PRIVATE
+        xl::excelreader benchmark::benchmark_main xlsxwriter duckdb)
+    target_compile_definitions(excelreader_cpp_write_compare_lxw_benchmarks PRIVATE
+        EXCELREADER_XLSX_FIXTURE_PATH="${EXCELREADER_XLSX_FIXTURE_PATH}"
+        EXCELREADER_BENCH_LIBXLSXWRITER)
+
     if(WIN32)
-        add_custom_command(TARGET excelreader_cpp_compare_benchmarks POST_BUILD
-            COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                "$<TARGET_PROPERTY:excelreader_native,IMPORTED_LOCATION>"
-                "$<TARGET_FILE_DIR:excelreader_cpp_compare_benchmarks>")
+        foreach(_compare_target excelreader_cpp_compare_benchmarks excelreader_cpp_write_compare_benchmarks
+                                excelreader_cpp_write_compare_lxw_benchmarks)
+            add_custom_command(TARGET ${_compare_target} POST_BUILD
+                COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                    "$<TARGET_PROPERTY:excelreader_native,IMPORTED_LOCATION>"
+                    "$<TARGET_FILE_DIR:${_compare_target}>"
+                COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                    "$<TARGET_PROPERTY:duckdb,IMPORTED_LOCATION>"
+                    "$<TARGET_FILE_DIR:${_compare_target}>")
+        endforeach()
     endif()
 endif()

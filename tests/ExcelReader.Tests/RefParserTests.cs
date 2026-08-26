@@ -265,7 +265,7 @@ namespace ExcelReader.Tests
             await using var ms = await TypedWorkbook.BuildAsync(["Name", "Id", "Value", "Date"]);
             using var reader = Excel.From(ms, leaveOpen: true);
             IEnumerable<SaleNamedRef> enumerable = RefParser.ParseNamed<SaleNamedRef>(reader);
-            Assert.Throws<NotSupportedException>(() => enumerable.GetEnumerator());
+            Assert.Throws<NotSupportedException>(enumerable.GetEnumerator);
             Assert.Throws<NotSupportedException>(() => ((IEnumerable)enumerable).GetEnumerator());
         }
     }

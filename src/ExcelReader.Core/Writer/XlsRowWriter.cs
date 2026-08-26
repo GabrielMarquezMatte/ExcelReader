@@ -130,8 +130,14 @@ namespace ExcelReader.Core.Writer
             if (value is not null)
             {
                 _owner.EmitNumber(_rowNumber, _columnIndex, value.Value);
+                _columnIndex++;
+                return;
             }
-            _columnIndex++;
+            // A bounds-checked skip, not a bare increment: the unchecked column advance used to
+            // bypass BIFF8's 256-column limit every other nullable overload in this class already
+            // enforces (see the Skip method's own remarks on this exact bug, fixed there but
+            // missed on these four numeric overloads until now).
+            Skip(1);
         }
 
         /// <summary>Writes a numeric cell in the current column and advances to the next column.</summary>
@@ -149,8 +155,11 @@ namespace ExcelReader.Core.Writer
             if (value is not null)
             {
                 _owner.EmitNumber(_rowNumber, _columnIndex, value.Value);
+                _columnIndex++;
+                return;
             }
-            _columnIndex++;
+            // A bounds-checked skip, not a bare increment: see Write(int?)'s remarks.
+            Skip(1);
         }
 
         /// <summary>Writes a numeric cell in the current column and advances to the next column.</summary>
@@ -168,8 +177,11 @@ namespace ExcelReader.Core.Writer
             if (value is not null)
             {
                 _owner.EmitNumber(_rowNumber, _columnIndex, value.Value);
+                _columnIndex++;
+                return;
             }
-            _columnIndex++;
+            // A bounds-checked skip, not a bare increment: see Write(int?)'s remarks.
+            Skip(1);
         }
 
         /// <summary>Writes a numeric cell in the current column and advances to the next column.</summary>
@@ -187,8 +199,11 @@ namespace ExcelReader.Core.Writer
             if (value is not null)
             {
                 _owner.EmitNumber(_rowNumber, _columnIndex, (double)value.Value);
+                _columnIndex++;
+                return;
             }
-            _columnIndex++;
+            // A bounds-checked skip, not a bare increment: see Write(int?)'s remarks.
+            Skip(1);
         }
 
         /// <inheritdoc/>

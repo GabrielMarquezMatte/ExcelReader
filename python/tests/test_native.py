@@ -32,8 +32,6 @@ def test_exported_functions_are_present():
         "xl_is_date1904",
         "xl_next_row",
         "xl_read_all_blob",
-        "xl_next_row_decoded",
-        "xl_free_row",
         "xl_read_all_decoded",
         "xl_free_rows",
         "xl_parse_typed",

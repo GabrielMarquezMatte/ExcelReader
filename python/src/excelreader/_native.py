@@ -5,10 +5,10 @@ Everything here mirrors src/ExcelReader.Native/include/excelreader.h. If you cha
 
 from __future__ import annotations
 
-from collections.abc import Sequence
 import ctypes
 import os
 import platform
+from collections.abc import Sequence
 from functools import lru_cache
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -27,13 +27,25 @@ XL_ERROR = -5
 
 # Bumped on any change to a struct layout, a status code, or the meaning of an existing function;
 # adding a new function does not bump it. Mirrors XL_ABI_VERSION in include/excelreader.h.
-XL_ABI_VERSION = 2
+XL_ABI_VERSION = 3
 
 XL_FORMAT_AUTO = 0
 XL_FORMAT_XLS = 1
 XL_FORMAT_XLSX = 2
 XL_FORMAT_XLSB = 3
 XL_FORMAT_CSV = 4
+# The one mapping from a public format name to its XL_FORMAT_* value. reader.py and writer.py both
+# derive their tables from these rather than restating them.
+FORMATS = {
+    "auto": XL_FORMAT_AUTO,
+    "xls": XL_FORMAT_XLS,
+    "xlsx": XL_FORMAT_XLSX,
+    "xlsb": XL_FORMAT_XLSB,
+    "csv": XL_FORMAT_CSV,
+}
+# xl_write_typed rejects XL_FORMAT_AUTO - a file being created has no signature bytes to sniff - so
+# the write side gets the same table minus that entry.
+WRITE_FORMATS = {name: value for name, value in FORMATS.items() if name != "auto"}
 
 # Every boolean-shaped NativeOpenOptions field uses one of these three states, never a plain 0/1 -
 # several of them default to true, so a bare 0 would be ambiguous between "off" and "use the library
@@ -117,22 +129,17 @@ def column_spec_by_index(index: int, type_: int, *, nullable: bool = False) -> N
     )
 
 
-class NativeInferredColumnSpec(ctypes.Structure):
-    """Mirrors xl_column_spec's layout exactly, for the OUTPUT direction (xl_infer_schema).
+class NativeInferredColumnSpec(NativeColumnSpec):
+    """The OUTPUT direction of the same xl_column_spec (xl_infer_schema fills these in).
+
+    Layout is inherited, not restated: it is literally the same C struct, and a second copy of the
+    field list is a second place for it to drift from the header. Only the ownership rules differ,
+    which is why this carries its own name.
 
     Always carries `name_count` 0 or 1 — inference never guesses more than one candidate name per
     column. Unlike `column_spec_by_name`'s buffers, `names[0]` here is a raw pointer with no
     guaranteed NUL terminator, so decode it with `ctypes.string_at(names[0], name_lens[0])`.
     """
-
-    _fields_ = [
-        ("names", ctypes.POINTER(ctypes.POINTER(ctypes.c_uint8))),
-        ("name_lens", ctypes.POINTER(ctypes.c_int32)),
-        ("name_count", ctypes.c_int32),
-        ("index", ctypes.c_int32),
-        ("type", ctypes.c_int32),
-        ("nullable", ctypes.c_int32),
-    ]
 
 
 class NativeInferredSchema(ctypes.Structure):
@@ -414,10 +421,6 @@ def _bind(lib: ctypes.CDLL) -> ctypes.CDLL:
     lib.xl_next_row.restype = c_int
     lib.xl_read_all_blob.argtypes = [p_void, p_bytes, c_int, p_int]
     lib.xl_read_all_blob.restype = c_int
-    lib.xl_next_row_decoded.argtypes = [p_void, ctypes.POINTER(NativeRow)]
-    lib.xl_next_row_decoded.restype = c_int
-    lib.xl_free_row.argtypes = [ctypes.POINTER(NativeRow)]
-    lib.xl_free_row.restype = None
     lib.xl_last_error.argtypes = [p_bytes, c_int, p_int]
     lib.xl_last_error.restype = c_int
     lib.xl_last_error_ptr.argtypes = [p_int]

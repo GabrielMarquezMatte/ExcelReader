@@ -45,21 +45,15 @@ namespace ExcelReader.Native
             try
             {
                 rows = handle.Reader.GetEnumerator();
-                List<string?> names = [];
-                List<ColumnStat> stats = [];
-
-                if (headerRow > 0 && !TryReadHeader(rows, headerRow, names, stats, out string? headerError))
-                {
-                    SetLastError(headerError!);
-                    return NativeStatus.InvalidArgument;
-                }
-
-                bool isDate1904 = handle.Reader.IsDate1904;
-                int dataRowCount = SampleDataRows(rows, sampleSize, isDate1904, names, stats);
-                MarkSparseColumnsNullable(stats, dataRowCount);
-
-                schema = BuildSchema(names, stats);
+                schema = BuildSchema(SchemaInference.Infer(rows, handle.Reader.IsDate1904, headerRow, sampleSize));
                 return NativeStatus.Ok;
+            }
+            catch (ArgumentException exception)
+            {
+                // Core throws for an unreachable header row; the ABI reports it as a status code.
+                SetLastError(exception.Message);
+                schema = default;
+                return NativeStatus.InvalidArgument;
             }
             catch (Exception exception)
             {
@@ -86,7 +80,12 @@ namespace ExcelReader.Native
             for (int i = 0; i < schema.ColumnCount; i++)
             {
                 NativeColumnSpecRaw spec = columns[i];
-                if (spec.NameCount > 0)
+                // NameCount > 0 is supposed to imply Names/NameLens are non-null (BuildSpec always
+                // allocates both together), but a caller that null-checked and swapped in its own
+                // freed-and-nulled Names field between InferSchema and this call would otherwise
+                // dereference a null byte**. FreeRows/FreeTable already check the array pointer
+                // first for the same reason; this matches them.
+                if (spec.NameCount > 0 && spec.Names is not null)
                 {
                     Marshal.FreeHGlobal((IntPtr)spec.Names[0]);
                     Marshal.FreeHGlobal((IntPtr)spec.Names);
@@ -97,103 +96,34 @@ namespace ExcelReader.Native
             schema = default;
         }
 
-        // Advances `rows` past headerRow and records each populated header cell's trimmed text as that
-        // column's name. A blank header cell leaves its column name null (index-based) rather than an
-        // empty string — an empty name would fail xl_parse_typed's own "blank name" validation later.
-        private static bool TryReadHeader(IExcelRowEnumerator rows, int headerRow, List<string?> names, List<ColumnStat> stats, out string? error)
-        {
-            error = null;
-            for (int rowNumber = 1; rowNumber <= headerRow; rowNumber++)
-            {
-                if (!rows.MoveNext())
-                {
-                    error = $"sheet has fewer than {headerRow} row(s); cannot resolve header_row.";
-                    return false;
-                }
-            }
-            Row header = rows.Current;
-            foreach (RowCell cell in header.Cells)
-            {
-                EnsureCapacity(names, stats, cell.ColumnIndex);
-                string text = cell.Value.GetString().Trim();
-                names[cell.ColumnIndex] = text.Length == 0 ? null : text;
-            }
-            return true;
-        }
-
-        // Reads up to sampleSize rows after the header, folding each populated cell's type into that
-        // column's ColumnStat. Returns how many data rows were actually sampled (fewer than sampleSize
-        // at end of sheet), used by MarkSparseColumnsNullable below.
-        private static int SampleDataRows(IExcelRowEnumerator rows, int sampleSize, bool isDate1904, List<string?> names, List<ColumnStat> stats)
-        {
-            int dataRowCount = 0;
-            for (int i = 0; i < sampleSize && rows.MoveNext(); i++)
-            {
-                dataRowCount++;
-                Row row = rows.Current;
-                foreach (RowCell cell in row.Cells)
-                {
-                    EnsureCapacity(names, stats, cell.ColumnIndex);
-                    Cell value = cell.Value;
-                    CollectionsMarshal.AsSpan(stats)[cell.ColumnIndex].Observe(in value, isDate1904);
-                }
-            }
-            return dataRowCount;
-        }
-
-        // A column absent from some sampled rows never triggers ColumnStat.Observe for them — which is
-        // exactly what row[index] would have reported for it: CellType.Empty. Comparing each column's
-        // Observe count against the number of rows actually sampled catches that without a second,
-        // O(columns) walk of every row via the indexer.
-        private static void MarkSparseColumnsNullable(List<ColumnStat> stats, int dataRowCount)
-        {
-            foreach (ref ColumnStat stat in CollectionsMarshal.AsSpan(stats))
-            {
-                if (stat.SeenCount < dataRowCount)
-                {
-                    stat.SawEmpty = true;
-                }
-            }
-        }
-
-        private static void EnsureCapacity(List<string?> names, List<ColumnStat> stats, int index)
-        {
-            while (names.Count <= index)
-            {
-                names.Add(null);
-                stats.Add(default);
-            }
-        }
-
         // Every allocation this function makes is handed to the caller inside the returned schema and
         // freed only by FreeSchema — a thrown exception between an AllocHGlobal and the assignment to
         // `schema` below would leak it, but nothing after the loop's own allocations can throw.
-        private static NativeInferredSchema BuildSchema(List<string?> names, List<ColumnStat> stats)
+        private static NativeInferredSchema BuildSchema(ExcelColumnSchema[] columns)
         {
-            int columnCount = names.Count;
-            if (columnCount == 0)
+            if (columns.Length == 0)
             {
                 return new NativeInferredSchema { Columns = IntPtr.Zero, ColumnCount = 0 };
             }
 
-            NativeColumnSpecRaw* block = (NativeColumnSpecRaw*)Marshal.AllocHGlobal(checked(columnCount * sizeof(NativeColumnSpecRaw)));
-            for (int i = 0; i < columnCount; i++)
+            NativeColumnSpecRaw* block = (NativeColumnSpecRaw*)Marshal.AllocHGlobal(checked(columns.Length * sizeof(NativeColumnSpecRaw)));
+            for (int i = 0; i < columns.Length; i++)
             {
-                block[i] = BuildSpec(names[i], i, stats[i]);
+                block[i] = BuildSpec(columns[i]);
             }
-            return new NativeInferredSchema { Columns = (IntPtr)block, ColumnCount = columnCount };
+            return new NativeInferredSchema { Columns = (IntPtr)block, ColumnCount = columns.Length };
         }
 
-        private static NativeColumnSpecRaw BuildSpec(string? name, int index, ColumnStat stat)
+        private static NativeColumnSpecRaw BuildSpec(ExcelColumnSchema column)
         {
             byte** namesBlock = null;
             int* lensBlock = null;
             int nameCount = 0;
-            if (name is not null)
+            if (column.Name is not null)
             {
-                int nameLen = Encoding.UTF8.GetByteCount(name);
+                int nameLen = Encoding.UTF8.GetByteCount(column.Name);
                 byte* namePtr = (byte*)Marshal.AllocHGlobal(Math.Max(nameLen, 1));
-                Encoding.UTF8.GetBytes(name, new Span<byte>(namePtr, nameLen));
+                Encoding.UTF8.GetBytes(column.Name, new Span<byte>(namePtr, nameLen));
 
                 namesBlock = (byte**)Marshal.AllocHGlobal(sizeof(byte*));
                 namesBlock[0] = namePtr;
@@ -206,79 +136,12 @@ namespace ExcelReader.Native
                 Names = namesBlock,
                 NameLens = lensBlock,
                 NameCount = nameCount,
-                Index = index,
-                Type = stat.InferType(),
-                Nullable = stat.SawEmpty ? 1 : 0,
+                Index = column.Index,
+                // ExcelColumnType's underlying values ARE the XL_T_* constants, by design — see the
+                // remarks on the enum. This cast is the whole translation.
+                Type = (int)column.Type,
+                Nullable = column.IsNullable ? 1 : 0,
             };
-        }
-
-        // Accumulates what kinds of CellType a column's sampled cells held, enough to guess a
-        // xl_parse_typed ColumnSpec without ever storing a cell's value past its own row.
-        private struct ColumnStat
-        {
-            internal int SeenCount;
-            internal bool SawEmpty;
-            internal bool SawString;
-            internal bool SawNumber;
-            internal bool SawDate;
-            internal bool SawBool;
-            internal bool SawFormulaOrError;
-            internal bool SawNonIntegralNumber;
-
-            internal void Observe(in Cell cell, bool isDate1904)
-            {
-                SeenCount++;
-                switch (cell.Type)
-                {
-                    case CellType.Empty:
-                        SawEmpty = true;
-                        break;
-                    case CellType.ExcelString:
-                        SawString = true;
-                        break;
-                    case CellType.Number:
-                        SawNumber = true;
-                        if (!ExcelCellReaders.Parsable<long>(in cell, isDate1904, CultureInfo.InvariantCulture, out _))
-                        {
-                            SawNonIntegralNumber = true;
-                        }
-                        break;
-                    case CellType.Date:
-                        SawDate = true;
-                        break;
-                    case CellType.Boolean:
-                        SawBool = true;
-                        break;
-                    default: // Formula, Error — the cached result was never sampled as a plain value.
-                        SawFormulaOrError = true;
-                        break;
-                }
-            }
-
-            // A column only gets a non-string guess when every sampled cell agreed on one single kind.
-            // A real mix, any formula/error result, or nothing seen at all falls back to the string
-            // type, since it is the only one able to represent every one of those verbatim.
-            internal readonly int InferType()
-            {
-                int kinds = (SawString ? 1 : 0) + (SawNumber ? 1 : 0) + (SawDate ? 1 : 0) + (SawBool ? 1 : 0);
-                if (SawFormulaOrError || kinds != 1)
-                {
-                    return NativeColumnType.String;
-                }
-                if (SawString)
-                {
-                    return NativeColumnType.String;
-                }
-                if (SawDate)
-                {
-                    return NativeColumnType.Date;
-                }
-                if (SawBool)
-                {
-                    return NativeColumnType.Bool;
-                }
-                return SawNonIntegralNumber ? NativeColumnType.Float64 : NativeColumnType.Int64;
-            }
         }
     }
 

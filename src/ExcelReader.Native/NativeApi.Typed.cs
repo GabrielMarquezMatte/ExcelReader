@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Runtime.InteropServices;
 using ExcelReader.Core.Parser;
@@ -28,7 +29,7 @@ namespace ExcelReader.Native
             }
             if (!TryValidateArguments(specs, headerRow, out string? argumentError))
             {
-                SetLastError(argumentError!);
+                SetLastError(argumentError);
                 return NativeStatus.InvalidArgument;
             }
 
@@ -40,7 +41,7 @@ namespace ExcelReader.Native
                 int[] columnIndices = new int[specs.Length];
                 if (!TryResolveColumns(rows, specs, headerRow, columnIndices, out string? resolveError))
                 {
-                    SetLastError(resolveError!);
+                    SetLastError(resolveError);
                     return NativeStatus.InvalidArgument;
                 }
 
@@ -149,7 +150,7 @@ namespace ExcelReader.Native
             return nameCount is >= 0 and <= NativeLimits.MaxNamesPerSpec;
         }
 
-        private static bool TryValidateArguments(NativeColumnSpec[] specs, int headerRow, out string? error)
+        private static bool TryValidateArguments(NativeColumnSpec[] specs, int headerRow, [NotNullWhen(false)] out string? error)
         {
             error = null;
             if (specs.Length == 0)
@@ -196,7 +197,7 @@ namespace ExcelReader.Native
         // Advances `rows` past any skipped rows and the header row itself (headerRow > 0), or leaves it
         // untouched at the sheet's first row (headerRow == 0, index-only specs). Either way, `rows` is
         // positioned so the next MoveNext() yields the first DATA row.
-        private static bool TryResolveColumns(IExcelRowEnumerator rows, NativeColumnSpec[] specs, int headerRow, int[] columnIndices, out string? error)
+        private static bool TryResolveColumns(IExcelRowEnumerator rows, NativeColumnSpec[] specs, int headerRow, int[] columnIndices, [NotNullWhen(false)] out string? error)
         {
             error = null;
             if (headerRow == 0)
@@ -208,13 +209,9 @@ namespace ExcelReader.Native
                 return true;
             }
 
-            for (int rowNumber = 1; rowNumber <= headerRow; rowNumber++)
+            if (!SchemaInference.TrySkipToHeaderRow(rows, headerRow, out error))
             {
-                if (!rows.MoveNext())
-                {
-                    error = $"sheet has fewer than {headerRow} row(s); cannot resolve header_row.";
-                    return false;
-                }
+                return false;
             }
 
             Row header = rows.Current;
@@ -274,9 +271,25 @@ namespace ExcelReader.Native
             long rowCount = columnCount > 0 ? builders[0].RowCount : 0;
             IntPtr columnsBlock = Marshal.AllocHGlobal(checked(columnCount * sizeof(NativeColumn)));
             NativeColumn* columns = (NativeColumn*)columnsBlock;
-            for (int i = 0; i < columnCount; i++)
+            int built = 0;
+            try
             {
-                columns[i] = builders[i].Build();
+                for (; built < columnCount; built++)
+                {
+                    columns[built] = builders[built].Build();
+                }
+            }
+            catch
+            {
+                // Every column before the one that threw (an AllocHGlobal OOM, or a ChunkedBuffer
+                // overflow past ~268M rows on one wide column) already has its own Values/Validity
+                // block allocated and assigned into `columns` - a bare rethrow here would leak all
+                // of them, plus columnsBlock itself. FreeTable already knows how to walk and release
+                // exactly that shape; hand it a table truncated to what actually got built (`built`
+                // columns are complete - the one that threw never got assigned, so it isn't touched).
+                NativeTable partial = new() { ColumnCount = built, RowCount = rowCount, Columns = columnsBlock };
+                FreeTable(ref partial);
+                throw;
             }
             return new NativeTable { ColumnCount = columnCount, RowCount = rowCount, Columns = columnsBlock };
         }
