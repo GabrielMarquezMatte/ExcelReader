@@ -72,13 +72,16 @@ namespace ExcelReader.Core.Crypto
             byte[] hmacKey = DecryptNoPadding(d.EncryptedHmacKey, intermediateKey, ivKey);
             byte[] hmacValue = DecryptNoPadding(d.EncryptedHmacValue, intermediateKey, ivValue);
 
-            // The wrapped plaintexts are, per spec, exactly saltSize bytes (the random HMAC key,
-            // 2.3.4.14 step 2) and exactly the hash's native output length (the HMAC digest, step 5) —
-            // both possibly padded out to a blockSize multiple by the producer.
-            int saltSize = keyData.SaltSize;
+            // The wrapped plaintexts are, per spec, exactly the hash's native output length in both
+            // cases: the random HMAC key is generated with the same length as the hash output (2.3.4.14
+            // step 2 - NOT saltSize; confirmed against msoffcrypto-tool's own writer, which allocates
+            // the key salt as `_random_buffer(hashSize)`, and against real fixtures in
+            // EncryptedIntegrityTests, since a wrong length here silently produces a different HMAC key
+            // rather than a visible parse error) and the HMAC digest itself (step 5) — both possibly
+            // padded out to a blockSize multiple by the producer.
             int hashLen = HashLength(keyData.Hash);
             return (
-                hmacKey.Length > saltSize ? hmacKey[..saltSize] : hmacKey,
+                hmacKey.Length > hashLen ? hmacKey[..hashLen] : hmacKey,
                 hmacValue.Length > hashLen ? hmacValue[..hashLen] : hmacValue);
         }
 

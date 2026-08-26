@@ -1,3 +1,7 @@
+using System.Buffers;
+using System.Buffers.Binary;
+using System.Runtime.InteropServices;
+using System.Security.Cryptography;
 using ExcelReader.Core.Reader;
 
 namespace ExcelReader.Core.Crypto
@@ -10,6 +14,13 @@ namespace ExcelReader.Core.Crypto
     internal static class EncryptedPackageOpener
     {
         private const long MaxEncryptionInfoBytes = 64 * 1024;
+
+        // Same shape as DecryptedPackageStream's own constants — duplicated rather than shared,
+        // since DecryptToMemory decrypts the whole package in one pass instead of on-demand segments
+        // and has no stream/cache lifetime to share with that type.
+        private const int SegmentSize = 4096;
+        private const int PrefixSize = 8;
+        private const int CipherBlockSize = 16;
 
         // Used by detection only — probes the directory, then always rewinds. `ExcelReaderOptions.Default`
         // is deliberately used here rather than the caller's options: this is a structural yes/no
@@ -32,6 +43,139 @@ namespace ExcelReader.Core.Crypto
             {
                 seekableSource.Position = start;
             }
+        }
+
+        // The in-memory twin of IsEncryptedContainer, for Excel.From/Excel.Open's
+        // ReadOnlyMemory<byte> overloads: probes the directory over a throwaway view of `container`
+        // and never touches the caller's buffer.
+        internal static bool IsEncryptedMemory(ReadOnlyMemory<byte> container, ExcelReaderOptions options)
+        {
+            // Structural yes/no question, same rationale as IsEncryptedContainer using
+            // ExcelReaderOptions.Default rather than the caller's options/limits.
+            _ = options;
+            using Stream source = WrapMemory(container);
+            try
+            {
+                using CfbContainer cfb = CfbContainer.Parse(source, ownsSource: false, ExcelReaderOptions.Default);
+                return cfb.ContainsStream("EncryptedPackage");
+            }
+            catch (InvalidDataException)
+            {
+                return false;
+            }
+        }
+
+        // The eager twin of Decrypt, for Excel.From/Excel.Open's ReadOnlyMemory<byte> overloads: those
+        // are documented to never suspend, even under `await foreach`, which rules out a lazily
+        // decrypt-on-demand DecryptedPackageStream here. Decrypts the whole "EncryptedPackage" stream
+        // into a fresh array in one pass and always verifies its dataIntegrity HMAC (when the
+        // descriptor carries one) — unlike the streaming path, verification here is nearly free
+        // because every byte is already in hand.
+        internal static ReadOnlyMemory<byte> DecryptToMemory(ReadOnlyMemory<byte> container, ExcelReaderOptions options)
+        {
+            using Stream source = WrapMemory(container);
+            using CfbContainer cfb = CfbContainer.Parse(source, ownsSource: false, options);
+            if (options.Password is null)
+            {
+                throw new ExcelEncryptionException(ExcelEncryptionReason.PasswordRequired,
+                    "This workbook is encrypted. Supply ExcelReaderOptions.Password to open it.");
+            }
+            byte[] info = cfb.ReadStream("EncryptionInfo", MaxEncryptionInfoBytes);
+            EncryptionDescriptor descriptor = EncryptionDescriptor.Parse(info, options);
+            if (descriptor is not AgileDescriptor agile)
+            {
+                throw new ExcelEncryptionException(ExcelEncryptionReason.UnsupportedScheme,
+                    "Only agile (ECMA-376 4.4) encryption is supported for the in-memory open path.");
+            }
+
+            // The raw "EncryptedPackage" stream: an 8-byte declared-plaintext-length prefix followed
+            // by ciphertext. Bounded by the caller's decompressed-byte budget, same as the streaming
+            // path bounds its declared length below — ciphertext can only be a few bytes larger than
+            // the plaintext it decodes to (segment padding), so the same budget is a fair cap for it too.
+            byte[] package = cfb.ReadStream("EncryptedPackage", options.MaxTotalDecompressedBytes);
+            if (package.Length < PrefixSize)
+            {
+                throw new InvalidDataException("The EncryptedPackage stream is truncated.");
+            }
+            long declared = BinaryPrimitives.ReadInt64LittleEndian(package.AsSpan(0, PrefixSize));
+            if (declared < 0 || declared > package.Length - PrefixSize)
+            {
+                throw new InvalidDataException("The encrypted package's declared size exceeds its ciphertext.");
+            }
+            long cipherTotal = package.Length - PrefixSize;
+            if (cipherTotal % CipherBlockSize != 0)
+            {
+                throw new InvalidDataException(
+                    "The encrypted package's ciphertext length is not a multiple of the cipher block size.");
+            }
+            LimitChecks.ThrowIfEntryLengthExceeds(
+                declared, options.MaxTotalDecompressedBytes, nameof(ExcelReaderOptions.MaxTotalDecompressedBytes));
+
+            byte[] key = AgileKeyDerivation.DeriveIntermediateKey(agile, options.Password.Chars);
+            try
+            {
+                if (agile.HasDataIntegrity)
+                {
+                    using var packageView = new MemoryStream(package, writable: false);
+                    PackageIntegrity.Verify(packageView, agile, key);
+                }
+                return DecryptWholePackage(package, agile, key, declared);
+            }
+            finally
+            {
+                CryptographicOperations.ZeroMemory(key);
+            }
+        }
+
+        // AES-CBC, no padding, one 4096-byte segment at a time — same per-segment IV rule as
+        // DecryptedPackageStream.DecryptSegment (each segment's IV is independently derived from its
+        // index), just decrypting straight into the final, fully-sized result array instead of a
+        // single reusable cache slot, since nothing here is read on demand.
+        private static byte[] DecryptWholePackage(byte[] package, AgileDescriptor agile, byte[] key, long declaredLength)
+        {
+            int cipherLen = package.Length - PrefixSize;
+            byte[] result = new byte[declaredLength];
+            byte[] segmentBuffer = ArrayPool<byte>.Shared.Rent(SegmentSize);
+            try
+            {
+                int segmentCount = (cipherLen + SegmentSize - 1) / SegmentSize;
+                for (int i = 0; i < segmentCount; i++)
+                {
+                    int segOffset = i * SegmentSize;
+                    int segCipherLen = Math.Min(SegmentSize, cipherLen - segOffset);
+                    byte[] iv = AgileKeyDerivation.SegmentIv(agile, i);
+                    using Aes aes = Aes.Create();
+                    aes.Mode = CipherMode.CBC;
+                    aes.Padding = PaddingMode.None;
+                    aes.Key = key;
+                    aes.IV = iv;
+                    using ICryptoTransform decryptor = aes.CreateDecryptor();
+                    decryptor.TransformBlock(package, PrefixSize + segOffset, segCipherLen, segmentBuffer, 0);
+
+                    int copyLen = (int)Math.Min(segCipherLen, declaredLength - segOffset);
+                    if (copyLen > 0)
+                    {
+                        Array.Copy(segmentBuffer, 0, result, segOffset, copyLen);
+                    }
+                }
+            }
+            finally
+            {
+                CryptographicOperations.ZeroMemory(segmentBuffer.AsSpan(0, SegmentSize));
+                ArrayPool<byte>.Shared.Return(segmentBuffer);
+            }
+            return result;
+        }
+
+        // Wraps a ReadOnlyMemory<byte> as a Stream for CfbContainer.Parse, which needs to seek an
+        // actual Stream. Avoids a full-buffer copy when `container` is already array-backed (the
+        // common case: callers pass a byte[] loaded from disk) by wrapping that array directly rather
+        // than materializing a new one.
+        private static MemoryStream WrapMemory(ReadOnlyMemory<byte> container)
+        {
+            return MemoryMarshal.TryGetArray(container, out ArraySegment<byte> segment)
+                ? new MemoryStream(segment.Array!, segment.Offset, segment.Count, writable: false)
+                : new MemoryStream(container.ToArray(), writable: false);
         }
 
         // Turns an encrypted OOXML CFB container into a seekable, read-only plaintext-ZIP stream.
