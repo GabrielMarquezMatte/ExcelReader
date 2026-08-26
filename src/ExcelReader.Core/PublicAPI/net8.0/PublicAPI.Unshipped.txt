@@ -7,6 +7,7 @@ ExcelReader.Core.Enums.ExcelColumnType.Int64Column = 1 -> ExcelReader.Core.Enums
 ExcelReader.Core.Enums.ExcelColumnType.StringColumn = 0 -> ExcelReader.Core.Enums.ExcelColumnType
 ExcelReader.Core.Enums.ExcelColumnType.TimeColumn = 5 -> ExcelReader.Core.Enums.ExcelColumnType
 ExcelReader.Core.Enums.ExcelColumnType.TimestampColumn = 6 -> ExcelReader.Core.Enums.ExcelColumnType
+ExcelReader.Core.Enums.ExcelFileFormat.EncryptedOoxml = 4 -> ExcelReader.Core.Enums.ExcelFileFormat
 ExcelReader.Core.Reader.ExcelColumnSchema
 ExcelReader.Core.Reader.ExcelColumnSchema.Equals(ExcelReader.Core.Reader.ExcelColumnSchema other) -> bool
 ExcelReader.Core.Reader.ExcelColumnSchema.ExcelColumnSchema() -> void
