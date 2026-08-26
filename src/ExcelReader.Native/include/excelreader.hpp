@@ -1,7 +1,7 @@
 /* Header-only C++ wrapper around excelreader.h (the C ABI).
  *
- * Scope of this first pass: opening a workbook and schema-driven typed table parsing
- * (xl_parse_typed) only - no writing, no row-by-row decoded reads.
+ * Scope: opening a workbook, schema-driven typed table parsing (xl_parse_typed), and
+ * schema-driven writing (xl_write_typed). No row-by-row decoded reads.
  *
  * Design constraints, matching the native library's own perf/memory posture:
  *   - No exceptions anywhere in this header. Every fallible operation returns
@@ -10,11 +10,14 @@
  *     xl::TableView<T> that owns the raw xl_table (freed via xl_free_table) and builds
  *     one T per dereference of its iterator - the only allocation is the one
  *     xl_parse_typed itself already makes for the columnar buffers. Call
- *     TableView<T>::to_vector() (or the parse_sheet_vector<T> convenience) if you
- *     actually want a materialized vector.
+ *     TableView<T>::to_vector() if you actually want a materialized vector.
  *   - std::string_view fields are zero-copy views into the xl_table's own string blob:
  *     valid ONLY as long as the owning TableView<T> is alive. Use std::string for a
  *     field that needs to outlive the view (e.g. after to_vector()).
+ *   - Writing borrows. xl::write_columns hands xl_write_typed the caller's own buffers,
+ *     which the ABI reads without copying or freeing; they must outlive the call.
+ *     xl::write_sheet<T> is the one place a copy happens, and only because a range of
+ *     structs has to be transposed into columns.
  */
 #pragma once
 
@@ -27,6 +30,7 @@
 #include <expected>
 #include <iterator>
 #include <optional>
+#include <ranges>
 #include <span>
 #include <string>
 #include <string_view>
@@ -182,6 +186,286 @@ namespace xl
         }
     };
 
+    // ---- Write options ---------------------------------------------------------------------------
+
+    // C++ mirror of xl_write_options: same fields, same meaning (0 or XL_OPT_DEFAULT for "use the
+    // library default" on every field), with default member initializers so a caller sets only what
+    // they want to override. to_c() fills in struct_size.
+    //
+    // sheet_name is BORROWED, like every other buffer this library hands the ABI: the string it
+    // views must outlive the write call. Its rules (1-31 characters, none of : \ / ? * [ ]) are
+    // validated natively and reported through xl_last_error, so they are deliberately not
+    // re-checked here - one set of bounds, one place to change them.
+    struct WriteOptions
+    {
+        std::string_view sheet_name{}; // empty = "Sheet1". Ignored for XL_FORMAT_CSV.
+
+        // CSV only; ignored for every other format. Byte value 1-255; 0 = default (',' and '"').
+        int32_t csv_delimiter = 0;
+        int32_t csv_quote = 0;
+
+        int32_t date1904 = XL_OPT_DEFAULT;           // XLS/XLSB only
+        int32_t use_shared_strings = XL_OPT_DEFAULT; // XLSX/XLSB only
+
+        xl_write_options to_c() const noexcept
+        {
+            xl_write_options opts{};
+            opts.struct_size = sizeof(xl_write_options);
+            opts.sheet_name_len = static_cast<int32_t>(sheet_name.size());
+            opts.sheet_name = sheet_name.empty()
+                                  ? nullptr
+                                  : reinterpret_cast<const uint8_t *>(sheet_name.data());
+            opts.csv_delimiter = csv_delimiter;
+            opts.csv_quote = csv_quote;
+            opts.date1904 = date1904;
+            opts.use_shared_strings = use_shared_strings;
+            return opts;
+        }
+    };
+
+    namespace detail
+    {
+
+        // A NULL options pointer is the ABI's "every default", and is NOT the same as a zeroed
+        // struct (whose struct_size of 0 is rejected). `storage` is the caller's own local, which
+        // must outlive the FFI call the returned pointer is handed to.
+        template <typename Opts, typename Raw>
+        inline const Raw *lower_options(const Opts *options, Raw &storage) noexcept
+        {
+            if (options == nullptr)
+            {
+                return nullptr;
+            }
+            storage = options->to_c();
+            return &storage;
+        }
+
+        // Case-insensitive suffix match over ASCII, which is all a file extension can be here.
+        // constexpr and allocation-free so format_from_path stays usable in a constant expression.
+        constexpr bool ends_with_ci(std::string_view text, std::string_view suffix) noexcept
+        {
+            if (text.size() < suffix.size())
+            {
+                return false;
+            }
+            const std::string_view tail = text.substr(text.size() - suffix.size());
+            for (size_t i = 0; i < suffix.size(); ++i)
+            {
+                const char c = tail[i];
+                const char lowered = (c >= 'A' && c <= 'Z') ? static_cast<char>(c - 'A' + 'a') : c;
+                if (lowered != suffix[i])
+                {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+    } // namespace detail
+
+    // Infers an XL_FORMAT_* from a path's extension. Returns XL_FORMAT_AUTO when the extension is
+    // absent or unrecognized - and since xl_write_typed rejects AUTO with a message of its own, an
+    // unrecognized path fails the write rather than silently picking a format.
+    constexpr int32_t format_from_path(std::string_view path) noexcept
+    {
+        const size_t separator = path.find_last_of("/\\");
+        const std::string_view name = (separator == std::string_view::npos)
+                                          ? path
+                                          : path.substr(separator + 1);
+        if (detail::ends_with_ci(name, ".xlsx"))
+        {
+            return XL_FORMAT_XLSX;
+        }
+        if (detail::ends_with_ci(name, ".xlsb"))
+        {
+            return XL_FORMAT_XLSB;
+        }
+        if (detail::ends_with_ci(name, ".xls"))
+        {
+            return XL_FORMAT_XLS;
+        }
+        if (detail::ends_with_ci(name, ".csv"))
+        {
+            return XL_FORMAT_CSV;
+        }
+        return XL_FORMAT_AUTO;
+    }
+
+    // ---- Columnar write --------------------------------------------------------------------------
+
+    // One INPUT column, pointing at the caller's own buffers. Nothing here is copied: every pointer
+    // must stay valid until write_columns returns.
+    //
+    // Build one through the typed constructors below rather than by hand - they derive `length`,
+    // `type` and `validity_len` from the spans they are handed, which is what makes the bounds check
+    // in write_columns possible at all.
+    struct ColumnRef
+    {
+        std::string_view name{}; // empty = no header row (all-or-nothing across the column set)
+        int32_t type = XL_T_STRING;
+        int64_t length = 0;
+        const void *values = nullptr;
+        const uint8_t *validity = nullptr; // nullptr = the column has no nulls
+        // NOT part of the ABI struct: xl_write_typed takes the bitmap without a length and reads
+        // (length + 7) / 8 bytes on trust. Carrying the length here is what lets write_columns
+        // refuse a short one instead of handing the native side a buffer overrun.
+        int64_t validity_len = 0;
+        const uint8_t *data = nullptr; // XL_T_STRING only: the UTF-8 blob
+        int64_t data_len = 0;
+    };
+
+    namespace detail
+    {
+
+        constexpr const uint8_t *validity_pointer(std::span<const uint8_t> validity) noexcept
+        {
+            return validity.empty() ? nullptr : validity.data();
+        }
+
+        // Every non-string column lowers identically: the values span supplies both the pointer and
+        // the row count, the validity span both the pointer and its length, and the only thing that
+        // varies per column type is the XL_T_* tag. The named factories below are one line each on
+        // top of this, so the wire layout lives in exactly one place.
+        template <int32_t Tag, typename E>
+        inline constexpr ColumnRef scalar_column(std::string_view name, std::span<const E> values,
+                                                 std::span<const uint8_t> validity) noexcept
+        {
+            return ColumnRef{name, Tag, static_cast<int64_t>(values.size()), values.data(),
+                             validity_pointer(validity), static_cast<int64_t>(validity.size()),
+                             nullptr, 0};
+        }
+
+    } // namespace detail
+
+    // One constructor per column type rather than an overload set: XL_T_BOOL's buffer and a string
+    // blob are both std::span<const uint8_t>, and XL_T_I64/TIME/TIMESTAMP are all
+    // std::span<const int64_t>, so overload resolution could not tell them apart. Each is one line
+    // over detail::scalar_column, which holds the shared lowering.
+    inline constexpr ColumnRef i64_column(std::string_view name, std::span<const int64_t> values,
+                                          std::span<const uint8_t> validity = {}) noexcept
+    {
+        return detail::scalar_column<XL_T_I64>(name, values, validity);
+    }
+
+    inline constexpr ColumnRef f64_column(std::string_view name, std::span<const double> values,
+                                          std::span<const uint8_t> validity = {}) noexcept
+    {
+        return detail::scalar_column<XL_T_F64>(name, values, validity);
+    }
+
+    // `values` is one byte per row, 0 or 1 - NOT a bit-packed bitmap.
+    inline constexpr ColumnRef bool_column(std::string_view name, std::span<const uint8_t> values,
+                                           std::span<const uint8_t> validity = {}) noexcept
+    {
+        return detail::scalar_column<XL_T_BOOL>(name, values, validity);
+    }
+
+    inline constexpr ColumnRef date_column(std::string_view name, std::span<const int32_t> days_since_epoch,
+                                           std::span<const uint8_t> validity = {}) noexcept
+    {
+        return detail::scalar_column<XL_T_DATE>(name, days_since_epoch, validity);
+    }
+
+    inline constexpr ColumnRef time_column(std::string_view name, std::span<const int64_t> micros_since_midnight,
+                                           std::span<const uint8_t> validity = {}) noexcept
+    {
+        return detail::scalar_column<XL_T_TIME>(name, micros_since_midnight, validity);
+    }
+
+    inline constexpr ColumnRef timestamp_column(std::string_view name, std::span<const int64_t> micros_since_epoch,
+                                                std::span<const uint8_t> validity = {}) noexcept
+    {
+        return detail::scalar_column<XL_T_TIMESTAMP>(name, micros_since_epoch, validity);
+    }
+
+    // `offsets` has length + 1 entries; `data` is every row's UTF-8 bytes concatenated. Unlike the
+    // table xl_parse_typed returns, `data` need not be interior to `offsets` here.
+    inline constexpr ColumnRef string_column(std::string_view name, std::span<const int32_t> offsets,
+                                             std::span<const uint8_t> data,
+                                             std::span<const uint8_t> validity = {}) noexcept
+    {
+        const int64_t rows = offsets.empty() ? 0 : static_cast<int64_t>(offsets.size()) - 1;
+        return ColumnRef{name, XL_T_STRING, rows, offsets.data(), detail::validity_pointer(validity),
+                         static_cast<int64_t>(validity.size()), data.empty() ? nullptr : data.data(),
+                         static_cast<int64_t>(data.size())};
+    }
+
+    namespace detail
+    {
+
+        // Split out of validate_write_columns to stay inside the style guide's nesting and length
+        // limits. Returns nullopt when the column is acceptable.
+        inline std::optional<Error> validate_one_write_column(const ColumnRef &column, size_t index,
+                                                              int64_t row_count, bool has_header)
+        {
+            const std::string at = " (column " + std::to_string(index) + ")";
+            if (column.length != row_count)
+            {
+                return Error{XL_INVALID_ARGUMENT,
+                             "every column must have the same length; column 0 has " +
+                                 std::to_string(row_count) + " rows but this one has " +
+                                 std::to_string(column.length) + at};
+            }
+            if (column.name.empty() == has_header)
+            {
+                return Error{XL_INVALID_ARGUMENT,
+                             "every column must have a name, or none may - xl_write_typed cannot write "
+                             "a partial header row" +
+                                 at};
+            }
+            if (column.validity != nullptr && column.validity_len < (row_count + 7) / 8)
+            {
+                return Error{XL_INVALID_ARGUMENT,
+                             "the validity bitmap is " + std::to_string(column.validity_len) +
+                                 " bytes, but " + std::to_string(row_count) + " rows need " +
+                                 std::to_string((row_count + 7) / 8) + at};
+            }
+            if (column.type == XL_T_STRING && column.data_len > INT32_MAX)
+            {
+                return Error{XL_INVALID_ARGUMENT,
+                             "the string blob is larger than 2 GiB, which int32 offsets cannot address" + at};
+            }
+            return std::nullopt;
+        }
+
+        // Returns the row count every column agreed on, or the first problem found. Runs to
+        // completion before anything reaches the native side, matching xl_write_typed's own
+        // "validate everything, then write" posture - a partially written file plus a buffer
+        // overrun is strictly worse than a rejected call.
+        inline std::expected<int64_t, Error> validate_write_columns(std::span<const ColumnRef> columns)
+        {
+            if (columns.empty())
+            {
+                return std::unexpected(Error{XL_INVALID_ARGUMENT, "write_columns needs at least one column."});
+            }
+            const int64_t row_count = columns.front().length;
+            const bool has_header = !columns.front().name.empty();
+            for (size_t i = 0; i < columns.size(); ++i)
+            {
+                std::optional<Error> problem = validate_one_write_column(columns[i], i, row_count, has_header);
+                if (problem.has_value())
+                {
+                    return std::unexpected(std::move(*problem));
+                }
+            }
+            return row_count;
+        }
+
+        // Lowers one ColumnRef into the two ABI structs. `name_slot` and `len_slot` are elements of
+        // arrays the caller keeps alive: xl_column_spec::names is a pointer to an ARRAY of name
+        // pointers, so each spec needs a stable address to point at, not a temporary.
+        inline void fill_write_column(const ColumnRef &column, const uint8_t *&name_slot, int32_t &len_slot,
+                                      xl_column_spec &spec, xl_column &raw) noexcept
+        {
+            name_slot = column.name.empty() ? nullptr : reinterpret_cast<const uint8_t *>(column.name.data());
+            len_slot = static_cast<int32_t>(column.name.size());
+            spec = xl_column_spec{&name_slot, &len_slot, column.name.empty() ? 0 : 1, 0, column.type, 0};
+            raw = xl_column{column.type, column.length, column.values, column.validity, column.data,
+                            column.data_len};
+        }
+
+    } // namespace detail
+
     // ---- Workbook (RAII) ------------------------------------------------------------------------
 
     class Workbook
@@ -212,12 +496,7 @@ namespace xl
             }
             xl_workbook *handle = nullptr;
             xl_open_options c_options{};
-            const xl_open_options *c_options_ptr = nullptr;
-            if (options != nullptr)
-            {
-                c_options = options->to_c();
-                c_options_ptr = &c_options;
-            }
+            const xl_open_options *c_options_ptr = detail::lower_options(options, c_options);
             int32_t status = xl_open_file_ex(reinterpret_cast<const uint8_t *>(path.data()),
                                              static_cast<int32_t>(path.size()), format,
                                              c_options_ptr, &handle);
@@ -239,12 +518,7 @@ namespace xl
             }
             xl_workbook *handle = nullptr;
             xl_open_options c_options{};
-            const xl_open_options *c_options_ptr = nullptr;
-            if (options != nullptr)
-            {
-                c_options = options->to_c();
-                c_options_ptr = &c_options;
-            }
+            const xl_open_options *c_options_ptr = detail::lower_options(options, c_options);
             int32_t status = xl_open_memory_ex(data.data(), static_cast<int32_t>(data.size()), format,
                                                c_options_ptr, &handle);
             if (status != XL_OK)
@@ -463,6 +737,35 @@ namespace xl
         static constexpr int32_t value = XL_T_TIME;
     };
 
+    template <typename T>
+    struct XlType<std::optional<T>>
+    {
+        static constexpr int32_t value = XlType<T>::value;
+    };
+
+    namespace detail
+    {
+
+        template <typename T>
+        struct IsOptional : std::false_type
+        {
+            using Inner = T;
+        };
+
+        template <typename T>
+        struct IsOptional<std::optional<T>> : std::true_type
+        {
+            using Inner = T;
+        };
+
+        template <typename T>
+        inline constexpr bool is_optional_v = IsOptional<T>::value;
+
+        template <typename T>
+        using unwrap_optional_t = typename IsOptional<T>::Inner;
+
+    } // namespace detail
+
     // ---- Struct <-> column bindings ---------------------------------------------------------------
 
     template <typename Class, typename T, std::size_t N = 1>
@@ -539,8 +842,19 @@ namespace xl
             {
                 return; // leave the struct member default-initialized
             }
-
-            if constexpr (std::is_same_v<T, std::string> || std::is_same_v<T, std::string_view>)
+            if constexpr (detail::is_optional_v<T>)
+            {
+                using Inner = detail::unwrap_optional_t<T>;
+                struct Holder
+                {
+                    Inner value{};
+                };
+                Holder holder{};
+                const FieldBinding<Holder, Inner, N> inner_binding{binding.column_names, &Holder::value};
+                assign_field(holder, col, row, inner_binding);
+                instance.*(binding.member) = std::move(holder.value);
+            }
+            else if constexpr (std::is_same_v<T, std::string> || std::is_same_v<T, std::string_view>)
             {
                 const int32_t *offsets = static_cast<const int32_t *>(col.values);
                 int32_t start = offsets[row];
@@ -551,6 +865,10 @@ namespace xl
                     instance.*(binding.member) = T(str_data, static_cast<size_t>(end - start));
                 }
             }
+            else if constexpr (std::is_same_v<T, bool>)
+            {
+                instance.*(binding.member) = (static_cast<const uint8_t *>(col.values)[row] != 0);
+            }
             else if constexpr (std::is_integral_v<T>)
             {
                 instance.*(binding.member) = T(static_cast<const int64_t *>(col.values)[row]);
@@ -558,10 +876,6 @@ namespace xl
             else if constexpr (std::is_floating_point_v<T>)
             {
                 instance.*(binding.member) = T(static_cast<const double *>(col.values)[row]);
-            }
-            else if constexpr (std::is_same_v<T, bool>)
-            {
-                instance.*(binding.member) = (static_cast<const uint8_t *>(col.values)[row] != 0);
             }
             else if constexpr (std::is_same_v<T, std::chrono::sys_days>)
             {
@@ -597,9 +911,22 @@ namespace xl
         }
 
         template <typename T, typename Tuple, std::size_t... Is>
-        void populate_instance(T &instance, const xl_table &table, int64_t row, const Tuple &bindings, std::index_sequence<Is...>)
+        inline void populate_instance(T &instance, const xl_table &table, int64_t row, const Tuple &bindings, std::index_sequence<Is...>)
         {
             (..., assign_field(instance, table.columns[Is], row, std::get<Is>(bindings)));
+        }
+
+        // The one place a T is built from a row of the columnar buffers. Both TableView<T>::operator[]
+        // and its iterator's operator*() go through this, so the bindings lookup and the index
+        // sequence are written once.
+        template <typename T>
+        inline T row_at(const xl_table &table, int64_t row)
+        {
+            T instance{};
+            static constexpr auto bindings = ExcelMapper<T>::get_bindings();
+            static constexpr size_t num_fields = std::tuple_size_v<decltype(bindings)>;
+            populate_instance(instance, table, row, bindings, std::make_index_sequence<num_fields>{});
+            return instance;
         }
 
     } // namespace detail
@@ -643,14 +970,7 @@ namespace xl
 
             iterator() = default;
 
-            T operator*() const
-            {
-                T instance{};
-                static constexpr auto bindings = ExcelMapper<T>::get_bindings();
-                static constexpr size_t num_fields = std::tuple_size_v<decltype(bindings)>;
-                detail::populate_instance(instance, *table_, row_, bindings, std::make_index_sequence<num_fields>{});
-                return instance;
-            }
+            T operator*() const { return detail::row_at<T>(*table_, row_); }
 
             T operator[](difference_type n) const { return *(*this + n); }
 
@@ -736,14 +1056,7 @@ namespace xl
         // Unchecked, exactly like std::vector::operator[]: a `row` outside [0, size()) reads past
         // the columnar buffers and returns whatever sits after the allocation. Use at() below unless
         // the caller has already established the bound.
-        T operator[](int64_t row) const
-        {
-            T instance{};
-            static constexpr auto bindings = ExcelMapper<T>::get_bindings();
-            static constexpr size_t num_fields = std::tuple_size_v<decltype(bindings)>;
-            detail::populate_instance(instance, table_, row, bindings, std::make_index_sequence<num_fields>{});
-            return instance;
-        }
+        T operator[](int64_t row) const { return detail::row_at<T>(table_, row); }
 
         // Bounds-checked counterpart to operator[]. Returns nullopt rather than throwing, since this
         // header is exception-free by design (std::vector::at's out_of_range is not an option here).
@@ -801,16 +1114,660 @@ namespace xl
         return TableView<T>::from_raw(table);
     }
 
-    // Convenience for callers who want a materialized std::vector<T> up front.
-    template <typename T>
-    std::expected<std::vector<T>, Error> parse_sheet_vector(Workbook &workbook, int32_t header_row = 1)
+    // Writes `columns` to `path` as a single sheet, then closes the file. One-shot: no writer handle
+    // exists before or after, and every buffer reachable from `columns` and `options` is borrowed
+    // for the duration of the call and never freed by this library.
+    // `format` must be XL_FORMAT_XLS/XLSX/XLSB/CSV. XL_FORMAT_AUTO is an error, because a file being
+    // created has no signature bytes to sniff. On failure the destination may exist and be
+    // incomplete - cleaning it up is the caller's.
+    inline std::expected<void, Error> write_columns(std::string_view path, int32_t format,
+                                                    std::span<const ColumnRef> columns,
+                                                    const WriteOptions *options = nullptr)
     {
-        auto view = parse_sheet<T>(workbook, header_row);
-        if (!view.has_value())
+        const std::expected<void, Error> &abi = detail::check_abi_version();
+        if (!abi.has_value())
         {
-            return std::unexpected(std::move(view.error()));
+            return std::unexpected(abi.error());
         }
-        return view->to_vector();
+        std::expected<int64_t, Error> row_count = detail::validate_write_columns(columns);
+        if (!row_count.has_value())
+        {
+            return std::unexpected(std::move(row_count.error()));
+        }
+
+        const size_t count = columns.size();
+        std::vector<const uint8_t *> name_slots(count);
+        std::vector<int32_t> name_lens(count);
+        std::vector<xl_column_spec> specs(count);
+        std::vector<xl_column> raw_columns(count);
+        for (size_t i = 0; i < count; ++i)
+        {
+            detail::fill_write_column(columns[i], name_slots[i], name_lens[i], specs[i], raw_columns[i]);
+        }
+
+        xl_table table{static_cast<int32_t>(count), *row_count, raw_columns.data()};
+        // A zeroed xl_write_options is NOT the same as no options: its struct_size of 0 is rejected.
+        // NULL is what means "every default".
+        xl_write_options raw_options{};
+        const xl_write_options *options_pointer = detail::lower_options(options, raw_options);
+
+        const int32_t status = xl_write_typed(reinterpret_cast<const uint8_t *>(path.data()),
+                                              static_cast<int32_t>(path.size()), format, specs.data(),
+                                              &table, options_pointer);
+        if (status != XL_OK)
+        {
+            return std::unexpected(detail::make_error(status));
+        }
+        return {};
     }
 
+    // Infers the format from the path's extension. An unrecognized extension yields XL_FORMAT_AUTO,
+    // which xl_write_typed then rejects by name.
+    inline std::expected<void, Error> write_columns(std::string_view path, std::span<const ColumnRef> columns,
+                                                    const WriteOptions *options = nullptr)
+    {
+        return write_columns(path, format_from_path(path), columns, options);
+    }
+
+    // In-memory equivalent of write_columns: same validation and column lowering, but the workbook
+    // is built in memory and returned as bytes instead of being written to a path - so, unlike
+    // write_columns, there is no path to infer a format from and `format` cannot default to one.
+    // The native xl_buffer is copied into the returned vector and freed before this function
+    // returns, so the caller owns an ordinary std::vector<uint8_t> with nothing further to release.
+    inline std::expected<std::vector<uint8_t>, Error> write_columns_to_memory(int32_t format,
+                                                                              std::span<const ColumnRef> columns,
+                                                                              const WriteOptions *options = nullptr)
+    {
+        const std::expected<void, Error> &abi = detail::check_abi_version();
+        if (!abi.has_value())
+        {
+            return std::unexpected(abi.error());
+        }
+        std::expected<int64_t, Error> row_count = detail::validate_write_columns(columns);
+        if (!row_count.has_value())
+        {
+            return std::unexpected(std::move(row_count.error()));
+        }
+
+        const size_t count = columns.size();
+        std::vector<const uint8_t *> name_slots(count);
+        std::vector<int32_t> name_lens(count);
+        std::vector<xl_column_spec> specs(count);
+        std::vector<xl_column> raw_columns(count);
+        for (size_t i = 0; i < count; ++i)
+        {
+            detail::fill_write_column(columns[i], name_slots[i], name_lens[i], specs[i], raw_columns[i]);
+        }
+
+        xl_table table{static_cast<int32_t>(count), *row_count, raw_columns.data()};
+        xl_write_options raw_options{};
+        const xl_write_options *options_pointer = detail::lower_options(options, raw_options);
+
+        xl_buffer buffer{};
+        const int32_t status = xl_write_typed_to_memory(format, specs.data(), &table, options_pointer, &buffer);
+        if (status != XL_OK)
+        {
+            return std::unexpected(detail::make_error(status));
+        }
+        struct BufferGuard
+        {
+            xl_buffer *buffer;
+            ~BufferGuard() { xl_free_buffer(buffer); }
+        } guard{&buffer};
+        return std::vector<uint8_t>(buffer.data, buffer.data + buffer.len);
+    }
+
+    // ---- write_sheet<T>: transposing a range of structs into columns -----------------------------
+
+    namespace detail
+    {
+
+        // An XL_T_STRING column's two output buffers. `overflowed` latches rather than throwing:
+        // this header has no exceptions anywhere, and write_sheet checks it once before the write.
+        struct StringBuffer
+        {
+            std::vector<int32_t> offsets{0};
+            std::vector<uint8_t> data{};
+            bool overflowed = false;
+
+            void reserve(size_t rows)
+            {
+                offsets.reserve(rows + 1);
+            }
+
+            void push(std::string_view value)
+            {
+                if (data.size() + value.size() > static_cast<size_t>(INT32_MAX))
+                {
+                    // Record the failure and keep the offsets array well-formed, so nothing
+                    // downstream reads a half-built column before write_sheet bails out.
+                    overflowed = true;
+                    offsets.push_back(offsets.back());
+                    return;
+                }
+                const uint8_t *bytes = reinterpret_cast<const uint8_t *>(value.data());
+                data.insert(data.end(), bytes, bytes + value.size());
+                offsets.push_back(static_cast<int32_t>(data.size()));
+            }
+        };
+
+        // The output buffer each XL_T_* needs, at that type's exact wire width.
+        template <int32_t Type>
+        struct ColumnStorage;
+
+        template <>
+        struct ColumnStorage<XL_T_STRING>
+        {
+            using type = StringBuffer;
+        };
+        template <>
+        struct ColumnStorage<XL_T_I64>
+        {
+            using type = std::vector<int64_t>;
+        };
+        template <>
+        struct ColumnStorage<XL_T_F64>
+        {
+            using type = std::vector<double>;
+        };
+        template <>
+        struct ColumnStorage<XL_T_BOOL>
+        {
+            using type = std::vector<uint8_t>;
+        };
+        template <>
+        struct ColumnStorage<XL_T_DATE>
+        {
+            using type = std::vector<int32_t>;
+        };
+        template <>
+        struct ColumnStorage<XL_T_TIME>
+        {
+            using type = std::vector<int64_t>;
+        };
+        template <>
+        struct ColumnStorage<XL_T_TIMESTAMP>
+        {
+            using type = std::vector<int64_t>;
+        };
+
+        // One column's accumulating buffers, built from the FIELD type. `validity` stays empty
+        // unless the field is std::optional - the ABI reads validity == NULL as "no nulls", so a
+        // non-nullable column costs no bitmap at all.
+        template <typename T>
+        struct ColumnBuilder
+        {
+            using Field = unwrap_optional_t<T>;
+            static constexpr bool nullable = is_optional_v<T>;
+            static constexpr int32_t column_type = XlType<Field>::value;
+
+            typename ColumnStorage<column_type>::type storage{};
+            std::vector<uint8_t> validity{};
+            int64_t rows = 0;
+
+            void reserve(size_t count)
+            {
+                storage.reserve(count);
+                if constexpr (nullable)
+                {
+                    validity.reserve((count + 7) / 8);
+                }
+            }
+
+            void push(const T &value)
+            {
+                if constexpr (nullable)
+                {
+                    // Grows one byte every eight rows, so the bitmap is always exactly big enough
+                    // for the rows pushed so far.
+                    validity.resize(static_cast<size_t>((rows + 8) / 8), 0);
+                    if (value.has_value())
+                    {
+                        validity[static_cast<size_t>(rows / 8)] |=
+                            static_cast<uint8_t>(1u << static_cast<unsigned>(rows % 8));
+                        append(*value);
+                    }
+                    else
+                    {
+                        append_placeholder();
+                    }
+                }
+                else
+                {
+                    append(value);
+                }
+                ++rows;
+            }
+
+            bool overflowed() const
+            {
+                if constexpr (column_type == XL_T_STRING)
+                {
+                    return storage.overflowed;
+                }
+                else
+                {
+                    return false;
+                }
+            }
+
+            ColumnRef to_ref(std::string_view name) const
+            {
+                if constexpr (column_type == XL_T_STRING)
+                {
+                    return string_column(name, storage.offsets, storage.data, validity);
+                }
+                else if constexpr (column_type == XL_T_I64)
+                {
+                    return i64_column(name, storage, validity);
+                }
+                else if constexpr (column_type == XL_T_F64)
+                {
+                    return f64_column(name, storage, validity);
+                }
+                else if constexpr (column_type == XL_T_BOOL)
+                {
+                    return bool_column(name, storage, validity);
+                }
+                else if constexpr (column_type == XL_T_DATE)
+                {
+                    return date_column(name, storage, validity);
+                }
+                else if constexpr (column_type == XL_T_TIME)
+                {
+                    return time_column(name, storage, validity);
+                }
+                else
+                {
+                    return timestamp_column(name, storage, validity);
+                }
+            }
+
+        private:
+            // A null row still occupies a slot in the values buffer; its bit is what marks it
+            // absent. Zero (or the empty string) is the placeholder the writer never reads.
+            void append_placeholder()
+            {
+                if constexpr (column_type == XL_T_STRING)
+                {
+                    storage.push(std::string_view{});
+                }
+                else
+                {
+                    storage.push_back({});
+                }
+            }
+
+            // The exact inverse of detail::assign_field - same chain, same conversions, opposite
+            // direction. If one of them gains a type, so must the other.
+            void append(const Field &value)
+            {
+                if constexpr (std::is_same_v<Field, std::string> || std::is_same_v<Field, std::string_view>)
+                {
+                    storage.push(std::string_view(value));
+                }
+                else if constexpr (std::is_same_v<Field, bool>)
+                {
+                    storage.push_back(static_cast<uint8_t>(value ? 1 : 0));
+                }
+                else if constexpr (std::is_integral_v<Field>)
+                {
+                    storage.push_back(static_cast<int64_t>(value));
+                }
+                else if constexpr (std::is_floating_point_v<Field>)
+                {
+                    storage.push_back(static_cast<double>(value));
+                }
+                else if constexpr (std::is_same_v<Field, std::chrono::sys_days>)
+                {
+                    storage.push_back(static_cast<int32_t>(value.time_since_epoch().count()));
+                }
+                else if constexpr (std::is_same_v<Field, std::chrono::year_month_day>)
+                {
+                    storage.push_back(
+                        static_cast<int32_t>(std::chrono::sys_days{value}.time_since_epoch().count()));
+                }
+                else if constexpr (std::is_same_v<Field, std::chrono::microseconds>)
+                {
+                    storage.push_back(value.count());
+                }
+                else if constexpr (std::is_same_v<Field, std::chrono::hh_mm_ss<std::chrono::microseconds>>)
+                {
+                    storage.push_back(value.to_duration().count());
+                }
+                else if constexpr (std::is_same_v<Field, std::chrono::system_clock::time_point>)
+                {
+                    storage.push_back(std::chrono::time_point_cast<std::chrono::microseconds>(value)
+                                          .time_since_epoch()
+                                          .count());
+                }
+            }
+        };
+
+        // The tuple of ColumnBuilders matching a bindings tuple, one per field, in the same order.
+        template <typename Tuple, typename Indices>
+        struct BuildersFor;
+        template <typename Tuple, std::size_t... Is>
+        struct BuildersFor<Tuple, std::index_sequence<Is...>>
+        {
+            using type = std::tuple<ColumnBuilder<typename std::tuple_element_t<Is, Tuple>::FieldType>...>;
+        };
+
+        template <typename Builders, typename T, typename Tuple, std::size_t... Is>
+        void push_row(Builders &builders, const T &row, const Tuple &bindings, std::index_sequence<Is...>)
+        {
+            (..., std::get<Is>(builders).push(row.*(std::get<Is>(bindings).member)));
+        }
+
+        template <typename Builders, std::size_t... Is>
+        void reserve_all(Builders &builders, size_t count, std::index_sequence<Is...>)
+        {
+            (..., std::get<Is>(builders).reserve(count));
+        }
+
+        template <typename Builders, std::size_t... Is>
+        bool any_overflowed(const Builders &builders, std::index_sequence<Is...>)
+        {
+            return (... || std::get<Is>(builders).overflowed());
+        }
+
+        template <typename Builders, typename Tuple, std::size_t... Is>
+        std::array<ColumnRef, sizeof...(Is)> to_refs(const Builders &builders, const Tuple &bindings,
+                                                     std::index_sequence<Is...>)
+        {
+            // Only the FIRST candidate name is used: xl_write_typed rejects a write spec carrying
+            // more than one, and the alias list exists to resolve a header on the way IN.
+            return {std::get<Is>(builders).to_ref(std::string_view(std::get<Is>(bindings).column_names[0]))...};
+        }
+
+    } // namespace detail
+
+    // Writes `rows` to `path` as a single sheet, using the same xl::ExcelMapper<T> specialization
+    // that xl::parse_sheet<T> reads with - so reading a sheet into structs and writing it back out
+    // needs one mapping, not two.
+    //
+    // The range is walked ONCE, and each field is appended to its own column buffer through a
+    // compile-time dispatch. That transpose is the only copy this makes; it is what the ABI's
+    // columnar shape costs a row-shaped caller. If you already hold columnar buffers, call
+    // write_columns instead and pay nothing.
+    //
+    // NOTE for write_sheet_to_memory below: this body is intentionally NOT factored into a shared
+    // helper returning just `refs`. Every ColumnRef in `refs` borrows pointers into `builders`'s own
+    // std::vectors (see detail::ColumnBuilder), so `refs` is only valid while `builders` is still
+    // alive - a helper that built `builders` and returned `refs` alone would hand back dangling
+    // pointers the moment it returned. `builders` and `refs` must stay in the same scope as the
+    // write_columns(_to_memory) call that consumes them.
+    template <std::ranges::input_range R>
+    std::expected<void, Error> write_sheet(std::string_view path, int32_t format, R &&rows,
+                                           const WriteOptions *options = nullptr)
+    {
+        using T = std::remove_cvref_t<std::ranges::range_value_t<R>>;
+        static constexpr auto bindings = ExcelMapper<T>::get_bindings();
+        static constexpr size_t field_count = std::tuple_size_v<decltype(bindings)>;
+        static constexpr auto indices = std::make_index_sequence<field_count>{};
+        typename detail::BuildersFor<decltype(bindings), std::remove_cvref_t<decltype(indices)>>::type builders{};
+        if constexpr (std::ranges::sized_range<R>)
+        {
+            detail::reserve_all(builders, static_cast<size_t>(std::ranges::size(rows)), indices);
+        }
+        for (const auto &row : rows)
+        {
+            detail::push_row(builders, row, bindings, indices);
+        }
+
+        if (detail::any_overflowed(builders, indices))
+        {
+            return std::unexpected(Error{XL_INVALID_ARGUMENT,
+                                         "a string column exceeds 2 GiB, which int32 offsets cannot address."});
+        }
+
+        const std::array<ColumnRef, field_count> refs = detail::to_refs(builders, bindings, indices);
+        return write_columns(path, format, refs, options);
+    }
+
+    // Infers the format from the path's extension.
+    template <std::ranges::input_range R>
+    std::expected<void, Error> write_sheet(std::string_view path, R &&rows,
+                                           const WriteOptions *options = nullptr)
+    {
+        return write_sheet(path, format_from_path(path), std::forward<R>(rows), options);
+    }
+
+    // In-memory equivalent of write_sheet: same transpose (see the NOTE on write_sheet above for why
+    // this body duplicates it instead of sharing it), but returns bytes instead of writing to a
+    // path - see write_columns_to_memory for why `format` has no default here.
+    template <std::ranges::input_range R>
+    std::expected<std::vector<uint8_t>, Error> write_sheet_to_memory(int32_t format, R &&rows,
+                                                                     const WriteOptions *options = nullptr)
+    {
+        using T = std::remove_cvref_t<std::ranges::range_value_t<R>>;
+        static constexpr auto bindings = ExcelMapper<T>::get_bindings();
+        static constexpr size_t field_count = std::tuple_size_v<decltype(bindings)>;
+        static constexpr auto indices = std::make_index_sequence<field_count>{};
+        typename detail::BuildersFor<decltype(bindings), std::remove_cvref_t<decltype(indices)>>::type builders{};
+        if constexpr (std::ranges::sized_range<R>)
+        {
+            detail::reserve_all(builders, static_cast<size_t>(std::ranges::size(rows)), indices);
+        }
+        for (const auto &row : rows)
+        {
+            detail::push_row(builders, row, bindings, indices);
+        }
+
+        if (detail::any_overflowed(builders, indices))
+        {
+            return std::unexpected(Error{XL_INVALID_ARGUMENT,
+                                         "a string column exceeds 2 GiB, which int32 offsets cannot address."});
+        }
+
+        const std::array<ColumnRef, field_count> refs = detail::to_refs(builders, bindings, indices);
+        return write_columns_to_memory(format, refs, options);
+    }
+
+    // ---- Streaming writer handle (RAII) ----------------------------------------------------------
+
+    // Row-by-row equivalent of write_columns/write_sheet<T>: xl_writer_handle wrapped for RAII, one
+    // sheet and one row open at a time. Call order mirrors the C ABI (see xl_writer_handle in
+    // excelreader.h): open()/open_memory(), then per sheet start_sheet()..end_sheet(), each
+    // containing start_row()..end_row() with one write() per cell in between, left to right. A call
+    // out of order returns an Error rather than crashing or corrupting output, and the handle stays
+    // usable afterward - fix the call order and continue, or let the destructor discard it.
+    //
+    // Unlike write_columns/write_sheet<T>, `format` is always explicit here: xl_open_write_handle
+    // and xl_open_write_handle_to_memory both reject XL_FORMAT_AUTO the same way xl_write_typed
+    // does, and a format_from_path(path)-inferring overload here would be genuinely ambiguous
+    // against open_memory's signature at literal 0/XL_FORMAT_AUTO (a null pointer constant matches
+    // both an int32_t format parameter and a defaulted `const WriteOptions*` one) - not merely
+    // confusing, an actual "call is ambiguous" compile error for that one call.
+    class WriterHandle
+    {
+    public:
+        WriterHandle(const WriterHandle &) = delete;
+        WriterHandle &operator=(const WriterHandle &) = delete;
+
+        WriterHandle(WriterHandle &&other) noexcept : handle_(std::exchange(other.handle_, nullptr)) {}
+        WriterHandle &operator=(WriterHandle &&other) noexcept
+        {
+            if (this != &other)
+            {
+                close();
+                handle_ = std::exchange(other.handle_, nullptr);
+            }
+            return *this;
+        }
+
+        ~WriterHandle() { close(); }
+
+        static std::expected<WriterHandle, Error> open(std::string_view path, int32_t format,
+                                                       const WriteOptions *options = nullptr)
+        {
+            if (const auto &abi = detail::check_abi_version(); !abi.has_value())
+            {
+                return std::unexpected(abi.error());
+            }
+            xl_writer_handle *handle = nullptr;
+            xl_write_options c_options{};
+            const xl_write_options *c_options_ptr = detail::lower_options(options, c_options);
+            int32_t status = xl_open_write_handle(reinterpret_cast<const uint8_t *>(path.data()),
+                                                  static_cast<int32_t>(path.size()), format,
+                                                  c_options_ptr, &handle);
+            if (status != XL_OK)
+            {
+                return std::unexpected(detail::make_error(status));
+            }
+            return WriterHandle(handle);
+        }
+
+        // In-memory equivalent of open(): read the result back with bytes(), then release the
+        // handle the same way as a file-backed one (destructor, or an explicit move-assignment).
+        static std::expected<WriterHandle, Error> open_memory(int32_t format,
+                                                              const WriteOptions *options = nullptr)
+        {
+            if (const auto &abi = detail::check_abi_version(); !abi.has_value())
+            {
+                return std::unexpected(abi.error());
+            }
+            xl_writer_handle *handle = nullptr;
+            xl_write_options c_options{};
+            const xl_write_options *c_options_ptr = detail::lower_options(options, c_options);
+            int32_t status = xl_open_write_handle_to_memory(format, c_options_ptr, &handle);
+            if (status != XL_OK)
+            {
+                return std::unexpected(detail::make_error(status));
+            }
+            return WriterHandle(handle);
+        }
+
+        std::expected<void, Error> start_sheet(std::string_view name)
+        {
+            return status_result(xl_start_sheet(handle_, reinterpret_cast<const uint8_t *>(name.data()),
+                                                static_cast<int32_t>(name.size())));
+        }
+
+        std::expected<void, Error> start_row() { return status_result(xl_start_row(handle_)); }
+
+        std::expected<void, Error> end_row() { return status_result(xl_end_row(handle_)); }
+
+        std::expected<void, Error> end_sheet() { return status_result(xl_end_sheet(handle_)); }
+
+        // Writes the next cell of the current row. T is deduced from `value` through the same
+        // XlType<T> mapping parse_sheet/write_sheet use: std::string/std::string_view for
+        // XL_T_STRING, an integral type for XL_T_I64, a floating-point type for XL_T_F64, bool for
+        // XL_T_BOOL, std::chrono::year_month_day/sys_days for XL_T_DATE,
+        // std::chrono::microseconds/hh_mm_ss<microseconds> for XL_T_TIME, and
+        // std::chrono::system_clock::time_point for XL_T_TIMESTAMP. Wrap any of those in
+        // std::optional<T> to write a blank cell for an empty one.
+        template <typename T>
+        std::expected<void, Error> write(const T &value)
+        {
+            using Value = std::remove_cvref_t<T>;
+            if constexpr (detail::is_optional_v<Value>)
+            {
+                if (!value.has_value())
+                {
+                    return write_null(XlType<Value>::value);
+                }
+                return write(*value);
+            }
+            else if constexpr (std::is_same_v<Value, std::string> || std::is_same_v<Value, std::string_view>)
+            {
+                const std::string_view text(value);
+                return status_result(xl_write_string(handle_, reinterpret_cast<const uint8_t *>(text.data()),
+                                                      static_cast<int32_t>(text.size())));
+            }
+            else if constexpr (std::is_same_v<Value, bool>)
+            {
+                return status_result(xl_write_bool(handle_, value ? 1 : 0));
+            }
+            else if constexpr (std::is_integral_v<Value>)
+            {
+                return status_result(xl_write_int64(handle_, static_cast<int64_t>(value)));
+            }
+            else if constexpr (std::is_floating_point_v<Value>)
+            {
+                return status_result(xl_write_float64(handle_, static_cast<double>(value)));
+            }
+            else if constexpr (std::is_same_v<Value, std::chrono::sys_days>)
+            {
+                return status_result(
+                    xl_write_date(handle_, static_cast<int32_t>(value.time_since_epoch().count())));
+            }
+            else if constexpr (std::is_same_v<Value, std::chrono::year_month_day>)
+            {
+                return status_result(xl_write_date(
+                    handle_, static_cast<int32_t>(std::chrono::sys_days{value}.time_since_epoch().count())));
+            }
+            else if constexpr (std::is_same_v<Value, std::chrono::microseconds>)
+            {
+                return status_result(xl_write_time(handle_, value.count()));
+            }
+            else if constexpr (std::is_same_v<Value, std::chrono::hh_mm_ss<std::chrono::microseconds>>)
+            {
+                return status_result(xl_write_time(handle_, value.to_duration().count()));
+            }
+            else if constexpr (std::is_same_v<Value, std::chrono::system_clock::time_point>)
+            {
+                return status_result(xl_write_timestamp(
+                    handle_,
+                    std::chrono::time_point_cast<std::chrono::microseconds>(value).time_since_epoch().count()));
+            }
+            else
+            {
+                // Dependent on Value so this only fires when write<T> is actually instantiated for
+                // an unsupported T, not on every parse of the template - same reasoning as XlType's
+                // "no default" comment: a type this cannot write is a compile error, not a silent
+                // no-op cell.
+                static_assert(sizeof(Value) == 0, "unsupported type for xl::WriterHandle::write");
+            }
+        }
+
+        // Writes a blank cell of the given XL_T_* type directly, for a caller that would rather
+        // pass the type explicitly than wrap a value in std::optional<T>.
+        std::expected<void, Error> write_null(int32_t type) { return status_result(xl_write_null(handle_, type)); }
+
+        // Reads back everything written so far - only valid for a handle from open_memory();
+        // XL_INVALID_ARGUMENT for one from open(). Ends the workbook's trailing structure if that
+        // has not already happened, but does NOT release the handle: it stays open (and closeable)
+        // exactly like a file-backed one. See xl_write_handle_bytes in excelreader.h.
+        std::expected<std::vector<uint8_t>, Error> bytes()
+        {
+            xl_buffer buffer{};
+            const int32_t status = xl_write_handle_bytes(handle_, &buffer);
+            if (status != XL_OK)
+            {
+                return std::unexpected(detail::make_error(status));
+            }
+            struct BufferGuard
+            {
+                xl_buffer *buffer;
+                ~BufferGuard() { xl_free_buffer(buffer); }
+            } guard{&buffer};
+            return std::vector<uint8_t>(buffer.data, buffer.data + buffer.len);
+        }
+
+        xl_writer_handle *handle() const noexcept { return handle_; }
+
+    private:
+        explicit WriterHandle(xl_writer_handle *handle) noexcept : handle_(handle) {}
+
+        static std::expected<void, Error> status_result(int32_t status)
+        {
+            if (status != XL_OK)
+            {
+                return std::unexpected(detail::make_error(status));
+            }
+            return {};
+        }
+
+        void close() noexcept
+        {
+            if (handle_ != nullptr)
+            {
+                xl_close_write_handle(handle_);
+                handle_ = nullptr;
+            }
+        }
+
+        xl_writer_handle *handle_ = nullptr;
+    };
 } // namespace xl

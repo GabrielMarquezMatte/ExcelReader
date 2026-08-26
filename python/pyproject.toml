@@ -14,10 +14,15 @@ classifiers = [
     "Programming Language :: Python :: 3",
     "License :: OSI Approved :: MIT License",
 ]
-dependencies = ["typing_extensions>=4.0"]
+dependencies = []
 
 [project.optional-dependencies]
-dev = ["pytest>=7.0"]
+# typing_extensions is a type-checking-time-only import (see reader.py's TYPE_CHECKING guard for
+# typing.Self, 3.11+ in the stdlib) — never evaluated at runtime, so it belongs in dev, not
+# dependencies. Keeping it out of the wheel's runtime deps is the point: this package's whole
+# selling point is a ctypes-only, interpreter-independent wheel with no compiled Python extension
+# and (now) no runtime dependency at all.
+dev = ["pytest>=7.0", "typing_extensions>=4.0"]
 # Optional: Workbook.read_all_columnar() returns NumPy int32 arrays when this is installed, and
 # array('i') (stdlib, always available) otherwise — see reader.py's _to_columnar_array(). Kept
 # optional on purpose: the package's whole selling point is a ctypes-only, interpreter-independent

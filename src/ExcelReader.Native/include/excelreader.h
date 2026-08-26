@@ -21,7 +21,7 @@ extern "C" {
 /* ABI revision of this header. Bumped on any change to a struct layout, a status code, or the
  * meaning of an existing function; adding a new function does not bump it. A caller should refuse
  * to proceed if xl_abi_version() does not equal the XL_ABI_VERSION it was compiled against. */
-#define XL_ABI_VERSION 2
+#define XL_ABI_VERSION 3
 
 #define XL_FORMAT_AUTO  0  /* sniffs XLS/XLSX/XLSB; does NOT detect CSV */
 #define XL_FORMAT_XLS   1
@@ -48,7 +48,7 @@ extern "C" {
 /* Opaque workbook handle. Never dereferenced by the caller; only ever passed back to xl_*. */
 typedef struct xl_workbook xl_workbook;
 
-/* One UTF-8 cell value returned by xl_next_row_decoded. value_len excludes the trailing NUL;
+/* One UTF-8 cell value returned by xl_read_all_decoded. value_len excludes the trailing NUL;
  * use it when the value could contain an embedded NUL. */
 typedef struct xl_row_cell {
     int32_t column;
@@ -57,9 +57,10 @@ typedef struct xl_row_cell {
     const uint8_t* value;
 } xl_row_cell;
 
-/* A decoded row returned by xl_next_row_decoded. The cells array and every cell->value live in one
- * allocation owned by the row; they stay valid until xl_free_row and must never be freed
- * individually. Values are NUL-terminated in addition to carrying value_len. */
+/* A decoded row, as returned inside xl_rows by xl_read_all_decoded. The cells array and every
+ * cell->value live in one allocation owned by the row; they stay valid until xl_free_rows frees
+ * the enclosing xl_rows and must never be freed individually. Values are NUL-terminated in
+ * addition to carrying value_len. */
 typedef struct xl_row {
     int32_t cell_count;
     xl_row_cell* cells;
@@ -168,13 +169,6 @@ int32_t xl_next_row(xl_workbook* handle, uint8_t* buffer, int32_t capacity, int3
  * lengths, is columnar, and is markedly faster - prefer it for a sheet anywhere near this size. */
 int32_t xl_read_all_blob(xl_workbook* handle, uint8_t* buffer, int32_t capacity, int32_t* out_written);
 
-/* Reads one row into C-friendly structs. Returns XL_EOF at the end of the sheet. The caller owns
- * the returned allocation and must call xl_free_row, including after partially processing a row. */
-int32_t xl_next_row_decoded(xl_workbook* handle, xl_row* out_row);
-
-/* Releases a row returned by xl_next_row_decoded and resets it to zero. Safe to call on a zeroed row. */
-void xl_free_row(xl_row* row);
-
 /* A decoded sheet returned by xl_read_all_decoded. Rows remain valid until xl_free_rows. */
 typedef struct xl_rows {
     int32_t row_count;
@@ -237,7 +231,7 @@ typedef struct xl_table {
 } xl_table;
 
 /* Schema-driven columnar read of the WHOLE current sheet, from its first row - independent of, and
- * never disturbing, the row cursor xl_next_row/xl_next_row_decoded/xl_read_all_blob share on `handle`.
+ * never disturbing, the row cursor xl_next_row/xl_read_all_blob share on `handle`.
  * `header_row` is the 1-based row number used to resolve name-based specs (rows before it are
  * skipped, and it is never itself yielded as a data row); 0 means "no header" and every spec must be
  * index-based. XL_INVALID_ARGUMENT for a bad spec (unknown type, negative index with no name, a
@@ -262,7 +256,9 @@ typedef struct xl_write_options {
     int32_t struct_size;
     int32_t sheet_name_len;
     const uint8_t* sheet_name;    /* UTF-8; NULL = "Sheet1". Excel's rules: 1-31 characters, none of
-                                    * : \ / ? * [ ] . Ignored for XL_FORMAT_CSV. */
+                                    * : \ / ? * [ ] . Ignored for XL_FORMAT_CSV, and ignored entirely
+                                    * by xl_open_write_handle - each sheet is named by its own
+                                    * xl_start_sheet call instead. */
 
     /* CSV only; ignored for every other format. */
     int32_t csv_delimiter;        /* byte value 1-255, 0 = default ',' */
@@ -308,6 +304,29 @@ int32_t xl_write_typed(const uint8_t* path, int32_t path_len,
                        const xl_table* table,
                        const xl_write_options* options);
 
+/* An owned block of memory returned by xl_write_typed_to_memory or xl_write_handle_bytes. The
+ * caller must release it with xl_free_buffer - same convention as xl_table/xl_inferred_schema. */
+typedef struct xl_buffer {
+    uint8_t* data;
+    int64_t len;
+} xl_buffer;
+
+/* Same as xl_write_typed, except there is no path: the workbook is built in memory and returned as
+ * out_buffer instead of being written to disk. Every other parameter and validation rule is
+ * identical.
+ *
+ * Only read *out_buffer when the call returns XL_OK; on failure it is zeroed, and xl_free_buffer on
+ * a zeroed buffer is a no-op. */
+int32_t xl_write_typed_to_memory(int32_t format,
+                                 const xl_column_spec* specs,
+                                 const xl_table* table,
+                                 const xl_write_options* options,
+                                 xl_buffer* out_buffer);
+
+/* Releases a buffer returned by xl_write_typed_to_memory or xl_write_handle_bytes and resets it to
+ * zero. Safe on a zeroed value. */
+void xl_free_buffer(xl_buffer* buffer);
+
 /* Result of xl_infer_schema: one xl_column_spec per column the sheet appears to have, in ascending
  * column order. Each spec's `type`/`nullable` is a guess from the sampled cells' own XL_CELL_* tags
  * (no text sniffing) and can be handed straight to xl_parse_typed/xl_parse_arrow; `name` is set from
@@ -320,8 +339,8 @@ typedef struct xl_inferred_schema {
 } xl_inferred_schema;
 
 /* Guesses a xl_parse_typed/xl_parse_arrow schema by sampling the WHOLE current sheet, from its first
- * row - independent of, and never disturbing, the row cursor xl_next_row/xl_next_row_decoded/
- * xl_read_all_blob share on `handle`. `header_row` has the same meaning as in xl_parse_typed (0 = no
+ * row - independent of, and never disturbing, the row cursor xl_next_row/xl_read_all_blob share
+ * on `handle`. `header_row` has the same meaning as in xl_parse_typed (0 = no
  * header). `sample_size` bounds how many rows after the header are inspected; a column is guessed
  * XL_T_STRING with nullable = 1 when its sampled cells mix kinds, are all XL_CELL_FORMULA/ERROR, or
  * were never populated. XL_T_I64 vs XL_T_F64 is decided by whether every sampled numeric cell parses
@@ -338,6 +357,91 @@ int32_t xl_infer_schema(xl_workbook* handle, int32_t header_row, int32_t sample_
 
 /* Releases a result returned by xl_infer_schema and resets it to zero. Safe on a zeroed value. */
 void xl_free_schema(xl_inferred_schema* schema);
+
+/* Streaming writer handle: one sheet and one row open at a time, written directly to disk as each
+ * call arrives instead of building an xl_table in memory first (see xl_write_typed for that
+ * alternative). The required call order is:
+ *
+ *   xl_open_write_handle
+ *     xl_start_sheet
+ *       xl_start_row
+ *         xl_write_string / xl_write_int64 / xl_write_float64 / xl_write_bool /
+ *         xl_write_date / xl_write_time / xl_write_timestamp / xl_write_null   (one call per cell,
+ *                                                                               left to right)
+ *       xl_end_row                                                            (repeat per row)
+ *     xl_end_sheet                                                            (repeat per sheet)
+ *   xl_close_write_handle
+ *
+ * Calling one of these out of order (e.g. a cell write before xl_start_row, or xl_start_sheet
+ * again before xl_end_sheet) returns XL_ERROR with a message from xl_last_error/xl_last_error_ptr;
+ * the handle itself is still usable afterward - fix the call order and continue, or give up and
+ * call xl_close_write_handle to discard it.
+ *
+ * xl_close_write_handle must be called exactly once to produce a valid file: it implicitly closes
+ * any row/sheet still open and writes the workbook's trailing structure (the zip central directory
+ * for XLSX/XLSB, the BIFF EOF record for XLS). It always releases the handle - including on
+ * XL_ERROR - so *handle must not be used again after calling it, successful or not.
+ *
+ * xl_open_write_handle_to_memory is the same handle, backed by an in-memory buffer instead of a
+ * file: every xl_start_sheet/xl_start_row/xl_write_xxx/xl_end_row/xl_end_sheet/xl_close_write_handle
+ * call above works identically on it. Call xl_write_handle_bytes to read the buffer out - it
+ * implicitly finishes the workbook's trailing structure the same way xl_close_write_handle does
+ * (so it is safe to call whether or not every sheet/row was explicitly ended), but unlike
+ * xl_close_write_handle it does NOT release the handle: call xl_close_write_handle afterward, same
+ * as for a file-backed handle. Calling xl_write_handle_bytes on a file-backed handle (one opened by
+ * xl_open_write_handle) is XL_INVALID_ARGUMENT. */
+typedef struct xl_writer_handle xl_writer_handle;
+
+/* Creates path (truncating it if it already exists) and returns a handle for it. options may be
+ * NULL for every default, same convention as xl_write_typed's options parameter. format must be
+ * one of XL_FORMAT_XLS/XLSX/XLSB/CSV (XL_FORMAT_AUTO is rejected - see xl_write_typed). */
+int32_t xl_open_write_handle(const uint8_t* path, int32_t path_len, int32_t format,
+                             const xl_write_options* options, xl_writer_handle** out_handle);
+
+/* Same as xl_open_write_handle, except there is no path: the handle is backed by an in-memory
+ * buffer, read out with xl_write_handle_bytes - see the call-order note above. */
+int32_t xl_open_write_handle_to_memory(int32_t format, const xl_write_options* options,
+                                       xl_writer_handle** out_handle);
+
+/* Starts a new sheet named name (UTF-8, name_len bytes). Must not be called again before the
+ * current sheet, if any, has been ended with xl_end_sheet. */
+int32_t xl_start_sheet(xl_writer_handle* handle, const uint8_t* name, int32_t name_len);
+
+/* Starts a new row on the current sheet. Must not be called again before the current row, if any,
+ * has been ended with xl_end_row. */
+int32_t xl_start_row(xl_writer_handle* handle);
+
+/* Writes the next cell of the current row as text, or a blank cell when value is NULL. */
+int32_t xl_write_string(xl_writer_handle* handle, const uint8_t* value, int32_t value_len);
+/* Writes the next cell of the current row as an integer. */
+int32_t xl_write_int64(xl_writer_handle* handle, int64_t value);
+/* Writes the next cell of the current row as a floating-point number. */
+int32_t xl_write_float64(xl_writer_handle* handle, double value);
+/* Writes the next cell of the current row as a boolean (0/nonzero). */
+int32_t xl_write_bool(xl_writer_handle* handle, int32_t value);
+/* Writes the next cell of the current row as a date. See XL_T_DATE for the wire format. */
+int32_t xl_write_date(xl_writer_handle* handle, int32_t days_since_epoch);
+/* Writes the next cell of the current row as a time of day. See XL_T_TIME for the wire format. */
+int32_t xl_write_time(xl_writer_handle* handle, int64_t microseconds_since_midnight);
+/* Writes the next cell of the current row as a date/time. See XL_T_TIMESTAMP for the wire format. */
+int32_t xl_write_timestamp(xl_writer_handle* handle, int64_t microseconds_since_epoch);
+/* Writes the next cell of the current row as a blank cell of the given XL_T_* type. */
+int32_t xl_write_null(xl_writer_handle* handle, int32_t type);
+
+/* Ends the current row, started by xl_start_row. */
+int32_t xl_end_row(xl_writer_handle* handle);
+/* Ends the current sheet, started by xl_start_sheet. Must not be called with a row still open. */
+int32_t xl_end_sheet(xl_writer_handle* handle);
+/* Finishes and releases handle - see the call-order note above. */
+int32_t xl_close_write_handle(xl_writer_handle* handle);
+
+/* Reads back everything written so far to a handle opened by xl_open_write_handle_to_memory - see
+ * the call-order note above for what this does and does not do to handle. XL_INVALID_ARGUMENT if
+ * handle was opened by xl_open_write_handle instead.
+ *
+ * Only read *out_buffer when the call returns XL_OK; on failure it is zeroed, and xl_free_buffer on
+ * a zeroed buffer is a no-op. */
+int32_t xl_write_handle_bytes(xl_writer_handle* handle, xl_buffer* out_buffer);
 
 /* Last error on the CALLING thread. */
 int32_t xl_last_error(uint8_t* buffer, int32_t capacity, int32_t* out_len);

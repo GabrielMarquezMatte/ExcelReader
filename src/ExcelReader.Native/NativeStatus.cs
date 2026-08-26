@@ -13,7 +13,7 @@ namespace ExcelReader.Native
         /// <summary>ABI revision returned by <c>xl_abi_version</c>. Mirrors XL_ABI_VERSION in include/excelreader.h.
         /// Bump on any change to a struct layout, a status code, or the meaning of an existing function; adding a
         /// new function does not bump it.</summary>
-        internal const int AbiVersion = 2;
+        internal const int AbiVersion = 3;
     }
 
     /// <summary>

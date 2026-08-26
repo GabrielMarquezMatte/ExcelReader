@@ -3,7 +3,7 @@ name = "excelreader"
 version = "0.0.0"
 edition = "2021"
 license = "MIT"
-description = "Read Excel/CSV workbooks via ExcelReader's native ABI (open + schema-driven typed parse)."
+description = "Read and write Excel/CSV workbooks via ExcelReader's native ABI (schema-driven typed parse and write)."
 repository = "https://github.com/GabrielMarquezMatte/ExcelReader"
 readme = "README.md"
 build = "build.rs"
@@ -14,17 +14,23 @@ default = []
 # NaiveDate/NaiveTime/NaiveDateTime, so `#[derive(ExcelMapper)]` can populate chrono fields
 # directly. Off by default: the newtypes alone need no dependency at all.
 chrono = ["dep:chrono"]
+# Converts the native Arrow C Data Interface export into an `arrow::array::RecordBatch`. Off by
+# default: arrow-rs is a large dependency and the crate's typed-parse path needs none of it.
+arrow = ["dep:arrow"]
 
 [dependencies]
 excelreader-derive = { path = "../excelreader-derive", version = "0.0.0" }
 # `default-features = false` drops chrono's `oldtime`/`clock` stack: this crate only converts
 # between integer counts and calendar types, and never reads the system clock or a timezone database.
 chrono = { version = "0.4", optional = true, default-features = false, features = ["std"] }
+arrow = { version = "56", optional = true, default-features = false, features = ["ffi"] }
 
 [dev-dependencies]
 trybuild = "1"
 criterion = "0.5"
 calamine = { version = "0.36.1", features = ["chrono"] }
+# Comparison baseline for write_bench only — this crate's own write path never calls it.
+rust_xlsxwriter = "0.98.2"
 
 [[bench]]
 name = "parse_bench"
@@ -32,6 +38,10 @@ harness = false
 
 [[bench]]
 name = "compare_bench"
+harness = false
+
+[[bench]]
+name = "write_bench"
 harness = false
 
 [package.metadata.docs.rs]

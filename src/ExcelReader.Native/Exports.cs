@@ -1,5 +1,7 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Runtime.InteropServices;
 using System.Text;
+using ExcelReader.Native.Writer;
 
 namespace ExcelReader.Native
 {
@@ -164,28 +166,6 @@ namespace ExcelReader.Native
             return status;
         }
 
-        [UnmanagedCallersOnly(EntryPoint = "xl_next_row_decoded")]
-        public static int NextRowDecoded(nint handle, NativeRow* outRow)
-        {
-            if (outRow is null)
-            {
-                return NativeStatus.InvalidArgument;
-            }
-
-            int status = NativeApi.NextRowDecoded(Resolve(handle), out NativeRow row);
-            *outRow = row;
-            return status;
-        }
-
-        [UnmanagedCallersOnly(EntryPoint = "xl_free_row")]
-        public static void FreeRow(NativeRow* row)
-        {
-            if (row is not null)
-            {
-                NativeApi.FreeRow(ref *row);
-            }
-        }
-
         [UnmanagedCallersOnly(EntryPoint = "xl_read_all_decoded")]
         public static int ReadAllDecoded(nint handle, NativeRows* outRows)
         {
@@ -202,9 +182,24 @@ namespace ExcelReader.Native
         [UnmanagedCallersOnly(EntryPoint = "xl_free_rows")]
         public static void FreeRows(NativeRows* rows)
         {
-            if (rows is not null)
+            if (rows is null)
+            {
+                return;
+            }
+            // void in the ABI - no status code to report a failure through, and an exception
+            // escaping [UnmanagedCallersOnly] is a fail-fast/abort for the native caller,
+            // uncatchable in C/C++/Rust/Python. A caller that double-frees (holds a copy of an
+            // already-freed struct - the header documents every Free* as "safe on a zeroed value",
+            // not "safe on a stale copy") can make Marshal.FreeHGlobal throw; this keeps that from
+            // crashing the whole process. The message still reaches xl_last_error for a caller that
+            // checks after a free looked suspicious.
+            try
             {
                 NativeApi.FreeRows(ref *rows);
+            }
+            catch (Exception exception)
+            {
+                NativeApi.SetLastError(exception.Message);
             }
         }
 
@@ -242,9 +237,18 @@ namespace ExcelReader.Native
         [UnmanagedCallersOnly(EntryPoint = "xl_free_table")]
         public static void FreeTable(NativeTable* table)
         {
-            if (table is not null)
+            if (table is null)
+            {
+                return;
+            }
+            // See FreeRows' remarks: void in the ABI, so an exception here must never escape.
+            try
             {
                 NativeApi.FreeTable(ref *table);
+            }
+            catch (Exception exception)
+            {
+                NativeApi.SetLastError(exception.Message);
             }
         }
 
@@ -276,6 +280,66 @@ namespace ExcelReader.Native
                 NativeApi.SetLastError(exception.Message);
                 return NativeStatus.Error;
             }
+        }
+
+        [UnmanagedCallersOnly(EntryPoint = "xl_write_typed_to_memory")]
+        public static int WriteTypedToMemory(int format, NativeColumnSpecRaw* specs, NativeTable* table, NativeWriteOptionsRaw* options, NativeBuffer* outBuffer)
+        {
+            if (specs is null || table is null || outBuffer is null || !NativeApi.IsValidSpecCount(table->ColumnCount))
+            {
+                return NativeStatus.InvalidArgument;
+            }
+            *outBuffer = default;
+
+            try
+            {
+                if (!TryDecodeColumnSpecs(specs, table->ColumnCount, out NativeColumnSpec[] decoded))
+                {
+                    return NativeStatus.InvalidArgument;
+                }
+                if (!TryDecodeWriteOptions(options, out NativeWriteOptions decodedOptions))
+                {
+                    return NativeStatus.InvalidArgument;
+                }
+                int status = NativeApi.WriteTypedToMemory(format, decoded, *table, decodedOptions, out byte[]? bytes);
+                PublishBuffer(bytes, outBuffer);
+                return status;
+            }
+            catch (Exception exception)
+            {
+                // Same reasoning as xl_write_typed's catch: decoding walks caller memory and can still
+                // fail in ways the guards above cannot see.
+                NativeApi.SetLastError(exception.Message);
+                return NativeStatus.Error;
+            }
+        }
+
+        [UnmanagedCallersOnly(EntryPoint = "xl_free_buffer")]
+        public static void FreeBuffer(NativeBuffer* buffer)
+        {
+            if (buffer is null || buffer->Data == IntPtr.Zero)
+            {
+                return;
+            }
+            Marshal.FreeHGlobal(buffer->Data);
+            *buffer = default;
+        }
+
+        // Copies a managed byte[] into unmanaged memory the caller owns until it calls xl_free_buffer.
+        // Shared by xl_write_typed_to_memory and xl_write_handle_bytes. A null/empty result (including
+        // a failed call, which leaves bytes null) publishes a zeroed xl_buffer rather than a 0-length
+        // allocation - there is nothing for the caller to free either way, and NativeBuffer's default
+        // is already exactly that.
+        private static void PublishBuffer(byte[]? bytes, NativeBuffer* outBuffer)
+        {
+            if (bytes is null || bytes.Length == 0)
+            {
+                return;
+            }
+            IntPtr data = Marshal.AllocHGlobal(bytes.Length);
+            Marshal.Copy(bytes, 0, data, bytes.Length);
+            outBuffer->Data = data;
+            outBuffer->Length = bytes.Length;
         }
 
         // A NULL options pointer means "every default", identical to xl_open_file_ex's contract. The
@@ -328,9 +392,18 @@ namespace ExcelReader.Native
         [UnmanagedCallersOnly(EntryPoint = "xl_free_schema")]
         public static void FreeSchema(NativeInferredSchema* schema)
         {
-            if (schema is not null)
+            if (schema is null)
+            {
+                return;
+            }
+            // See FreeRows' remarks: void in the ABI, so an exception here must never escape.
+            try
             {
                 NativeApi.FreeSchema(ref *schema);
+            }
+            catch (Exception exception)
+            {
+                NativeApi.SetLastError(exception.Message);
             }
         }
 
@@ -441,19 +514,249 @@ namespace ExcelReader.Native
         [UnmanagedCallersOnly]
         public static void ReleaseArrowSchemaCallback(ArrowSchema* schema)
         {
-            if (schema is not null)
+            if (schema is null)
+            {
+                return;
+            }
+            // See FreeRows' remarks: void in the ABI (Arrow's own release-callback convention), so
+            // an exception here must never escape - doubly so for this one, since an Arrow consumer
+            // owns when this runs, not this library.
+            try
             {
                 NativeApi.ReleaseArrowSchema((IntPtr)schema);
+            }
+            catch (Exception exception)
+            {
+                NativeApi.SetLastError(exception.Message);
             }
         }
 
         [UnmanagedCallersOnly]
         public static void ReleaseArrowArrayCallback(ArrowArray* array)
         {
-            if (array is not null)
+            if (array is null)
+            {
+                return;
+            }
+            // See ReleaseArrowSchemaCallback's remarks.
+            try
             {
                 NativeApi.ReleaseArrowArray((IntPtr)array);
             }
+            catch (Exception exception)
+            {
+                NativeApi.SetLastError(exception.Message);
+            }
+        }
+
+        [UnmanagedCallersOnly(EntryPoint = "xl_open_write_handle")]
+        public static int OpenWriteHandle(byte* path, int pathLength, int format, NativeWriteOptionsRaw* options, nint* outHandle)
+        {
+            if (!IsValidOpenRequest(path, pathLength, outHandle))
+            {
+                return NativeStatus.InvalidArgument;
+            }
+            *outHandle = 0;
+            if (!TryDecodeWriteOptions(options, out NativeWriteOptions decodedOptions))
+            {
+                return NativeStatus.InvalidArgument;
+            }
+            int status = NativeApi.OpenWriteHandle(new ReadOnlySpan<byte>(path, pathLength), format, decodedOptions, out NativeWriterHandle? handle);
+            if (handle is not null)
+            {
+                *outHandle = NativeHandleTable.Register(handle);
+            }
+            return status;
+        }
+
+        [UnmanagedCallersOnly(EntryPoint = "xl_open_write_handle_to_memory")]
+        public static int OpenWriteHandleToMemory(int format, NativeWriteOptionsRaw* options, nint* outHandle)
+        {
+            if (outHandle is null)
+            {
+                return NativeStatus.InvalidArgument;
+            }
+            *outHandle = 0;
+            if (!TryDecodeWriteOptions(options, out NativeWriteOptions decodedOptions))
+            {
+                return NativeStatus.InvalidArgument;
+            }
+            int status = NativeApi.OpenWriteHandleToMemory(format, decodedOptions, out NativeWriterHandle? handle);
+            if (handle is not null)
+            {
+                *outHandle = NativeHandleTable.Register(handle);
+            }
+            return status;
+        }
+
+        [UnmanagedCallersOnly(EntryPoint = "xl_write_handle_bytes")]
+        public static int WriteHandleBytes(nint handle, NativeBuffer* outBuffer)
+        {
+            if (outBuffer is null)
+            {
+                return NativeStatus.InvalidArgument;
+            }
+            *outBuffer = default;
+            // Resolved directly (not via TryResolveWriter/RunWriterOp): those helpers return
+            // XL_INVALID_HANDLE for an id that resolves to nothing, but a wrong-kind handle here
+            // (opened via xl_open_write_handle, no MemoryStream) is a caller usage error against a
+            // handle that IS valid, which NativeApi.GetWriteHandleBytes reports as InvalidArgument.
+            NativeWriterHandle? writerHandle = NativeHandleTable.Resolve<NativeWriterHandle>(handle);
+            int status = NativeApi.GetWriteHandleBytes(writerHandle, out byte[]? bytes);
+            PublishBuffer(bytes, outBuffer);
+            return status;
+        }
+
+        [UnmanagedCallersOnly(EntryPoint = "xl_start_sheet")]
+        public static int StartSheet(nint handle, byte* name, int nameLength)
+        {
+            if (name is null || !NativeApi.IsValidNameLength(nameLength))
+            {
+                NativeApi.SetLastError($"xl_start_sheet's name_len is out of range; got {nameLength}.");
+                return NativeStatus.InvalidArgument;
+            }
+            if (!TryResolveWriter(handle, out NativeWriterHandle? writerHandle))
+            {
+                return NativeStatus.InvalidHandle;
+            }
+            try
+            {
+                string sheetName = Encoding.UTF8.GetString(name, nameLength);
+                writerHandle.StartSheet(sheetName);
+                return NativeStatus.Ok;
+            }
+            catch (Exception exception)
+            {
+                NativeApi.SetLastError(exception.Message);
+                return NativeStatus.Error;
+            }
+        }
+
+        [UnmanagedCallersOnly(EntryPoint = "xl_start_row")]
+        public static int StartRow(nint handle)
+        {
+            return RunWriterOp(handle, static writerHandle => writerHandle.StartRow());
+        }
+
+        [UnmanagedCallersOnly(EntryPoint = "xl_write_string")]
+        public static int WriteString(nint handle, byte* value, int valueLength)
+        {
+            if (value is not null && !NativeApi.IsValidNameLength(valueLength))
+            {
+                NativeApi.SetLastError($"xl_write_string's value_len is out of range; got {valueLength}.");
+                return NativeStatus.InvalidArgument;
+            }
+            if (!TryResolveWriter(handle, out NativeWriterHandle? writerHandle))
+            {
+                return NativeStatus.InvalidHandle;
+            }
+            try
+            {
+                string? text = value is null ? null : Encoding.UTF8.GetString(value, valueLength);
+                writerHandle.WriteString(text);
+                return NativeStatus.Ok;
+            }
+            catch (Exception exception)
+            {
+                NativeApi.SetLastError(exception.Message);
+                return NativeStatus.Error;
+            }
+        }
+
+        [UnmanagedCallersOnly(EntryPoint = "xl_write_int64")]
+        public static int WriteInt64(nint handle, long value)
+        {
+            return RunWriterOp(handle, writerHandle => writerHandle.WriteInt64(value));
+        }
+
+        [UnmanagedCallersOnly(EntryPoint = "xl_write_float64")]
+        public static int WriteFloat64(nint handle, double value)
+        {
+            return RunWriterOp(handle, writerHandle => writerHandle.WriteFloat64(value));
+        }
+
+        [UnmanagedCallersOnly(EntryPoint = "xl_write_bool")]
+        public static int WriteBool(nint handle, int value)
+        {
+            return RunWriterOp(handle, writerHandle => writerHandle.WriteBool(value != 0));
+        }
+
+        [UnmanagedCallersOnly(EntryPoint = "xl_write_date")]
+        public static int WriteDate(nint handle, int daysSinceEpoch)
+        {
+            return RunWriterOp(handle, writerHandle => writerHandle.WriteDate(daysSinceEpoch));
+        }
+
+        [UnmanagedCallersOnly(EntryPoint = "xl_write_time")]
+        public static int WriteTime(nint handle, long microsecondsSinceMidnight)
+        {
+            return RunWriterOp(handle, writerHandle => writerHandle.WriteTime(microsecondsSinceMidnight));
+        }
+
+        [UnmanagedCallersOnly(EntryPoint = "xl_write_timestamp")]
+        public static int WriteTimestamp(nint handle, long microsecondsSinceEpoch)
+        {
+            return RunWriterOp(handle, writerHandle => writerHandle.WriteTimestamp(microsecondsSinceEpoch));
+        }
+
+        [UnmanagedCallersOnly(EntryPoint = "xl_write_null")]
+        public static int WriteNull(nint handle, int type)
+        {
+            return RunWriterOp(handle, writerHandle => writerHandle.WriteNull(type));
+        }
+
+        [UnmanagedCallersOnly(EntryPoint = "xl_end_row")]
+        public static int EndRow(nint handle)
+        {
+            return RunWriterOp(handle, static writerHandle => writerHandle.EndRow());
+        }
+
+        [UnmanagedCallersOnly(EntryPoint = "xl_end_sheet")]
+        public static int EndSheet(nint handle)
+        {
+            return RunWriterOp(handle, static writerHandle => writerHandle.EndSheet());
+        }
+
+        [UnmanagedCallersOnly(EntryPoint = "xl_close_write_handle")]
+        public static int CloseWriteHandle(nint handle)
+        {
+            if (handle == 0)
+            {
+                return NativeStatus.InvalidHandle;
+            }
+            if (!NativeHandleTable.TryUnregister(handle, out NativeWriterHandle? target))
+            {
+                return NativeStatus.InvalidHandle;
+            }
+            return NativeApi.CloseWriteHandle(target);
+        }
+
+        // Shared by every writer entry point above whose body is just "resolve, try the one call,
+        // translate an exception into Error". xl_start_sheet and xl_write_string are the exceptions:
+        // both also decode a caller buffer, which can itself throw on malformed UTF-8, so they keep
+        // their own inline try/catch around resolve-then-decode-then-call instead of using this helper.
+        private static int RunWriterOp(nint handle, Action<NativeWriterHandle> operation)
+        {
+            if (!TryResolveWriter(handle, out NativeWriterHandle? writerHandle))
+            {
+                return NativeStatus.InvalidHandle;
+            }
+            try
+            {
+                operation(writerHandle);
+                return NativeStatus.Ok;
+            }
+            catch (Exception exception)
+            {
+                NativeApi.SetLastError(exception.Message);
+                return NativeStatus.Error;
+            }
+        }
+
+        private static bool TryResolveWriter(nint handle, [NotNullWhen(true)] out NativeWriterHandle? writerHandle)
+        {
+            writerHandle = NativeHandleTable.Resolve<NativeWriterHandle>(handle);
+            return writerHandle is not null;
         }
 
         [UnmanagedCallersOnly(EntryPoint = "xl_last_error")]
@@ -492,7 +795,7 @@ namespace ExcelReader.Native
         // points above cannot be invoked from managed code, but a plain helper method can.
         internal static NativeHandle? Resolve(nint handle)
         {
-            return NativeHandleTable.Resolve(handle);
+            return NativeHandleTable.Resolve<NativeHandle>(handle);
         }
 
         internal static bool TryFree(nint handle, out NativeHandle? target)

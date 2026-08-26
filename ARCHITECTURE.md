@@ -48,6 +48,28 @@ Reader internals that would otherwise be duplicated four times over live in one 
   the single buffer-growth-cap function (`NextBufferSize`) every pooled buffer in the stack grows
   through, so one limit policy governs all of them consistently.
 
+## The `excelreader` CLI
+
+`src/ExcelReader.Cli/` is a thin `dotnet tool` shell (`excelreader`) over Core's public API — it
+parses no spreadsheet bytes of its own. It splits in two on purpose: `Commands` is a one-line-per-
+command adapter whose XML doc comments ConsoleAppFramework's source generator turns into argument
+parsing, routing and `--help`, while `CliCommands` holds the bodies as plain functions over explicit
+writers. The split keeps the tested surface free of the framework's static output hooks, so the CLI
+tests run in parallel like every other test class. ConsoleAppFramework is compile-time only
+(`PrivateAssets`), so the published tool's only *runtime* dependency besides ExcelReader.Core is
+Spectre.Console, used for `sheets`/`schema`'s tables and `convert`'s progress spinner on a real
+terminal.
+
+Rendering follows `Commands`/`CliCommands`'s own split, one level further: `Commands` picks plain vs.
+interactive per call (`Console.IsOutputRedirected`/`IsErrorRedirected`), so a script gets the exact
+same tab-separated text and stderr line the tool always wrote, unchanged. Two small always-stderr
+helpers back that split - `ErrorConsole` (a Spectre `IAnsiConsole` pinned to `Console.Error`, since
+Spectre's own default instance targets stdout, which `convert` may be using for the converted bytes
+themselves) and `ColorizingErrorWriter` (a `TextWriter` that renders `CliCommands.Execute`'s one-line
+failure in red through `ErrorConsole` on a terminal, or passes it through byte-for-byte otherwise).
+Both live in `ExcelReader.Cli`, not `CliCommands.cs` - the interactive/plain decision is
+`Console`-shaped state, exactly what that file's tests are built to never touch.
+
 ## Why readers are split into partial classes
 
 `XlsxReader` and `XlsbReader` are large enough that one file would be unwieldy, so each is split by

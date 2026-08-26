@@ -19,19 +19,10 @@ from excelreader import _native
 from excelreader.reader import _check
 from excelreader.types import ColumnType, StringColumn, TypedTable, WriteOptions
 
-_WRITE_FORMATS = {
-    ".xlsx": _native.XL_FORMAT_XLSX,
-    ".xlsb": _native.XL_FORMAT_XLSB,
-    ".xls": _native.XL_FORMAT_XLS,
-    ".csv": _native.XL_FORMAT_CSV,
-}
-
-_FORMAT_NAMES = {
-    "xlsx": _native.XL_FORMAT_XLSX,
-    "xlsb": _native.XL_FORMAT_XLSB,
-    "xls": _native.XL_FORMAT_XLS,
-    "csv": _native.XL_FORMAT_CSV,
-}
+_FORMAT_NAMES = _native.WRITE_FORMATS
+# The by-extension table is the by-name one with a leading dot, so a new format is added in exactly
+# one place (_native.FORMATS) and reaches both lookups.
+_WRITE_FORMATS = {f".{name}": value for name, value in _FORMAT_NAMES.items()}
 
 
 def _resolve_write_format(name: str | None, path: Path) -> int:

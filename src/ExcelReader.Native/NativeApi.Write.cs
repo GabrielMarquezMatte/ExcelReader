@@ -1,6 +1,7 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Text;
 using ExcelReader.Core.Writer;
+using ExcelReader.Native.Writer;
 
 namespace ExcelReader.Native
 {
@@ -12,7 +13,7 @@ namespace ExcelReader.Native
         // Named distinctly from NativeApi.Typed.cs's nested-class field of the same value: both are
         // static members reachable from the outer NativeApi partial class, and reusing the name there
         // trips S3218 (field shadows an outer-class member).
-        private static readonly int WriteUnixEpochDayNumber = new DateOnly(1970, 1, 1).DayNumber;
+        internal static readonly int WriteUnixEpochDayNumber = new DateOnly(1970, 1, 1).DayNumber;
 
         /// <summary>
         /// Writes <paramref name="table"/> to <paramref name="path"/> as one sheet. Mirrors
@@ -50,6 +51,162 @@ namespace ExcelReader.Native
                 string sheetName = options.SheetName ?? "Sheet1";
                 using FileStream stream = new(filePath, FileMode.Create, FileAccess.Write, FileShare.None);
                 WriteToStream(stream, format, specs, table, options, sheetName, hasHeader);
+                return NativeStatus.Ok;
+            }
+            catch (Exception exception)
+            {
+                SetLastError(exception.Message);
+                return NativeStatus.Error;
+            }
+        }
+
+        /// <summary>
+        /// Same as <see cref="WriteTyped"/>, except the result is returned as bytes rather than
+        /// written to a path — everything else about validation and content is identical.
+        /// </summary>
+        internal static int WriteTypedToMemory(int format, NativeColumnSpec[] specs, NativeTable table, NativeWriteOptions options, out byte[]? bytes)
+        {
+            bytes = null;
+            if (!IsWritableFormat(format))
+            {
+                SetLastError($"xl_write_typed_to_memory needs an explicit format (XLS/XLSX/XLSB/CSV); got format {format}.");
+                return NativeStatus.InvalidArgument;
+            }
+            if (!TryValidateWriteTable(specs, table, out bool hasHeader, out string? validationError))
+            {
+                SetLastError(validationError);
+                return NativeStatus.InvalidArgument;
+            }
+
+            ClearLastError();
+            try
+            {
+                string sheetName = options.SheetName ?? "Sheet1";
+                using MemoryStream stream = new();
+                WriteToStream(stream, format, specs, table, options, sheetName, hasHeader);
+                bytes = stream.ToArray();
+                return NativeStatus.Ok;
+            }
+            catch (Exception exception)
+            {
+                SetLastError(exception.Message);
+                return NativeStatus.Error;
+            }
+        }
+
+        internal static int OpenWriteHandle(ReadOnlySpan<byte> path, int format, NativeWriteOptions options, out NativeWriterHandle? handle)
+        {
+            handle = null;
+            if (path.IsEmpty)
+            {
+                SetLastError("xl_open_write_handle needs a non-empty path.");
+                return NativeStatus.InvalidArgument;
+            }
+            if (!IsWritableFormat(format))
+            {
+                SetLastError($"xl_open_write_handle needs an explicit format (XLS/XLSX/XLSB/CSV); got format {format}.");
+                return NativeStatus.InvalidArgument;
+            }
+            ClearLastError();
+            string filePath = Encoding.UTF8.GetString(path);
+            FileStream stream = new(filePath, FileMode.Create, FileAccess.Write, FileShare.None);
+            try
+            {
+                handle = NativeWriterHandle.Create(stream, format, options);
+                return NativeStatus.Ok;
+            }
+            catch (Exception exception)
+            {
+                // NativeWriterHandle.Create has not taken ownership of stream if it throws (e.g. a
+                // workbook writer's Start() fails), so this is the only place left to close it — an
+                // un-disposed FileStream here leaks a locked file handle for the process lifetime.
+                stream.Dispose();
+                SetLastError(exception.Message);
+                return NativeStatus.Error;
+            }
+        }
+
+        /// <summary>
+        /// Same as <see cref="OpenWriteHandle"/>, except the handle is backed by an in-memory buffer
+        /// rather than a file — see <see cref="GetWriteHandleBytes"/> to read it out.
+        /// </summary>
+        internal static int OpenWriteHandleToMemory(int format, NativeWriteOptions options, out NativeWriterHandle? handle)
+        {
+            handle = null;
+            if (!IsWritableFormat(format))
+            {
+                SetLastError($"xl_open_write_handle_to_memory needs an explicit format (XLS/XLSX/XLSB/CSV); got format {format}.");
+                return NativeStatus.InvalidArgument;
+            }
+            ClearLastError();
+            MemoryStream stream = new();
+            try
+            {
+                handle = NativeWriterHandle.Create(stream, format, options);
+                handle.MemoryBuffer = stream;
+                return NativeStatus.Ok;
+            }
+            catch (Exception exception)
+            {
+                stream.Dispose();
+                SetLastError(exception.Message);
+                return NativeStatus.Error;
+            }
+        }
+
+        /// <summary>
+        /// Finishes and releases a writer handle opened by <see cref="OpenWriteHandle"/>. Always
+        /// disposes <paramref name="handle"/>, even when <see cref="NativeWriterHandle.Close"/> throws
+        /// — an unregistered-but-undisposed handle would otherwise leak its open <see cref="FileStream"/>.
+        /// </summary>
+        internal static int CloseWriteHandle(NativeWriterHandle? handle)
+        {
+            if (handle is null)
+            {
+                return NativeStatus.InvalidHandle;
+            }
+            try
+            {
+                handle.Close();
+                ClearLastError();
+                return NativeStatus.Ok;
+            }
+            catch (Exception exception)
+            {
+                SetLastError(exception.Message);
+                return NativeStatus.Error;
+            }
+            finally
+            {
+                handle.Dispose();
+            }
+        }
+
+        /// <summary>
+        /// Reads back everything written so far to a handle opened by
+        /// <see cref="OpenWriteHandleToMemory"/>, ending the workbook's content first if that has not
+        /// already happened (see <see cref="NativeWriterHandle.Close"/> — idempotent, so this is safe
+        /// to call whether or not the caller ended every sheet/row itself). Does NOT dispose
+        /// <paramref name="handle"/>: the caller must still call <see cref="CloseWriteHandle"/>
+        /// afterward to release it, same as a file-backed handle.
+        /// </summary>
+        internal static int GetWriteHandleBytes(NativeWriterHandle? handle, out byte[]? bytes)
+        {
+            bytes = null;
+            if (handle is null)
+            {
+                return NativeStatus.InvalidHandle;
+            }
+            if (handle.MemoryBuffer is null)
+            {
+                SetLastError("xl_write_handle_bytes needs a handle opened by xl_open_write_handle_to_memory.");
+                return NativeStatus.InvalidArgument;
+            }
+            try
+            {
+                handle.Close();
+                bytes = handle.MemoryBuffer.ToArray();
+                ClearLastError();
                 return NativeStatus.Ok;
             }
             catch (Exception exception)
@@ -176,7 +333,7 @@ namespace ExcelReader.Native
             }
         }
 
-        private static void WriteCell(IRowWriter row, NativeColumn column, long rowIndex)
+        internal static void WriteCell(IRowWriter row, NativeColumn column, long rowIndex)
         {
             if (!IsValidAt(column, rowIndex))
             {
@@ -230,7 +387,7 @@ namespace ExcelReader.Native
 
         // The nullable overloads are what make a blank cell; passing a default value would write a real
         // 0/false/epoch-date instead.
-        private static void WriteNullCell(IRowWriter row, int type)
+        internal static void WriteNullCell(IRowWriter row, int type)
         {
             switch (type)
             {

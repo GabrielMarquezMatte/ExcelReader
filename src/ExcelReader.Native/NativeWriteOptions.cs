@@ -29,6 +29,9 @@ namespace ExcelReader.Native
     /// </summary>
     internal readonly struct NativeWriteOptions
     {
+        /// <summary>The C struct's name, as it appears in every message this type produces.</summary>
+        private const string OptionsName = "xl_write_options";
+
         /// <summary>Excel's own limit; a longer name is rejected here rather than by the writer, so the
         /// caller gets XL_INVALID_ARGUMENT before a file is created instead of XL_ERROR after.</summary>
         private const int MaxSheetNameLength = 31;
@@ -71,10 +74,10 @@ namespace ExcelReader.Native
             }
 
             if (!TryValidateSheetName(sheetName, out error)
-                || !TryDecodeByte(raw.CsvDelimiter, "csv_delimiter", out byte? delimiter, out error)
-                || !TryDecodeByte(raw.CsvQuote, "csv_quote", out byte? quote, out error)
-                || !TryDecodeState(raw.Date1904, "date1904", out bool? date1904, out error)
-                || !TryDecodeState(raw.UseSharedStrings, "use_shared_strings", out bool? sharedStrings, out error))
+                || !NativeOptionDecode.TryByte(raw.CsvDelimiter, OptionsName, "csv_delimiter", out byte? delimiter, out error)
+                || !NativeOptionDecode.TryByte(raw.CsvQuote, OptionsName, "csv_quote", out byte? quote, out error)
+                || !NativeOptionDecode.TryState(raw.Date1904, OptionsName, "date1904", out bool? date1904, out error)
+                || !NativeOptionDecode.TryState(raw.UseSharedStrings, OptionsName, "use_shared_strings", out bool? sharedStrings, out error))
             {
                 return false;
             }
@@ -106,7 +109,7 @@ namespace ExcelReader.Native
             int expectedSize = Marshal.SizeOf<NativeWriteOptionsRaw>();
             if (raw.StructSize != expectedSize)
             {
-                error = $"xl_write_options.struct_size is {raw.StructSize}, but this library expects {expectedSize}.";
+                error = $"{OptionsName}.struct_size is {raw.StructSize}, but this library expects {expectedSize}.";
                 return false;
             }
             return true;
@@ -121,46 +124,13 @@ namespace ExcelReader.Native
             }
             if (sheetName.Length is 0 or > MaxSheetNameLength)
             {
-                error = $"xl_write_options.sheet_name must be 1-{MaxSheetNameLength} characters; got {sheetName.Length}.";
+                error = $"{OptionsName}.sheet_name must be 1-{MaxSheetNameLength} characters; got {sheetName.Length}.";
                 return false;
             }
             if (sheetName.AsSpan().IndexOfAny(ForbiddenSheetNameCharactersSearchValues) >= 0)
             {
-                error = $@"xl_write_options.sheet_name must not contain any of : \ / ? * [ ] ; got ""{sheetName}"".";
+                error = $@"{OptionsName}.sheet_name must not contain any of : \ / ? * [ ] ; got ""{sheetName}"".";
                 return false;
-            }
-            return true;
-        }
-
-        private static bool TryDecodeByte(int value, string fieldName, out byte? decoded, out string? error)
-        {
-            decoded = null;
-            error = null;
-            if (value == 0)
-            {
-                return true;
-            }
-            if (value is < 1 or > 255)
-            {
-                error = $"xl_write_options.{fieldName} must be 0 (default) or a byte value 1-255; got {value}.";
-                return false;
-            }
-            decoded = (byte)value;
-            return true;
-        }
-
-        private static bool TryDecodeState(int value, string fieldName, out bool? decoded, out string? error)
-        {
-            decoded = null;
-            error = null;
-            if (value is not (NativeOptionState.Default or NativeOptionState.False or NativeOptionState.True))
-            {
-                error = $"xl_write_options.{fieldName} must be XL_OPT_DEFAULT/FALSE/TRUE (0/1/2); got {value}.";
-                return false;
-            }
-            if (value != NativeOptionState.Default)
-            {
-                decoded = value == NativeOptionState.True;
             }
             return true;
         }

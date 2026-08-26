@@ -1,0 +1,48 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <!-- Single-target: a dotnet tool ships as IL and is launched by whatever SDK the user has.
+         Multi-targeting it would double the build for no reachable consumer. -->
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>ExcelReader.Cli</RootNamespace>
+    <AssemblyName>ExcelReader.Cli</AssemblyName>
+    <PackAsTool>true</PackAsTool>
+    <ToolCommandName>excelreader</ToolCommandName>
+    <PackageId>ExcelReader.NET.Cli</PackageId>
+    <Version>1.0.0</Version>
+    <Description>Command-line workbook inspection and CSV conversion, built on ExcelReader.NET.</Description>
+    <IsAotCompatible>true</IsAotCompatible>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <!-- RS0016/RS0026/RS0037: the public-API-tracking analyzer guards ExcelReader.Core's shipped
+         NuGet surface. This is an executable - it has no API contract, so there is no
+         PublicAPI.txt here by design. -->
+    <!-- IDISP001: CsvSheetWriter's real teardown is End() (see CsvWorkbookWriterTests.cs, which
+         suppresses the same rule for the same reason) - Dispose() is an abandonment safety net,
+         not a call every normal path needs to make. -->
+    <!-- CA1822: ConsoleAppFramework's app.Add<T>() (see Program.cs) requires public instance
+         methods - CAF012 rejects a class whose commands are all static - so Commands' methods
+         cannot be marked static despite touching no instance state. -->
+    <NoWarn>$(NoWarn);RS0016;RS0026;RS0037;IDISP001;CA1822</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="ExcelReader.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\ExcelReader.Core\ExcelReader.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Source generator only: it emits the ConsoleApp class itself, so nothing from this package
+         reaches the published tool. PrivateAssets/ExcludeAssets are what keep it that way. -->
+    <PackageReference Include="ConsoleAppFramework" Version="5.7.13">
+      <PrivateAssets>all</PrivateAssets>
+      <ExcludeAssets>runtime</ExcludeAssets>
+      <IncludeAssets>compile; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+    <PackageReference Include="Spectre.Console" Version="0.57.2" />
+  </ItemGroup>
+
+</Project>
