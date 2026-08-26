@@ -31,8 +31,20 @@ ExcelReader.Core.Reader.ExcelEncryptionReason.IntegrityFailure = 3 -> ExcelReade
 ExcelReader.Core.Reader.ExcelEncryptionReason.PasswordIncorrect = 1 -> ExcelReader.Core.Reader.ExcelEncryptionReason
 ExcelReader.Core.Reader.ExcelEncryptionReason.PasswordRequired = 0 -> ExcelReader.Core.Reader.ExcelEncryptionReason
 ExcelReader.Core.Reader.ExcelEncryptionReason.UnsupportedScheme = 2 -> ExcelReader.Core.Reader.ExcelEncryptionReason
+ExcelReader.Core.Reader.ExcelPassword
+ExcelReader.Core.Reader.ExcelPassword.ExcelPassword(string! password) -> void
+ExcelReader.Core.Reader.ExcelPassword.ExcelPassword(System.ReadOnlySpan<char> password) -> void
+override ExcelReader.Core.Reader.ExcelPassword.ToString() -> string!
+ExcelReader.Core.Reader.ExcelReaderOptions.MaxPasswordSpinCount.get -> int
+ExcelReader.Core.Reader.ExcelReaderOptions.MaxPasswordSpinCount.init -> void
+ExcelReader.Core.Reader.ExcelReaderOptions.Password.get -> ExcelReader.Core.Reader.ExcelPassword?
+ExcelReader.Core.Reader.ExcelReaderOptions.Password.init -> void
+ExcelReader.Core.Reader.ExcelReaderOptions.VerifyEncryptedIntegrity.get -> bool
+ExcelReader.Core.Reader.ExcelReaderOptions.VerifyEncryptedIntegrity.init -> void
 override ExcelReader.Core.Reader.ExcelColumnSchema.GetHashCode() -> int
 static ExcelReader.Core.Reader.Excel.InferSchema(ExcelReader.Core.Reader.IExcelRowReader! reader, int headerRow = 1, int sampleSize = 100) -> ExcelReader.Core.Reader.ExcelColumnSchema[]!
+static ExcelReader.Core.Reader.ExcelPassword.FromString(string! password) -> ExcelReader.Core.Reader.ExcelPassword!
+static ExcelReader.Core.Reader.ExcelPassword.implicit operator ExcelReader.Core.Reader.ExcelPassword!(string! password) -> ExcelReader.Core.Reader.ExcelPassword!
 static ExcelReader.Core.Reader.ExcelColumnSchema.operator !=(ExcelReader.Core.Reader.ExcelColumnSchema left, ExcelReader.Core.Reader.ExcelColumnSchema right) -> bool
 static ExcelReader.Core.Reader.ExcelColumnSchema.operator ==(ExcelReader.Core.Reader.ExcelColumnSchema left, ExcelReader.Core.Reader.ExcelColumnSchema right) -> bool
 ~override ExcelReader.Core.Reader.ExcelColumnSchema.Equals(object obj) -> bool

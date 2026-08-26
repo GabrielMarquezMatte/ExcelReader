@@ -25,12 +25,6 @@ namespace ExcelReader.Core.Crypto
         private const string EncryptionNamespace = "http://schemas.microsoft.com/office/2006/encryption";
         private const string PasswordKeyEncryptorNamespace = "http://schemas.microsoft.com/office/2006/keyEncryptor/password";
 
-        // Recognized but not implemented in this pass (see the plan's "Execution Scope Note" / Task
-        // 17): no real standard-encryption fixture exists yet to verify a derivation against, so
-        // parsing stops at the version dispatch and this cap on the password spin count. Task 4 adds
-        // ExcelReaderOptions.MaxPasswordSpinCount; until then this literal is the cap.
-        private const int MaxPasswordSpinCount = 100_000;
-
         // This descriptor is parsed BEFORE any password check, on wholly untrusted input, so DTD
         // processing and external resolution must be off - an XXE here would be reachable
         // pre-authentication.
@@ -96,7 +90,7 @@ namespace ExcelReader.Core.Crypto
                     if (string.Equals(reader.LocalName, "keyData", StringComparison.Ordinal)
                         && (reader.NamespaceURI.Length == 0 || string.Equals(reader.NamespaceURI, EncryptionNamespace, StringComparison.Ordinal)))
                     {
-                        keyData = ReadCryptoParameters(reader);
+                        keyData = ReadCryptoParameters(reader, options);
                     }
                     else if (string.Equals(reader.LocalName, "dataIntegrity", StringComparison.Ordinal)
                         && (reader.NamespaceURI.Length == 0 || string.Equals(reader.NamespaceURI, EncryptionNamespace, StringComparison.Ordinal)))
@@ -107,7 +101,7 @@ namespace ExcelReader.Core.Crypto
                     else if (string.Equals(reader.LocalName, "encryptedKey", StringComparison.Ordinal) && passwordEncryptor is null
                         && (reader.NamespaceURI.Length == 0 || string.Equals(reader.NamespaceURI, PasswordKeyEncryptorNamespace, StringComparison.Ordinal)))
                     {
-                        passwordEncryptor = ReadCryptoParameters(reader);
+                        passwordEncryptor = ReadCryptoParameters(reader, options);
                     }
                 }
             }
@@ -134,7 +128,7 @@ namespace ExcelReader.Core.Crypto
         // Reads and validates the attribute set shared by <keyData> and <p:encryptedKey>. keyData
         // never carries spinCount/encryptedVerifierHash*/encryptedKeyValue, so those default to
         // 0/empty for it — callers only read the fields their element actually populates.
-        private static CryptoParameters ReadCryptoParameters(XmlReader reader)
+        private static CryptoParameters ReadCryptoParameters(XmlReader reader, ExcelReaderOptions options)
         {
             int saltSize = ReadIntAttribute(reader, "saltSize");
             int blockSize = ReadIntAttribute(reader, "blockSize");
@@ -181,9 +175,9 @@ namespace ExcelReader.Core.Crypto
             // A resource limit, not a scheme problem, so this throws ExcelLimitExceededException
             // rather than ExcelEncryptionException — a huge spin count is a DoS knob, not evidence the
             // file uses a scheme this library can't parse.
-            if (spinCount < 0 || spinCount > MaxPasswordSpinCount)
+            if (spinCount < 0 || spinCount > options.MaxPasswordSpinCount)
             {
-                throw new ExcelLimitExceededException(nameof(MaxPasswordSpinCount), MaxPasswordSpinCount, spinCount);
+                throw new ExcelLimitExceededException(nameof(options.MaxPasswordSpinCount), options.MaxPasswordSpinCount, spinCount);
             }
 
             return new CryptoParameters(saltSize, blockSize, keyBits, hashSize, hash, saltValue, spinCount,
