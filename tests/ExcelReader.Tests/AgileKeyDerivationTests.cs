@@ -41,6 +41,23 @@ namespace ExcelReader.Tests
             Assert.Equal(ExcelEncryptionReason.PasswordIncorrect, ex.Reason);
         }
 
+        // EncryptionInfo is untrusted, attacker-controlled input parsed before any password check.
+        // A ciphertext length that isn't a multiple of the AES block size must be reported as
+        // malformed input (InvalidDataException), not let AES's own CryptographicException escape —
+        // callers of DeriveIntermediateKey only expect ExcelEncryptionException/InvalidDataException,
+        // and a raw CryptographicException would also fail FuzzMutation.AcceptableExceptionTypes.
+        [Fact]
+        public void Should_Throw_InvalidData_When_Ciphertext_Length_Is_Misaligned()
+        {
+            AgileDescriptor d = Descriptor("agile-aes256-sha512.xlsx");
+            byte[] truncated = d.PasswordEncryptor.EncryptedVerifierHashInput[..^1];
+            CryptoParameters malformed = d.PasswordEncryptor with { EncryptedVerifierHashInput = truncated };
+            AgileDescriptor tampered = d with { PasswordEncryptor = malformed };
+
+            Assert.Throws<InvalidDataException>(
+                () => AgileKeyDerivation.DeriveIntermediateKey(tampered, EncryptedFixtures.Password));
+        }
+
         // Each 4096-byte segment gets its own IV derived from its index; if these collided, the
         // multi-segment fixture would decrypt to garbage past the first segment.
         [Fact]
