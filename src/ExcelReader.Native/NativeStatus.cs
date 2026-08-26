@@ -43,8 +43,11 @@ namespace ExcelReader.Native
 
     /// <summary>
     /// Format selectors accepted by the open functions. Values 1-3 deliberately match
-    /// <see cref="Core.Enums.ExcelFileFormat"/>; CSV has no signature to sniff, so it
-    /// has no counterpart there and must always be requested explicitly.
+    /// <see cref="Core.Enums.ExcelFileFormat"/>; CSV has no signature to sniff, so it has no
+    /// counterpart there and must always be requested explicitly. Note the enums are NOT
+    /// interchangeable beyond 3: managed 4 is <see cref="Core.Enums.ExcelFileFormat.EncryptedOoxml"/>
+    /// (a detection result) while native 4 is <see cref="Csv"/> (a request). Encryption is requested
+    /// via xl_open_options.password, not via a format selector.
     /// </summary>
     internal static class NativeFormat
     {
