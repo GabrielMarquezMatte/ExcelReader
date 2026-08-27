@@ -16,6 +16,7 @@ namespace ExcelReader.Fuzz
         internal static int Run(string corpusDirectory, int mutationsPerInput, int seed)
         {
             FuzzOracle.SelfCheck();
+            VerifyEncryptedSeedReachesRealCode(corpusDirectory);
 
             string[] files = Directory.Exists(corpusDirectory)
                 ? [.. Directory.GetFiles(corpusDirectory).Order(StringComparer.Ordinal)]
@@ -51,6 +52,41 @@ namespace ExcelReader.Fuzz
 
             Console.WriteLine($"executed {executed} case(s) across {files.Length} corpus file(s); {failures} failure(s)");
             return failures == 0 ? 0 : 1;
+        }
+
+        // The permanent regression guard for Critical 2 in the final review: the "encrypted" target
+        // must reach AgileKeyDerivation/DecryptedPackageStream/PackageIntegrity, not dead-end on a
+        // resource limit before ever touching them. That failure mode is invisible from failures==0
+        // alone (a limit rejection and a genuine malformed-input rejection look identical to
+        // FuzzOracle), so it's checked directly: the unmutated seed must actually open and yield rows.
+        // Skips silently when the corpus directory has no such file (e.g. a scratch/partial corpus
+        // used for a one-off repro) rather than failing an unrelated `check` run.
+        private static void VerifyEncryptedSeedReachesRealCode(string corpusDirectory)
+        {
+            string seedPath = Path.Combine(corpusDirectory, "encrypted-agile-seed.bin");
+            if (!File.Exists(seedPath))
+            {
+                return;
+            }
+            int rows;
+            try
+            {
+                rows = Harnesses.OpenEncryptedSeedForSelfCheck(File.ReadAllBytes(seedPath));
+            }
+            catch (Exception ex)
+            {
+                throw new InvalidOperationException(
+                    "the unmutated encrypted-agile-seed.bin no longer opens under Harnesses' " +
+                    "encrypted options - the 'encrypted' target would dead-end on this same " +
+                    $"rejection for every mutation too, making it inert: {ex.GetType().FullName}: {ex.Message}",
+                    ex);
+            }
+            if (rows == 0)
+            {
+                throw new InvalidOperationException(
+                    "the unmutated encrypted-agile-seed.bin opened but yielded zero rows under " +
+                    "Harnesses' encrypted options.");
+            }
         }
 
         private static int RunOne(

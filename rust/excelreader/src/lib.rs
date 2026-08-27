@@ -13,7 +13,7 @@ pub mod writer_handle;
 pub mod arrow;
 
 pub use error::Error;
-pub use options::{OpenOptions, WriteOptions};
+pub use options::{OpenOptions, OpenOptionsRaw, WriteOptions};
 pub use temporal::{Date, Time, Timestamp};
 
 use std::os::raw::{c_int, c_void};
@@ -24,10 +24,14 @@ pub const XL_BUFFER_TOO_SMALL: i32 = -2;
 pub const XL_INVALID_HANDLE: i32 = -3;
 pub const XL_INVALID_ARGUMENT: i32 = -4;
 pub const XL_ERROR: i32 = -5;
+/// The workbook is encrypted and no password was supplied.
+pub const XL_STATUS_PASSWORD_REQUIRED: i32 = -6;
+/// The supplied password did not match the workbook's verifier.
+pub const XL_STATUS_PASSWORD_INCORRECT: i32 = -7;
 
 /// ABI revision this crate is compiled against. `Workbook::open` refuses to proceed when the loaded
 /// library's `xl_abi_version()` disagrees - see `workbook::check_abi_version`.
-pub const XL_ABI_VERSION: i32 = 3;
+pub const XL_ABI_VERSION: i32 = 4;
 
 pub const XL_T_STRING: i32 = 0;
 pub const XL_T_I64: i32 = 1;
@@ -77,6 +81,13 @@ pub struct XlOpenOptions {
     pub max_zip_entries: i32,
     pub prefetch_decompression: i32,
     pub intern_strings: i32,
+
+    /// Password for an encrypted OOXML workbook, as UTF-8 bytes. NULL (with `password_len` 0) means
+    /// "not encrypted, or fail with `XL_STATUS_PASSWORD_REQUIRED`". Not NUL-terminated -
+    /// `password_len` is authoritative, since a password may contain any byte. The pointer need only
+    /// remain valid for the duration of the call - see [`OpenOptionsRaw`](crate::options::OpenOptionsRaw).
+    pub password: *const u8,
+    pub password_len: i32,
 }
 
 /// Mirrors `xl_write_options`. Field ORDER is the C struct's, not a tidied-up version of it: with

@@ -252,7 +252,13 @@ namespace ExcelReader.Core.Reader
                         }
                         break;
                     case Rec.FilePass:
-                        throw new NotSupportedException("Encrypted .xls workbooks are not supported.");
+                        // OOXML encryption (.xlsx/.xlsb) is supported via ExcelReaderOptions.Password; the legacy
+                        // .xls schemes (RC4 CryptoAPI and XOR obfuscation) are a different mechanism entirely and
+                        // are not implemented, so no password can open this file.
+                        throw new NotSupportedException(
+                            "This .xls workbook is encrypted, which is not supported. Encrypted .xlsx and .xlsb " +
+                            "workbooks are supported via ExcelReaderOptions.Password; the legacy .xls encryption " +
+                            "schemes are not. Re-save the file as .xlsx to read it.");
                 }
             }
 

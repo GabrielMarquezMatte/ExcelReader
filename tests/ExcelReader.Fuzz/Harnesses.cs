@@ -24,6 +24,21 @@ namespace ExcelReader.Fuzz
             MaxCellBytes = 1 << 20,
         };
 
+        private static readonly ExcelReaderOptions EncryptedLimits = new()
+        {
+            MaxCellBytes = 1 << 20,
+            MaxSharedStringBytes = 1 << 22,
+            Password = "hunter2",
+            // No MaxPasswordSpinCount override here (falls back to the default cap): the corpus seed
+            // (encrypted-agile-seed.bin, a copy of the real agile-aes256-sha512.xlsx fixture) declares
+            // spinCount="100000". A tighter cap here — this used to be 1_000 — makes the unmutated seed
+            // and most mutations dead-end on ExcelLimitExceededException before any key derivation,
+            // segment decryption, HMAC verification, or ZIP-layer code ever runs, which makes this
+            // target inert without ever failing loudly. Slower (~50ms/input instead of near-instant) is
+            // the correct tradeoff; see OpenEncryptedSeedForSelfCheck below, which SmokeRunner uses to
+            // catch this class of regression if it ever creeps back in.
+        };
+
         internal static void Xlsx(ReadOnlySpan<byte> data)
         {
             byte[] bytes = data.ToArray();
@@ -79,6 +94,45 @@ namespace ExcelReader.Fuzz
                 using XlsReader reader = Excel.FromXls(ms, leaveOpen: true, Limits);
                 DrainAllSheets(reader);
             });
+        }
+
+        // The encrypted container is a third container parser (CFB directory + EncryptionInfo descriptor)
+        // layered under the ZIP one, and it runs BEFORE any password check - so it gets its own target.
+        // The password is fixed and correct for the seed, so mutations explore the parsers rather than
+        // dead-ending on a verifier mismatch.
+        internal static void Encrypted(ReadOnlySpan<byte> data)
+        {
+            byte[] bytes = data.ToArray();
+            FuzzOracle.Guard(() =>
+            {
+                using IExcelRowReader reader = Excel.Open(bytes, EncryptedLimits);
+                DrainAllSheets(reader);
+            });
+        }
+
+        // Guards against the "the encrypted target exists but never reaches the code it's meant to
+        // guard" regression (final review, Critical 2): a rejection swallowed by FuzzOracle.Guard
+        // looks identical whether it's a genuine malformed-input rejection or every input dead-ending
+        // on a resource limit before AgileKeyDerivation/DecryptedPackageStream/PackageIntegrity/the
+        // post-decrypt ZIP layer ever runs. SmokeRunner calls this once per `check` run, unguarded,
+        // over the unmutated corpus seed — it must open and yield at least one row, not merely throw
+        // something FuzzOracle happens to accept.
+        internal static int OpenEncryptedSeedForSelfCheck(ReadOnlySpan<byte> data)
+        {
+            byte[] bytes = data.ToArray();
+            using IExcelRowReader reader = Excel.Open(bytes, EncryptedLimits);
+            int rows = 0;
+            int sheets = reader.SheetCount;
+            for (int i = 0; i < sheets; i++)
+            {
+                reader.MoveToSheet(i);
+                using IExcelRowEnumerator e = reader.GetEnumerator();
+                while (e.MoveNext())
+                {
+                    rows++;
+                }
+            }
+            return rows;
         }
 
         internal static void Csv(ReadOnlySpan<byte> data)

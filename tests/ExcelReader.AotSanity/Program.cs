@@ -1,6 +1,7 @@
 using System.Text;
 using ExcelReader.Core.Parser;
 using ExcelReader.Core.Reader;
+using ExcelReader.Core.ValueObjects;
 using ExcelReader.Core.Writer;
 
 namespace ExcelReader.AotSanity
@@ -65,8 +66,34 @@ namespace ExcelReader.AotSanity
                 return 1;
             }
 
+            // Crypto must work under NativeAOT: this is why hash and cipher algorithms are chosen through a
+            // switch over an allowlist rather than reflected from the descriptor's algorithm name.
+            if (!EncryptedWorkbookReadsUnderAot())
+            {
+                return 1;
+            }
+
             Console.WriteLine("AOT sanity checks passed.");
             return 0;
+        }
+
+        private static bool EncryptedWorkbookReadsUnderAot()
+        {
+            string encrypted = Path.Combine(AppContext.BaseDirectory, "data", "encrypted", "agile-aes256-sha512.xlsx");
+            var options = new ExcelReaderOptions { Password = "hunter2" };
+            using IExcelRowReader encryptedReader = Excel.Open(encrypted, options);
+            int encryptedRowCount = 0;
+            foreach (Row encryptedRow in encryptedReader)
+            {
+                encryptedRowCount++;
+            }
+            if (encryptedRowCount == 0)
+            {
+                Console.Error.WriteLine("FAIL: encrypted workbook yielded no rows under AOT");
+                return false;
+            }
+            Console.WriteLine($"OK: encrypted workbook read {encryptedRowCount} rows under AOT");
+            return true;
         }
 
         private static async Task<MemoryStream> BuildSampleXlsxAsync()

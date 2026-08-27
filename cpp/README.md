@@ -78,6 +78,31 @@ for (const auto& column : *workbook->infer_schema(1, 100)) {
 
 Every entry point returns `std::expected<T, xl::Error>` — this header throws nothing.
 
+### Encrypted workbooks
+
+`OpenOptions::password(std::string_view)` unlocks a password-protected OOXML workbook
+(.xlsx/.xlsb/.xlsm) through `Workbook::open`/`open_memory`:
+
+```cpp
+xl::OpenOptions options{};
+options.password("hunter2");
+auto workbook = xl::Workbook::open("protected.xlsx", XL_FORMAT_AUTO, &options);
+if (!workbook) {
+    if (workbook.error().code == XL_STATUS_PASSWORD_REQUIRED) { /* no password was supplied */ }
+    else if (workbook.error().code == XL_STATUS_PASSWORD_INCORRECT) { /* ask again */ }
+    else { /* workbook.error().message - unsupported scheme or a corrupt file; not worth retrying */ }
+}
+```
+
+Unlike the Rust/Python bindings, this header never throws — `XL_STATUS_PASSWORD_REQUIRED` and
+`XL_STATUS_PASSWORD_INCORRECT` (from `excelreader.h`) are reported as ordinary `xl::Error::code`
+values on the `std::unexpected` returned from `open`/`open_memory`, distinguishable from any other
+failure without parsing `error().message`.
+
+The `password_` string this builds into `xl_open_options::password` must outlive the open call;
+keeping it in the `OpenOptions` object (which owns its own copy) is what makes
+`options.password("hunter2")` safe to call with a temporary, as above.
+
 ### Arrow export
 
 `<xl/excelreader_arrow.hpp>` is a separate header — including `<xl/excelreader.hpp>` never pulls the

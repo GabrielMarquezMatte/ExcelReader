@@ -22,6 +22,7 @@ namespace ExcelReader.Fuzz
                 ["xlsb"] = Harnesses.Xlsb,
                 ["xlsb-memory"] = Harnesses.XlsbMemory,
                 ["xls"] = Harnesses.Xls,
+                ["encrypted"] = Harnesses.Encrypted,
                 ["csv"] = Harnesses.Csv,
                 ["csv-sniff"] = Harnesses.CsvSniff,
             };

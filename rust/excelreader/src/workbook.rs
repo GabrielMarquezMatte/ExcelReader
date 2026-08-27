@@ -1,7 +1,7 @@
 use crate::{
-    Date, Error, OpenOptions, Time, Timestamp, XlColumn, XlColumnSpec, XlInferredSchema,
-    XlTable, XlWorkbook, XL_BUFFER_TOO_SMALL, XL_ERROR, XL_FORMAT_AUTO, XL_OK,
-    XL_T_BOOL, XL_T_DATE, XL_T_F64, XL_T_I64, XL_T_STRING, XL_T_TIME, XL_T_TIMESTAMP,
+    Date, Error, OpenOptions, Time, Timestamp, XlColumn, XlColumnSpec, XlInferredSchema, XlTable,
+    XlWorkbook, XL_BUFFER_TOO_SMALL, XL_ERROR, XL_FORMAT_AUTO, XL_OK, XL_T_BOOL, XL_T_DATE,
+    XL_T_F64, XL_T_I64, XL_T_STRING, XL_T_TIME, XL_T_TIMESTAMP,
 };
 use std::marker::PhantomData;
 
@@ -15,7 +15,7 @@ pub(crate) fn last_error(code: i32) -> Error {
             let bytes = std::slice::from_raw_parts(ptr, len as usize);
             String::from_utf8_lossy(bytes).into_owned()
         };
-        Error { code, message }
+        Error::from_status(code, message)
     }
 }
 
@@ -65,14 +65,14 @@ pub(crate) fn check_abi_version() -> Result<(), Error> {
             if loaded == crate::XL_ABI_VERSION {
                 Ok(())
             } else {
-                Err(Error {
-                    code: XL_ERROR,
-                    message: format!(
+                Err(Error::from_status(
+                    XL_ERROR,
+                    format!(
                         "ExcelReader native library reports ABI version {loaded}, but this crate \
                          was built against {}. Update the crate and the native library together.",
                         crate::XL_ABI_VERSION
                     ),
-                })
+                ))
             }
         })
         .clone()
@@ -100,10 +100,14 @@ impl Workbook {
         options: Option<&OpenOptions>,
     ) -> Result<Workbook, Error> {
         check_abi_version()?;
+        // `raw` (and the password bytes it may borrow out of `options`) outlives the call below -
+        // it is a local binding in this function's scope, not a temporary - and the native side
+        // copies the path before returning.
         let raw = options.map(OpenOptions::to_raw);
-        let raw_ptr = crate::options::ptr_or_null(&raw);
+        let raw_ptr = raw
+            .as_ref()
+            .map_or(std::ptr::null(), crate::options::OpenOptionsRaw::as_ptr);
         let mut handle: *mut XlWorkbook = std::ptr::null_mut();
-        // `raw` outlives the call below, and the native side copies the path before returning.
         let status = unsafe {
             crate::xl_open_file_ex(
                 path.as_ptr(),
@@ -125,8 +129,12 @@ impl Workbook {
         options: Option<&OpenOptions>,
     ) -> Result<Workbook, Error> {
         check_abi_version()?;
+        // Same lifetime shape as `open_with` above: `raw` is a local binding that outlives the FFI
+        // call, so a password borrowed from `options` never dangles.
         let raw = options.map(OpenOptions::to_raw);
-        let raw_ptr = crate::options::ptr_or_null(&raw);
+        let raw_ptr = raw
+            .as_ref()
+            .map_or(std::ptr::null(), crate::options::OpenOptionsRaw::as_ptr);
         let mut handle: *mut XlWorkbook = std::ptr::null_mut();
         let status = unsafe {
             crate::xl_open_memory_ex(
@@ -239,9 +247,11 @@ impl Workbook {
             let buffer_slice = &buffer[..len.max(0) as usize];
             return str::from_utf8(buffer_slice)
                 .map(|s| s.to_string())
-                .map_err(|e| Error {
-                    code: XL_ERROR,
-                    message: format!("native library returned a non-UTF-8 name: {e}"),
+                .map_err(|e| {
+                    Error::from_status(
+                        XL_ERROR,
+                        format!("native library returned a non-UTF-8 name: {e}"),
+                    )
                 });
         }
         let mut vec_buffer = vec![0u8; len.max(0) as usize];
@@ -253,9 +263,11 @@ impl Workbook {
         );
         check(status)?;
         vec_buffer.truncate(len.max(0) as usize);
-        String::from_utf8(vec_buffer).map_err(|e| Error {
-            code: XL_ERROR,
-            message: format!("native library returned a non-UTF-8 name: {e}"),
+        String::from_utf8(vec_buffer).map_err(|e| {
+            Error::from_status(
+                XL_ERROR,
+                format!("native library returned a non-UTF-8 name: {e}"),
+            )
         })
     }
 }
@@ -608,13 +620,13 @@ pub fn parse_sheet<T: ExcelMapper>(
     if table.column_count as usize != bindings.len() {
         let column_count = table.column_count;
         unsafe { crate::xl_free_table(&mut table) };
-        return Err(Error {
-            code: XL_ERROR,
-            message: format!(
+        return Err(Error::from_status(
+            XL_ERROR,
+            format!(
                 "xl_parse_typed returned {column_count} columns for {} specs",
                 bindings.len()
             ),
-        });
+        ));
     }
 
     Ok(TableView {
