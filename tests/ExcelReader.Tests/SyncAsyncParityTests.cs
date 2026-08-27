@@ -85,6 +85,73 @@ namespace ExcelReader.Tests
             return cells;
         }
 
+        // DecryptedPackageStream has its own sync/async twins (a completed-ValueTask fast path plus a
+        // split-out slow path), which is exactly the drift risk this suite exists to catch.
+        [Theory]
+        [MemberData(nameof(EncryptedFixtureNames))]
+        public async Task SyncAndAsyncEnumeratorsProduceIdenticalCells_WhenEncrypted(string fixture)
+        {
+            CancellationToken ct = TestContext.Current.CancellationToken;
+            var options = ExcelReaderOptions.Default with { Password = EncryptedFixtures.Password };
+            string path = EncryptedFixtures.Path_(fixture);
+
+            List<CellSnapshot> sync = ReadEncryptedSync(path, options);
+            List<CellSnapshot> asyncCells = await ReadEncryptedAsync(path, options, ct);
+            List<CellSnapshot> asyncEnum = await ReadEncryptedViaAsyncEnumeratorAsync(path, options);
+
+            Assert.Equal(sync, asyncCells);
+            Assert.Equal(sync, asyncEnum);
+        }
+
+        public static TheoryData<string> EncryptedFixtureNames()
+        {
+            var data = new TheoryData<string>();
+            foreach (string name in EncryptedFixtures.All)
+            {
+                data.Add(name);
+            }
+            return data;
+        }
+
+        private static List<CellSnapshot> ReadEncryptedSync(string path, ExcelReaderOptions options)
+        {
+            using IExcelRowReader reader = Excel.Open(path, options);
+            using IExcelRowEnumerator e = reader.GetEnumerator();
+            List<CellSnapshot> cells = [];
+            int rowIndex = 0;
+            while (e.MoveNext())
+            {
+                AddRow(cells, rowIndex++, e.Current);
+            }
+            return cells;
+        }
+
+        private static async Task<List<CellSnapshot>> ReadEncryptedAsync(string path, ExcelReaderOptions options, CancellationToken ct)
+        {
+            await using IExcelRowReader reader = await Excel.OpenAsync(path, options, ct);
+            await using IExcelRowEnumerator e = await reader.GetAsyncEnumeratorAsync(ct);
+            List<CellSnapshot> cells = [];
+            int rowIndex = 0;
+            while (await e.MoveNextAsync())
+            {
+                AddRow(cells, rowIndex++, e.Current);
+            }
+            return cells;
+        }
+
+        private static async Task<List<CellSnapshot>> ReadEncryptedViaAsyncEnumeratorAsync(string path, ExcelReaderOptions options)
+        {
+            await using IExcelRowReader reader = Excel.Open(path, options);
+            await using IExcelRowEnumerator e = reader.GetAsyncEnumerator();
+            List<CellSnapshot> cells = [];
+            int rowIndex = 0;
+            while (await e.MoveNextAsync())
+            {
+                AddRow(cells, rowIndex++, e.Current);
+            }
+            return cells;
+        }
+
         private static void AddRow(List<CellSnapshot> cells, int rowIndex, Row row)
         {
             cells.Add(CellSnapshot.RowMarker(rowIndex, row.ColumnCount));
