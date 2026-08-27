@@ -25,6 +25,7 @@ namespace ExcelReader.Fuzz
                 ["encrypted"] = Harnesses.Encrypted,
                 ["csv"] = Harnesses.Csv,
                 ["csv-sniff"] = Harnesses.CsvSniff,
+                ["csv-parallel"] = Harnesses.CsvParallel,
             };
 
         private static async Task<int> Main(string[] args)

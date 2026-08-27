@@ -44,6 +44,9 @@
     <!-- NativeApi.Schema.cs / NativeApi.Typed.cs drive SchemaInference directly, so the C ABI and
          Excel.InferSchema answer identically by construction rather than by two parallel copies. -->
     <InternalsVisibleTo Include="ExcelReader.Native" />
+    <!-- The CsvParallel fuzz target drives ParallelCsvFactory.CreateWithChunkSize<T> directly (the
+         Task 9 test seam) to compare it against the sequential parser over arbitrary bytes. -->
+    <InternalsVisibleTo Include="ExcelReader.Fuzz" />
   </ItemGroup>
 
   <!-- The source generator runs as an analyzer during this project's own build (and any consumer's),
