@@ -10,10 +10,15 @@ namespace ExcelReader.Native
         internal const int InvalidArgument = -4;
         internal const int Error = -5;
 
+        /// <summary>The workbook is encrypted and no password was supplied.</summary>
+        internal const int PasswordRequired = -6;
+        /// <summary>The supplied password did not match the workbook's verifier.</summary>
+        internal const int PasswordIncorrect = -7;
+
         /// <summary>ABI revision returned by <c>xl_abi_version</c>. Mirrors XL_ABI_VERSION in include/excelreader.h.
         /// Bump on any change to a struct layout, a status code, or the meaning of an existing function; adding a
         /// new function does not bump it.</summary>
-        internal const int AbiVersion = 3;
+        internal const int AbiVersion = 4;
     }
 
     /// <summary>
