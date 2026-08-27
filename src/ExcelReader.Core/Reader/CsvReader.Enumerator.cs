@@ -34,6 +34,12 @@ namespace ExcelReader.Core.Reader
 
             private int _col;
 
+            // Source offset of the record Current exposes. Captured at each parse attempt rather
+            // than computed on demand, because by the time a caller reads it _pos has already moved
+            // past the record. Recomputed after every refill: compaction moves _pos and BaseOffset
+            // together, so the sum stays correct only if it is re-read on the retry.
+            private long _recordStart;
+
             // Persisted across records within the same buffered window (see TryParseSimpleRecord):
             // reusing pending vector-scan state avoids re-loading vectors over bytes already scanned
             // when several small records share one already-loaded chunk. _scannerValid is false
@@ -88,6 +94,12 @@ namespace ExcelReader.Core.Reader
             /// <inheritdoc/>
             public Row Current => new(_acc.CellSpan, _buf.AsSpan(0, _len), _acc.ValueSpan, rowBuffer: default, sharedStringCache: null, contentCache: _contentCache);
 
+            // Absolute byte offset, within the source this enumerator was handed, of the first byte
+            // of the current record. Used by the parallel CSV path to decide when a partition has
+            // reached a record belonging to the next chunk. Meaningful only after MoveNext /
+            // MoveNextAsync has returned true.
+            internal long CurrentRecordStart => _recordStart;
+
             // Dense field access for CsvEnumerable<T>: CSV cells are stored contiguously in column
             // order (no gaps), so field i is _acc.CellSpan[i] — O(1), skipping Row's binary search and
             // the RowCells re-walk the generic projector would do.
@@ -120,6 +132,7 @@ namespace ExcelReader.Core.Reader
                 {
                     BeginRecord();
                     int start = _pos;
+                    _recordStart = _io.BaseOffset + start;
                     if (TryParseRecordFromBuffer())
                     {
                         return true;
@@ -142,6 +155,7 @@ namespace ExcelReader.Core.Reader
                 }
                 BeginRecord();
                 int start = _pos;
+                _recordStart = _io.BaseOffset + start;
                 if (TryParseRecordFromBuffer())
                 {
                     return new ValueTask<bool>(true);
@@ -162,6 +176,7 @@ namespace ExcelReader.Core.Reader
                     }
                     BeginRecord();
                     int start = _pos;
+                    _recordStart = _io.BaseOffset + start;
                     if (TryParseRecordFromBuffer())
                     {
                         return true;

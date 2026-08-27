@@ -798,5 +798,68 @@ namespace ExcelReader.Tests
 
             Assert.True(await e.MoveNextAsync());
         }
+
+        [Fact]
+        public void CurrentRecordStartReportsTheByteOffsetOfEachRecord()
+        {
+            byte[] csv = "ab,cd\r\nef,gh\nij,kl"u8.ToArray();
+            using var reader = Excel.FromCsv(csv);
+            using CsvReader.Enumerator rows = reader.GetEnumerator();
+
+            var starts = new List<long>();
+            while (rows.MoveNext())
+            {
+                starts.Add(rows.CurrentRecordStart);
+            }
+
+            // "ab,cd\r\n" is 7 bytes; "ef,gh\n" is 6.
+            Assert.Equal([0L, 7L, 13L], starts);
+        }
+
+        [Fact]
+        public async Task CurrentRecordStartMatchesTheSyncPathWhenReadingAsync()
+        {
+            byte[] csv = "ab,cd\r\nef,gh\nij,kl"u8.ToArray();
+            using var ms = new MemoryStream(csv, writable: false);
+            await using var reader = await Excel.FromCsvAsync(ms, ct: TestContext.Current.CancellationToken);
+            await using CsvReader.Enumerator rows = await reader.GetAsyncEnumeratorAsync(TestContext.Current.CancellationToken);
+
+            var starts = new List<long>();
+            while (await rows.MoveNextAsync())
+            {
+                starts.Add(rows.CurrentRecordStart);
+            }
+
+            Assert.Equal([0L, 7L, 13L], starts);
+        }
+
+        [Fact]
+        public void CurrentRecordStartStaysCorrectWhenRecordsSpanBufferRefills()
+        {
+            // 4000 records of ~20 bytes each blows well past the 64 KiB initial buffer, forcing
+            // repeated compaction — the case BaseOffset exists to survive.
+            var sb = new System.Text.StringBuilder();
+            var expected = new List<long>();
+            long offset = 0;
+            for (int i = 0; i < 4000; i++)
+            {
+                string line = $"row{i:D6},value{i:D6}\n";
+                expected.Add(offset);
+                offset += line.Length;
+                sb.Append(line);
+            }
+            byte[] csv = System.Text.Encoding.UTF8.GetBytes(sb.ToString());
+            using var ms = new MemoryStream(csv, writable: false);
+            using var reader = Excel.FromCsv(ms);
+            using CsvReader.Enumerator rows = reader.GetEnumerator();
+
+            var actual = new List<long>();
+            while (rows.MoveNext())
+            {
+                actual.Add(rows.CurrentRecordStart);
+            }
+
+            Assert.Equal(expected, actual);
+        }
     }
 }
