@@ -173,6 +173,41 @@ Do **not** enable it for concurrent server workloads: a caller already reading m
 in parallel is CPU-saturated, and an extra background thread per read only doubles thread
 demand for no gain. It's meant for single-file batch processing.
 
+## Encrypted workbooks
+
+Password-protected `.xlsx`/`.xlsb`/`.xlsm` files open through the same entry points — the password
+goes on the options, so every overload supports it:
+
+```csharp
+var options = new ExcelReaderOptions { Password = "hunter2" };
+using IExcelRowReader reader = Excel.Open("protected.xlsx", options);
+foreach (Row row in reader) { /* ... */ }
+```
+
+`ExcelEncryptionException.Reason` tells you what to do about a failure — only `PasswordRequired` and
+`PasswordIncorrect` are worth re-prompting for:
+
+```csharp
+try
+{
+    using IExcelRowReader reader = Excel.Open(path, options);
+}
+catch (ExcelEncryptionException ex) when (ex.Reason is ExcelEncryptionReason.PasswordIncorrect)
+{
+    // Ask again. UnsupportedScheme and IntegrityFailure are terminal.
+}
+```
+
+Supported: ECMA-376 agile encryption (Excel 2010+ — what Excel writes today when you set a
+password). **Not** supported: ECMA-376 standard encryption (Excel 2007; recognized and rejected
+with `UnsupportedScheme`, pending real fixtures to verify a derivation against), writing encrypted
+files, encrypted legacy `.xls` (RC4 CryptoAPI), and sheet/workbook *protection* passwords — a
+different mechanism entirely, stored as hashes in the plaintext XML.
+
+`Password` never appears in `ExcelReaderOptions.ToString()`. Note that a password supplied as a
+`string` cannot be wiped from memory — .NET strings are immutable and movable — so the library zeroes
+only the buffers it owns: the derivation buffer and the derived key.
+
 ## Parse typed rows
 
 `ExcelParser<T>` maps worksheet columns to the public settable properties of `T`. Columns match on the property name, or on `[ExcelColumn("header")]` aliases — repeat the attribute to accept several headers. The first row is the header by default.

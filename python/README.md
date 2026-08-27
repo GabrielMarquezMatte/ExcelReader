@@ -243,6 +243,31 @@ options = OpenOptions(
 single-file batch work, not for a server already reading many files in parallel. See the root README
 for the measured trade.
 
+### Encrypted workbooks
+
+`open_workbook()`/`open_bytes()` take a `password` keyword to open a password-protected OOXML
+workbook (.xlsx/.xlsb/.xlsm):
+
+```python
+from excelreader import PasswordIncorrectError, open_workbook
+
+try:
+    with open_workbook("protected.xlsx", password="hunter2") as workbook:
+        ...
+except PasswordIncorrectError:
+    ...  # ask again
+```
+
+Omitting `password` for an encrypted file raises `PasswordRequiredError`; a wrong one raises
+`PasswordIncorrectError` — both subclass `ExcelReaderError`, so a caller that doesn't care about the
+distinction can just catch that. Any other native failure (an unsupported encryption scheme, a
+corrupt file) also raises `ExcelReaderError` but is not worth retrying.
+
+`format` must resolve to `auto` for an encrypted workbook to be detected as such — an explicit
+`format="xlsx"` bypasses the CFB-container sniffing that finds the encryption wrapper, and the file
+is read (and fails) as a plain ZIP instead. Leave `format` unset (the default) rather than passing it
+explicitly for an encrypted file.
+
 ## Benchmarks
 
 `benchmarks/bench_read.py` and `benchmarks/bench_write.py` over
