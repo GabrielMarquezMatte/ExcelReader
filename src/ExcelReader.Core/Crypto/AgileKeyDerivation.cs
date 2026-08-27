@@ -40,8 +40,17 @@ namespace ExcelReader.Core.Crypto
 
                 // The plaintext wrapped here is defined by spec to be exactly KeyData.keyBits/8 bytes
                 // (2.3.4.10, encryptedKeyValue step 1) regardless of how many blockSize-aligned bytes
-                // the ciphertext itself carries.
+                // the ciphertext itself carries. encryptedKeyValue is untrusted, pre-authentication
+                // input — a producer can wrap fewer bytes than keyBits/8 declares, so the short case
+                // must be rejected here rather than left to throw ArgumentOutOfRangeException out of
+                // the slice below (that's a raw BCL exception, not one of this codebase's documented
+                // malformed-input types).
                 int keyLen = d.KeyData.KeyBits / 8;
+                if (raw.Length < keyLen)
+                {
+                    throw new InvalidDataException(
+                        "The encryption descriptor's encryptedKeyValue decrypted to fewer bytes than the declared key size.");
+                }
                 return raw.Length == keyLen ? raw : raw[..keyLen];
             }
             finally

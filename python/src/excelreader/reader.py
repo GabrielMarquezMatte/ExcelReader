@@ -531,9 +531,9 @@ def open_workbook(
 
     `options` overrides reader limits and CSV dialect settings; see `OpenOptions`. `password` unlocks
     an encrypted OOXML workbook (.xlsx/.xlsb); omitting it for one raises `PasswordRequiredError`, and
-    a wrong one raises `PasswordIncorrectError`. `format` must resolve to `auto` for an encrypted
-    workbook to be detected as such — an explicit xlsx/xlsb format bypasses the CFB-container sniffing
-    that finds the encryption wrapper, and the file is read (and fails) as a plain ZIP instead.
+    a wrong one raises `PasswordIncorrectError`. An explicit xlsx/xlsb `format` works for an encrypted
+    file too, the same as leaving `format` unset — both routes decrypt correctly given the right
+    `password`.
     """
     resolved = Path(path)
     encoded = str(resolved).encode("utf-8")
