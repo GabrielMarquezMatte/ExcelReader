@@ -21,6 +21,10 @@ namespace ExcelReader.Native
                 handle = new NativeHandle(reader);
                 return NativeStatus.Ok;
             }
+            catch (ExcelEncryptionException ex)
+            {
+                return MapEncryptionException(ex);
+            }
             catch (Exception exception)
             {
                 SetLastError(exception.Message);
@@ -46,11 +50,28 @@ namespace ExcelReader.Native
                 handle = new NativeHandle(reader);
                 return NativeStatus.Ok;
             }
+            catch (ExcelEncryptionException ex)
+            {
+                return MapEncryptionException(ex);
+            }
             catch (Exception exception)
             {
                 SetLastError(exception.Message);
                 return NativeStatus.Error;
             }
+        }
+
+        // Only PasswordRequired and PasswordIncorrect are actionable programmatically; UnsupportedScheme
+        // and IntegrityFailure are terminal, so they take the general error path plus xl_last_error's message.
+        private static int MapEncryptionException(ExcelEncryptionException ex)
+        {
+            SetLastError(ex.Message);
+            return ex.Reason switch
+            {
+                ExcelEncryptionReason.PasswordRequired => NativeStatus.PasswordRequired,
+                ExcelEncryptionReason.PasswordIncorrect => NativeStatus.PasswordIncorrect,
+                _ => NativeStatus.Error,
+            };
         }
 
         internal static int Close(NativeHandle? handle)
