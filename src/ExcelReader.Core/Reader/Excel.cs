@@ -5,6 +5,8 @@ using System.Runtime.CompilerServices;
 using ExcelReader.Core.Crypto;
 using ExcelReader.Core.Enums;
 using ExcelReader.Core.Internal;
+using ExcelReader.Core.Parser;
+using ExcelReader.Core.Parser.Internal;
 
 namespace ExcelReader.Core.Reader
 {
@@ -298,6 +300,110 @@ namespace ExcelReader.Core.Reader
         public static ValueTask<CsvReader> FromCsvAsync(Stream stream, bool leaveOpen = true, CsvReaderOptions? options = null, CancellationToken ct = default)
         {
             return CsvReader.CreateAsync(stream, leaveOpen, options, ct);
+        }
+
+        /// <summary>
+        /// Parses a CSV file into <typeparamref name="T"/> instances across several threads, yielding the
+        /// same sequence, in the same order, that the sequential <see cref="Parser.ExcelParser{T}"/> produces.
+        /// </summary>
+        /// <typeparam name="T">The row model type to bind each CSV record to.</typeparam>
+        /// <param name="path">The path of the CSV file to read.</param>
+        /// <param name="degreeOfParallelism">The maximum number of parsing threads. <c>0</c> means <see cref="Environment.ProcessorCount"/>; <c>1</c> parses sequentially.</param>
+        /// <param name="readerOptions">CSV dialect options. Defaults to <see cref="CsvReaderOptions.Default"/>.</param>
+        /// <param name="config">Typed-parsing configuration. Defaults to a new <see cref="Parser.ExcelParserConfig"/>.</param>
+        /// <param name="ct">A token to cancel enumeration.</param>
+        /// <remarks>
+        /// <para>
+        /// Parsing and type conversion run in parallel; whatever the caller does per row does not. A caller
+        /// whose per-row work dominates will see little gain from raising <paramref name="degreeOfParallelism"/>.
+        /// </para>
+        /// <para>
+        /// Falls back to sequential parsing — same results, one thread — when the source is too small to
+        /// partition usefully, or when <see cref="CsvReaderOptions.Encoding"/> is set to a non-UTF-8 encoding,
+        /// which must be transcoded sequentially.
+        /// </para>
+        /// <para>
+        /// <see cref="CsvReaderOptions.InternStrings"/> yields substantially less here than on the sequential
+        /// path: each partition keeps its own dedup cache, so hit rates fall and memory multiplies. Results
+        /// are unaffected.
+        /// </para>
+        /// </remarks>
+        [RequiresUnreferencedCode("Typed parsing reflects over T's public properties, which trimming may remove.")]
+        [RequiresDynamicCode("Typed parsing binds property setters at runtime (MethodInfo.CreateDelegate / MakeGenericMethod).")]
+        public static IAsyncEnumerable<T> ParseCsvParallelAsync<T>(
+            string path,
+            int degreeOfParallelism = 0,
+            CsvReaderOptions? readerOptions = null,
+            ExcelParserConfig? config = null,
+            CancellationToken ct = default)
+        {
+            ArgumentException.ThrowIfNullOrEmpty(path);
+            ArgumentOutOfRangeException.ThrowIfNegative(degreeOfParallelism);
+            return ParallelCsvFactory.Create<T>(path, degreeOfParallelism, readerOptions, config, ct);
+        }
+
+        /// <summary>
+        /// Parses an in-memory CSV buffer into <typeparamref name="T"/> instances across several threads,
+        /// yielding the same sequence, in the same order, that the sequential <see cref="Parser.ExcelParser{T}"/> produces.
+        /// </summary>
+        /// <typeparam name="T">The row model type to bind each CSV record to.</typeparam>
+        /// <param name="data">The CSV bytes. The caller keeps ownership; the buffer must not be mutated during enumeration.</param>
+        /// <param name="degreeOfParallelism">The maximum number of parsing threads. <c>0</c> means <see cref="Environment.ProcessorCount"/>; <c>1</c> parses sequentially.</param>
+        /// <param name="readerOptions">CSV dialect options. Defaults to <see cref="CsvReaderOptions.Default"/>.</param>
+        /// <param name="config">Typed-parsing configuration. Defaults to a new <see cref="Parser.ExcelParserConfig"/>.</param>
+        /// <param name="ct">A token to cancel enumeration.</param>
+        /// <remarks>Carries the same fallback and <see cref="CsvReaderOptions.InternStrings"/> caveats as the path-based overload.</remarks>
+        [RequiresUnreferencedCode("Typed parsing reflects over T's public properties, which trimming may remove.")]
+        [RequiresDynamicCode("Typed parsing binds property setters at runtime (MethodInfo.CreateDelegate / MakeGenericMethod).")]
+        public static IAsyncEnumerable<T> ParseCsvParallelAsync<T>(
+            ReadOnlyMemory<byte> data,
+            int degreeOfParallelism = 0,
+            CsvReaderOptions? readerOptions = null,
+            ExcelParserConfig? config = null,
+            CancellationToken ct = default)
+        {
+            ArgumentOutOfRangeException.ThrowIfNegative(degreeOfParallelism);
+            return ParallelCsvFactory.Create<T>(data, degreeOfParallelism, readerOptions, config, ct);
+        }
+
+        /// <summary>
+        /// Parses a CSV stream into <typeparamref name="T"/> instances, in parallel where the stream can be
+        /// partitioned, yielding the same sequence, in the same order, that the sequential
+        /// <see cref="Parser.ExcelParser{T}"/> produces.
+        /// </summary>
+        /// <typeparam name="T">The row model type to bind each CSV record to.</typeparam>
+        /// <param name="stream">The CSV stream, read from its current position. The caller keeps ownership and must not read from it concurrently.</param>
+        /// <param name="degreeOfParallelism">The maximum number of parsing threads. <c>0</c> means <see cref="Environment.ProcessorCount"/>; <c>1</c> parses sequentially.</param>
+        /// <param name="readerOptions">CSV dialect options. Defaults to <see cref="CsvReaderOptions.Default"/>.</param>
+        /// <param name="config">Typed-parsing configuration. Defaults to a new <see cref="Parser.ExcelParserConfig"/>.</param>
+        /// <param name="ct">A token to cancel enumeration.</param>
+        /// <remarks>
+        /// <para>
+        /// Only a <see cref="FileStream"/>, or a <see cref="MemoryStream"/> whose buffer is publicly
+        /// visible, can be partitioned; every other stream — including seekable ones — parses sequentially,
+        /// with identical results. A stream exposes a single mutable position, and a seek can be
+        /// arbitrarily expensive, so this overload partitions only what it can read positionally and
+        /// cheaply rather than promising parallelism it cannot deliver.
+        /// </para>
+        /// <para>
+        /// Passing a <see cref="FileStream"/> reads its <see cref="FileStream.SafeFileHandle"/>, which
+        /// flushes that stream's internal buffer and disables its subsequent buffering optimizations. The
+        /// stream's position is not moved. Prefer the path-based overload where a path is available.
+        /// </para>
+        /// <para>Carries the same <see cref="CsvReaderOptions.InternStrings"/> caveat as the other overloads.</para>
+        /// </remarks>
+        [RequiresUnreferencedCode("Typed parsing reflects over T's public properties, which trimming may remove.")]
+        [RequiresDynamicCode("Typed parsing binds property setters at runtime (MethodInfo.CreateDelegate / MakeGenericMethod).")]
+        public static IAsyncEnumerable<T> ParseCsvParallelAsync<T>(
+            Stream stream,
+            int degreeOfParallelism = 0,
+            CsvReaderOptions? readerOptions = null,
+            ExcelParserConfig? config = null,
+            CancellationToken ct = default)
+        {
+            ArgumentNullException.ThrowIfNull(stream);
+            ArgumentOutOfRangeException.ThrowIfNegative(degreeOfParallelism);
+            return ParallelCsvFactory.Create<T>(stream, degreeOfParallelism, readerOptions, config, ct);
         }
 
         // Bounds the amount of data read to infer a dialect, independent of CsvSnifferOptions.MaxSampleLines:
