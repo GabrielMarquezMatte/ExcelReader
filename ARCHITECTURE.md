@@ -48,6 +48,34 @@ Reader internals that would otherwise be duplicated four times over live in one 
   the single buffer-growth-cap function (`NextBufferSize`) every pooled buffer in the stack grows
   through, so one limit policy governs all of them consistently.
 
+## Encrypted OOXML workbooks
+
+A password-protected `.xlsx`/`.xlsb` is not a ZIP: it is an OLE/CFB container holding an
+`EncryptionInfo` descriptor and an `EncryptedPackage` (the real ZIP, encrypted). `src/ExcelReader.Core/Crypto/`
+turns one back into a stream the ordinary readers consume:
+
+- **`CfbContainer`** — the CFB parse, factored out of `XlsCompoundFile` so one parse can yield
+  *named* streams. `XlsCompoundFile.OpenWorkbook` is now a thin wrapper over it, which is why the XLS
+  path kept its behavior and its fuzz coverage unchanged.
+- **`EncryptionDescriptor`** — parses `EncryptionInfo` and dispatches: version 4.4 is agile
+  (AES-CBC, 4096-byte segments, XML descriptor); 3.2/4.2 (ECMA-376 standard, AES-ECB/SHA-1, binary
+  descriptor) is recognized but rejected with `UnsupportedScheme` rather than implemented, for lack
+  of a real fixture to verify a derivation against; anything else is rejected outright. This is the
+  one parser in the codebase that uses `XmlReader` rather than hand-rolled scanning; the file header
+  explains why.
+- **`AgileKeyDerivation`** — password to key, plus the verifier check that distinguishes "wrong
+  password" from "corrupt file". (A `StandardKeyDerivation` counterpart is future work, gated on
+  real standard-encryption fixtures — see `tests/ExcelReader.Tests/data/encrypted/README.md`.)
+- **`DecryptedPackageStream`** — a read-only *seekable* `Stream`. Agile derives a per-segment IV
+  from the segment index, so `ZipArchive` finds its central directory without the package ever
+  being materialized. One 4 KiB segment is cached, which is enough because ZIP reads are sequential
+  within an entry.
+
+`XlsxReader` and `XlsbReader` are untouched by any of this: they receive a stream that happens to
+decrypt. Writing encrypted workbooks is not supported — which also means there is no round-trip
+check, so the fixtures in `tests/ExcelReader.Tests/data/encrypted/` (paired with plaintext produced
+by an independent implementation) are the only correctness oracle for decryption.
+
 ## The `excelreader` CLI
 
 `src/ExcelReader.Cli/` is a thin `dotnet tool` shell (`excelreader`) over Core's public API — it

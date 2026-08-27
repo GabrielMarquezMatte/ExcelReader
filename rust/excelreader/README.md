@@ -71,6 +71,31 @@ for column in workbook.infer_schema(1, 100)? {
 `Workbook::open_with` takes an explicit format and `OpenOptions`; `Workbook::open_memory` reads from
 a byte slice. Note that format sniffing does not detect CSV - pass `XL_FORMAT_CSV` explicitly.
 
+### Encrypted workbooks
+
+`OpenOptions::password` unlocks a password-protected OOXML workbook (.xlsx/.xlsb/.xlsm) through
+`Workbook::open_with`/`open_memory`:
+
+```rust
+use excelreader::workbook::Workbook;
+use excelreader::{Error, OpenOptions, XL_FORMAT_AUTO};
+
+let options = OpenOptions::new().password("hunter2");
+match Workbook::open_with("protected.xlsx", XL_FORMAT_AUTO, Some(&options)) {
+    Ok(workbook) => { /* ... */ }
+    Err(Error::PasswordIncorrect { .. }) => { /* ask again */ }
+    Err(Error::PasswordRequired { .. }) => { /* no password was supplied */ }
+    Err(other) => { /* Error::Native - unsupported scheme or a corrupt file; not worth retrying */ }
+}
+```
+
+`Error::PasswordRequired`/`Error::PasswordIncorrect` are dedicated variants rather than the generic
+error carrying `XL_STATUS_PASSWORD_REQUIRED`/`XL_STATUS_PASSWORD_INCORRECT`, so callers can
+`match`/`matches!` on "needs a password" without hardcoding the status codes. Format sniffing does not
+see through the CFB wrapper an encrypted file is stored in - pass `XL_FORMAT_AUTO` explicitly (as
+above) rather than `XL_FORMAT_XLSX`, or the file is read as a plain ZIP and fails before the password
+is ever checked.
+
 ### Arrow export (`arrow` feature)
 
 ```toml
