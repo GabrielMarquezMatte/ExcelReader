@@ -24,6 +24,16 @@ namespace ExcelReader.Fuzz
             MaxCellBytes = 1 << 20,
         };
 
+        private static readonly ExcelReaderOptions EncryptedLimits = new()
+        {
+            MaxCellBytes = 1 << 20,
+            MaxSharedStringBytes = 1 << 22,
+            Password = "hunter2",
+            // Keep derivation cheap: the engine runs millions of inputs, and a real spin count would make
+            // each one take ~100ms.
+            MaxPasswordSpinCount = 1_000,
+        };
+
         internal static void Xlsx(ReadOnlySpan<byte> data)
         {
             byte[] bytes = data.ToArray();
@@ -77,6 +87,20 @@ namespace ExcelReader.Fuzz
             {
                 using var ms = new MemoryStream(bytes, writable: false);
                 using XlsReader reader = Excel.FromXls(ms, leaveOpen: true, Limits);
+                DrainAllSheets(reader);
+            });
+        }
+
+        // The encrypted container is a third container parser (CFB directory + EncryptionInfo descriptor)
+        // layered under the ZIP one, and it runs BEFORE any password check - so it gets its own target.
+        // The password is fixed and correct for the seed, so mutations explore the parsers rather than
+        // dead-ending on a verifier mismatch.
+        internal static void Encrypted(ReadOnlySpan<byte> data)
+        {
+            byte[] bytes = data.ToArray();
+            FuzzOracle.Guard(() =>
+            {
+                using IExcelRowReader reader = Excel.Open(bytes, EncryptedLimits);
                 DrainAllSheets(reader);
             });
         }

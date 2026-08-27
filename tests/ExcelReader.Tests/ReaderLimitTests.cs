@@ -1,6 +1,8 @@
 using System.Buffers.Binary;
+using System.Globalization;
 using System.IO.Compression;
 using System.Text;
+using ExcelReader.Core.Crypto;
 using ExcelReader.Core.Enums;
 using ExcelReader.Core.Reader;
 using ExcelReader.Core.ValueObjects;
@@ -477,6 +479,91 @@ namespace ExcelReader.Tests
             var withInner = new ExcelLimitExceededException("outer", inner);
             Assert.Equal("outer", withInner.Message);
             Assert.Same(inner, withInner.InnerException);
+        }
+
+        // --- Encrypted-container resource guards ---
+
+        // Every one of these numbers comes from the file, so each must be a bounded rejection rather than
+        // an allocation, a stall, or an arithmetic fault.
+        [Fact]
+        public void Should_Throw_When_Encrypted_Package_Declares_More_Plaintext_Than_Budget()
+        {
+            byte[] bytes = EncryptedFixtures.Bytes("agile-aes256-sha512.xlsx");
+            var tiny = ExcelReaderOptions.Default with
+            {
+                Password = EncryptedFixtures.Password,
+                MaxTotalDecompressedBytes = 512,
+            };
+            Assert.Throws<ExcelLimitExceededException>(() => Excel.Open(bytes, tiny));
+        }
+
+        [Fact]
+        public void Should_Throw_When_SpinCount_Above_Configured_Cap()
+        {
+            byte[] bytes = EncryptedFixtures.Bytes("agile-aes256-sha512.xlsx");
+            var tight = ExcelReaderOptions.Default with
+            {
+                Password = EncryptedFixtures.Password,
+                MaxPasswordSpinCount = 1,
+            };
+            Assert.Throws<ExcelLimitExceededException>(() => Excel.Open(bytes, tight));
+        }
+
+        // Byte-flipping an encrypted container must never hang, OOM, or throw an arithmetic fault - only
+        // the acceptable rejection types.
+        [Fact]
+        public void Should_Reject_Gracefully_When_Encrypted_Container_Mutated()
+        {
+            const int Rounds = 200;
+            byte[] seed = EncryptedFixtures.Bytes("agile-aes256-sha512.xlsx");
+            var options = ExcelReaderOptions.Default with { Password = EncryptedFixtures.Password };
+            var rng = new Random(20260826);
+            int completed = 0;
+            for (int i = 0; i < Rounds; i++)
+            {
+                byte[] mutated = FuzzMutation.MutateCopy(seed, rng, out int[] positions);
+                try
+                {
+                    using IExcelRowReader reader = Excel.Open(mutated, options);
+                    foreach (Row row in reader)
+                    {
+                        foreach (RowCell cell in row.Cells)
+                        {
+                            _ = cell.Value.GetString();
+                        }
+                    }
+                }
+                catch (Exception ex) when (FuzzMutation.IsAcceptable(ex))
+                {
+                    // Correctly rejected.
+                }
+                catch (Exception ex)
+                {
+                    string offsets = string.Join(", ", positions);
+                    throw new InvalidOperationException(
+                        string.Create(CultureInfo.InvariantCulture,
+                            $"Round {i} on the encrypted seed produced an unacceptable '{ex.GetType().Name}' (mutated byte offsets: [{offsets}]): {ex.Message}"),
+                        ex);
+                }
+                completed++;
+            }
+            Assert.Equal(Rounds, completed);
+        }
+
+        // Regression: found by the new "encrypted" fuzz target's mutation of agile-aes256-sha512.xlsx.
+        // A mini-FAT chain entry is an attacker-controlled int32 with no upper bound of its own, and
+        // ReadMiniStream computed `checked(sector * miniSectorSize)` in Int32 arithmetic - a large
+        // sector value overflowed that multiply into an OverflowException before the bounds check
+        // that follows it ever ran, leaking an arithmetic fault instead of the InvalidDataException
+        // malformed input is contracted to produce. Fixed by promoting the multiply to Int64 first.
+        [Fact]
+        public void MiniStreamSectorNearIntMaxThrowsInvalidDataInsteadOfOverflow()
+        {
+            byte[] miniStream = new byte[128];
+            int[] miniFat = [-1];
+            const int HugeSector = 40_000_000; // * miniSectorSize (64) overflows Int32
+            Assert.Throws<InvalidDataException>(() =>
+                CfbContainer.ReadMiniStream(miniStream, miniFat, miniSectorSize: 64, startSector: HugeSector, size: 64));
         }
     }
 }

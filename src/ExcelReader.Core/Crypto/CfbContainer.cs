@@ -476,13 +476,17 @@ namespace ExcelReader.Core.Crypto
             int written = 0;
             while (sector is >= 0 and not EndOfChain && written < result.Length)
             {
-                int offset = checked(sector * miniSectorSize);
-                if ((uint)offset >= (uint)miniStream.Length)
+                // sector comes straight from an attacker-controlled miniFat entry (any int32), so the
+                // multiply is done in long arithmetic first - a `checked(sector * miniSectorSize)` in
+                // int32 can itself overflow and throw OverflowException before the bounds check below
+                // ever runs, turning malformed input into a crash instead of a graceful rejection.
+                long offset = (long)sector * miniSectorSize;
+                if (offset < 0 || offset >= miniStream.Length)
                 {
                     throw new InvalidDataException("Invalid OLE mini sector chain.");
                 }
                 int take = Math.Min(miniSectorSize, result.Length - written);
-                miniStream.Slice(offset, take).CopyTo(result.AsSpan(written));
+                miniStream.Slice((int)offset, take).CopyTo(result.AsSpan(written));
                 written += take;
                 if ((uint)sector >= (uint)miniFat.Length)
                 {

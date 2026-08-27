@@ -25,11 +25,14 @@ result cannot silently mean "the oracle accepts everything".
 
 ## Targets
 
-`xlsx`, `xlsx-memory`, `xlsb`, `xlsb-memory`, `xls`, `csv`, `csv-sniff`.
+`xlsx`, `xlsx-memory`, `xlsb`, `xlsb-memory`, `xls`, `encrypted`, `csv`, `csv-sniff`.
 
 The `-memory` variants exist because the in-memory ZIP path (`ZipMemoryIndex`) is a different
 container parser from the `Stream`/`ZipArchive` one, and `csv-sniff` because dialect detection runs
-over untrusted bytes before any reader is constructed.
+over untrusted bytes before any reader is constructed. `encrypted` is a third container parser (CFB
+directory + `EncryptionInfo` descriptor) layered under the ZIP one, and runs before any password
+check, so it gets its own target with a fixed, correct password (`hunter2`) so mutations explore the
+parsers instead of dead-ending on a verifier mismatch.
 
 ## Running locally
 
@@ -93,6 +96,7 @@ the working corpus for both jobs.
 | `xls-minifat-overflow.bin` | `xls` | `OverflowException` out of `XlsCompoundFile.ReadIntSectors`. `miniFatSectorCount` (16,777,215 in a 3.4 KB file) was the one header sector count not bounded against the container length, and `ReadIntSectors` multiplies it by `sectorSize` inside a `checked` block. Now rejected as `InvalidDataException`; regression test in `ExcelOpenAndOleErrorTests`. |
 | `xlsx-truncated-cellxfs.bin` | `xlsx` | `ArgumentOutOfRangeException` out of `XlsxReader.ParseStyleDateFlags`. A styles part truncated mid-`<cellXfs` open tag left the `'>'` search at -1, which then anchored the search for `</cellXfs>` before being checked. Now returns no date flags; the `IdxOf` helpers also treat a negative anchor as "not found". Regression test in `XlsxReaderTests`. |
 | `xlsx-isodate-year-below-100.bin` | `xlsx`, `xlsx-memory` | `OverflowException` ("Not a legal OleAut date") out of `XlsxReader.Enumerator.EmitIsoDate`. A `t="d"` cell holding `0024-02-29T21:00:00.000Z` parsed fine into a `DateTime` but has no OLE automation serial — `ToOADate` only accepts `0100-01-01` and later. Such values are now kept verbatim as text like any other unparseable `t="d"`. Regression test in `NamespacePrefixAndIsoDateTests`. |
+| `encrypted-agile-seed.bin` | `encrypted` (and, incidentally, every other target as an encrypted/rejected input) | A copy of `tests/ExcelReader.Tests/data/encrypted/agile-aes256-sha512.xlsx` — a real agile-encrypted CFB container, the one shape `SeedCorpus` cannot synthesize. Mutating it found `OverflowException` out of `CfbContainer.ReadMiniStream`: a mini-FAT chain entry is an attacker-controlled `int32` with no upper bound, and `checked(sector * miniSectorSize)` overflowed before the bounds check that follows it ever ran. Now computed in `Int64` first; regression test in `ReaderLimitTests`. |
 
 ## Seeds
 

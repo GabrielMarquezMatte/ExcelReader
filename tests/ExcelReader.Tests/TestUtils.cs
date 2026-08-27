@@ -23,6 +23,7 @@ namespace ExcelReader.Tests
         [
             typeof(InvalidDataException),
             typeof(ExcelLimitExceededException),
+            typeof(ExcelEncryptionException),
             typeof(IOException),
             typeof(NotSupportedException),
             typeof(FormatException),
