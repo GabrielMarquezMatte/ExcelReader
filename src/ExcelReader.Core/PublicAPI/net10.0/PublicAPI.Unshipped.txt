@@ -1,24 +1,5 @@
 #nullable enable
-ExcelReader.Core.Enums.ExcelColumnType
-ExcelReader.Core.Enums.ExcelColumnType.BoolColumn = 3 -> ExcelReader.Core.Enums.ExcelColumnType
-ExcelReader.Core.Enums.ExcelColumnType.DateColumn = 4 -> ExcelReader.Core.Enums.ExcelColumnType
-ExcelReader.Core.Enums.ExcelColumnType.Float64Column = 2 -> ExcelReader.Core.Enums.ExcelColumnType
-ExcelReader.Core.Enums.ExcelColumnType.Int64Column = 1 -> ExcelReader.Core.Enums.ExcelColumnType
-ExcelReader.Core.Enums.ExcelColumnType.StringColumn = 0 -> ExcelReader.Core.Enums.ExcelColumnType
-ExcelReader.Core.Enums.ExcelColumnType.TimeColumn = 5 -> ExcelReader.Core.Enums.ExcelColumnType
-ExcelReader.Core.Enums.ExcelColumnType.TimestampColumn = 6 -> ExcelReader.Core.Enums.ExcelColumnType
 ExcelReader.Core.Enums.ExcelFileFormat.EncryptedOoxml = 4 -> ExcelReader.Core.Enums.ExcelFileFormat
-ExcelReader.Core.Reader.ExcelColumnSchema
-ExcelReader.Core.Reader.ExcelColumnSchema.Equals(ExcelReader.Core.Reader.ExcelColumnSchema other) -> bool
-ExcelReader.Core.Reader.ExcelColumnSchema.ExcelColumnSchema() -> void
-ExcelReader.Core.Reader.ExcelColumnSchema.Index.get -> int
-ExcelReader.Core.Reader.ExcelColumnSchema.Index.init -> void
-ExcelReader.Core.Reader.ExcelColumnSchema.IsNullable.get -> bool
-ExcelReader.Core.Reader.ExcelColumnSchema.IsNullable.init -> void
-ExcelReader.Core.Reader.ExcelColumnSchema.Name.get -> string?
-ExcelReader.Core.Reader.ExcelColumnSchema.Name.init -> void
-ExcelReader.Core.Reader.ExcelColumnSchema.Type.get -> ExcelReader.Core.Enums.ExcelColumnType
-ExcelReader.Core.Reader.ExcelColumnSchema.Type.init -> void
 ExcelReader.Core.Reader.ExcelEncryptionException
 ExcelReader.Core.Reader.ExcelEncryptionException.ExcelEncryptionException() -> void
 ExcelReader.Core.Reader.ExcelEncryptionException.ExcelEncryptionException(ExcelReader.Core.Reader.ExcelEncryptionReason reason, string! message) -> void
@@ -42,11 +23,5 @@ ExcelReader.Core.Reader.ExcelReaderOptions.Password.get -> ExcelReader.Core.Read
 ExcelReader.Core.Reader.ExcelReaderOptions.Password.init -> void
 ExcelReader.Core.Reader.ExcelReaderOptions.VerifyEncryptedIntegrity.get -> bool
 ExcelReader.Core.Reader.ExcelReaderOptions.VerifyEncryptedIntegrity.init -> void
-override ExcelReader.Core.Reader.ExcelColumnSchema.GetHashCode() -> int
-static ExcelReader.Core.Reader.Excel.InferSchema(ExcelReader.Core.Reader.IExcelRowReader! reader, int headerRow = 1, int sampleSize = 100) -> ExcelReader.Core.Reader.ExcelColumnSchema[]!
 static ExcelReader.Core.Reader.ExcelPassword.FromString(string! password) -> ExcelReader.Core.Reader.ExcelPassword!
 static ExcelReader.Core.Reader.ExcelPassword.implicit operator ExcelReader.Core.Reader.ExcelPassword!(string! password) -> ExcelReader.Core.Reader.ExcelPassword!
-static ExcelReader.Core.Reader.ExcelColumnSchema.operator !=(ExcelReader.Core.Reader.ExcelColumnSchema left, ExcelReader.Core.Reader.ExcelColumnSchema right) -> bool
-static ExcelReader.Core.Reader.ExcelColumnSchema.operator ==(ExcelReader.Core.Reader.ExcelColumnSchema left, ExcelReader.Core.Reader.ExcelColumnSchema right) -> bool
-~override ExcelReader.Core.Reader.ExcelColumnSchema.Equals(object obj) -> bool
-~override ExcelReader.Core.Reader.ExcelColumnSchema.ToString() -> string
