@@ -157,9 +157,7 @@ namespace ExcelReader.Core.Parser.Internal
             CancellationToken ct)
         {
             var projector = new CsvRowProjector<T>(info, map, config.Culture, config.ThrowOnParseFailure);
-            long resolvedNextStart = long.MaxValue;
-            ExcelParseException? failure = null;
-            int failureRow = 0;
+            (long resolvedNextStart, ExcelParseException? failure, int failureRow) outcome;
 
             // The enumerator's stream constructor passes ownsSource: false (CsvReader.Enumerator.cs:65),
             // so it will NOT dispose this stream — the worker owns it. Disposing the RangedFileStream
@@ -167,81 +165,81 @@ namespace ExcelReader.Core.Parser.Internal
             // the IDisposable analyzers this repo builds with warnings-as-errors. The file/memory
             // branches are kept fully separate (rather than sharing one nullable partitionStream
             // variable) because that is the shape IDisposableAnalyzers can actually verify: each
-            // resource's creation and disposal live in the same lexical scope.
+            // resource's creation, its own `await using`, and its disposal all live in the same
+            // lexical scope. Only the loop that *consumes* an already-constructed enumerator is
+            // shared (ConsumeAsync below) — that part carries no disposal obligation of its own, so
+            // moving it across a method boundary does not confuse the analyzer.
             if (source.IsMemory)
             {
                 var rows = new CsvReader.Enumerator(source.SliceAt(start), options, ct);
                 await using (rows.ConfigureAwait(false))
                 {
-                    while (await rows.MoveNextAsync().ConfigureAwait(false))
-                    {
-                        long absolute = start + rows.CurrentRecordStart;
-                        if (absolute >= chunk.End)
-                        {
-                            resolvedNextStart = absolute;
-                            break;
-                        }
-                        T model = default!;
-                        try
-                        {
-                            if (projector.Advance(rows, ref model) == ProjectionStep.Yield)
-                            {
-                                models.Add(model);
-                            }
-                        }
-                        catch (ExcelParseException ex)
-                        {
-                            failure = ex;
-                            failureRow = models.Count;
-                            break;
-                        }
-                    }
+                    outcome = await ConsumeAsync(rows, start, chunk, projector, models).ConfigureAwait(false);
+                }
+                return new CsvChunkResult<T>(chunk.Index, models, start, outcome.resolvedNextStart)
+                {
+                    Failure = outcome.failure,
+                    FailureRowInChunk = outcome.failureRow,
+                };
+            }
+            Stream partitionStream = source.OpenAt(start);
+            try
+            {
+                var outerRows = new CsvReader.Enumerator(partitionStream, options, ct);
+                await using (outerRows.ConfigureAwait(false))
+                {
+                    outcome = await ConsumeAsync(outerRows, start, chunk, projector, models).ConfigureAwait(false);
                 }
             }
-            else
+            finally
             {
-                Stream partitionStream = source.OpenAt(start);
+                await partitionStream.DisposeAsync().ConfigureAwait(false);
+            }
+            return new CsvChunkResult<T>(chunk.Index, models, start, outcome.resolvedNextStart)
+            {
+                Failure = outcome.failure,
+                FailureRowInChunk = outcome.failureRow,
+            };
+        }
+
+        // Drains an already-open, already-`await using`-guarded enumerator into `models`. Owns no
+        // disposable of its own — `rows` is disposed by the caller's `await using` block — so it can
+        // be shared between the memory and file branches without confusing IDisposableAnalyzers about
+        // where the enumerator's lifetime ends.
+        private static async ValueTask<(long resolvedNextStart, ExcelParseException? failure, int failureRow)> ConsumeAsync<T>(
+            CsvReader.Enumerator rows,
+            long start,
+            CsvChunk chunk,
+            CsvRowProjector<T> projector,
+            List<T> models)
+        {
+            long resolvedNextStart = long.MaxValue;
+            ExcelParseException? failure = null;
+            int failureRow = 0;
+            while (await rows.MoveNextAsync().ConfigureAwait(false))
+            {
+                long absolute = start + rows.CurrentRecordStart;
+                if (absolute >= chunk.End)
+                {
+                    resolvedNextStart = absolute;
+                    break;
+                }
+                T model = default!;
                 try
                 {
-                    var rows = new CsvReader.Enumerator(partitionStream, options, ct);
-                    await using (rows.ConfigureAwait(false))
+                    if (projector.Advance(rows, ref model) == ProjectionStep.Yield)
                     {
-                        while (await rows.MoveNextAsync().ConfigureAwait(false))
-                        {
-                            long absolute = start + rows.CurrentRecordStart;
-                            if (absolute >= chunk.End)
-                            {
-                                resolvedNextStart = absolute;
-                                break;
-                            }
-                            T model = default!;
-                            try
-                            {
-                                if (projector.Advance(rows, ref model) == ProjectionStep.Yield)
-                                {
-                                    models.Add(model);
-                                }
-                            }
-                            catch (ExcelParseException ex)
-                            {
-                                failure = ex;
-                                failureRow = models.Count;
-                                break;
-                            }
-                        }
+                        models.Add(model);
                     }
                 }
-                finally
+                catch (ExcelParseException ex)
                 {
-                    await partitionStream.DisposeAsync().ConfigureAwait(false);
+                    failure = ex;
+                    failureRow = models.Count;
+                    break;
                 }
             }
-
-            return new CsvChunkResult<T>(chunk.Index, models, start, resolvedNextStart)
-            {
-                Failure = failure,
-                FailureRowInChunk = failureRow,
-            };
+            return (resolvedNextStart, failure, failureRow);
         }
 
         // Chunk 0 knows its start exactly (CsvHeaderBinder reported it). Every other chunk scans from

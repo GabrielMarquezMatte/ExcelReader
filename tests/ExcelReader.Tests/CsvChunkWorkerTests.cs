@@ -2,6 +2,7 @@ using System.Globalization;
 using ExcelReader.Core.Parser;
 using ExcelReader.Core.Parser.Internal;
 using ExcelReader.Core.Reader;
+using Microsoft.Win32.SafeHandles;
 
 namespace ExcelReader.Tests
 {
@@ -114,6 +115,44 @@ namespace ExcelReader.Tests
             CsvChunkResult<Row> result = await ParseAsync(csv, start: 15, end: 25);
 
             Assert.Empty(result.Models);
+        }
+
+        [Fact]
+        public async Task ParsesTheSameRecordFromAFileBackedSourceAsFromMemory()
+        {
+            //                  0        9        18       27
+            byte[] csv = "Name,Age\nAda,0001\nBob,0002\nCid,0003\n"u8.ToArray();
+            string path = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName());
+            await File.WriteAllBytesAsync(path, csv, TestContext.Current.CancellationToken);
+            try
+            {
+                using var headerReader = Excel.FromCsv(csv);
+                CsvBoundColumnMap<Row> map = CsvHeaderBinder.Bind<Row>(
+                    headerReader, new ExcelParserConfig(), TypeMapper<Row>.GetCsvInfo(), out _);
+
+                using SafeFileHandle handle = File.OpenHandle(path, FileMode.Open, FileAccess.Read, FileShare.Read);
+                var source = new CsvChunkSource(handle, csv.Length);
+
+                // Same chunk bounds as ParsesOnlyTheRecordsStartingInsideItsChunk, exercised through the
+                // SafeFileHandle/RangedFileStream branch instead of the ReadOnlyMemory<byte> one.
+                CsvChunkResult<Row> result = await CsvChunkWorker.ParseAsync(
+                    source,
+                    new CsvChunk(0, 18, 27),
+                    confirmedStart: 18,
+                    map,
+                    TypeMapper<Row>.GetCsvInfo(),
+                    CsvReaderOptions.Default,
+                    new ExcelParserConfig(),
+                    TestContext.Current.CancellationToken);
+
+                Row row = Assert.Single(result.Models);
+                Assert.Equal("Bob", row.Name);
+                Assert.Equal(2, row.Age);
+            }
+            finally
+            {
+                File.Delete(path);
+            }
         }
     }
 }
