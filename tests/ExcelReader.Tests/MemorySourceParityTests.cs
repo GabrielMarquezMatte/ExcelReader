@@ -71,7 +71,7 @@ namespace ExcelReader.Tests
         // The stream path decrypts lazily per segment; the memory path decrypts eagerly. They must agree.
         [Theory]
         [MemberData(nameof(EncryptedFixtureNames))]
-        public void EncryptedMemorySourceMatchesStreamSource(string fixture)
+        public void Should_Match_Stream_Path_When_Encrypted_Opened_From_Memory(string fixture)
         {
             var options = ExcelReaderOptions.Default with { Password = EncryptedFixtures.Password };
 
