@@ -166,6 +166,18 @@ namespace xl
         int32_t prefetch_decompression = XL_OPT_DEFAULT;
         int32_t intern_strings = XL_OPT_DEFAULT;
 
+        // Password for an encrypted OOXML workbook. Stored by value, not as a string_view: the raw
+        // struct's pointer must stay valid through the open call, and a caller passing a temporary
+        // would otherwise dangle. Empty (the default) means "not encrypted, or fail with
+        // XL_STATUS_PASSWORD_REQUIRED" - same meaning as a NULL xl_open_options::password.
+        std::string password_{};
+
+        OpenOptions &password(std::string_view value)
+        {
+            password_ = std::string(value);
+            return *this;
+        }
+
         xl_open_options to_c() const noexcept
         {
             xl_open_options opts{};
@@ -182,6 +194,8 @@ namespace xl
             opts.max_zip_entries = max_zip_entries;
             opts.prefetch_decompression = prefetch_decompression;
             opts.intern_strings = intern_strings;
+            opts.password = password_.empty() ? nullptr : reinterpret_cast<const uint8_t *>(password_.data());
+            opts.password_len = static_cast<int32_t>(password_.size());
             return opts;
         }
     };
