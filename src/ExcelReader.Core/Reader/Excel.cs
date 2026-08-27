@@ -21,7 +21,7 @@ namespace ExcelReader.Core.Reader
         /// <param name="options">Resource limits and behavior toggles; <see cref="ExcelReaderOptions.Default"/> when <see langword="null"/>.</param>
         public static XlsxReader FromFile(string path, ExcelReaderOptions? options = null)
         {
-            return new XlsxReader(File.OpenRead(path), leaveOpen: false, options);
+            return From(File.OpenRead(path), leaveOpen: false, options);
         }
 
         /// <summary>Opens an XLSX workbook from an existing stream.</summary>
@@ -117,7 +117,7 @@ namespace ExcelReader.Core.Reader
         /// <param name="options">Resource limits and behavior toggles; <see cref="ExcelReaderOptions.Default"/> when <see langword="null"/>.</param>
         public static XlsbReader FromXlsbFile(string path, ExcelReaderOptions? options = null)
         {
-            return new XlsbReader(File.OpenRead(path), leaveOpen: false, options);
+            return FromXlsb(File.OpenRead(path), leaveOpen: false, options);
         }
 
         /// <summary>Opens an XLSB (Excel binary) workbook from an existing stream.</summary>
@@ -145,7 +145,15 @@ namespace ExcelReader.Core.Reader
         /// <param name="options">Resource limits and behavior toggles; <see cref="ExcelReaderOptions.Default"/> when <see langword="null"/>. <see cref="ExcelReaderOptions.PrefetchDecompression"/> is ignored on this path — there is nothing left to overlap.</param>
         public static XlsbReader FromXlsb(ReadOnlyMemory<byte> data, ExcelReaderOptions? options = null)
         {
-            return XlsbReader.CreateFromMemory(data, options);
+            ExcelReaderOptions effective = options ?? ExcelReaderOptions.Default;
+            // The memory overload documents that it never suspends, even under await foreach, which
+            // forces eager decryption here rather than a DecryptedPackageStream.
+            if (data.Span.StartsWith(XlsCompoundFile.Signature) && EncryptedPackageOpener.IsEncryptedMemory(data, effective))
+            {
+                ReadOnlyMemory<byte> plain = EncryptedPackageOpener.DecryptToMemory(data, effective);
+                return XlsbReader.CreateFromMemory(plain, effective);
+            }
+            return XlsbReader.CreateFromMemory(data, effective);
         }
 
         /// <summary>Asynchronously opens an XLSX workbook from a file path, taking ownership of the file stream.</summary>
@@ -157,7 +165,7 @@ namespace ExcelReader.Core.Reader
         public static ValueTask<XlsxReader> FromFileAsync(string path, ExcelReaderOptions? options = null, CancellationToken ct = default)
         {
             FileStream stream = OpenAsyncFile(path);
-            return XlsxReader.CreateAsync(stream, leaveOpen: false, options, ct);
+            return FromAsync(stream, leaveOpen: false, options, ct);
         }
 
         /// <summary>Asynchronously opens an XLSX workbook from an existing stream.</summary>
@@ -226,7 +234,7 @@ namespace ExcelReader.Core.Reader
         public static ValueTask<XlsbReader> FromXlsbFileAsync(string path, ExcelReaderOptions? options = null, CancellationToken ct = default)
         {
             FileStream stream = OpenAsyncFile(path);
-            return XlsbReader.CreateAsync(stream, leaveOpen: false, options, ct);
+            return FromXlsbAsync(stream, leaveOpen: false, options, ct);
         }
 
         /// <summary>Asynchronously opens an XLSB (Excel binary) workbook from an existing stream.</summary>
