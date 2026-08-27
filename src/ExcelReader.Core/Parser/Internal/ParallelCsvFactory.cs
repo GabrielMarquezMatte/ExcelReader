@@ -83,6 +83,21 @@ namespace ExcelReader.Core.Parser.Internal
             return Build<T>(source, options, parserConfig, dop, chunkSizeOverride: 0, ownedHandle: null, ct);
         }
 
+        // Test seam: forces a chunk size so a small fixture can be swept across every boundary
+        // offset, and skips the minimum-size gate that would otherwise send every fixture down the
+        // sequential path. Never reached by the public overloads.
+        [RequiresUnreferencedCode("Typed parsing reflects over T's public properties, which trimming may remove.")]
+        [RequiresDynamicCode("Typed parsing binds property setters at runtime (MethodInfo.CreateDelegate / MakeGenericMethod).")]
+        [SuppressMessage("Usage", "VSTHRD200:Use \"Async\" suffix for async methods",
+            Justification = "Factory method, not itself async; it synchronously decides a plan and returns a lazily-enumerated IAsyncEnumerable<T>, exactly like ExcelParser<T>.Parse(CsvReader).")]
+        internal static IAsyncEnumerable<T> CreateWithChunkSize<T>(
+            ReadOnlyMemory<byte> data, int degreeOfParallelism, int chunkSize, CsvReaderOptions? readerOptions, ExcelParserConfig? config, CancellationToken ct)
+        {
+            CsvReaderOptions options = readerOptions ?? CsvReaderOptions.Default;
+            ExcelParserConfig parserConfig = config ?? new ExcelParserConfig();
+            return Build<T>(new CsvChunkSource(data), options, parserConfig, Normalize(degreeOfParallelism), chunkSize, ownedHandle: null, ct);
+        }
+
         private static int Normalize(int degreeOfParallelism)
         {
             return degreeOfParallelism == 0 ? Environment.ProcessorCount : degreeOfParallelism;
