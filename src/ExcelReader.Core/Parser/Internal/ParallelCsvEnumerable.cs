@@ -158,11 +158,30 @@ namespace ExcelReader.Core.Parser.Internal
             int inFlight = -1;
             try
             {
-                while (_plan.TryTakeNext(out CsvChunk chunk))
+                // Acquire the slot BEFORE claiming the chunk, never the other way round. Claiming
+                // first opens a window in which a worker owns the earliest unpublished chunk while
+                // holding no slot: if it is descheduled there and later-indexed chunks drain the
+                // semaphore, it blocks in WaitAsync forever and the merge waits forever on a chunk
+                // nobody will publish — a silent, permanent hang.
+                //
+                // With this order the invariant the merge depends on actually holds. If the merge is
+                // blocked on chunk i, then either i is claimed — and its owner already holds a slot,
+                // so it is parsing and will publish — or i is unclaimed, which (chunks being handed
+                // out in index order) means no chunk >= i is claimed either, so every permit is held
+                // by a chunk < i, all of which the merge has already released. A worker therefore
+                // acquires immediately and claims i.
+                while (true)
                 {
-                    inFlight = chunk.Index;
                     ct.ThrowIfCancellationRequested();
                     await slots.WaitAsync(ct).ConfigureAwait(false);
+                    if (!_plan.TryTakeNext(out CsvChunk chunk))
+                    {
+                        // No chunk to spend this permit on, and no merge iteration will ever release
+                        // it on this worker's behalf, so hand it back before leaving.
+                        slots.Release();
+                        return;
+                    }
+                    inFlight = chunk.Index;
                     long? confirmed = chunk.Index == 0 ? _firstDataRecordOffset : null;
                     CsvChunkResult<T> result = await CsvChunkWorker.ParseAsync(
                         _source, chunk, confirmed, _map, _info, _readerOptions, _config, ct).ConfigureAwait(false);
