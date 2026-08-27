@@ -1,3 +1,4 @@
+using System.Buffers;
 using ExcelReader.Core.Reader;
 using Microsoft.Win32.SafeHandles;
 
@@ -63,26 +64,33 @@ namespace ExcelReader.Core.Parser.Internal
         // A window for boundary resolution: from `offset`, at most `length` bytes, plus one extra
         // byte. That extra byte is what makes a \r sitting at the chunk's last position resolvable
         // against real data instead of a guess about what follows it.
-        internal byte[] ReadWindow(long offset, int length)
+        //
+        // Fills a caller-owned buffer rather than allocating one: the caller (CsvChunkWorker.
+        // GuessStart) rents from ArrayPool and grows on demand, so a boundary scan costs no
+        // allocation at all in the common case. Returns the number of bytes actually available.
+        internal int ReadWindow(long offset, Span<byte> buffer)
         {
             long available = Length - offset;
-            int want = (int)Math.Min(available, (long)length + 1);
+            int want = (int)Math.Min(available, buffer.Length);
             if (want <= 0)
             {
-                return [];
+                return 0;
             }
             if (IsMemory)
             {
-                return _memory.Slice((int)offset, want).ToArray();
+                _memory.Span.Slice((int)offset, want).CopyTo(buffer);
+                return want;
             }
-            byte[] buffer = new byte[want];
-            int read = RandomAccess.Read(_handle!, buffer, _startOffset + offset);
-            if (read == want)
-            {
-                return buffer;
-            }
-            Array.Resize(ref buffer, read);
-            return buffer;
+            return RandomAccess.Read(_handle!, buffer[..want], _startOffset + offset);
+        }
+
+        // The memory source's bytes are already in the process; boundary scanning can read them in
+        // place instead of copying a window out. Only valid for IsMemory sources.
+        internal ReadOnlySpan<byte> WindowSpan(long offset, int length)
+        {
+            long available = Length - offset;
+            int want = (int)Math.Min(available, (long)length + 1);
+            return want <= 0 ? default : _memory.Span.Slice((int)offset, want);
         }
     }
 
@@ -120,6 +128,24 @@ namespace ExcelReader.Core.Parser.Internal
 
     internal static class CsvChunkWorker
     {
+        // Boundary-scan window sizing. 4 KB holds any realistic CSV record several times over, and
+        // stays far below the 85 KB Large Object Heap threshold so the rented buffer is an ordinary
+        // Gen0 allocation the pool hands back immediately. Growth is geometric so even a
+        // pathologically long record converges in a handful of reads.
+        private const int InitialBoundaryWindow = 4 * 1024;
+        private const int BoundaryWindowGrowth = 8;
+
+        // Row-count estimation for the per-chunk result list. Sampling 64 records is enough to
+        // average out row-width variation without delaying the sizing long enough for the list to
+        // have doubled several times already. MinRecordBytes = 2 is the floor a real record can
+        // occupy (one byte of content plus a terminator), so it bounds an estimate skewed by an
+        // unusually wide sample. MaxSizingCapacity keeps a pathological estimate from requesting a
+        // multi-hundred-megabyte array in one go.
+        private const int SizingSampleRecords = 64;
+        private const int MinRecordBytes = 2;
+        private const int MaxSizingCapacity = 8 * 1024 * 1024;
+
+
         // Parses one chunk. `confirmedStart` is the offset the predecessor proved correct; when it is
         // null the worker guesses with the Outside hypothesis, which is right whenever no quoted
         // field straddles the chunk start — overwhelmingly the common case.
@@ -216,6 +242,8 @@ namespace ExcelReader.Core.Parser.Internal
             long resolvedNextStart = long.MaxValue;
             ExcelParseException? failure = null;
             int failureRow = 0;
+            long firstRecordStart = -1;
+            bool sized = false;
             while (await rows.MoveNextAsync().ConfigureAwait(false))
             {
                 long absolute = start + rows.CurrentRecordStart;
@@ -224,6 +252,35 @@ namespace ExcelReader.Core.Parser.Internal
                     resolvedNextStart = absolute;
                     break;
                 }
+
+                // Size the list from this chunk's own data instead of letting it double its way up.
+                // The sequential parser yields lazily and allocates no backing array at all; a chunk
+                // must buffer, so the doubling is pure overhead the parallel path adds — and above
+                // 85 KB every intermediate array is a Large Object Heap allocation. Sampling a few
+                // real records first (rather than guessing a row width, or plumbing an estimate down
+                // from the header) keeps the estimate honest for this file and this chunk.
+                if (firstRecordStart < 0)
+                {
+                    firstRecordStart = absolute;
+                }
+                else if (!sized && models.Count >= SizingSampleRecords)
+                {
+                    sized = true;
+                    long sampledBytes = absolute - firstRecordStart;
+                    if (sampledBytes > 0)
+                    {
+                        long estimate = (chunk.End - firstRecordStart) * models.Count / sampledBytes;
+                        // Clamped: an underestimate merely resumes doubling, but an overestimate
+                        // wastes memory outright, so cap it at a chunk's worth of minimum-width
+                        // records and never shrink below what the list already holds.
+                        long cap = Math.Min(estimate, (chunk.End - firstRecordStart) / MinRecordBytes);
+                        if (cap > models.Count)
+                        {
+                            models.EnsureCapacity((int)Math.Min(cap, MaxSizingCapacity));
+                        }
+                    }
+                }
+
                 T model = default!;
                 try
                 {
@@ -243,19 +300,73 @@ namespace ExcelReader.Core.Parser.Internal
         }
 
         // Chunk 0 knows its start exactly (CsvHeaderBinder reported it). Every other chunk scans from
-        // its nominal start under the Outside hypothesis. The window is the chunk's own length: a
-        // chunk with no boundary inside it holds no record start at all — its bytes belong to a
-        // record an earlier chunk owns and overshoots into.
+        // its nominal start under the Outside hypothesis. The scan is bounded by the chunk's own
+        // length: a chunk with no boundary inside it holds no record start at all — its bytes belong
+        // to a record an earlier chunk owns and overshoots into.
+        //
+        // The chunk's length bounds the scan, but it is NOT the window size. A record boundary sits
+        // within the first few hundred bytes of a chunk in any realistic CSV, so the window starts
+        // small and grows only against data pathological enough to need it. Reading the whole chunk
+        // up front — which is what this did originally — allocated a chunk-sized array per chunk
+        // (megabytes each, straight past the 85 KB Large Object Heap threshold) and read every byte
+        // of the source a second time, to answer a question the first line almost always settles.
+        // Measured on a 104 MB narrow-int corpus, that alone accounted for ~104 MB of LOH traffic
+        // and every Gen2 collection the parallel path incurred over the sequential one.
         private static long GuessStart(CsvChunkSource source, CsvChunk chunk, byte quote)
         {
-            int windowLength = (int)Math.Min(chunk.End - chunk.Start, int.MaxValue - 1);
-            byte[] window = source.ReadWindow(chunk.Start, windowLength);
-            int offset = CsvBoundaryResolver.FindRecordStart(window, quote, CsvQuoteParity.Outside);
-            if (offset < 0)
+            long chunkLength = chunk.End - chunk.Start;
+            if (chunkLength <= 0)
             {
                 return long.MaxValue;
             }
-            return chunk.Start + offset;
+
+            // Scanning in place, no window buffer at all: the bytes are already in the process.
+            if (source.IsMemory)
+            {
+                int cap = (int)Math.Min(chunkLength, int.MaxValue - 1);
+                int found = CsvBoundaryResolver.FindRecordStart(
+                    source.WindowSpan(chunk.Start, cap), quote, CsvQuoteParity.Outside);
+                return found < 0 ? long.MaxValue : chunk.Start + found;
+            }
+
+            long remaining = Math.Min(chunkLength, source.Length - chunk.Start);
+            int windowLength = (int)Math.Min(remaining, InitialBoundaryWindow);
+            while (true)
+            {
+                // +1 so a \r at the window's last position is resolved against the byte that
+                // follows it rather than guessed at — the same reason the original read one extra
+                // byte past the chunk.
+                int rentSize = windowLength == remaining ? windowLength + 1 : windowLength;
+                byte[] buffer = ArrayPool<byte>.Shared.Rent(rentSize);
+                try
+                {
+                    int read = source.ReadWindow(chunk.Start, buffer.AsSpan(0, rentSize));
+                    if (read <= 0)
+                    {
+                        return long.MaxValue;
+                    }
+                    int found = CsvBoundaryResolver.FindRecordStart(
+                        buffer.AsSpan(0, read), quote, CsvQuoteParity.Outside);
+                    if (found >= 0)
+                    {
+                        return chunk.Start + found;
+                    }
+                    // No boundary in this window. If it already covered the whole chunk, the chunk
+                    // genuinely holds no record start; otherwise widen and rescan. Rescanning the
+                    // prefix is deliberate over resuming: FindRecordStart is a left-to-right parity
+                    // scan, so a wider window's answer is the same one a resumed scan would reach,
+                    // and total rescan cost stays linear under geometric growth.
+                    if (read >= remaining || windowLength >= remaining)
+                    {
+                        return long.MaxValue;
+                    }
+                }
+                finally
+                {
+                    ArrayPool<byte>.Shared.Return(buffer);
+                }
+                windowLength = (int)Math.Min(remaining, (long)windowLength * BoundaryWindowGrowth);
+            }
         }
     }
 }
