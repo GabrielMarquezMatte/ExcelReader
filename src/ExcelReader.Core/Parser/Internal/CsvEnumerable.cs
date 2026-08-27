@@ -137,6 +137,33 @@ namespace ExcelReader.Core.Parser.Internal
         }
     }
 
+    // The header-derived, per-field binding state of a CSV projection, lifted out of
+    // CsvRowProjector<T> so the parallel path can bind a header once and share one instance across
+    // every worker. Every array here is written during construction and only read afterwards, which
+    // is what makes sharing it across threads safe without a lock.
+    internal sealed class CsvBoundColumnMap<T>
+    {
+        internal CsvBoundColumnMap(
+            ColumnParser<T>[] fieldParsers,
+            string?[] fieldNames,
+            bool[] fieldRequired,
+            (int Field, string Name)[] requiredFields)
+        {
+            FieldParsers = fieldParsers;
+            FieldNames = fieldNames;
+            FieldRequired = fieldRequired;
+            RequiredFields = requiredFields;
+        }
+
+        internal ColumnParser<T>[] FieldParsers { get; }
+
+        internal string?[] FieldNames { get; }
+
+        internal bool[] FieldRequired { get; }
+
+        internal (int Field, string Name)[] RequiredFields { get; }
+    }
+
     // The per-row state machine for CSV: skip rows before the header, bind property -> field index at
     // the header row, then project each data row by direct indexed field access.
     internal struct CsvRowProjector<T>
@@ -172,8 +199,38 @@ namespace ExcelReader.Core.Parser.Internal
             _requiredFields = [];
         }
 
+        // Parallel-path constructor: the header was already read and bound once by CsvHeaderBinder,
+        // so there is no header row to find and no rows to skip — every record this projector sees
+        // is data. _headerRow is set to -1 to make that explicit; the Advance fast path below keys
+        // off _fieldParsers already being non-null, exactly as the index-based path does.
+        internal CsvRowProjector(TypeMapInfo<T> typeInfo, CsvBoundColumnMap<T> map, IFormatProvider provider, bool throwOnParseFailure)
+        {
+            _typeInfo = typeInfo;
+            _comparer = StringComparer.Ordinal;
+            _normalization = HeaderNormalization.None;
+            _headerRow = -1;
+            _provider = provider;
+            _throwOnParseFailure = throwOnParseFailure;
+            _fieldParsers = map.FieldParsers;
+            _fieldNames = map.FieldNames;
+            _fieldRequired = map.FieldRequired;
+            _requiredFields = map.RequiredFields;
+            _rowNumber = 0;
+        }
+
         internal ProjectionStep Advance(CsvReader.Enumerator rows, ref T model)
         {
+            if (_headerRow < 0)
+            {
+                _rowNumber++;
+                if (rows.FieldCount == 1 && rows.FieldAt(0).Type == CellType.Empty)
+                {
+                    return ProjectionStep.Skip;
+                }
+                model = _typeInfo.CreateInstance();
+                ParseCurrentRow(rows, ref model);
+                return ProjectionStep.Yield;
+            }
             if (_typeInfo.IsIndexBased)
             {
                 if (_fieldParsers is null)
@@ -214,8 +271,20 @@ namespace ExcelReader.Core.Parser.Internal
 
         private void BuildColumnMap(CsvReader.Enumerator rows)
         {
+            CsvBoundColumnMap<T> map = BuildBoundMap(rows, _typeInfo, _comparer, _normalization);
+            _fieldParsers = map.FieldParsers;
+            _fieldNames = map.FieldNames;
+            _fieldRequired = map.FieldRequired;
+            _requiredFields = map.RequiredFields;
+        }
+
+        // Binds the current header row to T's properties, by field index. Shared by the sequential
+        // path (BuildColumnMap, above) and CsvHeaderBinder's parallel path — one implementation of
+        // header binding, reused rather than duplicated.
+        internal static CsvBoundColumnMap<T> BuildBoundMap(CsvReader.Enumerator rows, TypeMapInfo<T> typeInfo, StringComparer comparer, HeaderNormalization normalization)
+        {
             int fieldCount = rows.FieldCount;
-            int propertyCount = _typeInfo.PropertyCount;
+            int propertyCount = typeInfo.PropertyCount;
             var parsers = new ColumnParser<T>[fieldCount];
             var names = new string?[fieldCount];
             var required = new bool[fieldCount];
@@ -227,12 +296,12 @@ namespace ExcelReader.Core.Parser.Internal
             for (int i = 0; i < fieldCount; i++)
             {
                 Cell cell = rows.FieldAt(i);
-                string header = _normalization.Apply(cell.GetString());
+                string header = normalization.Apply(cell.GetString());
                 if (string.IsNullOrEmpty(header))
                 {
                     continue;
                 }
-                if (!_typeInfo.TryFindHeader(header, _comparer, _normalization, out HeaderMatch<T> match))
+                if (!typeInfo.TryFindHeader(header, comparer, normalization, out HeaderMatch<T> match))
                 {
                     continue;
                 }
@@ -252,25 +321,22 @@ namespace ExcelReader.Core.Parser.Internal
                 aliasByProp[match.PropertyIndex] = match.AliasIndex;
                 fieldByProp[match.PropertyIndex] = i;
                 parsers[i] = match.Parser;
-                names[i] = _typeInfo.DisplayName(match.PropertyIndex);
-                required[i] = _typeInfo.RequiresValue(match.PropertyIndex);
+                names[i] = typeInfo.DisplayName(match.PropertyIndex);
+                required[i] = typeInfo.RequiresValue(match.PropertyIndex);
             }
 
-            _typeInfo.ValidateRequiredColumns(aliasByProp);
+            typeInfo.ValidateRequiredColumns(aliasByProp);
 
             List<(int, string)>? requiredFields = null;
             for (int p = 0; p < propertyCount; p++)
             {
-                if (fieldByProp[p] >= 0 && _typeInfo.RequiresValue(p))
+                if (fieldByProp[p] >= 0 && typeInfo.RequiresValue(p))
                 {
-                    (requiredFields ??= []).Add((fieldByProp[p], _typeInfo.DisplayName(p)));
+                    (requiredFields ??= []).Add((fieldByProp[p], typeInfo.DisplayName(p)));
                 }
             }
 
-            _fieldParsers = parsers;
-            _fieldNames = names;
-            _fieldRequired = required;
-            _requiredFields = requiredFields is null ? [] : [.. requiredFields];
+            return new CsvBoundColumnMap<T>(parsers, names, required, requiredFields is null ? [] : [.. requiredFields]);
         }
 
         private void BuildIndexColumnMap()
