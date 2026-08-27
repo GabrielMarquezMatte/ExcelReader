@@ -1,5 +1,6 @@
 using System.Diagnostics.CodeAnalysis;
 using ExcelReader.Core.Reader;
+using Microsoft.Win32.SafeHandles;
 
 namespace ExcelReader.Core.Parser.Internal
 {
@@ -19,6 +20,13 @@ namespace ExcelReader.Core.Parser.Internal
         private readonly ExcelParserConfig _config;
         private readonly int _dop;
 
+        // The file handle this enumeration owns, or null for a memory/borrowed-stream source. Held
+        // here rather than in a wrapping IAsyncEnumerable<T> so that closing it costs one `finally`
+        // at the end of the enumeration instead of re-yielding every row through a second async
+        // iterator — the merge is single-threaded, so per-row cost there is not something more
+        // workers can absorb.
+        private readonly SafeFileHandle? _ownedHandle;
+
         internal ParallelCsvEnumerable(
             CsvChunkSource source,
             CsvChunkPlan plan,
@@ -27,7 +35,8 @@ namespace ExcelReader.Core.Parser.Internal
             TypeMapInfo<T> info,
             CsvReaderOptions readerOptions,
             ExcelParserConfig config,
-            int degreeOfParallelism)
+            int degreeOfParallelism,
+            SafeFileHandle? ownedHandle)
         {
             _source = source;
             _plan = plan;
@@ -37,6 +46,7 @@ namespace ExcelReader.Core.Parser.Internal
             _readerOptions = readerOptions;
             _config = config;
             _dop = degreeOfParallelism;
+            _ownedHandle = ownedHandle;
         }
 
         // No [EnumeratorCancellation] here: that attribute only wires a token through on an iterator
@@ -50,6 +60,8 @@ namespace ExcelReader.Core.Parser.Internal
             Justification = "The CTS and semaphore handed to the workers outlive them by construction: the finally block cancels and then awaits every worker task to completion, and only the enclosing `using` declarations' finally — which runs after it — disposes them.")]
         [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP013:Await in using",
             Justification = "Task.Run is deliberately not awaited at creation: the workers must run concurrently with the merge loop. They are joined in the finally block before the `using` declarations dispose anything they touch.")]
+        [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP007:Don't dispose injected",
+            Justification = "_ownedHandle is not borrowed: it is the SafeFileHandle ParallelCsvFactory.Create<T>(string, ...) opened for this one enumeration and handed over with it, and closing it when the consumer stops — including an early break — is exactly this enumerable's obligation. Every other source passes null here, since those handles belong to the caller.")]
         public async IAsyncEnumerator<T> GetAsyncEnumerator(CancellationToken cancellationToken = default)
         {
             using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
@@ -145,6 +157,11 @@ namespace ExcelReader.Core.Parser.Internal
                 // after this await has returned.
                 await cts.CancelAsync().ConfigureAwait(false);
                 await allWorkers.ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
+
+                // After the join, never before: a worker still running would be reading through this
+                // very handle. Closing here (rather than at finalization) is what makes an early
+                // `break` by the consumer release the file promptly.
+                _ownedHandle?.Dispose();
             }
         }
 

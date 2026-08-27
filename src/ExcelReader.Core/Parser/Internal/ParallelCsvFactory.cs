@@ -155,9 +155,11 @@ namespace ExcelReader.Core.Parser.Internal
                 return Sequential<T>(source.OpenReader(options), config, ct);
             }
 
-            return new OwningAsyncEnumerable<T>(
-                new ParallelCsvEnumerable<T>(source, plan, dataStart, map, info, options, config, dop),
-                ownedHandle);
+            // The handle goes straight into the enumerable rather than into a wrapping
+            // IAsyncEnumerable<T>. A wrapper would have to re-yield every row through a second async
+            // iterator, and on a narrow-row corpus that per-row hop is a measurable share of the
+            // single-threaded merge — the one part of this pipeline parallelism cannot shorten.
+            return new ParallelCsvEnumerable<T>(source, plan, dataStart, map, info, options, config, dop, ownedHandle);
         }
 
         [RequiresUnreferencedCode("Typed parsing reflects over T's public properties, which trimming may remove.")]
@@ -182,34 +184,6 @@ namespace ExcelReader.Core.Parser.Internal
         {
             await Task.CompletedTask.ConfigureAwait(false);
             yield break;
-        }
-
-        // Ties the shared file handle's lifetime to the enumeration, so the handle closes when the
-        // consumer stops — including an early break — rather than at an unrelated GC finalization.
-        private sealed class OwningAsyncEnumerable<T>(IAsyncEnumerable<T> inner, SafeFileHandle? handle) : IAsyncEnumerable<T>
-        {
-            // No [EnumeratorCancellation] here: that attribute only wires a token through on an
-            // iterator returning IAsyncEnumerable<T>. This is the enumerator factory itself (returns
-            // IAsyncEnumerator<T>), so the parameter *is* the token and is used directly (CS8424
-            // fires if the attribute is applied anyway) — same reasoning as ParallelCsvEnumerable<T>.
-            [SuppressMessage("Performance", "HLQ006:GetAsyncEnumerator should return a value type",
-                Justification = "IAsyncEnumerable<T> mandates the interface return type, and the compiler-generated async iterator is a reference type by construction.")]
-            [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP007:Don't dispose injected",
-                Justification = "handle is the SafeFileHandle Create<T>(string, ...) opened for this one enumeration; OwningAsyncEnumerable exists specifically to close it when the consumer stops, including an early break.")]
-            public async IAsyncEnumerator<T> GetAsyncEnumerator(CancellationToken cancellationToken = default)
-            {
-                try
-                {
-                    await foreach (T model in inner.WithCancellation(cancellationToken).ConfigureAwait(false))
-                    {
-                        yield return model;
-                    }
-                }
-                finally
-                {
-                    handle?.Dispose();
-                }
-            }
         }
     }
 }
