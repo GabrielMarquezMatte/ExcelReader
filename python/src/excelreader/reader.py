@@ -24,6 +24,8 @@ from excelreader.types import (
     ColumnType,
     ExcelReaderError,
     OpenOptions,
+    PasswordIncorrectError,
+    PasswordRequiredError,
     StringColumn,
     TypedTable,
 )
@@ -61,6 +63,10 @@ def _check(status: int) -> None:
         raise ExcelReaderError("workbook is closed or the handle is invalid")
     if status == _native.XL_INVALID_ARGUMENT:
         raise ExcelReaderError("invalid argument passed to the native library")
+    if status == _native.XL_STATUS_PASSWORD_REQUIRED:
+        raise PasswordRequiredError(_last_error() or "the workbook is encrypted and no password was supplied")
+    if status == _native.XL_STATUS_PASSWORD_INCORRECT:
+        raise PasswordIncorrectError(_last_error() or "the supplied password did not match the workbook's verifier")
     raise ExcelReaderError(_last_error() or f"native call failed with status {status}")
 
 
@@ -491,42 +497,71 @@ def decode_cell(sheet: ColumnarSheet, index: int) -> Cell:
     return Cell(column=int(sheet.columns[index]), type=CellType(int(sheet.types[index])), value=value)
 
 
-def _raw_options(options: OpenOptions | None) -> object:
-    # A NULL options pointer means "every library default" on the native side — identical to calling
-    # the non-_ex entry point — so both paths can go through xl_open_*_ex and there is only one call
-    # site to keep correct.
-    if options is None:
-        return None
-    return ctypes.byref(_native.to_native_open_options(options))
+def _raw_options(
+    options: OpenOptions | None, password: str | None
+) -> tuple[object, _native.NativeOpenOptions | None, ctypes.Array[ctypes.c_char] | None]:
+    """Builds the argument to pass as `xl_open_*_ex`'s `options` parameter, plus the two Python
+    objects that back it and must outlive the native call.
+
+    A NULL options pointer means "every library default" on the native side — identical to calling
+    the non-_ex entry point — so both paths can go through xl_open_*_ex and there is only one call
+    site to keep correct; that NULL case only applies when neither `options` nor `password` was given.
+
+    Returns `(raw_options_arg, raw, password_buffer)`. `raw` must be kept alive (referenced) until
+    after the native call returns, since `raw_options_arg` points into it; `password_buffer` must be
+    kept alive the same way, since `raw.password` points into IT. The C ABI copies the password bytes
+    immediately, but the buffer must not be collected before it does.
+    """
+    if options is None and password is None:
+        return None, None, None
+    raw = _native.to_native_open_options(options) if options is not None else _native.default_open_options()
+    password_buffer = None
+    if password is not None:
+        encoded = password.encode("utf-8")
+        password_buffer = ctypes.create_string_buffer(encoded, len(encoded))
+        raw.password = ctypes.cast(password_buffer, ctypes.POINTER(ctypes.c_uint8))
+        raw.password_len = len(encoded)
+    return ctypes.byref(raw), raw, password_buffer
 
 
-def open_workbook(path: str | Path, format: str | None = None, *, options: OpenOptions | None = None) -> Workbook:
+def open_workbook(
+    path: str | Path, format: str | None = None, *, options: OpenOptions | None = None, password: str | None = None
+) -> Workbook:
     """Opens a workbook from disk. `format` is one of auto/xls/xlsx/xlsb/csv; None infers it.
 
-    `options` overrides reader limits and CSV dialect settings; see `OpenOptions`.
+    `options` overrides reader limits and CSV dialect settings; see `OpenOptions`. `password` unlocks
+    an encrypted OOXML workbook (.xlsx/.xlsb); omitting it for one raises `PasswordRequiredError`, and
+    a wrong one raises `PasswordIncorrectError`. `format` must resolve to `auto` for an encrypted
+    workbook to be detected as such — an explicit xlsx/xlsb format bypasses the CFB-container sniffing
+    that finds the encryption wrapper, and the file is read (and fails) as a plain ZIP instead.
     """
     resolved = Path(path)
     encoded = str(resolved).encode("utf-8")
     handle = ctypes.c_void_p()
     lib = _native.load_library()
+    raw_options, _raw, _password_buffer = _raw_options(options, password)
     _check(
         lib.xl_open_file_ex(
-            encoded, len(encoded), _resolve_format(format, resolved), _raw_options(options), ctypes.byref(handle)
+            encoded, len(encoded), _resolve_format(format, resolved), raw_options, ctypes.byref(handle)
         )
     )
     return Workbook(handle)
 
 
-def open_bytes(data: bytes, format: str | None = None, *, options: OpenOptions | None = None) -> Workbook:
+def open_bytes(
+    data: bytes, format: str | None = None, *, options: OpenOptions | None = None, password: str | None = None
+) -> Workbook:
     """Opens a workbook from an in-memory buffer. The native side copies `data` immediately.
 
-    `options` overrides reader limits and CSV dialect settings; see `OpenOptions`.
+    `options` overrides reader limits and CSV dialect settings; see `OpenOptions`. `password` unlocks
+    an encrypted OOXML workbook — see `open_workbook()` for the full contract.
     """
     handle = ctypes.c_void_p()
     lib = _native.load_library()
+    raw_options, _raw, _password_buffer = _raw_options(options, password)
     _check(
         lib.xl_open_memory_ex(
-            data, len(data), _resolve_format(format, None), _raw_options(options), ctypes.byref(handle)
+            data, len(data), _resolve_format(format, None), raw_options, ctypes.byref(handle)
         )
     )
     return Workbook(handle)

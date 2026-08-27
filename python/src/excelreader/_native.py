@@ -24,10 +24,12 @@ XL_BUFFER_TOO_SMALL = -2
 XL_INVALID_HANDLE = -3
 XL_INVALID_ARGUMENT = -4
 XL_ERROR = -5
+XL_STATUS_PASSWORD_REQUIRED = -6
+XL_STATUS_PASSWORD_INCORRECT = -7
 
 # Bumped on any change to a struct layout, a status code, or the meaning of an existing function;
 # adding a new function does not bump it. Mirrors XL_ABI_VERSION in include/excelreader.h.
-XL_ABI_VERSION = 3
+XL_ABI_VERSION = 4
 
 XL_FORMAT_AUTO = 0
 XL_FORMAT_XLS = 1
@@ -242,6 +244,8 @@ class NativeOpenOptions(ctypes.Structure):
         ("max_zip_entries", ctypes.c_int32),
         ("prefetch_decompression", ctypes.c_int32),
         ("intern_strings", ctypes.c_int32),
+        ("password", ctypes.POINTER(ctypes.c_uint8)),
+        ("password_len", ctypes.c_int32),
     ]
 
 
