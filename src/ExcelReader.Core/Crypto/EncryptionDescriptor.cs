@@ -160,9 +160,16 @@ namespace ExcelReader.Core.Crypto
                 throw new ExcelEncryptionException(ExcelEncryptionReason.UnsupportedScheme,
                     $"Unsupported key size ({keyBits} bits) in the encryption descriptor.");
             }
-            if (blockSize is < 1 or > 64)
+            // This codebase only ever performs AES-CBC (cipherChaining is restricted to
+            // ChainingModeCBC above), and AES has a fixed 16-byte block size. Any other declared
+            // blockSize produces a wrong-sized IV in NormalizeToLength/SegmentIv, which throws a raw
+            // CryptographicException out of `aes.IV = ...` rather than one of this codebase's
+            // documented malformed-input exception types — so it's rejected here, the same way the
+            // cipherChaining check just above rejects other unsupported scheme shapes.
+            if (blockSize != 16)
             {
-                throw new InvalidDataException($"The encryption descriptor's block size ({blockSize}) is out of range.");
+                throw new ExcelEncryptionException(ExcelEncryptionReason.UnsupportedScheme,
+                    $"Unsupported block size ({blockSize}) in the encryption descriptor; AES-CBC requires 16.");
             }
             if (saltSize is < 1 or > 64 || saltSize != saltValue.Length)
             {

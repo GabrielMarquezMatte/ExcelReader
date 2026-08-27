@@ -549,11 +549,11 @@ namespace ExcelReader.Core.Reader
             }
             if (header.StartsWith(XlsCompoundFile.Signature))
             {
-                // In-memory Open has no CfbContainer probe over a ReadOnlyMemory<byte> source (that
-                // needs the OLE directory, not just the signature), so — same as before this overload
-                // gained no encrypted-OOXML support — any CFB container here is treated as legacy XLS.
-                // Use the stream/file Open overloads to read a password-protected workbook.
-                return ExcelFileFormat.Xls;
+                // Same two-stage CFB probe as DetectSeekable: only the OLE directory (not the 8-byte
+                // signature) can tell a legacy .xls apart from an encrypted OOXML package.
+                return EncryptedPackageOpener.IsEncryptedMemory(data, options)
+                    ? ExcelFileFormat.EncryptedOoxml
+                    : ExcelFileFormat.Xls;
             }
             memZip = ZipMemoryIndex.Create(data, options);
             return memZip.TryGetEntry("xl/workbook.bin"u8, out _) ? ExcelFileFormat.Xlsb : ExcelFileFormat.Xlsx;

@@ -263,10 +263,8 @@ Omitting `password` for an encrypted file raises `PasswordRequiredError`; a wron
 distinction can just catch that. Any other native failure (an unsupported encryption scheme, a
 corrupt file) also raises `ExcelReaderError` but is not worth retrying.
 
-`format` must resolve to `auto` for an encrypted workbook to be detected as such — an explicit
-`format="xlsx"` bypasses the CFB-container sniffing that finds the encryption wrapper, and the file
-is read (and fails) as a plain ZIP instead. Leave `format` unset (the default) rather than passing it
-explicitly for an encrypted file.
+An explicit `format="xlsx"`/`format="xlsb"` works for an encrypted file too, the same as leaving
+`format` unset — both routes decrypt correctly given the right `password`.
 
 ## Benchmarks
 

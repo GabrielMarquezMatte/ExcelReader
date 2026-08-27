@@ -514,7 +514,10 @@ namespace ExcelReader.Tests
         [Fact]
         public void Should_Reject_Gracefully_When_Encrypted_Container_Mutated()
         {
-            const int Rounds = 200;
+            // 200 rounds wasn't enough to reliably catch this class of bug with this test's own fixed
+            // seed: the final review found the first unacceptable-exception mutation at round 217 with
+            // one RNG seed and round 956 with another.
+            const int Rounds = 1000;
             byte[] seed = EncryptedFixtures.Bytes("agile-aes256-sha512.xlsx");
             var options = ExcelReaderOptions.Default with { Password = EncryptedFixtures.Password };
             var rng = new Random(20260826);

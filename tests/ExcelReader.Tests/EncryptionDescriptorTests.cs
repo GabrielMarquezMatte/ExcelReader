@@ -93,6 +93,24 @@ namespace ExcelReader.Tests
             Assert.Equal(ExcelEncryptionReason.UnsupportedScheme, ex.Reason);
         }
 
+        // AES-CBC (the only chaining mode this codebase performs — cipherChaining is restricted to
+        // ChainingModeCBC above) has a fixed 16-byte block size. Any other declared blockSize (still
+        // inside the old [1,64] bound) produces a wrong-sized IV in
+        // AgileKeyDerivation.NormalizeToLength/SegmentIv, which throws a raw CryptographicException
+        // out of `aes.IV = ...` — not one of this codebase's documented malformed-input exception
+        // types — unless it's rejected here first.
+        [Fact]
+        public void Should_Report_UnsupportedScheme_When_BlockSize_Is_Not_Sixteen()
+        {
+            byte[] info = Info("agile-aes256-sha512.xlsx");
+            string xml = Encoding.UTF8.GetString(info.AsSpan(8))
+                .Replace("blockSize=\"16\"", "blockSize=\"15\"", StringComparison.Ordinal);
+            byte[] patched = [.. info.AsSpan(0, 8), .. Encoding.UTF8.GetBytes(xml)];
+            var ex = Assert.Throws<ExcelEncryptionException>(
+                () => EncryptionDescriptor.Parse(patched, ExcelReaderOptions.Default));
+            Assert.Equal(ExcelEncryptionReason.UnsupportedScheme, ex.Reason);
+        }
+
         [Fact]
         public void Should_Report_UnsupportedScheme_When_KeyBits_Not_Allowed()
         {

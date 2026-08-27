@@ -58,6 +58,24 @@ namespace ExcelReader.Tests
                 () => AgileKeyDerivation.DeriveIntermediateKey(tampered, EncryptedFixtures.Password));
         }
 
+        // encryptedKeyValue is untrusted, pre-authentication input parsed before any password check.
+        // The spec defines its plaintext to be exactly KeyData.keyBits/8 bytes (32 here); a producer
+        // that wraps fewer bytes than that must be reported as malformed input (InvalidDataException),
+        // not let `raw[..keyLen]` throw a raw ArgumentOutOfRangeException. Truncating to one AES block
+        // (16 of the expected 32 bytes) keeps the ciphertext itself block-aligned - so it still
+        // decrypts cleanly under CBC - while decrypting to fewer bytes than KeyBits declares.
+        [Fact]
+        public void Should_Throw_InvalidData_When_EncryptedKeyValue_Decrypts_Shorter_Than_KeyBits()
+        {
+            AgileDescriptor d = Descriptor("agile-aes256-sha512.xlsx");
+            byte[] shortKeyValue = d.PasswordEncryptor.EncryptedKeyValue[..16];
+            CryptoParameters malformed = d.PasswordEncryptor with { EncryptedKeyValue = shortKeyValue };
+            AgileDescriptor tampered = d with { PasswordEncryptor = malformed };
+
+            Assert.Throws<InvalidDataException>(
+                () => AgileKeyDerivation.DeriveIntermediateKey(tampered, EncryptedFixtures.Password));
+        }
+
         // Each 4096-byte segment gets its own IV derived from its index; if these collided, the
         // multi-segment fixture would decrypt to garbage past the first segment.
         [Fact]
