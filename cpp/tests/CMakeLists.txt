@@ -3,8 +3,11 @@ target_link_libraries(excelreader_cpp_smoke PRIVATE xl::excelreader)
 
 set(EXCELREADER_FIXTURE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/../../RealExcel.xlsb"
     CACHE FILEPATH "Path to the RealExcel.xlsb fixture the C++ smoke test reads")
+set(EXCELREADER_ENCRYPTED_FIXTURE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../tests/ExcelReader.Tests/data/encrypted"
+    CACHE PATH "Directory containing the encrypted-workbook fixtures the C++ smoke test reads")
 target_compile_definitions(excelreader_cpp_smoke PRIVATE
-    EXCELREADER_FIXTURE_PATH="${EXCELREADER_FIXTURE_PATH}")
+    EXCELREADER_FIXTURE_PATH="${EXCELREADER_FIXTURE_PATH}"
+    EXCELREADER_ENCRYPTED_FIXTURE_DIR="${EXCELREADER_ENCRYPTED_FIXTURE_DIR}")
 
 add_test(NAME excelreader_cpp_smoke COMMAND excelreader_cpp_smoke)
 if(WIN32)
