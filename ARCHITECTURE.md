@@ -24,6 +24,44 @@ On top of all four readers sits the typed-parsing layer (`src/ExcelReader.Core/P
 (binds a `ref struct` model directly to `Cell.Value` spans — zero allocation for the container and,
 for span-typed columns, for the values too). Both consume `Row`/`Cell` from any reader uniformly.
 
+## Parallel CSV parsing
+
+`Excel.ParseCsvParallelAsync<T>` (`src/ExcelReader.Core/Parser/Internal/ParallelCsv*.cs`) is an opt-in
+alternate path over the same typed-parsing machinery, for sources large enough that partitioning
+pays for itself. `ParallelCsvFactory` decides eligibility — a seekable, UTF-8, large-enough source —
+and falls back to the ordinary sequential `ExcelParser<T>` otherwise, so callers get identical output
+either way.
+
+When it partitions, `CsvChunkPlan` slices the data range into four chunks per worker (not one — see
+the file's comments on why one-per-worker would buffer up to the whole output) and hands them out
+through a lock-free pull queue. Each worker reads its chunk through a `RangedFileStream`, a
+positional, non-seeking view over one shared `SafeFileHandle` (`RandomAccess.Read`, thread-safe, no
+per-worker file handle). A chunk's *nominal* start is only a guess — record boundaries do not respect
+chunk boundaries — so `CsvBoundaryResolver` has each worker also resolve where its own first real
+record begins.
+
+`ParallelCsvEnumerable<T>.GetAsyncEnumerator` is where the guesses get corrected and the output gets
+ordered. It walks chunks in index order; a chunk is only trusted once its predecessor has confirmed
+where the chunk actually starts, and a chunk whose guess was wrong is reparsed from the confirmed
+offset before anything downstream sees it. That correction can cascade into the following chunk, which
+the loop's confirmed-offset threading handles without special-casing. Boundary confirmation is
+therefore strictly ordered — it is a correctness requirement — but this also happens to be the merge
+that yields rows in file order, identical to the sequential parser.
+
+Whether a mode other than the ordered merge above would be worth adding as an opt-in is a measurement
+question the design deliberately left open (a >=10% throughput advantage on `CsvParallelParseBenchmark`
+would justify it; under that, the ordered merge stays the only shipped mode). An initial run of that
+benchmark, on a thermally-limited mobile CPU, produced numbers too unreliable to trust for the decision
+— flat-to-worse at mid-range degrees of parallelism, improving only at the extremes, consistent with
+power/thermal throttling under sustained multi-threaded load rather than the algorithm's own scaling.
+A follow-up ad hoc experiment tried decoupling confirmation from consumption (publishing each confirmed
+chunk to a bounded channel instead of yielding it inline, so confirmation could run a few chunks ahead
+of a slow consumer instead of lockstepping with it) across fast-, moderate-, and slow-consumer
+scenarios; none showed a consistent advantage over the ordered merge, so that variant was discarded
+rather than kept as a second mode. The broader question — whether true unordered emission would fare
+differently — is unresolved; the ordered merge (the safer default, and the only mode either public
+overload can reach) stays until a clean re-run on unconstrained hardware settles it.
+
 ## Shared plumbing
 
 Reader internals that would otherwise be duplicated four times over live in one place:

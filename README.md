@@ -68,6 +68,20 @@ foreach (var row in reader)
 }
 ```
 
+### Parallel CSV parsing (opt-in)
+
+```csharp
+await foreach (var row in Excel.ParseCsvParallelAsync<SalesRow>("big.csv", degreeOfParallelism: 8))
+{
+    Total += row.Revenue;
+}
+```
+
+Rows arrive in file order, identical to the sequential parser. Parsing and type conversion run across
+threads; whatever your loop body does per row does not — if that dominates, raising the degree will
+not help. Sources that cannot be partitioned (non-seekable streams, non-UTF-8 encodings, small files)
+fall back to sequential parsing with the same results.
+
 ## Open by auto-detecting the format
 
 `Excel.Open` picks the reader from the file signature (XLSX/XLSB are ZIP packages, XLS is an OLE2 document) and returns an `IExcelRowReader`. The interface exposes `GetEnumerator()` directly, so no pattern-match is needed for basic row iteration.
