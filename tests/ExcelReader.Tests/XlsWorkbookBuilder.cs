@@ -64,6 +64,14 @@ namespace ExcelReader.Tests
             return BuildOle(globals.ToArray());
         }
 
+        // Byte[] twin of BuildEncrypted(), for tests that open via Excel.Open(ReadOnlyMemory<byte>, ...)
+        // instead of a Stream.
+        internal static byte[] WithFilePassRecord()
+        {
+            using MemoryStream ms = BuildEncrypted();
+            return ms.ToArray();
+        }
+
         internal static MemoryStream BuildNoSheets()
         {
             using MemoryStream globals = new();

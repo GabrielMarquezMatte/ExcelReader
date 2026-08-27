@@ -147,7 +147,7 @@ fn move_to_sheet_rejects_an_index_past_the_end() {
         .move_to_sheet(count)
         .expect_err("an index past the last sheet must fail");
     assert!(
-        !error.message.is_empty(),
+        !error.message().is_empty(),
         "the failure must carry the native detail, got: {error}"
     );
 }
@@ -209,7 +209,7 @@ fn open_memory_reads_the_same_bytes() {
 fn open_reports_the_native_error_for_a_missing_file() {
     let error = Workbook::open("does-not-exist.xlsx").expect_err("a missing file must fail");
     assert!(
-        !error.message.is_empty(),
+        !error.message().is_empty(),
         "the failure must carry the native detail, got: {error}"
     );
 }
@@ -225,7 +225,7 @@ fn parse_sheet_reports_the_native_error_for_an_unknown_column() {
     let mut workbook = open_fixture();
     let error = parse_sheet::<Missing>(&mut workbook, 1).expect_err("an unknown column must fail");
     assert!(
-        !error.message.is_empty(),
+        !error.message().is_empty(),
         "the failure must carry the native detail, got: {error}"
     );
 }

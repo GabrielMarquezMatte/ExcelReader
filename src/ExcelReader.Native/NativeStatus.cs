@@ -10,10 +10,15 @@ namespace ExcelReader.Native
         internal const int InvalidArgument = -4;
         internal const int Error = -5;
 
+        /// <summary>The workbook is encrypted and no password was supplied.</summary>
+        internal const int PasswordRequired = -6;
+        /// <summary>The supplied password did not match the workbook's verifier.</summary>
+        internal const int PasswordIncorrect = -7;
+
         /// <summary>ABI revision returned by <c>xl_abi_version</c>. Mirrors XL_ABI_VERSION in include/excelreader.h.
         /// Bump on any change to a struct layout, a status code, or the meaning of an existing function; adding a
         /// new function does not bump it.</summary>
-        internal const int AbiVersion = 3;
+        internal const int AbiVersion = 4;
     }
 
     /// <summary>
@@ -43,8 +48,11 @@ namespace ExcelReader.Native
 
     /// <summary>
     /// Format selectors accepted by the open functions. Values 1-3 deliberately match
-    /// <see cref="Core.Enums.ExcelFileFormat"/>; CSV has no signature to sniff, so it
-    /// has no counterpart there and must always be requested explicitly.
+    /// <see cref="Core.Enums.ExcelFileFormat"/>; CSV has no signature to sniff, so it has no
+    /// counterpart there and must always be requested explicitly. Note the enums are NOT
+    /// interchangeable beyond 3: managed 4 is <see cref="Core.Enums.ExcelFileFormat.EncryptedOoxml"/>
+    /// (a detection result) while native 4 is <see cref="Csv"/> (a request). Encryption is requested
+    /// via xl_open_options.password, not via a format selector.
     /// </summary>
     internal static class NativeFormat
     {

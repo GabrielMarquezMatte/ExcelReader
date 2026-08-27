@@ -44,6 +44,32 @@ namespace ExcelReader.Core.Reader
         /// </summary>
         public bool InternStrings { get; init; }
 
+        /// <summary>Gets the password used to open an encrypted workbook. Defaults to <see langword="null"/>
+        /// (no password), in which case opening an encrypted workbook throws
+        /// <see cref="ExcelEncryptionException"/> with <see cref="ExcelEncryptionReason.PasswordRequired"/>.</summary>
+        /// <remarks>Applies to encrypted OOXML workbooks (.xlsx/.xlsb/.xlsm). Encrypted legacy .xls files
+        /// are not supported at all, with or without a password.</remarks>
+        public ExcelPassword? Password { get; init; }
+
+        /// <summary>Gets a value indicating whether an encrypted workbook's <c>dataIntegrity</c> HMAC is
+        /// verified when reading from a stream. Defaults to <see langword="false"/>.</summary>
+        /// <remarks>The HMAC covers the whole encrypted package, so verifying it on the streaming path
+        /// requires a full pass over the file before the first row — making time-to-first-row proportional
+        /// to file size, which defeats the point of a streaming reader. The in-memory path
+        /// (<see cref="Excel.From(System.ReadOnlyMemory{byte},ExcelReaderOptions?)"/>) has already decrypted
+        /// everything, so it always verifies regardless of this setting. With verification off, targeted
+        /// ciphertext tampering is not detected, though corrupt ciphertext still fails loudly downstream
+        /// when the decrypted bytes fail ZIP and XML parsing. Standard encryption has no HMAC field, so
+        /// this setting does not apply to it.</remarks>
+        public bool VerifyEncryptedIntegrity { get; init; }
+
+        /// <summary>Gets the maximum password-derivation iteration count accepted from an encrypted
+        /// workbook. Defaults to 100,000, which is what Excel writes.</summary>
+        /// <remarks>The file states its own iteration count, so a crafted workbook can ask for billions of
+        /// iterations and stall the process for hours. Exceeding this throws
+        /// <see cref="ExcelLimitExceededException"/>.</remarks>
+        public int MaxPasswordSpinCount { get; init; } = 100_000;
+
         /// <summary>Gets the default options instance, used whenever a reader is opened without explicit options.</summary>
         public static ExcelReaderOptions Default { get; } = new();
     }

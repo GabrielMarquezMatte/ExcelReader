@@ -24,4 +24,9 @@
                       OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Content Include="..\ExcelReader.Tests\data\encrypted\agile-aes256-sha512.xlsx"
+             Link="data\encrypted\agile-aes256-sha512.xlsx" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>

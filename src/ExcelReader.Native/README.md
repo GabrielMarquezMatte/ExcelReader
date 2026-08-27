@@ -73,3 +73,31 @@ normal link also works — this has not been set up or verified here.
 **Verifying it works:** `tests/ExcelReader.NativeSmoke/` is the reference consumer — it exercises
 every export against `RealExcel.xlsb` and pins the ABI structs' layout with `_STATIC_ASSERT`. Point a
 new integration at it before assuming your own linking approach is correct.
+
+## Encrypted workbooks
+
+`xl_open_options` grew a `password`/`password_len` pair (UTF-8 bytes, not NUL-terminated) to open a
+password-protected OOXML workbook (.xlsx/.xlsb/.xlsm) through `xl_open_file_ex`/`xl_open_memory_ex`.
+Omitting it for an encrypted file returns `XL_STATUS_PASSWORD_REQUIRED`; a wrong password returns
+`XL_STATUS_PASSWORD_INCORRECT`. Both are new status codes, and `xl_last_error`/`xl_last_error_ptr`
+carry the human-readable detail either way:
+
+```c
+xl_open_options options = {0};
+options.struct_size = sizeof(xl_open_options);
+options.password = (const uint8_t*)"hunter2";
+options.password_len = 7;
+
+xl_workbook* handle;
+int32_t status = xl_open_file_ex(path, path_len, XL_FORMAT_AUTO, &options, &handle);
+if (status == XL_STATUS_PASSWORD_REQUIRED || status == XL_STATUS_PASSWORD_INCORRECT) {
+    /* prompt again */
+}
+```
+
+This is why `XL_ABI_VERSION` moved from 3 to 4: `password`/`password_len` are new fields at the end
+of `xl_open_options`, so a caller built against the old, smaller struct passes the old, smaller
+`sizeof(xl_open_options)` as `struct_size` — the mismatch is rejected outright with
+`XL_INVALID_ARGUMENT` instead of the library reading two garbage fields past the end of the caller's
+allocation. Check `xl_abi_version()` against `XL_ABI_VERSION` (see above) and rebuild against the
+current header rather than only relying on the `struct_size` check to catch it.

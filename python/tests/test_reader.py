@@ -1,5 +1,6 @@
 import gc
 import shutil
+from pathlib import Path
 
 import pytest
 from excelreader import (
@@ -9,11 +10,15 @@ from excelreader import (
     ColumnType,
     ExcelReaderError,
     OpenOptions,
+    PasswordIncorrectError,
+    PasswordRequiredError,
     decode_cell,
     open_bytes,
     open_workbook,
 )
 from excelreader import reader as reader_module
+
+ENCRYPTED = Path(__file__).resolve().parents[2] / "tests" / "ExcelReader.Tests" / "data" / "encrypted"
 
 
 def test_reads_the_xlsx_header_row(xlsx_path):
@@ -493,3 +498,39 @@ def test_open_options_limit_actually_aborts_an_oversized_read(tmp_path):
 
     with pytest.raises(ExcelReaderError), open_workbook(path, format="csv", options=OpenOptions(csv_max_cell_bytes=100_000)) as workbook:
             list(workbook.rows())
+
+
+# --- password support -----------------------------------------------------------------------------
+#
+# open_workbook()/open_bytes() are this project's actual "open the workbook" entry points (there is
+# no bare excelreader.open()) — format is left at its auto-detect default throughout, since an
+# explicit xlsx/xlsb format bypasses the CFB-container sniffing that detects encryption in the first
+# place (see open_workbook()'s docstring).
+
+
+def test_opens_encrypted_workbook_with_password():
+    with open_workbook(ENCRYPTED / "agile-aes256-sha512.xlsx", password="hunter2") as book:
+        assert book.sheet_count > 0
+
+
+def test_reports_password_required_without_password():
+    with pytest.raises(PasswordRequiredError):
+        open_workbook(ENCRYPTED / "agile-aes256-sha512.xlsx")
+
+
+def test_reports_password_incorrect_with_wrong_password():
+    with pytest.raises(PasswordIncorrectError):
+        open_workbook(ENCRYPTED / "agile-aes256-sha512.xlsx", password="wrong")
+
+
+def test_encrypted_rows_match_plaintext():
+    with open_workbook(ENCRYPTED / "agile-aes256-sha512.xlsx", password="hunter2") as enc:
+        encrypted_rows = enc.read_all()
+    with open_workbook(ENCRYPTED / "agile-aes256-sha512.plain.xlsx") as plain:
+        assert plain.read_all() == encrypted_rows
+
+
+# A password must not surface in a traceback or a log line.
+def test_password_is_not_in_repr():
+    with open_workbook(ENCRYPTED / "agile-aes256-sha512.xlsx", password="hunter2") as book:
+        assert "hunter2" not in repr(book)

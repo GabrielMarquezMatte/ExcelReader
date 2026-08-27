@@ -43,9 +43,11 @@ pub fn parse_arrow<T: ExcelMapper>(
     // from_ffi consumes `array` by value: arrow-rs now owns it and will invoke its release callback
     // when the resulting ArrayData is dropped. `schema` stays owned here and releases on drop at
     // the end of this function, which is correct - the two are released independently.
-    let data = unsafe { from_ffi(array, &schema) }.map_err(|e| Error {
-        code: XL_ERROR,
-        message: format!("importing the native Arrow array failed: {e}"),
+    let data = unsafe { from_ffi(array, &schema) }.map_err(|e| {
+        Error::from_status(
+            XL_ERROR,
+            format!("importing the native Arrow array failed: {e}"),
+        )
     })?;
 
     Ok(RecordBatch::from(StructArray::from(data)))
