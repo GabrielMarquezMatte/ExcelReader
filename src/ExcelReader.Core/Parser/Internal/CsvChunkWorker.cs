@@ -135,16 +135,10 @@ namespace ExcelReader.Core.Parser.Internal
         private const int InitialBoundaryWindow = 4 * 1024;
         private const int BoundaryWindowGrowth = 8;
 
-        // Row-count estimation for the per-chunk result list. Sampling 64 records is enough to
-        // average out row-width variation without delaying the sizing long enough for the list to
-        // have doubled several times already. MinRecordBytes = 2 is the floor a real record can
-        // occupy (one byte of content plus a terminator), so it bounds an estimate skewed by an
-        // unusually wide sample. MaxSizingCapacity keeps a pathological estimate from requesting a
-        // multi-hundred-megabyte array in one go.
-        private const int SizingSampleRecords = 64;
-        private const int MinRecordBytes = 2;
-        private const int MaxSizingCapacity = 8 * 1024 * 1024;
-
+        // No row-count estimation here any more. It existed to stop a chunk's model list from
+        // doubling its way up to a Large Object Heap array, which mattered when a chunk was a share
+        // of the file; with a 64 KB chunk and lists recycled across chunks by the merge (ListPool),
+        // a list reaches its steady-state capacity within the first few chunks and never grows again.
 
         // Parses one chunk. `confirmedStart` is the offset the predecessor proved correct; when it is
         // null the worker guesses with the Outside hypothesis, which is right whenever no quoted
@@ -157,10 +151,10 @@ namespace ExcelReader.Core.Parser.Internal
             TypeMapInfo<T> info,
             CsvReaderOptions readerOptions,
             ExcelParserConfig config,
+            List<T> models,
             CancellationToken ct)
         {
             long start = confirmedStart ?? GuessStart(source, chunk, readerOptions.Quote);
-            var models = new List<T>();
             if (start >= source.Length)
             {
                 return new ValueTask<CsvChunkResult<T>>(new CsvChunkResult<T>(chunk.Index, models, start, long.MaxValue));
@@ -242,8 +236,6 @@ namespace ExcelReader.Core.Parser.Internal
             long resolvedNextStart = long.MaxValue;
             ExcelParseException? failure = null;
             int failureRow = 0;
-            long firstRecordStart = -1;
-            bool sized = false;
             while (await rows.MoveNextAsync().ConfigureAwait(false))
             {
                 long absolute = start + rows.CurrentRecordStart;
@@ -251,34 +243,6 @@ namespace ExcelReader.Core.Parser.Internal
                 {
                     resolvedNextStart = absolute;
                     break;
-                }
-
-                // Size the list from this chunk's own data instead of letting it double its way up.
-                // The sequential parser yields lazily and allocates no backing array at all; a chunk
-                // must buffer, so the doubling is pure overhead the parallel path adds — and above
-                // 85 KB every intermediate array is a Large Object Heap allocation. Sampling a few
-                // real records first (rather than guessing a row width, or plumbing an estimate down
-                // from the header) keeps the estimate honest for this file and this chunk.
-                if (firstRecordStart < 0)
-                {
-                    firstRecordStart = absolute;
-                }
-                else if (!sized && models.Count >= SizingSampleRecords)
-                {
-                    sized = true;
-                    long sampledBytes = absolute - firstRecordStart;
-                    if (sampledBytes > 0)
-                    {
-                        long estimate = (chunk.End - firstRecordStart) * models.Count / sampledBytes;
-                        // Clamped: an underestimate merely resumes doubling, but an overestimate
-                        // wastes memory outright, so cap it at a chunk's worth of minimum-width
-                        // records and never shrink below what the list already holds.
-                        long cap = Math.Min(estimate, (chunk.End - firstRecordStart) / MinRecordBytes);
-                        if (cap > models.Count)
-                        {
-                            models.EnsureCapacity((int)Math.Min(cap, MaxSizingCapacity));
-                        }
-                    }
                 }
 
                 T model = default!;

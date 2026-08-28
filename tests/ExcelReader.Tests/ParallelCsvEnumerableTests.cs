@@ -42,7 +42,7 @@ namespace ExcelReader.Tests
             CsvChunkPlan plan = CsvChunkPlan.Create(dataStart, csv.Length - dataStart, dop, chunkSizeOverride);
             return new ParallelCsvEnumerable<TRow>(
                 source, plan, dataStart, map, TypeMapper<TRow>.GetCsvInfo(),
-                CsvReaderOptions.Default, config, dop);
+                CsvReaderOptions.Default, config, dop, null);
         }
 
         // The parallel path's chunk projectors number rows from 1 within their own chunk, so

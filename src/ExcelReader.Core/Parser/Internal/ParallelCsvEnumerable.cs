@@ -67,12 +67,29 @@ namespace ExcelReader.Core.Parser.Internal
             using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             CancellationToken ct = cts.Token;
 
-            // Published-but-unconsumed results. Strictly below the chunk count (4 * dop) so it
-            // actually binds, and at least dop so workers are not throttled while the consumer keeps
-            // up. Without it, workers run ahead and the buffer grows to the whole file.
-            using var slots = new SemaphoreSlim(2 * _dop, 2 * _dop);
-            var results = new CsvChunkResult<T>?[_plan.Count];
-            var ready = new TaskCompletionSource<bool>[_plan.Count];
+            // Chunks that may be claimed but not yet consumed by the merge. One per worker: with 64 KB
+            // chunks (CsvChunkPlan) every worker still has a chunk to parse the moment the merge frees
+            // a slot, and deeper buffering measurably *hurt* — 2*dop was the original value, and at
+            // dop=16 it cost 10-45% wall clock on both corpora by keeping enough parsed models alive
+            // to push them out of Gen0.
+            int inFlight = _dop;
+            using var slots = new SemaphoreSlim(inFlight, inFlight);
+
+            // Ring size: at most `inFlight` chunks are claimed at once, and they are handed out in
+            // index order, so the live window is [merge position, merge position + inFlight - 1] —
+            // inFlight consecutive indices. One more slot than that makes index % Ring collision-free
+            // across the whole window, so all three per-chunk arrays are O(dop) rather than O(chunks).
+            // At 64 KB a 10 GB file has ~160k chunks; arrays indexed by chunk would be megabytes of
+            // live bookkeeping, and 160k TaskCompletionSources held to the end of the enumeration.
+            int ring = inFlight + 1;
+
+            // Chunk model lists are recycled rather than reallocated. A chunk's list is the single
+            // largest allocation the parallel path adds over the sequential one, and the merge drops
+            // it the moment it has yielded its rows, so without recycling every chunk buys and burns
+            // a fresh array.
+            var lists = new ListPool<T>(ring);
+            var results = new CsvChunkResult<T>?[ring];
+            var ready = new TaskCompletionSource<bool>[ring];
             foreach (ref TaskCompletionSource<bool> slot in ready.AsSpan())
             {
                 slot = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -82,7 +99,7 @@ namespace ExcelReader.Core.Parser.Internal
             // to the Action overload, which returns a Task that completes at the worker's first await
             // instead of at its end — and the whole join-before-release guarantee below rests on
             // `allWorkers` meaning the workers have actually finished.
-            Func<Task> body = () => RunWorkerAsync(results, ready, slots, ct);
+            Func<Task> body = () => RunWorkerAsync(results, ready, slots, lists, ring, ct);
             Task[] workers = new Task[Math.Min(_dop, _plan.Count)];
             foreach (ref Task worker in workers.AsSpan())
             {
@@ -98,8 +115,9 @@ namespace ExcelReader.Core.Parser.Internal
                 for (int i = 0; i < _plan.Count; i++)
                 {
                     ct.ThrowIfCancellationRequested();
-                    await WaitForChunkAsync(ready[i].Task, allWorkers).ConfigureAwait(false);
-                    CsvChunkResult<T> result = results[i]!;
+                    int slot = i % ring;
+                    await WaitForChunkAsync(ready[slot].Task, allWorkers).ConfigureAwait(false);
+                    CsvChunkResult<T> result = results[slot]!;
 
                     // The predecessor's ResolvedNextStart is ground truth. When this chunk guessed a
                     // different start, its rows are wrong and it is reparsed from the proven offset.
@@ -108,25 +126,41 @@ namespace ExcelReader.Core.Parser.Internal
                     // confirmedNextStart is recomputed from whatever result we end up emitting.
                     if (confirmedNextStart < long.MaxValue && result.ActualStart != confirmedNextStart)
                     {
+                        // The discarded result's list is reused verbatim for the reparse: its rows are
+                        // wrong, but its capacity was sized against this very chunk.
+                        List<T> reuse = result.Models;
+                        reuse.Clear();
                         result = await CsvChunkWorker.ParseAsync(
-                            _source, _plan[i], confirmedNextStart, _map, _info, _readerOptions, _config, ct).ConfigureAwait(false);
+                            _source, _plan[i], confirmedNextStart, _map, _info, _readerOptions, _config, reuse, ct).ConfigureAwait(false);
                     }
 
-                    // Drop the array's reference before yielding: the semaphore bounds how many chunks
-                    // are *in flight*, but only this keeps already-merged chunks from pinning every
-                    // parsed row in the array for the whole enumeration.
-                    results[i] = null;
+                    // Rearm this ring slot for chunk i + ring, then release. Strictly in that order:
+                    // chunk i + ring can only be claimed on a permit released at chunk i + 1 or later,
+                    // so rearming before this release puts it safely ahead of any worker that will
+                    // read the slot, with the semaphore providing the ordering edge. Dropping the
+                    // result reference here also matters on its own: the semaphore bounds how many
+                    // chunks are in flight, but only this keeps a merged chunk's rows from staying
+                    // reachable until the slot is overwritten a full ring later.
+                    results[slot] = null;
+                    ready[slot] = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
                     slots.Release();
 
                     // Indexed rather than foreach: HLQ012 would have this iterate a
                     // CollectionsMarshal.AsSpan over the list, and a Span cannot live across the
                     // `yield return` an ordered merge is built on.
                     List<T> models = result.Models;
-                    for (int m = 0; m < models.Count; m++)
+                    int count = models.Count;
+                    for (int m = 0; m < count; m++)
                     {
                         rowsEmitted++;
                         yield return models[m];
                     }
+
+                    // Recycled only once its rows are out the door. Clear() drops this chunk's model
+                    // references immediately, so recycling never keeps a parsed row alive longer than
+                    // not recycling would.
+                    models.Clear();
+                    lists.Return(models);
 
                     if (result.Failure is not null)
                     {
@@ -170,9 +204,11 @@ namespace ExcelReader.Core.Parser.Internal
             CsvChunkResult<T>?[] results,
             TaskCompletionSource<bool>[] ready,
             SemaphoreSlim slots,
+            ListPool<T> lists,
+            int ring,
             CancellationToken ct)
         {
-            int inFlight = -1;
+            int claimed = -1;
             try
             {
                 // Acquire the slot BEFORE claiming the chunk, never the other way round. Claiming
@@ -198,12 +234,12 @@ namespace ExcelReader.Core.Parser.Internal
                         slots.Release();
                         return;
                     }
-                    inFlight = chunk.Index;
+                    claimed = chunk.Index;
                     long? confirmed = chunk.Index == 0 ? _firstDataRecordOffset : null;
                     CsvChunkResult<T> result = await CsvChunkWorker.ParseAsync(
-                        _source, chunk, confirmed, _map, _info, _readerOptions, _config, ct).ConfigureAwait(false);
-                    results[chunk.Index] = result;
-                    ready[chunk.Index].TrySetResult(true);
+                        _source, chunk, confirmed, _map, _info, _readerOptions, _config, lists.Rent(), ct).ConfigureAwait(false);
+                    results[chunk.Index % ring] = result;
+                    ready[chunk.Index % ring].TrySetResult(true);
                 }
             }
             // A worker that dies owes the merge an answer for the chunk it was holding. Without this
@@ -211,14 +247,14 @@ namespace ExcelReader.Core.Parser.Internal
             // only other signal, Task.WhenAll, cannot complete while the surviving workers are still
             // running. TrySetCanceled rather than TrySetException for cancellation keeps the
             // early-break path from parking an exception nobody will observe.
-            catch (OperationCanceledException) when (inFlight >= 0)
+            catch (OperationCanceledException) when (claimed >= 0)
             {
-                ready[inFlight].TrySetCanceled(ct);
+                ready[claimed % ring].TrySetCanceled(ct);
                 throw;
             }
-            catch (Exception ex) when (inFlight >= 0)
+            catch (Exception ex) when (claimed >= 0)
             {
-                ready[inFlight].TrySetException(ex);
+                ready[claimed % ring].TrySetException(ex);
                 throw;
             }
         }
