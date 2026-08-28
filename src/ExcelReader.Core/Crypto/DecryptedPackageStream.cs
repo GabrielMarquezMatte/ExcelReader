@@ -34,17 +34,30 @@ namespace ExcelReader.Core.Crypto
         // within one entry, occasionally seek) makes a single cached segment enough — see the design
         // doc's remark that a multi-segment cache would be speculative.
         private readonly byte[] _segmentCache;
+        // One AES instance for the stream's lifetime instead of one per 4 KB segment. Aes.Create()
+        // plus a Key assignment plus CreateDecryptor() ran once per segment - ~25,600 times on a
+        // 100 MB package - rebuilding an identical key schedule every round. Only the IV differs
+        // between segments, and DecryptCbc takes that per call.
+        private readonly Aes _aes;
+        // Scratch for the per-segment IV, so deriving it costs no allocation either (see
+        // AgileKeyDerivation.SegmentIv's span overload).
+        private readonly byte[] _iv;
+        // Likewise built once: a per-segment IncrementalHash is a BCryptCreateHash per 4 KB.
+        private readonly IncrementalHash _ivHasher;
         private int _cachedSegment = -1;
         private long _position;
         private bool _disposed;
 
-        private DecryptedPackageStream(Stream view, AgileDescriptor descriptor, byte[] key, long length, byte[] segmentCache)
+        private DecryptedPackageStream(Stream view, AgileDescriptor descriptor, byte[] key, long length, byte[] segmentCache, Aes aes)
         {
             _view = view;
             _descriptor = descriptor;
             _key = key;
             _length = length;
             _segmentCache = segmentCache;
+            _aes = aes;
+            _iv = new byte[descriptor.KeyData.BlockSize];
+            _ivHasher = AgileKeyDerivation.CreateHasher(descriptor.KeyData.Hash);
         }
 
         internal static DecryptedPackageStream Create(CfbContainer cfb, EncryptionDescriptor descriptor, ExcelReaderOptions options)
@@ -115,7 +128,11 @@ namespace ExcelReader.Core.Crypto
                 }
 
                 byte[] segmentCache = ArrayPool<byte>.Shared.Rent(SegmentSize);
-                return new DecryptedPackageStream(view, agile, key, declared, segmentCache);
+                Aes aes = Aes.Create();
+                aes.Mode = CipherMode.CBC;
+                aes.Padding = PaddingMode.None;
+                aes.Key = key;
+                return new DecryptedPackageStream(view, agile, key, declared, segmentCache, aes);
             }
             catch
             {
@@ -302,20 +319,16 @@ namespace ExcelReader.Core.Crypto
             return (cipherOffset, cipherLen);
         }
 
-        // AES-CBC, no padding, decrypting straight into the pooled segment cache (TransformBlock, not
-        // TransformFinalBlock, to avoid the extra byte[] allocation TransformFinalBlock would return -
-        // there is no padding to strip, since the final segment's short plaintext is handled by Length
-        // bounding the copy in Read/ReadSlowAsync, not by removing a padding block here).
+        // AES-CBC, no padding, decrypting straight into the pooled segment cache. DecryptCbc rather
+        // than an ICryptoTransform: it takes the IV per call, which is what lets the cipher object and
+        // its key schedule be built once in Create instead of rebuilt per segment, and it writes into
+        // a caller-owned span, so there is no per-segment output array either. No padding to strip -
+        // the final segment's short plaintext is handled by Length bounding the copy in
+        // Read/ReadSlowAsync.
         private void DecryptSegment(int index, byte[] cipherBuf, int cipherLen)
         {
-            byte[] iv = AgileKeyDerivation.SegmentIv(_descriptor, index);
-            using Aes aes = Aes.Create();
-            aes.Mode = CipherMode.CBC;
-            aes.Padding = PaddingMode.None;
-            aes.Key = _key;
-            aes.IV = iv;
-            using ICryptoTransform decryptor = aes.CreateDecryptor();
-            decryptor.TransformBlock(cipherBuf, 0, cipherLen, _segmentCache, 0);
+            AgileKeyDerivation.SegmentIv(_descriptor, index, _ivHasher, _iv);
+            _aes.DecryptCbc(cipherBuf.AsSpan(0, cipherLen), _iv, _segmentCache.AsSpan(0, cipherLen), PaddingMode.None);
         }
 
         [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP007:Don't dispose injected",
@@ -328,6 +341,8 @@ namespace ExcelReader.Core.Crypto
                 CryptographicOperations.ZeroMemory(_key);
                 CryptographicOperations.ZeroMemory(_segmentCache);
                 ArrayPool<byte>.Shared.Return(_segmentCache);
+                _aes.Dispose();
+                _ivHasher.Dispose();
                 _view.Dispose();
             }
             base.Dispose(disposing);

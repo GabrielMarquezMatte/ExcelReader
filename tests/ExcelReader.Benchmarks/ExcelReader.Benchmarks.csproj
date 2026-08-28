@@ -38,6 +38,11 @@
 
   <ItemGroup>
     <None Include="Data\**" CopyToOutputDirectory="PreserveNewest" />
+    <!-- The encrypted-workbook benchmark reads the test suite's oracle fixtures rather than keeping
+         a second copy: this library cannot write encrypted workbooks, so those files are the only
+         encrypted corpus that exists in the repo. -->
+    <None Include="..\ExcelReader.Tests\data\encrypted\*.xlsx"
+          Link="data\encrypted\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>
