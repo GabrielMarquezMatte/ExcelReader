@@ -148,9 +148,8 @@ namespace ExcelReader.Core.Writer
             _owner.RegisterSheet(Name, SheetId);
         }
 
-        // <cols> must precede <sheetData> in worksheet XML — hence built once, up front, from
-        // whatever SetColumnStyle/SetColumnWidth calls landed before StartAsync — inserting it later
-        // would mean buffering the whole sheet instead of streaming rows as they're written.
+        // <cols> must precede <sheetData>, so it's built once up front from whatever
+        // SetColumnStyle/SetColumnWidth calls landed before StartAsync.
         private string BuildColsXml()
         {
             if (_columnStyles is null && _columnWidths is null)
@@ -233,13 +232,9 @@ namespace ExcelReader.Core.Writer
             return _rowWriter;
         }
 
-        // Explicit interface implementations (not public overloads): XlsxSheetWriter already ships a
-        // public StartRow(CancellationToken ct = default) — a public zero-arg or int-only StartRow
-        // alongside it would collide with that optional parameter under this repo's back-compat/overload
-        // analyzers (RS0027/S3427). Native/unmanaged callers reach these through the ISheetWriter<TRow>
-        // constraint (see NativeApi.Write.cs), which dispatches to an explicit implementation exactly
-        // the same as a public one; only direct-XlsxSheetWriter-typed callers can't see it by this name,
-        // and they already have StartRow()/StartRow(ct) via the pre-existing overload.
+        // Explicit, not public: a public zero-arg StartRow would collide with the existing
+        // StartRow(CancellationToken ct = default) overload. Reached via the ISheetWriter<TRow>
+        // constraint (see NativeApi.Write.cs).
         XlsxRowWriter ISheetWriter<XlsxRowWriter>.StartRow()
         {
             return StartRow(styleId: 0, default);
@@ -340,8 +335,7 @@ namespace ExcelReader.Core.Writer
             _rowNumber++;
             _rowActive = true;
             // The `r` attribute on <row> is optional per ECMA-376 (rows are positional); omitting it
-            // shrinks the XML fed to deflate and skips a Utf8Formatter call on every row. `s`/`customFormat`
-            // are only added when a row style was actually requested, for the same reason.
+            // shrinks the XML and skips a format call on every row.
             if (styleId == 0)
             {
                 _rowBuffer.Write("<row>"u8);
@@ -363,9 +357,8 @@ namespace ExcelReader.Core.Writer
             _rowActive = false;
         }
 
-        // When offloading, hands the buffer's backing array to the background writer directly
-        // (BiffBuffer.Detach) instead of copying it into a fresh rental — see WriteOffloadStream's
-        // EnqueueOwned. _rowBuffer keeps working immediately: Detach rents its own replacement.
+        // When offloading, hands the buffer's array to the background writer directly instead of
+        // copying; Detach rents _rowBuffer its own replacement so it keeps working immediately.
         private void FlushRowBuffer()
         {
             if (_stream is WriteOffloadStream offload)

@@ -15,18 +15,10 @@ namespace ExcelReader.Core.ValueObjects
     {
         private readonly double _number;
         private readonly bool _hasNumber;
-        // Set only for a shared-string cell whose reader was constructed with a dedup cache (currently
-        // XLSX/XLSB/XLS): _sharedIndex is the string's index into that reader's shared-string table
-        // (see CellDesc.ToCell), and _sharedCache is the reader-owned index -> materialized-string array,
-        // sized to the table's string count. -1 for non-shared cells and for an out-of-range/corrupt
-        // index (WorkbookLookups.SharedAt), which the bounds check in GetString() below excludes safely.
+        // Index into the reader's shared-string table (see CellDesc.ToCell); -1 for non-shared cells.
         private readonly int _sharedIndex;
         private readonly string?[]? _sharedCache;
-        // Content-keyed dedup cache (see Utf8StringCache), used for cells the index-keyed _sharedCache
-        // above can't serve — CSV has no stable shared-string index at all, and XLSX/XLSB/XLS
-        // inline/formula-string cells aren't part of the shared-string table either. Non-null only
-        // when the reader was constructed with string interning enabled; checked after _sharedCache in
-        // GetString() so a genuine shared-string hit is never routed through the slower content lookup.
+        // Content-keyed dedup cache for cells with no shared-string index (CSV, inline/formula strings).
         private readonly Utf8StringCache? _contentCache;
 
         /// <summary>The kind of value this cell holds.</summary>
@@ -86,11 +78,8 @@ namespace ExcelReader.Core.ValueObjects
                 value = _number;
                 return true;
             }
-            // NumberStyles.Float (no AllowThousands) — the default style lets a comma act as a
-            // thousands separator, so pt-BR comma-decimal text like "1,5" silently parsed as 15.0
-            // instead of failing. This method takes no IFormatProvider, so it can only ever be
-            // correct for genuine invariant-formatted text; rejecting ambiguous input is strictly
-            // better than silently returning a wrong number 10x off.
+            // NumberStyles.Float, not the default: AllowThousands would let a comma decimal (e.g.
+            // pt-BR "1,5") silently parse as 15.
             return FastDouble.TryParse(Value, out value)
                 || double.TryParse(Value, NumberStyles.Float, CultureInfo.InvariantCulture, out value);
         }
@@ -106,15 +95,11 @@ namespace ExcelReader.Core.ValueObjects
         [SkipLocalsInit]
         public bool TryParse<T>(IFormatProvider? provider, [MaybeNullWhen(false)] out T result) where T : IUtf8SpanParsable<T>
         {
-            // Fast path for binary doubles: hand back the stored value without round-tripping
-            // through text. Guards are JIT constants, so non-matching T compiles them away.
+            // typeof(T) == ... guards are JIT constants; the branch for every other T compiles away.
             if (!_hasNumber)
             {
-                // Text-backed double (e.g. CSV, or an XLSX cell FastDouble.TryParse declined to parse
-                // eagerly): try the same exact-representability fast parse before the general parser.
-                // FastDouble always treats '.' as the decimal separator, so it's only valid when the
-                // caller's culture agrees — otherwise "1.234" under e.g. pt-BR (comma decimal) would
-                // silently parse as 1.234 instead of the correct 1234.
+                // FastDouble always treats '.' as the decimal separator, so it only applies when the
+                // caller's culture agrees — otherwise pt-BR "1.234" would misparse as 1.234.
                 if (typeof(T) == typeof(double) && UsesDotDecimalSeparator(provider) && FastDouble.TryParse(Value, out double fast))
                 {
                     result = Unsafe.As<double, T>(ref fast);
@@ -154,35 +139,21 @@ namespace ExcelReader.Core.ValueObjects
             {
                 return true;
             }
-            // Other numeric targets (decimal, ...), plus out-of-range/non-integral cases above:
-            // format once and parse, which exactly matches "parse the formatted text" —
-            // e.g. int.TryParse fails on "12.5".
             Span<byte> buffer = stackalloc byte[32];
             return Utf8Formatter.TryFormat(_number, buffer, out int written)
                 ? T.TryParse(buffer[..written], provider, out result)
                 : T.TryParse(Value, provider, out result);
         }
 
-        // Plain ASCII digits into int/long, without going through the general number parser.
-        //
-        // Deliberately narrow, because the point is to be provably identical to the fallback rather
-        // than to cover every shape: an unsigned run of ASCII digits parses to the same value under
-        // NumberStyles.Integer in every culture (no sign, no separators, no whitespace to interpret),
-        // so this path can never disagree with T.TryParse. A leading '-' is only taken when the
-        // provider *is* the invariant culture, since a culture is free to spell its negative sign with
-        // something other than U+002D and would then reject what this accepts. Anything else — an
-        // empty span, a sign under another culture, a non-digit, or enough digits to risk overflowing
-        // the accumulator — returns false and falls through to the real parser unchanged.
-        //
-        // Worth the code because integer columns are the most common typed CSV column there is, and
-        // the general parser spends most of its time on the format/culture machinery none of these
-        // inputs need. Measured on 24M ints: 14.5 ns -> 4.5 ns per value.
+        // Fast path for plain ASCII digits into int/long, skipping the general number parser.
+        // Unsigned digits parse identically to T.TryParse under any culture, so those are always
+        // safe; a leading '-' is only accepted for the invariant culture, since another culture can
+        // spell its negative sign differently. Anything else falls through to T.TryParse unchanged.
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static bool TryParseAsciiDigits<T>(ReadOnlySpan<byte> utf8, IFormatProvider? provider, [MaybeNullWhen(false)] out T result)
             where T : IUtf8SpanParsable<T>
         {
             result = default;
-            // JIT constants: for every other T this whole method folds away to `return false`.
             if (typeof(T) != typeof(int) && typeof(T) != typeof(long))
             {
                 return false;
@@ -196,8 +167,8 @@ namespace ExcelReader.Core.ValueObjects
                 }
                 utf8 = utf8[1..];
             }
-            // 9 digits always fit an int, 18 always fit a long; longer runs go to the real parser
-            // rather than carrying overflow checks through the loop.
+            // 9 digits always fit an int, 18 always fit a long; longer runs go to T.TryParse instead
+            // of carrying overflow checks through the loop.
             int maxDigits = typeof(T) == typeof(int) ? 9 : 18;
             if (utf8.IsEmpty || utf8.Length > maxDigits)
             {
@@ -227,10 +198,8 @@ namespace ExcelReader.Core.ValueObjects
             return true;
         }
 
-        // Integral targets: cast directly when the stored double is a whole number that fits the
-        // target's range — skips the format+parse round trip that the general path below needs.
-        // Non-integral values (e.g. 12.5) and out-of-range values return false so the caller can
-        // preserve the general parser's exact semantics.
+        // Casts directly when the stored double is a whole number in range; otherwise false, so the
+        // caller falls back to the format+parse path.
         [SkipLocalsInit]
         private bool TryParseIntegral<T>([MaybeNullWhen(false)] out T result) where T : IUtf8SpanParsable<T>
         {

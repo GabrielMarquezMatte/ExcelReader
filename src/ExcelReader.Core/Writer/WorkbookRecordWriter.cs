@@ -198,18 +198,10 @@ namespace ExcelReader.Core.Writer
         }
     }
 
-    // Per-type column plan. Headers depend only on T; the write delegate additionally depends on the
-    // concrete TRow (XlsxRowWriter/XlsbRowWriter/XlsRowWriter), cached per (T, TRow) via the nested Plan<TRow>.
-    // Compiling against the concrete TRow (instead of the IRowWriter interface) lets each Expression.Call
-    // resolve directly to that sealed class's non-virtual method, so the JIT emits a direct call per cell
-    // instead of an interface dispatch. Numeric properties go to the generic Write<U> (a number cell)
-    // everything non-numeric/non-primitive is written as its ToString() text, since Write<U> only
-    // produces valid numeric cells.
-    // WriteSheetAsync<T> (this file's own public entry point) already carries a matching
-    // [RequiresUnreferencedCode]/[RequiresDynamicCode] pair - this is what makes that annotation
-    // actually cover the reflection performed internally here, instead of just documenting an
-    // assumption at the outer boundary. Not shared with MappedRecordColumns<T> (the AOT-safe,
-    // source-generated counterpart in MappedWorkbookRecordWriter.cs), so this doesn't affect that path.
+    // Per-type column plan, cached per (T, TRow) via the nested Plan<TRow>. Compiled against the
+    // concrete TRow rather than IRowWriter, so each call resolves directly to that sealed class's
+    // non-virtual method instead of an interface dispatch. Non-numeric/non-primitive properties fall
+    // back to ToString() text, since Write<U> only produces valid numeric cells.
     [RequiresUnreferencedCode("Record writing reflects over T's public properties, which trimming may remove.")]
     [RequiresDynamicCode("Record writing compiles the per-type column writer at runtime (Expression.Compile / MakeGenericMethod).")]
     [SuppressMessage("Major Code Smell", "S2743:Static fields should not be used in generic types",
@@ -249,8 +241,7 @@ namespace ExcelReader.Core.Writer
         private static class Plan<TRow> where TRow : IRowWriter
         {
             internal static readonly Action<TRow, T> Write = Build();
-            // Produces a string? expression for a non-string, non-numeric property (Guid, enum, char, DateOnly,
-            // custom types): null-safe ToString() so it lands in a text cell rather than a corrupt number cell.
+            // Null-safe ToString() for a non-string, non-numeric property, so it lands in a text cell.
             private static Expression ToStringExpression(Expression value, Type pt)
             {
                 MethodInfo toString = typeof(object).GetMethod(nameof(ToString), Type.EmptyTypes)!;
@@ -265,10 +256,7 @@ namespace ExcelReader.Core.Writer
                     Expression.Call(boxed, toString),
                     Expression.Constant(null, typeof(string)));
             }
-            // If the property carries [ExcelConverter(T)] and T implements IExcelCellWriter<propType>, returns
-            // a call to that converter's Write; otherwise null so the caller falls back to type-based
-            // routing (a read-only converter simply gets no write side). `instances` caches by converter
-            // type so a converter used on multiple properties of the same (T, TRow) is built only once.
+            // `instances` caches by converter type so one used on multiple properties is built once.
             private static MethodCallExpression? TryBuildConverterWrite(
                 PropertyInfo prop, ParameterExpression rowParam, Expression value, Dictionary<Type, object> instances)
             {
@@ -301,8 +289,6 @@ namespace ExcelReader.Core.Writer
                 foreach (PropertyInfo prop in _props)
                 {
                     Expression value = Expression.Property(recParam, prop);
-                    // A [ExcelConverter] whose type also implements IExcelCellWriter<propType> owns the write
-                    // (round-trips a custom type written here and read back via its IExcelCellConverter side).
                     Expression? converterCall = TryBuildConverterWrite(prop, rowParam, value, converterInstances);
                     if (converterCall is not null)
                     {
@@ -322,11 +308,8 @@ namespace ExcelReader.Core.Writer
         }
     }
 
-    // Reflection resolved once per concrete TRow (XlsxRowWriter/XlsbRowWriter/XlsRowWriter — at most a
-    // handful of instantiations for the whole process): the Write overloads declared on that concrete
-    // type, plus the set of numeric property types that map to Write<U>.
-    // Reached only from RecordColumns<T>.Plan<TRow> (the reflection-based write path) - not shared with
-    // the AOT-safe MappedRecordColumns<T> path, so this annotation doesn't affect that one.
+    // Reflection resolved once per concrete TRow: the Write overloads it declares, plus the set of
+    // numeric property types that map to Write<U>.
     [RequiresUnreferencedCode("Record writing reflects over TRow's Write overloads, which trimming may remove.")]
     [RequiresDynamicCode("Record writing dispatches through MakeGenericMethod for numeric column types.")]
     [SuppressMessage("Major Code Smell", "S2743:Static fields should not be used in generic types",

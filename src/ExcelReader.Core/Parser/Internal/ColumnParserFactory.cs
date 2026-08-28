@@ -47,13 +47,8 @@ namespace ExcelReader.Core.Parser.Internal
                 nameof(BuildConverterCore),
                 BindingFlags.NonPublic | BindingFlags.Static)!;
 
-        // sbyte, char, TimeSpan, DateTimeOffset, Half, Int128, UInt128 were previously absent
-        // from this set, so a property of one of these types silently bound to nothing — TypeMapper
-        // skips a null parser unless [ExcelRequired] (Cell.TryParse<T>'s IUtf8SpanParsable<T> generic
-        // path already supports all of them; sbyte in particular already had a TryParseIntegral fast
-        // path in Cell.cs that this factory never reached). Excel has no native serial-number concept
-        // for TimeSpan/DateTimeOffset the way it does for DateTime/DateOnly/TimeOnly, so — unlike those
-        // three, which get a dedicated serial-aware reader below — text parsing via this generic path is
+        // Excel has no serial-number concept for TimeSpan/DateTimeOffset the way it does for
+        // DateTime/DateOnly/TimeOnly, so — unlike those three — text parsing via this generic path is
         // the only sensible interpretation for them.
         private static readonly HashSet<Type> _parsableTypes =
         [
@@ -85,9 +80,8 @@ namespace ExcelReader.Core.Parser.Internal
             return BuildConcreteParser<T>(prop, propType, csvTextDates);
         }
 
-        // Builds a parser from a user-supplied IExcelCellConverter<TProperty>. The converter type must
-        // implement the interface for the property's exact type and have a public parameterless ctor
-        // a single shared instance is created here and reused for every row.
+        // Builds a parser from a user-supplied IExcelCellConverter<TProperty>; a single shared instance
+        // is created here and reused for every row.
         [RequiresUnreferencedCode("Building a converter-backed parser instantiates converterType and dispatches through MakeGenericMethod, which trimming may remove.")]
         [RequiresDynamicCode("Building a converter-backed parser calls MakeGenericType/MakeGenericMethod for the converter's concrete type.")]
         internal static ColumnParser<T> BuildConverter<T>(PropertyInfo prop, Type converterType)
@@ -140,11 +134,7 @@ namespace ExcelReader.Core.Parser.Internal
             }
             if (propType == typeof(TimeOnly))
             {
-                // Always serial, regardless of textDates: CsvWriter's own TimeOnly output is a numeric
-                // day-fraction in every format (unlike DateTime/DateOnly, CSV has no distinct textual
-                // form for it), so forcing the text reader here — as this used to do — broke reading a
-                // TimeOnly column back from CSV whenever the same model also had a DateTime/DateOnly
-                // property (which is what flips csvTextDates on for the whole map).
+                // Always serial, regardless of textDates: CSV has no distinct textual form for TimeOnly.
                 return BuildValue<T, TimeOnly>(prop, ReadTimeOnly);
             }
 #if NET8_0
@@ -195,7 +185,7 @@ namespace ExcelReader.Core.Parser.Internal
             }
             if (innerType == typeof(TimeOnly))
             {
-                // See BuildConcreteParser's TimeOnly case: always serial, never the csvTextDates text reader.
+                // See BuildConcreteParser's TimeOnly case: always serial.
                 return BuildNullableValue<T, TimeOnly>(prop, ReadTimeOnly);
             }
             if (innerType.IsEnum)
@@ -227,10 +217,8 @@ namespace ExcelReader.Core.Parser.Internal
         }
 
 #if NET9_0_OR_GREATER
-        // Zero-copy text binding: aliases Cell.Value (the reader's row/shared-string buffer) directly
-        // instead of allocating via GetString(). Valid only until the enumerator's next MoveNext() —
-        // the same forward-only-cursor contract Row/Cell themselves already have; a caller that needs
-        // the text past that must copy it out (e.g. Encoding.UTF8.GetString(span)) within the loop body.
+        // Zero-copy text binding: aliases Cell.Value directly instead of allocating via GetString().
+        // Valid only until the enumerator's next MoveNext(); a caller needing it past that must copy.
         private static ColumnParser<T> BuildSpanParser<T>(PropertyInfo prop)
             where T : allows ref struct
         {
@@ -243,10 +231,8 @@ namespace ExcelReader.Core.Parser.Internal
         }
 #endif
 
-        // Shared shape behind every value-type column parser below: read the cell into a V via one of
-        // the Read*/TryParse* strategies, then assign through the compiled setter. Build*Parser methods
-        // differ only in which reader they plug in, so they collapse to one-line factories over these
-        // two generics instead of ~12 structurally identical bodies.
+        // Shared shape behind every value-type column parser: read the cell into a V, then assign
+        // through the compiled setter.
         private delegate bool CellReader<V>(in Cell cell, bool isDate1904, IFormatProvider provider, out V value);
 
         private static ColumnParser<T> BuildValue<T, V>(PropertyInfo prop, CellReader<V> read)
@@ -285,9 +271,6 @@ namespace ExcelReader.Core.Parser.Internal
         }
 
 #pragma warning disable S1172 // CellReader has one fixed signature for all typed cell readers.
-        // internal (not private): ExcelCellReaders forwards these to the public ExcelCellReader<T>
-        // surface the source generator (feature A) and hand-written IExcelRowMap<T> maps plug into,
-        // so the generator never needs to reimplement this conversion logic.
         internal static bool ReadBool(in Cell cell, bool isDate1904, IFormatProvider provider, out bool value)
         {
             return TryParseBool(in cell, out value);
@@ -338,9 +321,6 @@ namespace ExcelReader.Core.Parser.Internal
         }
 #pragma warning restore S1172
 
-        // Forwards to EnumCache<TEnum>, which stays private (it caches per-TEnum lookup tables and has
-        // no reason to be part of the factory's own surface) — this is the seam ExcelCellReaders.Enum
-        // uses instead of duplicating the name/value lookup.
         internal static bool TryParseEnum<TEnum>(in Cell cell, out TEnum value)
             where TEnum : struct, Enum
         {
@@ -366,17 +346,14 @@ namespace ExcelReader.Core.Parser.Internal
             return new TimeOnly(ticks == TimeSpan.TicksPerDay ? 0 : ticks);
         }
 
-        // DateTime/DateOnly implement ISpanParsable (char) and IUtf8SpanFormattable, but NOT
-        // IUtf8SpanParsable (no parse-from-UTF-8) on either net8 or net10. So decode the date field to
-        // a stack (or, rarely, pooled) char buffer and parse culture-aware (honors Culture, e.g. pt-BR
-        // "02/07/2026").
+        // DateTime/DateOnly don't implement IUtf8SpanParsable, so decode to a stack (or pooled) char
+        // buffer and parse culture-aware.
         [SkipLocalsInit]
         private static bool TryParseDateTimeText(in Cell cell, IFormatProvider provider, out DateTime value)
         {
             ReadOnlySpan<byte> utf8 = cell.Value;
-            // Round-trip ISO 8601 ("O", no offset — 27 bytes exactly) parses straight from UTF-8,
-            // skipping the transcode and the general format-probing parser. Offset/Z forms fall
-            // through so their DateTimeKind/local-adjustment semantics stay identical to TryParse.
+            // Round-trip ISO 8601 ("O", 27 bytes exactly) parses straight from UTF-8. Offset/Z forms
+            // fall through to keep their DateTimeKind semantics identical to the general parser.
             if (utf8.Length == 27 && utf8[10] == (byte)'T'
                 && Utf8Parser.TryParse(utf8, out value, out int consumed, 'O') && consumed == 27)
             {
@@ -498,9 +475,6 @@ namespace ExcelReader.Core.Parser.Internal
         {
             return TryParseGuid(in cell, out value);
         }
-
-        // Guid does not implement IUtf8SpanParsable<Guid> on all targets, so parse from the string
-        // form rather than the UTF-8 generic dispatch. Culture is irrelevant for Guid.
 #endif
 
         private static class EnumCache<TEnum>
@@ -654,14 +628,9 @@ namespace ExcelReader.Core.Parser.Internal
             };
         }
 
-        // Callers (RowProjector/CsvRowProjector) skip invoking any ColumnParser for an empty cell, so
-        // the converter only ever sees a populated one.
-        // TConv is the concrete converter type (not just the interface). This only devirtualizes
-        // typed.TryConvert for a value-type converter: CoreCLR shares one compiled body across all
-        // reference-type instantiations of a generic method (canonical __Canon sharing), so for a class
-        // converter — the common case — the constrained call still resolves through the interface at
-        // runtime, same as calling through IExcelCellConverter<TProp> directly.
-
+        // TConv (the concrete converter type, not just the interface) only devirtualizes TryConvert for
+        // a value-type converter; CoreCLR's canonical generic sharing means a class converter still
+        // resolves through the interface at runtime either way.
         private static ColumnParser<T> BuildConverterCore<T, TProp, TConv>(PropertyInfo prop, object converter)
             where TConv : IExcelCellConverter<TProp>
 #if NET9_0_OR_GREATER
@@ -681,9 +650,8 @@ namespace ExcelReader.Core.Parser.Internal
             };
         }
 
-        // Binds the property setter directly via CreateDelegate instead of building and compiling an
-        // Expression tree — one dynamic-method/assembly emission avoided per bound column, which is
-        // what made first-use (cold start) cost dominated by map-building rather than parsing.
+        // Binds the property setter directly via CreateDelegate rather than compiling an Expression
+        // tree, avoiding a dynamic-method emission per bound column.
         private static RefAction<T, TProp> CompileSetter<T, TProp>(PropertyInfo prop)
 #if NET9_0_OR_GREATER
             where T : allows ref struct
@@ -692,24 +660,18 @@ namespace ExcelReader.Core.Parser.Internal
             MethodInfo setter = prop.GetSetMethod()!;
             if (typeof(T).IsValueType)
             {
-                // A struct (or ref struct) instance method's implicit `this` is already `ref T` at
-                // the CLR level, so an open-instance delegate whose first parameter is `ref T` binds
-                // directly — CreateDelegate does exactly what the old Expression tree produced.
+                // A struct's implicit `this` is already `ref T` at the CLR level, so an open-instance
+                // delegate binds directly.
                 return setter.CreateDelegate<RefAction<T, TProp>>();
             }
-            // Class model: the instance method's implicit `this` is a plain reference, so it binds
-            // to Action<T, TProp> instead; wrap once to match RefAction<T, TProp>'s ref-parameter shape.
+            // Class model: `this` is a plain reference, so bind to Action<T, TProp> and wrap once.
             Action<T, TProp> act = setter.CreateDelegate<Action<T, TProp>>();
             return (ref model, value) => act(model, value);
         }
 
 #if NET9_0_OR_GREATER
-        // TProp = ReadOnlySpan<byte> only (BuildSpanParser). A class can never declare a
-        // ref-struct-typed property, so T here is always itself a ref struct — always takes the
-        // direct RefAction bind CompileSetter's IsValueType branch takes, and never needs its
-        // Action<T,TProp> fallback (which can't even name a ref-struct-allowing TProp). Kept as a
-        // separate method because Action<T,TProp> can't be written in a method generic over a TProp
-        // that allows ref struct, even on a branch that would never execute for TProp=ReadOnlySpan<byte>.
+        // Separate from CompileSetter because Action<T,TProp> can't be written in a method generic
+        // over a TProp that allows ref struct.
         private static RefAction<T, TProp> CompileRefStructSetter<T, TProp>(PropertyInfo prop)
             where T : allows ref struct
             where TProp : allows ref struct
@@ -718,9 +680,8 @@ namespace ExcelReader.Core.Parser.Internal
         }
 #endif
 
-        // Matches "1"/"0" and "true"/"false" case-insensitively (so .NET's own bool.ToString() form
-        // "True"/"False" round-trips) and reports failure for anything else, so a nullable bool?
-        // column with garbage text stays null instead of silently becoming false.
+        // Matches "1"/"0" and "true"/"false" case-insensitively; garbage text fails rather than
+        // silently becoming false.
         private static bool TryParseBool(in Cell cell, out bool value)
         {
             ReadOnlySpan<byte> v = cell.Value;

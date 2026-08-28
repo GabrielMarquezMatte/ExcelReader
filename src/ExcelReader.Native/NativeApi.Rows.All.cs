@@ -36,9 +36,8 @@ namespace ExcelReader.Native
                     return NativeStatus.BufferTooSmall;
                 }
 
-                // The leading row count is written here rather than back-patched into the accumulated
-                // bytes: the accumulator is chunked and its first chunk is not addressable as "the
-                // start of the blob" the way a single array's offset 0 was.
+                // Written here rather than back-patched: the accumulator is chunked, so its first
+                // chunk isn't addressable as "the start of the blob".
                 BinaryPrimitives.WriteInt32LittleEndian(buffer, handle.AllRowsCount);
                 handle.AllRowsScratch?.CopyTo(buffer[sizeof(int)..handle.AllRowsLength]);
                 handle.AllRowsPending = false;
@@ -50,25 +49,20 @@ namespace ExcelReader.Native
                 handle.AllRowsPending = false;
                 handle.AllRowsLength = 0;
                 handle.AllRowsCount = 0;
-                // Dropped, not kept: a partially accumulated buffer can never be handed out, and on a
-                // sheet big enough to have thrown it is the largest thing this handle is holding.
                 handle.AllRowsScratch = null;
                 return NativeStatus.Error;
             }
         }
 
-        // Drains every remaining row of the current sheet (including one already held pending from a
-        // prior xl_next_row that returned XL_BUFFER_TOO_SMALL) into handle.AllRowsScratch as
+        // Drains every remaining row (including one already held pending from a prior xl_next_row
+        // that returned XL_BUFFER_TOO_SMALL) into handle.AllRowsScratch as
         //     repeated: int32 row_length, <row blob>
-        // with the blob's leading int32 row_count carried separately on the handle and written out in
-        // ReadAllBlob. The underlying enumerator is fully consumed by the time this returns — a
-        // too-small buffer on the ReadAllBlob call above does not mean rows remain unread, only that
-        // the accumulated result hasn't been copied out to the caller yet.
+        // with the leading int32 row_count carried separately and written out in ReadAllBlob. The
+        // enumerator is fully consumed by the time this returns; a too-small buffer on the ReadAllBlob
+        // call only means the result hasn't been copied out yet.
         //
-        // Accumulates into a ChunkedBuffer rather than a byte[] grown with Array.Resize: a doubling
-        // resize copies everything accumulated so far and discards the old array, so a 22 MB sheet
-        // blob cost roughly another 22 MB of copying and LOH garbage on top of itself. Chunks are
-        // never copied until the single CopyTo into the caller's buffer.
+        // Accumulates into a ChunkedBuffer rather than a byte[] grown with Array.Resize, which would
+        // copy everything accumulated so far on every doubling.
         private static void AccumulateAllRows(NativeHandle handle)
         {
             ChunkedBuffer<byte> output = new();
@@ -100,10 +94,8 @@ namespace ExcelReader.Native
         // Appends one `int32 row_length` + `row blob` entry to `output`.
         private static void AppendRow(ChunkedBuffer<byte> output, ReadOnlySpan<byte> rowBlob)
         {
-            // Lengths are int32 throughout this API (see excelreader.h on xl_read_all_blob), so the
-            // next required size is computed in a wider type first — including the leading row count
-            // the caller's buffer must also hold — and reported precisely, rather than surfacing as
-            // an overflow deep inside the accumulator.
+            // Computed in a wider type first, so an overflow of the int32 API surfaces as a clear
+            // error rather than deep inside the accumulator.
             long required = (long)sizeof(int) + output.Count + sizeof(int) + rowBlob.Length;
             if (required > int.MaxValue)
             {
@@ -126,14 +118,9 @@ namespace ExcelReader.Native
         /// </summary>
         /// <remarks>
         /// Each row keeps its own native block, exactly as <see cref="NextRowDecoded"/> hands it out.
-        /// Consolidating the whole sheet into one block was tried and reverted: it costs one native
-        /// allocation instead of 65K, but the cells and value bytes then have to accumulate in
-        /// MANAGED memory first, because the block cannot be sized until the last row is read.
-        /// Measured by NativeRowReadBenchmark on Data/65K_Records_Data.xlsb (Ryzen 7 5700X,
-        /// .NET 10.0.10, --job Medium): 92.86 ms / 5.72 MB managed for this version against
-        /// 88.39 ms / 32.97 MB for the consolidated one — 5% of wall clock for six times the
-        /// managed allocation and a third more Gen2 collections. Not a trade worth making, and worth
-        /// recording so it isn't re-attempted from the same reasoning.
+        /// Consolidating the whole sheet into one block was tried and reverted: it trades one native
+        /// allocation instead of many for accumulating every cell and value byte in managed memory
+        /// first, since the block can't be sized until the last row is read — not a trade worth making.
         /// </remarks>
         internal static int ReadAllDecoded(NativeHandle? handle, out NativeRows rows)
         {
@@ -155,9 +142,8 @@ namespace ExcelReader.Native
                     }
                     if (status != NativeStatus.Ok)
                     {
-                        // A real decode error mid-loop is a normal return, not a thrown exception —
-                        // the catch block below won't run, so every row already decoded must be
-                        // freed right here or it leaks.
+                        // A normal return, not a thrown exception, so the catch below won't run —
+                        // every row already decoded must be freed here or it leaks.
                         FreeAll(decoded);
                         return status;
                     }
@@ -170,8 +156,7 @@ namespace ExcelReader.Native
                 }
 
                 // NativeRow is blittable (an int and a pointer), so the array is filled by plain
-                // stores rather than Marshal.StructureToPtr — that goes through a marshalling stub
-                // per element, and this loop runs once per row of the sheet.
+                // stores rather than Marshal.StructureToPtr's per-element marshalling stub.
                 IntPtr block = Marshal.AllocHGlobal(checked(decoded.Count * sizeof(NativeRow)));
                 NativeRow* target = (NativeRow*)block;
                 for (int index = 0; index < decoded.Count; index++)
