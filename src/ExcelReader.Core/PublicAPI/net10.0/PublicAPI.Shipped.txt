@@ -122,7 +122,7 @@ ExcelReader.Core.Parser.Internal.AsyncRowEnumerator<T, TReader, TRows>
 ExcelReader.Core.Parser.Internal.AsyncRowEnumerator<T, TReader, TRows>.AsyncRowEnumerator(TReader reader, System.Threading.CancellationToken ct) -> void
 ExcelReader.Core.Parser.Internal.AsyncRowEnumerator<T, TReader, TRows>.Current.get -> T
 ExcelReader.Core.Parser.Internal.AsyncRowEnumerator<T, TReader, TRows>.CurrentValue -> T
-ExcelReader.Core.Parser.Internal.AsyncRowEnumerator<T, TReader, TRows>.DisposeAsync() -> System.Threading.Tasks.ValueTask
+virtual ExcelReader.Core.Parser.Internal.AsyncRowEnumerator<T, TReader, TRows>.DisposeAsync() -> System.Threading.Tasks.ValueTask
 ExcelReader.Core.Parser.Internal.AsyncRowEnumerator<T, TReader, TRows>.MoveNextAsync() -> System.Threading.Tasks.ValueTask<bool>
 ExcelReader.Core.Parser.Internal.AsyncRowEnumerator<T, TReader, TRows>.Rows -> TRows?
 ExcelReader.Core.Parser.Internal.CsvEnumerable<T>

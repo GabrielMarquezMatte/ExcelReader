@@ -1,4 +1,5 @@
 using System.Diagnostics.CodeAnalysis;
+using System.Runtime.CompilerServices;
 using ExcelReader.Core.Enums;
 using ExcelReader.Core.ValueObjects;
 
@@ -105,6 +106,7 @@ namespace ExcelReader.Core.Reader
             // the RowCells re-walk the generic projector would do.
             internal int FieldCount => _acc.Count;
 
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
             internal Cell FieldAt(int index)
             {
                 ref readonly CellDesc d = ref _acc.CellSpan[index];

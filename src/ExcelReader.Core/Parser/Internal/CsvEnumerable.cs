@@ -31,15 +31,29 @@ namespace ExcelReader.Core.Parser.Internal
         // whatever reader its ConfigureExcelRowMap chose — a caller who wants text dates from CSV picks
         // ExcelCellReaders.DateTimeText explicitly.
         private readonly TypeMapInfo<T> _info;
+        // Set only by the parallel factory's sequential fallback, which has no other owner for the
+        // reader it opened. Every other caller passes a reader it keeps owning.
+        private readonly bool _ownsReader;
 
         [RequiresUnreferencedCode("Typed parsing reflects over T's public properties, which trimming may remove.")]
         [RequiresDynamicCode("Typed parsing binds property setters at runtime (MethodInfo.CreateDelegate / MakeGenericMethod).")]
         internal CsvEnumerable(CsvReader reader, ExcelParserConfig config, CancellationToken ct = default)
+            : this(reader, config, ownsReader: false, ct)
+        {
+        }
+
+        // ownsReader: the enumeration closes the reader when it is disposed. Used by the parallel
+        // factory's sequential fallback, which opens a reader with no other owner and would otherwise
+        // need an async-iterator wrapper just to hold an `await using` around it.
+        [RequiresUnreferencedCode("Typed parsing reflects over T's public properties, which trimming may remove.")]
+        [RequiresDynamicCode("Typed parsing binds property setters at runtime (MethodInfo.CreateDelegate / MakeGenericMethod).")]
+        internal CsvEnumerable(CsvReader reader, ExcelParserConfig config, bool ownsReader, CancellationToken ct)
         {
             _reader = reader;
             _config = config;
             _info = TypeMapper<T>.GetCsvInfo();
             _ct = ct;
+            _ownsReader = ownsReader;
         }
 
         internal CsvEnumerable(CsvReader reader, ExcelParserConfig config, TypeMapInfo<T> explicitInfo, CancellationToken ct = default)
@@ -82,7 +96,7 @@ namespace ExcelReader.Core.Parser.Internal
         public AsyncEnumerator GetAsyncEnumerator(CancellationToken cancellationToken = default)
         {
             CancellationToken effective = cancellationToken.CanBeCanceled ? cancellationToken : _ct;
-            return new AsyncEnumerator(_reader, _info, _config.ColumnNameComparer, _config.HeaderNormalization, _config.HeaderRow, _config.Culture, _config.ThrowOnParseFailure, effective);
+            return new AsyncEnumerator(_reader, _info, _config.ColumnNameComparer, _config.HeaderNormalization, _config.HeaderRow, _config.Culture, _config.ThrowOnParseFailure, _ownsReader, effective);
         }
 
         /// <summary>Enumerates CSV rows synchronously, projecting each into a <typeparamref name="T"/> instance by fixed field index.</summary>
@@ -113,6 +127,7 @@ namespace ExcelReader.Core.Parser.Internal
         public sealed class AsyncEnumerator : AsyncRowEnumerator<T, CsvReader, CsvReader.Enumerator>
         {
             private CsvRowProjector<T> _projector;
+            private readonly CsvReader? _ownedReader;
 
             internal AsyncEnumerator(
                 CsvReader reader,
@@ -122,10 +137,24 @@ namespace ExcelReader.Core.Parser.Internal
                 int headerRow,
                 IFormatProvider provider,
                 bool throwOnParseFailure,
+                bool ownsReader,
                 CancellationToken ct)
                 : base(reader, ct)
             {
                 _projector = new CsvRowProjector<T>(typeInfo, comparer, normalization, headerRow, provider, throwOnParseFailure);
+                _ownedReader = ownsReader ? reader : null;
+            }
+
+            /// <inheritdoc/>
+            [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP007:Don't dispose injected",
+                Justification = "_ownedReader is non-null only when the enumerable was constructed with ownsReader: true, which is exactly the case where the reader was opened for this enumeration and has no other owner.")]
+            public override async ValueTask DisposeAsync()
+            {
+                await base.DisposeAsync().ConfigureAwait(false);
+                if (_ownedReader is not null)
+                {
+                    await _ownedReader.DisposeAsync().ConfigureAwait(false);
+                }
             }
 
             // Synchronous projection step: the ref-struct Cells never escape this call, so no span
@@ -240,6 +269,20 @@ namespace ExcelReader.Core.Parser.Internal
                 _rowNumber++;
                 // Same terminal-blank-line treatment as the header path below: a trailing empty line
                 // must not yield a phantom model or trip a required-column check.
+                if (rows.FieldCount == 1 && rows.FieldAt(0).Type == CellType.Empty)
+                {
+                    return ProjectionStep.Skip;
+                }
+                model = _typeInfo.CreateInstance();
+                ParseCurrentRow(rows, ref model);
+                return ProjectionStep.Yield;
+            }
+            // Steady state: the header row is behind us and the map is built, so every remaining row
+            // is data. ClassifyRow re-derives that from _rowNumber on every row of the file; once it
+            // can only answer Yield, asking is pure overhead on the hottest loop in the reader.
+            if (_fieldParsers is not null && _rowNumber >= _headerRow)
+            {
+                _rowNumber++;
                 if (rows.FieldCount == 1 && rows.FieldAt(0).Type == CellType.Empty)
                 {
                     return ProjectionStep.Skip;

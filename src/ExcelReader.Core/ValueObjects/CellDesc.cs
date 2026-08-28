@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using ExcelReader.Core.Enums;
 
@@ -24,6 +25,7 @@ namespace ExcelReader.Core.ValueObjects
         // (see WorkbookLookups.SharedAt), which Cell.GetString() treats as "no cache entry".
         public int SharedIndex { get; init; }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         internal Cell ToCell(ReadOnlySpan<byte> rowValues, ReadOnlySpan<byte> shared, ReadOnlySpan<byte> rowBuffer,
             string?[]? sharedStringCache = null, Utf8StringCache? contentCache = null)
         {
