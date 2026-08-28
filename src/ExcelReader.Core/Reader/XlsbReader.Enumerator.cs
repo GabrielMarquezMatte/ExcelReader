@@ -21,23 +21,16 @@ namespace ExcelReader.Core.Reader
             [SuppressMessage("Usage", "CA2213:Disposable fields should be disposed",
                 Justification = "XlsbReader is borrowed; its lifetime is managed by the caller, not this enumerator.")]
             private readonly XlsbReader _reader;
-            // Hoisted out of _reader: AddDouble consults it once per numeric cell, and going through
-            // _reader.IsDateStyle put two dependent loads (_reader -> array) on that critical path.
-            // _reader._styleIsDate is readonly and fully assigned before any enumerator exists.
+            // Hoisted out of _reader to avoid a dependent load on the per-cell hot path.
             private readonly bool[] _styleIsDate;
-            // Same hoist, for what PGO says is the hottest arm of ProcessCell (CellIsst): reaching the
-            // offsets through _reader.SharedAt cost two dependent loads before the index could be read.
             private readonly int[] _sharedOffsets;
-            // Content-keyed dedup cache for inline/formula-string cells GetString() can't serve via
-            // the shared-string table; see ExcelReaderOptions.InternStrings.
+            // Content-keyed dedup cache for inline/formula-string cells (see ExcelReaderOptions.InternStrings).
             private readonly Utf8StringCache? _contentCache;
             private bool _ended;
-            // A BrtRowHdr for the NEXT row was already consumed while collecting cells for the current row.
-            // On the next MoveNext call, skip the "seek to row header" step.
+            // A BrtRowHdr for the NEXT row was already consumed while collecting the current row's
+            // cells; the next MoveNext skips the "seek to row header" step.
             private bool _pendingRowHdr;
 
-            // Also used by the in-memory ZIP path: ZipMemoryIndex.OpenEntryStream hands back a
-            // DeflateStream/MemoryStream over the part's bytes, same as the ZipArchive path.
             internal Enumerator(XlsbReader reader, Stream sheet, long entryLength = 0, CancellationToken ct = default)
                 : base(sheet, reader._options.MaxCellBytes, nameof(ExcelReaderOptions.MaxCellBytes), WorkbookLookups.InitialBufferCapacity(entryLength), ownsSource: true, ct)
             {
@@ -58,10 +51,8 @@ namespace ExcelReader.Core.Reader
                 return MoveNextCore();
             }
 
-            // Non-async fast path mirroring MoveNextCore: with a 64KB buffer, almost every row's
-            // header and cells are already fully buffered, so this runs the same *FromBuffer primitives
-            // MoveNextCore uses, entirely synchronously, and only pays for an async state machine when
-            // a primitive actually reports a buffer miss (result == 2) — a real refill, not per row.
+            // Runs the same *FromBuffer primitives as MoveNextCore synchronously, paying for an async
+            // state machine only when a primitive reports a real buffer miss (result == 2).
             /// <inheritdoc/>
             public ValueTask<bool> MoveNextAsync()
             {
@@ -99,15 +90,12 @@ namespace ExcelReader.Core.Reader
                     {
                         return new ValueTask<bool>(false);
                     }
-                    // Empty row — loop again, still fully synchronous.
                 }
             }
 
             // Resumes a row attempt that hit a buffer miss mid-seek (seekDone: false) or mid-collect
-            // (seekDone: true — the seek step, and clearing _pendingRowHdr, already happened
-            // synchronously in MoveNextAsync). _acc already holds whatever cells were collected before
-            // the miss; CollectCellsAsync appends to it rather than restarting. Once this row is
-            // resolved, continues the empty-row retry loop with the same awaiting primitives.
+            // (seekDone: true, since the seek step already ran synchronously). _acc already holds
+            // whatever cells were collected before the miss; CollectCellsAsync appends, not restarts.
             private async ValueTask<bool> MoveNextRowAsync(bool seekDone)
             {
                 if (!seekDone && !await SeekRowHdrAsync().ConfigureAwait(false))
@@ -159,15 +147,8 @@ namespace ExcelReader.Core.Reader
                     {
                         return false; // EOF or BrtEndSheetData with no cells in sight
                     }
-                    // Empty row — advance to next
                 }
             }
-
-            // --- Sync record-loop helpers (use blocking Fill) ---
-            // Same shape as the async wrappers below: drive the *FromBuffer primitive, refill only when
-            // it reports a buffer miss. Going through a per-record TryNextRecord meant rebuilding the
-            // buffer window (and its AsSpan bounds check) for every record, when the window only
-            // actually changes on a refill.
 
             private bool SkipToRowHdr()
             {
@@ -189,10 +170,6 @@ namespace ExcelReader.Core.Reader
                     Fill();
                 }
             }
-
-            // --- Async record-loop helpers ---
-            // Span-touching work stays in non-async helpers (*FromBuffer); the async wrappers only call
-            // FillAsync and re-invoke those helpers — no ReadOnlySpan<byte> survives across an await.
 
             private async ValueTask<bool> SeekRowHdrAsync()
             {
@@ -225,9 +202,6 @@ namespace ExcelReader.Core.Reader
             }
 
             // 1 = found BrtRowHdr; 0 = ended (EndSheetData/EOF); 2 = buffer exhausted (needs refill).
-            // One reader per buffer window, not per record. TryReadRecord leaves its Position on the
-            // last fully decoded record, so writing _pos back on every exit preserves the retry
-            // contract: a partial record at the window's tail is re-decoded after the refill.
             private int SeekRowHdrFromBuffer()
             {
                 Biff12RecordReader reader = new(_buf.AsSpan(_pos, _len - _pos));
@@ -285,9 +259,7 @@ namespace ExcelReader.Core.Reader
                 return 2;
             }
 
-            // --- Cell decoding ---
             // All cell records: col (u32 @ 0) + styleAndFlags (u32 @ 4); iStyleRef = low 24 bits.
-
             private void ProcessCell(int id, ReadOnlySpan<byte> payload)
             {
                 if (payload.Length < 8)
@@ -302,9 +274,8 @@ namespace ExcelReader.Core.Reader
                     case Brt.CellRk when payload.Length >= 12:
                         AddDouble(col, style, Biff12.Rk(Biff12.ReadU32(payload, 8)));
                         break;
-                    // Formula cells: the cached result immediately follows the col/style header, in
-                    // the same shape as the equivalent plain-cell record; the formula bytes that follow
-                    // are outside the record framing we care about (TryReadRecord already bounds payload).
+                    // Formula cells: the cached result immediately follows the col/style header, same
+                    // shape as the equivalent plain-cell record.
                     case Brt.CellReal or Brt.FmlaNum when payload.Length >= 16:
                         AddDouble(col, style, Biff12.ReadF64(payload, 8));
                         break;
@@ -329,11 +300,9 @@ namespace ExcelReader.Core.Reader
                 }
             }
 
-            // The `out ReadOnlySpan<char>` deliberately lives here rather than in ProcessCell: an
-            // address-exposed byref-containing local must be zero-initialised in the prologue for GC
-            // reporting, and ProcessCell was paying that on *every* cell -- including CellRk/CellReal,
-            // which never touch a string. Keeping the span out of ProcessCell's frame keeps its
-            // prologue cheap. NoInlining so the JIT can't undo it.
+            // The `out ReadOnlySpan<char>` deliberately lives here rather than in ProcessCell, so a
+            // cell that never touches a string doesn't pay for zero-initializing it. NoInlining so
+            // the JIT can't undo the split.
             [MethodImpl(MethodImplOptions.NoInlining)]
             private void AddInlineString(int col, int style, ReadOnlySpan<byte> payload, int offset)
             {
@@ -348,19 +317,12 @@ namespace ExcelReader.Core.Reader
                 return id == Brt.EndSheetData;
             }
 
-            // Deliberately inlinable, unlike AddInlineString above. An earlier NoInlining here traded a
-            // register-spill saving on non-numeric cell arms for one extra call on every RK/Real cell —
-            // a bad trade on real-world numeric-heavy workbooks, where RK/Real dominate. Measured on the
-            // 65K-row real-data corpus (mostly numeric): NoInlining here cost ~5% wall-clock (30.64ms ->
-            // 29.12ms with it removed); the shared-string-heavy corpus, where the original tradeoff was
-            // supposed to pay off, showed no measurable change either way (40.22ms -> 40.85ms, within
-            // run-to-run noise).
+            // Deliberately inlinable, unlike AddInlineString above: RK/Real cells dominate a typical
+            // numeric-heavy workbook, so the extra call from NoInlining here costs more than it saves.
             private void AddDouble(int col, int style, double value)
             {
                 CellType type = WorkbookLookups.IsDateStyle(_styleIsDate, style) ? CellType.Date : CellType.Number;
-                // One local, not two `_acc` field reads: the JIT emitted a redundant reload of the
-                // field for the ValueLength argument.
-                CellAccumulator acc = _acc;
+                CellAccumulator acc = _acc; // avoids a redundant _acc field reload for the ValueLength argument
                 acc.Add(col, acc.ValueLength, 0, type, style, CellValueSource.RowValues, number: value, hasNumber: true);
             }
 

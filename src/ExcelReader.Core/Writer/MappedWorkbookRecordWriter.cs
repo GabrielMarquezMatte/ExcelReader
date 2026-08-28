@@ -109,12 +109,9 @@ namespace ExcelReader.Core.Writer
         }
     }
 
-    // The mapped-path counterpart to RecordColumns<T>: instead of reflecting over T's properties, builds
-    // T's ExcelRecordMapBuilder<T> once (via T.ConfigureExcelRecordMap, source-generated or hand-written)
-    // and caches it for the process lifetime. Headers/WriteRow don't depend on the concrete row-writer
-    // type the way RecordColumns<T>'s Expression-compiled Plan<TRow> does, since ExcelRecordMapBuilder<T>
-    // already compiles its column actions against the IRowWriter interface at the call site (ordinary C#
-    // interface dispatch, not per-TRow Expression trees) — one plan per T covers every format.
+    // The mapped-path counterpart to RecordColumns<T>: builds T's ExcelRecordMapBuilder<T> once via
+    // T.ConfigureExcelRecordMap and caches it. One plan per T covers every row-writer format, since the
+    // builder compiles its column actions against the IRowWriter interface rather than per-TRow.
     [SuppressMessage("Major Code Smell", "S2743:Static fields should not be used in generic types",
         Justification = "The per-closed-type static IS the design: the map is built once per T, not shared across different T.")]
     internal static class MappedRecordColumns<T> where T : IExcelRecordMap<T>

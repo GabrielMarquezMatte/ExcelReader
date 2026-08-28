@@ -4,20 +4,17 @@ using Microsoft.Win32.SafeHandles;
 
 namespace ExcelReader.Core.Parser.Internal
 {
-    // One shape for both partitionable sources, so the worker has a single code path. A file is read
-    // positionally off a shared handle; an in-memory source is simply sliced. Both extend to the end
-    // of the source rather than to the chunk end, because a chunk must overshoot to finish the
-    // record straddling its end.
+    // One shape for both partitionable sources: a file read positionally off a shared handle, or an
+    // in-memory slice. Both extend to the end of the source rather than the chunk end, since a chunk
+    // must overshoot to finish the record straddling its boundary.
     internal readonly struct CsvChunkSource
     {
         private readonly SafeFileHandle? _handle;
         private readonly ReadOnlyMemory<byte> _memory;
         private readonly long _startOffset;
 
-        // startOffset lets a FileStream positioned mid-file be honored (Task 8's CsvSourceResolver
-        // passes its Position). Every offset the rest of the pipeline works in stays relative to the
-        // source's first byte; only this type knows about the file-absolute shift, which is what
-        // keeps the chunk plan, worker, and merge free of the distinction.
+        // Lets a FileStream positioned mid-file be honored; every other offset in the pipeline stays
+        // relative to the source's first byte.
         internal CsvChunkSource(SafeFileHandle handle, long fileLength, long startOffset = 0)
         {
             _handle = handle;
@@ -48,10 +45,9 @@ namespace ExcelReader.Core.Parser.Internal
             return _memory[(int)offset..];
         }
 
-        // A fresh sequential reader over this whole source. Used for the one-time header bind and for
-        // the sequential fallback, and it must be repeatable: deriving it from the source rather than
-        // from a caller-supplied Stream is what makes it so, since reading a Stream twice would start
-        // the second read from the position the first one left behind.
+        // A fresh, repeatable sequential reader over this whole source, for the header bind and the
+        // sequential fallback — derived from the source rather than a caller-supplied Stream, which a
+        // second read would resume mid-way through instead of restarting.
         internal CsvReader OpenReader(CsvReaderOptions options)
         {
             if (IsMemory)
@@ -61,13 +57,8 @@ namespace ExcelReader.Core.Parser.Internal
             return Excel.FromCsv(OpenAt(0), leaveOpen: false, options);
         }
 
-        // A window for boundary resolution: from `offset`, at most `length` bytes, plus one extra
-        // byte. That extra byte is what makes a \r sitting at the chunk's last position resolvable
-        // against real data instead of a guess about what follows it.
-        //
-        // Fills a caller-owned buffer rather than allocating one: the caller (CsvChunkWorker.
-        // GuessStart) rents from ArrayPool and grows on demand, so a boundary scan costs no
-        // allocation at all in the common case. Returns the number of bytes actually available.
+        // Fills a caller-owned buffer (GuessStart rents from ArrayPool) with up to buffer.Length bytes
+        // from `offset`. Returns the number of bytes actually available.
         internal int ReadWindow(long offset, Span<byte> buffer)
         {
             long available = Length - offset;
@@ -84,8 +75,7 @@ namespace ExcelReader.Core.Parser.Internal
             return RandomAccess.Read(_handle!, buffer[..want], _startOffset + offset);
         }
 
-        // The memory source's bytes are already in the process; boundary scanning can read them in
-        // place instead of copying a window out. Only valid for IsMemory sources.
+        // Boundary scanning in place, no copy. Only valid for IsMemory sources.
         internal ReadOnlySpan<byte> WindowSpan(long offset, int length)
         {
             long available = Length - offset;
@@ -109,18 +99,16 @@ namespace ExcelReader.Core.Parser.Internal
 
         internal List<T> Models { get; }
 
-        // Where this chunk actually began parsing. A guess for every chunk but the first, checked
+        // Where this chunk actually began parsing — a guess for every chunk but the first, checked
         // against the predecessor's ResolvedNextStart during the merge.
         internal long ActualStart { get; }
 
-        // Offset of the first record starting at or after the chunk's nominal end — the ground truth
-        // the *next* chunk's ActualStart is validated against. long.MaxValue when this chunk ran to
-        // the end of the source.
+        // Offset of the first record at or after the chunk's nominal end, validated against the next
+        // chunk's ActualStart. long.MaxValue when this chunk ran to the end of the source.
         internal long ResolvedNextStart { get; }
 
-        // A parse failure is carried, not thrown. Only the merge knows this chunk's global row
-        // offset, so only the merge can raise it with the row number the sequential path would have
-        // reported. FailureRowInChunk is zero-based within Models' record sequence.
+        // Carried, not thrown: only the merge knows this chunk's global row offset. FailureRowInChunk
+        // is zero-based within Models.
         internal ExcelParseException? Failure { get; set; }
 
         internal int FailureRowInChunk { get; set; }
@@ -128,21 +116,15 @@ namespace ExcelReader.Core.Parser.Internal
 
     internal static class CsvChunkWorker
     {
-        // Boundary-scan window sizing. 4 KB holds any realistic CSV record several times over, and
-        // stays far below the 85 KB Large Object Heap threshold so the rented buffer is an ordinary
-        // Gen0 allocation the pool hands back immediately. Growth is geometric so even a
-        // pathologically long record converges in a handful of reads.
+        // Boundary-scan window sizing: 4 KB holds any realistic CSV record several times over and
+        // stays below the Large Object Heap threshold; growth is geometric for pathologically long
+        // records.
         private const int InitialBoundaryWindow = 4 * 1024;
         private const int BoundaryWindowGrowth = 8;
 
-        // No row-count estimation here any more. It existed to stop a chunk's model list from
-        // doubling its way up to a Large Object Heap array, which mattered when a chunk was a share
-        // of the file; with a 64 KB chunk and lists recycled across chunks by the merge (ListPool),
-        // a list reaches its steady-state capacity within the first few chunks and never grows again.
-
-        // Parses one chunk. `confirmedStart` is the offset the predecessor proved correct; when it is
-        // null the worker guesses with the Outside hypothesis, which is right whenever no quoted
-        // field straddles the chunk start — overwhelmingly the common case.
+        // Parses one chunk. `confirmedStart` is the offset the predecessor proved correct; null means
+        // the worker guesses under the Outside hypothesis — right whenever no quoted field straddles
+        // the chunk start, overwhelmingly the common case.
         internal static ValueTask<CsvChunkResult<T>> ParseAsync<T>(
             CsvChunkSource source,
             CsvChunk chunk,
@@ -179,16 +161,10 @@ namespace ExcelReader.Core.Parser.Internal
             var projector = new CsvRowProjector<T>(info, map, config.Culture, config.ThrowOnParseFailure);
             (long resolvedNextStart, ExcelParseException? failure, int failureRow) outcome;
 
-            // The enumerator's stream constructor passes ownsSource: false (CsvReader.Enumerator.cs:65),
-            // so it will NOT dispose this stream — the worker owns it. Disposing the RangedFileStream
-            // is cheap and does not touch the shared SafeFileHandle, but leaving it undisposed trips
-            // the IDisposable analyzers this repo builds with warnings-as-errors. The file/memory
-            // branches are kept fully separate (rather than sharing one nullable partitionStream
-            // variable) because that is the shape IDisposableAnalyzers can actually verify: each
-            // resource's creation, its own `await using`, and its disposal all live in the same
-            // lexical scope. Only the loop that *consumes* an already-constructed enumerator is
-            // shared (ConsumeAsync below) — that part carries no disposal obligation of its own, so
-            // moving it across a method boundary does not confuse the analyzer.
+            // The enumerator's stream constructor passes ownsSource: false — the worker owns
+            // `partitionStream` itself, disposed explicitly below. File/memory branches stay separate
+            // (rather than one nullable variable) so IDisposableAnalyzers can verify each resource's
+            // creation, `await using`, and disposal within one lexical scope.
             if (source.IsMemory)
             {
                 var rows = new CsvReader.Enumerator(source.SliceAt(start), options, ct);
@@ -222,10 +198,7 @@ namespace ExcelReader.Core.Parser.Internal
             };
         }
 
-        // Drains an already-open, already-`await using`-guarded enumerator into `models`. Owns no
-        // disposable of its own — `rows` is disposed by the caller's `await using` block — so it can
-        // be shared between the memory and file branches without confusing IDisposableAnalyzers about
-        // where the enumerator's lifetime ends.
+        // Drains an already-open enumerator into `models`; disposal is the caller's job.
         private static async ValueTask<(long resolvedNextStart, ExcelParseException? failure, int failureRow)> ConsumeAsync<T>(
             CsvReader.Enumerator rows,
             long start,
@@ -264,18 +237,10 @@ namespace ExcelReader.Core.Parser.Internal
         }
 
         // Chunk 0 knows its start exactly (CsvHeaderBinder reported it). Every other chunk scans from
-        // its nominal start under the Outside hypothesis. The scan is bounded by the chunk's own
-        // length: a chunk with no boundary inside it holds no record start at all — its bytes belong
-        // to a record an earlier chunk owns and overshoots into.
-        //
-        // The chunk's length bounds the scan, but it is NOT the window size. A record boundary sits
-        // within the first few hundred bytes of a chunk in any realistic CSV, so the window starts
-        // small and grows only against data pathological enough to need it. Reading the whole chunk
-        // up front — which is what this did originally — allocated a chunk-sized array per chunk
-        // (megabytes each, straight past the 85 KB Large Object Heap threshold) and read every byte
-        // of the source a second time, to answer a question the first line almost always settles.
-        // Measured on a 104 MB narrow-int corpus, that alone accounted for ~104 MB of LOH traffic
-        // and every Gen2 collection the parallel path incurred over the sequential one.
+        // its nominal start under the Outside hypothesis, bounded by the chunk's own length: a chunk
+        // with no boundary inside it holds no record start — its bytes belong to a record an earlier
+        // chunk overshoots into. The window starts small and only grows against pathological data,
+        // rather than reading the whole chunk up front.
         private static long GuessStart(CsvChunkSource source, CsvChunk chunk, byte quote)
         {
             long chunkLength = chunk.End - chunk.Start;
@@ -284,7 +249,6 @@ namespace ExcelReader.Core.Parser.Internal
                 return long.MaxValue;
             }
 
-            // Scanning in place, no window buffer at all: the bytes are already in the process.
             if (source.IsMemory)
             {
                 int cap = (int)Math.Min(chunkLength, int.MaxValue - 1);
@@ -297,9 +261,7 @@ namespace ExcelReader.Core.Parser.Internal
             int windowLength = (int)Math.Min(remaining, InitialBoundaryWindow);
             while (true)
             {
-                // +1 so a \r at the window's last position is resolved against the byte that
-                // follows it rather than guessed at — the same reason the original read one extra
-                // byte past the chunk.
+                // +1 so a \r at the window's last byte is resolved against real data.
                 int rentSize = windowLength == remaining ? windowLength + 1 : windowLength;
                 byte[] buffer = ArrayPool<byte>.Shared.Rent(rentSize);
                 try
@@ -315,11 +277,9 @@ namespace ExcelReader.Core.Parser.Internal
                     {
                         return chunk.Start + found;
                     }
-                    // No boundary in this window. If it already covered the whole chunk, the chunk
-                    // genuinely holds no record start; otherwise widen and rescan. Rescanning the
-                    // prefix is deliberate over resuming: FindRecordStart is a left-to-right parity
-                    // scan, so a wider window's answer is the same one a resumed scan would reach,
-                    // and total rescan cost stays linear under geometric growth.
+                    // No boundary found. Widen and rescan from the start (a left-to-right parity
+                    // scan gives the same answer either way) unless the window already covers the
+                    // whole chunk, meaning it genuinely holds no record start.
                     if (read >= remaining || windowLength >= remaining)
                     {
                         return long.MaxValue;

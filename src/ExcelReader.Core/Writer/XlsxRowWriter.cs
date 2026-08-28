@@ -22,7 +22,6 @@ namespace ExcelReader.Core.Writer
             _row = row;
         }
 
-        // Reused across rows by XlsxSheetWriter: rents one instance per sheet instead of one per row.
         internal void Reset(int rowNumber, int styleId = 0)
         {
             _rowNumber = rowNumber;
@@ -32,9 +31,7 @@ namespace ExcelReader.Core.Writer
             _disposed = false;
         }
 
-        // The row's own style (if set via StartRowAsync(int, ...)) always wins over a column style —
-        // both are user-configured, and the row is the more specific of the two. Falls back to 0 (no
-        // explicit style attribute) when neither is set, so an unstyled cell costs nothing extra.
+        // A row style always wins over a column style; falls back to 0 (no explicit attribute).
         private int EffectiveStyle()
         {
             return _rowStyleId != 0 ? _rowStyleId : _owner.GetColumnStyle(_columnIndex);
@@ -312,10 +309,7 @@ namespace ExcelReader.Core.Writer
             _columnIndex += count;
         }
 
-        // Only the first cell written after a gap (a real Skip(), which leaves the corresponding
-        // <c> elements out entirely) needs an explicit r="..." reference so the reader can tell how
-        // many columns were skipped; every cell after that is contiguous again. A null-valued cell
-        // still emits a real (self-closing) <c/> placeholder, so on its own it never needs one.
+        // Only the first cell written after a real Skip() needs an explicit r="..." reference.
         private bool ConsumeCellReference()
         {
             ExcelLimits.ThrowIfColumnOutOfRange(_columnIndex);
@@ -344,13 +338,6 @@ namespace ExcelReader.Core.Writer
         /// <summary>
         /// Synchronous counterpart to <see cref="DisposeAsync"/>: ends the row and, on the rare buffer-threshold flush, writes to the destination stream synchronously.
         /// </summary>
-        /// <remarks>
-        /// Exists for callers on <see cref="XlsxSheetWriter"/>'s synchronous <c>StartRow</c> fast path (see
-        /// <see cref="SheetWriterExtensions"/>'s <see cref="XlsxSheetWriter"/>-specific
-        /// <c>WriteRecordsAsync</c> overload): avoids the per-row await entirely, since the destination
-        /// stream write only happens on the rare buffer-threshold flush, which <c>EndBufferedRow</c>
-        /// already does synchronously.
-        /// </remarks>
         public void Dispose()
         {
             if (_disposed)

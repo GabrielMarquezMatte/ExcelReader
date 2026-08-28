@@ -8,10 +8,9 @@ using static ExcelReader.Core.Reader.Biff12;
 namespace ExcelReader.Core.Crypto
 {
     // Parses the OLE/CFB container metadata (header, FAT, directory, mini-FAT/stream) by seeking a
-    // seekable source, never materializing the whole file, and then exposes the directory so callers
-    // can look up any named stream by name (e.g. "Workbook"/"Book" for XLS, "EncryptionInfo"/
-    // "EncryptedPackage" for an encrypted OOXML package). Extracted verbatim from
-    // XlsCompoundFile.BuildWorkbook, which used to hardwire the directory lookup to a single stream.
+    // seekable source, never materializing the whole file, and exposes the directory so callers can
+    // look up any named stream (e.g. "Workbook" for XLS, "EncryptionInfo"/"EncryptedPackage" for an
+    // encrypted OOXML package).
     [ExcludeFromCodeCoverage(Justification = "Covered through XlsReader integration tests; most uncovered paths are corrupt-OLE guard rails.")]
     internal sealed class CfbContainer : IDisposable
     {
@@ -20,9 +19,7 @@ namespace ExcelReader.Core.Crypto
         private const int FatSector = unchecked((int)0xFFFFFFFD);
         private const int FreeSector = unchecked((int)0xFFFFFFFF);
 
-        // Internal (not private) so XlsCompoundFile.BuildWorkbook — the sole consumer that still needs
-        // to reimplement the mini-cutoff / Chained / Streamed selection over the raw sector data — can
-        // read them directly, exactly as it did when this state lived inline in that method.
+        // Internal, not private: XlsCompoundFile.BuildWorkbook reads these directly.
         internal readonly Stream Source;
         internal readonly bool OwnsSource;
         internal readonly ReadOnlyMemory<byte> Memory;
@@ -92,31 +89,20 @@ namespace ExcelReader.Core.Crypto
             int firstDifatSector = ReadI32(header, 0x44);
             int difatSectorCount = ReadI32(header, 0x48);
 
-            // [MS-CFB] fixes the mini sector size at 64 bytes (shift = 6); nothing bounded the upper end
-            // here before, and an unchecked shift amount from the file could still land the result well
-            // above 64 (int shift amounts wrap mod 32, so this never overflows, but a crafted header
-            // could pick any power-of-two result and later drive checked(sector * miniSectorSize) into an
-            // avoidable OverflowException instead of a graceful rejection at the source).
+            // [MS-CFB] fixes the mini sector size at 64 bytes; a crafted header could otherwise pick
+            // any power-of-two result.
             if (sectorSize < HeaderSize || sectorSize > 4096 || miniSectorSize != 64)
             {
                 throw new InvalidDataException("Unsupported OLE sector size.");
             }
-            // MS-CFB fixes the mini-stream cutoff at 4096 bytes. Without this bound a crafted header
-            // could push miniCutoff toward int.MaxValue, letting the mini-stream branch below take a
-            // multi-GB workbook.Size and materialize it as a single non-pooled byte[].
+            // [MS-CFB] fixes the mini-stream cutoff at 4096; unbounded, a crafted header could push it
+            // toward int.MaxValue and materialize a multi-GB stream as a single non-pooled byte[].
             if (miniCutoff != 4096)
             {
                 throw new InvalidDataException("Unsupported OLE mini stream cutoff.");
             }
-            // A file cannot hold more sectors than its length allows, so a FAT/DIFAT/mini-FAT sector
-            // count above that is a crafted header. Reject it before allocating, or `new
-            // int[fatSectorCount]` below would let a bogus count force a multi-GB allocation / OOM on
-            // untrusted input.
-            //
-            // miniFatSectorCount belongs here for a second reason: it is multiplied by sectorSize in
-            // ReadIntSectors, and a large value overflows that `checked` product into an
-            // OverflowException — a leaked arithmetic fault rather than the InvalidDataException a
-            // malformed file is supposed to produce. Found by the XLS fuzz target.
+            // A file cannot hold more sectors than its length allows; reject an inflated count before
+            // it drives an allocation or an overflow deep in ReadIntSectors.
             long maxSectors = source.Length / sectorSize;
             if (fatSectorCount < 0 || fatSectorCount > maxSectors ||
                 difatSectorCount < 0 || difatSectorCount > maxSectors ||
@@ -179,9 +165,6 @@ namespace ExcelReader.Core.Crypto
                 throw new InvalidDataException($"The OLE document does not contain a '{name}' stream.");
             }
 
-            // A stream cannot hold more content than the container's own byte length, so an inflated
-            // Size field (the same attack class as fatSectorCount/difatSectorCount above) is a crafted
-            // header — reject it before it drives an allocation or a chain walk sized off it.
             if (entry.Size < 0 || entry.Size > Source.Length)
             {
                 throw new InvalidDataException($"The OLE '{name}' stream size exceeds the container.");
@@ -222,18 +205,14 @@ namespace ExcelReader.Core.Crypto
             return new CfbStreamView(Source, chain, SectorSize, entry.Size);
         }
 
-        // Shared by ReadStream and OpenStreamView's mini-stream branches: rebuilds the mini-FAT (from
-        // the FAT-chained mini-FAT sectors) and the root entry's materialized mini-stream, the same way
-        // BuildWorkbook used to do it inline.
+        // Rebuilds the mini-FAT and the root entry's materialized mini-stream.
         private byte[] ReadMiniStreamData(ReadOnlySpan<int> fatSpan, out int[] miniFat)
         {
             miniFat = FirstMiniFatSector >= 0 && MiniFatSectorCount > 0
                 ? ReadIntSectors(Source, SectorSize, fatSpan, FirstMiniFatSector, MiniFatSectorCount)
                 : [];
-            // Entries[0].Size (the root storage entry's mini-stream length) is a long; a value above
-            // int.MaxValue would truncate through the (int) cast into a negative byteLimit, which
-            // ReadChainBytes interprets as "read the entire chain" instead of "read N bytes" — bounded
-            // safely by the cycle check below, but a silent semantic flip worth closing.
+            // Above int.MaxValue this would truncate through the (int) cast into a negative byteLimit,
+            // which ReadChainBytes reads as "until end of chain" instead of "N bytes".
             if (Entries[0].Size > int.MaxValue)
             {
                 throw new InvalidDataException("The OLE root entry size exceeds the container.");
@@ -262,10 +241,8 @@ namespace ExcelReader.Core.Crypto
             return false;
         }
 
-        // Returns the pooled FAT array without touching `Source`. XlsCompoundFile.BuildWorkbook calls
-        // this instead of Dispose(): it hands `Source` (and its OwnsSource flag) off to the
-        // WorkbookStream it returns (or disposes it itself, for the mini-stream branch), so the
-        // container must not also dispose it here.
+        // Returns the pooled FAT array without touching `Source`; used when Source's ownership has
+        // already been transferred elsewhere and must not be disposed here.
         internal void ReturnFatBuffer()
         {
             if (_fatReturned)
@@ -299,9 +276,6 @@ namespace ExcelReader.Core.Crypto
 
         [SuppressMessage("Performance", "HLQ013:Consider using 'foreach' loop instead of 'for' loop",
             Justification = "Not an iteration over fat; follows the sector linked-list, writing each hop into chain[i].")]
-        // Rents the chain from the pool (oversized); WorkbookStream/CfbStreamView owns it for the read
-        // and returns it in Dispose, bounding all access by the sectorCount it also receives (not
-        // chain.Length).
         internal static int[] BuildChain(ReadOnlySpan<int> fat, int startSector, int sectorCount)
         {
             int[] chain = ArrayPool<int>.Shared.Rent(sectorCount);
@@ -326,13 +300,8 @@ namespace ExcelReader.Core.Crypto
             }
         }
 
-        // Every sector-based read in this file (FAT, DIFAT, chain walks) funnels through here with an
-        // offset derived from a sector id read straight from the file. SectorOffset already rejects a
-        // negative sector, but a huge positive one (still a valid int, e.g. from a single flipped byte)
-        // passed that check and reached Stream.Seek/ReadExactly directly — surfacing as a raw
-        // ArgumentOutOfRangeException or EndOfStreamException instead of the graceful InvalidDataException
-        // every other bound in this file already throws. This is the one choke point all three callers
-        // share, so the bound belongs here rather than duplicated at each call site.
+        // Every sector-based read funnels through here so a huge (but positive) sector id from a
+        // crafted file rejects gracefully instead of throwing a raw stream exception.
         private static void ReadAt(Stream source, long offset, Span<byte> dest)
         {
             if (offset < 0 || offset > source.Length - dest.Length)
@@ -385,8 +354,8 @@ namespace ExcelReader.Core.Crypto
             }
         }
 
-        // Rents from the pool (returned in the container's Dispose); fatLength is the true entry count,
-        // since the rented array is oversized — callers must bound reads by fatLength, not fat.Length.
+        // fatLength is the true entry count; the rented array is oversized, so callers must bound
+        // reads by fatLength, not fat.Length.
         private static int[] ReadFat(Stream source, int sectorSize, ReadOnlySpan<int> fatSectorIds, out int fatLength)
         {
             int entriesPerSector = sectorSize / 4;
@@ -423,11 +392,8 @@ namespace ExcelReader.Core.Crypto
             int sector = startSector;
             int written = 0;
             byte[] sectorBuf = ArrayPool<byte>.Shared.Rent(sectorSize);
-            // Counting iterations (as this used to) lets a 2-sector cycle (fat[a]=b, fat[b]=a) run the
-            // full fat.Length before tripping, writing sectorSize bytes per hop into this unbounded
-            // MemoryStream — up to ~1000x amplification on a file whose FAT happens to have many
-            // entries. Tracking visited sectors instead catches a cycle after at most fat.Length
-            // distinct sectors, which is the true worst case for an acyclic chain too.
+            // Tracking visited sectors (rather than counting iterations) catches a cycle immediately
+            // instead of writing sectorSize bytes per hop into this unbounded MemoryStream.
             bool[] visited = ArrayPool<bool>.Shared.Rent(Math.Max(1, fat.Length));
             Array.Clear(visited, 0, fat.Length);
             try
@@ -476,10 +442,7 @@ namespace ExcelReader.Core.Crypto
             int written = 0;
             while (sector is >= 0 and not EndOfChain && written < result.Length)
             {
-                // sector comes straight from an attacker-controlled miniFat entry (any int32), so the
-                // multiply is done in long arithmetic first - a `checked(sector * miniSectorSize)` in
-                // int32 can itself overflow and throw OverflowException before the bounds check below
-                // ever runs, turning malformed input into a crash instead of a graceful rejection.
+                // long arithmetic: an int32 multiply here could overflow before the bounds check runs.
                 long offset = (long)sector * miniSectorSize;
                 if (offset < 0 || offset >= miniStream.Length)
                 {
@@ -519,10 +482,7 @@ namespace ExcelReader.Core.Crypto
             {
                 ReadOnlySpan<byte> entry = bytes.Slice(i * 128, 128);
                 int nameBytes = ReadU16(entry, 64);
-                // [MS-CFB] caps a directory entry's name length at 64 bytes (including the null
-                // terminator); nothing enforced that here, so a crafted value up to 65535 either threw
-                // a raw ArgumentOutOfRangeException slicing this fixed 128-byte slot, or (for values
-                // between 66 and 130) silently read adjacent slot fields into the name string.
+                // [MS-CFB] caps a directory entry's name length at 64 bytes including the terminator.
                 if (nameBytes < 0 || nameBytes > 64)
                 {
                     throw new InvalidDataException("The OLE directory entry name length is out of range.");
@@ -552,13 +512,9 @@ namespace ExcelReader.Core.Crypto
 
         internal readonly record struct DirectoryEntry(string Name, byte ObjectType, int StartSector, long Size);
 
-        // Read-only, seekable view over a FAT-chained CFB stream. This is what lets ZipArchive seek to
-        // the central directory of an EncryptedPackage stream without the caller materializing the
-        // whole (potentially large) decrypted package up front.
+        // Read-only, seekable view over a FAT-chained CFB stream.
         private sealed class CfbStreamView : Stream
         {
-            // Borrowed from the owning CfbContainer, which outlives this view and owns disposal — do
-            // not dispose here.
             [SuppressMessage("Usage", "CA2213:Disposable fields should be disposed", Justification = "Borrowed, not owned.")]
             private readonly Stream _source;
             private readonly int[] _chain;

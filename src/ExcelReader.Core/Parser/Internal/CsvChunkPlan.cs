@@ -11,24 +11,10 @@ namespace ExcelReader.Core.Parser.Internal
 
     // A fixed split of the data range into chunks, plus the pull queue workers draw from.
     //
-    // Chunk size is a small constant, NOT a share of the file. It was derived from the file length
-    // (dataLength / (4 * dop)) until measurement showed that to be the parallel path's single
-    // costliest decision: chunk size then grew without bound with the input, and since a chunk must
-    // buffer its parsed models until the ordered merge reaches it, peak heap grew with it. On a
-    // 200 MB corpus at dop=16 that was ~400 MB of live models and a stream of Gen2 collections; on a
-    // 10 GB file it would have been gigabytes.
-    //
-    // Small chunks fix that at the root: in-flight models stay a few MB, so they die in Gen0 instead
-    // of being promoted, and Gen2 collections disappear from the parallel path entirely. Measured on
-    // a 16-core machine, 200 MB narrow-int / 140 MB conversion-heavy corpora, dop=8:
-    //
-    //   chunk size   narrow ms   wide ms   peak heap MB
-    //   64 KB            254        294         15-19
-    //   256 KB           257        338         17-21
-    //   1 MB             335        621         33-50
-    //   file/(4*dop)     569        704       272-321   (the original sizing)
-    //
-    // 64 KB also matches the record reader's own buffer, so a chunk is about one buffered read.
+    // Chunk size is a small constant, not a share of the file. A chunk buffers its parsed models
+    // until the ordered merge reaches it, so a chunk size that scales with the file scales peak heap
+    // with it too. Keeping it small (64 KB, matching the record reader's own buffer) keeps in-flight
+    // models small enough to die in Gen0 instead of being promoted.
     internal sealed class CsvChunkPlan
     {
         private const long DefaultChunkSize = 64 * 1024;
@@ -49,9 +35,7 @@ namespace ExcelReader.Core.Parser.Internal
 
         internal int Count => _count;
 
-        // Chunks are uniform, so they are computed rather than stored. At 64 KB a 10 GB file has
-        // ~160k of them, and an array of those would be megabytes of bookkeeping held live for the
-        // whole enumeration for no information the index does not already carry.
+        // Computed rather than stored: chunks are uniform, and at 64 KB a 10 GB file has ~160k of them.
         internal CsvChunk this[int index]
         {
             get

@@ -6,9 +6,8 @@ namespace ExcelReader.Core.Parser.Internal
 {
     // Runs a pool of chunk workers and merges their output in file order.
     //
-    // Ordering is not a preference here: a chunk's rows are only *valid* once its predecessor has
-    // parsed up to the chunk's start and confirmed which boundary hypothesis was right. That
-    // sequencing is a correctness requirement, and the ordered merge is where it happens.
+    // Ordering is a correctness requirement, not a preference: a chunk's rows are only valid once its
+    // predecessor confirms which boundary hypothesis was right.
     internal sealed class ParallelCsvEnumerable<T> : IAsyncEnumerable<T>
     {
         private readonly CsvChunkSource _source;
@@ -20,11 +19,7 @@ namespace ExcelReader.Core.Parser.Internal
         private readonly ExcelParserConfig _config;
         private readonly int _dop;
 
-        // The file handle this enumeration owns, or null for a memory/borrowed-stream source. Held
-        // here rather than in a wrapping IAsyncEnumerable<T> so that closing it costs one `finally`
-        // at the end of the enumeration instead of re-yielding every row through a second async
-        // iterator — the merge is single-threaded, so per-row cost there is not something more
-        // workers can absorb.
+        // The file handle this enumeration owns, or null for a memory/borrowed-stream source.
         private readonly SafeFileHandle? _ownedHandle;
 
         internal ParallelCsvEnumerable(
@@ -67,26 +62,18 @@ namespace ExcelReader.Core.Parser.Internal
             using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             CancellationToken ct = cts.Token;
 
-            // Chunks that may be claimed but not yet consumed by the merge. One per worker: with 64 KB
-            // chunks (CsvChunkPlan) every worker still has a chunk to parse the moment the merge frees
-            // a slot, and deeper buffering measurably *hurt* — 2*dop was the original value, and at
-            // dop=16 it cost 10-45% wall clock on both corpora by keeping enough parsed models alive
-            // to push them out of Gen0.
+            // Chunks that may be claimed but not yet consumed by the merge. One per worker — deeper
+            // buffering keeps more parsed models alive, pushing them out of Gen0.
             int inFlight = _dop;
             using var slots = new SemaphoreSlim(inFlight, inFlight);
 
-            // Ring size: at most `inFlight` chunks are claimed at once, and they are handed out in
-            // index order, so the live window is [merge position, merge position + inFlight - 1] —
-            // inFlight consecutive indices. One more slot than that makes index % Ring collision-free
-            // across the whole window, so all three per-chunk arrays are O(dop) rather than O(chunks).
-            // At 64 KB a 10 GB file has ~160k chunks; arrays indexed by chunk would be megabytes of
-            // live bookkeeping, and 160k TaskCompletionSources held to the end of the enumeration.
+            // At most `inFlight` chunks are claimed at once, handed out in index order, so the live
+            // window is `inFlight` consecutive indices; one extra ring slot makes `index % ring`
+            // collision-free across it, keeping these arrays O(dop) instead of O(chunk count).
             int ring = inFlight + 1;
 
-            // Chunk model lists are recycled rather than reallocated. A chunk's list is the single
-            // largest allocation the parallel path adds over the sequential one, and the merge drops
-            // it the moment it has yielded its rows, so without recycling every chunk buys and burns
-            // a fresh array.
+            // Recycles chunk model lists instead of reallocating: a chunk's list is the largest
+            // allocation the parallel path adds, and the merge drops it right after yielding its rows.
             var lists = new ListPool<T>(ring);
             var results = new CsvChunkResult<T>?[ring];
             var ready = new TaskCompletionSource<bool>[ring];
@@ -95,10 +82,8 @@ namespace ExcelReader.Core.Parser.Internal
                 slot = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
             }
 
-            // Typed as Func<Task> deliberately: `Task.Run(() => RunWorkerAsync(...))` would also bind
-            // to the Action overload, which returns a Task that completes at the worker's first await
-            // instead of at its end — and the whole join-before-release guarantee below rests on
-            // `allWorkers` meaning the workers have actually finished.
+            // Typed as Func<Task>: `Task.Run(() => RunWorkerAsync(...))` would otherwise bind to the
+            // Action overload, whose Task completes at the worker's first await rather than at its end.
             Func<Task> body = () => RunWorkerAsync(results, ready, slots, lists, ring, ct);
             Task[] workers = new Task[Math.Min(_dop, _plan.Count)];
             foreach (ref Task worker in workers.AsSpan())
@@ -120,34 +105,25 @@ namespace ExcelReader.Core.Parser.Internal
                     CsvChunkResult<T> result = results[slot]!;
 
                     // The predecessor's ResolvedNextStart is ground truth. When this chunk guessed a
-                    // different start, its rows are wrong and it is reparsed from the proven offset.
-                    // A reparse changes THIS chunk's ResolvedNextStart too, so the correction can
-                    // cascade into the next chunk — which the loop handles naturally, because
-                    // confirmedNextStart is recomputed from whatever result we end up emitting.
+                    // different start, its rows are wrong and it is reparsed from the proven offset;
+                    // a cascading correction into the next chunk falls out naturally since
+                    // confirmedNextStart is recomputed from whatever result is actually emitted.
                     if (confirmedNextStart < long.MaxValue && result.ActualStart != confirmedNextStart)
                     {
-                        // The discarded result's list is reused verbatim for the reparse: its rows are
-                        // wrong, but its capacity was sized against this very chunk.
+                        // Reused verbatim: rows are wrong, but capacity was sized against this chunk.
                         List<T> reuse = result.Models;
                         reuse.Clear();
                         result = await CsvChunkWorker.ParseAsync(
                             _source, _plan[i], confirmedNextStart, _map, _info, _readerOptions, _config, reuse, ct).ConfigureAwait(false);
                     }
 
-                    // Rearm this ring slot for chunk i + ring, then release. Strictly in that order:
-                    // chunk i + ring can only be claimed on a permit released at chunk i + 1 or later,
-                    // so rearming before this release puts it safely ahead of any worker that will
-                    // read the slot, with the semaphore providing the ordering edge. Dropping the
-                    // result reference here also matters on its own: the semaphore bounds how many
-                    // chunks are in flight, but only this keeps a merged chunk's rows from staying
-                    // reachable until the slot is overwritten a full ring later.
+                    // Rearm this ring slot for chunk i + ring, then release — in that order, so the
+                    // rearm happens before any worker can claim i + ring on the permit this releases.
                     results[slot] = null;
                     ready[slot] = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
                     slots.Release();
 
-                    // Indexed rather than foreach: HLQ012 would have this iterate a
-                    // CollectionsMarshal.AsSpan over the list, and a Span cannot live across the
-                    // `yield return` an ordered merge is built on.
+                    // Indexed, not foreach: a Span (which HLQ012 would suggest) cannot live across yield.
                     List<T> models = result.Models;
                     int count = models.Count;
                     for (int m = 0; m < count; m++)
@@ -156,18 +132,11 @@ namespace ExcelReader.Core.Parser.Internal
                         yield return models[m];
                     }
 
-                    // Recycled only once its rows are out the door. Clear() drops this chunk's model
-                    // references immediately, so recycling never keeps a parsed row alive longer than
-                    // not recycling would.
                     models.Clear();
                     lists.Return(models);
 
                     if (result.Failure is not null)
                     {
-                        // The failing record is the one after this chunk's last emitted model (the
-                        // worker stops at the failure, so Models holds exactly FailureRowInChunk
-                        // items), shifted past the rows 1..HeaderRow the sequential path counts
-                        // before the first data record.
                         throw RenumberFailure(result.Failure, _config.HeaderRow + rowsEmitted + 1);
                     }
 
@@ -180,21 +149,10 @@ namespace ExcelReader.Core.Parser.Internal
             }
             finally
             {
-                // Cancel, then JOIN. A pooled buffer handed back to ArrayPool while a worker is still
-                // writing into it corrupts an unrelated consumer elsewhere in the process, so waiting
-                // for real worker completion is not optional here. SuppressThrowing keeps the join
-                // from replacing the merge's own exception (or from throwing out of DisposeAsync when
-                // the consumer simply broke early) while still marking worker faults observed.
-                //
-                // `cts` and `slots` are disposed by their `using` declarations, whose generated
-                // finally block encloses this one — so nothing a worker touches is released until
-                // after this await has returned.
+                // Cancel, then join — a worker still writing into a pooled buffer when it's returned
+                // to ArrayPool corrupts an unrelated consumer, so waiting for real completion matters.
                 await cts.CancelAsync().ConfigureAwait(false);
                 await allWorkers.ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
-
-                // After the join, never before: a worker still running would be reading through this
-                // very handle. Closing here (rather than at finalization) is what makes an early
-                // `break` by the consumer release the file promptly.
                 _ownedHandle?.Dispose();
             }
         }
@@ -211,26 +169,15 @@ namespace ExcelReader.Core.Parser.Internal
             int claimed = -1;
             try
             {
-                // Acquire the slot BEFORE claiming the chunk, never the other way round. Claiming
-                // first opens a window in which a worker owns the earliest unpublished chunk while
-                // holding no slot: if it is descheduled there and later-indexed chunks drain the
-                // semaphore, it blocks in WaitAsync forever and the merge waits forever on a chunk
-                // nobody will publish — a silent, permanent hang.
-                //
-                // With this order the invariant the merge depends on actually holds. If the merge is
-                // blocked on chunk i, then either i is claimed — and its owner already holds a slot,
-                // so it is parsing and will publish — or i is unclaimed, which (chunks being handed
-                // out in index order) means no chunk >= i is claimed either, so every permit is held
-                // by a chunk < i, all of which the merge has already released. A worker therefore
-                // acquires immediately and claims i.
+                // Slot acquired before the chunk is claimed, never the reverse: claiming first could
+                // leave a worker holding the earliest unpublished chunk with no slot, descheduled while
+                // later chunks drain the semaphore — a permanent hang on a chunk nobody will publish.
                 while (true)
                 {
                     ct.ThrowIfCancellationRequested();
                     await slots.WaitAsync(ct).ConfigureAwait(false);
                     if (!_plan.TryTakeNext(out CsvChunk chunk))
                     {
-                        // No chunk to spend this permit on, and no merge iteration will ever release
-                        // it on this worker's behalf, so hand it back before leaving.
                         slots.Release();
                         return;
                     }
@@ -242,11 +189,8 @@ namespace ExcelReader.Core.Parser.Internal
                     ready[chunk.Index % ring].TrySetResult(true);
                 }
             }
-            // A worker that dies owes the merge an answer for the chunk it was holding. Without this
-            // the merge would wait forever on a TaskCompletionSource nobody will ever complete: the
-            // only other signal, Task.WhenAll, cannot complete while the surviving workers are still
-            // running. TrySetCanceled rather than TrySetException for cancellation keeps the
-            // early-break path from parking an exception nobody will observe.
+            // A dying worker owes the merge an answer for the chunk it held, or the merge waits
+            // forever on a TaskCompletionSource nobody completes.
             catch (OperationCanceledException) when (claimed >= 0)
             {
                 ready[claimed % ring].TrySetCanceled(ct);
@@ -259,10 +203,7 @@ namespace ExcelReader.Core.Parser.Internal
             }
         }
 
-        // Surfaces a worker's infrastructure failure (I/O, OOM) instead of deadlocking on a chunk
-        // whose TaskCompletionSource will never be completed. This is the backstop for the case where
-        // every worker died before claiming the chunk the merge is waiting for; the common case is the
-        // per-chunk propagation in RunWorkerAsync.
+        // Backstop for every worker dying before claiming the chunk the merge is waiting on.
         [SuppressMessage("Usage", "VSTHRD003:Avoid awaiting foreign Tasks",
             Justification = "Both tasks are created by GetAsyncEnumerator, the sole caller, and passed in only to keep the waiting logic out of the iterator body.")]
         private static async Task WaitForChunkAsync(Task<bool> chunkReady, Task allWorkers)
@@ -270,21 +211,14 @@ namespace ExcelReader.Core.Parser.Internal
             Task finished = await Task.WhenAny(chunkReady, allWorkers).ConfigureAwait(false);
             if (finished == allWorkers)
             {
-                // Rethrows the first worker exception as-is. No AggregateException wrapping: callers
-                // already have catch blocks written against the sequential path's exception types.
                 await allWorkers.ConfigureAwait(false);
             }
             await chunkReady.ConfigureAwait(false);
         }
 
-        // Only the merge knows a chunk's global row offset, so only the merge can raise a parse
-        // failure with the row number the sequential path would have reported. The chunk worker's
-        // projector numbers rows from 1 within its own chunk, so the original number is discarded and
-        // the exception rebuilt — ExcelParseException is immutable.
-        //
-        // An empty RawValue distinguishes the two failure shapes: a parse failure is only raised for a
-        // non-empty cell (see ExcelParseException's own remarks), so a blank raw value is the
-        // missing-required-value case, which carries a different message.
+        // Only the merge knows a chunk's global row offset. The worker numbers rows from 1 within its
+        // own chunk, so the exception is rebuilt here with the real row number (ExcelParseException is
+        // immutable). An empty RawValue means missing-required-value rather than a parse failure.
         private static ExcelParseException RenumberFailure(ExcelParseException original, long globalRow)
         {
             if (original.RawValue.Length == 0)
