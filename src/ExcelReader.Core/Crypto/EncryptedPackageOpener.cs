@@ -136,6 +136,14 @@ namespace ExcelReader.Core.Crypto
             int cipherLen = package.Length - PrefixSize;
             byte[] result = new byte[declaredLength];
             byte[] segmentBuffer = ArrayPool<byte>.Shared.Rent(SegmentSize);
+            // One cipher object and one IV buffer for the whole package rather than one per segment -
+            // same reasoning as DecryptedPackageStream.DecryptSegment.
+            using Aes aes = Aes.Create();
+            aes.Mode = CipherMode.CBC;
+            aes.Padding = PaddingMode.None;
+            aes.Key = key;
+            using IncrementalHash ivHasher = AgileKeyDerivation.CreateHasher(agile.KeyData.Hash);
+            Span<byte> iv = stackalloc byte[agile.KeyData.BlockSize];
             try
             {
                 int segmentCount = (cipherLen + SegmentSize - 1) / SegmentSize;
@@ -143,14 +151,10 @@ namespace ExcelReader.Core.Crypto
                 {
                     int segOffset = i * SegmentSize;
                     int segCipherLen = Math.Min(SegmentSize, cipherLen - segOffset);
-                    byte[] iv = AgileKeyDerivation.SegmentIv(agile, i);
-                    using Aes aes = Aes.Create();
-                    aes.Mode = CipherMode.CBC;
-                    aes.Padding = PaddingMode.None;
-                    aes.Key = key;
-                    aes.IV = iv;
-                    using ICryptoTransform decryptor = aes.CreateDecryptor();
-                    decryptor.TransformBlock(package, PrefixSize + segOffset, segCipherLen, segmentBuffer, 0);
+                    AgileKeyDerivation.SegmentIv(agile, i, ivHasher, iv);
+                    aes.DecryptCbc(
+                        package.AsSpan(PrefixSize + segOffset, segCipherLen), iv,
+                        segmentBuffer.AsSpan(0, segCipherLen), PaddingMode.None);
 
                     int copyLen = (int)Math.Min(segCipherLen, declaredLength - segOffset);
                     if (copyLen > 0)
