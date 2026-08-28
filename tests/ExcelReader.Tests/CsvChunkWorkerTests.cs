@@ -29,6 +29,7 @@ namespace ExcelReader.Tests
                 TypeMapper<Row>.GetCsvInfo(),
                 CsvReaderOptions.Default,
                 new ExcelParserConfig(),
+                [],
                 CancellationToken.None);
         }
 
@@ -143,6 +144,7 @@ namespace ExcelReader.Tests
                     TypeMapper<Row>.GetCsvInfo(),
                     CsvReaderOptions.Default,
                     new ExcelParserConfig(),
+                    [],
                     TestContext.Current.CancellationToken);
 
                 Row row = Assert.Single(result.Models);

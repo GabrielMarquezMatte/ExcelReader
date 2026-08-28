@@ -4,12 +4,26 @@ namespace ExcelReader.Tests
 {
     public class CsvChunkPlanTests
     {
-        [Fact]
-        public void SplitsIntoFourChunksPerDegreeOfParallelism()
+        // Chunk size is a constant, not a share of the file: doubling the input doubles the chunk
+        // count and leaves chunk size — and therefore the parallel path's peak memory — untouched.
+        [Theory]
+        [InlineData(16 * 1024 * 1024, 256)]
+        [InlineData(32 * 1024 * 1024, 512)]
+        public void SplitsIntoFixedSizeChunksIndependentOfFileSize(int dataLength, int expectedChunks)
         {
-            CsvChunkPlan plan = CsvChunkPlan.Create(dataStart: 0, dataLength: 16 * 1024 * 1024, degreeOfParallelism: 4);
+            CsvChunkPlan plan = CsvChunkPlan.Create(dataStart: 0, dataLength: dataLength, degreeOfParallelism: 4);
 
-            Assert.Equal(16, plan.Count);
+            Assert.Equal(expectedChunks, plan.Count);
+            Assert.Equal(64 * 1024, plan[0].End - plan[0].Start);
+        }
+
+        [Fact]
+        public void ChunkSizeDoesNotChangeWithDegreeOfParallelism()
+        {
+            CsvChunkPlan one = CsvChunkPlan.Create(dataStart: 0, dataLength: 16 * 1024 * 1024, degreeOfParallelism: 1);
+            CsvChunkPlan many = CsvChunkPlan.Create(dataStart: 0, dataLength: 16 * 1024 * 1024, degreeOfParallelism: 32);
+
+            Assert.Equal(one.Count, many.Count);
         }
 
         [Fact]
