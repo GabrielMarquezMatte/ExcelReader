@@ -2,6 +2,7 @@
   <Folder Name="/src/">
     <Project Path="src/ExcelReader.Cli/ExcelReader.Cli.csproj" />
     <Project Path="src/ExcelReader.Core/ExcelReader.Core.csproj" />
+    <Project Path="src/ExcelReader.Arrow/ExcelReader.Arrow.csproj" />
     <Project Path="src/ExcelReader.Native/ExcelReader.Native.csproj" />
     <Project Path="src/ExcelReader.Generator/ExcelReader.Generator.csproj" />
   </Folder>
