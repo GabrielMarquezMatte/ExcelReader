@@ -1,4 +1,5 @@
 using Apache.Arrow;
+using ExcelReader.Core.Enums;
 using ExcelReader.Core.Reader;
 using ExcelReader.Core.ValueObjects;
 
@@ -24,6 +25,8 @@ namespace ExcelReader.Arrow
         /// <exception cref="InvalidOperationException">
         /// A cell failed to convert to its column's declared type on a non-nullable column.
         /// </exception>
+        /// <exception cref="ArgumentException">The sheet has fewer rows than <paramref name="headerRow"/>.</exception>
+        /// <exception cref="NotSupportedException"><paramref name="schema"/> names an unrecognized <see cref="ExcelColumnType"/>.</exception>
         public static RecordBatch ToArrowRecordBatch(this IExcelRowReader reader, ExcelColumnSchema[]? schema = null, int headerRow = 1)
         {
             ArgumentNullException.ThrowIfNull(reader);
@@ -61,6 +64,9 @@ namespace ExcelReader.Arrow
             return new RecordBatch(arrowSchema, arrays, rowCount);
         }
 
+        // Intentionally mirrors ExcelReader.Core's internal SchemaInference.TrySkipToHeaderRow (row-skip
+        // arithmetic and message text); this package has no InternalsVisibleTo access to call it directly,
+        // so the small duplication here is deliberate, not an oversight.
         private static void SkipHeaderRow(IExcelRowEnumerator rows, int headerRow)
         {
             for (int rowNumber = 1; rowNumber <= headerRow; rowNumber++)
