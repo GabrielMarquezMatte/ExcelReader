@@ -46,7 +46,13 @@ namespace ExcelReader.Arrow
             {
             }
 
-            internal override Field Field => new(DisplayName, StringType.Default, Nullable);
+            internal override Field Field
+            {
+                get
+                {
+                    return new(DisplayName, StringType.Default, Nullable);
+                }
+            }
 
             internal override void Append(in Cell cell, bool isDate1904)
             {
@@ -67,7 +73,13 @@ namespace ExcelReader.Arrow
             {
             }
 
-            internal override Field Field => new(DisplayName, Int64Type.Default, Nullable);
+            internal override Field Field
+            {
+                get
+                {
+                    return new(DisplayName, Int64Type.Default, Nullable);
+                }
+            }
 
             internal override void Append(in Cell cell, bool isDate1904)
             {
