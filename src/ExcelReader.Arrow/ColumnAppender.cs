@@ -34,6 +34,8 @@ namespace ExcelReader.Arrow
             {
                 ExcelColumnType.StringColumn => new StringColumnAppender(schema),
                 ExcelColumnType.Int64Column => new Int64ColumnAppender(schema),
+                ExcelColumnType.Float64Column => new Float64ColumnAppender(schema),
+                ExcelColumnType.BoolColumn => new BoolColumnAppender(schema),
                 _ => throw new NotSupportedException($"column type {schema.Type} is not supported yet."),
             };
         }
@@ -84,6 +86,76 @@ namespace ExcelReader.Arrow
             internal override void Append(in Cell cell, bool isDate1904)
             {
                 if (cell.TryParse(CultureInfo.InvariantCulture, out long value))
+                {
+                    _builder.Append(value);
+                }
+                else
+                {
+                    ThrowIfNotNullable();
+                    _builder.AppendNull();
+                }
+            }
+
+            internal override IArrowArray Build()
+            {
+                return _builder.Build();
+            }
+        }
+
+        private sealed class Float64ColumnAppender : ColumnAppender
+        {
+            private readonly DoubleArray.Builder _builder = new();
+
+            internal Float64ColumnAppender(ExcelColumnSchema schema) : base(schema)
+            {
+            }
+
+            internal override Field Field
+            {
+                get
+                {
+                    return new(DisplayName, DoubleType.Default, Nullable);
+                }
+            }
+
+            internal override void Append(in Cell cell, bool isDate1904)
+            {
+                if (cell.TryParse(CultureInfo.InvariantCulture, out double value))
+                {
+                    _builder.Append(value);
+                }
+                else
+                {
+                    ThrowIfNotNullable();
+                    _builder.AppendNull();
+                }
+            }
+
+            internal override IArrowArray Build()
+            {
+                return _builder.Build();
+            }
+        }
+
+        private sealed class BoolColumnAppender : ColumnAppender
+        {
+            private readonly BooleanArray.Builder _builder = new();
+
+            internal BoolColumnAppender(ExcelColumnSchema schema) : base(schema)
+            {
+            }
+
+            internal override Field Field
+            {
+                get
+                {
+                    return new(DisplayName, BooleanType.Default, Nullable);
+                }
+            }
+
+            internal override void Append(in Cell cell, bool isDate1904)
+            {
+                if (bool.TryParse(cell.GetString(), out bool value))
                 {
                     _builder.Append(value);
                 }
