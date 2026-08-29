@@ -121,5 +121,35 @@ namespace ExcelReader.Tests
             long expected = (new DateTime(2024, 1, 15, 13, 30, 0) - DateTime.UnixEpoch).Ticks / 10;
             Assert.Equal(expected, stamp.GetValue(0));
         }
+
+        [Fact]
+        public void ToArrowRecordBatch_Should_Infer_Schema_When_None_Given()
+        {
+            using var reader = Excel.FromCsv(Encoding.UTF8.GetBytes("name,qty\nwidget,3\ngadget,7\n"));
+
+            RecordBatch batch = reader.ToArrowRecordBatch();
+
+            Assert.Equal(2, batch.ColumnCount);
+            Assert.Equal("name", batch.Schema.GetFieldByIndex(0).Name);
+            Assert.IsType<StringArray>(batch.Column(0));
+            Assert.IsType<StringArray>(batch.Column(1));
+        }
+
+        [Fact]
+        public void ToArrowRecordBatch_Should_Treat_HeaderRow_Zero_As_No_Header()
+        {
+            using var reader = Excel.FromCsv(Encoding.UTF8.GetBytes("widget,3\ngadget,7\n"));
+            ExcelColumnSchema[] schema =
+            [
+                new() { Index = 0, Type = ExcelColumnType.StringColumn },
+                new() { Index = 1, Type = ExcelColumnType.Int64Column },
+            ];
+
+            RecordBatch batch = reader.ToArrowRecordBatch(schema, headerRow: 0);
+
+            Assert.Equal(2, batch.Length);
+            var name = Assert.IsType<StringArray>(batch.Column(0));
+            Assert.Equal("widget", name.GetString(0));
+        }
     }
 }
