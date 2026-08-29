@@ -1,8 +1,10 @@
+using System.Runtime.InteropServices;
 using System.Text;
 using Apache.Arrow;
 using ExcelReader.Arrow;
 using ExcelReader.Core.Enums;
 using ExcelReader.Core.Reader;
+using ExcelReader.Native;
 
 namespace ExcelReader.Tests
 {
@@ -150,6 +152,93 @@ namespace ExcelReader.Tests
             Assert.Equal(2, batch.Length);
             var name = Assert.IsType<StringArray>(batch.Column(0));
             Assert.Equal("widget", name.GetString(0));
+        }
+
+        [Fact]
+        public void ToArrowRecordBatch_Should_Match_The_Native_Arrow_Path_On_RealExcel()
+        {
+            string path = Path.Combine(AppContext.BaseDirectory, "data", "RealExcel.xlsb");
+
+            using IExcelRowReader managedReader = Excel.Open(path);
+            ExcelColumnSchema[] schema = Excel.InferSchema(managedReader);
+            RecordBatch managedBatch = managedReader.ToArrowRecordBatch(schema, headerRow: 1);
+
+            Assert.Equal(NativeStatus.Ok, NativeApiTests.OpenPath(path, NativeFormat.Xlsb, out NativeHandle? handle));
+            try
+            {
+                NativeColumnSpec[] specs = new NativeColumnSpec[schema.Length];
+                for (int i = 0; i < schema.Length; i++)
+                {
+                    specs[i] = new NativeColumnSpec
+                    {
+                        Names = schema[i].Name is null ? [] : [schema[i].Name!],
+                        Index = schema[i].Index,
+                        Type = (int)schema[i].Type,
+                        Nullable = schema[i].IsNullable,
+                    };
+                }
+
+                Assert.Equal(NativeStatus.Ok, NativeApi.ParseArrow(handle, specs, headerRow: 1, out ArrowArray nativeArray, out ArrowSchema nativeSchema));
+                try
+                {
+                    Assert.Equal(managedBatch.Length, nativeArray.Length);
+                    for (int i = 0; i < schema.Length; i++)
+                    {
+                        ArrowArray nativeColumn = NativeApiTests.ArrowChildArray(nativeArray, i);
+                        Assert.Equal(nativeColumn.Length, managedBatch.Column(i).Length);
+                        Assert.Equal(nativeColumn.NullCount, managedBatch.Column(i).NullCount);
+                        AssertColumnValuesMatch(schema[i].Type, nativeColumn, managedBatch.Column(i));
+                    }
+                }
+                finally
+                {
+                    NativeApiTests.ExercisedReleaseArrow(ref nativeArray, ref nativeSchema);
+                }
+            }
+            finally
+            {
+                NativeApi.Close(handle);
+            }
+        }
+
+        private static void AssertColumnValuesMatch(ExcelColumnType type, ArrowArray nativeColumn, IArrowArray managedColumn)
+        {
+            for (int row = 0; row < nativeColumn.Length; row++)
+            {
+                if (managedColumn.IsNull(row))
+                {
+                    continue; // null positions already compared via NullCount equality above.
+                }
+
+                switch (type)
+                {
+                    case ExcelColumnType.StringColumn:
+                        IntPtr offsets = NativeApiTests.ArrowBuffer(nativeColumn, 1);
+                        IntPtr data = NativeApiTests.ArrowBuffer(nativeColumn, 2);
+                        int start = Marshal.ReadInt32(offsets, row * sizeof(int));
+                        int end = Marshal.ReadInt32(offsets, (row + 1) * sizeof(int));
+                        byte[] bytes = new byte[end - start];
+                        Marshal.Copy(IntPtr.Add(data, start), bytes, 0, bytes.Length);
+                        Assert.Equal(Encoding.UTF8.GetString(bytes), ((StringArray)managedColumn).GetString(row));
+                        break;
+                    case ExcelColumnType.Int64Column:
+                        Assert.Equal(Marshal.ReadInt64(NativeApiTests.ArrowBuffer(nativeColumn, 1), row * sizeof(long)), ((Int64Array)managedColumn).GetValue(row));
+                        break;
+                    case ExcelColumnType.Float64Column:
+                        Assert.Equal(BitConverter.Int64BitsToDouble(Marshal.ReadInt64(NativeApiTests.ArrowBuffer(nativeColumn, 1), row * sizeof(double))), ((DoubleArray)managedColumn).GetValue(row));
+                        break;
+                    case ExcelColumnType.BoolColumn:
+                        bool bit = (Marshal.ReadByte(NativeApiTests.ArrowBuffer(nativeColumn, 1), row / 8) & (1 << (row % 8))) != 0;
+                        Assert.Equal(bit, ((BooleanArray)managedColumn).GetValue(row));
+                        break;
+                    case ExcelColumnType.DateColumn:
+                        Assert.Equal(Marshal.ReadInt32(NativeApiTests.ArrowBuffer(nativeColumn, 1), row * sizeof(int)), ((Date32Array)managedColumn).GetValue(row));
+                        break;
+                    default: // TimeColumn, TimestampColumn — both 8-byte microsecond values on both paths.
+                        Assert.Equal(Marshal.ReadInt64(NativeApiTests.ArrowBuffer(nativeColumn, 1), row * sizeof(long)), ((PrimitiveArray<long>)managedColumn).GetValue(row));
+                        break;
+                }
+            }
         }
     }
 }
