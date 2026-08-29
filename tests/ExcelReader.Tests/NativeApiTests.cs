@@ -16,7 +16,7 @@ namespace ExcelReader.Tests
         private static readonly string XlsxFixture = Path.Combine(AppContext.BaseDirectory, "data", "sample.xlsx");
         private static readonly string XlsbFixture = Path.Combine(AppContext.BaseDirectory, "data", "RealExcel.xlsb");
 
-        private static int OpenPath(string path, int format, out NativeHandle? handle)
+        internal static int OpenPath(string path, int format, out NativeHandle? handle)
         {
             return NativeApi.OpenFile(Encoding.UTF8.GetBytes(path), format, out handle);
         }
@@ -2414,12 +2414,12 @@ namespace ExcelReader.Tests
             return Marshal.PtrToStructure<ArrowSchema>(Marshal.ReadIntPtr(schema.Children, index * IntPtr.Size));
         }
 
-        private static ArrowArray ArrowChildArray(ArrowArray array, int index)
+        internal static ArrowArray ArrowChildArray(ArrowArray array, int index)
         {
             return Marshal.PtrToStructure<ArrowArray>(Marshal.ReadIntPtr(array.Children, index * IntPtr.Size));
         }
 
-        private static IntPtr ArrowBuffer(ArrowArray array, int index)
+        internal static IntPtr ArrowBuffer(ArrowArray array, int index)
         {
             return Marshal.ReadIntPtr(array.Buffers, index * IntPtr.Size);
         }
@@ -3470,7 +3470,7 @@ namespace ExcelReader.Tests
         // Releases via the same IntPtr round-trip real Arrow consumers use (their own storage, not a
         // pointer to this ref struct) - NativeApi.ReleaseArrowArray/Schema take an address, and `array`/
         // `schema` here are plain locals with no fixed address of their own.
-        private static void ExercisedReleaseArrow(ref ArrowArray array, ref ArrowSchema schema)
+        internal static void ExercisedReleaseArrow(ref ArrowArray array, ref ArrowSchema schema)
         {
             IntPtr arrayBlock = Marshal.AllocHGlobal(Marshal.SizeOf<ArrowArray>());
             IntPtr schemaBlock = Marshal.AllocHGlobal(Marshal.SizeOf<ArrowSchema>());
