@@ -80,5 +80,46 @@ namespace ExcelReader.Tests
             Assert.True(flag.GetValue(0));
             Assert.False(flag.GetValue(1));
         }
+
+        [Fact]
+        public void ToArrowRecordBatch_Should_Convert_Date_Column()
+        {
+            using var reader = Excel.FromCsv(Encoding.UTF8.GetBytes("day\n2024-01-15\n2024-03-01\n"));
+            ExcelColumnSchema[] schema = [new() { Index = 0, Name = "day", Type = ExcelColumnType.DateColumn }];
+
+            RecordBatch batch = reader.ToArrowRecordBatch(schema);
+
+            var day = Assert.IsType<Date32Array>(batch.Column(0));
+            int expectedFirst = (new DateTime(2024, 1, 15) - DateTime.UnixEpoch).Days;
+            int expectedSecond = (new DateTime(2024, 3, 1) - DateTime.UnixEpoch).Days;
+            Assert.Equal(expectedFirst, day.GetValue(0));
+            Assert.Equal(expectedSecond, day.GetValue(1));
+        }
+
+        [Fact]
+        public void ToArrowRecordBatch_Should_Convert_Time_Column()
+        {
+            using var reader = Excel.FromCsv(Encoding.UTF8.GetBytes("clock\n13:30:00\n\n"));
+            ExcelColumnSchema[] schema = [new() { Index = 0, Name = "clock", Type = ExcelColumnType.TimeColumn, IsNullable = true }];
+
+            RecordBatch batch = reader.ToArrowRecordBatch(schema);
+
+            var clock = Assert.IsType<Time64Array>(batch.Column(0));
+            Assert.Equal(new TimeSpan(13, 30, 0).Ticks / 10, clock.GetValue(0));
+            Assert.True(clock.IsNull(1));
+        }
+
+        [Fact]
+        public void ToArrowRecordBatch_Should_Convert_Timestamp_Column()
+        {
+            using var reader = Excel.FromCsv(Encoding.UTF8.GetBytes("stamp\n2024-01-15 13:30:00\n"));
+            ExcelColumnSchema[] schema = [new() { Index = 0, Name = "stamp", Type = ExcelColumnType.TimestampColumn }];
+
+            RecordBatch batch = reader.ToArrowRecordBatch(schema);
+
+            var stamp = Assert.IsType<TimestampArray>(batch.Column(0));
+            long expected = (new DateTime(2024, 1, 15, 13, 30, 0) - DateTime.UnixEpoch).Ticks / 10;
+            Assert.Equal(expected, stamp.GetValue(0));
+        }
     }
 }
