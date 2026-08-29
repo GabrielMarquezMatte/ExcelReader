@@ -28,6 +28,17 @@ namespace ExcelReader.Arrow
             }
         }
 
+        /// <summary>
+        /// Reads a date/time value from either an Excel serial (binary formats) or plain text (CSV,
+        /// which has no serial encoding); <see cref="DateTime"/> doesn't implement
+        /// <see cref="IUtf8SpanParsable{TSelf}"/>, so the text fallback goes through <see cref="Cell.GetString"/>.
+        /// </summary>
+        protected static bool TryGetDateTime(in Cell cell, bool isDate1904, out DateTime value)
+        {
+            return cell.TryGetDateTime(isDate1904, out value)
+                || DateTime.TryParse(cell.GetString(), CultureInfo.InvariantCulture, DateTimeStyles.None, out value);
+        }
+
         internal static ColumnAppender Create(ExcelColumnSchema schema)
         {
             return schema.Type switch
@@ -36,6 +47,9 @@ namespace ExcelReader.Arrow
                 ExcelColumnType.Int64Column => new Int64ColumnAppender(schema),
                 ExcelColumnType.Float64Column => new Float64ColumnAppender(schema),
                 ExcelColumnType.BoolColumn => new BoolColumnAppender(schema),
+                ExcelColumnType.DateColumn => new DateColumnAppender(schema),
+                ExcelColumnType.TimeColumn => new TimeColumnAppender(schema),
+                ExcelColumnType.TimestampColumn => new TimestampColumnAppender(schema),
                 _ => throw new NotSupportedException($"column type {schema.Type} is not supported yet."),
             };
         }
@@ -158,6 +172,117 @@ namespace ExcelReader.Arrow
                 if (bool.TryParse(cell.GetString(), out bool value))
                 {
                     _builder.Append(value);
+                }
+                else
+                {
+                    ThrowIfNotNullable();
+                    _builder.AppendNull();
+                }
+            }
+
+            internal override IArrowArray Build()
+            {
+                return _builder.Build();
+            }
+        }
+
+        private sealed class DateColumnAppender : ColumnAppender
+        {
+            private readonly Date32Array.Builder _builder = new();
+
+            internal DateColumnAppender(ExcelColumnSchema schema) : base(schema)
+            {
+            }
+
+            internal override Field Field
+            {
+                get
+                {
+                    return new(DisplayName, Date32Type.Default, Nullable);
+                }
+            }
+
+            internal override void Append(in Cell cell, bool isDate1904)
+            {
+                if (TryGetDateTime(in cell, isDate1904, out DateTime value))
+                {
+                    _builder.Append(value.Date);
+                }
+                else
+                {
+                    ThrowIfNotNullable();
+                    _builder.AppendNull();
+                }
+            }
+
+            internal override IArrowArray Build()
+            {
+                return _builder.Build();
+            }
+        }
+
+        private sealed class TimeColumnAppender : ColumnAppender
+        {
+            private static readonly Time64Type MicrosecondType = new(TimeUnit.Microsecond);
+
+            private readonly Time64Array.Builder _builder = new(MicrosecondType);
+
+            internal TimeColumnAppender(ExcelColumnSchema schema) : base(schema)
+            {
+            }
+
+            internal override Field Field
+            {
+                get
+                {
+                    return new(DisplayName, MicrosecondType, Nullable);
+                }
+            }
+
+            internal override void Append(in Cell cell, bool isDate1904)
+            {
+                if (TryGetDateTime(in cell, isDate1904, out DateTime value))
+                {
+                    _builder.Append(value.TimeOfDay.Ticks / 10);
+                }
+                else
+                {
+                    ThrowIfNotNullable();
+                    _builder.AppendNull();
+                }
+            }
+
+            internal override IArrowArray Build()
+            {
+                return _builder.Build();
+            }
+        }
+
+        private sealed class TimestampColumnAppender : ColumnAppender
+        {
+            // No timezone: matches the native `xl_parse_arrow` path's "tsu:" format code.
+            private static readonly TimestampType MicrosecondType = new(TimeUnit.Microsecond, timezone: (string?)null);
+
+            private readonly TimestampArray.Builder _builder = new(MicrosecondType);
+
+            internal TimestampColumnAppender(ExcelColumnSchema schema) : base(schema)
+            {
+            }
+
+            internal override Field Field
+            {
+                get
+                {
+                    return new(DisplayName, MicrosecondType, Nullable);
+                }
+            }
+
+            internal override void Append(in Cell cell, bool isDate1904)
+            {
+                if (TryGetDateTime(in cell, isDate1904, out DateTime value))
+                {
+                    // Zero offset keeps the raw naive value as microseconds since epoch.
+                    _builder.Append(new DateTimeOffset(value, TimeSpan.Zero));
                 }
                 else
                 {
