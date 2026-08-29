@@ -54,5 +54,31 @@ namespace ExcelReader.Tests
             InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() => reader.ToArrowRecordBatch(schema));
             Assert.Contains("qty", exception.Message, StringComparison.Ordinal);
         }
+
+        [Fact]
+        public void ToArrowRecordBatch_Should_Convert_Float64_Column()
+        {
+            using CsvReader reader = Excel.FromCsv(Encoding.UTF8.GetBytes("price\n1.5\n2.25\n"));
+            ExcelColumnSchema[] schema = [new() { Index = 0, Name = "price", Type = ExcelColumnType.Float64Column }];
+
+            RecordBatch batch = reader.ToArrowRecordBatch(schema);
+
+            var price = Assert.IsType<DoubleArray>(batch.Column(0));
+            Assert.Equal(1.5, price.GetValue(0));
+            Assert.Equal(2.25, price.GetValue(1));
+        }
+
+        [Fact]
+        public void ToArrowRecordBatch_Should_Convert_Bool_Column()
+        {
+            using CsvReader reader = Excel.FromCsv(Encoding.UTF8.GetBytes("flag\ntrue\nfalse\n"));
+            ExcelColumnSchema[] schema = [new() { Index = 0, Name = "flag", Type = ExcelColumnType.BoolColumn }];
+
+            RecordBatch batch = reader.ToArrowRecordBatch(schema);
+
+            var flag = Assert.IsType<BooleanArray>(batch.Column(0));
+            Assert.True(flag.GetValue(0));
+            Assert.False(flag.GetValue(1));
+        }
     }
 }
