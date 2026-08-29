@@ -82,6 +82,21 @@ threads; whatever your loop body does per row does not — if that dominates, ra
 not help. Sources that cannot be partitioned (non-seekable streams, non-UTF-8 encodings, small files)
 fall back to sequential parsing with the same results.
 
+### Apache Arrow conversion (opt-in)
+
+```csharp
+dotnet add package ExcelReader.Arrow
+```
+
+```csharp
+using ExcelReader.Arrow;
+
+using var reader = Excel.FromFile("report.xlsx");
+Apache.Arrow.RecordBatch batch = reader.ToArrowRecordBatch();
+```
+
+`schema` defaults to `Excel.InferSchema`'s guess; pass an explicit `ExcelColumnSchema[]` to skip inference. The whole sheet is materialized into one `RecordBatch` — there is no chunked/streaming variant yet.
+
 ## Open by auto-detecting the format
 
 `Excel.Open` picks the reader from the file signature (XLSX/XLSB are ZIP packages, XLS is an OLE2 document) and returns an `IExcelRowReader`. The interface exposes `GetEnumerator()` directly, so no pattern-match is needed for basic row iteration.
