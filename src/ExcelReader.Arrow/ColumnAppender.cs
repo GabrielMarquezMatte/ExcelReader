@@ -1,6 +1,7 @@
 using Apache.Arrow;
 using Apache.Arrow.Types;
 using ExcelReader.Core.Enums;
+using ExcelReader.Core.Parser;
 using ExcelReader.Core.Reader;
 using ExcelReader.Core.ValueObjects;
 using System.Globalization;
@@ -10,7 +11,7 @@ namespace ExcelReader.Arrow
     /// <summary>Builds one Arrow column from a schema-driven pass over an <see cref="IExcelRowReader"/>'s rows.</summary>
     internal abstract class ColumnAppender(ExcelColumnSchema schema)
     {
-        protected readonly bool Nullable = schema.IsNullable;
+        protected readonly bool IsNullable = schema.IsNullable;
         protected readonly string DisplayName = schema.Name ?? schema.Index.ToString(CultureInfo.InvariantCulture);
 
         internal abstract Field Field { get; }
@@ -22,7 +23,7 @@ namespace ExcelReader.Arrow
         /// <summary>Throws when a value failed to convert on a non-nullable column; a no-op otherwise.</summary>
         protected void ThrowIfNotNullable()
         {
-            if (!Nullable)
+            if (!IsNullable)
             {
                 throw new InvalidOperationException($"column \"{DisplayName}\" has a value that failed to convert and is not nullable.");
             }
@@ -66,7 +67,7 @@ namespace ExcelReader.Arrow
             {
                 get
                 {
-                    return new(DisplayName, StringType.Default, Nullable);
+                    return new(DisplayName, StringType.Default, IsNullable);
                 }
             }
 
@@ -93,7 +94,7 @@ namespace ExcelReader.Arrow
             {
                 get
                 {
-                    return new(DisplayName, Int64Type.Default, Nullable);
+                    return new(DisplayName, Int64Type.Default, IsNullable);
                 }
             }
 
@@ -128,7 +129,7 @@ namespace ExcelReader.Arrow
             {
                 get
                 {
-                    return new(DisplayName, DoubleType.Default, Nullable);
+                    return new(DisplayName, DoubleType.Default, IsNullable);
                 }
             }
 
@@ -163,13 +164,13 @@ namespace ExcelReader.Arrow
             {
                 get
                 {
-                    return new(DisplayName, BooleanType.Default, Nullable);
+                    return new(DisplayName, BooleanType.Default, IsNullable);
                 }
             }
 
             internal override void Append(in Cell cell, bool isDate1904)
             {
-                if (bool.TryParse(cell.GetString(), out bool value))
+                if (ExcelCellReaders.Bool(in cell, isDate1904, CultureInfo.InvariantCulture, out bool value))
                 {
                     _builder.Append(value);
                 }
@@ -198,15 +199,15 @@ namespace ExcelReader.Arrow
             {
                 get
                 {
-                    return new(DisplayName, Date32Type.Default, Nullable);
+                    return new(DisplayName, Date32Type.Default, IsNullable);
                 }
             }
 
             internal override void Append(in Cell cell, bool isDate1904)
             {
-                if (TryGetDateTime(in cell, isDate1904, out DateTime value))
+                if (ExcelCellReaders.DateOnlyAuto(in cell, isDate1904, CultureInfo.InvariantCulture, out DateOnly value))
                 {
-                    _builder.Append(value.Date);
+                    _builder.Append(value.ToDateTime(TimeOnly.MinValue));
                 }
                 else
                 {
@@ -235,15 +236,15 @@ namespace ExcelReader.Arrow
             {
                 get
                 {
-                    return new(DisplayName, MicrosecondType, Nullable);
+                    return new(DisplayName, MicrosecondType, IsNullable);
                 }
             }
 
             internal override void Append(in Cell cell, bool isDate1904)
             {
-                if (TryGetDateTime(in cell, isDate1904, out DateTime value))
+                if (ExcelCellReaders.TimeOnlyAuto(in cell, isDate1904, CultureInfo.InvariantCulture, out TimeOnly value))
                 {
-                    _builder.Append(value.TimeOfDay.Ticks / 10);
+                    _builder.Append(value.ToTimeSpan().Ticks / 10);
                 }
                 else
                 {
@@ -273,7 +274,7 @@ namespace ExcelReader.Arrow
             {
                 get
                 {
-                    return new(DisplayName, MicrosecondType, Nullable);
+                    return new(DisplayName, MicrosecondType, IsNullable);
                 }
             }
 
@@ -281,8 +282,14 @@ namespace ExcelReader.Arrow
             {
                 if (TryGetDateTime(in cell, isDate1904, out DateTime value))
                 {
-                    // Zero offset keeps the raw naive value as microseconds since epoch.
-                    _builder.Append(new DateTimeOffset(value, TimeSpan.Zero));
+                    // Normalize whatever Kind the parse produced (Unspecified from the binary-serial path,
+                    // Local from DateTime.TryParse resolving an explicit offset/Z) into a Kind-less value that
+                    // represents the same absolute instant, so DateTimeOffset construction below never throws
+                    // regardless of the machine's local UTC offset.
+                    DateTime normalized = value.Kind == DateTimeKind.Unspecified
+                        ? value
+                        : DateTime.SpecifyKind(value.ToUniversalTime(), DateTimeKind.Unspecified);
+                    _builder.Append(new DateTimeOffset(normalized, TimeSpan.Zero));
                 }
                 else
                 {

@@ -84,7 +84,9 @@ fall back to sequential parsing with the same results.
 
 ### Apache Arrow conversion (opt-in)
 
-```csharp
+Not yet published to NuGet — reference the project directly (`src/ExcelReader.Arrow/ExcelReader.Arrow.csproj`) until a release ships it.
+
+```bash
 dotnet add package ExcelReader.Arrow
 ```
 

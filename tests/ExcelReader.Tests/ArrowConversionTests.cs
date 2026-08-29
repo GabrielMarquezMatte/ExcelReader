@@ -125,6 +125,19 @@ namespace ExcelReader.Tests
         }
 
         [Fact]
+        public void ToArrowRecordBatch_Should_Convert_Timestamp_Column_With_Explicit_UtcOffset_Text()
+        {
+            using var reader = Excel.FromCsv(Encoding.UTF8.GetBytes("stamp\n2024-01-15T13:30:00Z\n"));
+            ExcelColumnSchema[] schema = [new() { Index = 0, Name = "stamp", Type = ExcelColumnType.TimestampColumn }];
+
+            RecordBatch batch = reader.ToArrowRecordBatch(schema);
+
+            var stamp = Assert.IsType<TimestampArray>(batch.Column(0));
+            long expected = (new DateTime(2024, 1, 15, 13, 30, 0, DateTimeKind.Utc) - DateTime.UnixEpoch).Ticks / 10;
+            Assert.Equal(expected, stamp.GetValue(0));
+        }
+
+        [Fact]
         public void ToArrowRecordBatch_Should_Infer_Schema_When_None_Given()
         {
             using var reader = Excel.FromCsv(Encoding.UTF8.GetBytes("name,qty\nwidget,3\ngadget,7\n"));
