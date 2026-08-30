@@ -29,3 +29,54 @@ static ExcelReader.Core.Reader.Excel.ParseCsvParallelAsync<T>(string! path, int 
 static ExcelReader.Core.Reader.Excel.ParseCsvParallelAsync<T>(System.ReadOnlyMemory<byte> data, int degreeOfParallelism = 0, ExcelReader.Core.Reader.CsvReaderOptions? readerOptions = null, ExcelReader.Core.Parser.ExcelParserConfig? config = null, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Collections.Generic.IAsyncEnumerable<T>!
 static ExcelReader.Core.Reader.Excel.ParseCsvParallelAsync<T>(System.IO.Stream! stream, int degreeOfParallelism = 0, ExcelReader.Core.Reader.CsvReaderOptions? readerOptions = null, ExcelReader.Core.Parser.ExcelParserConfig? config = null, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Collections.Generic.IAsyncEnumerable<T>!
 override ExcelReader.Core.Parser.Internal.CsvEnumerable<T>.AsyncEnumerator.DisposeAsync() -> System.Threading.Tasks.ValueTask
+ExcelReader.Core.Reader.ExcelDataReader
+ExcelReader.Core.Reader.ExcelDataReader.ExcelDataReader(ExcelReader.Core.Reader.IExcelRowReader! reader, int headerRow = 1) -> void
+ExcelReader.Core.Reader.ExcelDataReader.FieldCount.get -> int
+ExcelReader.Core.Reader.ExcelDataReader.Depth.get -> int
+ExcelReader.Core.Reader.ExcelDataReader.IsClosed.get -> bool
+ExcelReader.Core.Reader.ExcelDataReader.RecordsAffected.get -> int
+ExcelReader.Core.Reader.ExcelDataReader.this[int i].get -> object!
+ExcelReader.Core.Reader.ExcelDataReader.this[string! name].get -> object!
+ExcelReader.Core.Reader.ExcelDataReader.Read() -> bool
+ExcelReader.Core.Reader.ExcelDataReader.NextResult() -> bool
+ExcelReader.Core.Reader.ExcelDataReader.Close() -> void
+ExcelReader.Core.Reader.ExcelDataReader.Dispose() -> void
+ExcelReader.Core.Reader.ExcelDataReader.GetName(int i) -> string!
+ExcelReader.Core.Reader.ExcelDataReader.GetOrdinal(string! name) -> int
+ExcelReader.Core.Reader.ExcelDataReader.GetDataTypeName(int i) -> string!
+ExcelReader.Core.Reader.ExcelDataReader.GetFieldType(int i) -> System.Type!
+ExcelReader.Core.Reader.ExcelDataReader.GetValue(int i) -> object!
+ExcelReader.Core.Reader.ExcelDataReader.GetValues(object![]! values) -> int
+ExcelReader.Core.Reader.ExcelDataReader.IsDBNull(int i) -> bool
+ExcelReader.Core.Reader.ExcelDataReader.GetString(int i) -> string!
+ExcelReader.Core.Reader.ExcelDataReader.GetBoolean(int i) -> bool
+ExcelReader.Core.Reader.ExcelDataReader.GetDateTime(int i) -> System.DateTime
+ExcelReader.Core.Reader.ExcelDataReader.GetByte(int i) -> byte
+ExcelReader.Core.Reader.ExcelDataReader.GetInt16(int i) -> short
+ExcelReader.Core.Reader.ExcelDataReader.GetInt32(int i) -> int
+ExcelReader.Core.Reader.ExcelDataReader.GetInt64(int i) -> long
+ExcelReader.Core.Reader.ExcelDataReader.GetFloat(int i) -> float
+ExcelReader.Core.Reader.ExcelDataReader.GetDouble(int i) -> double
+ExcelReader.Core.Reader.ExcelDataReader.GetDecimal(int i) -> decimal
+ExcelReader.Core.Reader.ExcelDataReader.GetGuid(int i) -> System.Guid
+ExcelReader.Core.Reader.ExcelDataReader.GetChar(int i) -> char
+ExcelReader.Core.Reader.ExcelDataReader.GetBytes(int i, long fieldOffset, byte[]? buffer, int bufferoffset, int length) -> long
+ExcelReader.Core.Reader.ExcelDataReader.GetChars(int i, long fieldoffset, char[]? buffer, int bufferoffset, int length) -> long
+ExcelReader.Core.Reader.ExcelDataReader.GetData(int i) -> System.Data.IDataReader!
+ExcelReader.Core.Reader.ExcelDataReader.GetSchemaTable() -> System.Data.DataTable!
+ExcelReader.Core.Reader.ExcelSheet
+ExcelReader.Core.Reader.ExcelSheet.ExcelSheet() -> void
+ExcelReader.Core.Reader.ExcelSheet.ExcelSheet(int Index, string! Name) -> void
+~override ExcelReader.Core.Reader.ExcelSheet.ToString() -> string
+static ExcelReader.Core.Reader.ExcelSheet.operator !=(ExcelReader.Core.Reader.ExcelSheet left, ExcelReader.Core.Reader.ExcelSheet right) -> bool
+static ExcelReader.Core.Reader.ExcelSheet.operator ==(ExcelReader.Core.Reader.ExcelSheet left, ExcelReader.Core.Reader.ExcelSheet right) -> bool
+override ExcelReader.Core.Reader.ExcelSheet.GetHashCode() -> int
+~override ExcelReader.Core.Reader.ExcelSheet.Equals(object obj) -> bool
+ExcelReader.Core.Reader.ExcelSheet.Equals(ExcelReader.Core.Reader.ExcelSheet other) -> bool
+ExcelReader.Core.Reader.ExcelSheet.Deconstruct(out int Index, out string! Name) -> void
+ExcelReader.Core.Reader.ExcelSheet.Name.get -> string!
+ExcelReader.Core.Reader.ExcelSheet.Name.init -> void
+ExcelReader.Core.Reader.ExcelSheet.Index.get -> int
+ExcelReader.Core.Reader.ExcelSheet.Index.init -> void
+ExcelReader.Core.Reader.ExcelRowReaderExtensions
+static ExcelReader.Core.Reader.ExcelRowReaderExtensions.Sheets(this ExcelReader.Core.Reader.IExcelRowReader! reader) -> System.Collections.Generic.IEnumerable<ExcelReader.Core.Reader.ExcelSheet>!
