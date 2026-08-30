@@ -36,14 +36,23 @@ namespace ExcelReader.Core.Reader
 
         /// <summary>Converts a string to an <see cref="ExcelPassword"/>.</summary>
         /// <param name="password">The password.</param>
-        public static implicit operator ExcelPassword(string password) => new(password);
+        public static implicit operator ExcelPassword(string password)
+        {
+            return new(password);
+        }
 
         /// <summary>Creates an <see cref="ExcelPassword"/> from a string. Named alternative to the implicit conversion.</summary>
         /// <param name="password">The password.</param>
-        public static ExcelPassword FromString(string password) => new(password);
+        public static ExcelPassword FromString(string password)
+        {
+            return new(password);
+        }
 
         /// <summary>Returns a redacted placeholder, never the password itself.</summary>
-        public override string ToString() => "ExcelPassword(set)";
+        public override string ToString()
+        {
+            return "ExcelPassword(set)";
+        }
 
         internal ReadOnlySpan<char> Chars => _chars;
     }
