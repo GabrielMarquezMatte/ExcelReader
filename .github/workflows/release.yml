@@ -69,6 +69,14 @@ jobs:
           -p:Version=${{ steps.version.outputs.value }}
           --output ./artifacts
 
+      - name: Pack Arrow
+        run: >-
+          dotnet pack src/ExcelReader.Arrow/ExcelReader.Arrow.csproj
+          --configuration Release
+          --no-restore
+          -p:Version=${{ steps.version.outputs.value }}
+          --output ./artifacts
+
       - name: Generate SBOM
         uses: anchore/sbom-action@v0
         with:
