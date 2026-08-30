@@ -119,6 +119,9 @@ namespace ExcelReader.Tests
         // Flips a byte deep inside the EncryptedPackage ciphertext. The stream is stored in whole
         // 512-byte CFB sectors, and the fixture is multi-segment, so an offset 3/4 of the way into
         // the file lands in ciphertext rather than in container metadata.
-        private static int FindCiphertextOffset(byte[] container) => container.Length * 3 / 4;
+        private static int FindCiphertextOffset(byte[] container)
+        {
+            return container.Length * 3 / 4;
+        }
     }
 }

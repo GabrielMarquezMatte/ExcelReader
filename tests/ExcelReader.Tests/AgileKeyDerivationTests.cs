@@ -13,11 +13,14 @@ namespace ExcelReader.Tests
             return (AgileDescriptor)EncryptionDescriptor.Parse(info, ExcelReaderOptions.Default);
         }
 
-        public static TheoryData<string> AgileFixtures() => new()
+        public static TheoryData<string> AgileFixtures()
+        {
+            return new()
         {
             "agile-aes256-sha512.xlsx",
             "agile-aes256-sha512.xlsb",
         };
+        }
 
         // Only AES-256/SHA-512 has a real fixture in this pass (see "Execution Scope Note"); Task 3's
         // Should_Parse_Agile_When_KeyBits_And_Hash_Vary pins the AES-128/SHA-1 field layout separately,
