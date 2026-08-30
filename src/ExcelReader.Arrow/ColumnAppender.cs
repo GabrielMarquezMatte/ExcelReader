@@ -29,11 +29,7 @@ namespace ExcelReader.Arrow
             }
         }
 
-        /// <summary>
-        /// Reads a date/time value from either an Excel serial (binary formats) or plain text (CSV,
-        /// which has no serial encoding); <see cref="DateTime"/> doesn't implement
-        /// <see cref="IUtf8SpanParsable{TSelf}"/>, so the text fallback goes through <see cref="Cell.GetString"/>.
-        /// </summary>
+        /// <summary>Reads a date/time from either an Excel serial or, for CSV, plain text.</summary>
         protected static bool TryGetDateTime(in Cell cell, bool isDate1904, out DateTime value)
         {
             return cell.TryGetDateTime(isDate1904, out value)
@@ -57,13 +53,9 @@ namespace ExcelReader.Arrow
 
         private sealed class StringColumnAppender : ColumnAppender
         {
-            // Cell.GetString's own stack buffer for the format-a-number branch. Matched here so an
-            // unformattable number lands on the same empty result it would have through GetString.
             private const int NumberFormatMaxBytes = 32;
 
             private readonly StringArray.Builder _builder = new();
-
-            // Reused across every row. Grows to the widest cell seen, never shrinks.
             private byte[] _scratch = [];
 
             internal StringColumnAppender(ExcelColumnSchema schema) : base(schema)
@@ -78,14 +70,7 @@ namespace ExcelReader.Arrow
                 }
             }
 
-            // Reading a string column always succeeds, including for a blank cell (-> ""), so it is
-            // never null regardless of IsNullable.
-            //
-            // Cell.TryFormat emits exactly the bytes GetString would have decoded, so this hands Arrow
-            // the UTF-8 it wants directly instead of allocating a managed string per cell and paying a
-            // UTF-16 round trip to re-encode it. It also copies the file's bytes through unchanged
-            // rather than sanitizing malformed UTF-8 to U+FFFD, matching ExcelReader.Native's
-            // ColumnBuilder and every other read path in this library.
+            // TryFormat avoids allocating a managed string per cell, unlike GetString.
             internal override void Append(in Cell cell, bool isDate1904)
             {
                 int capacity = Math.Max(cell.Value.Length, NumberFormatMaxBytes);
@@ -306,10 +291,8 @@ namespace ExcelReader.Arrow
             {
                 if (TryGetDateTime(in cell, isDate1904, out DateTime value))
                 {
-                    // Normalize whatever Kind the parse produced (Unspecified from the binary-serial path,
-                    // Local from DateTime.TryParse resolving an explicit offset/Z) into a Kind-less value that
-                    // represents the same absolute instant, so DateTimeOffset construction below never throws
-                    // regardless of the machine's local UTC offset.
+                    // Kind can be Local when text carries an explicit offset/Z; strip it after
+                    // converting to UTC so the DateTimeOffset below never throws.
                     DateTime normalized = value.Kind == DateTimeKind.Unspecified
                         ? value
                         : DateTime.SpecifyKind(value.ToUniversalTime(), DateTimeKind.Unspecified);

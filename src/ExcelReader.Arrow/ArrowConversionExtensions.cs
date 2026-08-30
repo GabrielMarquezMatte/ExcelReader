@@ -41,7 +41,6 @@ namespace ExcelReader.Arrow
             using IExcelRowEnumerator rows = reader.GetEnumerator();
             SkipHeaderRow(rows, headerRow);
 
-            // Hoisted: an interface property read per cell is one per column per row.
             bool isDate1904 = reader.IsDate1904;
             int rowCount = 0;
             while (rows.MoveNext())
@@ -66,9 +65,7 @@ namespace ExcelReader.Arrow
             return new RecordBatch(arrowSchema, arrays, rowCount);
         }
 
-        // Intentionally mirrors ExcelReader.Core's internal SchemaInference.TrySkipToHeaderRow (row-skip
-        // arithmetic and message text); this package has no InternalsVisibleTo access to call it directly,
-        // so the small duplication here is deliberate, not an oversight.
+        // Mirrors Core's internal SchemaInference.TrySkipToHeaderRow; no InternalsVisibleTo to call it directly.
         private static void SkipHeaderRow(IExcelRowEnumerator rows, int headerRow)
         {
             for (int rowNumber = 1; rowNumber <= headerRow; rowNumber++)

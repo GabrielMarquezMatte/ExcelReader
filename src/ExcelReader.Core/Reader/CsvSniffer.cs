@@ -32,7 +32,8 @@ namespace ExcelReader.Core.Reader
         {
             ArgumentNullException.ThrowIfNull(options);
             (Encoding? encoding, bool hasBom, int bomLength) = DetectBom(sample);
-            ReadOnlySpan<byte> body = sample[bomLength..];
+            // Copied once here, not per candidate in the scoring loop below.
+            byte[] body = sample[bomLength..].ToArray();
             byte[] delimiters = options.CandidateDelimiters;
             byte[] quotes = options.CandidateQuotes;
             int maxLines = options.MaxSampleLines;
@@ -76,7 +77,7 @@ namespace ExcelReader.Core.Reader
         // A candidate scores only when at least one complete (newline-terminated) line was counted, and
         // the average field count exceeds 1 — a delimiter that never appears yields a field count of 1
         // on every line and must lose to one that does.
-        private static bool TryScore(ReadOnlySpan<byte> sample, byte delimiter, byte quote, int maxLines, out double variance)
+        private static bool TryScore(byte[] sample, byte delimiter, byte quote, int maxLines, out double variance)
         {
             variance = 0;
             List<int> counts = CountFieldsPerLine(sample, delimiter, quote, maxLines);
@@ -116,11 +117,11 @@ namespace ExcelReader.Core.Reader
 
         // Counts fields per line, respecting quotes, up to `maxLines` complete lines. The trailing
         // segment after the last newline is never counted — it may be truncated mid-field.
-        private static List<int> CountFieldsPerLine(ReadOnlySpan<byte> sample, byte delimiter, byte quote, int maxLines)
+        private static List<int> CountFieldsPerLine(byte[] sample, byte delimiter, byte quote, int maxLines)
         {
             var counts = new List<int>();
             var scanner = new CsvControlScanner(delimiter, quote);
-            scanner.Reset(sample.ToArray(), sample.Length, 0);
+            scanner.Reset(sample, sample.Length, 0);
             bool inQuotes = false;
             int delimiterCount = 0;
             int lineStart = 0;
