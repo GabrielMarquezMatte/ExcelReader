@@ -57,7 +57,14 @@ namespace ExcelReader.Arrow
 
         private sealed class StringColumnAppender : ColumnAppender
         {
+            // Cell.GetString's own stack buffer for the format-a-number branch. Matched here so an
+            // unformattable number lands on the same empty result it would have through GetString.
+            private const int NumberFormatMaxBytes = 32;
+
             private readonly StringArray.Builder _builder = new();
+
+            // Reused across every row. Grows to the widest cell seen, never shrinks.
+            private byte[] _scratch = [];
 
             internal StringColumnAppender(ExcelColumnSchema schema) : base(schema)
             {
@@ -71,9 +78,26 @@ namespace ExcelReader.Arrow
                 }
             }
 
+            // Reading a string column always succeeds, including for a blank cell (-> ""), so it is
+            // never null regardless of IsNullable.
+            //
+            // Cell.TryFormat emits exactly the bytes GetString would have decoded, so this hands Arrow
+            // the UTF-8 it wants directly instead of allocating a managed string per cell and paying a
+            // UTF-16 round trip to re-encode it. It also copies the file's bytes through unchanged
+            // rather than sanitizing malformed UTF-8 to U+FFFD, matching ExcelReader.Native's
+            // ColumnBuilder and every other read path in this library.
             internal override void Append(in Cell cell, bool isDate1904)
             {
-                _builder.Append(cell.GetString());
+                int capacity = Math.Max(cell.Value.Length, NumberFormatMaxBytes);
+                if (_scratch.Length < capacity)
+                {
+                    _scratch = new byte[capacity];
+                }
+                if (!cell.TryFormat(_scratch, out int written))
+                {
+                    written = 0;
+                }
+                _builder.Append(_scratch.AsSpan(0, written));
             }
 
             internal override IArrowArray Build()
@@ -207,7 +231,7 @@ namespace ExcelReader.Arrow
             {
                 if (ExcelCellReaders.DateOnlyAuto(in cell, isDate1904, CultureInfo.InvariantCulture, out DateOnly value))
                 {
-                    _builder.Append(value.ToDateTime(TimeOnly.MinValue));
+                    _builder.Append(value);
                 }
                 else
                 {

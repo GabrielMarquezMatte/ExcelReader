@@ -41,13 +41,15 @@ namespace ExcelReader.Arrow
             using IExcelRowEnumerator rows = reader.GetEnumerator();
             SkipHeaderRow(rows, headerRow);
 
+            // Hoisted: an interface property read per cell is one per column per row.
+            bool isDate1904 = reader.IsDate1904;
             int rowCount = 0;
             while (rows.MoveNext())
             {
                 Row row = rows.Current;
                 for (int i = 0; i < appenders.Length; i++)
                 {
-                    appenders[i].Append(row[resolvedSchema[i].Index], reader.IsDate1904);
+                    appenders[i].Append(row[resolvedSchema[i].Index], isDate1904);
                 }
                 rowCount++;
             }

@@ -23,6 +23,7 @@
     <!-- Referenced as an ordinary managed assembly (see that project's own note: the AOT shared
          library is only produced on publish -r), which is what NativeTypedParseBenchmark drives. -->
     <ProjectReference Include="..\..\src\ExcelReader.Native\ExcelReader.Native.csproj" />
+    <ProjectReference Include="..\..\src\ExcelReader.Arrow\ExcelReader.Arrow.csproj" />
   </ItemGroup>
 
   <ItemGroup>
