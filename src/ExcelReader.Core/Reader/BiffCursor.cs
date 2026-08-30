@@ -32,6 +32,10 @@ namespace ExcelReader.Core.Reader
         private long _runEnd = -1;
         private long _runBufferOffset;
 
+        // Streamed mode's loaded sector window, in logical stream bytes — same trick as _runStart/_runEnd.
+        private long _windowStart = -1;
+        private long _windowEnd = -1;
+
         internal BiffCursor(WorkbookStream wb)
         {
             _wb = wb;
@@ -100,6 +104,17 @@ namespace ExcelReader.Core.Reader
             {
                 return ReadChainedSpan(pos, len);
             }
+            // Same shape as ReadChainedSpan's fast path above.
+            if (pos >= _windowStart && pos + len <= _windowEnd)
+            {
+                return _sector.AsSpan((int)(pos - _windowStart), len);
+            }
+            return ReadStreamedSpanSlow(pos, len);
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        private ReadOnlySpan<byte> ReadStreamedSpanSlow(long pos, int len)
+        {
             int chainIndex = (int)(pos / _sectorSize);
             int within = (int)(pos % _sectorSize);
             LoadSector(chainIndex);
@@ -175,6 +190,8 @@ namespace ExcelReader.Core.Reader
             int sectorsRead = _wb.LoadSectors(chainIndex, _sector.AsSpan(0, _maxSectors * _sectorSize));
             _loadedStart = chainIndex;
             _loadedCount = sectorsRead;
+            _windowStart = (long)chainIndex * _sectorSize;
+            _windowEnd = _windowStart + ((long)sectorsRead * _sectorSize);
         }
 
         private byte[] EnsureScratch(int len)

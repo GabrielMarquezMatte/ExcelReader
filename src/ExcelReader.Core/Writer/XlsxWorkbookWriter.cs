@@ -163,7 +163,6 @@ namespace ExcelReader.Core.Writer
             return _styles.Add(style);
         }
 
-        // Valid styleId range for SetColumnStyle/StartRowAsync(int,...) is [0, StyleCount).
         internal int StyleCount => _styles.Count;
 
         /// <summary>
@@ -255,8 +254,7 @@ namespace ExcelReader.Core.Writer
             _disposed = true;
             if (_state == WriterState.Started)
             {
-                // End deliberately rejects a zero-sheet workbook. Disposal still must release
-                // a partially configured writer (for example after an earlier validation failure).
+                // End rejects a zero-sheet workbook; disposal must still release a partial writer.
                 if (_sheets.Count == 0)
                 {
                     _state = WriterState.Ended;
@@ -287,8 +285,7 @@ namespace ExcelReader.Core.Writer
             _disposed = true;
             if (_state == WriterState.Started)
             {
-                // EndAsync deliberately rejects a zero-sheet workbook. Disposal still must release
-                // a partially configured writer (for example after an earlier validation failure).
+                // EndAsync rejects a zero-sheet workbook; disposal must still release a partial writer.
                 if (_sheets.Count == 0)
                 {
                     _state = WriterState.Ended;
@@ -332,9 +329,6 @@ namespace ExcelReader.Core.Writer
             return WriteEntryAsync("xl/styles.xml", BuildStylesXml(), ct);
         }
 
-        // Reproduces the original hardcoded styles.xml byte-for-byte when no custom style was ever
-        // registered (the general/date pair are always present) — a workbook that doesn't use this
-        // feature pays nothing for it. Custom styles (index 2+) each append a numFmt/font/xf entry.
         private string BuildStylesXml()
         {
             IReadOnlyList<CellStyle> styles = _styles.Styles;
@@ -363,10 +357,8 @@ namespace ExcelReader.Core.Writer
         {
             sb.Append(CultureInfo.InvariantCulture, $"<numFmts count=\"{1 + numFmtIds.Count}\">");
             sb.Append("<numFmt numFmtId=\"14\" formatCode=\"mm-dd-yy\"/>");
-            // Dictionary<TKey,TValue> enumeration order is an implementation detail, not part of its
-            // contract — ordering by id (already unique and assigned sequentially from 164) is what
-            // makes this XML deterministic across runs, which StyledWorkbookOpensWithoutRepairXlsx
-            // compares byte-for-byte against a literal.
+            // Ordered by id: Dictionary enumeration order isn't guaranteed, but this XML must be
+            // deterministic across runs.
             foreach (KeyValuePair<string, int> entry in numFmtIds.OrderBy(static kv => kv.Value))
             {
                 sb.Append(CultureInfo.InvariantCulture, $"<numFmt numFmtId=\"{entry.Value}\" formatCode=\"{EscapeAttribute(entry.Key)}\"/>");

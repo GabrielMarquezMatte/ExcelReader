@@ -44,14 +44,23 @@
     <!-- NativeApi.Schema.cs / NativeApi.Typed.cs drive SchemaInference directly, so the C ABI and
          Excel.InferSchema answer identically by construction rather than by two parallel copies. -->
     <InternalsVisibleTo Include="ExcelReader.Native" />
+    <!-- The CsvParallel fuzz target drives ParallelCsvFactory.CreateWithChunkSize<T> directly (the
+         Task 9 test seam) to compare it against the sequential parser over arbitrary bytes. -->
+    <InternalsVisibleTo Include="ExcelReader.Fuzz" />
   </ItemGroup>
 
   <!-- The source generator runs as an analyzer during this project's own build (and any consumer's),
        never as an ordinary dependency — ReferenceOutputAssembly=false keeps its assembly out of this
-       project's own references. -->
+       project's own references. GlobalPropertiesToRemove (the .NET SDK's own project-reference metadata
+       for this, not plain MSBuild's UndefineProperties — that one is not honored by the SDK's restore/
+       publish-time project-reference walk) strips publish-only global properties that a consumer's
+       `dotnet publish` passes down through the whole project graph — Generator is netstandard2.0 and can
+       never honor them, and PublishAot=true in particular fails the build outright (NETSDK1207: AOT is
+       not supported for netstandard2.0). -->
   <ItemGroup>
     <ProjectReference Include="..\ExcelReader.Generator\ExcelReader.Generator.csproj"
-                      OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+                      OutputItemType="Analyzer" ReferenceOutputAssembly="false"
+                      GlobalPropertiesToRemove="PublishAot;RuntimeIdentifier;SelfContained" />
   </ItemGroup>
 
   <!-- Packs the generator's DLL into this package's analyzers folder so a consumer gets it just by

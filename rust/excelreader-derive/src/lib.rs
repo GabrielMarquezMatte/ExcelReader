@@ -297,13 +297,13 @@ impl WriteField {
             // changes the number it was given is worse than one that stops.
             FieldKind::Int => quote! {
                 #values.push(
-                    i64::try_from(*value).map_err(|_| ::excelreader::Error {
-                        code: ::excelreader::XL_INVALID_ARGUMENT,
-                        message: ::std::format!(
+                    i64::try_from(*value).map_err(|_| ::excelreader::Error::from_status(
+                        ::excelreader::XL_INVALID_ARGUMENT,
+                        ::std::format!(
                             "field `{}` holds a value that does not fit an i64 column",
                             #field
                         ),
-                    })?,
+                    ))?,
                 );
             },
             FieldKind::Float => quote! { #values.push(f64::from(*value)); },

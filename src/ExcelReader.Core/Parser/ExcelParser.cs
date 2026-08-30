@@ -22,12 +22,9 @@ namespace ExcelReader.Core.Parser
     /// <c>RefAction&lt;T,TProperty&gt;</c> — see <c>Internal/Delegates.cs</c>), and <c>Row</c>/<c>RowCell</c>
     /// are ref structs, so a <c>struct T</c> consumed via a direct <c>foreach</c> (not LINQ over
     /// <c>IEnumerable&lt;object&gt;</c> or anything else that boxes) skips the per-row model allocation a
-    /// class <typeparamref name="T"/> requires — measured -59% (3.88 MB -&gt; 1.59 MB / 50k rows) on a
-    /// 4-column benchmark record. The rest of that allocation is <typeparamref name="T"/>'s own
-    /// reference-typed fields (e.g. a string column decodes to a fresh managed string per row regardless
-    /// of <typeparamref name="T"/>'s kind) — struct <typeparamref name="T"/> doesn't remove that, only
-    /// the container. See <c>ParseBenchmark.ExcelParserStructSync/RecordStruct</c> in
-    /// <c>tests/ExcelReader.Benchmarks</c>.
+    /// class <typeparamref name="T"/> requires. <typeparamref name="T"/>'s own reference-typed fields
+    /// (e.g. a string column) still allocate regardless of <typeparamref name="T"/>'s kind — struct
+    /// <typeparamref name="T"/> only removes the container.
     /// </para>
     /// </remarks>
     [RequiresUnreferencedCode("Typed parsing reflects over T's public properties, which trimming may remove.")]

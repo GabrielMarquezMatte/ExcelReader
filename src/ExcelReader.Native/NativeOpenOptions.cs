@@ -83,6 +83,12 @@ namespace ExcelReader.Native
         public int MaxZipEntries;
         public int PrefetchDecompression;
         public int InternStrings;
+
+        // Appended at the end, never inserted in the middle — see StructSize's exact-equality check
+        // in TryDecode, which is what turns a stale caller's layout mismatch into a loud
+        // XL_INVALID_ARGUMENT instead of silently misreading these two fields (or everything after them).
+        public IntPtr Password;
+        public int PasswordLen;
     }
 
     /// <summary>
@@ -94,6 +100,10 @@ namespace ExcelReader.Native
     {
         /// <summary>The C struct's name, as it appears in every message this type produces.</summary>
         private const string OptionsName = "xl_open_options";
+
+        // An unbounded password length is the same class of hole as an unbounded count arriving as an
+        // argument (see NativeLimits' remarks) — it just arrives here instead.
+        private const int MaxPasswordBytes = 4096;
 
         internal bool CsvSniffDialect { get; init; }
         internal byte? CsvDelimiter { get; init; }
@@ -108,6 +118,11 @@ namespace ExcelReader.Native
         internal int? MaxZipEntries { get; init; }
         internal bool? PrefetchDecompression { get; init; }
         internal bool? InternStrings { get; init; }
+
+        /// <summary>Password for an encrypted OOXML workbook, decoded from the raw pointer+length pair.
+        /// Null means "no password supplied" — either the workbook isn't encrypted, or the caller wants
+        /// the library-default behavior of failing with <see cref="ExcelEncryptionReason.PasswordRequired"/>.</summary>
+        internal string? Password { get; init; }
 
         internal CsvReaderOptions ToCsvReaderOptions()
         {
@@ -162,6 +177,10 @@ namespace ExcelReader.Native
             {
                 options = options with { InternStrings = internStrings };
             }
+            if (Password is not null)
+            {
+                options = options with { Password = Password };
+            }
             return options;
         }
 
@@ -201,6 +220,27 @@ namespace ExcelReader.Native
                 return false;
             }
 
+            // UTF-8 with an explicit length rather than NUL-terminated: a password may contain anything.
+            // The pointer need only be valid for this call; we copy immediately.
+            string? password = null;
+            if (raw.Password != IntPtr.Zero)
+            {
+                if (raw.PasswordLen is < 0 or > MaxPasswordBytes)
+                {
+                    error = $"{OptionsName}.password_len must be between 0 and {MaxPasswordBytes}; got {raw.PasswordLen}.";
+                    return false;
+                }
+                unsafe
+                {
+                    password = System.Text.Encoding.UTF8.GetString((byte*)raw.Password, raw.PasswordLen);
+                }
+            }
+            else if (raw.PasswordLen != 0)
+            {
+                error = $"{OptionsName}.password_len is {raw.PasswordLen} but password is null.";
+                return false;
+            }
+
             options = new NativeOpenOptions
             {
                 CsvSniffDialect = sniffDialect ?? false,
@@ -215,6 +255,7 @@ namespace ExcelReader.Native
                 MaxZipEntries = maxZipEntries,
                 PrefetchDecompression = prefetch,
                 InternStrings = internStrings,
+                Password = password,
             };
             return true;
         }

@@ -16,7 +16,6 @@ namespace ExcelReader.Core.Writer
             _owner = owner;
         }
 
-        // Reused across rows by XlsbSheetWriter: rents one instance per sheet instead of one per row.
         internal void Reset()
         {
             _columnIndex = 0;
@@ -130,11 +129,7 @@ namespace ExcelReader.Core.Writer
                 WriteDouble(value.Value);
                 return;
             }
-            // A bounds-checked skip, not a bare increment: the unchecked column advance used to
-            // bypass the 16,384-column limit every other nullable overload in this class already
-            // enforces (see the Skip method's own remarks on this exact bug, fixed there but
-            // missed on these four numeric overloads until now).
-            Skip(1);
+            Skip(1); // bounds-checked, not a bare increment
         }
 
         /// <summary>Writes <paramref name="value"/> as a numeric cell in the current column, advancing to the next column.</summary>
@@ -153,11 +148,7 @@ namespace ExcelReader.Core.Writer
                 WriteDouble(value.Value);
                 return;
             }
-            // A bounds-checked skip, not a bare increment: the unchecked column advance used to
-            // bypass the 16,384-column limit every other nullable overload in this class already
-            // enforces (see the Skip method's own remarks on this exact bug, fixed there but
-            // missed on these four numeric overloads until now).
-            Skip(1);
+            Skip(1); // bounds-checked, not a bare increment
         }
 
         /// <summary>Writes <paramref name="value"/> as a numeric cell in the current column, advancing to the next column.</summary>
@@ -176,11 +167,7 @@ namespace ExcelReader.Core.Writer
                 WriteDouble(value.Value);
                 return;
             }
-            // A bounds-checked skip, not a bare increment: the unchecked column advance used to
-            // bypass the 16,384-column limit every other nullable overload in this class already
-            // enforces (see the Skip method's own remarks on this exact bug, fixed there but
-            // missed on these four numeric overloads until now).
-            Skip(1);
+            Skip(1); // bounds-checked, not a bare increment
         }
 
         /// <summary>Writes <paramref name="value"/> as a numeric cell in the current column, advancing to the next column.</summary>
@@ -199,11 +186,7 @@ namespace ExcelReader.Core.Writer
                 WriteDouble((double)value.Value);
                 return;
             }
-            // A bounds-checked skip, not a bare increment: the unchecked column advance used to
-            // bypass the 16,384-column limit every other nullable overload in this class already
-            // enforces (see the Skip method's own remarks on this exact bug, fixed there but
-            // missed on these four numeric overloads until now).
-            Skip(1);
+            Skip(1); // bounds-checked, not a bare increment
         }
 
         /// <inheritdoc/>
@@ -232,8 +215,6 @@ namespace ExcelReader.Core.Writer
         {
             ThrowIfDisposed();
             ArgumentOutOfRangeException.ThrowIfNegative(count);
-            // XlsxRowWriter already bounds this; XLS/XLSB didn't, so Skip(int.MaxValue) advanced
-            // _columnIndex unboundedly instead of failing fast.
             if (count > 0 && _columnIndex > ExcelLimits.MaxColumns - count)
             {
                 throw new ExcelLimitExceededException("Columns", ExcelLimits.MaxColumns, (long)_columnIndex + count);
@@ -247,9 +228,8 @@ namespace ExcelReader.Core.Writer
             _columnIndex++;
         }
 
-        // typeof(T) == typeof(...) folds to a JIT constant per generic instantiation, so the dead
-        // branches are elided and — unlike a type-pattern switch on an unconstrained T — no boxing
-        // occurs. Mirrors the pattern in CellFormatter.WriteValue<T>/CsvRowWriter.WriteUtf8Field.
+        // typeof(T) == typeof(...) folds to a JIT constant per instantiation, eliding dead branches
+        // with no boxing.
         [SkipLocalsInit]
         internal static double ToDouble<T>(T value) where T : IUtf8SpanFormattable
         {
@@ -302,11 +282,6 @@ namespace ExcelReader.Core.Writer
                 return convertible.ToDouble(CultureInfo.InvariantCulture);
             }
             Span<byte> bytes = stackalloc byte[64];
-            // Silently falling back to 0.0 here (as this used to) writes a wrong-but-plausible
-            // value for a caller-supplied T that can't actually convert — banned by STYLEGUIDE.md:209.
-            // This is a caller mistake (a Write<T> call with a T that doesn't represent a number), not a
-            // file defect, so it throws ArgumentException, matching CellValueGuards' convention for the
-            // same "caller passed something a spreadsheet cell can't hold" class of error.
             if (value.TryFormat(bytes, out int written, default, CultureInfo.InvariantCulture) &&
                 double.TryParse(bytes[..written], CultureInfo.InvariantCulture, out double parsed))
             {

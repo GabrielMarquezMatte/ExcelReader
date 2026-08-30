@@ -68,6 +68,35 @@ foreach (var row in reader)
 }
 ```
 
+### Parallel CSV parsing (opt-in)
+
+```csharp
+await foreach (var row in Excel.ParseCsvParallelAsync<SalesRow>("big.csv", degreeOfParallelism: 8))
+{
+    Total += row.Revenue;
+}
+```
+
+Rows arrive in file order, identical to the sequential parser. Parsing and type conversion run across
+threads; whatever your loop body does per row does not — if that dominates, raising the degree will
+not help. Sources that cannot be partitioned (non-seekable streams, non-UTF-8 encodings, small files)
+fall back to sequential parsing with the same results.
+
+### Apache Arrow conversion (opt-in)
+
+```bash
+dotnet add package ExcelReader.Arrow
+```
+
+```csharp
+using ExcelReader.Arrow;
+
+using var reader = Excel.FromFile("report.xlsx");
+Apache.Arrow.RecordBatch batch = reader.ToArrowRecordBatch();
+```
+
+`schema` defaults to `Excel.InferSchema`'s guess; pass an explicit `ExcelColumnSchema[]` to skip inference. The whole sheet is materialized into one `RecordBatch` — there is no chunked/streaming variant yet.
+
 ## Open by auto-detecting the format
 
 `Excel.Open` picks the reader from the file signature (XLSX/XLSB are ZIP packages, XLS is an OLE2 document) and returns an `IExcelRowReader`. The interface exposes `GetEnumerator()` directly, so no pattern-match is needed for basic row iteration.
@@ -172,6 +201,41 @@ and 25 KB to 71 KB for XLSB — and neither path triggers a garbage collection.
 Do **not** enable it for concurrent server workloads: a caller already reading many files
 in parallel is CPU-saturated, and an extra background thread per read only doubles thread
 demand for no gain. It's meant for single-file batch processing.
+
+## Encrypted workbooks
+
+Password-protected `.xlsx`/`.xlsb`/`.xlsm` files open through the same entry points — the password
+goes on the options, so every overload supports it:
+
+```csharp
+var options = new ExcelReaderOptions { Password = "hunter2" };
+using IExcelRowReader reader = Excel.Open("protected.xlsx", options);
+foreach (Row row in reader) { /* ... */ }
+```
+
+`ExcelEncryptionException.Reason` tells you what to do about a failure — only `PasswordRequired` and
+`PasswordIncorrect` are worth re-prompting for:
+
+```csharp
+try
+{
+    using IExcelRowReader reader = Excel.Open(path, options);
+}
+catch (ExcelEncryptionException ex) when (ex.Reason is ExcelEncryptionReason.PasswordIncorrect)
+{
+    // Ask again. UnsupportedScheme and IntegrityFailure are terminal.
+}
+```
+
+Supported: ECMA-376 agile encryption (Excel 2010+ — what Excel writes today when you set a
+password). **Not** supported: ECMA-376 standard encryption (Excel 2007; recognized and rejected
+with `UnsupportedScheme`, pending real fixtures to verify a derivation against), writing encrypted
+files, encrypted legacy `.xls` (RC4 CryptoAPI), and sheet/workbook *protection* passwords — a
+different mechanism entirely, stored as hashes in the plaintext XML.
+
+`Password` never appears in `ExcelReaderOptions.ToString()`. Note that a password supplied as a
+`string` cannot be wiped from memory — .NET strings are immutable and movable — so the library zeroes
+only the buffers it owns: the derivation buffer and the derived key.
 
 ## Parse typed rows
 

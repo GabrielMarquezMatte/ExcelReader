@@ -206,3 +206,13 @@ class TypedTable(NamedTuple):
 
 class ExcelReaderError(Exception):
     """Raised when the native library reports a failure."""
+
+
+class PasswordRequiredError(ExcelReaderError):
+    """Raised by `open_workbook()`/`open_bytes()` when the workbook is encrypted and no `password`
+    was supplied. Maps XL_STATUS_PASSWORD_REQUIRED from the native ABI."""
+
+
+class PasswordIncorrectError(ExcelReaderError):
+    """Raised by `open_workbook()`/`open_bytes()` when the supplied `password` did not match the
+    workbook's verifier. Maps XL_STATUS_PASSWORD_INCORRECT from the native ABI."""

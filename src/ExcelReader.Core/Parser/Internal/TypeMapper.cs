@@ -1,7 +1,15 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Reflection;
 
 namespace ExcelReader.Core.Parser.Internal
 {
+    // Every public entry point that reaches this type (ExcelParser<T>, RefParser.ParseNamed,
+    // ExcelFluentParser<T>.WithAttributeFallback) already carries its own matching
+    // [RequiresUnreferencedCode]/[RequiresDynamicCode] pair - this class-level pair is what makes that
+    // annotation actually cover the reflection this class performs internally, instead of just
+    // documenting an assumption at the outer boundary.
+    [RequiresUnreferencedCode("Typed parsing reflects over T's public properties, which trimming may remove.")]
+    [RequiresDynamicCode("Typed parsing binds property setters at runtime (MethodInfo.CreateDelegate / MakeGenericMethod).")]
     internal static class TypeMapper<T>
 #if NET9_0_OR_GREATER
         where T : allows ref struct

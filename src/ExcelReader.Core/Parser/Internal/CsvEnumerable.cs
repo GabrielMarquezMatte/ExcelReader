@@ -22,22 +22,30 @@ namespace ExcelReader.Core.Parser.Internal
         private readonly CsvReader _reader;
         private readonly ExcelParserConfig _config;
         private readonly CancellationToken _ct;
-        // Resolved once here, in the constructor — never in GetEnumerator()/GetAsyncEnumerator() — see
-        // ExcelEnumerable<T,TReader,TEnumerator>'s matching field for why: a trimmer/AOT analyzer decides
-        // reachability per method, not per field, so TypeMapper<T>.GetCsvInfo()'s reflection must live
-        // only in the constructor ExcelParser<T> uses, never in a method the AOT-clean ExcelMappedParser<T>
-        // path also calls. The mapped path also uses one map for every reader, so unlike the reflection
-        // path's dedicated CSV map (TypeMapper<T>.GetCsvInfo()), a CSV date property here reads with
-        // whatever reader its ConfigureExcelRowMap chose — a caller who wants text dates from CSV picks
-        // ExcelCellReaders.DateTimeText explicitly.
+        // Resolved in the constructor, never in GetEnumerator()/GetAsyncEnumerator(): a trimmer/AOT
+        // analyzer decides reachability per method, and TypeMapper<T>.GetCsvInfo()'s reflection must
+        // not leak into the AOT-clean ExcelMappedParser<T> path.
         private readonly TypeMapInfo<T> _info;
+        // True only for the parallel factory's sequential fallback, which owns the reader it opened.
+        private readonly bool _ownsReader;
 
+        [RequiresUnreferencedCode("Typed parsing reflects over T's public properties, which trimming may remove.")]
+        [RequiresDynamicCode("Typed parsing binds property setters at runtime (MethodInfo.CreateDelegate / MakeGenericMethod).")]
         internal CsvEnumerable(CsvReader reader, ExcelParserConfig config, CancellationToken ct = default)
+            : this(reader, config, ownsReader: false, ct)
+        {
+        }
+
+        // ownsReader: the enumeration closes the reader when it is disposed.
+        [RequiresUnreferencedCode("Typed parsing reflects over T's public properties, which trimming may remove.")]
+        [RequiresDynamicCode("Typed parsing binds property setters at runtime (MethodInfo.CreateDelegate / MakeGenericMethod).")]
+        internal CsvEnumerable(CsvReader reader, ExcelParserConfig config, bool ownsReader, CancellationToken ct)
         {
             _reader = reader;
             _config = config;
             _info = TypeMapper<T>.GetCsvInfo();
             _ct = ct;
+            _ownsReader = ownsReader;
         }
 
         internal CsvEnumerable(CsvReader reader, ExcelParserConfig config, TypeMapInfo<T> explicitInfo, CancellationToken ct = default)
@@ -80,7 +88,7 @@ namespace ExcelReader.Core.Parser.Internal
         public AsyncEnumerator GetAsyncEnumerator(CancellationToken cancellationToken = default)
         {
             CancellationToken effective = cancellationToken.CanBeCanceled ? cancellationToken : _ct;
-            return new AsyncEnumerator(_reader, _info, _config.ColumnNameComparer, _config.HeaderNormalization, _config.HeaderRow, _config.Culture, _config.ThrowOnParseFailure, effective);
+            return new AsyncEnumerator(_reader, _info, _config.ColumnNameComparer, _config.HeaderNormalization, _config.HeaderRow, _config.Culture, _config.ThrowOnParseFailure, _ownsReader, effective);
         }
 
         /// <summary>Enumerates CSV rows synchronously, projecting each into a <typeparamref name="T"/> instance by fixed field index.</summary>
@@ -111,6 +119,7 @@ namespace ExcelReader.Core.Parser.Internal
         public sealed class AsyncEnumerator : AsyncRowEnumerator<T, CsvReader, CsvReader.Enumerator>
         {
             private CsvRowProjector<T> _projector;
+            private readonly CsvReader? _ownedReader;
 
             internal AsyncEnumerator(
                 CsvReader reader,
@@ -120,14 +129,26 @@ namespace ExcelReader.Core.Parser.Internal
                 int headerRow,
                 IFormatProvider provider,
                 bool throwOnParseFailure,
+                bool ownsReader,
                 CancellationToken ct)
                 : base(reader, ct)
             {
                 _projector = new CsvRowProjector<T>(typeInfo, comparer, normalization, headerRow, provider, throwOnParseFailure);
+                _ownedReader = ownsReader ? reader : null;
             }
 
-            // Synchronous projection step: the ref-struct Cells never escape this call, so no span
-            // is held across the await in the base class's AdvanceAsync.
+            /// <inheritdoc/>
+            [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP007:Don't dispose injected",
+                Justification = "_ownedReader is non-null only when the enumerable was constructed with ownsReader: true, which is exactly the case where the reader was opened for this enumeration and has no other owner.")]
+            public override async ValueTask DisposeAsync()
+            {
+                await base.DisposeAsync().ConfigureAwait(false);
+                if (_ownedReader is not null)
+                {
+                    await _ownedReader.DisposeAsync().ConfigureAwait(false);
+                }
+            }
+
             private protected override ProjectionStep Project()
             {
                 return _projector.Advance(Rows!, ref CurrentValue);
@@ -135,8 +156,32 @@ namespace ExcelReader.Core.Parser.Internal
         }
     }
 
-    // The per-row state machine for CSV: skip rows before the header, bind property -> field index at
-    // the header row, then project each data row by direct indexed field access.
+    // Per-field binding state, shared read-only across parallel workers once bound.
+    internal sealed class CsvBoundColumnMap<T>
+    {
+        internal CsvBoundColumnMap(
+            ColumnParser<T>[] fieldParsers,
+            string?[] fieldNames,
+            bool[] fieldRequired,
+            (int Field, string Name)[] requiredFields)
+        {
+            FieldParsers = fieldParsers;
+            FieldNames = fieldNames;
+            FieldRequired = fieldRequired;
+            RequiredFields = requiredFields;
+        }
+
+        internal ColumnParser<T>[] FieldParsers { get; }
+
+        internal string?[] FieldNames { get; }
+
+        internal bool[] FieldRequired { get; }
+
+        internal (int Field, string Name)[] RequiredFields { get; }
+    }
+
+    // Per-row state machine: skip rows before the header, bind property -> field index at the header
+    // row, then project each data row by direct indexed field access.
     internal struct CsvRowProjector<T>
     {
         private readonly TypeMapInfo<T> _typeInfo;
@@ -145,15 +190,11 @@ namespace ExcelReader.Core.Parser.Internal
         private readonly int _headerRow;
         private readonly IFormatProvider _provider;
         private readonly bool _throwOnParseFailure;
-        // fieldParsers[i] is the parser bound to field i, or null if field i is unmapped.
+        // fieldParsers[i] is the parser bound to field i, or null if unmapped. _fieldNames/_fieldRequired
+        // are parallel to it (display name and [ExcelRequired] flag).
         private ColumnParser<T>[]? _fieldParsers;
-        // Parallel to _fieldParsers: the bound property's display name (for ExcelParseException) and
-        // whether it is [ExcelRequired] without AllowEmpty, indexed by field i. Only meaningful where
-        // _fieldParsers[i] is non-null.
         private string?[] _fieldNames;
         private bool[] _fieldRequired;
-        // Fields whose bound property is [ExcelRequired] without AllowEmpty; each data row must carry
-        // a non-empty value there. Empty when no bound column requires a value.
         private (int Field, string Name)[] _requiredFields;
         private int _rowNumber;
 
@@ -170,8 +211,36 @@ namespace ExcelReader.Core.Parser.Internal
             _requiredFields = [];
         }
 
+        // Parallel-path constructor: the header was already bound by CsvHeaderBinder, so every record
+        // this projector sees is data. _headerRow = -1 marks that.
+        internal CsvRowProjector(TypeMapInfo<T> typeInfo, CsvBoundColumnMap<T> map, IFormatProvider provider, bool throwOnParseFailure)
+        {
+            _typeInfo = typeInfo;
+            _comparer = StringComparer.Ordinal;
+            _normalization = HeaderNormalization.None;
+            _headerRow = -1;
+            _provider = provider;
+            _throwOnParseFailure = throwOnParseFailure;
+            _fieldParsers = map.FieldParsers;
+            _fieldNames = map.FieldNames;
+            _fieldRequired = map.FieldRequired;
+            _requiredFields = map.RequiredFields;
+            _rowNumber = 0;
+        }
+
         internal ProjectionStep Advance(CsvReader.Enumerator rows, ref T model)
         {
+            if (_headerRow < 0)
+            {
+                _rowNumber++;
+                if (rows.FieldCount == 1 && rows.FieldAt(0).Type == CellType.Empty)
+                {
+                    return ProjectionStep.Skip;
+                }
+                model = _typeInfo.CreateInstance();
+                ParseCurrentRow(rows, ref model);
+                return ProjectionStep.Yield;
+            }
             if (_typeInfo.IsIndexBased)
             {
                 if (_fieldParsers is null)
@@ -179,8 +248,19 @@ namespace ExcelReader.Core.Parser.Internal
                     BuildIndexColumnMap();
                 }
                 _rowNumber++;
-                // Same terminal-blank-line treatment as the header path below: a trailing empty line
-                // must not yield a phantom model or trip a required-column check.
+                if (rows.FieldCount == 1 && rows.FieldAt(0).Type == CellType.Empty)
+                {
+                    return ProjectionStep.Skip;
+                }
+                model = _typeInfo.CreateInstance();
+                ParseCurrentRow(rows, ref model);
+                return ProjectionStep.Yield;
+            }
+            // Steady state fast path: avoids re-deriving "this row is data" via ClassifyRow on every
+            // row once the header is behind us.
+            if (_fieldParsers is not null && _rowNumber >= _headerRow)
+            {
+                _rowNumber++;
                 if (rows.FieldCount == 1 && rows.FieldAt(0).Type == CellType.Empty)
                 {
                     return ProjectionStep.Skip;
@@ -199,8 +279,7 @@ namespace ExcelReader.Core.Parser.Internal
             {
                 return step;
             }
-            // The raw CSV reader intentionally exposes a terminal blank line as one empty field.
-            // Typed projection treats it as absent so it cannot yield a phantom model or fail Required.
+            // A terminal blank line comes through as one empty field; treat it as absent.
             if (rows.FieldCount == 1 && rows.FieldAt(0).Type == CellType.Empty)
             {
                 return ProjectionStep.Skip;
@@ -212,8 +291,18 @@ namespace ExcelReader.Core.Parser.Internal
 
         private void BuildColumnMap(CsvReader.Enumerator rows)
         {
+            CsvBoundColumnMap<T> map = BuildBoundMap(rows, _typeInfo, _comparer, _normalization);
+            _fieldParsers = map.FieldParsers;
+            _fieldNames = map.FieldNames;
+            _fieldRequired = map.FieldRequired;
+            _requiredFields = map.RequiredFields;
+        }
+
+        // Shared by the sequential path (BuildColumnMap) and CsvHeaderBinder's parallel path.
+        internal static CsvBoundColumnMap<T> BuildBoundMap(CsvReader.Enumerator rows, TypeMapInfo<T> typeInfo, StringComparer comparer, HeaderNormalization normalization)
+        {
             int fieldCount = rows.FieldCount;
-            int propertyCount = _typeInfo.PropertyCount;
+            int propertyCount = typeInfo.PropertyCount;
             var parsers = new ColumnParser<T>[fieldCount];
             var names = new string?[fieldCount];
             var required = new bool[fieldCount];
@@ -225,12 +314,12 @@ namespace ExcelReader.Core.Parser.Internal
             for (int i = 0; i < fieldCount; i++)
             {
                 Cell cell = rows.FieldAt(i);
-                string header = _normalization.Apply(cell.GetString());
+                string header = normalization.Apply(cell.GetString());
                 if (string.IsNullOrEmpty(header))
                 {
                     continue;
                 }
-                if (!_typeInfo.TryFindHeader(header, _comparer, _normalization, out HeaderMatch<T> match))
+                if (!typeInfo.TryFindHeader(header, comparer, normalization, out HeaderMatch<T> match))
                 {
                     continue;
                 }
@@ -238,8 +327,7 @@ namespace ExcelReader.Core.Parser.Internal
                 {
                     continue;
                 }
-                // A lower-priority alias already bound this property to another field: unbind it so
-                // each property maps to exactly one field (mirrors the generic RowProjector).
+                // Unbind the lower-priority alias so each property maps to exactly one field.
                 if (fieldByProp[match.PropertyIndex] >= 0)
                 {
                     int previousField = fieldByProp[match.PropertyIndex];
@@ -250,25 +338,22 @@ namespace ExcelReader.Core.Parser.Internal
                 aliasByProp[match.PropertyIndex] = match.AliasIndex;
                 fieldByProp[match.PropertyIndex] = i;
                 parsers[i] = match.Parser;
-                names[i] = _typeInfo.DisplayName(match.PropertyIndex);
-                required[i] = _typeInfo.RequiresValue(match.PropertyIndex);
+                names[i] = typeInfo.DisplayName(match.PropertyIndex);
+                required[i] = typeInfo.RequiresValue(match.PropertyIndex);
             }
 
-            _typeInfo.ValidateRequiredColumns(aliasByProp);
+            typeInfo.ValidateRequiredColumns(aliasByProp);
 
             List<(int, string)>? requiredFields = null;
             for (int p = 0; p < propertyCount; p++)
             {
-                if (fieldByProp[p] >= 0 && _typeInfo.RequiresValue(p))
+                if (fieldByProp[p] >= 0 && typeInfo.RequiresValue(p))
                 {
-                    (requiredFields ??= []).Add((fieldByProp[p], _typeInfo.DisplayName(p)));
+                    (requiredFields ??= []).Add((fieldByProp[p], typeInfo.DisplayName(p)));
                 }
             }
 
-            _fieldParsers = parsers;
-            _fieldNames = names;
-            _fieldRequired = required;
-            _requiredFields = requiredFields is null ? [] : [.. requiredFields];
+            return new CsvBoundColumnMap<T>(parsers, names, required, requiredFields is null ? [] : [.. requiredFields]);
         }
 
         private void BuildIndexColumnMap()
@@ -295,9 +380,6 @@ namespace ExcelReader.Core.Parser.Internal
             _requiredFields = requiredFields is null ? [] : [.. requiredFields];
         }
 
-        // On a parse failure (non-empty cell, parser returned false): throws ExcelParseException when
-        // _throwOnParseFailure is set; otherwise, a required field fails the same "missing required
-        // value" way a blank one does (F3) instead of silently keeping the model's default.
         private readonly void ParseCurrentRow(CsvReader.Enumerator rows, ref T model)
         {
             ColumnParser<T>[] parsers = _fieldParsers!;

@@ -185,7 +185,11 @@ namespace ExcelReader.Core.Parser.Internal
         /// <inheritdoc/>
         [SuppressMessage("Design", "CA1816:Dispose methods should call SuppressFinalize",
             Justification = "No finalizer exists on this type or any sealed derivative, so there is nothing to suppress.")]
-        public ValueTask DisposeAsync()
+        // Virtual so an enumerator that also owns the reader it was handed can close it here, instead
+        // of the caller wrapping the whole enumerable in a second async iterator to get an
+        // `await using` — that wrapper re-yields every row through another state machine, which costs
+        // more per row than the disposal it exists to perform (see ParallelCsvFactory.Sequential).
+        public virtual ValueTask DisposeAsync()
         {
             return Rows is null ? ValueTask.CompletedTask : Rows.DisposeAsync();
         }

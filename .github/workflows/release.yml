@@ -69,6 +69,14 @@ jobs:
           -p:Version=${{ steps.version.outputs.value }}
           --output ./artifacts
 
+      - name: Pack Arrow
+        run: >-
+          dotnet pack src/ExcelReader.Arrow/ExcelReader.Arrow.csproj
+          --configuration Release
+          --no-restore
+          -p:Version=${{ steps.version.outputs.value }}
+          --output ./artifacts
+
       - name: Generate SBOM
         uses: anchore/sbom-action@v0
         with:
@@ -181,6 +189,15 @@ jobs:
       # native executable instead - no .NET runtime required on the machine that runs it.
       # ConsoleAppFramework is already compile-time only and Spectre.Console is AOT-compatible,
       # so this publishes clean with zero IL2xxx/IL3xxx trim warnings.
+      #
+      # Do NOT split this into a separate `dotnet restore` (without PublishAot/the RID) followed by
+      # `dotnet publish --no-restore`: restoring without PublishAot=true skips pulling in both the
+      # AOT trim analyzer AND the NativeAOT compiler toolchain (both are gated on it at restore
+      # time), so the later publish step silently produces no binary at all instead of failing loud.
+      # ExcelReader.Generator (a netstandard2.0 analyzer-only reference from ExcelReader.Core) sets
+      # _RequiresILLinkPack=false in its own csproj specifically so this single-command restore+
+      # publish, with PublishAot=true present the whole way through, doesn't fail on it with
+      # NETSDK1207.
       - name: Publish native AOT binary
         shell: bash
         run: >-

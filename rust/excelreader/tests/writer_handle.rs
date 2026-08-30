@@ -172,7 +172,7 @@ fn writer_handle_bytes_rejects_a_file_backed_handle() {
         let error = handle
             .bytes()
             .expect_err("bytes() on a file-backed handle must fail");
-        assert_eq!(error.code, excelreader::XL_INVALID_ARGUMENT);
+        assert_eq!(error.code(), excelreader::XL_INVALID_ARGUMENT);
     }
     std::fs::remove_file(&path).ok();
 }
