@@ -45,6 +45,14 @@ namespace ExcelReader.Fuzz
                 return true;
             }
 
+            // A bad/missing password, an unsupported encryption scheme, or a tampered ciphertext caught
+            // by the dataIntegrity HMAC - all deliberate rejections from the encrypted-container path,
+            // reachable from any target now that the corpus includes an encrypted seed.
+            if (ex is ExcelEncryptionException)
+            {
+                return true;
+            }
+
             // Exact types only. ArgumentOutOfRangeException derives from ArgumentException and
             // IndexOutOfRangeException is its own type — both mean an internal slice or index was
             // computed from attacker-controlled bytes without validation, which is a real defect.
@@ -70,6 +78,7 @@ namespace ExcelReader.Fuzz
                 new ExcelLimitExceededException("MaxCellBytes", 1, 2),
                 new EndOfStreamException(),
                 new ArgumentException("bad option"),
+                new ExcelEncryptionException(ExcelEncryptionReason.PasswordRequired, "test"),
             ];
             foreach (Exception ex in mustAccept)
             {

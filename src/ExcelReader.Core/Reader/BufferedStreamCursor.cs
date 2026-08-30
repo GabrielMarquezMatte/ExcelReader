@@ -24,6 +24,13 @@ namespace ExcelReader.Core.Reader
         internal int Len { get; private set; }
         internal bool Eof { get; private set; }
 
+        // Source offset of Buf[0], so BaseOffset + Pos is always the source offset of the next
+        // unread byte. Advanced whenever PrepareBuffer discards a consumed prefix. Negative for a
+        // sliced memory cursor, where Buf[0] precedes the slice the caller actually handed us —
+        // that is deliberate, and it is what keeps the BaseOffset + Pos identity uniform across
+        // both constructors instead of forcing every consumer to special-case the memory path.
+        internal long BaseOffset { get; private set; }
+
         internal BufferedStreamCursor(int maxCellBytes, string limitName, int initialCapacity = InitialBuf)
         {
             _maxCellBytes = maxCellBytes;
@@ -49,6 +56,7 @@ namespace ExcelReader.Core.Reader
                 Buf = segment.Array!;
                 Pos = segment.Offset;
                 Len = segment.Offset + segment.Count;
+                BaseOffset = -segment.Offset;
                 return;
             }
             // Rare: a non-array-backed ReadOnlyMemory<byte> (e.g. a custom MemoryManager<byte>). One
@@ -74,6 +82,7 @@ namespace ExcelReader.Core.Reader
             {
                 Buf.AsSpan(Pos, Len - Pos).CopyTo(Buf);
                 Len -= Pos;
+                BaseOffset += Pos;
                 Pos = 0;
                 return;
             }

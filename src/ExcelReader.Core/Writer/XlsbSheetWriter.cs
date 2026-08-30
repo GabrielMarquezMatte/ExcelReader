@@ -94,10 +94,8 @@ namespace ExcelReader.Core.Writer
             }
         }
 
-        // The active row's own style always wins over a column style (both are user-configured; the
-        // row is the more specific of the two); falls back to 0 ("no override") when neither is set.
-        // Every BIFF12 cell record carries a mandatory ixfe field (unlike XLSX's optional `s`
-        // attribute), so this is consulted for every cell write, not only dates.
+        // A row style always wins over a column style; falls back to 0. Every BIFF12 cell record
+        // carries a mandatory ixfe field, so this is consulted for every cell write, not only dates.
         private int EffectiveStyle(int columnIndex)
         {
             if (_activeRowStyle != 0)
@@ -139,21 +137,15 @@ namespace ExcelReader.Core.Writer
             return ValueTask.CompletedTask;
         }
 
-        // Excel's own default column width, in characters — what a column with a style but no
-        // explicit SetColumnWidth reports, so the record carries a plausible coldx either way.
+        // Excel's own default column width, in characters.
         private const double DefaultColumnWidth = 8.43;
 
-        // BrtColInfo flags (2 bytes, [MS-XLSB] 2.4.667): bit 1 is fUserSet, "the column width was set
-        // by the user". Excel ignores coldx on a column that doesn't claim it, so an explicit
-        // SetColumnWidth must set this or the width silently has no effect in Excel.
+        // BrtColInfo flags: bit 1 is fUserSet. Excel ignores coldx on a column that doesn't claim it,
+        // so an explicit SetColumnWidth must set this or the width silently has no effect.
         private const int ColInfoUserSet = 0x0002;
 
         // Payload layout verified byte-for-byte against a real Excel-authored .xlsb (18 bytes:
-        // colFirst/colLast/coldx/ixfe as u32, then flags as u16). Note ixfe is a *u32*, not the u16
-        // this used to write — the old 16-byte record was 2 bytes short of what Excel emits, and left
-        // fUserSet clear so a SetColumnWidth never took effect. This library's own reader never parses
-        // column info (only per-cell style matters for round-tripping), so no round-trip test can catch
-        // a regression here; XlsbColInfoTests asserts the byte layout directly instead.
+        // colFirst/colLast/coldx/ixfe as u32, then flags as u16 — ixfe is a u32, not u16).
         private void WriteColInfos()
         {
             if (_columnStyles is null && _columnWidths is null)
@@ -362,9 +354,8 @@ namespace ExcelReader.Core.Writer
             _stream = _offloadWrite ? new WriteOffloadStream(stream) : stream;
         }
 
-        // When offloading, hands the buffer's backing array to the background writer directly
-        // (BiffBuffer.Detach) instead of copying it into a fresh rental — see WriteOffloadStream's
-        // EnqueueOwned. _records keeps working immediately: Detach rents its own replacement.
+        // When offloading, hands the buffer's array to the background writer directly instead of
+        // copying; Detach rents _records its own replacement so it keeps working immediately.
         private void FlushRecords()
         {
             if (_records.Length == 0)
@@ -429,9 +420,6 @@ namespace ExcelReader.Core.Writer
             _rowActive = true;
         }
 
-        // Fixed-length records (known-size cells, row headers) write header + fields straight into
-        // _records, skipping the Payload-buffer round trip that WriteRecord/Payload.Reset() needs for
-        // variable-length records.
         private void WriteRowHeader(int rowNumber)
         {
             const int Length = (6 * 4) + 1; // 6 x u32 + 1 byte
@@ -445,9 +433,7 @@ namespace ExcelReader.Core.Writer
             p[24] = 0;
             MaybeFlush();
         }
-        // The default-font/fill/border style, this-worksheet-view and metadata records are fixed byte
-        // blobs Excel expects verbatim; nothing in them varies per workbook, so they are emitted from
-        // constants through one write-and-reset helper rather than composed field by field.
+        // Fixed byte blobs Excel expects verbatim; nothing in them varies per workbook.
         private void WriteBlobRecord(int id, ReadOnlySpan<byte> blob)
         {
             Payload.Reset();
@@ -499,8 +485,6 @@ namespace ExcelReader.Core.Writer
             }
         }
 
-        // internal: shared with XlsbRowWriter, whose per-cell Write(...) overloads delegate here so
-        // the streaming and batch (WriteRow) paths emit BIFF12 cell records through one place.
         private const int CellHeaderLength = 8; // column u32 + style u32
 
         internal void WriteStringCell(int columnIndex, string? value)

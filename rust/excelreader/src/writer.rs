@@ -8,9 +8,9 @@
 
 use crate::workbook::{check, check_abi_version};
 use crate::{
-    Error, WriteOptions, XlColumn, XlColumnSpec, XlTable, XL_FORMAT_AUTO,
-    XL_FORMAT_CSV, XL_FORMAT_XLS, XL_FORMAT_XLSB, XL_FORMAT_XLSX, XL_INVALID_ARGUMENT, XL_T_BOOL,
-    XL_T_DATE, XL_T_F64, XL_T_I64, XL_T_STRING, XL_T_TIME, XL_T_TIMESTAMP,
+    Error, WriteOptions, XlColumn, XlColumnSpec, XlTable, XL_FORMAT_AUTO, XL_FORMAT_CSV,
+    XL_FORMAT_XLS, XL_FORMAT_XLSB, XL_FORMAT_XLSX, XL_INVALID_ARGUMENT, XL_T_BOOL, XL_T_DATE,
+    XL_T_F64, XL_T_I64, XL_T_STRING, XL_T_TIME, XL_T_TIMESTAMP,
 };
 use std::os::raw::c_void;
 
@@ -131,10 +131,7 @@ pub fn format_from_path(path: &str) -> i32 {
 }
 
 fn invalid(message: String) -> Error {
-    Error {
-        code: XL_INVALID_ARGUMENT,
-        message,
-    }
+    Error::from_status(XL_INVALID_ARGUMENT, message)
 }
 
 /// Returns the row count every column agreed on, or the first problem found.
@@ -469,7 +466,7 @@ mod tests {
             validity: Some(&bitmap),
         }];
         let error = validate(&columns).expect_err("a 1-byte bitmap cannot cover 9 rows");
-        assert_eq!(error.code, XL_INVALID_ARGUMENT);
+        assert_eq!(error.code(), XL_INVALID_ARGUMENT);
     }
 
     #[test]

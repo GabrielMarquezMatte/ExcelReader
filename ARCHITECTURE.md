@@ -24,6 +24,44 @@ On top of all four readers sits the typed-parsing layer (`src/ExcelReader.Core/P
 (binds a `ref struct` model directly to `Cell.Value` spans — zero allocation for the container and,
 for span-typed columns, for the values too). Both consume `Row`/`Cell` from any reader uniformly.
 
+## Parallel CSV parsing
+
+`Excel.ParseCsvParallelAsync<T>` (`src/ExcelReader.Core/Parser/Internal/ParallelCsv*.cs`) is an opt-in
+alternate path over the same typed-parsing machinery, for sources large enough that partitioning
+pays for itself. `ParallelCsvFactory` decides eligibility — a seekable, UTF-8, large-enough source —
+and falls back to the ordinary sequential `ExcelParser<T>` otherwise, so callers get identical output
+either way.
+
+When it partitions, `CsvChunkPlan` slices the data range into four chunks per worker (not one — see
+the file's comments on why one-per-worker would buffer up to the whole output) and hands them out
+through a lock-free pull queue. Each worker reads its chunk through a `RangedFileStream`, a
+positional, non-seeking view over one shared `SafeFileHandle` (`RandomAccess.Read`, thread-safe, no
+per-worker file handle). A chunk's *nominal* start is only a guess — record boundaries do not respect
+chunk boundaries — so `CsvBoundaryResolver` has each worker also resolve where its own first real
+record begins.
+
+`ParallelCsvEnumerable<T>.GetAsyncEnumerator` is where the guesses get corrected and the output gets
+ordered. It walks chunks in index order; a chunk is only trusted once its predecessor has confirmed
+where the chunk actually starts, and a chunk whose guess was wrong is reparsed from the confirmed
+offset before anything downstream sees it. That correction can cascade into the following chunk, which
+the loop's confirmed-offset threading handles without special-casing. Boundary confirmation is
+therefore strictly ordered — it is a correctness requirement — but this also happens to be the merge
+that yields rows in file order, identical to the sequential parser.
+
+Whether a mode other than the ordered merge above would be worth adding as an opt-in is a measurement
+question the design deliberately left open (a >=10% throughput advantage on `CsvParallelParseBenchmark`
+would justify it; under that, the ordered merge stays the only shipped mode). An initial run of that
+benchmark, on a thermally-limited mobile CPU, produced numbers too unreliable to trust for the decision
+— flat-to-worse at mid-range degrees of parallelism, improving only at the extremes, consistent with
+power/thermal throttling under sustained multi-threaded load rather than the algorithm's own scaling.
+A follow-up ad hoc experiment tried decoupling confirmation from consumption (publishing each confirmed
+chunk to a bounded channel instead of yielding it inline, so confirmation could run a few chunks ahead
+of a slow consumer instead of lockstepping with it) across fast-, moderate-, and slow-consumer
+scenarios; none showed a consistent advantage over the ordered merge, so that variant was discarded
+rather than kept as a second mode. The broader question — whether true unordered emission would fare
+differently — is unresolved; the ordered merge (the safer default, and the only mode either public
+overload can reach) stays until a clean re-run on unconstrained hardware settles it.
+
 ## Shared plumbing
 
 Reader internals that would otherwise be duplicated four times over live in one place:
@@ -47,6 +85,34 @@ Reader internals that would otherwise be duplicated four times over live in one 
 - **`LimitChecks`** — the DoS/resource-limit guards (`ExcelReaderOptions`/`CsvReaderOptions`), including
   the single buffer-growth-cap function (`NextBufferSize`) every pooled buffer in the stack grows
   through, so one limit policy governs all of them consistently.
+
+## Encrypted OOXML workbooks
+
+A password-protected `.xlsx`/`.xlsb` is not a ZIP: it is an OLE/CFB container holding an
+`EncryptionInfo` descriptor and an `EncryptedPackage` (the real ZIP, encrypted). `src/ExcelReader.Core/Crypto/`
+turns one back into a stream the ordinary readers consume:
+
+- **`CfbContainer`** — the CFB parse, factored out of `XlsCompoundFile` so one parse can yield
+  *named* streams. `XlsCompoundFile.OpenWorkbook` is now a thin wrapper over it, which is why the XLS
+  path kept its behavior and its fuzz coverage unchanged.
+- **`EncryptionDescriptor`** — parses `EncryptionInfo` and dispatches: version 4.4 is agile
+  (AES-CBC, 4096-byte segments, XML descriptor); 3.2/4.2 (ECMA-376 standard, AES-ECB/SHA-1, binary
+  descriptor) is recognized but rejected with `UnsupportedScheme` rather than implemented, for lack
+  of a real fixture to verify a derivation against; anything else is rejected outright. This is the
+  one parser in the codebase that uses `XmlReader` rather than hand-rolled scanning; the file header
+  explains why.
+- **`AgileKeyDerivation`** — password to key, plus the verifier check that distinguishes "wrong
+  password" from "corrupt file". (A `StandardKeyDerivation` counterpart is future work, gated on
+  real standard-encryption fixtures — see `tests/ExcelReader.Tests/data/encrypted/README.md`.)
+- **`DecryptedPackageStream`** — a read-only *seekable* `Stream`. Agile derives a per-segment IV
+  from the segment index, so `ZipArchive` finds its central directory without the package ever
+  being materialized. One 4 KiB segment is cached, which is enough because ZIP reads are sequential
+  within an entry.
+
+`XlsxReader` and `XlsbReader` are untouched by any of this: they receive a stream that happens to
+decrypt. Writing encrypted workbooks is not supported — which also means there is no round-trip
+check, so the fixtures in `tests/ExcelReader.Tests/data/encrypted/` (paired with plaintext produced
+by an independent implementation) are the only correctness oracle for decryption.
 
 ## The `excelreader` CLI
 

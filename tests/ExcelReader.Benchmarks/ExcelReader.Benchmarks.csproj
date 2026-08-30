@@ -23,12 +23,13 @@
     <!-- Referenced as an ordinary managed assembly (see that project's own note: the AOT shared
          library is only produced on publish -r), which is what NativeTypedParseBenchmark drives. -->
     <ProjectReference Include="..\..\src\ExcelReader.Native\ExcelReader.Native.csproj" />
+    <ProjectReference Include="..\..\src\ExcelReader.Arrow\ExcelReader.Arrow.csproj" />
   </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="BenchmarkDotNet" Version="0.15.8" />
     <PackageReference Include="CsvHelper" Version="33.1.0" />
-    <PackageReference Include="MiniExcel" Version="1.45.0" />
+    <PackageReference Include="MiniExcel" Version="1.46.0" />
     <PackageReference Include="Sep" Version="0.17.0" />
     <PackageReference Include="SpreadCheetah" Version="1.28.0" />
     <PackageReference Include="Sylvan.Data" Version="0.2.17" />
@@ -38,6 +39,11 @@
 
   <ItemGroup>
     <None Include="Data\**" CopyToOutputDirectory="PreserveNewest" />
+    <!-- The encrypted-workbook benchmark reads the test suite's oracle fixtures rather than keeping
+         a second copy: this library cannot write encrypted workbooks, so those files are the only
+         encrypted corpus that exists in the repo. -->
+    <None Include="..\ExcelReader.Tests\data\encrypted\*.xlsx"
+          Link="data\encrypted\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

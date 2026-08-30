@@ -114,9 +114,8 @@ namespace ExcelReader.Core.Parser
         {
             ArgumentNullException.ThrowIfNull(names);
             ArgumentNullException.ThrowIfNull(parse);
-            // ExcelRowParser<T> and the internal ColumnParser<T> share an identical invoke signature, so
-            // this constructs a new delegate instance targeting the same method/closure directly — not a
-            // wrapper that calls through parse.Invoke(...). No extra indirection at row-parse time.
+            // ExcelRowParser<T> and ColumnParser<T> share an identical invoke signature, so this
+            // targets the same method/closure directly rather than wrapping parse.Invoke(...).
             _properties.Add(new PropertyMap<T>(names, new ColumnParser<T>(parse), isRequired, requireValue));
             return this;
         }
@@ -210,16 +209,10 @@ namespace ExcelReader.Core.Parser
             return this;
         }
 
-        // requireFactory: false for ExcelFluentParser<T>.WithAttributeFallback's fluent-only builder —
-        // that path builds this map before merging it with the attribute-driven one, and
-        // TypeMapInfo<T>.MergeFluentOverAttributes already falls back to the attribute map's factory
-        // when this one has none (see its own comment on _useDefault). Checking here unconditionally
-        // would reject that legitimate, already-rescued case before the merge ever runs.
+        // requireFactory: false for ExcelFluentParser<T>.WithAttributeFallback's fluent-only builder,
+        // which merges this map with an attribute-driven fallback that supplies the factory instead.
         internal TypeMapInfo<T> Build(bool requireFactory = true)
         {
-            // A null factory means default(T); for a reference type that's always null, and every row
-            // would throw NullReferenceException on the first property assignment instead of at Build()
-            // time, where the real mistake (forgetting to call Factory(...)) is far easier to see.
             if (requireFactory && _factory is null && !typeof(T).IsValueType)
             {
                 throw new InvalidOperationException(

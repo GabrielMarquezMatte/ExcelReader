@@ -485,7 +485,12 @@ namespace ExcelReader.Tests
         public void EncryptedWorkbookThrows()
         {
             using var ms = XlsWorkbookBuilder.BuildEncrypted();
-            Assert.Throws<NotSupportedException>(() => Excel.FromXls(ms));
+            NotSupportedException ex = Assert.Throws<NotSupportedException>(() => Excel.FromXls(ms));
+            // The message must name the real boundary: OOXML encryption is supported, .xls is not —
+            // not read as a generic "this is broken" bug report.
+            Assert.Contains("xls", ex.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("not supported", ex.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("xlsx", ex.Message, StringComparison.OrdinalIgnoreCase);
         }
 
         [Fact]

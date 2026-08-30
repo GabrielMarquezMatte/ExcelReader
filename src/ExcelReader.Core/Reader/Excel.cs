@@ -2,8 +2,11 @@ using System.Buffers;
 using System.Diagnostics.CodeAnalysis;
 using System.IO.Compression;
 using System.Runtime.CompilerServices;
+using ExcelReader.Core.Crypto;
 using ExcelReader.Core.Enums;
 using ExcelReader.Core.Internal;
+using ExcelReader.Core.Parser;
+using ExcelReader.Core.Parser.Internal;
 
 namespace ExcelReader.Core.Reader
 {
@@ -20,15 +23,21 @@ namespace ExcelReader.Core.Reader
         /// <param name="options">Resource limits and behavior toggles; <see cref="ExcelReaderOptions.Default"/> when <see langword="null"/>.</param>
         public static XlsxReader FromFile(string path, ExcelReaderOptions? options = null)
         {
-            return new XlsxReader(File.OpenRead(path), leaveOpen: false, options);
+            return From(File.OpenRead(path), leaveOpen: false, options);
         }
 
         /// <summary>Opens an XLSX workbook from an existing stream.</summary>
         /// <param name="stream">The stream containing the XLSX data.</param>
         /// <param name="leaveOpen">When <see langword="true"/> (the default), <paramref name="stream"/> is not disposed when the reader is disposed.</param>
         /// <param name="options">Resource limits and behavior toggles; <see cref="ExcelReaderOptions.Default"/> when <see langword="null"/>.</param>
+        [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
+            Justification = "When TryDecryptCfbStream returns a new stream, it's passed to the reader ctor with leaveOpen:false, which disposes it on construction failure and via the reader on success.")]
         public static XlsxReader From(Stream stream, bool leaveOpen = true, ExcelReaderOptions? options = null)
         {
+            if (TryDecryptCfbStream(stream, leaveOpen, options, out Stream decrypted))
+            {
+                return new XlsxReader(decrypted, leaveOpen: false, options);
+            }
             return new XlsxReader(stream, leaveOpen, options);
         }
 
@@ -42,7 +51,14 @@ namespace ExcelReader.Core.Reader
         /// <param name="options">Resource limits and behavior toggles; <see cref="ExcelReaderOptions.Default"/> when <see langword="null"/>. <see cref="ExcelReaderOptions.PrefetchDecompression"/> is ignored on this path — there is nothing left to overlap.</param>
         public static XlsxReader From(ReadOnlyMemory<byte> data, ExcelReaderOptions? options = null)
         {
-            return XlsxReader.CreateFromMemory(data, options);
+            ExcelReaderOptions effective = options ?? ExcelReaderOptions.Default;
+            // Eager decryption, not a DecryptedPackageStream: this overload never suspends.
+            if (data.Span.StartsWith(XlsCompoundFile.Signature) && EncryptedPackageOpener.IsEncryptedMemory(data, effective))
+            {
+                ReadOnlyMemory<byte> plain = EncryptedPackageOpener.DecryptToMemory(data, effective);
+                return XlsxReader.CreateFromMemory(plain, effective);
+            }
+            return XlsxReader.CreateFromMemory(data, effective);
         }
 
         /// <summary>Opens an XLSX workbook from a file path, taking ownership of the file stream. Alias for <see cref="FromFile(string, ExcelReaderOptions?)"/>, for callers who grep for a format-named factory.</summary>
@@ -102,15 +118,21 @@ namespace ExcelReader.Core.Reader
         /// <param name="options">Resource limits and behavior toggles; <see cref="ExcelReaderOptions.Default"/> when <see langword="null"/>.</param>
         public static XlsbReader FromXlsbFile(string path, ExcelReaderOptions? options = null)
         {
-            return new XlsbReader(File.OpenRead(path), leaveOpen: false, options);
+            return FromXlsb(File.OpenRead(path), leaveOpen: false, options);
         }
 
         /// <summary>Opens an XLSB (Excel binary) workbook from an existing stream.</summary>
         /// <param name="stream">The stream containing the XLSB data.</param>
         /// <param name="leaveOpen">When <see langword="true"/> (the default), <paramref name="stream"/> is not disposed when the reader is disposed.</param>
         /// <param name="options">Resource limits and behavior toggles; <see cref="ExcelReaderOptions.Default"/> when <see langword="null"/>.</param>
+        [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
+            Justification = "When TryDecryptCfbStream returns a new stream, it's passed to the reader ctor with leaveOpen:false, which disposes it on construction failure and via the reader on success.")]
         public static XlsbReader FromXlsb(Stream stream, bool leaveOpen = true, ExcelReaderOptions? options = null)
         {
+            if (TryDecryptCfbStream(stream, leaveOpen, options, out Stream decrypted))
+            {
+                return new XlsbReader(decrypted, leaveOpen: false, options);
+            }
             return new XlsbReader(stream, leaveOpen, options);
         }
 
@@ -124,7 +146,14 @@ namespace ExcelReader.Core.Reader
         /// <param name="options">Resource limits and behavior toggles; <see cref="ExcelReaderOptions.Default"/> when <see langword="null"/>. <see cref="ExcelReaderOptions.PrefetchDecompression"/> is ignored on this path — there is nothing left to overlap.</param>
         public static XlsbReader FromXlsb(ReadOnlyMemory<byte> data, ExcelReaderOptions? options = null)
         {
-            return XlsbReader.CreateFromMemory(data, options);
+            ExcelReaderOptions effective = options ?? ExcelReaderOptions.Default;
+            // Eager decryption, not a DecryptedPackageStream: this overload never suspends.
+            if (data.Span.StartsWith(XlsCompoundFile.Signature) && EncryptedPackageOpener.IsEncryptedMemory(data, effective))
+            {
+                ReadOnlyMemory<byte> plain = EncryptedPackageOpener.DecryptToMemory(data, effective);
+                return XlsbReader.CreateFromMemory(plain, effective);
+            }
+            return XlsbReader.CreateFromMemory(data, effective);
         }
 
         /// <summary>Asynchronously opens an XLSX workbook from a file path, taking ownership of the file stream.</summary>
@@ -136,7 +165,7 @@ namespace ExcelReader.Core.Reader
         public static ValueTask<XlsxReader> FromFileAsync(string path, ExcelReaderOptions? options = null, CancellationToken ct = default)
         {
             FileStream stream = OpenAsyncFile(path);
-            return XlsxReader.CreateAsync(stream, leaveOpen: false, options, ct);
+            return FromAsync(stream, leaveOpen: false, options, ct);
         }
 
         /// <summary>Asynchronously opens an XLSX workbook from an existing stream.</summary>
@@ -144,8 +173,14 @@ namespace ExcelReader.Core.Reader
         /// <param name="leaveOpen">When <see langword="true"/> (the default), <paramref name="stream"/> is not disposed when the reader is disposed.</param>
         /// <param name="options">Resource limits and behavior toggles; <see cref="ExcelReaderOptions.Default"/> when <see langword="null"/>.</param>
         /// <param name="ct">A token to cancel the open operation.</param>
+        [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
+            Justification = "When TryDecryptCfbStream returns a new stream, it's passed to CreateAsync with leaveOpen:false, which disposes it on failure and via the reader on success.")]
         public static ValueTask<XlsxReader> FromAsync(Stream stream, bool leaveOpen = true, ExcelReaderOptions? options = null, CancellationToken ct = default)
         {
+            if (TryDecryptCfbStream(stream, leaveOpen, options, out Stream decrypted))
+            {
+                return XlsxReader.CreateAsync(decrypted, leaveOpen: false, options, ct);
+            }
             return XlsxReader.CreateAsync(stream, leaveOpen, options, ct);
         }
 
@@ -199,7 +234,7 @@ namespace ExcelReader.Core.Reader
         public static ValueTask<XlsbReader> FromXlsbFileAsync(string path, ExcelReaderOptions? options = null, CancellationToken ct = default)
         {
             FileStream stream = OpenAsyncFile(path);
-            return XlsbReader.CreateAsync(stream, leaveOpen: false, options, ct);
+            return FromXlsbAsync(stream, leaveOpen: false, options, ct);
         }
 
         /// <summary>Asynchronously opens an XLSB (Excel binary) workbook from an existing stream.</summary>
@@ -207,8 +242,14 @@ namespace ExcelReader.Core.Reader
         /// <param name="leaveOpen">When <see langword="true"/> (the default), <paramref name="stream"/> is not disposed when the reader is disposed.</param>
         /// <param name="options">Resource limits and behavior toggles; <see cref="ExcelReaderOptions.Default"/> when <see langword="null"/>.</param>
         /// <param name="ct">A token to cancel the open operation.</param>
+        [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
+            Justification = "When TryDecryptCfbStream returns a new stream, it's passed to CreateAsync with leaveOpen:false, which disposes it on failure and via the reader on success.")]
         public static ValueTask<XlsbReader> FromXlsbAsync(Stream stream, bool leaveOpen = true, ExcelReaderOptions? options = null, CancellationToken ct = default)
         {
+            if (TryDecryptCfbStream(stream, leaveOpen, options, out Stream decrypted))
+            {
+                return XlsbReader.CreateAsync(decrypted, leaveOpen: false, options, ct);
+            }
             return XlsbReader.CreateAsync(stream, leaveOpen, options, ct);
         }
 
@@ -259,9 +300,112 @@ namespace ExcelReader.Core.Reader
             return CsvReader.CreateAsync(stream, leaveOpen, options, ct);
         }
 
-        // Bounds the amount of data read to infer a dialect, independent of CsvSnifferOptions.MaxSampleLines:
-        // that option bounds lines *within* the sample, this bounds how many bytes are pulled from an
-        // untrusted stream/file in the first place.
+        /// <summary>
+        /// Parses a CSV file into <typeparamref name="T"/> instances across several threads, yielding the
+        /// same sequence, in the same order, that the sequential <see cref="Parser.ExcelParser{T}"/> produces.
+        /// </summary>
+        /// <typeparam name="T">The row model type to bind each CSV record to.</typeparam>
+        /// <param name="path">The path of the CSV file to read.</param>
+        /// <param name="degreeOfParallelism">The maximum number of parsing threads. <c>0</c> means <see cref="Environment.ProcessorCount"/>; <c>1</c> parses sequentially.</param>
+        /// <param name="readerOptions">CSV dialect options. Defaults to <see cref="CsvReaderOptions.Default"/>.</param>
+        /// <param name="config">Typed-parsing configuration. Defaults to a new <see cref="Parser.ExcelParserConfig"/>.</param>
+        /// <param name="ct">A token to cancel enumeration.</param>
+        /// <remarks>
+        /// <para>
+        /// Parsing and type conversion run in parallel; whatever the caller does per row does not. A caller
+        /// whose per-row work dominates will see little gain from raising <paramref name="degreeOfParallelism"/>.
+        /// </para>
+        /// <para>
+        /// Falls back to sequential parsing — same results, one thread — when the source is too small to
+        /// partition usefully, or when <see cref="CsvReaderOptions.Encoding"/> is set to a non-UTF-8 encoding,
+        /// which must be transcoded sequentially.
+        /// </para>
+        /// <para>
+        /// <see cref="CsvReaderOptions.InternStrings"/> yields substantially less here than on the sequential
+        /// path: each partition keeps its own dedup cache, so hit rates fall and memory multiplies. Results
+        /// are unaffected.
+        /// </para>
+        /// </remarks>
+        [RequiresUnreferencedCode("Typed parsing reflects over T's public properties, which trimming may remove.")]
+        [RequiresDynamicCode("Typed parsing binds property setters at runtime (MethodInfo.CreateDelegate / MakeGenericMethod).")]
+        public static IAsyncEnumerable<T> ParseCsvParallelAsync<T>(
+            string path,
+            int degreeOfParallelism = 0,
+            CsvReaderOptions? readerOptions = null,
+            ExcelParserConfig? config = null,
+            CancellationToken ct = default)
+        {
+            ArgumentException.ThrowIfNullOrEmpty(path);
+            ArgumentOutOfRangeException.ThrowIfNegative(degreeOfParallelism);
+            return ParallelCsvFactory.Create<T>(path, degreeOfParallelism, readerOptions, config, ct);
+        }
+
+        /// <summary>
+        /// Parses an in-memory CSV buffer into <typeparamref name="T"/> instances across several threads,
+        /// yielding the same sequence, in the same order, that the sequential <see cref="Parser.ExcelParser{T}"/> produces.
+        /// </summary>
+        /// <typeparam name="T">The row model type to bind each CSV record to.</typeparam>
+        /// <param name="data">The CSV bytes. The caller keeps ownership; the buffer must not be mutated during enumeration.</param>
+        /// <param name="degreeOfParallelism">The maximum number of parsing threads. <c>0</c> means <see cref="Environment.ProcessorCount"/>; <c>1</c> parses sequentially.</param>
+        /// <param name="readerOptions">CSV dialect options. Defaults to <see cref="CsvReaderOptions.Default"/>.</param>
+        /// <param name="config">Typed-parsing configuration. Defaults to a new <see cref="Parser.ExcelParserConfig"/>.</param>
+        /// <param name="ct">A token to cancel enumeration.</param>
+        /// <remarks>Carries the same fallback and <see cref="CsvReaderOptions.InternStrings"/> caveats as the path-based overload.</remarks>
+        [RequiresUnreferencedCode("Typed parsing reflects over T's public properties, which trimming may remove.")]
+        [RequiresDynamicCode("Typed parsing binds property setters at runtime (MethodInfo.CreateDelegate / MakeGenericMethod).")]
+        public static IAsyncEnumerable<T> ParseCsvParallelAsync<T>(
+            ReadOnlyMemory<byte> data,
+            int degreeOfParallelism = 0,
+            CsvReaderOptions? readerOptions = null,
+            ExcelParserConfig? config = null,
+            CancellationToken ct = default)
+        {
+            ArgumentOutOfRangeException.ThrowIfNegative(degreeOfParallelism);
+            return ParallelCsvFactory.Create<T>(data, degreeOfParallelism, readerOptions, config, ct);
+        }
+
+        /// <summary>
+        /// Parses a CSV stream into <typeparamref name="T"/> instances, in parallel where the stream can be
+        /// partitioned, yielding the same sequence, in the same order, that the sequential
+        /// <see cref="Parser.ExcelParser{T}"/> produces.
+        /// </summary>
+        /// <typeparam name="T">The row model type to bind each CSV record to.</typeparam>
+        /// <param name="stream">The CSV stream, read from its current position. The caller keeps ownership and must not read from it concurrently.</param>
+        /// <param name="degreeOfParallelism">The maximum number of parsing threads. <c>0</c> means <see cref="Environment.ProcessorCount"/>; <c>1</c> parses sequentially.</param>
+        /// <param name="readerOptions">CSV dialect options. Defaults to <see cref="CsvReaderOptions.Default"/>.</param>
+        /// <param name="config">Typed-parsing configuration. Defaults to a new <see cref="Parser.ExcelParserConfig"/>.</param>
+        /// <param name="ct">A token to cancel enumeration.</param>
+        /// <remarks>
+        /// <para>
+        /// Only a <see cref="FileStream"/>, or a <see cref="MemoryStream"/> whose buffer is publicly
+        /// visible, can be partitioned; every other stream — including seekable ones — parses sequentially,
+        /// with identical results. A stream exposes a single mutable position, and a seek can be
+        /// arbitrarily expensive, so this overload partitions only what it can read positionally and
+        /// cheaply rather than promising parallelism it cannot deliver.
+        /// </para>
+        /// <para>
+        /// Passing a <see cref="FileStream"/> reads its <see cref="FileStream.SafeFileHandle"/>, which
+        /// flushes that stream's internal buffer and disables its subsequent buffering optimizations. The
+        /// stream's position is not moved. Prefer the path-based overload where a path is available.
+        /// </para>
+        /// <para>Carries the same <see cref="CsvReaderOptions.InternStrings"/> caveat as the other overloads.</para>
+        /// </remarks>
+        [RequiresUnreferencedCode("Typed parsing reflects over T's public properties, which trimming may remove.")]
+        [RequiresDynamicCode("Typed parsing binds property setters at runtime (MethodInfo.CreateDelegate / MakeGenericMethod).")]
+        public static IAsyncEnumerable<T> ParseCsvParallelAsync<T>(
+            Stream stream,
+            int degreeOfParallelism = 0,
+            CsvReaderOptions? readerOptions = null,
+            ExcelParserConfig? config = null,
+            CancellationToken ct = default)
+        {
+            ArgumentNullException.ThrowIfNull(stream);
+            ArgumentOutOfRangeException.ThrowIfNegative(degreeOfParallelism);
+            return ParallelCsvFactory.Create<T>(stream, degreeOfParallelism, readerOptions, config, ct);
+        }
+
+        // Bounds bytes pulled from an untrusted stream/file, independent of
+        // CsvSnifferOptions.MaxSampleLines, which only bounds lines within the sample.
         private const int CsvDialectSampleBytes = 64 * 1024;
 
         /// <summary>Reads a sample from the start of a seekable stream and infers its CSV dialect. The stream's position is restored before returning.</summary>
@@ -383,15 +527,11 @@ namespace ExcelReader.Core.Reader
         public static ExcelColumnSchema[] InferSchema(IExcelRowReader reader, int headerRow = 1, int sampleSize = 100)
         {
             ArgumentNullException.ThrowIfNull(reader);
-
-            // A fresh enumerator, so sampling starts at row 1 and never touches a cursor the caller
-            // is already walking.
             using IExcelRowEnumerator rows = reader.GetEnumerator();
             return SchemaInference.Infer(rows, reader.IsDate1904, headerRow, sampleSize);
         }
 
-        // The leading bytes that distinguish container formats: XLSX and XLSB are ZIP ("PK\x03\x04"),
-        // XLS is an OLE2/CFB compound document. XLSB is distinguished from XLSX by the presence of
+        // XLSX/XLSB are ZIP ("PK\x03\x04"); XLS is OLE2/CFB. XLSB is told apart from XLSX by
         // "xl/workbook.bin" in the ZIP central directory.
         private static ReadOnlySpan<byte> ZipSignature => [0x50, 0x4B, 0x03, 0x04];
 
@@ -447,6 +587,12 @@ namespace ExcelReader.Core.Reader
         public static IExcelRowReader Open(ReadOnlyMemory<byte> data, ExcelReaderOptions? options = null)
         {
             ExcelReaderOptions effective = options ?? ExcelReaderOptions.Default;
+            // Eager decryption, not a DecryptedPackageStream: this overload never suspends.
+            if (data.Span.StartsWith(XlsCompoundFile.Signature) && EncryptedPackageOpener.IsEncryptedMemory(data, effective))
+            {
+                ReadOnlyMemory<byte> plain = EncryptedPackageOpener.DecryptToMemory(data, effective);
+                return OpenFromPlainMemory(plain, effective);
+            }
             ExcelFileFormat format = ClassifyMemory(data, effective, out ZipMemoryIndex? memZip);
             if (format is ExcelFileFormat.Unknown)
             {
@@ -462,9 +608,30 @@ namespace ExcelReader.Core.Reader
             };
         }
 
-        // The ZIP central directory must be walked to tell XLSB from XLSX (same "peek to distinguish"
-        // shape as DetectSeekable for streams), so the resulting ZipMemoryIndex is handed back for reuse
-        // by the chosen reader's CreateFromMemory instead of being parsed a second time.
+        // A genuinely decrypted OOXML package is always Xlsb/Xlsx; anything else means decryption
+        // produced something that isn't a workbook.
+        [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP001:Dispose created",
+            Justification = "memZip (when non-null) is handed to the chosen reader on success, which takes ownership; on Unknown it's disposed immediately above.")]
+        [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
+            Justification = "memZip (when non-null) is handed to the chosen reader on success, which takes ownership; on Unknown it's disposed immediately above.")]
+        private static IExcelRowReader OpenFromPlainMemory(ReadOnlyMemory<byte> plain, ExcelReaderOptions options)
+        {
+            ExcelFileFormat format = ClassifyMemory(plain, options, out ZipMemoryIndex? memZip);
+            if (format is not (ExcelFileFormat.Xlsb or ExcelFileFormat.Xlsx))
+            {
+                memZip?.Dispose();
+                UnknownFormatException();
+            }
+            return format switch
+            {
+                ExcelFileFormat.Xlsb => XlsbReader.CreateFromMemory(memZip!, options),
+                ExcelFileFormat.Xlsx => XlsxReader.CreateFromMemory(memZip!, options),
+                _ => throw new System.Diagnostics.UnreachableException(),
+            };
+        }
+
+        // The ZIP central directory must be walked to tell XLSB from XLSX, so the resulting
+        // ZipMemoryIndex is handed back for reuse instead of being parsed a second time.
         private static ExcelFileFormat ClassifyMemory(ReadOnlyMemory<byte> data, ExcelReaderOptions options, out ZipMemoryIndex? memZip)
         {
             memZip = null;
@@ -473,6 +640,14 @@ namespace ExcelReader.Core.Reader
             if (TryClassifyHeader(header, out ExcelFileFormat format))
             {
                 return format;
+            }
+            if (header.StartsWith(XlsCompoundFile.Signature))
+            {
+                // Same two-stage CFB probe as DetectSeekable: only the OLE directory (not the 8-byte
+                // signature) can tell a legacy .xls apart from an encrypted OOXML package.
+                return EncryptedPackageOpener.IsEncryptedMemory(data, options)
+                    ? ExcelFileFormat.EncryptedOoxml
+                    : ExcelFileFormat.Xls;
             }
             memZip = ZipMemoryIndex.Create(data, options);
             return memZip.TryGetEntry("xl/workbook.bin"u8, out _) ? ExcelFileFormat.Xlsb : ExcelFileFormat.Xlsx;
@@ -578,9 +753,12 @@ namespace ExcelReader.Core.Reader
             {
                 UnknownFormat(stream, leaveOpen);
             }
-            // zip (when non-null) is handed to the chosen reader, which takes ownership of it — this
-            // is the same archive DetectSeekable already opened to peek "xl/workbook.bin", so the
-            // central directory isn't parsed a second time.
+            if (format is ExcelFileFormat.EncryptedOoxml)
+            {
+                ExcelReaderOptions effective = options ?? ExcelReaderOptions.Default;
+                Stream decrypted = EncryptedPackageOpener.Decrypt(stream, leaveOpen, effective);
+                return OpenDecryptedZip(decrypted, effective);
+            }
             return format switch
             {
                 ExcelFileFormat.Xls => new XlsReader(stream, leaveOpen, options),
@@ -590,6 +768,36 @@ namespace ExcelReader.Core.Reader
             };
         }
 
+        // `decrypted` is a brand-new stream nobody else references, so it's always handed to the
+        // chosen reader with leaveOpen:false; disposing that reader cascades to the CFB container.
+        [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP001:Dispose created",
+            Justification = "zip is handed to the chosen reader on success, which takes ownership; on failure it's disposed in the catch below alongside decrypted.")]
+        [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP007:Don't dispose injected",
+            Justification = "OpenDecryptedZip/OpenSeekable jointly own `decrypted` — a brand-new stream nobody else references — for the duration of this call.")]
+        private static IExcelRowReader OpenDecryptedZip(Stream decrypted, ExcelReaderOptions options)
+        {
+            ZipArchive? zip = null;
+            try
+            {
+                ExcelFileFormat zipFormat = ClassifyZipStream(decrypted, start: 0, out ZipArchive zipPeek);
+                zip = zipPeek;
+                return zipFormat switch
+                {
+                    ExcelFileFormat.Xlsb => new XlsbReader(decrypted, leaveOpen: false, zip, options),
+                    ExcelFileFormat.Xlsx => new XlsxReader(decrypted, leaveOpen: false, zip, options),
+                    _ => throw new System.Diagnostics.UnreachableException(),
+                };
+            }
+            catch
+            {
+                zip?.Dispose();
+                decrypted.Dispose();
+                throw;
+            }
+        }
+
+        [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP001:Dispose created",
+            Justification = "zip (when non-null) is handed to the chosen reader on success, which takes ownership; on failure it's disposed in the catch below. `decrypted` (EncryptedOoxml branch) is owned jointly by this method and OpenDecryptedZipAsync, which disposes it on failure.")]
         private static async ValueTask<IExcelRowReader> OpenSeekableAsync(Stream stream, bool leaveOpen, ExcelReaderOptions? options, CancellationToken ct)
         {
             ExcelFileFormat format;
@@ -612,6 +820,12 @@ namespace ExcelReader.Core.Reader
                 await DisposeOnFailureAsync(stream, leaveOpen).ConfigureAwait(false);
                 UnknownFormatException();
             }
+            if (format is ExcelFileFormat.EncryptedOoxml)
+            {
+                ExcelReaderOptions effective = options ?? ExcelReaderOptions.Default;
+                Stream decrypted = EncryptedPackageOpener.Decrypt(stream, leaveOpen, effective);
+                return await OpenDecryptedZipAsync(decrypted, effective, ct).ConfigureAwait(false);
+            }
             return format switch
             {
                 ExcelFileFormat.Xls => await XlsReader.CreateAsync(stream, leaveOpen, options, ct).ConfigureAwait(false),
@@ -619,6 +833,39 @@ namespace ExcelReader.Core.Reader
                 ExcelFileFormat.Xlsx => await XlsxReader.CreateFromOpenZipAsync(stream, leaveOpen, zip!, options, ct).ConfigureAwait(false),
                 _ => throw new System.Diagnostics.UnreachableException(),
             };
+        }
+
+        // Async twin of OpenDecryptedZip: the central-directory peek is synchronous, but reader
+        // construction goes through CreateFromOpenZipAsync so worksheet reads stay fully async after.
+        [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP001:Dispose created",
+            Justification = "zip is handed to the chosen reader on success, which takes ownership; on failure it's disposed in the catch below alongside decrypted.")]
+        [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
+            Justification = "zip is handed to the chosen reader on success, which takes ownership; on failure it's disposed in the catch below.")]
+        [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP007:Don't dispose injected",
+            Justification = "OpenDecryptedZipAsync/OpenSeekableAsync jointly own `decrypted` — a brand-new stream nobody else references — for the duration of this call.")]
+        private static async ValueTask<IExcelRowReader> OpenDecryptedZipAsync(Stream decrypted, ExcelReaderOptions options, CancellationToken ct)
+        {
+            ZipArchive? zip = null;
+            try
+            {
+                ExcelFileFormat zipFormat = ClassifyZipStream(decrypted, start: 0, out ZipArchive zipPeek);
+                zip = zipPeek;
+                return zipFormat switch
+                {
+                    ExcelFileFormat.Xlsb => await XlsbReader.CreateFromOpenZipAsync(decrypted, leaveOpen: false, zip, options, ct).ConfigureAwait(false),
+                    ExcelFileFormat.Xlsx => await XlsxReader.CreateFromOpenZipAsync(decrypted, leaveOpen: false, zip, options, ct).ConfigureAwait(false),
+                    _ => throw new System.Diagnostics.UnreachableException(),
+                };
+            }
+            catch
+            {
+                if (zip is not null)
+                {
+                    await ZipArchiveDisposal.DisposeAsync(zip).ConfigureAwait(false);
+                }
+                await decrypted.DisposeAsync().ConfigureAwait(false);
+                throw;
+            }
         }
 
         private static void DisposeOnFailure(Stream stream, bool leaveOpen)
@@ -649,47 +896,36 @@ namespace ExcelReader.Core.Reader
             throw new InvalidDataException("Unrecognized file format; expected an XLSX/XLSB (ZIP) or XLS (OLE2) workbook.");
         }
 
-        // Classifies the leading signature bytes shared by DetectSeekable/DetectSeekableAsync. Returns
-        // true (with the final answer) for XLS/Unknown; false means "it's a ZIP" and the caller must
-        // still peek the central directory to tell XLSB from XLSX.
+        // Returns true (with the final answer) only for Unknown; false means the caller must probe
+        // further — a ZIP central directory (XLSB vs XLSX) or, for a CFB signature, the OLE directory
+        // (legacy .xls vs encrypted OOXML). Callers distinguish the two "false" cases by re-checking
+        // `sig` themselves, since `format` carries no signal here.
         private static bool TryClassifyHeader(ReadOnlySpan<byte> sig, out ExcelFileFormat format)
         {
-            if (sig.StartsWith(XlsCompoundFile.Signature))
+            if (sig.StartsWith(XlsCompoundFile.Signature) || sig.StartsWith(ZipSignature))
             {
-                format = ExcelFileFormat.Xls;
-                return true;
+                format = default;
+                return false;
             }
-            if (!sig.StartsWith(ZipSignature))
-            {
-                format = ExcelFileFormat.Unknown;
-                return true;
-            }
-            format = default;
-            return false;
+            format = ExcelFileFormat.Unknown;
+            return true;
         }
 
-        // Peeks the central directory to distinguish XLSB ("xl/workbook.bin" present) from XLSX (XML
-        // workbook). Kept open (not disposed here) so the caller can hand the archive straight to the
-        // chosen reader instead of letting it re-parse the central directory. `start` is the position
-        // detection began at, restored before returning so the reader sees an untouched stream.
+        // Peeks the central directory to distinguish XLSB from XLSX; kept open so the caller can hand
+        // the archive straight to the chosen reader instead of re-parsing it.
         [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP001:Dispose created",
             Justification = "Ownership transfers to the caller via the out parameter, which disposes it on failure or hands it to the chosen reader on success.")]
         private static ExcelFileFormat ClassifyZipStream(Stream stream, long start, out ZipArchive zip)
         {
             var zipPeek = new ZipArchive(stream, ZipArchiveMode.Read, leaveOpen: true);
-            zip = zipPeek; // assign immediately so a caller-side catch can dispose it even if GetEntry throws
+            zip = zipPeek; // assigned before GetEntry can throw, so a caller-side catch can dispose it
             bool isXlsb = zipPeek.GetEntry("xl/workbook.bin") is not null;
             stream.Position = start;
             return isXlsb ? ExcelFileFormat.Xlsb : ExcelFileFormat.Xlsx;
         }
 
-        // Detection peeks the 8-byte signature then rewinds. For ZIP streams, opens a temporary
-        // ZipArchive to distinguish XLSB from XLSX. Both XLSX and XLSB readers need a seekable source
-        // anyway (ZipArchive seeks the central directory), so requiring seek here costs nothing and
-        // keeps the peek cheap.
-        // `zip` receives the archive opened to peek the central directory (null for Xls/Unknown, which
-        // never need one) so the caller can hand it straight to the chosen reader instead of letting
-        // that reader re-parse the central directory from scratch.
+        // `zip` receives the archive opened to peek the central directory (null for Xls/Unknown) so the
+        // caller can hand it straight to the chosen reader instead of re-parsing it.
         [SkipLocalsInit]
         [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP001:Dispose created",
             Justification = "Ownership transfers to the caller via the out parameter, which disposes it on failure or hands it to the chosen reader on success.")]
@@ -701,9 +937,16 @@ namespace ExcelReader.Core.Reader
             Span<byte> header = stackalloc byte[8];
             int read = stream.ReadAtLeast(header, header.Length, throwOnEndOfStream: false);
             stream.Position = start;
-            if (TryClassifyHeader(header[..read], out ExcelFileFormat format))
+            ReadOnlySpan<byte> sig = header[..read];
+            if (TryClassifyHeader(sig, out ExcelFileFormat format))
             {
                 return format;
+            }
+            if (sig.StartsWith(XlsCompoundFile.Signature))
+            {
+                return EncryptedPackageOpener.IsEncryptedContainer(stream)
+                    ? ExcelFileFormat.EncryptedOoxml
+                    : ExcelFileFormat.Xls;
             }
             ExcelFileFormat zipFormat = ClassifyZipStream(stream, start, out ZipArchive zipPeek);
             zip = zipPeek;
@@ -717,12 +960,42 @@ namespace ExcelReader.Core.Reader
             byte[] header = new byte[8];
             int read = await stream.ReadAtLeastAsync(header, header.Length, throwOnEndOfStream: false, ct).ConfigureAwait(false);
             stream.Position = start;
-            if (TryClassifyHeader(header.AsSpan(0, read), out ExcelFileFormat format))
+            ReadOnlySpan<byte> sig = header.AsSpan(0, read);
+            if (TryClassifyHeader(sig, out ExcelFileFormat format))
             {
                 return (format, null);
             }
+            if (sig.StartsWith(XlsCompoundFile.Signature))
+            {
+                ExcelFileFormat cfbFormat = EncryptedPackageOpener.IsEncryptedContainer(stream)
+                    ? ExcelFileFormat.EncryptedOoxml
+                    : ExcelFileFormat.Xls;
+                return (cfbFormat, null);
+            }
             ExcelFileFormat zipFormat = ClassifyZipStream(stream, start, out ZipArchive zip);
             return (zipFormat, zip);
+        }
+
+        // If the caller supplied a password and the stream is a CFB container, decrypt it up front so
+        // the ZIP-based reader constructor gets a plaintext ZIP instead of a confusing "not a ZIP" error.
+        private static bool TryDecryptCfbStream(Stream stream, bool leaveOpen, ExcelReaderOptions? options, out Stream decrypted)
+        {
+            if (options?.Password is not null && stream.CanSeek && HasCfbSignature(stream))
+            {
+                decrypted = EncryptedPackageOpener.Decrypt(stream, leaveOpen, options);
+                return true;
+            }
+            decrypted = stream;
+            return false;
+        }
+
+        private static bool HasCfbSignature(Stream stream)
+        {
+            long start = stream.Position;
+            Span<byte> header = stackalloc byte[8];
+            int read = stream.ReadAtLeast(header, header.Length, throwOnEndOfStream: false);
+            stream.Position = start;
+            return header[..read].StartsWith(XlsCompoundFile.Signature);
         }
 
         private static void RequireSeekable(Stream stream)

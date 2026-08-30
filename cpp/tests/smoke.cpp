@@ -117,6 +117,46 @@ static int test_parse_with_alias(xl::Workbook &workbook)
     return 0;
 }
 
+static std::string encrypted_fixture_path(std::string_view filename)
+{
+    return std::string(EXCELREADER_ENCRYPTED_FIXTURE_DIR) + "/" + std::string(filename);
+}
+
+// The password pointer must outlive the open call; holding it in the options object (which owns a
+// std::string copy) is what makes that safe for a caller who passes a temporary.
+static int test_password_open()
+{
+    xl::OpenOptions options{};
+    options.password("hunter2");
+    auto workbook = xl::Workbook::open(encrypted_fixture_path("agile-aes256-sha512.xlsx"), XL_FORMAT_AUTO, &options);
+    CHECK(workbook.has_value(), "opening an encrypted workbook with the correct password must succeed");
+    auto count = workbook->sheet_count();
+    CHECK(count.has_value(), "sheet_count must succeed on the decrypted workbook");
+    CHECK(*count > 0, "the decrypted workbook must have at least one sheet");
+    return 0;
+}
+
+static int test_password_required()
+{
+    xl::OpenOptions options{};
+    auto workbook = xl::Workbook::open(encrypted_fixture_path("agile-aes256-sha512.xlsx"), XL_FORMAT_AUTO, &options);
+    CHECK(!workbook.has_value(), "opening an encrypted workbook without a password must fail");
+    CHECK(workbook.error().code == XL_STATUS_PASSWORD_REQUIRED,
+          "the failure must report XL_STATUS_PASSWORD_REQUIRED");
+    return 0;
+}
+
+static int test_password_incorrect()
+{
+    xl::OpenOptions options{};
+    options.password("wrong");
+    auto workbook = xl::Workbook::open(encrypted_fixture_path("agile-aes256-sha512.xlsx"), XL_FORMAT_AUTO, &options);
+    CHECK(!workbook.has_value(), "opening an encrypted workbook with the wrong password must fail");
+    CHECK(workbook.error().code == XL_STATUS_PASSWORD_INCORRECT,
+          "the failure must report XL_STATUS_PASSWORD_INCORRECT");
+    return 0;
+}
+
 int main()
 {
     CHECK(xl::abi_version() == XL_ABI_VERSION, "the linked native library must speak this header's ABI revision");
@@ -139,6 +179,18 @@ int main()
     }
     // Last: parse_sheet consumes the workbook's shared row cursor.
     if (int failed = test_parse(*workbook))
+    {
+        return failed;
+    }
+    if (int failed = test_password_open())
+    {
+        return failed;
+    }
+    if (int failed = test_password_required())
+    {
+        return failed;
+    }
+    if (int failed = test_password_incorrect())
     {
         return failed;
     }

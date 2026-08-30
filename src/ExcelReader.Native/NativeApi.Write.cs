@@ -10,9 +10,8 @@ namespace ExcelReader.Native
         /// <summary>Style index 1 is always the builtin date style (see IWorkbookWriter.AddStyle).</summary>
         private const int BuiltinDateStyleId = 1;
 
-        // Named distinctly from NativeApi.Typed.cs's nested-class field of the same value: both are
-        // static members reachable from the outer NativeApi partial class, and reusing the name there
-        // trips S3218 (field shadows an outer-class member).
+        // Named distinctly from NativeApi.Typed.cs's field of the same value to avoid S3218 (field
+        // shadows an outer-class member).
         internal static readonly int WriteUnixEpochDayNumber = new DateOnly(1970, 1, 1).DayNumber;
 
         /// <summary>
@@ -26,8 +25,6 @@ namespace ExcelReader.Native
         /// </remarks>
         internal static int WriteTyped(ReadOnlySpan<byte> path, int format, NativeColumnSpec[] specs, NativeTable table, NativeWriteOptions options)
         {
-            // Two guards, not one: a caller who passed a good path with XL_FORMAT_AUTO must not read a
-            // message implicating the path.
             if (path.IsEmpty)
             {
                 SetLastError("xl_write_typed needs a non-empty path.");
@@ -223,10 +220,8 @@ namespace ExcelReader.Native
             return format is NativeFormat.Xls or NativeFormat.Xlsx or NativeFormat.Xlsb or NativeFormat.Csv;
         }
 
-        // The four writers share no non-generic base (IWorkbookWriter<out TSheet> is generic in the
-        // sheet type), so each branch contributes only its construction line and hands off to the one
-        // generic body below. leaveOpen: false transfers the stream to the writer, matching the
-        // ownership pattern NativeApi.Open.cs already uses on the read side.
+        // Each branch contributes only its construction line and hands off to the one generic body
+        // below, since the four writers share no non-generic base.
         private static void WriteToStream(Stream stream, int format, NativeColumnSpec[] specs, NativeTable table, NativeWriteOptions options, string sheetName, bool hasHeader)
         {
             bool date1904 = options.Date1904 ?? false;
@@ -282,8 +277,8 @@ namespace ExcelReader.Native
             }
         }
 
-        // Must run before sheet.StartAsync (ISheetWriter.SetColumnStyle throws afterward). Without a
-        // number format a temporal cell renders in Excel as its raw serial number.
+        // Must run before sheet.Start (SetColumnStyle throws afterward). Without a number format a
+        // temporal cell renders in Excel as its raw serial number.
         private static void ApplyTemporalStyles<TSheet, TRow>(IWorkbookWriter<TSheet> workbook, TSheet sheet, NativeTable table)
             where TSheet : ISheetWriter<TRow>
             where TRow : IRowWriter
@@ -385,8 +380,7 @@ namespace ExcelReader.Native
             }
         }
 
-        // The nullable overloads are what make a blank cell; passing a default value would write a real
-        // 0/false/epoch-date instead.
+        // The nullable overloads make a blank cell; a default value would write a real 0/false/epoch.
         internal static void WriteNullCell(IRowWriter row, int type)
         {
             switch (type)
@@ -415,8 +409,7 @@ namespace ExcelReader.Native
             }
         }
 
-        // A NULL validity pointer is the "no nulls in this column" signal, not an error — same
-        // convention xl_parse_typed emits.
+        // NULL validity pointer is "no nulls in this column", not an error.
         private static bool IsValidAt(NativeColumn column, long rowIndex)
         {
             if (column.Validity == IntPtr.Zero)
@@ -481,8 +474,6 @@ namespace ExcelReader.Native
             return true;
         }
 
-        // Split out of TryValidateWriteTable to keep both inside the style guide's nesting and length
-        // limits; the string-offset walk alone is most of this method.
         private static bool TryValidateWriteColumn(NativeColumnSpec spec, NativeColumn column, int index, long rowCount, [NotNullWhen(false)] out string? error)
         {
             error = null;
@@ -513,9 +504,8 @@ namespace ExcelReader.Native
             return TryValidateStringOffsets(column, index, rowCount, out error);
         }
 
-        // The whole offsets array is walked here, once, before any of it is used as a slice bound.
-        // Checking lazily per row would let a hostile offset reach `data` on the row before the one
-        // that fails validation.
+        // The whole offsets array is walked once before any of it is used as a slice bound; checking
+        // lazily per row would let a hostile offset reach `data` before validation catches it.
         private static bool TryValidateStringOffsets(NativeColumn column, int index, long rowCount, [NotNullWhen(false)] out string? error)
         {
             error = null;

@@ -86,18 +86,15 @@ namespace ExcelReader.Core.Reader
             {
                 (cdOffset, cdSize, declaredCount) = ReadZip64Eocd(span, zip64EocdOffset);
             }
-            // cdOffset and cdSize are both attacker-controlled longs (straight from the ZIP64 EOCD when
-            // present); `cdOffset + cdSize` can overflow and wrap negative for a value near long.MaxValue,
-            // making this check pass when it should reject. Comparing via subtraction instead can never
-            // overflow: cdOffset is already bounded >= 0 here, and span.Length (an int) minus cdSize can
-            // go very negative for a huge cdSize but never wraps, so the comparison still rejects it.
+            // Subtraction, not addition: cdOffset + cdSize can overflow and wrap negative near
+            // long.MaxValue, making the check pass when it should reject.
             if (cdOffset < 0 || cdSize < 0 || cdOffset > span.Length - cdSize)
             {
                 throw new InvalidDataException("The ZIP central directory is out of range.");
             }
 
-            // Math.Max keeps the lower bound (16) from ever exceeding the upper bound: a caller can
-            // legitimately configure MaxZipEntries below 16, and Math.Clamp throws if min > max.
+            // Math.Clamp throws if min > max, so Math.Max guards against a caller-configured
+            // MaxZipEntries below 16.
             long maxHint = Math.Max(16, options.MaxZipEntries > 0 ? options.MaxZipEntries : 65_536);
             ZipEntryRef[] entries = ArrayPool<ZipEntryRef>.Shared.Rent((int)Math.Clamp(declaredCount, 16, maxHint));
             int count;
@@ -114,11 +111,9 @@ namespace ExcelReader.Core.Reader
             return new ZipMemoryIndex(file, entries, count);
         }
 
-        // TryGetEntry returns the first name match, so two central-directory records sharing a
-        // name would silently make the second one unreachable - a spoofing vector (e.g. a real
-        // xl/workbook.xml followed by a forged duplicate the reader never sees, or the reverse). Sorting
-        // by name content first means every duplicate becomes an adjacent pair, so this is one O(n log n)
-        // pass over indices rather than an O(n^2) scan - safe even at the full MaxZipEntries count.
+        // TryGetEntry returns the first name match, so two entries sharing a name would silently make
+        // the second unreachable — a spoofing vector. Sorting by name first turns duplicate detection
+        // into one O(n log n) pass instead of an O(n^2) scan.
         private static void ThrowIfDuplicateEntryNames(ReadOnlyMemory<byte> file, ZipEntryRef[] entries, int count)
         {
             if (count <= 1)
@@ -128,9 +123,7 @@ namespace ExcelReader.Core.Reader
             int[] order = ArrayPool<int>.Shared.Rent(count);
             try
             {
-                // Span<T> is a ref struct and can't be captured by the Comparison<int> lambda below, so
-                // the sort/compare bodies re-derive `.Span` from this ReadOnlyMemory<byte> each time
-                // instead of closing over a span directly.
+                // Re-derives `.Span` inside the lambda each time: Span<T> can't be captured directly.
                 for (int i = 0; i < count; i++)
                 {
                     order[i] = i;
@@ -198,19 +191,15 @@ namespace ExcelReader.Core.Reader
             return part;
         }
 
-        // default(ZipPart) (empty Memory, nothing to return on Dispose) stands in for a missing part —
-        // the same convention ZipEntryBytes.Read uses for a missing entry on the streamed path.
+        // default(ZipPart) stands in for a missing part.
         internal ZipPart OpenPartOrDefault(ReadOnlySpan<byte> utf8Name, DecompressedByteCounter counter)
         {
             return TryGetEntry(utf8Name, out ZipEntryRef entry) ? OpenPart(entry, counter) : default;
         }
 
-        // In-memory ZIP path's worksheet entry point: opens a Stream over the
-        // entry's compressed bytes instead of eagerly materializing the whole part, so the caller (the
-        // XlsxReader/XlsbReader enumerator) can reuse the exact same PrefetchStream/LimitedReadStream
-        // pipeline as the ZipArchive path (WorkbookLookups.Wrap) and overlap inflate with row parsing.
-        // Declared-size limits are enforced incrementally as bytes are actually read, matching the
-        // streamed path, rather than eagerly against entry.UncompressedSize the way OpenPart must.
+        // Opens a Stream over the entry's compressed bytes instead of eagerly materializing the whole
+        // part, so the caller can reuse the same PrefetchStream/LimitedReadStream pipeline as the
+        // ZipArchive path and overlap inflate with row parsing.
         [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP001:Dispose created",
             Justification = "Ownership of the opened entry stream and its wrapper transfers to the caller.")]
         [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
@@ -227,10 +216,6 @@ namespace ExcelReader.Core.Reader
             return WorkbookLookups.Wrap(opened, counter, options, entryLimitName, entryLimit, entry.UncompressedSize);
         }
 
-        // Bounds-checks and slices the entry's compressed bytes out of the whole-file buffer. Shared by
-        // OpenPart (which decompresses eagerly into a ZipPart) and OpenEntryStream (which hands the
-        // slice to a DeflateStream instead). CompressedSize must fit an int for the Slice cast below
-        // regardless of which caller uses it, so that check lives here rather than in each caller.
         private ReadOnlyMemory<byte> ResolveCompressedSlice(in ZipEntryRef entry)
         {
             if (entry.CompressedSize > Array.MaxLength)
@@ -260,8 +245,8 @@ namespace ExcelReader.Core.Reader
         }
 
         // Scans backward for the last signature occurrence whose declared comment length reaches
-        // exactly to the end of the file — a ZIP-like byte sequence inside an earlier part's content
-        // (e.g. an embedded image) must not be mistaken for the real record.
+        // exactly to the end of the file, so a ZIP-like byte sequence inside earlier content (e.g. an
+        // embedded image) isn't mistaken for the real record.
         private static long FindEocd(ReadOnlySpan<byte> span)
         {
             if (span.Length < EocdFixedSize)
@@ -294,8 +279,6 @@ namespace ExcelReader.Core.Reader
             throw new InvalidDataException("End of central directory record not found.");
         }
 
-        // zip64EocdOffset stays -1 unless a sentinel field forces a real ZIP64 lookup, so Create only
-        // pays for the extra 20+56 byte reads when the archive actually needs them.
         private static (long CdOffset, long CdSize, long Count) ReadEocdRecord(ReadOnlySpan<byte> span, long eocdOffset, out long zip64EocdOffset)
         {
             ReadOnlySpan<byte> eocd = span.Slice((int)eocdOffset, EocdFixedSize);
@@ -322,12 +305,7 @@ namespace ExcelReader.Core.Reader
 
         private static (long CdOffset, long CdSize, long Count) ReadZip64Eocd(ReadOnlySpan<byte> span, long offset)
         {
-            // offset comes straight from the ZIP64 locator's 8-byte field, so a value near
-            // long.MaxValue makes `offset + Zip64EocdFixedSize` overflow and wrap negative, passing this
-            // check when it should reject — then `(int)offset` truncates to an arbitrary value and
-            // Slice either throws a raw ArgumentOutOfRangeException or, worse, succeeds on the wrong
-            // range. The subtraction form below can't overflow (span.Length is a small int) and rejects
-            // the same inputs correctly.
+            // Subtraction, not addition: offset + Zip64EocdFixedSize can overflow near long.MaxValue.
             if (offset < 0 || offset > span.Length - Zip64EocdFixedSize)
             {
                 throw new InvalidDataException("The ZIP64 end of central directory record is out of range.");
@@ -387,9 +365,6 @@ namespace ExcelReader.Core.Reader
                     Flags = fields.Flags,
                 };
                 count++;
-                // The entry-count limit was previously enforced only after the whole central directory had been
-                // walked and every entry materialized into `entries` — a huge malicious CD count still
-                // paid the full walk/grow cost before rejection. Check as each entry lands instead.
                 LimitChecks.ThrowIfTooManyEntries(count, options);
                 pos = recordEnd;
             }
@@ -424,9 +399,9 @@ namespace ExcelReader.Core.Reader
             };
         }
 
-        // Only entries whose 32-bit field is the ZIP64 sentinel actually carry a replacement value in
-        // the extra field, and they appear in this fixed order (uncompressed, compressed, local
-        // offset, disk) — reading anything not sentineled would misalign every field after it.
+        // Only sentineled fields carry a replacement value in the extra field, in fixed order
+        // (uncompressed, compressed, local offset, disk); reading a non-sentineled one would misalign
+        // every field after it.
         private static (long Compressed, long Uncompressed, long LocalOffset) ResolveZip64Sizes(
             ReadOnlySpan<byte> span, int extraStart, int extraLength, CdFixedFields fields)
         {
@@ -513,11 +488,8 @@ namespace ExcelReader.Core.Reader
             {
                 throw new InvalidDataException("The ZIP local file header name runs past the end of the file.");
             }
-            // The central directory and local header each carry their own copy of the entry
-            // name. A crafted file can make them disagree - the central directory says "this name"
-            // points here, but the bytes physically at this offset carry a different name. Every
-            // lookup (TryGetEntry) trusts the central directory's name; silently reading whatever the
-            // local header actually says instead is a spoofing vector, not a graceful mismatch.
+            // The central directory and local header each carry their own copy of the name; a crafted
+            // file can make them disagree, which is a spoofing vector if silently ignored.
             if (nameLength != entry.NameLength ||
                 !fileSpan.Slice((int)nameStart, nameLength).SequenceEqual(fileSpan.Slice(entry.NameStart, entry.NameLength)))
             {
@@ -526,9 +498,6 @@ namespace ExcelReader.Core.Reader
             return nameStart + nameLength + extraLength;
         }
 
-        // This is a known stopgap: it round-trips through stdlib DeflateStream, which needs an
-        // array-backed ReadOnlyMemory<byte> (or a one-time copy). A zero-allocation span-based
-        // inflater would remove that, but is a separate, larger, not-yet-started follow-up.
         private static ZipPart InflateToPart(ReadOnlyMemory<byte> compressed, long uncompressedSize)
         {
             int size = checked((int)uncompressedSize);
@@ -558,10 +527,7 @@ namespace ExcelReader.Core.Reader
             }
         }
 
-        // MemoryStream needs an array; when `compressed` already aliases one (the common case — the
-        // caller's whole-file buffer), wrap it with zero copies. A non-array-backed
-        // ReadOnlyMemory<byte> (e.g. a custom MemoryManager<byte>) is the rare fallback that pays one
-        // copy here; Phase 2 removes the need for this entirely.
+        // MemoryStream needs an array; wraps with zero copies when `compressed` already aliases one.
         private static MemoryStream ToReadableMemoryStream(ReadOnlyMemory<byte> compressed)
         {
             if (MemoryMarshal.TryGetArray(compressed, out ArraySegment<byte> segment))

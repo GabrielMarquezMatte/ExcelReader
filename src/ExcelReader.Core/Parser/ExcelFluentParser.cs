@@ -93,9 +93,8 @@ namespace ExcelReader.Core.Parser
             ExcelParserConfig effective = ValidateConfig(config);
             var builder = new ExcelRowMapBuilder<T>();
             configure(builder);
-            // requireFactory: false — a factory-less fluent map is exactly the case
-            // MergeFluentOverAttributes below is built to rescue (falls back to the attribute map's
-            // factory), not a mistake to reject before the merge gets a chance to run.
+            // requireFactory: false — MergeFluentOverAttributes falls back to the attribute map's
+            // factory when the fluent one has none.
             TypeMapInfo<T> fluent = builder.Build(requireFactory: false);
             TypeMapInfo<T> attributeFallback = TypeMapper<T>.GetInfo();
             TypeMapInfo<T> merged = TypeMapInfo<T>.MergeFluentOverAttributes(fluent, attributeFallback, effective.ColumnNameComparer, effective.HeaderNormalization);

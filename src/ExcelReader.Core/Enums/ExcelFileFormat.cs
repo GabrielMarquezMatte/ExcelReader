@@ -6,12 +6,15 @@ namespace ExcelReader.Core.Enums
     public enum ExcelFileFormat
     {
         /// <summary>The format could not be determined.</summary>
-        Unknown,
+        Unknown = 0,
         /// <summary>The legacy binary Excel format (.xls).</summary>
-        Xls,
+        Xls = 1,
         /// <summary>The Office Open XML format (.xlsx).</summary>
-        Xlsx,
+        Xlsx = 2,
         /// <summary>The Excel binary workbook format (.xlsb).</summary>
-        Xlsb
+        Xlsb = 3,
+        /// <summary>An encrypted Office Open XML workbook. The concrete format (XLSX or XLSB) is
+        /// unknowable until it has been decrypted, so detection reports this instead.</summary>
+        EncryptedOoxml = 4
     }
 }

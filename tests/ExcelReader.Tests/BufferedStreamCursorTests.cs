@@ -138,5 +138,46 @@ namespace ExcelReader.Tests
                 return base.Read(buffer, offset, Math.Min(count, chunkSize));
             }
         }
+
+        [Fact]
+        public void BaseOffsetStartsAtZeroForAStreamCursor()
+        {
+            var cursor = new BufferedStreamCursor(maxCellBytes: 1 << 20, limitName: "Test", initialCapacity: 16);
+
+            Assert.Equal(0, cursor.BaseOffset);
+        }
+
+        [Fact]
+        public void BaseOffsetPlusPosTracksTheSourceOffsetAcrossCompaction()
+        {
+            byte[] content = new byte[64];
+            for (int i = 0; i < content.Length; i++)
+            {
+                content[i] = (byte)i;
+            }
+            using var source = new MemoryStream(content, writable: false);
+            var cursor = new BufferedStreamCursor(maxCellBytes: 1 << 20, limitName: "Test", initialCapacity: 16);
+
+            cursor.Fill(source);
+            // Consume nearly the whole buffer so the next Fill must compact rather than append.
+            cursor.Pos = cursor.Len - 1;
+            long sourceOffsetOfNextByte = cursor.BaseOffset + cursor.Pos;
+            cursor.Fill(source);
+
+            Assert.Equal(sourceOffsetOfNextByte, cursor.BaseOffset + cursor.Pos);
+            Assert.Equal(content[sourceOffsetOfNextByte], cursor.Buf[cursor.Pos]);
+        }
+
+        [Fact]
+        public void BaseOffsetRebasesASlicedMemoryCursorSoOffsetsStayZeroBased()
+        {
+            byte[] backing = [0xAA, 0xAA, 10, 20, 30, 0xAA];
+            var cursor = new BufferedStreamCursor(backing.AsMemory(2, 3), maxCellBytes: 0, limitName: "Test");
+
+            // Pos points at the slice's first byte, which is source offset 0.
+            Assert.Equal(0, cursor.BaseOffset + cursor.Pos);
+            cursor.Pos += 2;
+            Assert.Equal(2, cursor.BaseOffset + cursor.Pos);
+        }
     }
 }

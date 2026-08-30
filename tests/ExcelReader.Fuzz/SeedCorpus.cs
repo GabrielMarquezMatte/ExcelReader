@@ -35,6 +35,11 @@ namespace ExcelReader.Fuzz
             await File.WriteAllBytesAsync(Path.Combine(directory, "seed-semicolon.csv"), CsvSemicolon());
             await File.WriteAllBytesAsync(Path.Combine(directory, "seed-tab.csv"), CsvTab());
             await File.WriteAllBytesAsync(Path.Combine(directory, "seed-bom-lf.csv"), CsvBomLf());
+
+            // CsvParallel's oracle compares the sequential and parallel CSV paths over the same
+            // bytes; these seeds put a quote and a newline near each other, since those are what the
+            // chunk boundary resolver has to disambiguate.
+            await WriteCsvParallelSeedsAsync(directory);
             Console.WriteLine($"seeds written to {directory}");
         }
 
@@ -215,6 +220,24 @@ namespace ExcelReader.Fuzz
                 await wb.EndAsync();
             }
             return ms.ToArray();
+        }
+
+        private static async Task WriteCsvParallelSeedsAsync(string directory)
+        {
+            string[] seeds =
+            [
+                "\"a\nb\",1,x",
+                "\"a\"\"b\nc\",2,y",
+                "\"\",3,",
+                "\"\n\n\n\",4,z",
+                "a,5,\"unterminated",
+            ];
+            for (int i = 0; i < seeds.Length; i++)
+            {
+                await File.WriteAllBytesAsync(
+                    Path.Combine(directory, $"seed-csv-parallel-{i}.bin"),
+                    System.Text.Encoding.UTF8.GetBytes(seeds[i]));
+            }
         }
 
         // A header plus one row of every cell kind the readers decode differently.

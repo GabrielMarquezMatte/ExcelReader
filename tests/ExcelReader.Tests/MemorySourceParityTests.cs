@@ -68,6 +68,29 @@ namespace ExcelReader.Tests
             Assert.Throws<InvalidDataException>(() => Excel.FromXls(bytes.AsMemory()));
         }
 
+        // The stream path decrypts lazily per segment; the memory path decrypts eagerly. They must agree.
+        [Theory]
+        [MemberData(nameof(EncryptedFixtureNames))]
+        public void Should_Match_Stream_Path_When_Encrypted_Opened_From_Memory(string fixture)
+        {
+            var options = ExcelReaderOptions.Default with { Password = EncryptedFixtures.Password };
+
+            using IExcelRowReader streamReader = Excel.Open(EncryptedFixtures.Path_(fixture), options);
+            using IExcelRowReader memoryReader = Excel.Open(EncryptedFixtures.Bytes(fixture), options);
+
+            AssertRowsEqual(streamReader, memoryReader);
+        }
+
+        public static TheoryData<string> EncryptedFixtureNames()
+        {
+            var data = new TheoryData<string>();
+            foreach (string name in EncryptedFixtures.All)
+            {
+                data.Add(name);
+            }
+            return data;
+        }
+
         private static void AssertRowsEqual(IExcelRowReader expected, IExcelRowReader actual)
         {
             string[] expectedValues = ReadRows(expected);

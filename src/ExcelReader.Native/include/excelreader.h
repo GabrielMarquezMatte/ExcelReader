@@ -17,11 +17,13 @@ extern "C" {
 #define XL_INVALID_HANDLE    -3
 #define XL_INVALID_ARGUMENT  -4
 #define XL_ERROR             -5
+#define XL_STATUS_PASSWORD_REQUIRED  (-6) /* the workbook is encrypted and no password was supplied */
+#define XL_STATUS_PASSWORD_INCORRECT (-7) /* the supplied password did not match the workbook's verifier */
 
 /* ABI revision of this header. Bumped on any change to a struct layout, a status code, or the
  * meaning of an existing function; adding a new function does not bump it. A caller should refuse
  * to proceed if xl_abi_version() does not equal the XL_ABI_VERSION it was compiled against. */
-#define XL_ABI_VERSION 3
+#define XL_ABI_VERSION 4
 
 #define XL_FORMAT_AUTO  0  /* sniffs XLS/XLSX/XLSB; does NOT detect CSV */
 #define XL_FORMAT_XLS   1
@@ -104,6 +106,15 @@ typedef struct xl_open_options {
     int32_t max_zip_entries;              /* 0 = default (65536) */
     int32_t prefetch_decompression;       /* XL_OPT_*; default FALSE */
     int32_t intern_strings;               /* XL_OPT_*; default FALSE */
+
+    /* Password for an encrypted OOXML workbook (.xlsx/.xlsb/.xlsm), as UTF-8 bytes.
+     * NULL (with password_len 0) means "not encrypted, or fail with
+     * XL_STATUS_PASSWORD_REQUIRED". Not NUL-terminated: password_len is authoritative, since a
+     * password may contain any byte. The pointer need only remain valid for the duration of the
+     * call - the library copies it immediately. Max 4096 bytes.
+     * Encrypted legacy .xls files are not supported, with or without a password. */
+    const uint8_t* password;
+    int32_t password_len;
 } xl_open_options;
 
 /* `options` may be NULL, which is identical to xl_open_file. Copies the path; the caller may free it

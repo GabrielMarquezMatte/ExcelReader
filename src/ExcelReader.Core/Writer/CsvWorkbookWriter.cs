@@ -63,13 +63,6 @@ namespace ExcelReader.Core.Writer
             return new ValueTask<CsvRowWriter>(_writer.StartRow());
         }
 
-        // No upper-bound ("was this styleId ever registered?") check here, unlike the other three
-        // formats' SetColumnStyle/StartRowAsync(int,...): CSV never writes styleId anywhere, so a
-        // caller reusing a styleId obtained from another format's AddStyle (a common cross-format
-        // pattern — see FluentMapWorksAcrossAllFourFormats-style tests) must still no-op cleanly here,
-        // not throw just because CSV's own AddStyle never handed out that number. Negative values are
-        // still rejected: no format can make sense of those.
-
         /// <summary>Validates <paramref name="styleId"/> is not negative, then no-ops: CSV has no cell styles.</summary>
         /// <inheritdoc cref="ISheetWriter{TRow}.StartRowAsync(int, CancellationToken)"/>
         /// <exception cref="ArgumentOutOfRangeException"><paramref name="styleId"/> is negative.</exception>
@@ -175,10 +168,6 @@ namespace ExcelReader.Core.Writer
         /// <exception cref="InvalidOperationException">The workbook has already been started.</exception>
         public ValueTask StartAsync(CancellationToken ct = default)
         {
-            // This used to do nothing at all — no state tracking, so AddSheet worked identically
-            // before StartAsync, after EndAsync, or called twice, unlike the other three workbook
-            // writers. WriterStateGuard is the shared machinery those three already use for exactly
-            // this.
             WriterStateGuard.ThrowIfEnded(_state, this);
             WriterStateGuard.RequireCreated(_state, nameof(CsvWorkbookWriter));
             ct.ThrowIfCancellationRequested();
@@ -193,10 +182,7 @@ namespace ExcelReader.Core.Writer
         /// <exception cref="InvalidOperationException">The workbook has not been started, or a sheet was already added; a CSV file holds only one.</exception>
         public CsvSheetWriter AddSheet(string name)
         {
-            // sheetActive: false — CSV's "only one sheet" rule is the permanent _sheetAdded flag below,
-            // not a "previous sheet still open" check like the multi-sheet writers use this parameter
-            // for. Reused here for the null check, ThrowIfEnded/RequireStarted, and sheet-name validation
-            // every other writer already gets from this same call.
+            // sheetActive: false — the "only one sheet" rule is the permanent _sheetAdded flag below.
             WriterStateGuard.RequireCanAddSheet(_state, this, nameof(CsvWorkbookWriter), name, sheetActive: false, nameof(CsvSheetWriter));
             if (_sheetAdded)
             {

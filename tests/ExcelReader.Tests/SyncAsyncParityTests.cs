@@ -85,6 +85,34 @@ namespace ExcelReader.Tests
             return cells;
         }
 
+        // DecryptedPackageStream has its own sync/async twins (a completed-ValueTask fast path plus a
+        // split-out slow path), which is exactly the drift risk this suite exists to catch.
+        [Theory]
+        [MemberData(nameof(EncryptedFixtureNames))]
+        public async Task Should_Match_Across_Sync_And_Async_When_Encrypted(string fixture)
+        {
+            CancellationToken ct = TestContext.Current.CancellationToken;
+            var options = ExcelReaderOptions.Default with { Password = EncryptedFixtures.Password };
+            byte[] workbook = EncryptedFixtures.Bytes(fixture);
+
+            List<CellSnapshot> sync = ReadSync(workbook, stream => Excel.Open(stream, options: options));
+            List<CellSnapshot> asyncCells = await ReadAsync(workbook, (stream, token) => Excel.OpenAsync(stream, options: options, ct: token), ct);
+            List<CellSnapshot> asyncEnum = await ReadViaAsyncEnumeratorAsync(workbook, stream => Excel.Open(stream, options: options));
+
+            Assert.Equal(sync, asyncCells);
+            Assert.Equal(sync, asyncEnum);
+        }
+
+        public static TheoryData<string> EncryptedFixtureNames()
+        {
+            var data = new TheoryData<string>();
+            foreach (string name in EncryptedFixtures.All)
+            {
+                data.Add(name);
+            }
+            return data;
+        }
+
         private static void AddRow(List<CellSnapshot> cells, int rowIndex, Row row)
         {
             cells.Add(CellSnapshot.RowMarker(rowIndex, row.ColumnCount));

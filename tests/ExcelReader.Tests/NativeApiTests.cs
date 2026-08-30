@@ -16,7 +16,7 @@ namespace ExcelReader.Tests
         private static readonly string XlsxFixture = Path.Combine(AppContext.BaseDirectory, "data", "sample.xlsx");
         private static readonly string XlsbFixture = Path.Combine(AppContext.BaseDirectory, "data", "RealExcel.xlsb");
 
-        private static int OpenPath(string path, int format, out NativeHandle? handle)
+        internal static int OpenPath(string path, int format, out NativeHandle? handle)
         {
             return NativeApi.OpenFile(Encoding.UTF8.GetBytes(path), format, out handle);
         }
@@ -392,6 +392,96 @@ namespace ExcelReader.Tests
             {
                 File.Delete(path);
             }
+        }
+
+        // A password crossing the FFI boundary is a pointer plus a length, valid only for the duration
+        // of the call - the callee copies it immediately.
+        [Fact]
+        public void Should_Open_When_Password_Passed_Across_Abi()
+        {
+            byte[] pw = Encoding.UTF8.GetBytes(EncryptedFixtures.Password);
+            IntPtr pointer = Marshal.AllocHGlobal(pw.Length);
+            try
+            {
+                Marshal.Copy(pw, 0, pointer, pw.Length);
+                NativeOpenOptionsRaw options = DefaultRawOptions() with { Password = pointer, PasswordLen = pw.Length };
+                int status = NativeApi.OpenFileEx(
+                    Encoding.UTF8.GetBytes(EncryptedFixtures.Path_("agile-aes256-sha512.xlsx")),
+                    NativeFormat.Auto, options, out NativeHandle? handle);
+
+                Assert.Equal(NativeStatus.Ok, status);
+                Assert.NotNull(handle);
+                NativeApi.Close(handle);
+            }
+            finally
+            {
+                Marshal.FreeHGlobal(pointer);
+            }
+        }
+
+        [Fact]
+        public void Should_Return_PasswordRequired_When_No_Password_Across_Abi()
+        {
+            NativeOpenOptionsRaw options = DefaultRawOptions();
+            int status = NativeApi.OpenFileEx(
+                Encoding.UTF8.GetBytes(EncryptedFixtures.Path_("agile-aes256-sha512.xlsx")),
+                NativeFormat.Auto, options, out NativeHandle? handle);
+
+            Assert.Equal(NativeStatus.PasswordRequired, status);
+            Assert.Null(handle);
+        }
+
+        [Fact]
+        public void Should_Return_PasswordIncorrect_When_Password_Wrong_Across_Abi()
+        {
+            byte[] pw = Encoding.UTF8.GetBytes("wrong");
+            IntPtr pointer = Marshal.AllocHGlobal(pw.Length);
+            try
+            {
+                Marshal.Copy(pw, 0, pointer, pw.Length);
+                NativeOpenOptionsRaw options = DefaultRawOptions() with { Password = pointer, PasswordLen = pw.Length };
+                int status = NativeApi.OpenFileEx(
+                    Encoding.UTF8.GetBytes(EncryptedFixtures.Path_("agile-aes256-sha512.xlsx")),
+                    NativeFormat.Auto, options, out NativeHandle? handle);
+
+                Assert.Equal(NativeStatus.PasswordIncorrect, status);
+                Assert.Null(handle);
+            }
+            finally
+            {
+                Marshal.FreeHGlobal(pointer);
+            }
+        }
+
+        [Fact]
+        public void Should_Reject_When_Password_Len_Is_Negative()
+        {
+            NativeOpenOptionsRaw options = DefaultRawOptions() with { Password = (IntPtr)1, PasswordLen = -1 };
+            int status = NativeApi.OpenFileEx(
+                Encoding.UTF8.GetBytes(EncryptedFixtures.Path_("agile-aes256-sha512.xlsx")),
+                NativeFormat.Auto, options, out NativeHandle? handle);
+
+            Assert.Equal(NativeStatus.InvalidArgument, status);
+            Assert.Null(handle);
+        }
+
+        // struct_size is an exact-equality check, so an old caller gets a clear error, not corruption.
+        [Fact]
+        public void Should_Reject_When_Struct_Size_Is_Stale()
+        {
+            NativeOpenOptionsRaw options = DefaultRawOptions() with { StructSize = Marshal.SizeOf<NativeOpenOptionsRaw>() - 8 };
+            int status = NativeApi.OpenFileEx(
+                Encoding.UTF8.GetBytes(EncryptedFixtures.Path_("agile-aes256-sha512.xlsx")),
+                NativeFormat.Auto, options, out NativeHandle? handle);
+
+            Assert.Equal(NativeStatus.InvalidArgument, status);
+            Assert.Null(handle);
+        }
+
+        [Fact]
+        public void Should_Report_Abi_Version_4()
+        {
+            Assert.Equal(4, NativeStatus.AbiVersion);
         }
 
         [Fact]
@@ -2324,12 +2414,12 @@ namespace ExcelReader.Tests
             return Marshal.PtrToStructure<ArrowSchema>(Marshal.ReadIntPtr(schema.Children, index * IntPtr.Size));
         }
 
-        private static ArrowArray ArrowChildArray(ArrowArray array, int index)
+        internal static ArrowArray ArrowChildArray(ArrowArray array, int index)
         {
             return Marshal.PtrToStructure<ArrowArray>(Marshal.ReadIntPtr(array.Children, index * IntPtr.Size));
         }
 
-        private static IntPtr ArrowBuffer(ArrowArray array, int index)
+        internal static IntPtr ArrowBuffer(ArrowArray array, int index)
         {
             return Marshal.ReadIntPtr(array.Buffers, index * IntPtr.Size);
         }
@@ -3380,7 +3470,7 @@ namespace ExcelReader.Tests
         // Releases via the same IntPtr round-trip real Arrow consumers use (their own storage, not a
         // pointer to this ref struct) - NativeApi.ReleaseArrowArray/Schema take an address, and `array`/
         // `schema` here are plain locals with no fixed address of their own.
-        private static void ExercisedReleaseArrow(ref ArrowArray array, ref ArrowSchema schema)
+        internal static void ExercisedReleaseArrow(ref ArrowArray array, ref ArrowSchema schema)
         {
             IntPtr arrayBlock = Marshal.AllocHGlobal(Marshal.SizeOf<ArrowArray>());
             IntPtr schemaBlock = Marshal.AllocHGlobal(Marshal.SizeOf<ArrowSchema>());

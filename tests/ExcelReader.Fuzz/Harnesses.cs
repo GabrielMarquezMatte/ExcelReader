@@ -1,4 +1,7 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
+using ExcelReader.Core.Parser;
+using ExcelReader.Core.Parser.Internal;
 using ExcelReader.Core.Reader;
 using ExcelReader.Core.ValueObjects;
 
@@ -22,6 +25,21 @@ namespace ExcelReader.Fuzz
         private static readonly CsvReaderOptions CsvLimits = new()
         {
             MaxCellBytes = 1 << 20,
+        };
+
+        private static readonly ExcelReaderOptions EncryptedLimits = new()
+        {
+            MaxCellBytes = 1 << 20,
+            MaxSharedStringBytes = 1 << 22,
+            Password = "hunter2",
+            // No MaxPasswordSpinCount override here (falls back to the default cap): the corpus seed
+            // (encrypted-agile-seed.bin, a copy of the real agile-aes256-sha512.xlsx fixture) declares
+            // spinCount="100000". A tighter cap here — this used to be 1_000 — makes the unmutated seed
+            // and most mutations dead-end on ExcelLimitExceededException before any key derivation,
+            // segment decryption, HMAC verification, or ZIP-layer code ever runs, which makes this
+            // target inert without ever failing loudly. Slower (~50ms/input instead of near-instant) is
+            // the correct tradeoff; see OpenEncryptedSeedForSelfCheck below, which SmokeRunner uses to
+            // catch this class of regression if it ever creeps back in.
         };
 
         internal static void Xlsx(ReadOnlySpan<byte> data)
@@ -81,6 +99,45 @@ namespace ExcelReader.Fuzz
             });
         }
 
+        // The encrypted container is a third container parser (CFB directory + EncryptionInfo descriptor)
+        // layered under the ZIP one, and it runs BEFORE any password check - so it gets its own target.
+        // The password is fixed and correct for the seed, so mutations explore the parsers rather than
+        // dead-ending on a verifier mismatch.
+        internal static void Encrypted(ReadOnlySpan<byte> data)
+        {
+            byte[] bytes = data.ToArray();
+            FuzzOracle.Guard(() =>
+            {
+                using IExcelRowReader reader = Excel.Open(bytes, EncryptedLimits);
+                DrainAllSheets(reader);
+            });
+        }
+
+        // Guards against the "the encrypted target exists but never reaches the code it's meant to
+        // guard" regression (final review, Critical 2): a rejection swallowed by FuzzOracle.Guard
+        // looks identical whether it's a genuine malformed-input rejection or every input dead-ending
+        // on a resource limit before AgileKeyDerivation/DecryptedPackageStream/PackageIntegrity/the
+        // post-decrypt ZIP layer ever runs. SmokeRunner calls this once per `check` run, unguarded,
+        // over the unmutated corpus seed — it must open and yield at least one row, not merely throw
+        // something FuzzOracle happens to accept.
+        internal static int OpenEncryptedSeedForSelfCheck(ReadOnlySpan<byte> data)
+        {
+            byte[] bytes = data.ToArray();
+            using IExcelRowReader reader = Excel.Open(bytes, EncryptedLimits);
+            int rows = 0;
+            int sheets = reader.SheetCount;
+            for (int i = 0; i < sheets; i++)
+            {
+                reader.MoveToSheet(i);
+                using IExcelRowEnumerator e = reader.GetEnumerator();
+                while (e.MoveNext())
+                {
+                    rows++;
+                }
+            }
+            return rows;
+        }
+
         internal static void Csv(ReadOnlySpan<byte> data)
         {
             byte[] bytes = data.ToArray();
@@ -104,6 +161,129 @@ namespace ExcelReader.Fuzz
                 using CsvReader reader = Excel.FromCsv(ms, leaveOpen: true, CsvLimits.WithDialect(dialect));
                 DrainRows(reader);
             });
+        }
+
+        // A row model wide enough that binding, conversion, and required-column handling all run.
+        // Properties are set only through reflection by ExcelParser<T>/ParallelCsvFactory's binder,
+        // which static analysis cannot see, hence the suppression below.
+        [SuppressMessage("Major Code Smell", "S3459:Unassigned members should be removed",
+            Justification = "Set via reflection by ExcelParser<T>'s header-to-property binder, not by any code visible to the analyzer.")]
+        private sealed class FuzzRow
+        {
+            public string? Name { get; set; }
+            public int Age { get; set; }
+            public string? Note { get; set; }
+        }
+
+        // The parallel CSV path's oracle is the sequential parser: for any input, the two must yield
+        // the same models in the same order. Adversarial chunk boundaries — a quote and a newline
+        // arranged so a chunk guesses its start wrong — are exactly what a fuzzer finds without being
+        // told to look, which is why this target exists on top of the hand-written corpus.
+        internal static void CsvParallel(ReadOnlySpan<byte> data)
+        {
+            if (data.Length < 2)
+            {
+                return;
+            }
+            // A fixed header so typed binding always has something to bind; the fuzzer owns the data.
+            byte[] header = "Name,Age,Note\n"u8.ToArray();
+            byte[] bytes = new byte[header.Length + data.Length];
+            header.CopyTo(bytes, 0);
+            data.CopyTo(bytes.AsSpan(header.Length));
+            // Derive the chunk size from the input so boundary placement is fuzzed too.
+            int chunkSize = 1 + (data[0] % 64);
+
+            FuzzOracle.Guard(() =>
+            {
+                List<string>? sequential = null;
+                Exception? sequentialFailure = null;
+                try
+                {
+                    sequential = ParseSequential(bytes);
+                }
+                catch (Exception ex) when (ex is not OutOfMemoryException)
+                {
+                    sequentialFailure = ex;
+                }
+
+                List<string>? parallel = null;
+                Exception? parallelFailure = null;
+                try
+                {
+                    parallel = ParseParallel(bytes, chunkSize);
+                }
+                catch (Exception ex) when (ex is not OutOfMemoryException)
+                {
+                    parallelFailure = ex;
+                }
+
+                if (sequentialFailure is not null || parallelFailure is not null)
+                {
+                    // Both must fail, and with the same exception type. One succeeding where the
+                    // other throws is a divergence, which is the whole point of this target.
+                    if (sequentialFailure?.GetType() != parallelFailure?.GetType())
+                    {
+                        throw new InvalidOperationException(
+                            $"Oracle divergence: sequential threw {sequentialFailure?.GetType().Name ?? "nothing"}, " +
+                            $"parallel threw {parallelFailure?.GetType().Name ?? "nothing"}.");
+                    }
+                    return;
+                }
+
+                if (!sequential!.SequenceEqual(parallel!, StringComparer.Ordinal))
+                {
+                    throw new InvalidOperationException(
+                        $"Oracle divergence: sequential yielded {sequential!.Count} rows, parallel yielded {parallel!.Count}.");
+                }
+            });
+        }
+
+        private static List<string> ParseSequential(byte[] bytes)
+        {
+            using CsvReader reader = Excel.FromCsv(bytes, CsvLimits);
+            var rows = new List<string>();
+            foreach (FuzzRow row in new ExcelParser<FuzzRow>().Parse(reader))
+            {
+                rows.Add(Render(row));
+            }
+            return rows;
+        }
+
+        // The fuzz engine drives synchronous entry points, so this deliberately blocks on the async
+        // parallel path rather than making every harness in the file async for one target. It only
+        // ever waits on in-memory chunk work (the source here is a byte[], never real I/O), so it
+        // cannot deadlock the way blocking on I/O-bound async work could.
+        [SuppressMessage("VisualStudio.Threading", "VSTHRD002:Avoid problematic synchronous waits",
+            Justification = "The fuzz driver is synchronous by contract; the parallel CSV source here is in-memory, so this never blocks on real I/O.")]
+        private static List<string> ParseParallel(byte[] bytes, int chunkSize)
+        {
+            var rows = new List<string>();
+            IAsyncEnumerable<FuzzRow> source = ParallelCsvFactory.CreateWithChunkSize<FuzzRow>(
+                bytes.AsMemory(), degreeOfParallelism: 4, chunkSize, CsvLimits, config: null, CancellationToken.None);
+            IAsyncEnumerator<FuzzRow> e = source.GetAsyncEnumerator(CancellationToken.None);
+            try
+            {
+                while (true)
+                {
+                    ValueTask<bool> moveNext = e.MoveNextAsync();
+                    bool hasNext = moveNext.AsTask().GetAwaiter().GetResult();
+                    if (!hasNext)
+                    {
+                        break;
+                    }
+                    rows.Add(Render(e.Current));
+                }
+            }
+            finally
+            {
+                e.DisposeAsync().AsTask().GetAwaiter().GetResult();
+            }
+            return rows;
+        }
+
+        private static string Render(FuzzRow row)
+        {
+            return string.Create(CultureInfo.InvariantCulture, $"{row.Name}{row.Age}{row.Note}");
         }
 
         private static void DrainAllSheets(IExcelRowReader reader)

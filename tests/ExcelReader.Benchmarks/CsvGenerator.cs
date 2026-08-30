@@ -61,5 +61,55 @@ namespace ExcelReader.Benchmarks
             }
             return Encoding.UTF8.GetBytes(sb.ToString());
         }
+
+        // Conversion-heavy: dates, decimals, and several text columns, so per-row conversion
+        // dominates the vectorized scan. This is the shape parallelism is supposed to help, and the
+        // corpus the 3-5x expectation is stated against.
+        internal static string WriteConversionHeavyFile(int rows)
+        {
+            string path = Path.Combine(Path.GetTempPath(), $"exr-bench-wide-{Guid.NewGuid():N}.csv");
+            string[] regions = ["Europe", "Asia", "North America", "Sub-Saharan Africa"];
+            string[] countries = ["Portugal", "Japan", "Canada", "Kenya", "Brazil", "Norway"];
+            using var writer = new StreamWriter(path, append: false);
+            writer.WriteLine("Region,Country,OrderDate,UnitPrice,TotalRevenue,Units");
+            var start = new DateTime(2015, 1, 1, 0, 0, 0, DateTimeKind.Unspecified);
+            for (int i = 0; i < rows; i++)
+            {
+                DateTime date = start.AddDays(i % 3650);
+                decimal price = 10m + (i % 9000 / 100m);
+                decimal revenue = price * ((i % 500) + 1);
+                writer.Write(regions[i % regions.Length]);
+                writer.Write(',');
+                writer.Write(countries[i % countries.Length]);
+                writer.Write(',');
+                writer.Write(date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture));
+                writer.Write(',');
+                writer.Write(price.ToString(CultureInfo.InvariantCulture));
+                writer.Write(',');
+                writer.Write(revenue.ToString(CultureInfo.InvariantCulture));
+                writer.Write(',');
+                writer.WriteLine(((i % 500) + 1).ToString(CultureInfo.InvariantCulture));
+            }
+            return path;
+        }
+
+        // Narrow integers: almost nothing to convert, so the already-vectorized scanner sits near
+        // memory bandwidth. This is the shape that shows parallelism's floor, and the reason the
+        // benchmark reports two corpora rather than one flattering number.
+        internal static string WriteNarrowIntFile(int rows)
+        {
+            string path = Path.Combine(Path.GetTempPath(), $"exr-bench-narrow-{Guid.NewGuid():N}.csv");
+            using var writer = new StreamWriter(path, append: false);
+            writer.WriteLine("A,B,C");
+            for (int i = 0; i < rows; i++)
+            {
+                writer.Write(i.ToString(CultureInfo.InvariantCulture));
+                writer.Write(',');
+                writer.Write((i * 3).ToString(CultureInfo.InvariantCulture));
+                writer.Write(',');
+                writer.WriteLine((i * 7).ToString(CultureInfo.InvariantCulture));
+            }
+            return path;
+        }
     }
 }

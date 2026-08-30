@@ -71,9 +71,8 @@ namespace ExcelReader.Native
                 return NativeStatus.InvalidHandle;
             }
 
-            // A stale (already-closed) or outright garbage handle value is reported the same way a
-            // null handle is: InvalidHandle. NativeHandleTable retires an id permanently on a
-            // successful unregister, so this can never free — or resolve to — the wrong workbook.
+            // A stale or garbage handle value reports the same InvalidHandle a null one does;
+            // NativeHandleTable retires an id permanently on unregister.
             if (!TryFree(handle, out NativeHandle? target))
             {
                 return NativeStatus.InvalidHandle;
@@ -186,13 +185,10 @@ namespace ExcelReader.Native
             {
                 return;
             }
-            // void in the ABI - no status code to report a failure through, and an exception
-            // escaping [UnmanagedCallersOnly] is a fail-fast/abort for the native caller,
-            // uncatchable in C/C++/Rust/Python. A caller that double-frees (holds a copy of an
-            // already-freed struct - the header documents every Free* as "safe on a zeroed value",
-            // not "safe on a stale copy") can make Marshal.FreeHGlobal throw; this keeps that from
-            // crashing the whole process. The message still reaches xl_last_error for a caller that
-            // checks after a free looked suspicious.
+            // void in the ABI, so an exception escaping [UnmanagedCallersOnly] would abort the native
+            // caller's process (uncatchable in C/C++/Rust/Python). A double-free (a stale copy of an
+            // already-freed struct) can make Marshal.FreeHGlobal throw; caught here and surfaced
+            // through xl_last_error instead of crashing.
             try
             {
                 NativeApi.FreeRows(ref *rows);
@@ -326,10 +322,7 @@ namespace ExcelReader.Native
         }
 
         // Copies a managed byte[] into unmanaged memory the caller owns until it calls xl_free_buffer.
-        // Shared by xl_write_typed_to_memory and xl_write_handle_bytes. A null/empty result (including
-        // a failed call, which leaves bytes null) publishes a zeroed xl_buffer rather than a 0-length
-        // allocation - there is nothing for the caller to free either way, and NativeBuffer's default
-        // is already exactly that.
+        // A null/empty result publishes a zeroed xl_buffer rather than a 0-length allocation.
         private static void PublishBuffer(byte[]? bytes, NativeBuffer* outBuffer)
         {
             if (bytes is null || bytes.Length == 0)
@@ -342,17 +335,16 @@ namespace ExcelReader.Native
             outBuffer->Length = bytes.Length;
         }
 
-        // A NULL options pointer means "every default", identical to xl_open_file_ex's contract. The
-        // sheet name is UTF-8-decoded here because everything below this layer stays pointer-free.
+        // A NULL options pointer means "every default". The sheet name is UTF-8-decoded here because
+        // everything below this layer stays pointer-free.
         private static bool TryDecodeWriteOptions(NativeWriteOptionsRaw* options, out NativeWriteOptions decoded)
         {
             NativeWriteOptionsRaw raw = options is null
                 ? new NativeWriteOptionsRaw { StructSize = Marshal.SizeOf<NativeWriteOptionsRaw>() }
                 : *options;
             decoded = default;
-            // struct_size is checked BEFORE sheet_name is touched: a size that disagrees means the
-            // caller's struct layout is not this one, so the bytes sitting where sheet_name_len and
-            // sheet_name should be cannot be trusted as a length and a pointer to dereference.
+            // Checked before sheet_name is touched: a size mismatch means the caller's struct layout
+            // isn't this one, so sheet_name_len/sheet_name can't be trusted to read.
             if (!NativeWriteOptions.TryValidateStructSize(raw, out string? sizeError))
             {
                 NativeApi.SetLastError(sizeError);
@@ -431,8 +423,6 @@ namespace ExcelReader.Native
             }
             catch (Exception exception)
             {
-                // Same hard-boundary reasoning as xl_parse_typed: spec decoding can throw on input the
-                // guards above cannot rule out, and an escaping exception would unwind through C.
                 NativeApi.SetLastError(exception.Message);
                 *outArray = default;
                 *outSchema = default;
@@ -440,23 +430,16 @@ namespace ExcelReader.Native
             }
         }
 
-        // The argument contract every open entry point shares: a real source buffer, a non-negative
-        // length for it, and somewhere to put the resulting handle id.
         private static bool IsValidOpenRequest(byte* source, int sourceLength, nint* outHandle)
         {
             return source is not null && sourceLength >= 0 && outHandle is not null;
         }
 
-        // The argument contract every caller-supplied-buffer entry point shares. Kept in one place
-        // because the expensive mistake at an ABI edge is a guard that gets tightened at four of its
-        // five call sites.
         private static bool IsValidOutBuffer(byte* buffer, int capacity, int* outLength)
         {
             return capacity >= 0 && outLength is not null && (buffer is not null || capacity == 0);
         }
 
-        // Every open path ends the same way: publish the new handle's id — 0 when the open failed and
-        // produced none — and hand the status back untouched.
         private static int RegisterOpened(int status, NativeHandle? handle, nint* outHandle)
         {
             nint id = 0;
@@ -468,9 +451,8 @@ namespace ExcelReader.Native
             return status;
         }
 
-        // Shared by xl_parse_typed and xl_parse_arrow, whose column-spec input is identical. Returns
-        // false for a name length that cannot describe a real header rather than passing it to
-        // GetString, where it would become a read length over however much caller memory it names.
+        // Returns false for a name length that cannot describe a real header, rather than passing it
+        // to GetString as a read length over caller memory.
         private static bool TryDecodeColumnSpecs(NativeColumnSpecRaw* specs, int specCount, out NativeColumnSpec[] decoded)
         {
             decoded = new NativeColumnSpec[specCount];
@@ -508,9 +490,7 @@ namespace ExcelReader.Native
             return true;
         }
 
-        // Invoked ONLY as a native function pointer value (ArrowSchema.Release) computed in
-        // NativeApi.Arrow.cs — never called directly from managed code, so (like every other member
-        // here) the actual free logic lives in the testable NativeApi layer.
+        // Invoked only as a native function pointer value (ArrowSchema.Release), never directly.
         [UnmanagedCallersOnly]
         public static void ReleaseArrowSchemaCallback(ArrowSchema* schema)
         {
@@ -518,9 +498,7 @@ namespace ExcelReader.Native
             {
                 return;
             }
-            // See FreeRows' remarks: void in the ABI (Arrow's own release-callback convention), so
-            // an exception here must never escape - doubly so for this one, since an Arrow consumer
-            // owns when this runs, not this library.
+            // See FreeRows' remarks: void in the ABI, so an exception must never escape.
             try
             {
                 NativeApi.ReleaseArrowSchema((IntPtr)schema);
@@ -597,10 +575,8 @@ namespace ExcelReader.Native
                 return NativeStatus.InvalidArgument;
             }
             *outBuffer = default;
-            // Resolved directly (not via TryResolveWriter/RunWriterOp): those helpers return
-            // XL_INVALID_HANDLE for an id that resolves to nothing, but a wrong-kind handle here
-            // (opened via xl_open_write_handle, no MemoryStream) is a caller usage error against a
-            // handle that IS valid, which NativeApi.GetWriteHandleBytes reports as InvalidArgument.
+            // Resolved directly rather than via TryResolveWriter: a wrong-kind handle here is a caller
+            // usage error, which NativeApi.GetWriteHandleBytes reports as InvalidArgument, not InvalidHandle.
             NativeWriterHandle? writerHandle = NativeHandleTable.Resolve<NativeWriterHandle>(handle);
             int status = NativeApi.GetWriteHandleBytes(writerHandle, out byte[]? bytes);
             PublishBuffer(bytes, outBuffer);
@@ -731,10 +707,8 @@ namespace ExcelReader.Native
             return NativeApi.CloseWriteHandle(target);
         }
 
-        // Shared by every writer entry point above whose body is just "resolve, try the one call,
-        // translate an exception into Error". xl_start_sheet and xl_write_string are the exceptions:
-        // both also decode a caller buffer, which can itself throw on malformed UTF-8, so they keep
-        // their own inline try/catch around resolve-then-decode-then-call instead of using this helper.
+        // xl_start_sheet and xl_write_string keep their own inline try/catch instead of this, since
+        // both also decode a caller buffer that can itself throw on malformed UTF-8.
         private static int RunWriterOp(nint handle, Action<NativeWriterHandle> operation)
         {
             if (!TryResolveWriter(handle, out NativeWriterHandle? writerHandle))
@@ -791,8 +765,6 @@ namespace ExcelReader.Native
             return NativeStatus.AbiVersion;
         }
 
-        // Internal (not private) so tests can exercise this directly: the [UnmanagedCallersOnly] entry
-        // points above cannot be invoked from managed code, but a plain helper method can.
         internal static NativeHandle? Resolve(nint handle)
         {
             return NativeHandleTable.Resolve<NativeHandle>(handle);
