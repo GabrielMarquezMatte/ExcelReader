@@ -128,6 +128,21 @@ for (int i = 0; i < reader.SheetCount; i++)
 }
 ```
 
+`Sheets()` is the same walk as an extension method, yielding an `ExcelSheet { Index, Name }` per sheet after selecting it as current:
+
+```csharp
+using IExcelRowReader reader = Excel.Open("report.xlsx");
+
+foreach (var sheet in reader.Sheets())
+{
+    Console.WriteLine(sheet.Name);
+    foreach (var row in reader) // reads the sheet Sheets() just selected
+    {
+        Console.WriteLine(row[0].GetString());
+    }
+}
+```
+
 CSV is exposed as a single, unnamed sheet (`SheetCount == 1`, `SheetName == ""`). Pattern-match to the concrete type only for reader-specific internals beyond this surface.
 
 `OpenAsync` is the async counterpart. Both require a seekable stream (or a file path) so the signature can be read without consuming the input.
@@ -271,6 +286,23 @@ Built-in property types: `string`, `bool`, `DateTime`, `DateOnly`, `Guid`, every
 using IExcelRowReader reader = Excel.Open("changes.xlsx"); // or .xlsb / .xls
 foreach (var item in new ExcelParser<ChangeRow>().Parse(reader)) { /* ... */ }
 ```
+
+## Bridge to ADO.NET (`IDataReader`)
+
+`ExcelDataReader` adapts an `IExcelRowReader`'s current sheet to `System.Data.IDataReader`, so it drops straight into `SqlBulkCopy`, `DataTable.Load`, Dapper, or any other ADO.NET consumer:
+
+```csharp
+using System.Data;
+using ExcelReader.Core.Reader;
+
+using IExcelRowReader reader = Excel.Open("report.xlsx");
+using IDataReader data = new ExcelDataReader(reader); // headerRow: 1 by default
+
+var table = new DataTable();
+table.Load(data);
+```
+
+The header row (1-based, default 1) fixes the column shape; pass `headerRow: 0` for a header-less sheet, whose columns come back named `Column0`, `Column1`, ... sized from the first data row. There is no schema-inference pass — `GetFieldType`/`GetValue`/the typed getters read the *current* row's own cell type, so a consumer building its schema from the first row (like `DataTable.Load`) locks in that row's types for the whole load. `NextResult()` always returns `false`; combine with `Sheets()` to build one `ExcelDataReader` per sheet instead of chaining result sets.
 
 ## Generate typed maps at compile time (Native AOT / trimming)
 
