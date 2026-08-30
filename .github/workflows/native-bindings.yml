@@ -136,6 +136,15 @@ jobs:
           name: native-lib-${{ matrix.os }}
           path: python/src/excelreader/_lib
 
+      # actions/upload-artifact drops the executable bit on the way through. dlopen()'s initial ELF
+      # header read tolerates that, but the NativeAOT runtime's own PAL init - triggered by the first
+      # real P/Invoke, not by CDLL() itself - remaps the file with PROT_EXEC and aborts the whole
+      # process (SIGABRT, not a catchable dlopen error) when that mapping fails.
+      - name: Restore executable bit (Linux/macOS)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: chmod +x python/src/excelreader/_lib/*
+
       # rust/excelreader/excelreader.def is a hand-kept copy of the canonical list, needed
       # because `cargo package` only ships files under the crate directory (see build.rs). A silent
       # divergence would surface as an unresolved symbol at link time in a consumer's build, not here.
@@ -201,6 +210,13 @@ jobs:
           name: native-lib-${{ matrix.os }}
           path: python/src/excelreader/_lib
 
+      # See the matching step in test-rust: upload-artifact strips the executable bit, and the
+      # NativeAOT runtime aborts the process (not a catchable Python exception) without it.
+      - name: Restore executable bit (Linux/macOS)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: chmod +x python/src/excelreader/_lib/*
+
       - name: Install the Python package
         run: pip install -e "python[dev]"
 
@@ -242,6 +258,13 @@ jobs:
         with:
           name: native-lib-${{ matrix.os }}
           path: python/src/excelreader/_lib
+
+      # See the matching step in test-rust: upload-artifact strips the executable bit, and the
+      # NativeAOT runtime aborts the process (not a catchable error) without it.
+      - name: Restore executable bit (Linux/macOS)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: chmod +x python/src/excelreader/_lib/*
 
       - name: Setup MSVC developer environment (Windows)
         if: runner.os == 'Windows'
