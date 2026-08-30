@@ -14,13 +14,61 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # Gates the expensive jobs below by which paths actually changed. Filtering happens inside the
+  # workflow (an `if:` per job), not at the trigger level (`on.pull_request.paths`) - the trigger-level
+  # form skips the whole workflow run for a non-matching PR, which leaves every required status check
+  # it owns stuck at "expected" forever and blocks the merge button. A skipped *job* still posts a real
+  # check run with conclusion=skipped, which GitHub does treat as passing for a required check.
+  changes:
+    name: Detect changed paths
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      native: ${{ steps.filter.outputs.native }}
+      rust: ${{ steps.filter.outputs.rust }}
+      python: ${{ steps.filter.outputs.python }}
+      cpp: ${{ steps.filter.outputs.cpp }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Filter
+        id: filter
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            native:
+              - 'src/ExcelReader.Native/**'
+              - 'src/ExcelReader.Core/**'
+              - 'global.json'
+              - 'python/scripts/build_native.py'
+              - '.github/workflows/native-bindings.yml'
+            rust:
+              - 'rust/**'
+            python:
+              - 'python/**'
+              - 'tests/ExcelReader.NativeSmoke/**'
+            cpp:
+              - 'cpp/**'
+
   # Rust/Python/C++ bindings each need the same NativeAOT-published ExcelReader.Native binary per OS.
   # Building it once here and sharing it via artifact (instead of each binding workflow calling
   # build_native.py itself) cuts three redundant NativeAOT publishes per OS down to one. Required as
-  # its own status check: a failure here fails a job with no `needs`, so it can't be masked by
-  # GitHub treating a skipped downstream job as a passed required check.
+  # its own status check: a failure here fails a job with no `needs` gating it on another job's
+  # result, so it can't be masked by GitHub treating a skipped downstream job as a passed required
+  # check.
+  #
+  # Runs whenever any binding might need the binary it produces - narrower than any single test job,
+  # since it feeds all three.
   build-native:
     name: Build native library (${{ matrix.os }})
+    needs: changes
+    if: >-
+      needs.changes.outputs.native == 'true' ||
+      needs.changes.outputs.rust == 'true' ||
+      needs.changes.outputs.python == 'true' ||
+      needs.changes.outputs.cpp == 'true'
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -57,7 +105,8 @@ jobs:
 
   test-rust:
     name: Rust crate (${{ matrix.os }})
-    needs: build-native
+    needs: [changes, build-native]
+    if: needs.changes.outputs.native == 'true' || needs.changes.outputs.rust == 'true'
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -127,7 +176,8 @@ jobs:
 
   test-python:
     name: Native + Python + C smoke (${{ matrix.os }})
-    needs: build-native
+    needs: [changes, build-native]
+    if: needs.changes.outputs.native == 'true' || needs.changes.outputs.python == 'true'
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -167,7 +217,8 @@ jobs:
 
   test-cpp:
     name: C++ package + smoke test (${{ matrix.os }})
-    needs: build-native
+    needs: [changes, build-native]
+    if: needs.changes.outputs.native == 'true' || needs.changes.outputs.cpp == 'true'
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
