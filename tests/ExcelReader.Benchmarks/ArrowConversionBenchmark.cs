@@ -6,20 +6,9 @@ using ExcelReader.Core.Reader;
 
 namespace ExcelReader.Benchmarks
 {
-    // Measures ExcelReader.Arrow's whole-sheet conversion across the three shapes that stress it
-    // differently:
-    //
-    //   CsvAllString  - every column a string. Not a corner case: CSV cells carry no type tag, so
-    //                   SchemaInference can only ever return StringColumn for them (see its "no text
-    //                   sniffing" remark), making this the shape every ToArrowRecordBatch() call
-    //                   without an explicit schema actually takes.
-    //   CsvTyped      - string/int64/date/float64, so per-cell conversion competes with the string path.
-    //   XlsbTyped     - the same typed shape from a binary workbook, where repeated strings come back
-    //                   from the reader's shared-string cache already interned. This is the shape that
-    //                   flatters the string path LEAST, and it is measured for exactly that reason.
-    //
-    // InferSchema is kept out of the measured region (explicit schemas below) so these numbers move
-    // only when the conversion itself does.
+    // CsvAllString is the shape every ToArrowRecordBatch() call without an explicit schema actually
+    // takes (CSV has no type tags, so inference can only return StringColumn). XlsbTyped uses the
+    // reader's shared-string cache, which favors the string path least.
     [MemoryDiagnoser]
     public class ArrowConversionBenchmark
     {
@@ -58,7 +47,6 @@ namespace ExcelReader.Benchmarks
             _xlsbTyped = await WorkbookGenerator.BuildTypedXlsbAsync(Rows);
         }
 
-        // BuildWide is headerless, so headerRow: 0 - otherwise the first data row is eaten as a header.
         [Benchmark(Baseline = true)]
         public long CsvAllString()
         {
@@ -84,9 +72,6 @@ namespace ExcelReader.Benchmarks
             return batch.Length;
         }
 
-        // The default path an application takes when it does not hand in a schema: inference samples
-        // the sheet first, then the conversion runs. Separated from CsvTyped so a regression in either
-        // half is attributable.
         [Benchmark]
         public long CsvTypedWithInference()
         {

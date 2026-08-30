@@ -211,7 +211,7 @@ namespace ExcelReader.Core.Reader
                 byte quote = _quote;
                 int recordStart = _pos;
 
-                SimpleRecordOutcome simple = TryParseSimpleRecord(len, recordStart);
+                SimpleRecordOutcome simple = TryParseSimpleRecord(len, recordStart, out int quotedFieldStart);
                 if (simple == SimpleRecordOutcome.Done)
                 {
                     return true;
@@ -226,11 +226,10 @@ namespace ExcelReader.Core.Reader
                 }
 
                 ReadOnlySpan<byte> buf = _buf.AsSpan(0, len);
-                // A quote turned up: discard fields emitted above and re-parse the record from its
-                // start via the general per-field path.
-                _acc.Reset();
-                _col = 0;
-                int pos = recordStart;
+                // Fields already committed by the fast pass stay; only the field holding the quote
+                // onward is re-parsed. quotedFieldStart is the field's start, not the quote's, so a
+                // mid-field quote ("ab"cd") still reaches the general path as unquoted text.
+                int pos = quotedFieldStart;
                 FieldState f = default;
 
                 while (true)
@@ -270,8 +269,10 @@ namespace ExcelReader.Core.Reader
             // per record, so a vector load that already found bytes for the next record isn't wasted.
             // _scannerValid is true only when resuming from exactly where it last left off; every other
             // exit (NeedMore, Quoted, any Ensure/Fill) clears it.
-            private SimpleRecordOutcome TryParseSimpleRecord(int len, int pos)
+            // On Quoted, quotedFieldStart is where the field holding that quote begins.
+            private SimpleRecordOutcome TryParseSimpleRecord(int len, int pos, out int quotedFieldStart)
             {
+                quotedFieldStart = pos;
                 if (_scannerValid)
                 {
                     _scanner.Continue(_buf, len);
@@ -299,6 +300,7 @@ namespace ExcelReader.Core.Reader
                     byte b = buf[stop];
                     if (b == _quote)
                     {
+                        quotedFieldStart = fieldStart;
                         return SimpleRecordOutcome.Quoted;
                     }
                     if (b == _delimiter)
