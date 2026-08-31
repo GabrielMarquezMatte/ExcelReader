@@ -47,8 +47,13 @@ namespace ExcelReader.Tests
 
             ExcelReaderOptions options = new() { Password = Password, VerifyEncryptedIntegrity = true };
             using IExcelRowReader decrypted = Excel.Open(encrypted, options);
+            List<string[]> decryptedRows = ReadAllRows(decrypted);
 
-            Assert.Equal(expected.Count, ReadAllRows(decrypted).Count);
+            Assert.Equal(expected.Count, decryptedRows.Count);
+            for (int i = 0; i < expected.Count; i++)
+            {
+                Assert.Equal(expected[i], decryptedRows[i]);
+            }
         }
 
         [Fact]
@@ -102,6 +107,44 @@ namespace ExcelReader.Tests
             {
                 File.Delete(outputPath);
             }
+        }
+
+        [Fact]
+        public void EncryptPackage_PathOverload_RoundTrips()
+        {
+            string plainPath = EncryptedFixtures.PlainPath("agile-aes256-sha512.xlsx");
+            string outputPath = Path.Combine(Path.GetTempPath(), $"excelreader-encrypt-{Guid.NewGuid():N}.xlsx");
+            try
+            {
+                // Create a placeholder file to verify FileMode.Create overwrites it.
+                File.WriteAllBytes(outputPath, new byte[] { 0x00, 0x01, 0x02, 0x03 });
+
+                Excel.EncryptPackage(plainPath, outputPath, Password);
+
+                // Verify the destination now holds the real encrypted output, not the placeholder.
+                ExcelReaderOptions options = new() { Password = Password, VerifyEncryptedIntegrity = true };
+                using IExcelRowReader reader = Excel.Open(outputPath, options);
+                Assert.NotEmpty(ReadAllRows(reader));
+            }
+            finally
+            {
+                File.Delete(outputPath);
+            }
+        }
+
+        [Fact]
+        public async Task EncryptPackageAsync_StreamOverload_RoundTrips()
+        {
+            string plainPath = EncryptedFixtures.PlainPath("agile-aes256-sha512.xlsx");
+            using FileStream plain = File.OpenRead(plainPath);
+            using var encrypted = new MemoryStream();
+
+            await Excel.EncryptPackageAsync(plain, encrypted, Password, TestContext.Current.CancellationToken);
+            byte[] encryptedBytes = encrypted.ToArray();
+
+            ExcelReaderOptions options = new() { Password = Password, VerifyEncryptedIntegrity = true };
+            using IExcelRowReader decrypted = Excel.Open(encryptedBytes, options);
+            Assert.NotEmpty(ReadAllRows(decrypted));
         }
 
         [Fact]

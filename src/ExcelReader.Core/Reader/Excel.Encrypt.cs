@@ -33,6 +33,11 @@ namespace ExcelReader.Core.Reader
         /// <param name="packagePath">Path to the plaintext XLSX/XLSB package.</param>
         /// <param name="destinationPath">Path to write the encrypted workbook to.</param>
         /// <param name="password">The password required to open the result.</param>
+        /// <exception cref="ArgumentException">
+        /// <paramref name="packagePath"/> or <paramref name="destinationPath"/> is <see langword="null"/> or empty;
+        /// or the package at <paramref name="packagePath"/> is unreadable, empty, or does not begin with the
+        /// <c>PK\x03\x04</c> package signature; or <paramref name="password"/> is empty.
+        /// </exception>
         public static void EncryptPackage(string packagePath, string destinationPath, ExcelPassword password)
         {
             ArgumentException.ThrowIfNullOrEmpty(packagePath);
@@ -47,6 +52,11 @@ namespace ExcelReader.Core.Reader
         /// <param name="destination">Where the encrypted container is written; not disposed here.</param>
         /// <param name="password">The password required to open the result.</param>
         /// <param name="ct">A token to cancel the operation.</param>
+        /// <exception cref="ArgumentNullException">Any argument is <see langword="null"/>.</exception>
+        /// <exception cref="ArgumentException">
+        /// <paramref name="package"/> is unreadable, not seekable, empty, or does not begin with the
+        /// <c>PK\x03\x04</c> package signature; or <paramref name="password"/> is empty.
+        /// </exception>
         public static ValueTask EncryptPackageAsync(Stream package, Stream destination, ExcelPassword password,
             CancellationToken ct = default)
         {
@@ -59,6 +69,11 @@ namespace ExcelReader.Core.Reader
         /// <param name="destinationPath">Path to write the encrypted workbook to.</param>
         /// <param name="password">The password required to open the result.</param>
         /// <param name="ct">A token to cancel the operation.</param>
+        /// <exception cref="ArgumentException">
+        /// <paramref name="packagePath"/> or <paramref name="destinationPath"/> is <see langword="null"/> or empty;
+        /// or the package at <paramref name="packagePath"/> is unreadable, empty, or does not begin with the
+        /// <c>PK\x03\x04</c> package signature; or <paramref name="password"/> is empty.
+        /// </exception>
         public static async ValueTask EncryptPackageAsync(string packagePath, string destinationPath,
             ExcelPassword password, CancellationToken ct = default)
         {
