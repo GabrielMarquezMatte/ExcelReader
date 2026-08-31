@@ -264,6 +264,30 @@ different mechanism entirely, stored as hashes in the plaintext XML.
 `string` cannot be wiped from memory — .NET strings are immutable and movable — so the library zeroes
 only the buffers it owns: the derivation buffer and the derived key.
 
+Writing an encrypted workbook is a second step: build the package with any writer, then wrap it with
+`Excel.EncryptPackage`, which produces an agile-encrypted (ECMA-376 4.4) CFB container — AES-256-CBC,
+SHA-512, 100,000 spin iterations, with a `dataIntegrity` HMAC.
+
+```csharp
+using ExcelReader.Core.Reader;
+using ExcelReader.Core.Writer;
+
+using var plain = new MemoryStream();
+await using (var workbook = await XlsxWorkbookWriter.CreateAsync(plain, leaveOpen: true))
+{
+    // write sheets and rows as usual
+}
+plain.Position = 0;
+
+using var destination = File.Create("secret.xlsx");
+await Excel.EncryptPackageAsync(plain, destination, "hunter2");
+```
+
+The package stream must be seekable (it is read twice, so the container never has to be buffered in
+memory); the destination does not. Path-to-path overloads exist for both the sync and async forms.
+Encryption parameters are fixed at Excel's own defaults — there are no knobs — and only XLSX/XLSB
+packages can be encrypted, matching what the reader can decrypt.
+
 ## Parse typed rows
 
 `ExcelParser<T>` maps worksheet columns to the public settable properties of `T`. Columns match on the property name, or on `[ExcelColumn("header")]` aliases — repeat the attribute to accept several headers. The first row is the header by default.

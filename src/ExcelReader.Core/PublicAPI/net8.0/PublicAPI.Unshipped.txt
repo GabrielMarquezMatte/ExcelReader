@@ -80,3 +80,7 @@ ExcelReader.Core.Reader.ExcelSheet.Index.get -> int
 ExcelReader.Core.Reader.ExcelSheet.Index.init -> void
 ExcelReader.Core.Reader.ExcelRowReaderExtensions
 static ExcelReader.Core.Reader.ExcelRowReaderExtensions.Sheets(this ExcelReader.Core.Reader.IExcelRowReader! reader) -> System.Collections.Generic.IEnumerable<ExcelReader.Core.Reader.ExcelSheet>!
+static ExcelReader.Core.Reader.Excel.EncryptPackage(System.IO.Stream! package, System.IO.Stream! destination, ExcelReader.Core.Reader.ExcelPassword! password) -> void
+static ExcelReader.Core.Reader.Excel.EncryptPackage(string! packagePath, string! destinationPath, ExcelReader.Core.Reader.ExcelPassword! password) -> void
+static ExcelReader.Core.Reader.Excel.EncryptPackageAsync(System.IO.Stream! package, System.IO.Stream! destination, ExcelReader.Core.Reader.ExcelPassword! password, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+static ExcelReader.Core.Reader.Excel.EncryptPackageAsync(string! packagePath, string! destinationPath, ExcelReader.Core.Reader.ExcelPassword! password, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
