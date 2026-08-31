@@ -97,6 +97,18 @@ Apache.Arrow.RecordBatch batch = reader.ToArrowRecordBatch();
 
 `schema` defaults to `Excel.InferSchema`'s guess; pass an explicit `ExcelColumnSchema[]` to skip inference. The whole sheet is materialized into one `RecordBatch` — there is no chunked/streaming variant yet.
 
+`WriteRecordBatch`/`WriteRecordBatchAsync` are the write-side mirror — one call from a `RecordBatch` to a sheet, for XLSX, XLSB, XLS, and CSV:
+
+```csharp
+using ExcelReader.Arrow;
+using ExcelReader.Core.Writer;
+
+using XlsxWorkbookWriter workbook = XlsxWorkbookWriter.Create(File.Create("report.xlsx"));
+workbook.WriteRecordBatch(batch); // adds the sheet, writes the header + every row, ends the workbook
+```
+
+Supports the same seven Arrow types `ToArrowRecordBatch` produces (string, int64, double, boolean, date32, time64, timestamp); any other type throws `NotSupportedException`. Pass `writeHeader: false` to skip the header row, or a `sheetName` (XLSX/XLSB/XLS only — CSV has no sheet name) to rename it from the `"Sheet1"` default.
+
 ## Open by auto-detecting the format
 
 `Excel.Open` picks the reader from the file signature (XLSX/XLSB are ZIP packages, XLS is an OLE2 document) and returns an `IExcelRowReader`. The interface exposes `GetEnumerator()` directly, so no pattern-match is needed for basic row iteration.
