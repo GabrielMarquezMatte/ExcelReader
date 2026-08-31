@@ -111,6 +111,22 @@ namespace ExcelReader.Tests
             Assert.Throws<ArgumentException>(() => PackageEncryptor.Encrypt(source, destination, Password));
         }
 
+        [Fact]
+        public void Encrypt_PackageShorterThanSignature_ThrowsArgumentException()
+        {
+            using var source = new MemoryStream([0x50, 0x4B], writable: false);
+            using var destination = new MemoryStream();
+            Assert.Throws<ArgumentException>(() => PackageEncryptor.Encrypt(source, destination, Password));
+        }
+
+        [Fact]
+        public void Encrypt_NonWritableDestination_ThrowsArgumentException()
+        {
+            using var source = new MemoryStream(SamplePackage(), writable: false);
+            using var destination = new MemoryStream([], writable: false);
+            Assert.Throws<ArgumentException>(() => PackageEncryptor.Encrypt(source, destination, Password));
+        }
+
         // The index of a stream's last real data byte, as opposed to the zero padding a big stream
         // carries out to its final sector boundary — nothing reads that padding, so flipping a byte
         // in it cannot be detected as tampering.
