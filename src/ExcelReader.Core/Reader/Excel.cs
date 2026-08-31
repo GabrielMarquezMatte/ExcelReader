@@ -16,7 +16,7 @@ namespace ExcelReader.Core.Reader
     /// from the file's signature and return a format-agnostic <see cref="IExcelRowReader"/>; the
     /// <c>From*</c>/<c>FromXls*</c>/<c>FromXlsb*</c>/<c>FromCsv*</c> methods open a specific, known format directly.
     /// </summary>
-    public static class Excel
+    public static partial class Excel
     {
         /// <summary>Opens an XLSX workbook from a file path, taking ownership of the file stream.</summary>
         /// <param name="path">The path to the XLSX file.</param>
