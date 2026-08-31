@@ -1,4 +1,5 @@
 using System.Buffers.Binary;
+using System.Diagnostics.CodeAnalysis;
 
 namespace ExcelReader.Core.Writer.Internal
 {
@@ -30,11 +31,8 @@ namespace ExcelReader.Core.Writer.Internal
         private const int MaxHeaderDifat = (HeaderSize - 0x4C) / 4;        // 109
         private const int DifatEntriesPerSector = FatEntriesPerSector - 1; // 127 (last slot = next DIFAT)
 
-        // S4136 suppression for this entire section: new multi-stream Write/WriteAsync methods followed by old
-        // single-stream forwarders. They must be separate due to Layout class nesting, and the ordering violation
-        // is intentional. Suppressions are on the old methods only (lines below), leaving the new ones unsuppressed
-        // to trigger S4136 on the first method, then suppressing only the final methods that complete the overload set.
-#pragma warning disable S4136
+        [SuppressMessage("Major Code Smell", "S4136:Method overloads should be grouped together",
+            Justification = "The old single-stream Write(Stream, int, Action<Stream>) overload must stay verbatim at the bottom of the class per the brief (its sector math must not move), separated from this one by the private Layout class.")]
         internal static void Write(Stream destination, IReadOnlyList<CfbStreamSpec> streams)
         {
             Layout layout = Layout.Compute(streams);
@@ -62,6 +60,8 @@ namespace ExcelReader.Core.Writer.Internal
             }
         }
 
+        [SuppressMessage("Major Code Smell", "S4136:Method overloads should be grouped together",
+            Justification = "The old single-stream WriteAsync(Stream, int, Func<Stream, CancellationToken, ValueTask>, CancellationToken) overload must stay verbatim at the bottom of the class per the brief (its sector math must not move), separated from this one by the private Layout class.")]
         internal static async ValueTask WriteAsync(Stream destination, IReadOnlyList<CfbStreamSpec> streams, CancellationToken ct)
         {
             Layout layout = Layout.Compute(streams);
@@ -417,9 +417,6 @@ namespace ExcelReader.Core.Writer.Internal
             }
         }
 
-        // Old single-stream overloads: kept for backward compatibility with XLS writer.
-        // They are ordered after the multi-stream overloads, which triggers S4136 (group overloads together).
-        // This is intentional: the Layout nesting requires structural separation between the new API and old forwarders.
         internal static ValueTask WriteAsync(Stream destination, int workbookSize, Func<Stream, CancellationToken, ValueTask> writeBody, CancellationToken ct)
         {
             int storedSize = Math.Max(CeilingDiv(workbookSize, SectorSize) * SectorSize, MiniCutoff);
@@ -451,6 +448,5 @@ namespace ExcelReader.Core.Writer.Internal
                 WriteBodyAsync: static (_, _) => throw new NotSupportedException("This spec carries a sync body only."));
             Write(destination, [spec]);
         }
-#pragma warning restore S4136
     }
 }
