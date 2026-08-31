@@ -26,6 +26,10 @@ namespace ExcelReader.Core.Crypto
 
         internal static void Encrypt(Stream package, Stream destination, ExcelPassword password)
         {
+            if (!destination.CanWrite)
+            {
+                throw new ArgumentException("The destination stream must be writable.", nameof(destination));
+            }
             (byte[] encryptionInfo, Session session) = Prepare(package, password);
             try
             {
@@ -63,6 +67,10 @@ namespace ExcelReader.Core.Crypto
 
         internal static async ValueTask EncryptAsync(Stream package, Stream destination, ExcelPassword password, CancellationToken ct)
         {
+            if (!destination.CanWrite)
+            {
+                throw new ArgumentException("The destination stream must be writable.", nameof(destination));
+            }
             (byte[] encryptionInfo, Session session) = Prepare(package, password);
             try
             {
@@ -160,6 +168,11 @@ namespace ExcelReader.Core.Crypto
             {
                 throw new ArgumentException("The package stream is empty.", nameof(package));
             }
+            if (plainLength < 4)
+            {
+                throw new ArgumentException(
+                    "The package stream is not an OOXML package (missing the PK\\x03\\x04 signature).", nameof(package));
+            }
             if (password.Chars.IsEmpty)
             {
                 throw new ArgumentException("The password must not be empty.", nameof(password));
@@ -254,7 +267,6 @@ namespace ExcelReader.Core.Crypto
             {
                 using IncrementalHash hmac = PackageIntegrity.CreateHmac(_descriptor.KeyData.Hash, hmacKey);
                 hmac.AppendData(Prefix);
-                Package.Position = _origin;
                 using (Local local = BeginPass())
                 {
                     int read;
@@ -269,6 +281,7 @@ namespace ExcelReader.Core.Crypto
 
             internal Local BeginPass()
             {
+                Package.Position = _origin;
                 return new Local(_descriptor, _packageKey);
             }
 

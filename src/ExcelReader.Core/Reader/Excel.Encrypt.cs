@@ -79,13 +79,17 @@ namespace ExcelReader.Core.Reader
         {
             ArgumentException.ThrowIfNullOrEmpty(packagePath);
             ArgumentException.ThrowIfNullOrEmpty(destinationPath);
-#pragma warning disable CA2007, MA0004
-            await using FileStream package = new(packagePath, FileMode.Open, FileAccess.Read, FileShare.Read,
+            FileStream package = new(packagePath, FileMode.Open, FileAccess.Read, FileShare.Read,
                 bufferSize: 4096, useAsync: true);
-            await using FileStream destination = new(destinationPath, FileMode.Create, FileAccess.Write,
-                FileShare.None, bufferSize: 4096, useAsync: true);
-#pragma warning restore CA2007, MA0004
-            await PackageEncryptor.EncryptAsync(package, destination, password, ct).ConfigureAwait(false);
+            await using (package.ConfigureAwait(false))
+            {
+                FileStream destination = new(destinationPath, FileMode.Create, FileAccess.Write,
+                    FileShare.None, bufferSize: 4096, useAsync: true);
+                await using (destination.ConfigureAwait(false))
+                {
+                    await PackageEncryptor.EncryptAsync(package, destination, password, ct).ConfigureAwait(false);
+                }
+            }
         }
     }
 }

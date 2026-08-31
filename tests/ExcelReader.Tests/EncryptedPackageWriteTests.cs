@@ -151,9 +151,10 @@ namespace ExcelReader.Tests
         public void EncryptPackage_NullArguments_Throw()
         {
             using var stream = new MemoryStream([0x50, 0x4B, 0x03, 0x04], writable: false);
-            Assert.Throws<ArgumentNullException>(() => Excel.EncryptPackage(null!, stream, Password));
+            using var destination = new MemoryStream();
+            Assert.Throws<ArgumentNullException>(() => Excel.EncryptPackage(null!, destination, Password));
             Assert.Throws<ArgumentNullException>(() => Excel.EncryptPackage(stream, null!, Password));
-            Assert.Throws<ArgumentNullException>(() => Excel.EncryptPackage(stream, stream, null!));
+            Assert.Throws<ArgumentNullException>(() => Excel.EncryptPackage(stream, destination, null!));
         }
     }
 }
