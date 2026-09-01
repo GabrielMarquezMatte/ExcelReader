@@ -310,6 +310,22 @@ namespace ExcelReader.Native
             }
         }
 
+        [UnmanagedCallersOnly(EntryPoint = "xl_encrypt_package")]
+        public static int EncryptPackage(byte* packagePath, int packagePathLength, byte* destinationPath, int destinationPathLength, byte* password, int passwordLength)
+        {
+            if (packagePath is null || packagePathLength <= 0
+                || destinationPath is null || destinationPathLength <= 0
+                || password is null || passwordLength <= 0)
+            {
+                return NativeStatus.InvalidArgument;
+            }
+
+            return NativeApi.EncryptPackage(
+                new ReadOnlySpan<byte>(packagePath, packagePathLength),
+                new ReadOnlySpan<byte>(destinationPath, destinationPathLength),
+                new ReadOnlySpan<byte>(password, passwordLength));
+        }
+
         [UnmanagedCallersOnly(EntryPoint = "xl_free_buffer")]
         public static void FreeBuffer(NativeBuffer* buffer)
         {

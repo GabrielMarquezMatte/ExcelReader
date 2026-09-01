@@ -3,7 +3,9 @@ from excelreader import (
     ColumnSpec,
     ColumnType,
     ExcelReaderError,
+    PasswordIncorrectError,
     WriteOptions,
+    encrypt_package,
     open_workbook,
     write_arrow,
     write_pandas,
@@ -136,3 +138,45 @@ def test_write_arrow_rejects_an_unsupported_arrow_type(tmp_path):
 
     with pytest.raises(ValueError, match="type"):
         write_arrow(tmp_path / "bad.xlsx", batch)
+
+
+def test_encrypt_package_round_trips_through_open_workbook(source_csv, tmp_path):
+    with open_workbook(source_csv) as workbook:
+        table = workbook.parse_typed(_SCHEMA)
+
+    plain = tmp_path / "plain.xlsx"
+    write_workbook(plain, table, _TYPES)
+
+    encrypted = tmp_path / "encrypted.xlsx"
+    encrypt_package(plain, encrypted, "hunter2")
+
+    with open_workbook(encrypted, password="hunter2") as workbook:
+        result = workbook.parse_typed(_SCHEMA)
+
+    assert list(result.columns[0]) == ["widget", "gadget"]
+    assert list(result.columns[1]) == [3, 7]
+
+
+def test_encrypt_package_rejects_the_wrong_password_on_open(source_csv, tmp_path):
+    with open_workbook(source_csv) as workbook:
+        table = workbook.parse_typed(_SCHEMA)
+
+    plain = tmp_path / "plain.xlsx"
+    write_workbook(plain, table, _TYPES)
+
+    encrypted = tmp_path / "encrypted.xlsx"
+    encrypt_package(plain, encrypted, "hunter2")
+
+    with pytest.raises(PasswordIncorrectError):
+        open_workbook(encrypted, password="wrong")
+
+
+def test_encrypt_package_rejects_an_empty_password(source_csv, tmp_path):
+    with open_workbook(source_csv) as workbook:
+        table = workbook.parse_typed(_SCHEMA)
+
+    plain = tmp_path / "plain.xlsx"
+    write_workbook(plain, table, _TYPES)
+
+    with pytest.raises(ExcelReaderError):
+        encrypt_package(plain, tmp_path / "encrypted.xlsx", "")

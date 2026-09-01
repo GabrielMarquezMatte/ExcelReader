@@ -257,6 +257,18 @@ extern "C" {
     /// resets it to zero. Safe on a zeroed value.
     pub fn xl_free_buffer(buffer: *mut XlBuffer);
 
+    /// Reads the plaintext XLSX/XLSB package at `package_path` and writes its agile-encrypted
+    /// (ECMA-376 4.4) counterpart to `destination_path`, overwriting an existing file. The result
+    /// opens with the same password via `xl_open_file_ex`'s `xl_open_options::password`.
+    pub fn xl_encrypt_package(
+        package_path: *const u8,
+        package_path_len: i32,
+        destination_path: *const u8,
+        destination_path_len: i32,
+        password: *const u8,
+        password_len: i32,
+    ) -> c_int;
+
     // ---- Streaming writer handle: see writer_handle::WriterHandle for the call-order contract. ----
 
     pub fn xl_open_write_handle(

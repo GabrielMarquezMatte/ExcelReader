@@ -96,6 +96,22 @@ see through the CFB wrapper an encrypted file is stored in - pass `XL_FORMAT_AUT
 above) rather than `XL_FORMAT_XLSX`, or the file is read as a plain ZIP and fails before the password
 is ever checked.
 
+Writing an encrypted workbook is a second step: write the plaintext package with `write_columns`/
+`write_sheet`, then wrap it with `encrypt_package`, which produces an agile-encrypted (ECMA-376 4.4)
+CFB container - AES-256-CBC, SHA-512, 100,000 spin iterations, with a `dataIntegrity` HMAC:
+
+```rust
+use excelreader::writer::{encrypt_package, write_columns};
+use excelreader::XL_FORMAT_XLSX;
+
+write_columns("plain.xlsx", XL_FORMAT_XLSX, &columns, None)?;
+encrypt_package("plain.xlsx", "secret.xlsx", "hunter2")?;
+```
+
+`package_path` is read twice (it is not disposed or removed), so it must already be a finished file.
+Encryption parameters are fixed at Excel's own defaults - there are no options - and only XLSX/XLSB
+packages can be encrypted, matching what `Workbook::open_with`/`open_memory` can decrypt.
+
 ### Arrow export (`arrow` feature)
 
 ```toml

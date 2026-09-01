@@ -283,3 +283,22 @@ def write_pandas(path: str | Path, df: Any, **kwargs: Any) -> None:
 def write_polars(path: str | Path, df: Any, **kwargs: Any) -> None:
     """Writes a `polars.DataFrame` to `path`. Requires pyarrow and polars."""
     write_arrow(path, df.to_arrow(), **kwargs)
+
+
+def encrypt_package(package_path: str | Path, destination_path: str | Path, password: str) -> None:
+    """Wraps a finished plaintext XLSX/XLSB package in an agile-encrypted (ECMA-376 4.4) CFB
+    container — the inverse of passing `password=` to `open_workbook`/`open_bytes`. `package_path`
+    is read twice, so it must already be a complete file (write it with `write_workbook` first).
+    Encryption parameters are fixed at Excel's own defaults; there are no options.
+    """
+    package_encoded = str(Path(package_path)).encode("utf-8")
+    destination_encoded = str(Path(destination_path)).encode("utf-8")
+    password_encoded = password.encode("utf-8")
+    lib = _native.load_library()
+    _check(
+        lib.xl_encrypt_package(
+            package_encoded, len(package_encoded),
+            destination_encoded, len(destination_encoded),
+            password_encoded, len(password_encoded),
+        )
+    )

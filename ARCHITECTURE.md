@@ -110,9 +110,13 @@ turns one back into a stream the ordinary readers consume:
   within an entry.
 
 `XlsxReader` and `XlsbReader` are untouched by any of this: they receive a stream that happens to
-decrypt. Writing encrypted workbooks is not supported — which also means there is no round-trip
-check, so the fixtures in `tests/ExcelReader.Tests/data/encrypted/` (paired with plaintext produced
-by an independent implementation) are the only correctness oracle for decryption.
+decrypt. Writing encrypted workbooks is a separate step, `Excel.EncryptPackage`/`EncryptPackageAsync`
+in `PackageEncryptor.cs` — it wraps a plaintext package (written by any of the ordinary writers) in
+an agile-encrypted CFB container, the inverse of `DecryptedPackageStream`. There is still no
+round-trip check between the two directions: they don't share a derivation implementation to guard
+against a shared bug, so the fixtures in `tests/ExcelReader.Tests/data/encrypted/` (paired with
+plaintext produced by an independent implementation) remain the only correctness oracle for
+decryption specifically.
 
 ## The `excelreader` CLI
 

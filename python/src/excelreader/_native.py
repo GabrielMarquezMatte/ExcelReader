@@ -448,6 +448,8 @@ def _bind(lib: ctypes.CDLL) -> ctypes.CDLL:
         ctypes.POINTER(NativeColumnSpec), ctypes.POINTER(NativeTable), ctypes.POINTER(NativeWriteOptions),
     ]
     lib.xl_write_typed.restype = c_int
+    lib.xl_encrypt_package.argtypes = [p_bytes, c_int, p_bytes, c_int, p_bytes, c_int]
+    lib.xl_encrypt_package.restype = c_int
     lib.xl_abi_version.argtypes = []
     lib.xl_abi_version.restype = c_int
     return lib

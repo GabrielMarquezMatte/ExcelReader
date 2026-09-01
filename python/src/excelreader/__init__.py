@@ -15,7 +15,7 @@ from excelreader.types import (
     TypedTable,
     WriteOptions,
 )
-from excelreader.writer import write_arrow, write_pandas, write_polars, write_workbook
+from excelreader.writer import encrypt_package, write_arrow, write_pandas, write_polars, write_workbook
 
 __all__ = [
     "Cell",
@@ -32,6 +32,7 @@ __all__ = [
     "Workbook",
     "WriteOptions",
     "decode_cell",
+    "encrypt_package",
     "open_bytes",
     "open_workbook",
     "write_arrow",

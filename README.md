@@ -256,9 +256,9 @@ catch (ExcelEncryptionException ex) when (ex.Reason is ExcelEncryptionReason.Pas
 
 Supported: ECMA-376 agile encryption (Excel 2010+ — what Excel writes today when you set a
 password). **Not** supported: ECMA-376 standard encryption (Excel 2007; recognized and rejected
-with `UnsupportedScheme`, pending real fixtures to verify a derivation against), writing encrypted
-files, encrypted legacy `.xls` (RC4 CryptoAPI), and sheet/workbook *protection* passwords — a
-different mechanism entirely, stored as hashes in the plaintext XML.
+with `UnsupportedScheme`, pending real fixtures to verify a derivation against), encrypted legacy
+`.xls` (RC4 CryptoAPI), and sheet/workbook *protection* passwords — a different mechanism entirely,
+stored as hashes in the plaintext XML.
 
 `Password` never appears in `ExcelReaderOptions.ToString()`. Note that a password supplied as a
 `string` cannot be wiped from memory — .NET strings are immutable and movable — so the library zeroes
@@ -1010,6 +1010,7 @@ against the C/C++ competitors.
 - The XLSX writer emits a compact workbook with strings, numbers, booleans, dates, and blank cells; shared strings are opt-in.
 - The XLSB writer emits BIFF12 workbook parts inside the standard XLSB ZIP package; shared strings are opt-in.
 - The XLS writer buffers records in memory and assembles the OLE container at `EndAsync`; choose it when write throughput matters more than peak allocation.
+- `Excel.EncryptPackage`/`EncryptPackageAsync` wrap a written XLSX/XLSB package in agile ECMA-376 encryption; see [Encrypted workbooks](#encrypted-workbooks).
 
 ## Build
 
@@ -1059,6 +1060,11 @@ Row-by-row decoded reads remain Python-only. The Arrow export is available from 
 (`to_arrow`/`to_record_batch`), C++ (`xl::parse_arrow<T>`, in the separate `<xl/excelreader_arrow.hpp>`
 header — no Apache Arrow C++ dependency, you get the raw C Data Interface pair), and Rust
 (`excelreader::arrow::parse_arrow`, behind the `arrow` cargo feature, returning an `arrow::array::RecordBatch`).
+
+Encrypting a written package goes through one export too, `xl_encrypt_package` — wrap a finished
+plaintext XLSX/XLSB package in agile ECMA-376 encryption, given a password. All three bindings
+expose it: Python as `encrypt_package`, C++ as `xl::encrypt_package`, Rust as
+`writer::encrypt_package`; see each binding's README for the encrypted-workbooks section.
 
 ## Contributing
 

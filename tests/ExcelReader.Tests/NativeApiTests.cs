@@ -465,6 +465,67 @@ namespace ExcelReader.Tests
             Assert.Null(handle);
         }
 
+        [Fact]
+        public void EncryptPackage_Should_Produce_A_File_Openable_With_The_Same_Password()
+        {
+            string plainPath = EncryptedFixtures.PlainPath("agile-aes256-sha512.xlsx");
+            string encryptedPath = Path.Combine(Path.GetTempPath(), $"excelreader-native-{Guid.NewGuid():N}.xlsx");
+            try
+            {
+                int status = NativeApi.EncryptPackage(
+                    Encoding.UTF8.GetBytes(plainPath),
+                    Encoding.UTF8.GetBytes(encryptedPath),
+                    Encoding.UTF8.GetBytes(EncryptedFixtures.Password));
+
+                Assert.Equal(NativeStatus.Ok, status);
+
+                using IExcelRowReader plain = Excel.Open(plainPath);
+                using IExcelRowReader roundTripped = Excel.Open(
+                    encryptedPath, new ExcelReaderOptions { Password = EncryptedFixtures.Password });
+                using IExcelRowEnumerator plainRows = plain.GetEnumerator();
+                using IExcelRowEnumerator roundTrippedRows = roundTripped.GetEnumerator();
+
+                Assert.True(plainRows.MoveNext());
+                Assert.True(roundTrippedRows.MoveNext());
+                Assert.Equal(plainRows.Current[0].GetString(), roundTrippedRows.Current[0].GetString());
+            }
+            finally
+            {
+                File.Delete(encryptedPath);
+            }
+        }
+
+        [Fact]
+        public void EncryptPackage_Should_Fail_When_The_Password_Is_Empty()
+        {
+            string encryptedPath = Path.Combine(Path.GetTempPath(), $"excelreader-native-{Guid.NewGuid():N}.xlsx");
+            try
+            {
+                int status = NativeApi.EncryptPackage(
+                    Encoding.UTF8.GetBytes(EncryptedFixtures.PlainPath("agile-aes256-sha512.xlsx")),
+                    Encoding.UTF8.GetBytes(encryptedPath),
+                    ReadOnlySpan<byte>.Empty);
+
+                Assert.Equal(NativeStatus.Error, status);
+            }
+            finally
+            {
+                File.Delete(encryptedPath);
+            }
+        }
+
+        [Fact]
+        public void EncryptPackage_Should_Reject_A_Password_Past_The_Length_Ceiling()
+        {
+            byte[] tooLong = new byte[4097];
+            int status = NativeApi.EncryptPackage(
+                Encoding.UTF8.GetBytes(EncryptedFixtures.PlainPath("agile-aes256-sha512.xlsx")),
+                Encoding.UTF8.GetBytes(Path.Combine(Path.GetTempPath(), $"excelreader-native-{Guid.NewGuid():N}.xlsx")),
+                tooLong);
+
+            Assert.Equal(NativeStatus.InvalidArgument, status);
+        }
+
         // struct_size is an exact-equality check, so an old caller gets a clear error, not corruption.
         [Fact]
         public void Should_Reject_When_Struct_Size_Is_Stale()
