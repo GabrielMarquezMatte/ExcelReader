@@ -16,6 +16,7 @@ EXPORTS
     xl_write_typed
     xl_write_typed_to_memory
     xl_free_buffer
+    xl_encrypt_package
     xl_infer_schema
     xl_free_schema
     xl_open_write_handle

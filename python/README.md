@@ -266,6 +266,22 @@ corrupt file) also raises `ExcelReaderError` but is not worth retrying.
 An explicit `format="xlsx"`/`format="xlsb"` works for an encrypted file too, the same as leaving
 `format` unset — both routes decrypt correctly given the right `password`.
 
+Writing an encrypted workbook is a second step: write the plaintext package with `write_workbook`
+(or any of the `write_*` helpers), then wrap it with `encrypt_package`, which produces an
+agile-encrypted (ECMA-376 4.4) CFB container — AES-256-CBC, SHA-512, 100,000 spin iterations, with a
+`dataIntegrity` HMAC:
+
+```python
+from excelreader import encrypt_package, write_workbook
+
+write_workbook("plain.xlsx", table, types)
+encrypt_package("plain.xlsx", "secret.xlsx", "hunter2")
+```
+
+`package_path` is read twice (it is not disposed or removed), so it must already be a finished file.
+Encryption parameters are fixed at Excel's own defaults — there are no options — and only XLSX/XLSB
+packages can be encrypted, matching what `open_workbook`/`open_bytes` can decrypt.
+
 ## Benchmarks
 
 `benchmarks/bench_read.py` and `benchmarks/bench_write.py` over

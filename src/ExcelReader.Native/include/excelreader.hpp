@@ -1231,6 +1231,32 @@ namespace xl
         return std::vector<uint8_t>(buffer.data, buffer.data + buffer.len);
     }
 
+    // ---- encrypt_package: the inverse of OpenOptions::password -----------------------------------
+
+    // Wraps a finished plaintext XLSX/XLSB package at package_path in an agile-encrypted (ECMA-376
+    // 4.4) CFB container, written to destination_path (overwriting an existing file). The result
+    // opens with the same password via Workbook::open's OpenOptions::password. Encryption
+    // parameters are fixed at Excel's own defaults - there are no options.
+    inline std::expected<void, Error> encrypt_package(std::string_view package_path,
+                                                       std::string_view destination_path,
+                                                       std::string_view password)
+    {
+        const std::expected<void, Error> &abi = detail::check_abi_version();
+        if (!abi.has_value())
+        {
+            return std::unexpected(abi.error());
+        }
+        const int32_t status = xl_encrypt_package(
+            reinterpret_cast<const uint8_t *>(package_path.data()), static_cast<int32_t>(package_path.size()),
+            reinterpret_cast<const uint8_t *>(destination_path.data()), static_cast<int32_t>(destination_path.size()),
+            reinterpret_cast<const uint8_t *>(password.data()), static_cast<int32_t>(password.size()));
+        if (status != XL_OK)
+        {
+            return std::unexpected(detail::make_error(status));
+        }
+        return {};
+    }
+
     // ---- write_sheet<T>: transposing a range of structs into columns -----------------------------
 
     namespace detail

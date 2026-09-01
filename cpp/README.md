@@ -103,6 +103,20 @@ The `password_` string this builds into `xl_open_options::password` must outlive
 keeping it in the `OpenOptions` object (which owns its own copy) is what makes
 `options.password("hunter2")` safe to call with a temporary, as above.
 
+Writing an encrypted workbook is a second step: write the plaintext package with `write_columns`/
+`write_sheet`, then wrap it with `xl::encrypt_package`, which produces an agile-encrypted (ECMA-376
+4.4) CFB container — AES-256-CBC, SHA-512, 100,000 spin iterations, with a `dataIntegrity` HMAC:
+
+```cpp
+auto written = xl::write_columns("plain.xlsx", XL_FORMAT_XLSX, columns);
+auto encrypted = xl::encrypt_package("plain.xlsx", "secret.xlsx", "hunter2");
+if (!encrypted) { /* encrypted.error().message */ }
+```
+
+`package_path` is read twice (it is not disposed or removed), so it must already be a finished file.
+Encryption parameters are fixed at Excel's own defaults — there are no options — and only XLSX/XLSB
+packages can be encrypted, matching what `Workbook::open`/`open_memory` can decrypt.
+
 ### Arrow export
 
 `<xl/excelreader_arrow.hpp>` is a separate header — including `<xl/excelreader.hpp>` never pulls the

@@ -338,6 +338,20 @@ int32_t xl_write_typed_to_memory(int32_t format,
  * zero. Safe on a zeroed value. */
 void xl_free_buffer(xl_buffer* buffer);
 
+/* Reads the plaintext XLSX/XLSB package at package_path and writes its agile-encrypted (ECMA-376
+ * 4.4) counterpart to destination_path, overwriting an existing file. The inverse of
+ * xl_open_options.password: the result opens with the same password via xl_open_file_ex.
+ * Encryption parameters are fixed at Excel's own defaults - there are no options.
+ *
+ * All three byte-strings are UTF-8, not NUL-terminated; *_len is authoritative. password_len is
+ * capped at 4096 bytes, the same bound as xl_open_options.password_len.
+ *
+ * XL_INVALID_ARGUMENT for a NULL or empty path/password. XL_ERROR (with detail in xl_last_error)
+ * when package_path is not a valid plaintext OOXML package, or for the usual file I/O failures. */
+int32_t xl_encrypt_package(const uint8_t* package_path, int32_t package_path_len,
+                           const uint8_t* destination_path, int32_t destination_path_len,
+                           const uint8_t* password, int32_t password_len);
+
 /* Result of xl_infer_schema: one xl_column_spec per column the sheet appears to have, in ascending
  * column order. Each spec's `type`/`nullable` is a guess from the sampled cells' own XL_CELL_* tags
  * (no text sniffing) and can be handed straight to xl_parse_typed/xl_parse_arrow; `name` is set from

@@ -15,14 +15,14 @@ namespace ExcelReader.Cli
     /// </summary>
     internal static class CliCommands
     {
-        internal static int Sheets(string path, TextWriter stdout, TextWriter stderr)
+        internal static int Sheets(string path, TextWriter stdout, TextWriter stderr, string? password = null)
         {
             return Sheets(path, (index, name) =>
             {
                 stdout.Write(index.ToString(CultureInfo.InvariantCulture));
                 stdout.Write('\t');
                 stdout.WriteLine(name);
-            }, stderr);
+            }, stderr, password);
         }
 
         /// <summary>
@@ -30,11 +30,11 @@ namespace ExcelReader.Cli
         /// Commands.cs's interactive (table-rendering) path needs, without a second implementation of
         /// the sheet-listing loop or its error handling.
         /// </summary>
-        internal static int Sheets(string path, Action<int, string> onSheet, TextWriter stderr)
+        internal static int Sheets(string path, Action<int, string> onSheet, TextWriter stderr, string? password = null)
         {
             return Execute(() =>
             {
-                using IExcelRowReader reader = Open(path, sheet: null);
+                using IExcelRowReader reader = Open(path, sheet: null, password);
                 for (int i = 0; i < reader.SheetCount; i++)
                 {
                     onSheet(i, reader.SheetNameAt(i));
@@ -51,13 +51,13 @@ namespace ExcelReader.Cli
         // loudly if it drifts). Adding a 5th format means updating all three by hand.
         private static readonly string[] _validFormats = ["xlsx", "xlsb", "xls", "csv"];
 
-        internal static int Convert(string path, string? sheet, string? output, string? format, char delimiter, Stream stdout, TextWriter stderr, Action<int>? onProgress = null)
+        internal static int Convert(string path, string? sheet, string? output, string? format, char delimiter, Stream stdout, TextWriter stderr, Action<int>? onProgress = null, string? password = null)
         {
             return Execute(() =>
             {
                 string resolvedFormat = ResolveFormat(format, output);
                 ThrowIfOutputIsADirectory(output);
-                using IExcelRowReader reader = Open(path, sheet);
+                using IExcelRowReader reader = Open(path, sheet, password);
 
                 bool leaveOpen = output is null;
                 Stream target = leaveOpen
@@ -248,7 +248,7 @@ namespace ExcelReader.Cli
             workbook.End();
         }
 
-        internal static int Schema(string path, string? sheet, int headerRow, int sampleSize, TextWriter stdout, TextWriter stderr)
+        internal static int Schema(string path, string? sheet, int headerRow, int sampleSize, TextWriter stdout, TextWriter stderr, string? password = null)
         {
             return Schema(path, sheet, headerRow, sampleSize, column =>
             {
@@ -260,18 +260,18 @@ namespace ExcelReader.Cli
                 stdout.Write('\t');
                 stdout.Write(column.Type.ToString());
                 stdout.WriteLine(column.IsNullable ? "?" : string.Empty);
-            }, stderr);
+            }, stderr, password);
         }
 
         /// <summary>
         /// Same command, reported through a callback instead of a fixed tab-separated line - see the
-        /// <see cref="Sheets(string, Action{int, string}, TextWriter)"/> overload for why.
+        /// <see cref="Sheets(string, Action{int, string}, TextWriter, string?)"/> overload for why.
         /// </summary>
-        internal static int Schema(string path, string? sheet, int headerRow, int sampleSize, Action<ExcelColumnSchema> onColumn, TextWriter stderr)
+        internal static int Schema(string path, string? sheet, int headerRow, int sampleSize, Action<ExcelColumnSchema> onColumn, TextWriter stderr, string? password = null)
         {
             return Execute(() =>
             {
-                using IExcelRowReader reader = Open(path, sheet);
+                using IExcelRowReader reader = Open(path, sheet, password);
 
                 foreach (ExcelColumnSchema column in Excel.InferSchema(reader, headerRow, sampleSize))
                 {
@@ -311,13 +311,16 @@ namespace ExcelReader.Cli
         /// <summary>
         /// Opens <paramref name="path"/> and selects <paramref name="sheet"/>, which is either a
         /// zero-based index or a sheet name. CSV is opened through its own factory because
-        /// <see cref="Excel.Open(string, ExcelReaderOptions?)"/> deliberately does not sniff it.
+        /// <see cref="Excel.Open(string, ExcelReaderOptions?)"/> deliberately does not sniff it, and
+        /// <paramref name="password"/> is ignored for it since CSV is never encrypted.
         /// </summary>
-        internal static IExcelRowReader Open(string path, string? sheet)
+        internal static IExcelRowReader Open(string path, string? sheet, string? password = null)
         {
-            IExcelRowReader reader = string.Equals(Path.GetExtension(path), ".csv", StringComparison.OrdinalIgnoreCase)
+            bool isCsv = string.Equals(Path.GetExtension(path), ".csv", StringComparison.OrdinalIgnoreCase);
+            ExcelReaderOptions? options = password is null ? null : new ExcelReaderOptions { Password = password };
+            IExcelRowReader reader = isCsv
                 ? Excel.FromCsvFile(path)
-                : Excel.Open(path);
+                : Excel.Open(path, options);
 
             if (sheet is null)
             {
