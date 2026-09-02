@@ -192,6 +192,14 @@ impl Workbook {
         Ok(flag != 0)
     }
 
+    /// A row-at-a-time reader over the current sheet.
+    ///
+    /// Takes `&mut self` because it advances the row cursor every read on this handle shares, the
+    /// same reason [`move_to_sheet`](Self::move_to_sheet) does.
+    pub fn rows(&mut self) -> crate::rows::RowCursor<'_> {
+        crate::rows::RowCursor::new(self.handle)
+    }
+
     /// Guesses a [`parse_sheet`] schema by sampling the current sheet.
     ///
     /// `header_row` has the same meaning as in [`parse_sheet`] (0 = no header); `sample_size`

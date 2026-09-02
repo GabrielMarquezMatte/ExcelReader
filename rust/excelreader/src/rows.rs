@@ -217,6 +217,69 @@ fn cell_from_decoded(raw: &XlRowCell) -> Option<CellRef<'_>> {
     Some(CellRef { column: raw.column, cell_type, value })
 }
 
+/// Rows are usually well under this; it only sets how often the first oversized row costs a retry.
+const INITIAL_ROW_BUFFER: usize = 64 * 1024;
+
+/// A row-at-a-time reader over a workbook's current sheet, holding one reusable buffer.
+///
+/// Not an `Iterator`: each row borrows the buffer that the next call overwrites, which
+/// `Iterator::next` cannot express. One row is alive at a time, enforced by the borrow checker.
+pub struct RowCursor<'w> {
+    handle: *mut crate::XlWorkbook,
+    buffer: Vec<u8>,
+    written: usize,
+    workbook: std::marker::PhantomData<&'w mut crate::workbook::Workbook>,
+}
+
+impl<'w> RowCursor<'w> {
+    pub(crate) fn new(handle: *mut crate::XlWorkbook) -> RowCursor<'w> {
+        RowCursor {
+            handle,
+            buffer: vec![0; INITIAL_ROW_BUFFER],
+            written: 0,
+            workbook: std::marker::PhantomData,
+        }
+    }
+
+    /// Advances to the next row. `None` at end of sheet.
+    ///
+    /// On `XL_BUFFER_TOO_SMALL` the native side holds the row until it fits, so growing the buffer
+    /// and retrying loses nothing.
+    pub fn next_row(&mut self) -> Option<Result<RowRef<'_>, Error>> {
+        loop {
+            let mut written: i32 = 0;
+            let capacity = i32::try_from(self.buffer.len()).unwrap_or(i32::MAX);
+            let status = unsafe {
+                crate::xl_next_row(self.handle, self.buffer.as_mut_ptr(), capacity, &mut written)
+            };
+
+            match status {
+                crate::XL_OK => {
+                    self.written = if written > 0 { written as usize } else { 0 };
+                    let blob = &self.buffer[..self.written];
+                    return Some(
+                        RowRef::from_blob(blob).ok_or_else(|| {
+                            Error::from_status(XL_ERROR, "native returned a malformed row blob".to_string())
+                        }),
+                    );
+                }
+                crate::XL_EOF => return None,
+                crate::XL_BUFFER_TOO_SMALL => {
+                    let needed = if written > 0 { written as usize } else { self.buffer.len() * 2 };
+                    if needed <= self.buffer.len() {
+                        return Some(Err(Error::from_status(
+                            XL_ERROR,
+                            "native asked for a buffer no larger than the current one".to_string(),
+                        )));
+                    }
+                    self.buffer.resize(needed, 0);
+                }
+                other => return Some(Err(crate::workbook::last_error(other))),
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
