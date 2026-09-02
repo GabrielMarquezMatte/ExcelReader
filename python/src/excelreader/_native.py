@@ -226,6 +226,15 @@ class NativeRows(ctypes.Structure):
     ]
 
 
+class NativeBuffer(ctypes.Structure):
+    """Mirrors xl_buffer."""
+
+    _fields_ = [
+        ("data", ctypes.POINTER(ctypes.c_uint8)),
+        ("len", ctypes.c_int64),
+    ]
+
+
 class NativeOpenOptions(ctypes.Structure):
     """Mirrors xl_open_options. `struct_size` is set for you by `default_open_options()`; every other
     numeric field is 0 (use the library default), and every XL_OPT_* field starts at XL_OPT_DEFAULT."""
@@ -452,4 +461,61 @@ def _bind(lib: ctypes.CDLL) -> ctypes.CDLL:
     lib.xl_encrypt_package.restype = c_int
     lib.xl_abi_version.argtypes = []
     lib.xl_abi_version.restype = c_int
+
+    lib.xl_open_write_handle.argtypes = [
+        ctypes.POINTER(ctypes.c_uint8), ctypes.c_int32, ctypes.c_int32,
+        ctypes.POINTER(NativeWriteOptions), ctypes.POINTER(ctypes.c_void_p),
+    ]
+    lib.xl_open_write_handle.restype = ctypes.c_int32
+
+    lib.xl_open_write_handle_to_memory.argtypes = [
+        ctypes.c_int32, ctypes.POINTER(NativeWriteOptions), ctypes.POINTER(ctypes.c_void_p),
+    ]
+    lib.xl_open_write_handle_to_memory.restype = ctypes.c_int32
+
+    lib.xl_start_sheet.argtypes = [ctypes.c_void_p, ctypes.POINTER(ctypes.c_uint8), ctypes.c_int32]
+    lib.xl_start_sheet.restype = ctypes.c_int32
+
+    lib.xl_start_row.argtypes = [ctypes.c_void_p]
+    lib.xl_start_row.restype = ctypes.c_int32
+
+    lib.xl_write_string.argtypes = [ctypes.c_void_p, ctypes.POINTER(ctypes.c_uint8), ctypes.c_int32]
+    lib.xl_write_string.restype = ctypes.c_int32
+
+    lib.xl_write_int64.argtypes = [ctypes.c_void_p, ctypes.c_int64]
+    lib.xl_write_int64.restype = ctypes.c_int32
+
+    lib.xl_write_float64.argtypes = [ctypes.c_void_p, ctypes.c_double]
+    lib.xl_write_float64.restype = ctypes.c_int32
+
+    lib.xl_write_bool.argtypes = [ctypes.c_void_p, ctypes.c_int32]
+    lib.xl_write_bool.restype = ctypes.c_int32
+
+    lib.xl_write_date.argtypes = [ctypes.c_void_p, ctypes.c_int32]
+    lib.xl_write_date.restype = ctypes.c_int32
+
+    lib.xl_write_time.argtypes = [ctypes.c_void_p, ctypes.c_int64]
+    lib.xl_write_time.restype = ctypes.c_int32
+
+    lib.xl_write_timestamp.argtypes = [ctypes.c_void_p, ctypes.c_int64]
+    lib.xl_write_timestamp.restype = ctypes.c_int32
+
+    lib.xl_write_null.argtypes = [ctypes.c_void_p, ctypes.c_int32]
+    lib.xl_write_null.restype = ctypes.c_int32
+
+    lib.xl_end_row.argtypes = [ctypes.c_void_p]
+    lib.xl_end_row.restype = ctypes.c_int32
+
+    lib.xl_end_sheet.argtypes = [ctypes.c_void_p]
+    lib.xl_end_sheet.restype = ctypes.c_int32
+
+    lib.xl_close_write_handle.argtypes = [ctypes.c_void_p]
+    lib.xl_close_write_handle.restype = ctypes.c_int32
+
+    lib.xl_write_handle_bytes.argtypes = [ctypes.c_void_p, ctypes.POINTER(NativeBuffer)]
+    lib.xl_write_handle_bytes.restype = ctypes.c_int32
+
+    lib.xl_free_buffer.argtypes = [ctypes.POINTER(NativeBuffer)]
+    lib.xl_free_buffer.restype = None
+
     return lib
