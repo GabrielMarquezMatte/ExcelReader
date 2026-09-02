@@ -444,11 +444,11 @@ namespace ExcelReader.Core.Crypto
             {
                 // long arithmetic: an int32 multiply here could overflow before the bounds check runs.
                 long offset = (long)sector * miniSectorSize;
-                if (offset < 0 || offset >= miniStream.Length)
+                int take = Math.Min(miniSectorSize, result.Length - written);
+                if (offset < 0 || offset + take > miniStream.Length)
                 {
                     throw new InvalidDataException("Invalid OLE mini sector chain.");
                 }
-                int take = Math.Min(miniSectorSize, result.Length - written);
                 miniStream.Slice((int)offset, take).CopyTo(result.AsSpan(written));
                 written += take;
                 if ((uint)sector >= (uint)miniFat.Length)
