@@ -199,6 +199,42 @@ it out with `bytes()`. Dropping a `WriterHandle` closes and releases it, same as
 `bytes()` (memory-backed) or reopen the path (file-backed) to observe the result rather than relying
 on the drop for that.
 
+## Reading rows one at a time
+
+`Workbook::rows` returns a cursor over the current sheet. Each row borrows a buffer the cursor
+reuses, so iterating a sheet allocates nothing per row:
+
+```rust
+use excelreader::workbook::Workbook;
+
+let mut workbook = Workbook::open("book.xlsx")?;
+let mut cursor = workbook.rows();
+while let Some(row) = cursor.next_row() {
+    let row = row?;
+    for cell in row.iter() {
+        print!("{}\t", cell.as_str()?);
+    }
+    println!();
+}
+# Ok::<(), excelreader::Error>(())
+```
+
+Because each row borrows the cursor's buffer, only one row is alive at a time — the borrow checker
+enforces it. To hold every row at once, use `read_all_decoded`, which decodes the whole remaining
+sheet in one native call and keeps it alive until dropped:
+
+```rust
+let mut workbook = Workbook::open("book.xlsx")?;
+let rows = workbook.read_all_decoded()?;
+for row in rows.iter() {
+    println!("{} cells", row.len());
+}
+# Ok::<(), excelreader::Error>(())
+```
+
+`parse_sheet` remains the fastest way to read a sheet whose columns you know — it converts on the
+native side and never formats a cell to text.
+
 ## Bounds and panics
 
 `TableView::get` returns `Option<T>` and is `None` outside `0..len()`. The `column_*` accessors used
