@@ -78,6 +78,39 @@ for (const auto& column : *workbook->infer_schema(1, 100)) {
 
 Every entry point returns `std::expected<T, xl::Error>` — this header throws nothing.
 
+## Reading rows one at a time
+
+`Workbook::rows()` returns a cursor over the current sheet. Each row borrows a buffer the cursor
+reuses, so iterating allocates nothing per row. A clean end of sheet arrives as an error carrying
+`XL_EOF`:
+
+```cpp
+auto workbook = xl::Workbook::open("book.xlsx").value();
+auto cursor = workbook.rows();
+while (auto row = cursor.next_row())
+{
+    for (auto cell : *row)
+    {
+        std::print("{}\t", cell.value);
+    }
+    std::println();
+}
+```
+
+Each row is invalidated by the next `next_row()`. To hold every row at once, use
+`read_all_decoded()`, which decodes the whole remaining sheet in one native call and owns it until
+destroyed:
+
+```cpp
+auto rows = workbook.read_all_decoded().value();
+for (auto row : rows)
+{
+    std::println("{} cells", row.size());
+}
+```
+
+`xl::parse_sheet<T>` remains the fastest way to read a sheet whose columns you know.
+
 ### Encrypted workbooks
 
 `OpenOptions::password(std::string_view)` unlocks a password-protected OOXML workbook

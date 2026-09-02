@@ -694,6 +694,83 @@ namespace xl
         std::vector<uint8_t> buffer_;
     };
 
+    // Every remaining row of a sheet, decoded natively in one call. Owns the native allocation and
+    // frees it in the destructor; rows and cells borrow from it, so they must not outlive it.
+    class DecodedRows
+    {
+    public:
+        explicit DecodedRows(xl_rows raw) : raw_(raw) {}
+
+        DecodedRows(const DecodedRows &) = delete;
+        DecodedRows &operator=(const DecodedRows &) = delete;
+
+        DecodedRows(DecodedRows &&other) noexcept : raw_(std::exchange(other.raw_, xl_rows{})) {}
+        DecodedRows &operator=(DecodedRows &&other) noexcept
+        {
+            if (this != &other)
+            {
+                release();
+                raw_ = std::exchange(other.raw_, xl_rows{});
+            }
+            return *this;
+        }
+
+        ~DecodedRows() { release(); }
+
+        size_t size() const { return raw_.row_count > 0 ? static_cast<size_t>(raw_.row_count) : 0; }
+        bool empty() const { return size() == 0; }
+
+        RowView operator[](size_t index) const
+        {
+            const xl_row &row = raw_.rows[index];
+            return RowView(row.cells, row.cell_count > 0 ? static_cast<size_t>(row.cell_count) : 0);
+        }
+
+        class iterator
+        {
+        public:
+            using iterator_category = std::input_iterator_tag;
+            using value_type = RowView;
+            using difference_type = ptrdiff_t;
+
+            iterator() = default;
+            iterator(const DecodedRows *owner, size_t index) : owner_(owner), index_(index) {}
+
+            RowView operator*() const { return (*owner_)[index_]; }
+            iterator &operator++()
+            {
+                ++index_;
+                return *this;
+            }
+            iterator operator++(int)
+            {
+                iterator copy = *this;
+                ++*this;
+                return copy;
+            }
+            bool operator==(const iterator &other) const { return index_ == other.index_; }
+
+        private:
+            const DecodedRows *owner_{};
+            size_t index_{};
+        };
+
+        iterator begin() const { return iterator(this, 0); }
+        iterator end() const { return iterator(this, size()); }
+
+    private:
+        void release()
+        {
+            if (raw_.rows != nullptr)
+            {
+                xl_free_rows(&raw_);
+            }
+            raw_ = xl_rows{};
+        }
+
+        xl_rows raw_{};
+    };
+
     // ---- Workbook (RAII) ------------------------------------------------------------------------
 
     class Workbook
@@ -833,6 +910,19 @@ namespace xl
         // A row-at-a-time reader over the current sheet. Non-const: it moves the row cursor every
         // read on this handle shares.
         RowCursor rows() { return RowCursor(handle_); }
+
+        // Every remaining row of the current sheet in one native call, avoiding a round-trip per
+        // row. An empty remainder is an empty result, not an error.
+        std::expected<DecodedRows, Error> read_all_decoded()
+        {
+            xl_rows raw{};
+            const int32_t status = xl_read_all_decoded(handle_, &raw);
+            if (status != XL_OK)
+            {
+                return std::unexpected(detail::make_error(status));
+            }
+            return DecodedRows(raw);
+        }
 
         // ---- Schema inference --------------------------------------------------------------------
 
