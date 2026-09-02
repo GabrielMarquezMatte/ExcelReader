@@ -14,7 +14,7 @@ pub mod rows;
 pub mod arrow;
 
 pub use error::Error;
-pub use rows::{CellIter, CellRef, CellType, RowRef};
+pub use rows::{CellIter, CellRef, CellType, RowCursor, RowRef};
 pub use options::{OpenOptions, OpenOptionsRaw, WriteOptions};
 pub use temporal::{Date, Time, Timestamp};
 

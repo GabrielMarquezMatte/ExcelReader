@@ -10,6 +10,9 @@ EXPORTS
     xl_sheet_name_at
     xl_move_to_sheet
     xl_is_date1904
+    xl_next_row
+    xl_read_all_decoded
+    xl_free_rows
     xl_parse_typed
     xl_free_table
     xl_parse_arrow
