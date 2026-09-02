@@ -185,6 +185,42 @@ must already be in memory (no streaming/chunked writes); no styling beyond the t
 formats `xl_write_typed` applies to DATE/TIME/TIMESTAMP columns. `format="auto"` is not accepted —
 sniffing reads a file's existing signature bytes, and a file being created has none.
 
+## Writing a sheet row by row
+
+`open_workbook`'s counterpart for writing one row at a time, instead of building a whole table
+first:
+
+```python
+import datetime
+from excelreader import open_writer
+
+with open_writer("out.xlsx") as writer:
+    writer.start_sheet("Data")
+    writer.write_row(["name", "qty", "when"])
+    writer.write_row(["widget", 7, datetime.date(2026, 1, 31)])
+    writer.end_sheet()
+```
+
+`write_row` picks each cell's type from the Python value. For control over a column's type — or to
+write a typed blank — use the explicit methods: `write_str`, `write_i64`, `write_f64`, `write_bool`,
+`write_date`, `write_time`, `write_timestamp`, and `write_null(ColumnType.I64)`. A `None` passed to
+`write_row` becomes a blank string cell.
+
+To build a workbook without touching the filesystem, use `open_writer_to_memory` and read the result
+out with `bytes()`:
+
+```python
+from excelreader import open_writer_to_memory
+
+with open_writer_to_memory("xlsx") as writer:
+    writer.start_sheet("Data")
+    writer.write_row(["name", "qty"])
+    writer.end_sheet()
+    payload = writer.bytes()
+```
+
+`write_workbook_to_bytes()` is the same idea for the columnar `write_workbook()` path.
+
 ### Arrow
 
 With `pyarrow` installed, `to_arrow()` runs the same read and hands the buffers to pyarrow zero-copy

@@ -15,8 +15,15 @@ from excelreader.types import (
     TypedTable,
     WriteOptions,
 )
-from excelreader.writer import encrypt_package, write_arrow, write_pandas, write_polars, write_workbook
-from excelreader.writer_handle import SheetWriter, open_writer
+from excelreader.writer import (
+    encrypt_package,
+    write_arrow,
+    write_pandas,
+    write_polars,
+    write_workbook,
+    write_workbook_to_bytes,
+)
+from excelreader.writer_handle import SheetWriter, open_writer, open_writer_to_memory
 
 __all__ = [
     "Cell",
@@ -38,8 +45,10 @@ __all__ = [
     "open_bytes",
     "open_workbook",
     "open_writer",
+    "open_writer_to_memory",
     "write_arrow",
     "write_pandas",
     "write_polars",
     "write_workbook",
+    "write_workbook_to_bytes",
 ]

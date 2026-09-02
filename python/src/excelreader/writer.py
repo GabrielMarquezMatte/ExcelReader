@@ -96,6 +96,36 @@ def _validity_pointer(validity: bytes | None, keepalive: list[Any]) -> Any:
     return ctypes.cast(buffer, ctypes.POINTER(ctypes.c_uint8))
 
 
+def _marshal(
+    table: TypedTable,
+    types: list[ColumnType],
+    options: WriteOptions | None,
+) -> tuple[Any, Any, Any, list[Any]]:
+    """Lowers a TypedTable into the native structs xl_write_typed* expect.
+
+    Returns the specs array, the NativeTable, the NativeWriteOptions, and a keepalive list whose
+    contents must outlive the native call — dropping it early frees buffers the call is still
+    reading.
+    """
+    if len(types) != len(table.columns):
+        raise ValueError(
+            f"types must give one ColumnType per column in table.columns; got {len(types)} for {len(table.columns)}"
+        )
+
+    keepalive: list[Any] = []
+    columns = (_native.NativeColumn * len(table.columns))()
+    specs = (_native.NativeColumnSpec * len(table.columns))()
+    for index, column in enumerate(table.columns):
+        columns[index] = _native_column(column, types[index], table.validity[index], table.row_count, keepalive)
+        specs[index] = _native.column_spec_by_name(table.names[index], int(types[index]))
+
+    native_table = _native.NativeTable(
+        column_count=len(table.columns), row_count=table.row_count, columns=columns
+    )
+    raw_options = _native.to_native_write_options(options or WriteOptions())
+    return specs, native_table, raw_options, keepalive
+
+
 def write_workbook(
     path: str | Path,
     table: TypedTable,
@@ -118,22 +148,7 @@ def write_workbook(
     """
     resolved = Path(path)
     format_id = _resolve_write_format(format, resolved)
-    if len(types) != len(table.columns):
-        raise ValueError(
-            f"types must give one ColumnType per column in table.columns; got {len(types)} for {len(table.columns)}"
-        )
-
-    keepalive: list[Any] = []
-    columns = (_native.NativeColumn * len(table.columns))()
-    specs = (_native.NativeColumnSpec * len(table.columns))()
-    for index, column in enumerate(table.columns):
-        columns[index] = _native_column(column, types[index], table.validity[index], table.row_count, keepalive)
-        specs[index] = _native.column_spec_by_name(table.names[index], int(types[index]))
-
-    native_table = _native.NativeTable(
-        column_count=len(table.columns), row_count=table.row_count, columns=columns
-    )
-    raw_options = _native.to_native_write_options(options or WriteOptions())
+    specs, native_table, raw_options, keepalive = _marshal(table, types, options)
 
     encoded = str(resolved).encode("utf-8")
     lib = _native.load_library()
@@ -142,6 +157,44 @@ def write_workbook(
             encoded, len(encoded), format_id, specs, ctypes.byref(native_table), ctypes.byref(raw_options)
         )
     )
+    del keepalive
+
+
+def write_workbook_to_bytes(
+    table: TypedTable,
+    types: list[ColumnType],
+    *,
+    format: str,
+    options: WriteOptions | None = None,
+) -> bytes:
+    """The in-memory twin of `write_workbook()`.
+
+    `format` is required and is one of xlsx/xlsb/xls/csv — unlike `write_workbook`, there is no path
+    to infer it from.
+    """
+    if format not in _native.WRITE_FORMATS:
+        raise ValueError(f"format must be one of {sorted(_native.WRITE_FORMATS)}; got {format!r}")
+
+    specs, native_table, raw_options, keepalive = _marshal(table, types, options)
+
+    buffer = _native.NativeBuffer()
+    lib = _native.load_library()
+    _check(
+        lib.xl_write_typed_to_memory(
+            _native.WRITE_FORMATS[format],
+            specs,
+            ctypes.byref(native_table),
+            ctypes.byref(raw_options),
+            ctypes.byref(buffer),
+        )
+    )
+    try:
+        if not buffer.data or buffer.len <= 0:
+            return b""
+        return ctypes.string_at(buffer.data, buffer.len)
+    finally:
+        lib.xl_free_buffer(ctypes.byref(buffer))
+        del keepalive
 
 
 # Arrow type id -> the ColumnType whose buffer layout matches it exactly. Only the seven types
