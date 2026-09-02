@@ -480,6 +480,220 @@ namespace xl
 
     } // namespace detail
 
+    // ---- Row-at-a-time streaming view ----------------------------------------------------------
+
+    enum class CellType : int32_t
+    {
+        Empty = XL_CELL_EMPTY,
+        String = XL_CELL_STRING,
+        Number = XL_CELL_NUMBER,
+        Date = XL_CELL_DATE,
+        Bool = XL_CELL_BOOL,
+        Formula = XL_CELL_FORMULA,
+        Error = XL_CELL_ERROR,
+    };
+
+    // One cell, borrowing its bytes from the row that produced it. A Date cell's value is an Excel
+    // serial number as text.
+    struct CellView
+    {
+        int32_t column{};
+        CellType type{};
+        std::string_view value{};
+    };
+
+    namespace detail
+    {
+        // Decodes the cell at `offset` in an xl_next_row blob, returning it and the next offset.
+        // Every read is bounds-checked rather than trusting the declared cell count.
+        inline std::optional<std::pair<CellView, size_t>> decode_cell(std::span<const uint8_t> blob, size_t offset)
+        {
+            const auto read_i32 = [&](size_t at) -> std::optional<int32_t> {
+                if (at + 4 > blob.size())
+                {
+                    return std::nullopt;
+                }
+                int32_t value = 0;
+                std::memcpy(&value, blob.data() + at, sizeof(value));
+                return value;
+            };
+
+            const auto column = read_i32(offset);
+            const auto type = read_i32(offset + 4);
+            const auto length = read_i32(offset + 8);
+            if (!column || !type || !length || *length < 0)
+            {
+                return std::nullopt;
+            }
+            const size_t start = offset + 12;
+            const size_t end = start + static_cast<size_t>(*length);
+            if (end > blob.size())
+            {
+                return std::nullopt;
+            }
+            CellView cell{*column, static_cast<CellType>(*type),
+                          std::string_view(reinterpret_cast<const char *>(blob.data() + start),
+                                           static_cast<size_t>(*length))};
+            return std::make_pair(cell, end);
+        }
+    }
+
+    // One row. A row from RowCursor is invalidated by the next next_row() call; a row from
+    // DecodedRows stays valid for that object's lifetime.
+    class RowView
+    {
+    public:
+        RowView() = default;
+
+        // From an xl_next_row blob: `payload` is the bytes AFTER the leading int32 cell count.
+        RowView(std::span<const uint8_t> payload, size_t count) : payload_(payload), count_(count) {}
+
+        // From one xl_row of a decoded set.
+        RowView(const xl_row_cell *cells, size_t count) : cells_(cells), count_(count) {}
+
+        size_t size() const { return count_; }
+        bool empty() const { return count_ == 0; }
+
+        // For a blob-backed row this walks from the start, so it is O(index); prefer iteration when
+        // reading a whole row. A decoded row indexes directly.
+        CellView operator[](size_t index) const
+        {
+            if (cells_ != nullptr)
+            {
+                const xl_row_cell &raw = cells_[index];
+                const size_t length = raw.value_len > 0 ? static_cast<size_t>(raw.value_len) : 0;
+                return CellView{raw.column, static_cast<CellType>(raw.type),
+                                length == 0 || raw.value == nullptr
+                                    ? std::string_view{}
+                                    : std::string_view(reinterpret_cast<const char *>(raw.value), length)};
+            }
+            auto it = begin();
+            std::advance(it, static_cast<ptrdiff_t>(index));
+            return *it;
+        }
+
+        class iterator
+        {
+        public:
+            using iterator_category = std::input_iterator_tag;
+            using value_type = CellView;
+            using difference_type = ptrdiff_t;
+
+            iterator() = default;
+            iterator(const RowView *row, size_t index) : row_(row), index_(index) { load(); }
+
+            CellView operator*() const { return current_; }
+            iterator &operator++()
+            {
+                ++index_;
+                load();
+                return *this;
+            }
+            iterator operator++(int)
+            {
+                iterator copy = *this;
+                ++*this;
+                return copy;
+            }
+            bool operator==(const iterator &other) const { return index_ == other.index_; }
+
+        private:
+            void load()
+            {
+                if (row_ == nullptr || index_ >= row_->count_)
+                {
+                    return;
+                }
+                if (row_->cells_ != nullptr)
+                {
+                    current_ = (*row_)[index_];
+                    return;
+                }
+                auto decoded = detail::decode_cell(row_->payload_, offset_);
+                if (!decoded)
+                {
+                    index_ = row_->count_;   // a malformed blob ends iteration rather than reading past it
+                    return;
+                }
+                current_ = decoded->first;
+                offset_ = decoded->second;
+            }
+
+            const RowView *row_{};
+            size_t index_{};
+            size_t offset_{};
+            CellView current_{};
+        };
+
+        iterator begin() const { return iterator(this, 0); }
+        iterator end() const { return iterator(this, count_); }
+
+    private:
+        std::span<const uint8_t> payload_{};
+        const xl_row_cell *cells_{};
+        size_t count_{};
+    };
+
+    // A row-at-a-time reader over a workbook's current sheet, holding one reusable buffer.
+    class RowCursor
+    {
+    public:
+        explicit RowCursor(xl_workbook *handle) : handle_(handle), buffer_(kInitialRowBuffer) {}
+
+        RowCursor(const RowCursor &) = delete;
+        RowCursor &operator=(const RowCursor &) = delete;
+        RowCursor(RowCursor &&) noexcept = default;
+        RowCursor &operator=(RowCursor &&) noexcept = default;
+
+        // A RowView on success. unexpected(Error) with code XL_EOF at a clean end of sheet - check
+        // error().code to tell that apart from a real failure. Grows the buffer and retries on
+        // XL_BUFFER_TOO_SMALL, where the native side holds the row until it fits.
+        std::expected<RowView, Error> next_row()
+        {
+            while (true)
+            {
+                int32_t written = 0;
+                const auto capacity = static_cast<int32_t>(buffer_.size());
+                const int32_t status = xl_next_row(handle_, buffer_.data(), capacity, &written);
+
+                if (status == XL_OK)
+                {
+                    const size_t length = written > 0 ? static_cast<size_t>(written) : 0;
+                    if (length < 4)
+                    {
+                        return std::unexpected(detail::make_error(XL_ERROR));
+                    }
+                    int32_t count = 0;
+                    std::memcpy(&count, buffer_.data(), sizeof(count));
+                    if (count < 0)
+                    {
+                        return std::unexpected(detail::make_error(XL_ERROR));
+                    }
+                    return RowView(std::span<const uint8_t>(buffer_.data() + 4, length - 4),
+                                   static_cast<size_t>(count));
+                }
+                if (status == XL_BUFFER_TOO_SMALL)
+                {
+                    const size_t needed = written > 0 ? static_cast<size_t>(written) : buffer_.size() * 2;
+                    if (needed <= buffer_.size())
+                    {
+                        return std::unexpected(detail::make_error(XL_ERROR));
+                    }
+                    buffer_.resize(needed);
+                    continue;
+                }
+                return std::unexpected(detail::make_error(status));   // includes XL_EOF
+            }
+        }
+
+    private:
+        // Rows are usually well under this; it only sets how often an oversized row costs a retry.
+        static constexpr size_t kInitialRowBuffer = 64 * 1024;
+
+        xl_workbook *handle_{};
+        std::vector<uint8_t> buffer_;
+    };
+
     // ---- Workbook (RAII) ------------------------------------------------------------------------
 
     class Workbook
@@ -615,6 +829,10 @@ namespace xl
             }
             return flag != 0;
         }
+
+        // A row-at-a-time reader over the current sheet. Non-const: it moves the row cursor every
+        // read on this handle shares.
+        RowCursor rows() { return RowCursor(handle_); }
 
         // ---- Schema inference --------------------------------------------------------------------
 
