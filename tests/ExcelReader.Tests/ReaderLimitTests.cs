@@ -568,5 +568,20 @@ namespace ExcelReader.Tests
             Assert.Throws<InvalidDataException>(() =>
                 CfbContainer.ReadMiniStream(miniStream, miniFat, miniSectorSize: 64, startSector: HugeSector, size: 64));
         }
+
+        // Regression: found by libFuzzer's "encrypted" harness. ReadMiniStream validated that a mini
+        // sector's starting offset fell inside miniStream, but not that the full miniSectorSize (or
+        // remaining-bytes) slice starting there also fit - so a sector near the end of a truncated
+        // mini stream passed the offset check and then Span.Slice's own bounds check threw
+        // ArgumentOutOfRangeException instead of the InvalidDataException malformed input is
+        // contracted to produce.
+        [Fact]
+        public void MiniStreamSectorNearEndOfStreamThrowsInvalidDataInsteadOfRangeError()
+        {
+            byte[] miniStream = new byte[100]; // not an even multiple of the 64-byte mini sector size
+            int[] miniFat = [-1];
+            Assert.Throws<InvalidDataException>(() =>
+                CfbContainer.ReadMiniStream(miniStream, miniFat, miniSectorSize: 64, startSector: 1, size: 64));
+        }
     }
 }
