@@ -4,7 +4,7 @@ import datetime
 
 import pytest
 
-from excelreader import ColumnType, open_workbook, open_writer
+from excelreader import CellType, ColumnType, open_workbook, open_writer
 
 
 def test_round_trips_typed_cells(tmp_path):
@@ -106,3 +106,72 @@ def test_closing_twice_is_safe(tmp_path):
     writer.end_sheet()
     writer.close()
     writer.close()
+
+
+def test_write_row_infers_every_supported_type(tmp_path):
+    path = tmp_path / "inferred.xlsx"
+    with open_writer(path) as writer:
+        writer.start_sheet("Data")
+        # True and the datetime are the two subclass traps: bool subclasses int, and
+        # datetime.datetime subclasses datetime.date.
+        writer.write_row(
+            [
+                "text",
+                42,
+                1.5,
+                True,
+                datetime.date(2021, 6, 7),
+                datetime.time(8, 9, 10),
+                datetime.datetime(2021, 6, 7, 8, 9, 10),
+                None,
+            ]
+        )
+        writer.end_sheet()
+
+    with open_workbook(path) as workbook:
+        rows = [[(cell.type, cell.value) for cell in row] for row in workbook.rows()]
+
+    types = [cell_type for cell_type, _ in rows[0]]
+    values = [value for _, value in rows[0]]
+
+    assert values[0] == "text"
+    assert values[1] == "42"
+    # bool must NOT have been written as the integer 1.
+    assert types[3] == CellType.BOOL, f"bool dispatched as {types[3]}"
+    # datetime must NOT have been written as a plain date.
+    assert values[6] != values[4], "datetime and date produced the same cell"
+
+
+def test_write_row_rejects_an_unsupported_type(tmp_path):
+    path = tmp_path / "bad-type.xlsx"
+    with open_writer(path) as writer:
+        writer.start_sheet("Data")
+        with pytest.raises(TypeError) as excinfo:
+            writer.write_row(["fine", object()])
+        assert "1" in str(excinfo.value), "the message names the position"
+
+
+def test_write_row_matches_explicit_calls(tmp_path):
+    sugar = tmp_path / "sugar.xlsx"
+    explicit = tmp_path / "explicit.xlsx"
+
+    with open_writer(sugar) as writer:
+        writer.start_sheet("Data")
+        writer.write_row(["a", 1, 2.5, False])
+        writer.end_sheet()
+
+    with open_writer(explicit) as writer:
+        writer.start_sheet("Data")
+        writer.start_row()
+        writer.write_str("a")
+        writer.write_i64(1)
+        writer.write_f64(2.5)
+        writer.write_bool(False)
+        writer.end_row()
+        writer.end_sheet()
+
+    def read(path):
+        with open_workbook(path) as workbook:
+            return [[(cell.type, cell.value) for cell in row] for row in workbook.rows()]
+
+    assert read(sugar) == read(explicit)
