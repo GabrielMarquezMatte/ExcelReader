@@ -84,3 +84,42 @@ fn grows_its_buffer_for_an_oversized_row() {
     drop(workbook);
     std::fs::remove_file(&path).ok();
 }
+
+#[test]
+fn decoded_rows_agree_with_the_cursor() {
+    let from_cursor: Vec<Vec<String>> = {
+        let mut workbook = Workbook::open(&fixture("RealExcel.xlsx")).expect("open");
+        let mut cursor = workbook.rows();
+        let mut all = Vec::new();
+        while let Some(row) = cursor.next_row() {
+            let row = row.expect("ok");
+            all.push(row.iter().map(|c| c.as_str().unwrap().to_string()).collect());
+        }
+        all
+    };
+
+    let mut workbook = Workbook::open(&fixture("RealExcel.xlsx")).expect("open");
+    let decoded = workbook.read_all_decoded().expect("decode");
+
+    assert_eq!(decoded.len(), from_cursor.len());
+    for (index, expected) in from_cursor.iter().enumerate() {
+        let row = decoded.get(index).expect("row in range");
+        let actual: Vec<String> = row.iter().map(|c| c.as_str().unwrap().to_string()).collect();
+        assert_eq!(&actual, expected, "row {index} differs");
+    }
+}
+
+#[test]
+fn decoded_rows_on_an_exhausted_sheet_is_empty_not_an_error() {
+    let mut workbook = Workbook::open(&fixture("RealExcel.xlsx")).expect("open");
+    {
+        let mut cursor = workbook.rows();
+        while let Some(row) = cursor.next_row() {
+            row.expect("ok");
+        }
+    }
+    let decoded = workbook.read_all_decoded().expect("empty remainder is not an error");
+    assert_eq!(decoded.len(), 0);
+    assert!(decoded.is_empty());
+    assert_eq!(decoded.iter().count(), 0);
+}

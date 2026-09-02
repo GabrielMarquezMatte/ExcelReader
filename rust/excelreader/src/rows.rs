@@ -280,6 +280,55 @@ impl<'w> RowCursor<'w> {
     }
 }
 
+/// Every remaining row of a sheet, decoded natively in one call.
+///
+/// Owns the native allocation and releases it on drop. Rows and cells borrow from it, so they
+/// cannot outlive it.
+pub struct DecodedRows {
+    raw: crate::XlRows,
+}
+
+impl DecodedRows {
+    pub(crate) fn new(raw: crate::XlRows) -> DecodedRows {
+        DecodedRows { raw }
+    }
+
+    #[must_use]
+    pub fn len(&self) -> usize {
+        if self.raw.row_count > 0 { self.raw.row_count as usize } else { 0 }
+    }
+
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
+    #[must_use]
+    pub fn get(&self, index: usize) -> Option<RowRef<'_>> {
+        if index >= self.len() || self.raw.rows.is_null() {
+            return None;
+        }
+        let row = unsafe { &*self.raw.rows.add(index) };
+        Some(unsafe { RowRef::from_decoded(row.cells, row.cell_count) })
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item = RowRef<'_>> + '_ {
+        (0..self.len()).filter_map(move |index| self.get(index))
+    }
+}
+
+impl Drop for DecodedRows {
+    fn drop(&mut self) {
+        unsafe { crate::xl_free_rows(&mut self.raw) };
+    }
+}
+
+impl std::fmt::Debug for DecodedRows {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("DecodedRows").field("len", &self.len()).finish()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
