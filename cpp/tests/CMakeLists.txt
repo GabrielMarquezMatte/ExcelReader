@@ -46,3 +46,22 @@ if(WIN32)
             "$<TARGET_PROPERTY:excelreader_native,IMPORTED_LOCATION>"
             "$<TARGET_FILE_DIR:excelreader_cpp_arrow>")
 endif()
+
+add_executable(excelreader_cpp_rows rows.cpp)
+target_link_libraries(excelreader_cpp_rows PRIVATE xl::excelreader)
+
+# The existing targets read RealExcel.xlsb; the row tests need the .xlsx alongside it.
+set(EXCELREADER_XLSX_FIXTURE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/../../RealExcel.xlsx"
+    CACHE FILEPATH "Path to the RealExcel.xlsx fixture the C++ row tests read")
+target_compile_definitions(excelreader_cpp_rows PRIVATE
+    EXCELREADER_XLSX_FIXTURE_PATH="${EXCELREADER_XLSX_FIXTURE_PATH}")
+
+add_test(NAME excelreader_cpp_rows COMMAND excelreader_cpp_rows)
+if(WIN32)
+    # Same reason as the smoke test: the native DLL has no import-time PATH entry, so copy it next
+    # to the test executable for the loader to find.
+    add_custom_command(TARGET excelreader_cpp_rows POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "$<TARGET_PROPERTY:excelreader_native,IMPORTED_LOCATION>"
+            "$<TARGET_FILE_DIR:excelreader_cpp_rows>")
+endif()
