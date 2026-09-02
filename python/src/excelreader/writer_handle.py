@@ -25,6 +25,12 @@ def _encode(value: str) -> tuple[Any, int]:
     return (ctypes.cast(ctypes.c_char_p(raw), ctypes.POINTER(ctypes.c_uint8)), len(raw))
 
 
+def _is_writable(value: Any) -> bool:
+    return value is None or isinstance(
+        value, (bool, int, float, str, datetime.datetime, datetime.date, datetime.time)
+    )
+
+
 class SheetWriter:
     """A streaming workbook writer. Use as a context manager; closing finalizes the file.
 
@@ -115,6 +121,47 @@ class SheetWriter:
     def write_null(self, column_type: ColumnType) -> None:
         """Writes a blank cell typed as `column_type`."""
         _check(self._lib.xl_write_null(self._require_handle(), int(column_type)))
+
+    def write_row(self, values: Sequence[Any]) -> None:
+        """`start_row()`, one inferred write per value, `end_row()`.
+
+        The type of each value picks the write method. `None` becomes a blank *string* cell — it is
+        the one case inference cannot resolve; use `write_null(ColumnType.X)` for a typed blank.
+
+        Raises `TypeError`, before writing anything, for a value whose type has no mapping.
+        """
+        # Validate first: a TypeError halfway through would leave a half-written row open.
+        for position, value in enumerate(values):
+            if not _is_writable(value):
+                raise TypeError(
+                    f"write_row cannot infer a cell type for {type(value).__name__} "
+                    f"at position {position}"
+                )
+
+        self.start_row()
+        for value in values:
+            self._write_inferred(value)
+        self.end_row()
+
+    def _write_inferred(self, value: Any) -> None:
+        # Order matters twice over: bool is a subclass of int, and datetime.datetime is a subclass
+        # of datetime.date. Checking the general case first would silently mis-dispatch both.
+        if value is None:
+            self.write_str(None)
+        elif isinstance(value, bool):
+            self.write_bool(value)
+        elif isinstance(value, int):
+            self.write_i64(value)
+        elif isinstance(value, float):
+            self.write_f64(value)
+        elif isinstance(value, datetime.datetime):
+            self.write_timestamp(value)
+        elif isinstance(value, datetime.date):
+            self.write_date(value)
+        elif isinstance(value, datetime.time):
+            self.write_time(value)
+        else:
+            self.write_str(value)
 
     def close(self) -> None:
         """Finalizes and releases the writer. Safe to call more than once."""
