@@ -2,8 +2,7 @@
 
 Read and write Excel/CSV workbooks via ExcelReader's native ABI: opening a workbook (from a path or
 memory, with the full open-options surface), sheet navigation, schema inference, schema-driven typed
-parse, and schema-driven writing. No Arrow, no row-by-row decode yet - see the root README's Python
-section for what those look like.
+parse, schema-driven writing, row-by-row decoded reads, and Arrow export.
 
 ## Usage
 

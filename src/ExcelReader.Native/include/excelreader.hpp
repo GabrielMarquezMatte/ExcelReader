@@ -1,7 +1,8 @@
 /* Header-only C++ wrapper around excelreader.h (the C ABI).
  *
- * Scope: opening a workbook, schema-driven typed table parsing (xl_parse_typed), and
- * schema-driven writing (xl_write_typed). No row-by-row decoded reads.
+ * Scope: opening a workbook, schema-driven typed table parsing (xl_parse_typed), schema-driven
+ * writing (xl_write_typed), and row-by-row decoded reads (RowCursor/Workbook::rows() and
+ * DecodedRows/Workbook::read_all_decoded()).
  *
  * Design constraints, matching the native library's own perf/memory posture:
  *   - No exceptions anywhere in this header. Every fallible operation returns
