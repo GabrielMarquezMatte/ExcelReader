@@ -175,3 +175,57 @@ def test_write_row_matches_explicit_calls(tmp_path):
             return [[(cell.type, cell.value) for cell in row] for row in workbook.rows()]
 
     assert read(sugar) == read(explicit)
+
+
+def test_in_memory_writer_round_trips():
+    from excelreader import open_bytes, open_writer_to_memory
+
+    with open_writer_to_memory("xlsx") as writer:
+        writer.start_sheet("Data")
+        writer.write_row(["name", "qty"])
+        writer.write_row(["widget", 7])
+        writer.end_sheet()
+        payload = writer.bytes()
+
+    assert isinstance(payload, bytes)
+    assert len(payload) > 0
+
+    with open_bytes(payload, format="xlsx") as workbook:
+        rows = [[cell.value for cell in row] for row in workbook.rows()]
+
+    assert rows[0] == ["name", "qty"]
+    assert rows[1][0] == "widget"
+
+
+def test_bytes_on_a_file_writer_raises(tmp_path):
+    from excelreader import ExcelReaderError
+
+    path = tmp_path / "file.xlsx"
+    with open_writer(path) as writer:
+        writer.start_sheet("Data")
+        writer.write_row(["a"])
+        writer.end_sheet()
+        with pytest.raises(ExcelReaderError):
+            writer.bytes()
+
+
+def test_write_workbook_to_bytes_matches_write_workbook(tmp_path, xlsx_path):
+    from excelreader import open_bytes, write_workbook, write_workbook_to_bytes
+
+    with open_workbook(xlsx_path) as workbook:
+        schema = workbook.infer_schema()
+        table = workbook.parse_typed(schema)
+
+    types = [spec.type for spec in schema]
+
+    path = tmp_path / "from-file.xlsx"
+    write_workbook(path, table, types, format="xlsx")
+    payload = write_workbook_to_bytes(table, types, format="xlsx")
+
+    # Compare by reading both back: an XLSX ZIP is not guaranteed to be byte-identical.
+    with open_workbook(path) as workbook:
+        from_file = [[cell.value for cell in row] for row in workbook.rows()]
+    with open_bytes(payload, format="xlsx") as workbook:
+        from_memory = [[cell.value for cell in row] for row in workbook.rows()]
+
+    assert from_file == from_memory

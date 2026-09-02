@@ -163,6 +163,22 @@ class SheetWriter:
         else:
             self.write_str(value)
 
+    def bytes(self) -> bytes:
+        """The workbook written so far, for an in-memory writer.
+
+        Implicitly finishes the workbook's trailing structure, so it is safe whether or not every
+        sheet and row was explicitly ended. Unlike `close()`, it does not release the writer — call
+        `close()` afterward either way. Raises `ExcelReaderError` for a file-backed writer.
+        """
+        buffer = _native.NativeBuffer()
+        _check(self._lib.xl_write_handle_bytes(self._require_handle(), ctypes.byref(buffer)))
+        try:
+            if not buffer.data or buffer.len <= 0:
+                return b""
+            return ctypes.string_at(buffer.data, buffer.len)
+        finally:
+            self._lib.xl_free_buffer(ctypes.byref(buffer))
+
     def close(self) -> None:
         """Finalizes and releases the writer. Safe to call more than once."""
         if self._handle is None:
@@ -204,3 +220,23 @@ def open_writer(
         )
     )
     return SheetWriter(handle, in_memory=False)
+
+
+def open_writer_to_memory(format: str, options: WriteOptions | None = None) -> SheetWriter:
+    """Opens a streaming writer backed by an in-memory buffer, read out with `SheetWriter.bytes()`.
+
+    `format` is one of xlsx/xlsb/xls/csv — unlike `open_writer`, there is no path to infer it from.
+    """
+    if format not in _native.WRITE_FORMATS:
+        raise ValueError(
+            f"format must be one of {sorted(_native.WRITE_FORMATS)}; got {format!r}"
+        )
+    raw_options = _native.to_native_write_options(options or WriteOptions())
+    handle = ctypes.c_void_p()
+    lib = _native.load_library()
+    _check(
+        lib.xl_open_write_handle_to_memory(
+            _native.WRITE_FORMATS[format], ctypes.byref(raw_options), ctypes.byref(handle)
+        )
+    )
+    return SheetWriter(handle, in_memory=True)
