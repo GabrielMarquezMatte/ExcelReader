@@ -61,7 +61,6 @@ impl<'a> CellRef<'a> {
 
 /// Where a `RowRef`'s cells live. Blob rows come from `xl_next_row`, decoded rows from
 /// `xl_read_all_decoded`.
-#[allow(dead_code)]
 #[derive(Debug, Clone, Copy)]
 enum RowBacking<'a> {
     /// The bytes AFTER the leading `int32 cell_count`.
@@ -79,7 +78,6 @@ pub struct RowRef<'a> {
 impl<'a> RowRef<'a> {
     /// Parses the leading cell count off a `xl_next_row` blob. `None` when the blob is too short to
     /// hold even that count.
-    #[allow(dead_code)]
     pub(crate) fn from_blob(blob: &'a [u8]) -> Option<RowRef<'a>> {
         let count = read_i32(blob, 0)?;
         if count < 0 {
@@ -96,7 +94,6 @@ impl<'a> RowRef<'a> {
     /// # Safety
     /// `cells` must point to `count` initialized `XlRowCell` values whose `value` pointers stay
     /// valid for `'a` — that is, until `xl_free_rows` releases the enclosing `XlRows`.
-    #[allow(dead_code)]
     pub(crate) unsafe fn from_decoded(cells: *const XlRowCell, count: i32) -> RowRef<'a> {
         let len = if count > 0 { count as usize } else { 0 };
         let slice = if len == 0 || cells.is_null() {

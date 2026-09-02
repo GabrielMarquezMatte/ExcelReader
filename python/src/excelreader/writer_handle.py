@@ -194,6 +194,17 @@ class SheetWriter:
     def __exit__(self, *exc: object) -> None:
         self.close()
 
+    def __del__(self) -> None:
+        # Backstop only, not a substitute for explicit close()/`with`: if a SheetWriter is dropped
+        # without one, this still releases the native handle and the file lock it holds. During
+        # interpreter shutdown or GC, module globals (_native, ctypes) may already be partially torn
+        # down, so a finalizer must never let an exception escape — swallow anything broadly here,
+        # which is the standard, accepted exception to "never bare-except" for __del__ specifically.
+        try:
+            self.close()
+        except Exception:  # noqa: BLE001, S110
+            pass
+
 
 def open_writer(
     path: str | Path,

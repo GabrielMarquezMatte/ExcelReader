@@ -2,8 +2,7 @@
 
 Header-only C++23 wrapper around ExcelReader's native C ABI: opening a workbook (from a path or
 memory, with the full open-options surface), sheet navigation, schema inference, schema-driven
-typed table parsing, and schema-driven writing. No Arrow, no row-by-row decode yet — see the root
-README's Python section for what those look like.
+typed table parsing, schema-driven writing, row-by-row decoded reads, and Arrow export.
 
 ## Requirements
 
