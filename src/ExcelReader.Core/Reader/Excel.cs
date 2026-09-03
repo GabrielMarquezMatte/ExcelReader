@@ -901,19 +901,34 @@ namespace ExcelReader.Core.Reader
             return zipFormat;
         }
 
+        // Only the 8-byte signature read is asynchronous. Telling a legacy .xls from an encrypted OOXML
+        // package needs the OLE directory, and XLSB from XLSX needs the ZIP central directory; CfbContainer
+        // parses synchronously and ZipArchive has no async API at all, so both probes block. They read a
+        // bounded prefix once per open, and every worksheet read after this stays fully async — the same
+        // trade-off OpenDecryptedZipAsync already documents for its own central-directory peek.
         private static async ValueTask<(ExcelFileFormat Format, ZipArchive? Zip)> DetectSeekableAsync(Stream stream, CancellationToken ct)
         {
             RequireSeekable(stream);
             long start = stream.Position;
-            byte[] header = new byte[8];
-            int read = await stream.ReadAtLeastAsync(header, header.Length, throwOnEndOfStream: false, ct).ConfigureAwait(false);
-            stream.Position = start;
-            ReadOnlySpan<byte> sig = header.AsSpan(0, read);
-            if (TryClassifyHeader(sig, out ExcelFileFormat format))
+            byte[] header = ArrayPool<byte>.Shared.Rent(8);
+            ExcelFileFormat headerFormat;
+            bool isCfb;
+            try
             {
-                return (format, null);
+                int read = await stream.ReadAtLeastAsync(header.AsMemory(0, 8), 8, throwOnEndOfStream: false, ct).ConfigureAwait(false);
+                stream.Position = start;
+                ReadOnlySpan<byte> sig = header.AsSpan(0, read);
+                if (TryClassifyHeader(sig, out headerFormat))
+                {
+                    return (headerFormat, null);
+                }
+                isCfb = sig.StartsWith(XlsCompoundFile.Signature);
             }
-            if (sig.StartsWith(XlsCompoundFile.Signature))
+            finally
+            {
+                ArrayPool<byte>.Shared.Return(header);
+            }
+            if (isCfb)
             {
                 ExcelFileFormat cfbFormat = EncryptedPackageOpener.IsEncryptedContainer(stream)
                     ? ExcelFileFormat.EncryptedOoxml

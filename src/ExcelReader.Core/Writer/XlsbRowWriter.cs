@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Runtime.CompilerServices;
 using ExcelReader.Core.Reader;
+using ExcelReader.Core.Writer.Internal;
 
 namespace ExcelReader.Core.Writer
 {
@@ -201,14 +202,20 @@ namespace ExcelReader.Core.Writer
             {
                 return Unsafe.As<T, sbyte>(ref value);
             }
+            // Past this point T is caller-defined, so the conversion can overflow to ±Infinity or land on
+            // NaN. The cell writers reject those downstream, but only as a bare "non-finite value 8" that
+            // never names T — check here so the failure points at the value the caller actually passed.
             if (value is IConvertible convertible)
             {
-                return convertible.ToDouble(CultureInfo.InvariantCulture);
+                double converted = convertible.ToDouble(CultureInfo.InvariantCulture);
+                CellValueGuards.ThrowIfNonFiniteConversion(converted, typeof(T), nameof(value));
+                return converted;
             }
             Span<byte> bytes = stackalloc byte[64];
             if (value.TryFormat(bytes, out int written, default, CultureInfo.InvariantCulture) &&
                 double.TryParse(bytes[..written], CultureInfo.InvariantCulture, out double parsed))
             {
+                CellValueGuards.ThrowIfNonFiniteConversion(parsed, typeof(T), nameof(value));
                 return parsed;
             }
             throw new ArgumentException(
