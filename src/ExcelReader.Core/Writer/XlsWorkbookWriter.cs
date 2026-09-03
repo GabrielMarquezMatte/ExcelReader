@@ -192,7 +192,6 @@ namespace ExcelReader.Core.Writer
                 await OleCompoundWriter.WriteAsync(_stream, workbookSize, async (dest, canc) =>
                 {
                     await dest.WriteAsync(globals.Memory, canc).ConfigureAwait(false);
-#pragma warning disable HLQ012 // Loop body awaits; a CollectionsMarshal.AsSpan view cannot live across an await.
                     foreach (XlsSheetWriter sheet in _sheets)
                     {
                         frame.Reset();
@@ -206,7 +205,6 @@ namespace ExcelReader.Core.Writer
                         BiffRecordWriter.WriteEof(frame);
                         await dest.WriteAsync(frame.Memory, canc).ConfigureAwait(false);
                     }
-#pragma warning restore HLQ012
                 }, ct).ConfigureAwait(false);
             }
             finally

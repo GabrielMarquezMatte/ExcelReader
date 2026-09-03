@@ -263,9 +263,7 @@ namespace ExcelReader.Core.Crypto
             ReturnFatBuffer();
             if (OwnsSource)
             {
-#pragma warning disable IDISP007
                 Source.Dispose();
-#pragma warning restore IDISP007
             }
         }
 
@@ -274,8 +272,6 @@ namespace ExcelReader.Core.Crypto
             return checked((int)((size + sectorSize - 1) / sectorSize));
         }
 
-        [SuppressMessage("Performance", "HLQ013:Consider using 'foreach' loop instead of 'for' loop",
-            Justification = "Not an iteration over fat; follows the sector linked-list, writing each hop into chain[i].")]
         internal static int[] BuildChain(ReadOnlySpan<int> fat, int startSector, int sectorCount)
         {
             int[] chain = ArrayPool<int>.Shared.Rent(sectorCount);
@@ -444,11 +440,11 @@ namespace ExcelReader.Core.Crypto
             {
                 // long arithmetic: an int32 multiply here could overflow before the bounds check runs.
                 long offset = (long)sector * miniSectorSize;
-                if (offset < 0 || offset >= miniStream.Length)
+                int take = Math.Min(miniSectorSize, result.Length - written);
+                if (offset < 0 || offset + take > miniStream.Length)
                 {
                     throw new InvalidDataException("Invalid OLE mini sector chain.");
                 }
-                int take = Math.Min(miniSectorSize, result.Length - written);
                 miniStream.Slice((int)offset, take).CopyTo(result.AsSpan(written));
                 written += take;
                 if ((uint)sector >= (uint)miniFat.Length)

@@ -50,7 +50,7 @@ namespace ExcelReader.Core.Parser.Internal
         // Excel has no serial-number concept for TimeSpan/DateTimeOffset the way it does for
         // DateTime/DateOnly/TimeOnly, so — unlike those three — text parsing via this generic path is
         // the only sensible interpretation for them.
-        private static readonly HashSet<Type> _parsableTypes =
+        private static readonly FrozenSet<Type> _parsableTypes = FrozenSet.ToFrozenSet(
         [
             typeof(int), typeof(long), typeof(double), typeof(float), typeof(decimal),
             typeof(short), typeof(byte), typeof(uint), typeof(ulong), typeof(ushort),
@@ -59,7 +59,7 @@ namespace ExcelReader.Core.Parser.Internal
             // Guid is only reached here on net9+, where it implements IUtf8SpanParsable. On net8 the
             // dedicated Guid build paths (guarded by #if NET8_0 below) intercept it before this set.
             typeof(Guid),
-        ];
+        ]);
 
         // When csvTextDates is true, DateTime and DateOnly parse the cell text (ISO or culture format)
         // rather than an Excel serial number. Only the CSV parser opts in, because CSV has no serial
@@ -485,53 +485,6 @@ namespace ExcelReader.Core.Parser.Internal
             private static readonly FrozenDictionary<string, TEnum>.AlternateLookup<ReadOnlySpan<char>> _alternateLookup = _nameMap.GetAlternateLookup<ReadOnlySpan<char>>();
 #endif
             private static readonly FrozenDictionary<long, TEnum> _valueMap = BuildValueMap();
-#if NET8_0
-            private static readonly (string Name, TEnum Value)[] _sortedNames = BuildSortedNames();
-
-            private static (string Name, TEnum Value)[] BuildSortedNames()
-            {
-                var list = new List<(string Name, TEnum Value)>();
-                foreach (TEnum value in Enum.GetValues<TEnum>())
-                {
-                    string name = value.ToString();
-                    list.Add((name, value));
-                    long numericValue = Convert.ToInt64(value, CultureInfo.InvariantCulture);
-                    string intStr = numericValue.ToString(CultureInfo.InvariantCulture);
-                    if (!string.Equals(name, intStr, StringComparison.OrdinalIgnoreCase))
-                    {
-                        list.Add((intStr, value));
-                    }
-                }
-                var arr = list.ToArray();
-                Array.Sort(arr, static (a, b) => string.Compare(a.Name, b.Name, StringComparison.OrdinalIgnoreCase));
-                return arr;
-            }
-
-            private static bool TryLookupSpan(ReadOnlySpan<char> span, out TEnum value)
-            {
-                int low = 0;
-                int high = _sortedNames.Length - 1;
-                while (low <= high)
-                {
-                    int mid = (low + high) >>> 1;
-                    var (Name, Value) = _sortedNames[mid];
-                    int cmp = span.CompareTo(Name.AsSpan(), StringComparison.OrdinalIgnoreCase);
-                    if (cmp == 0)
-                    {
-                        value = Value;
-                        return true;
-                    }
-                    if (cmp < 0)
-                    {
-                        high = mid - 1;
-                        continue;
-                    }
-                    low = mid + 1;
-                }
-                value = default;
-                return false;
-            }
-#endif
 
 #if !NET8_0
             private static FrozenDictionary<string, TEnum> BuildNameMap()
@@ -585,7 +538,11 @@ namespace ExcelReader.Core.Parser.Internal
             private static bool TryLookupName(ReadOnlySpan<char> name, out TEnum value)
             {
 #if NET8_0
-                return TryLookupSpan(name, out value);
+                // net8 has FrozenDictionary but not GetAlternateLookup, so a span probe would have to
+                // allocate a string; Enum.TryParse takes the span directly. It also accepts numeric
+                // text for values no member declares, which _nameMap on newer targets does not — the
+                // IsDefined guard keeps both targets answering the same for that input.
+                return Enum.TryParse(name, ignoreCase: true, out value) && Enum.IsDefined(value);
 #else
                 return _alternateLookup.TryGetValue(name, out value);
 #endif

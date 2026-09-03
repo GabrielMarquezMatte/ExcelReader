@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.IO.Compression;
 using ExcelReader.Core.Enums;
 using ExcelReader.Core.Parser;
 using ExcelReader.Core.Reader;
@@ -404,6 +405,125 @@ namespace ExcelReader.Tests
             await using XlsbRowWriter row = await sheet.StartRowAsync(ct);
 
             Assert.Throws<ArgumentException>(() => row.Write(new NonNumericFormattable()));
+        }
+
+        // The overflow half of the same fallback: "1e400" parses fine and yields +Infinity, so only
+        // the conversion guard stops it. Asserting on the message, not just the type: without that
+        // guard the value still throws, but from the cell writer's ThrowIfNonFinite, which reports
+        // "non-finite value ∞" and never names the T the caller actually passed.
+        [Fact]
+        public async Task WriteOverflowingFormattableThrowsNamingTheSourceType()
+        {
+            CancellationToken ct = TestContext.Current.CancellationToken;
+            using MemoryStream ms = new();
+            await using XlsbWorkbookWriter wb = await XlsbWorkbookWriter.CreateAsync(ms, leaveOpen: true, ct: ct);
+            await wb.StartAsync(ct);
+            XlsbSheetWriter sheet = wb.AddSheet("Sheet1");
+            await sheet.StartAsync(ct);
+            await using XlsbRowWriter row = await sheet.StartRowAsync(ct);
+
+            ArgumentException ex = Assert.Throws<ArgumentException>(() => row.Write(new OverflowingFormattable()));
+            Assert.Contains(typeof(OverflowingFormattable).ToString(), ex.Message, StringComparison.Ordinal);
+        }
+
+        // RkNumber's fInt form ([MS-XLSB] 2.5.122) carries a 30-bit signed integer, so an integral
+        // value in [-2^29, 2^29) fits BrtCellRk's 4-byte payload instead of BrtCellReal's 8-byte Xnum
+        // — what Excel itself emits. Writing every number as BrtCellReal made a sheet of integers
+        // about twice the size of the one Excel produces for the same data.
+        [Theory]
+        [InlineData(0d)]
+        [InlineData(1d)]
+        [InlineData(-1d)]
+        [InlineData(536_870_911d)]  // 2^29 - 1, the largest fInt RkNumber
+        [InlineData(-536_870_912d)] // -2^29, the smallest
+        public async Task IntegralNumberInRkRangeUsesFourByteRkCell(double value)
+        {
+            (int Id, int PayloadLength)[] cells;
+            double readBack;
+            (cells, readBack) = await NumericCellAsync(value);
+
+            Assert.Equal([(Brt.CellRk, CellHeaderLength + 4)], cells);
+            Assert.Equal(value, readBack);
+        }
+
+        [Theory]
+        [InlineData(536_870_912d)]  // 2^29, one past fInt's range
+        [InlineData(-536_870_913d)]
+        [InlineData(0.5d)]
+        [InlineData(1e300d)]
+        public async Task NumberOutsideRkRangeKeepsEightByteRealCell(double value)
+        {
+            (int Id, int PayloadLength)[] cells;
+            double readBack;
+            (cells, readBack) = await NumericCellAsync(value);
+
+            Assert.Equal([(Brt.CellReal, CellHeaderLength + 8)], cells);
+            Assert.Equal(value, readBack);
+        }
+
+        // -0.0 is integral and inside the range, but RkNumber's fInt form has no way to carry the
+        // sign of zero: encoding it would silently hand back +0.0 on the way out.
+        [Fact]
+        public async Task NegativeZeroKeepsRealCellSoItsSignSurvives()
+        {
+            (int Id, int PayloadLength)[] cells;
+            double readBack;
+            (cells, readBack) = await NumericCellAsync(-0.0);
+
+            Assert.Equal([(Brt.CellReal, CellHeaderLength + 8)], cells);
+            Assert.True(double.IsNegative(readBack));
+        }
+
+        private const int CellHeaderLength = 8; // column u32 + style u32, ahead of every cell payload
+
+        // Writes `value` as the only cell of the only row, then reports how that cell was encoded in
+        // xl/worksheets/sheet1.bin and what the reader gets back for it.
+        private static async Task<((int Id, int PayloadLength)[] Cells, double ReadBack)> NumericCellAsync(double value)
+        {
+            CancellationToken ct = TestContext.Current.CancellationToken;
+            await using MemoryStream ms = await WriteAsync(async wb =>
+            {
+                XlsbSheetWriter sheet = wb.AddSheet("Sheet1");
+                await sheet.StartAsync(ct);
+                await using (XlsbRowWriter row = await sheet.StartRowAsync(ct))
+                {
+                    row.Write(value);
+                }
+                await sheet.EndAsync(ct);
+            });
+
+            (int Id, int PayloadLength)[] cells = ReadNumericCellRecords(ms);
+
+            ms.Position = 0;
+            await using XlsbReader reader = Excel.FromXlsb(ms, leaveOpen: true);
+            using XlsbReader.Enumerator e = reader.GetEnumerator();
+            Assert.True(e.MoveNext());
+            Assert.True(e.Current[0].TryGetDouble(out double readBack));
+            return (cells, readBack);
+        }
+
+        private static (int Id, int PayloadLength)[] ReadNumericCellRecords(MemoryStream workbook)
+        {
+            workbook.Position = 0;
+            byte[] sheetBin;
+            using (var zip = new ZipArchive(workbook, ZipArchiveMode.Read, leaveOpen: true))
+            {
+                using Stream entry = zip.GetEntry("xl/worksheets/sheet1.bin")!.Open();
+                using var copy = new MemoryStream();
+                entry.CopyTo(copy);
+                sheetBin = copy.ToArray();
+            }
+
+            var cells = new List<(int Id, int PayloadLength)>();
+            var records = new Biff12RecordReader(sheetBin);
+            while (records.TryReadRecord(out int id, out ReadOnlySpan<byte> payload))
+            {
+                if (id is Brt.CellRk or Brt.CellReal)
+                {
+                    cells.Add((id, payload.Length));
+                }
+            }
+            return [.. cells];
         }
 
         // EndAsync used to flip _state to Ended before the zero-sheet check threw, so a failed

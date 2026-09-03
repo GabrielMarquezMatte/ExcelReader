@@ -47,16 +47,12 @@ namespace ExcelReader.Core.Parser.Internal
         // No [EnumeratorCancellation] here: that attribute only wires a token through on an iterator
         // returning IAsyncEnumerable<T>. This is the enumerator factory itself, so the parameter *is*
         // the token and is used directly (CS8424 fires if the attribute is applied anyway).
-        [SuppressMessage("Performance", "HLQ006:GetAsyncEnumerator should return a value type",
-            Justification = "IAsyncEnumerable<T> mandates the interface return type, and the compiler-generated async iterator is a reference type by construction.")]
         [SuppressMessage("Usage", "VSTHRD003:Avoid awaiting foreign Tasks",
             Justification = "The awaited tasks are the worker tasks and per-chunk TaskCompletionSources created in this very method; every await is ConfigureAwait(false), so there is no captured context to deadlock against.")]
         [SuppressMessage("Reliability", "CA2025:Do not pass 'IDisposable' instances into unawaited tasks",
             Justification = "The CTS and semaphore handed to the workers outlive them by construction: the finally block cancels and then awaits every worker task to completion, and only the enclosing `using` declarations' finally — which runs after it — disposes them.")]
         [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP013:Await in using",
             Justification = "Task.Run is deliberately not awaited at creation: the workers must run concurrently with the merge loop. They are joined in the finally block before the `using` declarations dispose anything they touch.")]
-        [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP007:Don't dispose injected",
-            Justification = "_ownedHandle is not borrowed: it is the SafeFileHandle ParallelCsvFactory.Create<T>(string, ...) opened for this one enumeration and handed over with it, and closing it when the consumer stops — including an early break — is exactly this enumerable's obligation. Every other source passes null here, since those handles belong to the caller.")]
         public async IAsyncEnumerator<T> GetAsyncEnumerator(CancellationToken cancellationToken = default)
         {
             using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
@@ -123,7 +119,7 @@ namespace ExcelReader.Core.Parser.Internal
                     ready[slot] = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
                     slots.Release();
 
-                    // Indexed, not foreach: a Span (which HLQ012 would suggest) cannot live across yield.
+                    // Indexed, not a CollectionsMarshal.AsSpan foreach: a Span cannot live across yield.
                     List<T> models = result.Models;
                     int count = models.Count;
                     for (int m = 0; m < count; m++)

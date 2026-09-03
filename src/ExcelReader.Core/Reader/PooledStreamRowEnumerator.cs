@@ -36,8 +36,6 @@ namespace ExcelReader.Core.Reader
         }
 
         /// <summary>Releases the sheet stream (when owned) and returns both pooled buffers to the pool.</summary>
-        [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP007:Don't dispose injected",
-            Justification = "The source stream is opened for this enumerator by the reader's Get(Async)Enumerator and owned by it whenever _ownsSource is set.")]
 #pragma warning disable S2953 // Methods named "Dispose" should implement "IDisposable.Dispose"
         public void Dispose()
 #pragma warning restore S2953 // Methods named "Dispose" should implement "IDisposable.Dispose"
@@ -51,8 +49,6 @@ namespace ExcelReader.Core.Reader
         }
 
         /// <summary>Asynchronous counterpart to <see cref="Dispose"/>.</summary>
-        [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP007:Don't dispose injected",
-            Justification = "The source stream is opened for this enumerator by the reader's Get(Async)Enumerator and owned by it whenever _ownsSource is set.")]
         public async ValueTask DisposeAsync()
         {
             if (_ownsSource && _source is not null)

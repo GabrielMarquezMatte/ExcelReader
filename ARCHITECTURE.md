@@ -48,19 +48,30 @@ the loop's confirmed-offset threading handles without special-casing. Boundary c
 therefore strictly ordered — it is a correctness requirement — but this also happens to be the merge
 that yields rows in file order, identical to the sequential parser.
 
-Whether a mode other than the ordered merge above would be worth adding as an opt-in is a measurement
-question the design deliberately left open (a >=10% throughput advantage on `CsvParallelParseBenchmark`
-would justify it; under that, the ordered merge stays the only shipped mode). An initial run of that
-benchmark, on a thermally-limited mobile CPU, produced numbers too unreliable to trust for the decision
-— flat-to-worse at mid-range degrees of parallelism, improving only at the extremes, consistent with
-power/thermal throttling under sustained multi-threaded load rather than the algorithm's own scaling.
-A follow-up ad hoc experiment tried decoupling confirmation from consumption (publishing each confirmed
-chunk to a bounded channel instead of yielding it inline, so confirmation could run a few chunks ahead
-of a slow consumer instead of lockstepping with it) across fast-, moderate-, and slow-consumer
-scenarios; none showed a consistent advantage over the ordered merge, so that variant was discarded
-rather than kept as a second mode. The broader question — whether true unordered emission would fare
-differently — is unresolved; the ordered merge (the safer default, and the only mode either public
-overload can reach) stays until a clean re-run on unconstrained hardware settles it.
+Whether a mode other than the ordered merge above would be worth adding as an opt-in was a measurement
+question the design left open, against a >=10% throughput bar. It is now settled for the
+confirmation-decoupling variant, and the ordered merge stays the only shipped mode.
+
+The first measurement, on a thermally-limited mobile CPU, was discarded: flat-to-worse at mid-range
+degrees of parallelism and improving only at the extremes, which is throttling under sustained
+multi-threaded load rather than the algorithm's own scaling. The clean re-run (Ryzen 7 5700X, 8C/16T,
+`CsvParallelParseBenchmark`, MediumRun) shows the path scaling monotonically instead — 3.79x on the
+conversion-heavy corpus and 2.54x on narrow ints at dop 16, saturating past dop 4 as it becomes
+bandwidth-bound.
+
+With that baseline trustworthy, the variant itself was measured: confirmation decoupled from
+consumption, publishing confirmed rows to a bounded channel rather than yielding them inline, so
+confirmation can run ahead instead of lockstepping with a slow consumer. It lost at every consumer
+speed whose numbers were tight enough to read — 2.9% behind the ordered merge with a trivial consumer,
+23% and 28% behind as consumer cost rose past the pipeline's own — while allocating more. The slowest
+consumer leg produced no usable signal, because modelling a slow consumer with `Thread.SpinWait` makes
+it contend for the same cores as the workers; a blocking consumer would need a different harness. This
+reproduces the earlier ad hoc experiment's finding on hardware that can be trusted, so the variant is
+discarded rather than kept as a second mode.
+
+Still unresolved, and untested by any of the above: whether true unordered emission would fare
+differently. The ordered merge is the safer default and the only mode either public overload can
+reach, so it stays absent a specific reason to revisit.
 
 ## Shared plumbing
 
@@ -110,9 +121,13 @@ turns one back into a stream the ordinary readers consume:
   within an entry.
 
 `XlsxReader` and `XlsbReader` are untouched by any of this: they receive a stream that happens to
-decrypt. Writing encrypted workbooks is not supported — which also means there is no round-trip
-check, so the fixtures in `tests/ExcelReader.Tests/data/encrypted/` (paired with plaintext produced
-by an independent implementation) are the only correctness oracle for decryption.
+decrypt. Writing encrypted workbooks is a separate step, `Excel.EncryptPackage`/`EncryptPackageAsync`
+in `PackageEncryptor.cs` — it wraps a plaintext package (written by any of the ordinary writers) in
+an agile-encrypted CFB container, the inverse of `DecryptedPackageStream`. There is still no
+round-trip check between the two directions: they don't share a derivation implementation to guard
+against a shared bug, so the fixtures in `tests/ExcelReader.Tests/data/encrypted/` (paired with
+plaintext produced by an independent implementation) remain the only correctness oracle for
+decryption specifically.
 
 ## The `excelreader` CLI
 

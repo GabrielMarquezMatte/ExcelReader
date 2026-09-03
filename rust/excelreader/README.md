@@ -2,8 +2,7 @@
 
 Read and write Excel/CSV workbooks via ExcelReader's native ABI: opening a workbook (from a path or
 memory, with the full open-options surface), sheet navigation, schema inference, schema-driven typed
-parse, and schema-driven writing. No Arrow, no row-by-row decode yet - see the root README's Python
-section for what those look like.
+parse, schema-driven writing, row-by-row decoded reads, and Arrow export.
 
 ## Usage
 
@@ -96,6 +95,22 @@ see through the CFB wrapper an encrypted file is stored in - pass `XL_FORMAT_AUT
 above) rather than `XL_FORMAT_XLSX`, or the file is read as a plain ZIP and fails before the password
 is ever checked.
 
+Writing an encrypted workbook is a second step: write the plaintext package with `write_columns`/
+`write_sheet`, then wrap it with `encrypt_package`, which produces an agile-encrypted (ECMA-376 4.4)
+CFB container - AES-256-CBC, SHA-512, 100,000 spin iterations, with a `dataIntegrity` HMAC:
+
+```rust
+use excelreader::writer::{encrypt_package, write_columns};
+use excelreader::XL_FORMAT_XLSX;
+
+write_columns("plain.xlsx", XL_FORMAT_XLSX, &columns, None)?;
+encrypt_package("plain.xlsx", "secret.xlsx", "hunter2")?;
+```
+
+`package_path` is read twice (it is not disposed or removed), so it must already be a finished file.
+Encryption parameters are fixed at Excel's own defaults - there are no options - and only XLSX/XLSB
+packages can be encrypted, matching what `Workbook::open_with`/`open_memory` can decrypt.
+
 ### Arrow export (`arrow` feature)
 
 ```toml
@@ -182,6 +197,42 @@ corrupting output. `open_memory` backs the handle with an in-memory buffer inste
 it out with `bytes()`. Dropping a `WriterHandle` closes and releases it, same as `Workbook` — call
 `bytes()` (memory-backed) or reopen the path (file-backed) to observe the result rather than relying
 on the drop for that.
+
+## Reading rows one at a time
+
+`Workbook::rows` returns a cursor over the current sheet. Each row borrows a buffer the cursor
+reuses, so iterating a sheet allocates nothing per row:
+
+```rust
+use excelreader::workbook::Workbook;
+
+let mut workbook = Workbook::open("book.xlsx")?;
+let mut cursor = workbook.rows();
+while let Some(row) = cursor.next_row() {
+    let row = row?;
+    for cell in row.iter() {
+        print!("{}\t", cell.as_str()?);
+    }
+    println!();
+}
+# Ok::<(), excelreader::Error>(())
+```
+
+Because each row borrows the cursor's buffer, only one row is alive at a time — the borrow checker
+enforces it. To hold every row at once, use `read_all_decoded`, which decodes the whole remaining
+sheet in one native call and keeps it alive until dropped:
+
+```rust
+let mut workbook = Workbook::open("book.xlsx")?;
+let rows = workbook.read_all_decoded()?;
+for row in rows.iter() {
+    println!("{} cells", row.len());
+}
+# Ok::<(), excelreader::Error>(())
+```
+
+`parse_sheet` remains the fastest way to read a sheet whose columns you know — it converts on the
+native side and never formats a cell to text.
 
 ## Bounds and panics
 

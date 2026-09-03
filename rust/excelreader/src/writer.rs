@@ -316,6 +316,32 @@ pub fn write_columns_to_memory(
     Ok(crate::workbook::buffer_to_vec(buffer))
 }
 
+/// Wraps a finished plaintext XLSX/XLSB package at `package_path` in an agile-encrypted (ECMA-376
+/// 4.4) CFB container, written to `destination_path` (overwriting an existing file). The result
+/// opens with the same password via [`crate::OpenOptions::password`]. Encryption parameters are
+/// fixed at Excel's own defaults - there are no options.
+///
+/// `package_path` is read twice, so it must already be a finished file (write it with
+/// [`write_columns`]/[`write_sheet`] first).
+///
+/// # Errors
+/// `package_path` does not exist, is not readable, or is not a valid plaintext OOXML package;
+/// `password` is empty; or the usual file I/O failures on either path.
+pub fn encrypt_package(package_path: &str, destination_path: &str, password: &str) -> Result<(), Error> {
+    check_abi_version()?;
+    let status = unsafe {
+        crate::xl_encrypt_package(
+            package_path.as_ptr(),
+            package_path.len() as i32,
+            destination_path.as_ptr(),
+            destination_path.len() as i32,
+            password.as_ptr(),
+            password.len() as i32,
+        )
+    };
+    check(status)
+}
+
 /// The owning twin of [`ColumnData`], produced by [`ExcelWriter::to_columns`]. A transposed range
 /// of structs has to own its columns somewhere; this is that somewhere.
 pub enum OwnedColumnData {

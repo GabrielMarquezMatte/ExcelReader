@@ -30,6 +30,21 @@ csharp_prefer_braces = true:warning
 dotnet_diagnostic.IDE0045.severity = none
 dotnet_diagnostic.IDE0046.severity = none
 
+# Readers and writers hand stream/archive ownership across constructors and out parameters, and
+# dispose it on the failure path instead of in the method that created it. None of these three rules
+# can follow ownership that far, so every one of their reports here was a false positive carrying a
+# hand-written justification — 91 of them before this was turned off. The other IDISP rules still
+# run; they catch real leaks. Re-enable any of these if the ownership model ever stops being
+# constructor-transfer.
+dotnet_diagnostic.IDISP001.severity = none
+dotnet_diagnostic.IDISP007.severity = none
+dotnet_diagnostic.CA2000.severity = none
+
+# PooledStreamRowEnumerator provides Dispose/DisposeAsync for derived enumerators that declare
+# IExcelRowEnumerator themselves, so the base deliberately does not implement IDisposable. S2953 is
+# suppressed on that member for the same reason.
+dotnet_diagnostic.IDISP009.severity = none
+
 # Naming: private fields _camelCase, private consts PascalCase, everything else PascalCase/camelCase
 # per STYLEGUIDE.md.
 dotnet_naming_style.underscore_camel_case.capitalization = camel_case

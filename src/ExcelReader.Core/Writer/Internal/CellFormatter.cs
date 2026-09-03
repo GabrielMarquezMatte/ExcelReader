@@ -189,9 +189,18 @@ namespace ExcelReader.Core.Writer.Internal
             }
             int size = sizeHint;
             int written;
-            while (!value.TryFormat(xml.GetSpan(size), out written, default, CultureInfo.InvariantCulture))
+            Span<byte> destination = xml.GetSpan(size);
+            while (!value.TryFormat(destination, out written, default, CultureInfo.InvariantCulture))
             {
                 size = checked(size * 2);
+                destination = xml.GetSpan(size);
+            }
+            if (!CellValueGuards.IsAlwaysFinite<T>() && typeof(T) != typeof(double) && typeof(T) != typeof(float))
+            {
+                // Checked on the formatted bytes, not the value: T is caller-defined here, so its text is
+                // the only thing that reaches the cell. XLSB/XLS route the same value through a double and
+                // are already covered by their own non-finite guard.
+                CellValueGuards.ThrowIfNotFiniteNumberText(destination[..written], typeof(T), nameof(value));
             }
             xml.Advance(written);
         }

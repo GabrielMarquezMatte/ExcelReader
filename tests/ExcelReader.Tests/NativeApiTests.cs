@@ -465,6 +465,67 @@ namespace ExcelReader.Tests
             Assert.Null(handle);
         }
 
+        [Fact]
+        public void EncryptPackage_Should_Produce_A_File_Openable_With_The_Same_Password()
+        {
+            string plainPath = EncryptedFixtures.PlainPath("agile-aes256-sha512.xlsx");
+            string encryptedPath = Path.Combine(Path.GetTempPath(), $"excelreader-native-{Guid.NewGuid():N}.xlsx");
+            try
+            {
+                int status = NativeApi.EncryptPackage(
+                    Encoding.UTF8.GetBytes(plainPath),
+                    Encoding.UTF8.GetBytes(encryptedPath),
+                    Encoding.UTF8.GetBytes(EncryptedFixtures.Password));
+
+                Assert.Equal(NativeStatus.Ok, status);
+
+                using IExcelRowReader plain = Excel.Open(plainPath);
+                using IExcelRowReader roundTripped = Excel.Open(
+                    encryptedPath, new ExcelReaderOptions { Password = EncryptedFixtures.Password });
+                using IExcelRowEnumerator plainRows = plain.GetEnumerator();
+                using IExcelRowEnumerator roundTrippedRows = roundTripped.GetEnumerator();
+
+                Assert.True(plainRows.MoveNext());
+                Assert.True(roundTrippedRows.MoveNext());
+                Assert.Equal(plainRows.Current[0].GetString(), roundTrippedRows.Current[0].GetString());
+            }
+            finally
+            {
+                File.Delete(encryptedPath);
+            }
+        }
+
+        [Fact]
+        public void EncryptPackage_Should_Fail_When_The_Password_Is_Empty()
+        {
+            string encryptedPath = Path.Combine(Path.GetTempPath(), $"excelreader-native-{Guid.NewGuid():N}.xlsx");
+            try
+            {
+                int status = NativeApi.EncryptPackage(
+                    Encoding.UTF8.GetBytes(EncryptedFixtures.PlainPath("agile-aes256-sha512.xlsx")),
+                    Encoding.UTF8.GetBytes(encryptedPath),
+                    ReadOnlySpan<byte>.Empty);
+
+                Assert.Equal(NativeStatus.Error, status);
+            }
+            finally
+            {
+                File.Delete(encryptedPath);
+            }
+        }
+
+        [Fact]
+        public void EncryptPackage_Should_Reject_A_Password_Past_The_Length_Ceiling()
+        {
+            byte[] tooLong = new byte[4097];
+            int status = NativeApi.EncryptPackage(
+                Encoding.UTF8.GetBytes(EncryptedFixtures.PlainPath("agile-aes256-sha512.xlsx")),
+                Encoding.UTF8.GetBytes(Path.Combine(Path.GetTempPath(), $"excelreader-native-{Guid.NewGuid():N}.xlsx")),
+                tooLong);
+
+            Assert.Equal(NativeStatus.InvalidArgument, status);
+        }
+
         // struct_size is an exact-equality check, so an old caller gets a clear error, not corruption.
         [Fact]
         public void Should_Reject_When_Struct_Size_Is_Stale()
@@ -1005,7 +1066,6 @@ namespace ExcelReader.Tests
                 while (NativeApi.NextRow(handle, buffer, out int written) == NativeStatus.Ok)
                 {
                     List<DecodedCell> cells = DecodeRow(buffer.AsSpan(0, written));
-#pragma warning disable HLQ012
                     foreach (DecodedCell cell in cells)
                     {
                         // CellType.Number = 0, CellType.Date = 2 (from the XLSX/XLSB reader)
@@ -1015,7 +1075,6 @@ namespace ExcelReader.Tests
                             break;
                         }
                     }
-#pragma warning restore HLQ012
                     if (foundNumericCell)
                     {
                         break;
@@ -3502,8 +3561,6 @@ namespace ExcelReader.Tests
         /// its enumerator yields <paramref name="failAfter"/> real rows and then throws, simulating a
         /// genuine mid-sheet decode failure for <see cref="ReadAllDecoded_Should_Free_Already_Decoded_Rows_When_A_Later_Row_Fails_To_Decode"/>.
         /// </summary>
-#pragma warning disable IDISP007 // Don't dispose injected: this wrapper owns `inner` for the test's duration by construction — nothing else disposes it.
-#pragma warning disable HLQ006 // A reference-type enumerator is intentional here: this decorates the format-agnostic IExcelRowEnumerator interface, not a zero-allocation hot path.
         private sealed class FailAfterNRowsReader(IExcelRowReader inner, int failAfter) : IExcelRowReader
         {
             public bool IsDate1904 => inner.IsDate1904;
@@ -3549,10 +3606,7 @@ namespace ExcelReader.Tests
                 return inner.DisposeAsync();
             }
         }
-#pragma warning restore HLQ006
-#pragma warning restore IDISP007
 
-#pragma warning disable IDISP007 // Don't dispose injected: this wrapper owns `inner` for the test's duration by construction — nothing else disposes it.
         private sealed class FailAfterNRowsEnumerator(IExcelRowEnumerator inner, int failAfter) : IExcelRowEnumerator
         {
             private int _moveNextCalls;
@@ -3587,6 +3641,5 @@ namespace ExcelReader.Tests
                 return inner.DisposeAsync();
             }
         }
-#pragma warning restore IDISP007
     }
 }

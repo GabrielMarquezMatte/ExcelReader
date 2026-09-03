@@ -95,6 +95,71 @@ static int test_write_columns_round_trip()
     return 0;
 }
 
+static int test_encrypt_package_round_trip()
+{
+    const std::vector<int32_t> offsets{0, 3, 6};
+    const std::vector<uint8_t> blob{'u', 'm', 'a', 'd', 'o', 'i'};
+    const std::vector<int64_t> inteiros{1, 2};
+    const std::vector<double> numeros{0.5, 1.5};
+    const std::vector<int32_t> datas{20454, 20455};
+    const std::vector<int64_t> horas{3600000000, 7200000000};
+    const std::vector<int64_t> instantes{1767225600000000, 1767312000000000};
+
+    const std::array<xl::ColumnRef, 6> columns{
+        xl::string_column("texto", offsets, blob),
+        xl::i64_column("inteiro", inteiros),
+        xl::f64_column("numero", numeros),
+        xl::date_column("data", datas),
+        xl::time_column("hora", horas),
+        xl::timestamp_column("instante", instantes)};
+
+    const std::filesystem::path plain_path = temp_path("encrypt-plain.xlsx");
+    const std::filesystem::path encrypted_path = temp_path("encrypt-cipher.xlsx");
+    auto written = xl::write_columns(plain_path.string(), XL_FORMAT_XLSX, columns);
+    CHECK(written.has_value(), "write_columns must succeed");
+
+    auto encrypted = xl::encrypt_package(plain_path.string(), encrypted_path.string(), "hunter2");
+    CHECK(encrypted.has_value(), "encrypt_package must succeed");
+
+    {
+        // Scoped so workbook/table release their handle on encrypted_path before it's removed
+        // below - same reason test_writer_handle_class_round_trip scopes its WriterHandle.
+        xl::OpenOptions options;
+        options.password("hunter2");
+        auto workbook = xl::Workbook::open(encrypted_path.string(), XL_FORMAT_AUTO, &options);
+        CHECK(workbook.has_value(), "the encrypted file must open with the right password");
+        auto table = xl::parse_sheet<WrittenRow>(*workbook);
+        CHECK(table.has_value(), "the decrypted file must parse back");
+        CHECK(table->size() == 2, "two rows were written");
+        WrittenRow first = *table->begin();
+        CHECK(first.texto == "uma", "the round-tripped row must match what was written");
+        CHECK(first.inteiro == 1, "row 0's int64 must round-trip");
+    }
+
+    auto wrong_password = xl::Workbook::open(encrypted_path.string());
+    CHECK(!wrong_password.has_value(), "opening without a password must fail");
+    CHECK(wrong_password.error().code == XL_STATUS_PASSWORD_REQUIRED,
+         "opening without a password must report XL_STATUS_PASSWORD_REQUIRED");
+
+    std::filesystem::remove(plain_path);
+    std::filesystem::remove(encrypted_path);
+    return 0;
+}
+
+static int test_encrypt_package_rejects_an_empty_password()
+{
+    const std::filesystem::path plain_path = temp_path("encrypt-empty-pw.xlsx");
+    const std::array<xl::ColumnRef, 1> columns{xl::i64_column("inteiro", std::vector<int64_t>{1})};
+    auto written = xl::write_columns(plain_path.string(), XL_FORMAT_XLSX, columns);
+    CHECK(written.has_value(), "write_columns must succeed");
+
+    auto encrypted = xl::encrypt_package(plain_path.string(), temp_path("encrypt-empty-pw-out.xlsx").string(), "");
+    CHECK(!encrypted.has_value(), "encrypt_package must reject an empty password");
+
+    std::filesystem::remove(plain_path);
+    return 0;
+}
+
 static int test_write_columns_to_memory_round_trip()
 {
     const std::vector<int32_t> offsets{0, 3, 6};
@@ -652,6 +717,14 @@ int main()
         return 1;
     }
     if (test_write_columns_round_trip() != 0)
+    {
+        return 1;
+    }
+    if (test_encrypt_package_round_trip() != 0)
+    {
+        return 1;
+    }
+    if (test_encrypt_package_rejects_an_empty_password() != 0)
     {
         return 1;
     }
