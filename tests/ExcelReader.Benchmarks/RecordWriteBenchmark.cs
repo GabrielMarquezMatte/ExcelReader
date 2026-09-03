@@ -120,7 +120,8 @@ namespace ExcelReader.Benchmarks
         public DateTime Date { get; set; }
         public double Value { get; set; }
 
-        public static void ConfigureExcelRecordMap(ExcelRecordMapBuilder<MappedRecord> builder)
+        public static void ConfigureExcelRecordMap<TRow>(ExcelRecordMapBuilder<MappedRecord, TRow> builder)
+            where TRow : IRowWriter
         {
             builder.Column("Name", static (row, r) => row.Write(r.Name))
                    .Column("Id", static (row, r) => row.Write(r.Id))

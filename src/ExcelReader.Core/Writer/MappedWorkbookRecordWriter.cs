@@ -43,8 +43,8 @@ namespace ExcelReader.Core.Writer
         public ValueTask WriteSheetAsync<T>(string sheetName, IEnumerable<T> records, CancellationToken ct = default)
             where T : IExcelRecordMap<T>
         {
-            return WriteSheetCoreAsync(sheetName, records, MappedRecordColumns<T>.Headers,
-                                       static (row, record) => MappedRecordColumns<T>.WriteRow(row, record), ct);
+            return WriteSheetCoreAsync(sheetName, records, MappedRecordColumns<T, TRow>.Headers,
+                                       MappedRecordColumns<T, TRow>.WriteRow, ct);
         }
 
         /// <summary>
@@ -59,31 +59,34 @@ namespace ExcelReader.Core.Writer
         public ValueTask WriteSheetAsync<T>(string sheetName, IAsyncEnumerable<T> records, CancellationToken ct = default)
             where T : IExcelRecordMap<T>
         {
-            return WriteSheetCoreAsync(sheetName, records, MappedRecordColumns<T>.Headers,
-                                       static (row, record) => MappedRecordColumns<T>.WriteRow(row, record), ct);
+            return WriteSheetCoreAsync(sheetName, records, MappedRecordColumns<T, TRow>.Headers,
+                                       MappedRecordColumns<T, TRow>.WriteRow, ct);
         }
 
     }
 
-    // The mapped-path counterpart to RecordColumns<T>: builds T's ExcelRecordMapBuilder<T> once via
-    // T.ConfigureExcelRecordMap and caches it. One plan per T covers every row-writer format, since the
-    // builder compiles its column actions against the IRowWriter interface rather than per-TRow.
+    // The mapped-path counterpart to RecordColumns<T>.Plan<TRow>: builds T's map once per (T, TRow)
+    // pair via T.ConfigureExcelRecordMap and caches it. Keyed by TRow as well as T because the builder
+    // compiles its column actions against the concrete row writer, so a cell write lands on that
+    // sealed class's own method instead of an IRowWriter dispatch.
     [SuppressMessage("Major Code Smell", "S2743:Static fields should not be used in generic types",
-        Justification = "The per-closed-type static IS the design: the map is built once per T, not shared across different T.")]
-    internal static class MappedRecordColumns<T> where T : IExcelRecordMap<T>
+        Justification = "The per-closed-type static IS the design: the map is built once per (T, TRow), not shared across different pairs.")]
+    internal static class MappedRecordColumns<T, TRow>
+        where T : IExcelRecordMap<T>
+        where TRow : IRowWriter
     {
-        private static readonly ExcelRecordMapBuilder<T> _builder = Build();
+        private static readonly ExcelRecordMapBuilder<T, TRow> _builder = Build();
 
         internal static string[] Headers { get; } = _builder.Headers();
 
-        internal static void WriteRow(IRowWriter row, T record)
+        internal static void WriteRow(TRow row, T record)
         {
             _builder.WriteRow(row, record);
         }
 
-        private static ExcelRecordMapBuilder<T> Build()
+        private static ExcelRecordMapBuilder<T, TRow> Build()
         {
-            var builder = new ExcelRecordMapBuilder<T>();
+            var builder = new ExcelRecordMapBuilder<T, TRow>();
             T.ConfigureExcelRecordMap(builder);
             return builder;
         }

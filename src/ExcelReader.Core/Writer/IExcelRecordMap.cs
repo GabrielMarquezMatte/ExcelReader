@@ -10,7 +10,14 @@ namespace ExcelReader.Core.Writer
     public interface IExcelRecordMap<T>
     {
         /// <summary>Configures <paramref name="builder"/> with one column per mapped property.</summary>
+        /// <typeparam name="TRow">
+        /// The concrete row writer the columns write through; generic so each column action binds to
+        /// that sealed class instead of <see cref="IRowWriter"/> (see
+        /// <see cref="ExcelRecordMapBuilder{T, TRow}"/>). An implementation's body is identical for
+        /// every <typeparamref name="TRow"/> — write it once as a generic method.
+        /// </typeparam>
         /// <param name="builder">The builder to configure.</param>
-        static abstract void ConfigureExcelRecordMap(ExcelRecordMapBuilder<T> builder);
+        static abstract void ConfigureExcelRecordMap<TRow>(ExcelRecordMapBuilder<T, TRow> builder)
+            where TRow : IRowWriter;
     }
 }
