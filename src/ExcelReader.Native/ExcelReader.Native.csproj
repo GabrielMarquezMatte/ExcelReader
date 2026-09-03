@@ -17,7 +17,17 @@
     <StackTraceSupport>false</StackTraceSupport>
     <UseSystemResourceKeys>true</UseSystemResourceKeys>
     <EventSourceSupport>false</EventSourceSupport>
-    <IlcInstructionSet>native</IlcInstructionSet>
+    <!-- Deliberately NOT set. This binary is a redistributable: CI builds it in one job and runs it
+         in another (different runner VM), and release.yml ships it inside the PyPI wheel and as a
+         GitHub release asset. `IlcInstructionSet=native` resolves against the *build host's* CPU and
+         bakes those features in as a hard requirement, so the NativeAOT startup check aborts the
+         process — "The required instruction sets are not supported by the current CPU.", not a
+         catchable error — on any CPU missing them. GitHub's hosted pool mixes Intel and AMD hosts,
+         which made that an intermittent all-tests-abort in the cpp/rust/python jobs and a wheel that
+         could crash at import on a user's machine. ILC's default baseline is host-independent, and
+         Core's vector paths are guarded by Vector128/256.IsHardwareAccelerated, which stay runtime
+         checks under AOT — so they still light up on capable CPUs without pinning anything here.
+         If a floor is ever wanted, pin a fixed one (x86-64-v2/v3) — never `native`. -->
     <!-- RS0016/RS0026/RS0037: public-API tracking is for ExcelReader.Core's shipped NuGet surface.
          This project is never packed — its C ABI is tracked by include/excelreader.h instead. -->
     <!-- CA1031/S2221: every exported function is a hard boundary. An escaping exception would
