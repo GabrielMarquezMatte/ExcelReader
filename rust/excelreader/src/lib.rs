@@ -8,11 +8,13 @@ mod temporal;
 pub mod workbook;
 pub mod writer;
 pub mod writer_handle;
+pub mod rows;
 
 #[cfg(feature = "arrow")]
 pub mod arrow;
 
 pub use error::Error;
+pub use rows::{CellIter, CellRef, CellType, DecodedRows, RowCursor, RowRef};
 pub use options::{OpenOptions, OpenOptionsRaw, WriteOptions};
 pub use temporal::{Date, Time, Timestamp};
 
@@ -28,6 +30,14 @@ pub const XL_ERROR: i32 = -5;
 pub const XL_STATUS_PASSWORD_REQUIRED: i32 = -6;
 /// The supplied password did not match the workbook's verifier.
 pub const XL_STATUS_PASSWORD_INCORRECT: i32 = -7;
+
+pub const XL_CELL_EMPTY: i32 = 0;
+pub const XL_CELL_STRING: i32 = 1;
+pub const XL_CELL_NUMBER: i32 = 2;
+pub const XL_CELL_DATE: i32 = 3;
+pub const XL_CELL_BOOL: i32 = 4;
+pub const XL_CELL_FORMULA: i32 = 5;
+pub const XL_CELL_ERROR: i32 = 6;
 
 /// ABI revision this crate is compiled against. `Workbook::open` refuses to proceed when the loaded
 /// library's `xl_abi_version()` disagrees - see `workbook::check_abi_version`.
@@ -156,6 +166,30 @@ pub struct XlWriterHandle {
     _private: [u8; 0],
 }
 
+/// Mirrors `xl_row_cell`. Named `cell_type` because `type` is a Rust keyword.
+#[repr(C)]
+#[derive(Debug)]
+pub struct XlRowCell {
+    pub column: i32,
+    pub cell_type: i32,
+    pub value_len: i32,
+    pub value: *const u8,
+}
+
+/// Mirrors `xl_row`.
+#[repr(C)]
+pub struct XlRow {
+    pub cell_count: i32,
+    pub cells: *mut XlRowCell,
+}
+
+/// Mirrors `xl_rows`.
+#[repr(C)]
+pub struct XlRows {
+    pub row_count: i32,
+    pub rows: *mut XlRow,
+}
+
 extern "C" {
     pub fn xl_abi_version() -> c_int;
 
@@ -257,6 +291,18 @@ extern "C" {
     /// resets it to zero. Safe on a zeroed value.
     pub fn xl_free_buffer(buffer: *mut XlBuffer);
 
+    /// Reads the plaintext XLSX/XLSB package at `package_path` and writes its agile-encrypted
+    /// (ECMA-376 4.4) counterpart to `destination_path`, overwriting an existing file. The result
+    /// opens with the same password via `xl_open_file_ex`'s `xl_open_options::password`.
+    pub fn xl_encrypt_package(
+        package_path: *const u8,
+        package_path_len: i32,
+        destination_path: *const u8,
+        destination_path_len: i32,
+        password: *const u8,
+        password_len: i32,
+    ) -> c_int;
+
     // ---- Streaming writer handle: see writer_handle::WriterHandle for the call-order contract. ----
 
     pub fn xl_open_write_handle(
@@ -294,6 +340,15 @@ extern "C" {
     /// call returns `XL_OK`; on failure it is zeroed, and `xl_free_buffer` on a zeroed buffer is a
     /// no-op.
     pub fn xl_write_handle_bytes(handle: *mut XlWriterHandle, out_buffer: *mut XlBuffer) -> c_int;
+
+    pub fn xl_next_row(
+        handle: *mut XlWorkbook,
+        buffer: *mut u8,
+        capacity: i32,
+        out_written: *mut i32,
+    ) -> c_int;
+    pub fn xl_read_all_decoded(handle: *mut XlWorkbook, out_rows: *mut XlRows) -> c_int;
+    pub fn xl_free_rows(rows: *mut XlRows);
 
     pub fn xl_last_error_ptr(out_len: *mut i32) -> *const u8;
 }

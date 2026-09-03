@@ -11,10 +11,6 @@ namespace ExcelReader.Core.Reader
     // reader; ownership of `zip` transfers to that returned reader on success.
     internal static class ZipReaderOpen
     {
-        [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP001:Dispose created",
-            Justification = "zip ownership transfers to parseBody's returned reader on success; disposed here in the catch on failure.")]
-        [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
-            Justification = "zip ownership transfers to parseBody's returned reader on success; disposed here in the catch on failure.")]
         internal static async ValueTask<TResult> OpenAsync<TResult>(
             Stream stream, bool leaveOpen, ExcelReaderOptions options, Func<ZipArchive, ValueTask<TResult>> parseBody, CancellationToken ct = default)
         {
@@ -49,8 +45,6 @@ namespace ExcelReader.Core.Reader
         // is not parsed a second time. Bypasses OpenAsync's own archive creation, so dispose-on-failure lives
         // here instead. `parseBody` owns the entry reads and returns the fully-constructed reader; ownership
         // of `zip` transfers to that reader on success.
-        [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP007:Don't dispose injected",
-            Justification = "zip and stream ownership transfers to parseBody's returned reader on success; disposed here in the catch on failure.")]
         internal static async ValueTask<TResult> FromOpenZipAsync<TResult>(
             Stream stream, bool leaveOpen, ZipArchive zip, ExcelReaderOptions options,
             Func<ZipArchive, ValueTask<TResult>> parseBody)
@@ -73,8 +67,6 @@ namespace ExcelReader.Core.Reader
 
         // Memory-path twin of OpenAsync's dispose-on-failure contract: on success `memZip`'s lifetime
         // transfers to the reader `build` returns; on any failure it is disposed here before rethrowing.
-        [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP007:Don't dispose injected",
-            Justification = "memZip's lifetime transfers to this call; disposing it here on failure is correct ownership, not disposing a borrowed dependency.")]
         internal static TResult FromMemory<TResult>(ZipMemoryIndex memZip, Func<ZipMemoryIndex, TResult> build)
         {
             try

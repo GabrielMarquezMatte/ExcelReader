@@ -110,10 +110,6 @@ namespace ExcelReader.Core.Reader
         // entryLimitName/entryLimit carry a per-part cap (e.g. MaxSharedStringBytes) that
         // LimitedReadStream enforces on top of the workbook-wide counter; parts relying solely on
         // MaxTotalDecompressedBytes omit them.
-        [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP001:Dispose created",
-            Justification = "Ownership of the opened entry stream and its wrapper transfers to the caller.")]
-        [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
-            Justification = "Ownership of the opened entry stream and its wrapper transfers to the caller.")]
         internal static LimitedReadStream OpenEntryStream(
             ZipArchiveEntry entry, DecompressedByteCounter counter, ExcelReaderOptions options,
             string entryLimitName = "", long entryLimit = 0)
@@ -122,10 +118,6 @@ namespace ExcelReader.Core.Reader
         }
 
 #if NET10_0_OR_GREATER
-        [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP001:Dispose created",
-            Justification = "Ownership of the opened entry stream and its wrapper transfers to the caller.")]
-        [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
-            Justification = "Ownership of the opened entry stream and its wrapper transfers to the caller.")]
         internal static async ValueTask<LimitedReadStream> OpenEntryStreamAsync(
             ZipArchiveEntry entry, DecompressedByteCounter counter, ExcelReaderOptions options,
             CancellationToken ct, string entryLimitName = "", long entryLimit = 0)
@@ -134,10 +126,6 @@ namespace ExcelReader.Core.Reader
             return Wrap(opened, counter, options, entryLimitName, entryLimit, entry.Length);
         }
 #else
-        [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP001:Dispose created",
-            Justification = "Ownership of the opened entry stream and its wrapper transfers to the caller.")]
-        [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
-            Justification = "Ownership of the opened entry stream and its wrapper transfers to the caller.")]
         internal static ValueTask<LimitedReadStream> OpenEntryStreamAsync(
             ZipArchiveEntry entry, DecompressedByteCounter counter, ExcelReaderOptions options,
             CancellationToken ct, string entryLimitName = "", long entryLimit = 0)

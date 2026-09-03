@@ -16,10 +16,10 @@ namespace ExcelReader.Core.Writer
     /// the column plan comes from the record type's own <c>IExcelRecordMap{T}.ConfigureExcelRecordMap</c>,
     /// which reaches neither <c>GetProperties</c> nor <c>Expression.Compile</c>/<c>MakeGenericMethod</c>.
     /// </remarks>
-    public sealed class MappedWorkbookRecordWriter<TSheet, TRow> : IAsyncDisposable where TSheet : ISheetWriter<TRow> where TRow : IRowWriter
+    public sealed class MappedWorkbookRecordWriter<TSheet, TRow> : WorkbookRecordWriterBase<TSheet, TRow>
+        where TSheet : ISheetWriter<TRow>
+        where TRow : IRowWriter
     {
-        private readonly IWorkbookWriter<TSheet> _workbook;
-        private readonly HashSet<string> _sheetNames = new(StringComparer.OrdinalIgnoreCase);
 
         /// <summary>
         /// Wraps an already-created, already-started workbook writer. Ownership of <paramref name="workbook"/>
@@ -27,9 +27,8 @@ namespace ExcelReader.Core.Writer
         /// </summary>
         /// <param name="workbook">The started workbook writer to wrap.</param>
         public MappedWorkbookRecordWriter(IWorkbookWriter<TSheet> workbook)
+            : base(workbook)
         {
-            ArgumentNullException.ThrowIfNull(workbook);
-            _workbook = workbook;
         }
 
         /// <summary>
@@ -41,18 +40,11 @@ namespace ExcelReader.Core.Writer
         /// <param name="records">The records to write, one row each, in enumeration order.</param>
         /// <param name="ct">A token to cancel the operation.</param>
         /// <exception cref="InvalidOperationException">A sheet named <paramref name="sheetName"/> already exists in this workbook.</exception>
-        public async ValueTask WriteSheetAsync<T>(string sheetName, IEnumerable<T> records, CancellationToken ct = default)
+        public ValueTask WriteSheetAsync<T>(string sheetName, IEnumerable<T> records, CancellationToken ct = default)
             where T : IExcelRecordMap<T>
         {
-            ArgumentNullException.ThrowIfNull(records);
-            TSheet sheet = BeginSheet(sheetName);
-            await using (sheet.ConfigureAwait(false))
-            {
-                await sheet.StartAsync(ct).ConfigureAwait(false);
-                await WriteHeaderAsync<T>(sheet, ct).ConfigureAwait(false);
-                await sheet.WriteRecordsAsync(records, static (row, record) => MappedRecordColumns<T>.WriteRow(row, record), ct).ConfigureAwait(false);
-                await sheet.EndAsync(ct).ConfigureAwait(false);
-            }
+            return WriteSheetCoreAsync(sheetName, records, MappedRecordColumns<T, TRow>.Headers,
+                                       MappedRecordColumns<T, TRow>.WriteRow, ct);
         }
 
         /// <summary>
@@ -64,70 +56,37 @@ namespace ExcelReader.Core.Writer
         /// <param name="records">The records to write, one row each, in enumeration order.</param>
         /// <param name="ct">A token to cancel the operation, and passed to the source enumerable.</param>
         /// <exception cref="InvalidOperationException">A sheet named <paramref name="sheetName"/> already exists in this workbook.</exception>
-        public async ValueTask WriteSheetAsync<T>(string sheetName, IAsyncEnumerable<T> records, CancellationToken ct = default)
+        public ValueTask WriteSheetAsync<T>(string sheetName, IAsyncEnumerable<T> records, CancellationToken ct = default)
             where T : IExcelRecordMap<T>
         {
-            ArgumentNullException.ThrowIfNull(records);
-            TSheet sheet = BeginSheet(sheetName);
-            await using (sheet.ConfigureAwait(false))
-            {
-                await sheet.StartAsync(ct).ConfigureAwait(false);
-                await WriteHeaderAsync<T>(sheet, ct).ConfigureAwait(false);
-                await sheet.WriteRecordsAsync(records, static (row, record) => MappedRecordColumns<T>.WriteRow(row, record), ct).ConfigureAwait(false);
-                await sheet.EndAsync(ct).ConfigureAwait(false);
-            }
+            return WriteSheetCoreAsync(sheetName, records, MappedRecordColumns<T, TRow>.Headers,
+                                       MappedRecordColumns<T, TRow>.WriteRow, ct);
         }
 
-        private TSheet BeginSheet(string sheetName)
-        {
-            ArgumentNullException.ThrowIfNull(sheetName);
-            if (!_sheetNames.Add(sheetName))
-            {
-                throw new InvalidOperationException($"A sheet named '{sheetName}' already exists in this workbook.");
-            }
-            return _workbook.AddSheet(sheetName);
-        }
-
-        private static async ValueTask WriteHeaderAsync<T>(TSheet sheet, CancellationToken ct) where T : IExcelRecordMap<T>
-        {
-            TRow row = await sheet.StartRowAsync(ct).ConfigureAwait(false);
-            await using (row.ConfigureAwait(false))
-            {
-                foreach (string header in MappedRecordColumns<T>.Headers)
-                {
-                    row.Write(header);
-                }
-            }
-        }
-
-        /// <summary>Finalizes and disposes the underlying workbook writer, completing the workbook.</summary>
-        [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP007:Don't dispose injected",
-            Justification = "The RecordWriter factories transfer ownership of the workbook to this wrapper, which finalizes it here.")]
-        public ValueTask DisposeAsync()
-        {
-            return _workbook.DisposeAsync();
-        }
     }
 
-    // The mapped-path counterpart to RecordColumns<T>: builds T's ExcelRecordMapBuilder<T> once via
-    // T.ConfigureExcelRecordMap and caches it. One plan per T covers every row-writer format, since the
-    // builder compiles its column actions against the IRowWriter interface rather than per-TRow.
+    // The mapped-path counterpart to RecordColumns<T>.Plan<TRow>: builds T's map once per (T, TRow)
+    // pair via T.ConfigureExcelRecordMap and caches it. Keyed by TRow as well as T because the builder
+    // compiles its column actions against the concrete row writer, so a cell write lands on that
+    // sealed class's own method instead of an IRowWriter dispatch.
     [SuppressMessage("Major Code Smell", "S2743:Static fields should not be used in generic types",
-        Justification = "The per-closed-type static IS the design: the map is built once per T, not shared across different T.")]
-    internal static class MappedRecordColumns<T> where T : IExcelRecordMap<T>
+        Justification = "The per-closed-type static IS the design: the map is built once per (T, TRow), not shared across different pairs.")]
+    internal static class MappedRecordColumns<T, TRow>
+        where T : IExcelRecordMap<T>
+        where TRow : IRowWriter
     {
-        private static readonly ExcelRecordMapBuilder<T> _builder = Build();
+        private static readonly ExcelRecordMapBuilder<T, TRow> _builder = Build();
 
         internal static string[] Headers { get; } = _builder.Headers();
 
-        internal static void WriteRow(IRowWriter row, T record)
+        internal static void WriteRow(TRow row, T record)
         {
             _builder.WriteRow(row, record);
         }
 
-        private static ExcelRecordMapBuilder<T> Build()
+        private static ExcelRecordMapBuilder<T, TRow> Build()
         {
-            var builder = new ExcelRecordMapBuilder<T>();
+            var builder = new ExcelRecordMapBuilder<T, TRow>();
             T.ConfigureExcelRecordMap(builder);
             return builder;
         }
@@ -185,8 +144,6 @@ namespace ExcelReader.Core.Writer
         /// <param name="options">The delimiter/quote character to use; defaults to <see cref="CsvWriterOptions.Default"/> if <see langword="null"/>.</param>
         /// <param name="ct">A token to cancel the operation.</param>
         /// <returns>A started record writer ready to accept its single sheet.</returns>
-        [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
-            Justification = "Ownership of the workbook transfers to MappedWorkbookRecordWriter, which disposes it.")]
         public static async ValueTask<MappedWorkbookRecordWriter<CsvSheetWriter, CsvRowWriter>> CreateMappedCsvAsync(
             Stream stream, bool leaveOpen = false, CsvWriterOptions? options = null, CancellationToken ct = default)
         {
@@ -201,8 +158,6 @@ namespace ExcelReader.Core.Writer
         /// <param name="date1904">If <see langword="true"/>, dates are serialized using the 1904 date system instead of the default 1900 system.</param>
         /// <param name="ct">A token to cancel the operation.</param>
         /// <returns>A started record writer ready to accept sheets.</returns>
-        [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
-            Justification = "Ownership of the workbook transfers to MappedWorkbookRecordWriter, which disposes it.")]
         public static async ValueTask<MappedWorkbookRecordWriter<XlsSheetWriter, XlsRowWriter>> CreateMappedXlsAsync(
             Stream stream, bool leaveOpen = false, bool date1904 = false, CancellationToken ct = default)
         {

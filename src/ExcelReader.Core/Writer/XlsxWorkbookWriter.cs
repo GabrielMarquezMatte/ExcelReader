@@ -54,12 +54,8 @@ namespace ExcelReader.Core.Writer
         /// </param>
         /// <param name="ct">A token to cancel the operation before the archive is created.</param>
         /// <exception cref="ArgumentNullException"><paramref name="stream"/> is <see langword="null"/>.</exception>
-        [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP001:Dispose created",
-            Justification = "Factory method transfers ZipArchive ownership to XlsxWorkbookWriter; caller disposes via DisposeAsync.")]
         [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP004:Don't ignore created IDisposable",
             Justification = "Factory method transfers ZipArchive ownership to XlsxWorkbookWriter; caller disposes via DisposeAsync.")]
-        [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
-            Justification = "XlsxWorkbookWriter takes ownership of ZipArchive and disposes it in DisposeAsync/EndAsync.")]
         public static ValueTask<XlsxWorkbookWriter> CreateAsync(
             Stream stream, bool leaveOpen = false,
             CompressionLevel compression = CompressionLevel.Fastest,
@@ -77,12 +73,8 @@ namespace ExcelReader.Core.Writer
         /// Synchronous counterpart to <see cref="CreateAsync"/>, for native/unmanaged callers whose ABI
         /// is synchronous. Parameters mirror <see cref="CreateAsync"/> exactly, minus <c>ct</c>.
         /// </summary>
-        [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP001:Dispose created",
-            Justification = "Factory method transfers ZipArchive ownership to XlsxWorkbookWriter; caller disposes via Dispose/DisposeAsync.")]
         [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP004:Don't ignore created IDisposable",
             Justification = "Factory method transfers ZipArchive ownership to XlsxWorkbookWriter; caller disposes via Dispose/DisposeAsync.")]
-        [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
-            Justification = "XlsxWorkbookWriter takes ownership of ZipArchive and disposes it in Dispose(Async)/End(Async).")]
         public static XlsxWorkbookWriter Create(
             Stream stream, bool leaveOpen = false,
             CompressionLevel compression = CompressionLevel.Fastest,

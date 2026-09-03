@@ -23,18 +23,19 @@ namespace ExcelReader.Cli
     {
         /// <summary>Lists every sheet in a workbook, as "index[TAB]name".</summary>
         /// <param name="path">Path to the workbook (.xlsx, .xlsb, .xls or .csv).</param>
+        /// <param name="password">Password for an encrypted .xlsx/.xlsb workbook.</param>
         [Command("sheets")]
-        public int Sheets([Argument] string path)
+        public int Sheets([Argument] string path, string? password = null)
         {
             using TextWriter stderr = new ColorizingErrorWriter(Console.Error);
             if (Console.IsOutputRedirected)
             {
-                return CliCommands.Sheets(path, Console.Out, stderr);
+                return CliCommands.Sheets(path, Console.Out, stderr, password);
             }
 
             Table table = new Table().AddColumn("Index").AddColumn("Sheet");
             int code = CliCommands.Sheets(path, (index, name) =>
-                table.AddRow(index.ToString(CultureInfo.InvariantCulture), Markup.Escape(name)), stderr);
+                table.AddRow(index.ToString(CultureInfo.InvariantCulture), Markup.Escape(name)), stderr, password);
             if (code == 0)
             {
                 AnsiConsole.Write(table);
@@ -48,8 +49,9 @@ namespace ExcelReader.Cli
         /// <param name="output">-o, File to write to. Writes to standard output when omitted.</param>
         /// <param name="format">-f, Output format: xlsx, xlsb, xls or csv. Defaults to --output's extension, or csv when writing to standard output.</param>
         /// <param name="delimiter">-d, CSV field separator. Ignored for every other format. Defaults to a comma.</param>
+        /// <param name="password">Password for an encrypted .xlsx/.xlsb source workbook.</param>
         [Command("convert")]
-        public int Convert([Argument] string path, string? sheet = null, string? output = null, string? format = null, char? delimiter = null)
+        public int Convert([Argument] string path, string? sheet = null, string? output = null, string? format = null, char? delimiter = null, string? password = null)
         {
             // ConsoleAppFramework's source generator mis-emits a `char` parameter whose default
             // literal is itself a comma (the codegen that renders parameter defaults splits on ','),
@@ -63,12 +65,12 @@ namespace ExcelReader.Cli
             // risk, so the progress UI is gated on stderr alone, never on stdout's redirected state.
             if (Console.IsErrorRedirected)
             {
-                return CliCommands.Convert(path, sheet, output, format, delimiter ?? ',', stdout, stderr);
+                return CliCommands.Convert(path, sheet, output, format, delimiter ?? ',', stdout, stderr, onProgress: null, password);
             }
 
             return ErrorConsole.Console.Status().Start("Converting...", ctx =>
                 CliCommands.Convert(path, sheet, output, format, delimiter ?? ',', stdout, stderr, rowsWritten =>
-                    ctx.Status($"Converting... {rowsWritten.ToString("N0", CultureInfo.InvariantCulture)} rows written")));
+                    ctx.Status($"Converting... {rowsWritten.ToString("N0", CultureInfo.InvariantCulture)} rows written"), password));
         }
 
         /// <summary>Prints the inferred column schema, as "index[TAB]name[TAB]type", with a trailing ? for nullable columns.</summary>
@@ -76,13 +78,14 @@ namespace ExcelReader.Cli
         /// <param name="sheet">-s, Sheet to inspect, by name or zero-based index. Defaults to the first.</param>
         /// <param name="headerRow">1-based row to take column names from; 0 means the sheet has no header.</param>
         /// <param name="sampleSize">How many rows after the header to sample.</param>
+        /// <param name="password">Password for an encrypted .xlsx/.xlsb workbook.</param>
         [Command("schema")]
-        public int Schema([Argument] string path, string? sheet = null, int headerRow = 1, int sampleSize = 100)
+        public int Schema([Argument] string path, string? sheet = null, int headerRow = 1, int sampleSize = 100, string? password = null)
         {
             using TextWriter stderr = new ColorizingErrorWriter(Console.Error);
             if (Console.IsOutputRedirected)
             {
-                return CliCommands.Schema(path, sheet, headerRow, sampleSize, Console.Out, stderr);
+                return CliCommands.Schema(path, sheet, headerRow, sampleSize, Console.Out, stderr, password);
             }
 
             Table table = new Table().AddColumn("Index").AddColumn("Name").AddColumn("Type").AddColumn("Nullable");
@@ -92,7 +95,7 @@ namespace ExcelReader.Cli
                     Markup.Escape(column.Name ?? string.Empty),
                     column.Type.ToString(),
                     column.IsNullable ? "yes" : "no"),
-                stderr);
+                stderr, password);
             if (code == 0)
             {
                 AnsiConsole.Write(table);

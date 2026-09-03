@@ -621,7 +621,11 @@ namespace ExcelReader.Generator
 
         private static void AppendRecordMap(StringBuilder sb, string qualifiedType, List<PropertyPlan> properties)
         {
-            sb.AppendLine($"    public static void ConfigureExcelRecordMap(global::ExcelReader.Core.Writer.ExcelRecordMapBuilder<{qualifiedType}> builder)");
+            // Generic in TRow, matching IExcelRecordMap<T>: the body is the same for every row writer,
+            // but each instantiation binds its column actions to that concrete writer instead of to
+            // IRowWriter, so a cell write does not dispatch through the interface.
+            sb.AppendLine($"    public static void ConfigureExcelRecordMap<TRow>(global::ExcelReader.Core.Writer.ExcelRecordMapBuilder<{qualifiedType}, TRow> builder)");
+            sb.AppendLine("        where TRow : global::ExcelReader.Core.Writer.IRowWriter");
             sb.AppendLine("    {");
             string[] writeEmits = [.. properties.Select(static p => p.WriteEmit).Where(static w => w is not null)!];
             if (writeEmits.Length == 0)

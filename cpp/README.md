@@ -2,8 +2,7 @@
 
 Header-only C++23 wrapper around ExcelReader's native C ABI: opening a workbook (from a path or
 memory, with the full open-options surface), sheet navigation, schema inference, schema-driven
-typed table parsing, and schema-driven writing. No Arrow, no row-by-row decode yet — see the root
-README's Python section for what those look like.
+typed table parsing, schema-driven writing, row-by-row decoded reads, and Arrow export.
 
 ## Requirements
 
@@ -78,6 +77,39 @@ for (const auto& column : *workbook->infer_schema(1, 100)) {
 
 Every entry point returns `std::expected<T, xl::Error>` — this header throws nothing.
 
+## Reading rows one at a time
+
+`Workbook::rows()` returns a cursor over the current sheet. Each row borrows a buffer the cursor
+reuses, so iterating allocates nothing per row. A clean end of sheet arrives as an error carrying
+`XL_EOF`:
+
+```cpp
+auto workbook = xl::Workbook::open("book.xlsx").value();
+auto cursor = workbook.rows();
+while (auto row = cursor.next_row())
+{
+    for (auto cell : *row)
+    {
+        std::print("{}\t", cell.value);
+    }
+    std::println();
+}
+```
+
+Each row is invalidated by the next `next_row()`. To hold every row at once, use
+`read_all_decoded()`, which decodes the whole remaining sheet in one native call and owns it until
+destroyed:
+
+```cpp
+auto rows = workbook.read_all_decoded().value();
+for (auto row : rows)
+{
+    std::println("{} cells", row.size());
+}
+```
+
+`xl::parse_sheet<T>` remains the fastest way to read a sheet whose columns you know.
+
 ### Encrypted workbooks
 
 `OpenOptions::password(std::string_view)` unlocks a password-protected OOXML workbook
@@ -102,6 +134,20 @@ failure without parsing `error().message`.
 The `password_` string this builds into `xl_open_options::password` must outlive the open call;
 keeping it in the `OpenOptions` object (which owns its own copy) is what makes
 `options.password("hunter2")` safe to call with a temporary, as above.
+
+Writing an encrypted workbook is a second step: write the plaintext package with `write_columns`/
+`write_sheet`, then wrap it with `xl::encrypt_package`, which produces an agile-encrypted (ECMA-376
+4.4) CFB container — AES-256-CBC, SHA-512, 100,000 spin iterations, with a `dataIntegrity` HMAC:
+
+```cpp
+auto written = xl::write_columns("plain.xlsx", XL_FORMAT_XLSX, columns);
+auto encrypted = xl::encrypt_package("plain.xlsx", "secret.xlsx", "hunter2");
+if (!encrypted) { /* encrypted.error().message */ }
+```
+
+`package_path` is read twice (it is not disposed or removed), so it must already be a finished file.
+Encryption parameters are fixed at Excel's own defaults — there are no options — and only XLSX/XLSB
+packages can be encrypted, matching what `Workbook::open`/`open_memory` can decrypt.
 
 ### Arrow export
 

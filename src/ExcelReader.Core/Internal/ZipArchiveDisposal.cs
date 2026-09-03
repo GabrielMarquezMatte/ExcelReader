@@ -7,8 +7,6 @@ namespace ExcelReader.Core.Internal
     // across their dispose paths.
     internal static class ZipArchiveDisposal
     {
-        [System.Diagnostics.CodeAnalysis.SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP007:Don't dispose injected",
-            Justification = "Disposal helper: disposing the caller-owned ZipArchive is its sole purpose — callers delegate their own zip's disposal here.")]
         internal static ValueTask DisposeAsync(ZipArchive zip)
         {
 #if NET10_0_OR_GREATER
@@ -20,8 +18,6 @@ namespace ExcelReader.Core.Internal
         }
 
         // Synchronous counterpart, for native/unmanaged callers whose ABI is synchronous.
-        [System.Diagnostics.CodeAnalysis.SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP007:Don't dispose injected",
-            Justification = "Disposal helper: disposing the caller-owned ZipArchive is its sole purpose — callers delegate their own zip's disposal here.")]
         internal static void Dispose(ZipArchive zip)
         {
             zip.Dispose();

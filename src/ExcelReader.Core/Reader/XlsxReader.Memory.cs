@@ -8,8 +8,6 @@ namespace ExcelReader.Core.Reader
     // suspension — every part is already fully decompressed before the reader is constructed.
     public sealed partial class XlsxReader
     {
-        [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
-            Justification = "Ownership transfers to the (ZipMemoryIndex, ExcelReaderOptions) overload, which disposes it on failure and via the reader on success.")]
         internal static XlsxReader CreateFromMemory(ReadOnlyMemory<byte> data, ExcelReaderOptions? options = null)
         {
             ExcelReaderOptions effectiveOptions = options ?? ExcelReaderOptions.Default;

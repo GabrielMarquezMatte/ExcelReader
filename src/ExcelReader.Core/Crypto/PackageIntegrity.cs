@@ -38,7 +38,7 @@ namespace ExcelReader.Core.Crypto
             Justification = "The hash algorithm is dictated by the workbook's own EncryptionInfo descriptor, not chosen here; verifying a file written with SHA1 requires HMACSHA1.")]
         [SuppressMessage("Major Code Smell", "S4790:Use a stronger hashing algorithm",
             Justification = "The hash algorithm is dictated by the workbook's own EncryptionInfo descriptor, not chosen here; verifying a file written with SHA1 requires HMACSHA1.")]
-        private static byte[] ComputeHmac(Stream source, HashKind kind, byte[] key)
+        internal static IncrementalHash CreateHmac(HashKind kind, byte[] key)
         {
             HashAlgorithmName name = kind switch
             {
@@ -49,8 +49,12 @@ namespace ExcelReader.Core.Crypto
                 _ => throw new ExcelEncryptionException(ExcelEncryptionReason.UnsupportedScheme,
                     $"Unsupported hash algorithm '{kind}' in the encryption descriptor."),
             };
+            return IncrementalHash.CreateHMAC(name, key);
+        }
 
-            using IncrementalHash hmac = IncrementalHash.CreateHMAC(name, key);
+        private static byte[] ComputeHmac(Stream source, HashKind kind, byte[] key)
+        {
+            using IncrementalHash hmac = CreateHmac(kind, key);
             byte[] buffer = ArrayPool<byte>.Shared.Rent(StreamBufferSize);
             try
             {

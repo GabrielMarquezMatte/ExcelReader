@@ -186,8 +186,6 @@ namespace ExcelReader.Core.Reader
             return count;
         }
 
-        [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP007:Don't dispose injected",
-            Justification = "Only disposed when _ownsSource — this type took ownership of the source in that case.")]
         public void Dispose()
         {
             if (_ownsSource)

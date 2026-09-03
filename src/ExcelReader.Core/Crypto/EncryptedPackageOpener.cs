@@ -247,8 +247,6 @@ namespace ExcelReader.Core.Crypto
                 _inner.Write(buffer, offset, count);
             }
 
-            [System.Diagnostics.CodeAnalysis.SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP007:Don't dispose injected",
-                Justification = "OwnedDecryptedStream owns both _inner and _cfb for the duration of the decrypted read; see EncryptedPackageOpener.Decrypt.")]
             protected override void Dispose(bool disposing)
             {
                 if (disposing && !_disposed)

@@ -192,6 +192,23 @@ impl Workbook {
         Ok(flag != 0)
     }
 
+    /// A row-at-a-time reader over the current sheet.
+    ///
+    /// Takes `&mut self` because it advances the row cursor every read on this handle shares, the
+    /// same reason [`move_to_sheet`](Self::move_to_sheet) does.
+    pub fn rows(&mut self) -> crate::rows::RowCursor<'_> {
+        crate::rows::RowCursor::new(self.handle)
+    }
+
+    /// Every remaining row of the current sheet in one native call, avoiding a round-trip per row.
+    ///
+    /// An empty remainder is an empty result, not an error.
+    pub fn read_all_decoded(&mut self) -> Result<crate::rows::DecodedRows, Error> {
+        let mut raw = crate::XlRows { row_count: 0, rows: std::ptr::null_mut() };
+        check(unsafe { crate::xl_read_all_decoded(self.handle, &mut raw) })?;
+        Ok(crate::rows::DecodedRows::new(raw))
+    }
+
     /// Guesses a [`parse_sheet`] schema by sampling the current sheet.
     ///
     /// `header_row` has the same meaning as in [`parse_sheet`] (0 = no header); `sample_size`

@@ -341,8 +341,6 @@ namespace ExcelReader.Core.Writer
 
         [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP003:Dispose previous before re-assigning",
             Justification = "The null-guard above means this only ever assigns _stream once, from null; never re-assigns a live stream.")]
-        [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
-            Justification = "Ownership of the optionally-wrapped stream transfers to _stream, which EndAsync disposes.")]
         private void EnsureStream()
         {
             if (_stream is not null)
@@ -486,6 +484,8 @@ namespace ExcelReader.Core.Writer
         }
 
         private const int CellHeaderLength = 8; // column u32 + style u32
+        private const int RkIntMin = -(1 << 29);  // RkNumber's fInt field is a 30-bit signed integer
+        private const int RkIntMax = (1 << 29) - 1;
 
         internal void WriteStringCell(int columnIndex, string? value)
         {
@@ -539,11 +539,38 @@ namespace ExcelReader.Core.Writer
         {
             ValidateColumn(columnIndex);
             CellValueGuards.ThrowIfNonFinite(value, nameof(value));
+            if (TryEncodeRkInt(value, out uint rk))
+            {
+                const int RkLength = CellHeaderLength + 4; // + RkNumber u32
+                Biff12RecordWriter.WriteFixedRecord(_records, Brt.CellRk, RkLength, out Span<byte> rkPayload);
+                Biff12RecordWriter.WriteCellHeader(rkPayload, columnIndex, style);
+                BinaryPrimitives.WriteUInt32LittleEndian(rkPayload.Slice(8, 4), rk);
+                MaybeFlush();
+                return;
+            }
             const int Length = CellHeaderLength + 8; // + double
             Biff12RecordWriter.WriteFixedRecord(_records, Brt.CellReal, Length, out Span<byte> p);
             Biff12RecordWriter.WriteCellHeader(p, columnIndex, style);
             BinaryPrimitives.WriteDoubleLittleEndian(p.Slice(8, 8), value);
             MaybeFlush();
+        }
+
+        // RkNumber ([MS-XLSB] 2.5.122) with fInt set: its upper 30 bits are a signed integer, so a
+        // whole number in [-2^29, 2^29) costs 4 payload bytes instead of Xnum's 8 — the encoding Excel
+        // emits for integers, and the one Biff12.Rk reads back on the way in. A sheet of integers is
+        // about half the size for it. The fX100 form is deliberately left out: it would trade the same
+        // 4 bytes for a divide-by-100 round trip that is not bit-exact for every multiple of 0.01.
+        // Negative zero is excluded too — fInt has no sign bit for zero, so RK would hand back +0.0.
+        private static bool TryEncodeRkInt(double value, out uint rk)
+        {
+            rk = 0;
+            if (value != Math.Truncate(value) || value < RkIntMin || value > RkIntMax
+                || (value == 0 && double.IsNegative(value)))
+            {
+                return false;
+            }
+            rk = ((uint)(int)value << 2) | 0x02; // fInt set, fX100 clear
+            return true;
         }
 
         private static void ValidateColumn(int columnIndex)

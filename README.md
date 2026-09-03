@@ -97,6 +97,18 @@ Apache.Arrow.RecordBatch batch = reader.ToArrowRecordBatch();
 
 `schema` defaults to `Excel.InferSchema`'s guess; pass an explicit `ExcelColumnSchema[]` to skip inference. The whole sheet is materialized into one `RecordBatch` — there is no chunked/streaming variant yet.
 
+`WriteRecordBatch`/`WriteRecordBatchAsync` are the write-side mirror — one call from a `RecordBatch` to a sheet, for XLSX, XLSB, XLS, and CSV:
+
+```csharp
+using ExcelReader.Arrow;
+using ExcelReader.Core.Writer;
+
+using XlsxWorkbookWriter workbook = XlsxWorkbookWriter.Create(File.Create("report.xlsx"));
+workbook.WriteRecordBatch(batch); // adds the sheet, writes the header + every row, ends the workbook
+```
+
+Supports the same seven Arrow types `ToArrowRecordBatch` produces (string, int64, double, boolean, date32, time64, timestamp); any other type throws `NotSupportedException`. Pass `writeHeader: false` to skip the header row, or a `sheetName` (XLSX/XLSB/XLS only — CSV has no sheet name) to rename it from the `"Sheet1"` default.
+
 ## Open by auto-detecting the format
 
 `Excel.Open` picks the reader from the file signature (XLSX/XLSB are ZIP packages, XLS is an OLE2 document) and returns an `IExcelRowReader`. The interface exposes `GetEnumerator()` directly, so no pattern-match is needed for basic row iteration.
@@ -122,6 +134,21 @@ for (int i = 0; i < reader.SheetCount; i++)
     reader.MoveToSheet(i);
     Console.WriteLine(reader.SheetName);
     foreach (var row in reader)
+    {
+        Console.WriteLine(row[0].GetString());
+    }
+}
+```
+
+`Sheets()` is the same walk as an extension method, yielding an `ExcelSheet { Index, Name }` per sheet after selecting it as current:
+
+```csharp
+using IExcelRowReader reader = Excel.Open("report.xlsx");
+
+foreach (var sheet in reader.Sheets())
+{
+    Console.WriteLine(sheet.Name);
+    foreach (var row in reader) // reads the sheet Sheets() just selected
     {
         Console.WriteLine(row[0].GetString());
     }
@@ -229,13 +256,57 @@ catch (ExcelEncryptionException ex) when (ex.Reason is ExcelEncryptionReason.Pas
 
 Supported: ECMA-376 agile encryption (Excel 2010+ — what Excel writes today when you set a
 password). **Not** supported: ECMA-376 standard encryption (Excel 2007; recognized and rejected
-with `UnsupportedScheme`, pending real fixtures to verify a derivation against), writing encrypted
-files, encrypted legacy `.xls` (RC4 CryptoAPI), and sheet/workbook *protection* passwords — a
-different mechanism entirely, stored as hashes in the plaintext XML.
+with `UnsupportedScheme`, pending real fixtures to verify a derivation against), encrypted legacy
+`.xls` (RC4 CryptoAPI), and sheet/workbook *protection* passwords — a different mechanism entirely,
+stored as hashes in the plaintext XML.
 
 `Password` never appears in `ExcelReaderOptions.ToString()`. Note that a password supplied as a
 `string` cannot be wiped from memory — .NET strings are immutable and movable — so the library zeroes
 only the buffers it owns: the derivation buffer and the derived key.
+
+**The `dataIntegrity` HMAC is not verified by default when reading from a stream.**
+`ExcelReaderOptions.VerifyEncryptedIntegrity` defaults to `false`, because the HMAC covers the whole
+encrypted package: checking it means a full pass over the file before the first row, which makes
+time-to-first-row proportional to file size and defeats streaming. With it off, decryption still
+fails loudly on corrupt ciphertext (the plaintext stops being a valid ZIP), but *targeted* tampering
+by someone who can modify the file is not detected. Set it to `true` whenever the workbook comes from
+somewhere you do not control and you care that it was not altered:
+
+```csharp
+var options = new ExcelReaderOptions
+{
+    Password = "hunter2",
+    VerifyEncryptedIntegrity = true, // pay one full pass; reject tampered packages
+};
+```
+
+The in-memory path (`Excel.Open(ReadOnlyMemory<byte>)` and friends) has already decrypted everything
+by the time it returns, so it always verifies regardless of this setting. Standard encryption has no
+HMAC field, so the setting does not apply to it.
+
+Writing an encrypted workbook is a second step: build the package with any writer, then wrap it with
+`Excel.EncryptPackage`, which produces an agile-encrypted (ECMA-376 4.4) CFB container — AES-256-CBC,
+SHA-512, 100,000 spin iterations, with a `dataIntegrity` HMAC.
+
+```csharp
+using ExcelReader.Core.Reader;
+using ExcelReader.Core.Writer;
+
+using var plain = new MemoryStream();
+await using (var workbook = await XlsxWorkbookWriter.CreateAsync(plain, leaveOpen: true))
+{
+    // write sheets and rows as usual
+}
+plain.Position = 0;
+
+using var destination = File.Create("secret.xlsx");
+await Excel.EncryptPackageAsync(plain, destination, "hunter2");
+```
+
+The package stream must be seekable (it is read twice, so the container never has to be buffered in
+memory); the destination does not. Path-to-path overloads exist for both the sync and async forms.
+Encryption parameters are fixed at Excel's own defaults — there are no knobs — and only XLSX/XLSB
+packages can be encrypted, matching what the reader can decrypt.
 
 ## Parse typed rows
 
@@ -271,6 +342,23 @@ Built-in property types: `string`, `bool`, `DateTime`, `DateOnly`, `Guid`, every
 using IExcelRowReader reader = Excel.Open("changes.xlsx"); // or .xlsb / .xls
 foreach (var item in new ExcelParser<ChangeRow>().Parse(reader)) { /* ... */ }
 ```
+
+## Bridge to ADO.NET (`IDataReader`)
+
+`ExcelDataReader` adapts an `IExcelRowReader`'s current sheet to `System.Data.IDataReader`, so it drops straight into `SqlBulkCopy`, `DataTable.Load`, Dapper, or any other ADO.NET consumer:
+
+```csharp
+using System.Data;
+using ExcelReader.Core.Reader;
+
+using IExcelRowReader reader = Excel.Open("report.xlsx");
+using IDataReader data = new ExcelDataReader(reader); // headerRow: 1 by default
+
+var table = new DataTable();
+table.Load(data);
+```
+
+The header row (1-based, default 1) fixes the column shape; pass `headerRow: 0` for a header-less sheet, whose columns come back named `Column0`, `Column1`, ... sized from the first data row. There is no schema-inference pass — `GetFieldType`/`GetValue`/the typed getters read the *current* row's own cell type, so a consumer building its schema from the first row (like `DataTable.Load`) locks in that row's types for the whole load. `NextResult()` always returns `false`; combine with `Sheets()` to build one `ExcelDataReader` per sheet instead of chaining result sets.
 
 ## Generate typed maps at compile time (Native AOT / trimming)
 
@@ -942,6 +1030,7 @@ against the C/C++ competitors.
 - The XLSX writer emits a compact workbook with strings, numbers, booleans, dates, and blank cells; shared strings are opt-in.
 - The XLSB writer emits BIFF12 workbook parts inside the standard XLSB ZIP package; shared strings are opt-in.
 - The XLS writer buffers records in memory and assembles the OLE container at `EndAsync`; choose it when write throughput matters more than peak allocation.
+- `Excel.EncryptPackage`/`EncryptPackageAsync` wrap a written XLSX/XLSB package in agile ECMA-376 encryption; see [Encrypted workbooks](#encrypted-workbooks).
 
 ## Build
 
@@ -987,10 +1076,19 @@ write_sheet("out.xlsx", XL_FORMAT_XLSX, &rows, None)?;
 auto written = xl::write_sheet("out.xlsx", rows);   // format inferred from the extension
 ```
 
-Row-by-row decoded reads remain Python-only. The Arrow export is available from Python
+Row-by-row decoded reads are available from all three bindings — Python as `Workbook.rows()`, C++
+as `xl::Workbook::rows()`, Rust as `Workbook::rows()`. Python additionally exposes
+`read_all_columnar()` over `xl_read_all_blob`, which the other two do not wrap.
+
+The Arrow export is available from Python
 (`to_arrow`/`to_record_batch`), C++ (`xl::parse_arrow<T>`, in the separate `<xl/excelreader_arrow.hpp>`
 header — no Apache Arrow C++ dependency, you get the raw C Data Interface pair), and Rust
 (`excelreader::arrow::parse_arrow`, behind the `arrow` cargo feature, returning an `arrow::array::RecordBatch`).
+
+Encrypting a written package goes through one export too, `xl_encrypt_package` — wrap a finished
+plaintext XLSX/XLSB package in agile ECMA-376 encryption, given a password. All three bindings
+expose it: Python as `encrypt_package`, C++ as `xl::encrypt_package`, Rust as
+`writer::encrypt_package`; see each binding's README for the encrypted-workbooks section.
 
 ## Contributing
 

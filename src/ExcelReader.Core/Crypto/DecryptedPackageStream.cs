@@ -287,8 +287,6 @@ namespace ExcelReader.Core.Crypto
             _aes.DecryptCbc(cipherBuf.AsSpan(0, cipherLen), _iv, _segmentCache.AsSpan(0, cipherLen), PaddingMode.None);
         }
 
-        [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP007:Don't dispose injected",
-            Justification = "DecryptedPackageStream owns the ciphertext view for the duration of the decrypted read.")]
         protected override void Dispose(bool disposing)
         {
             if (disposing && !_disposed)

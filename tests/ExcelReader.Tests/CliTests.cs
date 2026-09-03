@@ -80,6 +80,26 @@ namespace ExcelReader.Tests
             Assert.Equal(reader.SheetNameAt(0), reader.SheetName);
         }
 
+        [Fact]
+        public void Should_OpenAnEncryptedWorkbook_When_PasswordIsGiven()
+        {
+            using IExcelRowReader reader = CliCommands.Open(
+                Path.Combine("data", "encrypted", "agile-aes256-sha512.xlsx"), null, EncryptedFixtures.Password);
+
+            Assert.True(reader.SheetCount > 0);
+        }
+
+        [Fact]
+        public void Should_ReturnOneAndWriteToStderr_When_AnEncryptedWorkbookHasNoPassword()
+        {
+            (int code, string output, string error) = Sheets(
+                Path.Combine("data", "encrypted", "agile-aes256-sha512.xlsx"));
+
+            Assert.Equal(1, code);
+            Assert.Empty(output);
+            Assert.NotEmpty(error);
+        }
+
         private static (int Code, string Out, string Err) Convert(
             string path, string? sheet = null, string? output = null, string? format = null, char delimiter = ',')
         {

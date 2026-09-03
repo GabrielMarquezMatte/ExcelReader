@@ -48,8 +48,6 @@ namespace ExcelReader.Core.Parser.Internal
         }
 
         /// <summary>Gets the enumerator used to consume this sequence with a <c>foreach</c> loop.</summary>
-        [System.Diagnostics.CodeAnalysis.SuppressMessage("Performance", "HLQ006:GetEnumerator should return a value type",
-            Justification = "The enumerator is a class so the same type can also expose MoveNextAsync for the async path.")]
         public NamedRefRowEnumerator<TModel, TEnumerator> GetEnumerator()
         {
             return new(_reader.GetEnumerator(), _context, _typeInfo, _comparer, _normalization, _headerRow, _throwOnParseFailure);
@@ -63,8 +61,6 @@ namespace ExcelReader.Core.Parser.Internal
         /// <c>MoveNextAsync</c>. A ref-struct <typeparamref name="TModel"/> can't be surfaced through
         /// <c>IAsyncEnumerable&lt;TModel&gt;</c> (CS9267), so this stays a pattern match, never the interface.
         /// </remarks>
-        [System.Diagnostics.CodeAnalysis.SuppressMessage("Performance", "HLQ006:GetAsyncEnumerator should return a value type",
-            Justification = "The enumerator is a class so the same type can also expose MoveNextAsync for the async path.")]
         public NamedRefRowEnumerator<TModel, TEnumerator> GetAsyncEnumerator()
         {
             return new(_reader.GetAsyncEnumerator(), _context, _typeInfo, _comparer, _normalization, _headerRow, _throwOnParseFailure);

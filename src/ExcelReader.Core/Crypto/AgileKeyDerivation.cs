@@ -7,7 +7,7 @@ using ExcelReader.Core.Reader;
 namespace ExcelReader.Core.Crypto
 {
     // ECMA-376/[MS-OFFCRYPTO] agile encryption key derivation.
-    internal static class AgileKeyDerivation
+    internal static partial class AgileKeyDerivation
     {
         // [MS-OFFCRYPTO] 2.3.4.10 password key encryptor block keys.
         private static ReadOnlySpan<byte> BlockVerifierHashInput => [0xfe, 0xa7, 0xd2, 0x76, 0x3b, 0x4b, 0x9e, 0x79];

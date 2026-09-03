@@ -65,8 +65,6 @@ namespace ExcelReader.Core.Reader
             return target.GetBuffer().AsMemory(0, (int)target.Length);
         }
 
-        [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
-            Justification = "Reader ownership transfers to the caller, who disposes it via await using / DisposeAsync.")]
         internal static ValueTask<CsvReader> CreateAsync(Stream stream, bool leaveOpen, CsvReaderOptions? options = null, CancellationToken ct = default)
         {
             ct.ThrowIfCancellationRequested();
@@ -126,8 +124,6 @@ namespace ExcelReader.Core.Reader
         }
 
         /// <summary>Gets an enumerator that reads records synchronously from the start of the source.</summary>
-        [SuppressMessage("Performance", "HLQ006:GetEnumerator should return a value type",
-            Justification = "Enumerator is a class so the same type can also expose MoveNextAsync for the async path.")]
         public Enumerator GetEnumerator()
         {
             ResetToStart();
@@ -144,8 +140,6 @@ namespace ExcelReader.Core.Reader
         }
 
         /// <summary>Gets an enumerator that reads records asynchronously from the start of the source.</summary>
-        [SuppressMessage("Performance", "HLQ006:GetAsyncEnumerator should return a value type",
-            Justification = "Enumerator is a class so the same type can also expose MoveNextAsync for the async path.")]
         public Enumerator GetAsyncEnumerator()
         {
             return GetEnumerator();
@@ -158,8 +152,6 @@ namespace ExcelReader.Core.Reader
 
         /// <summary>Asynchronously creates an enumerator that reads records from the start of the source.</summary>
         /// <param name="ct">A token to cancel the setup operation.</param>
-        [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
-            Justification = "Enumerator ownership transfers to the caller, who disposes it via await using / DisposeAsync.")]
         public ValueTask<Enumerator> GetAsyncEnumeratorAsync(CancellationToken ct = default)
         {
             ct.ThrowIfCancellationRequested();

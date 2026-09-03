@@ -46,8 +46,6 @@ namespace ExcelReader.Tests
         // PRNG is exactly what makes a fuzz failure pinpoint-able, unlike a CSPRNG would be.
         [SuppressMessage("Security", "CA5394:Do not use insecure randomness",
             Justification = "Fuzzing needs a reproducible seeded PRNG, not cryptographic randomness.")]
-        [SuppressMessage("Performance", "HLQ013:Consider using 'foreach' loop instead of 'for' loop",
-            Justification = "Each iteration both reads (rng.Next) and writes positions[i] by index; foreach can't express the write.")]
         internal static byte[] MutateCopy(byte[] seed, Random rng, out int[] positions)
         {
             byte[] copy = (byte[])seed.Clone();
@@ -402,6 +400,17 @@ namespace ExcelReader.Tests
         public bool TryFormat(Span<byte> utf8Destination, out int bytesWritten, ReadOnlySpan<char> format, IFormatProvider? provider)
         {
             return Encoding.UTF8.TryGetBytes("not-a-number", utf8Destination, out bytesWritten);
+        }
+    }
+
+    // The other half of that fallback: double.TryParse *succeeds* on "1e400" and hands back
+    // +Infinity (since .NET Core 3.0 overflow no longer fails the parse), so the value only stops
+    // at the conversion guard. Also shared by XlsWriterTests and XlsbWriterTests.
+    internal readonly struct OverflowingFormattable : IUtf8SpanFormattable
+    {
+        public bool TryFormat(Span<byte> utf8Destination, out int bytesWritten, ReadOnlySpan<char> format, IFormatProvider? provider)
+        {
+            return Encoding.UTF8.TryGetBytes("1e400", utf8Destination, out bytesWritten);
         }
     }
 }

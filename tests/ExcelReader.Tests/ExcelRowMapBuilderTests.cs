@@ -35,7 +35,8 @@ namespace ExcelReader.Tests
                     .Property(["Kind"], ExcelCellReaders.Enum, static (ref MapBuilderTestModel m, MapBuilderKind v) => m.Kind = v);
             }
 
-            public static void ConfigureExcelRecordMap(ExcelRecordMapBuilder<MapBuilderTestModel> builder)
+            public static void ConfigureExcelRecordMap<TRow>(ExcelRecordMapBuilder<MapBuilderTestModel, TRow> builder)
+                where TRow : IRowWriter
             {
                 builder
                     .Column("Name", static (row, m) => row.Write(m.Name))
@@ -123,7 +124,7 @@ namespace ExcelReader.Tests
                 await wb.StartAsync(ct);
                 XlsxSheetWriter sheet = wb.AddSheet("S1");
                 await sheet.StartAsync(ct);
-                var builder = new ExcelRecordMapBuilder<MapBuilderTestModel>();
+                var builder = new ExcelRecordMapBuilder<MapBuilderTestModel, XlsxRowWriter>();
                 MapBuilderTestModel.ConfigureExcelRecordMap(builder);
                 await WriteMappedRowAsync(sheet, builder, record, ct);
                 await sheet.EndAsync(ct);
@@ -153,7 +154,7 @@ namespace ExcelReader.Tests
             Assert.Equal(reflected[0].Kind, mapped[0].Kind);
         }
 
-        private static async ValueTask WriteMappedRowAsync(XlsxSheetWriter sheet, ExcelRecordMapBuilder<MapBuilderTestModel> builder, MapBuilderTestModel record, CancellationToken ct)
+        private static async ValueTask WriteMappedRowAsync(XlsxSheetWriter sheet, ExcelRecordMapBuilder<MapBuilderTestModel, XlsxRowWriter> builder, MapBuilderTestModel record, CancellationToken ct)
         {
             XlsxRowWriter header = await sheet.StartRowAsync(ct);
             await using (header.ConfigureAwait(false))
@@ -258,6 +259,57 @@ namespace ExcelReader.Tests
             Assert.Equal(record.Age, results[0].Age);
             Assert.Equal(record.Active, results[0].Active);
             Assert.Equal(record.Kind, results[0].Kind);
+        }
+
+        // The column plan is keyed by (T, TRow), not by T alone: the write actions compile against the
+        // concrete row writer, so each cell resolves to that sealed class's own method instead of an
+        // IRowWriter dispatch — the trade RecordColumns<T>.Plan<TRow> already makes on the reflection
+        // side. Its observable consequence, pinned here: the map is configured once per row-writer
+        // type, not once per record type.
+        private sealed class ConfigureCountingModel : IExcelRecordMap<ConfigureCountingModel>
+        {
+            private static int _configurations;
+
+            public string Name { get; set; } = "";
+
+            internal static int Configurations => Volatile.Read(ref _configurations);
+
+            public static void ConfigureExcelRecordMap<TRow>(ExcelRecordMapBuilder<ConfigureCountingModel, TRow> builder)
+                where TRow : IRowWriter
+            {
+                Interlocked.Increment(ref _configurations);
+                builder.Column("Name", static (row, m) => row.Write(m.Name));
+            }
+        }
+
+        [Fact]
+        public async Task RecordMapIsConfiguredOncePerRowWriterType()
+        {
+            CancellationToken ct = TestContext.Current.CancellationToken;
+            var record = new ConfigureCountingModel { Name = "Grace" };
+
+            await using var xlsxStream = new MemoryStream();
+            await using (var xlsx = await MappedRecordWriter.CreateMappedXlsxAsync(xlsxStream, leaveOpen: true, ct: ct))
+            {
+                await xlsx.WriteSheetAsync("S1", [record], ct);
+            }
+            Assert.Equal(1, ConfigureCountingModel.Configurations);
+
+            // Same (T, TRow) pair — the cached plan, no second configure call.
+            await using var secondXlsxStream = new MemoryStream();
+            await using (var again = await MappedRecordWriter.CreateMappedXlsxAsync(secondXlsxStream, leaveOpen: true, ct: ct))
+            {
+                await again.WriteSheetAsync("S1", [record], ct);
+            }
+            Assert.Equal(1, ConfigureCountingModel.Configurations);
+
+            // Different row writer — its own plan, compiled against CsvRowWriter.
+            await using var csvStream = new MemoryStream();
+            await using (var csv = await MappedRecordWriter.CreateMappedCsvAsync(csvStream, leaveOpen: true, ct: ct))
+            {
+                await csv.WriteSheetAsync("S1", [record], ct);
+            }
+            Assert.Equal(2, ConfigureCountingModel.Configurations);
         }
 
         private static void AssertMatches(MapBuilderTestModel expected, MapBuilderTestModel actual)
