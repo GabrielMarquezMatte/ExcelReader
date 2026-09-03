@@ -402,4 +402,15 @@ namespace ExcelReader.Tests
             return Encoding.UTF8.TryGetBytes("not-a-number", utf8Destination, out bytesWritten);
         }
     }
+
+    // The other half of that fallback: double.TryParse *succeeds* on "1e400" and hands back
+    // +Infinity (since .NET Core 3.0 overflow no longer fails the parse), so the value only stops
+    // at the conversion guard. Also shared by XlsWriterTests and XlsbWriterTests.
+    internal readonly struct OverflowingFormattable : IUtf8SpanFormattable
+    {
+        public bool TryFormat(Span<byte> utf8Destination, out int bytesWritten, ReadOnlySpan<char> format, IFormatProvider? provider)
+        {
+            return Encoding.UTF8.TryGetBytes("1e400", utf8Destination, out bytesWritten);
+        }
+    }
 }

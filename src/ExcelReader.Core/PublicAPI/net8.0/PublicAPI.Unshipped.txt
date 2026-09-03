@@ -143,3 +143,11 @@ ExcelReader.Core.Parser.ExcelRowMapParserBase<T>.ParseAsync(ExcelReader.Core.Rea
 ExcelReader.Core.Parser.ExcelRowMapParserBase<T>.ParseAsync(ExcelReader.Core.Reader.XlsxReader! reader, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> ExcelReader.Core.Parser.Internal.ExcelEnumerable<T>!
 ExcelReader.Core.Writer.WorkbookRecordWriterBase<TSheet, TRow>
 ExcelReader.Core.Writer.WorkbookRecordWriterBase<TSheet, TRow>.DisposeAsync() -> System.Threading.Tasks.ValueTask
+*REMOVED*ExcelReader.Core.Writer.ExcelRecordMapBuilder<T>
+*REMOVED*ExcelReader.Core.Writer.ExcelRecordMapBuilder<T>.Column(string! header, System.Action<ExcelReader.Core.Writer.IRowWriter!, T>! write) -> ExcelReader.Core.Writer.ExcelRecordMapBuilder<T>!
+*REMOVED*ExcelReader.Core.Writer.ExcelRecordMapBuilder<T>.ExcelRecordMapBuilder() -> void
+*REMOVED*ExcelReader.Core.Writer.IExcelRecordMap<T>.ConfigureExcelRecordMap(ExcelReader.Core.Writer.ExcelRecordMapBuilder<T>! builder) -> void
+ExcelReader.Core.Writer.ExcelRecordMapBuilder<T, TRow>
+ExcelReader.Core.Writer.ExcelRecordMapBuilder<T, TRow>.Column(string! header, System.Action<TRow, T>! write) -> ExcelReader.Core.Writer.ExcelRecordMapBuilder<T, TRow>!
+ExcelReader.Core.Writer.ExcelRecordMapBuilder<T, TRow>.ExcelRecordMapBuilder() -> void
+ExcelReader.Core.Writer.IExcelRecordMap<T>.ConfigureExcelRecordMap<TRow>(ExcelReader.Core.Writer.ExcelRecordMapBuilder<T, TRow>! builder) -> void
