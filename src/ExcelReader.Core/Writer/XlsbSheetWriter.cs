@@ -341,8 +341,6 @@ namespace ExcelReader.Core.Writer
 
         [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP003:Dispose previous before re-assigning",
             Justification = "The null-guard above means this only ever assigns _stream once, from null; never re-assigns a live stream.")]
-        [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
-            Justification = "Ownership of the optionally-wrapped stream transfers to _stream, which EndAsync disposes.")]
         private void EnsureStream()
         {
             if (_stream is not null)

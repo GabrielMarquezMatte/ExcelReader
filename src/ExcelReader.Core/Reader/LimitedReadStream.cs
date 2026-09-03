@@ -105,8 +105,6 @@ namespace ExcelReader.Core.Reader
             throw new NotSupportedException();
         }
 
-        [System.Diagnostics.CodeAnalysis.SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP007:Don't dispose injected",
-            Justification = "LimitedReadStream owns the wrapped entry stream for the duration of the decorated read.")]
         protected override void Dispose(bool disposing)
         {
             if (disposing)
@@ -116,8 +114,6 @@ namespace ExcelReader.Core.Reader
             base.Dispose(disposing);
         }
 
-        [System.Diagnostics.CodeAnalysis.SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP007:Don't dispose injected",
-            Justification = "LimitedReadStream owns the wrapped entry stream for the duration of the decorated read.")]
         public override async ValueTask DisposeAsync()
         {
             await _inner.DisposeAsync().ConfigureAwait(false);

@@ -57,10 +57,6 @@ namespace ExcelReader.Core.Parser.Internal
         }
 
         /// <inheritdoc cref="IEnumerable{T}.GetEnumerator"/>
-        [SuppressMessage("Performance", "HLQ006:GetEnumerator should return a value type",
-            Justification = "Enumerator is a class so the sync and async paths can share the SyncRowEnumerator/AsyncRowEnumerator base plumbing.")]
-        [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP001:Dispose created",
-            Justification = "rows is handed to the returned Enumerator, which owns and disposes it.")]
         public Enumerator GetEnumerator()
         {
             CsvReader.Enumerator rows = _reader.GetEnumerator();
@@ -83,8 +79,6 @@ namespace ExcelReader.Core.Parser.Internal
         }
 
         /// <inheritdoc cref="IAsyncEnumerable{T}.GetAsyncEnumerator"/>
-        [SuppressMessage("Performance", "HLQ006:GetAsyncEnumerator should return a value type",
-            Justification = "Async enumerator requires a class to host the async state machine.")]
         public AsyncEnumerator GetAsyncEnumerator(CancellationToken cancellationToken = default)
         {
             CancellationToken effective = cancellationToken.CanBeCanceled ? cancellationToken : _ct;
@@ -138,8 +132,6 @@ namespace ExcelReader.Core.Parser.Internal
             }
 
             /// <inheritdoc/>
-            [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP007:Don't dispose injected",
-                Justification = "_ownedReader is non-null only when the enumerable was constructed with ownsReader: true, which is exactly the case where the reader was opened for this enumeration and has no other owner.")]
             public override async ValueTask DisposeAsync()
             {
                 await base.DisposeAsync().ConfigureAwait(false);

@@ -46,8 +46,6 @@ namespace ExcelReader.Tests
         // PRNG is exactly what makes a fuzz failure pinpoint-able, unlike a CSPRNG would be.
         [SuppressMessage("Security", "CA5394:Do not use insecure randomness",
             Justification = "Fuzzing needs a reproducible seeded PRNG, not cryptographic randomness.")]
-        [SuppressMessage("Performance", "HLQ013:Consider using 'foreach' loop instead of 'for' loop",
-            Justification = "Each iteration both reads (rng.Next) and writes positions[i] by index; foreach can't express the write.")]
         internal static byte[] MutateCopy(byte[] seed, Random rng, out int[] positions)
         {
             byte[] copy = (byte[])seed.Clone();

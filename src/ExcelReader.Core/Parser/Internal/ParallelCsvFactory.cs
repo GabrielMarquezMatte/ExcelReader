@@ -116,8 +116,6 @@ namespace ExcelReader.Core.Parser.Internal
 
         [RequiresUnreferencedCode("Typed parsing reflects over T's public properties, which trimming may remove.")]
         [RequiresDynamicCode("Typed parsing binds property setters at runtime (MethodInfo.CreateDelegate / MakeGenericMethod).")]
-        [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP007:Don't dispose injected",
-            Justification = "ownedHandle is only ever non-null when Create<T>(string, ...) opened it and handed ownership to this call; every path that skips the parallel pipeline (empty source, single-chunk plan) must close it here, since OwningAsyncEnumerable, which would otherwise own it, is never constructed.")]
         [SuppressMessage("Usage", "VSTHRD200:Use \"Async\" suffix for async methods",
             Justification = "Factory helper, not itself async; it synchronously binds the header and plans chunks, then returns a lazily-enumerated IAsyncEnumerable<T>, exactly like ExcelParser<T>.Parse(CsvReader).")]
         // chunkSizeOverride sits next to dop (both shape the chunk plan) and before ct, which stays
@@ -171,8 +169,6 @@ namespace ExcelReader.Core.Parser.Internal
         // of the sequential fallback's cost, spent on nothing.
         [SuppressMessage("Usage", "VSTHRD200:Use \"Async\" suffix for async methods",
             Justification = "Factory helper, not itself async: it constructs a lazily-enumerated IAsyncEnumerable<T> and returns it.")]
-        [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP001:Dispose created",
-            Justification = "Ownership of the reader transfers to the returned CsvEnumerable<T>, whose AsyncEnumerator.DisposeAsync closes it.")]
         private static CsvEnumerable<T> Sequential<T>(
             CsvReader reader, ExcelParserConfig config, CancellationToken ct)
         {
