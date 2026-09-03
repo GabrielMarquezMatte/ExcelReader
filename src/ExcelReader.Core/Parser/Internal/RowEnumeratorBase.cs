@@ -27,8 +27,6 @@ namespace ExcelReader.Core.Parser.Internal
         where TRows : class, IExcelRowEnumerator
     {
         /// <summary>The underlying row cursor this enumerator advances.</summary>
-        [SuppressMessage("Performance", "HLQ011:ReadOnlyEnumeratorField",
-            Justification = "TRows is constrained to `class` here, so it is always a reference type — no copy-on-mutate risk from a readonly field.")]
         [SuppressMessage("Design", "CA1051:Do not declare visible instance fields",
             Justification = "Hot-path base class (MoveNext runs per row); a field avoids a property-call indirection in the tightest loop of the library.")]
         protected readonly TRows Rows;
@@ -68,8 +66,6 @@ namespace ExcelReader.Core.Parser.Internal
         private protected abstract ProjectionStep Project();
 
         /// <inheritdoc/>
-        [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP007:Don't dispose injected",
-            Justification = "Rows is created for this enumerator alone by the enclosing enumerable's GetEnumerator (reader.GetEnumerator()) — owned here, not injected.")]
         [SuppressMessage("Design", "CA1816:Dispose methods should call SuppressFinalize",
             Justification = "No finalizer exists on this type or any sealed derivative, so there is nothing to suppress.")]
         public void Dispose()

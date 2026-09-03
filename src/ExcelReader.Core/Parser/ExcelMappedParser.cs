@@ -26,7 +26,7 @@ namespace ExcelReader.Core.Parser
     /// <para>
     /// Unlike <see cref="ExcelParser{T}"/>, which builds a separate CSV-specific map with text-based date
     /// parsing (<c>TypeMapper&lt;T&gt;.GetCsvInfo()</c>), this type builds <typeparamref name="T"/>'s map
-    /// exactly once and reuses it for every reader, including <see cref="Parse(CsvReader)"/>. The
+    /// exactly once and reuses it for every reader, including <see cref="ExcelRowMapParserBase{T}.Parse(CsvReader)"/>. The
     /// source generator handles this by emitting <see cref="ExcelCellReaders.DateTimeAuto"/>/
     /// <see cref="ExcelCellReaders.DateOnlyAuto"/>/<see cref="ExcelCellReaders.TimeOnlyAuto"/> for
     /// <see cref="DateTime"/>/<see cref="DateOnly"/>/<see cref="TimeOnly"/> properties — serial number
@@ -36,139 +36,21 @@ namespace ExcelReader.Core.Parser
     /// directly.
     /// </para>
     /// </remarks>
-    public sealed class ExcelMappedParser<T> where T : IExcelRowMap<T>
+    public sealed class ExcelMappedParser<T> : ExcelRowMapParserBase<T> where T : IExcelRowMap<T>
     {
-        private readonly ExcelParserConfig _config;
-        private readonly TypeMapInfo<T> _info;
-
         /// <summary>Creates a parser configured with the given options, or with defaults if none are supplied.</summary>
         /// <param name="config">The options controlling header matching, culture, and parse-failure behavior. Defaults to a new <see cref="ExcelParserConfig"/> when <see langword="null"/>.</param>
         /// <exception cref="ArgumentOutOfRangeException"><paramref name="config"/> has <see cref="ExcelParserConfig.HeaderRow"/> less than 1.</exception>
         public ExcelMappedParser(ExcelParserConfig? config = null)
+            : base(ValidateConfig(config), BuildMap())
         {
-            if (config is not null && config.HeaderRow < 1)
-            {
-                throw new ArgumentOutOfRangeException(nameof(config), config.HeaderRow, "HeaderRow must be at least 1.");
-            }
-            _config = config ?? new ExcelParserConfig();
+        }
+
+        private static TypeMapInfo<T> BuildMap()
+        {
             var builder = new ExcelRowMapBuilder<T>();
             T.ConfigureExcelRowMap(builder);
-            _info = builder.Build();
-        }
-
-        /// <summary>Parses the rows of an XLSX reader into <typeparamref name="T"/> instances, lazily as the result is enumerated.</summary>
-        /// <param name="reader">The XLSX reader to pull rows from.</param>
-        /// <returns>An enumerable that yields one <typeparamref name="T"/> per data row.</returns>
-        /// <exception cref="ArgumentNullException"><paramref name="reader"/> is <see langword="null"/>.</exception>
-        [SuppressMessage("Usage", "VSTHRD200:Use \"Async\" suffix for async methods",
-            Justification = "Synchronous entry point; the enumerable also implements IAsyncEnumerable, but ParseAsync is the async counterpart.")]
-        public ExcelEnumerable<T> Parse(XlsxReader reader)
-        {
-            ArgumentNullException.ThrowIfNull(reader);
-            return new ExcelEnumerable<T>(reader, _config, _info);
-        }
-
-        /// <summary>Parses the rows of an XLS reader into <typeparamref name="T"/> instances, lazily as the result is enumerated.</summary>
-        /// <param name="reader">The XLS reader to pull rows from.</param>
-        /// <returns>An enumerable that yields one <typeparamref name="T"/> per data row.</returns>
-        /// <exception cref="ArgumentNullException"><paramref name="reader"/> is <see langword="null"/>.</exception>
-        [SuppressMessage("Usage", "VSTHRD200:Use \"Async\" suffix for async methods",
-            Justification = "Synchronous entry point; the enumerable also implements IAsyncEnumerable, but ParseAsync is the async counterpart.")]
-        public ExcelEnumerable<T, XlsReader, XlsReader.Enumerator> Parse(XlsReader reader)
-        {
-            ArgumentNullException.ThrowIfNull(reader);
-            return new ExcelEnumerable<T, XlsReader, XlsReader.Enumerator>(reader, _config, _info);
-        }
-
-        /// <summary>Parses the rows of an XLSB reader into <typeparamref name="T"/> instances, lazily as the result is enumerated.</summary>
-        /// <param name="reader">The XLSB reader to pull rows from.</param>
-        /// <returns>An enumerable that yields one <typeparamref name="T"/> per data row.</returns>
-        /// <exception cref="ArgumentNullException"><paramref name="reader"/> is <see langword="null"/>.</exception>
-        [SuppressMessage("Usage", "VSTHRD200:Use \"Async\" suffix for async methods",
-            Justification = "Synchronous entry point; the enumerable also implements IAsyncEnumerable, but ParseAsync is the async counterpart.")]
-        public ExcelEnumerable<T, XlsbReader, XlsbReader.Enumerator> Parse(XlsbReader reader)
-        {
-            ArgumentNullException.ThrowIfNull(reader);
-            return new ExcelEnumerable<T, XlsbReader, XlsbReader.Enumerator>(reader, _config, _info);
-        }
-
-        /// <summary>Parses the rows of a format-agnostic reader (e.g. one returned by <c>Excel.Open</c>) into <typeparamref name="T"/> instances, lazily as the result is enumerated.</summary>
-        /// <param name="reader">The reader to pull rows from.</param>
-        /// <returns>An enumerable that yields one <typeparamref name="T"/> per data row.</returns>
-        /// <exception cref="ArgumentNullException"><paramref name="reader"/> is <see langword="null"/>.</exception>
-        [SuppressMessage("Usage", "VSTHRD200:Use \"Async\" suffix for async methods",
-            Justification = "Synchronous entry point; the enumerable also implements IAsyncEnumerable, but ParseAsync is the async counterpart.")]
-        public ExcelEnumerable<T, IExcelRowReader, IExcelRowEnumerator> Parse(IExcelRowReader reader)
-        {
-            ArgumentNullException.ThrowIfNull(reader);
-            return new ExcelEnumerable<T, IExcelRowReader, IExcelRowEnumerator>(reader, _config, _info);
-        }
-
-        /// <summary>Parses the rows of a CSV reader into <typeparamref name="T"/> instances, lazily as the result is enumerated.</summary>
-        /// <param name="reader">The CSV reader to pull rows from.</param>
-        /// <returns>An enumerable that yields one <typeparamref name="T"/> per data row.</returns>
-        /// <exception cref="ArgumentNullException"><paramref name="reader"/> is <see langword="null"/>.</exception>
-        [SuppressMessage("Usage", "VSTHRD200:Use \"Async\" suffix for async methods",
-            Justification = "Synchronous entry point; the enumerable also implements IAsyncEnumerable, but ParseAsync is the async counterpart.")]
-        public CsvEnumerable<T> Parse(CsvReader reader)
-        {
-            ArgumentNullException.ThrowIfNull(reader);
-            return new CsvEnumerable<T>(reader, _config, _info);
-        }
-
-        /// <summary>Parses the rows of an XLSX reader into <typeparamref name="T"/> instances for asynchronous enumeration.</summary>
-        /// <param name="reader">The XLSX reader to pull rows from.</param>
-        /// <param name="ct">A token to cancel the enumeration.</param>
-        /// <returns>An enumerable that lazily parses and yields one <typeparamref name="T"/> per data row as it is asynchronously enumerated.</returns>
-        /// <exception cref="ArgumentNullException"><paramref name="reader"/> is <see langword="null"/>.</exception>
-        public ExcelEnumerable<T> ParseAsync(XlsxReader reader, CancellationToken ct = default)
-        {
-            ArgumentNullException.ThrowIfNull(reader);
-            return new ExcelEnumerable<T>(reader, _config, _info, ct);
-        }
-
-        /// <summary>Parses the rows of an XLS reader into <typeparamref name="T"/> instances for asynchronous enumeration.</summary>
-        /// <param name="reader">The XLS reader to pull rows from.</param>
-        /// <param name="ct">A token to cancel the enumeration.</param>
-        /// <returns>An enumerable that lazily parses and yields one <typeparamref name="T"/> per data row as it is asynchronously enumerated.</returns>
-        /// <exception cref="ArgumentNullException"><paramref name="reader"/> is <see langword="null"/>.</exception>
-        public ExcelEnumerable<T, XlsReader, XlsReader.Enumerator> ParseAsync(XlsReader reader, CancellationToken ct = default)
-        {
-            ArgumentNullException.ThrowIfNull(reader);
-            return new ExcelEnumerable<T, XlsReader, XlsReader.Enumerator>(reader, _config, _info, ct);
-        }
-
-        /// <summary>Parses the rows of an XLSB reader into <typeparamref name="T"/> instances for asynchronous enumeration.</summary>
-        /// <param name="reader">The XLSB reader to pull rows from.</param>
-        /// <param name="ct">A token to cancel the enumeration.</param>
-        /// <returns>An enumerable that lazily parses and yields one <typeparamref name="T"/> per data row as it is asynchronously enumerated.</returns>
-        /// <exception cref="ArgumentNullException"><paramref name="reader"/> is <see langword="null"/>.</exception>
-        public ExcelEnumerable<T, XlsbReader, XlsbReader.Enumerator> ParseAsync(XlsbReader reader, CancellationToken ct = default)
-        {
-            ArgumentNullException.ThrowIfNull(reader);
-            return new ExcelEnumerable<T, XlsbReader, XlsbReader.Enumerator>(reader, _config, _info, ct);
-        }
-
-        /// <summary>Parses the rows of a format-agnostic reader (e.g. one returned by <c>Excel.Open</c>) into <typeparamref name="T"/> instances for asynchronous enumeration.</summary>
-        /// <param name="reader">The reader to pull rows from.</param>
-        /// <param name="ct">A token to cancel the enumeration.</param>
-        /// <returns>An enumerable that lazily parses and yields one <typeparamref name="T"/> per data row as it is asynchronously enumerated.</returns>
-        /// <exception cref="ArgumentNullException"><paramref name="reader"/> is <see langword="null"/>.</exception>
-        public ExcelEnumerable<T, IExcelRowReader, IExcelRowEnumerator> ParseAsync(IExcelRowReader reader, CancellationToken ct = default)
-        {
-            ArgumentNullException.ThrowIfNull(reader);
-            return new ExcelEnumerable<T, IExcelRowReader, IExcelRowEnumerator>(reader, _config, _info, ct);
-        }
-
-        /// <summary>Parses the rows of a CSV reader into <typeparamref name="T"/> instances for asynchronous enumeration.</summary>
-        /// <param name="reader">The CSV reader to pull rows from.</param>
-        /// <param name="ct">A token to cancel the enumeration.</param>
-        /// <returns>An enumerable that lazily parses and yields one <typeparamref name="T"/> per data row as it is asynchronously enumerated.</returns>
-        /// <exception cref="ArgumentNullException"><paramref name="reader"/> is <see langword="null"/>.</exception>
-        public CsvEnumerable<T> ParseAsync(CsvReader reader, CancellationToken ct = default)
-        {
-            ArgumentNullException.ThrowIfNull(reader);
-            return new CsvEnumerable<T>(reader, _config, _info, ct);
+            return builder.Build();
         }
     }
 }

@@ -94,10 +94,6 @@ namespace ExcelReader.Core.Reader
             return new MemoryStream(data.ToArray(), writable: false);
         }
 
-        [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP001:Dispose created",
-            Justification = "cfb is not fully disposed here on purpose: only ReturnFatBuffer() runs in the finally, because `source` ownership transfers to the returned WorkbookStream (or is disposed explicitly in the mini-stream branch) - see the finally block's comment.")]
-        [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
-            Justification = "cfb is not fully disposed here on purpose: only ReturnFatBuffer() runs in the finally, because `source` ownership transfers to the returned WorkbookStream (or is disposed explicitly in the mini-stream branch) - see the finally block's comment.")]
         private static WorkbookStream BuildWorkbook(Stream source, bool ownsSource, ExcelReaderOptions options, ReadOnlyMemory<byte> memory = default)
         {
             CfbContainer cfb = CfbContainer.Parse(source, ownsSource, options, memory);
@@ -136,9 +132,7 @@ namespace ExcelReader.Core.Reader
                     byte[] data = cfb.ReadStream(name, options.MaxTotalDecompressedBytes);
                     if (ownsSource)
                     {
-#pragma warning disable IDISP007 // Disposed only when this method owns the source; the in-memory workbook no longer needs it.
                         source.Dispose();
-#pragma warning restore IDISP007
                     }
                     return WorkbookStream.InMemory(data);
                 }

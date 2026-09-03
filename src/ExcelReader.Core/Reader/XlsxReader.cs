@@ -177,8 +177,6 @@ namespace ExcelReader.Core.Reader
         }
 
         /// <inheritdoc/>
-        [SuppressMessage("Performance", "HLQ006:GetEnumerator should return a value type",
-            Justification = "Enumerator is a class so the same type can also expose MoveNextAsync for the async path.")]
         public Enumerator GetEnumerator()
         {
             if (_memZip is not null)
@@ -197,8 +195,6 @@ namespace ExcelReader.Core.Reader
         }
 
         /// <inheritdoc/>
-        [SuppressMessage("Performance", "HLQ006:GetAsyncEnumerator should return a value type",
-            Justification = "Enumerator is a class so the same type can also expose MoveNextAsync for the async path.")]
         public Enumerator GetAsyncEnumerator()
         {
             return GetEnumerator();
@@ -217,8 +213,6 @@ namespace ExcelReader.Core.Reader
         /// while (await e.MoveNextAsync()) { var row = e.Current; /* ... */ }
         /// </code>
         /// </summary>
-        [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP001:Dispose created",
-            Justification = "sheet is handed to the returned Enumerator, which owns and disposes it.")]
         public async ValueTask<Enumerator> GetAsyncEnumeratorAsync(CancellationToken ct = default)
         {
             if (_memZip is not null)
@@ -243,8 +237,6 @@ namespace ExcelReader.Core.Reader
         internal string?[] SharedStringCache => _sharedStringCache ??= WorkbookLookups.CreateSharedStringCache(_sharedOffsets);
 
         /// <inheritdoc/>
-        [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP007:Don't dispose injected",
-            Justification = "_memZip's lifetime was transferred to this reader at construction; this is owned disposal, not disposing a borrowed dependency.")]
         public void Dispose()
         {
             if (_sharedFlat.Length > 0)
@@ -261,8 +253,6 @@ namespace ExcelReader.Core.Reader
         }
 
         /// <inheritdoc/>
-        [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP007:Don't dispose injected",
-            Justification = "_memZip's lifetime was transferred to this reader at construction; this is owned disposal, not disposing a borrowed dependency.")]
         public async ValueTask DisposeAsync()
         {
             if (_sharedFlat.Length > 0)

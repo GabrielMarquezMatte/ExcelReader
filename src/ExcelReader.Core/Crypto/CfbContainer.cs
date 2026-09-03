@@ -263,9 +263,7 @@ namespace ExcelReader.Core.Crypto
             ReturnFatBuffer();
             if (OwnsSource)
             {
-#pragma warning disable IDISP007
                 Source.Dispose();
-#pragma warning restore IDISP007
             }
         }
 
@@ -274,8 +272,6 @@ namespace ExcelReader.Core.Crypto
             return checked((int)((size + sectorSize - 1) / sectorSize));
         }
 
-        [SuppressMessage("Performance", "HLQ013:Consider using 'foreach' loop instead of 'for' loop",
-            Justification = "Not an iteration over fat; follows the sector linked-list, writing each hop into chain[i].")]
         internal static int[] BuildChain(ReadOnlySpan<int> fat, int startSector, int sectorCount)
         {
             int[] chain = ArrayPool<int>.Shared.Rent(sectorCount);

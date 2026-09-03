@@ -200,10 +200,6 @@ namespace ExcelReader.Core.Reader
         // Opens a Stream over the entry's compressed bytes instead of eagerly materializing the whole
         // part, so the caller can reuse the same PrefetchStream/LimitedReadStream pipeline as the
         // ZipArchive path and overlap inflate with row parsing.
-        [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP001:Dispose created",
-            Justification = "Ownership of the opened entry stream and its wrapper transfers to the caller.")]
-        [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
-            Justification = "Ownership of the opened entry stream and its wrapper transfers to the caller.")]
         internal Stream OpenEntryStream(in ZipEntryRef entry, DecompressedByteCounter counter, ExcelReaderOptions options, string entryLimitName = "", long entryLimit = 0)
         {
             ReadOnlyMemory<byte> compressed = ResolveCompressedSlice(entry);

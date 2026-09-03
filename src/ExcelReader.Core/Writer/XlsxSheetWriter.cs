@@ -99,8 +99,6 @@ namespace ExcelReader.Core.Writer
         /// <exception cref="InvalidOperationException">The sheet has already been started.</exception>
         [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP003:Dispose previous before re-assigning",
             Justification = "_stream is always null when Start is called (state machine guarantees Created state).")]
-        [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
-            Justification = "Ownership of the optionally-wrapped stream transfers to _stream, which End/Dispose disposes.")]
         public void Start()
         {
             WriterStateGuard.ThrowIfEnded(_state, this);
@@ -123,8 +121,6 @@ namespace ExcelReader.Core.Writer
         /// <exception cref="InvalidOperationException">The sheet has already been started.</exception>
         [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP003:Dispose previous before re-assigning",
             Justification = "_stream is always null when StartAsync is called (state machine guarantees Created state).")]
-        [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
-            Justification = "Ownership of the optionally-wrapped stream transfers to _stream, which EndAsync/DisposeAsync disposes.")]
         public async ValueTask StartAsync(CancellationToken ct = default)
         {
             WriterStateGuard.ThrowIfEnded(_state, this);

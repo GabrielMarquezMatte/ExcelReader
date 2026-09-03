@@ -39,9 +39,7 @@ namespace ExcelReader.Core.Reader
             }
             if (_sheets.Length == 0)
             {
-#pragma warning disable IDISP007 // Ownership of the WorkbookStream transferred to this reader; dispose it on the no-sheets failure path.
                 workbook.Dispose();
-#pragma warning restore IDISP007
                 throw new InvalidDataException("The workbook contains no sheets.");
             }
         }
@@ -108,8 +106,6 @@ namespace ExcelReader.Core.Reader
         }
 
         /// <inheritdoc/>
-        [SuppressMessage("Performance", "HLQ006:GetEnumerator should return a value type",
-            Justification = "Enumerator is a class so the same type can also expose MoveNextAsync for parity with XlsxReader.")]
         public Enumerator GetEnumerator()
         {
             return new Enumerator(this, _sheets[_current].Offset);
@@ -121,8 +117,6 @@ namespace ExcelReader.Core.Reader
         }
 
         /// <inheritdoc/>
-        [SuppressMessage("Performance", "HLQ006:GetAsyncEnumerator should return a value type",
-            Justification = "Enumerator is a class so the same type can also expose MoveNextAsync for parity with XlsxReader.")]
         public Enumerator GetAsyncEnumerator()
         {
             return GetEnumerator();
@@ -131,8 +125,6 @@ namespace ExcelReader.Core.Reader
         /// <summary>Creates an enumerator for the current sheet that observes cancellation while iterating.</summary>
         /// <remarks>This overload takes no default value for <paramref name="ct"/>: the parameterless <see cref="GetAsyncEnumerator()"/> above already covers the no-argument call, so a default here would only shadow it.</remarks>
         /// <param name="ct">Token checked before enumeration starts and on each subsequent move.</param>
-        [SuppressMessage("Performance", "HLQ006:GetAsyncEnumerator should return a value type",
-            Justification = "Enumerator is a class so the same type can also expose MoveNextAsync for parity with XlsxReader.")]
         public Enumerator GetAsyncEnumerator(CancellationToken ct)
         {
             ct.ThrowIfCancellationRequested();
@@ -145,15 +137,11 @@ namespace ExcelReader.Core.Reader
         }
 
         /// <inheritdoc/>
-        [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
-            Justification = "Enumerator ownership transfers to the caller, who disposes it via await using / DisposeAsync.")]
         public ValueTask<Enumerator> GetAsyncEnumeratorAsync(CancellationToken ct = default)
         {
             return new ValueTask<Enumerator>(GetAsyncEnumerator(ct));
         }
 
-        [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
-            Justification = "Enumerator ownership transfers to the caller, who disposes it via await using / DisposeAsync.")]
         [SuppressMessage("Performance", "CA1849:Call async methods when in an async method",
             Justification = "XlsReader is fully in-memory; opening the enumerator is synchronous, so there is no async open to await here.")]
         ValueTask<IExcelRowEnumerator> IExcelRowReader<IExcelRowEnumerator>.GetAsyncEnumeratorAsync(CancellationToken ct)

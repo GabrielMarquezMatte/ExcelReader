@@ -19,20 +19,18 @@ namespace ExcelReader.Core.Writer
     /// </summary>
     /// <typeparam name="TSheet">The concrete sheet writer type.</typeparam>
     /// <typeparam name="TRow">The concrete row writer type.</typeparam>
-    public sealed class WorkbookRecordWriter<TSheet, TRow> : IAsyncDisposable where TSheet : ISheetWriter<TRow> where TRow : IRowWriter
+    public sealed class WorkbookRecordWriter<TSheet, TRow> : WorkbookRecordWriterBase<TSheet, TRow>
+        where TSheet : ISheetWriter<TRow>
+        where TRow : IRowWriter
     {
-        private readonly IWorkbookWriter<TSheet> _workbook;
-        private readonly HashSet<string> _sheetNames = new(StringComparer.OrdinalIgnoreCase);
-
         /// <summary>
         /// Wraps an already-created, already-started workbook writer. Ownership of <paramref name="workbook"/>
         /// transfers to this instance, which disposes it when this instance is disposed.
         /// </summary>
         /// <param name="workbook">The started workbook writer to wrap.</param>
         public WorkbookRecordWriter(IWorkbookWriter<TSheet> workbook)
+            : base(workbook)
         {
-            ArgumentNullException.ThrowIfNull(workbook);
-            _workbook = workbook;
         }
 
         /// <summary>
@@ -47,17 +45,9 @@ namespace ExcelReader.Core.Writer
         /// <exception cref="InvalidOperationException">A sheet named <paramref name="sheetName"/> already exists in this workbook.</exception>
         [RequiresUnreferencedCode("Record writing reflects over T's public properties, which trimming may remove.")]
         [RequiresDynamicCode("Record writing compiles the per-type column writer at runtime (Expression.Compile / MakeGenericMethod).")]
-        public async ValueTask WriteSheetAsync<T>(string sheetName, IEnumerable<T> records, CancellationToken ct = default)
+        public ValueTask WriteSheetAsync<T>(string sheetName, IEnumerable<T> records, CancellationToken ct = default)
         {
-            ArgumentNullException.ThrowIfNull(records);
-            TSheet sheet = BeginSheet(sheetName);
-            await using (sheet.ConfigureAwait(false))
-            {
-                await sheet.StartAsync(ct).ConfigureAwait(false);
-                await WriteHeaderAsync<T>(sheet, ct).ConfigureAwait(false);
-                await sheet.WriteRecordsAsync(records, RecordColumns<T>.WriteRow, ct).ConfigureAwait(false);
-                await sheet.EndAsync(ct).ConfigureAwait(false);
-            }
+            return WriteSheetCoreAsync(sheetName, records, RecordColumns<T>.Headers, RecordColumns<T>.WriteRow, ct);
         }
 
         /// <summary>
@@ -72,50 +62,9 @@ namespace ExcelReader.Core.Writer
         /// <exception cref="InvalidOperationException">A sheet named <paramref name="sheetName"/> already exists in this workbook.</exception>
         [RequiresUnreferencedCode("Record writing reflects over T's public properties, which trimming may remove.")]
         [RequiresDynamicCode("Record writing compiles the per-type column writer at runtime (Expression.Compile / MakeGenericMethod).")]
-        public async ValueTask WriteSheetAsync<T>(string sheetName, IAsyncEnumerable<T> records, CancellationToken ct = default)
+        public ValueTask WriteSheetAsync<T>(string sheetName, IAsyncEnumerable<T> records, CancellationToken ct = default)
         {
-            ArgumentNullException.ThrowIfNull(records);
-            TSheet sheet = BeginSheet(sheetName);
-            await using (sheet.ConfigureAwait(false))
-            {
-                await sheet.StartAsync(ct).ConfigureAwait(false);
-                await WriteHeaderAsync<T>(sheet, ct).ConfigureAwait(false);
-                await sheet.WriteRecordsAsync(records, RecordColumns<T>.WriteRow, ct).ConfigureAwait(false);
-                await sheet.EndAsync(ct).ConfigureAwait(false);
-            }
-        }
-
-        private TSheet BeginSheet(string sheetName)
-        {
-            ArgumentNullException.ThrowIfNull(sheetName);
-            if (!_sheetNames.Add(sheetName))
-            {
-                throw new InvalidOperationException($"A sheet named '{sheetName}' already exists in this workbook.");
-            }
-            return _workbook.AddSheet(sheetName);
-        }
-
-        [RequiresUnreferencedCode("Record writing reflects over T's public properties, which trimming may remove.")]
-        [RequiresDynamicCode("Record writing compiles the per-type column writer at runtime (Expression.Compile / MakeGenericMethod).")]
-        private static async ValueTask WriteHeaderAsync<T>(TSheet sheet, CancellationToken ct)
-        {
-            TRow row = await sheet.StartRowAsync(ct).ConfigureAwait(false);
-            await using (row.ConfigureAwait(false))
-            {
-                foreach (string header in RecordColumns<T>.Headers)
-                {
-                    row.Write(header);
-                }
-            }
-        }
-
-        /// <summary>Finalizes and disposes the underlying workbook writer, completing the workbook.</summary>
-        [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP007:Don't dispose injected",
-            Justification = "The RecordWriter factories transfer ownership of the workbook to this wrapper, which finalizes it here.")]
-        public ValueTask DisposeAsync()
-        {
-            // Each workbook writer's DisposeAsync ends the workbook (finalizing all sheets) when started.
-            return _workbook.DisposeAsync();
+            return WriteSheetCoreAsync(sheetName, records, RecordColumns<T>.Headers, RecordColumns<T>.WriteRow, ct);
         }
     }
 
@@ -171,8 +120,6 @@ namespace ExcelReader.Core.Writer
         /// <param name="options">The delimiter/quote character to use; defaults to <see cref="CsvWriterOptions.Default"/> if <see langword="null"/>.</param>
         /// <param name="ct">A token to cancel the operation.</param>
         /// <returns>A started record writer ready to accept its single sheet.</returns>
-        [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
-            Justification = "Ownership of the workbook transfers to WorkbookRecordWriter, which disposes it.")]
         public static async ValueTask<WorkbookRecordWriter<CsvSheetWriter, CsvRowWriter>> CreateCsvAsync(
             Stream stream, bool leaveOpen = false, CsvWriterOptions? options = null, CancellationToken ct = default)
         {
@@ -187,8 +134,6 @@ namespace ExcelReader.Core.Writer
         /// <param name="date1904">If <see langword="true"/>, dates are serialized using the 1904 date system instead of the default 1900 system.</param>
         /// <param name="ct">A token to cancel the operation.</param>
         /// <returns>A started record writer ready to accept sheets.</returns>
-        [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
-            Justification = "Ownership of the workbook transfers to WorkbookRecordWriter, which disposes it.")]
         public static async ValueTask<WorkbookRecordWriter<XlsSheetWriter, XlsRowWriter>> CreateXlsAsync(
             Stream stream, bool leaveOpen = false, bool date1904 = false, CancellationToken ct = default)
         {

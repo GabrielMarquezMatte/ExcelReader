@@ -1066,7 +1066,6 @@ namespace ExcelReader.Tests
                 while (NativeApi.NextRow(handle, buffer, out int written) == NativeStatus.Ok)
                 {
                     List<DecodedCell> cells = DecodeRow(buffer.AsSpan(0, written));
-#pragma warning disable HLQ012
                     foreach (DecodedCell cell in cells)
                     {
                         // CellType.Number = 0, CellType.Date = 2 (from the XLSX/XLSB reader)
@@ -1076,7 +1075,6 @@ namespace ExcelReader.Tests
                             break;
                         }
                     }
-#pragma warning restore HLQ012
                     if (foundNumericCell)
                     {
                         break;
@@ -3563,8 +3561,6 @@ namespace ExcelReader.Tests
         /// its enumerator yields <paramref name="failAfter"/> real rows and then throws, simulating a
         /// genuine mid-sheet decode failure for <see cref="ReadAllDecoded_Should_Free_Already_Decoded_Rows_When_A_Later_Row_Fails_To_Decode"/>.
         /// </summary>
-#pragma warning disable IDISP007 // Don't dispose injected: this wrapper owns `inner` for the test's duration by construction — nothing else disposes it.
-#pragma warning disable HLQ006 // A reference-type enumerator is intentional here: this decorates the format-agnostic IExcelRowEnumerator interface, not a zero-allocation hot path.
         private sealed class FailAfterNRowsReader(IExcelRowReader inner, int failAfter) : IExcelRowReader
         {
             public bool IsDate1904 => inner.IsDate1904;
@@ -3610,10 +3606,7 @@ namespace ExcelReader.Tests
                 return inner.DisposeAsync();
             }
         }
-#pragma warning restore HLQ006
-#pragma warning restore IDISP007
 
-#pragma warning disable IDISP007 // Don't dispose injected: this wrapper owns `inner` for the test's duration by construction — nothing else disposes it.
         private sealed class FailAfterNRowsEnumerator(IExcelRowEnumerator inner, int failAfter) : IExcelRowEnumerator
         {
             private int _moveNextCalls;
@@ -3648,6 +3641,5 @@ namespace ExcelReader.Tests
                 return inner.DisposeAsync();
             }
         }
-#pragma warning restore IDISP007
     }
 }

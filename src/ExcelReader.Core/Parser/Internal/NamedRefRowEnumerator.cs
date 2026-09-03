@@ -38,8 +38,6 @@ namespace ExcelReader.Core.Parser.Internal
         where TModel : allows ref struct
         where TEnumerator : class, IExcelRowEnumerator
     {
-        [SuppressMessage("Performance", "HLQ011:ReadOnlyEnumeratorField",
-            Justification = "TEnumerator is constrained to `class` here, so it is always a reference type — no copy-on-mutate risk from a readonly field.")]
         private readonly TEnumerator _rows;
         private readonly ExcelRowContext _context;
         private readonly TypeMapInfo<TModel> _typeInfo;
@@ -176,16 +174,12 @@ namespace ExcelReader.Core.Parser.Internal
         }
 
         /// <inheritdoc/>
-        [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP007:Don't dispose injected",
-            Justification = "_rows is created for this enumerator alone by NamedRefRowEnumerable.Get(Async)Enumerator() — owned here, not injected.")]
         public void Dispose()
         {
             _rows.Dispose();
         }
 
         /// <inheritdoc/>
-        [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP007:Don't dispose injected",
-            Justification = "_rows is created for this enumerator alone by NamedRefRowEnumerable.Get(Async)Enumerator() — owned here, not injected.")]
         public ValueTask DisposeAsync()
         {
             return _rows.DisposeAsync();

@@ -265,8 +265,6 @@ namespace ExcelReader.Core.Reader
             }
         }
 
-        [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP007:Don't dispose injected",
-            Justification = "PrefetchStream owns the wrapped entry stream for the duration of the decorated read.")]
         [SuppressMessage("VisualStudio.Threading", "VSTHRD002:Avoid problematic synchronous waits",
             Justification = "Dispose must not return before the producer thread stops touching _inner; ProduceAsync catches every exception, so this never blocks long or throws.")]
         protected override void Dispose(bool disposing)
@@ -291,8 +289,6 @@ namespace ExcelReader.Core.Reader
             base.Dispose(disposing);
         }
 
-        [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP007:Don't dispose injected",
-            Justification = "PrefetchStream owns the wrapped entry stream for the duration of the decorated read.")]
         [SuppressMessage("VisualStudio.Threading", "VSTHRD003:Avoid awaiting foreign Tasks",
             Justification = "_producer is this instance's own producer loop, started in the constructor and always brought to completion exactly once, here or in Dispose(bool) — not a fire-and-forget foreign Task.")]
         public override async ValueTask DisposeAsync()

@@ -362,12 +362,10 @@ namespace ExcelReader.Core.Writer.Internal
                     {
                         int bigPos = big.IndexOf(index);
                         startSector = bigStart;
-#pragma warning disable HLQ013 // Loop pattern: we need direct index access to partial array
                         for (int k = 0; k < bigPos; k++)
                         {
                             startSector += bigSectorCount[k];
                         }
-#pragma warning restore HLQ013
                     }
                     // A right-leaning chain: valid for an in-order tree walk, unbalanced but no reader
                     // verifies balance.

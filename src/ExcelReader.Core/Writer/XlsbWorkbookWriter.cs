@@ -51,12 +51,8 @@ namespace ExcelReader.Core.Writer
         /// saturating the CPU.
         /// </param>
         /// <param name="ct">A token to cancel creation before any I/O has started.</param>
-        [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP001:Dispose created",
-            Justification = "Factory method transfers ZipArchive ownership to XlsbWorkbookWriter; caller disposes via DisposeAsync.")]
         [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP004:Don't ignore created IDisposable",
             Justification = "Factory method transfers ZipArchive ownership to XlsbWorkbookWriter; caller disposes via DisposeAsync.")]
-        [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
-            Justification = "XlsbWorkbookWriter takes ownership of ZipArchive and disposes it in DisposeAsync/EndAsync.")]
         public static ValueTask<XlsbWorkbookWriter> CreateAsync(
             Stream stream,
             bool leaveOpen = false,
@@ -76,12 +72,8 @@ namespace ExcelReader.Core.Writer
         /// Synchronous counterpart to <see cref="CreateAsync"/>, for native/unmanaged callers whose ABI
         /// is synchronous. Parameters mirror <see cref="CreateAsync"/> exactly, minus <c>ct</c>.
         /// </summary>
-        [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP001:Dispose created",
-            Justification = "Factory method transfers ZipArchive ownership to XlsbWorkbookWriter; caller disposes via Dispose/DisposeAsync.")]
         [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP004:Don't ignore created IDisposable",
             Justification = "Factory method transfers ZipArchive ownership to XlsbWorkbookWriter; caller disposes via Dispose/DisposeAsync.")]
-        [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
-            Justification = "XlsbWorkbookWriter takes ownership of ZipArchive and disposes it in Dispose(Async)/End(Async).")]
         public static XlsbWorkbookWriter Create(
             Stream stream,
             bool leaveOpen = false,

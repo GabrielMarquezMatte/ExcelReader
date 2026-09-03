@@ -241,8 +241,6 @@ namespace ExcelReader.Core.Reader
         }
 
         /// <inheritdoc/>
-        [SuppressMessage("Performance", "HLQ006:GetEnumerator should return a value type",
-            Justification = "Public nested enumerator is the standard foreach pattern.")]
         public Enumerator GetEnumerator()
         {
             if (_memZip is not null)
@@ -259,8 +257,6 @@ namespace ExcelReader.Core.Reader
         }
 
         /// <inheritdoc/>
-        [SuppressMessage("Performance", "HLQ006:GetAsyncEnumerator should return a value type",
-            Justification = "Enumerator is a class so the same type can also expose MoveNextAsync for the async path.")]
         public Enumerator GetAsyncEnumerator()
         {
             return GetEnumerator();
@@ -279,8 +275,6 @@ namespace ExcelReader.Core.Reader
         /// while (await e.MoveNextAsync()) { var row = e.Current; /* ... */ }
         /// </code>
         /// </summary>
-        [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
-            Justification = "The enumerator is handed to the caller via the returned ValueTask, which owns and disposes it.")]
         public ValueTask<Enumerator> GetAsyncEnumeratorAsync(CancellationToken ct = default)
         {
             if (_memZip is not null)
@@ -290,8 +284,6 @@ namespace ExcelReader.Core.Reader
             return GetAsyncEnumeratorFromStreamAsync(ct);
         }
 
-        [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP001:Dispose created",
-            Justification = "sheet is handed to the returned Enumerator, which owns and disposes it.")]
         private async ValueTask<Enumerator> GetAsyncEnumeratorFromStreamAsync(CancellationToken ct)
         {
             var entry = WorkbookLookups.GetWorksheetEntry(_zip!, _sheets!, _current);
@@ -308,8 +300,6 @@ namespace ExcelReader.Core.Reader
         // --- Dispose ---
 
         /// <inheritdoc/>
-        [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP007:Don't dispose injected",
-            Justification = "_memZip's lifetime was transferred to this reader at construction; this is owned disposal, not disposing a borrowed dependency.")]
         public void Dispose()
         {
             if (Interlocked.Exchange(ref _disposed, 1) != 0)
@@ -329,8 +319,6 @@ namespace ExcelReader.Core.Reader
         }
 
         /// <inheritdoc/>
-        [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP007:Don't dispose injected",
-            Justification = "_stream is disposed conditionally based on _leaveOpen.")]
         public async ValueTask DisposeAsync()
         {
             if (Interlocked.Exchange(ref _disposed, 1) != 0)
