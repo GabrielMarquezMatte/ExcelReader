@@ -65,7 +65,7 @@ int main()
     bool found_coluna1 = false;
     for (const auto &cell : rows.front())
     {
-        if (cell == "Coluna1")
+        if (cell == "Region")
         {
             found_coluna1 = true;
         }
