@@ -1,1 +1,2 @@
 #nullable enable
+ExcelReader.Core.Parser.HeaderNormalization.RemoveDiacritics = 4 -> ExcelReader.Core.Parser.HeaderNormalization
