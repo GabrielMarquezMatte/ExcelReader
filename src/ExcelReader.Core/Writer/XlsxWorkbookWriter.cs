@@ -1,4 +1,3 @@
-using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.IO.Compression;
 using System.Security;
@@ -54,8 +53,6 @@ namespace ExcelReader.Core.Writer
         /// </param>
         /// <param name="ct">A token to cancel the operation before the archive is created.</param>
         /// <exception cref="ArgumentNullException"><paramref name="stream"/> is <see langword="null"/>.</exception>
-        [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP004:Don't ignore created IDisposable",
-            Justification = "Factory method transfers ZipArchive ownership to XlsxWorkbookWriter; caller disposes via DisposeAsync.")]
         public static ValueTask<XlsxWorkbookWriter> CreateAsync(
             Stream stream, bool leaveOpen = false,
             CompressionLevel compression = CompressionLevel.Fastest,
@@ -73,8 +70,6 @@ namespace ExcelReader.Core.Writer
         /// Synchronous counterpart to <see cref="CreateAsync"/>, for native/unmanaged callers whose ABI
         /// is synchronous. Parameters mirror <see cref="CreateAsync"/> exactly, minus <c>ct</c>.
         /// </summary>
-        [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP004:Don't ignore created IDisposable",
-            Justification = "Factory method transfers ZipArchive ownership to XlsxWorkbookWriter; caller disposes via Dispose/DisposeAsync.")]
         public static XlsxWorkbookWriter Create(
             Stream stream, bool leaveOpen = false,
             CompressionLevel compression = CompressionLevel.Fastest,
@@ -117,8 +112,6 @@ namespace ExcelReader.Core.Writer
         /// <exception cref="ArgumentException"><paramref name="name"/> is empty, longer than 31 characters, or contains one of <c>: \ / ? * [ ]</c>.</exception>
         /// <exception cref="ObjectDisposedException">The workbook has already been ended.</exception>
         /// <exception cref="InvalidOperationException">The workbook has not been started, or the previously added sheet has not been ended.</exception>
-        [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP003:Dispose previous before re-assigning",
-            Justification = "RequireCanAddSheet above guarantees _activeSheet is null (any previous sheet was already ended and disposed) before this assigns a new one.")]
         public XlsxSheetWriter AddSheet(string name)
         {
             WriterStateGuard.RequireCanAddSheet(
@@ -134,8 +127,6 @@ namespace ExcelReader.Core.Writer
             _sheets.Add((name, sheetId));
         }
 
-        [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP003:Dispose previous before re-assigning",
-            Justification = "Called only after the active sheet's own End/Dispose has already run (from End/Dispose below); this just clears the now-stale reference.")]
         internal void NotifySheetEnded()
         {
             _sheetActive = false;
@@ -235,8 +226,6 @@ namespace ExcelReader.Core.Writer
         /// Synchronous counterpart to <see cref="DisposeAsync"/>, for native/unmanaged callers whose ABI
         /// is synchronous.
         /// </summary>
-        [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP021:Call this.Dispose(true)",
-            Justification = "Sealed type, no finalizer, no Dispose(bool) pattern to route through — this is the only Dispose overload.")]
         public void Dispose()
         {
             if (_disposed)

@@ -210,8 +210,6 @@ namespace ExcelReader.Tests
             throw new NotSupportedException();
         }
 
-        [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP010:Call base.Dispose(disposing)",
-            Justification = "MemoryManager<byte>.Dispose(bool) is abstract — there is no base implementation to call.")]
         protected override void Dispose(bool disposing)
         {
         }

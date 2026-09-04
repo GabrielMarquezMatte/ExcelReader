@@ -1,4 +1,3 @@
-using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.IO.Compression;
 using System.Text;
@@ -21,10 +20,6 @@ namespace ExcelReader.Core.Writer
         // sheets while turning ~50k tiny per-row Writes into a handful of big ones. Kept at/under the
         // ArrayPool.Shared LOH threshold (a larger request would rent from the LOH and never leave it).
         private const int FlushThreshold = 64 * 1024;
-        [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP002:Dispose member",
-            Justification = "Reused per row; the caller disposes it via using after each row, and EndAsync's _rowActive guard rejects ending the sheet with it still open.")]
-        [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP006:Implement IDisposable",
-            Justification = "Reused per row; the caller disposes it via using after each row, and EndAsync's _rowActive guard rejects ending the sheet with it still open.")]
         private XlsxRowWriter? _rowWriter;
         private Stream? _stream;
         private int _rowNumber;
@@ -97,8 +92,6 @@ namespace ExcelReader.Core.Writer
         /// </summary>
         /// <exception cref="ObjectDisposedException">The sheet has already been ended.</exception>
         /// <exception cref="InvalidOperationException">The sheet has already been started.</exception>
-        [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP003:Dispose previous before re-assigning",
-            Justification = "_stream is always null when Start is called (state machine guarantees Created state).")]
         public void Start()
         {
             WriterStateGuard.ThrowIfEnded(_state, this);
@@ -119,8 +112,6 @@ namespace ExcelReader.Core.Writer
         /// <inheritdoc/>
         /// <exception cref="ObjectDisposedException">The sheet has already been ended.</exception>
         /// <exception cref="InvalidOperationException">The sheet has already been started.</exception>
-        [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP003:Dispose previous before re-assigning",
-            Justification = "_stream is always null when StartAsync is called (state machine guarantees Created state).")]
         public async ValueTask StartAsync(CancellationToken ct = default)
         {
             WriterStateGuard.ThrowIfEnded(_state, this);

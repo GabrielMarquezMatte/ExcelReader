@@ -42,8 +42,6 @@ namespace ExcelReader.Core.Writer
         private Dictionary<int, int>? _columnStyles;
         private Dictionary<int, double>? _columnWidths;
         private int _activeRowStyle;
-        [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP002:Dispose member",
-            Justification = "Reused per row; the caller disposes it via using after each row, and End's _rowActive guard rejects ending the sheet with it still open.")]
         private XlsRowWriter? _rowWriter;
 
         internal XlsSheetWriter(XlsWorkbookWriter owner, string name, bool date1904, bool isContinuation = false, string? baseName = null)

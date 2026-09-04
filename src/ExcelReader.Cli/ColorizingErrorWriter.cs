@@ -1,5 +1,4 @@
 using System.Text;
-using Spectre.Console;
 
 namespace ExcelReader.Cli
 {
@@ -13,10 +12,14 @@ namespace ExcelReader.Cli
     /// real behavior to - every other <see cref="TextWriter"/> member falls back to <paramref name="inner"/>
     /// unused. Kept out of <c>CliCommands.cs</c> deliberately: that file's whole point is a tested
     /// surface with no <c>Console</c>-shaped state, and this class exists only to decide, from
-    /// <see cref="System.Console.IsErrorRedirected"/>, how a byte reaches a real terminal.
+    /// <see cref="System.Console.IsErrorRedirected"/>, how a byte reaches a real terminal. A raw ANSI
+    /// escape is enough for one red line - no need for Spectre.Console's markup renderer here.
     /// </remarks>
     internal sealed class ColorizingErrorWriter(TextWriter inner) : TextWriter
     {
+        private const string Red = "\u001b[31m";
+        private const string Reset = "\u001b[0m";
+
         public override Encoding Encoding => inner.Encoding;
 
         public override void WriteLine(string? value)
@@ -33,7 +36,7 @@ namespace ExcelReader.Cli
                 return;
             }
 
-            ErrorConsole.Console.MarkupLine($"[red]{Markup.Escape(value)}[/]");
+            inner.WriteLine($"{Red}{value}{Reset}");
         }
     }
 }

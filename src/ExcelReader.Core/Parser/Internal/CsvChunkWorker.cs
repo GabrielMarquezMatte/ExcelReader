@@ -163,8 +163,8 @@ namespace ExcelReader.Core.Parser.Internal
 
             // The enumerator's stream constructor passes ownsSource: false — the worker owns
             // `partitionStream` itself, disposed explicitly below. File/memory branches stay separate
-            // (rather than one nullable variable) so IDisposableAnalyzers can verify each resource's
-            // creation, `await using`, and disposal within one lexical scope.
+            // (rather than one nullable variable) so each resource's creation, `await using`, and
+            // disposal stays verifiable within one lexical scope.
             if (source.IsMemory)
             {
                 var rows = new CsvReader.Enumerator(source.SliceAt(start), options, ct);

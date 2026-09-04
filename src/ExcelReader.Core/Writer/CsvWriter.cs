@@ -1,5 +1,4 @@
 using System.Buffers;
-using System.Diagnostics.CodeAnalysis;
 using ExcelReader.Core.Writer.Internal;
 
 namespace ExcelReader.Core.Writer
@@ -29,8 +28,6 @@ namespace ExcelReader.Core.Writer
         private readonly SearchValues<byte> _specialBytes;
         private readonly SearchValues<char> _specialChars;
         private readonly BiffBuffer _buffer = new(4096);
-        [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP002:Dispose member",
-            Justification = "Reused per row; the caller disposes it via using after each row, and TerminateOpenRow handles a dangling open row on Dispose without needing _rowWriter.Dispose() itself.")]
         private CsvRowWriter? _rowWriter;
         private bool _rowActive;
         private bool _disposed;
