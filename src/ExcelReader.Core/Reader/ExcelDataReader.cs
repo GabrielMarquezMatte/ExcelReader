@@ -174,6 +174,11 @@ namespace ExcelReader.Core.Reader
         }
 
         /// <inheritdoc/>
+        // IDataRecord.GetFieldType's return value carries this same annotation in the BCL (DataTable's
+        // schema machinery inspects a column's Type via its public fields/properties). An override must
+        // repeat an interface member's DynamicallyAccessedMembersAttribute exactly — IL2093 otherwise —
+        // even though every branch below returns a closed, well-known type that needs no such access.
+        [return: DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicFields | DynamicallyAccessedMemberTypes.PublicProperties)]
         public Type GetFieldType(int i)
         {
             return CurrentCell(i).Type switch
@@ -343,6 +348,17 @@ namespace ExcelReader.Core.Reader
         /// <inheritdoc/>
         [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP004:Don't ignore created IDisposable",
             Justification = "DataColumn.Add returns the DataColumn already owned by table.Columns; the table (and its columns) is disposed by whoever consumes this method's result.")]
+        // IL2111: DataColumnCollection.Add(string, Type)'s `type` parameter carries the same
+        // PublicFields|PublicProperties DynamicallyAccessedMembersAttribute as GetFieldType's return
+        // above. Passing `typeof(Type)` itself as that argument — the "DataType" schema column's own
+        // type is System.Type, describing the DataType column, not a real cell type — trips a known
+        // ILC/trimmer quirk: satisfying that annotation for the argument `Type` requires inspecting
+        // Type's own public properties, one of which (TypeInitializer) is itself DAM-annotated, and the
+        // linker can't statically prove that recursive requirement holds. Safe here: this DataTable is
+        // schema metadata for DataTable.Load/FillSchema; nothing ever reflects over the value stored in
+        // this column via the annotated members.
+        [UnconditionalSuppressMessage("Trimming", "IL2111",
+            Justification = "typeof(Type) as the 'DataType' schema column's own type is a metadata literal, never reflected over.")]
         public DataTable GetSchemaTable()
         {
             // DataTable.Load (via DbDataAdapter.FillSchema) reads this exact standard shape
