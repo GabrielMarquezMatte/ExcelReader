@@ -99,6 +99,7 @@ ExcelReader.Core.Parser.ExcelSerializableAttribute.ExcelSerializableAttribute() 
 ExcelReader.Core.Parser.HeaderNormalization
 ExcelReader.Core.Parser.HeaderNormalization.CollapseSpaces = 2 -> ExcelReader.Core.Parser.HeaderNormalization
 ExcelReader.Core.Parser.HeaderNormalization.None = 0 -> ExcelReader.Core.Parser.HeaderNormalization
+ExcelReader.Core.Parser.HeaderNormalization.RemoveDiacritics = 4 -> ExcelReader.Core.Parser.HeaderNormalization
 ExcelReader.Core.Parser.HeaderNormalization.Trim = 1 -> ExcelReader.Core.Parser.HeaderNormalization
 ExcelReader.Core.Parser.IExcelCellConverter<T>
 ExcelReader.Core.Parser.IExcelCellConverter<T>.TryConvert(in ExcelReader.Core.ValueObjects.Cell cell, bool isDate1904, System.IFormatProvider! provider, out T value) -> bool
@@ -445,13 +446,9 @@ ExcelReader.Core.Writer.CsvWriterOptions.Quote.init -> void
 ExcelReader.Core.Writer.ExcelRecordMapBuilder<T, TRow>
 ExcelReader.Core.Writer.ExcelRecordMapBuilder<T, TRow>.Column(string! header, System.Action<TRow, T>! write) -> ExcelReader.Core.Writer.ExcelRecordMapBuilder<T, TRow>!
 ExcelReader.Core.Writer.ExcelRecordMapBuilder<T, TRow>.ExcelRecordMapBuilder() -> void
-ExcelReader.Core.Writer.ExcelRecordMapBuilder<T>
-ExcelReader.Core.Writer.ExcelRecordMapBuilder<T>.Column(string! header, System.Action<ExcelReader.Core.Writer.IRowWriter!, T>! write) -> ExcelReader.Core.Writer.ExcelRecordMapBuilder<T>!
-ExcelReader.Core.Writer.ExcelRecordMapBuilder<T>.ExcelRecordMapBuilder() -> void
 ExcelReader.Core.Writer.IExcelCellWriter<T>
 ExcelReader.Core.Writer.IExcelCellWriter<T>.Write(ExcelReader.Core.Writer.IRowWriter! row, T value) -> void
 ExcelReader.Core.Writer.IExcelRecordMap<T>
-ExcelReader.Core.Writer.IExcelRecordMap<T>.ConfigureExcelRecordMap(ExcelReader.Core.Writer.ExcelRecordMapBuilder<T>! builder) -> void
 ExcelReader.Core.Writer.IExcelRecordMap<T>.ConfigureExcelRecordMap<TRow>(ExcelReader.Core.Writer.ExcelRecordMapBuilder<T, TRow>! builder) -> void
 ExcelReader.Core.Writer.IRowWriter
 ExcelReader.Core.Writer.IRowWriter.Skip(int count = 1) -> void
