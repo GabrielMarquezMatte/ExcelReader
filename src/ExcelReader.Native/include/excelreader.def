@@ -12,6 +12,7 @@ EXPORTS
     xl_is_date1904
     xl_next_row
     xl_read_all_decoded
+    xl_read_all_blob
     xl_free_rows
     xl_parse_typed
     xl_free_table
@@ -38,4 +39,5 @@ EXPORTS
     xl_end_sheet
     xl_close_write_handle
     xl_write_handle_bytes
+    xl_last_error
     xl_last_error_ptr

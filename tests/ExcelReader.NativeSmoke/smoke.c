@@ -1,5 +1,5 @@
 /* Real C consumer of the ExcelReader ABI, run in CI on Windows/Linux/macOS (see
- * .github/workflows/python.yml). Two jobs:
+ * .github/workflows/native-bindings.yml). Two jobs:
  *
  *   1. Compile-time _STATIC_ASSERTs (below) pin every ABI struct's layout against the C standard's
  *      own natural-alignment rules, on whatever compiler builds this file. Catches an accidental
@@ -12,8 +12,8 @@
  * The library is loaded dynamically (LoadLibrary/dlopen) rather than linked at build time. This is
  * deliberate, not a shortcut: NativeAOT's publish output ships no `ExcelReader.Native.lib` import
  * library on Windows, so a normal `target_link_libraries` against the DLL does not work with MSVC
- * out of the box (see docs/NATIVE_HARDENING_PLAN.md, task C, H3). Dynamic loading works identically
- * on all three platforms and needs nothing beyond the shared library file itself.
+ * out of the box. Dynamic loading works identically on all three platforms and needs nothing
+ * beyond the shared library file itself.
  */
 #include "excelreader.h"
 #include "excelreader_arrow.h"
