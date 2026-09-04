@@ -1,0 +1,12 @@
+#nullable enable
+ExcelReader.Arrow.ArrowConversionExtensions
+ExcelReader.Arrow.ArrowWriteExtensions
+static ExcelReader.Arrow.ArrowConversionExtensions.ToArrowRecordBatch(this ExcelReader.Core.Reader.IExcelRowReader! reader, ExcelReader.Core.Reader.ExcelColumnSchema[]? schema = null, int headerRow = 1) -> Apache.Arrow.RecordBatch!
+static ExcelReader.Arrow.ArrowWriteExtensions.WriteRecordBatch(this ExcelReader.Core.Writer.CsvWorkbookWriter! workbook, Apache.Arrow.RecordBatch! batch, bool writeHeader = true) -> void
+static ExcelReader.Arrow.ArrowWriteExtensions.WriteRecordBatch(this ExcelReader.Core.Writer.XlsWorkbookWriter! workbook, Apache.Arrow.RecordBatch! batch, string! sheetName = "Sheet1", bool writeHeader = true) -> void
+static ExcelReader.Arrow.ArrowWriteExtensions.WriteRecordBatch(this ExcelReader.Core.Writer.XlsbWorkbookWriter! workbook, Apache.Arrow.RecordBatch! batch, string! sheetName = "Sheet1", bool writeHeader = true) -> void
+static ExcelReader.Arrow.ArrowWriteExtensions.WriteRecordBatch(this ExcelReader.Core.Writer.XlsxWorkbookWriter! workbook, Apache.Arrow.RecordBatch! batch, string! sheetName = "Sheet1", bool writeHeader = true) -> void
+static ExcelReader.Arrow.ArrowWriteExtensions.WriteRecordBatchAsync(this ExcelReader.Core.Writer.CsvWorkbookWriter! workbook, Apache.Arrow.RecordBatch! batch, bool writeHeader = true, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+static ExcelReader.Arrow.ArrowWriteExtensions.WriteRecordBatchAsync(this ExcelReader.Core.Writer.XlsWorkbookWriter! workbook, Apache.Arrow.RecordBatch! batch, string! sheetName = "Sheet1", bool writeHeader = true, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+static ExcelReader.Arrow.ArrowWriteExtensions.WriteRecordBatchAsync(this ExcelReader.Core.Writer.XlsbWorkbookWriter! workbook, Apache.Arrow.RecordBatch! batch, string! sheetName = "Sheet1", bool writeHeader = true, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+static ExcelReader.Arrow.ArrowWriteExtensions.WriteRecordBatchAsync(this ExcelReader.Core.Writer.XlsxWorkbookWriter! workbook, Apache.Arrow.RecordBatch! batch, string! sheetName = "Sheet1", bool writeHeader = true, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
