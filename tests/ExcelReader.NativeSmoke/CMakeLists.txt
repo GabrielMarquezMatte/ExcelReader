@@ -1,6 +1,5 @@
 # Builds and runs smoke.c against the published ExcelReader.Native shared library. See smoke.c's
-# top comment and docs/NATIVE_HARDENING_PLAN.md (task B) for why the library is loaded dynamically
-# instead of linked at build time.
+# top comment for why the library is loaded dynamically instead of linked at build time.
 #
 # Usage (from the repository root, after `python python/scripts/build_native.py`):
 #     cmake -S tests/ExcelReader.NativeSmoke -B build/nativesmoke
