@@ -326,6 +326,117 @@ impl std::fmt::Debug for DecodedRows {
     }
 }
 
+/// Rows are usually well under this; it only sets how often an oversized sheet costs a retry.
+const INITIAL_ALL_ROWS_BUFFER: usize = 1024 * 1024;
+
+/// Every remaining row of a sheet, read into one flat buffer by a single `xl_read_all_blob` call.
+///
+/// Unlike [`DecodedRows`], the native side allocates nothing per row/cell here - `xl_read_all_blob`
+/// writes the same wire format `RowCursor::next_row` decodes, one row after another with a length
+/// prefix, into a buffer this type owns as a plain `Vec<u8>`. That means no `xl_free_*` call on
+/// drop (there is nothing native to release) and one native allocation total instead of one per
+/// row - prefer this over [`Workbook::read_all_decoded`](crate::workbook::Workbook::read_all_decoded)
+/// unless something specifically needs the decoded-array shape.
+pub struct AllRows {
+    buffer: Vec<u8>,
+    /// Each row's byte range within `buffer`, already excluding the row's own length prefix - so
+    /// `RowRef::from_blob` can be handed the slice directly.
+    row_ranges: Vec<(usize, usize)>,
+}
+
+impl AllRows {
+    pub(crate) fn read(handle: *mut crate::XlWorkbook) -> Result<AllRows, Error> {
+        let mut buffer = vec![0u8; INITIAL_ALL_ROWS_BUFFER];
+        loop {
+            let mut written: i32 = 0;
+            let capacity = i32::try_from(buffer.len()).unwrap_or(i32::MAX);
+            let status = unsafe {
+                crate::xl_read_all_blob(handle, buffer.as_mut_ptr(), capacity, &mut written)
+            };
+
+            match status {
+                crate::XL_OK => {
+                    buffer.truncate(if written > 0 { written as usize } else { 0 });
+                    let row_ranges = parse_row_ranges(&buffer)?;
+                    return Ok(AllRows { buffer, row_ranges });
+                }
+                crate::XL_BUFFER_TOO_SMALL => {
+                    let needed = if written > 0 { written as usize } else { buffer.len() * 2 };
+                    if needed <= buffer.len() {
+                        return Err(Error::from_status(
+                            XL_ERROR,
+                            "native asked for a buffer no larger than the current one".to_string(),
+                        ));
+                    }
+                    buffer.resize(needed, 0);
+                }
+                other => return Err(crate::workbook::last_error(other)),
+            }
+        }
+    }
+
+    #[must_use]
+    pub fn len(&self) -> usize {
+        self.row_ranges.len()
+    }
+
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.row_ranges.is_empty()
+    }
+
+    #[must_use]
+    pub fn get(&self, index: usize) -> Option<RowRef<'_>> {
+        let &(start, end) = self.row_ranges.get(index)?;
+        RowRef::from_blob(&self.buffer[start..end])
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item = RowRef<'_>> + '_ {
+        (0..self.len()).filter_map(move |index| self.get(index))
+    }
+}
+
+impl std::fmt::Debug for AllRows {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("AllRows").field("len", &self.len()).finish()
+    }
+}
+
+/// Parses the `xl_read_all_blob` wire format's row_count and per-row length prefixes into byte
+/// ranges. Bounds-checked throughout - a malformed buffer (which a correct native library never
+/// produces) is rejected rather than trusted into a panic or an out-of-bounds slice.
+fn parse_row_ranges(buffer: &[u8]) -> Result<Vec<(usize, usize)>, Error> {
+    let row_count = read_i32(buffer, 0).ok_or_else(malformed_all_rows_blob)?;
+    if row_count < 0 {
+        return Err(malformed_all_rows_blob());
+    }
+
+    let mut ranges = Vec::with_capacity(row_count as usize);
+    let mut offset = 4usize;
+    for _ in 0..row_count {
+        let row_length = read_i32(buffer, offset).ok_or_else(malformed_all_rows_blob)?;
+        if row_length < 0 {
+            return Err(malformed_all_rows_blob());
+        }
+        let start = offset.checked_add(4).ok_or_else(malformed_all_rows_blob)?;
+        let end = start.checked_add(row_length as usize).ok_or_else(malformed_all_rows_blob)?;
+        if end > buffer.len() {
+            return Err(malformed_all_rows_blob());
+        }
+        ranges.push((start, end));
+        offset = end;
+    }
+
+    if offset != buffer.len() {
+        return Err(malformed_all_rows_blob());
+    }
+    Ok(ranges)
+}
+
+fn malformed_all_rows_blob() -> Error {
+    Error::from_status(XL_ERROR, "native returned a malformed all-rows blob".to_string())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -395,5 +506,58 @@ mod tests {
     fn unknown_cell_type_is_none() {
         assert_eq!(CellType::from_raw(99), None);
         assert_eq!(CellType::from_raw(XL_CELL_ERROR), Some(CellType::Error));
+    }
+
+    /// Builds an `xl_read_all_blob` buffer: `int32 row_count`, then each row as
+    /// `int32 row_length` followed by that row's `blob()` bytes.
+    fn all_rows_blob(rows: &[&[(i32, i32, &str)]]) -> Vec<u8> {
+        let mut out = Vec::new();
+        out.extend_from_slice(&(rows.len() as i32).to_le_bytes());
+        for cells in rows {
+            let row = blob(cells);
+            out.extend_from_slice(&(row.len() as i32).to_le_bytes());
+            out.extend_from_slice(&row);
+        }
+        out
+    }
+
+    #[test]
+    fn parses_row_ranges_for_multiple_rows() {
+        let bytes = all_rows_blob(&[
+            &[(0, XL_CELL_STRING, "a")],
+            &[],
+            &[(0, XL_CELL_STRING, "b"), (1, XL_CELL_NUMBER, "2")],
+        ]);
+        let ranges = parse_row_ranges(&bytes).expect("well-formed buffer");
+        assert_eq!(ranges.len(), 3);
+
+        let rows: Vec<RowRef<'_>> =
+            ranges.iter().map(|&(start, end)| RowRef::from_blob(&bytes[start..end]).unwrap()).collect();
+        assert_eq!(rows[0].len(), 1);
+        assert_eq!(rows[0].get(0).unwrap().as_str().unwrap(), "a");
+        assert!(rows[1].is_empty());
+        assert_eq!(rows[2].len(), 2);
+        assert_eq!(rows[2].get(1).unwrap().as_str().unwrap(), "2");
+    }
+
+    #[test]
+    fn empty_all_rows_blob_parses_to_no_rows() {
+        let bytes = all_rows_blob(&[]);
+        let ranges = parse_row_ranges(&bytes).expect("well-formed buffer");
+        assert!(ranges.is_empty());
+    }
+
+    #[test]
+    fn truncated_all_rows_blob_is_rejected_not_panicked() {
+        let mut bytes = all_rows_blob(&[&[(0, XL_CELL_STRING, "hello")]]);
+        bytes.truncate(bytes.len() - 3);
+        assert!(parse_row_ranges(&bytes).is_err());
+    }
+
+    #[test]
+    fn trailing_garbage_after_declared_rows_is_rejected() {
+        let mut bytes = all_rows_blob(&[&[(0, XL_CELL_STRING, "a")]]);
+        bytes.push(0xFF);
+        assert!(parse_row_ranges(&bytes).is_err());
     }
 }

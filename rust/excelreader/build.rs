@@ -66,8 +66,22 @@ fn main() {
 
     if target_os == "windows" {
         let implib = out_dir.join("excelreader_native.lib");
-        if !implib.exists() {
-            generate_windows_implib(&implib, &target_env, &target_arch, &out_dir, &dll_basename);
+        // Regenerate when the .lib is missing, or when it exists but was built from a different
+        // .def content (e.g. excelreader.def gained/lost a symbol since OUT_DIR was last populated -
+        // OUT_DIR persists across incremental builds, and rerun-if-changed only guarantees this
+        // build script re-*runs*, not that a stale .lib sitting next to a fresh generated_def gets
+        // rebuilt). Comparing against the previous generated_def's content (not the .lib's mtime,
+        // which the generation below always bumps regardless of content) is what makes this check
+        // meaningful instead of always-stale or always-skip.
+        let generated_def = out_dir.join("excelreader.generated.def");
+        let new_def_content = format!("LIBRARY {dll_basename}\n{PHASE1_DEF_EXPORTS}");
+        let up_to_date = implib.exists()
+            && fs::read_to_string(&generated_def).is_ok_and(|old| old == new_def_content);
+        if !up_to_date {
+            generate_windows_implib(
+                &implib, &generated_def, &new_def_content, &target_env, &target_arch, &out_dir,
+                &dll_basename,
+            );
         }
         // The import library lives in OUT_DIR, not lib_dir (the DLL's own directory) - without
         // this, the linker can locate the DLL for cargo:rustc-link-search purposes but never finds
@@ -199,6 +213,8 @@ const PHASE1_DEF_EXPORTS: &str = include_str!("excelreader.def");
 
 fn generate_windows_implib(
     implib: &Path,
+    generated_def: &Path,
+    def_content: &str,
     target_env: &str,
     arch: &str,
     out_dir: &Path,
@@ -211,12 +227,8 @@ fn generate_windows_implib(
     // whatever EXCELREADER_NATIVE_LIB_DIR points at (override, e.g. `ExcelReader.Native.dll`).
     // Generate a temporary copy of the .def with an explicit LIBRARY line naming the real file,
     // and feed that to both tools instead of the checked-in .def directly.
-    let generated_def = out_dir.join("excelreader.generated.def");
-    fs::write(
-        &generated_def,
-        format!("LIBRARY {dll_basename}\n{PHASE1_DEF_EXPORTS}"),
-    )
-    .unwrap_or_else(|e| panic!("failed to write {}: {e}", generated_def.display()));
+    fs::write(generated_def, def_content)
+        .unwrap_or_else(|e| panic!("failed to write {}: {e}", generated_def.display()));
 
     if target_env == "msvc" {
         let lib_exe = "lib.exe";

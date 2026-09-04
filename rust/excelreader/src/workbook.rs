@@ -209,6 +209,16 @@ impl Workbook {
         Ok(crate::rows::DecodedRows::new(raw))
     }
 
+    /// Every remaining row of the current sheet, read in one native call into a buffer this type
+    /// owns outright - no native allocation per row/cell, and no `xl_free_*` call needed on drop.
+    /// Prefer this over [`read_all_decoded`](Self::read_all_decoded) unless something specifically
+    /// needs the decoded-array shape.
+    ///
+    /// An empty remainder is an empty result, not an error.
+    pub fn read_all_blob(&mut self) -> Result<crate::rows::AllRows, Error> {
+        crate::rows::AllRows::read(self.handle)
+    }
+
     /// Guesses a [`parse_sheet`] schema by sampling the current sheet.
     ///
     /// `header_row` has the same meaning as in [`parse_sheet`] (0 = no header); `sample_size`
