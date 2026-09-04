@@ -1,4 +1,3 @@
-using System.Diagnostics.CodeAnalysis;
 using ExcelReader.Core.Writer.Internal;
 
 namespace ExcelReader.Core.Writer
@@ -143,8 +142,6 @@ namespace ExcelReader.Core.Writer
         /// <param name="stream">The destination stream.</param>
         /// <param name="leaveOpen">If <see langword="true"/>, the stream is left open when the writer is disposed.</param>
         /// <param name="options">Delimiter/quote options; defaults to <see cref="CsvWriterOptions.Default"/> when omitted.</param>
-        [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP004:Don't ignore created IDisposable",
-            Justification = "The created CsvWriter is stored in the returned workbook's field and disposed there.")]
         public static CsvWorkbookWriter Create(Stream stream, bool leaveOpen = false, CsvWriterOptions? options = null)
         {
             return new CsvWorkbookWriter(CsvWriter.Create(stream, leaveOpen, options));

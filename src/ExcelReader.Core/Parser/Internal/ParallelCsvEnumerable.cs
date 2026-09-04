@@ -51,8 +51,6 @@ namespace ExcelReader.Core.Parser.Internal
             Justification = "The awaited tasks are the worker tasks and per-chunk TaskCompletionSources created in this very method; every await is ConfigureAwait(false), so there is no captured context to deadlock against.")]
         [SuppressMessage("Reliability", "CA2025:Do not pass 'IDisposable' instances into unawaited tasks",
             Justification = "The CTS and semaphore handed to the workers outlive them by construction: the finally block cancels and then awaits every worker task to completion, and only the enclosing `using` declarations' finally — which runs after it — disposes them.")]
-        [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP013:Await in using",
-            Justification = "Task.Run is deliberately not awaited at creation: the workers must run concurrently with the merge loop. They are joined in the finally block before the `using` declarations dispose anything they touch.")]
         public async IAsyncEnumerator<T> GetAsyncEnumerator(CancellationToken cancellationToken = default)
         {
             using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);

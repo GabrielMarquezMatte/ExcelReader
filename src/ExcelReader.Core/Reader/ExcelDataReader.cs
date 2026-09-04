@@ -346,8 +346,6 @@ namespace ExcelReader.Core.Reader
         }
 
         /// <inheritdoc/>
-        [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP004:Don't ignore created IDisposable",
-            Justification = "DataColumn.Add returns the DataColumn already owned by table.Columns; the table (and its columns) is disposed by whoever consumes this method's result.")]
         // IL2111: DataColumnCollection.Add(string, Type)'s `type` parameter carries the same
         // PublicFields|PublicProperties DynamicallyAccessedMembersAttribute as GetFieldType's return
         // above. Passing `typeof(Type)` itself as that argument — the "DataType" schema column's own
