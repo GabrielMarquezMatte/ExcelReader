@@ -83,5 +83,14 @@ namespace ExcelReader.Tests
 
             Assert.Equal(expectedBytes, key.Length);
         }
+
+        [Fact]
+        public void Should_Return_False_When_EncryptedVerifierHash_Exceeds_The_Cipher_Block_Buffer()
+        {
+            byte[] key = StandardKeyDerivation.DeriveKey(VectorPassword, VectorSalt, keyBits: 128);
+            byte[] oversizedHash = new byte[96];
+
+            Assert.False(StandardKeyDerivation.VerifyPassword(key, VectorEncryptedVerifier, oversizedHash));
+        }
     }
 }
