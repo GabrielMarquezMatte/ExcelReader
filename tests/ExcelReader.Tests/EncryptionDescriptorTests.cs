@@ -44,30 +44,32 @@ namespace ExcelReader.Tests
             Assert.Equal(HashKind.Sha1, d.KeyData.Hash);
         }
 
-        // Standard encryption (3.2/4.2) has no fixture in this pass, so it is recognized only far
-        // enough to reject it with a clear, non-alarming message - "not yet supported", not "this
-        // file is broken". Implementing it is Task 17.
+        // Standard encryption (3.2/4.2) is now parsed into a StandardDescriptor (see
+        // StandardDescriptorTests/EncryptionDescriptorDispatchTests for the full coverage) - it
+        // just isn't decryptable yet (DecryptedPackageStream.Create still rejects any non-agile
+        // descriptor; that's Task 3/4's concern). A well-formed binary header therefore succeeds
+        // at Parse() instead of being rejected as "not yet supported".
         [Fact]
-        public void Should_Report_UnsupportedScheme_When_Standard_Encryption()
+        public void Should_Parse_When_Standard_Encryption_Is_Well_Formed()
         {
             foreach ((int major, int minor) in new[] { (3, 2), (4, 2) })
             {
-                byte[] header = [(byte)major, 0, (byte)minor, 0, 0, 0, 0, 0];
-                var ex = Assert.Throws<ExcelEncryptionException>(
-                    () => EncryptionDescriptor.Parse(header, ExcelReaderOptions.Default));
-                Assert.Equal(ExcelEncryptionReason.UnsupportedScheme, ex.Reason);
-                Assert.Contains("standard", ex.Message, StringComparison.OrdinalIgnoreCase);
+                byte[] info = StandardInfoBuilder.Build(major, minor);
+                Assert.IsType<StandardDescriptor>(EncryptionDescriptor.Parse(info, ExcelReaderOptions.Default));
             }
         }
 
-        // Version 2.x is RC4 CryptoAPI - explicitly out of scope, and no password will ever help.
+        // Version 2.2 is a binary-header version shared with standard AES; EncryptionHeader.algId,
+        // not the version tuple, is what names it RC4 CryptoAPI - explicitly out of scope, and no
+        // password will ever help.
         [Fact]
         public void Should_Report_UnsupportedScheme_When_Rc4_CryptoApi()
         {
-            byte[] rc4 = [0x02, 0x00, 0x02, 0x00, 0, 0, 0, 0];
+            byte[] rc4 = StandardInfoBuilder.Build(major: 2, minor: 2, algId: 0x00006801, keySize: 128);
             var ex = Assert.Throws<ExcelEncryptionException>(
                 () => EncryptionDescriptor.Parse(rc4, ExcelReaderOptions.Default));
             Assert.Equal(ExcelEncryptionReason.UnsupportedScheme, ex.Reason);
+            Assert.Contains("RC4", ex.Message, StringComparison.Ordinal);
         }
 
         [Fact]
