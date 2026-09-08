@@ -56,7 +56,8 @@ namespace ExcelReader.Core.Crypto
         internal static bool VerifyPassword(ReadOnlySpan<byte> key, ReadOnlySpan<byte> encryptedVerifier,
             ReadOnlySpan<byte> encryptedVerifierHash)
         {
-            if (encryptedVerifier.Length != VerifierLength || encryptedVerifierHash.Length < Sha1Length)
+            if (encryptedVerifier.Length != VerifierLength || encryptedVerifierHash.Length < Sha1Length
+                || encryptedVerifierHash.Length > PadLength)
             {
                 return false;
             }
