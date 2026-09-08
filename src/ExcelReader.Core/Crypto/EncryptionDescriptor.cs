@@ -38,18 +38,112 @@ namespace ExcelReader.Core.Crypto
             return (major, minor) switch
             {
                 (4, 4) => ParseAgile(info[8..], options),
-                // Recognized but not implemented: no fixture exists yet to verify a derivation against.
-                (4, 2) or (3, 2) => throw new ExcelEncryptionException(
-                    ExcelEncryptionReason.UnsupportedScheme,
-                    $"This workbook uses ECMA-376 standard encryption (EncryptionInfo {major}.{minor}), " +
-                    "which is recognized but not yet supported."),
-                (2, _) or (3, 1) or (4, 1) => throw new ExcelEncryptionException(
+                // The binary descriptor's own fields start right after the 4-byte version tuple.
+                // Agile skips 8 instead because a 4-byte reserved field sits between its version
+                // and its XML; the asymmetry is in the format, not a mistake here.
+                (2, 2) or (3, 2) or (4, 2) => ParseBinary(info[4..], major, minor),
+                (3, 1) or (4, 1) => throw new ExcelEncryptionException(
                     ExcelEncryptionReason.UnsupportedScheme,
                     $"This workbook uses RC4 CryptoAPI encryption (EncryptionInfo {major}.{minor}), which is not supported."),
+                (3, 3) or (4, 3) => throw new ExcelEncryptionException(
+                    ExcelEncryptionReason.UnsupportedScheme,
+                    $"This workbook uses extensible encryption (EncryptionInfo {major}.{minor}), which is not supported."),
                 _ => throw new ExcelEncryptionException(
                     ExcelEncryptionReason.UnsupportedScheme,
                     $"Unrecognized EncryptionInfo version {major}.{minor}."),
             };
+        }
+
+        // [MS-OFFCRYPTO] 2.3.4.5-2.3.4.6. Versions 2.2/3.2/4.2 all carry this binary
+        // header+verifier, for standard AES *and* for RC4 CryptoAPI — the cipher is named by
+        // algId, so the header must be read before the scheme can be decided.
+        private static StandardDescriptor ParseBinary(ReadOnlySpan<byte> body, int major, int minor)
+        {
+            // headerFlags, then the header's own byte count.
+            if (body.Length < 8)
+            {
+                throw new InvalidDataException("The EncryptionInfo stream is truncated.");
+            }
+            int headerSize = BinaryPrimitives.ReadInt32LittleEndian(body[4..]);
+            // Eight fixed uint32 fields precede the variable-length CSP name.
+            if (headerSize < 32 || headerSize > body.Length - 8)
+            {
+                throw new InvalidDataException(
+                    "The EncryptionInfo descriptor's header size does not fit its stream.");
+            }
+
+            ReadOnlySpan<byte> header = body.Slice(8, headerSize);
+            int algId = BinaryPrimitives.ReadInt32LittleEndian(header[8..]);
+            int algIdHash = BinaryPrimitives.ReadInt32LittleEndian(header[12..]);
+            int keySize = BinaryPrimitives.ReadInt32LittleEndian(header[16..]);
+
+            int keyBits = ResolveKeyBits(algId, keySize, major, minor);
+            // 0 means "the scheme's default", which for standard encryption is SHA-1.
+            if (algIdHash is not (0x00008004 or 0))
+            {
+                throw new ExcelEncryptionException(ExcelEncryptionReason.UnsupportedScheme,
+                    $"Unsupported hash algorithm (algIdHash 0x{algIdHash:X4}) in the encryption descriptor.");
+            }
+
+            return ParseVerifier(body[(8 + headerSize)..], algId, keyBits);
+        }
+
+        // AES key size is implied by algId, so a stated keySize that disagrees with it means the
+        // descriptor is internally inconsistent and one of the two would have to be ignored.
+        private static int ResolveKeyBits(int algId, int keySize, int major, int minor)
+        {
+            int implied = algId switch
+            {
+                0x0000660E => 128,
+                0x0000660F => 192,
+                0x00006610 => 256,
+                0x00006801 => throw new ExcelEncryptionException(
+                    ExcelEncryptionReason.UnsupportedScheme,
+                    $"This workbook uses RC4 CryptoAPI encryption (EncryptionInfo {major}.{minor}), which is not supported."),
+                _ => throw new ExcelEncryptionException(
+                    ExcelEncryptionReason.UnsupportedScheme,
+                    $"Unsupported cipher algorithm (algId 0x{algId:X4}) in the encryption descriptor."),
+            };
+            if (keySize != 0 && keySize != implied)
+            {
+                throw new ExcelEncryptionException(ExcelEncryptionReason.UnsupportedScheme,
+                    $"The encryption descriptor's key size ({keySize} bits) disagrees with its cipher algorithm.");
+            }
+            return implied;
+        }
+
+        // [MS-OFFCRYPTO] 2.3.3 EncryptionVerifier: both sizes are fixed for AES, so a different
+        // value is a malformed descriptor rather than a scheme this library declines to support.
+        private static StandardDescriptor ParseVerifier(ReadOnlySpan<byte> verifier, int algId, int keyBits)
+        {
+            const int SaltLength = 16;
+            const int VerifierLength = 16;
+            const int VerifierHashLength = 32;
+
+            if (verifier.Length < 8 + SaltLength + VerifierLength + VerifierHashLength)
+            {
+                throw new InvalidDataException("The EncryptionInfo descriptor's verifier is truncated.");
+            }
+            int saltSize = BinaryPrimitives.ReadInt32LittleEndian(verifier);
+            if (saltSize != SaltLength)
+            {
+                throw new InvalidDataException(
+                    $"The encryption descriptor declares a {saltSize}-byte salt; AES requires {SaltLength}.");
+            }
+            int verifierHashSize = BinaryPrimitives.ReadInt32LittleEndian(
+                verifier[(4 + SaltLength + VerifierLength)..]);
+            if (verifierHashSize != VerifierHashLength)
+            {
+                throw new InvalidDataException(
+                    $"The encryption descriptor declares a {verifierHashSize}-byte verifier hash; AES requires {VerifierHashLength}.");
+            }
+
+            byte[] salt = verifier.Slice(4, SaltLength).ToArray();
+            byte[] encryptedVerifier = verifier.Slice(4 + SaltLength, VerifierLength).ToArray();
+            byte[] encryptedVerifierHash = verifier
+                .Slice(8 + SaltLength + VerifierLength, VerifierHashLength).ToArray();
+
+            return new StandardDescriptor(algId, keyBits, salt, encryptedVerifier, encryptedVerifierHash);
         }
 
         private static AgileDescriptor ParseAgile(ReadOnlySpan<byte> xml, ExcelReaderOptions options)
@@ -236,6 +330,18 @@ namespace ExcelReader.Core.Crypto
         // it) — a real element always carries both attributes.
         internal bool HasDataIntegrity => EncryptedHmacKey.Length > 0 && EncryptedHmacValue.Length > 0;
     }
+
+    // ECMA-376 standard encryption (EncryptionInfo 3.2/4.2). Deliberately not reusing
+    // CryptoParameters: its SpinCount/EncryptedKeyValue/HashSize/BlockSize fields describe agile's
+    // XML descriptor and would sit permanently empty here, implying they mean something. The hash
+    // is not a field either — standard encryption is SHA-1 by definition, and algIdHash is
+    // validated at parse time rather than carried forward.
+    internal sealed record StandardDescriptor(
+        int AlgId,
+        int KeyBits,
+        byte[] Salt,
+        byte[] EncryptedVerifier,
+        byte[] EncryptedVerifierHash) : EncryptionDescriptor;
 
     internal enum HashKind
     {
