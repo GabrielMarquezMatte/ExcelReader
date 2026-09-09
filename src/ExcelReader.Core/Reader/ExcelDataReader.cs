@@ -122,13 +122,12 @@ namespace ExcelReader.Core.Reader
         /// <inheritdoc/>
         public bool Read()
         {
-            if (!_pendingConsumed)
+            if (_pendingConsumed)
             {
-                _pendingConsumed = true;
-                _rowAvailable = _hasPendingRow;
-                return _rowAvailable;
+                return _rowAvailable = _rows.MoveNext();
             }
-            _rowAvailable = _rows.MoveNext();
+            _pendingConsumed = true;
+            _rowAvailable = _hasPendingRow;
             return _rowAvailable;
         }
 
