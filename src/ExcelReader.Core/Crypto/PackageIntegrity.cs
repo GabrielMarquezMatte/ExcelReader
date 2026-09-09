@@ -13,7 +13,7 @@ namespace ExcelReader.Core.Crypto
 
         // `ciphertext` must be a view over the WHOLE EncryptedPackage stream (prefix included).
         // Position is saved and restored so callers can invoke this mid-construction.
-        internal static void Verify(Stream ciphertext, AgileDescriptor d, ReadOnlySpan<byte> intermediateKey)
+        internal static void Verify(Stream ciphertext, AgileDescriptor d, byte[] intermediateKey)
         {
             (byte[] key, byte[] expected) = AgileKeyDerivation.UnwrapHmac(d, intermediateKey);
             try
