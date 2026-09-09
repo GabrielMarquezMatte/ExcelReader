@@ -75,10 +75,32 @@ std::expected<std::vector<std::uint8_t>, std::string> read_file_to_buffer(std::s
     return buffer;
 }
 
+// Cached once per process (function-local static, thread-safe init since C++11) rather than
+// re-read on every call to a BM_* function below. Google Benchmark invokes the whole benchmark
+// function an EXTRA, separate time to measure memory (BenchmarkRunner::RunMemoryManager), and that
+// call still executes everything outside the `for (auto _ : state)` loop too - so a fresh
+// read_file_to_buffer() there was inflating every *_Large benchmark's allocated-bytes total by the
+// fixture's own size (~15 MB), drowning out what the operation under test actually allocates per
+// call. Caching means only the first BM_* invocation across the whole binary pays that cost; every
+// later one - including the dedicated memory-measurement run - sees zero new allocation for it.
+const std::expected<std::vector<std::uint8_t>, std::string> &small_fixture_buffer()
+{
+    static const std::expected<std::vector<std::uint8_t>, std::string> buffer =
+        read_file_to_buffer(EXCELREADER_FIXTURE_PATH);
+    return buffer;
+}
+
+const std::expected<std::vector<std::uint8_t>, std::string> &large_fixture_buffer()
+{
+    static const std::expected<std::vector<std::uint8_t>, std::string> buffer =
+        read_file_to_buffer(EXCELREADER_LARGE_FIXTURE_PATH);
+    return buffer;
+}
+
 // Isolates xl::Workbook::open's cost: file read, container parse, header decode - no row typing.
 static void BM_Open(benchmark::State &state)
 {
-    auto buffer_result = read_file_to_buffer(EXCELREADER_FIXTURE_PATH);
+    const auto &buffer_result = small_fixture_buffer();
     if (!buffer_result.has_value())
     {
         state.SkipWithError(buffer_result.error().c_str());
@@ -101,7 +123,7 @@ BENCHMARK(BM_Open);
 // the columnar typed decode over all 100 rows.
 static void BM_ParseSheet(benchmark::State &state)
 {
-    auto buffer_result = read_file_to_buffer(EXCELREADER_FIXTURE_PATH);
+    const auto &buffer_result = small_fixture_buffer();
     if (!buffer_result.has_value())
     {
         state.SkipWithError(buffer_result.error().c_str());
@@ -133,7 +155,7 @@ BENCHMARK(BM_ParseSheet);
 // schema, independent of any typed parse.
 static void BM_InferSchema(benchmark::State &state)
 {
-    auto buffer_result = read_file_to_buffer(EXCELREADER_FIXTURE_PATH);
+    const auto &buffer_result = small_fixture_buffer();
     if (!buffer_result.has_value())
     {
         state.SkipWithError(buffer_result.error().c_str());
@@ -166,7 +188,7 @@ BENCHMARK(BM_InferSchema);
 
 static void BM_Open_Large(benchmark::State &state)
 {
-    auto buffer_result = read_file_to_buffer(EXCELREADER_LARGE_FIXTURE_PATH);
+    const auto &buffer_result = large_fixture_buffer();
     if (!buffer_result.has_value())
     {
         state.SkipWithError(buffer_result.error().c_str());
@@ -187,7 +209,7 @@ BENCHMARK(BM_Open_Large);
 
 static void BM_ParseSheet_Large(benchmark::State &state)
 {
-    auto buffer_result = read_file_to_buffer(EXCELREADER_LARGE_FIXTURE_PATH);
+    const auto &buffer_result = large_fixture_buffer();
     if (!buffer_result.has_value())
     {
         state.SkipWithError(buffer_result.error().c_str());
@@ -217,7 +239,7 @@ BENCHMARK(BM_ParseSheet_Large);
 
 static void BM_InferSchema_Large(benchmark::State &state)
 {
-    auto buffer_result = read_file_to_buffer(EXCELREADER_LARGE_FIXTURE_PATH);
+    const auto &buffer_result = large_fixture_buffer();
     if (!buffer_result.has_value())
     {
         state.SkipWithError(buffer_result.error().c_str());
