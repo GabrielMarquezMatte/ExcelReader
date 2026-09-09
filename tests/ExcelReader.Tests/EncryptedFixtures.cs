@@ -12,7 +12,15 @@ namespace ExcelReader.Tests
         [
             "agile-aes256-sha512.xlsx",
             "agile-aes256-sha512.xlsb",
+            "standard-aes128-sha1.xlsx",
         ];
+
+        // Every fixture but one is encrypted with Password. "standard-aes128-sha1.xlsx" is a genuine
+        // third-party file (Apache POI's test corpus) and keeps its real password instead.
+        internal static string PasswordFor(string name)
+        {
+            return name.StartsWith("standard-", StringComparison.Ordinal) ? "VelvetSweatshop" : Password;
+        }
 
         internal static string Dir => Path.Combine(AppContext.BaseDirectory, "data", "encrypted");
 

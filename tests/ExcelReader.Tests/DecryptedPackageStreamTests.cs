@@ -12,7 +12,7 @@ namespace ExcelReader.Tests
             var fs = File.OpenRead(EncryptedFixtures.Path_(fixture));
             cfb = CfbContainer.Parse(fs, ownsSource: true, ExcelReaderOptions.Default);
             byte[] info = cfb.ReadStream("EncryptionInfo", 64 * 1024);
-            var options = ExcelReaderOptions.Default with { Password = EncryptedFixtures.Password };
+            var options = ExcelReaderOptions.Default with { Password = EncryptedFixtures.PasswordFor(fixture) };
             EncryptionDescriptor d = EncryptionDescriptor.Parse(info, options);
             return DecryptedPackageStream.Create(cfb, d, options);
         }
