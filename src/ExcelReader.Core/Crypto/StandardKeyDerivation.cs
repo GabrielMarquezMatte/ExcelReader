@@ -50,10 +50,11 @@ namespace ExcelReader.Core.Crypto
             finally
             {
                 CryptographicOperations.ZeroMemory(passwordBytes);
+                CryptographicOperations.ZeroMemory(hash);
             }
         }
 
-        internal static bool VerifyPassword(ReadOnlySpan<byte> key, ReadOnlySpan<byte> encryptedVerifier,
+        internal static bool VerifyPassword(byte[] key, ReadOnlySpan<byte> encryptedVerifier,
             ReadOnlySpan<byte> encryptedVerifierHash)
         {
             if (encryptedVerifier.Length != VerifierLength || encryptedVerifierHash.Length < Sha1Length
@@ -64,40 +65,61 @@ namespace ExcelReader.Core.Crypto
 
             using Aes aes = CreateEcb(key);
             Span<byte> verifier = stackalloc byte[VerifierLength];
-            aes.DecryptEcb(encryptedVerifier, verifier, PaddingMode.None);
-
             Span<byte> expected = stackalloc byte[Sha1Length];
-            using IncrementalHash sha1 = CreateSha1();
-            sha1.AppendData(verifier);
-            sha1.GetHashAndReset(expected);
-
-            // The wrapped hash is padded out to a whole cipher block; only its leading 20 bytes are
-            // the SHA-1 value.
             Span<byte> actual = stackalloc byte[PadLength];
-            int wrapped = encryptedVerifierHash.Length - (encryptedVerifierHash.Length % VerifierLength);
-            aes.DecryptEcb(encryptedVerifierHash[..wrapped], actual[..wrapped], PaddingMode.None);
+            try
+            {
+                aes.DecryptEcb(encryptedVerifier, verifier, PaddingMode.None);
 
-            return CryptographicOperations.FixedTimeEquals(expected, actual[..Sha1Length]);
+                using IncrementalHash sha1 = CreateSha1();
+                sha1.AppendData(verifier);
+                sha1.GetHashAndReset(expected);
+
+                // The wrapped hash is padded out to a whole cipher block; only its leading 20
+                // bytes are the SHA-1 value.
+                int wrapped = encryptedVerifierHash.Length - (encryptedVerifierHash.Length % VerifierLength);
+                aes.DecryptEcb(encryptedVerifierHash[..wrapped], actual[..wrapped], PaddingMode.None);
+
+                return CryptographicOperations.FixedTimeEquals(expected, actual[..Sha1Length]);
+            }
+            finally
+            {
+                CryptographicOperations.ZeroMemory(verifier);
+                CryptographicOperations.ZeroMemory(expected);
+                CryptographicOperations.ZeroMemory(actual);
+            }
         }
 
         // X1 = SHA1(hFinal XOR 0x36, padded with 0x36 to 64 bytes); X2 the same with 0x5C. The key
-        // is the leading bytes of X1 || X2, so X2 only matters above a 20-byte key.
+        // is the leading bytes of X1 || X2, so X2 only matters above a 20-byte key. keyLength is
+        // internal-caller-controlled (derived from the descriptor's keyBits, already constrained to
+        // 128/192/256 by ResolveKeyBits), so an out-of-range value here is a caller bug, not
+        // malformed file data.
         private static byte[] ExpandToKeyLength(IncrementalHash sha1, ReadOnlySpan<byte> hFinal, int keyLength)
         {
+            ArgumentOutOfRangeException.ThrowIfGreaterThan(keyLength, Sha1Length * 2);
+
             Span<byte> buffer = stackalloc byte[PadLength];
             Span<byte> derived = stackalloc byte[Sha1Length * 2];
+            try
+            {
+                buffer.Fill(0x36);
+                XorInto(hFinal, buffer);
+                sha1.AppendData(buffer);
+                sha1.GetHashAndReset(derived[..Sha1Length]);
 
-            buffer.Fill(0x36);
-            XorInto(hFinal, buffer);
-            sha1.AppendData(buffer);
-            sha1.GetHashAndReset(derived[..Sha1Length]);
+                buffer.Fill(0x5C);
+                XorInto(hFinal, buffer);
+                sha1.AppendData(buffer);
+                sha1.GetHashAndReset(derived[Sha1Length..]);
 
-            buffer.Fill(0x5C);
-            XorInto(hFinal, buffer);
-            sha1.AppendData(buffer);
-            sha1.GetHashAndReset(derived[Sha1Length..]);
-
-            return derived[..keyLength].ToArray();
+                return derived[..keyLength].ToArray();
+            }
+            finally
+            {
+                CryptographicOperations.ZeroMemory(buffer);
+                CryptographicOperations.ZeroMemory(derived);
+            }
         }
 
         private static void XorInto(ReadOnlySpan<byte> value, Span<byte> destination)
@@ -115,14 +137,17 @@ namespace ExcelReader.Core.Crypto
 
         [SuppressMessage("Security", "CA5358:Review cipher mode usage with cryptographic experts",
             Justification = "ECMA-376 standard encryption encrypts the package with AES-ECB; reading such a file requires ECB. No data is encrypted here.")]
-        private static Aes CreateEcb(ReadOnlySpan<byte> key)
+        private static Aes CreateEcb(byte[] key)
         {
             Aes aes = Aes.Create();
             try
             {
                 aes.Mode = CipherMode.ECB;
                 aes.Padding = PaddingMode.None;
-                aes.Key = key.ToArray();
+                // Assign the caller's array directly (mirrors StandardPackageCipher's _key
+                // assignment) rather than key.ToArray(), which would leave an extra unzeroed
+                // heap copy of the key material for the GC.
+                aes.Key = key;
                 return aes;
             }
             catch

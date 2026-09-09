@@ -18,10 +18,17 @@ namespace ExcelReader.Tests
         ];
 
         // Every fixture but one is encrypted with Password. "standard-aes128-sha1.xlsx" is a genuine
-        // third-party file (Apache POI's test corpus) and keeps its real password instead.
+        // third-party file (Apache POI's test corpus) and keeps its real password instead. Keyed by
+        // exact name rather than a naming-convention prefix so a future fixture that doesn't follow
+        // the convention can't silently fall through to the wrong default.
+        private static readonly Dictionary<string, string> Passwords = new(StringComparer.Ordinal)
+        {
+            ["standard-aes128-sha1.xlsx"] = "VelvetSweatshop",
+        };
+
         internal static string PasswordFor(string name)
         {
-            return name.StartsWith("standard-", StringComparison.Ordinal) ? "VelvetSweatshop" : Password;
+            return Passwords.TryGetValue(name, out string? password) ? password : Password;
         }
 
         internal static string Dir => Path.Combine(AppContext.BaseDirectory, "data", "encrypted");

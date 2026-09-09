@@ -405,6 +405,13 @@ namespace ExcelReader.Core.Crypto
                     // ([MS-CFB]: the directory entry's Size, i.e. byteLimit, is authoritative, not
                     // physical padding past the last used byte) — so take must be computed, and the
                     // read bounded to it, before touching the source, not after reading a full sector.
+                    // The byteLimit < 0 case (the directory chain: it has no directory-entry Size of
+                    // its own to bound it against) deliberately keeps demanding a whole sectorSize
+                    // read on every hop, including the last: directory and FAT sectors are compound-
+                    // file control structures, not a user stream's logical content, so the format
+                    // itself always allocates and fully pads them to whole sectors. A directory chain
+                    // that ends mid-sector is genuine corruption, not a legitimate short final sector,
+                    // and clamping this read would mask that rather than reject it.
                     int take = byteLimit < 0 ? sectorSize : Math.Min(sectorSize, byteLimit - written);
                     ReadAt(source, SectorOffset(sector, sectorSize), sectorBuf.AsSpan(0, take));
                     ms.Write(sectorBuf, 0, take);

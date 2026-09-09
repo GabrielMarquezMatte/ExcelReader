@@ -527,17 +527,32 @@ namespace ExcelReader.Tests
             Assert.True(reader.SheetCount > 0);
         }
 
+        public static TheoryData<string> EncryptedMutationFixtures()
+        {
+            var data = new TheoryData<string>();
+            foreach (string name in EncryptedFixtures.All)
+            {
+                data.Add(name);
+            }
+            return data;
+        }
+
         // Byte-flipping an encrypted container must never hang, OOM, or throw an arithmetic fault - only
-        // the acceptable rejection types.
-        [Fact]
-        public void Should_Reject_Gracefully_When_Encrypted_Container_Mutated()
+        // the acceptable rejection types. Covers all three encrypted fixtures (not just the agile one)
+        // so the standard-encryption pre-authentication parse path (ParseBinary/ResolveKeyBits/
+        // ParseVerifier/StandardPackageCipher) gets mutation coverage too - mutating the agile seed alone
+        // would never realistically produce a coherent binary standard header.
+        [Theory]
+        [MemberData(nameof(EncryptedMutationFixtures))]
+        public void Should_Reject_Gracefully_When_Encrypted_Container_Mutated(string fixture)
         {
             // 200 rounds wasn't enough to reliably catch this class of bug with this test's own fixed
             // seed: the final review found the first unacceptable-exception mutation at round 217 with
-            // one RNG seed and round 956 with another.
-            const int Rounds = 1000;
-            byte[] seed = EncryptedFixtures.Bytes("agile-aes256-sha512.xlsx");
-            var options = ExcelReaderOptions.Default with { Password = EncryptedFixtures.Password };
+            // one RNG seed and round 956 with another. Split roughly evenly across three fixtures (was
+            // 1000 rounds x 1 fixture) so total runtime stays comparable to before.
+            const int Rounds = 340;
+            byte[] seed = EncryptedFixtures.Bytes(fixture);
+            var options = ExcelReaderOptions.Default with { Password = EncryptedFixtures.PasswordFor(fixture) };
             var rng = new Random(20260826);
             int completed = 0;
             for (int i = 0; i < Rounds; i++)
@@ -563,7 +578,7 @@ namespace ExcelReader.Tests
                     string offsets = string.Join(", ", positions);
                     throw new InvalidOperationException(
                         string.Create(CultureInfo.InvariantCulture,
-                            $"Round {i} on the encrypted seed produced an unacceptable '{ex.GetType().Name}' (mutated byte offsets: [{offsets}]): {ex.Message}"),
+                            $"Round {i} on fixture '{fixture}' produced an unacceptable '{ex.GetType().Name}' (mutated byte offsets: [{offsets}]): {ex.Message}"),
                         ex);
                 }
                 completed++;
