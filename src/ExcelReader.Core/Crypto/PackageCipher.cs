@@ -27,7 +27,12 @@ namespace ExcelReader.Core.Crypto
         // `cipher` and `plain` are equal-length and always a whole number of cipher blocks: the
         // caller validates that the total ciphertext length is block-aligned, and the segment size
         // is itself a multiple of the block size, so even a short final segment stays aligned.
-        internal abstract void DecryptSegment(int segmentIndex, ReadOnlySpan<byte> cipher, Span<byte> plain);
+        // Memory, not Span: StandardPackageCipher needs the backing array to reuse one
+        // ICryptoTransform via TransformBlock across every segment instead of paying a fresh
+        // cipher-object setup per segment (see StandardPackageCipher.DecryptSegment). Every caller
+        // already holds an array (a rented ArrayPool buffer or a whole-file byte[]), so this costs
+        // nothing at the call sites.
+        internal abstract void DecryptSegment(int segmentIndex, ReadOnlyMemory<byte> cipher, Memory<byte> plain);
 
         // Costs a full pass over the ciphertext, so the caller decides whether to pay for it.
         internal abstract void VerifyIntegrity(Stream ciphertextView);

@@ -276,7 +276,7 @@ namespace ExcelReader.Core.Crypto
 
         private void DecryptSegment(int index, byte[] cipherBuf, int cipherLen)
         {
-            _cipher.DecryptSegment(index, cipherBuf.AsSpan(0, cipherLen), _segmentCache.AsSpan(0, cipherLen));
+            _cipher.DecryptSegment(index, cipherBuf.AsMemory(0, cipherLen), _segmentCache.AsMemory(0, cipherLen));
         }
 
         protected override void Dispose(bool disposing)
