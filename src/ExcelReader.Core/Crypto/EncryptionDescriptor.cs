@@ -113,17 +113,20 @@ namespace ExcelReader.Core.Crypto
         }
 
         // [MS-OFFCRYPTO] 2.3.3 EncryptionVerifier: SaltSize is fixed for AES, so a different value
-        // is a malformed descriptor. VerifierHashSize is NOT the byte count of the encrypted blob
-        // that follows it in the stream — it's the native output length of the hash algorithm
-        // (SHA-1, the only hash this library's standard-encryption scope supports), which is 20
-        // bytes. The encrypted blob itself is a completely separate quantity: that SHA-1 digest
-        // padded up to the next 16-byte AES block boundary, i.e. 32 bytes. VerifierHashSize (20) and
-        // VerifierHashLength (32) must therefore stay two distinct constants.
+        // is a malformed descriptor. The 4-byte VerifierHashSize field that follows the verifier is
+        // NOT the byte count of the encrypted blob that follows it in the stream — it's the native
+        // output length of the hash algorithm (SHA-1, the only hash this library's standard-
+        // encryption scope supports), which is 20 bytes. The encrypted blob itself is a completely
+        // separate quantity: that SHA-1 digest padded up to the next 16-byte AES block boundary,
+        // i.e. VerifierHashLength (32) bytes, which is what actually drives the slice below. This
+        // parser deliberately does not read or validate VerifierHashSize: nothing downstream
+        // consumes it, so bounding it would only reject producers that declare a technically-true
+        // value we don't act on (a real Apache POI fixture declares 20; a hypothetical writer could
+        // just as validly declare 32, or 0 for "unspecified") without protecting anything.
         private static StandardDescriptor ParseVerifier(ReadOnlySpan<byte> verifier, int algId, int keyBits)
         {
             const int SaltLength = 16;
             const int VerifierLength = 16;
-            const int VerifierHashSize = 20;
             const int VerifierHashLength = 32;
 
             if (verifier.Length < 8 + SaltLength + VerifierLength + VerifierHashLength)
@@ -136,13 +139,9 @@ namespace ExcelReader.Core.Crypto
                 throw new InvalidDataException(
                     $"The encryption descriptor declares a {saltSize}-byte salt; AES requires {SaltLength}.");
             }
-            int verifierHashSize = BinaryPrimitives.ReadInt32LittleEndian(
-                verifier[(4 + SaltLength + VerifierLength)..]);
-            if (verifierHashSize != VerifierHashSize)
-            {
-                throw new InvalidDataException(
-                    $"The encryption descriptor declares a {verifierHashSize}-byte verifier hash; SHA-1 requires {VerifierHashSize}.");
-            }
+            // Bytes (4 + SaltLength + VerifierLength) .. (8 + SaltLength + VerifierLength) hold the
+            // unread, unvalidated VerifierHashSize field described above; the slices below skip past
+            // it without reading it.
 
             byte[] salt = verifier.Slice(4, SaltLength).ToArray();
             byte[] encryptedVerifier = verifier.Slice(4 + SaltLength, VerifierLength).ToArray();
@@ -154,7 +153,6 @@ namespace ExcelReader.Core.Crypto
 
         private static AgileDescriptor ParseAgile(ReadOnlySpan<byte> xml, ExcelReaderOptions options)
         {
-            _ = options;
             CryptoParameters? keyData = null;
             CryptoParameters? passwordEncryptor = null;
             byte[] encryptedHmacKey = [];

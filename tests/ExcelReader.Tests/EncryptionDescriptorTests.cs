@@ -44,11 +44,10 @@ namespace ExcelReader.Tests
             Assert.Equal(HashKind.Sha1, d.KeyData.Hash);
         }
 
-        // Standard encryption (3.2/4.2) is now parsed into a StandardDescriptor (see
-        // StandardDescriptorTests/EncryptionDescriptorDispatchTests for the full coverage) - it
-        // just isn't decryptable yet (DecryptedPackageStream.Create still rejects any non-agile
-        // descriptor; that's Task 3/4's concern). A well-formed binary header therefore succeeds
-        // at Parse() instead of being rejected as "not yet supported".
+        // Standard encryption (3.2/4.2) parses into a StandardDescriptor (see
+        // StandardDescriptorTests/EncryptionDescriptorDispatchTests for the full coverage) and, via
+        // DecryptedPackageStream.Create/StandardPackageCipher, decrypts fully. A well-formed binary
+        // header succeeds at Parse() here; the decrypt path itself is covered elsewhere.
         [Fact]
         public void Should_Parse_When_Standard_Encryption_Is_Well_Formed()
         {
