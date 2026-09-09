@@ -1,9 +1,11 @@
 namespace ExcelReader.Tests
 {
-    // Encrypted fixtures are the only oracle for decryption correctness (writing encrypted files is
-    // out of scope, so there is no round-trip check). Each encrypted file has a paired ".plain."
-    // file produced by msoffcrypto-tool, an independent implementation. See data/encrypted/README.md
-    // for what schemes/key sizes this corpus does and does not cover.
+    // Encrypted fixtures are the only *third-party* oracle for decryption correctness -
+    // Excel.EncryptPackage is round-tripped through the reader elsewhere in the test suite, but
+    // that only proves encrypt and decrypt agree with each other, not independent correctness (see
+    // data/encrypted/README.md). Each encrypted file has a paired ".plain." file produced by an
+    // implementation this codebase did not write. See data/encrypted/README.md for what
+    // schemes/key sizes this corpus does and does not cover.
     internal static class EncryptedFixtures
     {
         internal const string Password = "hunter2";
