@@ -509,6 +509,24 @@ namespace ExcelReader.Tests
             Assert.Throws<ExcelLimitExceededException>(() => Excel.Open(bytes, tight));
         }
 
+        // Standard encryption's iteration count is fixed by the scheme at 50,000 rather than stated
+        // in the file, so there is no file-supplied value for this cap to guard and a lowered cap
+        // must not make a legitimate file unopenable.
+        [Fact]
+        public void Should_Ignore_SpinCount_Cap_When_Scheme_Is_Standard()
+        {
+            byte[] container = StandardContainerFixture.Forge();
+            ExcelReaderOptions options = new()
+            {
+                Password = StandardContainerFixture.Password,
+                MaxPasswordSpinCount = 1,
+            };
+
+            using IExcelRowReader reader = Excel.Open(container, options);
+
+            Assert.True(reader.SheetCount > 0);
+        }
+
         // Byte-flipping an encrypted container must never hang, OOM, or throw an arithmetic fault - only
         // the acceptable rejection types.
         [Fact]

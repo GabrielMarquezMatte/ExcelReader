@@ -14,6 +14,7 @@ namespace ExcelReader.Core.Crypto
             return descriptor switch
             {
                 AgileDescriptor agile => new AgilePackageCipher(agile, password.Chars),
+                StandardDescriptor standard => new StandardPackageCipher(standard, password.Chars),
                 _ => throw new ExcelEncryptionException(ExcelEncryptionReason.UnsupportedScheme,
                     "This workbook's encryption scheme has no decryption implementation."),
             };
