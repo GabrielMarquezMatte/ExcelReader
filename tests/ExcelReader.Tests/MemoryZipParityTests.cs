@@ -194,8 +194,6 @@ namespace ExcelReader.Tests
         // let a using declaration dispose it again at scope exit.
         [Theory]
         [MemberData(nameof(Fixtures))]
-        [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP017:Prefer using",
-            Justification = "The test's whole point is calling Dispose() manually before the using declaration's own scope-exit dispose, to prove a third disposal is still safe.")]
         public void DoubleDisposingTheEnumeratorIsSafe(MemoryFixture fixture)
         {
             byte[] bytes = fixture.Build();

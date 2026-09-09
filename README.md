@@ -255,10 +255,9 @@ catch (ExcelEncryptionException ex) when (ex.Reason is ExcelEncryptionReason.Pas
 ```
 
 Supported: ECMA-376 agile encryption (Excel 2010+ — what Excel writes today when you set a
-password). **Not** supported: ECMA-376 standard encryption (Excel 2007; recognized and rejected
-with `UnsupportedScheme`, pending real fixtures to verify a derivation against), encrypted legacy
-`.xls` (RC4 CryptoAPI), and sheet/workbook *protection* passwords — a different mechanism entirely,
-stored as hashes in the plaintext XML.
+password) and ECMA-376 standard encryption (Excel 2007 — AES-ECB with SHA-1). **Not** supported:
+RC4 CryptoAPI encryption, encrypted legacy `.xls`, and sheet/workbook *protection* passwords — a
+different mechanism entirely, stored as hashes in the plaintext XML.
 
 `Password` never appears in `ExcelReaderOptions.ToString()`. Note that a password supplied as a
 `string` cannot be wiped from memory — .NET strings are immutable and movable — so the library zeroes

@@ -73,7 +73,7 @@ namespace ExcelReader.Tests
         [MemberData(nameof(EncryptedFixtureNames))]
         public void Should_Match_Stream_Path_When_Encrypted_Opened_From_Memory(string fixture)
         {
-            var options = ExcelReaderOptions.Default with { Password = EncryptedFixtures.Password };
+            var options = ExcelReaderOptions.Default with { Password = EncryptedFixtures.PasswordFor(fixture) };
 
             using IExcelRowReader streamReader = Excel.Open(EncryptedFixtures.Path_(fixture), options);
             using IExcelRowReader memoryReader = Excel.Open(EncryptedFixtures.Bytes(fixture), options);

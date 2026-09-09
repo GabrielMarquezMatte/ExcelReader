@@ -10,8 +10,8 @@ namespace ExcelReader.Core.Crypto
     // 4096-byte plaintext segments, so ZipArchive can seek/read the decrypted ZIP without the whole
     // package ever being materialized at once.
     //
-    // Only agile encryption (AES-CBC per segment) is implemented; EncryptionDescriptor.Parse never
-    // yields a descriptor for standard encryption.
+    // The scheme-specific part - key derivation and how one segment decrypts - lives behind
+    // PackageCipher, so nothing here names an encryption scheme.
     internal sealed class DecryptedPackageStream : Stream
     {
         private const int SegmentSize = 4096;
@@ -21,38 +21,24 @@ namespace ExcelReader.Core.Crypto
         // Borrowed only long enough for Create's own reads/derivation; the ciphertext view below is
         // what actually gets disposed.
         private readonly Stream _view;
-        private readonly AgileDescriptor _descriptor;
-        private readonly byte[] _key;
+        private readonly PackageCipher _cipher;
         private readonly long _length;
         // A single cached segment is enough for ZipArchive's mostly-sequential access pattern.
         private readonly byte[] _segmentCache;
-        // Built once for the stream's lifetime, not per 4 KB segment.
-        private readonly Aes _aes;
-        private readonly byte[] _iv;
-        private readonly IncrementalHash _ivHasher;
         private int _cachedSegment = -1;
         private long _position;
         private bool _disposed;
 
-        private DecryptedPackageStream(Stream view, AgileDescriptor descriptor, byte[] key, long length, byte[] segmentCache, Aes aes)
+        private DecryptedPackageStream(Stream view, PackageCipher cipher, long length, byte[] segmentCache)
         {
             _view = view;
-            _descriptor = descriptor;
-            _key = key;
+            _cipher = cipher;
             _length = length;
             _segmentCache = segmentCache;
-            _aes = aes;
-            _iv = new byte[descriptor.KeyData.BlockSize];
-            _ivHasher = AgileKeyDerivation.CreateHasher(descriptor.KeyData.Hash);
         }
 
         internal static DecryptedPackageStream Create(CfbContainer cfb, EncryptionDescriptor descriptor, ExcelReaderOptions options)
         {
-            if (descriptor is not AgileDescriptor agile)
-            {
-                throw new ExcelEncryptionException(ExcelEncryptionReason.UnsupportedScheme,
-                    "Only agile (ECMA-376 4.4) encryption is supported for streaming decryption.");
-            }
             if (options.Password is null)
             {
                 throw new ExcelEncryptionException(ExcelEncryptionReason.PasswordRequired,
@@ -62,58 +48,65 @@ namespace ExcelReader.Core.Crypto
             Stream view = cfb.OpenStreamView("EncryptedPackage");
             try
             {
-                if (view.Length < PrefixSize)
-                {
-                    throw new InvalidDataException("The EncryptedPackage stream is truncated.");
-                }
-                Span<byte> prefix = stackalloc byte[PrefixSize];
-                view.ReadExactly(prefix);
-                long declared = BinaryPrimitives.ReadInt64LittleEndian(prefix);
-                // Reject a crafted file claiming more plaintext than the ciphertext could hold, before
-                // it sizes a buffer.
-                if (declared < 0 || declared > view.Length - PrefixSize)
-                {
-                    throw new InvalidDataException("The encrypted package's declared size exceeds its ciphertext.");
-                }
-                // Segments decrypt with PaddingMode.None, which requires a whole number of AES blocks
-                // reject misalignment here rather than let DecryptCbc throw.
-                long cipherTotal = view.Length - PrefixSize;
-                if (cipherTotal % CipherBlockSize != 0)
-                {
-                    throw new InvalidDataException(
-                        "The encrypted package's ciphertext length is not a multiple of the cipher block size.");
-                }
-                LimitChecks.ThrowIfEntryLengthExceeds(
-                    declared, options.MaxTotalDecompressedBytes, nameof(ExcelReaderOptions.MaxTotalDecompressedBytes));
-
-                byte[] key = AgileKeyDerivation.DeriveIntermediateKey(agile, options.Password.Chars);
+                long declared = ReadDeclaredLength(view, options);
+                PackageCipher cipher = PackageCipher.Create(descriptor, options.Password);
                 try
                 {
                     // Opt-in only: verifying needs a full extra pass over the ciphertext before the
                     // first row, unlike the memory path where everything is already decrypted.
-                    if (agile.HasDataIntegrity && options.VerifyEncryptedIntegrity)
+                    if (cipher.SupportsIntegrity && options.VerifyEncryptedIntegrity)
                     {
-                        PackageIntegrity.Verify(view, agile, key);
+                        PackageIntegrityGate(view, cipher);
                     }
+                    byte[] segmentCache = ArrayPool<byte>.Shared.Rent(SegmentSize);
+                    return new DecryptedPackageStream(view, cipher, declared, segmentCache);
                 }
                 catch
                 {
-                    CryptographicOperations.ZeroMemory(key);
+                    cipher.Dispose();
                     throw;
                 }
-
-                byte[] segmentCache = ArrayPool<byte>.Shared.Rent(SegmentSize);
-                Aes aes = Aes.Create();
-                aes.Mode = CipherMode.CBC;
-                aes.Padding = PaddingMode.None;
-                aes.Key = key;
-                return new DecryptedPackageStream(view, agile, key, declared, segmentCache, aes);
             }
             catch
             {
                 view.Dispose();
                 throw;
             }
+        }
+
+        private static void PackageIntegrityGate(Stream view, PackageCipher cipher)
+        {
+            long start = view.Position;
+            cipher.VerifyIntegrity(view);
+            view.Position = start;
+        }
+
+        private static long ReadDeclaredLength(Stream view, ExcelReaderOptions options)
+        {
+            if (view.Length < PrefixSize)
+            {
+                throw new InvalidDataException("The EncryptedPackage stream is truncated.");
+            }
+            Span<byte> prefix = stackalloc byte[PrefixSize];
+            view.ReadExactly(prefix);
+            long declared = BinaryPrimitives.ReadInt64LittleEndian(prefix);
+            // Reject a crafted file claiming more plaintext than the ciphertext could hold, before
+            // it sizes a buffer.
+            if (declared < 0 || declared > view.Length - PrefixSize)
+            {
+                throw new InvalidDataException("The encrypted package's declared size exceeds its ciphertext.");
+            }
+            // Segments decrypt with PaddingMode.None, which requires a whole number of cipher
+            // blocks - reject misalignment here rather than let the cipher throw.
+            long cipherTotal = view.Length - PrefixSize;
+            if (cipherTotal % CipherBlockSize != 0)
+            {
+                throw new InvalidDataException(
+                    "The encrypted package's ciphertext length is not a multiple of the cipher block size.");
+            }
+            LimitChecks.ThrowIfEntryLengthExceeds(
+                declared, options.MaxTotalDecompressedBytes, nameof(ExcelReaderOptions.MaxTotalDecompressedBytes));
+            return declared;
         }
 
         public override bool CanRead => true;
@@ -283,8 +276,7 @@ namespace ExcelReader.Core.Crypto
 
         private void DecryptSegment(int index, byte[] cipherBuf, int cipherLen)
         {
-            AgileKeyDerivation.SegmentIv(_descriptor, index, _ivHasher, _iv);
-            _aes.DecryptCbc(cipherBuf.AsSpan(0, cipherLen), _iv, _segmentCache.AsSpan(0, cipherLen), PaddingMode.None);
+            _cipher.DecryptSegment(index, cipherBuf.AsMemory(0, cipherLen), _segmentCache.AsMemory(0, cipherLen));
         }
 
         protected override void Dispose(bool disposing)
@@ -292,11 +284,9 @@ namespace ExcelReader.Core.Crypto
             if (disposing && !_disposed)
             {
                 _disposed = true;
-                CryptographicOperations.ZeroMemory(_key);
                 CryptographicOperations.ZeroMemory(_segmentCache);
                 ArrayPool<byte>.Shared.Return(_segmentCache);
-                _aes.Dispose();
-                _ivHasher.Dispose();
+                _cipher.Dispose();
                 _view.Dispose();
             }
             base.Dispose(disposing);

@@ -14,7 +14,7 @@ pub mod rows;
 pub mod arrow;
 
 pub use error::Error;
-pub use rows::{CellIter, CellRef, CellType, DecodedRows, RowCursor, RowRef};
+pub use rows::{AllRows, CellIter, CellRef, CellType, DecodedRows, RowCursor, RowRef};
 pub use options::{OpenOptions, OpenOptionsRaw, WriteOptions};
 pub use temporal::{Date, Time, Timestamp};
 
@@ -349,6 +349,13 @@ extern "C" {
     ) -> c_int;
     pub fn xl_read_all_decoded(handle: *mut XlWorkbook, out_rows: *mut XlRows) -> c_int;
     pub fn xl_free_rows(rows: *mut XlRows);
+
+    pub fn xl_read_all_blob(
+        handle: *mut XlWorkbook,
+        buffer: *mut u8,
+        capacity: i32,
+        out_written: *mut i32,
+    ) -> c_int;
 
     pub fn xl_last_error_ptr(out_len: *mut i32) -> *const u8;
 }

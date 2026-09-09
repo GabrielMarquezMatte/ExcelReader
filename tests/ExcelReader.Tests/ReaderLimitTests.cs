@@ -1,4 +1,5 @@
 using System.Buffers.Binary;
+using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.IO.Compression;
 using System.Text;
@@ -509,25 +510,70 @@ namespace ExcelReader.Tests
             Assert.Throws<ExcelLimitExceededException>(() => Excel.Open(bytes, tight));
         }
 
-        // Byte-flipping an encrypted container must never hang, OOM, or throw an arithmetic fault - only
-        // the acceptable rejection types.
+        // Standard encryption's iteration count is fixed by the scheme at 50,000 rather than stated
+        // in the file, so there is no file-supplied value for this cap to guard and a lowered cap
+        // must not make a legitimate file unopenable.
         [Fact]
-        public void Should_Reject_Gracefully_When_Encrypted_Container_Mutated()
+        public void Should_Ignore_SpinCount_Cap_When_Scheme_Is_Standard()
         {
-            // 200 rounds wasn't enough to reliably catch this class of bug with this test's own fixed
-            // seed: the final review found the first unacceptable-exception mutation at round 217 with
-            // one RNG seed and round 956 with another.
-            const int Rounds = 1000;
-            byte[] seed = EncryptedFixtures.Bytes("agile-aes256-sha512.xlsx");
-            var options = ExcelReaderOptions.Default with { Password = EncryptedFixtures.Password };
+            byte[] container = StandardContainerFixture.Forge();
+            ExcelReaderOptions options = new()
+            {
+                Password = StandardContainerFixture.Password,
+                MaxPasswordSpinCount = 1,
+            };
+
+            using IExcelRowReader reader = Excel.Open(container, options);
+
+            Assert.True(reader.SheetCount > 0);
+        }
+
+        public static TheoryData<string> EncryptedMutationFixtures()
+        {
+            var data = new TheoryData<string>();
+            foreach (string name in EncryptedFixtures.All)
+            {
+                data.Add(name);
+            }
+            return data;
+        }
+
+        // Byte-flipping an encrypted container must never hang, OOM, or throw an arithmetic fault - only
+        // the acceptable rejection types. Covers all three encrypted fixtures (not just the agile one)
+        // so the standard-encryption pre-authentication parse path (ParseBinary/ResolveKeyBits/
+        // ParseVerifier/StandardPackageCipher) gets mutation coverage too - mutating the agile seed alone
+        // would never realistically produce a coherent binary standard header.
+        [Theory]
+        [MemberData(nameof(EncryptedMutationFixtures))]
+        [SuppressMessage("Design", "CA1031:Do not catch general exception types",
+            Justification = "Classifying every escaping exception as acceptable-rejection or bug IS this " +
+                "test's oracle; the unacceptable ones are recorded and rethrown after the loop rather than " +
+                "inside the handler, so the reported round stays deterministic.")]
+        public void Should_Reject_Gracefully_When_Encrypted_Container_Mutated(string fixture)
+        {
+            const int Rounds = 340;
+            byte[] seed = EncryptedFixtures.Bytes(fixture);
+            var options = ExcelReaderOptions.Default with { Password = EncryptedFixtures.PasswordFor(fixture) };
             var rng = new Random(20260826);
-            int completed = 0;
+            byte[][] mutations = new byte[Rounds][];
+            int[][] mutatedOffsets = new int[Rounds][];
             for (int i = 0; i < Rounds; i++)
             {
-                byte[] mutated = FuzzMutation.MutateCopy(seed, rng, out int[] positions);
+                mutations[i] = FuzzMutation.MutateCopy(seed, rng, out int[] positions);
+                mutatedOffsets[i] = positions;
+            }
+            Exception?[] failures = new Exception?[Rounds];
+            int completed = 0;
+            ParallelOptions parallelOptions = new()
+            {
+                MaxDegreeOfParallelism = Math.Max(2, Environment.ProcessorCount / 2),
+                CancellationToken = TestContext.Current.CancellationToken,
+            };
+            Parallel.For(0, Rounds, parallelOptions, i =>
+            {
                 try
                 {
-                    using IExcelRowReader reader = Excel.Open(mutated, options);
+                    using IExcelRowReader reader = Excel.Open(mutations[i], options);
                     foreach (Row row in reader)
                     {
                         foreach (RowCell cell in row.Cells)
@@ -542,13 +588,24 @@ namespace ExcelReader.Tests
                 }
                 catch (Exception ex)
                 {
-                    string offsets = string.Join(", ", positions);
-                    throw new InvalidOperationException(
-                        string.Create(CultureInfo.InvariantCulture,
-                            $"Round {i} on the encrypted seed produced an unacceptable '{ex.GetType().Name}' (mutated byte offsets: [{offsets}]): {ex.Message}"),
-                        ex);
+                    // Recorded rather than rethrown: with rounds running concurrently, several can fail
+                    // at once and Parallel.For would surface whichever thread lost the race. Reporting
+                    // the lowest failing index instead yields the same message the serial loop gave.
+                    failures[i] = ex;
+                    return;
                 }
-                completed++;
+                Interlocked.Increment(ref completed);
+            });
+
+            int firstFailure = Array.FindIndex(failures, ex => ex is not null);
+            if (firstFailure >= 0)
+            {
+                Exception failure = failures[firstFailure]!;
+                string offsets = string.Join(", ", mutatedOffsets[firstFailure]);
+                throw new InvalidOperationException(
+                    string.Create(CultureInfo.InvariantCulture,
+                        $"Round {firstFailure} on fixture '{fixture}' produced an unacceptable '{failure.GetType().Name}' (mutated byte offsets: [{offsets}]): {failure.Message}"),
+                    failure);
             }
             Assert.Equal(Rounds, completed);
         }

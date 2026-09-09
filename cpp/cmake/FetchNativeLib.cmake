@@ -10,7 +10,7 @@
 # Override EXCELREADER_NATIVE_LIB to point at a binary you built locally (e.g. via
 # `dotnet publish src/ExcelReader.Native -r win-x64`) instead of downloading a release asset -
 # useful for local development and for CI, which builds the native lib fresh per PR (see
-# .github/workflows/cpp.yml) rather than depending on a tag already being released.
+# .github/workflows/native-bindings.yml) rather than depending on a tag already being released.
 function(excelreader_fetch_native_lib)
     if(WIN32)
         set(_os "win")

@@ -123,3 +123,68 @@ fn decoded_rows_on_an_exhausted_sheet_is_empty_not_an_error() {
     assert!(decoded.is_empty());
     assert_eq!(decoded.iter().count(), 0);
 }
+
+#[test]
+fn all_rows_blob_agrees_with_the_cursor() {
+    let from_cursor: Vec<Vec<String>> = {
+        let mut workbook = Workbook::open(&fixture("RealExcel.xlsx")).expect("open");
+        let mut cursor = workbook.rows();
+        let mut all = Vec::new();
+        while let Some(row) = cursor.next_row() {
+            let row = row.expect("ok");
+            all.push(row.iter().map(|c| c.as_str().unwrap().to_string()).collect());
+        }
+        all
+    };
+
+    let mut workbook = Workbook::open(&fixture("RealExcel.xlsx")).expect("open");
+    let all_rows = workbook.read_all_blob().expect("read_all_blob");
+
+    assert_eq!(all_rows.len(), from_cursor.len());
+    for (index, expected) in from_cursor.iter().enumerate() {
+        let row = all_rows.get(index).expect("row in range");
+        let actual: Vec<String> = row.iter().map(|c| c.as_str().unwrap().to_string()).collect();
+        assert_eq!(&actual, expected, "row {index} differs");
+    }
+}
+
+#[test]
+fn all_rows_blob_on_an_exhausted_sheet_is_empty_not_an_error() {
+    let mut workbook = Workbook::open(&fixture("RealExcel.xlsx")).expect("open");
+    {
+        let mut cursor = workbook.rows();
+        while let Some(row) = cursor.next_row() {
+            row.expect("ok");
+        }
+    }
+    let all_rows = workbook.read_all_blob().expect("empty remainder is not an error");
+    assert_eq!(all_rows.len(), 0);
+    assert!(all_rows.is_empty());
+    assert_eq!(all_rows.iter().count(), 0);
+}
+
+#[test]
+fn all_rows_blob_grows_its_buffer_past_the_initial_size() {
+    // A sheet whose total accumulated blob exceeds the 1 MiB initial buffer, so read_all_blob
+    // must answer XL_BUFFER_TOO_SMALL at least once and AllRows::read must retry without losing
+    // any row.
+    let big = "x".repeat(2_000_000);
+    let dir = std::env::temp_dir().join("excelreader-rust-all-rows-blob-test");
+    std::fs::create_dir_all(&dir).expect("temp dir");
+    let path = dir.join("wide.csv");
+    std::fs::write(&path, format!("a\n{big}\n")).expect("write fixture");
+
+    let mut workbook =
+        Workbook::open_with(&path.to_string_lossy(), excelreader::XL_FORMAT_CSV, None).expect("open csv");
+    let all_rows = workbook.read_all_blob().expect("read_all_blob");
+
+    assert_eq!(all_rows.len(), 2);
+    assert_eq!(all_rows.get(0).unwrap().get(0).unwrap().as_str().unwrap(), "a");
+    let data_cell = all_rows.get(1).unwrap().get(0).unwrap();
+    assert_eq!(data_cell.cell_type, CellType::String);
+    assert_eq!(data_cell.as_str().unwrap().len(), 2_000_000);
+
+    drop(all_rows);
+    drop(workbook);
+    std::fs::remove_file(&path).ok();
+}

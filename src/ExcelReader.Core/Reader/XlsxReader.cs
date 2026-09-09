@@ -1,5 +1,4 @@
 using System.Buffers;
-using System.Diagnostics.CodeAnalysis;
 using System.IO.Compression;
 using ExcelReader.Core.Internal;
 
@@ -10,8 +9,6 @@ namespace ExcelReader.Core.Reader
     {
         private readonly Stream? _stream;
         private readonly bool _leaveOpen;
-        [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP008:Don't assign member with injected and created disposables",
-            Justification = "Two construction paths: the sync ctor opens and owns the ZipArchive itself; the CreateAsync path receives one already opened by ZipReaderOpen. Either way this reader ends up owning it and disposes it in Dispose/DisposeAsync.")]
         private readonly ZipArchive? _zip;
         // Non-null instead of _zip/_stream for the in-memory ZIP path — exactly one of _zip or _memZip
         // is non-null for any given reader instance.
