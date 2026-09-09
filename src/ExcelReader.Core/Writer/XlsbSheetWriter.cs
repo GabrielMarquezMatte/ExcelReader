@@ -62,12 +62,7 @@ namespace ExcelReader.Core.Writer
         /// <exception cref="InvalidOperationException">The sheet has already been started.</exception>
         public void SetColumnStyle(int columnIndex, int styleId)
         {
-            ArgumentOutOfRangeException.ThrowIfNegative(columnIndex);
-            ArgumentOutOfRangeException.ThrowIfNegative(styleId);
-            ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(styleId, _owner.StyleCount);
-            RequireNotStarted();
-            _columnStyles ??= [];
-            _columnStyles[columnIndex] = styleId;
+            SheetColumnValidation.SetColumnStyle(ref _columnStyles, columnIndex, styleId, _owner.StyleCount, _state, this, nameof(StartAsync));
         }
 
         /// <inheritdoc/>
@@ -75,20 +70,7 @@ namespace ExcelReader.Core.Writer
         /// <exception cref="InvalidOperationException">The sheet has already been started.</exception>
         public void SetColumnWidth(int columnIndex, double width)
         {
-            ArgumentOutOfRangeException.ThrowIfNegative(columnIndex);
-            ArgumentOutOfRangeException.ThrowIfNegative(width);
-            RequireNotStarted();
-            _columnWidths ??= [];
-            _columnWidths[columnIndex] = width;
-        }
-
-        private void RequireNotStarted()
-        {
-            WriterStateGuard.ThrowIfEnded(_state, this);
-            if (_state != WriterState.Created)
-            {
-                throw new InvalidOperationException($"{nameof(SetColumnStyle)}/{nameof(SetColumnWidth)} must be called before {nameof(StartAsync)}.");
-            }
+            SheetColumnValidation.SetColumnWidth(ref _columnWidths, columnIndex, width, _state, this, nameof(StartAsync));
         }
 
         // A row style always wins over a column style; falls back to 0. Every BIFF12 cell record
