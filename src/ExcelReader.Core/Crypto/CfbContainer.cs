@@ -401,8 +401,12 @@ namespace ExcelReader.Core.Crypto
                         throw new InvalidDataException("OLE FAT chain contains a cycle.");
                     }
                     visited[sector] = true;
-                    ReadAt(source, SectorOffset(sector, sectorSize), sectorBuf);
+                    // A stream's final sector need not be padded to a full sector on disk
+                    // ([MS-CFB]: the directory entry's Size, i.e. byteLimit, is authoritative, not
+                    // physical padding past the last used byte) — so take must be computed, and the
+                    // read bounded to it, before touching the source, not after reading a full sector.
                     int take = byteLimit < 0 ? sectorSize : Math.Min(sectorSize, byteLimit - written);
+                    ReadAt(source, SectorOffset(sector, sectorSize), sectorBuf.AsSpan(0, take));
                     ms.Write(sectorBuf, 0, take);
                     written += take;
                     sector = NextSector(fat, sector);
