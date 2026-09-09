@@ -1,5 +1,6 @@
 using System.Data;
 using System.Globalization;
+using System.Text;
 using ExcelReader.Core.Reader;
 
 namespace ExcelReader.Tests
@@ -114,6 +115,76 @@ namespace ExcelReader.Tests
             using var data = new ExcelDataReader(reader);
 
             Assert.False(data.NextResult());
+        }
+
+        // GetBytes reads a text cell's raw UTF-8 bytes directly (no string round trip for a
+        // multi-byte character to trip on) and windows them by fieldOffset/length exactly like
+        // IDataRecord.GetBytes documents.
+        [Fact]
+        public async Task GetBytesReturnsTheCellsUtf8BytesWindowedByOffsetAndLength()
+        {
+            await using var ms = await TypedWorkbook.BuildAsync(["Text"], ["héllo"]);
+            await using IExcelRowReader reader = await Excel.OpenAsync(ms, ct: TestContext.Current.CancellationToken);
+            using var data = new ExcelDataReader(reader);
+            Assert.True(data.Read());
+
+            byte[] expected = Encoding.UTF8.GetBytes("héllo");
+            Assert.Equal(expected.Length, data.GetBytes(0, 0, null, 0, 0)); // null buffer: just the length
+
+            byte[] buffer = new byte[expected.Length];
+            long read = data.GetBytes(0, 0, buffer, 0, buffer.Length);
+            Assert.Equal(expected.Length, read);
+            Assert.Equal(expected, buffer);
+
+            // Windowed: skip the 2-byte 'é' (UTF-8 bytes 1-2), read the remaining 3 bytes ("llo").
+            byte[] window = new byte[3];
+            long windowRead = data.GetBytes(0, 3, window, 0, window.Length);
+            Assert.Equal(3, windowRead);
+            Assert.Equal("llo"u8.ToArray(), window);
+        }
+
+        // A numeric cell's bytes never touched Cell.Value (see Cell.GetString's own hasNumber
+        // branch) — GetBytes has to format the number itself instead of just slicing Value.
+        [Fact]
+        public async Task GetBytesFormatsANumericCellInsteadOfReturningNothing()
+        {
+            await using var ms = await TypedWorkbook.BuildAsync(["Number"], [42]);
+            await using IExcelRowReader reader = await Excel.OpenAsync(ms, ct: TestContext.Current.CancellationToken);
+            using var data = new ExcelDataReader(reader);
+            Assert.True(data.Read());
+
+            byte[] buffer = new byte[8];
+            long read = data.GetBytes(0, 0, buffer, 0, buffer.Length);
+            Assert.Equal("42"u8.ToArray(), buffer.AsSpan(0, (int)read).ToArray());
+        }
+
+        [Fact]
+        public async Task GetBytesOnADbNullCellReturnsZero()
+        {
+            await using var ms = await TypedWorkbook.BuildAsync(["Blank"], [null]);
+            await using IExcelRowReader reader = await Excel.OpenAsync(ms, ct: TestContext.Current.CancellationToken);
+            using var data = new ExcelDataReader(reader);
+            Assert.True(data.Read());
+
+            Assert.Equal(0, data.GetBytes(0, 0, null, 0, 0));
+            byte[] buffer = new byte[4];
+            Assert.Equal(0, data.GetBytes(0, 0, buffer, 0, buffer.Length));
+        }
+
+        [Fact]
+        public async Task GetCharsReturnsTheCellsTextWindowedByOffsetAndLength()
+        {
+            await using var ms = await TypedWorkbook.BuildAsync(["Text"], ["hello world"]);
+            await using IExcelRowReader reader = await Excel.OpenAsync(ms, ct: TestContext.Current.CancellationToken);
+            using var data = new ExcelDataReader(reader);
+            Assert.True(data.Read());
+
+            Assert.Equal(11, data.GetChars(0, 0, null, 0, 0)); // null buffer: just the length
+
+            char[] window = new char[5];
+            long read = data.GetChars(0, 6, window, 0, window.Length);
+            Assert.Equal(5, read);
+            Assert.Equal("world", new string(window));
         }
 
         [Fact]

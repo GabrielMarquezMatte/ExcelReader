@@ -306,8 +306,6 @@ namespace ExcelReader.Tests
         }
 
         [Fact]
-        [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP017:Prefer using",
-            Justification = "The test calls Dispose() manually, twice, to verify the second call is a no-op — a using block would only call it once.")]
         public void RowDisposedTwiceIsNoOp()
         {
             var ms = new MemoryStream();
@@ -476,8 +474,6 @@ namespace ExcelReader.Tests
         }
 
         [Fact]
-        [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP017:Prefer using",
-            Justification = "Explicit Dispose() call is the point of this test — Flush must throw afterward.")]
         public void FlushThrowsAfterDispose()
         {
             var ms = new MemoryStream();
@@ -536,8 +532,6 @@ namespace ExcelReader.Tests
         }
 
         [Fact]
-        [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP017:Prefer using",
-            Justification = "Explicit Dispose() calls are the point of this test — a second call must be a no-op.")]
         public void DisposeCalledTwiceIsNoOp()
         {
             var ms = new MemoryStream();
@@ -573,8 +567,6 @@ namespace ExcelReader.Tests
         }
 
         [Fact]
-        [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP017:Prefer using",
-            Justification = "Explicit Dispose() call is the point of this test — asserts the stream closes as a side effect.")]
         public void DisposeClosesStreamWhenNotLeaveOpen()
         {
             var ms = new MemoryStream();

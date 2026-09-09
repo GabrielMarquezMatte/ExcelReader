@@ -29,13 +29,6 @@ namespace ExcelReader.Arrow
             }
         }
 
-        /// <summary>Reads a date/time from either an Excel serial or, for CSV, plain text.</summary>
-        protected static bool TryGetDateTime(in Cell cell, bool isDate1904, out DateTime value)
-        {
-            return cell.TryGetDateTime(isDate1904, out value)
-                || DateTime.TryParse(cell.GetString(), CultureInfo.InvariantCulture, DateTimeStyles.None, out value);
-        }
-
         internal static ColumnAppender Create(ExcelColumnSchema schema)
         {
             return schema.Type switch
@@ -289,7 +282,7 @@ namespace ExcelReader.Arrow
 
             internal override void Append(in Cell cell, bool isDate1904)
             {
-                if (TryGetDateTime(in cell, isDate1904, out DateTime value))
+                if (ExcelCellReaders.DateTimeAuto(in cell, isDate1904, CultureInfo.InvariantCulture, out DateTime value))
                 {
                     // Kind can be Local when text carries an explicit offset/Z; strip it after
                     // converting to UTC so the DateTimeOffset below never throws.
@@ -297,12 +290,10 @@ namespace ExcelReader.Arrow
                         ? value
                         : DateTime.SpecifyKind(value.ToUniversalTime(), DateTimeKind.Unspecified);
                     _builder.Append(new DateTimeOffset(normalized, TimeSpan.Zero));
+                    return;
                 }
-                else
-                {
-                    ThrowIfNotNullable();
-                    _builder.AppendNull();
-                }
+                ThrowIfNotNullable();
+                _builder.AppendNull();
             }
 
             internal override IArrowArray Build()

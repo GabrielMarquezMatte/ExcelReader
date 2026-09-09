@@ -1,5 +1,4 @@
 using System.Buffers.Binary;
-using System.Diagnostics.CodeAnalysis;
 using System.IO.Compression;
 using System.Runtime.InteropServices;
 using ExcelReader.Core.Reader;
@@ -25,8 +24,6 @@ namespace ExcelReader.Core.Writer
         private bool _registered;
         private bool _buffersDisposed;
         private int _rowNumber = -1;
-        [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP002:Dispose member",
-            Justification = "Reused per row; the caller disposes it via using after each row, and End's _rowActive guard rejects ending the sheet with it still open.")]
         private XlsbRowWriter? _rowWriter;
         private Dictionary<int, int>? _columnStyles;
         private Dictionary<int, double>? _columnWidths;
@@ -339,8 +336,6 @@ namespace ExcelReader.Core.Writer
             }
         }
 
-        [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP003:Dispose previous before re-assigning",
-            Justification = "The null-guard above means this only ever assigns _stream once, from null; never re-assigns a live stream.")]
         private void EnsureStream()
         {
             if (_stream is not null)

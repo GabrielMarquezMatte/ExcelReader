@@ -15,7 +15,7 @@ namespace ExcelReader.Core.Crypto
     internal static partial class AgileKeyDerivation
     {
         internal static PasswordEncryptorBlobs DeriveWriteBlobs(CryptoParameters passwordEncryptor,
-            ReadOnlySpan<char> password, ReadOnlySpan<byte> packageKey, ReadOnlySpan<byte> verifierInput)
+            ReadOnlySpan<char> password, byte[] packageKey, byte[] verifierInput)
         {
             byte[] hFinal = PasswordHash(passwordEncryptor, password);
             byte[] keyVerifierInput = BlockKey(passwordEncryptor, hFinal, BlockVerifierHashInput);
@@ -40,8 +40,7 @@ namespace ExcelReader.Core.Crypto
             }
         }
 
-        internal static (byte[] EncryptedKey, byte[] EncryptedValue) WrapHmac(CryptoParameters keyData,
-            ReadOnlySpan<byte> packageKey, ReadOnlySpan<byte> hmacKey, ReadOnlySpan<byte> hmacValue)
+        internal static (byte[] EncryptedKey, byte[] EncryptedValue) WrapHmac(CryptoParameters keyData, byte[] packageKey, byte[] hmacKey, byte[] hmacValue)
         {
             byte[] ivKey = NormalizeToLength(HashTwo(keyData.Hash, keyData.SaltValue, BlockHmacKey), keyData.BlockSize);
             byte[] ivValue = NormalizeToLength(HashTwo(keyData.Hash, keyData.SaltValue, BlockHmacValue), keyData.BlockSize);
@@ -52,7 +51,7 @@ namespace ExcelReader.Core.Crypto
         // parameters (verifier input 16, verifier hash 64, package key 32, HMAC key/value 64), so a
         // misaligned plaintext means a parameter changed and the caller's assumptions are stale.
         [SuppressMessage("Security", "CA5401", Justification = "Agile encryption uses derived IVs per ECMA-376.")]
-        internal static byte[] EncryptNoPadding(ReadOnlySpan<byte> plaintext, ReadOnlySpan<byte> key, ReadOnlySpan<byte> iv)
+        internal static byte[] EncryptNoPadding(byte[] plaintext, byte[] key, byte[] iv)
         {
             using Aes aes = Aes.Create();
             aes.Mode = CipherMode.CBC;
@@ -64,10 +63,10 @@ namespace ExcelReader.Core.Crypto
                     $"Plaintext length {plaintext.Length} is not a positive multiple of the {blockBytes}-byte cipher block.",
                     nameof(plaintext));
             }
-            aes.Key = key.ToArray();
-            aes.IV = iv.ToArray();
+            aes.Key = key;
+            aes.IV = iv;
             using ICryptoTransform encryptor = aes.CreateEncryptor();
-            return encryptor.TransformFinalBlock(plaintext.ToArray(), 0, plaintext.Length);
+            return encryptor.TransformFinalBlock(plaintext, 0, plaintext.Length);
         }
     }
 }

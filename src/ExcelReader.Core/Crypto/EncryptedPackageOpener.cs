@@ -66,13 +66,21 @@ namespace ExcelReader.Core.Crypto
             }
             byte[] info = cfb.ReadStream("EncryptionInfo", MaxEncryptionInfoBytes);
             EncryptionDescriptor descriptor = EncryptionDescriptor.Parse(info, options);
-            if (descriptor is not AgileDescriptor agile)
-            {
-                throw new ExcelEncryptionException(ExcelEncryptionReason.UnsupportedScheme,
-                    "Only agile (ECMA-376 4.4) encryption is supported for the in-memory open path.");
-            }
 
             byte[] package = cfb.ReadStream("EncryptedPackage", options.MaxTotalDecompressedBytes);
+            long declared = ValidatePackage(package, options);
+
+            using PackageCipher cipher = PackageCipher.Create(descriptor, options.Password);
+            if (cipher.SupportsIntegrity)
+            {
+                using var packageView = new MemoryStream(package, writable: false);
+                cipher.VerifyIntegrity(packageView);
+            }
+            return DecryptWholePackage(package, cipher, declared);
+        }
+
+        private static long ValidatePackage(byte[] package, ExcelReaderOptions options)
+        {
             if (package.Length < PrefixSize)
             {
                 throw new InvalidDataException("The EncryptedPackage stream is truncated.");
@@ -90,34 +98,14 @@ namespace ExcelReader.Core.Crypto
             }
             LimitChecks.ThrowIfEntryLengthExceeds(
                 declared, options.MaxTotalDecompressedBytes, nameof(ExcelReaderOptions.MaxTotalDecompressedBytes));
-
-            byte[] key = AgileKeyDerivation.DeriveIntermediateKey(agile, options.Password.Chars);
-            try
-            {
-                if (agile.HasDataIntegrity)
-                {
-                    using var packageView = new MemoryStream(package, writable: false);
-                    PackageIntegrity.Verify(packageView, agile, key);
-                }
-                return DecryptWholePackage(package, agile, key, declared);
-            }
-            finally
-            {
-                CryptographicOperations.ZeroMemory(key);
-            }
+            return declared;
         }
 
-        private static byte[] DecryptWholePackage(byte[] package, AgileDescriptor agile, byte[] key, long declaredLength)
+        private static byte[] DecryptWholePackage(byte[] package, PackageCipher cipher, long declaredLength)
         {
             int cipherLen = package.Length - PrefixSize;
             byte[] result = new byte[declaredLength];
             byte[] segmentBuffer = ArrayPool<byte>.Shared.Rent(SegmentSize);
-            using Aes aes = Aes.Create();
-            aes.Mode = CipherMode.CBC;
-            aes.Padding = PaddingMode.None;
-            aes.Key = key;
-            using IncrementalHash ivHasher = AgileKeyDerivation.CreateHasher(agile.KeyData.Hash);
-            Span<byte> iv = stackalloc byte[agile.KeyData.BlockSize];
             try
             {
                 int segmentCount = (cipherLen + SegmentSize - 1) / SegmentSize;
@@ -125,10 +113,8 @@ namespace ExcelReader.Core.Crypto
                 {
                     int segOffset = i * SegmentSize;
                     int segCipherLen = Math.Min(SegmentSize, cipherLen - segOffset);
-                    AgileKeyDerivation.SegmentIv(agile, i, ivHasher, iv);
-                    aes.DecryptCbc(
-                        package.AsSpan(PrefixSize + segOffset, segCipherLen), iv,
-                        segmentBuffer.AsSpan(0, segCipherLen), PaddingMode.None);
+                    cipher.DecryptSegment(i, package.AsMemory(PrefixSize + segOffset, segCipherLen),
+                        segmentBuffer.AsMemory(0, segCipherLen));
 
                     int copyLen = (int)Math.Min(segCipherLen, declaredLength - segOffset);
                     if (copyLen > 0)

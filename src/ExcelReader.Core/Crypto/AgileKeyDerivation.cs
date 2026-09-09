@@ -93,7 +93,7 @@ namespace ExcelReader.Core.Crypto
             return IncrementalHash.CreateHash(AlgorithmName(kind));
         }
 
-        internal static (byte[] Key, byte[] Value) UnwrapHmac(AgileDescriptor d, ReadOnlySpan<byte> intermediateKey)
+        internal static (byte[] Key, byte[] Value) UnwrapHmac(AgileDescriptor d, byte[] intermediateKey)
         {
             CryptoParameters keyData = d.KeyData;
             byte[] ivKey = NormalizeToLength(HashTwo(keyData.Hash, keyData.SaltValue, BlockHmacKey), keyData.BlockSize);
@@ -213,7 +213,7 @@ namespace ExcelReader.Core.Crypto
             }
         }
 
-        private static byte[] DecryptNoPadding(ReadOnlySpan<byte> ciphertext, ReadOnlySpan<byte> key, ReadOnlySpan<byte> iv)
+        private static byte[] DecryptNoPadding(byte[] ciphertext, byte[] key, byte[] iv)
         {
             if (ciphertext.Length == 0)
             {
@@ -230,10 +230,10 @@ namespace ExcelReader.Core.Crypto
                 throw new InvalidDataException(
                     "The encryption descriptor contains a ciphertext whose length is not a multiple of the cipher block size.");
             }
-            aes.Key = key.ToArray();
-            aes.IV = iv.ToArray();
+            aes.Key = key;
+            aes.IV = iv;
             using ICryptoTransform decryptor = aes.CreateDecryptor();
-            return decryptor.TransformFinalBlock(ciphertext.ToArray(), 0, ciphertext.Length);
+            return decryptor.TransformFinalBlock(ciphertext, 0, ciphertext.Length);
         }
 
         private static byte[] HashOne(HashKind kind, ReadOnlySpan<byte> data)

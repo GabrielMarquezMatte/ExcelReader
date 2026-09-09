@@ -625,8 +625,6 @@ namespace ExcelReader.Tests
         // --- Dispose/DisposeAsync stream ownership ---
 
         [Fact]
-        [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP017:Prefer using",
-            Justification = "Explicit Dispose() call is the point of this test — asserts the stream closes as a side effect.")]
         public void DisposeClosesStreamWhenNotLeaveOpen()
         {
             var ms = Csv("a,b\n");

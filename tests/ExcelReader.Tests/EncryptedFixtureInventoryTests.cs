@@ -1,7 +1,20 @@
+using ExcelReader.Core.Crypto;
+using ExcelReader.Core.Reader;
+
 namespace ExcelReader.Tests
 {
     public class EncryptedFixtureInventoryTests
     {
+        // Keyed by exact fixture name (not a naming-convention prefix) so an unregistered future
+        // fixture fails loudly here instead of the test silently accepting whatever descriptor type
+        // it happens to parse to.
+        private static readonly Dictionary<string, Type> ExpectedDescriptorTypes = new(StringComparer.Ordinal)
+        {
+            ["agile-aes256-sha512.xlsx"] = typeof(AgileDescriptor),
+            ["agile-aes256-sha512.xlsb"] = typeof(AgileDescriptor),
+            ["standard-aes128-sha1.xlsx"] = typeof(StandardDescriptor),
+        };
+
         public static TheoryData<string> Fixtures()
         {
             var data = new TheoryData<string>();
@@ -10,6 +23,23 @@ namespace ExcelReader.Tests
                 data.Add(name);
             }
             return data;
+        }
+
+        // Guards against a fixture swap silently changing what's actually under test: without this,
+        // swapping standard-aes128-sha1.xlsx for an agile file would leave every other encrypted
+        // suite green while third-party standard-encryption coverage quietly disappeared.
+        [Theory]
+        [MemberData(nameof(Fixtures))]
+        public void Should_Parse_To_Expected_Descriptor_Type_When_Encrypted(string name)
+        {
+            using FileStream fs = File.OpenRead(EncryptedFixtures.Path_(name));
+            using CfbContainer cfb = CfbContainer.Parse(fs, ownsSource: true, ExcelReaderOptions.Default);
+            byte[] info = cfb.ReadStream("EncryptionInfo", 64 * 1024);
+            EncryptionDescriptor descriptor = EncryptionDescriptor.Parse(info, ExcelReaderOptions.Default);
+
+            Assert.True(ExpectedDescriptorTypes.TryGetValue(name, out Type? expected),
+                $"No expected descriptor type registered for fixture '{name}'.");
+            Assert.IsType(expected, descriptor);
         }
 
         [Theory]

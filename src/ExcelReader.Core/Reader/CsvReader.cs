@@ -1,4 +1,3 @@
-using System.Diagnostics.CodeAnalysis;
 using System.Text;
 
 namespace ExcelReader.Core.Reader
@@ -10,8 +9,6 @@ namespace ExcelReader.Core.Reader
     /// <remarks>Unlike the XLSX/XLSB/XLS readers, there are no styles or shared strings to resolve.</remarks>
     public sealed partial class CsvReader : IExcelRowReader, IExcelRowReader<CsvReader.Enumerator>
     {
-        [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP008:Don't assign member with injected and created disposables",
-            Justification = "Holds either the caller's stream or a transcoding wrapper this reader creates and owns; both branches set _leaveOpen consistently with which one applies.")]
         private readonly Stream? _stream;
         private readonly bool _leaveOpen;
         private readonly CsvReaderOptions _options;

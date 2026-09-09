@@ -1,4 +1,6 @@
 using System.Reflection;
+using System.Runtime.InteropServices;
+using ExcelReader.Native;
 
 namespace ExcelReader.Tests
 {
@@ -33,6 +35,25 @@ namespace ExcelReader.Tests
             return [.. lines.Skip(1).Select(l => l.Trim()).Where(l => l.Length > 0)];
         }
 
+        // The actual source of truth: every [UnmanagedCallersOnly] EntryPoint in the
+        // ExcelReader.Native assembly. A .def missing one of these fails to link on Windows (the
+        // import lib is generated only from the .def - see cpp/cmake/FetchNativeLib.cmake), and a
+        // .def listing one that doesn't exist would fail lib.exe/dlltool outright.
+        private static string[] ReflectedExports()
+        {
+            return
+            [
+                .. typeof(NativeApi).Assembly.GetTypes()
+                    .SelectMany(t => t.GetMethods(BindingFlags.Public | BindingFlags.NonPublic
+                        | BindingFlags.Static | BindingFlags.Instance))
+                    .Select(m => m.GetCustomAttribute<UnmanagedCallersOnlyAttribute>())
+                    .Where(a => a is not null)
+                    .Select(a => a!.EntryPoint)
+                    .OfType<string>()
+                    .Order(StringComparer.Ordinal),
+            ];
+        }
+
         [Fact]
         public void Should_ListIdenticalExports_When_ComparingTheCanonicalAndRustDefCopies()
         {
@@ -46,9 +67,10 @@ namespace ExcelReader.Tests
         }
 
         [Fact]
-        public void Should_ExportParseArrow_When_ReadingTheCanonicalDef()
+        public void Should_MatchReflectedUnmanagedCallersOnlyEntryPoints_When_ReadingTheCanonicalDef()
         {
-            Assert.Contains("xl_parse_arrow", ReadExports(RepoRoot(), DefPaths[0]), StringComparer.Ordinal);
+            string[] canonical = [.. ReadExports(RepoRoot(), DefPaths[0]).OrderBy(name => name, StringComparer.Ordinal)];
+            Assert.Equal(ReflectedExports(), canonical);
         }
     }
 }

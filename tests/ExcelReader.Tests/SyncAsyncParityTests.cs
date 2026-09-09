@@ -92,7 +92,7 @@ namespace ExcelReader.Tests
         public async Task Should_Match_Across_Sync_And_Async_When_Encrypted(string fixture)
         {
             CancellationToken ct = TestContext.Current.CancellationToken;
-            var options = ExcelReaderOptions.Default with { Password = EncryptedFixtures.Password };
+            var options = ExcelReaderOptions.Default with { Password = EncryptedFixtures.PasswordFor(fixture) };
             byte[] workbook = EncryptedFixtures.Bytes(fixture);
 
             List<CellSnapshot> sync = ReadSync(workbook, stream => Excel.Open(stream, options: options));

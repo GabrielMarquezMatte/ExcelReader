@@ -1,4 +1,3 @@
-using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.IO.Compression;
 using System.Runtime.InteropServices;
@@ -51,8 +50,6 @@ namespace ExcelReader.Core.Writer
         /// saturating the CPU.
         /// </param>
         /// <param name="ct">A token to cancel creation before any I/O has started.</param>
-        [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP004:Don't ignore created IDisposable",
-            Justification = "Factory method transfers ZipArchive ownership to XlsbWorkbookWriter; caller disposes via DisposeAsync.")]
         public static ValueTask<XlsbWorkbookWriter> CreateAsync(
             Stream stream,
             bool leaveOpen = false,
@@ -72,8 +69,6 @@ namespace ExcelReader.Core.Writer
         /// Synchronous counterpart to <see cref="CreateAsync"/>, for native/unmanaged callers whose ABI
         /// is synchronous. Parameters mirror <see cref="CreateAsync"/> exactly, minus <c>ct</c>.
         /// </summary>
-        [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP004:Don't ignore created IDisposable",
-            Justification = "Factory method transfers ZipArchive ownership to XlsbWorkbookWriter; caller disposes via Dispose/DisposeAsync.")]
         public static XlsbWorkbookWriter Create(
             Stream stream,
             bool leaveOpen = false,
@@ -109,8 +104,6 @@ namespace ExcelReader.Core.Writer
         }
 
         /// <inheritdoc/>
-        [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP003:Dispose previous before re-assigning",
-            Justification = "RequireCanAddSheet above guarantees _activeSheet is null (any previous sheet was already ended and disposed) before this assigns a new one.")]
         public XlsbSheetWriter AddSheet(string name)
         {
             WriterStateGuard.RequireCanAddSheet(
@@ -125,8 +118,6 @@ namespace ExcelReader.Core.Writer
             _sheets.Add(sheet);
         }
 
-        [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP003:Dispose previous before re-assigning",
-            Justification = "Called only after the active sheet's own End/Dispose has already run (from End/Dispose below); this just clears the now-stale reference.")]
         internal void NotifySheetEnded()
         {
             _activeSheet = null;
@@ -220,8 +211,6 @@ namespace ExcelReader.Core.Writer
         /// Synchronous counterpart to <see cref="DisposeAsync"/>, for native/unmanaged callers whose ABI
         /// is synchronous.
         /// </summary>
-        [SuppressMessage("IDisposableAnalyzers.Correctness", "IDISP021:Call this.Dispose(true)",
-            Justification = "Sealed type, no finalizer, no Dispose(bool) pattern to route through — this is the only Dispose overload.")]
         public void Dispose()
         {
             if (_disposed)
