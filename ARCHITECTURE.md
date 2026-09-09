@@ -106,15 +106,20 @@ turns one back into a stream the ordinary readers consume:
 - **`CfbContainer`** — the CFB parse, factored out of `XlsCompoundFile` so one parse can yield
   *named* streams. `XlsCompoundFile.OpenWorkbook` is now a thin wrapper over it, which is why the XLS
   path kept its behavior and its fuzz coverage unchanged.
-- **`EncryptionDescriptor`** — parses `EncryptionInfo` and dispatches: version 4.4 is agile
-  (AES-CBC, 4096-byte segments, XML descriptor); 3.2/4.2 (ECMA-376 standard, AES-ECB/SHA-1, binary
-  descriptor) is recognized but rejected with `UnsupportedScheme` rather than implemented, for lack
-  of a real fixture to verify a derivation against; anything else is rejected outright. This is the
-  one parser in the codebase that uses `XmlReader` rather than hand-rolled scanning; the file header
-  explains why.
-- **`AgileKeyDerivation`** — password to key, plus the verifier check that distinguishes "wrong
-  password" from "corrupt file". (A `StandardKeyDerivation` counterpart is future work, gated on
-  real standard-encryption fixtures — see `tests/ExcelReader.Tests/data/encrypted/README.md`.)
+- **`EncryptionDescriptor`** — parses `EncryptionInfo` and dispatches. Version 4.4 is agile
+  (AES-CBC, 4096-byte segments, XML descriptor). Versions 2.2/3.2/4.2 share a binary
+  header+verifier used by *both* ECMA-376 standard encryption (AES-ECB/SHA-1) and RC4 CryptoAPI, so
+  the cipher is decided by `EncryptionHeader.algId`, not by the version — standard is supported,
+  RC4 is rejected. Anything else is rejected outright. This is the one parser in the codebase that
+  uses `XmlReader` rather than hand-rolled scanning; the file header explains why.
+- **`AgileKeyDerivation`** / **`StandardKeyDerivation`** — password to key, plus the verifier check
+  that distinguishes "wrong password" from "corrupt file". Standard's SHA-1 and 50,000 iterations
+  are fixed by the scheme rather than stated in the file, which is why `MaxPasswordSpinCount` has
+  nothing to bound there.
+- **`PackageCipher`** — the keyed half of a scheme: derive, decrypt one aligned window, verify
+  integrity if the scheme has any. `DecryptedPackageStream` and `EncryptedPackageOpener` hold one
+  of these and name no scheme, which is why adding standard encryption did not touch their
+  segmenting or their ZIP handling.
 - **`DecryptedPackageStream`** — a read-only *seekable* `Stream`. Agile derives a per-segment IV
   from the segment index, so `ZipArchive` finds its central directory without the package ever
   being materialized. One 4 KiB segment is cached, which is enough because ZIP reads are sequential

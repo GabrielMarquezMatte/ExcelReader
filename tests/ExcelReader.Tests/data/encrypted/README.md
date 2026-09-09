@@ -4,10 +4,14 @@ Every file here is encrypted with the password `hunter2`, except `standard-aes12
 which keeps its own genuine third-party password (see the table below). They are test data with no
 secret content; the passwords are hardcoded in the test suite deliberately.
 
-Writing encrypted files is out of scope for the reader (see the design spec), so these fixtures
-are the *only* oracle for decryption correctness — there is no round-trip check. Each `X.ext` has
-a paired `X.plain.ext`, produced by `msoffcrypto-tool` (an independent implementation), which the
-decryptor must reproduce byte-for-byte.
+These fixtures are the only *third-party* oracle for decryption correctness: `Excel.EncryptPackage`
+exists and is round-tripped through the reader elsewhere in the test suite, but that only proves
+encrypt and decrypt agree with each other, not that either is independently correct — they share a
+derivation implementation, so a bug in it could cancel out on both ends of that round trip. Each
+`X.ext` here has a paired `X.plain.ext`, produced by `msoffcrypto-tool` (an independent
+implementation) or, for `standard-aes128-sha1.xlsx`, sourced as a genuinely third-party-produced
+file (see the table below) — either way, bytes this codebase's own encryptor never touched, which
+the decryptor must reproduce byte-for-byte.
 
 | File | Scheme | Notes |
 |---|---|---|
