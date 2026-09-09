@@ -1,4 +1,5 @@
 using System.Diagnostics.CodeAnalysis;
+using System.Globalization;
 using BenchmarkDotNet.Attributes;
 using ExcelReader.Core.Reader;
 using ExcelReader.Core.ValueObjects;
@@ -9,16 +10,17 @@ namespace ExcelReader.Benchmarks
     // The pair is the point: the plain leg is what reading this file costs anyway, so the difference
     // is what encryption actually adds.
     //
-    // The corpus is the checked-in oracle fixture pair from the test suite (encrypted with
-    // `hunter2`, AES-256 / SHA-512 / spinCount 100,000). It is small on purpose — writing encrypted
-    // workbooks is out of scope for this library, so there is no way to generate a large one here
-    // without depending on msoffcrypto-tool at benchmark time. That makes this suite a measurement of
-    // the *fixed* cost of opening an encrypted workbook, which is dominated by the spinCount key
-    // derivation and does not shrink with file size; the per-byte AES cost is a rounding error at
-    // this size and is not what these numbers are about.
+    // Two corpora, two different things measured:
     //
-    // Point EXCELREADER_ENCRYPTED_XLSX / EXCELREADER_PLAIN_XLSX at a larger pair to measure the
-    // per-byte side instead. The password still has to be `hunter2`.
+    // - Encrypted_*/Plain_Stream (below) use the checked-in oracle fixture pair from the test suite
+    //   (encrypted with `hunter2`, AES-256 / SHA-512 / spinCount 100,000). It is small on purpose, so
+    //   what these legs measure is the *fixed* cost of opening an encrypted workbook — dominated by
+    //   the spinCount key derivation, independent of file size. The per-byte AES cost is a rounding
+    //   error at this size and is not what these numbers are about. Point
+    //   EXCELREADER_ENCRYPTED_XLSX / EXCELREADER_PLAIN_XLSX at a larger pair to override this corpus
+    //   directly (the password still has to be `hunter2`), or use the Large_* legs below instead.
+    // - Large_* legs generate their own large pair in-process (see LargeSetup's comment) specifically
+    //   to measure the per-byte side the small fixture can't show.
     [MemoryDiagnoser]
     public class EncryptedWorkbookBenchmark
     {
@@ -109,6 +111,61 @@ namespace ExcelReader.Benchmarks
         {
             using var ms = new MemoryStream(_encryptedBytes, writable: false);
             using IExcelRowReader reader = Excel.Open(ms, leaveOpen: true, Options());
+            return reader.SheetCount;
+        }
+        [SuppressMessage("Major Code Smell", "S2068:Hard-coded credentials are security-sensitive",
+            Justification = "Password for an in-memory workbook this benchmark generates and discards itself.")]
+        private const string GeneratedPassword = "hunter2";
+        private const int DefaultLargeRows = 300_000;
+        private byte[] _largePlainBytes = [];
+        private byte[] _largeEncryptedBytes = [];
+
+        [GlobalSetup(Targets = [nameof(Large_Plain_Stream), nameof(Large_Encrypted_Stream), nameof(Large_Encrypted_OpenOnly)])]
+        public async Task LargeSetupAsync()
+        {
+            int rows = int.TryParse(
+                Environment.GetEnvironmentVariable("EXCELREADER_LARGE_ENCRYPTED_ROWS"),
+                NumberStyles.Integer, CultureInfo.InvariantCulture, out int configured) && configured > 0
+                ? configured
+                : DefaultLargeRows;
+            _largePlainBytes = await WorkbookGenerator.BuildAsync(rows).ConfigureAwait(false);
+
+            using var plainStream = new MemoryStream(_largePlainBytes, writable: false);
+            using var encryptedStream = new MemoryStream();
+            Excel.EncryptPackage(plainStream, encryptedStream, new ExcelPassword(GeneratedPassword));
+            _largeEncryptedBytes = encryptedStream.ToArray();
+        }
+
+        // What the generated large workbook costs with no encryption in the way — the baseline the
+        // two legs below are measured against.
+        [Benchmark]
+        public long Large_Plain_Stream()
+        {
+            using var ms = new MemoryStream(_largePlainBytes, writable: false);
+            using IExcelRowReader reader = Excel.Open(ms, leaveOpen: true);
+            return ReadAll(reader);
+        }
+
+        // The per-byte cost this whole section exists to measure: decrypting and reading a package
+        // far larger than the fixed-cost-dominated legs above can show.
+        [Benchmark]
+        public long Large_Encrypted_Stream()
+        {
+            using var ms = new MemoryStream(_largeEncryptedBytes, writable: false);
+            using IExcelRowReader reader = Excel.Open(ms, leaveOpen: true,
+                new ExcelReaderOptions { Password = new ExcelPassword(GeneratedPassword) });
+            return ReadAll(reader);
+        }
+
+        // Same fixed-cost isolation as Encrypted_OpenOnly, at the large package's size — confirms the
+        // open-only cost doesn't grow with the package (it shouldn't: CFB directory parse and
+        // spinCount derivation are both independent of EncryptedPackage's length).
+        [Benchmark]
+        public int Large_Encrypted_OpenOnly()
+        {
+            using var ms = new MemoryStream(_largeEncryptedBytes, writable: false);
+            using IExcelRowReader reader = Excel.Open(ms, leaveOpen: true,
+                new ExcelReaderOptions { Password = new(GeneratedPassword) });
             return reader.SheetCount;
         }
     }
