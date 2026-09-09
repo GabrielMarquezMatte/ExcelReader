@@ -136,7 +136,7 @@ namespace ExcelReader.Tests
             using var source = new MemoryStream(raw);
             using CfbContainer cfb = CfbContainer.Parse(source, ownsSource: true, ExcelReaderOptions.Default);
             byte[] info = cfb.ReadStream("EncryptionInfo", 64 * 1024);
-            var options = ExcelReaderOptions.Default with { Password = EncryptedFixtures.Password };
+            var options = ExcelReaderOptions.Default with { Password = EncryptedFixtures.PasswordFor(fixture) };
             EncryptionDescriptor d = EncryptionDescriptor.Parse(info, options);
 
             InvalidDataException ex = Assert.Throws<InvalidDataException>(() => DecryptedPackageStream.Create(cfb, d, options));
