@@ -112,12 +112,18 @@ namespace ExcelReader.Core.Crypto
             return implied;
         }
 
-        // [MS-OFFCRYPTO] 2.3.3 EncryptionVerifier: both sizes are fixed for AES, so a different
-        // value is a malformed descriptor rather than a scheme this library declines to support.
+        // [MS-OFFCRYPTO] 2.3.3 EncryptionVerifier: SaltSize is fixed for AES, so a different value
+        // is a malformed descriptor. VerifierHashSize is NOT the byte count of the encrypted blob
+        // that follows it in the stream — it's the native output length of the hash algorithm
+        // (SHA-1, the only hash this library's standard-encryption scope supports), which is 20
+        // bytes. The encrypted blob itself is a completely separate quantity: that SHA-1 digest
+        // padded up to the next 16-byte AES block boundary, i.e. 32 bytes. VerifierHashSize (20) and
+        // VerifierHashLength (32) must therefore stay two distinct constants.
         private static StandardDescriptor ParseVerifier(ReadOnlySpan<byte> verifier, int algId, int keyBits)
         {
             const int SaltLength = 16;
             const int VerifierLength = 16;
+            const int VerifierHashSize = 20;
             const int VerifierHashLength = 32;
 
             if (verifier.Length < 8 + SaltLength + VerifierLength + VerifierHashLength)
@@ -132,10 +138,10 @@ namespace ExcelReader.Core.Crypto
             }
             int verifierHashSize = BinaryPrimitives.ReadInt32LittleEndian(
                 verifier[(4 + SaltLength + VerifierLength)..]);
-            if (verifierHashSize != VerifierHashLength)
+            if (verifierHashSize != VerifierHashSize)
             {
                 throw new InvalidDataException(
-                    $"The encryption descriptor declares a {verifierHashSize}-byte verifier hash; AES requires {VerifierHashLength}.");
+                    $"The encryption descriptor declares a {verifierHashSize}-byte verifier hash; SHA-1 requires {VerifierHashSize}.");
             }
 
             byte[] salt = verifier.Slice(4, SaltLength).ToArray();
