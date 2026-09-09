@@ -65,9 +65,11 @@ namespace ExcelReader.Core.Reader
 
         /// <summary>Gets the maximum password-derivation iteration count accepted from an encrypted
         /// workbook. Defaults to 100,000, which is what Excel writes.</summary>
-        /// <remarks>The file states its own iteration count, so a crafted workbook can ask for billions of
-        /// iterations and stall the process for hours. Exceeding this throws
-        /// <see cref="ExcelLimitExceededException"/>.</remarks>
+        /// <remarks>An agile-encrypted file states its own iteration count, so a crafted workbook can ask
+        /// for billions of iterations and stall the process for hours. Exceeding this throws
+        /// <see cref="ExcelLimitExceededException"/>. ECMA-376 standard encryption is unaffected: its
+        /// 50,000 iterations are fixed by the scheme rather than read from the file, so there is no
+        /// file-supplied value to bound and this limit is not applied on that path.</remarks>
         public int MaxPasswordSpinCount { get; init; } = 100_000;
 
         /// <summary>Gets the default options instance, used whenever a reader is opened without explicit options.</summary>
