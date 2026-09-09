@@ -14,7 +14,7 @@ namespace ExcelReader.Tests
             int algIdHash = 0x00008004,
             int keySize = 256,
             int saltSize = 16,
-            int verifierHashSize = 32,
+            int verifierHashSize = 20,
             int saltBytes = 16,
             int verifierHashBytes = 32,
             int? headerSizeOverride = null)

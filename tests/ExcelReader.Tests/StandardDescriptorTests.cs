@@ -109,10 +109,10 @@ namespace ExcelReader.Tests
         }
 
         [Fact]
-        public void Should_Reject_When_VerifierHashSize_Is_Not_ThirtyTwo()
+        public void Should_Reject_When_VerifierHashSize_Is_Not_Twenty()
         {
             Assert.Throws<InvalidDataException>(
-                () => Parse(StandardInfoBuilder.Build(verifierHashSize: 20)));
+                () => Parse(StandardInfoBuilder.Build(verifierHashSize: 32)));
         }
 
         [Fact]
