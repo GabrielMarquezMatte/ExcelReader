@@ -46,10 +46,10 @@ namespace ExcelReader.Core.Crypto
             }
         }
 
-        internal override void DecryptSegment(int segmentIndex, ReadOnlySpan<byte> cipher, Span<byte> plain)
+        internal override void DecryptSegment(int segmentIndex, ReadOnlyMemory<byte> cipher, Memory<byte> plain)
         {
             AgileKeyDerivation.SegmentIv(_descriptor, segmentIndex, _ivHasher, _iv);
-            _aes.DecryptCbc(cipher, _iv, plain, PaddingMode.None);
+            _aes.DecryptCbc(cipher.Span, _iv, plain.Span, PaddingMode.None);
         }
 
         internal override void VerifyIntegrity(Stream ciphertextView)

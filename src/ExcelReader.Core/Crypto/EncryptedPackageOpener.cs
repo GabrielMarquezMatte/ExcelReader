@@ -113,8 +113,8 @@ namespace ExcelReader.Core.Crypto
                 {
                     int segOffset = i * SegmentSize;
                     int segCipherLen = Math.Min(SegmentSize, cipherLen - segOffset);
-                    cipher.DecryptSegment(i, package.AsSpan(PrefixSize + segOffset, segCipherLen),
-                        segmentBuffer.AsSpan(0, segCipherLen));
+                    cipher.DecryptSegment(i, package.AsMemory(PrefixSize + segOffset, segCipherLen),
+                        segmentBuffer.AsMemory(0, segCipherLen));
 
                     int copyLen = (int)Math.Min(segCipherLen, declaredLength - segOffset);
                     if (copyLen > 0)
