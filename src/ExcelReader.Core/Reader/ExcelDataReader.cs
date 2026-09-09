@@ -2,7 +2,7 @@ using System.Data;
 using System.Data.Common;
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
-using System.Text;
+using System.Runtime.CompilerServices;
 using ExcelReader.Core.Enums;
 using ExcelReader.Core.Parser;
 using ExcelReader.Core.ValueObjects;
@@ -308,32 +308,51 @@ namespace ExcelReader.Core.Reader
         }
 
         /// <inheritdoc/>
+        [SkipLocalsInit]
         public long GetBytes(int i, long fieldOffset, byte[]? buffer, int bufferoffset, int length)
         {
-            byte[] bytes = IsDBNull(i) ? [] : Encoding.UTF8.GetBytes(GetString(i));
-            return CopySlice(bytes.Length, fieldOffset, buffer?.Length, length,
-                toCopy => Array.Copy(bytes, (int)fieldOffset, buffer!, bufferoffset, toCopy));
+            Cell cell = CurrentCell(i);
+            if (cell.Type == CellType.Empty)
+            {
+                return CopyBytesSlice(default, fieldOffset, buffer, bufferoffset, length);
+            }
+            if (!cell.Value.IsEmpty)
+            {
+                return CopyBytesSlice(cell.Value, fieldOffset, buffer, bufferoffset, length);
+            }
+            Span<byte> scratch = stackalloc byte[32];
+            ReadOnlySpan<byte> formatted = cell.TryFormat(scratch, out int written) ? scratch[..written] : default;
+            return CopyBytesSlice(formatted, fieldOffset, buffer, bufferoffset, length);
+        }
+
+        private static long CopyBytesSlice(ReadOnlySpan<byte> source, long fieldOffset, byte[]? buffer, int bufferoffset, int length)
+        {
+            if (buffer is null)
+            {
+                return source.Length;
+            }
+            int available = (int)Math.Max(0, source.Length - fieldOffset);
+            int toCopy = Math.Max(0, Math.Min(length, available));
+            if (toCopy > 0)
+            {
+                source.Slice((int)fieldOffset, toCopy).CopyTo(buffer.AsSpan(bufferoffset, toCopy));
+            }
+            return toCopy;
         }
 
         /// <inheritdoc/>
         public long GetChars(int i, long fieldoffset, char[]? buffer, int bufferoffset, int length)
         {
             string s = GetString(i);
-            return CopySlice(s.Length, fieldoffset, buffer?.Length, length,
-                toCopy => s.CopyTo((int)fieldoffset, buffer!, bufferoffset, toCopy));
-        }
-
-        private static long CopySlice(int sourceLength, long fieldOffset, int? bufferLength, int length, Action<int> copy)
-        {
-            if (bufferLength is null)
+            if (buffer is null)
             {
-                return sourceLength;
+                return s.Length;
             }
-            int available = (int)Math.Max(0, sourceLength - fieldOffset);
+            int available = (int)Math.Max(0, s.Length - fieldoffset);
             int toCopy = Math.Max(0, Math.Min(length, available));
             if (toCopy > 0)
             {
-                copy(toCopy);
+                s.CopyTo((int)fieldoffset, buffer, bufferoffset, toCopy);
             }
             return toCopy;
         }
