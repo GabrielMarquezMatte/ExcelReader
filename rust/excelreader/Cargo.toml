@@ -44,5 +44,9 @@ harness = false
 name = "write_bench"
 harness = false
 
+[[bench]]
+name = "alloc_bench"
+harness = false
+
 [package.metadata.docs.rs]
 all-features = true
