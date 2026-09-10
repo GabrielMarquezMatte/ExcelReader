@@ -49,4 +49,16 @@ namespace ExcelReader.Native
         public IntPtr Release;    // void (*)(ArrowArray*)
         public IntPtr PrivateData;
     }
+
+    /// <summary>C# mirror of the Arrow C Data Interface's <c>struct ArrowArrayStream</c>. See
+    /// <see cref="ArrowSchema"/>'s remarks for why every pointer field is <see cref="IntPtr"/>.</summary>
+    [StructLayout(LayoutKind.Sequential)]
+    internal struct ArrowArrayStream
+    {
+        public IntPtr GetSchema;    // int (*)(ArrowArrayStream*, ArrowSchema*)
+        public IntPtr GetNext;      // int (*)(ArrowArrayStream*, ArrowArray*)
+        public IntPtr GetLastError; // const char* (*)(ArrowArrayStream*)
+        public IntPtr Release;      // void (*)(ArrowArrayStream*)
+        public IntPtr PrivateData;
+    }
 }

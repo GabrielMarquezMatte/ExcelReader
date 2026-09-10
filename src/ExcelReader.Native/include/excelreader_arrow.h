@@ -53,6 +53,14 @@ struct ArrowArray {
     void* private_data;
 };
 
+struct ArrowArrayStream {
+    int (*get_schema)(struct ArrowArrayStream*, struct ArrowSchema* out);
+    int (*get_next)(struct ArrowArrayStream*, struct ArrowArray* out);
+    const char* (*get_last_error)(struct ArrowArrayStream*);
+    void (*release)(struct ArrowArrayStream*);
+    void* private_data;
+};
+
 #endif /* ARROW_C_DATA_INTERFACE */
 
 /* Same schema/column semantics as xl_parse_typed (see excelreader.h) - `header_row`, `nullable`,
@@ -86,6 +94,21 @@ struct ArrowArray {
  * XL_MAX_COLUMN_NAME_BYTES (see excelreader.h); anything past either is XL_INVALID_ARGUMENT. */
 int32_t xl_parse_arrow(xl_workbook* handle, const xl_column_spec* specs, int32_t spec_count,
                        int32_t header_row, struct ArrowArray* out_array, struct ArrowSchema* out_schema);
+
+/* Batched counterpart to xl_parse_arrow: the same schema-driven read, delivered as an Arrow C
+ * stream so peak memory is one batch rather than one sheet. max_rows is the batch size in rows;
+ * 0 means unbounded, negative is XL_INVALID_ARGUMENT.
+ *
+ * On XL_OK the caller owns *out_stream and MUST eventually call out_stream->release, which is what
+ * closes the underlying read - there is no xl_free_* for it. Driving the stream follows the Arrow
+ * contract, not this ABI's: get_next returns 0 on success, and signals end of stream by returning 0
+ * with a RELEASED array (out->release == NULL). A non-zero return is errno-style; get_last_error
+ * then yields a message valid until the next call on the same stream.
+ *
+ * The stream borrows the workbook, with the same rules as xl_typed_reader_open. */
+int32_t xl_parse_arrow_stream(xl_workbook* handle, const xl_column_spec* specs, int32_t spec_count,
+                              int32_t header_row, int64_t max_rows,
+                              struct ArrowArrayStream* out_stream);
 
 #ifdef __cplusplus
 }
