@@ -25,13 +25,45 @@ namespace ExcelReader.Native
                 LastErrorUtf8 = AllocUtf8Z(message);
             }
 
+            /// <summary>
+            /// Stores the message behind a failed batch. Unlike <see cref="SetError"/> this never
+            /// leaves <c>get_last_error</c> empty for a non-zero return: once
+            /// <see cref="TypedParseSession"/> latches a fault, every later
+            /// <see cref="TypedParseSession.NextBatch"/> re-reports <see cref="NativeStatus.Error"/>
+            /// *without* re-setting the thread's last error, so from the second failing call onward
+            /// the message arrives empty. An empty message therefore keeps whatever the fault first
+            /// stored — strictly better for the consumer than a generic string — and only a fault
+            /// that never carried a message at all falls back to a fixed one.
+            /// </summary>
+            internal void SetBatchError(string message)
+            {
+                if (message.Length == 0)
+                {
+                    if (LastErrorUtf8 != IntPtr.Zero)
+                    {
+                        return;
+                    }
+                    message = "the Arrow stream's underlying read has faulted.";
+                }
+                SetError(message);
+            }
+
             /// <summary>Closes the underlying read and frees the message block. Idempotent, because
             /// <see cref="TypedParseSession.Dispose"/> is and the freed block is zeroed here.</summary>
             public void Dispose()
             {
-                Session.Dispose();
-                FreeIfSet(LastErrorUtf8);
-                LastErrorUtf8 = IntPtr.Zero;
+                // The message block is freed even if closing the read throws: TypedParseSession.Dispose
+                // reaches IExcelRowEnumerator.Dispose, which can plausibly raise IOException, and the
+                // caller only ever gets one contract-correct release to leak it on.
+                try
+                {
+                    Session.Dispose();
+                }
+                finally
+                {
+                    FreeIfSet(LastErrorUtf8);
+                    LastErrorUtf8 = IntPtr.Zero;
+                }
             }
         }
 
@@ -101,6 +133,11 @@ namespace ExcelReader.Native
             {
                 return ArrowErrno;
             }
+            // Zeroed up front for the same reason xl_parse_arrow_stream zeroes *out_stream: a consumer
+            // that ignores the errno and defensively calls out_schema->release must find a released
+            // struct, not whatever its own stack happened to hold.
+            *outSchema = default;
+
             try
             {
                 *outSchema = BuildArrowSchema(state.Specs);
@@ -109,6 +146,7 @@ namespace ExcelReader.Native
             catch (Exception exception)
             {
                 state.SetError(exception.Message);
+                *outSchema = default;
                 return ArrowErrno;
             }
         }
@@ -131,7 +169,7 @@ namespace ExcelReader.Native
             }
             if (status != NativeStatus.Ok)
             {
-                state.SetError(LastErrorText());
+                state.SetBatchError(LastErrorText());
                 return ArrowErrno;
             }
 
@@ -165,14 +203,28 @@ namespace ExcelReader.Native
             {
                 return; // already released - Arrow permits the defensive double-release check
             }
-            if (stream->PrivateData != IntPtr.Zero)
-            {
-                GCHandle pin = GCHandle.FromIntPtr(stream->PrivateData);
-                (pin.Target as ArrowStreamSession)?.Dispose();
-                pin.Free();
-                stream->PrivateData = IntPtr.Zero;
-            }
+            // The struct is marked released BEFORE anything that can throw. TypedParseSession.Dispose
+            // reaches IExcelRowEnumerator.Dispose, which can plausibly raise IOException, and the thunk
+            // swallows whatever escapes - so a consumer that called release exactly once, which is all
+            // the contract asks of it, would otherwise be left with a leaked GCHandle and a stream
+            // whose release is still non-null, i.e. one that still looks live. Reading private_data out
+            // first and zeroing both fields here makes the released state unconditional; the finally
+            // then guarantees the handle itself is freed on the same single call.
+            IntPtr privateData = stream->PrivateData;
+            stream->PrivateData = IntPtr.Zero;
             stream->Release = IntPtr.Zero;
+            if (privateData != IntPtr.Zero)
+            {
+                GCHandle pin = GCHandle.FromIntPtr(privateData);
+                try
+                {
+                    (pin.Target as ArrowStreamSession)?.Dispose();
+                }
+                finally
+                {
+                    pin.Free();
+                }
+            }
         }
     }
 }
