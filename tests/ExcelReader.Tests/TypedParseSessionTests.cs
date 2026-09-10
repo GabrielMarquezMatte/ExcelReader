@@ -246,5 +246,62 @@ namespace ExcelReader.Tests
                 File.Delete(path);
             }
         }
+
+        [Fact]
+        public void OpenTypedReader_Should_Reject_A_Negative_Batch_Size()
+        {
+            Assert.Equal(NativeStatus.Ok, NativeApiTests.OpenPath(XlsxFixture, NativeFormat.Auto, out NativeHandle? handle));
+            using NativeHandle live = handle!;
+
+            int status = NativeApi.OpenTypedReader(live, Specs(), headerRow: 0, maxRows: -1, out nint reader);
+
+            Assert.Equal(NativeStatus.InvalidArgument, status);
+            Assert.Equal(0, reader);
+        }
+
+        [Fact]
+        public void OpenTypedReader_Should_Reject_A_Null_Handle()
+        {
+            Assert.Equal(NativeStatus.InvalidHandle,
+                NativeApi.OpenTypedReader(null, Specs(), headerRow: 0, maxRows: 10, out nint reader));
+            Assert.Equal(0, reader);
+        }
+
+        [Fact]
+        public void NextTypedBatch_Should_Report_InvalidHandle_For_A_Closed_Reader()
+        {
+            Assert.Equal(NativeStatus.Ok, NativeApiTests.OpenPath(XlsxFixture, NativeFormat.Auto, out NativeHandle? handle));
+            using NativeHandle live = handle!;
+            Assert.Equal(NativeStatus.Ok, NativeApi.OpenTypedReader(live, Specs(), 0, 10, out nint reader));
+
+            NativeApi.CloseTypedReader(reader);
+
+            Assert.Equal(NativeStatus.InvalidHandle, NativeApi.NextTypedBatch(reader, out NativeTable table));
+            Assert.Equal(IntPtr.Zero, table.Columns);
+        }
+
+        [Fact]
+        public void CloseTypedReader_Should_Be_A_No_Op_On_Zero_And_On_A_Second_Close()
+        {
+            Assert.Equal(NativeStatus.Ok, NativeApiTests.OpenPath(XlsxFixture, NativeFormat.Auto, out NativeHandle? handle));
+            using NativeHandle live = handle!;
+            Assert.Equal(NativeStatus.Ok, NativeApi.OpenTypedReader(live, Specs(), 0, 10, out nint reader));
+
+            NativeApi.CloseTypedReader(reader);
+            NativeApi.CloseTypedReader(reader); // must not throw
+            NativeApi.CloseTypedReader(0);      // must not throw
+        }
+
+        // A reader id must never resolve to a workbook id, and vice versa - NativeHandleTable's
+        // type check is what makes a cross-kind call a clean no-op instead of a wrong-object free.
+        [Fact]
+        public void NextTypedBatch_Should_Reject_A_Workbook_Id()
+        {
+            Assert.Equal(NativeStatus.Ok, NativeApiTests.OpenPath(XlsxFixture, NativeFormat.Auto, out NativeHandle? handle));
+            using NativeHandle live = handle!;
+            nint workbookId = NativeHandleTable.Register(live);
+
+            Assert.Equal(NativeStatus.InvalidHandle, NativeApi.NextTypedBatch(workbookId, out _));
+        }
     }
 }
