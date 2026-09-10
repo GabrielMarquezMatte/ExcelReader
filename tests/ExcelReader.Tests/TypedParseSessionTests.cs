@@ -251,11 +251,18 @@ namespace ExcelReader.Tests
 
         // The feature's actual claim is about peak memory, not cumulative allocation - see
         // ChunkedParseBenchmark's class comment for why a BenchmarkDotNet [MemoryDiagnoser] run
-        // cannot show this. Bytes owned by the single largest live NativeTable is exactly the
-        // quantity TypedParseSession's own doc comment promises to bound ("the working set is one
-        // batch's columns plus one batch's output block rather than the whole sheet"), it is
-        // deterministic, and unlike a managed allocation count it includes the Marshal.AllocHGlobal
-        // blocks that are the bulk of what this feature bounds.
+        // cannot show this. Bytes owned by the single largest live NativeTable is deterministic, and
+        // unlike a managed allocation count it includes the Marshal.AllocHGlobal blocks that are the
+        // bulk of what this feature bounds.
+        //
+        // It is the OUTPUT-BLOCK half of the two things TypedParseSession's remarks promise to bound
+        // ("one batch's columns plus one batch's output block"). The builder-side half needs no
+        // measurement: a ColumnBuilder's ChunkedBuffer chain only ever grows by appending a new chunk
+        // per row appended (ChunkedBuffer.Grow), the builders are constructed fresh inside NextBatch,
+        // and nothing outside that call can reach them - so a batch's builders are bounded by the same
+        // maxRows the block below is measured against, structurally rather than by assertion. If
+        // NextBatch ever hoisted its builders out of the row loop, that is what this test would NOT
+        // catch, and the sizes below would still pass.
         private const int CeilingRowCount = 4000;
         private const long CeilingBatchSize = 200;
 
