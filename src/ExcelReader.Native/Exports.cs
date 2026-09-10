@@ -248,6 +248,72 @@ namespace ExcelReader.Native
             }
         }
 
+        [UnmanagedCallersOnly(EntryPoint = "xl_typed_reader_open")]
+        public static int TypedReaderOpen(nint handle, NativeColumnSpecRaw* specs, int specCount, int headerRow,
+            long maxRows, nint* outReader)
+        {
+            if (specs is null || outReader is null || !NativeApi.IsValidSpecCount(specCount))
+            {
+                return NativeStatus.InvalidArgument;
+            }
+            *outReader = 0;
+
+            try
+            {
+                if (!TryDecodeColumnSpecs(specs, specCount, out NativeColumnSpec[] decoded))
+                {
+                    return NativeStatus.InvalidArgument;
+                }
+
+                int status = NativeApi.OpenTypedReader(Resolve(handle), decoded, headerRow, maxRows, out nint reader);
+                *outReader = reader;
+                return status;
+            }
+            catch (Exception exception)
+            {
+                NativeApi.SetLastError(exception.Message);
+                *outReader = 0;
+                return NativeStatus.Error;
+            }
+        }
+
+        [UnmanagedCallersOnly(EntryPoint = "xl_typed_reader_next")]
+        public static int TypedReaderNext(nint reader, NativeTable* outTable)
+        {
+            if (outTable is null)
+            {
+                return NativeStatus.InvalidArgument;
+            }
+            *outTable = default;
+
+            try
+            {
+                int status = NativeApi.NextTypedBatch(reader, out NativeTable table);
+                *outTable = table;
+                return status;
+            }
+            catch (Exception exception)
+            {
+                NativeApi.SetLastError(exception.Message);
+                *outTable = default;
+                return NativeStatus.Error;
+            }
+        }
+
+        [UnmanagedCallersOnly(EntryPoint = "xl_typed_reader_close")]
+        public static void TypedReaderClose(nint reader)
+        {
+            // void in the ABI, so an exception here must never escape - same shape as FreeTable.
+            try
+            {
+                NativeApi.CloseTypedReader(reader);
+            }
+            catch (Exception exception)
+            {
+                NativeApi.SetLastError(exception.Message);
+            }
+        }
+
         [UnmanagedCallersOnly(EntryPoint = "xl_write_typed")]
         public static int WriteTyped(byte* path, int pathLength, int format, NativeColumnSpecRaw* specs, NativeTable* table, NativeWriteOptionsRaw* options)
         {

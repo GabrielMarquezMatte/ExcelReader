@@ -50,6 +50,8 @@ extern "C" {
 /* Opaque workbook handle. Never dereferenced by the caller; only ever passed back to xl_*. */
 typedef struct xl_workbook xl_workbook;
 
+typedef struct xl_typed_reader xl_typed_reader;
+
 /* One UTF-8 cell value returned by xl_read_all_decoded. value_len excludes the trailing NUL;
  * use it when the value could contain an embedded NUL. */
 typedef struct xl_row_cell {
@@ -258,6 +260,39 @@ int32_t xl_parse_typed(xl_workbook* handle, const xl_column_spec* specs, int32_t
 
 /* Releases a result returned by xl_parse_typed and resets it to zero. Safe on a zeroed value. */
 void xl_free_table(xl_table* table);
+
+/* ---- Chunked typed reading -------------------------------------------------------------------
+ *
+ * xl_parse_typed materializes the whole sheet. These read it a batch at a time instead, so peak
+ * memory is one batch rather than one sheet. Everything else - specs, header_row, the resulting
+ * xl_table and its lifetime - is identical to xl_parse_typed.
+ *
+ * Column resolution happens once, in xl_typed_reader_open: the header row is consumed there and
+ * never re-read, so each xl_typed_reader_next is purely rows.
+ *
+ * The reader BORROWS the workbook. Close every reader before xl_close on its workbook; calling
+ * xl_close first, or xl_move_to_sheet while a reader is open, makes the next xl_typed_reader_next
+ * return XL_ERROR (detail in xl_last_error) rather than crashing. A reader is not thread-safe, in
+ * common with every other handle in this ABI. */
+
+/* max_rows is the batch size in rows: 0 means unbounded (one batch holding every row, which is
+ * exactly what xl_parse_typed does). A negative max_rows is XL_INVALID_ARGUMENT.
+ * *out_reader is zeroed on any failure. */
+int32_t xl_typed_reader_open(xl_workbook* handle, const xl_column_spec* specs, int32_t spec_count,
+                             int32_t header_row, int64_t max_rows, xl_typed_reader** out_reader);
+
+/* XL_OK with a batch in *out_table, or XL_EOF once the sheet is exhausted. *out_table is zeroed on
+ * both XL_EOF and error, so xl_free_table on it is always safe and a caller can simply drain:
+ *
+ *     while (xl_typed_reader_next(reader, &table) == XL_OK) { ...; xl_free_table(&table); }
+ *
+ * Each batch is an ordinary xl_table, freed with xl_free_table, independent of every other batch.
+ * A value that fails to convert in a non-nullable column returns XL_ERROR and LATCHES: every later
+ * call returns the same error. Batches already handed out stay valid and owned by the caller. */
+int32_t xl_typed_reader_next(xl_typed_reader* reader, xl_table* out_table);
+
+/* Safe on NULL and on an already-closed reader. Does not close the workbook. */
+void xl_typed_reader_close(xl_typed_reader* reader);
 
 /* ---- Writing --------------------------------------------------------------------------------- */
 

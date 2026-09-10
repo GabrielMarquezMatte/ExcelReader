@@ -16,6 +16,9 @@ EXPORTS
     xl_free_rows
     xl_parse_typed
     xl_free_table
+    xl_typed_reader_open
+    xl_typed_reader_next
+    xl_typed_reader_close
     xl_parse_arrow
     xl_write_typed
     xl_write_typed_to_memory
