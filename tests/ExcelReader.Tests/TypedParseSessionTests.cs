@@ -72,10 +72,16 @@ namespace ExcelReader.Tests
         public void NextBatch_Should_Match_The_Unbounded_Read_At_Every_Batch_Size(long maxRows)
         {
             List<string> whole = ReadInBatches(0, out int wholeBatches);
-            List<string> batched = ReadInBatches(maxRows, out _);
+            List<string> batched = ReadInBatches(maxRows, out int batches);
 
             Assert.Equal(1, wholeBatches);
             Assert.Equal(whole, batched);
+            // Concatenated values alone cannot tell batching apart from a NextBatch that ignored
+            // maxRows and returned the whole sheet in one call, so the batch count is pinned too:
+            // ceil(rows / maxRows), with the row count taken from the unbounded read so this stays
+            // correct if the fixture grows.
+            long expectedBatches = (whole.Count + maxRows - 1) / maxRows;
+            Assert.Equal(expectedBatches, batches);
         }
     }
 }
