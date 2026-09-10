@@ -47,8 +47,12 @@ namespace ExcelReader.Core.Crypto
             try
             {
                 aes.Mode = CipherMode.CBC;
+                // PaddingMode.None is load-bearing, not just a default: it is what makes
+                // TransformBlock consume and produce exactly inputCount bytes, which every offset in
+                // Transform below depends on. See the length check there.
                 aes.Padding = PaddingMode.None;
-                aes.Key = key;
+                // No aes.Key assignment: CreateEncryptor/CreateDecryptor take the key explicitly, so
+                // setting the property as well would only generate a second key schedule to discard.
                 _transform = encrypting ? aes.CreateEncryptor(key, _tail) : aes.CreateDecryptor(key, _tail);
                 _aes = aes;
             }
@@ -103,20 +107,35 @@ namespace ExcelReader.Core.Crypto
             if (MemoryMarshal.TryGetArray(source, out ArraySegment<byte> src)
                 && MemoryMarshal.TryGetArray((ReadOnlyMemory<byte>)destination, out ArraySegment<byte> dst))
             {
-                _transform.TransformBlock(src.Array!, src.Offset, src.Count, dst.Array!, dst.Offset);
+                RequireWholeBlock(_transform.TransformBlock(src.Array!, src.Offset, src.Count, dst.Array!, dst.Offset), src.Count);
                 return;
             }
             byte[] staged = ArrayPool<byte>.Shared.Rent(source.Length);
             try
             {
                 source.Span.CopyTo(staged);
-                _transform.TransformBlock(staged, 0, source.Length, staged, 0);
+                RequireWholeBlock(_transform.TransformBlock(staged, 0, source.Length, staged, 0), source.Length);
                 staged.AsSpan(0, source.Length).CopyTo(destination.Span);
             }
             finally
             {
                 CryptographicOperations.ZeroMemory(staged.AsSpan(0, source.Length));
                 ArrayPool<byte>.Shared.Return(staged);
+            }
+        }
+
+        // With PaddingMode.None over a whole number of blocks, TransformBlock always writes exactly
+        // inputCount bytes - and every caller here relies on that identity: the segment's plaintext
+        // length, the correction's final-block offset, and _tail all assume the whole segment was
+        // transformed. If that ever stopped holding (a changed padding mode, a provider that buffers a
+        // block) the failure would otherwise be a silently truncated segment, decrypted to plausible
+        // garbage. Cheaper to assert than to debug.
+        private static void RequireWholeBlock(int written, int expected)
+        {
+            if (written != expected)
+            {
+                throw new CryptographicException(
+                    $"The CBC transform consumed {expected} bytes but produced {written}; a segment cipher must transform a whole segment.");
             }
         }
 
