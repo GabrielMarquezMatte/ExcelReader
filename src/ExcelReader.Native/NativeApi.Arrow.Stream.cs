@@ -26,23 +26,17 @@ namespace ExcelReader.Native
             }
 
             /// <summary>
-            /// Stores the message behind a failed batch. Unlike <see cref="SetError"/> this never
-            /// leaves <c>get_last_error</c> empty for a non-zero return: once
-            /// <see cref="TypedParseSession"/> latches a fault, every later
-            /// <see cref="TypedParseSession.NextBatch"/> re-reports <see cref="NativeStatus.Error"/>
-            /// *without* re-setting the thread's last error, so from the second failing call onward
-            /// the message arrives empty. An empty message therefore keeps whatever the fault first
-            /// stored — strictly better for the consumer than a generic string — and only a fault
-            /// that never carried a message at all falls back to a fixed one.
+            /// Stores the message behind a failed batch, taken from the SESSION's own latched fault
+            /// rather than the thread's <c>xl_last_error</c>: that one belongs to whatever ExcelReader
+            /// call ran most recently on this thread, which need not be this stream at all, so reading
+            /// it back here could hand the consumer an unrelated message. Never leaves
+            /// <c>get_last_error</c> empty for a non-zero return — a fault with no message of its own
+            /// (nothing produces one today, but the fallback costs nothing) still gets a fixed one.
             /// </summary>
-            internal void SetBatchError(string message)
+            internal void SetBatchError(string? message)
             {
-                if (message.Length == 0)
+                if (string.IsNullOrEmpty(message))
                 {
-                    if (LastErrorUtf8 != IntPtr.Zero)
-                    {
-                        return;
-                    }
                     message = "the Arrow stream's underlying read has faulted.";
                 }
                 SetError(message);
@@ -169,7 +163,7 @@ namespace ExcelReader.Native
             }
             if (status != NativeStatus.Ok)
             {
-                state.SetBatchError(LastErrorText());
+                state.SetBatchError(state.Session.FaultMessage);
                 return ArrowErrno;
             }
 

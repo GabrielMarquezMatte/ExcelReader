@@ -270,14 +270,27 @@ void xl_free_table(xl_table* table);
  * Column resolution happens once, in xl_typed_reader_open: the header row is consumed there and
  * never re-read, so each xl_typed_reader_next is purely rows.
  *
- * The reader BORROWS the workbook. Close every reader before xl_close on its workbook; calling
- * xl_close first, or xl_move_to_sheet while a reader is open, makes the next xl_typed_reader_next
- * return XL_ERROR (detail in xl_last_error) rather than crashing. A reader is not thread-safe, in
- * common with every other handle in this ABI. */
+ * A workbook serves ONE chunked read at a time - one reader, or one xl_parse_arrow_stream, never
+ * both and never two of either. A workbook has a single row cursor, so this is a hard limit, not a
+ * policy: opening a second read on a workbook that already has one returns XL_ERROR (detail in
+ * xl_last_error) instead.
+ *
+ * The reader BORROWS the workbook, and every OTHER read on that workbook takes the cursor away from
+ * it. xl_parse_typed, xl_parse_arrow, xl_next_row, xl_next_row_decoded, xl_read_all_blob,
+ * xl_read_all, xl_infer_schema, xl_move_to_sheet and xl_close all succeed normally and all
+ * INVALIDATE an open reader: its next xl_typed_reader_next returns XL_ERROR (detail in
+ * xl_last_error) and every call after that returns the same error with the same message. It never
+ * crashes, and - the point of the rule - it never resumes from wherever that other call left the
+ * cursor and reports truncated data as success. Batches already handed out stay valid and owned by
+ * the caller. So: finish or close a reader before touching its workbook for anything else. A reader
+ * is not thread-safe, in common with every other handle in this ABI.
+ *
+ * `specs`, and the name buffers the specs point at, are COPIED during the open call. Neither has to
+ * outlive it, so a stack-local array is fine. */
 
 /* max_rows is the batch size in rows: 0 means unbounded (one batch holding every row, which is
- * exactly what xl_parse_typed does). A negative max_rows is XL_INVALID_ARGUMENT.
- * *out_reader is zeroed on any failure. */
+ * exactly what xl_parse_typed does). A negative max_rows is XL_INVALID_ARGUMENT; a workbook that
+ * already has a chunked read open is XL_ERROR. *out_reader is zeroed on any failure. */
 int32_t xl_typed_reader_open(xl_workbook* handle, const xl_column_spec* specs, int32_t spec_count,
                              int32_t header_row, int64_t max_rows, xl_typed_reader** out_reader);
 
@@ -288,7 +301,10 @@ int32_t xl_typed_reader_open(xl_workbook* handle, const xl_column_spec* specs, i
  *
  * Each batch is an ordinary xl_table, freed with xl_free_table, independent of every other batch.
  * A value that fails to convert in a non-nullable column returns XL_ERROR and LATCHES: every later
- * call returns the same error. Batches already handed out stay valid and owned by the caller. */
+ * call returns the same error, with the same xl_last_error message, so a caller that only checks the
+ * message after the second failure still learns what happened. Invalidation by another call on the
+ * workbook (see above) latches identically. Batches already handed out stay valid and owned by the
+ * caller. */
 int32_t xl_typed_reader_next(xl_typed_reader* reader, xl_table* out_table);
 
 /* Safe on NULL and on an already-closed reader. Does not close the workbook. */

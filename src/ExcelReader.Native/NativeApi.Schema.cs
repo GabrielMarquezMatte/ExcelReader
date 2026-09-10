@@ -44,6 +44,10 @@ namespace ExcelReader.Native
             IExcelRowEnumerator? rows = null;
             try
             {
+                // Sampling opens a second enumerator on the workbook, which a chunked read holding one
+                // open across calls cannot survive - so that read is invalidated rather than rewound
+                // underneath.
+                handle.FaultLiveSession("xl_infer_schema");
                 rows = handle.Reader.GetEnumerator();
                 schema = BuildSchema(SchemaInference.Infer(rows, handle.Reader.IsDate1904, headerRow, sampleSize));
                 return NativeStatus.Ok;

@@ -10,6 +10,15 @@ namespace ExcelReader.Native
     /// <see cref="Scratch"/> holds the most recently serialized row. A row is serialized once and
     /// then copied out, so a caller whose buffer was too small can retry with a bigger one without
     /// losing the row — the reader has already advanced past it and cannot rewind.
+    /// <para>
+    /// <see cref="LiveSession"/> is the interlock behind the ABI's one-chunked-read-per-workbook rule.
+    /// <see cref="IExcelRowReader"/> serves ONE usable <see cref="IExcelRowEnumerator"/> at a time (see
+    /// its thread-safety remarks): <c>CsvReader.GetEnumerator</c> and <c>XlsReader.GetEnumerator</c>
+    /// rewind the shared source stream, so a second enumerator silently invalidates the first. Every
+    /// export except the chunked reader/stream drains and disposes its enumerator inside one call, so
+    /// only they can hold one open across calls — which is why the slot exists here, on the workbook
+    /// they all share, rather than inside <see cref="NativeApi.TypedParseSession"/>.
+    /// </para>
     /// </remarks>
     internal sealed class NativeHandle : IDisposable
     {
@@ -49,6 +58,37 @@ namespace ExcelReader.Native
 
         internal bool AllRowsPending { get; set; }
 
+        /// <summary>The one caller-visible chunked read open on this workbook — an
+        /// <c>xl_typed_reader</c> or an <c>xl_parse_arrow_stream</c> — or <see langword="null"/> when
+        /// there is none. Set by <see cref="NativeApi.TypedParseSession.Open"/>, cleared by that
+        /// session's dispose or fault. See the class remarks for why one is the limit.</summary>
+        internal NativeApi.TypedParseSession? LiveSession { get; set; }
+
+        /// <summary>
+        /// Invalidates the live chunked read, if any, because <paramref name="cause"/> is about to take
+        /// over the workbook's row cursor. The session latches the reason and reports it from every
+        /// later <c>xl_typed_reader_next</c>/<c>get_next</c>; it never silently resumes at whatever row
+        /// <paramref name="cause"/> leaves the cursor on.
+        /// </summary>
+        /// <param name="cause">The ABI function taking over, named as the caller knows it.</param>
+        internal void FaultLiveSession(string cause)
+        {
+            LiveSession?.Fault($"this chunked read was invalidated by {cause} on the same workbook: a " +
+                "workbook serves one row cursor at a time, so this read's position is no longer defined. " +
+                "Finish or close the read before using the workbook for anything else.");
+        }
+
+        /// <summary>Releases the live-session slot if <paramref name="session"/> still owns it. Identity-checked
+        /// because a faulted session is detached immediately, so the slot may already belong to a newer one by
+        /// the time the faulted one is closed.</summary>
+        internal void ReleaseLiveSession(NativeApi.TypedParseSession session)
+        {
+            if (ReferenceEquals(LiveSession, session))
+            {
+                LiveSession = null;
+            }
+        }
+
         internal void ResetRows()
         {
             Rows?.Dispose();
@@ -63,6 +103,12 @@ namespace ExcelReader.Native
 
         public void Dispose()
         {
+            // A chunked read outliving its workbook is the documented "close the workbook first" case
+            // (excelreader.h, chunked typed reading): faulted here, explicitly, so the next call on it
+            // is a clean XL_ERROR with a message. Leaving it to the disposed reader to throw is not
+            // enough — a CSV enumerator sitting on already-buffered bytes keeps returning rows from a
+            // closed workbook instead.
+            FaultLiveSession("xl_close");
             ResetRows();
             Reader.Dispose();
         }

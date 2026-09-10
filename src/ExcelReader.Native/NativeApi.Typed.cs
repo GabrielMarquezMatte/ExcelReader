@@ -23,9 +23,12 @@ namespace ExcelReader.Native
         internal static int ParseTyped(NativeHandle? handle, NativeColumnSpec[] specs, int headerRow, out NativeTable table)
         {
             table = default;
-            // maxRows 0 is one unbounded batch, which is exactly this method's contract - so the row
-            // loop lives in TypedParseSession only, with no second copy here to drift from it.
-            int status = TypedParseSession.Open(handle, specs, headerRow, maxRows: 0, out TypedParseSession? session);
+            // One unbounded batch, drained and closed inside this call, which is exactly this method's
+            // contract - so the row loop lives in TypedParseSession only, with no second copy here to
+            // drift from it. Transient because it must not be refused by (or trip over) the workbook's
+            // one-live-session rule; see TypedParseSession.OpenTransient.
+            int status = TypedParseSession.OpenTransient(handle, specs, headerRow, "xl_parse_typed",
+                out TypedParseSession? session);
             if (status != NativeStatus.Ok)
             {
                 return status;
@@ -33,14 +36,27 @@ namespace ExcelReader.Native
 
             using TypedParseSession open = session!;
             status = open.NextBatch(out table);
+            if (status != NativeStatus.Eof)
+            {
+                return status;
+            }
+
             // An empty sheet produced no batch at all; the old contract is an OK result with a
-            // zero-row table, which BuildTable over empty builders is exactly.
-            if (status == NativeStatus.Eof)
+            // zero-row table, which BuildTable over empty builders is exactly. Inside a try because
+            // it allocates: no exception may leave this layer (see NativeApi's class remarks).
+            try
             {
                 table = BuildEmptyTable(specs);
                 return NativeStatus.Ok;
             }
-            return status;
+            catch (Exception exception)
+            {
+                // BuildTable releases whatever it had allocated before a throw (see its own catch), so
+                // there is nothing left to free here.
+                SetLastError(exception.Message);
+                table = default;
+                return NativeStatus.Error;
+            }
         }
 
         // Zero rows, one column per spec - what the pre-session ParseTyped returned when the sheet
