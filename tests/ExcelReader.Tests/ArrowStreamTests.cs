@@ -53,6 +53,26 @@ namespace ExcelReader.Tests
             }
         }
 
+        // One child schema flattened to the three things an Arrow consumer actually validates. A
+        // child count alone would let a stream whose format codes, names or nullability drifted
+        // between batches pass, which is precisely the breakage the spec's same-schema rule forbids.
+        private readonly record struct SchemaShape(string? Format, string? Name, long Flags);
+
+        private static List<SchemaShape> DescribeChildren(ArrowSchema schema)
+        {
+            List<SchemaShape> children = [];
+            for (long i = 0; i < schema.NChildren; i++)
+            {
+                ArrowSchema child = Marshal.PtrToStructure<ArrowSchema>(
+                    Marshal.ReadIntPtr(schema.Children, (int)(i * IntPtr.Size)));
+                children.Add(new SchemaShape(
+                    Marshal.PtrToStringUTF8(child.Format),
+                    Marshal.PtrToStringUTF8(child.Name),
+                    child.Flags));
+            }
+            return children;
+        }
+
         // The Arrow spec requires every batch in a stream to carry the same schema.
         [Fact]
         public void GetSchema_Should_Return_The_Same_Shape_Every_Time()
@@ -64,7 +84,16 @@ namespace ExcelReader.Tests
                 {
                     Assert.Equal(0, InvokeGetSchema(ref stream, out ArrowSchema first));
                     Assert.Equal(0, InvokeGetSchema(ref stream, out ArrowSchema second));
-                    Assert.Equal(first.NChildren, second.NChildren);
+
+                    List<SchemaShape> firstChildren = DescribeChildren(first);
+                    Assert.Equal(firstChildren, DescribeChildren(second));
+                    Assert.Equal("+s", Marshal.PtrToStringUTF8(first.Format));
+                    Assert.Equal(Marshal.PtrToStringUTF8(first.Format), Marshal.PtrToStringUTF8(second.Format));
+
+                    // Ground truth for Specs(), so this cannot pass by both calls agreeing on the
+                    // wrong answer: one unnamed nullable string column, named by its index.
+                    Assert.Equal([new SchemaShape("u", "0", ArrowFlags.Nullable)], firstChildren);
+
                     ReleaseSchema(ref first);
                     ReleaseSchema(ref second);
                 }
@@ -89,6 +118,16 @@ namespace ExcelReader.Tests
                 InvokeRelease(ref stream);
                 Assert.Equal(IntPtr.Zero, stream.Release);
                 InvokeRelease(ref stream); // must not throw
+
+                // The stream BORROWS the workbook - release closes the read, never the handle. If it
+                // ever disposed the workbook instead, this second open would fail rather than hand
+                // back a fresh stream over the same still-live handle.
+                Assert.Equal(NativeStatus.Ok,
+                    NativeApi.OpenArrowStream(live, Specs(), headerRow: 0, maxRows: 1, out ArrowArrayStream reopened));
+                Assert.Equal(0, InvokeGetNext(ref reopened, out ArrowArray fromReopened));
+                Assert.NotEqual(IntPtr.Zero, fromReopened.Release);
+                ReleaseArray(ref fromReopened);
+                InvokeRelease(ref reopened);
             }
         }
 
@@ -182,12 +221,39 @@ namespace ExcelReader.Tests
             long[] quantities = new long[rowCount];
             Marshal.Copy(BufferAt(qty, 1), quantities, 0, rowCount);
 
+            // null_count must agree with the validity bitmap this same batch carries. CountUnset
+            // popcounts whole bytes on the assumption that every bit past `length` is zero, so a batch
+            // whose row count is not a multiple of 8 is exactly where a stale tail bit would inflate
+            // null_count - a discrepancy the row values alone cannot show, and one pyarrow would act on
+            // because it trusts null_count for its validity fast paths.
+            Assert.Equal(valid.Count(v => !v), qty.NullCount);
+            Assert.Equal(0, active.NullCount); // non-nullable: no validity bitmap, so no nulls
+            Assert.Equal(0, array.NullCount);  // the top-level struct array has no row-level nulls
+
             List<TallRow> decoded = [];
             for (int i = 0; i < rowCount; i++)
             {
                 decoded.Add(new TallRow(flags[i], valid[i], quantities[i]));
             }
             return decoded;
+        }
+
+        // Ground truth straight from WriteTallFixture's generating rules, so the comparison below does
+        // not rest solely on the unbounded read agreeing with the batched one: both sides run the same
+        // PackBitsLsbFirst, so a batch-size-invariant bug (a global bit inversion, say) would cancel
+        // out between them and pass. These assertions are absolute.
+        private static void AssertMatchesFixtureRules(List<TallRow> rows)
+        {
+            Assert.Equal(TallRowCount, rows.Count);
+            for (int i = 0; i < rows.Count; i++)
+            {
+                Assert.Equal(i % 3 == 0, rows[i].Active);
+                Assert.Equal(i % 5 != 0, rows[i].QtyValid);
+                if (rows[i].QtyValid)
+                {
+                    Assert.Equal(i * 3, rows[i].Qty);
+                }
+            }
         }
 
         private static ArrowArray ChildAt(ArrowArray array, int index)
@@ -232,13 +298,16 @@ namespace ExcelReader.Tests
                 List<TallRow> batched = ReadTallThroughStream(path, maxRows, out int batches);
 
                 Assert.Equal(1, wholeBatches);
-                Assert.Equal(TallRowCount, whole.Count);
                 // Guards the fixture: uniform flags or no nulls at all would leave nothing to mis-pack.
                 Assert.Contains(whole, row => row.Active);
                 Assert.Contains(whole, row => !row.Active);
                 Assert.Contains(whole, row => row.QtyValid);
                 Assert.Contains(whole, row => !row.QtyValid);
 
+                // Absolute first, then relative: the batched read must match the fixture's own rules,
+                // and the unbounded read must agree with it.
+                AssertMatchesFixtureRules(batched);
+                AssertMatchesFixtureRules(whole);
                 Assert.Equal(whole, batched);
                 long expectedBatches = (whole.Count + maxRows - 1) / maxRows;
                 Assert.Equal(expectedBatches, batches);

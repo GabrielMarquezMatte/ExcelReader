@@ -53,6 +53,17 @@ struct ArrowArray {
     void* private_data;
 };
 
+#endif /* ARROW_C_DATA_INTERFACE */
+
+/* Guarded separately from the data interface above, exactly as Arrow's own arrow/c/abi.h does: the
+ * stream ABI is a distinct opt-in, and a consumer can legitimately have defined
+ * ARROW_C_DATA_INTERFACE from a data-only subset (nanoarrow, for one) without ever declaring
+ * ArrowArrayStream. Folding this into that guard would give such a consumer xl_parse_arrow_stream
+ * declared against an undeclared struct, and would redefine the struct for anyone including
+ * arrow/c/abi.h after this header. */
+#ifndef ARROW_C_STREAM_INTERFACE
+#define ARROW_C_STREAM_INTERFACE
+
 struct ArrowArrayStream {
     int (*get_schema)(struct ArrowArrayStream*, struct ArrowSchema* out);
     int (*get_next)(struct ArrowArrayStream*, struct ArrowArray* out);
@@ -61,7 +72,7 @@ struct ArrowArrayStream {
     void* private_data;
 };
 
-#endif /* ARROW_C_DATA_INTERFACE */
+#endif /* ARROW_C_STREAM_INTERFACE */
 
 /* Same schema/column semantics as xl_parse_typed (see excelreader.h) - `header_row`, `nullable`,
  * name-vs-index resolution, XL_T_* dispatch, and every XL_INVALID_ARGUMENT/XL_ERROR case are
@@ -103,7 +114,13 @@ int32_t xl_parse_arrow(xl_workbook* handle, const xl_column_spec* specs, int32_t
  * closes the underlying read - there is no xl_free_* for it. Driving the stream follows the Arrow
  * contract, not this ABI's: get_next returns 0 on success, and signals end of stream by returning 0
  * with a RELEASED array (out->release == NULL). A non-zero return is errno-style; get_last_error
- * then yields a message valid until the next call on the same stream.
+ * then yields a non-empty message valid until the next call on the same stream.
+ *
+ * Unlike xl_parse_arrow's out params, *out_stream is ALWAYS written: every failure path zeroes it,
+ * so a caller that ignores the return code and calls out_stream->release still finds a NULL release
+ * (a no-op) rather than an uninitialized function pointer. get_next and get_schema give their own
+ * out params the same guarantee. The only case where *out_stream is untouched is out_stream == NULL
+ * itself, which returns XL_INVALID_ARGUMENT.
  *
  * The stream borrows the workbook, with the same rules as xl_typed_reader_open. */
 int32_t xl_parse_arrow_stream(xl_workbook* handle, const xl_column_spec* specs, int32_t spec_count,
