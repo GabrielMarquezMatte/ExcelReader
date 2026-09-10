@@ -16,9 +16,13 @@ namespace ExcelReader.Native
         /// block rather than the whole sheet.
         ///
         /// Holds a strong reference to the <see cref="NativeHandle"/> so the reader cannot be
-        /// collected underneath it. A caller that closes the workbook first still gets a clean
-        /// error, not undefined behavior: the disposed reader throws and
-        /// <see cref="NextBatch"/> latches it as a fault.
+        /// collected underneath it. This is also the only thing in this ABI that keeps an
+        /// <see cref="IExcelRowEnumerator"/> open ACROSS calls, which a workbook cannot serve twice at
+        /// once — so a caller-visible session takes <see cref="NativeHandle.LiveSession"/> for its whole
+        /// lifetime (a second one is refused) and any other read on that workbook, including
+        /// <c>xl_close</c> and <c>xl_move_to_sheet</c>, <see cref="Fault"/>s it instead of rewinding the
+        /// reader underneath it. A faulted session reports its latched message from every later
+        /// <see cref="NextBatch"/> and never returns rows again.
         /// </remarks>
         internal sealed class TypedParseSession : IDisposable
         {
@@ -28,7 +32,11 @@ namespace ExcelReader.Native
             private readonly long _maxRows;
             private readonly bool _isDate1904;
             private IExcelRowEnumerator? _rows;
+            // Latched together: _faultMessage is the reason for the FIRST fault and is re-reported by
+            // every later call, so a consumer that only reads the error after the second one still
+            // learns what actually happened.
             private bool _faulted;
+            private string? _faultMessage;
             private bool _disposed;
 
             private TypedParseSession(NativeHandle handle, NativeColumnSpec[] specs, int[] columnIndices,
@@ -43,10 +51,20 @@ namespace ExcelReader.Native
             }
 
             /// <summary>
-            /// Resolves the columns once and positions the reader at the first data row, leaving the
-            /// row loop itself to <see cref="NextBatch"/>.
+            /// Opens a CALLER-VISIBLE session: resolves the columns once, positions the reader at the
+            /// first data row, and takes the workbook's single live-session slot for as long as the
+            /// session lives.
             /// </summary>
             /// <param name="maxRows">Rows per batch. 0 means unbounded — one batch holding every row.</param>
+            /// <remarks>
+            /// Refused with <see cref="NativeStatus.Error"/> when the workbook already has one open —
+            /// a second <c>xl_typed_reader_open</c>, an <c>xl_parse_arrow_stream</c> while a typed
+            /// reader is open, or the reverse. No new status code for it: it is a workbook-state
+            /// failure whose detail belongs in <c>xl_last_error</c>, exactly what XL_ERROR means
+            /// everywhere else in this ABI (the arguments are all perfectly valid, so
+            /// XL_INVALID_ARGUMENT would misdescribe it, and the handle is live, so XL_INVALID_HANDLE
+            /// would too).
+            /// </remarks>
             internal static int Open(NativeHandle? handle, NativeColumnSpec[] specs, int headerRow, long maxRows,
                 out TypedParseSession? session)
             {
@@ -55,6 +73,51 @@ namespace ExcelReader.Native
                 {
                     return NativeStatus.InvalidHandle;
                 }
+                if (handle.LiveSession is not null)
+                {
+                    SetLastError("this workbook already has a chunked read open; close it "
+                        + "(xl_typed_reader_close, or the Arrow stream's own release) before opening another.");
+                    return NativeStatus.Error;
+                }
+
+                int status = OpenCore(handle, specs, headerRow, maxRows, out session);
+                if (status == NativeStatus.Ok)
+                {
+                    handle.LiveSession = session;
+                }
+                return status;
+            }
+
+            /// <summary>
+            /// Opens the short-lived session behind <see cref="ParseTyped"/>/<see cref="ParseArrow"/>:
+            /// one unbounded batch, drained and disposed inside the same ABI call.
+            /// </summary>
+            /// <param name="cause">The ABI function opening it, for the fault message it leaves behind.</param>
+            /// <remarks>
+            /// Deliberately does NOT touch <see cref="NativeHandle.LiveSession"/>. That is what lets the
+            /// whole-sheet functions coexist with the one-live-session rule instead of being refused by
+            /// it: they cannot be interleaved with anything, because they hold the workbook's cursor
+            /// only for the duration of their own call — and for the same reason they cannot fault
+            /// themselves, since the session they fault is by definition someone else's. What they do
+            /// have to do is fault any caller-visible session first, exactly as every other row-cursor
+            /// path does.
+            /// </remarks>
+            internal static int OpenTransient(NativeHandle? handle, NativeColumnSpec[] specs, int headerRow,
+                string cause, out TypedParseSession? session)
+            {
+                session = null;
+                if (handle is null)
+                {
+                    return NativeStatus.InvalidHandle;
+                }
+                handle.FaultLiveSession(cause);
+                return OpenCore(handle, specs, headerRow, maxRows: 0, out session);
+            }
+
+            private static int OpenCore(NativeHandle handle, NativeColumnSpec[] specs, int headerRow, long maxRows,
+                out TypedParseSession? session)
+            {
+                session = null;
                 if (maxRows < 0)
                 {
                     SetLastError($"max_rows must be 0 (unbounded) or positive; got {maxRows}.");
@@ -104,11 +167,12 @@ namespace ExcelReader.Native
                     SetLastError("this typed reader has been closed.");
                     return NativeStatus.InvalidHandle;
                 }
-                // A conversion failure leaves the enumerator mid-sheet with no defined resume point,
-                // so the fault latches: every later call reports the same thing rather than silently
-                // continuing past bad data.
+                // A conversion failure — or any other loss of a defined resume point, including an
+                // interleaved call on the same workbook — latches: every later call reports the same
+                // thing rather than silently continuing past bad data or from a rewound cursor.
                 if (_faulted)
                 {
+                    SetLastError(_faultMessage!);
                     return NativeStatus.Error;
                 }
                 if (_rows is null)
@@ -130,9 +194,7 @@ namespace ExcelReader.Native
                     {
                         if (!TryAppendRow(builders, _rows.Current, _columnIndices, _isDate1904, out int failedColumn))
                         {
-                            _faulted = true;
-                            SetLastError(DescribeFailedColumn(_specs, failedColumn));
-                            return NativeStatus.Error;
+                            return Fail(DescribeFailedColumn(_specs, failedColumn));
                         }
                         taken++;
                     }
@@ -146,11 +208,60 @@ namespace ExcelReader.Native
                 }
                 catch (Exception exception)
                 {
-                    _faulted = true;
-                    SetLastError(exception.Message);
                     table = default;
-                    return NativeStatus.Error;
+                    return Fail(exception.Message);
                 }
+            }
+
+            /// <summary>The reason this session is faulted, or <see langword="null"/> while it is healthy.
+            /// Owned here rather than read back out of the thread's <c>xl_last_error</c>, which any
+            /// unrelated ExcelReader call on the same thread can overwrite between the fault and the
+            /// report — see <see cref="ArrowStreamGetNextCore"/>, the one consumer that needs it.</summary>
+            internal string? FaultMessage
+            {
+                get
+                {
+                    return _faultMessage;
+                }
+            }
+
+            /// <summary>
+            /// Permanently invalidates this session with <paramref name="message"/>, releasing its row
+            /// cursor and the workbook's live-session slot. Idempotent, and the FIRST message wins: the
+            /// original cause is more useful than whatever happened afterwards.
+            /// </summary>
+            internal void Fault(string message)
+            {
+                if (_disposed || _faulted)
+                {
+                    return;
+                }
+                // State first, cursor second: a throwing IExcelRowEnumerator.Dispose (plausibly an
+                // IOException) must still leave this session latched and detached, not half-faulted.
+                _faulted = true;
+                _faultMessage = message;
+                _handle.ReleaseLiveSession(this);
+                ReleaseRows();
+            }
+
+            // Latches `message` and reports it now, for a fault raised inside NextBatch itself.
+            // Re-entrant on purpose: Fault's own cursor release can throw, which lands in NextBatch's
+            // catch and comes straight back here — the already-latched message then wins and the
+            // second release is a no-op.
+            private int Fail(string message)
+            {
+                Fault(message);
+                SetLastError(_faultMessage!);
+                return NativeStatus.Error;
+            }
+
+            // Nulled before the dispose, so a throwing dispose cannot leave a cursor this session
+            // still believes it can read from.
+            private void ReleaseRows()
+            {
+                IExcelRowEnumerator? rows = _rows;
+                _rows = null;
+                rows?.Dispose();
             }
 
             public void Dispose()
@@ -160,8 +271,8 @@ namespace ExcelReader.Native
                     return;
                 }
                 _disposed = true;
-                _rows?.Dispose();
-                _rows = null;
+                _handle.ReleaseLiveSession(this);
+                ReleaseRows();
                 // _handle is deliberately NOT disposed: the session borrows the workbook, it does
                 // not own it. xl_close remains the only thing that closes a workbook.
                 GC.KeepAlive(_handle);

@@ -26,26 +26,39 @@ namespace ExcelReader.Native
         {
             array = default;
             schema = default;
-            // maxRows 0 is one unbounded batch, the same session-driven shape ParseTyped uses - so
-            // the row loop lives in TypedParseSession only, with no second copy here to drift from it.
-            int status = TypedParseSession.Open(handle, specs, headerRow, maxRows: 0, out TypedParseSession? session);
+            // One unbounded batch, drained and closed inside this call - the same session-driven shape
+            // ParseTyped uses, so the row loop lives in TypedParseSession only, with no second copy
+            // here to drift from it. Transient for the same reason too; see OpenTransient.
+            int status = TypedParseSession.OpenTransient(handle, specs, headerRow, "xl_parse_arrow",
+                out TypedParseSession? session);
             if (status != NativeStatus.Ok)
             {
                 return status;
             }
 
-            NativeTable table;
-            using (TypedParseSession open = session!)
+            NativeTable table = default;
+            try
             {
-                status = open.NextBatch(out table);
-                // An empty sheet produced no batch at all; the old contract is an OK result with a
-                // zero-row table, which BuildTable over empty builders is exactly - same as
-                // ParseTyped's Eof handling.
-                if (status == NativeStatus.Eof)
+                using (TypedParseSession open = session!)
                 {
-                    table = BuildEmptyTable(specs);
-                    status = NativeStatus.Ok;
+                    status = open.NextBatch(out table);
+                    // An empty sheet produced no batch at all; the old contract is an OK result with a
+                    // zero-row table, which BuildTable over empty builders is exactly - same as
+                    // ParseTyped's Eof handling.
+                    if (status == NativeStatus.Eof)
+                    {
+                        table = BuildEmptyTable(specs);
+                        status = NativeStatus.Ok;
+                    }
                 }
+            }
+            catch (Exception exception)
+            {
+                // Only BuildEmptyTable can land here (NextBatch never throws), and BuildTable already
+                // released whatever it had allocated before the throw - so there is nothing to free,
+                // just the promise that no exception leaves this layer.
+                SetLastError(exception.Message);
+                return NativeStatus.Error;
             }
             if (status != NativeStatus.Ok)
             {

@@ -73,7 +73,9 @@ namespace ExcelReader.Tests
             return children;
         }
 
-        // The Arrow spec requires every batch in a stream to carry the same schema.
+        // The Arrow spec requires every batch in a stream to carry the same schema. The two calls
+        // deliberately straddle a drained batch: taken back to back, before the stream has advanced at
+        // all, "identical across batches" is only asserted in the ordering where it cannot fail.
         [Fact]
         public void GetSchema_Should_Return_The_Same_Shape_Every_Time()
         {
@@ -83,6 +85,11 @@ namespace ExcelReader.Tests
                 try
                 {
                     Assert.Equal(0, InvokeGetSchema(ref stream, out ArrowSchema first));
+
+                    Assert.Equal(0, InvokeGetNext(ref stream, out ArrowArray batch));
+                    Assert.NotEqual(IntPtr.Zero, batch.Release);
+                    ReleaseArray(ref batch);
+
                     Assert.Equal(0, InvokeGetSchema(ref stream, out ArrowSchema second));
 
                     List<SchemaShape> firstChildren = DescribeChildren(first);
@@ -318,8 +325,107 @@ namespace ExcelReader.Tests
             }
         }
 
+        // TypedParseSessionTests pins this guard for the typed reader. It matters more here, not less:
+        // the stream's out param carries a `release` that a consumer ignoring the return code will
+        // call, so zeroing it on this failure is what keeps that call a no-op.
+        [Fact]
+        public void OpenArrowStream_Should_Reject_A_Negative_Batch_Size_And_Zero_The_Stream()
+        {
+            Assert.Equal(NativeStatus.Ok, NativeApiTests.OpenPath(XlsxFixture, NativeFormat.Auto, out NativeHandle? handle));
+            using NativeHandle live = handle!;
+
+            int status = NativeApi.OpenArrowStream(live, Specs(), headerRow: 0, maxRows: -1, out ArrowArrayStream stream);
+
+            Assert.Equal(NativeStatus.InvalidArgument, status);
+            Assert.Equal(IntPtr.Zero, stream.Release);
+            Assert.Equal(IntPtr.Zero, stream.GetNext);
+            Assert.Equal(IntPtr.Zero, stream.PrivateData);
+        }
+
+        // A non-nullable column whose value cannot convert. Row 3 fails, so at a batch size of 2 the
+        // first batch is a clean success and the fault lands on the second call - the same shape
+        // xl_typed_reader_next has, and the only thing that exercises SetBatchError at all.
+        private static string WriteUnconvertibleFixture()
+        {
+            string path = Path.Combine(Path.GetTempPath(), $"excelreader-arrowstream-{Guid.NewGuid():N}.csv");
+            File.WriteAllText(path, "qty\n1\n2\nnot-a-number\n4\n");
+            return path;
+        }
+
+        // The stream half of the LATCHES promise, plus the get_last_error contract: a non-zero return
+        // must come with a message, on the failing call AND on every call after it. That second part is
+        // what the session's own latched fault message is for - re-reading the thread's xl_last_error
+        // would come back empty (or, worse, carry an unrelated call's message) the second time.
+        [Fact]
+        public void GetNext_Should_Latch_A_Conversion_Failure_With_A_Message()
+        {
+            string path = WriteUnconvertibleFixture();
+            try
+            {
+                Assert.Equal(NativeStatus.Ok, NativeApiTests.OpenPath(path, NativeFormat.Csv, out NativeHandle? handle));
+                using NativeHandle live = handle!;
+                NativeColumnSpec[] specs = [new() { Names = ["qty"], Type = NativeColumnType.Int64 }];
+                Assert.Equal(NativeStatus.Ok,
+                    NativeApi.OpenArrowStream(live, specs, headerRow: 1, maxRows: 2, out ArrowArrayStream stream));
+                try
+                {
+                    Assert.Equal(0, InvokeGetNext(ref stream, out ArrowArray good));
+                    Assert.Equal(2, good.Length);
+                    ReleaseArray(ref good);
+
+                    Assert.NotEqual(0, InvokeGetNext(ref stream, out ArrowArray bad));
+                    Assert.Equal(IntPtr.Zero, bad.Release);
+                    string? latched = Marshal.PtrToStringUTF8(InvokeGetLastError(ref stream));
+                    Assert.False(string.IsNullOrEmpty(latched));
+                    Assert.Contains("failed to convert", latched, StringComparison.Ordinal);
+
+                    Assert.NotEqual(0, InvokeGetNext(ref stream, out ArrowArray again));
+                    Assert.Equal(IntPtr.Zero, again.Release);
+                    Assert.Equal(latched, Marshal.PtrToStringUTF8(InvokeGetLastError(ref stream)));
+                }
+                finally
+                {
+                    InvokeRelease(ref stream);
+                }
+            }
+            finally
+            {
+                File.Delete(path);
+            }
+        }
+
+        // The spec's Testing section: the workbook closed mid-stream is a clean errno with a message,
+        // not a crash, and it latches too.
+        [Fact]
+        public void GetNext_Should_Fail_Cleanly_After_The_Workbook_Is_Closed()
+        {
+            ArrowArrayStream stream = Open(maxRows: 1, out NativeHandle live);
+            try
+            {
+                Assert.Equal(0, InvokeGetNext(ref stream, out ArrowArray first));
+                Assert.NotEqual(IntPtr.Zero, first.Release);
+                ReleaseArray(ref first);
+
+                live.Dispose(); // xl_close
+
+                Assert.NotEqual(0, InvokeGetNext(ref stream, out ArrowArray after));
+                Assert.Equal(IntPtr.Zero, after.Release);
+                string? latched = Marshal.PtrToStringUTF8(InvokeGetLastError(ref stream));
+                Assert.False(string.IsNullOrEmpty(latched));
+
+                Assert.NotEqual(0, InvokeGetNext(ref stream, out ArrowArray again));
+                Assert.Equal(IntPtr.Zero, again.Release);
+                Assert.Equal(latched, Marshal.PtrToStringUTF8(InvokeGetLastError(ref stream)));
+            }
+            finally
+            {
+                InvokeRelease(ref stream);
+            }
+        }
+
         private delegate int GetNextFn(ref ArrowArrayStream stream, out ArrowArray array);
         private delegate int GetSchemaFn(ref ArrowArrayStream stream, out ArrowSchema schema);
+        private delegate IntPtr GetLastErrorFn(ref ArrowArrayStream stream);
         private delegate void ReleaseStreamFn(ref ArrowArrayStream stream);
         private delegate void ReleaseArrayFn(ref ArrowArray array);
         private delegate void ReleaseSchemaFn(ref ArrowSchema schema);
@@ -332,6 +438,11 @@ namespace ExcelReader.Tests
         private static int InvokeGetSchema(ref ArrowArrayStream stream, out ArrowSchema schema)
         {
             return Marshal.GetDelegateForFunctionPointer<GetSchemaFn>(stream.GetSchema)(ref stream, out schema);
+        }
+
+        private static IntPtr InvokeGetLastError(ref ArrowArrayStream stream)
+        {
+            return Marshal.GetDelegateForFunctionPointer<GetLastErrorFn>(stream.GetLastError)(ref stream);
         }
 
         private static void InvokeRelease(ref ArrowArrayStream stream)

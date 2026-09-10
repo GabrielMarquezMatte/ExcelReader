@@ -55,6 +55,11 @@ namespace ExcelReader.Native
             {
                 if (!handle.HasPending)
                 {
+                    // Taking (or advancing) the workbook's own row cursor invalidates any chunked read
+                    // holding an enumerator open across calls - the workbook cannot serve both. A
+                    // pending row needs no fault: it is copied out of the scratch buffer without
+                    // touching the reader at all.
+                    handle.FaultLiveSession("xl_next_row");
                     handle.Rows ??= handle.Reader.GetEnumerator();
                     if (!handle.Rows.MoveNext())
                     {
