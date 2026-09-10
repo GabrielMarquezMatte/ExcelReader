@@ -64,6 +64,14 @@ namespace ExcelReader.Native
             _lastErrorUtf8Length = 0;
         }
 
+        /// <summary>The message <see cref="SetLastError"/> last stored, for callers that need to
+        /// re-surface it through a different channel than <c>xl_last_error</c> — the Arrow stream's
+        /// <c>get_last_error</c>, which owns its own UTF-8 copy.</summary>
+        internal static string LastErrorText()
+        {
+            return _lastError ?? "";
+        }
+
         /// <summary>Copies the calling thread's last error message into <paramref name="buffer"/> as UTF-8.</summary>
         internal static int LastError(Span<byte> buffer, out int length)
         {

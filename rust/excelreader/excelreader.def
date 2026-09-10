@@ -20,6 +20,7 @@ EXPORTS
     xl_typed_reader_next
     xl_typed_reader_close
     xl_parse_arrow
+    xl_parse_arrow_stream
     xl_write_typed
     xl_write_typed_to_memory
     xl_free_buffer
