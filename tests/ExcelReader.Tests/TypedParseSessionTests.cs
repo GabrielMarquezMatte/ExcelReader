@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Runtime.InteropServices;
 using System.Text;
 using ExcelReader.Native;
@@ -82,6 +83,168 @@ namespace ExcelReader.Tests
             // correct if the fixture grows.
             long expectedBatches = (whole.Count + maxRows - 1) / maxRows;
             Assert.Equal(expectedBatches, batches);
+        }
+
+        // sample.xlsx holds 3 rows, so on it every batch size above 2 collapses to a single batch and
+        // no batch ever ends mid-byte. This second sweep runs the same property over a fixture tall
+        // enough that 7, 8 and 9 each produce several batches plus a partial final one — 43 is
+        // coprime with all three, so no size divides it evenly.
+        private const int TallRowCount = 43;
+
+        // One decoded row of the tall fixture. Compared as a whole so a bit-packing bug in the bool
+        // values or the validity bitmap fails the assertion, which a string-only comparison would miss.
+        private readonly record struct TallRow(string Name, bool Active, bool QtyValid, long Qty);
+
+        // A temp CSV is exactly how NativeApiTests.cs builds its own ParseTyped fixtures
+        // (ParseTyped_Should_Return_Typed_Columns_By_Name and friends), so this follows that pattern
+        // rather than standing up an XlsxWorkbookWriter for data no part of this test cares about.
+        private static string WriteTallFixture()
+        {
+            string path = Path.Combine(Path.GetTempPath(), $"excelreader-session-{Guid.NewGuid():N}.csv");
+            StringBuilder csv = new("name,active,qty\n");
+            for (int i = 0; i < TallRowCount; i++)
+            {
+                // Periods 3 and 5 rather than powers of two: the flags and the null pattern have to
+                // stay out of phase with the 8-row byte boundary, or a batch that mis-packed its
+                // final partial byte could still come out looking right.
+                string active = i % 3 == 0 ? "true" : "false";
+                string qty = i % 5 == 0 ? string.Empty : (i * 3).ToString(CultureInfo.InvariantCulture);
+                csv.Append(CultureInfo.InvariantCulture, $"row-{i},{active},{qty}\n");
+            }
+            File.WriteAllText(path, csv.ToString());
+            return path;
+        }
+
+        private static NativeColumnSpec[] TallSpecs()
+        {
+            return
+            [
+                new() { Names = ["name"], Type = NativeColumnType.String },
+                new() { Names = ["active"], Type = NativeColumnType.Bool },
+                // Nullable, and blank on every fifth row, so this column's validity bitmap actually
+                // has zero bits to mis-pack at a batch boundary.
+                new() { Names = ["qty"], Type = NativeColumnType.Int64, Nullable = true },
+            ];
+        }
+
+        private static List<TallRow> ReadTallInBatches(string path, long maxRows, out int batchCount)
+        {
+            Assert.Equal(NativeStatus.Ok, NativeApiTests.OpenPath(path, NativeFormat.Csv, out NativeHandle? handle));
+            using NativeHandle live = handle!;
+            Assert.Equal(NativeStatus.Ok,
+                NativeApi.TypedParseSession.Open(live, TallSpecs(), headerRow: 1, maxRows, out NativeApi.TypedParseSession? session));
+            using NativeApi.TypedParseSession open = session!;
+
+            List<TallRow> rows = [];
+            batchCount = 0;
+            while (true)
+            {
+                int status = open.NextBatch(out NativeTable table);
+                if (status == NativeStatus.Eof)
+                {
+                    Assert.Equal(0, table.ColumnCount);
+                    Assert.Equal(IntPtr.Zero, table.Columns);
+                    break;
+                }
+                Assert.Equal(NativeStatus.Ok, status);
+                batchCount++;
+                try
+                {
+                    rows.AddRange(DecodeTallBatch(table));
+                }
+                finally
+                {
+                    NativeApi.FreeTable(ref table);
+                }
+            }
+            return rows;
+        }
+
+        private static List<TallRow> DecodeTallBatch(NativeTable table)
+        {
+            NativeColumn names = ColumnAt(table, 0);
+            NativeColumn active = ColumnAt(table, 1);
+            NativeColumn qty = ColumnAt(table, 2);
+            int rowCount = (int)names.Length;
+
+            byte[] flags = new byte[rowCount];
+            Marshal.Copy(active.Values, flags, 0, rowCount);
+            long[] quantities = new long[rowCount];
+            Marshal.Copy(qty.Values, quantities, 0, rowCount);
+            bool[] valid = DecodeValidity(qty, rowCount);
+
+            List<TallRow> decoded = [];
+            for (int i = 0; i < rowCount; i++)
+            {
+                decoded.Add(new TallRow(ReadStringAt(names, i), flags[i] != 0, valid[i], quantities[i]));
+            }
+            return decoded;
+        }
+
+        private static NativeColumn ColumnAt(NativeTable table, int index)
+        {
+            return Marshal.PtrToStructure<NativeColumn>(IntPtr.Add(table.Columns, index * Marshal.SizeOf<NativeColumn>()));
+        }
+
+        private static string ReadStringAt(NativeColumn column, int row)
+        {
+            int start = Marshal.ReadInt32(column.Values, row * sizeof(int));
+            int end = Marshal.ReadInt32(column.Values, (row + 1) * sizeof(int));
+            byte[] bytes = new byte[end - start];
+            Marshal.Copy(IntPtr.Add(column.Data, start), bytes, 0, bytes.Length);
+            return Encoding.UTF8.GetString(bytes);
+        }
+
+        // Same LSB-first unpacking NativeApiTests uses: bit i of byte i/8, 1 = valid, and a NULL
+        // pointer means the column has no nulls at all.
+        private static bool[] DecodeValidity(NativeColumn column, int rowCount)
+        {
+            bool[] result = new bool[rowCount];
+            if (column.Validity == IntPtr.Zero)
+            {
+                Array.Fill(result, true);
+                return result;
+            }
+            byte[] bitmap = new byte[(rowCount + 7) / 8];
+            Marshal.Copy(column.Validity, bitmap, 0, bitmap.Length);
+            for (int i = 0; i < rowCount; i++)
+            {
+                result[i] = (bitmap[i >> 3] & (1 << (i & 7))) != 0;
+            }
+            return result;
+        }
+
+        [Theory]
+        [InlineData(1)]
+        [InlineData(7)]
+        [InlineData(8)]
+        [InlineData(9)]
+        [InlineData(1000)]
+        public void NextBatch_Should_Match_The_Unbounded_Read_Across_Bit_Packing_Boundaries(long maxRows)
+        {
+            string path = WriteTallFixture();
+            try
+            {
+                List<TallRow> whole = ReadTallInBatches(path, 0, out int wholeBatches);
+                List<TallRow> batched = ReadTallInBatches(path, maxRows, out int batches);
+
+                Assert.Equal(1, wholeBatches);
+                Assert.Equal(TallRowCount, whole.Count);
+                // Guards the fixture itself: with no nulls and no false flags, the bool values and the
+                // validity bitmap would be uniform and could not expose a packing bug.
+                Assert.Contains(whole, row => row.Active);
+                Assert.Contains(whole, row => !row.Active);
+                Assert.Contains(whole, row => row.QtyValid);
+                Assert.Contains(whole, row => !row.QtyValid);
+
+                Assert.Equal(whole, batched);
+                long expectedBatches = (whole.Count + maxRows - 1) / maxRows;
+                Assert.Equal(expectedBatches, batches);
+            }
+            finally
+            {
+                File.Delete(path);
+            }
         }
     }
 }
