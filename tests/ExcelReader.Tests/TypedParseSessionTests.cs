@@ -98,11 +98,13 @@ namespace ExcelReader.Tests
         // A temp CSV is exactly how NativeApiTests.cs builds its own ParseTyped fixtures
         // (ParseTyped_Should_Return_Typed_Columns_By_Name and friends), so this follows that pattern
         // rather than standing up an XlsxWorkbookWriter for data no part of this test cares about.
-        private static string WriteTallFixture()
+        // rowCount defaults to TallRowCount for the bit-packing sweep above; the memory-ceiling
+        // test below scales it up instead of inventing a second fixture-generation approach.
+        private static string WriteTallFixture(int rowCount = TallRowCount)
         {
             string path = Path.Combine(Path.GetTempPath(), $"excelreader-session-{Guid.NewGuid():N}.csv");
             StringBuilder csv = new("name,active,qty\n");
-            for (int i = 0; i < TallRowCount; i++)
+            for (int i = 0; i < rowCount; i++)
             {
                 // Periods 3 and 5 rather than powers of two: the flags and the null pattern have to
                 // stay out of phase with the 8-row byte boundary, or a batch that mis-packed its
@@ -240,6 +242,120 @@ namespace ExcelReader.Tests
                 Assert.Equal(whole, batched);
                 long expectedBatches = (whole.Count + maxRows - 1) / maxRows;
                 Assert.Equal(expectedBatches, batches);
+            }
+            finally
+            {
+                File.Delete(path);
+            }
+        }
+
+        // The feature's actual claim is about peak memory, not cumulative allocation - see
+        // ChunkedParseBenchmark's class comment for why a BenchmarkDotNet [MemoryDiagnoser] run
+        // cannot show this. Bytes owned by the single largest live NativeTable is exactly the
+        // quantity TypedParseSession's own doc comment promises to bound ("the working set is one
+        // batch's columns plus one batch's output block rather than the whole sheet"), it is
+        // deterministic, and unlike a managed allocation count it includes the Marshal.AllocHGlobal
+        // blocks that are the bulk of what this feature bounds.
+        private const int CeilingRowCount = 4000;
+        private const long CeilingBatchSize = 200;
+
+        // Mirrors BuildChildArray's own per-type buffer math in NativeApi.Arrow.cs: a string
+        // column's Values holds Length+1 int32 offsets and Data is a second, separate DataLen-byte
+        // allocation (not interior to Values, so both are summed, not one or the other); every
+        // fixed-width type is Length elements of its own size; Validity, when present, is one bit
+        // per row rounded up to a byte.
+        private static long ColumnBytes(NativeColumn column)
+        {
+            long bytes = column.Type switch
+            {
+                NativeColumnType.String => (column.Length + 1) * sizeof(int) + column.DataLen,
+                NativeColumnType.Bool => column.Length,
+                NativeColumnType.Date => column.Length * sizeof(int),
+                NativeColumnType.Float64 => column.Length * sizeof(double),
+                _ => column.Length * sizeof(long), // Int64, Time, Timestamp
+            };
+            if (column.Validity != IntPtr.Zero)
+            {
+                bytes += (column.Length + 7) / 8;
+            }
+            return bytes;
+        }
+
+        private static long TableBytes(NativeTable table)
+        {
+            long total = 0;
+            for (int i = 0; i < table.ColumnCount; i++)
+            {
+                total += ColumnBytes(ColumnAt(table, i));
+            }
+            return total;
+        }
+
+        // Returns the byte size of every batch NextBatch produces at the given maxRows, freeing
+        // each one immediately after measuring it - the same discipline a real streaming consumer
+        // follows, so the measurement cannot pass by accident from a table kept alive past its batch.
+        private static List<long> MeasureBatchByteSizes(string path, long maxRows)
+        {
+            Assert.Equal(NativeStatus.Ok, NativeApiTests.OpenPath(path, NativeFormat.Csv, out NativeHandle? handle));
+            using NativeHandle live = handle!;
+            Assert.Equal(NativeStatus.Ok,
+                NativeApi.TypedParseSession.Open(live, TallSpecs(), headerRow: 1, maxRows, out NativeApi.TypedParseSession? session));
+            using NativeApi.TypedParseSession open = session!;
+
+            List<long> sizes = [];
+            while (true)
+            {
+                int status = open.NextBatch(out NativeTable table);
+                if (status == NativeStatus.Eof)
+                {
+                    break;
+                }
+                Assert.Equal(NativeStatus.Ok, status);
+                try
+                {
+                    sizes.Add(TableBytes(table));
+                }
+                finally
+                {
+                    NativeApi.FreeTable(ref table);
+                }
+            }
+            return sizes;
+        }
+
+        // The deterministic proof ChunkedParseBenchmark's class comment points to: at 200-row
+        // batches over a 4000-row sheet, the largest live table must stay close to a twentieth of
+        // the unbounded table's size, not equal to it. This is the test that actually exercises
+        // TypedParseSession's memory-ceiling claim - the benchmark measures a different quantity
+        // (cumulative managed churn) that does not and cannot show this.
+        [Fact]
+        public void NextBatch_Should_Bound_The_Largest_Live_Table_To_Roughly_One_Batch()
+        {
+            string path = WriteTallFixture(CeilingRowCount);
+            try
+            {
+                List<long> unbounded = MeasureBatchByteSizes(path, maxRows: 0);
+                List<long> batched = MeasureBatchByteSizes(path, CeilingBatchSize);
+
+                Assert.Single(unbounded);
+                // 4000 / 200 = 20 batches exactly, so this also incidentally guards against a
+                // NextBatch that silently coalesced everything into one call.
+                Assert.True(batched.Count > 1, $"expected more than one batch, got {batched.Count}.");
+
+                long unboundedBytes = unbounded[0];
+                long maxBatchBytes = batched.Max();
+
+                // Generous (3x) slack absorbs fixed per-column overhead (each string column's +1
+                // offset element, a validity byte shared unevenly across a batch boundary) without
+                // weakening the assertion past the point where it can no longer tell real batching
+                // apart from a NextBatch that ignored maxRows - verified by temporarily changing
+                // NextBatch's row loop to ignore maxRows and confirming this assertion fails.
+                double expectedFraction = (double)CeilingBatchSize / CeilingRowCount;
+                long bound = (long)(unboundedBytes * expectedFraction * 3);
+                Assert.True(maxBatchBytes <= bound,
+                    $"expected the largest live batch ({maxBatchBytes} bytes) to stay within {bound} " +
+                    $"bytes (~{expectedFraction:P0} of the {unboundedBytes}-byte unbounded table, x3 " +
+                    "slack) - the memory ceiling is not holding.");
             }
             finally
             {
