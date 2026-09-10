@@ -252,11 +252,19 @@ namespace ExcelReader.Native
         public static int TypedReaderOpen(nint handle, NativeColumnSpecRaw* specs, int specCount, int headerRow,
             long maxRows, nint* outReader)
         {
-            if (specs is null || outReader is null || !NativeApi.IsValidSpecCount(specCount))
+            if (outReader is null)
             {
                 return NativeStatus.InvalidArgument;
             }
+            // Zeroed before the remaining guards, not after, so *out_reader really is zeroed on ANY
+            // failure as documented - a combined guard would have returned with the caller's variable
+            // untouched for a NULL specs or an out-of-range spec_count. Same shape as
+            // xl_parse_arrow_stream's out_stream.
             *outReader = 0;
+            if (specs is null || !NativeApi.IsValidSpecCount(specCount))
+            {
+                return NativeStatus.InvalidArgument;
+            }
 
             try
             {
