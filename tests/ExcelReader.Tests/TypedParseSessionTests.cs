@@ -259,11 +259,14 @@ namespace ExcelReader.Tests
         private const int CeilingRowCount = 4000;
         private const long CeilingBatchSize = 200;
 
-        // Mirrors BuildChildArray's own per-type buffer math in NativeApi.Arrow.cs: a string
-        // column's Values holds Length+1 int32 offsets and Data is a second, separate DataLen-byte
-        // allocation (not interior to Values, so both are summed, not one or the other); every
-        // fixed-width type is Length elements of its own size; Validity, when present, is one bit
-        // per row rounded up to a byte.
+        // NativeColumn's own doc comment (NativeTypedTable.cs:53-60) is the authority here: for a
+        // string column, Values is the ONE allocation the column owns - ColumnBuilder.BuildStringColumn
+        // (NativeApi.Typed.cs:468-478) writes the Length+1 int32 offsets array immediately followed
+        // by the DataLen-byte UTF-8 blob into that single block, and Data is an interior pointer into
+        // it (freeing it separately would be a double free). So (Length + 1) * sizeof(int) + DataLen
+        // is the size of that one block, not two summed allocations. Every fixed-width type is Length
+        // elements of its own size; Validity, when present, is a second, independent allocation of one
+        // bit per row rounded up to a byte.
         private static long ColumnBytes(NativeColumn column)
         {
             long bytes = column.Type switch
@@ -346,9 +349,12 @@ namespace ExcelReader.Tests
                 long maxBatchBytes = batched.Max();
 
                 // Generous (3x) slack absorbs fixed per-column overhead (each string column's +1
-                // offset element, a validity byte shared unevenly across a batch boundary) without
-                // weakening the assertion past the point where it can no longer tell real batching
-                // apart from a NextBatch that ignored maxRows - verified by temporarily changing
+                // offset element, a validity byte shared unevenly across a batch boundary) at this
+                // 200-row batch size. It is tight against the failure modes that matter most - batching
+                // removed entirely, or the batch size inflated by roughly an order of magnitude, both
+                // land far outside 3x the ideal ~5% fraction - but it is not tight in general: a
+                // partial regression that merely doubled or tripled the intended batch size would
+                // still pass. Verified against the total-removal case by temporarily changing
                 // NextBatch's row loop to ignore maxRows and confirming this assertion fails.
                 double expectedFraction = (double)CeilingBatchSize / CeilingRowCount;
                 long bound = (long)(unboundedBytes * expectedFraction * 3);
