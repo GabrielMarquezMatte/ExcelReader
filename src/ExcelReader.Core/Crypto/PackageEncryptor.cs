@@ -300,7 +300,7 @@ namespace ExcelReader.Core.Crypto
             internal sealed class Local : IDisposable
             {
                 private readonly AgileDescriptor _descriptor;
-                private readonly Aes _aes;
+                private readonly CbcSegmentCipher _cipher;
                 private readonly IncrementalHash _ivHasher;
                 private readonly byte[] _iv;
                 private int _segmentIndex;
@@ -308,10 +308,10 @@ namespace ExcelReader.Core.Crypto
                 internal Local(AgileDescriptor descriptor, byte[] packageKey)
                 {
                     _descriptor = descriptor;
-                    _aes = Aes.Create();
-                    _aes.Mode = CipherMode.CBC;
-                    _aes.Padding = PaddingMode.None;
-                    _aes.Key = packageKey;
+                    // One transform for the whole pass. A pass is a fresh Local, so its chaining
+                    // state starts where CbcSegmentCipher seeds it and the two passes stay
+                    // independent.
+                    _cipher = CbcSegmentCipher.CreateEncryptor(packageKey);
                     _ivHasher = AgileKeyDerivation.CreateHasher(descriptor.KeyData.Hash);
                     _iv = new byte[descriptor.KeyData.BlockSize];
                     Plain = ArrayPool<byte>.Shared.Rent(SegmentSize);
@@ -326,10 +326,10 @@ namespace ExcelReader.Core.Crypto
                 // the cipher block, and returns the ciphertext length.
                 internal int EncryptSegment(int length)
                 {
-                    int padded = ((length + CipherBlockSize - 1) / CipherBlockSize) * CipherBlockSize;
+                    int padded = (length + CipherBlockSize - 1) / CipherBlockSize * CipherBlockSize;
                     Plain.AsSpan(length, padded - length).Clear();
                     AgileKeyDerivation.SegmentIv(_descriptor, _segmentIndex, _ivHasher, _iv);
-                    _aes.EncryptCbc(Plain.AsSpan(0, padded), _iv, Cipher.AsSpan(0, padded), PaddingMode.None);
+                    _cipher.Encrypt(Plain.AsMemory(0, padded), _iv, Cipher.AsMemory(0, padded));
                     _segmentIndex++;
                     return padded;
                 }
@@ -340,7 +340,7 @@ namespace ExcelReader.Core.Crypto
                     ArrayPool<byte>.Shared.Return(Plain);
                     ArrayPool<byte>.Shared.Return(Cipher);
                     _ivHasher.Dispose();
-                    _aes.Dispose();
+                    _cipher.Dispose();
                 }
             }
         }
