@@ -14,10 +14,14 @@ namespace ExcelReader.Native
     /// <see cref="LiveSession"/> is the interlock behind the ABI's one-chunked-read-per-workbook rule.
     /// <see cref="IExcelRowReader"/> serves ONE usable <see cref="IExcelRowEnumerator"/> at a time (see
     /// its thread-safety remarks): <c>CsvReader.GetEnumerator</c> and <c>XlsReader.GetEnumerator</c>
-    /// rewind the shared source stream, so a second enumerator silently invalidates the first. Every
-    /// export except the chunked reader/stream drains and disposes its enumerator inside one call, so
-    /// only they can hold one open across calls — which is why the slot exists here, on the workbook
-    /// they all share, rather than inside <see cref="NativeApi.TypedParseSession"/>.
+    /// rewind the shared source stream, so a second enumerator silently invalidates the first.
+    /// <see cref="Rows"/>, the <c>xl_next_row</c> cursor, is also held open across calls on this handle
+    /// by design, so <see cref="LiveSession"/> is not the only such enumerator here — it is the only
+    /// one that is CALLER-VISIBLE across calls (a <c>xl_typed_reader</c>/Arrow stream handed back to
+    /// the caller keeps running until the caller drains or closes it), which is why it alone needs an
+    /// explicit interlock: the slot exists here, on the workbook they all share, rather than inside
+    /// <see cref="NativeApi.TypedParseSession"/>, so that every OTHER read on the workbook can reach it
+    /// to fault a live session before taking the cursor over.
     /// </para>
     /// </remarks>
     internal sealed class NativeHandle : IDisposable

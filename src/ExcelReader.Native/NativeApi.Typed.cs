@@ -10,9 +10,11 @@ namespace ExcelReader.Native
     internal static unsafe partial class NativeApi
     {
         /// <summary>
-        /// Schema-driven columnar read of the WHOLE current sheet, from its first row — independent of,
-        /// and never disturbing, the incremental cursor <see cref="NextRow"/>/<see cref="NextRowDecoded"/>/
-        /// <see cref="ReadAllBlob"/> share on <paramref name="handle"/>. This is not a new parser: each
+        /// Schema-driven columnar read of the WHOLE current sheet, from its first row. It drives the
+        /// workbook's row cursor for the duration of this call — succeeding normally even while a
+        /// caller-visible <see cref="TypedParseSession"/> (<c>xl_typed_reader</c>/Arrow stream) is open
+        /// on <paramref name="handle"/>, but faulting it rather than resuming it from a rewound
+        /// position; see <see cref="TypedParseSession.OpenTransient"/>. This is not a new parser: each
         /// column dispatches to the same <see cref="ExcelCellReaders"/> members
         /// <c>ExcelParser&lt;T&gt;</c>'s reflective path already uses (see
         /// docs/NATIVE_BINDINGS_PLAN.md §7's feasibility finding).
