@@ -311,6 +311,52 @@ namespace ExcelReader.Tests
             }
         }
 
+        // ---- xl_parse_typed must not fault a live reader on pure argument validation -----------
+
+        // OpenTransient used to fault the live session before OpenCore's own argument validation ran,
+        // so a xl_parse_typed call that was always going to fail XL_INVALID_ARGUMENT (a spec with a
+        // blank name, here) destroyed an unrelated caller's open reader without ever touching the
+        // cursor. Validation must run first; the reader must come out of this untouched.
+        [Fact]
+        public void ParseTyped_Should_Not_Fault_A_Live_Reader_When_Argument_Validation_Fails()
+        {
+            string path = WriteCsv(SmallRowCount);
+            try
+            {
+                Assert.Equal(NativeStatus.Ok, NativeApiTests.OpenPath(path, NativeFormat.Csv, out NativeHandle? handle));
+                using NativeHandle live = handle!;
+                Assert.Equal(NativeStatus.Ok,
+                    NativeApi.OpenTypedReader(live, IdSpecs(), headerRow: 1, maxRows: 10, out nint reader));
+                try
+                {
+                    Assert.Equal(NativeStatus.Ok, NativeApi.NextTypedBatch(reader, out NativeTable first));
+                    NativeApi.FreeTable(ref first);
+
+                    NativeColumnSpec[] blankNameSpec = [new() { Names = [" "], Type = NativeColumnType.Int64 }];
+                    int status = NativeApi.ParseTyped(live, blankNameSpec, headerRow: 1, out NativeTable invalid);
+
+                    Assert.Equal(NativeStatus.InvalidArgument, status);
+                    Assert.Equal(IntPtr.Zero, invalid.Columns);
+                    Assert.NotEmpty(NativeApi.LastErrorText());
+
+                    // The reader is still alive and still returns real data - the failed call never
+                    // touched the cursor.
+                    Assert.Equal(NativeStatus.Ok, NativeApi.NextTypedBatch(reader, out NativeTable after));
+                    long rowsAfter = RowsIn(after);
+                    NativeApi.FreeTable(ref after);
+                    Assert.True(rowsAfter > 0);
+                }
+                finally
+                {
+                    NativeApi.CloseTypedReader(reader);
+                }
+            }
+            finally
+            {
+                File.Delete(path);
+            }
+        }
+
         // ---- the conversion fault itself ------------------------------------------------------
 
         // The LATCHES promise in excelreader.h, exercised through the status codes rather than

@@ -80,7 +80,7 @@ namespace ExcelReader.Native
                     return NativeStatus.Error;
                 }
 
-                int status = OpenCore(handle, specs, headerRow, maxRows, out session);
+                int status = OpenCore(handle, specs, headerRow, maxRows, faultCause: null, out session);
                 if (status == NativeStatus.Ok)
                 {
                     handle.LiveSession = session;
@@ -99,8 +99,11 @@ namespace ExcelReader.Native
             /// it: they cannot be interleaved with anything, because they hold the workbook's cursor
             /// only for the duration of their own call — and for the same reason they cannot fault
             /// themselves, since the session they fault is by definition someone else's. What they do
-            /// have to do is fault any caller-visible session first, exactly as every other row-cursor
-            /// path does.
+            /// have to do is fault any caller-visible session before taking the reader's enumerator —
+            /// but not before <paramref name="specs"/>/<paramref name="headerRow"/> are known to be
+            /// valid, or a call that was always going to fail XL_INVALID_ARGUMENT on pure argument
+            /// checking would destroy an unrelated caller's open reader without ever touching the
+            /// cursor. See <see cref="OpenCore"/>'s own ordering for where the line sits.
             /// </remarks>
             internal static int OpenTransient(NativeHandle? handle, NativeColumnSpec[] specs, int headerRow,
                 string cause, out TypedParseSession? session)
@@ -110,12 +113,15 @@ namespace ExcelReader.Native
                 {
                     return NativeStatus.InvalidHandle;
                 }
-                handle.FaultLiveSession(cause);
-                return OpenCore(handle, specs, headerRow, maxRows: 0, out session);
+                return OpenCore(handle, specs, headerRow, maxRows: 0, faultCause: cause, out session);
             }
 
+            /// <param name="faultCause">Non-null only for <see cref="OpenTransient"/>: the ABI function
+            /// name to fault any live session with, once argument validation has passed and this call is
+            /// actually about to take the reader's enumerator. Null for <see cref="Open"/>, which never
+            /// reaches here with a live session already set (its own caller refuses that first).</param>
             private static int OpenCore(NativeHandle handle, NativeColumnSpec[] specs, int headerRow, long maxRows,
-                out TypedParseSession? session)
+                string? faultCause, out TypedParseSession? session)
             {
                 session = null;
                 if (maxRows < 0)
@@ -127,6 +133,13 @@ namespace ExcelReader.Native
                 {
                     SetLastError(argumentError);
                     return NativeStatus.InvalidArgument;
+                }
+
+                // Only past this point does the call actually commit to taking over the workbook's row
+                // cursor, so only from here does an unrelated caller's live session need to be faulted.
+                if (faultCause is not null)
+                {
+                    handle.FaultLiveSession(faultCause);
                 }
 
                 ClearLastError();

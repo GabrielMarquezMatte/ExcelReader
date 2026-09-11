@@ -243,8 +243,10 @@ typedef struct xl_table {
     xl_column* columns;
 } xl_table;
 
-/* Schema-driven columnar read of the WHOLE current sheet, from its first row - independent of, and
- * never disturbing, the row cursor xl_next_row/xl_read_all_blob share on `handle`.
+/* Schema-driven columnar read of the WHOLE current sheet, from its first row. It drives the
+ * workbook's row cursor for the duration of this call - see "Chunked typed reading" below: this call
+ * still succeeds normally even while a xl_typed_reader/xl_parse_arrow_stream is open on `handle`, but
+ * INVALIDATES it rather than resuming it from a rewound position.
  * `header_row` is the 1-based row number used to resolve name-based specs (rows before it are
  * skipped, and it is never itself yielded as a data row); 0 means "no header" and every spec must be
  * index-based. XL_INVALID_ARGUMENT for a bad spec (unknown type, negative index with no name, a
@@ -276,9 +278,9 @@ void xl_free_table(xl_table* table);
  * xl_last_error) instead.
  *
  * The reader BORROWS the workbook, and every OTHER read on that workbook takes the cursor away from
- * it. xl_parse_typed, xl_parse_arrow, xl_next_row, xl_next_row_decoded, xl_read_all_blob,
- * xl_read_all, xl_infer_schema, xl_move_to_sheet and xl_close all succeed normally and all
- * INVALIDATE an open reader: its next xl_typed_reader_next returns XL_ERROR (detail in
+ * it. xl_parse_typed, xl_parse_arrow, xl_next_row, xl_read_all_blob, xl_read_all_decoded,
+ * xl_infer_schema, xl_move_to_sheet and xl_close all succeed normally and all INVALIDATE an open
+ * reader: its next xl_typed_reader_next returns XL_ERROR (detail in
  * xl_last_error) and every call after that returns the same error with the same message. It never
  * crashes, and - the point of the rule - it never resumes from wherever that other call left the
  * cursor and reports truncated data as success. Batches already handed out stay valid and owned by
@@ -415,14 +417,15 @@ typedef struct xl_inferred_schema {
 } xl_inferred_schema;
 
 /* Guesses a xl_parse_typed/xl_parse_arrow schema by sampling the WHOLE current sheet, from its first
- * row - independent of, and never disturbing, the row cursor xl_next_row/xl_read_all_blob share
- * on `handle`. `header_row` has the same meaning as in xl_parse_typed (0 = no
- * header). `sample_size` bounds how many rows after the header are inspected; a column is guessed
- * XL_T_STRING with nullable = 1 when its sampled cells mix kinds, are all XL_CELL_FORMULA/ERROR, or
- * were never populated. XL_T_I64 vs XL_T_F64 is decided by whether every sampled numeric cell parses
- * as an integer. `nullable` is 1 when any sampled row left the column empty (including a row
- * narrower than the widest one seen). This is a guess over a sample, not a guarantee - always check
- * it fits before trusting it against the full sheet.
+ * row. Like xl_parse_typed, it drives the workbook's row cursor for the duration of this call and
+ * INVALIDATES a live xl_typed_reader/xl_parse_arrow_stream on `handle` rather than resuming it from a
+ * rewound position (see "Chunked typed reading" above). `header_row` has the same meaning as in
+ * xl_parse_typed (0 = no header). `sample_size` bounds how many rows after the header are inspected;
+ * a column is guessed XL_T_STRING with nullable = 1 when its sampled cells mix kinds, are all
+ * XL_CELL_FORMULA/ERROR, or were never populated. XL_T_I64 vs XL_T_F64 is decided by whether every
+ * sampled numeric cell parses as an integer. `nullable` is 1 when any sampled row left the column
+ * empty (including a row narrower than the widest one seen). This is a guess over a sample, not a
+ * guarantee - always check it fits before trusting it against the full sheet.
  *
  * XL_INVALID_ARGUMENT for a negative header_row, a non-positive sample_size, or a sheet with fewer
  * than header_row rows. The caller owns the returned schema and must call xl_free_schema.
