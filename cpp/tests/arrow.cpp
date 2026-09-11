@@ -65,6 +65,63 @@ int main()
     auto failed = xl::parse_arrow<Record>(*workbook, 1'000'000);
     CHECK(!failed.has_value(), "xl::parse_arrow<Record> must fail for an out-of-range header_row");
 
+    // --- Chunked: xl::arrow_stream -------------------------------------------------------------
+    {
+        auto stream_workbook = xl::Workbook::open(EXCELREADER_FIXTURE_PATH, XL_FORMAT_XLSB, &options);
+        CHECK(stream_workbook.has_value(), "opening a workbook for the Arrow stream must succeed");
+
+        auto stream = xl::arrow_stream<Record>(*stream_workbook, 1, 8);
+        CHECK(stream.has_value(), "xl::arrow_stream<Record> must succeed");
+
+        auto schema = stream->schema();
+        CHECK(schema.has_value(), "the stream must report a schema");
+        CHECK(schema->schema.release != nullptr, "the schema must be a live, owned struct");
+        CHECK(std::strcmp(schema->schema.format, "+s") == 0, "the stream schema must be a struct array");
+        CHECK(schema->schema.n_children == 2, "the stream schema must have two child columns");
+
+        int64_t rows = 0;
+        int64_t batches = 0;
+        while (true)
+        {
+            auto batch = stream->next();
+            CHECK(batch.has_value(), "a stream batch must read without error");
+            if (!batch->has_value())
+            {
+                break;
+            }
+            ++batches;
+            CHECK((*batch)->array.length <= 8, "no batch may exceed the requested batch size");
+            rows += (*batch)->array.length;
+        }
+        CHECK(rows == 100, "the stream must deliver all 100 data rows");
+        CHECK(batches == 13, "100 rows at batch size 8 is 13 batches");
+
+        // One chunked read per workbook: a second stream must be rejected rather than quietly
+        // sharing the row cursor.
+        auto second = xl::arrow_stream<Record>(*stream_workbook, 1, 8);
+        CHECK(!second.has_value(), "a second stream on one workbook must be rejected");
+    }
+
+    // A batch outlives the stream that produced it, and releasing it twice is a no-op - the
+    // ownership rule a hand-written Arrow consumer has to get right.
+    {
+        auto abandoned_workbook = xl::Workbook::open(EXCELREADER_FIXTURE_PATH, XL_FORMAT_XLSB, &options);
+        CHECK(abandoned_workbook.has_value(), "opening a workbook for the abandonment test must succeed");
+
+        xl::ArrowArrayGuard kept;
+        {
+            auto stream = xl::arrow_stream<Record>(*abandoned_workbook, 1, 4);
+            CHECK(stream.has_value(), "the abandoned stream must open");
+            auto batch = stream->next();
+            CHECK(batch.has_value() && batch->has_value(), "one batch must read before abandonment");
+            kept = std::move(**batch);
+        }
+        CHECK(kept.array.length == 4, "a batch must outlive the stream that produced it");
+        kept.release();
+        kept.release();
+        CHECK(kept.array.release == nullptr, "releasing must null the release callback");
+    }
+
     std::printf("OK: C++ arrow test passed\n");
     return 0;
 }
