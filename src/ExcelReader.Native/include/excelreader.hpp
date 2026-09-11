@@ -1437,6 +1437,152 @@ namespace xl
         return TableView<T>::from_raw(table);
     }
 
+    // ---- Chunked typed reading -----------------------------------------------------------------
+
+    // parse_sheet a batch at a time: peak memory is one batch rather than one sheet. Owns the
+    // native reader and closes it on destruction.
+    //
+    // The reader borrows the workbook's single row cursor. The ABI serves ONE chunked read per
+    // workbook, and every other read on that workbook (parse_sheet, rows(), move_to_sheet, close)
+    // invalidates this reader - its next() then reports a latched error rather than resuming from
+    // the moved cursor. C++ cannot enforce that; finish or destroy the reader before touching its
+    // workbook for anything else.
+    template <typename T>
+    class TypedReader
+    {
+    public:
+        TypedReader(const TypedReader &) = delete;
+        TypedReader &operator=(const TypedReader &) = delete;
+
+        TypedReader(TypedReader &&other) noexcept : reader_(std::exchange(other.reader_, nullptr)) {}
+
+        TypedReader &operator=(TypedReader &&other) noexcept
+        {
+            if (this != &other)
+            {
+                xl_typed_reader_close(reader_);
+                reader_ = std::exchange(other.reader_, nullptr);
+            }
+            return *this;
+        }
+
+        ~TypedReader() { xl_typed_reader_close(reader_); } // safe on null
+
+        // The next batch, an empty optional at end of sheet, or an Error. Each batch is an ordinary
+        // TableView<T>, independent of every other and valid after this reader is gone.
+        std::expected<std::optional<TableView<T>>, Error> next()
+        {
+            xl_table table{};
+            int32_t status = xl_typed_reader_next(reader_, &table);
+            if (status == XL_EOF)
+            {
+                return std::optional<TableView<T>>{};
+            }
+            if (status != XL_OK)
+            {
+                return std::unexpected(detail::make_error(status));
+            }
+            return std::optional<TableView<T>>(TableView<T>::from_raw(table));
+        }
+
+        // Input range over std::expected<TableView<T>, Error>, so `for (auto &batch : reader)`
+        // works. Single-pass by nature: the native reader has no rewind.
+        class iterator
+        {
+        public:
+            using iterator_category = std::input_iterator_tag;
+            using iterator_concept = std::input_iterator_tag;
+            using value_type = std::expected<TableView<T>, Error>;
+            using difference_type = std::ptrdiff_t;
+
+            iterator() = default;
+
+            value_type &operator*() { return *current_; }
+
+            iterator &operator++()
+            {
+                advance();
+                return *this;
+            }
+
+            void operator++(int) { advance(); }
+
+            friend bool operator==(const iterator &it, std::default_sentinel_t) noexcept
+            {
+                return !it.current_.has_value();
+            }
+
+        private:
+            friend class TypedReader;
+
+            explicit iterator(TypedReader *reader) : reader_(reader) { advance(); }
+
+            void advance()
+            {
+                if (reader_ == nullptr)
+                {
+                    current_.reset();
+                    return;
+                }
+                std::expected<std::optional<TableView<T>>, Error> batch = reader_->next();
+                if (!batch.has_value())
+                {
+                    // The error is yielded once and then the range ends: the ABI latches the same
+                    // failure forever, so continuing would be an infinite stream of one error.
+                    current_ = value_type(std::unexpect, std::move(batch.error()));
+                    reader_ = nullptr;
+                    return;
+                }
+                if (!batch->has_value())
+                {
+                    current_.reset();
+                    reader_ = nullptr;
+                    return;
+                }
+                current_ = value_type(std::move(**batch));
+            }
+
+            TypedReader *reader_ = nullptr;
+            std::optional<value_type> current_{};
+        };
+
+        iterator begin() { return iterator(this); }
+        std::default_sentinel_t end() const noexcept { return {}; }
+
+        // Internal: constructed only by typed_reader, which owns the xl_typed_reader_open call.
+        static TypedReader from_raw(xl_typed_reader *reader) { return TypedReader(reader); }
+
+    private:
+        explicit TypedReader(xl_typed_reader *reader) noexcept : reader_(reader) {}
+
+        xl_typed_reader *reader_ = nullptr;
+    };
+
+    // parse_sheet, delivered a batch at a time. `header_row` means exactly what it does there
+    // (0 = no header), and is consumed once here rather than re-read per batch. `batch_size` is
+    // rows per batch: 0 is unbounded (one batch, identical to parse_sheet), negative is
+    // XL_INVALID_ARGUMENT.
+    template <typename T>
+    std::expected<TypedReader<T>, Error> typed_reader(Workbook &workbook, int32_t header_row = 1,
+                                                      int64_t batch_size = 10000)
+    {
+        static constexpr auto bindings = ExcelMapper<T>::get_bindings();
+        static constexpr size_t num_fields = std::tuple_size_v<decltype(bindings)>;
+        std::array<std::vector<int32_t>, num_fields> name_lens_storage{};
+        std::array<xl_column_spec, num_fields> specs_array =
+            detail::build_specs(bindings, std::make_index_sequence<num_fields>{}, name_lens_storage);
+
+        xl_typed_reader *reader = nullptr;
+        int32_t status = xl_typed_reader_open(workbook.handle(), specs_array.data(),
+                                              static_cast<int32_t>(specs_array.size()), header_row,
+                                              batch_size, &reader);
+        if (status != XL_OK)
+        {
+            return std::unexpected(detail::make_error(status));
+        }
+        return TypedReader<T>::from_raw(reader);
+    }
+
     // Writes `columns` to `path` as a single sheet, then closes the file. One-shot: no writer handle
     // exists before or after, and every buffer reachable from `columns` and `options` is borrowed
     // for the duration of the call and never freed by this library.
