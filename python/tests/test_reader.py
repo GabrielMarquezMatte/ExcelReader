@@ -534,3 +534,81 @@ def test_encrypted_rows_match_plaintext():
 def test_password_is_not_in_repr():
     with open_workbook(ENCRYPTED / "agile-aes256-sha512.xlsx", password="hunter2") as book:
         assert "hunter2" not in repr(book)
+
+
+# --- chunked typed reading ------------------------------------------------------------------
+
+
+@pytest.fixture
+def batched_csv(tmp_path):
+    # 50 rows, not the 2 of typed_csv: a batch sweep needs enough rows for the batch count to mean
+    # something and for a mid-sheet boundary to exist.
+    path = tmp_path / "batched.csv"
+    lines = ["name,qty"] + [f"row{i},{i}" for i in range(50)]
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return path
+
+
+_BATCH_SCHEMA = [
+    ColumnSpec(ColumnType.STRING, name="name"),
+    ColumnSpec(ColumnType.I64, name="qty"),
+]
+
+
+def _batch_rows(table):
+    names, qtys = table.columns
+    return [(names[i], qtys[i]) for i in range(table.row_count)]
+
+
+@pytest.mark.parametrize("batch_size", [1, 7, 8, 9, 1000, 0])
+def test_iter_parse_typed_matches_parse_typed(batched_csv, batch_size):
+    with open_workbook(batched_csv) as workbook:
+        expected = _batch_rows(workbook.parse_typed(_BATCH_SCHEMA))
+
+    with open_workbook(batched_csv) as workbook:
+        batches = list(workbook.iter_parse_typed(_BATCH_SCHEMA, batch_size=batch_size))
+
+    assert [row for batch in batches for row in _batch_rows(batch)] == expected
+
+    # Pins the batching: an implementation that ignored batch_size would pass the equality above.
+    rows = len(expected)
+    want = 1 if batch_size == 0 else (rows + batch_size - 1) // batch_size
+    assert len(batches) == want
+    if batch_size:
+        assert all(batch.row_count <= batch_size for batch in batches)
+
+
+def test_iter_parse_typed_rejects_a_negative_batch_size(batched_csv):
+    with open_workbook(batched_csv) as workbook:
+        with pytest.raises(ExcelReaderError):
+            next(workbook.iter_parse_typed(_BATCH_SCHEMA, batch_size=-1))
+
+
+def test_a_second_reader_on_one_workbook_is_rejected(batched_csv):
+    with open_workbook(batched_csv) as workbook:
+        first = workbook.iter_parse_typed(_BATCH_SCHEMA, batch_size=4)
+        next(first)  # a generator opens nothing until it is first iterated
+        second = workbook.iter_parse_typed(_BATCH_SCHEMA, batch_size=4)
+        with pytest.raises(ExcelReaderError):
+            next(second)
+        first.close()
+
+
+def test_a_foreign_read_latches_the_readers_error(batched_csv):
+    with open_workbook(batched_csv) as workbook:
+        batches = workbook.iter_parse_typed(_BATCH_SCHEMA, batch_size=4)
+        next(batches)
+        workbook.parse_typed(_BATCH_SCHEMA)  # steals the row cursor, invalidating the reader
+        with pytest.raises(ExcelReaderError):
+            next(batches)
+
+
+def test_abandoning_the_generator_closes_the_reader(batched_csv):
+    with open_workbook(batched_csv) as workbook:
+        batches = workbook.iter_parse_typed(_BATCH_SCHEMA, batch_size=4)
+        next(batches)
+        batches.close()  # runs the generator's finally, closing the native reader
+        # Proof it really closed: a second reader now opens instead of being rejected.
+        again = workbook.iter_parse_typed(_BATCH_SCHEMA, batch_size=4)
+        assert next(again).row_count == 4
+        again.close()
