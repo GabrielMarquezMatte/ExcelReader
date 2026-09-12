@@ -287,17 +287,82 @@ class Workbook:
 
         return pyarrow.RecordBatch.from_struct_array(array)
 
-    def to_pandas(self, schema: Sequence[ColumnSpec], header_row: int = 1) -> object:
+    def to_record_batch_reader(
+        self, schema: Sequence[ColumnSpec], header_row: int = 1, batch_size: int = 10000
+    ) -> object:
+        """The same read as `to_arrow()`, as a streaming `pyarrow.RecordBatchReader`.
+
+        Peak memory is one batch rather than one sheet. Requires pyarrow.
+
+        The stream borrows this workbook's row cursor under the same rules as `iter_parse_typed()`:
+        one chunked read at a time, and any other read on this workbook invalidates the stream.
+        pyarrow owns the stream once it is imported — exhausting or dropping the reader is what
+        closes the underlying read.
+        """
+        try:
+            import pyarrow
+        except ImportError:
+            raise ImportError(
+                "to_record_batch_reader() requires pyarrow — install it with `pip install "
+                "pyarrow`, or use iter_parse_typed(), which streams the same data with no "
+                "third-party dependency."
+            ) from None
+
+        handle = self._require_handle()
+        specs = _build_specs(schema)
+        stream = _native.ArrowArrayStream()
+        _check(
+            self._lib.xl_parse_arrow_stream(
+                handle, specs, len(specs), header_row, batch_size, ctypes.byref(stream)
+            )
+        )
+        # _import_from_c takes ownership of the stream's release callback, exactly as
+        # Array._import_from_c does for the whole-sheet pair in to_arrow().
+        return pyarrow.RecordBatchReader._import_from_c(ctypes.addressof(stream))
+
+    def iter_pandas(
+        self, schema: Sequence[ColumnSpec], header_row: int = 1, batch_size: int = 10000
+    ) -> Iterator[object]:
+        """One `pandas.DataFrame` per batch, streamed. Requires pyarrow and pandas."""
+        reader = self.to_record_batch_reader(schema, header_row=header_row, batch_size=batch_size)
+        for batch in reader:
+            yield batch.to_pandas(self_destruct=True, split_blocks=True)
+
+    def iter_polars(
+        self, schema: Sequence[ColumnSpec], header_row: int = 1, batch_size: int = 10000
+    ) -> Iterator[object]:
+        """One `polars.DataFrame` per batch, streamed. Requires pyarrow and polars."""
+        try:
+            import polars
+        except ImportError:
+            raise ImportError(
+                "iter_polars() requires polars — install it with `pip install polars`, or use "
+                "to_record_batch_reader(), which streams the same data with no polars dependency."
+            ) from None
+
+        reader = self.to_record_batch_reader(schema, header_row=header_row, batch_size=batch_size)
+        for batch in reader:
+            yield polars.from_arrow(batch, rechunk=False)
+
+    def to_pandas(
+        self, schema: Sequence[ColumnSpec], header_row: int = 1, batch_size: int = 10000
+    ) -> object:
         """Same read as `to_arrow()`, materialized as a `pandas.DataFrame`.
 
-        Requires pyarrow and pandas.
+        Streams internally: the sheet arrives a batch at a time, so peak memory is well below the
+        whole-sheet path. Requires pyarrow and pandas.
         """
-        return self.to_record_batch(schema, header_row=header_row).to_pandas()
+        reader = self.to_record_batch_reader(schema, header_row=header_row, batch_size=batch_size)
+        # self_destruct + split_blocks are what make this actually stream: without both, the Arrow
+        # table stays alive through the conversion and pandas consolidates into one block.
+        return reader.read_all().to_pandas(self_destruct=True, split_blocks=True)
 
-    def to_polars(self, schema: Sequence[ColumnSpec], header_row: int = 1) -> object:
+    def to_polars(
+        self, schema: Sequence[ColumnSpec], header_row: int = 1, batch_size: int = 10000
+    ) -> object:
         """Same read as `to_arrow()`, materialized as a `polars.DataFrame`, zero-copy.
 
-        Requires pyarrow and polars.
+        Streams internally, like `to_pandas()`. Requires pyarrow and polars.
         """
         try:
             import polars
@@ -307,7 +372,10 @@ class Workbook:
                 "to_arrow()/to_record_batch(), which return the same data with no polars dependency."
             ) from None
 
-        return polars.from_arrow(self.to_record_batch(schema, header_row=header_row))
+        reader = self.to_record_batch_reader(schema, header_row=header_row, batch_size=batch_size)
+        # rechunk=False is load-bearing: the default re-concatenates every batch into contiguous
+        # memory, a full extra copy that undoes the streaming.
+        return polars.from_arrow(reader, rechunk=False)
 
     def infer_schema(self, header_row: int = 1, sample_size: int = 100) -> list[ColumnSpec]:
         """Guesses a `parse_typed()`/`to_arrow()` schema by sampling this sheet's cells.
