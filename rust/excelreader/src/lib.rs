@@ -263,6 +263,22 @@ extern "C" {
         out_schema: *mut c_void,
     ) -> c_int;
 
+    /// Batched counterpart to `xl_parse_arrow`, delivered as an Arrow C stream. `out_stream` is a
+    /// `struct ArrowArrayStream*`, typed as `c_void` for the same reason `xl_parse_arrow`'s outputs
+    /// are: arrow-rs's `FFI_ArrowArrayStream` is ABI-identical, and redeclaring a fixed, versioned
+    /// spec struct would be a second source of truth.
+    ///
+    /// On `XL_OK` the caller owns `*out_stream` and must eventually call its `release`, which is
+    /// what closes the underlying read. Every failure path zeroes `*out_stream`.
+    pub fn xl_parse_arrow_stream(
+        handle: *mut XlWorkbook,
+        specs: *const XlColumnSpec,
+        spec_count: i32,
+        header_row: i32,
+        max_rows: i64,
+        out_stream: *mut c_void,
+    ) -> c_int;
+
     pub fn xl_free_table(table: *mut XlTable);
 
     /// Opens a chunked typed read over the current sheet. Same specs and `header_row` as
