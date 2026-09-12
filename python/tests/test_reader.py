@@ -612,3 +612,67 @@ def test_abandoning_the_generator_closes_the_reader(batched_csv):
         again = workbook.iter_parse_typed(_BATCH_SCHEMA, batch_size=4)
         assert next(again).row_count == 4
         again.close()
+
+
+# --- Arrow stream / streaming pandas & polars ----------------------------------------------------
+
+
+def test_to_record_batch_reader_matches_to_record_batch(batched_csv):
+    pytest.importorskip("pyarrow")
+    with open_workbook(batched_csv) as workbook:
+        expected = workbook.to_record_batch(_BATCH_SCHEMA)
+
+    with open_workbook(batched_csv) as workbook:
+        reader = workbook.to_record_batch_reader(_BATCH_SCHEMA, batch_size=8)
+        assert reader.schema == expected.schema
+        batches = list(reader)
+
+    assert sum(batch.num_rows for batch in batches) == expected.num_rows
+    assert len(batches) == 7, "50 rows at batch size 8 is 7 batches"
+    assert all(batch.num_rows <= 8 for batch in batches)
+
+
+def test_to_record_batch_reader_rejects_a_negative_batch_size(batched_csv):
+    pytest.importorskip("pyarrow")
+    with open_workbook(batched_csv) as workbook:
+        with pytest.raises(ExcelReaderError):
+            workbook.to_record_batch_reader(_BATCH_SCHEMA, batch_size=-1)
+
+
+def test_iter_pandas_yields_one_frame_per_batch(batched_csv):
+    pytest.importorskip("pyarrow")
+    pytest.importorskip("pandas")
+    with open_workbook(batched_csv) as workbook:
+        frames = list(workbook.iter_pandas(_BATCH_SCHEMA, batch_size=8))
+    assert len(frames) == 7
+    assert sum(len(frame) for frame in frames) == 50
+
+
+def test_iter_polars_yields_one_frame_per_batch(batched_csv):
+    pytest.importorskip("pyarrow")
+    pytest.importorskip("polars")
+    with open_workbook(batched_csv) as workbook:
+        frames = list(workbook.iter_polars(_BATCH_SCHEMA, batch_size=8))
+    assert len(frames) == 7
+    assert sum(frame.height for frame in frames) == 50
+
+
+# The flag that carries the whole streaming win: polars.from_arrow defaults to rechunk=True, which
+# re-concatenates every batch into contiguous memory and puts peak right back where it started.
+def test_to_polars_stays_chunked(batched_csv):
+    pytest.importorskip("pyarrow")
+    polars = pytest.importorskip("polars")
+    with open_workbook(batched_csv) as workbook:
+        frame = workbook.to_polars(_BATCH_SCHEMA, batch_size=8)
+    assert isinstance(frame, polars.DataFrame)
+    assert frame.height == 50
+    assert frame.n_chunks() > 1, "to_polars must not rechunk the streamed batches"
+
+
+def test_to_pandas_still_reads_the_whole_sheet(batched_csv):
+    pytest.importorskip("pyarrow")
+    pytest.importorskip("pandas")
+    with open_workbook(batched_csv) as workbook:
+        frame = workbook.to_pandas(_BATCH_SCHEMA, batch_size=8)
+    assert len(frame) == 50
+    assert list(frame.columns) == ["name", "qty"]
