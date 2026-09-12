@@ -237,6 +237,53 @@ static void BM_ParseSheet_Large(benchmark::State &state)
 }
 BENCHMARK(BM_ParseSheet_Large);
 
+// What this DOES measure: wall-clock time and C++-side allocation (operator new/delete only) over
+// the full read. What this does NOT measure: the peak-memory ceiling, because the allocation harness
+// sees only C++-side allocations and reports a cumulative total, not bytes-live-at-once. The columnar
+// buffers (the bulk of what batching bounds) are allocated inside NativeAOT and invisible here. The
+// ceiling itself is proven instead by TypedParseSessionTests.NextBatch_Should_Bound_The_Largest_Live_Table_To_Roughly_One_Batch
+// in tests/ExcelReader.Tests/TypedParseSessionTests.cs, which sums live NativeTable bytes directly.
+// Read that test for the ceiling; read this benchmark for the wall-clock cost and C++ allocation trade-off.
+static void BM_TypedReaderBatched_Large(benchmark::State &state)
+{
+    const auto &buffer_result = large_fixture_buffer();
+    if (!buffer_result.has_value())
+    {
+        state.SkipWithError(buffer_result.error().c_str());
+        return;
+    }
+    for (auto _ : state)
+    {
+        state.PauseTiming();
+        auto workbook = xl::Workbook::open_memory(buffer_result.value(), XL_FORMAT_XLSB);
+        if (!workbook.has_value())
+        {
+            state.SkipWithError(workbook.error().message.c_str());
+            return;
+        }
+        state.ResumeTiming();
+
+        auto reader = xl::typed_reader<LargeRow>(*workbook, 1, state.range(0));
+        if (!reader.has_value())
+        {
+            state.SkipWithError(reader.error().message.c_str());
+            return;
+        }
+        int64_t rows = 0;
+        for (auto &batch : *reader)
+        {
+            if (!batch.has_value())
+            {
+                state.SkipWithError(batch.error().message.c_str());
+                return;
+            }
+            rows += batch->size();
+        }
+        benchmark::DoNotOptimize(rows);
+    }
+}
+BENCHMARK(BM_TypedReaderBatched_Large)->Arg(1000)->Arg(10000)->Arg(0);
+
 static void BM_InferSchema_Large(benchmark::State &state)
 {
     const auto &buffer_result = large_fixture_buffer();
