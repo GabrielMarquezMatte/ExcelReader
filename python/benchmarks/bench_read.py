@@ -94,6 +94,24 @@ def bench_to_arrow(path: Path) -> tuple[int, int]:
         array = workbook.to_arrow(_FIXTURE_SCHEMA)
     return len(array), len(array) * array.type.num_fields
 
+
+def bench_iter_parse_typed(path: Path) -> tuple[int, int]:
+    """Batched counterpart to bench_parse_typed: one batch resident instead of the whole sheet."""
+    rows = 0
+    with excelreader.open_workbook(path, format="xlsb") as workbook:
+        for table in workbook.iter_parse_typed(_FIXTURE_SCHEMA, batch_size=10000):
+            rows += table.row_count
+    return rows, rows * len(_FIXTURE_SCHEMA)
+
+
+def bench_record_batch_reader(path: Path) -> tuple[int, int]:
+    rows = 0
+    with excelreader.open_workbook(path, format="xlsb") as workbook:
+        for batch in workbook.to_record_batch_reader(_FIXTURE_SCHEMA, batch_size=10000):
+            rows += batch.num_rows
+    return rows, rows * len(_FIXTURE_SCHEMA)
+
+
 def bench_to_polars(path: Path) -> tuple[int, int]:
     with excelreader.open_workbook(path, format="xlsb") as workbook:
         schema = workbook.infer_schema(sample_size=10)
@@ -152,6 +170,10 @@ def main() -> int:
         _time_and_assert("  parse_typed", bench_parse_typed, args.path, args.n)
         print()
 
+        print("excelreader.iter_parse_typed() (batched):")
+        _time_and_assert("  iter_parse_typed", bench_iter_parse_typed, args.path, args.n)
+        print()
+
         try:
             import pyarrow  # noqa: F401
         except ImportError:
@@ -160,6 +182,10 @@ def main() -> int:
         else:
             print("to_arrow() [same parse, handed to pyarrow zero-copy]:")
             _time_and_assert("  to_arrow", bench_to_arrow, args.path, args.n)
+            print()
+
+            print("excelreader.to_record_batch_reader() (batched):")
+            _time_and_assert("  record_batch_reader", bench_record_batch_reader, args.path, args.n)
             print()
     else:
         print("typed/Arrow variants skipped — their schema only matches the default fixture")
