@@ -202,6 +202,10 @@ namespace xl
         // this without keeping the guards would leak.
         std::expected<ArrowSchemaGuard, Error> schema()
         {
+            if (stream_.release == nullptr)
+            {
+                return std::unexpected(Error{XL_ERROR, "the Arrow stream is released or moved-from"});
+            }
             ArrowSchemaGuard guard;
             int rc = stream_.get_schema(&stream_, &guard.schema);
             if (rc != 0)
@@ -215,6 +219,10 @@ namespace xl
         // returning success with a RELEASED array, which is what the null release check reads.
         std::expected<std::optional<ArrowArrayGuard>, Error> next()
         {
+            if (stream_.release == nullptr)
+            {
+                return std::unexpected(Error{XL_ERROR, "the Arrow stream is released or moved-from"});
+            }
             ArrowArrayGuard guard;
             int rc = stream_.get_next(&stream_, &guard.array);
             if (rc != 0)

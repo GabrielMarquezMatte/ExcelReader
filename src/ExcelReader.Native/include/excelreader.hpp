@@ -1524,6 +1524,10 @@ namespace xl
                     current_.reset();
                     return;
                 }
+                // Frees the batch just yielded BEFORE the next one is allocated. Keeping it alive
+                // across the call would hold two batches at once and double the peak this type
+                // exists to bound.
+                current_.reset();
                 std::expected<std::optional<TableView<T>>, Error> batch = reader_->next();
                 if (!batch.has_value())
                 {

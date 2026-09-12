@@ -223,6 +223,10 @@ class Workbook:
         `close()` — invalidates this generator, whose next batch then raises rather than silently
         resuming from the moved cursor. Finish it, or `.close()` it, before reading the workbook
         another way.
+
+        This is a generator, so nothing below runs until the first iteration: the workbook's single
+        chunked read is not reserved at call time, and a bad `batch_size` is not reported until then.
+        `to_record_batch_reader()` differs — it opens, and raises, immediately.
         """
         handle = self._require_handle()
         specs = _build_specs(schema)
@@ -365,12 +369,14 @@ class Workbook:
     ) -> object:
         """Same read as `to_arrow()`, materialized as a `pandas.DataFrame`.
 
-        Streams internally: the sheet arrives a batch at a time, so peak memory is well below the
-        whole-sheet path. Requires pyarrow and pandas.
+        The whole sheet is resident: `read_all()` concatenates every batch into one Arrow table, so
+        this does NOT bound peak memory the way `iter_pandas()` does — use that to stream. What the
+        batching buys here is the conversion: `self_destruct` frees each Arrow chunk as pandas takes
+        it, so the sheet is never held twice over. Requires pyarrow and pandas.
         """
         reader = self.to_record_batch_reader(schema, header_row=header_row, batch_size=batch_size)
-        # self_destruct + split_blocks are what make this actually stream: without both, the Arrow
-        # table stays alive through the conversion and pandas consolidates into one block.
+        # Without both, the Arrow table stays alive through the conversion and pandas consolidates
+        # into one block — the sheet resident twice at the peak instead of once.
         return reader.read_all().to_pandas(self_destruct=True, split_blocks=True)
 
     def to_polars(
@@ -378,7 +384,8 @@ class Workbook:
     ) -> object:
         """Same read as `to_arrow()`, materialized as a `polars.DataFrame`, zero-copy.
 
-        Streams internally, like `to_pandas()`. Requires pyarrow and polars.
+        Streams internally — polars consumes the reader a batch at a time, so unlike `to_pandas()`
+        the whole sheet is never resident as Arrow buffers. Requires pyarrow and polars.
         """
         try:
             import polars

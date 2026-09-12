@@ -64,6 +64,11 @@ pub fn parse_arrow<T: ExcelMapper>(
 /// The lifetime is the whole reason this wraps arrow-rs's reader instead of returning it directly:
 /// `ArrowArrayStreamReader` is `'static`, and handing one back would drop the compile-time proof
 /// that the workbook is untouched while the stream lives.
+///
+/// Unlike [`crate::workbook::TypedChunks`], this does NOT fuse after an error: iteration follows
+/// arrow-rs's semantics, since the point of this type is to be a drop-in `RecordBatchReader`. The
+/// ABI latches a failure, so a `for` loop that ignores the error and keeps pulling can spin on it —
+/// break on the first `Err`.
 pub struct ArrowChunks<'a> {
     inner: ArrowArrayStreamReader,
     _workbook: PhantomData<&'a mut Workbook>,
