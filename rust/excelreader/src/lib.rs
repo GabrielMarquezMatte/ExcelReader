@@ -73,6 +73,12 @@ pub struct XlWorkbook {
     _private: [u8; 0],
 }
 
+/// Opaque chunked-read handle, declared like `XlWorkbook`: the native side owns the layout.
+#[repr(C)]
+pub struct XlTypedReader {
+    _private: [u8; 0],
+}
+
 /// Mirrors `xl_open_options`. `struct_size` must be set to `size_of::<XlOpenOptions>()`; build one
 /// through [`OpenOptions`] rather than by hand.
 #[repr(C)]
@@ -258,6 +264,27 @@ extern "C" {
     ) -> c_int;
 
     pub fn xl_free_table(table: *mut XlTable);
+
+    /// Opens a chunked typed read over the current sheet. Same specs and `header_row` as
+    /// `xl_parse_typed`, plus `max_rows`: the rows per batch, 0 meaning one unbounded batch. The
+    /// header row is consumed here and never re-read, so each `xl_typed_reader_next` is purely rows.
+    /// A workbook serves one chunked read at a time; opening a second is `XL_ERROR`.
+    pub fn xl_typed_reader_open(
+        handle: *mut XlWorkbook,
+        specs: *const XlColumnSpec,
+        spec_count: i32,
+        header_row: i32,
+        max_rows: i64,
+        out_reader: *mut *mut XlTypedReader,
+    ) -> c_int;
+
+    /// `XL_OK` with a batch in `*out_table`, or `XL_EOF` once the sheet is exhausted. Each batch is
+    /// an ordinary table freed with `xl_free_table`. A failure LATCHES: every later call repeats it
+    /// with the same `xl_last_error` message.
+    pub fn xl_typed_reader_next(reader: *mut XlTypedReader, out_table: *mut XlTable) -> c_int;
+
+    /// Safe on null and on an already-closed reader. Does not close the workbook.
+    pub fn xl_typed_reader_close(reader: *mut XlTypedReader);
 
     pub fn xl_infer_schema(
         handle: *mut XlWorkbook,

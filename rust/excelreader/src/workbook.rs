@@ -1,6 +1,6 @@
 use crate::{
     Date, Error, OpenOptions, Time, Timestamp, XlColumn, XlColumnSpec, XlInferredSchema, XlTable,
-    XlWorkbook, XL_BUFFER_TOO_SMALL, XL_ERROR, XL_FORMAT_AUTO, XL_OK, XL_T_BOOL, XL_T_DATE,
+    XlWorkbook, XL_BUFFER_TOO_SMALL, XL_EOF, XL_ERROR, XL_FORMAT_AUTO, XL_OK, XL_T_BOOL, XL_T_DATE,
     XL_T_F64, XL_T_I64, XL_T_STRING, XL_T_TIME, XL_T_TIMESTAMP,
 };
 use std::marker::PhantomData;
@@ -219,6 +219,40 @@ impl Workbook {
         crate::rows::AllRows::read(self.handle)
     }
 
+    /// [`parse_sheet`] delivered a batch at a time, so peak memory is one batch rather than one
+    /// sheet. `header_row` means what it does there (0 = no header) and is consumed once, here, not
+    /// re-read per batch. `batch_size` is rows per batch: 0 is unbounded (one batch, identical to
+    /// `parse_sheet`), negative is an error.
+    ///
+    /// `&mut self` is load-bearing, not a formality: the native reader borrows this workbook's
+    /// single row cursor, and the ABI serves one chunked read per workbook. The exclusive borrow is
+    /// what makes a second reader - or a `parse_sheet`/[`rows`](Self::rows) call alongside a live
+    /// one - a compile error here rather than a runtime fault.
+    pub fn typed_chunks<T: ExcelMapper>(
+        &mut self,
+        header_row: i32,
+        batch_size: i64,
+    ) -> Result<TypedChunks<'_, T>, Error> {
+        let arena = build_specs::<T>();
+        let mut reader: *mut crate::XlTypedReader = std::ptr::null_mut();
+        check(unsafe {
+            crate::xl_typed_reader_open(
+                self.handle,
+                arena.specs.as_ptr(),
+                arena.specs.len() as i32,
+                header_row,
+                batch_size,
+                &mut reader,
+            )
+        })?;
+        Ok(TypedChunks {
+            reader,
+            bindings: arena.bindings,
+            done: false,
+            _workbook: PhantomData,
+        })
+    }
+
     /// Guesses a [`parse_sheet`] schema by sampling the current sheet.
     ///
     /// `header_row` has the same meaning as in [`parse_sheet`] (0 = no header); `sample_size`
@@ -372,6 +406,16 @@ pub struct ColumnBinding<T> {
     pub xl_type: i32,
     pub assign: fn(&mut T, &XlColumn, i64),
 }
+
+// Hand-written rather than derived: `#[derive(Clone)]` would add a `T: Clone` bound, and `T` here
+// is the user's row struct, which has no reason to be cloneable. A binding is function pointers.
+impl<T> Clone for ColumnBinding<T> {
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+
+impl<T> Copy for ColumnBinding<T> {}
 
 /// Implemented by any struct `parse_sheet` can populate from a `parse_typed` result. Implement
 /// `bindings()` by hand (mirroring `xl::ExcelMapper<T>` on the C++ side), or derive it with
@@ -541,6 +585,81 @@ impl<T: ExcelMapper> std::fmt::Debug for TableView<T> {
         f.debug_struct("TableView")
             .field("rows", &self.table.row_count)
             .field("columns", &self.table.column_count)
+            .finish_non_exhaustive()
+    }
+}
+
+/// Iterator over the batches of one chunked typed read. Closes the native reader on `Drop`.
+pub struct TypedChunks<'a, T: ExcelMapper> {
+    reader: *mut crate::XlTypedReader,
+    bindings: Vec<ColumnBinding<T>>,
+    done: bool,
+    _workbook: PhantomData<&'a mut Workbook>,
+}
+
+impl<T: ExcelMapper> Iterator for TypedChunks<'_, T> {
+    type Item = Result<TableView<T>, Error>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        // The ABI latches a failure: every later call repeats it. Ending the iterator instead keeps
+        // a plain `for` loop from spinning on the same error forever.
+        if self.done {
+            return None;
+        }
+
+        let mut table = XlTable {
+            column_count: 0,
+            row_count: 0,
+            columns: std::ptr::null_mut(),
+        };
+        let status = unsafe { crate::xl_typed_reader_next(self.reader, &mut table) };
+        if status == XL_EOF {
+            self.done = true;
+            return None;
+        }
+        if status != XL_OK {
+            self.done = true;
+            return Some(Err(last_error(status)));
+        }
+
+        // Same invariant parse_sheet checks once: one column per spec, in spec order, or the zip in
+        // `get` would silently leave trailing fields at their default.
+        if table.column_count as usize != self.bindings.len() {
+            let column_count = table.column_count;
+            unsafe { crate::xl_free_table(&mut table) };
+            self.done = true;
+            return Some(Err(Error::from_status(
+                XL_ERROR,
+                format!(
+                    "xl_typed_reader_next returned {column_count} columns for {} specs",
+                    self.bindings.len()
+                ),
+            )));
+        }
+
+        // ponytail: bindings are cloned per batch - one small Vec of function pointers per batch,
+        // not per row. Give TableView a borrowed binding slice only if a bench shows this.
+        Some(Ok(TableView {
+            table,
+            bindings: self.bindings.clone(),
+            _marker: PhantomData,
+        }))
+    }
+}
+
+impl<T: ExcelMapper> Drop for TypedChunks<'_, T> {
+    fn drop(&mut self) {
+        unsafe { crate::xl_typed_reader_close(self.reader) };
+    }
+}
+
+/// Progress only, for the same reason [`TableView`]'s is shape only - and because the reader handle
+/// is opaque. Needed so `Result<TypedChunks<_>, Error>` works with `expect_err` and friends.
+impl<T: ExcelMapper> std::fmt::Debug for TypedChunks<'_, T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("TypedChunks")
+            .field("columns", &self.bindings.len())
+            .field("done", &self.done)
             .finish_non_exhaustive()
     }
 }
