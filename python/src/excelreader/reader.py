@@ -323,7 +323,19 @@ class Workbook:
     def iter_pandas(
         self, schema: Sequence[ColumnSpec], header_row: int = 1, batch_size: int = 10000
     ) -> Iterator[object]:
-        """One `pandas.DataFrame` per batch, streamed. Requires pyarrow and pandas."""
+        """One `pandas.DataFrame` per batch, streamed. Requires pyarrow and pandas.
+
+        This is a generator: the pyarrow check below does not run until the caller's first
+        `next()`/iteration, so a missing dependency is reported then, not when this is called.
+        """
+        try:
+            import pyarrow  # noqa: F401
+        except ImportError:
+            raise ImportError(
+                "iter_pandas() requires pyarrow — install it with `pip install pyarrow`, or use "
+                "iter_parse_typed(), which streams the same data with no third-party dependency."
+            ) from None
+
         reader = self.to_record_batch_reader(schema, header_row=header_row, batch_size=batch_size)
         for batch in reader:
             yield batch.to_pandas(self_destruct=True, split_blocks=True)
@@ -331,7 +343,11 @@ class Workbook:
     def iter_polars(
         self, schema: Sequence[ColumnSpec], header_row: int = 1, batch_size: int = 10000
     ) -> Iterator[object]:
-        """One `polars.DataFrame` per batch, streamed. Requires pyarrow and polars."""
+        """One `polars.DataFrame` per batch, streamed. Requires pyarrow and polars.
+
+        This is a generator: the polars check below does not run until the caller's first
+        `next()`/iteration, so a missing dependency is reported then, not when this is called.
+        """
         try:
             import polars
         except ImportError:

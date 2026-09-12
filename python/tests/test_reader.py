@@ -676,3 +676,23 @@ def test_to_pandas_still_reads_the_whole_sheet(batched_csv):
         frame = workbook.to_pandas(_BATCH_SCHEMA, batch_size=8)
     assert len(frame) == 50
     assert list(frame.columns) == ["name", "qty"]
+
+
+# _BATCH_SCHEMA's two columns (name: string, qty: int64) already land in separate pandas blocks by
+# dtype alone, split_blocks or not, so it can't pin split_blocks=True. Reading "qty" a second time
+# (once by name, once by its own position) gives two same-dtype int64 columns instead: without
+# split_blocks=True pandas would consolidate them into one 2-D block (2 blocks total); with it, each
+# column keeps its own block (3 total). An implementation that dropped self_destruct/split_blocks
+# would still pass every other test in this file and silently double peak memory - this is the one
+# check that fails if it does.
+#
+# frame._mgr.nblocks is private pandas API (no public block-count accessor exists on pandas 3.0.5):
+# reached for here because the flags have no public observable, and leaving them unguarded is worse
+# than depending on an internal.
+def test_to_pandas_splits_blocks_per_column(batched_csv):
+    pytest.importorskip("pyarrow")
+    pytest.importorskip("pandas")
+    schema = [*_BATCH_SCHEMA, ColumnSpec(ColumnType.I64, index=1)]
+    with open_workbook(batched_csv) as workbook:
+        frame = workbook.to_pandas(schema, batch_size=8)
+    assert frame._mgr.nblocks == 3
