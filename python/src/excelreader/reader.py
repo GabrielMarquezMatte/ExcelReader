@@ -209,6 +209,47 @@ class Workbook:
             # nothing this method hands back points into it.
             self._lib.xl_free_table(ctypes.byref(table))
 
+    def iter_parse_typed(
+        self, schema: Sequence[ColumnSpec], header_row: int = 1, batch_size: int = 10000
+    ) -> Iterator[TypedTable]:
+        """`parse_typed()` a batch at a time, so peak memory is one batch rather than one sheet.
+
+        Everything else matches `parse_typed()`: same specs, same `header_row` (resolved once, when
+        the first batch is pulled), one `TypedTable` per batch. `batch_size` is rows per batch —
+        0 means one unbounded batch, exactly what `parse_typed()` does.
+
+        The native reader borrows this workbook's row cursor, and the workbook serves ONE chunked
+        read at a time. Any other read on it — `parse_typed()`, `rows()`, `move_to_sheet()`,
+        `close()` — invalidates this generator, whose next batch then raises rather than silently
+        resuming from the moved cursor. Finish it, or `.close()` it, before reading the workbook
+        another way.
+        """
+        handle = self._require_handle()
+        specs = _build_specs(schema)
+        reader = ctypes.c_void_p()
+        _check(
+            self._lib.xl_typed_reader_open(
+                handle, specs, len(specs), header_row, batch_size, ctypes.byref(reader)
+            )
+        )
+        try:
+            while True:
+                table = _native.NativeTable()
+                status = self._lib.xl_typed_reader_next(reader, ctypes.byref(table))
+                if status == _native.XL_EOF:
+                    return
+                _check(status)
+                try:
+                    yield _decode_table(schema, table)
+                finally:
+                    # _decode_table copies every column out, so the native batch is dead the moment
+                    # the caller has it — same lifetime as parse_typed's table.
+                    self._lib.xl_free_table(ctypes.byref(table))
+        finally:
+            # Runs on exhaustion, on an exception, and on GeneratorExit when the caller abandons the
+            # generator — the one path that would otherwise leak the reader.
+            self._lib.xl_typed_reader_close(reader)
+
     def to_arrow(self, schema: Sequence[ColumnSpec], header_row: int = 1) -> object:
         """The same read as `parse_typed()`, handed to pyarrow as one `StructArray`, zero-copy.
 
