@@ -117,15 +117,25 @@ def bench_record_batch_reader(path: Path) -> tuple[int, int]:
 # --- peak memory ------------------------------------------------------------------------------
 #
 # Every other leg here is wall-clock, which cannot see the one property batching exists for: bytes
-# live at once. These two legs measure it.
+# live at once. These two legs measure process private bytes instead, as a directional proxy.
 #
 # NOT pyarrow.total_allocated_bytes(): the batch buffers are allocated by the native reader and
 # handed to pyarrow through the Arrow C Data Interface, so they never pass through Arrow's pool and
 # it reports 0 for both paths. The process's private bytes do see them — confirmed by a control that
 # retains every batch, which reads ABOVE the whole-sheet peak rather than at one batch.
 #
-# Both legs include the same native workbook parse, so the floor is common to them; it is the
-# DIFFERENCE between the two peaks that is the exported table, bounded to one batch or not.
+# What this number IS: both legs pay the same native xlsb-parse cost before the Arrow-specific part
+# diverges, so that shared cost is a floor common to both peaks, and a lower streamed peak here is
+# real evidence in the right direction.
+#
+# What it is NOT: a measurement of the Arrow-buffer ceiling. The parse floor dominates total private
+# bytes, so it dilutes the signal — a 15-20% drop in TOTAL private bytes does not mean the
+# Arrow-attributable portion dropped 15-20%; at batch_size=10000 against 65,535 rows, one batch is
+# ~15% of the sheet, so if peak Arrow memory were truly bounded to one batch we'd expect something
+# closer to an order-of-magnitude drop in that portion, not in the total. Per-run variance in the
+# streamed leg alone (~2.6 MiB) is also close to the ~3.6-4.8 MiB gap between legs. Treat the gap as
+# a directional floor on the saving — real, reproducible, and consistent with streaming helping — not
+# as proof of the one-batch bound itself.
 
 
 class _ProcessMemoryCountersEx(ctypes.Structure):
