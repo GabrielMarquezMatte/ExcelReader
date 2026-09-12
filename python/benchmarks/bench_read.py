@@ -17,7 +17,9 @@ do real native-side type conversion into columns, against a fixed schema rather 
 from __future__ import annotations
 
 import argparse
+import ctypes
 import statistics
+import subprocess
 import sys
 import timeit
 from pathlib import Path
@@ -112,6 +114,100 @@ def bench_record_batch_reader(path: Path) -> tuple[int, int]:
     return rows, rows * len(_FIXTURE_SCHEMA)
 
 
+# --- peak memory ------------------------------------------------------------------------------
+#
+# Every other leg here is wall-clock, which cannot see the one property batching exists for: bytes
+# live at once. These two legs measure it.
+#
+# NOT pyarrow.total_allocated_bytes(): the batch buffers are allocated by the native reader and
+# handed to pyarrow through the Arrow C Data Interface, so they never pass through Arrow's pool and
+# it reports 0 for both paths. The process's private bytes do see them — confirmed by a control that
+# retains every batch, which reads ABOVE the whole-sheet peak rather than at one batch.
+#
+# Both legs include the same native workbook parse, so the floor is common to them; it is the
+# DIFFERENCE between the two peaks that is the exported table, bounded to one batch or not.
+
+
+class _ProcessMemoryCountersEx(ctypes.Structure):
+    _fields_ = [
+        ("cb", ctypes.c_uint32),
+        ("PageFaultCount", ctypes.c_uint32),
+        ("PeakWorkingSetSize", ctypes.c_size_t),
+        ("WorkingSetSize", ctypes.c_size_t),
+        ("QuotaPeakPagedPoolUsage", ctypes.c_size_t),
+        ("QuotaPagedPoolUsage", ctypes.c_size_t),
+        ("QuotaPeakNonPagedPoolUsage", ctypes.c_size_t),
+        ("QuotaNonPagedPoolUsage", ctypes.c_size_t),
+        ("PagefileUsage", ctypes.c_size_t),
+        ("PeakPagefileUsage", ctypes.c_size_t),
+        ("PrivateUsage", ctypes.c_size_t),
+    ]
+
+
+def _private_bytes() -> int:
+    kernel32 = ctypes.WinDLL("kernel32")
+    counters = _ProcessMemoryCountersEx()
+    counters.cb = ctypes.sizeof(counters)
+    kernel32.GetCurrentProcess.restype = ctypes.c_void_p
+    if not kernel32.K32GetProcessMemoryInfo(
+        ctypes.c_void_p(kernel32.GetCurrentProcess()), ctypes.byref(counters), counters.cb
+    ):
+        raise OSError("K32GetProcessMemoryInfo failed")
+    return counters.PrivateUsage
+
+
+def peak_leg_whole_sheet(path: Path) -> tuple[int, int]:
+    """Whole-sheet Arrow read, sampled once while the full table is live. Returns (rows, peak)."""
+    base = _private_bytes()
+    with excelreader.open_workbook(path, format="xlsb") as workbook:
+        batch = workbook.to_record_batch(_FIXTURE_SCHEMA)
+        peak = _private_bytes() - base
+        rows = batch.num_rows
+    return rows, peak
+
+
+def peak_leg_streamed(path: Path) -> tuple[int, int]:
+    """The same read streamed, sampled after every batch. Returns (rows, the maximum sample)."""
+    base = _private_bytes()
+    rows = 0
+    peak = 0
+    with excelreader.open_workbook(path, format="xlsb") as workbook:
+        for batch in workbook.to_record_batch_reader(_FIXTURE_SCHEMA, batch_size=10000):
+            rows += batch.num_rows
+            peak = max(peak, _private_bytes() - base)
+            # Released before the next batch is pulled. Holding it across the pull would measure two
+            # batches live and hide exactly the defect this leg exists to catch.
+            del batch
+    return rows, peak
+
+
+_PEAK_LEGS = {"whole_sheet": peak_leg_whole_sheet, "streamed": peak_leg_streamed}
+
+
+def _measure_peaks(path: Path) -> dict[str, int]:
+    """Runs each peak leg in a FRESH subprocess and collects its number.
+
+    In-process would read zero: the legs above allocate far more than these reads do (read_all alone
+    builds ~900k Cell tuples), a heap is not handed back to the OS on free, and so by the time we got
+    here the growth we are trying to see would already be absorbed by slack.
+    """
+    peaks: dict[str, int] = {}
+    for name in _PEAK_LEGS:
+        proc = subprocess.run(
+            [sys.executable, str(Path(__file__).resolve()), str(path), "--peak-leg", name],
+            capture_output=True,
+            text=True,
+        )
+        if proc.returncode != 0:
+            raise AssertionError(f"peak leg {name} failed:\n{proc.stdout}{proc.stderr}")
+        rows, peak = (int(field) for field in proc.stdout.split())
+        if rows == 0:
+            raise AssertionError(f"peak leg {name} read zero rows — harness is broken")
+        print(f"  {name}: rows={rows} peak={peak} bytes ({peak / 1024 / 1024:.1f} MiB)")
+        peaks[name] = peak
+    return peaks
+
+
 def bench_to_polars(path: Path) -> tuple[int, int]:
     with excelreader.open_workbook(path, format="xlsb") as workbook:
         schema = workbook.infer_schema(sample_size=10)
@@ -144,11 +240,19 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("path", nargs="?", type=Path, default=DEFAULT_PATH)
     parser.add_argument("--n", type=int, default=10)
+    # Internal re-entry point for _measure_peaks(): it shells out to this same script so each peak
+    # leg gets a fresh process (see _measure_peaks' docstring for why in-process reads zero).
+    parser.add_argument("--peak-leg", choices=sorted(_PEAK_LEGS), help=argparse.SUPPRESS)
     args = parser.parse_args()
 
     if not args.path.exists():
         print(f"error: fixture not found: {args.path}", file=sys.stderr)
         return 1
+
+    if args.peak_leg is not None:
+        rows, peak = _PEAK_LEGS[args.peak_leg](args.path)
+        print(rows, peak)
+        return 0
 
     print(f"file: {args.path}")
     print()
@@ -186,6 +290,15 @@ def main() -> int:
 
             print("excelreader.to_record_batch_reader() (batched):")
             _time_and_assert("  record_batch_reader", bench_record_batch_reader, args.path, args.n)
+            print()
+
+            if sys.platform == "win32":
+                print("peak memory [to_record_batch whole sheet vs to_record_batch_reader(batch_size=10000)]:")
+                peaks = _measure_peaks(args.path)
+                saved = peaks["whole_sheet"] - peaks["streamed"]
+                print(f"  streaming holds {saved} bytes ({saved / 1024 / 1024:.1f} MiB) less at the peak")
+            else:
+                print("peak memory leg skipped — its private-bytes probe is Windows-only")
             print()
     else:
         print("typed/Arrow variants skipped — their schema only matches the default fixture")
