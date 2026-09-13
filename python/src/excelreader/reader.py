@@ -212,21 +212,15 @@ class Workbook:
     def iter_parse_typed(
         self, schema: Sequence[ColumnSpec], header_row: int = 1, batch_size: int = 10000
     ) -> Iterator[TypedTable]:
-        """`parse_typed()` a batch at a time, so peak memory is one batch rather than one sheet.
+        """`parse_typed()` a batch at a time, yielding one `TypedTable` per batch.
 
-        Everything else matches `parse_typed()`: same specs, same `header_row` (resolved once, when
-        the first batch is pulled), one `TypedTable` per batch. `batch_size` is rows per batch —
-        0 means one unbounded batch, exactly what `parse_typed()` does.
+        `batch_size` is rows per batch; 0 means one unbounded batch, exactly what `parse_typed()`
+        does. Any other read on this workbook — `parse_typed()`, `rows()`, `move_to_sheet()`,
+        `close()` — invalidates the generator, whose next batch then raises. Finish it, or
+        `.close()` it, first.
 
-        The native reader borrows this workbook's row cursor, and the workbook serves ONE chunked
-        read at a time. Any other read on it — `parse_typed()`, `rows()`, `move_to_sheet()`,
-        `close()` — invalidates this generator, whose next batch then raises rather than silently
-        resuming from the moved cursor. Finish it, or `.close()` it, before reading the workbook
-        another way.
-
-        This is a generator, so nothing below runs until the first iteration: the workbook's single
-        chunked read is not reserved at call time, and a bad `batch_size` is not reported until then.
-        `to_record_batch_reader()` differs — it opens, and raises, immediately.
+        Being a generator, it opens nothing until the first iteration, so a bad `batch_size` is not
+        reported until then; `to_record_batch_reader()` raises immediately instead.
         """
         handle = self._require_handle()
         specs = _build_specs(schema)
@@ -246,12 +240,10 @@ class Workbook:
                 try:
                     yield _decode_table(schema, table)
                 finally:
-                    # _decode_table copies every column out, so the native batch is dead the moment
-                    # the caller has it — same lifetime as parse_typed's table.
+                    # _decode_table copied every column out, so nothing the caller holds points here.
                     self._lib.xl_free_table(ctypes.byref(table))
         finally:
-            # Runs on exhaustion, on an exception, and on GeneratorExit when the caller abandons the
-            # generator — the one path that would otherwise leak the reader.
+            # Also runs on GeneratorExit, the abandonment path that would otherwise leak the reader.
             self._lib.xl_typed_reader_close(reader)
 
     def to_arrow(self, schema: Sequence[ColumnSpec], header_row: int = 1) -> object:
@@ -320,8 +312,7 @@ class Workbook:
                 handle, specs, len(specs), header_row, batch_size, ctypes.byref(stream)
             )
         )
-        # _import_from_c takes ownership of the stream's release callback, exactly as
-        # Array._import_from_c does for the whole-sheet pair in to_arrow().
+        # _import_from_c takes ownership of the stream's release callback.
         return pyarrow.RecordBatchReader._import_from_c(ctypes.addressof(stream))
 
     def iter_pandas(
@@ -329,8 +320,7 @@ class Workbook:
     ) -> Iterator[object]:
         """One `pandas.DataFrame` per batch, streamed. Requires pyarrow and pandas.
 
-        This is a generator: the pyarrow check below does not run until the caller's first
-        `next()`/iteration, so a missing dependency is reported then, not when this is called.
+        A generator, so a missing dependency is reported at the first iteration, not at the call.
         """
         try:
             import pyarrow  # noqa: F401
@@ -349,8 +339,7 @@ class Workbook:
     ) -> Iterator[object]:
         """One `polars.DataFrame` per batch, streamed. Requires pyarrow and polars.
 
-        This is a generator: the polars check below does not run until the caller's first
-        `next()`/iteration, so a missing dependency is reported then, not when this is called.
+        A generator, so a missing dependency is reported at the first iteration, not at the call.
         """
         try:
             import polars
@@ -369,14 +358,12 @@ class Workbook:
     ) -> object:
         """Same read as `to_arrow()`, materialized as a `pandas.DataFrame`.
 
-        The whole sheet is resident: `read_all()` concatenates every batch into one Arrow table, so
-        this does NOT bound peak memory the way `iter_pandas()` does — use that to stream. What the
-        batching buys here is the conversion: `self_destruct` frees each Arrow chunk as pandas takes
-        it, so the sheet is never held twice over. Requires pyarrow and pandas.
+        `read_all()` concatenates every batch, so this does NOT bound peak memory the way
+        `iter_pandas()` does. What it buys is the conversion: `self_destruct` frees each Arrow
+        chunk as pandas takes it, so the sheet is never held twice. Requires pyarrow and pandas.
         """
         reader = self.to_record_batch_reader(schema, header_row=header_row, batch_size=batch_size)
-        # Without both, the Arrow table stays alive through the conversion and pandas consolidates
-        # into one block — the sheet resident twice at the peak instead of once.
+        # Without both, the sheet is resident twice at the peak instead of once.
         return reader.read_all().to_pandas(self_destruct=True, split_blocks=True)
 
     def to_polars(
@@ -396,8 +383,7 @@ class Workbook:
             ) from None
 
         reader = self.to_record_batch_reader(schema, header_row=header_row, batch_size=batch_size)
-        # rechunk=False is load-bearing: the default re-concatenates every batch into contiguous
-        # memory, a full extra copy that undoes the streaming.
+        # rechunk=True, the default, re-concatenates every batch and undoes the streaming.
         return polars.from_arrow(reader, rechunk=False)
 
     def infer_schema(self, header_row: int = 1, sample_size: int = 100) -> list[ColumnSpec]:

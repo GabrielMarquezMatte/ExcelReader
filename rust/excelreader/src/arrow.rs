@@ -58,17 +58,11 @@ pub fn parse_arrow<T: ExcelMapper>(
     Ok(RecordBatch::from(StructArray::from(data)))
 }
 
-/// Batched counterpart to [`parse_arrow`]: the same schema-driven read, one [`RecordBatch`] at a
-/// time, so peak memory is one batch rather than one sheet.
+/// Batched counterpart to [`parse_arrow`], one [`RecordBatch`] at a time.
 ///
-/// The lifetime is the whole reason this wraps arrow-rs's reader instead of returning it directly:
-/// `ArrowArrayStreamReader` is `'static`, and handing one back would drop the compile-time proof
-/// that the workbook is untouched while the stream lives.
-///
-/// Unlike [`crate::workbook::TypedChunks`], this does NOT fuse after an error: iteration follows
-/// arrow-rs's semantics, since the point of this type is to be a drop-in `RecordBatchReader`. The
-/// ABI latches a failure, so a `for` loop that ignores the error and keeps pulling can spin on it —
-/// break on the first `Err`.
+/// Wraps arrow-rs's `'static` reader only to carry the `'a` borrow, which is what proves the
+/// workbook is untouched while the stream lives. Unlike [`crate::workbook::TypedChunks`] it does
+/// not fuse after an error, so break on the first `Err` rather than spinning on the latched one.
 pub struct ArrowChunks<'a> {
     inner: ArrowArrayStreamReader,
     _workbook: PhantomData<&'a mut Workbook>,
@@ -88,12 +82,11 @@ impl RecordBatchReader for ArrowChunks<'_> {
     }
 }
 
-/// `parse_arrow` delivered a batch at a time. `header_row` means what it does there (0 = no
-/// header); `batch_size` is rows per batch, 0 is unbounded and negative is an error.
+/// `parse_arrow` delivered a batch at a time. `batch_size` is rows per batch, 0 unbounded,
+/// negative an error.
 ///
-/// Takes `&mut Workbook` for the same reason [`crate::workbook::Workbook::typed_chunks`] does: the
-/// stream borrows the workbook's single row cursor, and the ABI serves one chunked read per
-/// workbook.
+/// `&mut Workbook` because the stream borrows the workbook's single row cursor, and the ABI serves
+/// one chunked read per workbook.
 pub fn parse_arrow_stream<T: ExcelMapper>(
     workbook: &mut Workbook,
     header_row: i32,
@@ -101,8 +94,7 @@ pub fn parse_arrow_stream<T: ExcelMapper>(
 ) -> Result<ArrowChunks<'_>, Error> {
     let arena = build_specs::<T>();
 
-    // Starts with a null `release` - "owns nothing" per the Arrow spec - so an early failure leaves
-    // nothing to clean up.
+    // Null `release` means "owns nothing", so an early failure leaves nothing to clean up.
     let mut stream = FFI_ArrowArrayStream::empty();
 
     check(unsafe {
@@ -116,8 +108,7 @@ pub fn parse_arrow_stream<T: ExcelMapper>(
         )
     })?;
 
-    // try_new takes the struct by value, so ownership of the release callback moves exactly once -
-    // no path where both this function and arrow-rs believe they own it.
+    // By value, so ownership of the release callback moves exactly once.
     let inner = ArrowArrayStreamReader::try_new(stream).map_err(|e| {
         Error::from_status(
             XL_ERROR,
