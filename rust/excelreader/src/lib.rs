@@ -73,7 +73,6 @@ pub struct XlWorkbook {
     _private: [u8; 0],
 }
 
-/// Opaque chunked-read handle, declared like `XlWorkbook`: the native side owns the layout.
 #[repr(C)]
 pub struct XlTypedReader {
     _private: [u8; 0],
@@ -263,13 +262,8 @@ extern "C" {
         out_schema: *mut c_void,
     ) -> c_int;
 
-    /// Batched counterpart to `xl_parse_arrow`, delivered as an Arrow C stream. `out_stream` is a
-    /// `struct ArrowArrayStream*`, typed as `c_void` for the same reason `xl_parse_arrow`'s outputs
-    /// are: arrow-rs's `FFI_ArrowArrayStream` is ABI-identical, and redeclaring a fixed, versioned
-    /// spec struct would be a second source of truth.
-    ///
-    /// On `XL_OK` the caller owns `*out_stream` and must eventually call its `release`, which is
-    /// what closes the underlying read. Every failure path zeroes `*out_stream`.
+    /// `out_stream` is a `struct ArrowArrayStream*`, typed as `c_void` for the same reason
+    /// `xl_parse_arrow`'s outputs are. Its `release` is what closes the underlying read.
     pub fn xl_parse_arrow_stream(
         handle: *mut XlWorkbook,
         specs: *const XlColumnSpec,
@@ -281,10 +275,8 @@ extern "C" {
 
     pub fn xl_free_table(table: *mut XlTable);
 
-    /// Opens a chunked typed read over the current sheet. Same specs and `header_row` as
-    /// `xl_parse_typed`, plus `max_rows`: the rows per batch, 0 meaning one unbounded batch. The
-    /// header row is consumed here and never re-read, so each `xl_typed_reader_next` is purely rows.
-    /// A workbook serves one chunked read at a time; opening a second is `XL_ERROR`.
+    /// `max_rows` is rows per batch, 0 meaning one unbounded batch. A workbook serves one chunked
+    /// read at a time; opening a second is `XL_ERROR`.
     pub fn xl_typed_reader_open(
         handle: *mut XlWorkbook,
         specs: *const XlColumnSpec,
@@ -294,12 +286,10 @@ extern "C" {
         out_reader: *mut *mut XlTypedReader,
     ) -> c_int;
 
-    /// `XL_OK` with a batch in `*out_table`, or `XL_EOF` once the sheet is exhausted. Each batch is
-    /// an ordinary table freed with `xl_free_table`. A failure LATCHES: every later call repeats it
-    /// with the same `xl_last_error` message.
+    /// `XL_OK` with a batch, or `XL_EOF` at end of sheet. A failure latches: every later call
+    /// repeats it.
     pub fn xl_typed_reader_next(reader: *mut XlTypedReader, out_table: *mut XlTable) -> c_int;
 
-    /// Safe on null and on an already-closed reader. Does not close the workbook.
     pub fn xl_typed_reader_close(reader: *mut XlTypedReader);
 
     pub fn xl_infer_schema(

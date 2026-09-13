@@ -96,9 +96,8 @@ namespace xl
         return result;
     }
 
-    // One owned ArrowSchema. Separate from ArrowTable because a stream hands schemas and arrays out
-    // independently - get_schema allocates a fresh one on every call, and each batch is its own
-    // allocation - so they cannot share one guard.
+    // Separate from ArrowTable: a stream hands schemas and arrays out independently, so they cannot
+    // share one guard.
     struct ArrowSchemaGuard
     {
         ArrowSchema schema{};
@@ -134,7 +133,6 @@ namespace xl
         }
     };
 
-    // One owned ArrowArray - a single batch from an ArrowStream.
     struct ArrowArrayGuard
     {
         ArrowArray array{};
@@ -170,11 +168,8 @@ namespace xl
         }
     };
 
-    // parse_arrow delivered a batch at a time, over the Arrow C stream interface. Owns the stream
-    // and releases it on destruction, which is what closes the underlying read.
-    //
-    // Borrows the workbook under the same rules as xl::TypedReader: one chunked read per workbook,
-    // and any other read on it invalidates this stream permanently.
+    // parse_arrow a batch at a time. Releasing the stream is what closes the underlying read.
+    // Borrows the workbook under the same rules as xl::TypedReader.
     class ArrowStream
     {
     public:
@@ -198,8 +193,7 @@ namespace xl
 
         ~ArrowStream() { release(); }
 
-        // A FRESH schema on every call - each returned guard owns its own allocation, so polling
-        // this without keeping the guards would leak.
+        // A fresh allocation per call, so polling this without keeping the guards would leak.
         std::expected<ArrowSchemaGuard, Error> schema()
         {
             if (stream_.release == nullptr)
@@ -215,8 +209,7 @@ namespace xl
             return guard;
         }
 
-        // The next batch, or an empty optional at end of stream. Arrow signals end of stream by
-        // returning success with a RELEASED array, which is what the null release check reads.
+        // Arrow signals end of stream by returning success with a released array.
         std::expected<std::optional<ArrowArrayGuard>, Error> next()
         {
             if (stream_.release == nullptr)
@@ -236,7 +229,6 @@ namespace xl
             return std::optional<ArrowArrayGuard>(std::move(guard));
         }
 
-        // Internal: constructed only by arrow_stream, which owns the xl_parse_arrow_stream call.
         static ArrowStream from_raw(ArrowArrayStream stream) { return ArrowStream(stream); }
 
     private:
@@ -250,8 +242,7 @@ namespace xl
             }
         }
 
-        // get_next/get_schema are errno-style, not XL_*; the reason lives in get_last_error and is
-        // only valid until the next call on this stream, so it is copied into the Error here.
+        // errno-style, not XL_*. get_last_error's message dies on the next call, so copy it now.
         Error stream_error(int rc)
         {
             const char *message =
@@ -266,8 +257,7 @@ namespace xl
         ArrowArrayStream stream_{};
     };
 
-    // parse_arrow, delivered a batch at a time. `header_row` and `batch_size` mean exactly what
-    // they do in xl::typed_reader.
+    // `header_row` and `batch_size` mean what they do in xl::typed_reader.
     template <typename T>
     std::expected<ArrowStream, Error> arrow_stream(Workbook &workbook, int32_t header_row = 1,
                                                    int64_t batch_size = 10000)

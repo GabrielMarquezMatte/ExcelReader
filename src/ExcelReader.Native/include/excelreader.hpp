@@ -1439,14 +1439,10 @@ namespace xl
 
     // ---- Chunked typed reading -----------------------------------------------------------------
 
-    // parse_sheet a batch at a time: peak memory is one batch rather than one sheet. Owns the
-    // native reader and closes it on destruction.
-    //
-    // The reader borrows the workbook's single row cursor. The ABI serves ONE chunked read per
-    // workbook, and every other read on that workbook (parse_sheet, rows(), move_to_sheet, close)
-    // invalidates this reader - its next() then reports a latched error rather than resuming from
-    // the moved cursor. C++ cannot enforce that; finish or destroy the reader before touching its
-    // workbook for anything else.
+    // parse_sheet a batch at a time. Borrows the workbook's single row cursor: any other read on
+    // that workbook (parse_sheet, rows(), move_to_sheet, close) leaves this reader reporting a
+    // latched error instead of resuming from the moved cursor. C++ cannot enforce that, so finish
+    // or destroy the reader first.
     template <typename T>
     class TypedReader
     {
@@ -1468,8 +1464,7 @@ namespace xl
 
         ~TypedReader() { xl_typed_reader_close(reader_); } // safe on null
 
-        // The next batch, an empty optional at end of sheet, or an Error. Each batch is an ordinary
-        // TableView<T>, independent of every other and valid after this reader is gone.
+        // Empty optional at end of sheet. Each batch outlives this reader.
         std::expected<std::optional<TableView<T>>, Error> next()
         {
             xl_table table{};
@@ -1485,8 +1480,7 @@ namespace xl
             return std::optional<TableView<T>>(TableView<T>::from_raw(table));
         }
 
-        // Input range over std::expected<TableView<T>, Error>, so `for (auto &batch : reader)`
-        // works. Single-pass by nature: the native reader has no rewind.
+        // Single-pass by nature: the native reader has no rewind.
         class iterator
         {
         public:
@@ -1524,15 +1518,12 @@ namespace xl
                     current_.reset();
                     return;
                 }
-                // Frees the batch just yielded BEFORE the next one is allocated. Keeping it alive
-                // across the call would hold two batches at once and double the peak this type
-                // exists to bound.
+                // Holding the yielded batch across the call would double the peak this type bounds.
                 current_.reset();
                 std::expected<std::optional<TableView<T>>, Error> batch = reader_->next();
                 if (!batch.has_value())
                 {
-                    // The error is yielded once and then the range ends: the ABI latches the same
-                    // failure forever, so continuing would be an infinite stream of one error.
+                    // The ABI latches the failure, so yield it once and end rather than repeat it.
                     current_ = value_type(std::unexpect, std::move(batch.error()));
                     reader_ = nullptr;
                     return;
@@ -1553,7 +1544,6 @@ namespace xl
         iterator begin() { return iterator(this); }
         std::default_sentinel_t end() const noexcept { return {}; }
 
-        // Internal: constructed only by typed_reader, which owns the xl_typed_reader_open call.
         static TypedReader from_raw(xl_typed_reader *reader) { return TypedReader(reader); }
 
     private:
@@ -1562,10 +1552,8 @@ namespace xl
         xl_typed_reader *reader_ = nullptr;
     };
 
-    // parse_sheet, delivered a batch at a time. `header_row` means exactly what it does there
-    // (0 = no header), and is consumed once here rather than re-read per batch. `batch_size` is
-    // rows per batch: 0 is unbounded (one batch, identical to parse_sheet), negative is
-    // XL_INVALID_ARGUMENT.
+    // `batch_size` is rows per batch: 0 unbounded, negative XL_INVALID_ARGUMENT. `header_row` is
+    // consumed here rather than re-read per batch.
     template <typename T>
     std::expected<TypedReader<T>, Error> typed_reader(Workbook &workbook, int32_t header_row = 1,
                                                       int64_t batch_size = 10000)

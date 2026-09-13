@@ -219,15 +219,11 @@ impl Workbook {
         crate::rows::AllRows::read(self.handle)
     }
 
-    /// [`parse_sheet`] delivered a batch at a time, so peak memory is one batch rather than one
-    /// sheet. `header_row` means what it does there (0 = no header) and is consumed once, here, not
-    /// re-read per batch. `batch_size` is rows per batch: 0 is unbounded (one batch, identical to
-    /// `parse_sheet`), negative is an error.
+    /// [`parse_sheet`] delivered a batch at a time. `batch_size` is rows per batch: 0 unbounded,
+    /// negative an error. The header row is consumed once, here, not re-read per batch.
     ///
-    /// `&mut self` is load-bearing, not a formality: the native reader borrows this workbook's
-    /// single row cursor, and the ABI serves one chunked read per workbook. The exclusive borrow is
-    /// what makes a second reader - or a `parse_sheet`/[`rows`](Self::rows) call alongside a live
-    /// one - a compile error here rather than a runtime fault.
+    /// `&mut self` is what makes a second reader - or a `parse_sheet`/[`rows`](Self::rows) call
+    /// alongside a live one - a compile error rather than a runtime fault.
     pub fn typed_chunks<T: ExcelMapper>(
         &mut self,
         header_row: i32,
@@ -407,8 +403,7 @@ pub struct ColumnBinding<T> {
     pub assign: fn(&mut T, &XlColumn, i64),
 }
 
-// Hand-written rather than derived: `#[derive(Clone)]` would add a `T: Clone` bound, and `T` here
-// is the user's row struct, which has no reason to be cloneable. A binding is function pointers.
+// Hand-written: `#[derive(Clone)]` would add a `T: Clone` bound the user's row struct need not meet.
 impl<T> Clone for ColumnBinding<T> {
     fn clone(&self) -> Self {
         *self
@@ -601,8 +596,7 @@ impl<T: ExcelMapper> Iterator for TypedChunks<'_, T> {
     type Item = Result<TableView<T>, Error>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        // The ABI latches a failure: every later call repeats it. Ending the iterator instead keeps
-        // a plain `for` loop from spinning on the same error forever.
+        // The ABI latches a failure, so ending here keeps a `for` loop from spinning on it forever.
         if self.done {
             return None;
         }
@@ -622,8 +616,7 @@ impl<T: ExcelMapper> Iterator for TypedChunks<'_, T> {
             return Some(Err(last_error(status)));
         }
 
-        // Same invariant parse_sheet checks once: one column per spec, in spec order, or the zip in
-        // `get` would silently leave trailing fields at their default.
+        // Without this the zip in `get` would silently leave trailing fields at their default.
         if table.column_count as usize != self.bindings.len() {
             let column_count = table.column_count;
             unsafe { crate::xl_free_table(&mut table) };
@@ -637,8 +630,8 @@ impl<T: ExcelMapper> Iterator for TypedChunks<'_, T> {
             )));
         }
 
-        // ponytail: bindings are cloned per batch - one small Vec of function pointers per batch,
-        // not per row. Give TableView a borrowed binding slice only if a bench shows this.
+        // ponytail: one small Vec of function pointers cloned per batch, not per row. Give
+        // TableView a borrowed slice only if a bench shows it.
         Some(Ok(TableView {
             table,
             bindings: self.bindings.clone(),
@@ -653,8 +646,7 @@ impl<T: ExcelMapper> Drop for TypedChunks<'_, T> {
     }
 }
 
-/// Progress only, for the same reason [`TableView`]'s is shape only - and because the reader handle
-/// is opaque. Needed so `Result<TypedChunks<_>, Error>` works with `expect_err` and friends.
+/// Progress only - the reader handle is opaque. Needed for `expect_err` on a `Result<Self, _>`.
 impl<T: ExcelMapper> std::fmt::Debug for TypedChunks<'_, T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("TypedChunks")
