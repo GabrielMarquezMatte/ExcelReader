@@ -639,6 +639,41 @@ def test_to_record_batch_reader_rejects_a_negative_batch_size(batched_csv):
             workbook.to_record_batch_reader(_BATCH_SCHEMA, batch_size=-1)
 
 
+def test_a_stream_is_rejected_while_a_reader_is_live(batched_csv):
+    pytest.importorskip("pyarrow")
+    with open_workbook(batched_csv) as workbook:
+        reader = workbook.iter_parse_typed(_BATCH_SCHEMA, batch_size=4)
+        next(reader)  # a generator opens nothing until it is first iterated
+        with pytest.raises(ExcelReaderError):
+            workbook.to_record_batch_reader(_BATCH_SCHEMA, batch_size=4)
+        reader.close()
+
+
+def test_a_reader_is_rejected_while_a_stream_is_live(batched_csv):
+    pytest.importorskip("pyarrow")
+    with open_workbook(batched_csv) as workbook:
+        stream = workbook.to_record_batch_reader(_BATCH_SCHEMA, batch_size=4)  # noqa: F841 (kept alive on purpose)
+        with pytest.raises(ExcelReaderError):
+            next(workbook.iter_parse_typed(_BATCH_SCHEMA, batch_size=4))
+
+
+# pyarrow's RecordBatchReader surfaces a faulted C stream as a plain OSError, not ExcelReaderError -
+# get_next's errno-style failure crosses the Arrow C Data Interface before this library's own
+# exception wrapping ever gets a chance to run.
+def test_a_foreign_read_latches_the_streams_error(batched_csv):
+    pytest.importorskip("pyarrow")
+    with open_workbook(batched_csv) as workbook:
+        reader = workbook.to_record_batch_reader(_BATCH_SCHEMA, batch_size=4)
+        reader.read_next_batch()
+        workbook.parse_typed(_BATCH_SCHEMA)  # steals the row cursor, invalidating the stream
+
+        with pytest.raises(OSError) as first:
+            reader.read_next_batch()
+        with pytest.raises(OSError) as second:
+            reader.read_next_batch()
+        assert str(first.value) == str(second.value)
+
+
 def test_iter_pandas_yields_one_frame_per_batch(batched_csv):
     pytest.importorskip("pyarrow")
     pytest.importorskip("pandas")
