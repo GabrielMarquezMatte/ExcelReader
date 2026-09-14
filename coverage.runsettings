@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RunSettings>
+  <DataCollectionRunSettings>
+    <DataCollectors>
+      <DataCollector friendlyName="Code Coverage">
+        <Configuration>
+          <CodeCoverage>
+            <Sources>
+              <Exclude>
+                <!-- Source generator output. Counting it measures the generators' templates, not
+                     this repo's code: ConsoleAppFramework alone contributes ~660 permanently
+                     uncovered lines, which is most of what drags ExcelReader.Cli's number down.
+                     The separator class matters - a bare `obj` substring also matches
+                     ValueObjects/. -->
+                <Source>.*[\/]obj[\/].*</Source>
+                <!-- The C ABI entry points. Managed code cannot call an [UnmanagedCallersOnly]
+                     method, so the .NET suite structurally cannot reach them; they are exercised by
+                     the C, C++, Rust and Python jobs in native-bindings.yml, whose coverage does not
+                     land in this report. -->
+                <Source>.*[\/]ExcelReader\.Native[\/]Exports\.cs</Source>
+              </Exclude>
+            </Sources>
+          </CodeCoverage>
+        </Configuration>
+      </DataCollector>
+    </DataCollectors>
+  </DataCollectionRunSettings>
+</RunSettings>
