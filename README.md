@@ -1084,6 +1084,14 @@ The Arrow export is available from Python
 header — no Apache Arrow C++ dependency, you get the raw C Data Interface pair), and Rust
 (`excelreader::arrow::parse_arrow`, behind the `arrow` cargo feature, returning an `arrow::array::RecordBatch`).
 
+All three bindings can also read a sheet a batch at a time instead of the whole sheet in one call, so
+peak memory is one batch rather than one sheet — Python as `iter_parse_typed`/
+`to_record_batch_reader` (plus `iter_pandas`/`iter_polars`), C++ as `xl::typed_reader<T>`/
+`xl::arrow_stream<T>`, Rust as `Workbook::typed_chunks`/`arrow::parse_arrow_stream`. The .NET reader
+above already streams row-by-row by construction, so there is nothing to add here for it; see each
+binding's README for the chunked-reading semantics (one chunked read per workbook, `batch_size`
+meaning, and what invalidates a live one).
+
 Encrypting a written package goes through one export too, `xl_encrypt_package` — wrap a finished
 plaintext XLSX/XLSB package in agile ECMA-376 encryption, given a password. All three bindings
 expose it: Python as `encrypt_package`, C++ as `xl::encrypt_package`, Rust as
