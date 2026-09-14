@@ -3,6 +3,16 @@ name: Benchmarks -> GitHub Pages
 on:
   push:
     branches: [master]
+    # Trigger-level filtering is safe here, unlike in benchmark-pr.yml: this workflow owns no required
+    # status check, so skipping the whole run blocks nothing. Worth more than the saved CI minutes -
+    # a docs-only merge would otherwise append a fresh point to the published gh-pages series, feeding
+    # pure runner variance into the very history alert-threshold compares against.
+    paths:
+      - 'src/**'
+      - 'tests/ExcelReader.Benchmarks/**'
+      - 'Directory.Build.props'
+      - 'global.json'
+      - '.github/workflows/benchmark-pages.yml'
 
 concurrency:
   group: benchmark-pages

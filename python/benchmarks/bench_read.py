@@ -324,6 +324,14 @@ def main() -> int:
     _time_and_assert("  to_polars", bench_to_polars, args.path, args.n)
     print()
 
+    # polars itself is not enough for this leg: read_excel delegates the decode to fastexcel, which
+    # polars declares optional. to_polars above needs only polars, so it stays outside this guard.
+    try:
+        import fastexcel  # noqa: F401
+    except ImportError:
+        print("fastexcel not installed — skipping the polars.read_excel comparison")
+        return 0
+
     print("polars.read_excel() [NOTE: typed columnar DataFrame with type inference — not matched work]:")
     _time_and_assert("  polars", bench_polars, args.path, args.n)
     return 0
