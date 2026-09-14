@@ -2,19 +2,16 @@ using System.Text;
 
 namespace ExcelReader.Cli
 {
-    /// <summary>
-    /// Wraps standard error so <see cref="CliCommands.Execute"/>'s one-line failure message renders
-    /// in red on an interactive terminal, and as the exact same plain text everywhere else.
-    /// </summary>
-    /// <remarks>
-    /// <see cref="CliCommands"/> only ever calls <see cref="WriteLine(string?)"/> on the
-    /// <c>TextWriter</c> it's given for errors, so that is the only member this class needs to give
-    /// real behavior to - every other <see cref="TextWriter"/> member falls back to <paramref name="inner"/>
-    /// unused. Kept out of <c>CliCommands.cs</c> deliberately: that file's whole point is a tested
-    /// surface with no <c>Console</c>-shaped state, and this class exists only to decide, from
-    /// <see cref="System.Console.IsErrorRedirected"/>, how a byte reaches a real terminal. A raw ANSI
-    /// escape is enough for one red line - no need for Spectre.Console's markup renderer here.
-    /// </remarks>
+    // Wraps standard error so CliCommands.Execute's one-line failure message renders
+    // in red on an interactive terminal, and as the exact same plain text everywhere else.
+    //
+    // CliCommands only ever calls WriteLine(string?) on the
+    // TextWriter it's given for errors, so that is the only member this class needs to give
+    // real behavior to - every other TextWriter member falls back to inner
+    // unused. Kept out of CliCommands.cs deliberately: that file's whole point is a tested
+    // surface with no Console-shaped state, and this class exists only to decide, from
+    // System.Console.IsErrorRedirected, how a byte reaches a real terminal. A raw ANSI
+    // escape is enough for one red line - no need for Spectre.Console's markup renderer here.
     internal sealed class ColorizingErrorWriter(TextWriter inner) : TextWriter
     {
         private const string Red = "\u001b[31m";

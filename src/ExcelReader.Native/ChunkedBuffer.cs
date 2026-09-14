@@ -3,22 +3,19 @@ using System.Runtime.InteropServices;
 
 namespace ExcelReader.Native
 {
-    /// <summary>
-    /// Append-only accumulator, of a column's values or of a whole sheet's row blobs, that never
-    /// copies what it already holds: values land in a chain of chunks, so growth costs one fresh
-    /// chunk instead of reallocating and copying everything so far. <see cref="CopyTo"/> flattens
-    /// the chain into the single destination block, which is the only copy any value ever pays.
-    /// </summary>
-    /// <remarks>
-    /// This replaces the <see cref="List{T}"/> each <c>ColumnBuilder</c> field used to be, and the
-    /// <see cref="Array.Resize"/>d <c>byte[]</c> <c>AccumulateAllRows</c> used to grow. Both double
-    /// by allocating a bigger array and copying, so accumulating N elements allocates ~2N elements'
-    /// worth and throws ~N away, with the tall ones landing on the large object heap. Chunks are
-    /// capped below the LOH threshold, so nothing accumulated here reaches it at any row count.
-    /// Measured on Data/65K_Records_Data.xlsb (Ryzen 7 5700X, .NET 10.0.10, --job Medium):
-    /// NativeTypedParseBenchmark.ParseTyped 20.58 MB -> 11.73 MB, NativeRowReadBenchmark.ReadAllBlob
-    /// 67.72 MB -> 21.07 MB (the remainder of which is the blob itself plus the caller's copy).
-    /// </remarks>
+    // Append-only accumulator, of a column's values or of a whole sheet's row blobs, that never
+    // copies what it already holds: values land in a chain of chunks, so growth costs one fresh
+    // chunk instead of reallocating and copying everything so far. CopyTo flattens
+    // the chain into the single destination block, which is the only copy any value ever pays.
+    //
+    // This replaces the List each ColumnBuilder field used to be, and the
+    // Array.Resized byte[] AccumulateAllRows used to grow. Both double
+    // by allocating a bigger array and copying, so accumulating N elements allocates ~2N elements'
+    // worth and throws ~N away, with the tall ones landing on the large object heap. Chunks are
+    // capped below the LOH threshold, so nothing accumulated here reaches it at any row count.
+    // Measured on Data/65K_Records_Data.xlsb (Ryzen 7 5700X, .NET 10.0.10, --job Medium):
+    // NativeTypedParseBenchmark.ParseTyped 20.58 MB -> 11.73 MB, NativeRowReadBenchmark.ReadAllBlob
+    // 67.72 MB -> 21.07 MB (the remainder of which is the blob itself plus the caller's copy).
     // ponytail: chunks are plain allocations, not pooled — a parse still allocates its column data
     // once, it just no longer allocates it repeatedly. Upgrade path if that last slice matters is
     // ArrayPool&lt;T&gt;.Shared plus an IDisposable ColumnBuilder returning its chunks in ParseTyped's
@@ -37,14 +34,12 @@ namespace ExcelReader.Native
         private T[] _current = [];
         private int _used; // elements written into _current
         internal int Count { get; private set; }
-        /// <summary>Size of everything appended so far, in bytes — the exact size <see cref="CopyTo"/> needs.</summary>
+        // Size of everything appended so far, in bytes — the exact size CopyTo needs.
         internal int ByteLength => checked(Count * Unsafe.SizeOf<T>());
 
-        /// <summary>
-        /// The most recently appended element, by reference, for the read-modify-write the validity
-        /// bitmap does on the byte it is currently filling. Only valid after at least one
-        /// <see cref="Add"/>.
-        /// </summary>
+        // The most recently appended element, by reference, for the read-modify-write the validity
+        // bitmap does on the byte it is currently filling. Only valid after at least one
+        // Add.
         internal ref T Last => ref _current[_used - 1];
 
         internal void Add(T value)
@@ -73,8 +68,8 @@ namespace ExcelReader.Native
             }
         }
 
-        /// <summary>Writes every element appended so far into <paramref name="destination"/>, which
-        /// must be at least <see cref="ByteLength"/> bytes.</summary>
+        // Writes every element appended so far into destination, which
+        // must be at least ByteLength bytes.
         internal void CopyTo(Span<byte> destination)
         {
             int offset = 0;

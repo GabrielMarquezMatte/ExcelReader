@@ -10,18 +10,16 @@ namespace ExcelReader.Native
 {
     internal static unsafe partial class NativeApi
     {
-        /// <summary>
-        /// Guesses a <see cref="ParseTyped"/>/<c>xl_parse_arrow</c> schema by sampling the WHOLE current
-        /// sheet, from its first row — independent of, and never disturbing, the incremental cursor
-        /// <see cref="NextRow"/>/<see cref="NextRowDecoded"/>/<see cref="ReadAllBlob"/> share on
-        /// <paramref name="handle"/>. Every guess comes from the sampled cells' own <see cref="CellType"/>
-        /// tag (the same one <see cref="ParseTyped"/> already trusts to convert values) — no text
-        /// sniffing, and no new parsing logic beyond <see cref="ExcelCellReaders.Parsable{TValue}"/>,
-        /// reused here only to tell an integral column from a fractional one.
-        /// </summary>
-        /// <param name="headerRow">Same meaning as in <see cref="ParseTyped"/>: 1-based row number to
-        /// take column names from; 0 means "no header", so every returned spec is index-based.</param>
-        /// <param name="sampleSize">How many rows after the header to inspect. Must be positive.</param>
+        // Guesses a ParseTyped/xl_parse_arrow schema by sampling the WHOLE current sheet, from its first
+        // row — independent of, and never disturbing, the incremental cursor NextRow/NextRowDecoded/
+        // ReadAllBlob share on handle. Every guess comes from the sampled cells' own CellType tag (the
+        // same one ParseTyped already trusts to convert values) — no text sniffing, and no new parsing
+        // logic beyond ExcelCellReaders.Parsable, reused here only to tell an integral column from a
+        // fractional one.
+        //
+        // headerRow: same meaning as in ParseTyped — 1-based row to take column names from; 0 means "no
+        // header", so every returned spec is index-based. sampleSize: rows after the header to inspect,
+        // which must be positive.
         internal static int InferSchema(NativeHandle? handle, int headerRow, int sampleSize, out NativeInferredSchema schema)
         {
             schema = default;
@@ -71,7 +69,7 @@ namespace ExcelReader.Native
             }
         }
 
-        /// <summary>Releases a result returned by <see cref="InferSchema"/> and resets it to zero. Safe on a zeroed value.</summary>
+        // Releases a result returned by InferSchema and resets it to zero. Safe on a zeroed value.
         internal static void FreeSchema(ref NativeInferredSchema schema)
         {
             if (schema.Columns == IntPtr.Zero)
@@ -149,10 +147,10 @@ namespace ExcelReader.Native
         }
     }
 
-    /// <summary>Flat C ABI representation of the whole result of <see cref="NativeApi.InferSchema"/>.
-    /// <see cref="Columns"/> is one allocation of <see cref="ColumnCount"/> <see cref="NativeColumnSpecRaw"/>
-    /// values; each spec's own non-null <see cref="NativeColumnSpecRaw.Name"/> is a separate allocation,
-    /// freed individually by <see cref="NativeApi.FreeSchema"/>.</summary>
+    // Flat C ABI representation of the whole result of NativeApi.InferSchema.
+    // Columns is one allocation of ColumnCount NativeColumnSpecRaw
+    // values; each spec's own non-null NativeColumnSpecRaw.Name is a separate allocation,
+    // freed individually by NativeApi.FreeSchema.
     [StructLayout(LayoutKind.Sequential)]
     internal struct NativeInferredSchema
     {

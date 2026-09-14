@@ -7,21 +7,18 @@ namespace ExcelReader.Native
 {
     internal static unsafe partial class NativeApi
     {
-        /// <summary>
-        /// Same schema-driven read as <see cref="ParseTyped"/>, exported as one top-level Arrow struct
-        /// array/schema instead of a <see cref="NativeTable"/> — see excelreader_arrow.h for the
-        /// XL_T_*-to-Arrow-format-code mapping and the ownership contract (the caller releases via
-        /// <c>out_array-&gt;release</c>/<c>out_schema-&gt;release</c>, never <see cref="FreeTable"/>).
-        /// </summary>
-        /// <remarks>
-        /// Not zero-copy from <see cref="ParseTyped"/>'s own buffers: every Arrow buffer here is a
-        /// fresh allocation copied from the intermediate <see cref="NativeTable"/>, which is freed
-        /// immediately after (including the deliberate <see cref="NativeColumnType.Bool"/> repack from
-        /// one byte per row to Arrow's bit-packed layout). This trades one extra copy of already-computed
-        /// columnar data for an ownership story with no buffers shared between two different release
-        /// paths — true zero-copy would require building Arrow-shaped buffers during the row loop
-        /// itself, which is a larger change deferred until zero-copy is actually measured to matter.
-        /// </remarks>
+        // Same schema-driven read as ParseTyped, exported as one top-level Arrow struct
+        // array/schema instead of a NativeTable — see excelreader_arrow.h for the
+        // XL_T_*-to-Arrow-format-code mapping and the ownership contract (the caller releases via
+        // out_array-&gt;release/out_schema-&gt;release, never FreeTable).
+        //
+        // Not zero-copy from ParseTyped's own buffers: every Arrow buffer here is a
+        // fresh allocation copied from the intermediate NativeTable, which is freed
+        // immediately after (including the deliberate NativeColumnType.Bool repack from
+        // one byte per row to Arrow's bit-packed layout). This trades one extra copy of already-computed
+        // columnar data for an ownership story with no buffers shared between two different release
+        // paths — true zero-copy would require building Arrow-shaped buffers during the row loop
+        // itself, which is a larger change deferred until zero-copy is actually measured to matter.
         internal static int ParseArrow(NativeHandle? handle, NativeColumnSpec[] specs, int headerRow, out ArrowArray array, out ArrowSchema schema)
         {
             array = default;
@@ -93,10 +90,10 @@ namespace ExcelReader.Native
             }
         }
 
-        /// <summary>Releases a result returned by <see cref="ParseArrow"/>'s <paramref name="schemaPtr"/>
-        /// half. Safe to call on an already-released (zeroed <see cref="ArrowSchema.Release"/>) schema —
-        /// mirrors every other <c>xl_free_*</c>'s idempotency, required here because Arrow's own contract
-        /// permits (and some consumers do) a defensive double-release check.</summary>
+        // Releases a result returned by ParseArrow's schemaPtr
+        // half. Safe to call on an already-released (zeroed ArrowSchema.Release) schema —
+        // mirrors every other xl_free_*'s idempotency, required here because Arrow's own contract
+        // permits (and some consumers do) a defensive double-release check.
         internal static void ReleaseArrowSchema(IntPtr schemaPtr)
         {
             if (schemaPtr == IntPtr.Zero)
@@ -117,9 +114,9 @@ namespace ExcelReader.Native
             Marshal.StructureToPtr(schema, schemaPtr, false);
         }
 
-        /// <summary>The <see cref="ArrowArray"/> half of <see cref="ReleaseArrowSchema"/>: the same
-        /// recursive-children walk (shared via <see cref="ReleaseChildren"/>) and idempotent release
-        /// mark, plus the buffers block, which a schema has no counterpart for.</summary>
+        // The ArrowArray half of ReleaseArrowSchema: the same
+        // recursive-children walk (shared via ReleaseChildren) and idempotent release
+        // mark, plus the buffers block, which a schema has no counterpart for.
         internal static void ReleaseArrowArray(IntPtr arrayPtr)
         {
             if (arrayPtr == IntPtr.Zero)

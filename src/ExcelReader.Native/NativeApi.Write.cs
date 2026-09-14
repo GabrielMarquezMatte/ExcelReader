@@ -7,22 +7,19 @@ namespace ExcelReader.Native
 {
     internal static unsafe partial class NativeApi
     {
-        /// <summary>Style index 1 is always the builtin date style (see IWorkbookWriter.AddStyle).</summary>
+        // Style index 1 is always the builtin date style (see IWorkbookWriter.AddStyle).
         private const int BuiltinDateStyleId = 1;
 
         // Named distinctly from NativeApi.Typed.cs's field of the same value to avoid S3218 (field
         // shadows an outer-class member).
         internal static readonly int WriteUnixEpochDayNumber = new DateOnly(1970, 1, 1).DayNumber;
 
-        /// <summary>
-        /// Writes <paramref name="table"/> to <paramref name="path"/> as one sheet. Mirrors
-        /// <see cref="ParseTyped"/> in reverse and consumes the exact structs it produces.
-        /// </summary>
-        /// <remarks>
-        /// Every buffer reachable from <paramref name="table"/> is borrowed, never copied and never
-        /// freed here. Validation runs to completion before the file is created, so a rejected call
-        /// leaves nothing behind on disk.
-        /// </remarks>
+        // Writes table to path as one sheet. Mirrors
+        // ParseTyped in reverse and consumes the exact structs it produces.
+        //
+        // Every buffer reachable from table is borrowed, never copied and never
+        // freed here. Validation runs to completion before the file is created, so a rejected call
+        // leaves nothing behind on disk.
         internal static int WriteTyped(ReadOnlySpan<byte> path, int format, NativeColumnSpec[] specs, NativeTable table, NativeWriteOptions options)
         {
             if (path.IsEmpty)
@@ -57,10 +54,8 @@ namespace ExcelReader.Native
             }
         }
 
-        /// <summary>
-        /// Same as <see cref="WriteTyped"/>, except the result is returned as bytes rather than
-        /// written to a path — everything else about validation and content is identical.
-        /// </summary>
+        // Same as WriteTyped, except the result is returned as bytes rather than
+        // written to a path — everything else about validation and content is identical.
         internal static int WriteTypedToMemory(int format, NativeColumnSpec[] specs, NativeTable table, NativeWriteOptions options, out byte[]? bytes)
         {
             bytes = null;
@@ -123,10 +118,8 @@ namespace ExcelReader.Native
             }
         }
 
-        /// <summary>
-        /// Same as <see cref="OpenWriteHandle"/>, except the handle is backed by an in-memory buffer
-        /// rather than a file — see <see cref="GetWriteHandleBytes"/> to read it out.
-        /// </summary>
+        // Same as OpenWriteHandle, except the handle is backed by an in-memory buffer
+        // rather than a file — see GetWriteHandleBytes to read it out.
         internal static int OpenWriteHandleToMemory(int format, NativeWriteOptions options, out NativeWriterHandle? handle)
         {
             handle = null;
@@ -151,11 +144,9 @@ namespace ExcelReader.Native
             }
         }
 
-        /// <summary>
-        /// Finishes and releases a writer handle opened by <see cref="OpenWriteHandle"/>. Always
-        /// disposes <paramref name="handle"/>, even when <see cref="NativeWriterHandle.Close"/> throws
-        /// — an unregistered-but-undisposed handle would otherwise leak its open <see cref="FileStream"/>.
-        /// </summary>
+        // Finishes and releases a writer handle opened by OpenWriteHandle. Always
+        // disposes handle, even when NativeWriterHandle.Close throws
+        // — an unregistered-but-undisposed handle would otherwise leak its open FileStream.
         internal static int CloseWriteHandle(NativeWriterHandle? handle)
         {
             if (handle is null)
@@ -179,14 +170,12 @@ namespace ExcelReader.Native
             }
         }
 
-        /// <summary>
-        /// Reads back everything written so far to a handle opened by
-        /// <see cref="OpenWriteHandleToMemory"/>, ending the workbook's content first if that has not
-        /// already happened (see <see cref="NativeWriterHandle.Close"/> — idempotent, so this is safe
-        /// to call whether or not the caller ended every sheet/row itself). Does NOT dispose
-        /// <paramref name="handle"/>: the caller must still call <see cref="CloseWriteHandle"/>
-        /// afterward to release it, same as a file-backed handle.
-        /// </summary>
+        // Reads back everything written so far to a handle opened by
+        // OpenWriteHandleToMemory, ending the workbook's content first if that has not
+        // already happened (see NativeWriterHandle.Close — idempotent, so this is safe
+        // to call whether or not the caller ended every sheet/row itself). Does NOT dispose
+        // handle: the caller must still call CloseWriteHandle
+        // afterward to release it, same as a file-backed handle.
         internal static int GetWriteHandleBytes(NativeWriterHandle? handle, out byte[]? bytes)
         {
             bytes = null;
@@ -420,18 +409,16 @@ namespace ExcelReader.Native
             return (bitmap[rowIndex >> 3] & (1 << (int)(rowIndex & 7))) != 0;
         }
 
-        /// <summary>
-        /// Validates a caller-supplied write table before a single byte is written.
-        /// </summary>
-        /// <remarks>
-        /// This is the trust boundary. Every pointer reachable from <paramref name="table"/> belongs to
-        /// the caller and is about to be dereferenced against lengths the caller also supplied, so a
-        /// value that is merely wrong here becomes an out-of-bounds read of the caller's process
-        /// memory a few frames later. The string-offset walk below is the reason this runs to
-        /// completion up front rather than checking each row as it is written: a partially written
-        /// file plus a segfault is strictly worse than a rejected call.
-        /// </remarks>
-        /// <param name="hasHeader">True when every spec carries a name, so a header row must be written.</param>
+        // Validates a caller-supplied write table before a single byte is written.
+        //
+        // This is the trust boundary. Every pointer reachable from table belongs to
+        // the caller and is about to be dereferenced against lengths the caller also supplied, so a
+        // value that is merely wrong here becomes an out-of-bounds read of the caller's process
+        // memory a few frames later. The string-offset walk below is the reason this runs to
+        // completion up front rather than checking each row as it is written: a partially written
+        // file plus a segfault is strictly worse than a rejected call.
+        //
+        // hasHeader: True when every spec carries a name, so a header row must be written.
         internal static bool TryValidateWriteTable(NativeColumnSpec[] specs, NativeTable table, out bool hasHeader, [NotNullWhen(false)] out string? error)
         {
             hasHeader = false;

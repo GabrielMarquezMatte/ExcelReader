@@ -4,11 +4,9 @@ namespace ExcelReader.Native
 {
     internal static unsafe partial class NativeApi
     {
-        /// <summary>
-        /// Everything one <c>ArrowArrayStream</c> needs behind its <c>private_data</c>: the batch
-        /// source, the specs its schema is built from, and the last error, kept alive as UTF-8 for
-        /// <c>get_last_error</c> (whose returned pointer must outlive the call).
-        /// </summary>
+        // Everything one ArrowArrayStream needs behind its private_data: the batch
+        // source, the specs its schema is built from, and the last error, kept alive as UTF-8 for
+        // get_last_error (whose returned pointer must outlive the call).
         internal sealed class ArrowStreamSession : IDisposable
         {
             internal required TypedParseSession Session { get; init; }
@@ -25,14 +23,12 @@ namespace ExcelReader.Native
                 LastErrorUtf8 = AllocUtf8Z(message);
             }
 
-            /// <summary>
-            /// Stores the message behind a failed batch, taken from the SESSION's own latched fault
-            /// rather than the thread's <c>xl_last_error</c>: that one belongs to whatever ExcelReader
-            /// call ran most recently on this thread, which need not be this stream at all, so reading
-            /// it back here could hand the consumer an unrelated message. Never leaves
-            /// <c>get_last_error</c> empty for a non-zero return — a fault with no message of its own
-            /// (nothing produces one today, but the fallback costs nothing) still gets a fixed one.
-            /// </summary>
+            // Stores the message behind a failed batch, taken from the SESSION's own latched fault
+            // rather than the thread's xl_last_error: that one belongs to whatever ExcelReader
+            // call ran most recently on this thread, which need not be this stream at all, so reading
+            // it back here could hand the consumer an unrelated message. Never leaves
+            // get_last_error empty for a non-zero return — a fault with no message of its own
+            // (nothing produces one today, but the fallback costs nothing) still gets a fixed one.
             internal void SetBatchError(string? message)
             {
                 if (string.IsNullOrEmpty(message))
@@ -42,8 +38,8 @@ namespace ExcelReader.Native
                 SetError(message);
             }
 
-            /// <summary>Closes the underlying read and frees the message block. Idempotent, because
-            /// <see cref="TypedParseSession.Dispose"/> is and the freed block is zeroed here.</summary>
+            // Closes the underlying read and frees the message block. Idempotent, because
+            // TypedParseSession.Dispose is and the freed block is zeroed here.
             public void Dispose()
             {
                 // The message block is freed even if closing the read throws: TypedParseSession.Dispose
@@ -61,14 +57,13 @@ namespace ExcelReader.Native
             }
         }
 
-        /// <summary>Opens a batched Arrow read as an Arrow C Data Interface stream.</summary>
-        /// <remarks>
-        /// The session lives only in the stream's <c>private_data</c> as a strong (not pinned — only
-        /// the handle's opaque id crosses the boundary, never the object's address)
-        /// <see cref="GCHandle"/> — deliberately NOT in <see cref="NativeHandleTable"/>. There is no
-        /// id for a caller to hold, so there is no stale id to misuse and no way to close this
-        /// session through <c>xl_typed_reader_close</c>. <c>stream-&gt;release</c> is the only exit.
-        /// </remarks>
+        // Opens a batched Arrow read as an Arrow C Data Interface stream.
+        //
+        // The session lives only in the stream's private_data as a strong (not pinned — only
+        // the handle's opaque id crosses the boundary, never the object's address)
+        // GCHandle — deliberately NOT in NativeHandleTable. There is no
+        // id for a caller to hold, so there is no stale id to misuse and no way to close this
+        // session through xl_typed_reader_close. stream-&gt;release is the only exit.
         internal static int OpenArrowStream(NativeHandle? handle, NativeColumnSpec[] specs, int headerRow,
             long maxRows, out ArrowArrayStream stream)
         {

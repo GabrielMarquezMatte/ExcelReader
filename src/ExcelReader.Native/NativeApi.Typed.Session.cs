@@ -4,26 +4,23 @@ namespace ExcelReader.Native
 {
     internal static unsafe partial class NativeApi
     {
-        /// <summary>
-        /// A resumable <see cref="ParseTyped"/>: the same schema-driven columnar read, cut into
-        /// batches of at most <c>maxRows</c> rows. Column resolution happens once, at open — the
-        /// header row is consumed there and never re-read — so a batch is purely the row loop.
-        /// </summary>
-        /// <remarks>
-        /// Fresh <see cref="ColumnBuilder"/>s per batch are the entire memory ceiling: each
-        /// builder's <see cref="ChunkedBuffer{T}"/> chain is dropped once <see cref="BuildTable"/>
-        /// has copied it out, so the working set is one batch's columns plus one batch's output
-        /// block rather than the whole sheet.
-        ///
-        /// Holds a strong reference to the <see cref="NativeHandle"/> so the reader cannot be
-        /// collected underneath it. This is also the only thing in this ABI that keeps an
-        /// <see cref="IExcelRowEnumerator"/> open ACROSS calls, which a workbook cannot serve twice at
-        /// once — so a caller-visible session takes <see cref="NativeHandle.LiveSession"/> for its whole
-        /// lifetime (a second one is refused) and any other read on that workbook, including
-        /// <c>xl_close</c> and <c>xl_move_to_sheet</c>, <see cref="Fault"/>s it instead of rewinding the
-        /// reader underneath it. A faulted session reports its latched message from every later
-        /// <see cref="NextBatch"/> and never returns rows again.
-        /// </remarks>
+        // A resumable ParseTyped: the same schema-driven columnar read, cut into
+        // batches of at most maxRows rows. Column resolution happens once, at open — the
+        // header row is consumed there and never re-read — so a batch is purely the row loop.
+        //
+        // Fresh ColumnBuilders per batch are the entire memory ceiling: each
+        // builder's ChunkedBuffer chain is dropped once BuildTable
+        // has copied it out, so the working set is one batch's columns plus one batch's output
+        // block rather than the whole sheet.
+        //
+        // Holds a strong reference to the NativeHandle so the reader cannot be
+        // collected underneath it. This is also the only thing in this ABI that keeps an
+        // IExcelRowEnumerator open ACROSS calls, which a workbook cannot serve twice at
+        // once — so a caller-visible session takes NativeHandle.LiveSession for its whole
+        // lifetime (a second one is refused) and any other read on that workbook, including
+        // xl_close and xl_move_to_sheet, Faults it instead of rewinding the
+        // reader underneath it. A faulted session reports its latched message from every later
+        // NextBatch and never returns rows again.
         internal sealed class TypedParseSession : IDisposable
         {
             private readonly NativeHandle _handle;
@@ -50,21 +47,19 @@ namespace ExcelReader.Native
                 _rows = rows;
             }
 
-            /// <summary>
-            /// Opens a CALLER-VISIBLE session: resolves the columns once, positions the reader at the
-            /// first data row, and takes the workbook's single live-session slot for as long as the
-            /// session lives.
-            /// </summary>
-            /// <param name="maxRows">Rows per batch. 0 means unbounded — one batch holding every row.</param>
-            /// <remarks>
-            /// Refused with <see cref="NativeStatus.Error"/> when the workbook already has one open —
-            /// a second <c>xl_typed_reader_open</c>, an <c>xl_parse_arrow_stream</c> while a typed
-            /// reader is open, or the reverse. No new status code for it: it is a workbook-state
-            /// failure whose detail belongs in <c>xl_last_error</c>, exactly what XL_ERROR means
-            /// everywhere else in this ABI (the arguments are all perfectly valid, so
-            /// XL_INVALID_ARGUMENT would misdescribe it, and the handle is live, so XL_INVALID_HANDLE
-            /// would too).
-            /// </remarks>
+            // Opens a CALLER-VISIBLE session: resolves the columns once, positions the reader at the
+            // first data row, and takes the workbook's single live-session slot for as long as the
+            // session lives.
+            //
+            // maxRows: Rows per batch. 0 means unbounded — one batch holding every row.
+            //
+            // Refused with NativeStatus.Error when the workbook already has one open —
+            // a second xl_typed_reader_open, an xl_parse_arrow_stream while a typed
+            // reader is open, or the reverse. No new status code for it: it is a workbook-state
+            // failure whose detail belongs in xl_last_error, exactly what XL_ERROR means
+            // everywhere else in this ABI (the arguments are all perfectly valid, so
+            // XL_INVALID_ARGUMENT would misdescribe it, and the handle is live, so XL_INVALID_HANDLE
+            // would too).
             internal static int Open(NativeHandle? handle, NativeColumnSpec[] specs, int headerRow, long maxRows,
                 out TypedParseSession? session)
             {
@@ -88,23 +83,21 @@ namespace ExcelReader.Native
                 return status;
             }
 
-            /// <summary>
-            /// Opens the short-lived session behind <see cref="ParseTyped"/>/<see cref="ParseArrow"/>:
-            /// one unbounded batch, drained and disposed inside the same ABI call.
-            /// </summary>
-            /// <param name="cause">The ABI function opening it, for the fault message it leaves behind.</param>
-            /// <remarks>
-            /// Deliberately does NOT touch <see cref="NativeHandle.LiveSession"/>. That is what lets the
-            /// whole-sheet functions coexist with the one-live-session rule instead of being refused by
-            /// it: they cannot be interleaved with anything, because they hold the workbook's cursor
-            /// only for the duration of their own call — and for the same reason they cannot fault
-            /// themselves, since the session they fault is by definition someone else's. What they do
-            /// have to do is fault any caller-visible session before taking the reader's enumerator —
-            /// but not before <paramref name="specs"/>/<paramref name="headerRow"/> are known to be
-            /// valid, or a call that was always going to fail XL_INVALID_ARGUMENT on pure argument
-            /// checking would destroy an unrelated caller's open reader without ever touching the
-            /// cursor. See <see cref="OpenCore"/>'s own ordering for where the line sits.
-            /// </remarks>
+            // Opens the short-lived session behind ParseTyped/ParseArrow:
+            // one unbounded batch, drained and disposed inside the same ABI call.
+            //
+            // cause: The ABI function opening it, for the fault message it leaves behind.
+            //
+            // Deliberately does NOT touch NativeHandle.LiveSession. That is what lets the
+            // whole-sheet functions coexist with the one-live-session rule instead of being refused by
+            // it: they cannot be interleaved with anything, because they hold the workbook's cursor
+            // only for the duration of their own call — and for the same reason they cannot fault
+            // themselves, since the session they fault is by definition someone else's. What they do
+            // have to do is fault any caller-visible session before taking the reader's enumerator —
+            // but not before specs/headerRow are known to be
+            // valid, or a call that was always going to fail XL_INVALID_ARGUMENT on pure argument
+            // checking would destroy an unrelated caller's open reader without ever touching the
+            // cursor. See OpenCore's own ordering for where the line sits.
             internal static int OpenTransient(NativeHandle? handle, NativeColumnSpec[] specs, int headerRow,
                 string cause, out TypedParseSession? session)
             {
@@ -116,10 +109,10 @@ namespace ExcelReader.Native
                 return OpenCore(handle, specs, headerRow, maxRows: 0, faultCause: cause, out session);
             }
 
-            /// <param name="faultCause">Non-null only for <see cref="OpenTransient"/>: the ABI function
-            /// name to fault any live session with, once argument validation has passed and this call is
-            /// actually about to take the reader's enumerator. Null for <see cref="Open"/>, which never
-            /// reaches here with a live session already set (its own caller refuses that first).</param>
+            // faultCause is non-null only for OpenTransient: the ABI function name to fault any live
+            // session with, once argument validation has passed and this call is actually about to take
+            // the reader's enumerator. Null for Open, which never reaches here with a live session
+            // already set (its own caller refuses that first).
             private static int OpenCore(NativeHandle handle, NativeColumnSpec[] specs, int headerRow, long maxRows,
                 string? faultCause, out TypedParseSession? session)
             {
@@ -167,11 +160,9 @@ namespace ExcelReader.Native
                 }
             }
 
-            /// <summary>
-            /// Fills <paramref name="table"/> with the next batch. Returns <see cref="NativeStatus.Eof"/>
-            /// once the sheet is exhausted, zeroing <paramref name="table"/> so the caller's
-            /// <see cref="FreeTable"/> stays safe either way.
-            /// </summary>
+            // Fills table with the next batch. Returns NativeStatus.Eof
+            // once the sheet is exhausted, zeroing table so the caller's
+            // FreeTable stays safe either way.
             internal int NextBatch(out NativeTable table)
             {
                 table = default;
@@ -226,10 +217,10 @@ namespace ExcelReader.Native
                 }
             }
 
-            /// <summary>The reason this session is faulted, or <see langword="null"/> while it is healthy.
-            /// Owned here rather than read back out of the thread's <c>xl_last_error</c>, which any
-            /// unrelated ExcelReader call on the same thread can overwrite between the fault and the
-            /// report — see <see cref="ArrowStreamGetNextCore"/>, the one consumer that needs it.</summary>
+            // The reason this session is faulted, or null while it is healthy.
+            // Owned here rather than read back out of the thread's xl_last_error, which any
+            // unrelated ExcelReader call on the same thread can overwrite between the fault and the
+            // report — see ArrowStreamGetNextCore, the one consumer that needs it.
             internal string? FaultMessage
             {
                 get
@@ -238,11 +229,9 @@ namespace ExcelReader.Native
                 }
             }
 
-            /// <summary>
-            /// Permanently invalidates this session with <paramref name="message"/>, releasing its row
-            /// cursor and the workbook's live-session slot. Idempotent, and the FIRST message wins: the
-            /// original cause is more useful than whatever happened afterwards.
-            /// </summary>
+            // Permanently invalidates this session with message, releasing its row
+            // cursor and the workbook's live-session slot. Idempotent, and the FIRST message wins: the
+            // original cause is more useful than whatever happened afterwards.
             internal void Fault(string message)
             {
                 if (_disposed || _faulted)

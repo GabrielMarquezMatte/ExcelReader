@@ -4,9 +4,9 @@ using ExcelReader.Core.Reader;
 
 namespace ExcelReader.Native
 {
-    /// <summary>Boolean-shaped option states. "0" is never ambiguous between "off" and "use the library
-    /// default" — several <see cref="NativeOpenOptionsRaw"/> fields default to true. Mirrors
-    /// XL_OPT_* in include/excelreader.h.</summary>
+    // Boolean-shaped option states. "0" is never ambiguous between "off" and "use the library
+    // default" — several NativeOpenOptionsRaw fields default to true. Mirrors
+    // XL_OPT_* in include/excelreader.h.
     internal static class NativeOptionState
     {
         internal const int Default = 0;
@@ -14,15 +14,13 @@ namespace ExcelReader.Native
         internal const int True = 2;
     }
 
-    /// <summary>
-    /// Field-level decoding shared by <see cref="NativeOpenOptions"/> and
-    /// <see cref="NativeWriteOptions"/>. Both option structs carry the same two shapes of field — a
-    /// byte-valued one and a <see cref="NativeOptionState"/> tri-state — with the same rules and the
-    /// same messages; only the struct's own name differs, so it arrives as an argument.
-    /// </summary>
+    // Field-level decoding shared by NativeOpenOptions and
+    // NativeWriteOptions. Both option structs carry the same two shapes of field — a
+    // byte-valued one and a NativeOptionState tri-state — with the same rules and the
+    // same messages; only the struct's own name differs, so it arrives as an argument.
     internal static class NativeOptionDecode
     {
-        /// <summary>A byte-valued field: 0 means "use the library default", 1-255 is a real byte.</summary>
+        // A byte-valued field: 0 means "use the library default", 1-255 is a real byte.
         internal static bool TryByte(int value, string structName, string fieldName, out byte? decoded, out string? error)
         {
             decoded = null;
@@ -40,8 +38,8 @@ namespace ExcelReader.Native
             return true;
         }
 
-        /// <summary>A boolean-shaped field, encoded as <see cref="NativeOptionState"/> rather than a plain
-        /// 0/1 because several of these default to true.</summary>
+        // A boolean-shaped field, encoded as NativeOptionState rather than a plain
+        // 0/1 because several of these default to true.
         internal static bool TryState(int value, string structName, string fieldName, out bool? decoded, out string? error)
         {
             decoded = null;
@@ -59,12 +57,10 @@ namespace ExcelReader.Native
         }
     }
 
-    /// <summary>
-    /// Flat C ABI representation of <c>xl_open_options</c>. Every numeric field is 0 for "use the
-    /// library default"; every boolean-shaped field uses <see cref="NativeOptionState"/> instead of a
-    /// plain 0/1, since several of them default to true. See excelreader.h for the authoritative field
-    /// list and comments.
-    /// </summary>
+    // Flat C ABI representation of xl_open_options. Every numeric field is 0 for "use the
+    // library default"; every boolean-shaped field uses NativeOptionState instead of a
+    // plain 0/1, since several of them default to true. See excelreader.h for the authoritative field
+    // list and comments.
     [StructLayout(LayoutKind.Sequential)]
     internal struct NativeOpenOptionsRaw
     {
@@ -91,14 +87,12 @@ namespace ExcelReader.Native
         public int PasswordLen;
     }
 
-    /// <summary>
-    /// Decoded, validated form of <see cref="NativeOpenOptionsRaw"/> — every field is nullable, with
-    /// null meaning "use the library default", so <see cref="ToCsvReaderOptions"/>/
-    /// <see cref="ToExcelReaderOptions"/> only ever override what the caller actually set.
-    /// </summary>
+    // Decoded, validated form of NativeOpenOptionsRaw — every field is nullable, with
+    // null meaning "use the library default", so ToCsvReaderOptions/
+    // ToExcelReaderOptions only ever override what the caller actually set.
     internal readonly struct NativeOpenOptions
     {
-        /// <summary>The C struct's name, as it appears in every message this type produces.</summary>
+        // The C struct's name, as it appears in every message this type produces.
         private const string OptionsName = "xl_open_options";
 
         // An unbounded password length is the same class of hole as an unbounded count arriving as an
@@ -119,9 +113,9 @@ namespace ExcelReader.Native
         internal bool? PrefetchDecompression { get; init; }
         internal bool? InternStrings { get; init; }
 
-        /// <summary>Password for an encrypted OOXML workbook, decoded from the raw pointer+length pair.
-        /// Null means "no password supplied" — either the workbook isn't encrypted, or the caller wants
-        /// the library-default behavior of failing with <see cref="ExcelEncryptionReason.PasswordRequired"/>.</summary>
+        // Password for an encrypted OOXML workbook, decoded from the raw pointer+length pair.
+        // Null means "no password supplied" — either the workbook isn't encrypted, or the caller wants
+        // the library-default behavior of failing with ExcelEncryptionReason.PasswordRequired.
         internal string? Password { get; init; }
 
         internal CsvReaderOptions ToCsvReaderOptions()
@@ -184,11 +178,9 @@ namespace ExcelReader.Native
             return options;
         }
 
-        /// <summary>
-        /// Validates and decodes a raw ABI struct. Returns <see langword="false"/> (with no exception —
-        /// callers are on the hot "was this argument well-formed" path, not an error-recovery one) for an
-        /// unrecognized <see cref="NativeOpenOptionsRaw.StructSize"/> or an out-of-range field.
-        /// </summary>
+        // Validates and decodes a raw ABI struct. Returns false (with no exception —
+        // callers are on the hot "was this argument well-formed" path, not an error-recovery one) for an
+        // unrecognized NativeOpenOptionsRaw.StructSize or an out-of-range field.
         internal static bool TryDecode(NativeOpenOptionsRaw raw, out NativeOpenOptions options, out string? error)
         {
             options = default;

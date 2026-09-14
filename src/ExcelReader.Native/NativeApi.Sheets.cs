@@ -45,9 +45,9 @@ namespace ExcelReader.Native
             }
         }
 
-        /// <summary>Name of the sheet at <paramref name="index"/>, without disturbing the current sheet or
-        /// row enumeration cursor — the batch counterpart of <see cref="SheetName"/>, which only exposes the
-        /// currently selected sheet.</summary>
+        // Name of the sheet at index, without disturbing the current sheet or
+        // row enumeration cursor — the batch counterpart of SheetName, which only exposes the
+        // currently selected sheet.
         internal static int SheetNameAt(NativeHandle? handle, int index, Span<byte> buffer, out int length)
         {
             length = 0;
@@ -75,8 +75,8 @@ namespace ExcelReader.Native
             }
         }
 
-        /// <summary>Shared UTF-8 copy-out behavior for <see cref="SheetName"/> and <see cref="SheetNameAt"/> so
-        /// the two-call "ask the size, then fill the buffer" protocol can't drift between them.</summary>
+        // Shared UTF-8 copy-out behavior for SheetName and SheetNameAt so
+        // the two-call "ask the size, then fill the buffer" protocol can't drift between them.
         private static int CopyUtf8(string value, Span<byte> buffer, out int length)
         {
             int required = Encoding.UTF8.GetByteCount(value);

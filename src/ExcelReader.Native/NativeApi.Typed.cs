@@ -9,19 +9,16 @@ namespace ExcelReader.Native
 {
     internal static unsafe partial class NativeApi
     {
-        /// <summary>
-        /// Schema-driven columnar read of the WHOLE current sheet, from its first row. It drives the
-        /// workbook's row cursor for the duration of this call — succeeding normally even while a
-        /// caller-visible <see cref="TypedParseSession"/> (<c>xl_typed_reader</c>/Arrow stream) is open
-        /// on <paramref name="handle"/>, but faulting it rather than resuming it from a rewound
-        /// position; see <see cref="TypedParseSession.OpenTransient"/>. This is not a new parser: each
-        /// column dispatches to the same <see cref="ExcelCellReaders"/> members
-        /// <c>ExcelParser&lt;T&gt;</c>'s reflective path already uses (see
-        /// docs/NATIVE_BINDINGS_PLAN.md §7's feasibility finding).
-        /// </summary>
-        /// <param name="headerRow">1-based row number to resolve name-based <paramref name="specs"/>
-        /// against; rows before it are skipped entirely and it is never itself yielded as data. 0 means
-        /// "no header" — every row from the first is data, and every spec must be index-based.</param>
+        // Schema-driven columnar read of the WHOLE current sheet, from its first row. It drives the
+        // workbook's row cursor for the duration of this call — succeeding normally even while a
+        // caller-visible TypedParseSession (xl_typed_reader/Arrow stream) is open on handle, but faulting
+        // it rather than resuming it from a rewound position; see TypedParseSession.OpenTransient. Not a
+        // new parser: each column dispatches to the same ExcelCellReaders members ExcelParser<T>'s
+        // reflective path already uses.
+        //
+        // headerRow: 1-based row to resolve name-based specs against; rows before it are skipped
+        // entirely and it is never itself yielded as data. 0 means "no header" — every row from the
+        // first is data, and every spec must be index-based.
         internal static int ParseTyped(NativeHandle? handle, NativeColumnSpec[] specs, int headerRow, out NativeTable table)
         {
             table = default;
@@ -100,7 +97,7 @@ namespace ExcelReader.Native
             return true;
         }
 
-        /// <summary>Releases a result returned by <see cref="ParseTyped"/> and resets it to zero. Safe on a zeroed value.</summary>
+        // Releases a result returned by ParseTyped and resets it to zero. Safe on a zeroed value.
         internal static void FreeTable(ref NativeTable table)
         {
             if (table.Columns == IntPtr.Zero)
@@ -127,28 +124,25 @@ namespace ExcelReader.Native
             table = default;
         }
 
-        /// <summary>
-        /// Bounds the spec count xl_parse_typed/xl_parse_arrow receive before it sizes an array and
-        /// drives a walk over the caller's spec block.
-        /// </summary>
-        /// <remarks>
-        /// Internal rather than private so tests can pin the boundary directly: the
-        /// [UnmanagedCallersOnly] entry points that enforce this cannot be invoked from managed code,
-        /// so the predicate is the only part of that guard a unit test can reach. The C smoke test
-        /// covers the entry points themselves.
-        /// </remarks>
+        // Bounds the spec count xl_parse_typed/xl_parse_arrow receive before it sizes an array and
+        // drives a walk over the caller's spec block.
+        //
+        // Internal rather than private so tests can pin the boundary directly: the
+        // [UnmanagedCallersOnly] entry points that enforce this cannot be invoked from managed code,
+        // so the predicate is the only part of that guard a unit test can reach. The C smoke test
+        // covers the entry points themselves.
         internal static bool IsValidSpecCount(int specCount)
         {
             return specCount is > 0 and <= NativeLimits.MaxColumnSpecs;
         }
 
-        /// <summary>Bounds one spec's name length before it becomes a read length over caller memory.</summary>
+        // Bounds one spec's name length before it becomes a read length over caller memory.
         internal static bool IsValidNameLength(int nameLength)
         {
             return nameLength is >= 0 and <= NativeLimits.MaxColumnNameBytes;
         }
 
-        /// <summary>Bounds one spec's candidate-name count before it sizes an array and drives a walk over the caller's spec block.</summary>
+        // Bounds one spec's candidate-name count before it sizes an array and drives a walk over the caller's spec block.
         internal static bool IsValidNameCount(int nameCount)
         {
             return nameCount is >= 0 and <= NativeLimits.MaxNamesPerSpec;
@@ -315,13 +309,11 @@ namespace ExcelReader.Native
             return block;
         }
 
-        /// <summary>
-        /// Accumulates one column's values in managed memory as rows are read, then marshals to a single
-        /// <see cref="NativeColumn"/> in <see cref="Build"/> once every row has been read successfully —
-        /// deferring native allocation until success is certain means a conversion failure mid-sheet
-        /// (<see cref="AppendFrom"/> returning <see langword="false"/>) never has to unwind any native
-        /// memory, unlike <see cref="ReadAllDecoded"/>'s per-row native allocations.
-        /// </summary>
+        // Accumulates one column's values in managed memory as rows are read, then marshals to a single
+        // NativeColumn in Build once every row has been read successfully —
+        // deferring native allocation until success is certain means a conversion failure mid-sheet
+        // (AppendFrom returning false) never has to unwind any native
+        // memory, unlike ReadAllDecoded's per-row native allocations.
         private sealed class ColumnBuilder(int type, bool nullable)
         {
             // Already in the layout the ABI hands out: one LSB-first bit per row, 1 = valid, 0 = null.
