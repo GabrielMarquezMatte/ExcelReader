@@ -162,8 +162,6 @@ namespace ExcelReader.Core.Reader
             return Buffer.AsSpan(BufferBase + (int)offset, len);
         }
 
-        // Reads contiguous physical sectors starting from chainIndex into dest.
-        // Returns the number of sectors loaded.
         internal int LoadSectors(int chainIndex, Span<byte> dest)
         {
             if ((uint)chainIndex >= (uint)_chainLength)

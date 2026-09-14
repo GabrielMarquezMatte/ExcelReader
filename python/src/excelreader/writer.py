@@ -307,7 +307,10 @@ def write_arrow(path: str | Path, batch: Any, **kwargs: Any) -> None:
     import pyarrow
 
     if isinstance(batch, pyarrow.Table):
-        batch = batch.combine_chunks().to_batches()[0]
+        # combine_chunks collapses a multi-chunk table into one batch, but yields none at all for a
+        # row-less table - which is a header-only sheet, not an error.
+        batches = batch.combine_chunks().to_batches()
+        batch = batches[0] if batches else pyarrow.RecordBatch.from_pylist([], schema=batch.schema)
 
     types = [_arrow_column_type(field) for field in batch.schema]
     columns: list[Any] = []
@@ -330,7 +333,12 @@ def write_pandas(path: str | Path, df: Any, **kwargs: Any) -> None:
     """Writes a `pandas.DataFrame` to `path`. Requires pyarrow and pandas."""
     import pyarrow
 
-    write_arrow(path, pyarrow.RecordBatch.from_pandas(df, preserve_index=False), **kwargs)
+    # Table, not RecordBatch: a frame this library produced itself carries one chunk per batch that
+    # Workbook.to_pandas read (7 of them for a 65k-row sheet at the default batch_size), and
+    # RecordBatch cannot hold a multi-chunk column at all - so reading a sheet and writing it back,
+    # the round trip both functions exist for, used to fail outright. write_arrow already combines a
+    # Table's chunks.
+    write_arrow(path, pyarrow.Table.from_pandas(df, preserve_index=False), **kwargs)
 
 
 def write_polars(path: str | Path, df: Any, **kwargs: Any) -> None:
