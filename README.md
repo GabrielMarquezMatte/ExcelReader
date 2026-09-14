@@ -229,6 +229,9 @@ Do **not** enable it for concurrent server workloads: a caller already reading m
 in parallel is CPU-saturated, and an extra background thread per read only doubles thread
 demand for no gain. It's meant for single-file batch processing.
 
+Writing has the same option, under a different name: see
+[Prefetch compression](#prefetch-compression-xlsxxlsb-writing).
+
 ## Encrypted workbooks
 
 Password-protected `.xlsx`/`.xlsb`/`.xlsm` files open through the same entry points — the password
@@ -728,6 +731,48 @@ Column behavior mirrors the parser attributes:
 `DateTime` and `DateOnly` are written as Excel date serials; `TimeOnly` as a time-of-day fraction. Numeric properties become number cells; any other type is written as its `ToString()` text. (`CreateCsvAsync` follows the CSV rules instead — see [Write CSV](#write-csv) — writing `DateTime`/`DateOnly` as ISO text and `TimeOnly` as a time-of-day fraction, all still round-tripping through `ExcelParser<T>`.)
 
 For a model marked `[ExcelSerializable]`, use `MappedRecordWriter.CreateMapped*Async` instead — same behavior, but driven by the source-generated map instead of reflection, so it stays Native AOT/trim-safe. See [Generate typed maps at compile time](#generate-typed-maps-at-compile-time-native-aot--trimming).
+
+## Prefetch compression (XLSX/XLSB writing)
+
+The write-side mirror of [Prefetch decompression](#prefetch-decompression-xlsxxlsb). XLSX and XLSB
+are ZIP-backed, so every row a writer serializes has to be deflated before it reaches the stream,
+and by default that happens on the calling thread. Pass `prefetchWrite: true` to move the deflate
+onto a background thread, so the caller keeps building the next batch of rows while the previous one
+compresses:
+
+```csharp
+await using var wb = await XlsxWorkbookWriter.CreateAsync(stream, leaveOpen: true, prefetchWrite: true);
+await wb.StartAsync();
+XlsxSheetWriter sheet = wb.AddSheet("S1");
+await sheet.StartAsync();
+
+foreach (var record in records)
+{
+    using XlsxRowWriter row = sheet.StartRow();
+    row.Write(record.Name);
+    row.Write(record.Value);
+}
+
+await sheet.EndAsync();
+```
+
+The same parameter is on `XlsbWorkbookWriter.CreateAsync`, `RecordWriter.CreateXlsxAsync`/
+`CreateXlsbAsync`, and their `MappedRecordWriter` counterparts. XLS and CSV are uncompressed, so
+they have nothing to overlap and do not offer it.
+
+Writing a 50,000-row workbook (`WriteBenchmark`, both figures from one run):
+
+| Workload | Default | `prefetchWrite: true` | Gain |
+|---|---:|---:|---:|
+| XLSX | 17.128 ms | 12.629 ms | 26% |
+| XLSB | 7.662 ms | 6.128 ms | 20% |
+
+Allocations are unchanged (4.02 MB vs. 4.03 MB) — the background writer hands over buffers the row
+writer already owns rather than copying them.
+
+The same caveat as the read side applies: **do not enable it for concurrent server workloads**. A
+caller already writing many files in parallel is CPU-saturated, and an extra background thread per
+writer only doubles thread demand for no gain. It's meant for single-file batch work.
 
 ## Read CSV
 
