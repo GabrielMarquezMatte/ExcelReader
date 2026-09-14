@@ -1,0 +1,57 @@
+[
+  {
+    "name": "read",
+    "filter": "ExcelReader.Benchmarks.ReadBenchmark.* ExcelReader.Benchmarks.XlsReadBenchmark.* ExcelReader.Benchmarks.CsvReadBenchmark.*",
+    "pagesArgs": "--warmupCount 3 --iterationCount 10",
+    "prArgs": "--warmupCount 1 --iterationCount 5"
+  },
+  {
+    "name": "stringheavy",
+    "filter": "ExcelReader.Benchmarks.StringHeavyReadBenchmark.*",
+    "pagesArgs": "--warmupCount 3 --iterationCount 10",
+    "prArgs": "--warmupCount 1 --iterationCount 5"
+  },
+  {
+    "name": "parse",
+    "filter": "ExcelReader.Benchmarks.ParseBenchmark.* ExcelReader.Benchmarks.CsvParseBenchmark.* ExcelReader.Benchmarks.CsvParallelParseBenchmark.* ExcelReader.Benchmarks.CsvParallelVsSepBenchmark.*",
+    "pagesArgs": "--warmupCount 3 --iterationCount 10",
+    "prArgs": "--warmupCount 1 --iterationCount 5"
+  },
+  {
+    "name": "write",
+    "filter": "ExcelReader.Benchmarks.WriteBenchmark.* ExcelReader.Benchmarks.RecordWriteBenchmark.* ExcelReader.Benchmarks.XlsWriteBenchmark.* ExcelReader.Benchmarks.CsvWriteBenchmark.*",
+    "pagesArgs": "--warmupCount 3 --iterationCount 10",
+    "prArgs": "--warmupCount 1 --iterationCount 5"
+  },
+  {
+    "name": "realdata",
+    "filter": "ExcelReader.Benchmarks.RealDataReadBenchmark.* ExcelReader.Benchmarks.RealDataTypedParseBenchmark.*",
+    "pagesArgs": "--warmupCount 3 --iterationCount 10",
+    "prArgs": "--warmupCount 1 --iterationCount 5"
+  },
+  {
+    "name": "native",
+    "filter": "ExcelReader.Benchmarks.NativeRowReadBenchmark.* ExcelReader.Benchmarks.NativeTypedParseBenchmark.* ExcelReader.Benchmarks.ChunkedParseBenchmark.*",
+    "pagesArgs": "--warmupCount 3 --iterationCount 10",
+    "prArgs": "--warmupCount 1 --iterationCount 5"
+  },
+  {
+    "name": "interop",
+    "filter": "ExcelReader.Benchmarks.ArrowConversionBenchmark.* ExcelReader.Benchmarks.DataReaderBenchmark.*",
+    "pagesArgs": "--warmupCount 3 --iterationCount 10",
+    "prArgs": "--warmupCount 1 --iterationCount 5"
+  },
+  {
+    "name": "crypto",
+    "filter": "ExcelReader.Benchmarks.EncryptedWorkbookBenchmark.*",
+    "pagesArgs": "--warmupCount 3 --iterationCount 10",
+    "prArgs": "--warmupCount 1 --iterationCount 5"
+  },
+  {
+    "name": "coldstart",
+    "note": "Args stay empty on purpose: ColdStartBenchmark sets its own launch/warmup/iteration counts via [SimpleJob], and passing --warmupCount/--iterationCount would override them and warm away the cold measurement.",
+    "filter": "ExcelReader.Benchmarks.ColdStartBenchmark.*",
+    "pagesArgs": "",
+    "prArgs": ""
+  }
+]
