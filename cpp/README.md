@@ -28,6 +28,32 @@ target_link_libraries(your_app PRIVATE xl::excelreader)
 `FetchContent_MakeAvailable` downloads the matching native binary for your platform from that tag's
 GitHub Release automatically (see `cmake/FetchNativeLib.cmake`).
 
+### Install once, `find_package` after
+
+Building `cpp` as its own project installs the headers, the native binary and a config package, so
+downstream projects find it without re-downloading anything:
+
+```bash
+cmake -S cpp -B build/cpp -DCMAKE_BUILD_TYPE=Release
+cmake --install build/cpp --config Release --prefix /your/prefix
+```
+
+```cmake
+find_package(excelreader 3.0 REQUIRED)
+target_link_libraries(your_app PRIVATE xl::excelreader)
+```
+
+Point `CMAKE_PREFIX_PATH` at the prefix you installed into. The native binary is resolved once, at
+install time — `find_package` never touches the network. The package version comes from
+`EXCELREADER_VERSION`, so a checkout that isn't on a tag installs as `0.0.0` and any versioned
+`find_package` request against it fails; pass `-DEXCELREADER_VERSION=v3.0.2` to install under a real
+version. On Windows the generated import library is installed next to the DLL, and consumers need
+the DLL beside their executable (or on `PATH`) at run time — `$<TARGET_FILE:xl::native>` names it,
+see `tests/package/CMakeLists.txt`.
+
+Pass `-DEXCELREADER_INSTALL=OFF` to skip the install rules. They default off when `cpp` is pulled in
+with `add_subdirectory`/`FetchContent`, so a parent project's `install` step never picks them up.
+
 ## Build notes
 
 Two variables control where `FetchNativeLib.cmake` gets the native binary and which release it
