@@ -290,3 +290,17 @@ jobs:
 
       - name: Test
         run: ctest --test-dir build/cpp --output-on-failure -C Release
+
+      - name: Install the package
+        run: cmake --install build/cpp --config Release --prefix "${{ github.workspace }}/build/prefix"
+
+      - name: Build a find_package() consumer against the install prefix
+        shell: bash
+        run: |
+          cmake -S cpp/tests/package -B build/consumer -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_PREFIX_PATH="${{ github.workspace }}/build/prefix" \
+            -DEXCELREADER_FIXTURE="${{ github.workspace }}/RealExcel.xlsx"
+          cmake --build build/consumer --config Release
+
+      - name: Run the consumer
+        run: ctest --test-dir build/consumer --output-on-failure -C Release
