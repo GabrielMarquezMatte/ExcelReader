@@ -4,12 +4,10 @@ using System.Text;
 
 namespace ExcelReader.Native
 {
-    /// <summary>
-    /// Span-based implementation behind the C ABI. Every method returns a <see cref="NativeStatus"/>
-    /// code and never throws; <see cref="Exports"/> only converts pointers into spans on top of it.
-    /// This split exists because managed code cannot call an [UnmanagedCallersOnly] method, so the
-    /// exports themselves are untestable — this layer is what the test suite drives.
-    /// </summary>
+    // Span-based implementation behind the C ABI. Every method returns a NativeStatus
+    // code and never throws; Exports only converts pointers into spans on top of it.
+    // This split exists because managed code cannot call an [UnmanagedCallersOnly] method, so the
+    // exports themselves are untestable — this layer is what the test suite drives.
     internal static partial class NativeApi
     {
         // Thread-local because handles are single-threaded by contract: an error raised on one
@@ -64,20 +62,19 @@ namespace ExcelReader.Native
             _lastErrorUtf8Length = 0;
         }
 
-        /// <summary>The message <see cref="SetLastError"/> last stored, as a managed string.</summary>
-        /// <remarks>
-        /// The tests' window onto <c>xl_last_error</c> without the ask-the-size-then-copy round trip
-        /// <see cref="LastError"/> models. Deliberately not used by the Arrow stream's
-        /// <c>get_last_error</c>, which latches its own copy of its own session's fault instead — this
-        /// value belongs to whatever ExcelReader call ran last on the calling thread, which need not be
-        /// the one being reported.
-        /// </remarks>
+        // The message SetLastError last stored, as a managed string.
+        //
+        // The tests' window onto xl_last_error without the ask-the-size-then-copy round trip
+        // LastError models. Deliberately not used by the Arrow stream's
+        // get_last_error, which latches its own copy of its own session's fault instead — this
+        // value belongs to whatever ExcelReader call ran last on the calling thread, which need not be
+        // the one being reported.
         internal static string LastErrorText()
         {
             return _lastError ?? "";
         }
 
-        /// <summary>Copies the calling thread's last error message into <paramref name="buffer"/> as UTF-8.</summary>
+        // Copies the calling thread's last error message into buffer as UTF-8.
         internal static int LastError(Span<byte> buffer, out int length)
         {
             string? message = _lastError;
@@ -98,17 +95,14 @@ namespace ExcelReader.Native
             return NativeStatus.Ok;
         }
 
-        /// <summary>
-        /// Borrowed pointer to the calling thread's last error message, UTF-8, not NUL-terminated.
-        /// Returns <see cref="IntPtr.Zero"/> with <paramref name="length"/> zero when there is no error.
-        /// The pointer is only valid until the next ExcelReader call on this thread — see the ownership
-        /// note on <c>xl_last_error_ptr</c> in excelreader.h.
-        /// </summary>
-        /// <remarks>
-        /// Returns <see cref="nint"/>, not <see cref="byte"/>*, so this method (and the test suite that
-        /// drives it) doesn't need an unsafe context — <see cref="Exports.LastErrorPtr"/> is the one place
-        /// this becomes an actual pointer, cast at the ABI boundary where unsafe code already lives.
-        /// </remarks>
+        // Borrowed pointer to the calling thread's last error message, UTF-8, not NUL-terminated.
+        // Returns IntPtr.Zero with length zero when there is no error.
+        // The pointer is only valid until the next ExcelReader call on this thread — see the ownership
+        // note on xl_last_error_ptr in excelreader.h.
+        //
+        // Returns nint, not byte*, so this method (and the test suite that
+        // drives it) doesn't need an unsafe context — Exports.LastErrorPtr is the one place
+        // this becomes an actual pointer, cast at the ABI boundary where unsafe code already lives.
         internal static nint LastErrorPtr(out int length)
         {
             length = _lastErrorUtf8Length;

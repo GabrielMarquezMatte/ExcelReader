@@ -2,25 +2,21 @@ using System.Collections.Concurrent;
 
 namespace ExcelReader.Native
 {
-    /// <summary>
-    /// Maps the opaque handle values handed to C callers onto their live managed object — a
-    /// <see cref="NativeHandle"/> (reader) or a <see cref="Writer.NativeWriterHandle"/> (writer).
-    /// </summary>
-    /// <remarks>
-    /// The value a caller receives is an id from a single monotonic counter shared by every handle
-    /// kind, never a GCHandle or any other pointer. That is the whole point: GCHandle table slots and
-    /// heap addresses are both RECYCLED, so a stale value can silently start naming a different, live
-    /// object — a double xl_close would then free somebody else's handle. An id retired by
-    /// <see cref="TryUnregister{T}"/> is never handed out again, so a stale handle stays invalid
-    /// permanently.
-    /// </remarks>
-    /// <remarks>
-    /// The counter and table are shared across every handle kind rather than one per kind: reader ids
-    /// and writer ids must never collide, since the ABI hands out a bare <c>nint</c> with no type tag.
-    /// <see cref="Resolve{T}"/>/<see cref="TryUnregister{T}"/> additionally check the stored object's
-    /// runtime type, so passing a live writer id to a reader entry point (or vice versa) resolves to
-    /// nothing rather than to the wrong kind of handle.
-    /// </remarks>
+    // Maps the opaque handle values handed to C callers onto their live managed object — a
+    // NativeHandle (reader) or a Writer.NativeWriterHandle (writer).
+    //
+    // The value a caller receives is an id from a single monotonic counter shared by every handle
+    // kind, never a GCHandle or any other pointer. That is the whole point: GCHandle table slots and
+    // heap addresses are both RECYCLED, so a stale value can silently start naming a different, live
+    // object — a double xl_close would then free somebody else's handle. An id retired by
+    // TryUnregister is never handed out again, so a stale handle stays invalid
+    // permanently.
+    //
+    // The counter and table are shared across every handle kind rather than one per kind: reader ids
+    // and writer ids must never collide, since the ABI hands out a bare nint with no type tag.
+    // Resolve/TryUnregister additionally check the stored object's
+    // runtime type, so passing a live writer id to a reader entry point (or vice versa) resolves to
+    // nothing rather than to the wrong kind of handle.
     internal static class NativeHandleTable
     {
         private static readonly ConcurrentDictionary<nint, object> _live = new();

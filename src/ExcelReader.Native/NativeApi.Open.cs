@@ -162,9 +162,9 @@ namespace ExcelReader.Native
             return format is >= NativeFormat.Auto and <= NativeFormat.Csv;
         }
 
-        /// <summary>The xl_open_file_ex entry point's logic: decodes <paramref name="rawOptions"/> (a null
-        /// value means the caller passed a NULL options pointer — identical to xl_open_file) and, if valid,
-        /// opens exactly as <see cref="OpenFile"/> does with it applied.</summary>
+        // The xl_open_file_ex entry point's logic: decodes rawOptions (a null
+        // value means the caller passed a NULL options pointer — identical to xl_open_file) and, if valid,
+        // opens exactly as OpenFile does with it applied.
         internal static int OpenFileEx(ReadOnlySpan<byte> utf8Path, int format, NativeOpenOptionsRaw? rawOptions, out NativeHandle? handle)
         {
             handle = null;
@@ -176,7 +176,7 @@ namespace ExcelReader.Native
             return OpenFile(utf8Path, format, out handle, options);
         }
 
-        /// <summary>The xl_open_memory_ex entry point's logic — the in-memory twin of <see cref="OpenFileEx"/>.</summary>
+        // The xl_open_memory_ex entry point's logic — the in-memory twin of OpenFileEx.
         internal static int OpenMemoryEx(ReadOnlySpan<byte> data, int format, NativeOpenOptionsRaw? rawOptions, out NativeHandle? handle)
         {
             handle = null;
@@ -188,10 +188,10 @@ namespace ExcelReader.Native
             return OpenMemory(data, format, out handle, options);
         }
 
-        /// <summary>Decodes and validates a raw <c>xl_open_options</c> struct, if the caller passed one.
-        /// A null <paramref name="rawOptions"/> means "no struct passed" (xl_open_file/xl_open_memory, or
-        /// an _ex call with a NULL options pointer) and decodes to <see langword="null"/>, meaning "use
-        /// every library default" — the same as never having called an _ex function at all.</summary>
+        // Decodes and validates a raw xl_open_options struct, if the caller passed one.
+        // A null rawOptions means "no struct passed" (xl_open_file/xl_open_memory, or
+        // an _ex call with a NULL options pointer) and decodes to null, meaning "use
+        // every library default" — the same as never having called an _ex function at all.
         internal static bool TryDecodeOpenOptions(NativeOpenOptionsRaw? rawOptions, out NativeOpenOptions? options, out string? error)
         {
             if (rawOptions is not NativeOpenOptionsRaw raw)
