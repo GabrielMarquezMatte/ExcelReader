@@ -128,6 +128,27 @@ println!("{} rows x {} columns", batch.num_rows(), batch.num_columns());
 
 Off by default — arrow-rs is a large dependency and the typed-parse path needs none of it.
 
+Batched: `parse_arrow_stream` is `parse_arrow` delivered a batch at a time, returning
+`ArrowChunks<'_>`, an `Iterator<Item = Result<RecordBatch, ArrowError>>` that also implements
+`RecordBatchReader`:
+
+```rust
+use excelreader::arrow::parse_arrow_stream;
+use excelreader::workbook::Workbook;
+
+let mut workbook = Workbook::open("book.xlsx")?;
+let mut chunks = parse_arrow_stream::<Row>(&mut workbook, 1, 10_000)?;
+while let Some(batch) = chunks.next() {
+    let Ok(batch) = batch else { break }; // ArrowChunks does not fuse, unlike TypedChunks
+    println!("{} rows", batch.num_rows());
+}
+# Ok::<(), excelreader::Error>(())
+```
+
+Same `batch_size`/one-chunked-read-at-a-time semantics as `typed_chunks` above. Unlike `TypedChunks`,
+`ArrowChunks` does not fuse after an error — it follows arrow-rs's own semantics — so break on the
+first `Err` rather than continuing the loop.
+
 ## Writing
 
 `#[derive(ExcelMapper)]` generates both halves, so the same struct reads and writes - the field
@@ -233,6 +254,36 @@ for row in rows.iter() {
 
 `parse_sheet` remains the fastest way to read a sheet whose columns you know — it converts on the
 native side and never formats a cell to text.
+
+### Chunked reads
+
+For a sheet too large to hold in memory at once, `Workbook::typed_chunks` is `parse_sheet` delivered
+a batch at a time:
+
+```rust
+use excelreader::workbook::Workbook;
+
+let mut workbook = Workbook::open("book.xlsx")?;
+let chunks = workbook.typed_chunks::<Row>(1, 10_000)?;
+for batch in chunks {
+    let batch = batch?;
+    for row in batch.iter() { /* ... */ }
+}
+# Ok::<(), excelreader::Error>(())
+```
+
+`typed_chunks` returns `TypedChunks<'_, Row>`, an `Iterator<Item = Result<TableView<Row>, Error>>`
+that closes the native reader on drop. `batch_size` is rows per batch — `0` means one unbounded
+batch, identical to `parse_sheet`; negative is an error. A workbook serves one chunked read, of
+either kind (typed or Arrow — see [Arrow export](#arrow-export-arrow-feature) above), at a time; any
+other read on it while one is live invalidates that reader, so its next call reports a latched error
+rather than resuming from the moved cursor. `TypedChunks` itself ends after yielding an `Err`, so a
+`for` loop stops there rather than spinning on it.
+
+Both `typed_chunks` and `arrow::parse_arrow_stream` take `&mut Workbook` — the same borrow
+`parse_sheet` takes — which is why a second chunked read, or a `parse_sheet` call, while one is live
+is a compile error here rather than the runtime error the C++ and Python bindings report for the same
+mistake.
 
 ## Bounds and panics
 

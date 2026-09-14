@@ -248,6 +248,80 @@ namespace ExcelReader.Native
             }
         }
 
+        [UnmanagedCallersOnly(EntryPoint = "xl_typed_reader_open")]
+        public static int TypedReaderOpen(nint handle, NativeColumnSpecRaw* specs, int specCount, int headerRow,
+            long maxRows, nint* outReader)
+        {
+            if (outReader is null)
+            {
+                return NativeStatus.InvalidArgument;
+            }
+            // Zeroed before the remaining guards, not after, so *out_reader really is zeroed on ANY
+            // failure as documented - a combined guard would have returned with the caller's variable
+            // untouched for a NULL specs or an out-of-range spec_count. Same shape as
+            // xl_parse_arrow_stream's out_stream.
+            *outReader = 0;
+            if (specs is null || !NativeApi.IsValidSpecCount(specCount))
+            {
+                return NativeStatus.InvalidArgument;
+            }
+
+            try
+            {
+                if (!TryDecodeColumnSpecs(specs, specCount, out NativeColumnSpec[] decoded))
+                {
+                    return NativeStatus.InvalidArgument;
+                }
+
+                int status = NativeApi.OpenTypedReader(Resolve(handle), decoded, headerRow, maxRows, out nint reader);
+                *outReader = reader;
+                return status;
+            }
+            catch (Exception exception)
+            {
+                NativeApi.SetLastError(exception.Message);
+                *outReader = 0;
+                return NativeStatus.Error;
+            }
+        }
+
+        [UnmanagedCallersOnly(EntryPoint = "xl_typed_reader_next")]
+        public static int TypedReaderNext(nint reader, NativeTable* outTable)
+        {
+            if (outTable is null)
+            {
+                return NativeStatus.InvalidArgument;
+            }
+            *outTable = default;
+
+            try
+            {
+                int status = NativeApi.NextTypedBatch(reader, out NativeTable table);
+                *outTable = table;
+                return status;
+            }
+            catch (Exception exception)
+            {
+                NativeApi.SetLastError(exception.Message);
+                *outTable = default;
+                return NativeStatus.Error;
+            }
+        }
+
+        [UnmanagedCallersOnly(EntryPoint = "xl_typed_reader_close")]
+        public static void TypedReaderClose(nint reader)
+        {
+            // void in the ABI, so an exception here must never escape - same shape as FreeTable.
+            try
+            {
+                NativeApi.CloseTypedReader(reader);
+            }
+            catch (Exception exception)
+            {
+                NativeApi.SetLastError(exception.Message);
+            }
+        }
+
         [UnmanagedCallersOnly(EntryPoint = "xl_write_typed")]
         public static int WriteTyped(byte* path, int pathLength, int format, NativeColumnSpecRaw* specs, NativeTable* table, NativeWriteOptionsRaw* options)
         {
@@ -446,6 +520,44 @@ namespace ExcelReader.Native
             }
         }
 
+        [UnmanagedCallersOnly(EntryPoint = "xl_parse_arrow_stream")]
+        public static int ParseArrowStream(nint handle, NativeColumnSpecRaw* specs, int specCount, int headerRow,
+            long maxRows, ArrowArrayStream* outStream)
+        {
+            if (outStream is null)
+            {
+                return NativeStatus.InvalidArgument;
+            }
+            // Zeroed before the remaining guards, not after: unlike xl_parse_typed's out_table, a
+            // non-zeroed ArrowArrayStream carries a garbage `release` that a caller ignoring the return
+            // code would call. Every failure path below therefore leaves a released stream, never
+            // untouched caller memory.
+            *outStream = default;
+            if (specs is null || !NativeApi.IsValidSpecCount(specCount))
+            {
+                return NativeStatus.InvalidArgument;
+            }
+
+            try
+            {
+                if (!TryDecodeColumnSpecs(specs, specCount, out NativeColumnSpec[] decoded))
+                {
+                    return NativeStatus.InvalidArgument;
+                }
+
+                int status = NativeApi.OpenArrowStream(Resolve(handle), decoded, headerRow, maxRows,
+                    out ArrowArrayStream stream);
+                *outStream = stream;
+                return status;
+            }
+            catch (Exception exception)
+            {
+                NativeApi.SetLastError(exception.Message);
+                *outStream = default;
+                return NativeStatus.Error;
+            }
+        }
+
         private static bool IsValidOpenRequest(byte* source, int sourceLength, nint* outHandle)
         {
             return source is not null && sourceLength >= 0 && outHandle is not null;
@@ -541,6 +653,38 @@ namespace ExcelReader.Native
             {
                 NativeApi.SetLastError(exception.Message);
             }
+        }
+
+        // The four ArrowArrayStream callbacks, reached only as function pointer values stored in the
+        // struct xl_parse_arrow_stream hands out. Each catches everything: they are called from native
+        // code, so an escaping exception would unwind through the consumer's frame. The error codes are
+        // Arrow's errno-style convention, not this ABI's XL_* — 5 is EIO.
+        [UnmanagedCallersOnly]
+        internal static int ArrowStreamGetSchema(ArrowArrayStream* stream, ArrowSchema* outSchema)
+        {
+            try { return NativeApi.ArrowStreamGetSchemaCore(stream, outSchema); }
+            catch { return 5; }
+        }
+
+        [UnmanagedCallersOnly]
+        internal static int ArrowStreamGetNext(ArrowArrayStream* stream, ArrowArray* outArray)
+        {
+            try { return NativeApi.ArrowStreamGetNextCore(stream, outArray); }
+            catch { return 5; }
+        }
+
+        [UnmanagedCallersOnly]
+        internal static IntPtr ArrowStreamGetLastError(ArrowArrayStream* stream)
+        {
+            try { return NativeApi.ArrowStreamGetLastErrorCore(stream); }
+            catch { return IntPtr.Zero; }
+        }
+
+        [UnmanagedCallersOnly]
+        internal static void ArrowStreamRelease(ArrowArrayStream* stream)
+        {
+            try { NativeApi.ArrowStreamReleaseCore(stream); }
+            catch { /* void in the ABI - an exception must never escape */ }
         }
 
         [UnmanagedCallersOnly(EntryPoint = "xl_open_write_handle")]

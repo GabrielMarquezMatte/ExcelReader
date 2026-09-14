@@ -219,6 +219,30 @@ ArrowArray._fields_ = [
 ARROW_FLAG_NULLABLE = 2
 
 
+# The Arrow C stream interface, kept separate from the data interface above for the same reason the
+# C header guards it separately: a consumer can have the data structs without the stream one.
+class ArrowArrayStream(ctypes.Structure):
+    pass
+
+
+_ArrowStreamGetSchema = ctypes.CFUNCTYPE(
+    ctypes.c_int, ctypes.POINTER(ArrowArrayStream), ctypes.POINTER(ArrowSchema)
+)
+_ArrowStreamGetNext = ctypes.CFUNCTYPE(
+    ctypes.c_int, ctypes.POINTER(ArrowArrayStream), ctypes.POINTER(ArrowArray)
+)
+_ArrowStreamGetLastError = ctypes.CFUNCTYPE(ctypes.c_char_p, ctypes.POINTER(ArrowArrayStream))
+_ArrowStreamRelease = ctypes.CFUNCTYPE(None, ctypes.POINTER(ArrowArrayStream))
+
+ArrowArrayStream._fields_ = [
+    ("get_schema", _ArrowStreamGetSchema),
+    ("get_next", _ArrowStreamGetNext),
+    ("get_last_error", _ArrowStreamGetLastError),
+    ("release", _ArrowStreamRelease),
+    ("private_data", ctypes.c_void_p),
+]
+
+
 class NativeRows(ctypes.Structure):
     _fields_ = [
         ("row_count", ctypes.c_int32),
@@ -452,6 +476,19 @@ def _bind(lib: ctypes.CDLL) -> ctypes.CDLL:
     lib.xl_free_schema.restype = None
     lib.xl_parse_arrow.argtypes = [p_void, ctypes.POINTER(NativeColumnSpec), c_int, c_int, ctypes.POINTER(ArrowArray), ctypes.POINTER(ArrowSchema)]
     lib.xl_parse_arrow.restype = c_int
+    lib.xl_typed_reader_open.argtypes = [
+        p_void, ctypes.POINTER(NativeColumnSpec), c_int, c_int, ctypes.c_int64, pp_void,
+    ]
+    lib.xl_typed_reader_open.restype = c_int
+    lib.xl_typed_reader_next.argtypes = [p_void, ctypes.POINTER(NativeTable)]
+    lib.xl_typed_reader_next.restype = c_int
+    lib.xl_typed_reader_close.argtypes = [p_void]
+    lib.xl_typed_reader_close.restype = None
+    lib.xl_parse_arrow_stream.argtypes = [
+        p_void, ctypes.POINTER(NativeColumnSpec), c_int, c_int, ctypes.c_int64,
+        ctypes.POINTER(ArrowArrayStream),
+    ]
+    lib.xl_parse_arrow_stream.restype = c_int
     lib.xl_write_typed.argtypes = [
         p_bytes, c_int, c_int,
         ctypes.POINTER(NativeColumnSpec), ctypes.POINTER(NativeTable), ctypes.POINTER(NativeWriteOptions),

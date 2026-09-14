@@ -76,6 +76,9 @@ namespace ExcelReader.Native
             }
 
             byte[] rowScratch = [];
+            // Same rule as NextRow: draining the workbook's own row cursor invalidates any chunked
+            // read holding an enumerator open across calls.
+            handle.FaultLiveSession("xl_read_all_blob");
             handle.Rows ??= handle.Reader.GetEnumerator();
             while (handle.Rows.MoveNext())
             {

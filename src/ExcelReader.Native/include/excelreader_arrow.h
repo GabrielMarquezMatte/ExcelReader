@@ -55,6 +55,25 @@ struct ArrowArray {
 
 #endif /* ARROW_C_DATA_INTERFACE */
 
+/* Guarded separately from the data interface above, exactly as Arrow's own arrow/c/abi.h does: the
+ * stream ABI is a distinct opt-in, and a consumer can legitimately have defined
+ * ARROW_C_DATA_INTERFACE from a data-only subset (nanoarrow, for one) without ever declaring
+ * ArrowArrayStream. Folding this into that guard would give such a consumer xl_parse_arrow_stream
+ * declared against an undeclared struct, and would redefine the struct for anyone including
+ * arrow/c/abi.h after this header. */
+#ifndef ARROW_C_STREAM_INTERFACE
+#define ARROW_C_STREAM_INTERFACE
+
+struct ArrowArrayStream {
+    int (*get_schema)(struct ArrowArrayStream*, struct ArrowSchema* out);
+    int (*get_next)(struct ArrowArrayStream*, struct ArrowArray* out);
+    const char* (*get_last_error)(struct ArrowArrayStream*);
+    void (*release)(struct ArrowArrayStream*);
+    void* private_data;
+};
+
+#endif /* ARROW_C_STREAM_INTERFACE */
+
 /* Same schema/column semantics as xl_parse_typed (see excelreader.h) - `header_row`, `nullable`,
  * name-vs-index resolution, XL_T_* dispatch, and every XL_INVALID_ARGUMENT/XL_ERROR case are
  * identical. The whole table is exported as ONE top-level Arrow struct array (format "+s"): its
@@ -83,9 +102,48 @@ struct ArrowArray {
  * but nothing about it is meaningful.
  *
  * `spec_count` and each spec's `name_len` are bounded by XL_MAX_COLUMN_SPECS and
- * XL_MAX_COLUMN_NAME_BYTES (see excelreader.h); anything past either is XL_INVALID_ARGUMENT. */
+ * XL_MAX_COLUMN_NAME_BYTES (see excelreader.h); anything past either is XL_INVALID_ARGUMENT.
+ *
+ * `specs`, and the name buffers the specs point at, are COPIED during the call and need not outlive
+ * it. */
 int32_t xl_parse_arrow(xl_workbook* handle, const xl_column_spec* specs, int32_t spec_count,
                        int32_t header_row, struct ArrowArray* out_array, struct ArrowSchema* out_schema);
+
+/* Batched counterpart to xl_parse_arrow: the same schema-driven read, delivered as an Arrow C
+ * stream so peak memory is one batch rather than one sheet. max_rows is the batch size in rows;
+ * 0 means unbounded, negative is XL_INVALID_ARGUMENT.
+ *
+ * On XL_OK the caller owns *out_stream and MUST eventually call out_stream->release, which is what
+ * closes the underlying read - there is no xl_free_* for it. Driving the stream follows the Arrow
+ * contract, not this ABI's: get_next returns 0 on success, and signals end of stream by returning 0
+ * with a RELEASED array (out->release == NULL). A non-zero return is errno-style; get_last_error
+ * then yields a message, valid until the next call on the same stream, and repeats it for as long as
+ * the failure persists - a faulted read reports the same reason on every later get_next rather than
+ * an empty string. (get_last_error returns NULL only for misuse: a NULL or already-released stream,
+ * which has no error state left to report.)
+ *
+ * OWNERSHIP, per call, not per stream:
+ *   - get_schema allocates a FRESH ArrowSchema every time it is called. Each one is the caller's, and
+ *     each one must be released with out->release(out). Polling get_schema without releasing leaks.
+ *   - each get_next batch is likewise independent and must be released with out->release(out) before
+ *     or after the next call, in any order - batches do not share buffers.
+ * pyarrow and arrow-rs do this for you; a hand-written C or C++ consumer must do it itself.
+ *
+ * Unlike xl_parse_arrow's out params, *out_stream is ALWAYS written: every failure path zeroes it,
+ * so a caller that ignores the return code and calls out_stream->release still finds a NULL release
+ * (a no-op) rather than an uninitialized function pointer. get_next and get_schema give their own
+ * out params the same guarantee. The only case where *out_stream is untouched is out_stream == NULL
+ * itself, which returns XL_INVALID_ARGUMENT.
+ *
+ * `specs` and their name buffers are COPIED during this call and need not outlive it.
+ *
+ * The stream borrows the workbook, with the same rules as xl_typed_reader_open - including the
+ * one-chunked-read-per-workbook limit: this returns XL_ERROR if a typed reader or another stream is
+ * already open on `handle`, and any other read on that workbook invalidates this stream (its
+ * get_next then returns errno with the reason in get_last_error, permanently). */
+int32_t xl_parse_arrow_stream(xl_workbook* handle, const xl_column_spec* specs, int32_t spec_count,
+                              int32_t header_row, int64_t max_rows,
+                              struct ArrowArrayStream* out_stream);
 
 #ifdef __cplusplus
 }

@@ -534,3 +534,200 @@ def test_encrypted_rows_match_plaintext():
 def test_password_is_not_in_repr():
     with open_workbook(ENCRYPTED / "agile-aes256-sha512.xlsx", password="hunter2") as book:
         assert "hunter2" not in repr(book)
+
+
+# --- chunked typed reading ------------------------------------------------------------------
+
+
+@pytest.fixture
+def batched_csv(tmp_path):
+    # 50 rows, not the 2 of typed_csv: a batch sweep needs enough rows for the batch count to mean
+    # something and for a mid-sheet boundary to exist.
+    path = tmp_path / "batched.csv"
+    lines = ["name,qty"] + [f"row{i},{i}" for i in range(50)]
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return path
+
+
+_BATCH_SCHEMA = [
+    ColumnSpec(ColumnType.STRING, name="name"),
+    ColumnSpec(ColumnType.I64, name="qty"),
+]
+
+
+def _batch_rows(table):
+    names, qtys = table.columns
+    return [(names[i], qtys[i]) for i in range(table.row_count)]
+
+
+@pytest.mark.parametrize("batch_size", [1, 7, 8, 9, 1000, 0])
+def test_iter_parse_typed_matches_parse_typed(batched_csv, batch_size):
+    with open_workbook(batched_csv) as workbook:
+        expected = _batch_rows(workbook.parse_typed(_BATCH_SCHEMA))
+
+    with open_workbook(batched_csv) as workbook:
+        batches = list(workbook.iter_parse_typed(_BATCH_SCHEMA, batch_size=batch_size))
+
+    assert [row for batch in batches for row in _batch_rows(batch)] == expected
+
+    # Pins the batching: an implementation that ignored batch_size would pass the equality above.
+    rows = len(expected)
+    want = 1 if batch_size == 0 else (rows + batch_size - 1) // batch_size
+    assert len(batches) == want
+    if batch_size:
+        assert all(batch.row_count <= batch_size for batch in batches)
+
+
+def test_iter_parse_typed_rejects_a_negative_batch_size(batched_csv):
+    with open_workbook(batched_csv) as workbook:
+        with pytest.raises(ExcelReaderError):
+            next(workbook.iter_parse_typed(_BATCH_SCHEMA, batch_size=-1))
+
+
+def test_a_second_reader_on_one_workbook_is_rejected(batched_csv):
+    with open_workbook(batched_csv) as workbook:
+        first = workbook.iter_parse_typed(_BATCH_SCHEMA, batch_size=4)
+        next(first)  # a generator opens nothing until it is first iterated
+        second = workbook.iter_parse_typed(_BATCH_SCHEMA, batch_size=4)
+        with pytest.raises(ExcelReaderError):
+            next(second)
+        first.close()
+
+
+def test_a_foreign_read_latches_the_readers_error(batched_csv):
+    with open_workbook(batched_csv) as workbook:
+        batches = workbook.iter_parse_typed(_BATCH_SCHEMA, batch_size=4)
+        next(batches)
+        workbook.parse_typed(_BATCH_SCHEMA)  # steals the row cursor, invalidating the reader
+        with pytest.raises(ExcelReaderError):
+            next(batches)
+
+
+def test_abandoning_the_generator_closes_the_reader(batched_csv):
+    with open_workbook(batched_csv) as workbook:
+        batches = workbook.iter_parse_typed(_BATCH_SCHEMA, batch_size=4)
+        next(batches)
+        batches.close()  # runs the generator's finally, closing the native reader
+        # Proof it really closed: a second reader now opens instead of being rejected.
+        again = workbook.iter_parse_typed(_BATCH_SCHEMA, batch_size=4)
+        assert next(again).row_count == 4
+        again.close()
+
+
+# --- Arrow stream / streaming pandas & polars ----------------------------------------------------
+
+
+def test_to_record_batch_reader_matches_to_record_batch(batched_csv):
+    pytest.importorskip("pyarrow")
+    with open_workbook(batched_csv) as workbook:
+        expected = workbook.to_record_batch(_BATCH_SCHEMA)
+
+    with open_workbook(batched_csv) as workbook:
+        reader = workbook.to_record_batch_reader(_BATCH_SCHEMA, batch_size=8)
+        assert reader.schema == expected.schema
+        batches = list(reader)
+
+    assert sum(batch.num_rows for batch in batches) == expected.num_rows
+    assert len(batches) == 7, "50 rows at batch size 8 is 7 batches"
+    assert all(batch.num_rows <= 8 for batch in batches)
+
+
+def test_to_record_batch_reader_rejects_a_negative_batch_size(batched_csv):
+    pytest.importorskip("pyarrow")
+    with open_workbook(batched_csv) as workbook:
+        with pytest.raises(ExcelReaderError):
+            workbook.to_record_batch_reader(_BATCH_SCHEMA, batch_size=-1)
+
+
+def test_a_stream_is_rejected_while_a_reader_is_live(batched_csv):
+    pytest.importorskip("pyarrow")
+    with open_workbook(batched_csv) as workbook:
+        reader = workbook.iter_parse_typed(_BATCH_SCHEMA, batch_size=4)
+        next(reader)  # a generator opens nothing until it is first iterated
+        with pytest.raises(ExcelReaderError):
+            workbook.to_record_batch_reader(_BATCH_SCHEMA, batch_size=4)
+        reader.close()
+
+
+def test_a_reader_is_rejected_while_a_stream_is_live(batched_csv):
+    pytest.importorskip("pyarrow")
+    with open_workbook(batched_csv) as workbook:
+        stream = workbook.to_record_batch_reader(_BATCH_SCHEMA, batch_size=4)  # noqa: F841 (kept alive on purpose)
+        with pytest.raises(ExcelReaderError):
+            next(workbook.iter_parse_typed(_BATCH_SCHEMA, batch_size=4))
+
+
+# pyarrow's RecordBatchReader surfaces a faulted C stream as a plain OSError, not ExcelReaderError -
+# get_next's errno-style failure crosses the Arrow C Data Interface before this library's own
+# exception wrapping ever gets a chance to run.
+def test_a_foreign_read_latches_the_streams_error(batched_csv):
+    pytest.importorskip("pyarrow")
+    with open_workbook(batched_csv) as workbook:
+        reader = workbook.to_record_batch_reader(_BATCH_SCHEMA, batch_size=4)
+        reader.read_next_batch()
+        workbook.parse_typed(_BATCH_SCHEMA)  # steals the row cursor, invalidating the stream
+
+        with pytest.raises(OSError) as first:
+            reader.read_next_batch()
+        with pytest.raises(OSError) as second:
+            reader.read_next_batch()
+        assert str(first.value) == str(second.value)
+
+
+def test_iter_pandas_yields_one_frame_per_batch(batched_csv):
+    pytest.importorskip("pyarrow")
+    pytest.importorskip("pandas")
+    with open_workbook(batched_csv) as workbook:
+        frames = list(workbook.iter_pandas(_BATCH_SCHEMA, batch_size=8))
+    assert len(frames) == 7
+    assert sum(len(frame) for frame in frames) == 50
+
+
+def test_iter_polars_yields_one_frame_per_batch(batched_csv):
+    pytest.importorskip("pyarrow")
+    pytest.importorskip("polars")
+    with open_workbook(batched_csv) as workbook:
+        frames = list(workbook.iter_polars(_BATCH_SCHEMA, batch_size=8))
+    assert len(frames) == 7
+    assert sum(frame.height for frame in frames) == 50
+
+
+# The flag that carries the whole streaming win: polars.from_arrow defaults to rechunk=True, which
+# re-concatenates every batch into contiguous memory and puts peak right back where it started.
+def test_to_polars_stays_chunked(batched_csv):
+    pytest.importorskip("pyarrow")
+    polars = pytest.importorskip("polars")
+    with open_workbook(batched_csv) as workbook:
+        frame = workbook.to_polars(_BATCH_SCHEMA, batch_size=8)
+    assert isinstance(frame, polars.DataFrame)
+    assert frame.height == 50
+    assert frame.n_chunks() > 1, "to_polars must not rechunk the streamed batches"
+
+
+def test_to_pandas_still_reads_the_whole_sheet(batched_csv):
+    pytest.importorskip("pyarrow")
+    pytest.importorskip("pandas")
+    with open_workbook(batched_csv) as workbook:
+        frame = workbook.to_pandas(_BATCH_SCHEMA, batch_size=8)
+    assert len(frame) == 50
+    assert list(frame.columns) == ["name", "qty"]
+
+
+# _BATCH_SCHEMA's two columns (name: string, qty: int64) already land in separate pandas blocks by
+# dtype alone, split_blocks or not, so it can't pin split_blocks=True. Reading "qty" a second time
+# (once by name, once by its own position) gives two same-dtype int64 columns instead: without
+# split_blocks=True pandas would consolidate them into one 2-D block (2 blocks total); with it, each
+# column keeps its own block (3 total). An implementation that dropped self_destruct/split_blocks
+# would still pass every other test in this file and silently double peak memory - this is the one
+# check that fails if it does.
+#
+# frame._mgr.nblocks is private pandas API (no public block-count accessor exists on pandas 3.0.5):
+# reached for here because the flags have no public observable, and leaving them unguarded is worse
+# than depending on an internal.
+def test_to_pandas_splits_blocks_per_column(batched_csv):
+    pytest.importorskip("pyarrow")
+    pytest.importorskip("pandas")
+    schema = [*_BATCH_SCHEMA, ColumnSpec(ColumnType.I64, index=1)]
+    with open_workbook(batched_csv) as workbook:
+        frame = workbook.to_pandas(schema, batch_size=8)
+    assert frame._mgr.nblocks == 3

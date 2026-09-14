@@ -95,6 +95,190 @@ namespace xl
         }
         return result;
     }
+
+    // Separate from ArrowTable: a stream hands schemas and arrays out independently, so they cannot
+    // share one guard.
+    struct ArrowSchemaGuard
+    {
+        ArrowSchema schema{};
+
+        ArrowSchemaGuard() = default;
+
+        ArrowSchemaGuard(const ArrowSchemaGuard &) = delete;
+        ArrowSchemaGuard &operator=(const ArrowSchemaGuard &) = delete;
+
+        ArrowSchemaGuard(ArrowSchemaGuard &&other) noexcept
+            : schema(std::exchange(other.schema, ArrowSchema{}))
+        {
+        }
+
+        ArrowSchemaGuard &operator=(ArrowSchemaGuard &&other) noexcept
+        {
+            if (this != &other)
+            {
+                release();
+                schema = std::exchange(other.schema, ArrowSchema{});
+            }
+            return *this;
+        }
+
+        ~ArrowSchemaGuard() { release(); }
+
+        void release() noexcept
+        {
+            if (schema.release != nullptr)
+            {
+                schema.release(&schema);
+            }
+        }
+    };
+
+    struct ArrowArrayGuard
+    {
+        ArrowArray array{};
+
+        ArrowArrayGuard() = default;
+
+        ArrowArrayGuard(const ArrowArrayGuard &) = delete;
+        ArrowArrayGuard &operator=(const ArrowArrayGuard &) = delete;
+
+        ArrowArrayGuard(ArrowArrayGuard &&other) noexcept
+            : array(std::exchange(other.array, ArrowArray{}))
+        {
+        }
+
+        ArrowArrayGuard &operator=(ArrowArrayGuard &&other) noexcept
+        {
+            if (this != &other)
+            {
+                release();
+                array = std::exchange(other.array, ArrowArray{});
+            }
+            return *this;
+        }
+
+        ~ArrowArrayGuard() { release(); }
+
+        void release() noexcept
+        {
+            if (array.release != nullptr)
+            {
+                array.release(&array);
+            }
+        }
+    };
+
+    // parse_arrow a batch at a time. Releasing the stream is what closes the underlying read.
+    // Borrows the workbook under the same rules as xl::TypedReader.
+    class ArrowStream
+    {
+    public:
+        ArrowStream(const ArrowStream &) = delete;
+        ArrowStream &operator=(const ArrowStream &) = delete;
+
+        ArrowStream(ArrowStream &&other) noexcept
+            : stream_(std::exchange(other.stream_, ArrowArrayStream{}))
+        {
+        }
+
+        ArrowStream &operator=(ArrowStream &&other) noexcept
+        {
+            if (this != &other)
+            {
+                release();
+                stream_ = std::exchange(other.stream_, ArrowArrayStream{});
+            }
+            return *this;
+        }
+
+        ~ArrowStream() { release(); }
+
+        // A fresh allocation per call, so polling this without keeping the guards would leak.
+        std::expected<ArrowSchemaGuard, Error> schema()
+        {
+            if (stream_.release == nullptr)
+            {
+                return std::unexpected(Error{XL_ERROR, "the Arrow stream is released or moved-from"});
+            }
+            ArrowSchemaGuard guard;
+            int rc = stream_.get_schema(&stream_, &guard.schema);
+            if (rc != 0)
+            {
+                return std::unexpected(stream_error(rc));
+            }
+            return guard;
+        }
+
+        // Arrow signals end of stream by returning success with a released array.
+        std::expected<std::optional<ArrowArrayGuard>, Error> next()
+        {
+            if (stream_.release == nullptr)
+            {
+                return std::unexpected(Error{XL_ERROR, "the Arrow stream is released or moved-from"});
+            }
+            ArrowArrayGuard guard;
+            int rc = stream_.get_next(&stream_, &guard.array);
+            if (rc != 0)
+            {
+                return std::unexpected(stream_error(rc));
+            }
+            if (guard.array.release == nullptr)
+            {
+                return std::optional<ArrowArrayGuard>{};
+            }
+            return std::optional<ArrowArrayGuard>(std::move(guard));
+        }
+
+        static ArrowStream from_raw(ArrowArrayStream stream) { return ArrowStream(stream); }
+
+    private:
+        explicit ArrowStream(ArrowArrayStream stream) noexcept : stream_(stream) {}
+
+        void release() noexcept
+        {
+            if (stream_.release != nullptr)
+            {
+                stream_.release(&stream_);
+            }
+        }
+
+        // errno-style, not XL_*. get_last_error's message dies on the next call, so copy it now.
+        Error stream_error(int rc)
+        {
+            const char *message =
+                stream_.get_last_error != nullptr ? stream_.get_last_error(&stream_) : nullptr;
+            if (message != nullptr)
+            {
+                return Error{XL_ERROR, std::string(message)};
+            }
+            return Error{XL_ERROR, "Arrow stream failed with errno " + std::to_string(rc)};
+        }
+
+        ArrowArrayStream stream_{};
+    };
+
+    // `header_row` and `batch_size` mean what they do in xl::typed_reader.
+    template <typename T>
+    std::expected<ArrowStream, Error> arrow_stream(Workbook &workbook, int32_t header_row = 1,
+                                                   int64_t batch_size = 10000)
+    {
+        static constexpr auto bindings = ExcelMapper<T>::get_bindings();
+        static constexpr size_t num_fields = std::tuple_size_v<decltype(bindings)>;
+        std::array<std::vector<int32_t>, num_fields> name_lens_storage{};
+        std::array<xl_column_spec, num_fields> specs_array =
+            detail::build_specs(bindings, std::make_index_sequence<num_fields>{}, name_lens_storage);
+
+        ArrowArrayStream stream{};
+        int32_t status = xl_parse_arrow_stream(workbook.handle(), specs_array.data(),
+                                               static_cast<int32_t>(specs_array.size()), header_row,
+                                               batch_size, &stream);
+        if (status != XL_OK)
+        {
+            // Every failure path zeroes *out_stream, so there is nothing to release here.
+            return std::unexpected(detail::make_error(status));
+        }
+        return ArrowStream::from_raw(stream);
+    }
 }
 
 #endif /* XL_EXCELREADER_ARROW_HPP */

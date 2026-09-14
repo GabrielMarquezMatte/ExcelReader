@@ -8,7 +8,7 @@ namespace ExcelReader.Core.Crypto
     {
         private readonly AgileDescriptor _descriptor;
         private readonly byte[] _key;
-        private readonly Aes _aes;
+        private readonly CbcSegmentCipher _cipher;
         private readonly IncrementalHash _ivHasher;
         // Rebuilt per segment, but allocated once: a 100 MB package decrypts 25,600 segments.
         private readonly byte[] _iv;
@@ -20,18 +20,15 @@ namespace ExcelReader.Core.Crypto
             // Derives and verifies in one step, so a wrong password throws before anything
             // cipher-shaped is allocated.
             _key = AgileKeyDerivation.DeriveIntermediateKey(descriptor, password);
-            Aes aes = Aes.Create();
+            CbcSegmentCipher cipher = CbcSegmentCipher.CreateDecryptor(_key);
             try
             {
-                aes.Mode = CipherMode.CBC;
-                aes.Padding = PaddingMode.None;
-                aes.Key = _key;
-                _aes = aes;
                 _ivHasher = AgileKeyDerivation.CreateHasher(descriptor.KeyData.Hash);
+                _cipher = cipher;
             }
             catch
             {
-                aes.Dispose();
+                cipher.Dispose();
                 CryptographicOperations.ZeroMemory(_key);
                 throw;
             }
@@ -49,7 +46,7 @@ namespace ExcelReader.Core.Crypto
         internal override void DecryptSegment(int segmentIndex, ReadOnlyMemory<byte> cipher, Memory<byte> plain)
         {
             AgileKeyDerivation.SegmentIv(_descriptor, segmentIndex, _ivHasher, _iv);
-            _aes.DecryptCbc(cipher.Span, _iv, plain.Span, PaddingMode.None);
+            _cipher.Decrypt(cipher, _iv, plain);
         }
 
         internal override void VerifyIntegrity(Stream ciphertextView)
@@ -65,7 +62,7 @@ namespace ExcelReader.Core.Crypto
             }
             _disposed = true;
             CryptographicOperations.ZeroMemory(_key);
-            _aes.Dispose();
+            _cipher.Dispose();
             _ivHasher.Dispose();
         }
     }

@@ -26,7 +26,40 @@ namespace ExcelReader.Native
         {
             array = default;
             schema = default;
-            int status = ParseTyped(handle, specs, headerRow, out NativeTable table);
+            // One unbounded batch, drained and closed inside this call - the same session-driven shape
+            // ParseTyped uses, so the row loop lives in TypedParseSession only, with no second copy
+            // here to drift from it. Transient for the same reason too; see OpenTransient.
+            int status = TypedParseSession.OpenTransient(handle, specs, headerRow, "xl_parse_arrow",
+                out TypedParseSession? session);
+            if (status != NativeStatus.Ok)
+            {
+                return status;
+            }
+
+            NativeTable table = default;
+            try
+            {
+                using (TypedParseSession open = session!)
+                {
+                    status = open.NextBatch(out table);
+                    // An empty sheet produced no batch at all; the old contract is an OK result with a
+                    // zero-row table, which BuildTable over empty builders is exactly - same as
+                    // ParseTyped's Eof handling.
+                    if (status == NativeStatus.Eof)
+                    {
+                        table = BuildEmptyTable(specs);
+                        status = NativeStatus.Ok;
+                    }
+                }
+            }
+            catch (Exception exception)
+            {
+                // Only BuildEmptyTable can land here (NextBatch never throws), and BuildTable already
+                // released whatever it had allocated before the throw - so there is nothing to free,
+                // just the promise that no exception leaves this layer.
+                SetLastError(exception.Message);
+                return NativeStatus.Error;
+            }
             if (status != NativeStatus.Ok)
             {
                 return status;

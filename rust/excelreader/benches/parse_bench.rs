@@ -130,6 +130,30 @@ fn bench_infer_schema_large(c: &mut Criterion) {
     });
 }
 
+// The comparison point is bench_parse_sheet_large: same rows, same mapper, one batch resident at a
+// time instead of the whole sheet.
+fn bench_typed_chunks_large(c: &mut Criterion) {
+    let path = large_fixture_path();
+    for batch_size in [1_000_i64, 10_000, 0] {
+        c.bench_function(&format!("typed_chunks_large/{batch_size}"), |b| {
+            b.iter_batched(
+                || Workbook::open(&path).expect("open must succeed"),
+                |mut workbook| {
+                    let chunks = workbook
+                        .typed_chunks::<LargeRow>(1, batch_size)
+                        .expect("typed_chunks must succeed");
+                    let mut rows = 0_i64;
+                    for batch in chunks {
+                        rows += batch.expect("a batch must read").len();
+                    }
+                    black_box(rows);
+                },
+                criterion::BatchSize::SmallInput,
+            );
+        });
+    }
+}
+
 criterion_group!(
     benches,
     bench_open,
@@ -137,6 +161,7 @@ criterion_group!(
     bench_infer_schema,
     bench_open_large,
     bench_parse_sheet_large,
-    bench_infer_schema_large
+    bench_infer_schema_large,
+    bench_typed_chunks_large
 );
 criterion_main!(benches);

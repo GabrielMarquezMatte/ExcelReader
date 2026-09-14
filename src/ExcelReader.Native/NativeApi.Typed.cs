@@ -10,9 +10,11 @@ namespace ExcelReader.Native
     internal static unsafe partial class NativeApi
     {
         /// <summary>
-        /// Schema-driven columnar read of the WHOLE current sheet, from its first row — independent of,
-        /// and never disturbing, the incremental cursor <see cref="NextRow"/>/<see cref="NextRowDecoded"/>/
-        /// <see cref="ReadAllBlob"/> share on <paramref name="handle"/>. This is not a new parser: each
+        /// Schema-driven columnar read of the WHOLE current sheet, from its first row. It drives the
+        /// workbook's row cursor for the duration of this call — succeeding normally even while a
+        /// caller-visible <see cref="TypedParseSession"/> (<c>xl_typed_reader</c>/Arrow stream) is open
+        /// on <paramref name="handle"/>, but faulting it rather than resuming it from a rewound
+        /// position; see <see cref="TypedParseSession.OpenTransient"/>. This is not a new parser: each
         /// column dispatches to the same <see cref="ExcelCellReaders"/> members
         /// <c>ExcelParser&lt;T&gt;</c>'s reflective path already uses (see
         /// docs/NATIVE_BINDINGS_PLAN.md §7's feasibility finding).
@@ -23,59 +25,63 @@ namespace ExcelReader.Native
         internal static int ParseTyped(NativeHandle? handle, NativeColumnSpec[] specs, int headerRow, out NativeTable table)
         {
             table = default;
-            if (handle is null)
+            // One unbounded batch, drained and closed inside this call, which is exactly this method's
+            // contract - so the row loop lives in TypedParseSession only, with no second copy here to
+            // drift from it. Transient because it must not be refused by (or trip over) the workbook's
+            // one-live-session rule; see TypedParseSession.OpenTransient.
+            int status = TypedParseSession.OpenTransient(handle, specs, headerRow, "xl_parse_typed",
+                out TypedParseSession? session);
+            if (status != NativeStatus.Ok)
             {
-                return NativeStatus.InvalidHandle;
-            }
-            if (!TryValidateArguments(specs, headerRow, out string? argumentError))
-            {
-                SetLastError(argumentError);
-                return NativeStatus.InvalidArgument;
+                return status;
             }
 
-            ClearLastError();
-            IExcelRowEnumerator? rows = null;
+            using TypedParseSession open = session!;
+            status = open.NextBatch(out table);
+            if (status != NativeStatus.Eof)
+            {
+                return status;
+            }
+
+            // An empty sheet produced no batch at all; the old contract is an OK result with a
+            // zero-row table, which BuildTable over empty builders is exactly. Inside a try because
+            // it allocates: no exception may leave this layer (see NativeApi's class remarks).
             try
             {
-                rows = handle.Reader.GetEnumerator();
-                int[] columnIndices = new int[specs.Length];
-                if (!TryResolveColumns(rows, specs, headerRow, columnIndices, out string? resolveError))
-                {
-                    SetLastError(resolveError);
-                    return NativeStatus.InvalidArgument;
-                }
-
-                ColumnBuilder[] builders = new ColumnBuilder[specs.Length];
-                for (int i = 0; i < specs.Length; i++)
-                {
-                    builders[i] = new ColumnBuilder(specs[i].Type, specs[i].Nullable);
-                }
-
-                bool isDate1904 = handle.Reader.IsDate1904;
-                while (rows.MoveNext())
-                {
-                    if (!TryAppendRow(builders, rows.Current, columnIndices, isDate1904, out int failedColumn))
-                    {
-                        NativeColumnSpec spec = specs[failedColumn];
-                        string columnLabel = spec.Names.Length > 0 ? string.Join(" / ", spec.Names) : spec.Index.ToString(CultureInfo.InvariantCulture);
-                        SetLastError($"column {failedColumn} (\"{columnLabel}\") has a value that failed to convert and is not nullable.");
-                        return NativeStatus.Error;
-                    }
-                }
-
-                table = BuildTable(builders);
+                table = BuildEmptyTable(specs);
                 return NativeStatus.Ok;
             }
             catch (Exception exception)
             {
+                // BuildTable releases whatever it had allocated before a throw (see its own catch), so
+                // there is nothing left to free here.
                 SetLastError(exception.Message);
                 table = default;
                 return NativeStatus.Error;
             }
-            finally
+        }
+
+        // Zero rows, one column per spec - what the pre-session ParseTyped returned when the sheet
+        // had no data rows.
+        private static NativeTable BuildEmptyTable(NativeColumnSpec[] specs)
+        {
+            ColumnBuilder[] builders = new ColumnBuilder[specs.Length];
+            for (int i = 0; i < specs.Length; i++)
             {
-                rows?.Dispose();
+                builders[i] = new ColumnBuilder(specs[i].Type, specs[i].Nullable);
             }
+            return BuildTable(builders);
+        }
+
+        // Shared by ParseTyped and TypedParseSession.NextBatch: only the caller holds the specs
+        // needed to name the column that failed.
+        private static string DescribeFailedColumn(NativeColumnSpec[] specs, int failedColumn)
+        {
+            NativeColumnSpec spec = specs[failedColumn];
+            string columnLabel = spec.Names.Length > 0
+                ? string.Join(" / ", spec.Names)
+                : spec.Index.ToString(CultureInfo.InvariantCulture);
+            return $"column {failedColumn} (\"{columnLabel}\") has a value that failed to convert and is not nullable.";
         }
 
         // The failing column travels back through `failedColumn` rather than being reported here,

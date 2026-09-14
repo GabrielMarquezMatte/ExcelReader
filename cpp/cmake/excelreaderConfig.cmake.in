@@ -1,0 +1,25 @@
+@PACKAGE_INIT@
+
+# Rebuilds the same two targets cpp/CMakeLists.txt defines for an in-tree build, pointed at the
+# installed copies instead. No download happens here: the native library was resolved and installed
+# once, at install time, so find_package() never touches the network.
+
+if(NOT TARGET xl::native)
+    add_library(xl::native SHARED IMPORTED)
+    set_target_properties(xl::native PROPERTIES
+        IMPORTED_LOCATION "@PACKAGE_EXCELREADER_INSTALLED_NATIVE_DIR@/@EXCELREADER_INSTALLED_NATIVE_NAME@")
+    if(WIN32)
+        set_target_properties(xl::native PROPERTIES
+            IMPORTED_IMPLIB "@PACKAGE_EXCELREADER_INSTALLED_IMPLIB_DIR@/@EXCELREADER_INSTALLED_IMPLIB_NAME@")
+    endif()
+endif()
+
+if(NOT TARGET xl::excelreader)
+    add_library(xl::excelreader INTERFACE IMPORTED)
+    set_target_properties(xl::excelreader PROPERTIES
+        INTERFACE_INCLUDE_DIRECTORIES "@PACKAGE_EXCELREADER_INSTALLED_INCLUDE_DIR@"
+        INTERFACE_COMPILE_FEATURES cxx_std_23
+        INTERFACE_LINK_LIBRARIES xl::native)
+endif()
+
+check_required_components(excelreader)
