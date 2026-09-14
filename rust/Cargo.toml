@@ -1,3 +1,14 @@
 [workspace]
 resolver = "2"
 members = ["excelreader", "excelreader-derive"]
+
+# Only takes effect when this workspace is the top-level build (`cargo build`/`bench` here) — Cargo
+# ignores a dependency's own [profile.*], so a consumer pulling in `excelreader` via crates.io is
+# unaffected either way. Worth setting anyway: this repo's own criterion benches (parse_bench,
+# compare_bench, write_bench) and the release job in .github/workflows/rust.yml both build through
+# this workspace, and the crate's own work here is thin (blob bounds-checking, buffer growth, FFI
+# calls into the real, already-optimized native library) — cross-crate inlining mostly helps the
+# derive-generated field-population code get folded into its caller.
+[profile.release]
+lto = true
+codegen-units = 1

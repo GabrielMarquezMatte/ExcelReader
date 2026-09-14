@@ -117,6 +117,32 @@ failure in `table.validity` and keeps reading.
 Note that `parse_typed()` always reads the whole sheet from its first row, independent of how far
 `rows()` has advanced — and it leaves that cursor alone.
 
+#### Reading a sheet a batch at a time
+
+For a sheet too large to hold in memory at once, `iter_parse_typed()` is `parse_typed()` a batch at a
+time — a generator yielding one `TypedTable` per batch:
+
+```python
+with open_workbook("sales.xlsb") as workbook:
+    schema = [
+        ColumnSpec(ColumnType.STRING, name="Region"),
+        ColumnSpec(ColumnType.DATE, name="Order Date"),
+        ColumnSpec(ColumnType.F64, name="Total Revenue", nullable=True),
+    ]
+    for batch in workbook.iter_parse_typed(schema, batch_size=10_000):
+        region, day, revenue = batch.columns
+        ...
+```
+
+`batch_size` is rows per batch; `0` means one unbounded batch, identical to `parse_typed()`, and a
+negative value is an error. A workbook serves one chunked read at a time — of either kind, typed or
+Arrow (see [Arrow](#arrow) below) — and any other read on the workbook while one is live invalidates
+it: its next call then raises `ExcelReaderError` rather than silently resuming from the moved cursor.
+Finish the batches, or call `.close()` on the generator, before starting another read.
+
+Being a generator, `iter_parse_typed()` opens nothing until the first iteration, so a bad
+`batch_size` or a rejected second reader is only raised there, not at the call.
+
 #### Guessing a schema
 
 Writing the `ColumnSpec` list by hand means already knowing every column's name and type. When you
@@ -236,6 +262,43 @@ batch = pa.RecordBatch.from_struct_array(array)
 ```
 
 pyarrow owns the buffers from that point on, so the result stays valid after the workbook is closed.
+
+#### Streaming: RecordBatchReader, pandas, and polars
+
+`to_record_batch_reader()` is `to_arrow()` a batch at a time, as a streaming
+`pyarrow.RecordBatchReader` — peak memory is one batch rather than one sheet:
+
+```python
+with open_workbook("sales.xlsb") as workbook:
+    reader = workbook.to_record_batch_reader(schema, batch_size=10_000)
+    for batch in reader:
+        ...
+```
+
+Same `batch_size`/one-chunked-read-at-a-time rules as `iter_parse_typed()` above, except
+`to_record_batch_reader()` raises immediately rather than on the first iteration.
+
+`iter_pandas()`/`iter_polars()` build on it, yielding one DataFrame per batch (requires pyarrow, plus
+pandas or polars respectively):
+
+```python
+with open_workbook("sales.xlsb") as workbook:
+    for frame in workbook.iter_polars(schema, batch_size=10_000):
+        ...
+```
+
+`to_pandas()`/`to_polars()` materialize the whole sheet as a single DataFrame and also take a
+`batch_size`, but the two spend it differently — do not blur them. `to_polars()` genuinely streams:
+polars consumes the reader batch by batch, so the whole sheet is never resident as Arrow buffers at
+once. `to_pandas()` does **not** bound peak memory the same way — `RecordBatchReader.read_all()`
+concatenates every batch before pandas ever sees them. What `batch_size` buys `to_pandas()` instead is
+the conversion: `self_destruct=True` frees each Arrow chunk as pandas consumes it, so the sheet is
+never held twice, once as Arrow and once as the DataFrame.
+
+**A faulted stream surfaces differently from every other native error in this library**: pyarrow's
+`RecordBatchReader` reports a failed batch as a plain `OSError` carrying the native error message, not
+`ExcelReaderError` — the failure crosses the Arrow C Data Interface before this library's own
+exception wrapping ever runs.
 
 ### From memory
 

@@ -64,6 +64,19 @@ namespace ExcelReader.Native
             _lastErrorUtf8Length = 0;
         }
 
+        /// <summary>The message <see cref="SetLastError"/> last stored, as a managed string.</summary>
+        /// <remarks>
+        /// The tests' window onto <c>xl_last_error</c> without the ask-the-size-then-copy round trip
+        /// <see cref="LastError"/> models. Deliberately not used by the Arrow stream's
+        /// <c>get_last_error</c>, which latches its own copy of its own session's fault instead — this
+        /// value belongs to whatever ExcelReader call ran last on the calling thread, which need not be
+        /// the one being reported.
+        /// </remarks>
+        internal static string LastErrorText()
+        {
+            return _lastError ?? "";
+        }
+
         /// <summary>Copies the calling thread's last error message into <paramref name="buffer"/> as UTF-8.</summary>
         internal static int LastError(Span<byte> buffer, out int length)
         {

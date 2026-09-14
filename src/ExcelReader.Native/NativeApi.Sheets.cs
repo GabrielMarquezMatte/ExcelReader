@@ -104,6 +104,13 @@ namespace ExcelReader.Native
                 // Row enumeration is per-sheet: the old cursor points into the previous sheet's
                 // buffers, so it is dropped and rebuilt on the next row request.
                 handle.ResetRows();
+                // A chunked read is a cursor this handle does not own and cannot rebuild, so it is
+                // faulted instead of dropped - which is the guarantee excelreader.h's chunked-reading
+                // section makes. Unconditional, including a move to the sheet already selected: the
+                // reader re-initializes its per-sheet state either way, so the read's position is no
+                // longer defined either way. A rule that held only for a DIFFERENT index would be one
+                // more thing for a binding author to get subtly wrong.
+                handle.FaultLiveSession("xl_move_to_sheet");
                 return NativeStatus.Ok;
             }
             catch (Exception exception)

@@ -73,6 +73,11 @@ pub struct XlWorkbook {
     _private: [u8; 0],
 }
 
+#[repr(C)]
+pub struct XlTypedReader {
+    _private: [u8; 0],
+}
+
 /// Mirrors `xl_open_options`. `struct_size` must be set to `size_of::<XlOpenOptions>()`; build one
 /// through [`OpenOptions`] rather than by hand.
 #[repr(C)]
@@ -257,7 +262,35 @@ extern "C" {
         out_schema: *mut c_void,
     ) -> c_int;
 
+    /// `out_stream` is a `struct ArrowArrayStream*`, typed as `c_void` for the same reason
+    /// `xl_parse_arrow`'s outputs are. Its `release` is what closes the underlying read.
+    pub fn xl_parse_arrow_stream(
+        handle: *mut XlWorkbook,
+        specs: *const XlColumnSpec,
+        spec_count: i32,
+        header_row: i32,
+        max_rows: i64,
+        out_stream: *mut c_void,
+    ) -> c_int;
+
     pub fn xl_free_table(table: *mut XlTable);
+
+    /// `max_rows` is rows per batch, 0 meaning one unbounded batch. A workbook serves one chunked
+    /// read at a time; opening a second is `XL_ERROR`.
+    pub fn xl_typed_reader_open(
+        handle: *mut XlWorkbook,
+        specs: *const XlColumnSpec,
+        spec_count: i32,
+        header_row: i32,
+        max_rows: i64,
+        out_reader: *mut *mut XlTypedReader,
+    ) -> c_int;
+
+    /// `XL_OK` with a batch, or `XL_EOF` at end of sheet. A failure latches: every later call
+    /// repeats it.
+    pub fn xl_typed_reader_next(reader: *mut XlTypedReader, out_table: *mut XlTable) -> c_int;
+
+    pub fn xl_typed_reader_close(reader: *mut XlTypedReader);
 
     pub fn xl_infer_schema(
         handle: *mut XlWorkbook,

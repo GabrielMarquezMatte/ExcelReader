@@ -65,3 +65,19 @@ if(WIN32)
             "$<TARGET_PROPERTY:excelreader_native,IMPORTED_LOCATION>"
             "$<TARGET_FILE_DIR:excelreader_cpp_rows>")
 endif()
+
+add_executable(excelreader_cpp_batch batch.cpp)
+target_link_libraries(excelreader_cpp_batch PRIVATE xl::excelreader)
+
+# Reads the same RealExcel.xlsb the smoke test does; that cache variable is set above.
+target_compile_definitions(excelreader_cpp_batch PRIVATE
+    EXCELREADER_FIXTURE_PATH="${EXCELREADER_FIXTURE_PATH}")
+
+add_test(NAME excelreader_cpp_batch COMMAND excelreader_cpp_batch)
+if(WIN32)
+    # Same reason as the smoke test: the native DLL has no import-time PATH entry.
+    add_custom_command(TARGET excelreader_cpp_batch POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "$<TARGET_PROPERTY:excelreader_native,IMPORTED_LOCATION>"
+            "$<TARGET_FILE_DIR:excelreader_cpp_batch>")
+endif()

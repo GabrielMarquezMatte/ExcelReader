@@ -28,6 +28,32 @@ target_link_libraries(your_app PRIVATE xl::excelreader)
 `FetchContent_MakeAvailable` downloads the matching native binary for your platform from that tag's
 GitHub Release automatically (see `cmake/FetchNativeLib.cmake`).
 
+### Install once, `find_package` after
+
+Building `cpp` as its own project installs the headers, the native binary and a config package, so
+downstream projects find it without re-downloading anything:
+
+```bash
+cmake -S cpp -B build/cpp -DCMAKE_BUILD_TYPE=Release
+cmake --install build/cpp --config Release --prefix /your/prefix
+```
+
+```cmake
+find_package(excelreader 3.0 REQUIRED)
+target_link_libraries(your_app PRIVATE xl::excelreader)
+```
+
+Point `CMAKE_PREFIX_PATH` at the prefix you installed into. The native binary is resolved once, at
+install time — `find_package` never touches the network. The package version comes from
+`EXCELREADER_VERSION`, so a checkout that isn't on a tag installs as `0.0.0` and any versioned
+`find_package` request against it fails; pass `-DEXCELREADER_VERSION=v3.0.2` to install under a real
+version. On Windows the generated import library is installed next to the DLL, and consumers need
+the DLL beside their executable (or on `PATH`) at run time — `$<TARGET_FILE:xl::native>` names it,
+see `tests/package/CMakeLists.txt`.
+
+Pass `-DEXCELREADER_INSTALL=OFF` to skip the install rules. They default off when `cpp` is pulled in
+with `add_subdirectory`/`FetchContent`, so a parent project's `install` step never picks them up.
+
 ## Build notes
 
 Two variables control where `FetchNativeLib.cmake` gets the native binary and which release it
@@ -110,6 +136,33 @@ for (auto row : rows)
 
 `xl::parse_sheet<T>` remains the fastest way to read a sheet whose columns you know.
 
+### Chunked reads
+
+For a sheet too large to hold in memory at once, `xl::typed_reader<T>` is `xl::parse_sheet<T>`
+delivered a batch at a time:
+
+```cpp
+auto workbook = xl::Workbook::open("book.xlsx").value();
+auto reader = xl::typed_reader<Row>(workbook, 1, 10'000).value();
+for (auto &batch : reader)
+{
+    if (!batch) { break; }
+    for (const auto &row : *batch) { /* ... */ }
+}
+```
+
+`typed_reader` returns `std::expected<xl::TypedReader<T>, xl::Error>`; `next()` returns
+`std::expected<std::optional<TableView<T>>, Error>`, an empty optional at end of sheet, and
+`TypedReader` is also an input range, so the range-`for` above works directly. `batch_size` is rows
+per batch — `0` means one unbounded batch, identical to `parse_sheet`; negative is an error. Each
+batch is independent and outlives the reader.
+
+A workbook serves one chunked read at a time, of either kind (typed or Arrow — see
+[Arrow export](#arrow-export) below), and any other read on it while one is live invalidates that
+reader: its next call reports a latched error rather than resuming from the moved cursor. C++ cannot
+enforce that at compile time the way the Rust binding does — finish or destroy the reader before
+starting another read.
+
 ### Encrypted workbooks
 
 `OpenOptions::password(std::string_view)` unlocks a password-protected OOXML workbook
@@ -163,6 +216,23 @@ auto workbook = xl::Workbook::open("book.xlsx");
 auto table = xl::parse_arrow<Row>(*workbook);
 // table->array / table->schema are a top-level struct array; both release in ~ArrowTable.
 ```
+
+Batched: `xl::arrow_stream<T>` is `xl::parse_arrow<T>` delivered a batch at a time. `schema()` and
+`next()` return RAII guards (`ArrowSchemaGuard`, `ArrowArrayGuard`) that release exactly once, and
+each batch outlives the stream that produced it:
+
+```cpp
+auto stream = xl::arrow_stream<Row>(*workbook, 1, 10'000);
+while (true)
+{
+    auto batch = stream->next();
+    if (!batch || !batch->has_value()) { break; }
+    // (*batch)->array is this one batch
+}
+```
+
+Same `header_row`/`batch_size` meaning, and the same one-chunked-read-at-a-time rule, as
+`xl::typed_reader` above.
 
 ## Writing
 

@@ -123,16 +123,20 @@ static void BM_WriteSheet(benchmark::State &state)
 }
 BENCHMARK(BM_WriteSheet);
 
-static void BM_WriteColumns(benchmark::State &state)
+// Columnar buffers, transposed from fixture_rows() once (function-local static, same caching
+// rationale as fixture_rows() itself). BM_WriteColumns previously rebuilt these on every call
+// outside its `for (auto _ : state)` loop - harmless for timing (PauseTiming/ResumeTiming aren't
+// even needed there), but Google Benchmark's dedicated memory-measurement run
+// (BenchmarkRunner::RunMemoryManager) still executes that untimed setup code, so every one of its
+// (up to 16) calls re-transposed all 65,535 rows, and the *total* over that run - not amortized per
+// iteration - dominated BM_WriteColumns' allocated-bytes figure with a cost the benchmark isn't
+// meant to isolate (that's BM_WriteSheet's job). Caching means only the first call pays it.
+//
+// ALL SEVEN columns, the same set BM_WriteSheet writes. An earlier version of this benchmark wrote
+// only four, which made it look ~2x faster when a third of that gap was simply three fewer columns
+// of work.
+struct WriteColumnsFixture
 {
-    const std::vector<Row> &rows = fixture_rows();
-
-    // Transposed once, outside the measured region: this case exists to measure the write, not the
-    // transpose BM_WriteSheet already covers.
-    //
-    // ALL SEVEN columns, the same set BM_WriteSheet writes. An earlier version of this benchmark
-    // wrote only four, which made it look ~2x faster when a third of that gap was simply three
-    // fewer columns of work.
     StringBuffer region;
     StringBuffer country;
     StringBuffer item_type;
@@ -140,32 +144,49 @@ static void BM_WriteColumns(benchmark::State &state)
     std::vector<int64_t> order_ids;
     std::vector<int64_t> units;
     std::vector<double> revenue;
-    region.reserve(rows.size());
-    country.reserve(rows.size());
-    item_type.reserve(rows.size());
-    order_dates.reserve(rows.size());
-    order_ids.reserve(rows.size());
-    units.reserve(rows.size());
-    revenue.reserve(rows.size());
-    for (const Row &row : rows)
+};
+
+static const WriteColumnsFixture &write_columns_fixture()
+{
+    static const WriteColumnsFixture fixture = []
     {
-        region.push(row.region);
-        country.push(row.country);
-        item_type.push(row.item_type);
-        order_dates.push_back(static_cast<int32_t>(row.order_date.time_since_epoch().count()));
-        order_ids.push_back(row.order_id);
-        units.push_back(row.units_sold);
-        revenue.push_back(row.total_revenue);
-    }
+        const std::vector<Row> &rows = fixture_rows();
+        WriteColumnsFixture built;
+        built.region.reserve(rows.size());
+        built.country.reserve(rows.size());
+        built.item_type.reserve(rows.size());
+        built.order_dates.reserve(rows.size());
+        built.order_ids.reserve(rows.size());
+        built.units.reserve(rows.size());
+        built.revenue.reserve(rows.size());
+        for (const Row &row : rows)
+        {
+            built.region.push(row.region);
+            built.country.push(row.country);
+            built.item_type.push(row.item_type);
+            built.order_dates.push_back(static_cast<int32_t>(row.order_date.time_since_epoch().count()));
+            built.order_ids.push_back(row.order_id);
+            built.units.push_back(row.units_sold);
+            built.revenue.push_back(row.total_revenue);
+        }
+        return built;
+    }();
+    return fixture;
+}
+
+static void BM_WriteColumns(benchmark::State &state)
+{
+    const std::vector<Row> &rows = fixture_rows();
+    const WriteColumnsFixture &columns_fixture = write_columns_fixture();
 
     const std::array<xl::ColumnRef, 7> columns{
-        xl::string_column("Region", region.offsets, region.data),
-        xl::string_column("Country", country.offsets, country.data),
-        xl::string_column("Item Type", item_type.offsets, item_type.data),
-        xl::date_column("Order Date", order_dates),
-        xl::i64_column("Order ID", order_ids),
-        xl::i64_column("Units Sold", units),
-        xl::f64_column("Total Revenue", revenue)};
+        xl::string_column("Region", columns_fixture.region.offsets, columns_fixture.region.data),
+        xl::string_column("Country", columns_fixture.country.offsets, columns_fixture.country.data),
+        xl::string_column("Item Type", columns_fixture.item_type.offsets, columns_fixture.item_type.data),
+        xl::date_column("Order Date", columns_fixture.order_dates),
+        xl::i64_column("Order ID", columns_fixture.order_ids),
+        xl::i64_column("Units Sold", columns_fixture.units),
+        xl::f64_column("Total Revenue", columns_fixture.revenue)};
 
     const std::filesystem::path path = bench_path("columns.xlsx");
     for (auto _ : state)

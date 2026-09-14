@@ -33,6 +33,13 @@ rewrites — see [ARCHITECTURE.md](ARCHITECTURE.md) for the shape of the codebas
   [STYLEGUIDE.md § Untrusted Input](STYLEGUIDE.md#untrusted-input) before touching a parser: every
   length, offset, and size read from the file must be bounded before it drives an allocation.
 
+## Commit messages
+
+Use [Conventional Commits](https://www.conventionalcommits.org/): `type(scope): summary`, imperative
+mood, lowercase summary, no trailing period. Common types in this repo: `feat`, `fix`, `refactor`,
+`perf`, `test`, `docs`, `chore`, `ci`, `build`. The scope is usually the area touched (`crypto`,
+`reader`, `writer`, `parser`, `native`). Example: `fix(crypto): bound VerifyPassword's encryptedVerifierHash length`.
+
 ## Pull requests
 
 - One focused change per PR — don't batch unrelated fixes into one commit or one PR.

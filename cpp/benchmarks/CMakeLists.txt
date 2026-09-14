@@ -13,8 +13,11 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(googlebenchmark)
 
-add_executable(excelreader_cpp_benchmarks benchmark_workbook.cpp)
-target_link_libraries(excelreader_cpp_benchmarks PRIVATE xl::excelreader benchmark::benchmark_main)
+# Own main() (not benchmark::benchmark_main) so RegisterMemoryManager can run before
+# RunSpecifiedBenchmarks() — see benchmark_main_with_alloc.cpp's header comment for how to read the
+# allocation numbers it adds (JSON output only).
+add_executable(excelreader_cpp_benchmarks benchmark_workbook.cpp benchmark_main_with_alloc.cpp)
+target_link_libraries(excelreader_cpp_benchmarks PRIVATE xl::excelreader benchmark::benchmark)
 
 set(EXCELREADER_FIXTURE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/../../RealExcel.xlsb"
     CACHE FILEPATH "Path to the RealExcel.xlsb fixture the C++ benchmarks read")
@@ -33,8 +36,8 @@ if(WIN32)
             "$<TARGET_FILE_DIR:excelreader_cpp_benchmarks>")
 endif()
 
-add_executable(excelreader_cpp_write_benchmarks benchmark_write.cpp)
-target_link_libraries(excelreader_cpp_write_benchmarks PRIVATE xl::excelreader benchmark::benchmark_main)
+add_executable(excelreader_cpp_write_benchmarks benchmark_write.cpp benchmark_main_with_alloc.cpp)
+target_link_libraries(excelreader_cpp_write_benchmarks PRIVATE xl::excelreader benchmark::benchmark)
 target_compile_definitions(excelreader_cpp_write_benchmarks PRIVATE
     EXCELREADER_LARGE_FIXTURE_PATH="${EXCELREADER_LARGE_FIXTURE_PATH}")
 
