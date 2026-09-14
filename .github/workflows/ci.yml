@@ -61,6 +61,7 @@ jobs:
           --
           --report-xunit-trx
           --coverage
+          --coverage-settings coverage.runsettings
           --coverage-output-format cobertura
 
       - name: Upload test results
