@@ -115,8 +115,8 @@ namespace ExcelReader.Core.Reader
         }
 
         // Streams xl/sharedStrings.xml through a growable pooled buffer instead of inflating the whole
-        // part before parsing a byte of it — mirrors how the row enumerators use BufferedStreamCursor/
-        // EnsureRowBuffered so decompression overlaps the scan (via PrefetchStream) instead of finishing
+        // part before parsing a byte of it — mirrors how the row enumerators use BufferedStreamCursor
+        // so decompression overlaps the scan (via PrefetchStream) instead of finishing
         // first. Growth is capped by MaxSharedStringBytes, the same limit ThrowIfSharedEntryTooLarge
         // already checked the declared part length against.
         private void ParseSharedStreaming(Stream stream, long entryLength)
@@ -250,7 +250,7 @@ namespace ExcelReader.Core.Reader
         // position of "</si>"'s own '<' as already located by EnsureSiBuffered(Async) — passed through
         // instead of re-running the same IndexOf(siClose) scan a second time (-1 for a self-closing
         // <si/>, which has no body to locate). No Fill/FillAsync happens here, so plain bounded index
-        // math is safe exactly like ParseRow's post-EnsureRowBuffered body.
+        // math is safe exactly like ParseRowInWindow's body.
         private int AppendSharedEntry(BufferedStreamCursor io, SharedStringTokens tok, int open, int close, int flat, out int nextPos)
         {
             if (close < 0) // <si/>: no body
@@ -373,8 +373,8 @@ namespace ExcelReader.Core.Reader
 
         // Grows io (io.Pos already anchored at the '<si' tag's start by the caller) until the whole
         // element — open tag through "</si>", or through a self-closing "<si .../>"'s own '>' — sits
-        // contiguously in io.Buf. Mirrors XlsxReader.Enumerator.EnsureRowBuffered's "buffer the whole
-        // element before parsing it" contract; returns -1 on a truncated file, matching the original
+        // contiguously in io.Buf. Buffers the whole element before parsing it; returns -1 on a
+        // truncated file, matching the original
         // ParseShared's own break-on-truncation behavior instead of throwing.
         private static (int Open, int Close) EnsureSiBuffered(BufferedStreamCursor io, Stream? stream, byte[] siClose)
         {

@@ -43,7 +43,44 @@ namespace ExcelReader.Core.Reader
         }
 
         // Column reference letters (the "B" in "B2") -> 0-based column index. "" -> -1.
+        // Unrolled to XFD, the last valid column; longer refs fall back to ColumnIndexLong.
         public static int ColumnIndex(ReadOnlySpan<byte> cellRef)
+        {
+            if (cellRef.IsEmpty)
+            {
+                return -1;
+            }
+            uint a = (uint)(cellRef[0] - 'A');
+            if (a > 25)
+            {
+                return -1;
+            }
+            if (cellRef.Length == 1)
+            {
+                return (int)a;
+            }
+            uint b = (uint)(cellRef[1] - 'A');
+            if (b > 25)
+            {
+                return (int)a;
+            }
+            if (cellRef.Length == 2)
+            {
+                return (int)(((a + 1) * 26) + b);
+            }
+            uint c = (uint)(cellRef[2] - 'A');
+            if (c > 25)
+            {
+                return (int)(((a + 1) * 26) + b);
+            }
+            if (cellRef.Length == 3 || (uint)(cellRef[3] - 'A') > 25)
+            {
+                return (int)(((((a + 1) * 26) + b + 1) * 26) + c);
+            }
+            return ColumnIndexLong(cellRef);
+        }
+
+        private static int ColumnIndexLong(ReadOnlySpan<byte> cellRef)
         {
             ref var c0 = ref MemoryMarshal.GetReference(cellRef);
             int col = 0;

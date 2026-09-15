@@ -48,8 +48,8 @@ namespace ExcelReader.Core.Reader
 
             // Top-level scanning differs between sync and async only in whether the buffer refill
             // awaits, so that span work stays in sync helpers that never hold a span across an await.
-            // Once inside a row, EnsureRowBuffered(Async) guarantees the whole row is buffered first,
-            // so ParseRow/ParseCellSpan/EmitCell are shared by both paths unchanged.
+            // Once inside a row, ParseRowInWindow does all the span work and commits nothing when the
+            // row runs past the window, so both paths share it and differ only in how they refill.
 
             /// <inheritdoc/>
             public bool MoveNext()
@@ -75,7 +75,7 @@ namespace ExcelReader.Core.Reader
                         case HeadKind.Row:
                             if (!BeginRow())
                             {
-                                ParseRow(EnsureRowBuffered());
+                                ParseRowBody();
                             }
                             return true;
                         default:
@@ -154,13 +154,17 @@ namespace ExcelReader.Core.Reader
                     return new ValueTask<bool>(true);
                 }
 
-                ValueTask<int> rowBufferTask = EnsureRowBufferedAsync();
-                if (!rowBufferTask.IsCompletedSuccessfully)
+                int rowStart = _pos;
+                if (ParseRowInWindow())
                 {
-                    return FinishRowAfterAsync(rowBufferTask);
+                    return new ValueTask<bool>(true);
                 }
-                ParseRow(rowBufferTask.Result);
-                return new ValueTask<bool>(true);
+                if (_eof)
+                {
+                    ParseTruncatedRow(rowStart);
+                    return new ValueTask<bool>(true);
+                }
+                return ParseRowBodySlowAsync(rowStart);
             }
 
             // Returns null only when markup was skipped and enumeration should continue immediately.
@@ -194,13 +198,53 @@ namespace ExcelReader.Core.Reader
                 return await MoveNextAsync().ConfigureAwait(false);
             }
 
-            // Unlike AwaitThenRestartAsync, must not re-enter MoveNextAsync from the top — the row is
-            // already open and that would misread its first cell as a new top-level element.
-            private async ValueTask<bool> FinishRowAfterAsync(ValueTask<int> pendingRowBuffered)
+            private void ParseRowBody()
             {
-                int rowEnd = await pendingRowBuffered.ConfigureAwait(false);
-                ParseRow(rowEnd);
-                return true;
+                int rowStart = _pos;
+                while (!ParseRowInWindow())
+                {
+                    if (_eof)
+                    {
+                        ParseTruncatedRow(rowStart);
+                        return;
+                    }
+                    RestartRowAt(rowStart);
+                    Fill();
+                    rowStart = _pos; // Fill may compact, which moves the row's start to 0
+                }
+            }
+
+            private async ValueTask<bool> ParseRowBodySlowAsync(int rowStart)
+            {
+                while (true)
+                {
+                    RestartRowAt(rowStart);
+                    await FillAsync().ConfigureAwait(false);
+                    rowStart = _pos;
+                    if (ParseRowInWindow())
+                    {
+                        return true;
+                    }
+                    if (_eof)
+                    {
+                        ParseTruncatedRow(rowStart);
+                        return true;
+                    }
+                }
+            }
+
+            // RowBuffer cells alias _buf by absolute offset, so a compacting Fill forces a re-parse.
+            private void RestartRowAt(int rowStart)
+            {
+                _pos = rowStart;
+                _acc.Reset();
+                _nextCol = 0;
+            }
+
+            private void ParseTruncatedRow(int rowStart)
+            {
+                RestartRowAt(rowStart);
+                ParseRow(_len);
             }
 
             // Detects the sheet's element-name prefix (e.g. "x:" in <x:worksheet>) once, from the root
@@ -239,9 +283,43 @@ namespace ExcelReader.Core.Reader
                 }
                 return BeginRowAt(gt);
             }
+            private bool ParseRowInWindow()
+            {
+                byte[] buf = _buf;
+                int len = _len;
+                int p = _pos;
+                ReadOnlySpan<byte> rowEnd = _ns is null ? "</row"u8 : _ns.RowEnd;
+                while (true)
+                {
+                    int lt = p < len && buf[p] == (byte)'<' ? p : IndexOfBounded(buf, len, p, (byte)'<');
+                    if (lt < 0)
+                    {
+                        return false;
+                    }
+                    p = lt;
+                    if (IsCellStart(buf, len, p))
+                    {
+                        p = ParseCellSpan(buf, len, p);
+                        continue;
+                    }
+                    if (buf.AsSpan(p, Math.Min(rowEnd.Length, len - p)).StartsWith(rowEnd))
+                    {
+                        int gt = IndexOfBounded(buf, len, p, (byte)'>');
+                        if (gt < 0)
+                        {
+                            return false;
+                        }
+                        _pos = gt + 1;
+                        return true;
+                    }
+                    if (!SkipMarkupSpan(buf, len, ref p))
+                    {
+                        return false;
+                    }
+                }
+            }
 
-            // `rowEnd` (the '<' starting "</row") is supplied by EnsureRowBuffered(Async), which already
-            // grew the buffer until the whole row is present — so everything below is pure
+            // Truncated-row fallback only. `rowEnd` bounds the cells to parse; everything below is pure
             // ReadOnlySpan<byte> work with no Ensure/Fill and no mid-row compaction risk. `_pos` is
             // written back exactly once, after the whole row is consumed.
             private void ParseRow(int rowEnd)
@@ -811,8 +889,7 @@ namespace ExcelReader.Core.Reader
                 }
             }
 
-            // Bounded, Fill-free counterparts used once EnsureRowBuffered(Async) has already
-            // guaranteed the whole row is buffered.
+            // Bounded, Fill-free counterparts for span work inside the buffered window.
             private static int IndexOfBounded(byte[] buf, int boundExclusive, int from, byte b)
             {
                 int rel = buf.AsSpan(from, boundExclusive - from).IndexOf(b);
@@ -850,60 +927,13 @@ namespace ExcelReader.Core.Reader
                 return -1;
             }
 
-            // Grows the buffer until the whole row (through "</row...>"'s closing '>') is present.
-            // Returns _len instead on a truncated file, so ParseRow still parses whatever is present.
-            private int EnsureRowBuffered()
-            {
-                while (true)
-                {
-                    int rowEnd = FindSeq(MarkupSeq.RowEnd, _pos);
-                    if (rowEnd >= 0 && _buf.AsSpan(rowEnd, _len - rowEnd).IndexOf((byte)'>') >= 0)
-                    {
-                        return rowEnd;
-                    }
-                    if (_eof)
-                    {
-                        return _len;
-                    }
-                    Fill();
-                }
-            }
-
-            private ValueTask<int> EnsureRowBufferedAsync()
-            {
-                int rowEnd = FindSeq(MarkupSeq.RowEnd, _pos);
-                if (rowEnd >= 0 && _buf.AsSpan(rowEnd, _len - rowEnd).IndexOf((byte)'>') >= 0)
-                {
-                    return new ValueTask<int>(rowEnd);
-                }
-                return _eof ? new ValueTask<int>(_len) : EnsureRowBufferedSlowAsync();
-            }
-
-            private async ValueTask<int> EnsureRowBufferedSlowAsync()
-            {
-                do
-                {
-                    await FillAsync().ConfigureAwait(false);
-                    int rowEnd = FindSeq(MarkupSeq.RowEnd, _pos);
-                    if (rowEnd >= 0 && _buf.AsSpan(rowEnd, _len - rowEnd).IndexOf((byte)'>') >= 0)
-                    {
-                        return rowEnd;
-                    }
-                }
-                while (!_eof);
-                return _len;
-            }
-
-            private enum MarkupSeq { CommentEnd, CDataEnd, RowEnd }
+            private enum MarkupSeq { CommentEnd, CDataEnd }
 
             private int FindSeq(MarkupSeq seq, int start)
             {
-                int rel = seq switch
-                {
-                    MarkupSeq.CommentEnd => _buf.AsSpan(start, _len - start).IndexOf("-->"u8),
-                    MarkupSeq.CDataEnd => _buf.AsSpan(start, _len - start).IndexOf("]]>"u8),
-                    _ => _buf.AsSpan(start, _len - start).IndexOf(_ns is null ? "</row"u8 : _ns.RowEnd),
-                };
+                int rel = seq == MarkupSeq.CommentEnd
+                    ? _buf.AsSpan(start, _len - start).IndexOf("-->"u8)
+                    : _buf.AsSpan(start, _len - start).IndexOf("]]>"u8);
                 return rel < 0 ? -1 : start + rel;
             }
 
