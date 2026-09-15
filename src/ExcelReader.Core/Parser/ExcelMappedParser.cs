@@ -13,9 +13,9 @@ namespace ExcelReader.Core.Parser
     /// The model type to bind each row to; must implement <see cref="IExcelRowMap{T}"/>. Not implementing
     /// it is a compile error here, rather than a silent runtime fallback to reflection. Must not be a
     /// <see langword="ref struct"/>: unlike <see cref="ExcelParser{T}"/>/<c>RefParser</c>, this
-    /// map-based path has no <see langword="ref struct"/>-model entry — see the "fora de
-    /// escopo" note in docs/v2-plan.md §2.3.3 for why. A <see langword="ref struct"/> model, or a
-    /// <c>ReadOnlySpan&lt;byte&gt;</c> property, stays exclusive to <c>RefParser</c>'s reflection-based path.
+    /// map-based path has no <see langword="ref struct"/>-model entry. A <see langword="ref struct"/>
+    /// model, or a <c>ReadOnlySpan&lt;byte&gt;</c> property, stays exclusive to <c>RefParser</c>'s
+    /// reflection-based path.
     /// </typeparam>
     /// <remarks>
     /// No <c>[RequiresUnreferencedCode]</c>/<c>[RequiresDynamicCode]</c>: the <c>where T : IExcelRowMap&lt;T&gt;</c>

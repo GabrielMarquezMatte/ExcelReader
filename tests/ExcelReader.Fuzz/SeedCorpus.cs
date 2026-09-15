@@ -35,8 +35,10 @@ namespace ExcelReader.Fuzz
         [
             ("xlsx", ["xlsx", "xlsx-multisheet", "xlsx-sharedstrings", "xlsx-blanks", "xlsx-empty-sheet"]),
             ("xlsx-memory", ["xlsx", "xlsx-multisheet", "xlsx-sharedstrings", "xlsx-blanks", "xlsx-empty-sheet"]),
+            ("xlsx-differential", ["xlsx", "xlsx-multisheet", "xlsx-sharedstrings", "xlsx-blanks", "xlsx-empty-sheet"]),
             ("xlsb", ["xlsb", "xlsb-multisheet"]),
             ("xlsb-memory", ["xlsb", "xlsb-multisheet"]),
+            ("xlsb-differential", ["xlsb", "xlsb-multisheet"]),
             ("xls", ["xls"]),
             ("encrypted", ["encrypted", "encrypted-multisheet", "encrypted-sharedstrings"]),
             ("csv", ["csv", "csv-semicolon", "csv-tab", "csv-bom-lf", "csv-pipe", "csv-ragged",

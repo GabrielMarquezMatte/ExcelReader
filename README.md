@@ -12,6 +12,18 @@ High-performance Excel reading and writing for .NET 10. Reads `.xlsx`, `.xlsb`, 
 
 ExcelReader is built for streaming spreadsheet workloads where low allocations matter. It reads worksheet rows as lightweight `ref struct` values, resolves shared strings, recognizes date styles, handles sparse cells, and includes writers for producing `.xlsx` (Open XML), `.xlsb` (BIFF12), and `.xls` (BIFF8) workbooks. The library also supports opening workbook data directly from in-memory buffers without requiring a stream, which makes it convenient for API and network-based scenarios. `Excel.FromCsv(ReadOnlyMemory<byte>)` and `Excel.FromXls(ReadOnlyMemory<byte>)` now accept caller-owned buffers directly, and `Excel.Open(ReadOnlyMemory<byte>)` routes XLS workbooks through the same true-memory path instead of wrapping the bytes in `MemoryStream`.
 
+## Contents
+
+**Getting started** — [Install](#install) · [Command line](#command-line) · [Read rows](#read-rows) · [Open by auto-detecting the format](#open-by-auto-detecting-the-format) · [Read asynchronously](#read-asynchronously)
+
+**Reading** — [Prefetch decompression (XLSX/XLSB)](#prefetch-decompression-xlsxxlsb) · [Encrypted workbooks](#encrypted-workbooks) · [Read CSV](#read-csv) · [Sniff a CSV dialect](#sniff-a-csv-dialect)
+
+**Typed parsing** — [Parse typed rows](#parse-typed-rows) · [Bridge to ADO.NET (`IDataReader`)](#bridge-to-adonet-idatareader) · [Generate typed maps at compile time (Native AOT / trimming)](#generate-typed-maps-at-compile-time-native-aot--trimming) · [Map columns at runtime (fluent API)](#map-columns-at-runtime-fluent-api) · [Parser configuration](#parser-configuration) · [Required columns](#required-columns) · [Custom converters](#custom-converters) · [Parse into a ref struct (zero-copy)](#parse-into-a-ref-struct-zero-copy)
+
+**Writing** — [Write XLSX workbooks](#write-xlsx-workbooks) · [Cell styles on write](#cell-styles-on-write) · [Read and write XLSB workbooks (BIFF12)](#read-and-write-xlsb-workbooks-biff12) · [Write XLS workbooks (BIFF8)](#write-xls-workbooks-biff8) · [Write typed records](#write-typed-records) · [Prefetch compression (XLSX/XLSB writing)](#prefetch-compression-xlsxxlsb-writing) · [Write CSV](#write-csv)
+
+**Project** — [Benchmarks](#benchmarks) · [Notes](#notes) · [Build](#build) · [Other languages](#other-languages) · [Contributing](#contributing) · [License](#license)
+
 ## Install
 
 ```bash

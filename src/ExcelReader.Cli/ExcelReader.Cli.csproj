@@ -11,7 +11,14 @@
     <ToolCommandName>excelreader</ToolCommandName>
     <PackageId>ExcelReader.NET.Cli</PackageId>
     <Version>1.0.0</Version>
+    <Authors>Gabriel Matte</Authors>
     <Description>Command-line workbook inspection and CSV conversion, built on ExcelReader.NET.</Description>
+    <PackageTags>excel;xlsx;xlsb;xls;csv;cli;dotnet-tool;convert;spreadsheet</PackageTags>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageProjectUrl>https://github.com/GabrielMarquezMatte/ExcelReader</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/GabrielMarquezMatte/ExcelReader</RepositoryUrl>
+    <Copyright>Copyright (c) Gabriel Matte</Copyright>
     <IsAotCompatible>true</IsAotCompatible>
     <InvariantGlobalization>true</InvariantGlobalization>
     <!-- RS0016/RS0026/RS0037: the public-API-tracking analyzer guards ExcelReader.Core's shipped
@@ -25,6 +32,10 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="ExcelReader.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="..\..\README.md" Pack="true" PackagePath="\" />
   </ItemGroup>
 
   <ItemGroup>
