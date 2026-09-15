@@ -95,13 +95,25 @@ jobs:
       #  * the target is selected via FUZZ_TARGET, not --target_args. SharpFuzz's
       #    Fuzzer.LibFuzzer.Run parses argv itself and treats a lone argument as a single input file
       #    to replay, so our own argument would be swallowed as a corpus path.
+      # -dict gives libFuzzer the tokens its byte-level mutators cannot invent: `<sheetData>`, a BIFF
+      # record id, a ZIP signature. Without one the engine spends the run failing at the container
+      # layer. Unlike our own smoke mutator, libFuzzer keeps the inputs a token unlocks and mutates
+      # them further, so the tokens compound over the run.
       - name: Fuzz
         env:
           FUZZ_TARGET: ${{ matrix.target }}
         run: |
+          case "${{ matrix.target }}" in
+            xlsx*)     dict=xlsx ;;
+            xlsb*)     dict=xlsb ;;
+            xls)       dict=xls ;;
+            encrypted) dict=encrypted ;;
+            csv*)      dict=csv ;;
+          esac
           ./libfuzzer-dotnet \
             --target_path=fuzz-out/ExcelReader.Fuzz \
             corpus/${{ matrix.target }} \
+            -dict="tests/ExcelReader.Fuzz/dictionaries/$dict.dict" \
             -max_total_time=${{ github.event.inputs.seconds || '600' }} \
             -max_len=131072 \
             -timeout=25 \
