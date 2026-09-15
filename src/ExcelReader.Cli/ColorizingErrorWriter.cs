@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Text;
 
 namespace ExcelReader.Cli
@@ -12,6 +13,7 @@ namespace ExcelReader.Cli
     // surface with no Console-shaped state, and this class exists only to decide, from
     // System.Console.IsErrorRedirected, how a byte reaches a real terminal. A raw ANSI
     // escape is enough for one red line - no need for Spectre.Console's markup renderer here.
+    [ExcludeFromCodeCoverage]
     internal sealed class ColorizingErrorWriter(TextWriter inner) : TextWriter
     {
         private const string Red = "\u001b[31m";
