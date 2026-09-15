@@ -5,12 +5,11 @@ using ExcelReader.Native.Writer;
 
 namespace ExcelReader.Native
 {
-    /// <summary>
-    /// The C ABI. Every function here does exactly two things: turn raw pointers into spans and a
-    /// handle id (see <see cref="NativeHandleTable"/>) into a <see cref="NativeHandle"/>, then
-    /// delegate to <see cref="NativeApi"/>. Keep the logic in NativeApi — managed code cannot call an
-    /// [UnmanagedCallersOnly] method, so anything implemented here is untestable.
-    /// </summary>
+    // The C ABI. Every function here does exactly two things: turn raw pointers into spans and a
+    // handle id (see NativeHandleTable) into a NativeHandle, then
+    // delegate to NativeApi. Keep the logic in NativeApi — managed code cannot call an
+    // [UnmanagedCallersOnly] method, so anything implemented here is untestable.
+    [ExcludeFromCodeCoverage]
     internal static unsafe class Exports
     {
         [UnmanagedCallersOnly(EntryPoint = "xl_open_file")]

@@ -30,7 +30,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        target: [xlsx, xlsx-memory, xlsb, xlsb-memory, xls, encrypted, csv, csv-sniff]
+        target: [xlsx, xlsx-memory, xlsx-differential, xlsb, xlsb-memory, xlsb-differential, xls, encrypted, csv, csv-sniff, csv-parallel]
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -58,16 +58,27 @@ jobs:
       # runtime, and an instrumented assembly writes coverage into a shared-memory region that only
       # exists when libfuzzer-dotnet is the one launching the process — running it standalone kills
       # the process with an AccessViolationException. Do not reorder these two steps.
+      # `seeds` writes one directory per target (corpus/xlsx, corpus/csv, ...). Only this target's
+      # directory is handed to libFuzzer below: it schedules and mutates every file it is given, so
+      # a .csv sitting in the xlsx corpus burns execution budget on inputs that die in the first
+      # format check. The extra real-world and regression inputs are filed the same way.
       - name: Generate seed corpus
         run: |
-          mkdir -p corpus
           dotnet fuzz-out/ExcelReader.Fuzz.dll seeds corpus
           # Excel-authored files make far better seeds than anything we can synthesise.
-          cp RealExcel.xlsb RealExcel.xlsx corpus/ 2>/dev/null || true
-          cp tests/ExcelReader.Tests/data/*.xlsx corpus/ 2>/dev/null || true
+          for d in corpus/xlsx corpus/xlsx-memory; do
+            cp RealExcel.xlsx "$d/" 2>/dev/null || true
+            cp tests/ExcelReader.Tests/data/*.xlsx "$d/" 2>/dev/null || true
+          done
+          cp RealExcel.xlsb corpus/xlsb/ 2>/dev/null || true
+          cp RealExcel.xlsb corpus/xlsb-memory/ 2>/dev/null || true
           # Inputs that previously crashed a target: keeping them in the corpus guards those paths.
-          cp tests/ExcelReader.Fuzz/corpus/* corpus/ 2>/dev/null || true
-          ls -la corpus
+          # Each is named for the target it reproduced on, so it goes to that target's corpus only.
+          cp tests/ExcelReader.Fuzz/corpus/xlsx-*.bin corpus/xlsx/ 2>/dev/null || true
+          cp tests/ExcelReader.Fuzz/corpus/xlsx-*.bin corpus/xlsx-memory/ 2>/dev/null || true
+          cp tests/ExcelReader.Fuzz/corpus/xls-*.bin corpus/xls/ 2>/dev/null || true
+          cp tests/ExcelReader.Fuzz/corpus/encrypted-*.bin corpus/encrypted/ 2>/dev/null || true
+          ls -la "corpus/${{ matrix.target }}"
 
       # SharpFuzz rewrites the assembly under test to emit coverage. Only ExcelReader.Core is
       # instrumented: the harness itself is not the code under test, and instrumenting it would
@@ -84,13 +95,25 @@ jobs:
       #  * the target is selected via FUZZ_TARGET, not --target_args. SharpFuzz's
       #    Fuzzer.LibFuzzer.Run parses argv itself and treats a lone argument as a single input file
       #    to replay, so our own argument would be swallowed as a corpus path.
+      # -dict gives libFuzzer the tokens its byte-level mutators cannot invent: `<sheetData>`, a BIFF
+      # record id, a ZIP signature. Without one the engine spends the run failing at the container
+      # layer. Unlike our own smoke mutator, libFuzzer keeps the inputs a token unlocks and mutates
+      # them further, so the tokens compound over the run.
       - name: Fuzz
         env:
           FUZZ_TARGET: ${{ matrix.target }}
         run: |
+          case "${{ matrix.target }}" in
+            xlsx*)     dict=xlsx ;;
+            xlsb*)     dict=xlsb ;;
+            xls)       dict=xls ;;
+            encrypted) dict=encrypted ;;
+            csv*)      dict=csv ;;
+          esac
           ./libfuzzer-dotnet \
             --target_path=fuzz-out/ExcelReader.Fuzz \
-            corpus \
+            corpus/${{ matrix.target }} \
+            -dict="tests/ExcelReader.Fuzz/dictionaries/$dict.dict" \
             -max_total_time=${{ github.event.inputs.seconds || '600' }} \
             -max_len=131072 \
             -timeout=25 \
@@ -124,13 +147,15 @@ jobs:
       - name: Build
         run: dotnet build tests/ExcelReader.Fuzz/ExcelReader.Fuzz.csproj -c Release
 
+      # Unlike the libFuzzer jobs above, SmokeRunner walks the whole tree and drives EVERY target
+      # over EVERY file on purpose - its cross-format splice mutation is what that buys.
       - name: Generate corpus
         run: |
-          mkdir -p corpus
+          mkdir -p corpus/real
           dotnet run --project tests/ExcelReader.Fuzz -c Release --no-build -- seeds corpus
-          cp RealExcel.xlsb RealExcel.xlsx corpus/ 2>/dev/null || true
-          cp tests/ExcelReader.Tests/data/*.xlsx corpus/ 2>/dev/null || true
-          cp tests/ExcelReader.Fuzz/corpus/* corpus/ 2>/dev/null || true
+          cp RealExcel.xlsb RealExcel.xlsx corpus/real/ 2>/dev/null || true
+          cp tests/ExcelReader.Tests/data/*.xlsx corpus/real/ 2>/dev/null || true
+          cp tests/ExcelReader.Fuzz/corpus/* corpus/real/ 2>/dev/null || true
 
       # No engine, no native tooling: runs every target over the corpus plus deterministic mutations,
       # and self-checks the oracle first so a green run cannot mean "the oracle accepts everything".

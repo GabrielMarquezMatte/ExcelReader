@@ -6,14 +6,12 @@ namespace ExcelReader.Native
 {
     internal static unsafe partial class NativeApi
     {
-        /// <summary>
-        /// Writes every remaining row of the current sheet into <paramref name="buffer"/> as one
-        /// caller-owned blob (see excelreader.h for the layout) — the batch counterpart of
-        /// <see cref="NextRow"/>, with zero native heap allocations for the row/cell data itself.
-        /// On <see cref="NativeStatus.BufferTooSmall"/>, the accumulated bytes are held on
-        /// <paramref name="handle"/> so a retry with a bigger buffer costs one copy, not a re-read —
-        /// mirroring the single-row pending protocol <see cref="NextRow"/> already uses.
-        /// </summary>
+        // Writes every remaining row of the current sheet into buffer as one
+        // caller-owned blob (see excelreader.h for the layout) — the batch counterpart of
+        // NextRow, with zero native heap allocations for the row/cell data itself.
+        // On NativeStatus.BufferTooSmall, the accumulated bytes are held on
+        // handle so a retry with a bigger buffer costs one copy, not a re-read —
+        // mirroring the single-row pending protocol NextRow already uses.
         internal static int ReadAllBlob(NativeHandle? handle, Span<byte> buffer, out int written)
         {
             written = 0;
@@ -113,18 +111,15 @@ namespace ExcelReader.Native
             output.AddRange(rowBlob);
         }
 
-        /// <summary>
-        /// Decodes every remaining row of the current sheet in one call. Unlike
-        /// <see cref="NextRowDecoded"/>, end-of-sheet is not an error: it comes back as
-        /// <see cref="NativeStatus.Ok"/> with <see cref="NativeRows.RowCount"/> equal to zero, since
-        /// there's no per-call "keep going" signal here to distinguish EOF from an empty result.
-        /// </summary>
-        /// <remarks>
-        /// Each row keeps its own native block, exactly as <see cref="NextRowDecoded"/> hands it out.
-        /// Consolidating the whole sheet into one block was tried and reverted: it trades one native
-        /// allocation instead of many for accumulating every cell and value byte in managed memory
-        /// first, since the block can't be sized until the last row is read — not a trade worth making.
-        /// </remarks>
+        // Decodes every remaining row of the current sheet in one call. Unlike
+        // NextRowDecoded, end-of-sheet is not an error: it comes back as
+        // NativeStatus.Ok with NativeRows.RowCount equal to zero, since
+        // there's no per-call "keep going" signal here to distinguish EOF from an empty result.
+        //
+        // Each row keeps its own native block, exactly as NextRowDecoded hands it out.
+        // Consolidating the whole sheet into one block was tried and reverted: it trades one native
+        // allocation instead of many for accumulating every cell and value byte in managed memory
+        // first, since the block can't be sized until the last row is read — not a trade worth making.
         internal static int ReadAllDecoded(NativeHandle? handle, out NativeRows rows)
         {
             rows = default;
@@ -191,7 +186,7 @@ namespace ExcelReader.Native
             }
         }
 
-        /// <summary>Releases a result returned by <see cref="ReadAllDecoded"/>. Safe on a zeroed value.</summary>
+        // Releases a result returned by ReadAllDecoded. Safe on a zeroed value.
         internal static void FreeRows(ref NativeRows rows)
         {
             if (rows.Rows == IntPtr.Zero)

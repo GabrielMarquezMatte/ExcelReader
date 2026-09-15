@@ -117,6 +117,50 @@ def test_write_pandas_round_trips(tmp_path):
     assert list(result.columns[1]) == [3, 7]
 
 
+# A frame that came out of Workbook.to_pandas carries one Arrow chunk per batch that read it, and a
+# RecordBatch cannot hold a multi-chunk column - so read-then-write, the round trip these two
+# functions exist for, used to raise TypeError for any sheet wider than one batch.
+def test_write_pandas_round_trips_a_multi_chunk_frame(tmp_path):
+    pa = pytest.importorskip("pyarrow")
+    pd = pytest.importorskip("pandas")
+
+    chunked = pa.Table.from_batches(
+        [
+            pa.RecordBatch.from_pydict({"name": ["widget"], "qty": [3]}),
+            pa.RecordBatch.from_pydict({"name": ["gadget"], "qty": [7]}),
+        ]
+    )
+    frame = chunked.to_pandas(split_blocks=True)
+    assert pa.Table.from_pandas(frame, preserve_index=False).column(0).num_chunks > 1
+
+    out = tmp_path / "chunked.xlsx"
+    write_pandas(out, frame)
+
+    with open_workbook(out) as workbook:
+        result = workbook.parse_typed(_SCHEMA)
+
+    assert list(result.columns[0]) == ["widget", "gadget"]
+    assert list(result.columns[1]) == [3, 7]
+
+
+# A row-less table yields no batches at all, which is a header-only sheet rather than an error.
+def test_write_pandas_writes_a_header_only_sheet_for_an_empty_frame(tmp_path):
+    pytest.importorskip("pyarrow")
+    pd = pytest.importorskip("pandas")
+
+    out = tmp_path / "empty.xlsx"
+    write_pandas(
+        out,
+        pd.DataFrame({"name": pd.Series([], dtype="string"), "qty": pd.Series([], dtype="int64")}),
+    )
+
+    with open_workbook(out) as workbook:
+        rows = workbook.read_all()
+
+    assert [cell.value for cell in rows[0]] == ["name", "qty"]
+    assert len(rows) == 1
+
+
 def test_write_polars_round_trips(tmp_path):
     pytest.importorskip("pyarrow")
     pl = pytest.importorskip("polars")

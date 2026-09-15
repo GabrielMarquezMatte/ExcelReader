@@ -16,10 +16,16 @@ namespace ExcelReader.Fuzz
         internal static int Run(string corpusDirectory, int mutationsPerInput, int seed)
         {
             FuzzOracle.SelfCheck();
+            Harnesses.AssertSameRowsSelfCheck();
             VerifyEncryptedSeedReachesRealCode(corpusDirectory);
+            VerifyDifferentialSeedsReachBothReaders(corpusDirectory);
 
+            // Recursive: the corpus is laid out one directory per target (see SeedCorpus), but this
+            // runner deliberately drives EVERY target over EVERY file. That cross-format pass is the
+            // point of the Mutate splice below — it moves BIFF records into ZIP containers and back,
+            // which is exactly the material a per-target libFuzzer corpus never produces.
             string[] files = Directory.Exists(corpusDirectory)
-                ? [.. Directory.GetFiles(corpusDirectory).Order(StringComparer.Ordinal)]
+                ? [.. Directory.GetFiles(corpusDirectory, "*", SearchOption.AllDirectories).Order(StringComparer.Ordinal)]
                 : [];
             if (files.Length == 0)
             {
@@ -63,11 +69,69 @@ namespace ExcelReader.Fuzz
         // used for a one-off repro) rather than failing an unrelated `check` run.
         private static void VerifyEncryptedSeedReachesRealCode(string corpusDirectory)
         {
-            string seedPath = Path.Combine(corpusDirectory, "encrypted-agile-seed.bin");
-            if (!File.Exists(seedPath))
+            if (!Directory.Exists(corpusDirectory))
             {
                 return;
             }
+
+            // Both the committed regression seed and every generated one (SeedCorpus writes these
+            // under the encryption password Harnesses opens with). A generated seed written under the
+            // wrong password would be inert in exactly the same silent way.
+            string[] seeds =
+            [
+                .. Directory.GetFiles(corpusDirectory, "encrypted-agile-seed.bin", SearchOption.AllDirectories),
+                .. Directory.GetFiles(corpusDirectory, "seed-encrypted*.bin", SearchOption.AllDirectories),
+            ];
+            foreach (string seedPath in seeds.Order(StringComparer.Ordinal))
+            {
+                VerifyOneEncryptedSeed(seedPath);
+            }
+        }
+
+        private static void VerifyDifferentialSeedsReachBothReaders(string corpusDirectory)
+        {
+            if (!Directory.Exists(corpusDirectory))
+            {
+                return;
+            }
+
+            foreach (string seedPath in Directory.GetFiles(corpusDirectory, "seed-xlsx*.bin", SearchOption.AllDirectories).Order(StringComparer.Ordinal))
+            {
+                VerifyOneDifferentialSeed(seedPath, xlsb: false);
+            }
+            foreach (string seedPath in Directory.GetFiles(corpusDirectory, "seed-xlsb*.bin", SearchOption.AllDirectories).Order(StringComparer.Ordinal))
+            {
+                VerifyOneDifferentialSeed(seedPath, xlsb: true);
+            }
+        }
+
+        private static void VerifyOneDifferentialSeed(string seedPath, bool xlsb)
+        {
+            string name = Path.GetFileName(seedPath);
+            int rows;
+            try
+            {
+                rows = Harnesses.OpenDifferentialSeedForSelfCheck(File.ReadAllBytes(seedPath), xlsb);
+            }
+            catch (Exception ex)
+            {
+                throw new InvalidOperationException(
+                    $"the unmutated {name} no longer reads identically through both the stream and " +
+                    "memory container readers - the matching differential target would compare two " +
+                    $"rejections instead of two row sets, making it inert: {ex.GetType().FullName}: {ex.Message}",
+                    ex);
+            }
+            if (rows == 0)
+            {
+                throw new InvalidOperationException(
+                    $"the unmutated {name} opened through both readers but yielded zero rows, so the " +
+                    "differential target compares nothing.");
+            }
+        }
+
+        private static void VerifyOneEncryptedSeed(string seedPath)
+        {
+            string name = Path.GetFileName(seedPath);
             int rows;
             try
             {
@@ -76,16 +140,15 @@ namespace ExcelReader.Fuzz
             catch (Exception ex)
             {
                 throw new InvalidOperationException(
-                    "the unmutated encrypted-agile-seed.bin no longer opens under Harnesses' " +
-                    "encrypted options - the 'encrypted' target would dead-end on this same " +
-                    $"rejection for every mutation too, making it inert: {ex.GetType().FullName}: {ex.Message}",
+                    $"the unmutated {name} no longer opens under Harnesses' encrypted options - the " +
+                    "'encrypted' target would dead-end on this same rejection for every mutation too, " +
+                    $"making it inert: {ex.GetType().FullName}: {ex.Message}",
                     ex);
             }
             if (rows == 0)
             {
                 throw new InvalidOperationException(
-                    "the unmutated encrypted-agile-seed.bin opened but yielded zero rows under " +
-                    "Harnesses' encrypted options.");
+                    $"the unmutated {name} opened but yielded zero rows under Harnesses' encrypted options.");
             }
         }
 
@@ -130,74 +193,98 @@ namespace ExcelReader.Fuzz
         // meet an offset or length field that points past the end of the data.
         private static byte[] Mutate(byte[] original, byte[][] corpus, Random random)
         {
-            byte[] copy;
-            switch (random.Next(7))
+            return random.Next(7) switch
             {
-                case 0: // truncate
-                    copy = original[..random.Next(0, original.Length + 1)];
-                    break;
-                case 1: // flip a handful of bits
-                    copy = [.. original];
-                    for (int i = 0; i < 8 && copy.Length > 0; i++)
-                    {
-                        int at = random.Next(copy.Length);
-                        copy[at] ^= (byte)(1 << random.Next(8));
-                    }
-                    break;
-                case 2: // overwrite a run with a repeated byte (drives length/count fields to extremes)
-                    copy = [.. original];
-                    if (copy.Length > 0)
-                    {
-                        int start = random.Next(copy.Length);
-                        int length = Math.Min(copy.Length - start, random.Next(1, 17));
-                        byte value = (byte)random.Next(256);
-                        copy.AsSpan(start, length).Fill(value);
-                    }
-                    break;
-                case 3: // splice a chunk over another position within the same input
-                    copy = [.. original];
-                    if (copy.Length > 4)
-                    {
-                        int length = random.Next(1, Math.Min(64, copy.Length));
-                        int from = random.Next(copy.Length - length + 1);
-                        int to = random.Next(copy.Length - length + 1);
-                        copy.AsSpan(from, length).CopyTo(copy.AsSpan(to));
-                    }
-                    break;
-                case 4: // insert random bytes, growing the input (mutations above only shrink or hold size)
-                    {
-                        int at = random.Next(original.Length + 1);
-                        int length = random.Next(1, 33);
-                        copy = new byte[original.Length + length];
-                        original.AsSpan(0, at).CopyTo(copy);
-                        random.NextBytes(copy.AsSpan(at, length));
-                        original.AsSpan(at).CopyTo(copy.AsSpan(at + length));
-                    }
-                    break;
-                case 5: // overwrite a length-sized field with a value picked to sit at a boundary
-                    copy = [.. original];
-                    if (copy.Length > 0)
-                    {
-                        byte[] pattern = _interesting[random.Next(_interesting.Length)];
-                        int at = random.Next(copy.Length);
-                        int length = Math.Min(pattern.Length, copy.Length - at);
-                        pattern.AsSpan(0, length).CopyTo(copy.AsSpan(at, length));
-                    }
-                    break;
-                default: // splice a chunk from a *different* corpus file over this one (cross-format material)
-                    {
-                        byte[] donor = corpus[random.Next(corpus.Length)];
-                        copy = [.. original];
-                        if (copy.Length > 0 && donor.Length > 0)
-                        {
-                            int length = Math.Min(Math.Min(64, copy.Length), donor.Length);
-                            length = random.Next(1, length + 1);
-                            int from = random.Next(donor.Length - length + 1);
-                            int to = random.Next(copy.Length - length + 1);
-                            donor.AsSpan(from, length).CopyTo(copy.AsSpan(to));
-                        }
-                    }
-                    break;
+                0 => Truncate(original, random),
+                1 => FlipBits(original, random),
+                2 => FillRun(original, random),
+                3 => SpliceWithin(original, random),
+                4 => InsertRandom(original, random),
+                5 => OverwriteWithBoundaryValue(original, random),
+                _ => SpliceFromDonor(original, corpus, random),
+            };
+        }
+
+        private static byte[] Truncate(byte[] original, Random random)
+        {
+            return original[..random.Next(0, original.Length + 1)];
+        }
+
+        private static byte[] FlipBits(byte[] original, Random random)
+        {
+            byte[] copy = [.. original];
+            for (int i = 0; i < 8 && copy.Length > 0; i++)
+            {
+                int at = random.Next(copy.Length);
+                copy[at] ^= (byte)(1 << random.Next(8));
+            }
+            return copy;
+        }
+
+        // Drives length/count fields to extremes.
+        private static byte[] FillRun(byte[] original, Random random)
+        {
+            byte[] copy = [.. original];
+            if (copy.Length > 0)
+            {
+                int start = random.Next(copy.Length);
+                int length = Math.Min(copy.Length - start, random.Next(1, 17));
+                byte value = (byte)random.Next(256);
+                copy.AsSpan(start, length).Fill(value);
+            }
+            return copy;
+        }
+
+        private static byte[] SpliceWithin(byte[] original, Random random)
+        {
+            byte[] copy = [.. original];
+            if (copy.Length > 4)
+            {
+                int length = random.Next(1, Math.Min(64, copy.Length));
+                int from = random.Next(copy.Length - length + 1);
+                int to = random.Next(copy.Length - length + 1);
+                copy.AsSpan(from, length).CopyTo(copy.AsSpan(to));
+            }
+            return copy;
+        }
+
+        // The only mutation that grows the input; the rest shrink or hold size.
+        private static byte[] InsertRandom(byte[] original, Random random)
+        {
+            int at = random.Next(original.Length + 1);
+            int length = random.Next(1, 33);
+            byte[] copy = new byte[original.Length + length];
+            original.AsSpan(0, at).CopyTo(copy);
+            random.NextBytes(copy.AsSpan(at, length));
+            original.AsSpan(at).CopyTo(copy.AsSpan(at + length));
+            return copy;
+        }
+
+        private static byte[] OverwriteWithBoundaryValue(byte[] original, Random random)
+        {
+            byte[] copy = [.. original];
+            if (copy.Length > 0)
+            {
+                byte[] pattern = _interesting[random.Next(_interesting.Length)];
+                int at = random.Next(copy.Length);
+                int length = Math.Min(pattern.Length, copy.Length - at);
+                pattern.AsSpan(0, length).CopyTo(copy.AsSpan(at, length));
+            }
+            return copy;
+        }
+
+        // Cross-format material: moves e.g. BIFF records from one container into another.
+        private static byte[] SpliceFromDonor(byte[] original, byte[][] corpus, Random random)
+        {
+            byte[] donor = corpus[random.Next(corpus.Length)];
+            byte[] copy = [.. original];
+            if (copy.Length > 0 && donor.Length > 0)
+            {
+                int length = Math.Min(Math.Min(64, copy.Length), donor.Length);
+                length = random.Next(1, length + 1);
+                int from = random.Next(donor.Length - length + 1);
+                int to = random.Next(copy.Length - length + 1);
+                donor.AsSpan(from, length).CopyTo(copy.AsSpan(to));
             }
             return copy;
         }

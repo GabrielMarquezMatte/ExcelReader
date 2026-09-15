@@ -3,9 +3,7 @@ using System.Collections.Concurrent;
 namespace ExcelReader.Core.Parser.Internal
 {
     internal readonly struct TypeMapInfo<T>
-#if NET9_0_OR_GREATER
         where T : allows ref struct
-#endif
     {
         private readonly PropertyMap<T>[] _properties;
         // Null when _useDefault is true: a value type with no explicit parameterless constructor needs
@@ -40,10 +38,8 @@ namespace ExcelReader.Core.Parser.Internal
 
         internal int PropertyCount => _properties.Length;
 
-        // True for a map built purely by ExcelRowMapBuilder<T>.PropertyAt (§4.4.2): no header row exists
-        // to wait for, so RowProjector/CsvRowProjector build the column map immediately instead of at
-        // ProjectionRules.ClassifyRow's usual header-row step (R-C3 — HeaderRow is never repurposed to
-        // mean this).
+        // A PropertyAt map has no header row to wait for, so the column map can be built immediately
+        // rather than at the usual header-row step.
         internal bool IsIndexBased => _indexBindings is not null;
 
         internal ColumnBinding<T>[] IndexBindings => _indexBindings!;
@@ -67,11 +63,9 @@ namespace ExcelReader.Core.Parser.Internal
             return _properties[propertyIndex].Names[0];
         }
 
-        // Throws if any [ExcelRequired] property was left unmatched after the header row was mapped.
-        // unmatched[i] is int.MaxValue when property i found no header column (RowProjector's sentinel).
-        // A header missing a required column is a defect in the file, not a caller mistake, so this
-        // throws ExcelParseException — the same type used for a per-row parse/required-value failure —
-        // rather than InvalidOperationException, which would misattribute the fault to the caller.
+        // unmatched[i] is int.MaxValue when property i found no header column. A header missing a
+        // required column is a defect in the file, not a caller mistake, hence ExcelParseException
+        // rather than InvalidOperationException.
         internal void ValidateRequiredColumns(int[] unmatched)
         {
             List<string>? missing = null;
@@ -88,11 +82,9 @@ namespace ExcelReader.Core.Parser.Internal
             }
         }
 
-        // Fluent overrides attribute, per property (§4.4.3): a property configured in `fluent` fully
-        // replaces whatever attribute-driven property shares one of its header names, regardless of
-        // comparer/normalization used later at parse time — the same identity a header row itself would
-        // use to pick between two same-named bindings. A property the builder never touched keeps its
-        // attribute-driven behavior untouched.
+        // Override identity is the normalized header name, not the property: that is the same identity a
+        // header row itself uses to pick between two same-named bindings, so a fluent property replaces
+        // the attribute-driven one it would have collided with at parse time.
         internal static TypeMapInfo<T> MergeFluentOverAttributes(TypeMapInfo<T> fluent, TypeMapInfo<T> attributeFallback, StringComparer comparer, HeaderNormalization normalization)
         {
             // An index-based map (ExcelRowMapBuilder<T>.PropertyAt) has no header row to match

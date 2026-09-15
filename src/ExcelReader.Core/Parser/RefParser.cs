@@ -1,4 +1,3 @@
-#if NET9_0_OR_GREATER
 using System.Diagnostics.CodeAnalysis;
 using ExcelReader.Core.Parser.Internal;
 using ExcelReader.Core.Reader;
@@ -125,4 +124,3 @@ namespace ExcelReader.Core.Parser
         }
     }
 }
-#endif

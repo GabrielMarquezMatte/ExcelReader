@@ -183,6 +183,15 @@ jobs:
           EXCELREADER_NATIVE_LIB_DIR: ${{ github.workspace }}/${{ steps.lib.outputs.dir }}
         run: cargo build --workspace --verbose
 
+      # Criterion's --test mode runs each benchmark once and reports nothing. A shared runner cannot
+      # produce a number worth publishing, but it can prove the suite still compiles and runs - which
+      # is what stops these from rotting between the hand-run measurements in the README.
+      - name: cargo bench (smoke)
+        working-directory: rust
+        env:
+          EXCELREADER_NATIVE_LIB_DIR: ${{ github.workspace }}/${{ steps.lib.outputs.dir }}
+        run: cargo bench --benches -- --test
+
   test-python:
     name: Native + Python + C smoke (${{ matrix.os }})
     needs: [changes, build-native]
@@ -230,6 +239,14 @@ jobs:
 
       - name: Run the C smoke test
         run: ctest --test-dir build/nativesmoke --output-on-failure -C Release
+
+      # One iteration each, for the same reason as the Rust bench smoke: proving the scripts still
+      # run, not measuring anything. Their optional comparison legs (polars, openpyxl, xlsxwriter)
+      # skip themselves when the package is absent.
+      - name: Run the Python benchmarks (smoke)
+        run: |
+          python python/benchmarks/bench_read.py --n 1
+          python python/benchmarks/bench_write.py --n 1
 
   test-cpp:
     name: C++ package + smoke test (${{ matrix.os }})
@@ -280,16 +297,35 @@ jobs:
             *)       echo "path=${{ github.workspace }}/python/src/excelreader/_lib/ExcelReader.Native.so" >> "$GITHUB_OUTPUT" ;;
           esac
 
+      # EXCELREADER_BUILD_BENCHMARKS only adds this package's own two benchmark targets; the
+      # xlnt/xlsxio/duckdb comparison ones sit behind EXCELREADER_BUILD_BENCHMARKS_COMPARE and stay
+      # off, so this costs a Google Benchmark fetch and nothing heavier.
       - name: Configure
         env:
           EXCELREADER_NATIVE_LIB: ${{ steps.lib.outputs.path }}
-        run: cmake -S cpp -B build/cpp -DEXCELREADER_BUILD_TESTS=ON -DCMAKE_BUILD_TYPE=Release
+        run: cmake -S cpp -B build/cpp -DEXCELREADER_BUILD_TESTS=ON -DEXCELREADER_BUILD_BENCHMARKS=ON -DCMAKE_BUILD_TYPE=Release
 
       - name: Build
         run: cmake --build build/cpp --config Release
 
       - name: Test
         run: ctest --test-dir build/cpp --output-on-failure -C Release
+
+      # --benchmark_min_time=1x is one iteration per benchmark: same smoke intent as the Rust and
+      # Python legs, no number anyone should read.
+      - name: Run the C++ benchmarks (smoke)
+        shell: bash
+        run: |
+          for name in excelreader_cpp_benchmarks excelreader_cpp_write_benchmarks; do
+            # A multi-config generator (Visual Studio on the Windows runner) nests the binary under a
+            # per-configuration directory; the single-config ones do not.
+            exe=$(find build/cpp/benchmarks -type f \( -name "$name" -o -name "$name.exe" \) | head -n 1)
+            if [ -z "$exe" ]; then
+              echo "benchmark binary $name not found under build/cpp/benchmarks" >&2
+              exit 1
+            fi
+            "$exe" --benchmark_min_time=1x
+          done
 
       - name: Install the package
         run: cmake --install build/cpp --config Release --prefix "${{ github.workspace }}/build/prefix"

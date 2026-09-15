@@ -18,14 +18,64 @@ permissions:
   security-events: write
 
 jobs:
+  # Only pull requests are narrowed: pushes to master/develop and the weekly scheduled scan still
+  # analyze both languages, since the point of the schedule is to re-run the full query set against
+  # unchanged code. A scheduled run also has no base commit for paths-filter to diff against.
+  #
+  # The matrix is built from the result rather than gated per entry, because the matrix context is not
+  # available in a job-level `if:` - and the `if:` has to stay at job level so a narrowed run still
+  # posts a check run for the required CodeQL check.
+  changes:
+    name: Detect changed languages
+    runs-on: ubuntu-latest
+    outputs:
+      languages: ${{ steps.languages.outputs.value }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Filter
+        id: filter
+        if: github.event_name == 'pull_request'
+        uses: dorny/paths-filter@v4
+        with:
+          filters: |
+            csharp:
+              - 'src/**'
+              - 'tests/**'
+              - 'Directory.Build.props'
+              - 'global.json'
+              - '.github/workflows/codeql.yml'
+            python:
+              - 'python/**'
+              - '.github/workflows/codeql.yml'
+
+      - name: Select languages
+        id: languages
+        run: |
+          if [ '${{ github.event_name }}' != 'pull_request' ]; then
+            echo 'value=["csharp","python"]' >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          languages=()
+          if [ '${{ steps.filter.outputs.csharp }}' = 'true' ]; then
+            languages+=('"csharp"')
+          fi
+          if [ '${{ steps.filter.outputs.python }}' = 'true' ]; then
+            languages+=('"python"')
+          fi
+          echo "value=[$(IFS=,; echo "${languages[*]}")]" >> "$GITHUB_OUTPUT"
+
   analyze:
     name: Analyze (${{ matrix.language }})
     runs-on: ubuntu-latest
+    needs: changes
+    if: needs.changes.outputs.languages != '[]'
 
     strategy:
       fail-fast: false
       matrix:
-        language: [ csharp, python ]
+        language: ${{ fromJSON(needs.changes.outputs.languages) }}
 
     steps:
       - name: Checkout

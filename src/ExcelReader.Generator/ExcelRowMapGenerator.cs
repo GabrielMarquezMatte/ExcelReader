@@ -402,11 +402,6 @@ namespace ExcelReader.Generator
             return WriteKind.ToStringFallback;
         }
 
-        // Guid implements IUtf8SpanParsable<Guid> starting only on the newer TFM ColumnParserFactory's
-        // own conditional compilation gates on; the generated code targets whatever TFM the *consumer*
-        // builds for, so both branches are emitted guarded the same way, and the C# compiler picks the
-        // live one per consumer TFM — mirroring ColumnParserFactory.ReadGuid/BuildParsableCore inside
-        // ExcelReader.Core itself.
         private static (string Reader, string ValueType, bool IsGuid)? TryGetBuiltInReader(ITypeSymbol underlying)
         {
             if (underlying.SpecialType == SpecialType.System_String)
@@ -592,13 +587,8 @@ namespace ExcelReader.Generator
                     return;
                 case ReadKind.GuidValue:
                 case ReadKind.GuidNullable:
-                    sb.AppendLine("#if NET9_0_OR_GREATER");
                     EmitPropertyRaw(sb, qualifiedType, namesLiteral, p.PropertyName, req,
                         "global::ExcelReader.Core.Parser.ExcelCellReaders.Parsable<global::System.Guid>(in c, d, pr, out global::System.Guid v)");
-                    sb.AppendLine("#else");
-                    EmitPropertyRaw(sb, qualifiedType, namesLiteral, p.PropertyName, req,
-                        "global::ExcelReader.Core.Parser.ExcelCellReaders.Guid(in c, d, pr, out global::System.Guid v)");
-                    sb.AppendLine("#endif");
                     return;
                 default:
                     return;

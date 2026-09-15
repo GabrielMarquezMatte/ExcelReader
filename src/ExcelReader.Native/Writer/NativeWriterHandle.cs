@@ -2,72 +2,65 @@ using ExcelReader.Core.Writer;
 
 namespace ExcelReader.Native.Writer
 {
-    /// <summary>
-    /// Everything one streaming write session needs on the managed side of the boundary — the
-    /// writer-side counterpart to <see cref="NativeHandle"/>. The caller only ever sees an opaque id
-    /// into <see cref="NativeHandleTable"/>.
-    /// </summary>
-    /// <remarks>
-    /// One sheet, one row open at a time: <see cref="StartSheet"/> must precede <see cref="StartRow"/>,
-    /// which must precede the <c>WriteXxx</c> calls for that row, which must precede
-    /// <see cref="EndRow"/>. Calling any of these out of order throws
-    /// <see cref="InvalidOperationException"/>, which <see cref="Exports"/> turns into
-    /// <see cref="NativeStatus.Error"/> plus a message from <see cref="NativeApi.SetLastError"/> —
-    /// never lets it escape across the ABI.
-    /// </remarks>
+    // Everything one streaming write session needs on the managed side of the boundary — the
+    // writer-side counterpart to NativeHandle. The caller only ever sees an opaque id
+    // into NativeHandleTable.
+    //
+    // One sheet, one row open at a time: StartSheet must precede StartRow,
+    // which must precede the WriteXxx calls for that row, which must precede
+    // EndRow. Calling any of these out of order throws
+    // InvalidOperationException, which Exports turns into
+    // NativeStatus.Error plus a message from NativeApi.SetLastError —
+    // never lets it escape across the ABI.
     internal abstract class NativeWriterHandle : IDisposable
     {
         internal abstract void StartSheet(string name);
 
         internal abstract void StartRow();
 
-        /// <summary>Writes a text cell, or a blank cell if <paramref name="value"/> is <see langword="null"/>.</summary>
+        // Writes a text cell, or a blank cell if value is null.
         internal abstract void WriteString(string? value);
 
-        /// <summary>Writes an integer cell.</summary>
+        // Writes an integer cell.
         internal abstract void WriteInt64(long value);
 
-        /// <summary>Writes a floating-point cell.</summary>
+        // Writes a floating-point cell.
         internal abstract void WriteFloat64(double value);
 
-        /// <summary>Writes a boolean cell.</summary>
+        // Writes a boolean cell.
         internal abstract void WriteBool(bool value);
 
-        /// <summary>Writes a date-only cell.</summary>
-        /// <param name="daysSinceEpoch">Days since 1970-01-01 (mirrors <see cref="NativeColumnType.Date"/>'s wire format).</param>
+        // Writes a date-only cell.
+        // daysSinceEpoch: Days since 1970-01-01 (mirrors NativeColumnType.Date's wire format).
         internal abstract void WriteDate(int daysSinceEpoch);
 
-        /// <summary>Writes a time-of-day cell.</summary>
-        /// <param name="microsecondsSinceMidnight">Mirrors <see cref="NativeColumnType.Time"/>'s wire format.</param>
+        // Writes a time-of-day cell.
+        // microsecondsSinceMidnight: Mirrors NativeColumnType.Time's wire format.
         internal abstract void WriteTime(long microsecondsSinceMidnight);
 
-        /// <summary>Writes a date/time cell.</summary>
-        /// <param name="microsecondsSinceEpoch">Mirrors <see cref="NativeColumnType.Timestamp"/>'s wire format.</param>
+        // Writes a date/time cell.
+        // microsecondsSinceEpoch: Mirrors NativeColumnType.Timestamp's wire format.
         internal abstract void WriteTimestamp(long microsecondsSinceEpoch);
 
-        /// <summary>Writes a blank cell of the given <see cref="NativeColumnType"/>.</summary>
+        // Writes a blank cell of the given NativeColumnType.
         internal abstract void WriteNull(int type);
 
         internal abstract void EndRow();
 
         internal abstract void EndSheet();
 
-        /// <summary>
-        /// Finishes the workbook: closes any row/sheet still open, then writes the workbook's trailing
-        /// structure (<c>IWorkbookWriter.End</c>) — the zip central directory for XLSX/XLSB, the BIFF
-        /// EOF record for XLS. Must run before <see cref="Dispose"/> for the output file to be valid;
-        /// <see cref="NativeApi.CloseWriteHandle"/> always calls both, in that order. Idempotent: a
-        /// second call is a no-op, so <see cref="NativeApi.GetWriteHandleBytes"/> can call this to
-        /// guarantee a complete result without caring whether the caller already ended the workbook.
-        /// </summary>
+        // Finishes the workbook: closes any row/sheet still open, then writes the workbook's trailing
+        // structure (IWorkbookWriter.End) — the zip central directory for XLSX/XLSB, the BIFF
+        // EOF record for XLS. Must run before Dispose for the output file to be valid;
+        // NativeApi.CloseWriteHandle always calls both, in that order. Idempotent: a
+        // second call is a no-op, so NativeApi.GetWriteHandleBytes can call this to
+        // guarantee a complete result without caring whether the caller already ended the workbook.
         internal abstract void Close();
 
-        /// <summary>
-        /// Set by <see cref="NativeApi.OpenWriteHandleToMemory"/> right after construction, to the
-        /// exact <see cref="MemoryStream"/> passed to <see cref="Create"/> — null for a file-backed
-        /// handle. <see cref="NativeApi.GetWriteHandleBytes"/> reads it back out; nothing else here
-        /// needs to know a handle is memory-backed rather than file-backed.
-        /// </summary>
+        // Set by NativeApi.OpenWriteHandleToMemory right after construction, to the
+        // exact MemoryStream passed to Create — null for a file-backed
+        // handle. NativeApi.GetWriteHandleBytes reads it back out; nothing else here
+        // needs to know a handle is memory-backed rather than file-backed.
         internal MemoryStream? MemoryBuffer { get; set; }
 
         public void Dispose()

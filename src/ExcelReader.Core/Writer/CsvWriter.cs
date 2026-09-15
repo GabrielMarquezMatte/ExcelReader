@@ -38,8 +38,8 @@ namespace ExcelReader.Core.Writer
             _leaveOpen = leaveOpen;
             _delimiter = options.Delimiter;
             _quote = options.Quote;
-            // Via explicitly-typed spans so this binds to SearchValues.Create(ReadOnlySpan<T>) on both
-            // target frameworks (net8.0 has no params overload) with no intermediate array allocation.
+            // Via explicitly-typed spans so this binds to SearchValues.Create(ReadOnlySpan<T>) with no
+            // intermediate array allocation.
             ReadOnlySpan<byte> specialBytes = [_delimiter, _quote, (byte)'\r', (byte)'\n'];
             ReadOnlySpan<char> specialChars = [(char)_delimiter, (char)_quote, '\r', '\n'];
             _specialBytes = SearchValues.Create(specialBytes);

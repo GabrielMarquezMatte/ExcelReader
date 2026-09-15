@@ -149,8 +149,6 @@ namespace ExcelReader.Core.Writer
     // back to ToString() text, since Write<U> only produces valid numeric cells.
     [RequiresUnreferencedCode("Record writing reflects over T's public properties, which trimming may remove.")]
     [RequiresDynamicCode("Record writing compiles the per-type column writer at runtime (Expression.Compile / MakeGenericMethod).")]
-    [SuppressMessage("Major Code Smell", "S2743:Static fields should not be used in generic types",
-        Justification = "The per-closed-type static IS the design: headers/property plan are cached once per T, not shared across different T.")]
     internal static class RecordColumns<T>
     {
         private static readonly PropertyInfo[] _props = FilterProperties();
@@ -257,8 +255,6 @@ namespace ExcelReader.Core.Writer
     // numeric property types that map to Write<U>.
     [RequiresUnreferencedCode("Record writing reflects over TRow's Write overloads, which trimming may remove.")]
     [RequiresDynamicCode("Record writing dispatches through MakeGenericMethod for numeric column types.")]
-    [SuppressMessage("Major Code Smell", "S2743:Static fields should not be used in generic types",
-        Justification = "The per-closed-type static IS the design: the resolved MethodInfo set is cached once per concrete TRow, not shared across different TRow.")]
     internal static class RowWriteMethods<TRow> where TRow : IRowWriter
     {
         private readonly record struct MethodInfoSet(MethodInfo Str, MethodInfo Bool, MethodInfo BoolN, MethodInfo Date,

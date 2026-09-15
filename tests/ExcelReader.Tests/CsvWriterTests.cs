@@ -1,4 +1,3 @@
-using System.Diagnostics.CodeAnalysis;
 using System.Text;
 using ExcelReader.Core.Enums;
 using ExcelReader.Core.Parser;
@@ -25,8 +24,6 @@ namespace ExcelReader.Tests
         // type is long enough to reach on its own.
         private readonly struct HugeUtf8Formattable(int length) : IUtf8SpanFormattable
         {
-            [SuppressMessage("Major Code Smell", "S1172:Unused method parameters should be removed",
-                Justification = "Signature required by IFormattable; this test type ignores format/culture.")]
             public string ToString(string? format, IFormatProvider? formatProvider)
             {
                 return new string('x', length);

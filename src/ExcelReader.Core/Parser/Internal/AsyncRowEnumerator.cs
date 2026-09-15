@@ -45,8 +45,6 @@ namespace ExcelReader.Core.Parser.Internal
         public T Current => CurrentValue;
 
         /// <inheritdoc/>
-        [SuppressMessage("VisualStudio.Threading", "VSTHRD103:Result synchronously blocks",
-            Justification = "The .Result access is guarded by IsCompletedSuccessfully immediately above it — never blocks.")]
         public ValueTask<bool> MoveNextAsync()
         {
             if (Rows is null)

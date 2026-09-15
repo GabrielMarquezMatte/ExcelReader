@@ -12,36 +12,26 @@ namespace ExcelReader.Core.Parser.Internal
 {
     internal static class ColumnParserFactory
     {
-        [SuppressMessage("Blocker Code Smell", "S3011:Reflection should not be used to increase accessibility of classes, methods, or fields",
-            Justification = "Private method accessed within same class for generic dispatch; intentional and type-safe.")]
         private static readonly MethodInfo _buildParsableMethod =
             typeof(ColumnParserFactory).GetMethod(
                 nameof(BuildParsableCore),
                 BindingFlags.NonPublic | BindingFlags.Static)!;
 
-        [SuppressMessage("Blocker Code Smell", "S3011:Reflection should not be used to increase accessibility of classes, methods, or fields",
-            Justification = "Private method accessed within same class for generic dispatch; intentional and type-safe.")]
         private static readonly MethodInfo _buildNullableParsableMethod =
             typeof(ColumnParserFactory).GetMethod(
                 nameof(BuildNullableParsableCore),
                 BindingFlags.NonPublic | BindingFlags.Static)!;
 
-        [SuppressMessage("Blocker Code Smell", "S3011:Reflection should not be used to increase accessibility of classes, methods, or fields",
-            Justification = "Private method accessed within same class for generic dispatch; intentional and type-safe.")]
         private static readonly MethodInfo _buildEnumMethod =
             typeof(ColumnParserFactory).GetMethod(
                 nameof(BuildEnumCore),
                 BindingFlags.NonPublic | BindingFlags.Static)!;
 
-        [SuppressMessage("Blocker Code Smell", "S3011:Reflection should not be used to increase accessibility of classes, methods, or fields",
-            Justification = "Private method accessed within same class for generic dispatch; intentional and type-safe.")]
         private static readonly MethodInfo _buildNullableEnumMethod =
             typeof(ColumnParserFactory).GetMethod(
                 nameof(BuildNullableEnumCore),
                 BindingFlags.NonPublic | BindingFlags.Static)!;
 
-        [SuppressMessage("Blocker Code Smell", "S3011:Reflection should not be used to increase accessibility of classes, methods, or fields",
-            Justification = "Private method accessed within same class for generic dispatch; intentional and type-safe.")]
         private static readonly MethodInfo _buildConverterMethod =
             typeof(ColumnParserFactory).GetMethod(
                 nameof(BuildConverterCore),
@@ -56,8 +46,6 @@ namespace ExcelReader.Core.Parser.Internal
             typeof(short), typeof(byte), typeof(uint), typeof(ulong), typeof(ushort),
             typeof(sbyte), typeof(char), typeof(Half), typeof(Int128), typeof(UInt128),
             typeof(TimeSpan), typeof(DateTimeOffset),
-            // Guid is only reached here on net9+, where it implements IUtf8SpanParsable. On net8 the
-            // dedicated Guid build paths (guarded by #if NET8_0 below) intercept it before this set.
             typeof(Guid),
         ]);
 
@@ -67,9 +55,7 @@ namespace ExcelReader.Core.Parser.Internal
         [RequiresUnreferencedCode("Building a column parser reflects over the property's type and setter, which trimming may remove.")]
         [RequiresDynamicCode("Building a column parser dispatches through MakeGenericMethod for the property's concrete type.")]
         internal static ColumnParser<T>? Build<T>(PropertyInfo prop, bool csvTextDates = false)
-#if NET9_0_OR_GREATER
             where T : allows ref struct
-#endif
         {
             Type propType = prop.PropertyType;
             Type? innerNullable = Nullable.GetUnderlyingType(propType);
@@ -85,9 +71,7 @@ namespace ExcelReader.Core.Parser.Internal
         [RequiresUnreferencedCode("Building a converter-backed parser instantiates converterType and dispatches through MakeGenericMethod, which trimming may remove.")]
         [RequiresDynamicCode("Building a converter-backed parser calls MakeGenericType/MakeGenericMethod for the converter's concrete type.")]
         internal static ColumnParser<T> BuildConverter<T>(PropertyInfo prop, Type converterType)
-#if NET9_0_OR_GREATER
             where T : allows ref struct
-#endif
         {
             Type propType = prop.PropertyType;
             Type ifaceType = typeof(IExcelCellConverter<>).MakeGenericType(propType);
@@ -106,20 +90,16 @@ namespace ExcelReader.Core.Parser.Internal
         [RequiresUnreferencedCode("Building a column parser reflects over the property's type and setter, which trimming may remove.")]
         [RequiresDynamicCode("Building a column parser dispatches through MakeGenericMethod for the property's concrete type.")]
         private static ColumnParser<T>? BuildConcreteParser<T>(PropertyInfo prop, Type propType, bool textDates)
-#if NET9_0_OR_GREATER
             where T : allows ref struct
-#endif
         {
             if (propType == typeof(string))
             {
                 return BuildStringParser<T>(prop);
             }
-#if NET9_0_OR_GREATER
             if (propType == typeof(ReadOnlySpan<byte>))
             {
                 return BuildSpanParser<T>(prop);
             }
-#endif
             if (propType == typeof(bool))
             {
                 return BuildValue<T, bool>(prop, ReadBool);
@@ -137,12 +117,6 @@ namespace ExcelReader.Core.Parser.Internal
                 // Always serial, regardless of textDates: CSV has no distinct textual form for TimeOnly.
                 return BuildValue<T, TimeOnly>(prop, ReadTimeOnly);
             }
-#if NET8_0
-            if (propType == typeof(Guid))
-            {
-                return BuildValue<T, Guid>(prop, ReadGuid);
-            }
-#endif
             if (propType.IsEnum)
             {
                 return (ColumnParser<T>?)_buildEnumMethod
@@ -161,9 +135,7 @@ namespace ExcelReader.Core.Parser.Internal
         [RequiresUnreferencedCode("Building a column parser reflects over the property's type and setter, which trimming may remove.")]
         [RequiresDynamicCode("Building a column parser dispatches through MakeGenericMethod for the property's concrete type.")]
         private static ColumnParser<T>? BuildNullableParser<T>(PropertyInfo prop, Type innerType, bool textDates)
-#if NET9_0_OR_GREATER
             where T : allows ref struct
-#endif
         {
             if (innerType == typeof(bool))
             {
@@ -173,12 +145,6 @@ namespace ExcelReader.Core.Parser.Internal
             {
                 return BuildNullableValue<T, DateTime>(prop, DateTimeReader(textDates));
             }
-#if NET8_0
-            if (innerType == typeof(Guid))
-            {
-                return BuildNullableValue<T, Guid>(prop, ReadGuid);
-            }
-#endif
             if (innerType == typeof(DateOnly))
             {
                 return BuildNullableValue<T, DateOnly>(prop, DateOnlyReader(textDates));
@@ -204,9 +170,7 @@ namespace ExcelReader.Core.Parser.Internal
         }
 
         private static ColumnParser<T> BuildStringParser<T>(PropertyInfo prop)
-#if NET9_0_OR_GREATER
             where T : allows ref struct
-#endif
         {
             RefAction<T, string> setter = CompileSetter<T, string>(prop);
             return (ref model, in cell, _, _) =>
@@ -216,7 +180,6 @@ namespace ExcelReader.Core.Parser.Internal
             };
         }
 
-#if NET9_0_OR_GREATER
         // Zero-copy text binding: aliases Cell.Value directly instead of allocating via GetString().
         // Valid only until the enumerator's next MoveNext(); a caller needing it past that must copy.
         private static ColumnParser<T> BuildSpanParser<T>(PropertyInfo prop)
@@ -229,16 +192,13 @@ namespace ExcelReader.Core.Parser.Internal
                 return true;
             };
         }
-#endif
 
         // Shared shape behind every value-type column parser: read the cell into a V, then assign
         // through the compiled setter.
         private delegate bool CellReader<V>(in Cell cell, bool isDate1904, IFormatProvider provider, out V value);
 
         private static ColumnParser<T> BuildValue<T, V>(PropertyInfo prop, CellReader<V> read)
-#if NET9_0_OR_GREATER
             where T : allows ref struct
-#endif
         {
             RefAction<T, V> setter = CompileSetter<T, V>(prop);
             return (ref model, in cell, isDate1904, provider) =>
@@ -254,9 +214,7 @@ namespace ExcelReader.Core.Parser.Internal
 
         private static ColumnParser<T> BuildNullableValue<T, V>(PropertyInfo prop, CellReader<V> read)
             where V : struct
-#if NET9_0_OR_GREATER
             where T : allows ref struct
-#endif
         {
             RefAction<T, V?> setter = CompileSetter<T, V?>(prop);
             return (ref model, in cell, isDate1904, provider) =>
@@ -403,9 +361,7 @@ namespace ExcelReader.Core.Parser.Internal
 
         private static ColumnParser<T> BuildParsableCore<T, TProp>(PropertyInfo prop)
             where TProp : IUtf8SpanParsable<TProp>
-#if NET9_0_OR_GREATER
             where T : allows ref struct
-#endif
         {
             RefAction<T, TProp> setter = CompileSetter<T, TProp>(prop);
             return (ref model, in cell, _, provider) =>
@@ -421,9 +377,7 @@ namespace ExcelReader.Core.Parser.Internal
 
         private static ColumnParser<T> BuildNullableParsableCore<T, TProp>(PropertyInfo prop)
             where TProp : struct, IUtf8SpanParsable<TProp>
-#if NET9_0_OR_GREATER
             where T : allows ref struct
-#endif
         {
             RefAction<T, TProp?> setter = CompileSetter<T, TProp?>(prop);
             return (ref model, in cell, _, provider) =>
@@ -438,55 +392,14 @@ namespace ExcelReader.Core.Parser.Internal
             };
         }
 
-#if NET8_0
-        [SkipLocalsInit]
-        private static bool TryParseGuid(in Cell cell, out Guid value)
-        {
-            ReadOnlySpan<byte> utf8 = cell.Value;
-            if (!utf8.IsEmpty || !cell.TryGetDouble(out double d))
-            {
-                return TryParseGuidChars(utf8, out value);
-            }
-            Span<byte> doubleBuf = stackalloc byte[32];
-            if (!Utf8Formatter.TryFormat(d, doubleBuf, out int byteWritten))
-            {
-                value = Guid.Empty;
-                return false;
-            }
-            return TryParseGuidChars(doubleBuf[..byteWritten], out value);
-        }
-
-        [SkipLocalsInit]
-        private static bool TryParseGuidChars(ReadOnlySpan<byte> utf8, out Guid value)
-        {
-            Span<char> stack = stackalloc char[Utf8Text.StackChars];
-            ReadOnlySpan<char> chars = Utf8Text.Decode(utf8, stack, out char[]? rented);
-            try
-            {
-                return Guid.TryParse(chars, out value);
-            }
-            finally
-            {
-                Utf8Text.Release(rented);
-            }
-        }
-
-        internal static bool ReadGuid(in Cell cell, bool isDate1904, IFormatProvider provider, out Guid value)
-        {
-            return TryParseGuid(in cell, out value);
-        }
-#endif
 
         private static class EnumCache<TEnum>
             where TEnum : struct, Enum
         {
-#if !NET8_0
             private static readonly FrozenDictionary<string, TEnum> _nameMap = BuildNameMap();
             private static readonly FrozenDictionary<string, TEnum>.AlternateLookup<ReadOnlySpan<char>> _alternateLookup = _nameMap.GetAlternateLookup<ReadOnlySpan<char>>();
-#endif
             private static readonly FrozenDictionary<long, TEnum> _valueMap = BuildValueMap();
 
-#if !NET8_0
             private static FrozenDictionary<string, TEnum> BuildNameMap()
             {
                 Dictionary<string, TEnum> map = new(StringComparer.OrdinalIgnoreCase);
@@ -499,7 +412,6 @@ namespace ExcelReader.Core.Parser.Internal
                 }
                 return map.ToFrozenDictionary(StringComparer.OrdinalIgnoreCase);
             }
-#endif
             private static FrozenDictionary<long, TEnum> BuildValueMap()
             {
                 Dictionary<long, TEnum> map = [];
@@ -537,23 +449,13 @@ namespace ExcelReader.Core.Parser.Internal
 
             private static bool TryLookupName(ReadOnlySpan<char> name, out TEnum value)
             {
-#if NET8_0
-                // net8 has FrozenDictionary but not GetAlternateLookup, so a span probe would have to
-                // allocate a string; Enum.TryParse takes the span directly. It also accepts numeric
-                // text for values no member declares, which _nameMap on newer targets does not — the
-                // IsDefined guard keeps both targets answering the same for that input.
-                return Enum.TryParse(name, ignoreCase: true, out value) && Enum.IsDefined(value);
-#else
                 return _alternateLookup.TryGetValue(name, out value);
-#endif
             }
         }
 
         private static ColumnParser<T> BuildEnumCore<T, TEnum>(PropertyInfo prop)
             where TEnum : struct, Enum
-#if NET9_0_OR_GREATER
             where T : allows ref struct
-#endif
         {
             RefAction<T, TEnum> setter = CompileSetter<T, TEnum>(prop);
             return (ref model, in cell, _, _) =>
@@ -569,9 +471,7 @@ namespace ExcelReader.Core.Parser.Internal
 
         private static ColumnParser<T> BuildNullableEnumCore<T, TEnum>(PropertyInfo prop)
             where TEnum : struct, Enum
-#if NET9_0_OR_GREATER
             where T : allows ref struct
-#endif
         {
             RefAction<T, TEnum?> setter = CompileSetter<T, TEnum?>(prop);
             return (ref model, in cell, _, _) =>
@@ -590,9 +490,7 @@ namespace ExcelReader.Core.Parser.Internal
         // resolves through the interface at runtime either way.
         private static ColumnParser<T> BuildConverterCore<T, TProp, TConv>(PropertyInfo prop, object converter)
             where TConv : IExcelCellConverter<TProp>
-#if NET9_0_OR_GREATER
             where T : allows ref struct
-#endif
         {
             var typed = (TConv)converter;
             RefAction<T, TProp> setter = CompileSetter<T, TProp>(prop);
@@ -610,9 +508,7 @@ namespace ExcelReader.Core.Parser.Internal
         // Binds the property setter directly via CreateDelegate rather than compiling an Expression
         // tree, avoiding a dynamic-method emission per bound column.
         private static RefAction<T, TProp> CompileSetter<T, TProp>(PropertyInfo prop)
-#if NET9_0_OR_GREATER
             where T : allows ref struct
-#endif
         {
             MethodInfo setter = prop.GetSetMethod()!;
             if (typeof(T).IsValueType)
@@ -626,7 +522,6 @@ namespace ExcelReader.Core.Parser.Internal
             return (ref model, value) => act(model, value);
         }
 
-#if NET9_0_OR_GREATER
         // Separate from CompileSetter because Action<T,TProp> can't be written in a method generic
         // over a TProp that allows ref struct.
         private static RefAction<T, TProp> CompileRefStructSetter<T, TProp>(PropertyInfo prop)
@@ -635,7 +530,6 @@ namespace ExcelReader.Core.Parser.Internal
         {
             return prop.GetSetMethod()!.CreateDelegate<RefAction<T, TProp>>();
         }
-#endif
 
         // Matches "1"/"0" and "true"/"false" case-insensitively; garbage text fails rather than
         // silently becoming false.

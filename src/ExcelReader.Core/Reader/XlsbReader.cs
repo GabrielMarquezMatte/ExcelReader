@@ -1,6 +1,5 @@
 using System.Buffers;
 using System.IO.Compression;
-using ExcelReader.Core.Internal;
 
 namespace ExcelReader.Core.Reader
 {
@@ -325,7 +324,7 @@ namespace ExcelReader.Core.Reader
             _memZip?.Dispose();
             if (_zip is not null)
             {
-                await ZipArchiveDisposal.DisposeAsync(_zip).ConfigureAwait(false);
+                await _zip.DisposeAsync().ConfigureAwait(false);
             }
             if (!_leaveOpen && _stream is not null)
             {

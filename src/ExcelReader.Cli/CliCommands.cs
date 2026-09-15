@@ -8,11 +8,9 @@ using ExcelReader.Core.Writer;
 
 namespace ExcelReader.Cli
 {
-    /// <summary>
-    /// The command bodies, as plain functions over explicit writers — this is the layer the tests
-    /// drive. Nothing here touches <c>Console</c> or any other process-global state, so the tests
-    /// run in parallel without interfering with each other.
-    /// </summary>
+    // The command bodies, as plain functions over explicit writers — this is the layer the tests
+    // drive. Nothing here touches Console or any other process-global state, so the tests
+    // run in parallel without interfering with each other.
     internal static class CliCommands
     {
         internal static int Sheets(string path, TextWriter stdout, TextWriter stderr, string? password = null)
@@ -25,11 +23,9 @@ namespace ExcelReader.Cli
             }, stderr, password);
         }
 
-        /// <summary>
-        /// Same command, reported through a callback instead of a fixed tab-separated line - the shape
-        /// Commands.cs's interactive (table-rendering) path needs, without a second implementation of
-        /// the sheet-listing loop or its error handling.
-        /// </summary>
+        // Same command, reported through a callback instead of a fixed tab-separated line - the shape
+        // Commands.cs's interactive (table-rendering) path needs, without a second implementation of
+        // the sheet-listing loop or its error handling.
         internal static int Sheets(string path, Action<int, string> onSheet, TextWriter stderr, string? password = null)
         {
             return Execute(() =>
@@ -95,13 +91,10 @@ namespace ExcelReader.Cli
             }, stderr);
         }
 
-        /// <summary>
-        /// Picks the workbook format to write: <paramref name="format"/> wins when given; otherwise
-        /// it's inferred from <paramref name="output"/>'s extension; with neither (writing to
-        /// stdout with no override), it's CSV - the one format every shell can already consume.
-        /// </summary>
-        /// <exception cref="ArgumentException"><paramref name="format"/> isn't one of
-        /// <see cref="_validFormats"/>, or <paramref name="output"/>'s extension isn't either.</exception>
+        // Picks the workbook format to write: format wins when given; otherwise it's inferred from
+        // output's extension; with neither (writing to stdout with no override), it's CSV - the one
+        // format every shell can already consume. Throws ArgumentException when format is not one of
+        // _validFormats, or output's extension is not either.
         internal static string ResolveFormat(string? format, string? output)
         {
             if (format is not null)
@@ -136,13 +129,12 @@ namespace ExcelReader.Cli
             return "csv";
         }
 
-        /// <summary>
-        /// A directory whose name happens to end in a recognized extension (e.g. a folder literally
-        /// named "backup.xlsx") resolves a format fine, then fails <see cref="FileStream"/> with
-        /// "Access to the path is denied" - true, but it reads as a permissions problem rather than
-        /// naming the actual mistake.
-        /// </summary>
-        /// <exception cref="ArgumentException"><paramref name="output"/> names an existing directory.</exception>
+        // A directory whose name happens to end in a recognized extension (e.g. a folder literally
+        // named "backup.xlsx") resolves a format fine, then fails FileStream with
+        // "Access to the path is denied" - true, but it reads as a permissions problem rather than
+        // naming the actual mistake.
+        //
+        // Throws ArgumentException: output names an existing directory.
         private static void ThrowIfOutputIsADirectory(string? output)
         {
             if (output is not null && Directory.Exists(output))
@@ -175,13 +167,11 @@ namespace ExcelReader.Cli
             WriteRows<XlsWorkbookWriter, XlsSheetWriter, XlsRowWriter>(workbook, reader, onProgress);
         }
 
-        /// <summary>
-        /// Copies every sampled row's cells across as text, one <see cref="IRowWriter.Write(string?)"/>
-        /// call per column. Generic over the four workbook/sheet/row writer triples so the loop - the
-        /// only part that actually varies by target - lives once; each format still gets its own
-        /// <c>Create</c> call above, since their constructor parameters (date1904, compression, ...)
-        /// differ.
-        /// </summary>
+        // Copies every sampled row's cells across as text, one IRowWriter.Write(string?)
+        // call per column. Generic over the four workbook/sheet/row writer triples so the loop - the
+        // only part that actually varies by target - lives once; each format still gets its own
+        // Create call above, since their constructor parameters (date1904, compression, ...)
+        // differ.
         // How many rows between onProgress callbacks - frequent enough to look alive on a terminal
         // (~a handful of updates per second on typical row-write throughput), rare enough that the
         // callback (usually a Spectre.Console status refresh) never dominates the actual write.
@@ -263,10 +253,8 @@ namespace ExcelReader.Cli
             }, stderr, password);
         }
 
-        /// <summary>
-        /// Same command, reported through a callback instead of a fixed tab-separated line - see the
-        /// <see cref="Sheets(string, Action{int, string}, TextWriter, string?)"/> overload for why.
-        /// </summary>
+        // Same command, reported through a callback instead of a fixed tab-separated line - see the
+        // Sheets(string, Action<int, string>, TextWriter, string?) overload for why.
         internal static int Schema(string path, string? sheet, int headerRow, int sampleSize, Action<ExcelColumnSchema> onColumn, TextWriter stderr, string? password = null)
         {
             return Execute(() =>
@@ -281,11 +269,9 @@ namespace ExcelReader.Cli
             }, stderr);
         }
 
-        /// <summary>
-        /// Runs <paramref name="body"/>, turning the failures a user can act on into exit code 1 plus
-        /// a single stderr line. Anything not listed here is a bug and is deliberately left to
-        /// propagate with its stack trace intact.
-        /// </summary>
+        // Runs body, turning the failures a user can act on into exit code 1 plus
+        // a single stderr line. Anything not listed here is a bug and is deliberately left to
+        // propagate with its stack trace intact.
         internal static int Execute(Func<int> body, TextWriter stderr)
         {
             try
@@ -308,12 +294,10 @@ namespace ExcelReader.Cli
             }
         }
 
-        /// <summary>
-        /// Opens <paramref name="path"/> and selects <paramref name="sheet"/>, which is either a
-        /// zero-based index or a sheet name. CSV is opened through its own factory because
-        /// <see cref="Excel.Open(string, ExcelReaderOptions?)"/> deliberately does not sniff it, and
-        /// <paramref name="password"/> is ignored for it since CSV is never encrypted.
-        /// </summary>
+        // Opens path and selects sheet, which is either a
+        // zero-based index or a sheet name. CSV is opened through its own factory because
+        // Excel.Open(string, ExcelReaderOptions?) deliberately does not sniff it, and
+        // password is ignored for it since CSV is never encrypted.
         internal static IExcelRowReader Open(string path, string? sheet, string? password = null)
         {
             bool isCsv = string.Equals(Path.GetExtension(path), ".csv", StringComparison.OrdinalIgnoreCase);

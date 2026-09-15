@@ -11,9 +11,7 @@ namespace ExcelReader.Core.Parser.Internal
     [RequiresUnreferencedCode("Typed parsing reflects over T's public properties, which trimming may remove.")]
     [RequiresDynamicCode("Typed parsing binds property setters at runtime (MethodInfo.CreateDelegate / MakeGenericMethod).")]
     internal static class TypeMapper<T>
-#if NET9_0_OR_GREATER
         where T : allows ref struct
-#endif
     {
         // ExecutionAndPublication already caches a thrown build exception and re-throws it (original
         // stack trace preserved) on every subsequent .Value access — no need to do that by hand.

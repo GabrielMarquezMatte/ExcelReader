@@ -15,16 +15,6 @@ namespace ExcelReader.Tests
     // EXR001/EXR002 cases) would otherwise fail this whole project's own build.
     public class GeneratorTests
     {
-        // #if NET9_0_OR_GREATER/NET8_0 in generator output (the Guid split) only resolves correctly if
-        // the synthetic Compilation defines the same preprocessor symbol the *real* SDK build would —
-        // mirror whichever TFM this test assembly itself is running under, rather than leaving it
-        // undefined (which would always take the #else branch, regardless of the actual TFM).
-#if NET9_0_OR_GREATER
-        private static readonly string[] _preprocessorSymbols = ["NET9_0_OR_GREATER"];
-#else
-        private static readonly string[] _preprocessorSymbols = ["NET8_0"];
-#endif
-
         private static (ImmutableCompilationResult Result, ImmutableArray<Diagnostic> GeneratorDiagnostics) RunGenerator(string source)
         {
             (ImmutableCompilationResult result, ImmutableArray<Diagnostic> diagnostics, string _) = RunGeneratorWithSource(source);
@@ -36,8 +26,7 @@ namespace ExcelReader.Tests
         // generated rather than just whether it compiles.
         private static (ImmutableCompilationResult Result, ImmutableArray<Diagnostic> GeneratorDiagnostics, string GeneratedSource) RunGeneratorWithSource(string source)
         {
-            var parseOptions = new CSharpParseOptions(preprocessorSymbols: _preprocessorSymbols);
-            SyntaxTree tree = CSharpSyntaxTree.ParseText(source, parseOptions);
+            SyntaxTree tree = CSharpSyntaxTree.ParseText(source);
             MetadataReference[] references = [.. AppDomain.CurrentDomain.GetAssemblies()
                 .Where(static a => !a.IsDynamic && !string.IsNullOrEmpty(a.Location))
                 .Select(static a => (MetadataReference)MetadataReference.CreateFromFile(a.Location))];
@@ -47,11 +36,8 @@ namespace ExcelReader.Tests
                 references,
                 new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
 
-            // parseOptions here is what re-parses the generator's *own* AddSource output (the Guid
-            // #if NET9_0_OR_GREATER split) — without passing it explicitly, the driver falls back to
-            // default parse options (no symbols defined) for generated sources, regardless of what the
-            // original tree above used, and the #else branch would always "win".
-            GeneratorDriver driver = CSharpGeneratorDriver.Create([new ExcelRowMapGenerator().AsSourceGenerator()], parseOptions: parseOptions);
+            ISourceGenerator[] generators = [new ExcelRowMapGenerator().AsSourceGenerator()];
+            GeneratorDriver driver = CSharpGeneratorDriver.Create(generators);
             _ = driver.RunGeneratorsAndUpdateCompilation(compilation, out Compilation outputCompilation, out ImmutableArray<Diagnostic> generatorDiagnostics);
             string generatedSource = string.Join("\n----\n", outputCompilation.SyntaxTrees.Skip(1).Select(static t => t.ToString()));
             return (new ImmutableCompilationResult((CSharpCompilation)outputCompilation), generatorDiagnostics, generatedSource);
@@ -355,6 +341,100 @@ namespace ExcelReader.Tests
             Assert.True(emit.Success, string.Join(Environment.NewLine, emit.Diagnostics.Select(static d => d.ToString())));
         }
 
+        // The self-contained model + driver this test compiles, loads and invokes. Held as a
+        // field rather than inline so the test body reads as the arrange/act/assert it is.
+        private const string RoundTripSource = """
+            using System;
+            using System.Collections.Generic;
+            using System.Globalization;
+            using System.IO;
+            using System.Threading.Tasks;
+            using ExcelReader.Core.Parser;
+            using ExcelReader.Core.Reader;
+            using ExcelReader.Core.Writer;
+
+            namespace GeneratorTests.RoundTrip
+            {
+                public enum Kind { Alpha, Beta }
+
+                [ExcelSerializable]
+                public partial class Model
+                {
+                    public string Name { get; set; } = "";
+                    public bool Active { get; set; }
+                    public int Age { get; set; }
+                    public decimal Balance { get; set; }
+                    public Kind Category { get; set; }
+                    public int? OptionalAge { get; set; }
+                    public Kind? OptionalCategory { get; set; }
+                }
+
+                public static class TestRunner
+                {
+                    // Writes the header/data row directly through the public XlsxRowWriter API
+                    // (mirroring what a hand-rolled test fixture would do) rather than through
+                    // ExcelRecordMapBuilder<T>.Headers()/WriteRow(), which are internal to
+                    // ExcelReader.Core — this synthetic assembly has no InternalsVisibleTo grant for
+                    // them. The read side below still exercises the real generated
+                    // IExcelRowMap<Model>/ExcelMappedParser<Model> path end to end.
+                    public static async Task<string[]> RunAsync()
+                    {
+                        var writeStream = new MemoryStream();
+                        await using (XlsxWorkbookWriter wb = await XlsxWorkbookWriter.CreateAsync(writeStream, leaveOpen: true))
+                        {
+                            await wb.StartAsync();
+                            XlsxSheetWriter sheet = wb.AddSheet("S1");
+                            await sheet.StartAsync();
+                            XlsxRowWriter header = await sheet.StartRowAsync();
+                            await using (header.ConfigureAwait(false))
+                            {
+                                header.Write("Name");
+                                header.Write("Active");
+                                header.Write("Age");
+                                header.Write("Balance");
+                                header.Write("Category");
+                                header.Write("OptionalAge");
+                                header.Write("OptionalCategory");
+                            }
+                            XlsxRowWriter row = await sheet.StartRowAsync();
+                            await using (row.ConfigureAwait(false))
+                            {
+                                row.Write("Alice");
+                                row.Write(true);
+                                row.Write(30);
+                                row.Write(12.5m);
+                                row.Write("Beta");
+                                row.Write(7);
+                                row.Write("Alpha");
+                            }
+                            await sheet.EndAsync();
+                            await wb.EndAsync();
+                        }
+
+                        writeStream.Position = 0;
+                        await using XlsxReader reader = await Excel.FromAsync(writeStream);
+                        var results = new List<Model>();
+                        foreach (Model m in new ExcelMappedParser<Model>().Parse(reader))
+                        {
+                            results.Add(m);
+                        }
+                        Model m0 = results[0];
+                        return new[]
+                        {
+                            results.Count.ToString(CultureInfo.InvariantCulture),
+                            m0.Name,
+                            m0.Active.ToString(CultureInfo.InvariantCulture),
+                            m0.Age.ToString(CultureInfo.InvariantCulture),
+                            m0.Balance.ToString(CultureInfo.InvariantCulture),
+                            m0.Category.ToString(),
+                            m0.OptionalAge.ToString(),
+                            m0.OptionalCategory.ToString(),
+                        };
+                    }
+                }
+            }
+            """;
+
         // Behavioral parity: compiles a self-contained model + driver method into a real in-memory
         // assembly (so ExcelMappedParser<Model> resolves with ordinary compile-time generics inside
         // that assembly — no MakeGenericType reflection gymnastics needed here), loads it, and calls
@@ -363,98 +443,7 @@ namespace ExcelReader.Tests
         [Fact]
         public async Task GeneratedMapRoundTripsThroughRealXlsxReaderAndWriter()
         {
-            const string source = """
-                using System;
-                using System.Collections.Generic;
-                using System.Globalization;
-                using System.IO;
-                using System.Threading.Tasks;
-                using ExcelReader.Core.Parser;
-                using ExcelReader.Core.Reader;
-                using ExcelReader.Core.Writer;
-
-                namespace GeneratorTests.RoundTrip
-                {
-                    public enum Kind { Alpha, Beta }
-
-                    [ExcelSerializable]
-                    public partial class Model
-                    {
-                        public string Name { get; set; } = "";
-                        public bool Active { get; set; }
-                        public int Age { get; set; }
-                        public decimal Balance { get; set; }
-                        public Kind Category { get; set; }
-                        public int? OptionalAge { get; set; }
-                        public Kind? OptionalCategory { get; set; }
-                    }
-
-                    public static class TestRunner
-                    {
-                        // Writes the header/data row directly through the public XlsxRowWriter API
-                        // (mirroring what a hand-rolled test fixture would do) rather than through
-                        // ExcelRecordMapBuilder<T>.Headers()/WriteRow(), which are internal to
-                        // ExcelReader.Core — this synthetic assembly has no InternalsVisibleTo grant for
-                        // them. The read side below still exercises the real generated
-                        // IExcelRowMap<Model>/ExcelMappedParser<Model> path end to end.
-                        public static async Task<string[]> RunAsync()
-                        {
-                            var writeStream = new MemoryStream();
-                            await using (XlsxWorkbookWriter wb = await XlsxWorkbookWriter.CreateAsync(writeStream, leaveOpen: true))
-                            {
-                                await wb.StartAsync();
-                                XlsxSheetWriter sheet = wb.AddSheet("S1");
-                                await sheet.StartAsync();
-                                XlsxRowWriter header = await sheet.StartRowAsync();
-                                await using (header.ConfigureAwait(false))
-                                {
-                                    header.Write("Name");
-                                    header.Write("Active");
-                                    header.Write("Age");
-                                    header.Write("Balance");
-                                    header.Write("Category");
-                                    header.Write("OptionalAge");
-                                    header.Write("OptionalCategory");
-                                }
-                                XlsxRowWriter row = await sheet.StartRowAsync();
-                                await using (row.ConfigureAwait(false))
-                                {
-                                    row.Write("Alice");
-                                    row.Write(true);
-                                    row.Write(30);
-                                    row.Write(12.5m);
-                                    row.Write("Beta");
-                                    row.Write(7);
-                                    row.Write("Alpha");
-                                }
-                                await sheet.EndAsync();
-                                await wb.EndAsync();
-                            }
-
-                            writeStream.Position = 0;
-                            await using XlsxReader reader = await Excel.FromAsync(writeStream);
-                            var results = new List<Model>();
-                            foreach (Model m in new ExcelMappedParser<Model>().Parse(reader))
-                            {
-                                results.Add(m);
-                            }
-                            Model m0 = results[0];
-                            return new[]
-                            {
-                                results.Count.ToString(CultureInfo.InvariantCulture),
-                                m0.Name,
-                                m0.Active.ToString(CultureInfo.InvariantCulture),
-                                m0.Age.ToString(CultureInfo.InvariantCulture),
-                                m0.Balance.ToString(CultureInfo.InvariantCulture),
-                                m0.Category.ToString(),
-                                m0.OptionalAge.ToString(),
-                                m0.OptionalCategory.ToString(),
-                            };
-                        }
-                    }
-                }
-                """;
-            (ImmutableCompilationResult result, ImmutableArray<Diagnostic> diagnostics) = RunGenerator(source);
+            (ImmutableCompilationResult result, ImmutableArray<Diagnostic> diagnostics) = RunGenerator(RoundTripSource);
             Assert.Empty(diagnostics);
             (EmitResult Emit, byte[] AssemblyBytes) emitted = result.EmitToBytes();
             Assert.True(emitted.Emit.Success, string.Join(Environment.NewLine, emitted.Emit.Diagnostics.Select(static d => d.ToString())));

@@ -1,0 +1,34 @@
+# libFuzzer token dictionary for the XLS target (BIFF8 inside an OLE compound file).
+#
+# Two layered containers, each with its own framing. The CFB signature and the BIFF8 record headers
+# below are what the reader dispatches on; a byte-level mutator reaches neither on its own.
+
+# OLE/CFB compound file signature and free/end-of-chain sector markers
+"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1"
+"\xff\xff\xff\xff"
+"\xfe\xff\xff\xff"
+"\xfd\xff\xff\xff"
+
+# Stream names, UTF-16LE as stored in the CFB directory
+"W\x00o\x00r\x00k\x00b\x00o\x00o\x00k\x00"
+"B\x00o\x00o\x00k\x00"
+
+# BIFF8 record headers, 2-byte little-endian record ids
+"\x09\x08"
+"\x0a\x00"
+"\x85\x00"
+"\xfc\x00"
+"\xfd\x00"
+"\x7e\x02"
+"\xbd\x00"
+"\x03\x02"
+"\x01\x02"
+"\x08\x02"
+"\x00\x02"
+"\x06\x00"
+"\x3c\x00"
+"\x0b\x02"
+"\xe0\x00"
+"\x1e\x04"
+"\x3d\x00"
+"\x22\x00"

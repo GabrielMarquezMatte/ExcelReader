@@ -1,5 +1,4 @@
 using System.Buffers.Binary;
-using System.Diagnostics.CodeAnalysis;
 
 namespace ExcelReader.Core.Writer.Internal
 {
@@ -31,8 +30,6 @@ namespace ExcelReader.Core.Writer.Internal
         private const int MaxHeaderDifat = (HeaderSize - 0x4C) / 4;        // 109
         private const int DifatEntriesPerSector = FatEntriesPerSector - 1; // 127 (last slot = next DIFAT)
 
-        [SuppressMessage("Major Code Smell", "S4136:Method overloads should be grouped together",
-            Justification = "The old single-stream Write(Stream, int, Action<Stream>) overload must stay verbatim at the bottom of the class per the brief (its sector math must not move), separated from this one by the private Layout class.")]
         internal static void Write(Stream destination, IReadOnlyList<CfbStreamSpec> streams)
         {
             Layout layout = Layout.Compute(streams);
@@ -60,8 +57,6 @@ namespace ExcelReader.Core.Writer.Internal
             }
         }
 
-        [SuppressMessage("Major Code Smell", "S4136:Method overloads should be grouped together",
-            Justification = "The old single-stream WriteAsync(Stream, int, Func<Stream, CancellationToken, ValueTask>, CancellationToken) overload must stay verbatim at the bottom of the class per the brief (its sector math must not move), separated from this one by the private Layout class.")]
         internal static async ValueTask WriteAsync(Stream destination, IReadOnlyList<CfbStreamSpec> streams, CancellationToken ct)
         {
             Layout layout = Layout.Compute(streams);

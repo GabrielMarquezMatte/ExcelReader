@@ -5,10 +5,8 @@ using System.Text;
 
 namespace ExcelReader.Core.Reader
 {
-    // Small lookups duplicated identically across the XLSX/XLS/XLSB readers: sheet-name resolution,
-    // sheet-index validation, date-style flags, and shared-string offset lookup. Each reader keeps its
-    // own sheets/styles/shared arrays (the sheet tuple's non-name element differs per format), so these
-    // take the array in rather than requiring a shared interface.
+    // Each reader keeps its own sheets/styles/shared arrays (the sheet tuple's non-name element differs
+    // per format), so these take the array in rather than requiring a shared interface.
     internal static class WorkbookLookups
     {
         internal static bool TryFindSheetIndex<T>(T[] sheets, ReadOnlySpan<char> name, Func<T, string> nameOf, out int index)
@@ -36,7 +34,6 @@ namespace ExcelReader.Core.Reader
             return (uint)style < (uint)styleIsDate.Length && styleIsDate[style];
         }
 
-        // A numFmtId is a date style if it's a custom format flagged as such, else the builtin table decides.
         internal static bool ResolveDateFlag(Dictionary<int, bool> customFormats, int numFmtId)
         {
             return customFormats.TryGetValue(numFmtId, out bool isDate) ? isDate : NumberFormat.IsBuiltinDate(numFmtId);
@@ -58,15 +55,11 @@ namespace ExcelReader.Core.Reader
             }
         }
 
-        // ValidIndex is `index` when in range, or -1 otherwise — callers thread it straight into the
-        // per-reader shared-string dedup cache (an array indexed by shared-string index) as the cache
-        // key, so an out-of-range/corrupt index never becomes an out-of-bounds array access there.
-        // Shared-string dedup cache: a lazily-allocated array indexed by shared-string index, rather than
-        // a Dictionary<int,string>. With the table's exact string count known up front, one array avoids
-        // the resize/rehash churn (and resulting LOH pressure) an unsized Dictionary pays at high
-        // cardinality. Capped so a workbook that declares an extreme shared-string count doesn't force
-        // one huge eager allocation; above the cap, GetString() still returns the right value, it just
-        // never dedups (Cell.GetString()'s bounds check excludes any index outside the array).
+        // An array indexed by shared-string index, not a Dictionary<int,string>: the table's exact count
+        // is known up front, so one array avoids the resize/rehash churn and LOH pressure an unsized
+        // Dictionary pays at high cardinality. Capped so a workbook declaring an extreme count cannot
+        // force one huge eager allocation; above the cap GetString() still returns the right value and
+        // only loses dedup.
         private const int MaxCachedSharedStrings = 4_000_000; // ~32 MB of string? references
 
         internal static string?[] CreateSharedStringCache(int[] sharedOffsets)
@@ -117,7 +110,6 @@ namespace ExcelReader.Core.Reader
             return Wrap(entry.Open(), counter, options, entryLimitName, entryLimit, entry.Length);
         }
 
-#if NET10_0_OR_GREATER
         internal static async ValueTask<LimitedReadStream> OpenEntryStreamAsync(
             ZipArchiveEntry entry, DecompressedByteCounter counter, ExcelReaderOptions options,
             CancellationToken ct, string entryLimitName = "", long entryLimit = 0)
@@ -125,15 +117,6 @@ namespace ExcelReader.Core.Reader
             Stream opened = await entry.OpenAsync(ct).ConfigureAwait(false);
             return Wrap(opened, counter, options, entryLimitName, entryLimit, entry.Length);
         }
-#else
-        internal static ValueTask<LimitedReadStream> OpenEntryStreamAsync(
-            ZipArchiveEntry entry, DecompressedByteCounter counter, ExcelReaderOptions options,
-            CancellationToken ct, string entryLimitName = "", long entryLimit = 0)
-        {
-            ct.ThrowIfCancellationRequested();
-            return new ValueTask<LimitedReadStream>(Wrap(entry.Open(), counter, options, entryLimitName, entryLimit, entry.Length));
-        }
-#endif
 
         // Below this, the overlap isn't worth a dedicated thread + producer/consumer handoff: a small
         // sheet decompresses faster than the Task.Run dispatch and teardown join cost it, so prefetch
