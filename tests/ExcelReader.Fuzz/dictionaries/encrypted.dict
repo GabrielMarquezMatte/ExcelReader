@@ -1,0 +1,42 @@
+# libFuzzer token dictionary for the encrypted target (agile/standard OOXML encryption: an
+# EncryptionInfo descriptor and an EncryptedPackage stream inside a CFB container).
+#
+# The descriptor is XML for agile encryption, so the engine needs its element and attribute names
+# to build anything the parser will look at past the version header.
+
+# CFB container
+"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1"
+"\xff\xff\xff\xff"
+"\xfe\xff\xff\xff"
+
+# Stream names, UTF-16LE as stored in the CFB directory
+"E\x00n\x00c\x00r\x00y\x00p\x00t\x00i\x00o\x00n\x00I\x00n\x00f\x00o\x00"
+"E\x00n\x00c\x00r\x00y\x00p\x00t\x00e\x00d\x00P\x00a\x00c\x00k\x00a\x00g\x00e\x00"
+
+# EncryptionInfo version headers: 4.4 agile, 3.2/4.2 standard
+"\x04\x00\x04\x00\x40\x00\x00\x00"
+"\x03\x00\x02\x00"
+"\x04\x00\x02\x00"
+
+# Agile descriptor XML
+"<encryption"
+"<keyData"
+"<keyEncryptors"
+"<keyEncryptor"
+"<p:encryptedKey"
+"<dataIntegrity"
+"saltSize=\""
+"blockSize=\""
+"keyBits=\""
+"hashSize=\""
+"cipherAlgorithm=\"AES\""
+"cipherChaining=\"ChainingModeCBC\""
+"hashAlgorithm=\"SHA512\""
+"hashAlgorithm=\"SHA1\""
+"saltValue=\""
+"spinCount=\"100000\""
+"encryptedVerifierHashInput=\""
+"encryptedVerifierHashValue=\""
+"encryptedKeyValue=\""
+"encryptedHmacKey=\""
+"encryptedHmacValue=\""
