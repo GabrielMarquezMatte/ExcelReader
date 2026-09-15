@@ -14,7 +14,7 @@
          new overload later can rebind existing callers). Several intentional overloads (e.g.
          Excel.Open) already accept this tradeoff for ergonomics; fixing it means redesigning
          those APIs, not a PublicAPI.txt entry, so it stays suppressed. -->
-    <NoWarn>$(NoWarn);CA1062;RS0026;CA1819;CA1515;MA0051;MA0048</NoWarn>
+    <NoWarn>$(NoWarn);CA1062;RS0026;CA1819;CA1515;MA0048</NoWarn>
     <AccelerateBuildsInVisualStudio>true</AccelerateBuildsInVisualStudio>
     <AutoGenerateBindingRedirects>true</AutoGenerateBindingRedirects>
     <GenerateBindingRedirectsOutputType>true</GenerateBindingRedirectsOutputType>
