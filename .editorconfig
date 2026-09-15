@@ -45,6 +45,19 @@ dotnet_diagnostic.CA2000.severity = none
 # suppressed on that member for the same reason.
 dotnet_diagnostic.IDISP009.severity = none
 
+# MA0051 (method is too long) runs repo-wide rather than being suppressed, but calibrated up from the
+# 60-line / 40-statement defaults. At the defaults it reported 22 methods — mostly format parsers and
+# writers that decode one record layout in a single flat sequence — which is enough noise that the
+# rule had been switched off project-wide instead of read. 90/50 keeps it armed and pointed at
+# methods that are genuinely doing too much.
+#
+# Note the option names: this analyzer reads `maximum_lines_per_method`, NOT the `maximum_lines`
+# spelling in the older docs. A wrong key is silently ignored — the rule just keeps using its
+# defaults — so verify any change here actually moves the reported count.
+dotnet_diagnostic.MA0051.severity = warning
+MA0051.maximum_lines_per_method = 90
+MA0051.maximum_statements_per_method = 50
+
 # Naming: private fields _camelCase, private consts PascalCase, everything else PascalCase/camelCase
 # per STYLEGUIDE.md.
 dotnet_naming_style.underscore_camel_case.capitalization = camel_case
