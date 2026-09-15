@@ -7,7 +7,7 @@ rewrites — see [ARCHITECTURE.md](ARCHITECTURE.md) for the shape of the codebas
 ## Build expectations
 
 - **Warnings are errors.** `Directory.Build.props` sets `TreatWarningsAsErrors`, with a curated
-  `AnalysisMode=All` analyzer set (Sonar, Meziantou, Roslynator, AsyncFixer, and more). A PR that
+  `AnalysisMode=All` analyzer set (NetAnalyzers plus Meziantou). A PR that
   doesn't build clean locally won't build clean in CI either — run a full build before pushing:
 
   ```bash
@@ -15,7 +15,7 @@ rewrites — see [ARCHITECTURE.md](ARCHITECTURE.md) for the shape of the codebas
   ```
 
 - **Public API changes require a `PublicAPI.Unshipped.txt` entry.** `Microsoft.CodeAnalysis.PublicApiAnalyzers`
-  is active (arrives transitively via `Roslyn.Diagnostics.Analyzers`) and fails the build on any
+  is active and fails the build on any
   unrecorded public member. If you add, change, or remove anything public, update
   `src/ExcelReader.Core/PublicAPI/PublicAPI.Unshipped.txt`. A bot promotes `Unshipped` →
   `Shipped` automatically after each release — don't edit `Shipped.txt` by hand.

@@ -419,5 +419,5 @@ jobs:
           base: develop
           delete-branch: true
           add-paths: |
-            src/*/PublicAPI/*/PublicAPI.Shipped.txt
-            src/*/PublicAPI/*/PublicAPI.Unshipped.txt
+            src/*/PublicAPI/PublicAPI.Shipped.txt
+            src/*/PublicAPI/PublicAPI.Unshipped.txt

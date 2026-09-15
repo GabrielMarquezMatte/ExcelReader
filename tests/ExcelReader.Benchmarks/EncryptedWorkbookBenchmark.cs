@@ -1,4 +1,3 @@
-using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using BenchmarkDotNet.Attributes;
 using ExcelReader.Core.Reader;
@@ -27,8 +26,6 @@ namespace ExcelReader.Benchmarks
         // Not a credential: this is the published password of the repository's own encrypted test
         // fixtures, documented in tests/ExcelReader.Tests/data/encrypted/README.md, guarding files
         // that contain nothing but generated benchmark rows.
-        [SuppressMessage("Major Code Smell", "S2068:Hard-coded credentials are security-sensitive",
-            Justification = "Published password of the repository's own public test fixtures; there is no secret here to leak.")]
         private const string FixturePassword = "hunter2";
 
         private string _encrypted = "";
@@ -113,8 +110,6 @@ namespace ExcelReader.Benchmarks
             using IExcelRowReader reader = Excel.Open(ms, leaveOpen: true, Options());
             return reader.SheetCount;
         }
-        [SuppressMessage("Major Code Smell", "S2068:Hard-coded credentials are security-sensitive",
-            Justification = "Password for an in-memory workbook this benchmark generates and discards itself.")]
         private const string GeneratedPassword = "hunter2";
         private const int DefaultLargeRows = 300_000;
         private byte[] _largePlainBytes = [];

@@ -1,4 +1,3 @@
-using System.Diagnostics.CodeAnalysis;
 using ExcelReader.Core.Reader;
 using ExcelReader.Core.ValueObjects;
 
@@ -121,8 +120,6 @@ namespace ExcelReader.Core.Parser.Internal
         // continuation on a genuine buffer miss. Every state mutation (Classify's ref _rowNumber,
         // BuildColumnMap) runs on the shared class instance, so it survives the await (see class remarks).
         /// <inheritdoc cref="IExcelRowEnumerator.MoveNextAsync"/>
-        [SuppressMessage("VisualStudio.Threading", "VSTHRD103:Result synchronously blocks",
-            Justification = "The .Result access is guarded by IsCompletedSuccessfully immediately above it — never blocks.")]
         public ValueTask<bool> MoveNextAsync()
         {
             while (true)

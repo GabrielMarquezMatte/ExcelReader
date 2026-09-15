@@ -47,8 +47,6 @@ namespace ExcelReader.Core.Parser.Internal
         // No [EnumeratorCancellation] here: that attribute only wires a token through on an iterator
         // returning IAsyncEnumerable<T>. This is the enumerator factory itself, so the parameter *is*
         // the token and is used directly (CS8424 fires if the attribute is applied anyway).
-        [SuppressMessage("Usage", "VSTHRD003:Avoid awaiting foreign Tasks",
-            Justification = "The awaited tasks are the worker tasks and per-chunk TaskCompletionSources created in this very method; every await is ConfigureAwait(false), so there is no captured context to deadlock against.")]
         [SuppressMessage("Reliability", "CA2025:Do not pass 'IDisposable' instances into unawaited tasks",
             Justification = "The CTS and semaphore handed to the workers outlive them by construction: the finally block cancels and then awaits every worker task to completion, and only the enclosing `using` declarations' finally — which runs after it — disposes them.")]
         public async IAsyncEnumerator<T> GetAsyncEnumerator(CancellationToken cancellationToken = default)
@@ -198,8 +196,6 @@ namespace ExcelReader.Core.Parser.Internal
         }
 
         // Backstop for every worker dying before claiming the chunk the merge is waiting on.
-        [SuppressMessage("Usage", "VSTHRD003:Avoid awaiting foreign Tasks",
-            Justification = "Both tasks are created by GetAsyncEnumerator, the sole caller, and passed in only to keep the waiting logic out of the iterator body.")]
         private static async Task WaitForChunkAsync(Task<bool> chunkReady, Task allWorkers)
         {
             Task finished = await Task.WhenAny(chunkReady, allWorkers).ConfigureAwait(false);

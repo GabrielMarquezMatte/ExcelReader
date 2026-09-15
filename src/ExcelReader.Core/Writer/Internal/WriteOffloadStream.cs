@@ -83,8 +83,6 @@ namespace ExcelReader.Core.Writer.Internal
         // The blocking path here is deliberate, mirroring PrefetchStream's sync Read: it only ever
         // blocks on the bounded channel (backpressure from a slow consumer), never on real I/O, since
         // the actual write/deflate happens on the consumer thread.
-        [SuppressMessage("VisualStudio.Threading", "VSTHRD002:Avoid problematic synchronous waits",
-            Justification = "Sync Write must block on the bounded channel by design; it never blocks on I/O.")]
         public override void Write(ReadOnlySpan<byte> buffer)
         {
             ThrowIfFaulted();
@@ -112,8 +110,6 @@ namespace ExcelReader.Core.Writer.Internal
             EnqueueSync((buffer, length, Owned: true));
         }
 
-        [SuppressMessage("VisualStudio.Threading", "VSTHRD002:Avoid problematic synchronous waits",
-            Justification = "Sync Write must block on the bounded channel by design; it never blocks on I/O.")]
         private void EnqueueSync((byte[] Buffer, int Length, bool Owned) item)
         {
             try
@@ -192,8 +188,6 @@ namespace ExcelReader.Core.Writer.Internal
             ThrowIfFaulted();
         }
 
-        [SuppressMessage("VisualStudio.Threading", "VSTHRD002:Avoid problematic synchronous waits",
-            Justification = "Sync Flush must block until the background writer catches up; every caller of this path (XlsxSheetWriter's sync row API) already accepts blocking on I/O.")]
         public override void Flush()
         {
             FlushAsync(CancellationToken.None).GetAwaiter().GetResult();
@@ -203,8 +197,6 @@ namespace ExcelReader.Core.Writer.Internal
         // right before disposing the real entry stream (see XlsxSheetWriter.EndAsync) never closes it
         // with buffered bytes still in flight. Safe to call at most once per stream: every real call
         // site here flushes only immediately before Dispose/DisposeAsync, never writes afterward.
-        [SuppressMessage("VisualStudio.Threading", "VSTHRD003:Avoid awaiting foreign Tasks",
-            Justification = "_consumer is this instance's own consumer loop, started in the constructor and always brought to completion exactly once, here or in Dispose(Async).")]
         public override async Task FlushAsync(CancellationToken cancellationToken)
         {
             CompleteWriterOnce();
@@ -257,8 +249,6 @@ namespace ExcelReader.Core.Writer.Internal
             }
         }
 
-        [SuppressMessage("VisualStudio.Threading", "VSTHRD002:Avoid problematic synchronous waits",
-            Justification = "Dispose must not return before the consumer thread stops touching _inner; ConsumeAsync catches every exception, so this never blocks long or throws.")]
         protected override void Dispose(bool disposing)
         {
             if (disposing && !_disposed)
@@ -272,8 +262,6 @@ namespace ExcelReader.Core.Writer.Internal
             base.Dispose(disposing);
         }
 
-        [SuppressMessage("VisualStudio.Threading", "VSTHRD003:Avoid awaiting foreign Tasks",
-            Justification = "_consumer is this instance's own consumer loop, started in the constructor and always brought to completion exactly once, here or in Dispose(bool).")]
         public override async ValueTask DisposeAsync()
         {
             if (_disposed)

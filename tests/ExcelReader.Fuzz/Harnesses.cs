@@ -1,4 +1,3 @@
-using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using ExcelReader.Core.Parser;
 using ExcelReader.Core.Parser.Internal;
@@ -166,8 +165,6 @@ namespace ExcelReader.Fuzz
         // A row model wide enough that binding, conversion, and required-column handling all run.
         // Properties are set only through reflection by ExcelParser<T>/ParallelCsvFactory's binder,
         // which static analysis cannot see, hence the suppression below.
-        [SuppressMessage("Major Code Smell", "S3459:Unassigned members should be removed",
-            Justification = "Set via reflection by ExcelParser<T>'s header-to-property binder, not by any code visible to the analyzer.")]
         private sealed class FuzzRow
         {
             public string? Name { get; set; }
@@ -253,8 +250,6 @@ namespace ExcelReader.Fuzz
         // parallel path rather than making every harness in the file async for one target. It only
         // ever waits on in-memory chunk work (the source here is a byte[], never real I/O), so it
         // cannot deadlock the way blocking on I/O-bound async work could.
-        [SuppressMessage("VisualStudio.Threading", "VSTHRD002:Avoid problematic synchronous waits",
-            Justification = "The fuzz driver is synchronous by contract; the parallel CSV source here is in-memory, so this never blocks on real I/O.")]
         private static List<string> ParseParallel(byte[] bytes, int chunkSize)
         {
             var rows = new List<string>();

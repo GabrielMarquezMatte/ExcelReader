@@ -5,7 +5,7 @@
 AdditionalFile (the .txt), not a .cs document, and dotnet-format's CLI fixer only applies
 fixes that land in source documents. So this replicates it: build with the warning-as-error
 gate relaxed, parse RS0016's message (locale-agnostic: it always quotes the symbol right
-after the diagnostic id), and append to the matching TFM's Unshipped.txt.
+after the diagnostic id), and append to that project's Unshipped.txt.
 
 Run this locally whenever `dotnet build` fails on RS0016 for a member you meant to add.
 """
@@ -17,17 +17,15 @@ import subprocess
 import sys
 
 HEADER = "#nullable enable"
-RS0016_RE = re.compile(r"RS0016[^']*'([^']+)'.*TargetFramework=([\w.]+)\]")
+RS0016_RE = re.compile(r"RS0016[^']*'([^']+)'")
 
 
 def discover_tracked_projects():
-    """Maps each PublicAPI-tracked project dir to its set of tracked TFMs."""
-    projects = {}
-    for unshipped_path in glob.glob("src/*/PublicAPI/*/PublicAPI.Unshipped.txt"):
-        parts = unshipped_path.replace("\\", "/").split("/")
-        project_dir, tfm = parts[0] + "/" + parts[1], parts[3]
-        projects.setdefault(project_dir, set()).add(tfm)
-    return projects
+    """Returns each project dir that tracks a public API surface."""
+    return sorted(
+        os.path.dirname(os.path.dirname(p.replace("\\", "/")))
+        for p in glob.glob("src/*/PublicAPI/PublicAPI.Unshipped.txt")
+    )
 
 
 def read_entries(path):
@@ -47,11 +45,11 @@ def write_entries(path, entries):
 def main():
     projects = discover_tracked_projects()
     if not projects:
-        print("No src/*/PublicAPI/*/PublicAPI.Unshipped.txt files found — nothing to track.")
+        print("No src/*/PublicAPI/PublicAPI.Unshipped.txt files found — nothing to track.")
         return 1
 
     added_any = False
-    for project_dir, tfms in projects.items():
+    for project_dir in projects:
         csproj = glob.glob(f"{project_dir}/*.csproj")[0]
         result = subprocess.run(
             [
@@ -60,20 +58,18 @@ def main():
             ],
             capture_output=True, text=True, check=False,
         )
-        missing = {tfm: set() for tfm in tfms}
+        symbols = set()
         for line in result.stdout.splitlines():
             m = RS0016_RE.search(line)
-            if m and m.group(2) in missing:
-                missing[m.group(2)].add(m.group(1))
+            if m:
+                symbols.add(m.group(1))
+        if not symbols:
+            continue
 
-        for tfm, symbols in missing.items():
-            if not symbols:
-                continue
-            path = f"{project_dir}/PublicAPI/{tfm}/PublicAPI.Unshipped.txt"
-            current = read_entries(path)
-            write_entries(path, current | symbols)
-            print(f"{path}: added {len(symbols)} entries.")
-            added_any = True
+        path = f"{project_dir}/PublicAPI/PublicAPI.Unshipped.txt"
+        write_entries(path, read_entries(path) | symbols)
+        print(f"{path}: added {len(symbols)} entries.")
+        added_any = True
 
     if not added_any:
         print("Nothing missing — build already passes RS0016 clean.")

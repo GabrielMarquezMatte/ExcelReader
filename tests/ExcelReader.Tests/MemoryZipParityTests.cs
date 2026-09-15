@@ -398,8 +398,6 @@ namespace ExcelReader.Tests
 
         // MemberData factories run before any test body and have no async context to await into,
         // so building the xlsb fixture (which needs XlsbWorkbookWriter's async API) has to block here.
-        [SuppressMessage("VisualStudio.Threading", "VSTHRD002:Avoid problematic synchronous waits",
-            Justification = "MemberData factories are synchronous by contract; there is no async context to await from here.")]
         private static byte[] BuildXlsb()
         {
             CancellationToken ct = TestContext.Current.CancellationToken;

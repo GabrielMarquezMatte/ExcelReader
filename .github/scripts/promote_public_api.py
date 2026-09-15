@@ -2,7 +2,7 @@
 """Moves every entry out of each PublicAPI.Unshipped.txt into its PublicAPI.Shipped.txt.
 
 Run after a release ships: everything that was "unshipped" at release time is now part of
-the public API contract. Operates on every TFM folder under src/*/PublicAPI/*/.
+the public API contract. Operates on every src/*/PublicAPI/ folder.
 
 Exit codes: 0 = promoted something, 2 = nothing needed promoting (not an error — the caller
 skips the rest of the job), 1 = an actual failure (an uncaught exception, same as Python's
@@ -14,6 +14,7 @@ breaking-change detection instead of failing the job.
 """
 
 import glob
+import os
 import sys
 
 HEADER = "#nullable enable"
@@ -48,7 +49,7 @@ def promote_one(unshipped_path, shipped_path):
     if not new_entries:
         return 0
 
-    shipped_entries = set(read_entries(shipped_path)) if glob.glob(shipped_path) else set()
+    shipped_entries = set(read_entries(shipped_path)) if os.path.exists(shipped_path) else set()
     for entry in new_entries:
         if entry.startswith(REMOVED_PREFIX):
             shipped_entries.discard(entry[len(REMOVED_PREFIX):])
@@ -61,9 +62,9 @@ def promote_one(unshipped_path, shipped_path):
 
 
 def main():
-    unshipped_files = sorted(glob.glob("src/*/PublicAPI/*/PublicAPI.Unshipped.txt"))
+    unshipped_files = sorted(glob.glob("src/*/PublicAPI/PublicAPI.Unshipped.txt"))
     if not unshipped_files:
-        print("No PublicAPI/*/PublicAPI.Unshipped.txt files found.")
+        print("No src/*/PublicAPI/PublicAPI.Unshipped.txt files found.")
         return 2
 
     promoted_any = False

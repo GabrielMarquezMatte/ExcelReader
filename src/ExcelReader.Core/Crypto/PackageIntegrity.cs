@@ -36,8 +36,6 @@ namespace ExcelReader.Core.Crypto
 
         [SuppressMessage("Security", "CA5350:Do Not Use Weak Cryptographic Algorithms",
             Justification = "The hash algorithm is dictated by the workbook's own EncryptionInfo descriptor, not chosen here; verifying a file written with SHA1 requires HMACSHA1.")]
-        [SuppressMessage("Major Code Smell", "S4790:Use a stronger hashing algorithm",
-            Justification = "The hash algorithm is dictated by the workbook's own EncryptionInfo descriptor, not chosen here; verifying a file written with SHA1 requires HMACSHA1.")]
         internal static IncrementalHash CreateHmac(HashKind kind, byte[] key)
         {
             HashAlgorithmName name = kind switch

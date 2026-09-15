@@ -69,8 +69,6 @@ namespace ExcelReader.Core.Writer
     // pair via T.ConfigureExcelRecordMap and caches it. Keyed by TRow as well as T because the builder
     // compiles its column actions against the concrete row writer, so a cell write lands on that
     // sealed class's own method instead of an IRowWriter dispatch.
-    [SuppressMessage("Major Code Smell", "S2743:Static fields should not be used in generic types",
-        Justification = "The per-closed-type static IS the design: the map is built once per (T, TRow), not shared across different pairs.")]
     internal static class MappedRecordColumns<T, TRow>
         where T : IExcelRecordMap<T>
         where TRow : IRowWriter
