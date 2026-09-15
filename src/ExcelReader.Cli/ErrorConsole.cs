@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using Spectre.Console;
 
 namespace ExcelReader.Cli
@@ -10,6 +11,7 @@ namespace ExcelReader.Cli
     // command's actual result - convert's progress spinner, and every command's error text -
     // because convert's stdout may be carrying piped CSV or a binary workbook that must stay
     // byte-exact; writing so much as one spinner frame to it would corrupt the stream.
+    [ExcludeFromCodeCoverage]
     internal static class ErrorConsole
     {
         internal static readonly IAnsiConsole Console = AnsiConsole.Create(new AnsiConsoleSettings

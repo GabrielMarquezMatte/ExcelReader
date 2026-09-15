@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using ConsoleAppFramework;
 using Spectre.Console;
@@ -16,6 +17,7 @@ namespace ExcelReader.Cli
     // Only on an actual terminal does Spectre.Console's table/spinner render instead. This is not
     // re-tested here on purpose - it's the ConsoleAppFramework precedent this file already followed
     // (see the type-level remarks on that split): rendering is glue, not logic.
+    [ExcludeFromCodeCoverage]
     internal sealed class Commands
     {
         // Lists every sheet in a workbook, as "index[TAB]name".

@@ -9,6 +9,7 @@ namespace ExcelReader.Native
     // handle id (see NativeHandleTable) into a NativeHandle, then
     // delegate to NativeApi. Keep the logic in NativeApi — managed code cannot call an
     // [UnmanagedCallersOnly] method, so anything implemented here is untestable.
+    [ExcludeFromCodeCoverage]
     internal static unsafe class Exports
     {
         [UnmanagedCallersOnly(EntryPoint = "xl_open_file")]
