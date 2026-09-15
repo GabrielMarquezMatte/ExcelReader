@@ -291,11 +291,7 @@ namespace ExcelReader.Core.Reader
         public Guid GetGuid(int i)
         {
             Cell cell = CurrentCell(i);
-#if NET8_0
-            return ExcelCellReaders.Guid(in cell, _isDate1904, CultureInfo.InvariantCulture, out Guid value)
-#else
             return cell.TryParse(CultureInfo.InvariantCulture, out Guid value)
-#endif
                 ? value
                 : throw new FormatException($"Column {i} is not a valid Guid.");
         }

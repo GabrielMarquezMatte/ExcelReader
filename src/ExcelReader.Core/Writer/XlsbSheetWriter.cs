@@ -358,11 +358,7 @@ namespace ExcelReader.Core.Writer
         private async ValueTask WriteBufferedSheetAsync(CancellationToken ct)
         {
             ZipArchiveEntry entry = _zip.CreateEntry($"xl/worksheets/sheet{SheetId}.bin", _compression);
-#if NET10_0_OR_GREATER
             Stream stream = await entry.OpenAsync(ct).ConfigureAwait(false);
-#else
-            Stream stream = entry.Open();
-#endif
             await using (stream.ConfigureAwait(false))
             {
                 await stream.WriteAsync(_records.Memory, ct).ConfigureAwait(false);

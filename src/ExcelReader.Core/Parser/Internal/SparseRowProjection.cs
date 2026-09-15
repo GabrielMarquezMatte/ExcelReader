@@ -4,7 +4,7 @@ using ExcelReader.Core.ValueObjects;
 namespace ExcelReader.Core.Parser.Internal
 {
     // The merge-walk column-binding loop shared by RowProjector<T> (class/struct models) and
-    // NamedRefRowEnumerator<TModel,...> (ref struct models, net9+). Both bind sparse Row.Cells to a
+    // NamedRefRowEnumerator<TModel,...> (ref struct models). Both bind sparse Row.Cells to a
     // header-resolved column map the same way; before this they carried two byte-identical copies. A
     // `static` generic method — never storing TModel in a field — is what lets a ref-struct-constrained
     // TModel flow through without CS8345.
@@ -22,9 +22,7 @@ namespace ExcelReader.Core.Parser.Internal
             StringComparer comparer,
             HeaderNormalization normalization,
             out int requireValueCount)
-#if NET9_0_OR_GREATER
             where TModel : allows ref struct
-#endif
         {
             int propertyCount = typeInfo.PropertyCount;
             int[] columns = new int[propertyCount];
@@ -95,9 +93,7 @@ namespace ExcelReader.Core.Parser.Internal
             bool throwOnParseFailure,
             int rowNumber,
             ref TModel model)
-#if NET9_0_OR_GREATER
             where TModel : allows ref struct
-#endif
         {
             if (track)
             {
@@ -146,9 +142,7 @@ namespace ExcelReader.Core.Parser.Internal
         }
 
         private static void ValidateRowValues<TModel>(ColumnBinding<TModel>[] bindings, bool[] seen, int rowNumber)
-#if NET9_0_OR_GREATER
             where TModel : allows ref struct
-#endif
         {
             for (int i = 0; i < bindings.Length; i++)
             {

@@ -3,9 +3,7 @@ using System.Collections.Concurrent;
 namespace ExcelReader.Core.Parser.Internal
 {
     internal readonly struct TypeMapInfo<T>
-#if NET9_0_OR_GREATER
         where T : allows ref struct
-#endif
     {
         private readonly PropertyMap<T>[] _properties;
         // Null when _useDefault is true: a value type with no explicit parameterless constructor needs

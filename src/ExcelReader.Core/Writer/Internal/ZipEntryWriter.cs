@@ -32,12 +32,7 @@ namespace ExcelReader.Core.Writer.Internal
         internal static async ValueTask WriteBytesAsync(ZipArchive zip, string entryName, ReadOnlyMemory<byte> content, CompressionLevel compression, CancellationToken ct)
         {
             ZipArchiveEntry entry = zip.CreateEntry(entryName, compression);
-#if NET10_0_OR_GREATER
             Stream stream = await entry.OpenAsync(ct).ConfigureAwait(false);
-#else
-            ct.ThrowIfCancellationRequested();
-            Stream stream = entry.Open();
-#endif
             await using (stream.ConfigureAwait(false))
             {
                 await stream.WriteAsync(content, ct).ConfigureAwait(false);

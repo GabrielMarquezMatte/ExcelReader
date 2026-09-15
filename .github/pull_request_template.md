@@ -6,7 +6,7 @@
 
 - [ ] `dotnet build ExcelReader.slnx --configuration Release` builds clean (warnings are errors)
 - [ ] `dotnet test tests/ExcelReader.Tests/ExcelReader.Tests.csproj --configuration Release` passes
-- [ ] If this changes the public API: `PublicAPI.Unshipped.txt` updated for **both** `net8.0` and `net10.0`
+- [ ] If this changes the public API: `PublicAPI.Unshipped.txt` updated
 - [ ] Tests added/updated for the behavior change
 - [ ] One focused change — unrelated fixes are in a separate PR
 

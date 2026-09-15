@@ -1,14 +1,9 @@
 namespace ExcelReader.Core.Parser.Internal
 {
     // One resolved header->column->parser binding, shared by RowProjector<T> (class/struct models) and
-    // NamedRefRowEnumerator<TModel,...> (ref struct models, net9+) via SparseRowProjection. `allows ref
-    // struct` only exists as a constraint kind on net9+; on net8 TModel is always a class/struct anyway
-    // (NamedRefRowEnumerator itself is entirely #if NET9_0_OR_GREATER-gated), so the plain unconstrained
-    // form there is exactly as capable.
+    // NamedRefRowEnumerator<TModel,...> (ref struct models) via SparseRowProjection.
     internal readonly struct ColumnBinding<TModel>
-#if NET9_0_OR_GREATER
         where TModel : allows ref struct
-#endif
     {
         internal ColumnBinding(int column, ColumnParser<TModel> parser, bool requireValue, string name)
         {

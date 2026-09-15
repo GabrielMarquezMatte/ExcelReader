@@ -158,15 +158,8 @@ namespace ExcelReader.Tests
         }
     }
 
-    // Was duplicated (CoverageGapTests, XlsReaderTests) with a naming split (Disposed vs
-    // WasDisposed) and a constructor split (parameterless vs byte[]). Both are kept here as overloads
-    // rather than picking one, so neither call site needed to change its construction style.
     internal sealed class TrackingStream : MemoryStream
     {
-        internal TrackingStream()
-        {
-        }
-
         internal TrackingStream(byte[] bytes)
             : base(bytes)
         {

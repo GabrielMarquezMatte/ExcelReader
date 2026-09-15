@@ -2,7 +2,6 @@ using System.Globalization;
 using System.IO.Compression;
 using System.Runtime.InteropServices;
 using System.Text;
-using ExcelReader.Core.Internal;
 using ExcelReader.Core.Reader;
 using ExcelReader.Core.Writer.Internal;
 
@@ -161,7 +160,7 @@ namespace ExcelReader.Core.Writer
             WriteSharedStrings();
             WriteAppProperties();
             WriteContentTypes();
-            ZipArchiveDisposal.Dispose(_zip);
+            _zip.Dispose();
         }
 
         /// <inheritdoc/>
@@ -189,7 +188,7 @@ namespace ExcelReader.Core.Writer
             await WriteSharedStringsAsync(ct).ConfigureAwait(false);
             await WriteAppPropertiesAsync(ct).ConfigureAwait(false);
             await WriteContentTypesAsync(ct).ConfigureAwait(false);
-            await ZipArchiveDisposal.DisposeAsync(_zip).ConfigureAwait(false);
+            await _zip.DisposeAsync().ConfigureAwait(false);
         }
 
         /// <summary>
@@ -223,7 +222,7 @@ namespace ExcelReader.Core.Writer
                 if (_sheets.Count == 0 && _activeSheet is null)
                 {
                     _state = WriterState.Ended;
-                    ZipArchiveDisposal.Dispose(_zip);
+                    _zip.Dispose();
                 }
                 else
                 {
@@ -232,7 +231,7 @@ namespace ExcelReader.Core.Writer
             }
             else if (_state == WriterState.Created)
             {
-                ZipArchiveDisposal.Dispose(_zip);
+                _zip.Dispose();
             }
             if (!_leaveOpen)
             {
@@ -255,7 +254,7 @@ namespace ExcelReader.Core.Writer
                 if (_sheets.Count == 0 && _activeSheet is null)
                 {
                     _state = WriterState.Ended;
-                    await ZipArchiveDisposal.DisposeAsync(_zip).ConfigureAwait(false);
+                    await _zip.DisposeAsync().ConfigureAwait(false);
                 }
                 else
                 {
@@ -264,7 +263,7 @@ namespace ExcelReader.Core.Writer
             }
             else if (_state == WriterState.Created)
             {
-                await ZipArchiveDisposal.DisposeAsync(_zip).ConfigureAwait(false);
+                await _zip.DisposeAsync().ConfigureAwait(false);
             }
             if (!_leaveOpen)
             {

@@ -2,7 +2,6 @@ using System.Globalization;
 using System.IO.Compression;
 using System.Security;
 using System.Text;
-using ExcelReader.Core.Internal;
 using ExcelReader.Core.Writer.Internal;
 
 namespace ExcelReader.Core.Writer
@@ -176,7 +175,7 @@ namespace ExcelReader.Core.Writer
             WriteEntry("xl/workbook.xml", BuildWorkbookXml());
             WriteEntry("xl/_rels/workbook.xml.rels", BuildWorkbookRelsXml());
             WriteEntry("[Content_Types].xml", BuildContentTypesXml());
-            ZipArchiveDisposal.Dispose(_zip);
+            _zip.Dispose();
         }
 
         /// <inheritdoc/>
@@ -204,7 +203,7 @@ namespace ExcelReader.Core.Writer
             await WriteWorkbookAsync(ct).ConfigureAwait(false);
             await WriteWorkbookRelsAsync(ct).ConfigureAwait(false);
             await WriteContentTypesAsync(ct).ConfigureAwait(false);
-            await ZipArchiveDisposal.DisposeAsync(_zip).ConfigureAwait(false);
+            await _zip.DisposeAsync().ConfigureAwait(false);
         }
 
         /// <summary>
@@ -239,7 +238,7 @@ namespace ExcelReader.Core.Writer
                 if (_sheets.Count == 0)
                 {
                     _state = WriterState.Ended;
-                    ZipArchiveDisposal.Dispose(_zip);
+                    _zip.Dispose();
                 }
                 else
                 {
@@ -248,7 +247,7 @@ namespace ExcelReader.Core.Writer
             }
             else if (_state == WriterState.Created)
             {
-                ZipArchiveDisposal.Dispose(_zip);
+                _zip.Dispose();
             }
             if (!_leaveOpen)
             {
@@ -270,7 +269,7 @@ namespace ExcelReader.Core.Writer
                 if (_sheets.Count == 0)
                 {
                     _state = WriterState.Ended;
-                    await ZipArchiveDisposal.DisposeAsync(_zip).ConfigureAwait(false);
+                    await _zip.DisposeAsync().ConfigureAwait(false);
                 }
                 else
                 {
@@ -279,7 +278,7 @@ namespace ExcelReader.Core.Writer
             }
             else if (_state == WriterState.Created)
             {
-                await ZipArchiveDisposal.DisposeAsync(_zip).ConfigureAwait(false);
+                await _zip.DisposeAsync().ConfigureAwait(false);
             }
             if (!_leaveOpen)
             {

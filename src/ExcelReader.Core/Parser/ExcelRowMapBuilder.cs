@@ -10,9 +10,7 @@ namespace ExcelReader.Core.Parser
     /// </summary>
     /// <typeparam name="T">The row model type being mapped.</typeparam>
     public sealed class ExcelRowMapBuilder<T>
-#if NET9_0_OR_GREATER
         where T : allows ref struct
-#endif
     {
         private readonly List<PropertyMap<T>> _properties = [];
         private readonly List<ColumnBinding<T>> _indexBindings = [];

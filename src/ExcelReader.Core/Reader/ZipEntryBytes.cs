@@ -95,7 +95,6 @@ namespace ExcelReader.Core.Reader
             return await ReadAsync(entry, counter, ct, entryLimitName, entryLimit).ConfigureAwait(false);
         }
 
-#if NET10_0_OR_GREATER
         internal static async ValueTask<ZipPart> ReadAsync(
             ZipArchiveEntry entry,
             DecompressedByteCounter counter,
@@ -134,18 +133,6 @@ namespace ExcelReader.Core.Reader
                 throw new InvalidDataException("The ZIP entry produced less data than its declared uncompressed size.", ex);
             }
         }
-#else
-        internal static ValueTask<ZipPart> ReadAsync(
-            ZipArchiveEntry entry,
-            DecompressedByteCounter counter,
-            CancellationToken ct,
-            string entryLimitName = "",
-            long entryLimit = 0)
-        {
-            ct.ThrowIfCancellationRequested();
-            return new ValueTask<ZipPart>(Read(entry, counter, entryLimitName, entryLimit));
-        }
-#endif
 
     }
 }

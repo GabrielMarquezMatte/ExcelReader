@@ -1,6 +1,5 @@
 using System.Diagnostics.CodeAnalysis;
 using System.IO.Compression;
-using ExcelReader.Core.Internal;
 
 namespace ExcelReader.Core.Reader
 {
@@ -17,12 +16,7 @@ namespace ExcelReader.Core.Reader
             ZipArchive? zip = null;
             try
             {
-#if NET10_0_OR_GREATER
                 zip = await ZipArchive.CreateAsync(stream, ZipArchiveMode.Read, leaveOpen: true, entryNameEncoding: null, ct).ConfigureAwait(false);
-#else
-                ct.ThrowIfCancellationRequested();
-                zip = new ZipArchive(stream, ZipArchiveMode.Read, leaveOpen: true);
-#endif
                 LimitChecks.ThrowIfTooManyEntries(zip.Entries.Count, options);
                 return await parseBody(zip).ConfigureAwait(false);
             }
@@ -30,7 +24,7 @@ namespace ExcelReader.Core.Reader
             {
                 if (zip is not null)
                 {
-                    await ZipArchiveDisposal.DisposeAsync(zip).ConfigureAwait(false);
+                    await zip.DisposeAsync().ConfigureAwait(false);
                 }
                 if (!leaveOpen)
                 {
@@ -56,7 +50,7 @@ namespace ExcelReader.Core.Reader
             }
             catch
             {
-                await ZipArchiveDisposal.DisposeAsync(zip).ConfigureAwait(false);
+                await zip.DisposeAsync().ConfigureAwait(false);
                 if (!leaveOpen)
                 {
                     await stream.DisposeAsync().ConfigureAwait(false);
