@@ -16,7 +16,9 @@ namespace ExcelReader.Fuzz
         internal static int Run(string corpusDirectory, int mutationsPerInput, int seed)
         {
             FuzzOracle.SelfCheck();
+            Harnesses.AssertSameRowsSelfCheck();
             VerifyEncryptedSeedReachesRealCode(corpusDirectory);
+            VerifyDifferentialSeedsReachBothReaders(corpusDirectory);
 
             // Recursive: the corpus is laid out one directory per target (see SeedCorpus), but this
             // runner deliberately drives EVERY target over EVERY file. That cross-format pass is the
@@ -83,6 +85,47 @@ namespace ExcelReader.Fuzz
             foreach (string seedPath in seeds.Order(StringComparer.Ordinal))
             {
                 VerifyOneEncryptedSeed(seedPath);
+            }
+        }
+
+        private static void VerifyDifferentialSeedsReachBothReaders(string corpusDirectory)
+        {
+            if (!Directory.Exists(corpusDirectory))
+            {
+                return;
+            }
+
+            foreach (string seedPath in Directory.GetFiles(corpusDirectory, "seed-xlsx*.bin", SearchOption.AllDirectories).Order(StringComparer.Ordinal))
+            {
+                VerifyOneDifferentialSeed(seedPath, xlsb: false);
+            }
+            foreach (string seedPath in Directory.GetFiles(corpusDirectory, "seed-xlsb*.bin", SearchOption.AllDirectories).Order(StringComparer.Ordinal))
+            {
+                VerifyOneDifferentialSeed(seedPath, xlsb: true);
+            }
+        }
+
+        private static void VerifyOneDifferentialSeed(string seedPath, bool xlsb)
+        {
+            string name = Path.GetFileName(seedPath);
+            int rows;
+            try
+            {
+                rows = Harnesses.OpenDifferentialSeedForSelfCheck(File.ReadAllBytes(seedPath), xlsb);
+            }
+            catch (Exception ex)
+            {
+                throw new InvalidOperationException(
+                    $"the unmutated {name} no longer reads identically through both the stream and " +
+                    "memory container readers - the matching differential target would compare two " +
+                    $"rejections instead of two row sets, making it inert: {ex.GetType().FullName}: {ex.Message}",
+                    ex);
+            }
+            if (rows == 0)
+            {
+                throw new InvalidOperationException(
+                    $"the unmutated {name} opened through both readers but yielded zero rows, so the " +
+                    "differential target compares nothing.");
             }
         }
 

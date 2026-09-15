@@ -19,8 +19,10 @@ namespace ExcelReader.Fuzz
             {
                 ["xlsx"] = Harnesses.Xlsx,
                 ["xlsx-memory"] = Harnesses.XlsxMemory,
+                ["xlsx-differential"] = Harnesses.XlsxDifferential,
                 ["xlsb"] = Harnesses.Xlsb,
                 ["xlsb-memory"] = Harnesses.XlsbMemory,
+                ["xlsb-differential"] = Harnesses.XlsbDifferential,
                 ["xls"] = Harnesses.Xls,
                 ["encrypted"] = Harnesses.Encrypted,
                 ["csv"] = Harnesses.Csv,

@@ -30,7 +30,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        target: [xlsx, xlsx-memory, xlsb, xlsb-memory, xls, encrypted, csv, csv-sniff, csv-parallel]
+        target: [xlsx, xlsx-memory, xlsx-differential, xlsb, xlsb-memory, xlsb-differential, xls, encrypted, csv, csv-sniff, csv-parallel]
     steps:
       - name: Checkout
         uses: actions/checkout@v7

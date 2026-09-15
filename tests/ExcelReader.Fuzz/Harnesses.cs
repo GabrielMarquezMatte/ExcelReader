@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Text;
 using ExcelReader.Core.Parser;
 using ExcelReader.Core.Parser.Internal;
 using ExcelReader.Core.Reader;
@@ -83,6 +84,35 @@ namespace ExcelReader.Fuzz
                 using XlsbReader reader = Excel.FromXlsb(new ReadOnlyMemory<byte>(bytes), Limits);
                 DrainAllSheets(reader);
             });
+        }
+
+        // Value-level oracle for XLSX. Every target above asserts only "nothing unexpected was
+        // thrown" — a reader that returns the WRONG cell value for a structurally valid input passes
+        // all of them, and silent read corruption is the one defect class the suite was otherwise
+        // blind to. ZipArchive (the stream path) and ZipMemoryIndex (the memory path) decode the same
+        // bytes through independent container code, so each is the other's ground truth: same input,
+        // same cells, or one of them is corrupting. This is the csv-parallel target's oracle applied
+        // to the container readers.
+        internal static void XlsxDifferential(ReadOnlySpan<byte> data)
+        {
+            byte[] bytes = data.ToArray();
+            FuzzOracle.Guard(() => CompareReaders(
+                bytes,
+                static b => Excel.FromXlsx(new MemoryStream(b, writable: false), leaveOpen: false, Limits),
+                static b => Excel.FromXlsx(new ReadOnlyMemory<byte>(b), Limits),
+                "stream",
+                "memory"));
+        }
+
+        internal static void XlsbDifferential(ReadOnlySpan<byte> data)
+        {
+            byte[] bytes = data.ToArray();
+            FuzzOracle.Guard(() => CompareReaders(
+                bytes,
+                static b => Excel.FromXlsb(new MemoryStream(b, writable: false), leaveOpen: false, Limits),
+                static b => Excel.FromXlsb(new ReadOnlyMemory<byte>(b), Limits),
+                "stream",
+                "memory"));
         }
 
         // BIFF8 inside an OLE compound file — an entirely hand-rolled container parser, and the one
@@ -279,6 +309,144 @@ namespace ExcelReader.Fuzz
         private static string Render(FuzzRow row)
         {
             return string.Create(CultureInfo.InvariantCulture, $"{row.Name}{row.Age}{row.Note}");
+        }
+
+        // Guards the differential targets against the same "exists but is inert" failure
+        // OpenEncryptedSeedForSelfCheck guards: if every input were rejected by both readers,
+        // CompareReaders would agree on the exception and report success forever without ever
+        // comparing a single cell. SmokeRunner calls this unguarded over the unmutated seeds — they
+        // must open through BOTH paths and yield rows.
+        internal static int OpenDifferentialSeedForSelfCheck(ReadOnlySpan<byte> data, bool xlsb)
+        {
+            byte[] bytes = data.ToArray();
+            List<string> stream = RenderAllSheets(xlsb
+                ? (IExcelRowReader)Excel.FromXlsb(new MemoryStream(bytes, writable: false), leaveOpen: false, Limits)
+                : Excel.FromXlsx(new MemoryStream(bytes, writable: false), leaveOpen: false, Limits));
+            List<string> memory = RenderAllSheets(xlsb
+                ? (IExcelRowReader)Excel.FromXlsb(new ReadOnlyMemory<byte>(bytes), Limits)
+                : Excel.FromXlsx(new ReadOnlyMemory<byte>(bytes), Limits));
+            AssertSameRows(stream, memory, "stream", "memory");
+            return stream.Count;
+        }
+
+        // Polarity, in the spirit of FuzzOracle.SelfCheck: an AssertSameRows that accepted everything
+        // would leave both differential targets passing vacuously.
+        internal static void AssertSameRowsSelfCheck()
+        {
+            try
+            {
+                AssertSameRows(["0:1=a@-1;"], ["0:1=b@-1;"], "left", "right");
+            }
+            catch (InvalidOperationException)
+            {
+                AssertSameRows(["0:1=a@-1;"], ["0:1=a@-1;"], "left", "right");
+                return;
+            }
+            throw new InvalidOperationException("AssertSameRows accepted two different rows.");
+        }
+
+        // Both sides must agree on failure as well as on success: one reader accepting an input the
+        // other rejects is itself a divergence, and the shape of that check mirrors CsvParallel.
+        private static void CompareReaders(
+            byte[] bytes,
+            Func<byte[], IExcelRowReader> left,
+            Func<byte[], IExcelRowReader> right,
+            string leftName,
+            string rightName)
+        {
+            List<string>? leftRows = null;
+            Exception? leftFailure = null;
+            try
+            {
+                leftRows = RenderAllSheets(left(bytes));
+            }
+            catch (Exception ex) when (ex is not OutOfMemoryException)
+            {
+                leftFailure = ex;
+            }
+
+            List<string>? rightRows = null;
+            Exception? rightFailure = null;
+            try
+            {
+                rightRows = RenderAllSheets(right(bytes));
+            }
+            catch (Exception ex) when (ex is not OutOfMemoryException)
+            {
+                rightFailure = ex;
+            }
+
+            if (leftFailure is not null || rightFailure is not null)
+            {
+                if (leftFailure?.GetType() != rightFailure?.GetType())
+                {
+                    throw new InvalidOperationException(
+                        $"Oracle divergence: {leftName} threw {leftFailure?.GetType().Name ?? "nothing"}, " +
+                        $"{rightName} threw {rightFailure?.GetType().Name ?? "nothing"}.");
+                }
+                return;
+            }
+
+            AssertSameRows(leftRows!, rightRows!, leftName, rightName);
+        }
+
+        // Reports the first differing row rather than only the counts: a saved crash input is
+        // replayable either way, but the row text is what says whether the bug is a misdecoded value
+        // or a dropped row.
+        private static void AssertSameRows(List<string> left, List<string> right, string leftName, string rightName)
+        {
+            int common = Math.Min(left.Count, right.Count);
+            for (int i = 0; i < common; i++)
+            {
+                if (!string.Equals(left[i], right[i], StringComparison.Ordinal))
+                {
+                    throw new InvalidOperationException(
+                        $"Oracle divergence at row {i}: {leftName} read \"{left[i]}\", {rightName} read \"{right[i]}\".");
+                }
+            }
+
+            if (left.Count != right.Count)
+            {
+                throw new InvalidOperationException(
+                    $"Oracle divergence: {leftName} yielded {left.Count} rows, {rightName} yielded {right.Count}.");
+            }
+        }
+
+        private static List<string> RenderAllSheets(IExcelRowReader reader)
+        {
+            using (reader)
+            {
+                var rows = new List<string>();
+                int sheets = reader.SheetCount;
+                for (int i = 0; i < sheets; i++)
+                {
+                    reader.MoveToSheet(i);
+                    // A sheet marker, so a divergence in sheet count or in where one sheet ends is a
+                    // row difference rather than a silent re-alignment of the rows that follow.
+                    rows.Add(string.Create(CultureInfo.InvariantCulture, $"#sheet{i}"));
+                    using IExcelRowEnumerator e = reader.GetEnumerator();
+                    while (e.MoveNext())
+                    {
+                        rows.Add(RenderRow(e.Current, reader.IsDate1904));
+                    }
+                }
+                return rows;
+            }
+        }
+
+        // Renders what a caller would actually observe: the column index, the cell type, the text,
+        // and the date interpretation. Comparing this rather than "did it throw" is the entire point
+        // of the differential targets.
+        private static string RenderRow(Row row, bool isDate1904)
+        {
+            var sb = new StringBuilder();
+            foreach (RowCell rowCell in row.Cells)
+            {
+                Cell cell = rowCell.Value;
+                long ticks = cell.TryGetDateTime(isDate1904, out DateTime date) ? date.Ticks : -1;
+                sb.Append(CultureInfo.InvariantCulture, $"{rowCell.ColumnIndex}:{(int)cell.Type}={cell.GetString()}@{ticks};");
+            }
+            return sb.ToString();
         }
 
         private static void DrainAllSheets(IExcelRowReader reader)
