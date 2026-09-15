@@ -15,16 +15,6 @@ namespace ExcelReader.Tests
     // EXR001/EXR002 cases) would otherwise fail this whole project's own build.
     public class GeneratorTests
     {
-        // #if NET9_0_OR_GREATER/NET8_0 in generator output (the Guid split) only resolves correctly if
-        // the synthetic Compilation defines the same preprocessor symbol the *real* SDK build would —
-        // mirror whichever TFM this test assembly itself is running under, rather than leaving it
-        // undefined (which would always take the #else branch, regardless of the actual TFM).
-#if NET9_0_OR_GREATER
-        private static readonly string[] _preprocessorSymbols = ["NET9_0_OR_GREATER"];
-#else
-        private static readonly string[] _preprocessorSymbols = ["NET8_0"];
-#endif
-
         private static (ImmutableCompilationResult Result, ImmutableArray<Diagnostic> GeneratorDiagnostics) RunGenerator(string source)
         {
             (ImmutableCompilationResult result, ImmutableArray<Diagnostic> diagnostics, string _) = RunGeneratorWithSource(source);
@@ -36,8 +26,7 @@ namespace ExcelReader.Tests
         // generated rather than just whether it compiles.
         private static (ImmutableCompilationResult Result, ImmutableArray<Diagnostic> GeneratorDiagnostics, string GeneratedSource) RunGeneratorWithSource(string source)
         {
-            var parseOptions = new CSharpParseOptions(preprocessorSymbols: _preprocessorSymbols);
-            SyntaxTree tree = CSharpSyntaxTree.ParseText(source, parseOptions);
+            SyntaxTree tree = CSharpSyntaxTree.ParseText(source);
             MetadataReference[] references = [.. AppDomain.CurrentDomain.GetAssemblies()
                 .Where(static a => !a.IsDynamic && !string.IsNullOrEmpty(a.Location))
                 .Select(static a => (MetadataReference)MetadataReference.CreateFromFile(a.Location))];
@@ -47,11 +36,8 @@ namespace ExcelReader.Tests
                 references,
                 new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
 
-            // parseOptions here is what re-parses the generator's *own* AddSource output (the Guid
-            // #if NET9_0_OR_GREATER split) — without passing it explicitly, the driver falls back to
-            // default parse options (no symbols defined) for generated sources, regardless of what the
-            // original tree above used, and the #else branch would always "win".
-            GeneratorDriver driver = CSharpGeneratorDriver.Create([new ExcelRowMapGenerator().AsSourceGenerator()], parseOptions: parseOptions);
+            ISourceGenerator[] generators = [new ExcelRowMapGenerator().AsSourceGenerator()];
+            GeneratorDriver driver = CSharpGeneratorDriver.Create(generators);
             _ = driver.RunGeneratorsAndUpdateCompilation(compilation, out Compilation outputCompilation, out ImmutableArray<Diagnostic> generatorDiagnostics);
             string generatedSource = string.Join("\n----\n", outputCompilation.SyntaxTrees.Skip(1).Select(static t => t.ToString()));
             return (new ImmutableCompilationResult((CSharpCompilation)outputCompilation), generatorDiagnostics, generatedSource);

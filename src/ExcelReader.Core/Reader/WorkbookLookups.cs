@@ -110,7 +110,6 @@ namespace ExcelReader.Core.Reader
             return Wrap(entry.Open(), counter, options, entryLimitName, entryLimit, entry.Length);
         }
 
-#if NET10_0_OR_GREATER
         internal static async ValueTask<LimitedReadStream> OpenEntryStreamAsync(
             ZipArchiveEntry entry, DecompressedByteCounter counter, ExcelReaderOptions options,
             CancellationToken ct, string entryLimitName = "", long entryLimit = 0)
@@ -118,15 +117,6 @@ namespace ExcelReader.Core.Reader
             Stream opened = await entry.OpenAsync(ct).ConfigureAwait(false);
             return Wrap(opened, counter, options, entryLimitName, entryLimit, entry.Length);
         }
-#else
-        internal static ValueTask<LimitedReadStream> OpenEntryStreamAsync(
-            ZipArchiveEntry entry, DecompressedByteCounter counter, ExcelReaderOptions options,
-            CancellationToken ct, string entryLimitName = "", long entryLimit = 0)
-        {
-            ct.ThrowIfCancellationRequested();
-            return new ValueTask<LimitedReadStream>(Wrap(entry.Open(), counter, options, entryLimitName, entryLimit, entry.Length));
-        }
-#endif
 
         // Below this, the overlap isn't worth a dedicated thread + producer/consumer handoff: a small
         // sheet decompresses faster than the Task.Run dispatch and teardown join cost it, so prefetch

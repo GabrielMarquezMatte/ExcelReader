@@ -1,4 +1,3 @@
-#if NET9_0_OR_GREATER
 using System.Collections;
 using System.Collections.Generic;
 using System.Globalization;
@@ -91,4 +90,3 @@ namespace ExcelReader.Core.Parser.Internal
         }
     }
 }
-#endif

@@ -4,7 +4,7 @@
     <IsPackable>false</IsPackable>
     <OutputType>Exe</OutputType>
     <RootNamespace>ExcelReader.Tests</RootNamespace>
-    <TargetFrameworks>net10.0;net8.0</TargetFrameworks>
+    <TargetFramework>net10.0</TargetFramework>
     <TestingPlatformDotnetTestSupport>true</TestingPlatformDotnetTestSupport>
     <UseMicrosoftTestingPlatformRunner>true</UseMicrosoftTestingPlatformRunner>
     <EmitCompilerGeneratedFiles>true</EmitCompilerGeneratedFiles>
@@ -50,11 +50,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <!-- ExcelReader.Cli is single-target (net10.0) - a dotnet tool has no reachable net8.0 consumer -
-         so only pull it into the net10.0 leg of this multi-targeted test project; CliTests.cs is
-         excluded from the net8.0 leg below for the same reason. -->
-    <ProjectReference Include="..\..\src\ExcelReader.Cli\ExcelReader.Cli.csproj" Condition="'$(TargetFramework)' == 'net10.0'" />
-    <Compile Remove="CliTests.cs" Condition="'$(TargetFramework)' != 'net10.0'" />
+    <ProjectReference Include="..\..\src\ExcelReader.Cli\ExcelReader.Cli.csproj" />
     <ProjectReference Include="..\..\src\ExcelReader.Core\ExcelReader.Core.csproj" />
     <ProjectReference Include="..\..\src\ExcelReader.Arrow\ExcelReader.Arrow.csproj" />
     <ProjectReference Include="..\..\src\ExcelReader.Native\ExcelReader.Native.csproj" />

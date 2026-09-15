@@ -4,7 +4,6 @@ using System.IO.Compression;
 using System.Runtime.CompilerServices;
 using ExcelReader.Core.Crypto;
 using ExcelReader.Core.Enums;
-using ExcelReader.Core.Internal;
 using ExcelReader.Core.Parser;
 using ExcelReader.Core.Parser.Internal;
 
@@ -696,7 +695,7 @@ namespace ExcelReader.Core.Reader
             (ExcelFileFormat format, ZipArchive? zip) = await DetectSeekableAsync(stream, ct).ConfigureAwait(false);
             if (zip is not null)
             {
-                await ZipArchiveDisposal.DisposeAsync(zip).ConfigureAwait(false);
+                await zip.DisposeAsync().ConfigureAwait(false);
             }
             return format;
         }
@@ -770,7 +769,7 @@ namespace ExcelReader.Core.Reader
             {
                 if (zip is not null)
                 {
-                    await ZipArchiveDisposal.DisposeAsync(zip).ConfigureAwait(false);
+                    await zip.DisposeAsync().ConfigureAwait(false);
                 }
                 await DisposeOnFailureAsync(stream, leaveOpen).ConfigureAwait(false);
                 throw;
@@ -815,7 +814,7 @@ namespace ExcelReader.Core.Reader
             {
                 if (zip is not null)
                 {
-                    await ZipArchiveDisposal.DisposeAsync(zip).ConfigureAwait(false);
+                    await zip.DisposeAsync().ConfigureAwait(false);
                 }
                 await decrypted.DisposeAsync().ConfigureAwait(false);
                 throw;

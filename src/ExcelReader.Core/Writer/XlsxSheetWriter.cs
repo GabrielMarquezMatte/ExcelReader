@@ -100,12 +100,7 @@ namespace ExcelReader.Core.Writer
             WriterStateGuard.RequireCreated(_state, nameof(XlsxSheetWriter));
             ct.ThrowIfCancellationRequested();
             ZipArchiveEntry entry = _zip.CreateEntry($"xl/worksheets/sheet{SheetId}.xml", _compression);
-#if NET10_0_OR_GREATER
             Stream stream = await entry.OpenAsync(ct).ConfigureAwait(false);
-#else
-            ct.ThrowIfCancellationRequested();
-            Stream stream = entry.Open();
-#endif
             _stream = _offloadWrite ? new WriteOffloadStream(stream) : stream;
             _rowBuffer.Reset();
             _rowBuffer.WriteUtf8(

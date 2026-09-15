@@ -16,9 +16,8 @@ rewrites — see [ARCHITECTURE.md](ARCHITECTURE.md) for the shape of the codebas
 
 - **Public API changes require a `PublicAPI.Unshipped.txt` entry.** `Microsoft.CodeAnalysis.PublicApiAnalyzers`
   is active (arrives transitively via `Roslyn.Diagnostics.Analyzers`) and fails the build on any
-  unrecorded public member. If you add, change, or remove anything public, update **both**
-  `src/ExcelReader.Core/PublicAPI/net8.0/PublicAPI.Unshipped.txt` and
-  `src/ExcelReader.Core/PublicAPI/net10.0/PublicAPI.Unshipped.txt`. A bot promotes `Unshipped` →
+  unrecorded public member. If you add, change, or remove anything public, update
+  `src/ExcelReader.Core/PublicAPI/PublicAPI.Unshipped.txt`. A bot promotes `Unshipped` →
   `Shipped` automatically after each release — don't edit `Shipped.txt` by hand.
 
 - **Tests are required for behavior changes.** Run the suite before opening a PR:
@@ -46,8 +45,7 @@ mood, lowercase summary, no trailing period. Common types in this repo: `feat`, 
 - If a change is user-visible (new API, behavior change, performance claim), mention it in the PR
   description; the README's benchmark tables and changelog are updated separately, not as part of
   every PR.
-- CI runs on Linux, Windows, and macOS across .NET 8 and .NET 10 — a change that only builds on one
-  OS/TFM combination isn't ready to merge.
+- CI runs on Linux, Windows, and macOS — a change that only builds on one OS isn't ready to merge.
 
 ## Reporting bugs / requesting features
 
