@@ -1,4 +1,3 @@
-using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Text;
 using ExcelReader.Core.Parser;
@@ -23,15 +22,11 @@ namespace ExcelReader.Tests
             public string? Note { get; set; }
         }
 
-        [SuppressMessage("Usage", "VSTHRD200:Use \"Async\" suffix for async methods",
-            Justification = "Builds the enumerable synchronously; nothing is awaited here, so an Async suffix would misdescribe it.")]
         private static ParallelCsvEnumerable<Row> Build(byte[] csv, int dop, int chunkSizeOverride)
         {
             return Build<Row>(csv, dop, chunkSizeOverride, new ExcelParserConfig());
         }
 
-        [SuppressMessage("Usage", "VSTHRD200:Use \"Async\" suffix for async methods",
-            Justification = "Builds the enumerable synchronously; nothing is awaited here, so an Async suffix would misdescribe it.")]
         private static ParallelCsvEnumerable<TRow> Build<TRow>(byte[] csv, int dop, int chunkSizeOverride, ExcelParserConfig config)
         {
             using var headerReader = Excel.FromCsv(csv);

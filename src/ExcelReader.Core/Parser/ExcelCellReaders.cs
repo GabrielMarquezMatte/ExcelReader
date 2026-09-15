@@ -94,8 +94,6 @@ namespace ExcelReader.Core.Parser
 
         /// <summary>Reads a cell as an enum, by its declared value name (case-insensitive) or its underlying numeric value.</summary>
         /// <typeparam name="TEnum">The enum type to parse.</typeparam>
-        [SuppressMessage("Design", "S1172:Unused method parameters should be removed",
-            Justification = "isDate1904/provider are part of the fixed ExcelCellReader<T> shape every reader matches; this one has no use for them.")]
         public static bool Enum<TEnum>(in Cell cell, bool isDate1904, IFormatProvider provider, out TEnum value)
             where TEnum : struct, Enum
         {

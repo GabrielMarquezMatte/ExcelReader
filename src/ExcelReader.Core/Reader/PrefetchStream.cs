@@ -133,8 +133,6 @@ namespace ExcelReader.Core.Reader
 
         // Isolated so the ValueTask from WaitToReadAsync is consumed along exactly one path (either
         // the already-completed branch or the GetResult() branch), never both.
-        [SuppressMessage("VisualStudio.Threading", "VSTHRD002:Avoid problematic synchronous waits",
-            Justification = "Sync Read must block on the producer channel by design; it never blocks on I/O.")]
         private bool WaitForNextChunkSync()
         {
             ValueTask<bool> waitTask = _channel.Reader.WaitToReadAsync(_cts.Token);
@@ -265,8 +263,6 @@ namespace ExcelReader.Core.Reader
             }
         }
 
-        [SuppressMessage("VisualStudio.Threading", "VSTHRD002:Avoid problematic synchronous waits",
-            Justification = "Dispose must not return before the producer thread stops touching _inner; ProduceAsync catches every exception, so this never blocks long or throws.")]
         protected override void Dispose(bool disposing)
         {
             if (disposing && !_disposed)
@@ -289,8 +285,6 @@ namespace ExcelReader.Core.Reader
             base.Dispose(disposing);
         }
 
-        [SuppressMessage("VisualStudio.Threading", "VSTHRD003:Avoid awaiting foreign Tasks",
-            Justification = "_producer is this instance's own producer loop, started in the constructor and always brought to completion exactly once, here or in Dispose(bool) — not a fire-and-forget foreign Task.")]
         public override async ValueTask DisposeAsync()
         {
             if (_disposed)

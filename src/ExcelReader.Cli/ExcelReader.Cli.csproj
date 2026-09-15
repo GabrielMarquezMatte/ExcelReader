@@ -17,13 +17,10 @@
     <!-- RS0016/RS0026/RS0037: the public-API-tracking analyzer guards ExcelReader.Core's shipped
          NuGet surface. This is an executable - it has no API contract, so there is no
          PublicAPI.txt here by design. -->
-    <!-- IDISP001: CsvSheetWriter's real teardown is End() (see CsvWorkbookWriterTests.cs, which
-         suppresses the same rule for the same reason) - Dispose() is an abandonment safety net,
-         not a call every normal path needs to make. -->
     <!-- CA1822: ConsoleAppFramework's app.Add<T>() (see Program.cs) requires public instance
          methods - CAF012 rejects a class whose commands are all static - so Commands' methods
          cannot be marked static despite touching no instance state. -->
-    <NoWarn>$(NoWarn);RS0016;RS0026;RS0037;IDISP001;CA1822</NoWarn>
+    <NoWarn>$(NoWarn);RS0016;RS0026;RS0037;CA1822</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>

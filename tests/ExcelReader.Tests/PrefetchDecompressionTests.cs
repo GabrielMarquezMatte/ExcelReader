@@ -107,8 +107,6 @@ namespace ExcelReader.Tests
         // work is this method's own Task.Run started immediately above by every caller, brought to
         // completion (or observed via the timeout) exactly once here — not a fire-and-forget foreign
         // Task, so awaiting it is safe despite VSTHRD003's default assumption otherwise.
-        [SuppressMessage("VisualStudio.Threading", "VSTHRD003:Avoid awaiting foreign Tasks",
-            Justification = "work is the caller's own Task.Run, started immediately before this call and awaited exactly once here.")]
         private static async Task AssertCompletesWithinGuardAsync(Task work, CancellationToken ct)
         {
             using CancellationTokenSource delayCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
@@ -402,8 +400,6 @@ namespace ExcelReader.Tests
 
         // MemberData factories run before any test body and have no async context to await into,
         // so building the xlsb fixture (which needs XlsbWorkbookWriter's async API) has to block here.
-        [SuppressMessage("VisualStudio.Threading", "VSTHRD002:Avoid problematic synchronous waits",
-            Justification = "MemberData factories are synchronous by contract; there is no async context to await from here.")]
         private static byte[] BuildLargeXlsb()
         {
             return BuildLargeXlsbAsync().GetAwaiter().GetResult();

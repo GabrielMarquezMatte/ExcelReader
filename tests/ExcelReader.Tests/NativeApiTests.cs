@@ -1,4 +1,3 @@
-using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.IO.Compression;
 using System.Runtime.InteropServices;
@@ -86,8 +85,6 @@ namespace ExcelReader.Tests
         }
 
         [Fact]
-        [SuppressMessage("Reliability", "S1215:GC.Collect should not be called",
-            Justification = "This test's entire purpose is to prove the pointer survives a forced gen2 collection — that is the property under test, not incidental cleanup.")]
         public void LastErrorPtr_Should_Survive_A_Gen2_Collection()
         {
             // Catches an unpinned implementation: if the byte[] backing the pointer weren't allocated

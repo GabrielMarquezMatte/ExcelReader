@@ -16,12 +16,8 @@ namespace ExcelReader.Core.Parser.Internal
 
         [RequiresUnreferencedCode("Typed parsing reflects over T's public properties, which trimming may remove.")]
         [RequiresDynamicCode("Typed parsing binds property setters at runtime (MethodInfo.CreateDelegate / MakeGenericMethod).")]
-        [SuppressMessage("Usage", "VSTHRD200:Use \"Async\" suffix for async methods",
-            Justification = "Factory method, not itself async; it synchronously decides a plan and returns a lazily-enumerated IAsyncEnumerable<T>, exactly like ExcelParser<T>.Parse(CsvReader).")]
         [SuppressMessage("Performance", "CA1849:Call async methods when in an async method",
             Justification = "This factory is synchronous by design (see the VSTHRD200 suppression above); opening the file here, once, before any enumeration starts, is deliberate rather than a blocking call inside an async method.")]
-        [SuppressMessage("VisualStudio.Threading", "VSTHRD103:FromCsvFile synchronously blocks",
-            Justification = "Same rationale as the CA1849 suppression: this factory method is synchronous by design.")]
         internal static IAsyncEnumerable<T> Create<T>(
             string path, int degreeOfParallelism, CsvReaderOptions? readerOptions, ExcelParserConfig? config, CancellationToken ct)
         {
@@ -41,8 +37,6 @@ namespace ExcelReader.Core.Parser.Internal
 
         [RequiresUnreferencedCode("Typed parsing reflects over T's public properties, which trimming may remove.")]
         [RequiresDynamicCode("Typed parsing binds property setters at runtime (MethodInfo.CreateDelegate / MakeGenericMethod).")]
-        [SuppressMessage("Usage", "VSTHRD200:Use \"Async\" suffix for async methods",
-            Justification = "Factory method, not itself async; it synchronously decides a plan and returns a lazily-enumerated IAsyncEnumerable<T>, exactly like ExcelParser<T>.Parse(CsvReader).")]
         internal static IAsyncEnumerable<T> Create<T>(
             ReadOnlyMemory<byte> data, int degreeOfParallelism, CsvReaderOptions? readerOptions, ExcelParserConfig? config, CancellationToken ct)
         {
@@ -59,12 +53,8 @@ namespace ExcelReader.Core.Parser.Internal
 
         [RequiresUnreferencedCode("Typed parsing reflects over T's public properties, which trimming may remove.")]
         [RequiresDynamicCode("Typed parsing binds property setters at runtime (MethodInfo.CreateDelegate / MakeGenericMethod).")]
-        [SuppressMessage("Usage", "VSTHRD200:Use \"Async\" suffix for async methods",
-            Justification = "Factory method, not itself async; it synchronously decides a plan and returns a lazily-enumerated IAsyncEnumerable<T>, exactly like ExcelParser<T>.Parse(CsvReader).")]
         [SuppressMessage("Performance", "CA1849:Call async methods when in an async method",
             Justification = "This factory is synchronous by design (see the VSTHRD200 suppression above); wrapping the caller-owned stream here, once, before any enumeration starts, is deliberate rather than a blocking call inside an async method.")]
-        [SuppressMessage("VisualStudio.Threading", "VSTHRD103:FromCsv synchronously blocks",
-            Justification = "Same rationale as the CA1849 suppression: this factory method is synchronous by design.")]
         internal static IAsyncEnumerable<T> Create<T>(
             Stream stream, int degreeOfParallelism, CsvReaderOptions? readerOptions, ExcelParserConfig? config, CancellationToken ct)
         {
@@ -88,8 +78,6 @@ namespace ExcelReader.Core.Parser.Internal
         // sequential path. Never reached by the public overloads.
         [RequiresUnreferencedCode("Typed parsing reflects over T's public properties, which trimming may remove.")]
         [RequiresDynamicCode("Typed parsing binds property setters at runtime (MethodInfo.CreateDelegate / MakeGenericMethod).")]
-        [SuppressMessage("Usage", "VSTHRD200:Use \"Async\" suffix for async methods",
-            Justification = "Factory method, not itself async; it synchronously decides a plan and returns a lazily-enumerated IAsyncEnumerable<T>, exactly like ExcelParser<T>.Parse(CsvReader).")]
         internal static IAsyncEnumerable<T> CreateWithChunkSize<T>(
             ReadOnlyMemory<byte> data, int degreeOfParallelism, int chunkSize, CsvReaderOptions? readerOptions, ExcelParserConfig? config, CancellationToken ct)
         {
@@ -116,8 +104,6 @@ namespace ExcelReader.Core.Parser.Internal
 
         [RequiresUnreferencedCode("Typed parsing reflects over T's public properties, which trimming may remove.")]
         [RequiresDynamicCode("Typed parsing binds property setters at runtime (MethodInfo.CreateDelegate / MakeGenericMethod).")]
-        [SuppressMessage("Usage", "VSTHRD200:Use \"Async\" suffix for async methods",
-            Justification = "Factory helper, not itself async; it synchronously binds the header and plans chunks, then returns a lazily-enumerated IAsyncEnumerable<T>, exactly like ExcelParser<T>.Parse(CsvReader).")]
         // chunkSizeOverride sits next to dop (both shape the chunk plan) and before ct, which stays
         // last. It is not optional: a defaulted parameter here would have to trail the token.
         private static IAsyncEnumerable<T> Build<T>(
@@ -167,16 +153,12 @@ namespace ExcelReader.Core.Parser.Internal
         // single row through a second async state machine to buy one disposal at the end: measured on
         // an 8M-row narrow corpus, ~24 ns per row, or 190 ms of the 800 ms this path took — a quarter
         // of the sequential fallback's cost, spent on nothing.
-        [SuppressMessage("Usage", "VSTHRD200:Use \"Async\" suffix for async methods",
-            Justification = "Factory helper, not itself async: it constructs a lazily-enumerated IAsyncEnumerable<T> and returns it.")]
         private static CsvEnumerable<T> Sequential<T>(
             CsvReader reader, ExcelParserConfig config, CancellationToken ct)
         {
             return new CsvEnumerable<T>(reader, config, ownsReader: true, ct);
         }
 
-        [SuppressMessage("Usage", "VSTHRD200:Use \"Async\" suffix for async methods",
-            Justification = "The enumerable also implements IAsyncEnumerable<T>; this is an async-iterator method, not an async entry point that awaits a single operation and returns its result.")]
         private static async IAsyncEnumerable<T> Empty<T>()
         {
             await Task.CompletedTask.ConfigureAwait(false);
