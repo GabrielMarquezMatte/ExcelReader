@@ -48,6 +48,52 @@ namespace ExcelReader.Tests
             Assert.False(FastDate.TryParse(Encoding.ASCII.GetBytes(text), out _));
         }
 
+        // The round-trip form takes a vectorized path that validates digit positions with a mask.
+        // A digit sitting in a separator slot satisfies that mask, so only an exact check of the
+        // separators rejects these.
+        [Theory]
+        [InlineData("2024503-15T10:20:30.1234567")]
+        [InlineData("2024-03515T10:20:30.1234567")]
+        [InlineData("2024-03-15T10520:30.1234567")]
+        [InlineData("2024-03-15T10:20530.1234567")]
+        [InlineData("2024-03-15T10:20:3051234567")]
+        [InlineData("202X-03-15T10:20:30.1234567")]
+        [InlineData("2024-03-15T10:20:30.123456X")]
+        [InlineData("2024-02-30T10:20:30.1234567")]
+        [InlineData("2024-03-15T24:20:30.1234567")]
+        [InlineData("2024-03-15T10:60:30.1234567")]
+        [InlineData("2024-03-15T10:20:60.1234567")]
+        [InlineData("0000-03-15T10:20:30.1234567")]
+        public void RejectsMalformedRoundTripForm(string text)
+        {
+            Assert.Equal(27, text.Length);
+            Assert.False(FastDate.TryParse(Encoding.ASCII.GetBytes(text), out _));
+        }
+
+        [Fact]
+        public void RoundTripFormAgreesWithTheGeneralParserAcrossADecade()
+        {
+            var cursor = new DateTime(2015, 1, 1, 0, 0, 0, DateTimeKind.Unspecified).AddTicks(1234567);
+            for (int i = 0; i < 4000; i++)
+            {
+                string text = cursor.ToString("O", CultureInfo.InvariantCulture);
+                Assert.Equal(27, text.Length);
+
+                Assert.True(FastDate.TryParse(Encoding.ASCII.GetBytes(text), out DateTime actual), text);
+                Assert.True(DateTime.TryParse(text, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out DateTime expected));
+                Assert.Equal(expected, actual);
+
+                cursor = cursor.AddDays(1).AddHours(7).AddMinutes(13).AddSeconds(29).AddTicks(1111);
+            }
+        }
+
+        [Fact]
+        public void RoundTripFormAcceptsASpaceSeparator()
+        {
+            Assert.True(FastDate.TryParse("2024-03-15 10:20:30.1234567"u8, out DateTime actual));
+            Assert.Equal(new DateTime(2024, 3, 15, 10, 20, 30).AddTicks(1234567), actual);
+        }
+
         [Theory]
         [InlineData("2024-03-15T10:20:30Z")]
         [InlineData("2024-03-15T10:20:30+01:00")]

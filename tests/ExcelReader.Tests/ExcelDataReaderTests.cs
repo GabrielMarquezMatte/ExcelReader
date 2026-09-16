@@ -55,7 +55,7 @@ namespace ExcelReader.Tests
             Assert.True(data.Read());
             Assert.Equal("hi", data.GetValue(0));
             Assert.Equal(42.0, data.GetValue(1));
-            Assert.Equal((object)true, data.GetValue(2));
+            Assert.Equal(true, data.GetValue(2));
             Assert.Equal(new DateTime(2024, 1, 1), data.GetValue(3));
             Assert.Equal(DBNull.Value, data.GetValue(4));
             Assert.True(data.IsDBNull(4));
