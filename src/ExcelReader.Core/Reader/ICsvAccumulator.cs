@@ -1,30 +1,30 @@
-using ExcelReader.Core.ValueObjects;
-
 namespace ExcelReader.Core.Reader
 {
     /// <summary>
-    /// Folds CSV records read by <see cref="Excel.AggregateCsvParallelAsync{TAccumulator}(ReadOnlyMemory{byte}, CsvParallelOptions?, CancellationToken)"/>
-    /// into a result. Each partition of the source gets its own instance.
+    /// Folds typed CSV records read by <c>Excel.AggregateCsvParallelAsync</c> into a result. Each partition
+    /// of the source gets its own instance.
     /// </summary>
     /// <typeparam name="TSelf">The implementing type.</typeparam>
+    /// <typeparam name="TModel">The record type, produced by <see cref="ICsvRecord{TSelf}.TryParse"/> or by a CsvModelMap{TModel}.</typeparam>
     /// <remarks>
     /// <para>
     /// <see cref="Add"/> runs concurrently across instances on worker threads, and must mutate only the
     /// instance it is called on. A partition that started at a misguessed record boundary is read again
     /// into a new instance and the first one is discarded, so an instance may see records that are later
-    /// thrown away — including records whose <see cref="Add"/> threw.
+    /// thrown away — including records whose parse or <see cref="Add"/> threw.
     /// </para>
     /// <para>
     /// <see cref="Merge"/> runs on a single thread, left to right in source order, folding each later
     /// partition into the accumulator of everything before it. It may receive an instance that saw no records.
     /// </para>
     /// </remarks>
-    public interface ICsvAccumulator<TSelf>
-        where TSelf : ICsvAccumulator<TSelf>
+    public interface ICsvAccumulator<TSelf, TModel>
+        where TSelf : ICsvAccumulator<TSelf, TModel>
+        where TModel : allows ref struct
     {
         /// <summary>Folds one record into this instance.</summary>
-        /// <param name="row">The record. Valid only for the duration of the call.</param>
-        void Add(Row row);
+        /// <param name="model">The record. Spans it holds are valid only for the duration of the call.</param>
+        void Add(TModel model);
 
         /// <summary>Folds the records of the partition that immediately follows this one into this instance.</summary>
         /// <param name="following">The accumulator of the following partition. It is not used again afterwards.</param>

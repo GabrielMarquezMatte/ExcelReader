@@ -384,65 +384,66 @@ namespace ExcelReader.Core.Reader
         }
 
         /// <summary>
-        /// Reads an in-memory CSV buffer across several threads and folds every record into a
-        /// <typeparamref name="TAccumulator"/>, one instance per partition, merged in buffer order.
+        /// Reads an in-memory CSV buffer across several threads, parses every record into a
+        /// <typeparamref name="TRecord"/> and folds it into a <typeparamref name="TAccumulator"/>, one
+        /// instance per partition, merged in buffer order.
         /// </summary>
-        /// <typeparam name="TAccumulator">The accumulator type. See <see cref="ICsvAccumulator{TSelf}"/> for the contract it must honor.</typeparam>
+        /// <typeparam name="TAccumulator">The accumulator type. See <see cref="ICsvAccumulator{TSelf, TModel}"/> for the contract it must honor.</typeparam>
+        /// <typeparam name="TRecord">The record type. A record whose <see cref="ICsvRecord{TSelf}.TryParse"/> returns <see langword="false"/> is skipped.</typeparam>
         /// <param name="data">The CSV bytes. The caller keeps ownership; the buffer must not be mutated during processing.</param>
         /// <param name="options">Parallelism, dialect and header options. Defaults to <see cref="CsvParallelOptions.Default"/>.</param>
         /// <param name="ct">A token to cancel processing.</param>
         /// <returns>The accumulator holding every record.</returns>
         /// <remarks>
         /// <para>
-        /// Records are handed over as <see cref="ValueObjects.Row"/> views over the raw bytes, with no
-        /// per-record allocation. Partitions start at guessed record boundaries; one whose guess landed
-        /// inside a quoted field spanning lines is read again into a new accumulator, as
-        /// <see cref="ICsvAccumulator{TSelf}"/> describes.
+        /// Partitions start at guessed record boundaries; one whose guess landed inside a quoted field
+        /// spanning lines is read again into a new accumulator, as <see cref="ICsvAccumulator{TSelf, TModel}"/> describes.
         /// </para>
         /// <para>
         /// Falls back to one sequential pass, with a single accumulator and no call to
-        /// <see cref="ICsvAccumulator{TSelf}.Merge"/>, when the source is too small to partition usefully
+        /// <see cref="ICsvAccumulator{TSelf, TModel}.Merge"/>, when the source is too small to partition usefully
         /// or when <see cref="CsvReaderOptions.Encoding"/> is set to a non-UTF-8 encoding.
         /// </para>
-        /// <para>
-        /// Calls through the interface cost measurably more per record than the
-        /// <see cref="CsvAggregation{TState}"/> overload; prefer that one when the per-record work is small.
-        /// </para>
         /// </remarks>
-        public static Task<TAccumulator> AggregateCsvParallelAsync<TAccumulator>(
+        public static Task<TAccumulator> AggregateCsvParallelAsync<TAccumulator, TRecord>(
             ReadOnlyMemory<byte> data,
             CsvParallelOptions? options = null,
             CancellationToken ct = default)
-            where TAccumulator : ICsvAccumulator<TAccumulator>, new()
+            where TAccumulator : ICsvAccumulator<TAccumulator, TRecord>, new()
+            where TRecord : ICsvRecord<TRecord>, allows ref struct
         {
-            return ParallelCsvProcessor.RunAsync(data, AccumulatorAggregation<TAccumulator>.Instance, null, Validated(options), ct);
+            return ParallelCsvProcessor.RunAsync(data, RecordAggregation<TAccumulator, TRecord>.Instance, null, Validated(options), ct);
         }
 
         /// <summary>
-        /// Reads a CSV file across several threads and folds every record into a
-        /// <typeparamref name="TAccumulator"/>, one instance per partition, merged in file order.
+        /// Reads a CSV file across several threads, parses every record into a <typeparamref name="TRecord"/>
+        /// and folds it into a <typeparamref name="TAccumulator"/>, one instance per partition, merged in file order.
         /// </summary>
-        /// <typeparam name="TAccumulator">The accumulator type. See <see cref="ICsvAccumulator{TSelf}"/> for the contract it must honor.</typeparam>
+        /// <typeparam name="TAccumulator">The accumulator type. See <see cref="ICsvAccumulator{TSelf, TModel}"/> for the contract it must honor.</typeparam>
+        /// <typeparam name="TRecord">The record type. A record whose <see cref="ICsvRecord{TSelf}.TryParse"/> returns <see langword="false"/> is skipped.</typeparam>
         /// <param name="path">The path of the CSV file to read.</param>
         /// <param name="options">Parallelism, dialect and header options. Defaults to <see cref="CsvParallelOptions.Default"/>.</param>
         /// <param name="ct">A token to cancel processing.</param>
         /// <returns>The accumulator holding every record.</returns>
         /// <remarks>Carries the same contract and fallbacks as the in-memory overload.</remarks>
-        public static Task<TAccumulator> AggregateCsvParallelAsync<TAccumulator>(
+        public static Task<TAccumulator> AggregateCsvParallelAsync<TAccumulator, TRecord>(
             string path,
             CsvParallelOptions? options = null,
             CancellationToken ct = default)
-            where TAccumulator : ICsvAccumulator<TAccumulator>, new()
+            where TAccumulator : ICsvAccumulator<TAccumulator, TRecord>, new()
+            where TRecord : ICsvRecord<TRecord>, allows ref struct
         {
             ArgumentException.ThrowIfNullOrEmpty(path);
-            return ParallelCsvProcessor.RunAsync(path, AccumulatorAggregation<TAccumulator>.Instance, null, Validated(options), ct);
+            return ParallelCsvProcessor.RunAsync(path, RecordAggregation<TAccumulator, TRecord>.Instance, null, Validated(options), ct);
         }
 
         /// <summary>
-        /// Reads a CSV stream, in parallel where the stream can be partitioned, and folds every record into a
-        /// <typeparamref name="TAccumulator"/>, one instance per partition, merged in stream order.
+        /// Reads a CSV stream, in parallel where the stream can be partitioned, parses every record into a
+        /// <typeparamref name="TRecord"/> and folds it into a <typeparamref name="TAccumulator"/>, one instance
+        /// per partition, merged in stream order.
         /// </summary>
-        /// <typeparam name="TAccumulator">The accumulator type. See <see cref="ICsvAccumulator{TSelf}"/> for the contract it must honor.</typeparam>
+        /// <typeparam name="TAccumulator">The accumulator type. See <see cref="ICsvAccumulator{TSelf, TModel}"/> for the contract it must honor.</typeparam>
+        /// <typeparam name="TRecord">The record type. A record whose <see cref="ICsvRecord{TSelf}.TryParse"/> returns <see langword="false"/> is skipped.</typeparam>
         /// <param name="stream">The CSV stream, read from its current position. The caller keeps ownership and must not read from it concurrently.</param>
         /// <param name="options">Parallelism, dialect and header options. Defaults to <see cref="CsvParallelOptions.Default"/>.</param>
         /// <param name="ct">A token to cancel processing.</param>
@@ -452,14 +453,15 @@ namespace ExcelReader.Core.Reader
         /// <see cref="FileStream"/> or a <see cref="MemoryStream"/> whose buffer is publicly visible;
         /// every other stream is read sequentially.
         /// </remarks>
-        public static Task<TAccumulator> AggregateCsvParallelAsync<TAccumulator>(
+        public static Task<TAccumulator> AggregateCsvParallelAsync<TAccumulator, TRecord>(
             Stream stream,
             CsvParallelOptions? options = null,
             CancellationToken ct = default)
-            where TAccumulator : ICsvAccumulator<TAccumulator>, new()
+            where TAccumulator : ICsvAccumulator<TAccumulator, TRecord>, new()
+            where TRecord : ICsvRecord<TRecord>, allows ref struct
         {
             ArgumentNullException.ThrowIfNull(stream);
-            return ParallelCsvProcessor.RunAsync(stream, AccumulatorAggregation<TAccumulator>.Instance, null, Validated(options), ct);
+            return ParallelCsvProcessor.RunAsync(stream, RecordAggregation<TAccumulator, TRecord>.Instance, null, Validated(options), ct);
         }
 
         /// <summary>
@@ -468,11 +470,11 @@ namespace ExcelReader.Core.Reader
         /// </summary>
         /// <typeparam name="TState">The accumulator type.</typeparam>
         /// <param name="data">The CSV bytes. The caller keeps ownership; the buffer must not be mutated during processing.</param>
-        /// <param name="aggregation">The seed, accumulate and combine functions. They carry the same contract as <see cref="ICsvAccumulator{TSelf}"/>.</param>
+        /// <param name="aggregation">The seed, accumulate and combine functions. They carry the same contract as <see cref="ICsvAccumulator{TSelf, TModel}"/>.</param>
         /// <param name="options">Parallelism, dialect and header options. Defaults to <see cref="CsvParallelOptions.Default"/>.</param>
         /// <param name="ct">A token to cancel processing.</param>
         /// <returns>The combined accumulator.</returns>
-        /// <remarks>Carries the same fallbacks as the <see cref="ICsvAccumulator{TSelf}"/> overloads, at a lower per-record cost.</remarks>
+        /// <remarks>Carries the same fallbacks as the <see cref="ICsvAccumulator{TSelf, TModel}"/> overloads, at a lower per-record cost.</remarks>
         public static Task<TState> AggregateCsvParallelAsync<TState>(
             ReadOnlyMemory<byte> data,
             CsvAggregation<TState> aggregation,
@@ -488,11 +490,11 @@ namespace ExcelReader.Core.Reader
         /// </summary>
         /// <typeparam name="TState">The accumulator type.</typeparam>
         /// <param name="path">The path of the CSV file to read.</param>
-        /// <param name="aggregation">The seed, accumulate and combine functions. They carry the same contract as <see cref="ICsvAccumulator{TSelf}"/>.</param>
+        /// <param name="aggregation">The seed, accumulate and combine functions. They carry the same contract as <see cref="ICsvAccumulator{TSelf, TModel}"/>.</param>
         /// <param name="options">Parallelism, dialect and header options. Defaults to <see cref="CsvParallelOptions.Default"/>.</param>
         /// <param name="ct">A token to cancel processing.</param>
         /// <returns>The combined accumulator.</returns>
-        /// <remarks>Carries the same fallbacks as the <see cref="ICsvAccumulator{TSelf}"/> overloads, at a lower per-record cost.</remarks>
+        /// <remarks>Carries the same fallbacks as the <see cref="ICsvAccumulator{TSelf, TModel}"/> overloads, at a lower per-record cost.</remarks>
         public static Task<TState> AggregateCsvParallelAsync<TState>(
             string path,
             CsvAggregation<TState> aggregation,
@@ -509,11 +511,11 @@ namespace ExcelReader.Core.Reader
         /// </summary>
         /// <typeparam name="TState">The accumulator type.</typeparam>
         /// <param name="stream">The CSV stream, read from its current position. The caller keeps ownership and must not read from it concurrently.</param>
-        /// <param name="aggregation">The seed, accumulate and combine functions. They carry the same contract as <see cref="ICsvAccumulator{TSelf}"/>.</param>
+        /// <param name="aggregation">The seed, accumulate and combine functions. They carry the same contract as <see cref="ICsvAccumulator{TSelf, TModel}"/>.</param>
         /// <param name="options">Parallelism, dialect and header options. Defaults to <see cref="CsvParallelOptions.Default"/>.</param>
         /// <param name="ct">A token to cancel processing.</param>
         /// <returns>The combined accumulator.</returns>
-        /// <remarks>Carries the same fallbacks and stream restrictions as the <see cref="ICsvAccumulator{TSelf}"/> stream overload, at a lower per-record cost.</remarks>
+        /// <remarks>Carries the same fallbacks and stream restrictions as the <see cref="ICsvAccumulator{TSelf, TModel}"/> stream overload, at a lower per-record cost.</remarks>
         public static Task<TState> AggregateCsvParallelAsync<TState>(
             Stream stream,
             CsvAggregation<TState> aggregation,

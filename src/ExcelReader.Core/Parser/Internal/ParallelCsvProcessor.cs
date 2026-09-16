@@ -4,21 +4,6 @@ using Microsoft.Win32.SafeHandles;
 
 namespace ExcelReader.Core.Parser.Internal
 {
-    internal static class AccumulatorAggregation<TAccumulator>
-        where TAccumulator : ICsvAccumulator<TAccumulator>, new()
-    {
-        internal static readonly CsvAggregation<TAccumulator> Instance = new()
-        {
-            Seed = static () => new TAccumulator(),
-            Accumulate = static (ref accumulator, row) => accumulator.Add(row),
-            Combine = static (left, right) =>
-            {
-                left.Merge(right);
-                return left;
-            },
-        };
-    }
-
     internal static class ParallelCsvProcessor
     {
         private const int ChunksPerWorker = 4;

@@ -16,15 +16,17 @@ ExcelReader.Core.Reader.CsvParallelOptions.HeaderRow.init -> void
 ExcelReader.Core.Reader.CsvParallelOptions.Reader.get -> ExcelReader.Core.Reader.CsvReaderOptions!
 ExcelReader.Core.Reader.CsvParallelOptions.Reader.init -> void
 ExcelReader.Core.Reader.CsvRowAction<TState>
-ExcelReader.Core.Reader.ICsvAccumulator<TSelf>
-ExcelReader.Core.Reader.ICsvAccumulator<TSelf>.Add(ExcelReader.Core.ValueObjects.Row row) -> void
-ExcelReader.Core.Reader.ICsvAccumulator<TSelf>.Merge(TSelf following) -> void
 static ExcelReader.Core.Reader.CsvParallelOptions.Default.get -> ExcelReader.Core.Reader.CsvParallelOptions!
-static ExcelReader.Core.Reader.Excel.AggregateCsvParallelAsync<TAccumulator>(System.IO.Stream! stream, ExcelReader.Core.Reader.CsvParallelOptions? options = null, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<TAccumulator>!
-static ExcelReader.Core.Reader.Excel.AggregateCsvParallelAsync<TAccumulator>(System.ReadOnlyMemory<byte> data, ExcelReader.Core.Reader.CsvParallelOptions? options = null, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<TAccumulator>!
-static ExcelReader.Core.Reader.Excel.AggregateCsvParallelAsync<TAccumulator>(string! path, ExcelReader.Core.Reader.CsvParallelOptions? options = null, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<TAccumulator>!
 static ExcelReader.Core.Reader.Excel.AggregateCsvParallelAsync<TState>(System.IO.Stream! stream, ExcelReader.Core.Reader.CsvAggregation<TState>! aggregation, ExcelReader.Core.Reader.CsvParallelOptions? options = null, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<TState>!
 static ExcelReader.Core.Reader.Excel.AggregateCsvParallelAsync<TState>(System.ReadOnlyMemory<byte> data, ExcelReader.Core.Reader.CsvAggregation<TState>! aggregation, ExcelReader.Core.Reader.CsvParallelOptions? options = null, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<TState>!
 static ExcelReader.Core.Reader.Excel.AggregateCsvParallelAsync<TState>(string! path, ExcelReader.Core.Reader.CsvAggregation<TState>! aggregation, ExcelReader.Core.Reader.CsvParallelOptions? options = null, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<TState>!
 static ExcelReader.Core.Parser.ExcelCellReaders.Utf8(scoped in ExcelReader.Core.ValueObjects.Cell cell, bool isDate1904, System.IFormatProvider! provider, out System.ReadOnlySpan<byte> value) -> bool
 virtual ExcelReader.Core.Reader.CsvRowAction<TState>.Invoke(ref TState state, ExcelReader.Core.ValueObjects.Row row) -> void
+ExcelReader.Core.Reader.ICsvAccumulator<TSelf, TModel>
+ExcelReader.Core.Reader.ICsvAccumulator<TSelf, TModel>.Add(TModel model) -> void
+ExcelReader.Core.Reader.ICsvAccumulator<TSelf, TModel>.Merge(TSelf following) -> void
+ExcelReader.Core.Reader.ICsvRecord<TSelf>
+ExcelReader.Core.Reader.ICsvRecord<TSelf>.TryParse(ExcelReader.Core.ValueObjects.Row row, out TSelf record) -> bool
+static ExcelReader.Core.Reader.Excel.AggregateCsvParallelAsync<TAccumulator, TRecord>(System.IO.Stream! stream, ExcelReader.Core.Reader.CsvParallelOptions? options = null, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<TAccumulator>!
+static ExcelReader.Core.Reader.Excel.AggregateCsvParallelAsync<TAccumulator, TRecord>(System.ReadOnlyMemory<byte> data, ExcelReader.Core.Reader.CsvParallelOptions? options = null, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<TAccumulator>!
+static ExcelReader.Core.Reader.Excel.AggregateCsvParallelAsync<TAccumulator, TRecord>(string! path, ExcelReader.Core.Reader.CsvParallelOptions? options = null, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<TAccumulator>!
