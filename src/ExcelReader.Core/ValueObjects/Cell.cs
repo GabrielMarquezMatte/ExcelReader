@@ -295,8 +295,6 @@ namespace ExcelReader.Core.ValueObjects
         /// <param name="result">The parsed date, when this method returns true.</param>
         public bool TryGetDateTime(bool isDate1904, out DateTime result)
         {
-            // Text dates go first: FastDate rejects a non-date on its second byte, while reaching it
-            // through TryGetDouble would mean a full failing double parse on every date cell.
             if (!_hasNumber && FastDate.TryParse(Value, out result))
             {
                 return true;
