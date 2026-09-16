@@ -313,9 +313,6 @@ namespace ExcelReader.Core.Reader
                          style: 0, CellValueSource.RowValues);
             }
 
-            // Returns the position after the record terminator. Returns NeedsGeneric, with any unconsumed
-            // hits handed back to the scanner, on a quote, a bare CR, a CRLF split across chunks, a full
-            // descriptor array, the column limit, or when no whole vector chunk is left to load.
             [MethodImpl(MethodImplOptions.NoInlining)]
             private int DrainFields(byte[] buf, ref int fieldStart)
             {
