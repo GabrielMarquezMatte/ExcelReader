@@ -4,8 +4,6 @@ namespace ExcelReader.Core.ValueObjects
     {
         private const int MaxFractionDigits = 7;
 
-        // Indexed by fraction digit position; dividing a running scale instead would chain seven
-        // dependent integer divisions.
         private static readonly long[] FractionScale = [1_000_000, 100_000, 10_000, 1_000, 100, 10, 1];
 
         public static bool TryParse(ReadOnlySpan<byte> s, out DateTime value)
@@ -66,8 +64,6 @@ namespace ExcelReader.Core.ValueObjects
             return true;
         }
 
-        // Rejects a trailing zone designator rather than guessing at it; those fall back to the
-        // general parser, which is the only thing that knows what to do with an offset.
         private static bool TryFraction(ReadOnlySpan<byte> s, out long ticks)
         {
             ticks = 0;

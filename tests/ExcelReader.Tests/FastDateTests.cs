@@ -48,8 +48,6 @@ namespace ExcelReader.Tests
             Assert.False(FastDate.TryParse(Encoding.ASCII.GetBytes(text), out _));
         }
 
-        // Offsets carry information this parser does not model, so they go to the general parser
-        // rather than being silently dropped.
         [Theory]
         [InlineData("2024-03-15T10:20:30Z")]
         [InlineData("2024-03-15T10:20:30+01:00")]
