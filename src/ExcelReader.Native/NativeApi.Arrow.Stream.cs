@@ -4,17 +4,11 @@ namespace ExcelReader.Native
 {
     internal static unsafe partial class NativeApi
     {
-        // Everything one ArrowArrayStream needs behind its private_data: the batch
-        // source, the specs its schema is built from, and the last error, kept alive as UTF-8 for
-        // get_last_error (whose returned pointer must outlive the call).
         internal sealed class ArrowStreamSession : IDisposable
         {
             internal required TypedParseSession Session { get; init; }
             internal required NativeColumnSpec[] Specs { get; init; }
 
-            // Named for its representation, not just its role: the outer partial class already has a
-            // LastError (the xl_last_error span copy), and this is a different thing - an owned,
-            // NUL-terminated UTF-8 block whose address get_last_error hands straight to the consumer.
             internal IntPtr LastErrorUtf8 { get; set; }
 
             internal void SetError(string message)
@@ -23,12 +17,6 @@ namespace ExcelReader.Native
                 LastErrorUtf8 = AllocUtf8Z(message);
             }
 
-            // Stores the message behind a failed batch, taken from the SESSION's own latched fault
-            // rather than the thread's xl_last_error: that one belongs to whatever ExcelReader
-            // call ran most recently on this thread, which need not be this stream at all, so reading
-            // it back here could hand the consumer an unrelated message. Never leaves
-            // get_last_error empty for a non-zero return — a fault with no message of its own
-            // (nothing produces one today, but the fallback costs nothing) still gets a fixed one.
             internal void SetBatchError(string? message)
             {
                 if (string.IsNullOrEmpty(message))
@@ -38,13 +26,8 @@ namespace ExcelReader.Native
                 SetError(message);
             }
 
-            // Closes the underlying read and frees the message block. Idempotent, because
-            // TypedParseSession.Dispose is and the freed block is zeroed here.
             public void Dispose()
             {
-                // The message block is freed even if closing the read throws: TypedParseSession.Dispose
-                // reaches IExcelRowEnumerator.Dispose, which can plausibly raise IOException, and the
-                // caller only ever gets one contract-correct release to leak it on.
                 try
                 {
                     Session.Dispose();
@@ -57,13 +40,6 @@ namespace ExcelReader.Native
             }
         }
 
-        // Opens a batched Arrow read as an Arrow C Data Interface stream.
-        //
-        // The session lives only in the stream's private_data as a strong (not pinned — only
-        // the handle's opaque id crosses the boundary, never the object's address)
-        // GCHandle — deliberately NOT in NativeHandleTable. There is no
-        // id for a caller to hold, so there is no stale id to misuse and no way to close this
-        // session through xl_typed_reader_close. stream-&gt;release is the only exit.
         internal static int OpenArrowStream(NativeHandle? handle, NativeColumnSpec[] specs, int headerRow,
             long maxRows, out ArrowArrayStream stream)
         {
@@ -83,19 +59,12 @@ namespace ExcelReader.Native
                     GetNext = (IntPtr)(delegate* unmanaged<ArrowArrayStream*, ArrowArray*, int>)&Exports.ArrowStreamGetNext,
                     GetLastError = (IntPtr)(delegate* unmanaged<ArrowArrayStream*, IntPtr>)&Exports.ArrowStreamGetLastError,
                     Release = (IntPtr)(delegate* unmanaged<ArrowArrayStream*, void>)&Exports.ArrowStreamRelease,
-                    // Allocated straight into the field: GCHandle is non-copyable (RS0042), so
-                    // reading it back out of a local to pass it here would not compile.
                     PrivateData = GCHandle.ToIntPtr(GCHandle.Alloc(state)),
                 };
                 return NativeStatus.Ok;
             }
             catch (Exception exception)
             {
-                // The session is open (its row enumerator holds the sheet) but nothing has been handed
-                // back yet, so no `release` exists to close it and nobody else can reach it. The window
-                // is narrow — a GCHandle.Alloc OOM is the only realistic trigger — but the leak would be
-                // a live file handle, so it is closed here rather than left to a finalizer that
-                // TypedParseSession does not have.
                 session!.Dispose();
                 SetLastError(exception.Message);
                 stream = default;
@@ -112,8 +81,7 @@ namespace ExcelReader.Native
             return GCHandle.FromIntPtr(stream->PrivateData).Target as ArrowStreamSession;
         }
 
-        // Arrow's get_schema/get_next return 0 on success and an errno-style code otherwise.
-        private const int ArrowErrno = 5; // EIO
+        private const int ArrowErrno = 5;
 
         internal static int ArrowStreamGetSchemaCore(ArrowArrayStream* stream, ArrowSchema* outSchema)
         {
@@ -122,9 +90,6 @@ namespace ExcelReader.Native
             {
                 return ArrowErrno;
             }
-            // Zeroed up front for the same reason xl_parse_arrow_stream zeroes *out_stream: a consumer
-            // that ignores the errno and defensively calls out_schema->release must find a released
-            // struct, not whatever its own stack happened to hold.
             *outSchema = default;
 
             try
@@ -147,8 +112,6 @@ namespace ExcelReader.Native
             {
                 return ArrowErrno;
             }
-            // End of stream is a RELEASED array plus a 0 return, never an error code. Zeroing here
-            // covers both that case and every failure path below.
             *outArray = default;
 
             int status = state.Session.NextBatch(out NativeTable table);
@@ -175,8 +138,6 @@ namespace ExcelReader.Native
             }
             finally
             {
-                // Arrow owns an independent copy now (or, on failure, owns nothing) - the
-                // intermediate batch is never reachable by the caller either way.
                 FreeTable(ref table);
             }
         }
@@ -190,15 +151,8 @@ namespace ExcelReader.Native
         {
             if (stream is null || stream->Release == IntPtr.Zero)
             {
-                return; // already released - Arrow permits the defensive double-release check
+                return;
             }
-            // The struct is marked released BEFORE anything that can throw. TypedParseSession.Dispose
-            // reaches IExcelRowEnumerator.Dispose, which can plausibly raise IOException, and the thunk
-            // swallows whatever escapes - so a consumer that called release exactly once, which is all
-            // the contract asks of it, would otherwise be left with a leaked GCHandle and a stream
-            // whose release is still non-null, i.e. one that still looks live. Reading private_data out
-            // first and zeroing both fields here makes the released state unconditional; the finally
-            // then guarantees the handle itself is freed on the same single call.
             IntPtr privateData = stream->PrivateData;
             stream->PrivateData = IntPtr.Zero;
             stream->Release = IntPtr.Zero;

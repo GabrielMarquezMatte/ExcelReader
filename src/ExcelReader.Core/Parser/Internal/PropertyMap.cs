@@ -13,9 +13,7 @@ namespace ExcelReader.Core.Parser.Internal
 
         internal string[] Names { get; }
         internal ColumnParser<T> Parser { get; }
-        // The column must be present in the header.
         internal bool IsRequired { get; }
-        // The cell must also be non-empty in every data row.
         internal bool RequireValue { get; }
     }
 }

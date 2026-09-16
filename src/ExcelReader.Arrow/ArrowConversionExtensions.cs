@@ -65,7 +65,6 @@ namespace ExcelReader.Arrow
             return new RecordBatch(arrowSchema, arrays, rowCount);
         }
 
-        // Mirrors Core's internal SchemaInference.TrySkipToHeaderRow; no InternalsVisibleTo to call it directly.
         private static void SkipHeaderRow(IExcelRowEnumerator rows, int headerRow)
         {
             for (int rowNumber = 1; rowNumber <= headerRow; rowNumber++)

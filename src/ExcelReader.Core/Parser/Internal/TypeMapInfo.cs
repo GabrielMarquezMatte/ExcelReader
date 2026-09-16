@@ -6,17 +6,9 @@ namespace ExcelReader.Core.Parser.Internal
         where T : allows ref struct
     {
         private readonly PropertyMap<T>[] _properties;
-        // Null when _useDefault is true: a value type with no explicit parameterless constructor needs
-        // no factory at all, since default(T) is exactly what `new T()` would have produced, and Build()
-        // skips compiling one. Non-null (and always invoked instead of _useDefault) for every class T
-        // and for a struct T that declares an explicit parameterless constructor (C# 10+), whose
-        // user-written initializer logic default(T) would silently skip.
         private readonly Func<T>? _factory;
         private readonly bool _useDefault;
         private readonly ConcurrentDictionary<(StringComparer, HeaderNormalization), Dictionary<string, HeaderMatch<T>>> _lookupCache;
-        // Non-null exactly for a fluent map built entirely from ExcelRowMapBuilder<T>.PropertyAt: fixed
-        // column index, no header row involved at all. Already sorted by Column — the shape RowProjector/
-        // CsvRowProjector need directly, with no per-row header lookup step (see IsIndexBased).
         private readonly ColumnBinding<T>[]? _indexBindings;
 
         internal TypeMapInfo(PropertyMap<T>[] properties, Func<T>? factory, bool useDefault)
@@ -38,16 +30,10 @@ namespace ExcelReader.Core.Parser.Internal
 
         internal int PropertyCount => _properties.Length;
 
-        // A PropertyAt map has no header row to wait for, so the column map can be built immediately
-        // rather than at the usual header-row step.
         internal bool IsIndexBased => _indexBindings is not null;
 
         internal ColumnBinding<T>[] IndexBindings => _indexBindings!;
 
-        // Creates a fresh model instance per row without a `where T : new()` constraint, so types with
-        // required members (which the new() constraint forbids) can still be parsed. For a plain struct
-        // target (the common case for a zero-allocation row model), skips the compiled-factory delegate
-        // call/struct-copy entirely — see Build()'s _useDefault computation.
         internal T CreateInstance()
         {
             return _useDefault ? default! : _factory!();
@@ -63,9 +49,6 @@ namespace ExcelReader.Core.Parser.Internal
             return _properties[propertyIndex].Names[0];
         }
 
-        // unmatched[i] is int.MaxValue when property i found no header column. A header missing a
-        // required column is a defect in the file, not a caller mistake, hence ExcelParseException
-        // rather than InvalidOperationException.
         internal void ValidateRequiredColumns(int[] unmatched)
         {
             List<string>? missing = null;
@@ -82,15 +65,8 @@ namespace ExcelReader.Core.Parser.Internal
             }
         }
 
-        // Override identity is the normalized header name, not the property: that is the same identity a
-        // header row itself uses to pick between two same-named bindings, so a fluent property replaces
-        // the attribute-driven one it would have collided with at parse time.
         internal static TypeMapInfo<T> MergeFluentOverAttributes(TypeMapInfo<T> fluent, TypeMapInfo<T> attributeFallback, StringComparer comparer, HeaderNormalization normalization)
         {
-            // An index-based map (ExcelRowMapBuilder<T>.PropertyAt) has no header row to match
-            // attribute-driven properties against — it stores its bindings in _indexBindings and leaves
-            // _properties empty, so silently ignoring them here would drop every PropertyAt binding
-            // rather than merge it. The two shapes can't compose; fail loud instead.
             if (fluent.IsIndexBased)
             {
                 throw new InvalidOperationException(
@@ -114,9 +90,6 @@ namespace ExcelReader.Core.Parser.Internal
                 }
             }
 
-            // A fluent builder that never called Factory() has _useDefault = true (see
-            // ExcelRowMapBuilder<T>.Factory's doc comment) — fall back to the attribute map's factory
-            // rather than silently defaulting a class T to null.
             Func<T>? factory = fluent._useDefault ? attributeFallback._factory : fluent._factory;
             bool useDefault = fluent._useDefault && attributeFallback._useDefault;
             return new TypeMapInfo<T>([.. merged], factory, useDefault);

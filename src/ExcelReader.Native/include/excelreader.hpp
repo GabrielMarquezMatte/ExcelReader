@@ -1,25 +1,3 @@
-/* Header-only C++ wrapper around excelreader.h (the C ABI).
- *
- * Scope: opening a workbook, schema-driven typed table parsing (xl_parse_typed), schema-driven
- * writing (xl_write_typed), and row-by-row decoded reads (RowCursor/Workbook::rows() and
- * DecodedRows/Workbook::read_all_decoded()).
- *
- * Design constraints, matching the native library's own perf/memory posture:
- *   - No exceptions anywhere in this header. Every fallible operation returns
- *     std::expected<T, xl::Error>.
- *   - xl::parse_sheet<T> does NOT materialize a std::vector<T>. It returns a
- *     xl::TableView<T> that owns the raw xl_table (freed via xl_free_table) and builds
- *     one T per dereference of its iterator - the only allocation is the one
- *     xl_parse_typed itself already makes for the columnar buffers. Call
- *     TableView<T>::to_vector() if you actually want a materialized vector.
- *   - std::string_view fields are zero-copy views into the xl_table's own string blob:
- *     valid ONLY as long as the owning TableView<T> is alive. Use std::string for a
- *     field that needs to outlive the view (e.g. after to_vector()).
- *   - Writing borrows. xl::write_columns hands xl_write_typed the caller's own buffers,
- *     which the ABI reads without copying or freeing; they must outlive the call.
- *     xl::write_sheet<T> is the one place a copy happens, and only because a range of
- *     structs has to be transposed into columns.
- */
 #pragma once
 
 #include "excelreader.h"
@@ -44,7 +22,6 @@
 namespace xl
 {
 
-    // ---- Errors --------------------------------------------------------------------------------
 
     struct Error
     {
@@ -65,13 +42,9 @@ namespace xl
             return Error{code, std::move(message)};
         }
 
-        // Shared two-pass buffer dance for the xl_* functions that write a UTF-8 name into a caller
-        // buffer and report the required capacity through XL_BUFFER_TOO_SMALL.
         template <typename Call>
         std::expected<std::string, Error> fill_string(Call &&call)
         {
-            // One sized attempt first: Excel caps sheet names at 31 characters, so 128 bytes clears
-            // even the 4-byte-per-character worst case and the retry never runs in practice.
             std::string buffer(128, '\0');
             int32_t len = 0;
             int32_t status = call(reinterpret_cast<uint8_t *>(buffer.data()),
@@ -90,26 +63,14 @@ namespace xl
             return buffer;
         }
 
-    } // namespace detail
+    } 
 
-    // ---- ABI guard -------------------------------------------------------------------------------
 
-    // Revision of the loaded shared library, to compare against XL_ABI_VERSION - the revision this
-    // header was compiled against.
     inline int32_t abi_version() noexcept { return xl_abi_version(); }
 
     namespace detail
     {
 
-        // The native binary is resolved at build time from a GitHub release asset (see
-        // cmake/FetchNativeLib.cmake) or from EXCELREADER_NATIVE_LIB, so it can easily be built from
-        // a different ABI revision than this header. Every struct below is laid out against
-        // XL_ABI_VERSION, so proceeding past a mismatch would mean reading native memory through the
-        // wrong layout. Both Workbook constructors gate on this.
-        //
-        // The result is cached in a function-local static: it cannot change for the lifetime of the
-        // process, its initialization is thread-safe since C++11, and every open() would otherwise
-        // pay an FFI call for it.
         inline const std::expected<void, Error> &check_abi_version()
         {
             static const std::expected<void, Error> result = []() -> std::expected<void, Error>
@@ -128,30 +89,20 @@ namespace xl
             return result;
         }
 
-    } // namespace detail
+    } 
 
-    // ---- Inferred schema ---------------------------------------------------------------------------
 
-    // One column guessed by Workbook::infer_schema.
     struct InferredColumn
     {
-        // Header text, or nullopt when the column must be resolved by `index` instead (no header
-        // row was requested, the header cell was blank, or the column never appeared in it).
         std::optional<std::string> name;
         int32_t index = 0;
-        int32_t type = XL_T_STRING; // XL_T_*
+        int32_t type = XL_T_STRING; 
         bool nullable = false;
     };
 
-    // ---- Open options ----------------------------------------------------------------------------
 
-    // C++ mirror of xl_open_options: same fields, same meaning (XL_OPT_DEFAULT/FALSE/TRUE for every
-    // tri-state field, 0 for "use the library default" on every numeric field), but with default
-    // member initializers so a caller only sets the fields they actually want to override - no
-    // memset, no struct_size bookkeeping (to_c() fills it in).
     struct OpenOptions
     {
-        // CSV only (format == XL_FORMAT_CSV); ignored for every other format.
         int32_t csv_sniff_dialect = XL_OPT_DEFAULT;
         int32_t csv_delimiter = 0;
         int32_t csv_quote = 0;
@@ -159,7 +110,6 @@ namespace xl
         int32_t csv_max_cell_bytes = 0;
         int32_t csv_intern_strings = XL_OPT_DEFAULT;
 
-        // XLS/XLSX/XLSB only; ignored for CSV.
         int64_t max_total_decompressed_bytes = 0;
         int32_t max_cell_bytes = 0;
         int64_t max_shared_string_bytes = 0;
@@ -167,10 +117,6 @@ namespace xl
         int32_t prefetch_decompression = XL_OPT_DEFAULT;
         int32_t intern_strings = XL_OPT_DEFAULT;
 
-        // Password for an encrypted OOXML workbook. Stored by value, not as a string_view: the raw
-        // struct's pointer must stay valid through the open call, and a caller passing a temporary
-        // would otherwise dangle. Empty (the default) means "not encrypted, or fail with
-        // XL_STATUS_PASSWORD_REQUIRED" - same meaning as a NULL xl_open_options::password.
         std::string password_{};
 
         OpenOptions &password(std::string_view value)
@@ -201,26 +147,16 @@ namespace xl
         }
     };
 
-    // ---- Write options ---------------------------------------------------------------------------
 
-    // C++ mirror of xl_write_options: same fields, same meaning (0 or XL_OPT_DEFAULT for "use the
-    // library default" on every field), with default member initializers so a caller sets only what
-    // they want to override. to_c() fills in struct_size.
-    //
-    // sheet_name is BORROWED, like every other buffer this library hands the ABI: the string it
-    // views must outlive the write call. Its rules (1-31 characters, none of : \ / ? * [ ]) are
-    // validated natively and reported through xl_last_error, so they are deliberately not
-    // re-checked here - one set of bounds, one place to change them.
     struct WriteOptions
     {
-        std::string_view sheet_name{}; // empty = "Sheet1". Ignored for XL_FORMAT_CSV.
+        std::string_view sheet_name{}; 
 
-        // CSV only; ignored for every other format. Byte value 1-255; 0 = default (',' and '"').
         int32_t csv_delimiter = 0;
         int32_t csv_quote = 0;
 
-        int32_t date1904 = XL_OPT_DEFAULT;           // XLS/XLSB only
-        int32_t use_shared_strings = XL_OPT_DEFAULT; // XLSX/XLSB only
+        int32_t date1904 = XL_OPT_DEFAULT;           
+        int32_t use_shared_strings = XL_OPT_DEFAULT; 
 
         xl_write_options to_c() const noexcept
         {
@@ -241,9 +177,6 @@ namespace xl
     namespace detail
     {
 
-        // A NULL options pointer is the ABI's "every default", and is NOT the same as a zeroed
-        // struct (whose struct_size of 0 is rejected). `storage` is the caller's own local, which
-        // must outlive the FFI call the returned pointer is handed to.
         template <typename Opts, typename Raw>
         inline const Raw *lower_options(const Opts *options, Raw &storage) noexcept
         {
@@ -255,8 +188,6 @@ namespace xl
             return &storage;
         }
 
-        // Case-insensitive suffix match over ASCII, which is all a file extension can be here.
-        // constexpr and allocation-free so format_from_path stays usable in a constant expression.
         constexpr bool ends_with_ci(std::string_view text, std::string_view suffix) noexcept
         {
             if (text.size() < suffix.size())
@@ -276,11 +207,8 @@ namespace xl
             return true;
         }
 
-    } // namespace detail
+    } 
 
-    // Infers an XL_FORMAT_* from a path's extension. Returns XL_FORMAT_AUTO when the extension is
-    // absent or unrecognized - and since xl_write_typed rejects AUTO with a message of its own, an
-    // unrecognized path fails the write rather than silently picking a format.
     constexpr int32_t format_from_path(std::string_view path) noexcept
     {
         const size_t separator = path.find_last_of("/\\");
@@ -306,26 +234,16 @@ namespace xl
         return XL_FORMAT_AUTO;
     }
 
-    // ---- Columnar write --------------------------------------------------------------------------
 
-    // One INPUT column, pointing at the caller's own buffers. Nothing here is copied: every pointer
-    // must stay valid until write_columns returns.
-    //
-    // Build one through the typed constructors below rather than by hand - they derive `length`,
-    // `type` and `validity_len` from the spans they are handed, which is what makes the bounds check
-    // in write_columns possible at all.
     struct ColumnRef
     {
-        std::string_view name{}; // empty = no header row (all-or-nothing across the column set)
+        std::string_view name{}; 
         int32_t type = XL_T_STRING;
         int64_t length = 0;
         const void *values = nullptr;
-        const uint8_t *validity = nullptr; // nullptr = the column has no nulls
-        // NOT part of the ABI struct: xl_write_typed takes the bitmap without a length and reads
-        // (length + 7) / 8 bytes on trust. Carrying the length here is what lets write_columns
-        // refuse a short one instead of handing the native side a buffer overrun.
+        const uint8_t *validity = nullptr; 
         int64_t validity_len = 0;
-        const uint8_t *data = nullptr; // XL_T_STRING only: the UTF-8 blob
+        const uint8_t *data = nullptr; 
         int64_t data_len = 0;
     };
 
@@ -337,10 +255,6 @@ namespace xl
             return validity.empty() ? nullptr : validity.data();
         }
 
-        // Every non-string column lowers identically: the values span supplies both the pointer and
-        // the row count, the validity span both the pointer and its length, and the only thing that
-        // varies per column type is the XL_T_* tag. The named factories below are one line each on
-        // top of this, so the wire layout lives in exactly one place.
         template <int32_t Tag, typename E>
         inline constexpr ColumnRef scalar_column(std::string_view name, std::span<const E> values,
                                                  std::span<const uint8_t> validity) noexcept
@@ -350,12 +264,8 @@ namespace xl
                              nullptr, 0};
         }
 
-    } // namespace detail
+    } 
 
-    // One constructor per column type rather than an overload set: XL_T_BOOL's buffer and a string
-    // blob are both std::span<const uint8_t>, and XL_T_I64/TIME/TIMESTAMP are all
-    // std::span<const int64_t>, so overload resolution could not tell them apart. Each is one line
-    // over detail::scalar_column, which holds the shared lowering.
     inline constexpr ColumnRef i64_column(std::string_view name, std::span<const int64_t> values,
                                           std::span<const uint8_t> validity = {}) noexcept
     {
@@ -368,7 +278,6 @@ namespace xl
         return detail::scalar_column<XL_T_F64>(name, values, validity);
     }
 
-    // `values` is one byte per row, 0 or 1 - NOT a bit-packed bitmap.
     inline constexpr ColumnRef bool_column(std::string_view name, std::span<const uint8_t> values,
                                            std::span<const uint8_t> validity = {}) noexcept
     {
@@ -393,8 +302,6 @@ namespace xl
         return detail::scalar_column<XL_T_TIMESTAMP>(name, micros_since_epoch, validity);
     }
 
-    // `offsets` has length + 1 entries; `data` is every row's UTF-8 bytes concatenated. Unlike the
-    // table xl_parse_typed returns, `data` need not be interior to `offsets` here.
     inline constexpr ColumnRef string_column(std::string_view name, std::span<const int32_t> offsets,
                                              std::span<const uint8_t> data,
                                              std::span<const uint8_t> validity = {}) noexcept
@@ -408,8 +315,6 @@ namespace xl
     namespace detail
     {
 
-        // Split out of validate_write_columns to stay inside the style guide's nesting and length
-        // limits. Returns nullopt when the column is acceptable.
         inline std::optional<Error> validate_one_write_column(const ColumnRef &column, size_t index,
                                                               int64_t row_count, bool has_header)
         {
@@ -443,10 +348,6 @@ namespace xl
             return std::nullopt;
         }
 
-        // Returns the row count every column agreed on, or the first problem found. Runs to
-        // completion before anything reaches the native side, matching xl_write_typed's own
-        // "validate everything, then write" posture - a partially written file plus a buffer
-        // overrun is strictly worse than a rejected call.
         inline std::expected<int64_t, Error> validate_write_columns(std::span<const ColumnRef> columns)
         {
             if (columns.empty())
@@ -466,9 +367,6 @@ namespace xl
             return row_count;
         }
 
-        // Lowers one ColumnRef into the two ABI structs. `name_slot` and `len_slot` are elements of
-        // arrays the caller keeps alive: xl_column_spec::names is a pointer to an ARRAY of name
-        // pointers, so each spec needs a stable address to point at, not a temporary.
         inline void fill_write_column(const ColumnRef &column, const uint8_t *&name_slot, int32_t &len_slot,
                                       xl_column_spec &spec, xl_column &raw) noexcept
         {
@@ -479,9 +377,8 @@ namespace xl
                             column.data_len};
         }
 
-    } // namespace detail
+    } 
 
-    // ---- Row-at-a-time streaming view ----------------------------------------------------------
 
     enum class CellType : int32_t
     {
@@ -494,8 +391,6 @@ namespace xl
         Error = XL_CELL_ERROR,
     };
 
-    // One cell, borrowing its bytes from the row that produced it. A Date cell's value is an Excel
-    // serial number as text.
     struct CellView
     {
         int32_t column{};
@@ -505,8 +400,6 @@ namespace xl
 
     namespace detail
     {
-        // Decodes the cell at `offset` in an xl_next_row blob, returning it and the next offset.
-        // Every read is bounds-checked rather than trusting the declared cell count.
         inline std::optional<std::pair<CellView, size_t>> decode_cell(std::span<const uint8_t> blob, size_t offset)
         {
             const auto read_i32 = [&](size_t at) -> std::optional<int32_t> {
@@ -539,24 +432,18 @@ namespace xl
         }
     }
 
-    // One row. A row from RowCursor is invalidated by the next next_row() call; a row from
-    // DecodedRows stays valid for that object's lifetime.
     class RowView
     {
     public:
         RowView() = default;
 
-        // From an xl_next_row blob: `payload` is the bytes AFTER the leading int32 cell count.
         RowView(std::span<const uint8_t> payload, size_t count) : payload_(payload), count_(count) {}
 
-        // From one xl_row of a decoded set.
         RowView(const xl_row_cell *cells, size_t count) : cells_(cells), count_(count) {}
 
         size_t size() const { return count_; }
         bool empty() const { return count_ == 0; }
 
-        // For a blob-backed row this walks from the start, so it is O(index); prefer iteration when
-        // reading a whole row. A decoded row indexes directly.
         CellView operator[](size_t index) const
         {
             if (cells_ != nullptr)
@@ -613,7 +500,7 @@ namespace xl
                 auto decoded = detail::decode_cell(row_->payload_, offset_);
                 if (!decoded)
                 {
-                    index_ = row_->count_;   // a malformed blob ends iteration rather than reading past it
+                    index_ = row_->count_;   
                     return;
                 }
                 current_ = decoded->first;
@@ -635,7 +522,6 @@ namespace xl
         size_t count_{};
     };
 
-    // A row-at-a-time reader over a workbook's current sheet, holding one reusable buffer.
     class RowCursor
     {
     public:
@@ -646,9 +532,6 @@ namespace xl
         RowCursor(RowCursor &&) noexcept = default;
         RowCursor &operator=(RowCursor &&) noexcept = default;
 
-        // A RowView on success. unexpected(Error) with code XL_EOF at a clean end of sheet - check
-        // error().code to tell that apart from a real failure. Grows the buffer and retries on
-        // XL_BUFFER_TOO_SMALL, where the native side holds the row until it fits.
         std::expected<RowView, Error> next_row()
         {
             while (true)
@@ -683,20 +566,17 @@ namespace xl
                     buffer_.resize(needed);
                     continue;
                 }
-                return std::unexpected(detail::make_error(status));   // includes XL_EOF
+                return std::unexpected(detail::make_error(status));   
             }
         }
 
     private:
-        // Rows are usually well under this; it only sets how often an oversized row costs a retry.
         static constexpr size_t kInitialRowBuffer = 64 * 1024;
 
         xl_workbook *handle_{};
         std::vector<uint8_t> buffer_;
     };
 
-    // Every remaining row of a sheet, decoded natively in one call. Owns the native allocation and
-    // frees it in the destructor; rows and cells borrow from it, so they must not outlive it.
     class DecodedRows
     {
     public:
@@ -772,7 +652,6 @@ namespace xl
         xl_rows raw_{};
     };
 
-    // ---- Workbook (RAII) ------------------------------------------------------------------------
 
     class Workbook
     {
@@ -813,8 +692,6 @@ namespace xl
             return Workbook(handle);
         }
 
-        // In-memory equivalent of open(): `data` is copied by the native library, so it need not
-        // outlive this call.
         static std::expected<Workbook, Error> open_memory(std::span<const uint8_t> data, int32_t format = XL_FORMAT_AUTO,
                                                           const OpenOptions *options = nullptr)
         {
@@ -834,7 +711,6 @@ namespace xl
             return Workbook(handle);
         }
 
-        // ---- Sheet navigation --------------------------------------------------------------------
 
         std::expected<int32_t, Error> sheet_count() const
         {
@@ -847,22 +723,18 @@ namespace xl
             return count;
         }
 
-        // Name of the currently selected sheet.
         std::expected<std::string, Error> sheet_name() const
         {
             return detail::fill_string([this](uint8_t *buffer, int32_t capacity, int32_t *out_len)
                                        { return xl_sheet_name(handle_, buffer, capacity, out_len); });
         }
 
-        // Name of the sheet at `index`, without changing the current sheet or disturbing row
-        // enumeration.
         std::expected<std::string, Error> sheet_name_at(int32_t index) const
         {
             return detail::fill_string([this, index](uint8_t *buffer, int32_t capacity, int32_t *out_len)
                                        { return xl_sheet_name_at(handle_, index, buffer, capacity, out_len); });
         }
 
-        // Every sheet name, in workbook order.
         std::expected<std::vector<std::string>, Error> sheet_names() const
         {
             auto count = sheet_count();
@@ -884,8 +756,6 @@ namespace xl
             return names;
         }
 
-        // Selects the sheet at `index`, resetting row enumeration to its first row. Non-const: it
-        // moves the cursor every subsequent read on this handle shares.
         std::expected<void, Error> move_to_sheet(int32_t index)
         {
             int32_t status = xl_move_to_sheet(handle_, index);
@@ -896,7 +766,6 @@ namespace xl
             return {};
         }
 
-        // Whether the workbook uses the 1904 date system - needed to interpret raw Excel serials.
         std::expected<bool, Error> is_date1904() const
         {
             int32_t flag = 0;
@@ -908,12 +777,8 @@ namespace xl
             return flag != 0;
         }
 
-        // A row-at-a-time reader over the current sheet. Non-const: it moves the row cursor every
-        // read on this handle shares.
         RowCursor rows() { return RowCursor(handle_); }
 
-        // Every remaining row of the current sheet in one native call, avoiding a round-trip per
-        // row. An empty remainder is an empty result, not an error.
         std::expected<DecodedRows, Error> read_all_decoded()
         {
             xl_rows raw{};
@@ -925,13 +790,7 @@ namespace xl
             return DecodedRows(raw);
         }
 
-        // ---- Schema inference --------------------------------------------------------------------
 
-        // Guesses a parse_sheet schema by sampling the current sheet. `header_row` has the same
-        // meaning as in parse_sheet (0 = no header); `sample_size` bounds how many rows after the
-        // header are inspected. A guess over a sample, not a guarantee - always check it fits before
-        // trusting it against the full sheet. Const: the native call samples independently of the
-        // shared row cursor and never disturbs it.
         std::expected<std::vector<InferredColumn>, Error> infer_schema(int32_t header_row = 1,
                                                                        int32_t sample_size = 100) const
         {
@@ -942,9 +801,6 @@ namespace xl
                 return std::unexpected(detail::make_error(status));
             }
 
-            // The schema is native-owned from here. This guard returns it on every exit path,
-            // including the one where the vector's own allocation throws - the only way out of this
-            // function that is not a plain return.
             struct SchemaGuard
             {
                 xl_inferred_schema *schema;
@@ -957,8 +813,6 @@ namespace xl
             {
                 const xl_column_spec &spec = schema.columns[i];
                 InferredColumn column{};
-                // A guessed name is exactly name_len bytes with no NUL terminator, and is NULL
-                // whenever the column had no usable header cell.
                 if (spec.name_count > 0 && spec.names[0] != nullptr && spec.name_lens[0] > 0)
                 {
                     column.name = std::string(reinterpret_cast<const char *>(spec.names[0]),
@@ -989,10 +843,9 @@ namespace xl
         xl_workbook *handle_ = nullptr;
     };
 
-    // ---- Type traits: map a C++ field type to its XL_T_* column type -----------------------------
 
     template <typename T>
-    struct XlType; // no default: a field type not specialized below is a compile error, not a silent bug.
+    struct XlType; 
 
     template <>
     struct XlType<std::string>
@@ -1044,10 +897,6 @@ namespace xl
         static constexpr int32_t value = XL_T_DATE;
     };
 
-    // XL_T_TIME's native width is microseconds since midnight (see excelreader.h) - std::chrono::
-    // microseconds is the primary field type for it, matching that exactly with no conversion.
-    // hh_mm_ss<microseconds> is also supported, for callers who want hours/minutes/seconds broken
-    // out rather than a raw duration; its precision must match XL_T_TIME's for the same reason.
     template <>
     struct XlType<std::chrono::microseconds>
     {
@@ -1087,9 +936,8 @@ namespace xl
         template <typename T>
         using unwrap_optional_t = typename IsOptional<T>::Inner;
 
-    } // namespace detail
+    } 
 
-    // ---- Struct <-> column bindings ---------------------------------------------------------------
 
     template <typename Class, typename T, std::size_t N = 1>
     struct FieldBinding
@@ -1117,7 +965,6 @@ namespace xl
         return result;
     }
 
-    // Users specialize this for each struct they want to parse into.
     template <typename T>
     struct ExcelMapper;
 
@@ -1135,9 +982,9 @@ namespace xl
                 reinterpret_cast<const uint8_t *const *>(binding.column_names.data()),
                 name_lens_storage.data(),
                 static_cast<int32_t>(N),
-                0, // index is ignored: resolved by name
+                0, 
                 XlType<T>::value,
-                1 // nullable = 1 (safe default)
+                1 
             };
         }
         template <typename Tuple, std::size_t... Is>
@@ -1146,7 +993,6 @@ namespace xl
             return {build_one_spec(std::get<Is>(bindings), name_lens_storage[Is])...};
         }
 
-        // Whether row `row` is non-null in `col`; columns with no null values have validity == nullptr.
         inline bool is_valid(const xl_column &col, int64_t row)
         {
             if (col.validity == nullptr)
@@ -1163,7 +1009,7 @@ namespace xl
         {
             if (!is_valid(col, row))
             {
-                return; // leave the struct member default-initialized
+                return; 
             }
             if constexpr (detail::is_optional_v<T>)
             {
@@ -1222,11 +1068,6 @@ namespace xl
             }
             else if constexpr (std::is_same_v<T, std::chrono::system_clock::time_point>)
             {
-                // system_clock::time_point's own Duration is implementation-defined (nanoseconds on
-                // libstdc++/MSVC) - time_point_cast converts the microseconds XL_T_TIMESTAMP provides
-                // into whatever that is. sys_time<microseconds> is the time_point<system_clock,
-                // microseconds> alias; constructing through it (rather than time_point's raw Duration
-                // constructor) keeps the "microseconds since epoch" meaning explicit at the call site.
                 int64_t micros = static_cast<const int64_t *>(col.values)[row];
                 instance.*(binding.member) = std::chrono::time_point_cast<std::chrono::system_clock::duration>(
                     std::chrono::sys_time<std::chrono::microseconds>{std::chrono::microseconds{micros}});
@@ -1239,9 +1080,6 @@ namespace xl
             (..., assign_field(instance, table.columns[Is], row, std::get<Is>(bindings)));
         }
 
-        // The one place a T is built from a row of the columnar buffers. Both TableView<T>::operator[]
-        // and its iterator's operator*() go through this, so the bindings lookup and the index
-        // sequence are written once.
         template <typename T>
         inline T row_at(const xl_table &table, int64_t row)
         {
@@ -1252,9 +1090,8 @@ namespace xl
             return instance;
         }
 
-    } // namespace detail
+    } 
 
-    // ---- TableView<T>: a lazy, non-owning-of-T view over a parsed xl_table ------------------------
 
     template <typename T>
     class TableView
@@ -1274,13 +1111,8 @@ namespace xl
             return *this;
         }
 
-        ~TableView() { xl_free_table(&table_); } // safe on a zeroed table
+        ~TableView() { xl_free_table(&table_); } 
 
-        // Random access: every row is independently addressable in the columnar buffers, so
-        // dereferencing has no traversal-order dependency and the full random-access surface
-        // applies. operator*() still returns T by value (same as any forward/bidirectional
-        // iterator here) - only algorithms that need a real lvalue reference (e.g. std::sort)
-        // are unavailable; read-only traversal, std::advance/distance, and indexed access all work.
         class iterator
         {
         public:
@@ -1374,15 +1206,8 @@ namespace xl
         int64_t size() const noexcept { return table_.row_count; }
         bool empty() const noexcept { return table_.row_count == 0; }
 
-        // Random access into the view itself, without going through an iterator.
-        //
-        // Unchecked, exactly like std::vector::operator[]: a `row` outside [0, size()) reads past
-        // the columnar buffers and returns whatever sits after the allocation. Use at() below unless
-        // the caller has already established the bound.
         T operator[](int64_t row) const { return detail::row_at<T>(table_, row); }
 
-        // Bounds-checked counterpart to operator[]. Returns nullopt rather than throwing, since this
-        // header is exception-free by design (std::vector::at's out_of_range is not an option here).
         std::optional<T> at(int64_t row) const
         {
             if (row < 0 || row >= table_.row_count)
@@ -1392,8 +1217,6 @@ namespace xl
             return (*this)[row];
         }
 
-        // Opt-in materialization for callers who want an owned std::vector<T> instead of the
-        // lazy view (e.g. because they need it to outlive the view, or need random access).
         std::vector<T> to_vector() const
         {
             std::vector<T> result;
@@ -1405,7 +1228,6 @@ namespace xl
             return result;
         }
 
-        // Internal: constructed only by parse_sheet, which owns the xl_parse_typed call.
         static TableView from_raw(xl_table table) { return TableView(table); }
 
     private:
@@ -1414,10 +1236,7 @@ namespace xl
         xl_table table_{};
     };
 
-    // ---- Entry points -------------------------------------------------------------------------
 
-    // Schema-driven, zero-vector-allocation parse: only the xl_parse_typed columnar buffers are
-    // allocated. Iterate the returned TableView directly, or call .to_vector() to materialize.
     template <typename T>
     std::expected<TableView<T>, Error> parse_sheet(Workbook &workbook, int32_t header_row = 1)
     {
@@ -1437,12 +1256,7 @@ namespace xl
         return TableView<T>::from_raw(table);
     }
 
-    // ---- Chunked typed reading -----------------------------------------------------------------
 
-    // parse_sheet a batch at a time. Borrows the workbook's single row cursor: any other read on
-    // that workbook (parse_sheet, rows(), move_to_sheet, close) leaves this reader reporting a
-    // latched error instead of resuming from the moved cursor. C++ cannot enforce that, so finish
-    // or destroy the reader first.
     template <typename T>
     class TypedReader
     {
@@ -1462,9 +1276,8 @@ namespace xl
             return *this;
         }
 
-        ~TypedReader() { xl_typed_reader_close(reader_); } // safe on null
+        ~TypedReader() { xl_typed_reader_close(reader_); } 
 
-        // Empty optional at end of sheet. Each batch outlives this reader.
         std::expected<std::optional<TableView<T>>, Error> next()
         {
             xl_table table{};
@@ -1480,7 +1293,6 @@ namespace xl
             return std::optional<TableView<T>>(TableView<T>::from_raw(table));
         }
 
-        // Single-pass by nature: the native reader has no rewind.
         class iterator
         {
         public:
@@ -1518,12 +1330,10 @@ namespace xl
                     current_.reset();
                     return;
                 }
-                // Holding the yielded batch across the call would double the peak this type bounds.
                 current_.reset();
                 std::expected<std::optional<TableView<T>>, Error> batch = reader_->next();
                 if (!batch.has_value())
                 {
-                    // The ABI latches the failure, so yield it once and end rather than repeat it.
                     current_ = value_type(std::unexpect, std::move(batch.error()));
                     reader_ = nullptr;
                     return;
@@ -1552,8 +1362,6 @@ namespace xl
         xl_typed_reader *reader_ = nullptr;
     };
 
-    // `batch_size` is rows per batch: 0 unbounded, negative XL_INVALID_ARGUMENT. `header_row` is
-    // consumed here rather than re-read per batch.
     template <typename T>
     std::expected<TypedReader<T>, Error> typed_reader(Workbook &workbook, int32_t header_row = 1,
                                                       int64_t batch_size = 10000)
@@ -1575,12 +1383,6 @@ namespace xl
         return TypedReader<T>::from_raw(reader);
     }
 
-    // Writes `columns` to `path` as a single sheet, then closes the file. One-shot: no writer handle
-    // exists before or after, and every buffer reachable from `columns` and `options` is borrowed
-    // for the duration of the call and never freed by this library.
-    // `format` must be XL_FORMAT_XLS/XLSX/XLSB/CSV. XL_FORMAT_AUTO is an error, because a file being
-    // created has no signature bytes to sniff. On failure the destination may exist and be
-    // incomplete - cleaning it up is the caller's.
     inline std::expected<void, Error> write_columns(std::string_view path, int32_t format,
                                                     std::span<const ColumnRef> columns,
                                                     const WriteOptions *options = nullptr)
@@ -1607,8 +1409,6 @@ namespace xl
         }
 
         xl_table table{static_cast<int32_t>(count), *row_count, raw_columns.data()};
-        // A zeroed xl_write_options is NOT the same as no options: its struct_size of 0 is rejected.
-        // NULL is what means "every default".
         xl_write_options raw_options{};
         const xl_write_options *options_pointer = detail::lower_options(options, raw_options);
 
@@ -1622,19 +1422,12 @@ namespace xl
         return {};
     }
 
-    // Infers the format from the path's extension. An unrecognized extension yields XL_FORMAT_AUTO,
-    // which xl_write_typed then rejects by name.
     inline std::expected<void, Error> write_columns(std::string_view path, std::span<const ColumnRef> columns,
                                                     const WriteOptions *options = nullptr)
     {
         return write_columns(path, format_from_path(path), columns, options);
     }
 
-    // In-memory equivalent of write_columns: same validation and column lowering, but the workbook
-    // is built in memory and returned as bytes instead of being written to a path - so, unlike
-    // write_columns, there is no path to infer a format from and `format` cannot default to one.
-    // The native xl_buffer is copied into the returned vector and freed before this function
-    // returns, so the caller owns an ordinary std::vector<uint8_t> with nothing further to release.
     inline std::expected<std::vector<uint8_t>, Error> write_columns_to_memory(int32_t format,
                                                                               std::span<const ColumnRef> columns,
                                                                               const WriteOptions *options = nullptr)
@@ -1678,12 +1471,7 @@ namespace xl
         return std::vector<uint8_t>(buffer.data, buffer.data + buffer.len);
     }
 
-    // ---- encrypt_package: the inverse of OpenOptions::password -----------------------------------
 
-    // Wraps a finished plaintext XLSX/XLSB package at package_path in an agile-encrypted (ECMA-376
-    // 4.4) CFB container, written to destination_path (overwriting an existing file). The result
-    // opens with the same password via Workbook::open's OpenOptions::password. Encryption
-    // parameters are fixed at Excel's own defaults - there are no options.
     inline std::expected<void, Error> encrypt_package(std::string_view package_path,
                                                        std::string_view destination_path,
                                                        std::string_view password)
@@ -1704,13 +1492,10 @@ namespace xl
         return {};
     }
 
-    // ---- write_sheet<T>: transposing a range of structs into columns -----------------------------
 
     namespace detail
     {
 
-        // An XL_T_STRING column's two output buffers. `overflowed` latches rather than throwing:
-        // this header has no exceptions anywhere, and write_sheet checks it once before the write.
         struct StringBuffer
         {
             std::vector<int32_t> offsets{0};
@@ -1726,8 +1511,6 @@ namespace xl
             {
                 if (data.size() + value.size() > static_cast<size_t>(INT32_MAX))
                 {
-                    // Record the failure and keep the offsets array well-formed, so nothing
-                    // downstream reads a half-built column before write_sheet bails out.
                     overflowed = true;
                     offsets.push_back(offsets.back());
                     return;
@@ -1738,7 +1521,6 @@ namespace xl
             }
         };
 
-        // The output buffer each XL_T_* needs, at that type's exact wire width.
         template <int32_t Type>
         struct ColumnStorage;
 
@@ -1778,9 +1560,6 @@ namespace xl
             using type = std::vector<int64_t>;
         };
 
-        // One column's accumulating buffers, built from the FIELD type. `validity` stays empty
-        // unless the field is std::optional - the ABI reads validity == NULL as "no nulls", so a
-        // non-nullable column costs no bitmap at all.
         template <typename T>
         struct ColumnBuilder
         {
@@ -1805,8 +1584,6 @@ namespace xl
             {
                 if constexpr (nullable)
                 {
-                    // Grows one byte every eight rows, so the bitmap is always exactly big enough
-                    // for the rows pushed so far.
                     validity.resize(static_cast<size_t>((rows + 8) / 8), 0);
                     if (value.has_value())
                     {
@@ -1871,8 +1648,6 @@ namespace xl
             }
 
         private:
-            // A null row still occupies a slot in the values buffer; its bit is what marks it
-            // absent. Zero (or the empty string) is the placeholder the writer never reads.
             void append_placeholder()
             {
                 if constexpr (column_type == XL_T_STRING)
@@ -1885,8 +1660,6 @@ namespace xl
                 }
             }
 
-            // The exact inverse of detail::assign_field - same chain, same conversions, opposite
-            // direction. If one of them gains a type, so must the other.
             void append(const Field &value)
             {
                 if constexpr (std::is_same_v<Field, std::string> || std::is_same_v<Field, std::string_view>)
@@ -1931,7 +1704,6 @@ namespace xl
             }
         };
 
-        // The tuple of ColumnBuilders matching a bindings tuple, one per field, in the same order.
         template <typename Tuple, typename Indices>
         struct BuildersFor;
         template <typename Tuple, std::size_t... Is>
@@ -1962,28 +1734,12 @@ namespace xl
         std::array<ColumnRef, sizeof...(Is)> to_refs(const Builders &builders, const Tuple &bindings,
                                                      std::index_sequence<Is...>)
         {
-            // Only the FIRST candidate name is used: xl_write_typed rejects a write spec carrying
-            // more than one, and the alias list exists to resolve a header on the way IN.
             return {std::get<Is>(builders).to_ref(std::string_view(std::get<Is>(bindings).column_names[0]))...};
         }
 
-    } // namespace detail
+    } 
 
-    // Writes `rows` to `path` as a single sheet, using the same xl::ExcelMapper<T> specialization
-    // that xl::parse_sheet<T> reads with - so reading a sheet into structs and writing it back out
-    // needs one mapping, not two.
-    //
-    // The range is walked ONCE, and each field is appended to its own column buffer through a
-    // compile-time dispatch. That transpose is the only copy this makes; it is what the ABI's
-    // columnar shape costs a row-shaped caller. If you already hold columnar buffers, call
-    // write_columns instead and pay nothing.
-    //
     // NOTE for write_sheet_to_memory below: this body is intentionally NOT factored into a shared
-    // helper returning just `refs`. Every ColumnRef in `refs` borrows pointers into `builders`'s own
-    // std::vectors (see detail::ColumnBuilder), so `refs` is only valid while `builders` is still
-    // alive - a helper that built `builders` and returned `refs` alone would hand back dangling
-    // pointers the moment it returned. `builders` and `refs` must stay in the same scope as the
-    // write_columns(_to_memory) call that consumes them.
     template <std::ranges::input_range R>
     std::expected<void, Error> write_sheet(std::string_view path, int32_t format, R &&rows,
                                            const WriteOptions *options = nullptr)
@@ -2012,7 +1768,6 @@ namespace xl
         return write_columns(path, format, refs, options);
     }
 
-    // Infers the format from the path's extension.
     template <std::ranges::input_range R>
     std::expected<void, Error> write_sheet(std::string_view path, R &&rows,
                                            const WriteOptions *options = nullptr)
@@ -2021,8 +1776,6 @@ namespace xl
     }
 
     // In-memory equivalent of write_sheet: same transpose (see the NOTE on write_sheet above for why
-    // this body duplicates it instead of sharing it), but returns bytes instead of writing to a
-    // path - see write_columns_to_memory for why `format` has no default here.
     template <std::ranges::input_range R>
     std::expected<std::vector<uint8_t>, Error> write_sheet_to_memory(int32_t format, R &&rows,
                                                                      const WriteOptions *options = nullptr)
@@ -2051,21 +1804,7 @@ namespace xl
         return write_columns_to_memory(format, refs, options);
     }
 
-    // ---- Streaming writer handle (RAII) ----------------------------------------------------------
 
-    // Row-by-row equivalent of write_columns/write_sheet<T>: xl_writer_handle wrapped for RAII, one
-    // sheet and one row open at a time. Call order mirrors the C ABI (see xl_writer_handle in
-    // excelreader.h): open()/open_memory(), then per sheet start_sheet()..end_sheet(), each
-    // containing start_row()..end_row() with one write() per cell in between, left to right. A call
-    // out of order returns an Error rather than crashing or corrupting output, and the handle stays
-    // usable afterward - fix the call order and continue, or let the destructor discard it.
-    //
-    // Unlike write_columns/write_sheet<T>, `format` is always explicit here: xl_open_write_handle
-    // and xl_open_write_handle_to_memory both reject XL_FORMAT_AUTO the same way xl_write_typed
-    // does, and a format_from_path(path)-inferring overload here would be genuinely ambiguous
-    // against open_memory's signature at literal 0/XL_FORMAT_AUTO (a null pointer constant matches
-    // both an int32_t format parameter and a defaulted `const WriteOptions*` one) - not merely
-    // confusing, an actual "call is ambiguous" compile error for that one call.
     class WriterHandle
     {
     public:
@@ -2105,8 +1844,6 @@ namespace xl
             return WriterHandle(handle);
         }
 
-        // In-memory equivalent of open(): read the result back with bytes(), then release the
-        // handle the same way as a file-backed one (destructor, or an explicit move-assignment).
         static std::expected<WriterHandle, Error> open_memory(int32_t format,
                                                               const WriteOptions *options = nullptr)
         {
@@ -2137,13 +1874,6 @@ namespace xl
 
         std::expected<void, Error> end_sheet() { return status_result(xl_end_sheet(handle_)); }
 
-        // Writes the next cell of the current row. T is deduced from `value` through the same
-        // XlType<T> mapping parse_sheet/write_sheet use: std::string/std::string_view for
-        // XL_T_STRING, an integral type for XL_T_I64, a floating-point type for XL_T_F64, bool for
-        // XL_T_BOOL, std::chrono::year_month_day/sys_days for XL_T_DATE,
-        // std::chrono::microseconds/hh_mm_ss<microseconds> for XL_T_TIME, and
-        // std::chrono::system_clock::time_point for XL_T_TIMESTAMP. Wrap any of those in
-        // std::optional<T> to write a blank cell for an empty one.
         template <typename T>
         std::expected<void, Error> write(const T &value)
         {
@@ -2200,22 +1930,12 @@ namespace xl
             }
             else
             {
-                // Dependent on Value so this only fires when write<T> is actually instantiated for
-                // an unsupported T, not on every parse of the template - same reasoning as XlType's
-                // "no default" comment: a type this cannot write is a compile error, not a silent
-                // no-op cell.
                 static_assert(sizeof(Value) == 0, "unsupported type for xl::WriterHandle::write");
             }
         }
 
-        // Writes a blank cell of the given XL_T_* type directly, for a caller that would rather
-        // pass the type explicitly than wrap a value in std::optional<T>.
         std::expected<void, Error> write_null(int32_t type) { return status_result(xl_write_null(handle_, type)); }
 
-        // Reads back everything written so far - only valid for a handle from open_memory();
-        // XL_INVALID_ARGUMENT for one from open(). Ends the workbook's trailing structure if that
-        // has not already happened, but does NOT release the handle: it stays open (and closeable)
-        // exactly like a file-backed one. See xl_write_handle_bytes in excelreader.h.
         std::expected<std::vector<uint8_t>, Error> bytes()
         {
             xl_buffer buffer{};
@@ -2257,4 +1977,4 @@ namespace xl
 
         xl_writer_handle *handle_ = nullptr;
     };
-} // namespace xl
+} 

@@ -30,13 +30,13 @@ namespace ExcelReader.Tests
         [Fact]
         public void TruncatedWideStringReturnsFalse()
         {
-            byte[] data = [.. B.U32(5), 1, 2, 3, 4]; // declares 5 chars (10 bytes), only 4 present
+            byte[] data = [.. B.U32(5), 1, 2, 3, 4];
             Assert.False(Biff12.TryReadWideString(data, 0, out _, out _));
         }
 
         [Theory]
-        [InlineData(402u, 100.0)]        // (100 << 2) | fInt
-        [InlineData(0x3FF80000u, 1.5)]   // double 1.5, high 30 bits, fInt clear
+        [InlineData(402u, 100.0)]
+        [InlineData(0x3FF80000u, 1.5)]
         public void RkDecodesIntAndDouble(uint rk, double expected)
         {
             Assert.Equal(expected, Biff12.Rk(rk));
@@ -45,11 +45,10 @@ namespace ExcelReader.Tests
         [Fact]
         public void RkAppliesDivideByHundred()
         {
-            const uint rk = (12345u << 2) | 0x03; // fInt | fX100
+            const uint rk = (12345u << 2) | 0x03;
             Assert.Equal(123.45, Biff12.Rk(rk));
         }
 
-        // --- workbook.bin ---
 
         private static byte[] WorkbookBin(uint wbPropFlags)
         {
@@ -83,10 +82,9 @@ namespace ExcelReader.Tests
         {
             Assert.True(XlsbWorkbook.ParseDate1904(WorkbookBin(0x01)));
             Assert.False(XlsbWorkbook.ParseDate1904(WorkbookBin(0x00)));
-            Assert.False(XlsbWorkbook.ParseDate1904([])); // no BrtWbProp
+            Assert.False(XlsbWorkbook.ParseDate1904([]));
         }
 
-        // --- styles.bin ---
 
         [Fact]
         public void StyleDateFlagsCoverBuiltinCustomAndCellXfsScope()
@@ -95,18 +93,16 @@ namespace ExcelReader.Tests
             const int endCellStyleXfs = 627;
             byte[] styles =
             [
-                .. B.Record(Brt.Fmt, [.. B.U16(176), .. B.WideString("yyyy-mm-dd")]), // custom date
-                .. B.Record(Brt.Fmt, [.. B.U16(177), .. B.WideString("0.00")]),       // custom non-date
-                // cellStyleXfs region: a date XF here must NOT count toward cell styles.
+                .. B.Record(Brt.Fmt, [.. B.U16(176), .. B.WideString("yyyy-mm-dd")]),
+                .. B.Record(Brt.Fmt, [.. B.U16(177), .. B.WideString("0.00")]),
                 .. B.Record(beginCellStyleXfs),
                 .. B.Record(Brt.Xf, B.Xf(14)),
                 .. B.Record(endCellStyleXfs),
-                // cellXfs region: these are the ones iStyleRef indexes.
                 .. B.Record(Brt.BeginCellXFs),
-                .. B.Record(Brt.Xf, B.Xf(0)),    // general -> not date
-                .. B.Record(Brt.Xf, B.Xf(14)),   // builtin date
-                .. B.Record(Brt.Xf, B.Xf(176)),  // custom date
-                .. B.Record(Brt.Xf, B.Xf(177)),  // custom non-date
+                .. B.Record(Brt.Xf, B.Xf(0)),
+                .. B.Record(Brt.Xf, B.Xf(14)),
+                .. B.Record(Brt.Xf, B.Xf(176)),
+                .. B.Record(Brt.Xf, B.Xf(177)),
                 .. B.Record(Brt.EndCellXFs),
             ];
 
@@ -115,7 +111,6 @@ namespace ExcelReader.Tests
             Assert.Equal([false, true, true, false], flags);
         }
 
-        // --- sharedStrings.bin ---
 
         [Fact]
         public void SharedStringsDecodeToFlatUtf8()

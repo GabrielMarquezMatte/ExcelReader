@@ -4,23 +4,13 @@ using ExcelReader.Core.Crypto;
 
 namespace ExcelReader.Tests
 {
-    // CbcSegmentCipher reuses one ICryptoTransform across every segment and corrects the first
-    // block for the IV the segment is actually encrypted under. The oracle for all of it is the
-    // one-shot Aes.DecryptCbc/EncryptCbc API it replaced: these tests assert byte-for-byte
-    // equality against that, segment by segment, which is the only thing that makes the
-    // chaining-state fix-up safe to rely on in a security path.
     public class CbcSegmentCipherTests
     {
         private const int SegmentSize = 4096;
         private const int BlockSize = 16;
 
-        // Three full segments plus a short-but-block-aligned tail, which is the shape a real
-        // package ends on.
         private static readonly int[] SegmentLengths = [SegmentSize, SegmentSize, SegmentSize, 32];
 
-        // Deliberately not cryptographically secure — CA5394 doesn't apply: a seeded, reproducible
-        // byte pattern standing in for keys, IVs and payloads that are never used to protect
-        // anything. A failing case has to be replayable from its seed.
         [SuppressMessage("Security", "CA5394:Do not use insecure randomness",
             Justification = "Seeded test vectors, not randomness protecting anything.")]
         private static byte[] Random(int length, int seed)
@@ -30,8 +20,6 @@ namespace ExcelReader.Tests
             return buffer;
         }
 
-        // The per-segment IVs ECMA-376 derives from the salt and the segment index; their only
-        // relevant property here is that they differ per segment, so random stands in for them.
         private static byte[][] Ivs(int count, int seed)
         {
             byte[][] ivs = new byte[count][];
@@ -72,9 +60,6 @@ namespace ExcelReader.Tests
             }
         }
 
-        // DecryptedPackageStream seeks, so segments arrive in whatever order the ZIP reader asks
-        // for them. The fix-up compensates from the state the cipher tracks itself, never from an
-        // assumption about which segment came before, so the order must not matter.
         [Fact]
         public void Should_Match_OneShot_When_Segments_Arrive_Out_Of_Order()
         {
@@ -105,7 +90,6 @@ namespace ExcelReader.Tests
             for (int i = 0; i < SegmentLengths.Length; i++)
             {
                 byte[] plaintext = Random(SegmentLengths[i], 600 + i);
-                // Encrypt XORs the first block of its input in place, so the oracle needs its own copy.
                 byte[] expected = OneShotEncrypt(key, ivs[i], plaintext);
                 byte[] actual = new byte[plaintext.Length];
                 cipher.Encrypt(plaintext, ivs[i], actual);

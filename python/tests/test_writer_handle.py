@@ -83,13 +83,8 @@ def test_out_of_order_call_raises(tmp_path):
 
     path = tmp_path / "bad.xlsx"
     with open_writer(path) as writer:
-        # A cell write before start_row is rejected by the native side.
         with pytest.raises(ExcelReaderError):
             writer.write_str("too early")
-        # The writer stays usable after a rejected call (see SheetWriter's docstring). Finish a
-        # minimal sheet so the implicit close on exit succeeds: an XLSX workbook with zero sheets is
-        # itself rejected on close by the native side, same as rust/excelreader/tests/writer_handle.rs
-        # ends its equivalent test with a start_sheet call before the handle drops.
         writer.start_sheet("Data")
         writer.start_row()
         writer.end_row()
@@ -112,8 +107,6 @@ def test_write_row_infers_every_supported_type(tmp_path):
     path = tmp_path / "inferred.xlsx"
     with open_writer(path) as writer:
         writer.start_sheet("Data")
-        # True and the datetime are the two subclass traps: bool subclasses int, and
-        # datetime.datetime subclasses datetime.date.
         writer.write_row(
             [
                 "text",
@@ -136,9 +129,7 @@ def test_write_row_infers_every_supported_type(tmp_path):
 
     assert values[0] == "text"
     assert values[1] == "42"
-    # bool must NOT have been written as the integer 1.
     assert types[3] == CellType.BOOL, f"bool dispatched as {types[3]}"
-    # datetime must NOT have been written as a plain date.
     assert values[6] != values[4], "datetime and date produced the same cell"
 
 
@@ -222,7 +213,6 @@ def test_write_workbook_to_bytes_matches_write_workbook(tmp_path, xlsx_path):
     write_workbook(path, table, types, format="xlsx")
     payload = write_workbook_to_bytes(table, types, format="xlsx")
 
-    # Compare by reading both back: an XLSX ZIP is not guaranteed to be byte-identical.
     with open_workbook(path) as workbook:
         from_file = [[cell.value for cell in row] for row in workbook.rows()]
     with open_bytes(payload, format="xlsx") as workbook:

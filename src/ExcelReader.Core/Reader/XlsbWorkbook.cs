@@ -1,7 +1,5 @@
 namespace ExcelReader.Core.Reader
 {
-    // Parses xl/workbook.bin (binary BIFF12): the sheet bundle and the date system. Sheet names come
-    // from BrtBundleSh records; their part paths come from the (still XML) workbook.bin.rels.
     internal static class XlsbWorkbook
     {
         internal static (string Name, string Path)[] ParseSheets(ReadOnlySpan<byte> workbookBin, ReadOnlySpan<byte> relsBytes)
@@ -20,7 +18,6 @@ namespace ExcelReader.Core.Reader
             return [.. sheets];
         }
 
-        // BrtBundleSh: hsState (u32), iTabID (u32), strRelID (nullable wide string), strName (wide string).
         private static void AddSheet(ReadOnlySpan<byte> payload, Dictionary<string, string> rels, List<(string, string)> sheets)
         {
             if (payload.Length < 8)
@@ -41,7 +38,6 @@ namespace ExcelReader.Core.Reader
             }
         }
 
-        // BrtWbProp flags (u32): bit 0 (f1904) selects the 1904 date system.
         internal static bool ParseDate1904(ReadOnlySpan<byte> workbookBin)
         {
             var reader = new Biff12RecordReader(workbookBin);

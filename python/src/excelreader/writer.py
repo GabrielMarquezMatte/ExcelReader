@@ -20,15 +20,10 @@ from excelreader.reader import _check
 from excelreader.types import ColumnType, StringColumn, TypedTable, WriteOptions
 
 _FORMAT_NAMES = _native.WRITE_FORMATS
-# The by-extension table is the by-name one with a leading dot, so a new format is added in exactly
-# one place (_native.FORMATS) and reaches both lookups.
 _WRITE_FORMATS = {f".{name}": value for name, value in _FORMAT_NAMES.items()}
 
 
 def _resolve_write_format(name: str | None, path: Path) -> int:
-    # XL_FORMAT_AUTO is not accepted by xl_write_typed — a file being created has no signature bytes
-    # to sniff — so the extension is the only inference available, and an unknown one is an error
-    # rather than a silent default.
     if name is not None:
         try:
             return _FORMAT_NAMES[name.lower()]
@@ -57,7 +52,7 @@ def _buffer_of(values: Any) -> tuple[Any, int]:
     elif isinstance(values, array):
         raw = values
     else:
-        raw = getattr(values, "data", values)  # numpy ndarray -> memoryview
+        raw = getattr(values, "data", values)  
     blob = memoryview(raw).tobytes()
     return (ctypes.c_char * len(blob)).from_buffer_copy(blob), len(blob)
 
@@ -197,9 +192,6 @@ def write_workbook_to_bytes(
         del keepalive
 
 
-# Arrow type id -> the ColumnType whose buffer layout matches it exactly. Only the seven types
-# xl_write_typed accepts are listed; anything else is rejected by name rather than coerced, so a
-# caller learns what happened instead of getting a silently stringified column.
 _ARROW_TYPES = {
     "string": ColumnType.STRING,
     "large_string": ColumnType.STRING,
@@ -283,9 +275,6 @@ def _column_from_pylist(values: list[Any], column_type: ColumnType, row_count: i
                 + value.microsecond
             )
         elif column_type is ColumnType.TIMESTAMP:
-            # timedelta arithmetic, not datetime.timestamp(): that returns a float whose ULP is
-            # already ~0.24 us at 2024-era magnitudes, so int() truncation would silently shift a
-            # microsecond-precision value by one microsecond.
             delta = value.replace(tzinfo=datetime.timezone.utc) - _EPOCH_DATETIME
             data_array.append(delta.days * 86_400_000_000 + delta.seconds * 1_000_000 + delta.microseconds)
         elif column_type is ColumnType.BOOL:
@@ -307,8 +296,6 @@ def write_arrow(path: str | Path, batch: Any, **kwargs: Any) -> None:
     import pyarrow
 
     if isinstance(batch, pyarrow.Table):
-        # combine_chunks collapses a multi-chunk table into one batch, but yields none at all for a
-        # row-less table - which is a header-only sheet, not an error.
         batches = batch.combine_chunks().to_batches()
         batch = batches[0] if batches else pyarrow.RecordBatch.from_pylist([], schema=batch.schema)
 
@@ -333,11 +320,6 @@ def write_pandas(path: str | Path, df: Any, **kwargs: Any) -> None:
     """Writes a `pandas.DataFrame` to `path`. Requires pyarrow and pandas."""
     import pyarrow
 
-    # Table, not RecordBatch: a frame this library produced itself carries one chunk per batch that
-    # Workbook.to_pandas read (7 of them for a 65k-row sheet at the default batch_size), and
-    # RecordBatch cannot hold a multi-chunk column at all - so reading a sheet and writing it back,
-    # the round trip both functions exist for, used to fail outright. write_arrow already combines a
-    # Table's chunks.
     write_arrow(path, pyarrow.Table.from_pandas(df, preserve_index=False), **kwargs)
 
 

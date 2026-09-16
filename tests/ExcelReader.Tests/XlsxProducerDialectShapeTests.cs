@@ -8,7 +8,6 @@ using ExcelReader.Core.Writer;
 namespace ExcelReader.Tests
 {
     // Hand-authored XML/ZIP fragments mimicking known producer quirks — not files actually exported by
-    // those producers. See RealWorldXlsxCorpusTests for tests against genuine producer-exported binaries.
     public class XlsxProducerDialectShapeTests
     {
         private const string SpreadsheetNs = "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
@@ -20,15 +19,11 @@ namespace ExcelReader.Tests
         private const string StylesRelType = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles";
         private const string SharedStringsRelType = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/sharedStrings";
 
-        // One entry per real-world producer dialect. Split across the two methods below only
-        // to keep each within the method-length gate; this stays the single ordered sequence
-        // [MemberData] consumes.
         public static IEnumerable<object[]> ProducerFixtures
         {
             get { return DotNetAndJsProducerFixtures().Concat(CloudAndJavaProducerFixtures()); }
         }
 
-        // ClosedXML and SheetJS: dimensions, ignored views, dense refs, styled numbers, formula caches.
         private static IEnumerable<object[]> DotNetAndJsProducerFixtures()
         {
             yield return
@@ -84,7 +79,6 @@ namespace ExcelReader.Tests
 
         }
 
-        // Numbers, Google Sheets and Aspose/Java: rich shared strings, ISO-8601 dates, namespace prefixes.
         private static IEnumerable<object[]> CloudAndJavaProducerFixtures()
         {
             yield return
@@ -212,7 +206,7 @@ namespace ExcelReader.Tests
             XDocument workbookXml = ReadXml(zip, "xl/workbook.xml");
             XNamespace s = SpreadsheetNs;
             XNamespace r = RelationshipsNs;
-#pragma warning disable CS8602 // Dereference of a possibly null reference.
+#pragma warning disable CS8602 
             XElement[] sheets = [.. workbookXml.Root.Element(s + "sheets")!.Elements(s + "sheet")];
             Assert.Collection(
                 sheets,
@@ -334,8 +328,6 @@ namespace ExcelReader.Tests
 
         private static MemoryStream BuildProducerFixture(ProducerFixture fixture)
         {
-            // A fixture may prefix its worksheet/shared-strings elements (e.g. <x:row>) while the workbook
-            // part stays unprefixed — the mixed shape where a prefixed worksheet previously read as zero rows.
             string pfx = fixture.Prefix is null ? "" : fixture.Prefix + ":";
             string wsNs = fixture.Prefix is null
                 ? $"""xmlns="{SpreadsheetNs}" """
@@ -489,7 +481,6 @@ namespace ExcelReader.Tests
 
             public string? StylesXml { get; init; }
 
-            // When set, the worksheet (and shared-strings) elements are namespace-prefixed, e.g. <x:row>.
             public string? Prefix { get; init; }
 
             public override string ToString()
@@ -501,4 +492,4 @@ namespace ExcelReader.Tests
         public readonly record struct ExpectedCell(int Row, int Column, CellType Type, string Value);
     }
 }
-#pragma warning restore CS8602 // Dereference of a possibly null reference.
+#pragma warning restore CS8602 

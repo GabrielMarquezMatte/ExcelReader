@@ -20,10 +20,6 @@ namespace ExcelReader.Fuzz
             VerifyEncryptedSeedReachesRealCode(corpusDirectory);
             VerifyDifferentialSeedsReachBothReaders(corpusDirectory);
 
-            // Recursive: the corpus is laid out one directory per target (see SeedCorpus), but this
-            // runner deliberately drives EVERY target over EVERY file. That cross-format pass is the
-            // point of the Mutate splice below — it moves BIFF records into ZIP containers and back,
-            // which is exactly the material a per-target libFuzzer corpus never produces.
             string[] files = Directory.Exists(corpusDirectory)
                 ? [.. Directory.GetFiles(corpusDirectory, "*", SearchOption.AllDirectories).Order(StringComparer.Ordinal)]
                 : [];
@@ -37,9 +33,6 @@ namespace ExcelReader.Fuzz
             int failures = 0;
             int executed = 0;
 
-            // Kept alongside the per-file mutation loop below so a mutation can splice a chunk from a
-            // *different* corpus file — a shape blind single-file mutation can never produce, useful
-            // here because it moves e.g. BIFF records from one container into another.
             byte[][] corpus = [.. files.Select(File.ReadAllBytes)];
 
             for (int f = 0; f < files.Length; f++)
@@ -60,13 +53,6 @@ namespace ExcelReader.Fuzz
             return failures == 0 ? 0 : 1;
         }
 
-        // The permanent regression guard for Critical 2 in the final review: the "encrypted" target
-        // must reach AgileKeyDerivation/DecryptedPackageStream/PackageIntegrity, not dead-end on a
-        // resource limit before ever touching them. That failure mode is invisible from failures==0
-        // alone (a limit rejection and a genuine malformed-input rejection look identical to
-        // FuzzOracle), so it's checked directly: the unmutated seed must actually open and yield rows.
-        // Skips silently when the corpus directory has no such file (e.g. a scratch/partial corpus
-        // used for a one-off repro) rather than failing an unrelated `check` run.
         private static void VerifyEncryptedSeedReachesRealCode(string corpusDirectory)
         {
             if (!Directory.Exists(corpusDirectory))
@@ -74,9 +60,6 @@ namespace ExcelReader.Fuzz
                 return;
             }
 
-            // Both the committed regression seed and every generated one (SeedCorpus writes these
-            // under the encryption password Harnesses opens with). A generated seed written under the
-            // wrong password would be inert in exactly the same silent way.
             string[] seeds =
             [
                 .. Directory.GetFiles(corpusDirectory, "encrypted-agile-seed.bin", SearchOption.AllDirectories),
@@ -168,8 +151,6 @@ namespace ExcelReader.Fuzz
             }
             catch (Exception ex)
             {
-                // FuzzOracle already let the sanctioned exceptions through inside the harness, so
-                // anything arriving here is by definition unexpected.
                 Console.Error.WriteLine($"FAIL target={targetName} source={Path.GetFileName(sourceFile)} input={what}");
                 Console.Error.WriteLine($"  {ex.GetType().FullName}: {ex.Message}");
                 Console.Error.WriteLine(ex.StackTrace);
@@ -180,8 +161,6 @@ namespace ExcelReader.Fuzz
             }
         }
 
-        // Bytes that tend to sit right at a length/offset/count field's extremes — cheap to splice in
-        // and far more likely to hit an unchecked boundary than a random byte run.
         private static readonly byte[][] _interesting =
         [
             [0x00], [0xFF], [0x7F], [0x80],
@@ -189,8 +168,6 @@ namespace ExcelReader.Fuzz
             [0xFF, 0xFF, 0xFF, 0x7F],
         ];
 
-        // Blind byte-level mutations. Truncation matters most here: it is how a reader is made to
-        // meet an offset or length field that points past the end of the data.
         private static byte[] Mutate(byte[] original, byte[][] corpus, Random random)
         {
             return random.Next(7) switch
@@ -221,7 +198,6 @@ namespace ExcelReader.Fuzz
             return copy;
         }
 
-        // Drives length/count fields to extremes.
         private static byte[] FillRun(byte[] original, Random random)
         {
             byte[] copy = [.. original];
@@ -248,7 +224,6 @@ namespace ExcelReader.Fuzz
             return copy;
         }
 
-        // The only mutation that grows the input; the rest shrink or hold size.
         private static byte[] InsertRandom(byte[] original, Random random)
         {
             int at = random.Next(original.Length + 1);
@@ -273,7 +248,6 @@ namespace ExcelReader.Fuzz
             return copy;
         }
 
-        // Cross-format material: moves e.g. BIFF records from one container into another.
         private static byte[] SpliceFromDonor(byte[] original, byte[][] corpus, Random random)
         {
             byte[] donor = corpus[random.Next(corpus.Length)];

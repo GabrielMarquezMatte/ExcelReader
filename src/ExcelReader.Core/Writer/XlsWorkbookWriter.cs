@@ -68,7 +68,7 @@ namespace ExcelReader.Core.Writer
         {
             WriterStateGuard.RequireCanAddSheet(
                 _state, this, nameof(XlsWorkbookWriter), name, _activeSheet is not null, nameof(XlsSheetWriter));
-#pragma warning disable IDISP003 // The guard above guarantees _activeSheet is null here — there is no previous to dispose.
+#pragma warning disable IDISP003 
             _activeSheet = new XlsSheetWriter(this, name, _date1904);
 #pragma warning restore IDISP003
             return _activeSheet;
@@ -82,7 +82,6 @@ namespace ExcelReader.Core.Writer
             return _styles.Add(style);
         }
 
-        // Valid styleId range for SetColumnStyle/StartRow(int)/StartRowAsync(int,...) is [0, StyleCount).
         internal int StyleCount => _styles.Count;
 
         internal void RegisterSheet(XlsSheetWriter sheet)
@@ -96,8 +95,6 @@ namespace ExcelReader.Core.Writer
             _activeSheet = null;
         }
 
-        // Shared by End/EndAsync: computes the BoundSheet offsets/workbook size and returns the globals
-        // buffer, which the caller streams into OleCompoundWriter and disposes afterward.
         private BiffBuffer BuildGlobals(out int workbookSize)
         {
             BiffBuffer globals = new(1024);
@@ -247,8 +244,6 @@ namespace ExcelReader.Core.Writer
             _disposed = true;
             if (_state == WriterState.Started)
             {
-                // Auto-finalize only a usable workbook; an unused/sheet-less one is abandoned
-                // quietly so disposal never throws over cleanup.
                 if (_sheets.Count > 0)
                 {
                     End();
@@ -274,8 +269,6 @@ namespace ExcelReader.Core.Writer
             _disposed = true;
             if (_state == WriterState.Started)
             {
-                // Auto-finalize only a usable workbook; an unused/sheet-less one is abandoned
-                // quietly so disposal never throws over cleanup.
                 if (_sheets.Count > 0)
                 {
                     await EndAsync().ConfigureAwait(false);

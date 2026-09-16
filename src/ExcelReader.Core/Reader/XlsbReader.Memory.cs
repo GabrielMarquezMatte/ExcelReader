@@ -2,9 +2,6 @@ using System.Diagnostics.CodeAnalysis;
 
 namespace ExcelReader.Core.Reader
 {
-    // In-memory ZIP path: opens an XlsbReader directly over a
-    // ReadOnlyMemory<byte> via ZipMemoryIndex instead of ZipArchive/Stream. No refills, no async
-    // suspension — every part is already fully decompressed before the reader is constructed.
     public sealed partial class XlsbReader
     {
         internal static XlsbReader CreateFromMemory(ReadOnlyMemory<byte> data, ExcelReaderOptions? options = null)
@@ -13,8 +10,6 @@ namespace ExcelReader.Core.Reader
             return CreateFromMemory(ZipMemoryIndex.Create(data, effectiveOptions), effectiveOptions);
         }
 
-        // Takes an already-built index (from Excel.Open's format peek) so the central directory isn't
-        // walked a second time — the memory-path twin of CreateFromOpenZipAsync.
         internal static XlsbReader CreateFromMemory(ZipMemoryIndex memZip, ExcelReaderOptions effectiveOptions)
         {
             return ZipReaderOpen.FromMemory(memZip, zip => BuildFromMemory(zip, effectiveOptions));
@@ -50,10 +45,6 @@ namespace ExcelReader.Core.Reader
             return XlsbSharedStrings.Parse(part.Memory.Span, options);
         }
 
-        // Worksheet entry only: opens a Stream (DeflateStream, optionally wrapped in PrefetchStream via
-        // ZipMemoryIndex.OpenEntryStream) instead of eagerly materializing a ZipPart, so
-        // PrefetchDecompression overlaps inflate with row parsing on this path exactly as it does for
-        // the ZipArchive-backed reader.
         private Enumerator GetEnumeratorFromMemory()
         {
             ZipEntryRef entry = WorkbookLookups.GetWorksheetEntry(_memZip!, _sheets!, _current);

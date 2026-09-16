@@ -4,9 +4,6 @@ using Sylvan.Data.Excel;
 
 namespace ExcelReader.Benchmarks
 {
-    // Shared consume loops for the cell-by-cell read benchmarks. Kept in one place so the
-    // ExcelReader and Sylvan sides stay comparable across every benchmark class that uses them —
-    // a CellType case added to only one copy would silently skew the comparison.
     internal static class BenchmarkAccumulators
     {
         internal static long AccumulateRow(Row row)
@@ -31,10 +28,6 @@ namespace ExcelReader.Benchmarks
             return acc;
         }
 
-        // Same shape as AccumulateRow, but calls Cell.GetString() for text — matching the allocation
-        // Sylvan's ADO.NET-style GetString(i) is forced to pay on its side. This is the fair,
-        // matched-work counterpart to AccumulateRow's zero-copy span read (see the README's
-        // "Benchmark methodology" note).
         internal static long AccumulateRowMaterialized(Row row)
         {
             long acc = 0;

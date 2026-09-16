@@ -10,16 +10,6 @@ namespace ExcelReader.Native
 {
     internal static unsafe partial class NativeApi
     {
-        // Guesses a ParseTyped/xl_parse_arrow schema by sampling the WHOLE current sheet, from its first
-        // row — independent of, and never disturbing, the incremental cursor NextRow/NextRowDecoded/
-        // ReadAllBlob share on handle. Every guess comes from the sampled cells' own CellType tag (the
-        // same one ParseTyped already trusts to convert values) — no text sniffing, and no new parsing
-        // logic beyond ExcelCellReaders.Parsable, reused here only to tell an integral column from a
-        // fractional one.
-        //
-        // headerRow: same meaning as in ParseTyped — 1-based row to take column names from; 0 means "no
-        // header", so every returned spec is index-based. sampleSize: rows after the header to inspect,
-        // which must be positive.
         internal static int InferSchema(NativeHandle? handle, int headerRow, int sampleSize, out NativeInferredSchema schema)
         {
             schema = default;
@@ -42,9 +32,6 @@ namespace ExcelReader.Native
             IExcelRowEnumerator? rows = null;
             try
             {
-                // Sampling opens a second enumerator on the workbook, which a chunked read holding one
-                // open across calls cannot survive - so that read is invalidated rather than rewound
-                // underneath.
                 handle.FaultLiveSession("xl_infer_schema");
                 rows = handle.Reader.GetEnumerator();
                 schema = BuildSchema(SchemaInference.Infer(rows, handle.Reader.IsDate1904, headerRow, sampleSize));
@@ -52,7 +39,6 @@ namespace ExcelReader.Native
             }
             catch (ArgumentException exception)
             {
-                // Core throws for an unreachable header row; the ABI reports it as a status code.
                 SetLastError(exception.Message);
                 schema = default;
                 return NativeStatus.InvalidArgument;
@@ -69,7 +55,6 @@ namespace ExcelReader.Native
             }
         }
 
-        // Releases a result returned by InferSchema and resets it to zero. Safe on a zeroed value.
         internal static void FreeSchema(ref NativeInferredSchema schema)
         {
             if (schema.Columns == IntPtr.Zero)
@@ -82,11 +67,6 @@ namespace ExcelReader.Native
             for (int i = 0; i < schema.ColumnCount; i++)
             {
                 NativeColumnSpecRaw spec = columns[i];
-                // NameCount > 0 is supposed to imply Names/NameLens are non-null (BuildSpec always
-                // allocates both together), but a caller that null-checked and swapped in its own
-                // freed-and-nulled Names field between InferSchema and this call would otherwise
-                // dereference a null byte**. FreeRows/FreeTable already check the array pointer
-                // first for the same reason; this matches them.
                 if (spec.NameCount > 0 && spec.Names is not null)
                 {
                     Marshal.FreeHGlobal((IntPtr)spec.Names[0]);
@@ -98,9 +78,6 @@ namespace ExcelReader.Native
             schema = default;
         }
 
-        // Every allocation this function makes is handed to the caller inside the returned schema and
-        // freed only by FreeSchema — a thrown exception between an AllocHGlobal and the assignment to
-        // `schema` below would leak it, but nothing after the loop's own allocations can throw.
         private static NativeInferredSchema BuildSchema(ExcelColumnSchema[] columns)
         {
             if (columns.Length == 0)
@@ -139,18 +116,12 @@ namespace ExcelReader.Native
                 NameLens = lensBlock,
                 NameCount = nameCount,
                 Index = column.Index,
-                // ExcelColumnType's underlying values ARE the XL_T_* constants, by design — see the
-                // remarks on the enum. This cast is the whole translation.
                 Type = (int)column.Type,
                 Nullable = column.IsNullable ? 1 : 0,
             };
         }
     }
 
-    // Flat C ABI representation of the whole result of NativeApi.InferSchema.
-    // Columns is one allocation of ColumnCount NativeColumnSpecRaw
-    // values; each spec's own non-null NativeColumnSpecRaw.Name is a separate allocation,
-    // freed individually by NativeApi.FreeSchema.
     [StructLayout(LayoutKind.Sequential)]
     internal struct NativeInferredSchema
     {

@@ -3,8 +3,6 @@ using System.Text;
 
 namespace ExcelReader.Tests
 {
-    // Hand-builds BIFF12 (.xlsb) record bytes for parser tests: record framing (varint id + len)
-    // plus the field encoders that mirror the decoders in ExcelReader.Core.Reader.Biff12.
     internal static class Biff12Build
     {
         internal static byte[] Record(int id, params byte[] payload)
@@ -33,25 +31,21 @@ namespace ExcelReader.Tests
             return bytes;
         }
 
-        // XLWideString: cch (u32) + UTF-16LE chars.
         internal static byte[] WideString(string value)
         {
             return [.. U32((uint)value.Length), .. Encoding.Unicode.GetBytes(value)];
         }
 
-        // XLNullableWideString null sentinel.
         internal static byte[] NullWideString()
         {
             return U32(0xFFFFFFFF);
         }
 
-        // A 16-byte BrtXF payload with the given numFmtId at offset 2 (ixfeParent at 0).
         internal static byte[] Xf(int numFmtId)
         {
             return [.. U16(0), .. U16(numFmtId), .. new byte[12]];
         }
 
-        // Cell record payloads: col(u32) + styleAndFlags(u32) + value.
         internal static byte[] CellRk(int col, int style, uint rk)
         {
             return [.. U32((uint)col), .. U32((uint)style), .. U32(rk)];
@@ -82,7 +76,6 @@ namespace ExcelReader.Tests
             return [.. U32((uint)col), .. U32((uint)style), error];
         }
 
-        // BrtCellRString: col(u32) + styleAndFlags(u32) + cRun(byte) + XLWideString.
         internal static byte[] CellRString(int col, int style, byte cRun, string value)
         {
             return [.. U32((uint)col), .. U32((uint)style), cRun, .. WideString(value)];

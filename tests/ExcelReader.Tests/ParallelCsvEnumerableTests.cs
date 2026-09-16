@@ -40,10 +40,6 @@ namespace ExcelReader.Tests
                 CsvReaderOptions.Default, config, dop, null);
         }
 
-        // The parallel path's chunk projectors number rows from 1 within their own chunk, so
-        // ParallelCsvEnumerable has to renumber a carried failure to the row the sequential path would
-        // have reported. Nothing but a differential assertion can pin that: it depends on the header
-        // offset and on picking the right ExcelParseException constructor for the failure's shape.
         private static async Task AssertSameFailureAsSequentialAsync<TRow>(byte[] csv, ExcelParserConfig config)
         {
             using CsvReader sequentialReader = Excel.FromCsv(csv);
@@ -95,8 +91,6 @@ namespace ExcelReader.Tests
         [Fact]
         public async Task CorrectsAChunkThatGuessedItsStartInsideAQuotedField()
         {
-            // Every row's Name is a quoted field carrying a newline, so a chunk boundary landing
-            // inside one guesses wrong and must be corrected by its predecessor.
             var sb = new StringBuilder("Name,Age\n");
             for (int i = 0; i < 200; i++)
             {
@@ -139,8 +133,6 @@ namespace ExcelReader.Tests
             }
 
             Assert.Equal(10, taken);
-            // Reaching here without a hang or an ObjectDisposedException from a still-running worker
-            // is the assertion: DisposeAsync must have cancelled and joined every worker.
         }
 
         [Fact]
@@ -169,7 +161,6 @@ namespace ExcelReader.Tests
             var sb = new StringBuilder("Name,Age\n");
             for (int i = 0; i < 40; i++)
             {
-                // Data record 18 (file row 19) carries an Age that cannot be parsed.
                 string age = i == 17 ? "not-a-number" : i.ToString(CultureInfo.InvariantCulture);
                 sb.Append(CultureInfo.InvariantCulture, $"name{i:D5},{age}\n");
             }
@@ -182,8 +173,6 @@ namespace ExcelReader.Tests
         [Fact]
         public Task ReportsABlankRequiredCellTheWayTheSequentialPathDoes()
         {
-            // A blank required cell is a *different* ExcelParseException shape from a parse failure —
-            // different constructor, different message — and the renumbering has to preserve which.
             var sb = new StringBuilder("Id,Note\n");
             for (int i = 0; i < 40; i++)
             {
@@ -198,8 +187,6 @@ namespace ExcelReader.Tests
         [Fact]
         public Task ReportsAParseFailureRowRelativeToANonDefaultHeaderRow()
         {
-            // HeaderRow 3 shifts every data row's number by two, which pins the header offset in the
-            // renumbering rather than only the +1 for the failing record itself.
             var sb = new StringBuilder("skip me\nskip me too\nName,Age\n");
             for (int i = 0; i < 40; i++)
             {

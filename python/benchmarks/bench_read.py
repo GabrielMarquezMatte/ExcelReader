@@ -60,9 +60,6 @@ def bench_read_all_columnar(path: Path) -> tuple[int, int]:
     return len(sheet.row_offsets) - 1, len(sheet.columns)
 
 
-# The 14 columns of the default fixture, in file order. parse_typed()/to_arrow() take a schema;
-# this is the schema that matches 65K_Records_Data.xlsb. Passing --path a different file makes both
-# typed variants meaningless, so they are skipped there rather than silently benchmarking a failure.
 _T = excelreader.ColumnType
 _FIXTURE_SCHEMA = [
     excelreader.ColumnSpec(type_, name=name)
@@ -114,28 +111,6 @@ def bench_record_batch_reader(path: Path) -> tuple[int, int]:
     return rows, rows * len(_FIXTURE_SCHEMA)
 
 
-# --- peak memory ------------------------------------------------------------------------------
-#
-# Every other leg here is wall-clock, which cannot see the one property batching exists for: bytes
-# live at once. These two legs measure process private bytes instead, as a directional proxy.
-#
-# NOT pyarrow.total_allocated_bytes(): the batch buffers are allocated by the native reader and
-# handed to pyarrow through the Arrow C Data Interface, so they never pass through Arrow's pool and
-# it reports 0 for both paths. The process's private bytes do see them — confirmed by a control that
-# retains every batch, which reads ABOVE the whole-sheet peak rather than at one batch.
-#
-# What this number IS: both legs pay the same native xlsb-parse cost before the Arrow-specific part
-# diverges, so that shared cost is a floor common to both peaks, and a lower streamed peak here is
-# real evidence in the right direction.
-#
-# What it is NOT: a measurement of the Arrow-buffer ceiling. The parse floor dominates total private
-# bytes, so it dilutes the signal — a 15-20% drop in TOTAL private bytes does not mean the
-# Arrow-attributable portion dropped 15-20%; at batch_size=10000 against 65,535 rows, one batch is
-# ~15% of the sheet, so if peak Arrow memory were truly bounded to one batch we'd expect something
-# closer to an order-of-magnitude drop in that portion, not in the total. Per-run variance in the
-# streamed leg alone (~2.6 MiB) is also close to the ~3.6-4.8 MiB gap between legs. Treat the gap as
-# a directional floor on the saving — real, reproducible, and consistent with streaming helping — not
-# as proof of the one-batch bound itself.
 
 
 class _ProcessMemoryCountersEx(ctypes.Structure):
@@ -185,8 +160,6 @@ def peak_leg_streamed(path: Path) -> tuple[int, int]:
         for batch in workbook.to_record_batch_reader(_FIXTURE_SCHEMA, batch_size=10000):
             rows += batch.num_rows
             peak = max(peak, _private_bytes() - base)
-            # Released before the next batch is pulled. Holding it across the pull would measure two
-            # batches live and hide exactly the defect this leg exists to catch.
             del batch
     return rows, peak
 
@@ -250,8 +223,6 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("path", nargs="?", type=Path, default=DEFAULT_PATH)
     parser.add_argument("--n", type=int, default=10)
-    # Internal re-entry point for _measure_peaks(): it shells out to this same script so each peak
-    # leg gets a fresh process (see _measure_peaks' docstring for why in-process reads zero).
     parser.add_argument("--peak-leg", choices=sorted(_PEAK_LEGS), help=argparse.SUPPRESS)
     args = parser.parse_args()
 
@@ -324,8 +295,6 @@ def main() -> int:
     _time_and_assert("  to_polars", bench_to_polars, args.path, args.n)
     print()
 
-    # polars itself is not enough for this leg: read_excel delegates the decode to fastexcel, which
-    # polars declares optional. to_polars above needs only polars, so it stays outside this guard.
     try:
         import fastexcel  # noqa: F401
     except ImportError:

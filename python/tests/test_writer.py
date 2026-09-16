@@ -58,7 +58,6 @@ def test_write_workbook_round_trips_a_nullable_column(tmp_path):
         result = workbook.parse_typed(schema)
 
     assert result.row_count == 3
-    # Bit 1 clear: valid, null, valid.
     assert result.validity[0][0] & 0b111 == 0b101
 
 
@@ -117,9 +116,6 @@ def test_write_pandas_round_trips(tmp_path):
     assert list(result.columns[1]) == [3, 7]
 
 
-# A frame that came out of Workbook.to_pandas carries one Arrow chunk per batch that read it, and a
-# RecordBatch cannot hold a multi-chunk column - so read-then-write, the round trip these two
-# functions exist for, used to raise TypeError for any sheet wider than one batch.
 def test_write_pandas_round_trips_a_multi_chunk_frame(tmp_path):
     pa = pytest.importorskip("pyarrow")
     pd = pytest.importorskip("pandas")
@@ -143,7 +139,6 @@ def test_write_pandas_round_trips_a_multi_chunk_frame(tmp_path):
     assert list(result.columns[1]) == [3, 7]
 
 
-# A row-less table yields no batches at all, which is a header-only sheet rather than an error.
 def test_write_pandas_writes_a_header_only_sheet_for_an_empty_frame(tmp_path):
     pytest.importorskip("pyarrow")
     pd = pytest.importorskip("pandas")

@@ -9,11 +9,6 @@ using static ExcelReader.Benchmarks.BenchmarkAccumulators;
 
 namespace ExcelReader.Benchmarks
 {
-    // Reads the real-world 65K-row dataset (Data/65K_Records_Data.*) cell-by-cell across every
-    // format this library supports, against Sylvan — the only other library referenced here that
-    // also reads xls/xlsb/xlsx/xlsm/csv. Unlike the synthetic *ReadBenchmark classes (headerless,
-    // 4 generated columns), this exercises a real file: 14 columns, a header row, real compression
-    // ratios, and real shared-string/date-style density.
     [MemoryDiagnoser]
     public class RealDataReadBenchmark
     {
@@ -28,7 +23,6 @@ namespace ExcelReader.Benchmarks
         [GlobalSetup]
         public void Setup()
         {
-            // Sylvan decodes legacy .xls text as CP1252, which .NET only exposes via this provider.
             Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
             string dir = Path.Combine(AppContext.BaseDirectory, "Data");
             _xlsx = File.ReadAllBytes(Path.Combine(dir, "65K_Records_Data.xlsx"));
@@ -38,7 +32,6 @@ namespace ExcelReader.Benchmarks
             _csv = File.ReadAllBytes(Path.Combine(dir, "65K_Records_Data.csv"));
         }
 
-        // --- XLSX ---
 
         [Benchmark(Baseline = true)]
         public long Xlsx_ExcelReader()
@@ -58,9 +51,6 @@ namespace ExcelReader.Benchmarks
             return AccumulateSylvanExcel(reader);
         }
 
-        // Matched-work counterpart to Xlsx_ExcelReader: materializes a string per cell like
-        // Xlsx_Sylvan is forced to, instead of reading the zero-copy span (see the README's
-        // "Benchmark methodology" note).
         [Benchmark]
         public long Xlsx_ExcelReader_Materialized()
         {
@@ -81,8 +71,6 @@ namespace ExcelReader.Benchmarks
             return acc;
         }
 
-        // In-memory ZIP path: no ZipArchive/Stream, central directory read
-        // directly out of _xlsx. Compare against Xlsx_ExcelReader to see the memory path's overhead.
         [Benchmark]
         public long Xlsx_ExcelReader_Memory()
         {
@@ -101,7 +89,6 @@ namespace ExcelReader.Benchmarks
             return acc;
         }
 
-        // --- XLSM (same OOXML container as XLSX; ExcelReader parses it identically) ---
 
         [Benchmark]
         public long Xlsm_ExcelReader()
@@ -121,7 +108,6 @@ namespace ExcelReader.Benchmarks
             return AccumulateSylvanExcel(reader);
         }
 
-        // Matched-work counterpart to Xlsm_ExcelReader — see Xlsx_ExcelReader_Materialized.
         [Benchmark]
         public long Xlsm_ExcelReader_Materialized()
         {
@@ -160,7 +146,6 @@ namespace ExcelReader.Benchmarks
             return acc;
         }
 
-        // --- XLSB ---
 
         [Benchmark]
         public long Xlsb_ExcelReader()
@@ -180,7 +165,6 @@ namespace ExcelReader.Benchmarks
             return AccumulateSylvanExcel(reader);
         }
 
-        // Matched-work counterpart to Xlsb_ExcelReader — see Xlsx_ExcelReader_Materialized.
         [Benchmark]
         public long Xlsb_ExcelReader_Materialized()
         {
@@ -219,7 +203,6 @@ namespace ExcelReader.Benchmarks
             return acc;
         }
 
-        // --- XLS ---
 
         [Benchmark]
         public long Xls_ExcelReader()
@@ -239,7 +222,6 @@ namespace ExcelReader.Benchmarks
             return AccumulateSylvanExcel(reader);
         }
 
-        // Matched-work counterpart to Xls_ExcelReader — see Xlsx_ExcelReader_Materialized.
         [Benchmark]
         public long Xls_ExcelReader_Materialized()
         {
@@ -259,10 +241,6 @@ namespace ExcelReader.Benchmarks
             return acc;
         }
 
-        // --- CSV --- (CSV cells are always plain text on both sides, so no style-driven date/number
-        // typing is possible. The ExcelReader benchmark below reads the raw UTF-8 span with no decode
-        // or allocation, while the Sylvan side is forced to materialize a UTF-16 string, so these two
-        // are not matched work. The materialized benchmark further down is the fair counterpart.)
 
         [Benchmark]
         public long Csv_ExcelReader()
@@ -298,8 +276,6 @@ namespace ExcelReader.Benchmarks
             return acc;
         }
 
-        // Matched-work counterpart to Csv_ExcelReader: materializes a string per cell like
-        // Csv_Sylvan's GetString(i) is forced to, instead of reading the zero-copy span.
         [Benchmark]
         public long Csv_ExcelReader_Materialized()
         {

@@ -1,19 +1,3 @@
-// Write benchmarks over tests/ExcelReader.Benchmarks/Data/65K_Records_Data.xlsb (65,535 data rows),
-// the same fixture the Rust, Python and .NET suites use.
-//
-// Both cases write the SAME seven columns, so the only difference between them is where the data
-// starts out - which is the one thing this file is measuring:
-//
-//   * write_columns is handed buffers that are already columnar - nothing is transposed and
-//     nothing is copied. It is the ceiling.
-//   * write_sheet starts from a std::vector<Row> and pays the row-to-column transpose. It is what
-//     a row-shaped caller actually experiences, and the number to compare against any cell-at-a-
-//     time writer.
-//
-// The gap between them is therefore the cost of holding row-shaped data, not a difference in how
-// much gets written. For the comparison against other libraries, see benchmark_write_compare.cpp.
-//
-// State the CPU, OS and compiler version alongside any number published from this file.
 
 #include <xl/excelreader.hpp>
 
@@ -51,8 +35,6 @@ struct xl::ExcelMapper<Row>
     }
 };
 
-// Reads the fixture once into row structs. Aborts rather than silently benchmarking an empty
-// input - a suite that measures nothing is worse than no suite.
 static const std::vector<Row> &fixture_rows()
 {
     static const std::vector<Row> rows = []
@@ -82,9 +64,6 @@ static std::filesystem::path bench_path(std::string_view name)
 
 namespace
 {
-    // The offsets/blob pair an XL_T_STRING column needs. xl::write_sheet builds one of these
-    // internally; the columnar benchmark below builds its own so both cases start from the same
-    // shape.
     struct StringBuffer
     {
         std::vector<int32_t> offsets{0};
@@ -123,18 +102,6 @@ static void BM_WriteSheet(benchmark::State &state)
 }
 BENCHMARK(BM_WriteSheet);
 
-// Columnar buffers, transposed from fixture_rows() once (function-local static, same caching
-// rationale as fixture_rows() itself). BM_WriteColumns previously rebuilt these on every call
-// outside its `for (auto _ : state)` loop - harmless for timing (PauseTiming/ResumeTiming aren't
-// even needed there), but Google Benchmark's dedicated memory-measurement run
-// (BenchmarkRunner::RunMemoryManager) still executes that untimed setup code, so every one of its
-// (up to 16) calls re-transposed all 65,535 rows, and the *total* over that run - not amortized per
-// iteration - dominated BM_WriteColumns' allocated-bytes figure with a cost the benchmark isn't
-// meant to isolate (that's BM_WriteSheet's job). Caching means only the first call pays it.
-//
-// ALL SEVEN columns, the same set BM_WriteSheet writes. An earlier version of this benchmark wrote
-// only four, which made it look ~2x faster when a third of that gap was simply three fewer columns
-// of work.
 struct WriteColumnsFixture
 {
     StringBuffer region;

@@ -12,9 +12,6 @@ namespace ExcelReader.Core.Parser.Internal
         private readonly IFormatProvider _provider;
         private readonly bool _throwOnParseFailure;
         private ColumnBinding<T>[]? _bindings;
-        // Per-row scratch: _seen[i] is set when binding i saw a non-empty cell this row that parsed
-        // successfully. Only allocated and walked when at least one bound column requires a value
-        // (_requireValueCount > 0).
         private bool[] _seen;
         private int _requireValueCount;
         private int _rowNumber;
@@ -31,8 +28,6 @@ namespace ExcelReader.Core.Parser.Internal
             _seen = [];
         }
 
-        // The per-row state machine shared by every enumerator (sync/async, xlsx/xls): skip rows before
-        // the header, build the column map at the header row, then project each subsequent row.
         internal ProjectionStep Advance(in Row row, ref T model)
         {
             if (_typeInfo.IsIndexBased)

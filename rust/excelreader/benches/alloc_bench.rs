@@ -14,8 +14,6 @@ unsafe impl GlobalAlloc for CountingAllocator {
     }
 
     unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
-        // Freeing doesn't need instrumentation to answer "bytes allocated" - same scope choice as
-        // the C++ side (total_allocated_bytes there, not net/peak usage).
         unsafe { System.dealloc(ptr, layout) }
     }
 
@@ -95,7 +93,7 @@ fn main() {
     let small_path = fixture_path();
     let large_path = large_fixture_path();
     const ITERATIONS: usize = 200;
-    const ITERATIONS_LARGE: usize = 30; // the large fixture's own per-call cost dwarfs the loop overhead already at this count
+    const ITERATIONS_LARGE: usize = 30; 
 
     println!("Bytes allocated per call, Rust binding (System allocator, this process only — excludes the NativeAOT side of the FFI boundary):\n");
 

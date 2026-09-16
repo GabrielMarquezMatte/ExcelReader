@@ -7,12 +7,6 @@ using ExcelReader.Core.Reader;
 
 namespace ExcelReader.Tests
 {
-    // The in-memory ZIP central-directory reader, exercised directly here (rather than only through
-    // Excel.From(ReadOnlyMemory<byte>)). Every fixture here is a real
-    // ZipArchive-built file, so any divergence from the streamed path (parsed via
-    // ZipEntryBytes/ZipArchive in the same test) is a bug in the new reader, not the fixture.
-    // No CRC-32 check: ZipArchive doesn't validate it on read either (see ZipMemoryIndex.OpenPart),
-    // and it measured at ~48% of a large part's read time for a check the streamed path never paid.
     public class ZipMemoryIndexTests
     {
         [Fact]
@@ -59,8 +53,6 @@ namespace ExcelReader.Tests
         [Fact]
         public void CreateThrowsOnDuplicateCentralDirectoryEntryNames()
         {
-            // TryGetEntry returns the first name match, so a second central-directory record
-            // sharing a name would silently be unreachable - reject the file outright instead.
             using var ms = new MemoryStream();
             using (var zip = new ZipArchive(ms, ZipArchiveMode.Create, leaveOpen: true))
             {
@@ -83,9 +75,6 @@ namespace ExcelReader.Tests
         [Fact]
         public void OpenPartThrowsWhenLocalHeaderNameDoesNotMatchCentralDirectory()
         {
-            // The central directory and local header each carry their own copy of the entry
-            // name. Patch only the local header's copy (same length, so no offset shifts) and confirm
-            // the mismatch is rejected instead of silently reading the entry under the wrong identity.
             byte[] payload = Encoding.UTF8.GetBytes("hello world, stored and not deflated");
             byte[] zipBytes = BuildZipWithOneEntry("hello.txt", payload, CompressionLevel.NoCompression);
 
@@ -96,10 +85,9 @@ namespace ExcelReader.Tests
                 localHeaderOffset = entry.LocalHeaderOffset;
             }
 
-            // Local header layout: 4-byte signature + 26 bytes of fixed fields, then the name.
             int nameOffset = (int)localHeaderOffset + 30;
             Assert.Equal((byte)'h', zipBytes[nameOffset]);
-            zipBytes[nameOffset] = (byte)'j'; // "hello.txt" -> "jello.txt" in the local header only
+            zipBytes[nameOffset] = (byte)'j';
 
             using ZipMemoryIndex mutatedIndex = ZipMemoryIndex.Create(zipBytes, ExcelReaderOptions.Default);
             Assert.True(mutatedIndex.TryGetEntry("hello.txt"u8, out ZipEntryRef mutatedEntry));
@@ -175,9 +163,6 @@ namespace ExcelReader.Tests
             Assert.Throws<InvalidDataException>(() => ZipMemoryIndex.Create(notAZip, ExcelReaderOptions.Default));
         }
 
-        // Mirrors FuzzTests.cs's seeded-mutation harness, aimed squarely at the new untrusted-input
-        // boundary (central directory / local header parsing) rather than the row scanners it already
-        // covers. Any exception escaping a round that isn't a graceful, documented rejection is a bug.
         [Fact]
         public void MutatedZipBytesNeverCrashTheMemoryIndex()
         {
@@ -203,7 +188,6 @@ namespace ExcelReader.Tests
                 }
                 catch (Exception ex) when (FuzzMutation.IsAcceptable(ex))
                 {
-                    // Expected: the mutated bytes were rejected gracefully.
                 }
                 catch (Exception ex)
                 {
@@ -233,10 +217,6 @@ namespace ExcelReader.Tests
             }
         }
 
-        // Hand-crafted ZIP64 EOCD structures, not producible via ZipArchive (which never emits
-        // absurd 64-bit offsets), that exercise the two overflow-prone additions fixed in ZipMemoryIndex:
-        // ReadZip64Eocd's own `offset` bound, and Create's `cdOffset + cdSize` bound. Every multi-byte
-        // field below is little-endian, matching BinaryPrimitives.ReadXLittleEndian on the reader side.
 
         private const uint Zip64SentinelU32 = 0xFFFFFFFFu;
 
@@ -246,7 +226,6 @@ namespace ExcelReader.Tests
             BinaryPrimitives.WriteUInt16LittleEndian(bytes.AsSpan(offset + 10), declaredCount);
             BinaryPrimitives.WriteUInt32LittleEndian(bytes.AsSpan(offset + 12), cdSize);
             BinaryPrimitives.WriteUInt32LittleEndian(bytes.AsSpan(offset + 16), cdOffset);
-            // comment length at offset+20 is left 0.
         }
 
         private static void WriteZip64Locator(byte[] bytes, int offset, long zip64EocdOffset)
@@ -258,8 +237,6 @@ namespace ExcelReader.Tests
         [Fact]
         public void HugeZip64EocdLocatorOffsetThrowsInsteadOfWrapping()
         {
-            // Layout: [0..20) Zip64 locator, pointing to a Zip64 EOCD offset near long.MaxValue,
-            // immediately followed by [20..42) a regular EOCD whose sentinel fields force the ZIP64 path.
             byte[] bytes = new byte[42];
             WriteZip64Locator(bytes, 0, zip64EocdOffset: long.MaxValue - 2);
             WriteEocd(bytes, 20, declaredCount: 0xFFFF, cdSize: Zip64SentinelU32, cdOffset: Zip64SentinelU32);
@@ -272,14 +249,11 @@ namespace ExcelReader.Tests
         [Fact]
         public void HugeZip64CentralDirectorySizeThrowsInsteadOfWrapping()
         {
-            // Layout: [0..56) a valid, in-range Zip64 EOCD record whose cdSize field is near
-            // long.MaxValue (cdOffset stays small), [56..76) the Zip64 locator pointing at it,
-            // [76..98) the regular EOCD with ZIP64 sentinel fields.
             byte[] bytes = new byte[98];
             BinaryPrimitives.WriteInt32LittleEndian(bytes.AsSpan(0), 0x06064b50);
-            BinaryPrimitives.WriteInt64LittleEndian(bytes.AsSpan(32), 1); // total entries
-            BinaryPrimitives.WriteInt64LittleEndian(bytes.AsSpan(40), long.MaxValue - 2); // cdSize
-            BinaryPrimitives.WriteInt64LittleEndian(bytes.AsSpan(48), 5); // cdOffset
+            BinaryPrimitives.WriteInt64LittleEndian(bytes.AsSpan(32), 1);
+            BinaryPrimitives.WriteInt64LittleEndian(bytes.AsSpan(40), long.MaxValue - 2);
+            BinaryPrimitives.WriteInt64LittleEndian(bytes.AsSpan(48), 5);
             WriteZip64Locator(bytes, 56, zip64EocdOffset: 0);
             WriteEocd(bytes, 76, declaredCount: 0xFFFF, cdSize: Zip64SentinelU32, cdOffset: Zip64SentinelU32);
 
@@ -291,9 +265,6 @@ namespace ExcelReader.Tests
         [Fact]
         public void ZipEntryBytesReadThrowsInvalidDataWhenEntryUnderDelivers()
         {
-            // The streamed path (ZipEntryBytes.Read, used via a real ZipArchive) previously let
-            // a raw EndOfStreamException escape here instead of the Reader-layer's InvalidDataException
-            // convention — the in-memory twin (ZipMemoryIndex.InflateToPart) already rewrapped it.
             using MemoryStream built = WorkbookBuilder.Build("""<row r="1"><c r="A1"><v>1</v></c></row>""");
             byte[] zipBytes = built.ToArray();
             uint realLength = ReadDeclaredUncompressedSize(zipBytes, "xl/workbook.xml");
@@ -309,15 +280,6 @@ namespace ExcelReader.Tests
         [Fact]
         public void ZipArchiveEntryOpenSilentlyTruncatesAtDeclaredLengthUnderOverDelivery()
         {
-            // Attempted an over-delivery check (declared size smaller than what
-            // actually decompresses) mirroring ZipMemoryIndex.InflateToPart's trailing ReadByte() check,
-            // symmetric with the under-delivery fix below. Verified by direct experiment that
-            // ZipArchiveEntry.Open() itself silently stops the stream at the entry's declared Length —
-            // the extra real decompressed byte here is simply never exposed, so a "read one more, expect
-            // EOF" check always passes and can never catch this. This documents that BCL behavior so it
-            // isn't rediscovered as a bug in ZipEntryBytes.Read: over-delivery is not detectable on this
-            // path without bypassing ZipArchiveEntry.Open() and driving DeflateStream directly, the way
-            // ZipMemoryIndex.InflateToPart already does for the in-memory path.
             using MemoryStream built = WorkbookBuilder.Build("""<row r="1"><c r="A1"><v>1</v></c></row>""");
             byte[] zipBytes = built.ToArray();
             uint realLength = ReadDeclaredUncompressedSize(zipBytes, "xl/workbook.xml");

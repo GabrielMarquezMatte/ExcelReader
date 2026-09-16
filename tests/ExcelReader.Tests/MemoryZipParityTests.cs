@@ -8,10 +8,6 @@ using ExcelReader.Core.Writer;
 
 namespace ExcelReader.Tests
 {
-    // Excel.From/FromXlsb/Open(ReadOnlyMemory<byte>) (the in-memory ZIP path) must be
-    // observationally identical to the streamed path — same cells, same exceptions, same exception
-    // types on malformed input. Every fixture here is a real ZipArchive-built file, so any divergence
-    // is a bug in the memory path, not the fixture.
     public class MemoryZipParityTests
     {
         public static IEnumerable<object[]> Fixtures
@@ -23,7 +19,6 @@ namespace ExcelReader.Tests
             }
         }
 
-        // ---- 1. Equivalence (load-bearing) ----
 
         [Theory]
         [MemberData(nameof(Fixtures))]
@@ -55,8 +50,6 @@ namespace ExcelReader.Tests
         [MemberData(nameof(Fixtures))]
         public async Task MemoryAsyncEnumeratorNeverSuspends(MemoryFixture fixture)
         {
-            // A ValueTask that is already IsCompleted right after the call (no await needed to reach
-            // that state) is the proof that GetAsyncEnumeratorAsync never suspended on this path.
             CancellationToken ct = TestContext.Current.CancellationToken;
             byte[] bytes = fixture.Build();
             using IExcelRowReader reader = fixture.OpenMemory(bytes, ExcelReaderOptions.Default);
@@ -65,8 +58,6 @@ namespace ExcelReader.Tests
             await using IExcelRowEnumerator e = await task;
         }
 
-        // ---- 2. PrefetchDecompression overlaps inflate with parsing here too, same as the
-        // streamed path — output must stay identical either way. ----
 
         [Theory]
         [MemberData(nameof(Fixtures))]
@@ -81,7 +72,6 @@ namespace ExcelReader.Tests
             Assert.Equal(off, on);
         }
 
-        // ---- 3. Multi-sheet navigation ----
 
         [Fact]
         public void MoveToSheetAndTryMoveToSheetWorkOnTheMemoryPath()
@@ -116,7 +106,6 @@ namespace ExcelReader.Tests
             Assert.False(reader.TryMoveToSheet("NoSuchSheet"));
         }
 
-        // ---- 4. Non-array-backed ReadOnlyMemory<byte> ----
 
         [Fact]
         public void ReadsCorrectlyOverANonArrayBackedMemory()
@@ -131,7 +120,6 @@ namespace ExcelReader.Tests
             Assert.Equal("42", e.Current[0].GetString());
         }
 
-        // ---- 5. Excel.Open(ReadOnlyMemory<byte>) auto-detection, including XLS ----
 
         [Fact]
         public void OpenMemoryDetectsXlsx()
@@ -177,7 +165,6 @@ namespace ExcelReader.Tests
             Assert.Equal(streamed.GetType(), memory.GetType());
         }
 
-        // ---- 6. Disposal ----
 
         [Theory]
         [MemberData(nameof(Fixtures))]
@@ -189,9 +176,6 @@ namespace ExcelReader.Tests
             Assert.Null(Record.Exception(reader.Dispose));
         }
 
-        // Regression: the enumerator's Dispose must be safe to call twice (both BufferedStreamCursor.Return
-        // and the Stream it owns are idempotent), since a caller can both call Dispose() explicitly and
-        // let a using declaration dispose it again at scope exit.
         [Theory]
         [MemberData(nameof(Fixtures))]
         public void DoubleDisposingTheEnumeratorIsSafe(MemoryFixture fixture)
@@ -203,7 +187,6 @@ namespace ExcelReader.Tests
             Assert.Null(Record.Exception(e.Dispose));
         }
 
-        // ---- 7. Exception parity ----
 
         [Fact]
         public void ForgedOversizedEntryThrowsSameLimitOnBothPaths()
@@ -245,7 +228,6 @@ namespace ExcelReader.Tests
             });
         }
 
-        // ---- 8. Fuzz: mutated ZIP bytes must fail the same way through Excel.Open(memory) ----
 
         [Fact]
         public void MutatedZipBytesNeverCrashExcelOpenMemory()
@@ -272,7 +254,6 @@ namespace ExcelReader.Tests
                 }
                 catch (Exception ex) when (FuzzMutation.IsAcceptable(ex))
                 {
-                    // Expected: the mutated bytes were rejected gracefully.
                 }
                 catch (Exception ex)
                 {
@@ -304,7 +285,6 @@ namespace ExcelReader.Tests
             }
         }
 
-        // ---- Real-world corpus ----
 
         [Fact]
         public void RealSampleWorkbookMatchesBetweenStreamAndMemory()
@@ -319,7 +299,6 @@ namespace ExcelReader.Tests
             Assert.Equal(streamed, memory);
         }
 
-        // ---- Shared read helpers ----
 
         private static List<CellSnapshot> ReadViaStream(byte[] bytes, Func<Stream, ExcelReaderOptions, IExcelRowReader> open)
         {
@@ -381,7 +360,6 @@ namespace ExcelReader.Tests
             }
         }
 
-        // ---- Fixture builders ----
 
         private static byte[] BuildXlsx()
         {
@@ -396,8 +374,6 @@ namespace ExcelReader.Tests
             return built.ToArray();
         }
 
-        // MemberData factories run before any test body and have no async context to await into,
-        // so building the xlsb fixture (which needs XlsbWorkbookWriter's async API) has to block here.
         private static byte[] BuildXlsb()
         {
             CancellationToken ct = TestContext.Current.CancellationToken;
@@ -425,7 +401,6 @@ namespace ExcelReader.Tests
             return ms.ToArray();
         }
 
-        // ---- Open delegates ----
 
         private static IExcelRowReader OpenXlsxStream(Stream stream, ExcelReaderOptions options)
         {
@@ -437,8 +412,6 @@ namespace ExcelReader.Tests
             return Excel.From(bytes.AsMemory(), options);
         }
 
-        // Returns the interface, not the concrete XlsbReader, so this delegate has the same shape as
-        // OpenXlsxStream/OpenXlsxMemory above for MemoryFixture's Func<..., IExcelRowReader> fields.
         [SuppressMessage("Performance", "CA1859:Use concrete types when possible for improved performance",
             Justification = "Must match the Func<Stream, ExcelReaderOptions, IExcelRowReader> delegate shape shared with the XLSX fixture.")]
         private static IExcelRowReader OpenXlsbStream(Stream stream, ExcelReaderOptions options)
@@ -453,7 +426,6 @@ namespace ExcelReader.Tests
             return Excel.FromXlsb(bytes.AsMemory(), options);
         }
 
-        // ---- ZIP byte-surgery helpers ----
 
         private static void ForgeCentralDirectoryUncompressedSize(byte[] zipBytes, string entryName, uint forgedSize)
         {
@@ -479,9 +451,6 @@ namespace ExcelReader.Tests
             throw new InvalidOperationException($"Central directory entry '{entryName}' not found.");
         }
 
-        // Rebuilds the archive without the named entry, via the real ZipArchive (not hand-rolled byte
-        // surgery) — deleting an entry means shifting every later record, which ZipArchive.Delete
-        // already implements correctly.
         private static void RemoveZipEntry(byte[] zipBytes, string entryName, out byte[] result)
         {
             using var ms = new MemoryStream();

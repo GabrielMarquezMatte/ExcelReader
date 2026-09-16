@@ -4,9 +4,6 @@ using ExcelReader.Core.Reader;
 
 namespace ExcelReader.Native
 {
-    // Boolean-shaped option states. "0" is never ambiguous between "off" and "use the library
-    // default" — several NativeOpenOptionsRaw fields default to true. Mirrors
-    // XL_OPT_* in include/excelreader.h.
     internal static class NativeOptionState
     {
         internal const int Default = 0;
@@ -14,13 +11,8 @@ namespace ExcelReader.Native
         internal const int True = 2;
     }
 
-    // Field-level decoding shared by NativeOpenOptions and
-    // NativeWriteOptions. Both option structs carry the same two shapes of field — a
-    // byte-valued one and a NativeOptionState tri-state — with the same rules and the
-    // same messages; only the struct's own name differs, so it arrives as an argument.
     internal static class NativeOptionDecode
     {
-        // A byte-valued field: 0 means "use the library default", 1-255 is a real byte.
         internal static bool TryByte(int value, string structName, string fieldName, out byte? decoded, out string? error)
         {
             decoded = null;
@@ -38,8 +30,6 @@ namespace ExcelReader.Native
             return true;
         }
 
-        // A boolean-shaped field, encoded as NativeOptionState rather than a plain
-        // 0/1 because several of these default to true.
         internal static bool TryState(int value, string structName, string fieldName, out bool? decoded, out string? error)
         {
             decoded = null;
@@ -57,10 +47,6 @@ namespace ExcelReader.Native
         }
     }
 
-    // Flat C ABI representation of xl_open_options. Every numeric field is 0 for "use the
-    // library default"; every boolean-shaped field uses NativeOptionState instead of a
-    // plain 0/1, since several of them default to true. See excelreader.h for the authoritative field
-    // list and comments.
     [StructLayout(LayoutKind.Sequential)]
     internal struct NativeOpenOptionsRaw
     {
@@ -80,23 +66,14 @@ namespace ExcelReader.Native
         public int PrefetchDecompression;
         public int InternStrings;
 
-        // Appended at the end, never inserted in the middle — see StructSize's exact-equality check
-        // in TryDecode, which is what turns a stale caller's layout mismatch into a loud
-        // XL_INVALID_ARGUMENT instead of silently misreading these two fields (or everything after them).
         public IntPtr Password;
         public int PasswordLen;
     }
 
-    // Decoded, validated form of NativeOpenOptionsRaw — every field is nullable, with
-    // null meaning "use the library default", so ToCsvReaderOptions/
-    // ToExcelReaderOptions only ever override what the caller actually set.
     internal readonly struct NativeOpenOptions
     {
-        // The C struct's name, as it appears in every message this type produces.
         private const string OptionsName = "xl_open_options";
 
-        // An unbounded password length is the same class of hole as an unbounded count arriving as an
-        // argument (see NativeLimits' remarks) — it just arrives here instead.
         private const int MaxPasswordBytes = 4096;
 
         internal bool CsvSniffDialect { get; init; }
@@ -113,9 +90,6 @@ namespace ExcelReader.Native
         internal bool? PrefetchDecompression { get; init; }
         internal bool? InternStrings { get; init; }
 
-        // Password for an encrypted OOXML workbook, decoded from the raw pointer+length pair.
-        // Null means "no password supplied" — either the workbook isn't encrypted, or the caller wants
-        // the library-default behavior of failing with ExcelEncryptionReason.PasswordRequired.
         internal string? Password { get; init; }
 
         internal CsvReaderOptions ToCsvReaderOptions()
@@ -178,9 +152,6 @@ namespace ExcelReader.Native
             return options;
         }
 
-        // Validates and decodes a raw ABI struct. Returns false (with no exception —
-        // callers are on the hot "was this argument well-formed" path, not an error-recovery one) for an
-        // unrecognized NativeOpenOptionsRaw.StructSize or an out-of-range field.
         internal static bool TryDecode(NativeOpenOptionsRaw raw, out NativeOpenOptions options, out string? error)
         {
             options = default;
@@ -212,8 +183,6 @@ namespace ExcelReader.Native
                 return false;
             }
 
-            // UTF-8 with an explicit length rather than NUL-terminated: a password may contain anything.
-            // The pointer need only be valid for this call; we copy immediately.
             string? password = null;
             if (raw.Password != IntPtr.Zero)
             {
@@ -252,8 +221,6 @@ namespace ExcelReader.Native
             return true;
         }
 
-        // Serves both the int and long fields: the rule ("0 means default, negative is a caller error")
-        // and its message are identical, and only the width differed.
         private static bool TryDecodeNonNegative<T>(T value, string fieldName, out T? decoded, out string? error)
             where T : struct, INumberBase<T>
         {

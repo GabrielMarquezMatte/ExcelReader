@@ -5,8 +5,6 @@ using ExcelReader.Core.ValueObjects;
 
 namespace ExcelReader.Core.Reader
 {
-    // Outcome of Enumerator.TryScanUnquotedRun: whether the delimiter/terminator search inside the
-    // general per-field path landed on a field boundary, a record boundary, or needs more buffered bytes.
     internal enum FieldScanOutcome
     {
         NeedMore,
@@ -14,8 +12,6 @@ namespace ExcelReader.Core.Reader
         RecordEnd,
     }
 
-    // Outcome of Enumerator.TryParseSimpleRecord: whether the fused vectorized fast path finished the
-    // record, needs more buffered bytes, or bailed out because a quote turned up (general path's job).
     internal enum SimpleRecordOutcome
     {
         Done,
@@ -40,7 +36,6 @@ namespace ExcelReader.Core.Reader
             private const byte Cr = (byte)'\r';
             private const byte Lf = (byte)'\n';
 
-            // Borrowed: CsvReader owns the stream's lifetime (it may be reused across enumerations).
             private readonly byte _delimiter;
             private readonly byte _quote;
             private readonly bool _stripBom;
@@ -49,25 +44,13 @@ namespace ExcelReader.Core.Reader
 
             private int _col;
 
-            // Source offset of the record Current exposes. Captured at each parse attempt, not
-            // computed on demand, since _pos has already moved past the record by the time a caller
-            // reads it; recomputed after every refill because compaction moves _pos and BaseOffset.
             private long _recordStart;
 
-            // Vector-scan state persisted across records in the same buffered window, to avoid
-            // re-loading vectors over already-scanned bytes. _scannerValid is false whenever it
-            // can't be trusted to resume from the caller's current position.
             private CsvControlScanner _scanner;
             private bool _scannerValid;
 
-            // Content-keyed dedup cache for GetString(); CSV has no shared-string table like
-            // XLSX/XLSB/XLS, so this is its only dedup path.
             private readonly Utf8StringCache? _contentCache;
 
-            // A field's bytes, built as either a contiguous run in _buf (zero-copy) or, once a
-            // discontiguous append is needed, materialized into _acc's value buffer. Scoped to one
-            // TryParseRecordFromBuffer call and threaded by ref so the hot loop stays in
-            // locals/registers.
             private struct FieldState
             {
                 public int BufStart;
@@ -99,12 +82,8 @@ namespace ExcelReader.Core.Reader
             /// <inheritdoc/>
             public Row Current => new(_acc.CellSpan, _buf.AsSpan(0, _len), _acc.ValueSpan, rowBuffer: default, sharedStringCache: null, contentCache: _contentCache);
 
-            // Absolute offset of the current record's first byte. Used by the parallel CSV path to
-            // detect a record belonging to the next chunk. Meaningful only after MoveNext(Async) true.
             internal long CurrentRecordStart => _recordStart;
 
-            // O(1) dense field access for CsvEnumerable<T>: CSV cells have no gaps, so field i is
-            // _acc.CellSpan[i] directly.
             internal int FieldCount => _acc.Count;
 
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -140,8 +119,6 @@ namespace ExcelReader.Core.Reader
                 }
             }
 
-            // Tries the buffer-only parse before paying for an async state machine; only a genuine
-            // buffer miss (or the BOM check) falls to MoveNextSlowAsync.
             /// <inheritdoc/>
             public ValueTask<bool> MoveNextAsync()
             {
@@ -182,10 +159,6 @@ namespace ExcelReader.Core.Reader
                 }
             }
 
-            // Every Ensure/Fill may refill, compact, or grow the buffer, which can move or replace the
-            // bytes _scanner's pending state refers to — so all of them route through here to
-            // invalidate it. Over-invalidating just costs a skippable vector reload; under-invalidating
-            // corrupts field data.
 
             private void EnsureInvalidatingScanner(int count)
             {
@@ -217,11 +190,7 @@ namespace ExcelReader.Core.Reader
                 _col = 0;
             }
 
-            // Parses one full record from _buf[_pos.._len]. Returns false when not fully buffered yet
-            // (and not EOF); the caller restores _pos, refills, and re-parses from scratch.
             // ponytail: restart-on-refill re-scans the partial record after every Fill — fine while
-            // records are far smaller than the 64KB buffer; make the parse resumable if huge records
-            // over trickling streams ever matter.
             private bool TryParseRecordFromBuffer()
             {
                 int len = _len;
@@ -234,8 +203,6 @@ namespace ExcelReader.Core.Reader
                 {
                     return true;
                 }
-                // Neither NeedMore nor Quoted resumes through _scanner next time, so invalidate
-                // explicitly rather than rely on a Fill happening to occur.
                 _scannerValid = false;
                 if (simple == SimpleRecordOutcome.NeedMore)
                 {
@@ -244,9 +211,6 @@ namespace ExcelReader.Core.Reader
                 }
 
                 ReadOnlySpan<byte> buf = _buf.AsSpan(0, len);
-                // Fields already committed by the fast pass stay; only the field holding the quote
-                // onward is re-parsed. quotedFieldStart is the field's start, not the quote's, so a
-                // mid-field quote ("ab"cd") still reaches the general path as unquoted text.
                 int pos = quotedFieldStart;
                 FieldState f = default;
 
@@ -280,14 +244,6 @@ namespace ExcelReader.Core.Reader
                 }
             }
 
-            // Emits every field of a quote-free record in one vectorized pass — each byte read once,
-            // not twice — bailing out to the general per-field path the moment a quote is seen.
-            //
-            // _scanner persists across records in the same buffered window rather than being rebuilt
-            // per record, so a vector load that already found bytes for the next record isn't wasted.
-            // _scannerValid is true only when resuming from exactly where it last left off; every other
-            // exit (NeedMore, Quoted, any Ensure/Fill) clears it.
-            // On Quoted, quotedFieldStart is where the field holding that quote begins.
             private SimpleRecordOutcome TryParseSimpleRecord(int len, int pos, out int quotedFieldStart)
             {
                 quotedFieldStart = pos;
@@ -329,14 +285,12 @@ namespace ExcelReader.Core.Reader
                     }
                     if (b == Cr && stop + 1 >= len && !_eof)
                     {
-                        return SimpleRecordOutcome.NeedMore; // can't tell a bare CR from CRLF yet
+                        return SimpleRecordOutcome.NeedMore;
                     }
                     AddField(fieldStart, stop - fieldStart);
                     bool isCrLf = b == Cr && stop + 1 < len && buf[stop + 1] == Lf;
                     if (isCrLf)
                     {
-                        // The LF byte is skipped without going through the scanner's own Next(); tell
-                        // it explicitly so no stale state trips up the next record.
                         _scanner.SkipByte(stop + 1);
                     }
                     _pos = stop + (isCrLf ? 2 : 1);
@@ -350,9 +304,6 @@ namespace ExcelReader.Core.Reader
                          style: 0, CellValueSource.RowValues);
             }
 
-            // `pos` is right after the opening quote. Appends unescaped content ("" -> ") to _acc and
-            // leaves `pos` right after the closing quote. False means the closing quote isn't
-            // buffered yet.
             private bool TryParseQuotedContent(ReadOnlySpan<byte> buf, int len, byte quote, ref int pos, ref FieldState f)
             {
                 while (true)
@@ -366,12 +317,12 @@ namespace ExcelReader.Core.Reader
                         }
                         FieldAppendBufRun(buf, pos, len - pos, ref f);
                         pos = len;
-                        return true; // unterminated quoted field at EOF
+                        return true;
                     }
                     int q = pos + rel;
                     if (q + 1 >= len && !_eof)
                     {
-                        return false; // can't distinguish a closing quote from "" yet
+                        return false;
                     }
                     FieldAppendBufRun(buf, pos, q - pos, ref f);
                     if (q + 1 < len && buf[q + 1] == quote)
@@ -385,8 +336,6 @@ namespace ExcelReader.Core.Reader
                 }
             }
 
-            // Scans from `pos` (either the field's start, or right after a closing quote) for the
-            // next delimiter/terminator, appending the run verbatim.
             private FieldScanOutcome TryScanUnquotedRun(ReadOnlySpan<byte> buf, int len, byte delim, ref int pos, ref FieldState f)
             {
                 int rel = pos < len ? buf[pos..len].IndexOfAny(delim, Cr, Lf) : -1;
@@ -404,7 +353,7 @@ namespace ExcelReader.Core.Reader
                 byte b = buf[found];
                 if (b == Cr && found + 1 >= len && !_eof)
                 {
-                    return FieldScanOutcome.NeedMore; // can't tell a bare CR from CRLF yet
+                    return FieldScanOutcome.NeedMore;
                 }
                 FieldAppendBufRun(buf, pos, found - pos, ref f);
                 if (b == delim)
@@ -416,7 +365,6 @@ namespace ExcelReader.Core.Reader
                 return FieldScanOutcome.RecordEnd;
             }
 
-            // The three-byte UTF-8 BOM, if present at the very start.
             private void StripBomFromBuffer()
             {
                 ReadOnlySpan<byte> buf = _buf.AsSpan(0, _len);
@@ -456,9 +404,6 @@ namespace ExcelReader.Core.Reader
                 StripBomFromBuffer();
             }
 
-            // Appends a run of bytes at buf[start..start+len). Stays a zero-copy slice of buf as long
-            // as each run continues exactly where the previous one ended; any gap forces
-            // materialization into _acc from then on.
             private void FieldAppendBufRun(ReadOnlySpan<byte> buf, int start, int len, ref FieldState f)
             {
                 if (len == 0)
@@ -485,7 +430,6 @@ namespace ExcelReader.Core.Reader
                 _acc.Advance(len);
             }
 
-            // Appends one literal byte (the unescaped '"' from a doubled ""); never contiguous with buf.
             private void FieldAppendLiteralByte(ReadOnlySpan<byte> buf, byte b, ref FieldState f)
             {
                 if (!f.Materialized)

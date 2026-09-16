@@ -4,9 +4,6 @@ using ExcelReader.Core.Writer;
 
 namespace ExcelReader.Tests
 {
-    // The styles part is structural: this library's own reader only consumes the number-format side of
-    // it, so a missing or malformed production round-trips fine here while Excel reports "Formato de
-    // parte de /xl/styles.bin" and repairs the workbook on open. These assert the record structure
     // directly, against the shape a real Excel-authored .xlsb was dumped from.
     public class XlsbStylesPartTests
     {
@@ -84,8 +81,6 @@ namespace ExcelReader.Tests
             Assert.Equal(1u, BitConverter.ToUInt32(count, 0));
 
             byte[] style = Assert.Single(records, r => r.Id == Brt.Style).Payload;
-            // Byte-for-byte identical to the "Normal" BrtStyle in a real Excel-authored .xlsb:
-            //   ixf=0 | grbit=0x0001 (fBuiltIn) | iStyBuiltIn=0 | iLevel=0 | "Normal" as XLWideString
             Assert.Equal(
                 Convert.FromHexString("0000000001000000060000004E006F0072006D0061006C00"),
                 style);
@@ -101,9 +96,6 @@ namespace ExcelReader.Tests
 
             List<byte[]> fills = [.. records.Where(r => r.Id == Brt.Fill).Select(r => r.Payload)];
             Assert.Equal(2, fills.Count);
-            // Byte-for-byte identical to the two fills in a real Excel-authored .xlsb. The payload used
-            // to be written one byte short at the head, shifting every field left so the leading fls
-            // (pattern type) decoded as 0x03000000 instead of 0.
             Assert.Equal(
                 Convert.FromHexString("0000000003400000000000FF03410000FFFFFFFF" + new string('0', 96)),
                 fills[0]);
@@ -117,23 +109,18 @@ namespace ExcelReader.Tests
         {
             List<byte[]> xfs = [.. ReadRecords(await WriteStylesBinAsync()).Where(r => r.Id == Brt.Xf).Select(r => r.Payload)];
 
-            // The middle 10 bytes (iFont/iFill/ixBorder/trot/indent/flags) used to come from an
-            // uninitialized `stackalloc` under [SkipLocalsInit], so they held arbitrary stack contents
-            // — indices pointing at fonts and fills the part never declares. Both of these are
-            // byte-for-byte what Excel writes for the equivalent XF.
             Assert.Equal(
-                Convert.FromHexString("FFFF0000000000000000000010100000"), // cellStyleXfs[0]
+                Convert.FromHexString("FFFF0000000000000000000010100000"),
                 xfs[0]);
             Assert.Equal(
-                Convert.FromHexString("00000000000000000000000010100000"), // cellXfs[0], no number format
+                Convert.FromHexString("00000000000000000000000010100000"),
                 xfs[1]);
             Assert.All(xfs, xf => Assert.Equal(16, xf.Length));
-            // iFont/iFill/ixBorder must stay 0: the part declares exactly one font and one border.
             Assert.All(xfs, xf =>
             {
-                Assert.Equal(0, BitConverter.ToUInt16(xf, 4));  // iFont
-                Assert.Equal(0, BitConverter.ToUInt16(xf, 6));  // iFill
-                Assert.Equal(0, BitConverter.ToUInt16(xf, 8));  // ixBorder
+                Assert.Equal(0, BitConverter.ToUInt16(xf, 4));
+                Assert.Equal(0, BitConverter.ToUInt16(xf, 6));
+                Assert.Equal(0, BitConverter.ToUInt16(xf, 8));
             });
         }
 
@@ -144,17 +131,14 @@ namespace ExcelReader.Tests
                 await WriteStylesBinAsync(wb => wb.AddStyle(new CellStyle { NumberFormat = "0.00%" })));
             List<byte[]> xfs = [.. records.Where(r => r.Id == Brt.Xf).Select(r => r.Payload)];
 
-            // The last cell XF is the custom style's: it carries a non-zero iFmt, and must therefore
-            // set xfGrbitAtr's number-format bit, exactly as Excel does.
             byte[] custom = xfs[^1];
-            Assert.NotEqual(0, BitConverter.ToUInt16(custom, 2));  // iFmt
-            Assert.Equal(1, BitConverter.ToUInt16(custom, 14));    // xfGrbitAtr: fAtrNum
+            Assert.NotEqual(0, BitConverter.ToUInt16(custom, 2));
+            Assert.Equal(1, BitConverter.ToUInt16(custom, 14));
         }
 
         [Fact]
         public async Task StylesProductionSurvivesCustomStyles()
         {
-            // A custom number format grows CELLXFS; the STYLES production must still be emitted after it.
             List<int> ids = [.. ReadRecords(await WriteStylesBinAsync(wb => wb.AddStyle(new CellStyle { NumberFormat = "0.00%" }))).Select(r => r.Id)];
 
             Assert.True(ids.IndexOf(Brt.EndCellXFs) < ids.IndexOf(Brt.BeginStyles));

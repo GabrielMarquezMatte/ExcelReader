@@ -34,7 +34,6 @@ fn cursor_terminates_cleanly() {
     }
     assert!(counted > 1, "fixture should have a header plus data rows");
 
-    // A second cursor on an exhausted sheet yields nothing rather than erroring.
     let mut cursor = workbook.rows();
     assert!(cursor.next_row().is_none());
 }
@@ -60,8 +59,6 @@ fn move_to_sheet_resets_the_cursor() {
 
 #[test]
 fn grows_its_buffer_for_an_oversized_row() {
-    // One cell far larger than the cursor's initial buffer, so xl_next_row must answer
-    // XL_BUFFER_TOO_SMALL at least once and the cursor must retry without losing the row.
     let big = "x".repeat(200_000);
     let dir = std::env::temp_dir().join("excelreader-rust-rows-test");
     std::fs::create_dir_all(&dir).expect("temp dir");
@@ -165,9 +162,6 @@ fn all_rows_blob_on_an_exhausted_sheet_is_empty_not_an_error() {
 
 #[test]
 fn all_rows_blob_grows_its_buffer_past_the_initial_size() {
-    // A sheet whose total accumulated blob exceeds the 1 MiB initial buffer, so read_all_blob
-    // must answer XL_BUFFER_TOO_SMALL at least once and AllRows::read must retry without losing
-    // any row.
     let big = "x".repeat(2_000_000);
     let dir = std::env::temp_dir().join("excelreader-rust-all-rows-blob-test");
     std::fs::create_dir_all(&dir).expect("temp dir");

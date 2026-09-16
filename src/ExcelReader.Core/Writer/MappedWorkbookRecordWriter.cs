@@ -65,10 +65,6 @@ namespace ExcelReader.Core.Writer
 
     }
 
-    // The mapped-path counterpart to RecordColumns<T>.Plan<TRow>: builds T's map once per (T, TRow)
-    // pair via T.ConfigureExcelRecordMap and caches it. Keyed by TRow as well as T because the builder
-    // compiles its column actions against the concrete row writer, so a cell write lands on that
-    // sealed class's own method instead of an IRowWriter dispatch.
     internal static class MappedRecordColumns<T, TRow>
         where T : IExcelRecordMap<T>
         where TRow : IRowWriter

@@ -109,13 +109,6 @@ namespace ExcelReader.Generator
             ToStringFallback,
         }
 
-        // Matches RowWriteMethods<TRow>.Numeric exactly (the reflection write path's hashset) — only
-        // these get the generic, numeric-cell Write<T> overload. Everything else that's still writable
-        // (enum, Guid, char, Half, Int128, UInt128, TimeSpan, DateTimeOffset — every other
-        // IUtf8SpanParsable/enum type this generator's read side supports) writes as text via ToString(),
-        // even though several of them (Guid, TimeSpan, DateTimeOffset, char, Half, Int128, UInt128) also
-        // implement IUtf8SpanFormattable and so *could* go through the generic path — using that path for
-        // them anyway would write a different cell type than the reflection path does for the same model.
         private static readonly HashSet<SpecialType> NumericWriteSpecialTypes =
         [
             SpecialType.System_Byte, SpecialType.System_SByte, SpecialType.System_Int16, SpecialType.System_UInt16,
@@ -129,18 +122,9 @@ namespace ExcelReader.Generator
             IncrementalValuesProvider<GeneratedResult> results = context.SyntaxProvider
                 .ForAttributeWithMetadataName(
                     SerializableAttribute,
-                    // TypeDeclarationSyntax covers class/struct/record/record struct (but not enum,
-                    // which is a BaseTypeDeclarationSyntax, not a TypeDeclarationSyntax) — a record was
-                    // previously silently ignored here (ClassDeclarationSyntax does not cover it).
                     predicate: static (node, _) => node is TypeDeclarationSyntax and not InterfaceDeclarationSyntax,
                     transform: static (ctx, _) => Analyze((INamedTypeSymbol)ctx.TargetSymbol));
 
-            // The transform above does the actual analysis and returns a plain-data, value-equatable
-            // result — RegisterSourceOutput's callback only replays it. ForAttributeWithMetadataName's
-            // incremental cache compares that result to the previous run's by Equals: an ISymbol/
-            // Compilation carried past the transform stage is reference-equality-only across
-            // compilations, so it would never hit the cache and this generator would re-run on every
-            // keystroke, not just when a marked type's own declaration actually changes.
             context.RegisterSourceOutput(results, static (spc, result) =>
             {
                 foreach (DiagnosticInfo diagnostic in result.Diagnostics.Items)
@@ -170,16 +154,11 @@ namespace ExcelReader.Generator
                     return NoSource(diagnostics);
                 }
             }
-            // A generic hintName (AddSource's file name) is invalid, and the emitted declaration below
-            // has no way to carry the type parameters back — reject up front instead of letting AddSource
-            // throw (which the generator host reports as an opaque CS8785 with no diagnostic at all).
             if (IsGenericTypeOrContainer(symbol))
             {
                 diagnostics.Add(DiagnosticInfo.Create(GenericTypeNotSupportedDescriptor, symbol.Locations.FirstOrDefault(), symbol.Name));
                 return NoSource(diagnostics);
             }
-            // A struct always has an implicit parameterless constructor; only a class/record class needs
-            // one to exist explicitly for `new T()` (AppendRowMap's factory) to compile.
             if (symbol.TypeKind != TypeKind.Struct && !HasPublicParameterlessConstructor(symbol))
             {
                 diagnostics.Add(DiagnosticInfo.Create(NoParameterlessConstructorDescriptor, symbol.Locations.FirstOrDefault(), symbol.Name));
@@ -207,9 +186,6 @@ namespace ExcelReader.Generator
                 }
             }
 
-            // Skip EXR005 when a more specific per-property error (EXR003/EXR004) already explains why
-            // nothing mapped — piling a generic "nothing mappable" warning on top of the real cause is
-            // noise, not information.
             if (plans.Count == 0 && !hadPropertyError)
             {
                 diagnostics.Add(DiagnosticInfo.Create(NoMappablePropertyDescriptor, symbol.Locations.FirstOrDefault(), symbol.Name));
@@ -248,11 +224,6 @@ namespace ExcelReader.Generator
             return symbol.Constructors.Any(static c => c.Parameters.Length == 0 && c.DeclaredAccessibility == Accessibility.Public);
         }
 
-        // Mirrors TypeMapper<T>.Build()'s GetProperties(BindingFlags.Public | BindingFlags.Instance),
-        // which (unlike symbol.GetMembers()) walks inherited properties too — a property declared only
-        // on a base type was previously missing from the generated map (divergence from reflection).
-        // Declared-on-`symbol` properties come first, then each base type's in turn; a property that a
-        // derived type re-declares (`new`) shadows the base one, first occurrence by name wins.
         private static IEnumerable<IPropertySymbol> CollectMappableProperties(INamedTypeSymbol symbol)
         {
             var seenNames = new HashSet<string>(StringComparer.Ordinal);
@@ -297,10 +268,6 @@ namespace ExcelReader.Generator
             bool allowEmpty = required?.NamedArguments.FirstOrDefault(static kv => string.Equals(kv.Key, "AllowEmpty", StringComparison.Ordinal)).Value.Value is true;
             bool requireValue = isRequired && !allowEmpty;
 
-            // An init-only setter (`{ get; init; }`, and every positional-record property) can be
-            // assigned through reflection's CreateDelegate, but the emitted `m.Prop = v` lambda cannot
-            // (CS8852) — such a property is write-only from the generator's perspective, so it's read
-            // through the record's write side only, not the row map.
             bool canSet = property.SetMethod is { DeclaredAccessibility: Accessibility.Public, IsInitOnly: false };
             bool canGet = property.GetMethod is { DeclaredAccessibility: Accessibility.Public };
             string qualifiedProperty = property.Type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
@@ -355,10 +322,6 @@ namespace ExcelReader.Generator
                 WriteKind writeKind = GetWriteKind(underlying);
                 if (canGet && writeKind != WriteKind.None)
                 {
-                    // A Nullable<T> (isNullable) or a reference type (!underlying.IsValueType) can be
-                    // null at runtime — matches RecordColumns<T>.ToStringExpression's reflection-path
-                    // rule exactly (Plan<TRow>.Build in WorkbookRecordWriter.cs): a genuinely non-null
-                    // value type calls ToString() directly, everything else null-conditionally.
                     bool needsNullConditional = isNullable || !underlying.IsValueType;
                     string valueExpr = WriteValueExpression(writeKind, needsNullConditional, property.Name);
                     writeEmit = $"            .Column(\"{names[0].Replace("\"", "\\\"")}\", static (row, m) => row.Write({valueExpr}))";
@@ -386,11 +349,6 @@ namespace ExcelReader.Generator
             return needsNullConditional ? $"m.{propertyName}?.ToString()" : $"m.{propertyName}.ToString()";
         }
 
-        // Direct for the fixed set RowWriteMethods<TRow> has a dedicated Write overload for; every
-        // other type — enum, Guid, char, Half, Int128, UInt128, TimeSpan, DateTimeOffset, a plain
-        // reference type with no built-in reader, anything — falls back to ToString(), exactly like
-        // RecordColumns<T>.Plan<TRow>.Build's reflection path (RowWriteMethods<TRow>.Select's
-        // asString=true default). No type is ever omitted from the written columns.
         private static WriteKind GetWriteKind(ITypeSymbol underlying)
         {
             if (underlying.SpecialType is SpecialType.System_String or SpecialType.System_Boolean
@@ -412,9 +370,6 @@ namespace ExcelReader.Generator
             {
                 return ("global::ExcelReader.Core.Parser.ExcelCellReaders.Bool", "bool", false);
             }
-            // *Auto, not *Serial: ExcelMappedParser<T> builds one map and reuses it for every reader
-            // (unlike the reflection path's dedicated csvTextDates map for CSV), so a date property has
-            // to read a serial number from XLSX/XLSB/XLS and ISO text from CSV through the same reader.
             if (IsSystemType(underlying, "DateTime"))
             {
                 return ("global::ExcelReader.Core.Parser.ExcelCellReaders.DateTimeAuto", "global::System.DateTime", false);
@@ -471,9 +426,6 @@ namespace ExcelReader.Generator
                 && SymbolEqualityComparer.Default.Equals(i.TypeArguments[0], type));
         }
 
-        // Symbol-level equivalent of "converterType implements openInterface<exactArgument>" — used for
-        // both IExcelCellConverter<T> (read) and IExcelCellWriter<T> (write), each checked independently
-        // since a converter may implement only one of the two (a read-only converter has no write side).
         private static bool ImplementsGenericInterface(ITypeSymbol converterType, string openInterfaceDisplay, ITypeSymbol exactArgument)
         {
             return converterType.AllInterfaces.Any(i =>
@@ -482,10 +434,6 @@ namespace ExcelReader.Generator
                 && SymbolEqualityComparer.Default.Equals(i.TypeArguments[0], exactArgument));
         }
 
-        // Matches the original declaration's keyword so the emitted partial declares the same kind —
-        // "class" for a record class would compile but subtly change the type's semantics (no more
-        // synthesized Equals/ToString from a *second* declaration, though the original still has them),
-        // whereas "struct" for a record struct's partial would flat out fail to bind IsRecord's members.
         private static string DeclarationKeyword(INamedTypeSymbol symbol)
         {
             if (symbol.TypeKind == TypeKind.Struct)
@@ -531,14 +479,14 @@ namespace ExcelReader.Generator
             AppendRowMap(sb, symbol, qualifiedType, properties);
             AppendRecordMap(sb, qualifiedType, properties);
 
-            sb.AppendLine("}"); // type
+            sb.AppendLine("}");
             for (int i = 0; i < containers.Count; i++)
             {
-                sb.AppendLine("}"); // containers
+                sb.AppendLine("}");
             }
             if (ns is not null)
             {
-                sb.AppendLine("}"); // namespace
+                sb.AppendLine("}");
             }
             return sb.ToString();
         }
@@ -560,14 +508,6 @@ namespace ExcelReader.Generator
             sb.AppendLine("    }");
         }
 
-        // Emits a single fused .PropertyRaw(...) call per bound property instead of the two-delegate
-        // .Property/.PropertyNullable/.Converted composition ExcelRowMapBuilder<T> builds internally:
-        // one indirect call per bound cell per row (the ColumnParser<T> itself) instead of two (the
-        // ColumnParser<T> wrapper calling through to a separate read delegate, then a separate setter
-        // delegate). Assigning a non-nullable `v` straight into a `TValue?` property (the Nullable/
-        // GuidNullable cases) already implicitly wraps it, so those collapse into the same emission as
-        // their non-nullable counterparts — PropertyRaw needs no separate nullable overload the way
-        // Property/PropertyNullable do.
         private static void EmitReadFragment(StringBuilder sb, string qualifiedType, PropertyPlan p)
         {
             string namesLiteral = string.Join(", ", p.HeaderNames.Select(static n => $"\"{n.Replace("\"", "\\\"")}\""));
@@ -595,10 +535,6 @@ namespace ExcelReader.Generator
             }
         }
 
-        // `tryReadExpr` is a full call expression evaluating a `bool`, binding `out {ValueType} v` — e.g.
-        // "global::...ExcelCellReaders.Bool(in c, d, pr, out bool v)" or "s_converter_Foo.TryConvert(in
-        // c, d, pr, out int v)". `c`/`d`/`pr` are this lambda's own parameter names (Cell/isDate1904/
-        // provider), matching ExcelRowParser<T>'s shape exactly so no wrapper indirection is introduced.
         private static void EmitPropertyRaw(StringBuilder sb, string qualifiedType, string namesLiteral, string propertyName, string req, string tryReadExpr)
         {
             sb.AppendLine($"            .PropertyRaw([{namesLiteral}], static (ref {qualifiedType} m, in global::ExcelReader.Core.ValueObjects.Cell c, bool d, global::System.IFormatProvider pr) =>");
@@ -611,17 +547,12 @@ namespace ExcelReader.Generator
 
         private static void AppendRecordMap(StringBuilder sb, string qualifiedType, List<PropertyPlan> properties)
         {
-            // Generic in TRow, matching IExcelRecordMap<T>: the body is the same for every row writer,
-            // but each instantiation binds its column actions to that concrete writer instead of to
-            // IRowWriter, so a cell write does not dispatch through the interface.
             sb.AppendLine($"    public static void ConfigureExcelRecordMap<TRow>(global::ExcelReader.Core.Writer.ExcelRecordMapBuilder<{qualifiedType}, TRow> builder)");
             sb.AppendLine("        where TRow : global::ExcelReader.Core.Writer.IRowWriter");
             sb.AppendLine("    {");
             string[] writeEmits = [.. properties.Select(static p => p.WriteEmit).Where(static w => w is not null)!];
             if (writeEmits.Length == 0)
             {
-                // No `.Column(...)` calls to chain — `builder;` alone is not a valid statement
-                // (CS0201), and an unused parameter warning would fire without some use of it.
                 sb.AppendLine("        _ = builder;");
                 sb.AppendLine("    }");
                 return;
@@ -640,8 +571,6 @@ namespace ExcelReader.Generator
             return value ? "true" : "false";
         }
 
-        // netstandard2.0 has no record types (IsExternalInit lives in netstandard2.1+), so plain
-        // constructor-initialized structs do the same job as record struct here.
         private readonly struct ReadPlan
         {
             internal ReadPlan(ReadKind kind, string reader, string valueType)
@@ -678,14 +607,6 @@ namespace ExcelReader.Generator
             internal string? ConverterFieldDecl { get; }
         }
 
-        // Everything Analyze() produces for one [ExcelSerializable] type, carrying no ISymbol/
-        // Compilation/live Location past the transform stage — plain strings and EquatableArray, so two
-        // runs whose underlying declaration didn't change compare Equals and RegisterSourceOutput's
-        // callback is skipped for that type, instead of re-running on every keystroke regardless of
-        // whether anything relevant changed. A plain struct, not a record: netstandard2.0 (this
-        // project's required TFM, see the .csproj comment) has no IsExternalInit, so record/record
-        // struct's compiler-synthesized init-setters don't compile here — same reason ReadPlan/
-        // PropertyPlan above are plain structs.
         private readonly struct GeneratedResult : IEquatable<GeneratedResult>
         {
             internal GeneratedResult(string? hintName, string? source, EquatableArray<DiagnosticInfo> diagnostics)
@@ -719,11 +640,6 @@ namespace ExcelReader.Generator
             }
         }
 
-        // Location.Create(filePath, textSpan, lineSpan) — the "external file" flavor — captures the
-        // same information a real syntax Location does, but as plain value data with no reference to
-        // the SyntaxTree/Compilation that produced it, which is what makes it safe to compare across
-        // incremental runs. The real, tree-bound Location that comes out of the symbol API is exactly
-        // the kind of thing that would otherwise pin the whole Analyze() result to reference equality.
         private readonly struct LocationInfo : IEquatable<LocationInfo>
         {
             private LocationInfo(string filePath, TextSpan span, LinePositionSpan lineSpan)
@@ -807,9 +723,6 @@ namespace ExcelReader.Generator
             }
         }
 
-        // ImmutableArray<T>'s own Equals is reference-equality on the backing array, not structural —
-        // exactly wrong for an incremental-generator cache key, where two runs' arrays are never the
-        // same instance even when their content is identical. This wrapper is the standard fix.
         private readonly struct EquatableArray<T> : IEquatable<EquatableArray<T>>
             where T : IEquatable<T>
         {
@@ -860,8 +773,6 @@ namespace ExcelReader.Generator
             }
         }
 
-        // System.HashCode isn't available on netstandard2.0 (this project's required TFM) — the
-        // classic combine formula does the same job without it.
         private static int CombineHash(int h1, int h2)
         {
             unchecked

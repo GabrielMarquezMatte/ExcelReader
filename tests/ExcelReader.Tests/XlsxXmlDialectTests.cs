@@ -75,9 +75,6 @@ namespace ExcelReader.Tests
         [Fact]
         public void ParseRelationshipsDoesNotMatchLongerElementNameSharingThePrefix()
         {
-            // "<RelationshipGroup" is not a valid OPC element, but it contains "<Relationship" as a
-            // literal substring — without a name-boundary check, TagSpanEnumerable would misparse it
-            // as a real <Relationship> tag and inject a spurious rId into the map.
             var rels = XlsxXml.ParseRelationships(
                 """<Relationship Id="rId1" Target="worksheets/sheet1.xml"/><RelationshipGroup Id="rId2" Target="malicious.xml"/>"""u8);
 

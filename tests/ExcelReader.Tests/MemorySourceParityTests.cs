@@ -68,7 +68,6 @@ namespace ExcelReader.Tests
             Assert.Throws<InvalidDataException>(() => Excel.FromXls(bytes.AsMemory()));
         }
 
-        // The stream path decrypts lazily per segment; the memory path decrypts eagerly. They must agree.
         [Theory]
         [MemberData(nameof(EncryptedFixtureNames))]
         public void Should_Match_Stream_Path_When_Encrypted_Opened_From_Memory(string fixture)
@@ -136,9 +135,9 @@ namespace ExcelReader.Tests
                 throw new NotSupportedException();
             }
 
-#pragma warning disable IDISP010 // Call base.Dispose(disposing)
+#pragma warning disable IDISP010 
             protected override void Dispose(bool disposing)
-#pragma warning restore IDISP010 // Call base.Dispose(disposing)
+#pragma warning restore IDISP010 
             {
             }
         }

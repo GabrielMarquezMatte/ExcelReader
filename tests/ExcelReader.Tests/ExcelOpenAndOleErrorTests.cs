@@ -87,7 +87,7 @@ namespace ExcelReader.Tests
         [Fact]
         public void OpenThrowsOnUnrecognizedSignature()
         {
-            using MemoryStream ms = new([0x25, 0x50, 0x44, 0x46, 0x2D]); // "%PDF-"
+            using MemoryStream ms = new([0x25, 0x50, 0x44, 0x46, 0x2D]);
             Assert.Throws<InvalidDataException>(() => Excel.Open(ms));
         }
 
@@ -118,7 +118,6 @@ namespace ExcelReader.Tests
         public void OpenLeavesSeekableStreamAtOriginalPositionForReader()
         {
             using MemoryStream ms = WorkbookBuilder.Build("""<row r="1"><c r="A1"><v>7</v></c></row>""");
-            // A non-zero start position must be restored so the reader sees the whole stream.
             ms.Position = 0;
             using var reader = Excel.Open(ms, leaveOpen: true);
             using XlsxReader.Enumerator e = ((XlsxReader)reader).GetEnumerator();
@@ -129,7 +128,6 @@ namespace ExcelReader.Tests
         [Fact]
         public void OpenDisposesOwnedStreamWhenSignatureUnrecognized()
         {
-            // path overload opens the file with leaveOpen:false; a bad signature must not leak it.
             string path = WriteTemp(".bin", new MemoryStream([0x01, 0x02, 0x03, 0x04]));
             try
             {
@@ -137,11 +135,10 @@ namespace ExcelReader.Tests
             }
             finally
             {
-                File.Delete(path); // succeeds only if Open released its FileStream handle
+                File.Delete(path);
             }
         }
 
-        // --- Excel.DetectFileFormat / DetectFileFormatAsync ---
 
         [Fact]
         public void DetectFileFormatIdentifiesXlsx()
@@ -167,7 +164,7 @@ namespace ExcelReader.Tests
         [Fact]
         public void DetectFileFormatReturnsUnknownForUnrecognizedSignature()
         {
-            using MemoryStream ms = new([0x25, 0x50, 0x44, 0x46, 0x2D]); // "%PDF-"
+            using MemoryStream ms = new([0x25, 0x50, 0x44, 0x46, 0x2D]);
             Assert.Equal(ExcelFileFormat.Unknown, Excel.DetectFileFormat(ms));
         }
 
@@ -202,7 +199,6 @@ namespace ExcelReader.Tests
             Assert.Equal(ExcelFileFormat.Xlsx, Excel.DetectFileFormat(ms));
             Assert.Equal(before, ms.Position);
 
-            // The stream must still be readable from the same position afterward.
             using var reader = Excel.Open(ms, leaveOpen: true);
             Assert.IsType<XlsxReader>(reader);
         }
@@ -266,7 +262,6 @@ namespace ExcelReader.Tests
             return ms;
         }
 
-        // --- OLE/CFB guard rails (XlsCompoundFile), reached via Excel.FromXls ---
 
         [Fact]
         public void CorruptOleSignatureThrows()
@@ -279,19 +274,13 @@ namespace ExcelReader.Tests
         [Fact]
         public void UnsupportedOleSectorSizeThrows()
         {
-            // shift 13 -> 8192-byte sectors, above the 4096 ceiling the parser accepts.
             using MemoryStream ms = XlsWorkbookBuilder.BuildPatched(
                 XlsWorkbookBuilder.SectorShiftOffset, XlsWorkbookBuilder.LE16(13));
             Assert.Throws<InvalidDataException>(() => Excel.FromXls(ms));
         }
 
-        // Regression: found by the XLS fuzz target. miniFatSectorCount was the one sector count the
-        // header validation skipped, and ReadIntSectors multiplies it by sectorSize inside a `checked`
-        // block — so a large value escaped as an OverflowException (an arithmetic fault leaking out of
-        // the parser) instead of the InvalidDataException malformed input is contracted to produce.
-        // The crashing input carried miniFatSectorCount = 16,777,215 against a 3.4 KB file.
         [Theory]
-        [InlineData(16777215)] // the value libFuzzer actually found; * 512 overflows Int32
+        [InlineData(16777215)]
         [InlineData(int.MaxValue)]
         [InlineData(-1)]
         public void OutOfRangeMiniFatSectorCountThrowsInvalidData(int miniFatSectorCount)
@@ -304,7 +293,6 @@ namespace ExcelReader.Tests
         [Fact]
         public void IncompleteDifatThrows()
         {
-            // Header claims more FAT sectors than the DIFAT region actually lists.
             using MemoryStream ms = XlsWorkbookBuilder.BuildPatched(
                 XlsWorkbookBuilder.FatSectorCountOffset, XlsWorkbookBuilder.LE32(9));
             Assert.Throws<InvalidDataException>(() => Excel.FromXls(ms));
@@ -313,7 +301,6 @@ namespace ExcelReader.Tests
         [Fact]
         public void MissingWorkbookDirectoryEntryThrows()
         {
-            // Rename "Workbook" -> "Xorkbook" so no Workbook/Book stream is found.
             using MemoryStream ms = XlsWorkbookBuilder.BuildPatched(
                 XlsWorkbookBuilder.WorkbookEntryNameOffset, (byte)'X');
             InvalidDataException ex = Assert.Throws<InvalidDataException>(() => Excel.FromXls(ms));
@@ -347,7 +334,6 @@ namespace ExcelReader.Tests
             Assert.Equal("Async", e.Current[0].GetString());
         }
 
-        // --- Excel.FromXlsx* aliases (API1: format-named factory matching FromXls/FromXlsb) ---
 
         [Fact]
         public void FromXlsxFileOpensLikeFromFile()

@@ -7,21 +7,8 @@ using ExcelReader.Core.Writer.Internal;
 
 namespace ExcelReader.Tests
 {
-    // WriteOffloadStream overlaps a ZIP entry's deflate with row-serialization on a background thread
-    // (the write-side mirror of PrefetchDecompressionTests). Each test here pins one specific way that
-    // can go wrong: a cell-content mismatch versus the non-offloaded path, or a sheet too small to ever
-    // engage the offload path at all (XLSB only spills past SpillThreshold).
-    //
-    // Deliberately NOT a raw byte-for-byte comparison of the two builds' zip output: ZipArchiveEntry
-    // stamps LastWriteTime from DateTime.Now at CreateEntry time, so two independent builds a few
-    // milliseconds apart can legitimately cross a 2-second DOS-time rounding boundary and differ in a
-    // header byte or two — a real, pre-existing quirk of System.IO.Compression, not something
-    // WriteOffloadStream introduces. Comparing decoded cell content (as PrefetchDecompressionTests does
-    // on the read side) is the correctness property that actually matters here.
     public class WriteOffloadTests
     {
-        // Enough rows that the XLSX row buffer crosses its 64 KiB flush threshold and the XLSB record
-        // buffer crosses its 64 KiB spill threshold many times over, not just once.
         private const int Rows = 20_000;
 
         [Fact]
@@ -65,8 +52,6 @@ namespace ExcelReader.Tests
             Assert.Equal(Rows, rowIndex);
         }
 
-        // Uses the sync row-write API (StartRow/RowWriter.Dispose), which is the path that exercises
-        // WriteOffloadStream's synchronous Write(ReadOnlySpan<byte>) override rather than WriteAsync.
         [Fact]
         public async Task XlsxPrefetchWriteWorksThroughSyncRowApi()
         {
@@ -99,9 +84,6 @@ namespace ExcelReader.Tests
             Assert.Equal(Rows, rowIndex);
         }
 
-        // XLSB's offload path only ever engages once the record buffer actually spills past
-        // SpillThreshold (see XlsbSheetWriter.EnsureStream) — a small sheet must still round-trip
-        // correctly with prefetchWrite: true even though WriteOffloadStream is never constructed.
         [Fact]
         public async Task XlsbPrefetchWriteRoundTripsASmallSheetThatNeverSpills()
         {
@@ -181,9 +163,6 @@ namespace ExcelReader.Tests
             Assert.Equal("hello world", Encoding.UTF8.GetString(inner.ToArray()));
         }
 
-        // EnqueueOwned(Async) takes over a BiffBuffer.Detach array instead of copying. A zero-length
-        // one still has to go back to BiffBuffer's own pool rather than being dropped or, worse,
-        // returned to ArrayPool<byte>.Shared.
         [Fact]
         public async Task EnqueueOwnedWritesTheDetachedBufferAndReturnsAnEmptyOneUnwritten()
         {
@@ -201,9 +180,6 @@ namespace ExcelReader.Tests
             Assert.Equal("sync async", Encoding.UTF8.GetString(inner.ToArray()));
         }
 
-        // The consumer runs on a pool thread and swallows its own exceptions so the task never faults
-        // unobserved; the producer must still see the original exception, with its original type, on
-        // the next call that synchronizes with the consumer.
         [Fact]
         public void AConsumerFailureSurfacesOnTheProducerWithItsOriginalType()
         {
@@ -214,8 +190,6 @@ namespace ExcelReader.Tests
             Assert.Throws<TimeoutException>(stream.Dispose);
         }
 
-        // Flush completes the channel writer, so anything enqueued afterwards hits a closed channel.
-        // Each enqueue path has its own catch that must hand the buffer back before rethrowing.
         [Fact]
         public async Task EveryEnqueuePathReportsAClosedChannelAfterFlush()
         {

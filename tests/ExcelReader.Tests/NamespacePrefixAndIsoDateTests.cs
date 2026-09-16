@@ -3,12 +3,8 @@ using ExcelReader.Core.Reader;
 
 namespace ExcelReader.Tests
 {
-    // Regression coverage for two SpreadsheetML dialects non-Excel producers emit:
-    //   3.4 — every element carries a namespace prefix (<x:worksheet>/<x:row>/<x:c>/...).
-    //   3.7 — ISO-8601 date cells typed t="d" (a bare serial is NOT what the <v> holds).
     public class NamespacePrefixAndIsoDateTests
     {
-        // ---- 3.4: namespace-prefixed worksheets ----
 
         [Fact]
         public void PrefixedNumberAndInlineStringCellsAreRead()
@@ -60,7 +56,6 @@ namespace ExcelReader.Tests
         [Fact]
         public void PrefixedPhoneticRunsAreSkippedInSharedStrings()
         {
-            // Exercises the prefixed <x:rPh> skip in WriteTextRuns (item 1.1 under a namespace prefix).
             using MemoryStream ms = WorkbookBuilder.BuildPrefixed("x",
                 """<x:row r="1"><x:c r="A1" t="s"><x:v>0</x:v></x:c></x:row>""",
                 sharedStrings: "<x:si><x:t>株式会社</x:t><x:rPh sb=\"0\" eb=\"4\"><x:t>カブシキガイシャ</x:t></x:rPh></x:si>");
@@ -74,7 +69,6 @@ namespace ExcelReader.Tests
         [Fact]
         public void PrefixedCustomDateStyleIsClassifiedAsDate()
         {
-            // Exercises the prefixed <x:numFmt> + <x:cellXfs>/<x:xf> style parsing.
             using MemoryStream ms = WorkbookBuilder.BuildPrefixed("x",
                 """<x:row r="1"><x:c r="A1" s="0"><x:v>45658</x:v></x:c></x:row>""",
                 stylesInner: """<x:numFmts count="1"><x:numFmt numFmtId="164" formatCode="yyyy-mm-dd"/></x:numFmts><x:cellXfs count="1"><x:xf numFmtId="164"/></x:cellXfs>""");
@@ -105,7 +99,6 @@ namespace ExcelReader.Tests
         [Fact]
         public void UnusualPrefixNameIsSupported()
         {
-            // The prefix is detected from the root element, so it need not be the conventional "x".
             using MemoryStream ms = WorkbookBuilder.BuildPrefixed("ss",
                 """<ss:row r="1"><ss:c r="A1"><ss:v>99</ss:v></ss:c></ss:row>""");
             using XlsxReader reader = Excel.From(ms);
@@ -115,7 +108,6 @@ namespace ExcelReader.Tests
             Assert.Equal("99", e.Current[0].GetString());
         }
 
-        // ---- 3.7: ISO-8601 date cells (t="d") ----
 
         [Fact]
         public void IsoDateTimeCellIsParsedAsDate()
@@ -148,7 +140,6 @@ namespace ExcelReader.Tests
         [Fact]
         public void UnparseableIsoDateCellIsKeptAsString()
         {
-            // Garbage in a t="d" cell must not crash the enumerator or silently vanish.
             using MemoryStream ms = WorkbookBuilder.Build(
                 """<row r="1"><c r="A1" t="d"><v>not-a-date</v></c></row>""");
             using XlsxReader reader = Excel.From(ms);
@@ -159,10 +150,6 @@ namespace ExcelReader.Tests
             Assert.Equal("not-a-date", e.Current[0].GetString());
         }
 
-        // Regression: found by the xlsx-memory fuzz target. DateTime spans years 1..9999 but
-        // ToOADate only accepts 0100-01-01 and later, so a t="d" whose text parsed into an earlier
-        // year threw OverflowException ("Not a legal OleAut date") out of MoveNext. Such a value has
-        // no Excel serial at all, so it is kept verbatim as text like any other unparseable t="d".
         [Theory]
         [InlineData("0024-02-29T21:00:00.000Z")]
         [InlineData("0001-01-01")]
@@ -179,7 +166,6 @@ namespace ExcelReader.Tests
             Assert.Equal(text, e.Current[0].GetString());
         }
 
-        // The first legal OADate value still round-trips as a date, so the guard is not off by a day.
         [Fact]
         public void IsoDateAtOaDateFloorIsStillParsedAsDate()
         {
@@ -209,7 +195,6 @@ namespace ExcelReader.Tests
         [Fact]
         public void IsoDateCellCombinedWithPrefix()
         {
-            // Both dialects at once: a prefixed worksheet whose cell is also an ISO t="d" date.
             using MemoryStream ms = WorkbookBuilder.BuildPrefixed("x",
                 """<x:row r="1"><x:c r="A1" t="d"><x:v>2026-03-04</x:v></x:c></x:row>""");
             using XlsxReader reader = Excel.From(ms);

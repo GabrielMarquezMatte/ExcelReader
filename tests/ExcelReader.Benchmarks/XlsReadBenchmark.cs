@@ -19,7 +19,6 @@ namespace ExcelReader.Benchmarks
         [GlobalSetup]
         public void Setup()
         {
-            // Sylvan decodes legacy .xls text as CP1252, which .NET only exposes via this provider.
             Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
             _workbook = XlsBenchmarkWorkbookGenerator.Build(Rows);
         }
@@ -66,8 +65,6 @@ namespace ExcelReader.Benchmarks
         internal static byte[] Build(int rows)
         {
             byte[] sheet = BuildSheet(rows);
-            // The sheet substream starts right after the globals, so the BoundSheet offset
-            // must equal the globals byte count: BOF(20) + 2×XF(24) + BoundSheet(14) + EOF(4).
             const int globalsLength = 20 + 24 + 24 + 14 + 4;
             using MemoryStream workbook = new();
             WriteRecord(workbook, 0x0809, [.. U16(0x0600), .. U16(0x0005), .. new byte[12]]);
@@ -88,7 +85,6 @@ namespace ExcelReader.Benchmarks
         {
             using MemoryStream sheet = new();
             WriteRecord(sheet, 0x0809, [.. U16(0x0600), .. U16(0x0010), .. new byte[12]]);
-            // DIMENSION: rwMic=0, rwMac=rows, colMic=0, colMac=4, reserved.
             WriteRecord(sheet, 0x0200, [.. I32(0), .. I32(rows), .. U16(0), .. U16(4), 0, 0]);
             for (int r = 1; r <= rows; r++)
             {
@@ -105,8 +101,6 @@ namespace ExcelReader.Benchmarks
         {
             int workbookSize = RoundUp(workbook.Length, SectorSize);
             int workbookSectorCount = workbookSize / SectorSize;
-            // The FAT must cover its own sectors plus the directory and workbook sectors.
-            // Each FAT sector holds 128 entries but also consumes one, so divide by 127.
             int fatSectorCount = (workbookSectorCount + 1 + 126) / 127;
             int dirSector = fatSectorCount;
             int workbookStart = dirSector + 1;
@@ -141,11 +135,11 @@ namespace ExcelReader.Benchmarks
             byte[] header = new byte[SectorSize];
             byte[] sig = [0xD0, 0xCF, 0x11, 0xE0, 0xA1, 0xB1, 0x1A, 0xE1];
             sig.CopyTo(header, 0);
-            WriteU16(header, 0x18, 0x003E); // minor version
-            WriteU16(header, 0x1A, 0x0003); // major version
-            WriteU16(header, 0x1C, 0xFFFE); // byte-order mark (little-endian)
-            WriteU16(header, 0x1E, 9);      // sector shift -> 512
-            WriteU16(header, 0x20, 6);      // mini-sector shift -> 64
+            WriteU16(header, 0x18, 0x003E);
+            WriteU16(header, 0x1A, 0x0003);
+            WriteU16(header, 0x1C, 0xFFFE);
+            WriteU16(header, 0x1E, 9);
+            WriteU16(header, 0x20, 6);
             WriteI32(header, 0x2C, fatSectorCount);
             WriteI32(header, 0x30, dirSector);
             WriteI32(header, 0x38, 4096);

@@ -5,8 +5,6 @@ using ExcelReader.Core.Writer;
 
 namespace ExcelReader.Native
 {
-    // Flat C ABI representation of xl_write_options. Numeric fields are 0 for "use the library
-    // default"; boolean-shaped fields use NativeOptionState for the same reason
     // NativeOpenOptionsRaw does. See excelreader.h for the authoritative field list.
     [StructLayout(LayoutKind.Sequential)]
     internal unsafe struct NativeWriteOptionsRaw
@@ -21,19 +19,12 @@ namespace ExcelReader.Native
         public int UseSharedStrings;
     }
 
-    // Decoded, pointer-free form of NativeWriteOptionsRaw — null means "use the library
-    // default", so only what the caller actually set is ever overridden.
     internal readonly struct NativeWriteOptions
     {
-        // The C struct's name, as it appears in every message this type produces.
         private const string OptionsName = "xl_write_options";
 
-        // Excel's own limit; a longer name is rejected here rather than by the writer, so the
-        // caller gets XL_INVALID_ARGUMENT before a file is created instead of XL_ERROR after.
         private const int MaxSheetNameLength = 31;
 
-        // Excel's reserved sheet-name characters. Kept as a literal rather than reaching into Core:
-        // IWorkbookWriter.AddSheet documents exactly this set, and the writer enforces it too.
         private const string ForbiddenSheetNameCharacters = @":\/?*[]";
         private static readonly SearchValues<char> ForbiddenSheetNameCharactersSearchValues = SearchValues.Create(ForbiddenSheetNameCharacters);
         internal string? SheetName { get; init; }
@@ -56,9 +47,6 @@ namespace ExcelReader.Native
             return options;
         }
 
-        // Validates and decodes a raw ABI struct. sheetName arrives already
-        // UTF-8-decoded by Exports, since everything below that layer must stay
-        // pointer-free to remain testable.
         internal static bool TryDecode(NativeWriteOptionsRaw raw, string? sheetName, out NativeWriteOptions options, out string? error)
         {
             options = default;
@@ -87,13 +75,6 @@ namespace ExcelReader.Native
             return true;
         }
 
-        // The very first check any caller-supplied NativeWriteOptionsRaw must pass.
-        //
-        // A struct_size that disagrees IS the "our two struct layouts differ" signal, so every other
-        // field — sheet_name_len and sheet_name above all — is at that point just bytes
-        // at an offset this library guessed. Exports calls this before it dereferences
-        // the sheet-name pointer, and TryDecode calls it again for callers that reach
-        // the decoder directly; both share this one copy so the check cannot drift.
         internal static bool TryValidateStructSize(NativeWriteOptionsRaw raw, [NotNullWhen(false)] out string? error)
         {
             error = null;
