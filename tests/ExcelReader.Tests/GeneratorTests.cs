@@ -647,5 +647,37 @@ namespace ExcelReader.Tests
             int inheritedIndex = generated.IndexOf(".PropertyRaw([\"Inherited\"]", StringComparison.Ordinal);
             Assert.True(ownIndex < inheritedIndex, "Declared-on-type properties must be emitted before inherited ones.");
         }
+
+        [Fact]
+        public void RefStructWithSpanPropertyGeneratesBothMaps()
+        {
+            const string source = """
+                using System;
+                using ExcelReader.Core.Parser;
+
+                namespace GeneratorTests.RefStruct
+                {
+                    public partial class Outer
+                    {
+                        [ExcelSerializable]
+                        public ref partial struct Reading
+                        {
+                            public ReadOnlySpan<byte> Station { get; set; }
+                            [ExcelRequired]
+                            public double Temperature { get; set; }
+                            public string? Note { get; set; }
+                        }
+                    }
+                }
+                """;
+            (ImmutableCompilationResult result, ImmutableArray<Diagnostic> diagnostics, string generated) = RunGeneratorWithSource(source);
+            Assert.Empty(diagnostics);
+            EmitResult emit = result.Emit();
+            Assert.True(emit.Success, string.Join(Environment.NewLine, emit.Diagnostics.Select(static d => d.ToString())));
+            Assert.Contains("ref partial struct Reading : global::ExcelReader.Core.Parser.IExcelRowMap<", generated, StringComparison.Ordinal);
+            Assert.Contains("global::ExcelReader.Core.Writer.IExcelRecordMap<", generated, StringComparison.Ordinal);
+            Assert.Contains("global::ExcelReader.Core.Parser.ExcelCellReaders.Utf8(in c, d, pr, out global::System.ReadOnlySpan<byte> v)", generated, StringComparison.Ordinal);
+            Assert.Contains("row.Write(global::System.Text.Encoding.UTF8.GetString(m.Station))", generated, StringComparison.Ordinal);
+        }
     }
 }
