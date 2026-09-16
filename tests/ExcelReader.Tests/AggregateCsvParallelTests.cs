@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Globalization;
 using System.Text;
 using ExcelReader.Core.Parser.Internal;
@@ -60,6 +61,7 @@ namespace ExcelReader.Tests
             return ParallelCsvProcessor.RunWithChunkSizeAsync(
                 csv.AsMemory(),
                 aggregation ?? Collecting,
+                null,
                 new CsvParallelOptions { DegreeOfParallelism = dop, HeaderRow = headerRow },
                 chunkSize,
                 TestContext.Current.CancellationToken);
@@ -160,7 +162,7 @@ namespace ExcelReader.Tests
             };
 
             var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => ParallelCsvProcessor.RunWithChunkSizeAsync(
-                csv.AsMemory(), failAt150, new CsvParallelOptions { DegreeOfParallelism = 4 }, 64, TestContext.Current.CancellationToken));
+                csv.AsMemory(), failAt150, null, new CsvParallelOptions { DegreeOfParallelism = 4 }, 64, TestContext.Current.CancellationToken));
 
             Assert.Equal("r150", ex.Message);
         }
@@ -238,6 +240,64 @@ namespace ExcelReader.Tests
 
             await Assert.ThrowsAnyAsync<OperationCanceledException>(
                 () => Excel.AggregateCsvParallelAsync<RowLog>(csv, new CsvParallelOptions { DegreeOfParallelism = 4 }, cts.Token));
+        }
+
+        [Fact]
+        public async Task CallsTheFactoryOnceWithTheHeaderRecord()
+        {
+            byte[] csv = LargeCsv(rows: 2_000);
+            List<string> expected = Sequential(csv, headerRow: 1);
+            CancellationToken ct = TestContext.Current.CancellationToken;
+
+            foreach (bool partitioned in new[] { true, false })
+            {
+                var calls = new ConcurrentBag<(string Header, bool Sequential)>();
+                CsvAccumulateFactory<List<string>> factory = (Row header, bool sequential) =>
+                {
+                    calls.Add((Render(header), sequential));
+                    return Collecting.Accumulate;
+                };
+                List<string> rows = partitioned
+                    ? await ParallelCsvProcessor.RunWithChunkSizeAsync(csv.AsMemory(), Collecting, factory, new CsvParallelOptions { DegreeOfParallelism = 4, HeaderRow = 1 }, 4096, ct)
+                    : await ParallelCsvProcessor.RunAsync(csv.AsMemory(), Collecting, factory, new CsvParallelOptions { DegreeOfParallelism = 1, HeaderRow = 1 }, ct);
+
+                Assert.Equal(expected, rows);
+                (string header, bool sequentialCall) = Assert.Single(calls);
+                Assert.Equal("0:name|1:id|2:note|", header);
+                Assert.Equal(!partitioned, sequentialCall);
+            }
+        }
+
+        [Fact]
+        public async Task CallsTheFactoryWithAnEmptyHeaderWhenThereIsNoHeaderRow()
+        {
+            byte[] csv = LargeCsv(rows: 500);
+            CancellationToken ct = TestContext.Current.CancellationToken;
+            var columnCounts = new ConcurrentBag<int>();
+            CsvAccumulateFactory<List<string>> factory = (Row header, bool sequential) =>
+            {
+                columnCounts.Add(header.ColumnCount);
+                return Collecting.Accumulate;
+            };
+
+            List<string> rows = await ParallelCsvProcessor.RunWithChunkSizeAsync(csv.AsMemory(), Collecting, factory, new CsvParallelOptions { DegreeOfParallelism = 4 }, 1024, ct);
+
+            Assert.Equal(Sequential(csv), rows);
+            Assert.Equal(0, Assert.Single(columnCounts));
+        }
+
+        [Fact]
+        public async Task DoesNotCallTheFactoryWhenTheInputEndsBeforeTheHeader()
+        {
+            int calls = 0;
+            CsvAccumulateFactory<List<string>> factory = (Row header, bool sequential) =>
+            {
+                Interlocked.Increment(ref calls);
+                return Collecting.Accumulate;
+            };
+
+            Assert.Empty(await ParallelCsvProcessor.RunWithChunkSizeAsync(ReadOnlyMemory<byte>.Empty, Collecting, factory, new CsvParallelOptions { DegreeOfParallelism = 4, HeaderRow = 1 }, 4, TestContext.Current.CancellationToken));
+            Assert.Equal(0, calls);
         }
 
         private static byte[] LargeCsv(int rows)

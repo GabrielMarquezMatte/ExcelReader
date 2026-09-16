@@ -350,6 +350,42 @@ delegate call and the interface call on every record. That is the price of keepi
 second engine specialized on the accumulator type would remove the delegate hop. The one-thread
 fallback also runs above the inline loop's ~62 ns, since it enumerates through `MoveNextAsync`.
 
+A prototype (not in the library) put a typed record between `Row` and the accumulator: a
+`ref struct Reading : ICsvRecord<Reading>` with `static abstract bool TryParse(Row, out TSelf)`
+holding the station as a `ReadOnlySpan<byte>`, and an accumulator whose `Add` takes the record, with
+the record parameter declared `allows ref struct`. It compiles — a span taken from the `Row` may flow
+into the `out` record — and through the same delegate engine, one thread, interleaved, identical
+checksums:
+
+| | per row | |
+|---|---|---|
+| `CsvAggregation`, `Row` | 68.2 ns, 68.5 ns | 1.00x |
+| `ICsvAccumulator<TSelf>`, `Add(Row)` | 99.5 ns, 93.8 ns | 1.37–1.46x |
+| record accumulator, `TryParse` into a `ref struct`, `Add(Reading)` | 67.5 ns, 69.6 ns | 0.99–1.02x |
+
+Adding a layer made it faster than the shipped interface. The likely reason — inferred, not
+confirmed in the disassembly — is that `TryParse` is a static method on a value type, so the JIT
+specializes and inlines the `Row` work into the delegate, and the interface call then carries only a
+span and a double instead of the whole `Row`.
+
+The same prototype then filled the record automatically from a `TypeMapInfo<T>`, the map both
+attribute reflection and the `[ExcelSerializable]` generator produce, binding the header once and
+calling one `ColumnParser<T>` per column into a `ref struct` model. The generator-shape row uses
+`ExcelRowMapBuilder.PropertyRaw` lambdas written the way the generator emits them. Two columns, one
+thread, interleaved, two runs, identical checksums:
+
+| | per row | |
+|---|---|---|
+| `CsvAggregation`, `Row` | 65.0 ns, 66.0 ns | 1.00x |
+| `ICsvAccumulator<TSelf>`, `Add(Row)` | 92.8 ns, 92.1 ns | 1.40–1.43x |
+| record, static `TryParse` | 61.3 ns, 61.0 ns | 0.93–0.94x |
+| reflection `TypeMapInfo` | 80.6 ns, 79.6 ns | 1.21–1.24x |
+| generator-shape `TypeMapInfo` | 73.1 ns, 74.5 ns | 1.12–1.13x |
+
+Both mapped paths beat the shipped `Add(Row)` interface. The per-column delegate costs roughly
+6–10 ns per column over the hand-written `TryParse` here; with two columns this says nothing yet
+about wide models, where that cost grows with every mapped column.
+
 The constrained-generic struct, the textbook zero-cost shape, came out slower than the delegate.
 The multithreaded version of this comparison was unusable: the same inline partitioned loop
 measured 16.9 ns per row when run fourth and 23.8 ns when run seventh, from heat alone.

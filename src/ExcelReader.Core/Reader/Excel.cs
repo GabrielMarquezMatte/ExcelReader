@@ -415,7 +415,7 @@ namespace ExcelReader.Core.Reader
             CancellationToken ct = default)
             where TAccumulator : ICsvAccumulator<TAccumulator>, new()
         {
-            return ParallelCsvProcessor.RunAsync(data, AccumulatorAggregation<TAccumulator>.Instance, Validated(options), ct);
+            return ParallelCsvProcessor.RunAsync(data, AccumulatorAggregation<TAccumulator>.Instance, null, Validated(options), ct);
         }
 
         /// <summary>
@@ -435,7 +435,7 @@ namespace ExcelReader.Core.Reader
             where TAccumulator : ICsvAccumulator<TAccumulator>, new()
         {
             ArgumentException.ThrowIfNullOrEmpty(path);
-            return ParallelCsvProcessor.RunAsync(path, AccumulatorAggregation<TAccumulator>.Instance, Validated(options), ct);
+            return ParallelCsvProcessor.RunAsync(path, AccumulatorAggregation<TAccumulator>.Instance, null, Validated(options), ct);
         }
 
         /// <summary>
@@ -459,7 +459,7 @@ namespace ExcelReader.Core.Reader
             where TAccumulator : ICsvAccumulator<TAccumulator>, new()
         {
             ArgumentNullException.ThrowIfNull(stream);
-            return ParallelCsvProcessor.RunAsync(stream, AccumulatorAggregation<TAccumulator>.Instance, Validated(options), ct);
+            return ParallelCsvProcessor.RunAsync(stream, AccumulatorAggregation<TAccumulator>.Instance, null, Validated(options), ct);
         }
 
         /// <summary>
@@ -479,7 +479,7 @@ namespace ExcelReader.Core.Reader
             CsvParallelOptions? options = null,
             CancellationToken ct = default)
         {
-            return ParallelCsvProcessor.RunAsync(data, Validated(aggregation), Validated(options), ct);
+            return ParallelCsvProcessor.RunAsync(data, Validated(aggregation), null, Validated(options), ct);
         }
 
         /// <summary>
@@ -500,7 +500,7 @@ namespace ExcelReader.Core.Reader
             CancellationToken ct = default)
         {
             ArgumentException.ThrowIfNullOrEmpty(path);
-            return ParallelCsvProcessor.RunAsync(path, Validated(aggregation), Validated(options), ct);
+            return ParallelCsvProcessor.RunAsync(path, Validated(aggregation), null, Validated(options), ct);
         }
 
         /// <summary>
@@ -521,7 +521,7 @@ namespace ExcelReader.Core.Reader
             CancellationToken ct = default)
         {
             ArgumentNullException.ThrowIfNull(stream);
-            return ParallelCsvProcessor.RunAsync(stream, Validated(aggregation), Validated(options), ct);
+            return ParallelCsvProcessor.RunAsync(stream, Validated(aggregation), null, Validated(options), ct);
         }
 
         private static CsvAggregation<TState> Validated<TState>(CsvAggregation<TState> aggregation)
