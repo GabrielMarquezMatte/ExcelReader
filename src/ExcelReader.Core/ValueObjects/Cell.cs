@@ -271,24 +271,36 @@ namespace ExcelReader.Core.ValueObjects
         }
 
         /// <summary>
-        /// Interprets the cell's numeric value as an Excel serial date under the 1900 date system.
-        /// Works on any cell whose value parses as a number, not only cells whose <see cref="Type"/> is
-        /// <see cref="CellType.Date"/>. Use the <see cref="TryGetDateTime(bool, out DateTime)"/> overload
-        /// for workbooks using the 1904 date system.
+        /// Interprets the cell's numeric value as an Excel serial date under the 1900 date system, or,
+        /// when the value is not numeric, parses it as an ISO-8601 date or date-time. Works on any cell,
+        /// not only cells whose <see cref="Type"/> is <see cref="CellType.Date"/> — text formats such as
+        /// CSV carry dates as text rather than serials. Use the
+        /// <see cref="TryGetDateTime(bool, out DateTime)"/> overload for workbooks using the 1904 date system.
         /// </summary>
         public bool TryGetDateTime(out DateTime result)
         {
             return TryGetDateTime(isDate1904: false, out result);
         }
 
-        /// <summary>Interprets the cell's numeric value as an Excel serial date.</summary>
+        /// <summary>
+        /// Interprets the cell's numeric value as an Excel serial date, falling back to an ISO-8601
+        /// text date (<c>yyyy-MM-dd</c>, optionally followed by <c>T</c> or a space, a time, and up to
+        /// seven fractional-second digits) when the value is not numeric. A trailing zone designator is
+        /// not accepted.
+        /// </summary>
         /// <param name="isDate1904">
         /// Pass true for workbooks using the 1904 date system (e.g. when the reader's IsDate1904 is true)
-        /// so the epoch offset is applied correctly.
+        /// so the epoch offset is applied correctly. Ignored for a text date, which carries its own calendar.
         /// </param>
         /// <param name="result">The parsed date, when this method returns true.</param>
         public bool TryGetDateTime(bool isDate1904, out DateTime result)
         {
+            // Text dates go first: FastDate rejects a non-date on its second byte, while reaching it
+            // through TryGetDouble would mean a full failing double parse on every date cell.
+            if (!_hasNumber && FastDate.TryParse(Value, out result))
+            {
+                return true;
+            }
             if (!TryGetDouble(out double serial))
             {
                 result = default;
