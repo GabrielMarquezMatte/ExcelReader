@@ -1,7 +1,12 @@
 # Architecture
 
 A map of how the codebase fits together, not a manual. Start here, then follow the file/type names
-into the source — the code comments carry the detailed reasoning.
+into the source: the code is expected to carry its own meaning through naming and flow, so read it
+directly rather than looking for a commentary alongside it.
+
+What the code deliberately does *not* carry is the evidence behind a decision — benchmark numbers,
+memory-footprint measurements, approaches that were tried and rejected. That lives in
+[`docs/`](docs/), and [`STYLEGUIDE.md`](STYLEGUIDE.md#comments) says why.
 
 ## The four format families
 
