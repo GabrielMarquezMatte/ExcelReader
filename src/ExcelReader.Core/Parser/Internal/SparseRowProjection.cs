@@ -71,7 +71,7 @@ namespace ExcelReader.Core.Parser.Internal
         internal static void ParseRow<TModel>(
             in Row row,
             ColumnBinding<TModel>[] bindings,
-            bool[] seen,
+            Span<bool> seen,
             bool track,
             bool isDate1904,
             IFormatProvider provider,
@@ -82,7 +82,7 @@ namespace ExcelReader.Core.Parser.Internal
         {
             if (track)
             {
-                Array.Clear(seen, 0, bindings.Length);
+                seen[..bindings.Length].Clear();
             }
             int bindingIndex = 0;
             foreach (RowCell rowCell in row.Cells)
@@ -126,7 +126,7 @@ namespace ExcelReader.Core.Parser.Internal
             }
         }
 
-        private static void ValidateRowValues<TModel>(ColumnBinding<TModel>[] bindings, bool[] seen, int rowNumber)
+        private static void ValidateRowValues<TModel>(ColumnBinding<TModel>[] bindings, ReadOnlySpan<bool> seen, int rowNumber)
             where TModel : allows ref struct
         {
             for (int i = 0; i < bindings.Length; i++)
