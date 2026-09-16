@@ -54,6 +54,28 @@ namespace ExcelReader.Core.Reader
             return NextFromChunks();
         }
 
+        internal bool TryTakeMask(out uint mask, out int chunkStart)
+        {
+            mask = _mask;
+            chunkStart = _chunkStart;
+            if (mask != 0)
+            {
+                _mask = 0;
+                return true;
+            }
+            if (Vector256.IsHardwareAccelerated)
+            {
+                return TryLoadVector256(out mask, out chunkStart);
+            }
+            return Vector128.IsHardwareAccelerated && TryLoadVector128(out mask, out chunkStart);
+        }
+
+        internal void PutBack(uint mask, int chunkStart)
+        {
+            _mask = mask;
+            _chunkStart = chunkStart;
+        }
+
         internal void SkipByte(int position)
         {
             if (_mask != 0 && _chunkStart + BitOperations.TrailingZeroCount(_mask) == position)
@@ -68,26 +90,16 @@ namespace ExcelReader.Core.Reader
 
         private int NextFromChunks()
         {
-            if (Vector256.IsHardwareAccelerated)
+            if (TryTakeMask(out uint mask, out int chunkStart))
             {
-                int found = NextVector256();
-                if (found >= 0)
-                {
-                    return found;
-                }
-            }
-            else if (Vector128.IsHardwareAccelerated)
-            {
-                int found = NextVector128();
-                if (found >= 0)
-                {
-                    return found;
-                }
+                _chunkStart = chunkStart;
+                _mask = mask & (mask - 1);
+                return chunkStart + BitOperations.TrailingZeroCount(mask);
             }
             return NextScalar();
         }
 
-        private int NextVector256()
+        private bool TryLoadVector256(out uint mask, out int chunkStart)
         {
             Vector256<byte> delim = Vector256.Create(_delim);
             Vector256<byte> quote = Vector256.Create(_quote);
@@ -98,25 +110,23 @@ namespace ExcelReader.Core.Reader
             while (_pos + Vector256<byte>.Count <= _len)
             {
                 Vector256<byte> chunk = Vector256.LoadUnsafe(ref origin, (nuint)_pos);
-                uint mask = (Vector256.Equals(chunk, delim)
-                           | Vector256.Equals(chunk, quote)
-                           | Vector256.Equals(chunk, cr)
-                           | Vector256.Equals(chunk, lf)).ExtractMostSignificantBits();
-                int start = _pos;
+                mask = (Vector256.Equals(chunk, delim)
+                      | Vector256.Equals(chunk, quote)
+                      | Vector256.Equals(chunk, cr)
+                      | Vector256.Equals(chunk, lf)).ExtractMostSignificantBits();
+                chunkStart = _pos;
                 _pos += Vector256<byte>.Count;
-                if (mask == 0)
+                if (mask != 0)
                 {
-                    continue;
+                    return true;
                 }
-                _chunkStart = start;
-                int bit = BitOperations.TrailingZeroCount(mask);
-                _mask = mask & (mask - 1);
-                return start + bit;
             }
-            return -1;
+            mask = 0;
+            chunkStart = 0;
+            return false;
         }
 
-        private int NextVector128()
+        private bool TryLoadVector128(out uint mask, out int chunkStart)
         {
             Vector128<byte> delim = Vector128.Create(_delim);
             Vector128<byte> quote = Vector128.Create(_quote);
@@ -127,22 +137,20 @@ namespace ExcelReader.Core.Reader
             while (_pos + Vector128<byte>.Count <= _len)
             {
                 Vector128<byte> chunk = Vector128.LoadUnsafe(ref origin, (nuint)_pos);
-                uint mask = (Vector128.Equals(chunk, delim)
-                           | Vector128.Equals(chunk, quote)
-                           | Vector128.Equals(chunk, cr)
-                           | Vector128.Equals(chunk, lf)).ExtractMostSignificantBits();
-                int start = _pos;
+                mask = (Vector128.Equals(chunk, delim)
+                      | Vector128.Equals(chunk, quote)
+                      | Vector128.Equals(chunk, cr)
+                      | Vector128.Equals(chunk, lf)).ExtractMostSignificantBits();
+                chunkStart = _pos;
                 _pos += Vector128<byte>.Count;
-                if (mask == 0)
+                if (mask != 0)
                 {
-                    continue;
+                    return true;
                 }
-                _chunkStart = start;
-                int bit = BitOperations.TrailingZeroCount(mask);
-                _mask = mask & (mask - 1);
-                return start + bit;
             }
-            return -1;
+            mask = 0;
+            chunkStart = 0;
+            return false;
         }
 
         private int NextScalar()

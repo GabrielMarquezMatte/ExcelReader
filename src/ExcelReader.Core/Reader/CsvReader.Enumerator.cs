@@ -1,4 +1,5 @@
 using System.Diagnostics.CodeAnalysis;
+using System.Numerics;
 using System.Runtime.CompilerServices;
 using ExcelReader.Core.Enums;
 using ExcelReader.Core.ValueObjects;
@@ -35,6 +36,8 @@ namespace ExcelReader.Core.Reader
         {
             private const byte Cr = (byte)'\r';
             private const byte Lf = (byte)'\n';
+            private const int ChunkExhausted = -1;
+            private const int NeedsGeneric = -2;
 
             private readonly byte _delimiter;
             private readonly byte _quote;
@@ -260,6 +263,12 @@ namespace ExcelReader.Core.Reader
                 int fieldStart = pos;
                 while (true)
                 {
+                    int recordEnd = DrainFields(buf, ref fieldStart);
+                    if (recordEnd >= 0)
+                    {
+                        _pos = recordEnd;
+                        return SimpleRecordOutcome.Done;
+                    }
                     int stop = _scanner.Next();
                     if (stop < 0)
                     {
@@ -302,6 +311,83 @@ namespace ExcelReader.Core.Reader
             {
                 _acc.Add(_col++, start, length, length == 0 ? CellType.Empty : CellType.ExcelString,
                          style: 0, CellValueSource.RowValues);
+            }
+
+            // Returns the position after the record terminator. Returns NeedsGeneric, with any unconsumed
+            // hits handed back to the scanner, on a quote, a bare CR, a CRLF split across chunks, a full
+            // descriptor array, the column limit, or when no whole vector chunk is left to load.
+            [MethodImpl(MethodImplOptions.NoInlining)]
+            private int DrainFields(byte[] buf, ref int fieldStart)
+            {
+                if (!_scanner.TryTakeMask(out uint mask, out int chunkStart))
+                {
+                    return NeedsGeneric;
+                }
+                CellAccumulator acc = _acc;
+                CellDesc[] cells = acc.RawCells;
+                byte delimiter = _delimiter;
+                int n = acc.Count;
+                int c = _col;
+                int start = fieldStart;
+                int recordEnd = ChunkExhausted;
+                while (true)
+                {
+                    if (mask == 0)
+                    {
+                        if (_scanner.TryTakeMask(out mask, out chunkStart))
+                        {
+                            continue;
+                        }
+                        recordEnd = NeedsGeneric;
+                        break;
+                    }
+                    int stop = chunkStart + BitOperations.TrailingZeroCount(mask);
+                    byte b = buf[stop];
+                    uint rest = mask & (mask - 1);
+                    if (b == delimiter)
+                    {
+                        recordEnd = ChunkExhausted;
+                    }
+                    else if (b == Lf)
+                    {
+                        recordEnd = stop + 1;
+                    }
+                    else if (b == Cr && rest != 0 && chunkStart + BitOperations.TrailingZeroCount(rest) == stop + 1 && buf[stop + 1] == Lf)
+                    {
+                        recordEnd = stop + 2;
+                        rest &= rest - 1;
+                    }
+                    else
+                    {
+                        recordEnd = NeedsGeneric;
+                    }
+                    if (recordEnd == NeedsGeneric || (uint)n >= (uint)cells.Length || (uint)c >= ExcelLimits.MaxColumns)
+                    {
+                        recordEnd = NeedsGeneric;
+                        break;
+                    }
+                    int length = stop - start;
+                    cells[n++] = new CellDesc
+                    {
+                        Column = c++,
+                        Start = start,
+                        Length = length,
+                        Type = length == 0 ? CellType.Empty : CellType.ExcelString,
+                        Source = CellValueSource.RowValues,
+                        SharedIndex = -1,
+                    };
+                    start = stop + 1;
+                    mask = rest;
+                    if (recordEnd >= 0)
+                    {
+                        break;
+                    }
+                }
+                acc.CommitAscending(n, c - 1);
+                _col = c;
+                fieldStart = start;
+                _scanner.PutBack(mask, chunkStart);
+                return recordEnd;
             }
 
             private bool TryParseQuotedContent(ReadOnlySpan<byte> buf, int len, byte quote, ref int pos, ref FieldState f)

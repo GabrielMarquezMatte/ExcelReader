@@ -216,6 +216,60 @@ undecomposed block left in CSV after the conversions.
 (1.676 vs 2.201 ms), but full conversion is faster from the buffer (4.942 vs 4.190 ms). Both
 directions reproduced across four runs. No explanation; recorded rather than guessed at.
 
+### The enumerator overhead: register pressure, not memory traffic — 1.16x on wide rows
+
+Wide corpus (50,000 rows × 32 short text fields, 9.8 MB). The reader enumerating rows with no cell
+access ran at **2.25x a standalone framing prototype** doing the same scan and writing the same
+descriptors: 2.8 ns per field above framing. That overhead is per field, not per row — fitting the
+narrow and wide corpora together gives ~5 ns fixed per row and ~2.6 ns per field.
+
+The JIT disassembly of `TryParseSimpleRecord` showed, per field, a load and store of the scanner's
+`_mask`, a load and store of `_col`, two loads and a store of the accumulator's `Count`, a load and
+store of `_lastCol`, and `_cells` reloaded twice — all loop-carried through memory, where the
+prototype keeps them in registers. Three attempts, each measured:
+
+| attempt | result |
+|---|---|
+| copy the scanner struct into a local for the loop | **slower**, 2.25x → 2.52x |
+| accumulator state and column in locals, committed once per record | **no change** |
+| drain the vector mask in a call-free leaf function, one call per record | **1.16x** on wide |
+
+The second attempt explains the first two. Its disassembly showed the locals **spilled to the
+stack**: the loop still contained calls on cold paths (`GrowCells`, `ThrowColumnLimit`,
+`NextScalar`, `SkipByte`), so every variable live across the loop needed a callee-saved register,
+and x64 Windows has eight. The store-forwarding chain did not go away; it moved from the heap to
+the stack. The prototype has no calls in its loop, so it gets the volatile registers.
+
+`CsvReader.Enumerator.DrainFields` is that loop with no calls in it. It takes vector masks from
+`CsvControlScanner.TryTakeMask`, emits delimiter-terminated fields, and closes the record on LF or
+a CRLF inside one chunk. It hands back to the existing per-hit path on a quote, a bare CR, a CRLF
+split across chunks, a full descriptor array, the column limit, or a buffer tail shorter than a
+vector.
+
+A first version drained only delimiters and returned to the per-hit path for every record end. It
+won 1.14x on wide rows and **lost ~12% on the narrow benchmark**: a 47-byte record spans one and a
+half chunks, so it paid two non-inlined calls per record and still took the slow path for the
+newline. Closing the record inside the leaf and loading the next chunk from inside it made the
+narrow case neutral.
+
+In-process A/B, separate binaries for the old and new source, alternated three times, min of 12:
+
+| | before | after |
+|---|---|---|
+| wide, rows only | 5.54–5.90 ms | **4.38–4.70 ms** (~1.28x) |
+| wide, 32 cell spans (`ExcelReaderWide` shape) | 7.97–8.47 ms | **6.94–7.48 ms** (~1.16x) |
+| narrow, 4 cell spans | 1.50–1.66 ms | 1.53–1.65 ms (neutral) |
+
+BenchmarkDotNet, same machine, one run each: `ExcelReaderWide` 8.939 → 8.128 ms (the new run's
+standard deviation was 0.91 ms, so read that as direction only), `ExcelReader` 3.774 → 3.609 ms,
+`ExcelReaderAsync` 3.506 → 3.356 ms.
+
+Correctness gate: 3,000 seeded random inputs weighted toward quotes, bare CR, CRLF and rows wider
+than the initial descriptor array, each read both from memory and through a stream that returns
+1–96 bytes per read so refills land at arbitrary offsets. 5,496,494 rows, byte-identical digests
+between the old and new builds. The gate was checked by mutation: shifting the CRLF record end by
+one byte changed both the row count and the digest.
+
 ### The date parser: 1.49x from one vectorized pass over the round-trip form
 
 The date column is 35% of the CSV read, so it was decomposed next. Two candidate cost centres had
@@ -464,10 +518,11 @@ digit in each separator slot. Anything else falls through to the scalar parser u
 - `XlsxReader.Enumerator.TryParseIsoDate` still has its own ISO date parse, copying bytes to chars on
   the stack and calling `DateTime.TryParse`. `FastDate` now covers the same shapes and should replace
   it, but that path was not measured, so it was left alone.
-- The enumerator overhead above framing — `MoveNext`, `_acc.Reset`, refill and compaction
-  bookkeeping — is ~0.8 ms, the largest undecomposed block left in CSV now that the conversions are
-  accounted for. `ExcelReaderWide` (32 columns, spans only, no conversions) runs 2.73x the narrow
-  benchmark and exercises exactly that path, so it is the place to look next.
+- After `DrainFields`, rows-only enumeration of wide rows still runs ~1.75x the framing prototype.
+  What remains is per record rather than per field (the `MoveNext` → `TryParseRecordFromBuffer` →
+  `TryParseSimpleRecord` call chain, `BeginRecord`, the write barrier from `CsvControlScanner.Continue`
+  storing the buffer reference every record) plus the consumer side: `Row` indexer access costs
+  about as much again as enumeration on the wide shape.
 - Reading a CSV from an already-resident buffer is slower than from a stream for spans only, and
   faster for full conversion. Reproduced in both directions across four runs, unexplained.
 
