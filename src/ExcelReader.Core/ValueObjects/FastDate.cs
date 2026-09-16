@@ -4,6 +4,10 @@ namespace ExcelReader.Core.ValueObjects
     {
         private const int MaxFractionDigits = 7;
 
+        // Indexed by fraction digit position; dividing a running scale instead would chain seven
+        // dependent integer divisions.
+        private static readonly long[] FractionScale = [1_000_000, 100_000, 10_000, 1_000, 100, 10, 1];
+
         public static bool TryParse(ReadOnlySpan<byte> s, out DateTime value)
         {
             value = default;
@@ -12,8 +16,8 @@ namespace ExcelReader.Core.ValueObjects
                 return false;
             }
             if (!TryDigits(s, 0, 4, out int year)
-                || !TryDigits(s, 5, 2, out int month)
-                || !TryDigits(s, 8, 2, out int day))
+                || !TryTwoDigits(s, 5, out int month)
+                || !TryTwoDigits(s, 8, out int day))
             {
                 return false;
             }
@@ -33,9 +37,9 @@ namespace ExcelReader.Core.ValueObjects
             {
                 return false;
             }
-            if (!TryDigits(s, 11, 2, out int hour)
-                || !TryDigits(s, 14, 2, out int minute)
-                || !TryDigits(s, 17, 2, out int second))
+            if (!TryTwoDigits(s, 11, out int hour)
+                || !TryTwoDigits(s, 14, out int minute)
+                || !TryTwoDigits(s, 17, out int second))
             {
                 return false;
             }
@@ -71,7 +75,6 @@ namespace ExcelReader.Core.ValueObjects
             {
                 return false;
             }
-            long scale = TimeSpan.TicksPerSecond;
             for (int i = 0; i < s.Length; i++)
             {
                 uint d = (uint)(s[i] - '0');
@@ -79,10 +82,17 @@ namespace ExcelReader.Core.ValueObjects
                 {
                     return false;
                 }
-                scale /= 10;
-                ticks += d * scale;
+                ticks += d * FractionScale[i];
             }
             return true;
+        }
+
+        private static bool TryTwoDigits(ReadOnlySpan<byte> s, int offset, out int value)
+        {
+            uint hi = (uint)(s[offset] - '0');
+            uint lo = (uint)(s[offset + 1] - '0');
+            value = (int)((hi * 10) + lo);
+            return hi <= 9 && lo <= 9;
         }
 
         private static bool TryDigits(ReadOnlySpan<byte> s, int offset, int count, out int value)
