@@ -99,6 +99,14 @@ namespace ExcelReader.Core.Reader
             Add(col, start, length, CellType.Error, style, CellValueSource.RowValues);
         }
 
+        internal CellDesc[] RawCells => _cells;
+
+        internal void CommitAscending(int count, int lastCol)
+        {
+            Count = count;
+            _lastCol = lastCol;
+        }
+
         internal void Add(int col, int start, int len, CellType type, int style, CellValueSource source, double number = 0, bool hasNumber = false, int sharedIndex = -1)
         {
             if ((uint)col >= ExcelLimits.MaxColumns)
