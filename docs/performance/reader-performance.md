@@ -1,9 +1,15 @@
 # Reader performance: where the time goes, and what bounds it
 
-Measured 2026-09-15/16 on a Ryzen 7 5700X (8C/16T, 12 logical cores visible to the harness), AVX2,
-no AVX-512, .NET 10. Corpus: `tests/ExcelReader.Benchmarks/Data/65K_Records_Data.*` — 65,536 rows,
-14 columns, numeric and date heavy, with only ~5 KB of shared strings. The string-heavy section uses
-`StringHeavyWorkbookGenerator`'s 65,536-row fixture instead.
+Measured 2026-09-15/16 on a **13th Gen Intel Core i7-1365U** (12 logical / 10 physical cores, P+E),
+AVX2, no AVX-512, .NET 10. Corpus: `tests/ExcelReader.Benchmarks/Data/65K_Records_Data.*` — 65,536
+rows, 14 columns, numeric and date heavy, with only ~5 KB of shared strings. The string-heavy section
+uses `StringHeavyWorkbookGenerator`'s 65,536-row fixture instead.
+
+**This is not the machine the README's tables come from.** Those are a Ryzen 7 5700X desktop. A
+throttling mobile part with P and E cores is exactly the hardware `ARCHITECTURE.md` describes
+discarding an earlier parallel-CSV measurement over, so nothing here should be compared against a
+README number by absolute milliseconds — only ratios measured within one run are meaningful, and
+anything destined for the README has to be re-run on the documented machine.
 
 The harness was a throwaway console app, not committed. Every table below comes from a single
 interleaved round-robin run, where each variant runs once per round so thermal drift hits all of
@@ -310,10 +316,60 @@ that was previously the only option. It serves CSV, text dates in XLS, and XLSX 
 - `XlsxReader.Enumerator.TryParseIsoDate` still has its own ISO date parse, copying bytes to chars on
   the stack and calling `DateTime.TryParse`. `FastDate` now covers the same shapes and should replace
   it, but that path was not measured, so it was left alone.
-- `FastDate` costs ~40 ns on a 27-character round-trip timestamp: fourteen digits parsed one at a
-  time, a `DaysInMonth` check and a seven-digit fraction. SWAR digit parsing would cut it further.
-  Not pursued — the 4x against the previous workaround was the point.
-- The CSV gap the README reports against Sylvan on the generated corpus (5.138 ms vs 4.636 ms) is
-  still unexplained. It is not framing, which measures at the byte-sweep floor, and it is not date
-  conversion, because that benchmark dispatches on `Cell.Type` and CSV date cells are `ExcelString`,
-  so its date branch never runs.
+- `FastDate` is now ~23 ns on a 27-character round-trip timestamp, after the two tuning changes
+  above. The remaining SWAR option was measured and rejected.
+### Resolved: the CSV gap against Sylvan was the benchmark not using this library's date API
+
+`CsvReadBenchmark`'s accumulator parsed the date column with the BCL's
+`Utf8Parser.TryParse(..., 'O')` rather than `Cell.TryGetDateTime`. Every competitor in that table
+uses its own library's accessor — `GetDateTime`, `GetField<DateTime>` — so ExcelReader was the only
+entrant not being measured through its own API. It had no choice: before `FastDate`,
+`TryGetDateTime` could not read a text date at all.
+
+Measured at 63.6 ns per date for `Utf8Parser` against 42.0 ns for `TryGetDateTime` on `FastDate`.
+Switching the benchmark to the library's own accessor, then tuning the parser, under BenchmarkDotNet:
+
+| `CsvReadBenchmark.ExcelReader` | |
+|---|---|
+| as published, date via `Utf8Parser.TryParse(…, 'O')` | 4.786 ms |
+| date via `Cell.TryGetDateTime` (`FastDate`) | 4.149 ms |
+| + `FastDate` tuned (below) | **3.966 ms** |
+
+**17.1% on the same method.** Sylvan, the control, did not move across the first two runs
+(4.460 → 4.489 ms) — a third run reported 6.185 ms with a 1.56 ms standard deviation and is
+discarded as an outlier. Against its stable figure ExcelReader now leads by roughly 12%, at 368 B
+against 1,688,737 B allocated.
+
+Caveats: six iterations on a throttling mobile CPU give wide error bars (±0.64 ms on ExcelReader), so
+the lead over Sylvan sits near the margin. The 17.1% before/after on one method is the sounder
+number, being the same code path measured three times. Everything here needs re-running on the
+README's machine before publication.
+
+#### Tuning the parser: two of three changes were worth it
+
+Measured over the corpus's 50,000 real date strings, all variants agreeing on every value:
+
+| | per date | |
+|---|---|---|
+| original (`scale /= 10` per fraction digit) | 31.3 ns | 1.00x |
+| fraction scale from a lookup table | 27.2 ns | 1.15x |
+| + two-digit fields unrolled | 23.1 ns | 1.35x |
+| + SWAR four-digit year | 21.7 ns | 1.44x |
+
+The first two shipped. The seven `scale /= 10` steps were a chain of dependent integer divisions, and
+the five two-digit fields did not need a loop at all.
+
+**The SWAR year did not ship.** It buys 1.07x on top — 1.4 ns — in exchange for masked-validation bit
+arithmetic, and a first attempt at exactly that code had a bug: `(a | b) <= 9` does not test two
+digits, since `2 | 8` is 10. The differential check against the other variants caught it. Six percent
+is not worth that surface in a date parser.
+
+### Still open
+
+- A first attempt to attribute this gap in an interleaved in-process harness found no gap at all
+  (7.120 ms vs 7.180 ms). That harness was the wrong tool: Sylvan allocates 1.69 MB per operation
+  and triggers 265 Gen0 collections per 1000 ops, so its GC cost lands on whichever variant happens
+  to be running. Interleaving compares variants with matching allocation profiles; against an
+  allocating competitor it needs BenchmarkDotNet's process isolation.
+- `FastDate` is now ~23 ns on a full round-trip timestamp. Whether Sylvan's date path is still ahead
+  was never measured directly — it was inferred by subtracting totals, which is not evidence.

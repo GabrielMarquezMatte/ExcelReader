@@ -78,7 +78,7 @@ namespace ExcelReader.Benchmarks
             {
                 acc += id;
             }
-            if (Utf8Parser.TryParse(row[2].Value, out DateTime date, out _, 'O'))
+            if (row[2].TryGetDateTime(out DateTime date))
             {
                 acc += date.Ticks;
             }
