@@ -110,6 +110,61 @@ shared-string parser gains nothing. The sheet stage is parse-bound with **8.9 ms
 floor** — the one place in this document where ordinary parser work still converts 1:1. That 8.9 ms
 has not been decomposed.
 
+## CSV — the parser is at the floor; the cost is in the value layer
+
+CSV is the only format with neither an inflate floor nor a format size cap, so every millisecond is
+parse and every millisecond saved converts at any file size. That made it the best remaining
+candidate. It turned out the parser has nothing left to give.
+
+Generated 50,000-row corpus (2.32 MB), reading three columns:
+
+| stage | |
+|---|---|
+| framing + emit + span | 2.32 ms |
+| raw `IndexOfAny` byte sweep, no framing at all | 2.24 ms |
+
+**1.03x of a bare byte sweep.** `CsvControlScanner` already does the right thing — one `Vector256`
+pass producing a mask of delimiter/quote/CR/LF, kept stateful across refills through `Reset`/
+`Continue`, so the vector setup amortizes over the whole buffer. (This is the same structural-scan
+idea that lost badly in XLSX. It wins here because CSV fields are longer and the scanner is stateful
+rather than restarted per short hop.)
+
+So the cost is downstream of framing:
+
+| conversion | per call |
+|---|---|
+| `TryParse<int>` | 6.2 ns |
+| `GetString()` | 17.6 ns |
+| `TryGetDateTime` on a text date | see below |
+
+### `TryGetDateTime` did not work on text dates at all
+
+`TryGetDateTime` resolves the cell as an Excel **serial number** — it called `TryGetDouble` first. On
+an ISO date string that is a `double.TryParse` that walks 27 characters and fails, so the method
+returned `false` after ~69 ns of wasted work. Measured on the corpus: **0 of 50,000 date cells
+succeeded**.
+
+There was no other efficient path. `TryParse<T>` is constrained to `IUtf8SpanParsable<T>`, which
+`DateTime` does not implement, so the only working option was `GetString()` followed by
+`DateTime.Parse` — **163.7 ns per date**, 26x the int parse. A date written by this library's own
+`CsvWriter` could not be read back by its own `CsvReader`; a test asserted that limitation rather
+than the round-trip its name promised.
+
+`FastDate` (`src/ExcelReader.Core/ValueObjects/FastDate.cs`) now parses ISO-8601 straight from UTF-8:
+`yyyy-MM-dd`, optionally `T` or a space, a time, and up to seven fractional digits. A trailing zone
+designator is rejected rather than guessed at.
+
+| | before | after |
+|---|---|---|
+| text date cells resolved | 0 of 50,000 | 50,000 of 50,000 |
+| cost per date | 163.7 ns (via `GetString`) | **40.4 ns** |
+
+**4.05x, and the API stopped lying.** Order matters: the text-date attempt runs first, guarded by
+`_hasNumber`, because reaching it through `TryGetDouble` costs a full failing double parse on every
+date cell — measured at 85.4 ns with the wrong order against 40.4 ns with the right one. The guard
+keeps the XLSX serial-date path untouched; its consumer-conversion layer measured 6.3 ms before and
+after, inside the run-to-run band.
+
 ## Approaches measured and rejected
 
 ### SIMD structural index (simdjson stage 1) — 0.86–0.97x, rejected
@@ -167,7 +222,7 @@ time, while the value bytes are still hot in L1, is cheaper than parsing them la
 `Cell.TryParse`. Deferring skips no work for a consumer that reads numbers, and loses the locality.
 Worth having only as an opt-in for consumers that skip numeric columns entirely — never as a default.
 
-### Shared-string prefetch — no cheap version reaches the 1.69x
+### Shared-string prefetch — measured at ~1.1x, not built
 
 The consumer needs the shared-string table at row 1, and in a pull model the consumer's thread is the
 thread parsing the sheet, so it blocks there and the sheet parse stops with it.
@@ -178,12 +233,49 @@ thread parsing the sheet, so it blocks there and the sheet parse stops with it.
 | + resolve the shared index lazily at consumption | ~1% |
 | overlap the two inflates only | **negative** (49.7 ms vs 48.4) |
 | speed up the shared-string parser | 0% (that stage is inflate-bound) |
-| decouple the sheet parse from the consumer | 1.69x |
+| incremental SST with a published watermark | **1.11x measured** |
+| decouple the sheet parse from the consumer | 1.69x (upper bound, not measured) |
 
 Overlapping the inflates alone loses because the sheet stage is already parse-bound at 28.5 ms
 against 20.4 ms of inflate — its inflate is already hidden, so pre-inflating buys nothing and costs
-scheduling. The entire prize sits behind a producer/consumer split, which is the same constraint that
-caps parallel parsing.
+scheduling.
+
+#### The watermark variant, and why it falls short
+
+Shared-string indices are assigned in first-use order, so a sheet written row by row references them
+in roughly ascending order. That suggests parsing the SST incrementally on its own thread, publishing
+a monotonic "resolved up to index N" watermark, and letting the sheet parse — still on the consumer's
+thread — block only when it needs an index the SST has not reached. No producer/consumer split.
+
+The ordering property is real. Measured over `StringHeavy.xlsx` (190,105 unique strings), the highest
+index a row needs, by row decile:
+
+| row decile | 0% | 10% | 20% | 30% | 50% | 70% | 90% |
+|---|---|---|---|---|---|---|---|
+| fraction of the table needed | 20% | 34% | 46% | 56% | 72% | 87% | 100% |
+
+Row 1 alone needs only index 10. A prototype confirmed the consequence: across ~590,000 shared cells,
+the sheet stalled exactly **once** — after that the SST parser stayed ahead for the whole file.
+
+But that single stall costs 10.9 ms of the SST's 14.5 ms, hiding only 3.6 ms. The sheet reaches row 1
+in microseconds and already demands a fifth of the table. A stall happens whenever
+`table fraction / row fraction` exceeds the ratio between the two stages' total costs; in the first
+decile that is 3.4 against a ratio of 2.32. The prologue is shortened, not removed.
+
+Serial 46.5 ms → watermark 42.0 ms, **1.11x**. On the numeric corpus (5.9 KB table) it measured
+0.98x — threading overhead with nothing to hide.
+
+**In the real reader it would be worse.** The prototype's stage ratio was favourable: its sheet scan
+is 33.6 ms against an SST parse of 14.5 ms that excludes inflate, a ratio of 2.32. The reader's real
+ratio is 29.3 / 19.8 = 1.48, because its SST stage is inflate-bound at 18.6 ms. A lower ratio means
+more stalling, not less. Scaling the measured stall gives ~14.9 ms of the 19.8 ms stage hidden away,
+about 4.9 ms off a 48.4 ms read — ~1.1x again, from both directions.
+
+Not worth building: ~1.1x on string-heavy workbooks only, in exchange for a background thread inside
+the reader, the `MaxSharedStringBytes` limit being enforced on it, exception propagation across it,
+and a public API change. The 1.69x ceiling remains real but sits behind the producer/consumer split,
+which is the same constraint that caps parallel parsing — and the watermark, which looked like the
+shortcut to it, delivers less than a sixth.
 
 ## What landed
 
@@ -202,6 +294,11 @@ Integrated effect: **~1.8 ms, about 5% of L1.** The components measure 3.4 ms in
 is expected, because the `</row` pre-scan was also warming the cache for the walk that followed it.
 Microbenchmarks overstate.
 
+A third change, from the CSV investigation: **`FastDate`, a UTF-8 ISO-8601 date parser**, wired into
+`Cell.TryGetDateTime` as the first attempt for non-numeric cells. Text dates went from unreadable
+(0 of 50,000) to 40.4 ns each, against 163.7 ns for the `GetString()` + `DateTime.Parse` workaround
+that was previously the only option. It serves CSV, text dates in XLS, and XLSX `t="d"`.
+
 ## Known open items
 
 - The 8.9 ms of sheet parse above the inflate floor in the string-heavy corpus has not been
@@ -210,4 +307,13 @@ Microbenchmarks overstate.
   producer's pooled chunk into the consumer's buffer. Removing it means replacing the `Stream` seam
   with a buffer-exchange protocol — and that seam is where the decompressed-byte limit counters sit,
   so it is a trust boundary, not just a copy.
-- CSV was not measured in this investigation; it already ships a parallel path.
+- `XlsxReader.Enumerator.TryParseIsoDate` still has its own ISO date parse, copying bytes to chars on
+  the stack and calling `DateTime.TryParse`. `FastDate` now covers the same shapes and should replace
+  it, but that path was not measured, so it was left alone.
+- `FastDate` costs ~40 ns on a 27-character round-trip timestamp: fourteen digits parsed one at a
+  time, a `DaysInMonth` check and a seven-digit fraction. SWAR digit parsing would cut it further.
+  Not pursued — the 4x against the previous workaround was the point.
+- The CSV gap the README reports against Sylvan on the generated corpus (5.138 ms vs 4.636 ms) is
+  still unexplained. It is not framing, which measures at the byte-sweep floor, and it is not date
+  conversion, because that benchmark dispatches on `Cell.Type` and CSV date cells are `ExcelString`,
+  so its date branch never runs.

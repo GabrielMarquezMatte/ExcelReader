@@ -339,7 +339,8 @@ namespace ExcelReader.Tests
             Assert.Equal("has, comma", row2[0].GetString());
             Assert.Equal(CellType.ExcelString, row2[1].Type);
             Assert.Equal("true", row2[1].GetString());
-            Assert.False(row2[2].TryGetDateTime(out _));
+            Assert.True(row2[2].TryGetDateTime(out DateTime readBack));
+            Assert.Equal(date, readBack);
             Assert.Equal(date.ToString("O"), row2[2].GetString());
         }
 
