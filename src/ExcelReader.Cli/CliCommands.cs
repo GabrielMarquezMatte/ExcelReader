@@ -8,9 +8,6 @@ using ExcelReader.Core.Writer;
 
 namespace ExcelReader.Cli
 {
-    // The command bodies, as plain functions over explicit writers — this is the layer the tests
-    // drive. Nothing here touches Console or any other process-global state, so the tests
-    // run in parallel without interfering with each other.
     internal static class CliCommands
     {
         internal static int Sheets(string path, TextWriter stdout, TextWriter stderr, string? password = null)
@@ -23,9 +20,6 @@ namespace ExcelReader.Cli
             }, stderr, password);
         }
 
-        // Same command, reported through a callback instead of a fixed tab-separated line - the shape
-        // Commands.cs's interactive (table-rendering) path needs, without a second implementation of
-        // the sheet-listing loop or its error handling.
         internal static int Sheets(string path, Action<int, string> onSheet, TextWriter stderr, string? password = null)
         {
             return Execute(() =>
@@ -39,12 +33,6 @@ namespace ExcelReader.Cli
             }, stderr);
         }
 
-        // The extensions/format names this command understands, and the only values --format
-        // accepts. Order here is the order every "expected one of ..." error message lists them in.
-        // Not compile-time tied to anything else that names these four: Commands.cs's --format/path
-        // XML doc comments spell them out as prose for --help, and the switch in Convert below has
-        // its own case per format (guarded by an UnreachableException default, so THAT one fails
-        // loudly if it drifts). Adding a 5th format means updating all three by hand.
         private static readonly string[] _validFormats = ["xlsx", "xlsb", "xls", "csv"];
 
         internal static int Convert(string path, string? sheet, string? output, string? format, char delimiter, Stream stdout, TextWriter stderr, Action<int>? onProgress = null, string? password = null)
@@ -76,7 +64,6 @@ namespace ExcelReader.Cli
                             WriteXls(reader, target, leaveOpen, onProgress);
                             break;
                         default:
-                            // Unreachable: ResolveFormat only ever returns one of the cases above.
                             throw new UnreachableException($"unresolved format '{resolvedFormat}'.");
                     }
                 }
@@ -91,10 +78,6 @@ namespace ExcelReader.Cli
             }, stderr);
         }
 
-        // Picks the workbook format to write: format wins when given; otherwise it's inferred from
-        // output's extension; with neither (writing to stdout with no override), it's CSV - the one
-        // format every shell can already consume. Throws ArgumentException when format is not one of
-        // _validFormats, or output's extension is not either.
         internal static string ResolveFormat(string? format, string? output)
         {
             if (format is not null)
@@ -113,9 +96,6 @@ namespace ExcelReader.Cli
                 string extension = Path.GetExtension(output).TrimStart('.').ToLowerInvariant();
                 if (Array.IndexOf(_validFormats, extension) < 0)
                 {
-                    // Path.GetExtension("noext") and Path.GetExtension("some/dir/") both return "" -
-                    // reporting that as "unrecognized extension '.'" reads as if the user typed a
-                    // bare dot, when in fact they gave none. Name the actual problem instead.
                     string problem = extension.Length == 0
                         ? $"--output '{output}' has no file extension"
                         : $"unrecognized output extension '.{extension}'";
@@ -129,12 +109,6 @@ namespace ExcelReader.Cli
             return "csv";
         }
 
-        // A directory whose name happens to end in a recognized extension (e.g. a folder literally
-        // named "backup.xlsx") resolves a format fine, then fails FileStream with
-        // "Access to the path is denied" - true, but it reads as a permissions problem rather than
-        // naming the actual mistake.
-        //
-        // Throws ArgumentException: output names an existing directory.
         private static void ThrowIfOutputIsADirectory(string? output)
         {
             if (output is not null && Directory.Exists(output))
@@ -167,14 +141,6 @@ namespace ExcelReader.Cli
             WriteRows<XlsWorkbookWriter, XlsSheetWriter, XlsRowWriter>(workbook, reader, onProgress);
         }
 
-        // Copies every sampled row's cells across as text, one IRowWriter.Write(string?)
-        // call per column. Generic over the four workbook/sheet/row writer triples so the loop - the
-        // only part that actually varies by target - lives once; each format still gets its own
-        // Create call above, since their constructor parameters (date1904, compression, ...)
-        // differ.
-        // How many rows between onProgress callbacks - frequent enough to look alive on a terminal
-        // (~a handful of updates per second on typical row-write throughput), rare enough that the
-        // callback (usually a Spectre.Console status refresh) never dominates the actual write.
         private const int ProgressInterval = 500;
 
         private static void WriteRows<TWorkbook, TSheet, TRow>(TWorkbook workbook, IExcelRowReader reader, Action<int>? onProgress)
@@ -198,17 +164,9 @@ namespace ExcelReader.Cli
                     switch (cellValue.Type)
                     {
                         case CellType.Boolean:
-                            // Every format's Boolean cell stores a single raw byte, '0' or '1'
-                            // (CellAccumulator.AddBool) - not the text "True"/"False" bool.TryParse
-                            // expects, so this reads the byte directly rather than going through
-                            // GetString()/Cell.TryParse<bool>. Writing a real bool cell (not text)
-                            // preserves the source's type in the converted workbook.
                             row.Write(!cellValue.Value.IsEmpty && cellValue.Value[0] != (byte)'0');
                             break;
                         case CellType.Number:
-                            // Writing a real numeric cell (not text) preserves the source's type -
-                            // a text fallback would make every number a left-aligned string cell in
-                            // the converted workbook.
                             if (cellValue.TryGetDouble(out double number))
                             {
                                 row.Write(number);
@@ -244,8 +202,6 @@ namespace ExcelReader.Cli
             {
                 stdout.Write(column.Index.ToString(CultureInfo.InvariantCulture));
                 stdout.Write('\t');
-                // A null name means the column is addressable only by index - an empty field,
-                // never the literal "null", so the output stays machine-parseable.
                 stdout.Write(column.Name ?? string.Empty);
                 stdout.Write('\t');
                 stdout.Write(column.Type.ToString());
@@ -253,8 +209,6 @@ namespace ExcelReader.Cli
             }, stderr, password);
         }
 
-        // Same command, reported through a callback instead of a fixed tab-separated line - see the
-        // Sheets(string, Action<int, string>, TextWriter, string?) overload for why.
         internal static int Schema(string path, string? sheet, int headerRow, int sampleSize, Action<ExcelColumnSchema> onColumn, TextWriter stderr, string? password = null)
         {
             return Execute(() =>
@@ -269,9 +223,6 @@ namespace ExcelReader.Cli
             }, stderr);
         }
 
-        // Runs body, turning the failures a user can act on into exit code 1 plus
-        // a single stderr line. Anything not listed here is a bug and is deliberately left to
-        // propagate with its stack trace intact.
         internal static int Execute(Func<int> body, TextWriter stderr)
         {
             try
@@ -284,9 +235,6 @@ namespace ExcelReader.Cli
                                            or ArgumentException
                                            or NotSupportedException
                                            or ExcelLimitExceededException
-                                           // A legacy XLS target rejects sheets wider than 256
-                                           // columns (BIFF8's own limit) - a real user-facing
-                                           // "this workbook doesn't fit that format" error, not a bug.
                                            or InvalidOperationException)
             {
                 stderr.WriteLine(exception.Message);
@@ -294,10 +242,6 @@ namespace ExcelReader.Cli
             }
         }
 
-        // Opens path and selects sheet, which is either a
-        // zero-based index or a sheet name. CSV is opened through its own factory because
-        // Excel.Open(string, ExcelReaderOptions?) deliberately does not sniff it, and
-        // password is ignored for it since CSV is never encrypted.
         internal static IExcelRowReader Open(string path, string? sheet, string? password = null)
         {
             bool isCsv = string.Equals(Path.GetExtension(path), ".csv", StringComparison.OrdinalIgnoreCase);
