@@ -8,8 +8,6 @@ using Sylvan.Data.Csv;
 
 namespace ExcelReader.Benchmarks
 {
-    // Reads a headerless CSV cell-by-cell, accumulating a checksum, across
-    // ExcelReader (sync + async), Sep, Sylvan.Data.Csv, and CsvHelper.
     [MemoryDiagnoser]
     public class CsvReadBenchmark
     {
@@ -43,8 +41,6 @@ namespace ExcelReader.Benchmarks
             return acc;
         }
 
-        // 32-column rows: the vectorized scan amortizes one vector load over many fields, so this is
-        // where CsvControlScanner's mask-reuse win is largest — see CsvGenerator.BuildWide.
         [Benchmark]
         public long ExcelReaderWide()
         {
@@ -75,7 +71,6 @@ namespace ExcelReader.Benchmarks
             return acc;
         }
 
-        // Row is a ref struct: a plain sync helper keeps it out of the async method bodies above.
         private static long AccumulateRow(Row row)
         {
             long acc = row[0].Value.Length;

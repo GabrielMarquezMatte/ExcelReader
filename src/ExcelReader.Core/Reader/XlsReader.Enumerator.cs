@@ -17,8 +17,6 @@ namespace ExcelReader.Core.Reader
             private readonly CancellationToken _ct;
             private readonly BiffCursor _cursor;
             private readonly CellAccumulator _acc;
-            // Content-keyed dedup cache for literal (non-shared) Label cells GetString() can't serve
-            // via the shared-string table; see ExcelReaderOptions.InternStrings.
             private readonly Utf8StringCache? _contentCache;
             private bool _ended;
             private int _row;
@@ -52,9 +50,6 @@ namespace ExcelReader.Core.Reader
 
             private bool MoveNextCore()
             {
-                // A row whose only records are BLANK/MULBLANK (styled empty cells — Excel writes these
-                // routinely) yields zero cells; that must not end enumeration, so keep advancing to the
-                // next row instead of returning false for anything short of true EOF.
                 while (!_ended)
                 {
                     ResetRow();
@@ -81,13 +76,6 @@ namespace ExcelReader.Core.Reader
                 return false;
             }
 
-            // Returns false when the current row has ended or the worksheet stream reached EOF.
-            //
-            // A single switch below handles every cell-record kind: it reads the row (always at offset
-            // 0), applies the row-tracking decision (first row / same row / new row started), and then
-            // runs the type-specific parse in the same case, all in one dispatch on the record id.
-            // Previously this was two separate switches on the same id — one just to test whether the
-            // id carried a row, a second to parse it — twice the dispatch cost per cell record.
             private bool ReadRecord(BiffCursor cursor, long recordStart, int id, ReadOnlySpan<byte> data)
             {
                 if (id == Rec.Bof)
@@ -105,7 +93,7 @@ namespace ExcelReader.Core.Reader
                 }
                 if (data.Length < 2)
                 {
-                    return true; // no room for the row field -- not a usable cell record, keep going
+                    return true;
                 }
                 switch (id)
                 {
@@ -151,17 +139,12 @@ namespace ExcelReader.Core.Reader
                         return true;
                     case Rec.Blank:
                     case Rec.MulBlank:
-                        // Contributes no value, but still participates in row tracking.
                         return AdvanceRow(cursor, recordStart, ReadU16(data, 0));
                     default:
-                        return true; // markup / unrecognized record -- keep going
+                        return true;
                 }
             }
 
-            // Owns the row-tracking decision shared by every cell-record case above: the first cell
-            // record of a row adopts its row number; a later record for the same row proceeds; a record
-            // for a *different* row means the current row has ended, so the cursor rewinds to re-read
-            // this same record as the first record of the next row.
             private bool AdvanceRow(BiffCursor cursor, long recordStart, int row)
             {
                 if (_row < 0)
@@ -204,9 +187,6 @@ namespace ExcelReader.Core.Reader
                 _acc.Add(col, valueStart, _acc.ValueLength - valueStart, CellType.ExcelString, style, CellValueSource.RowValues);
             }
 
-            // Decodes an XLUnicodeString body (chars, already-read flags byte) that may continue
-            // across one or more CONTINUE records — shared by LABEL and the FORMULA cached-string
-            // result, both of which use this exact shape. Appends decoded UTF-8 to the accumulator.
             private void DecodeUnicodeString(ReadOnlySpan<byte> firstData, int chars, byte flags)
             {
                 int firstByteLen = firstData.Length;
@@ -284,7 +264,6 @@ namespace ExcelReader.Core.Reader
                             _acc.AddError(col, style, result[2]);
                             break;
                         case 0:
-                            // String result: the marker means "see the STRING record that follows".
                             if (_cursor.PeekId() == Rec.StringRec && _cursor.TryReadRecord(out _, out ReadOnlySpan<byte> str) && str.Length >= 3)
                             {
                                 int start = _acc.ValueLength;
@@ -304,8 +283,6 @@ namespace ExcelReader.Core.Reader
 
             private void AddDouble(int col, int style, double value, CellType? forced = null)
             {
-                // Store the raw double only — no eager formatting. Cell formats lazily if a caller
-                // asks for text (GetString/Value); numeric consumers read the double directly.
                 CellType type = forced ?? (_reader.IsDateStyle(style) ? CellType.Date : CellType.Number);
                 _acc.Add(col, _acc.ValueLength, 0, type, style, CellValueSource.RowValues, number: value, hasNumber: true);
             }

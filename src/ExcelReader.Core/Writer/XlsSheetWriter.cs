@@ -11,23 +11,15 @@ namespace ExcelReader.Core.Writer
     public sealed class XlsSheetWriter : ISheetWriter<XlsRowWriter>
     {
         private const int MaxRow = 65535;
-        // Internal (not private) so XlsRowWriter.Skip can bound itself against the same limit instead
-        // of duplicating the literal — BIFF8's grid is 256 columns, not the 16,384 of XLSX/XLSB.
         internal const int MaxColumn = 255;
         private const int MaxSheetNameLength = 31;
 
-        // Fixed framing added around the cell records when the substream is assembled.
-        private const int FramingBytes = 20 + 18 + 22 + 4; // BOF + DIMENSION + WINDOW2 + EOF
+        private const int FramingBytes = 20 + 18 + 22 + 4;
 
         private readonly XlsWorkbookWriter _owner;
         private readonly bool _date1904;
         private readonly bool _isContinuation;
         private readonly string _baseName;
-        // BiffBuffer's default 4 KB initial capacity means any real sheet (a 50k-row sheet is ~8 MB of
-        // records) pays ~11 doubling grows — each one a full memmove of everything written so far, to
-        // produce output BiffBuffer's own 32 MB dedicated pool (see BiffBuffer.Pool) would happily have
-        // rented in one shot. 256 KB collapses most of that to one or two grows without meaningfully
-        // over-allocating a small sheet (the pool bucket size only grows in powers of two anyway).
         private const int InitialCellsCapacity = 256 * 1024;
 
         [SuppressMessage("Usage", "CA2213:Disposable fields should be disposed",
@@ -55,7 +47,6 @@ namespace ExcelReader.Core.Writer
 
         internal string Name { get; }
 
-        // Full substream byte length once framed — used to compute BoundSheet offsets.
         internal int SubstreamLength => FramingBytes + _colInfos.Length + _cells.Length;
 
         internal int RowCount => _maxRow + 1;
@@ -83,10 +74,6 @@ namespace ExcelReader.Core.Writer
             SheetColumnValidation.SetColumnWidth(ref _columnWidths, columnIndex, width, _state, this, nameof(Start));
         }
 
-        // The active row's own style always wins over a column style (both are user-configured; the
-        // row is the more specific of the two); falls back to 0 ("no override", i.e. the general XF)
-        // when neither is set. Every BIFF8 cell record carries a mandatory XF field, so this is
-        // consulted for every cell write, not only dates.
         private int EffectiveStyle(int columnIndex)
         {
             int abstractStyle = 0;

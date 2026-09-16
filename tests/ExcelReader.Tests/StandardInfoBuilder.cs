@@ -3,8 +3,6 @@ using System.Text;
 
 namespace ExcelReader.Tests
 {
-    // Forges a standard EncryptionInfo stream. Every field is a parameter because the negative
-    // tests exist to corrupt exactly one of them at a time.
     internal static class StandardInfoBuilder
     {
         internal static byte[] Build(

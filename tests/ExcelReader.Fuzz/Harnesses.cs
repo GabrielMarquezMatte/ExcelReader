@@ -13,9 +13,6 @@ namespace ExcelReader.Fuzz
     /// </summary>
     internal static class Harnesses
     {
-        // Deliberately tight limits: they keep a single input fast (the engine runs millions of them)
-        // and, more importantly, they put the limit checks themselves on the hot path so the fuzzer
-        // actually explores the guard code rather than only the happy path.
         private static readonly ExcelReaderOptions Limits = new()
         {
             MaxCellBytes = 1 << 20,
@@ -32,14 +29,6 @@ namespace ExcelReader.Fuzz
             MaxCellBytes = 1 << 20,
             MaxSharedStringBytes = 1 << 22,
             Password = "hunter2",
-            // No MaxPasswordSpinCount override here (falls back to the default cap): the corpus seed
-            // (encrypted-agile-seed.bin, a copy of the real agile-aes256-sha512.xlsx fixture) declares
-            // spinCount="100000". A tighter cap here — this used to be 1_000 — makes the unmutated seed
-            // and most mutations dead-end on ExcelLimitExceededException before any key derivation,
-            // segment decryption, HMAC verification, or ZIP-layer code ever runs, which makes this
-            // target inert without ever failing loudly. Slower (~50ms/input instead of near-instant) is
-            // the correct tradeoff; see OpenEncryptedSeedForSelfCheck below, which SmokeRunner uses to
-            // catch this class of regression if it ever creeps back in.
         };
 
         internal static void Xlsx(ReadOnlySpan<byte> data)
@@ -53,8 +42,6 @@ namespace ExcelReader.Fuzz
             });
         }
 
-        // The in-memory ZIP path (ZipMemoryIndex) is a different container parser from the
-        // Stream/ZipArchive one above, so it gets its own target rather than sharing a corpus.
         internal static void XlsxMemory(ReadOnlySpan<byte> data)
         {
             byte[] bytes = data.ToArray();
@@ -86,13 +73,6 @@ namespace ExcelReader.Fuzz
             });
         }
 
-        // Value-level oracle for XLSX. Every target above asserts only "nothing unexpected was
-        // thrown" — a reader that returns the WRONG cell value for a structurally valid input passes
-        // all of them, and silent read corruption is the one defect class the suite was otherwise
-        // blind to. ZipArchive (the stream path) and ZipMemoryIndex (the memory path) decode the same
-        // bytes through independent container code, so each is the other's ground truth: same input,
-        // same cells, or one of them is corrupting. This is the csv-parallel target's oracle applied
-        // to the container readers.
         internal static void XlsxDifferential(ReadOnlySpan<byte> data)
         {
             byte[] bytes = data.ToArray();
@@ -115,8 +95,6 @@ namespace ExcelReader.Fuzz
                 "memory"));
         }
 
-        // BIFF8 inside an OLE compound file — an entirely hand-rolled container parser, and the one
-        // with the most pointer-like structures (sector chains, FAT/miniFAT) reachable from bytes.
         internal static void Xls(ReadOnlySpan<byte> data)
         {
             byte[] bytes = data.ToArray();
@@ -128,10 +106,6 @@ namespace ExcelReader.Fuzz
             });
         }
 
-        // The encrypted container is a third container parser (CFB directory + EncryptionInfo descriptor)
-        // layered under the ZIP one, and it runs BEFORE any password check - so it gets its own target.
-        // The password is fixed and correct for the seed, so mutations explore the parsers rather than
-        // dead-ending on a verifier mismatch.
         internal static void Encrypted(ReadOnlySpan<byte> data)
         {
             byte[] bytes = data.ToArray();
@@ -142,13 +116,6 @@ namespace ExcelReader.Fuzz
             });
         }
 
-        // Guards against the "the encrypted target exists but never reaches the code it's meant to
-        // guard" regression (final review, Critical 2): a rejection swallowed by FuzzOracle.Guard
-        // looks identical whether it's a genuine malformed-input rejection or every input dead-ending
-        // on a resource limit before AgileKeyDerivation/DecryptedPackageStream/PackageIntegrity/the
-        // post-decrypt ZIP layer ever runs. SmokeRunner calls this once per `check` run, unguarded,
-        // over the unmutated corpus seed — it must open and yield at least one row, not merely throw
-        // something FuzzOracle happens to accept.
         internal static int OpenEncryptedSeedForSelfCheck(ReadOnlySpan<byte> data)
         {
             byte[] bytes = data.ToArray();
@@ -178,8 +145,6 @@ namespace ExcelReader.Fuzz
             });
         }
 
-        // Dialect detection runs over untrusted bytes before any reader is constructed, so it is its
-        // own attack surface — and unlike the readers it has no stream to bound it.
         internal static void CsvSniff(ReadOnlySpan<byte> data)
         {
             byte[] bytes = data.ToArray();
@@ -192,9 +157,6 @@ namespace ExcelReader.Fuzz
             });
         }
 
-        // A row model wide enough that binding, conversion, and required-column handling all run.
-        // Properties are set only through reflection by ExcelParser<T>/ParallelCsvFactory's binder,
-        // which static analysis cannot see, hence the suppression below.
         private sealed class FuzzRow
         {
             public string? Name { get; set; }
@@ -202,22 +164,16 @@ namespace ExcelReader.Fuzz
             public string? Note { get; set; }
         }
 
-        // The parallel CSV path's oracle is the sequential parser: for any input, the two must yield
-        // the same models in the same order. Adversarial chunk boundaries — a quote and a newline
-        // arranged so a chunk guesses its start wrong — are exactly what a fuzzer finds without being
-        // told to look, which is why this target exists on top of the hand-written corpus.
         internal static void CsvParallel(ReadOnlySpan<byte> data)
         {
             if (data.Length < 2)
             {
                 return;
             }
-            // A fixed header so typed binding always has something to bind; the fuzzer owns the data.
             byte[] header = "Name,Age,Note\n"u8.ToArray();
             byte[] bytes = new byte[header.Length + data.Length];
             header.CopyTo(bytes, 0);
             data.CopyTo(bytes.AsSpan(header.Length));
-            // Derive the chunk size from the input so boundary placement is fuzzed too.
             int chunkSize = 1 + (data[0] % 64);
 
             FuzzOracle.Guard(() =>
@@ -246,8 +202,6 @@ namespace ExcelReader.Fuzz
 
                 if (sequentialFailure is not null || parallelFailure is not null)
                 {
-                    // Both must fail, and with the same exception type. One succeeding where the
-                    // other throws is a divergence, which is the whole point of this target.
                     if (sequentialFailure?.GetType() != parallelFailure?.GetType())
                     {
                         throw new InvalidOperationException(
@@ -276,10 +230,6 @@ namespace ExcelReader.Fuzz
             return rows;
         }
 
-        // The fuzz engine drives synchronous entry points, so this deliberately blocks on the async
-        // parallel path rather than making every harness in the file async for one target. It only
-        // ever waits on in-memory chunk work (the source here is a byte[], never real I/O), so it
-        // cannot deadlock the way blocking on I/O-bound async work could.
         private static List<string> ParseParallel(byte[] bytes, int chunkSize)
         {
             var rows = new List<string>();
@@ -311,11 +261,6 @@ namespace ExcelReader.Fuzz
             return string.Create(CultureInfo.InvariantCulture, $"{row.Name}{row.Age}{row.Note}");
         }
 
-        // Guards the differential targets against the same "exists but is inert" failure
-        // OpenEncryptedSeedForSelfCheck guards: if every input were rejected by both readers,
-        // CompareReaders would agree on the exception and report success forever without ever
-        // comparing a single cell. SmokeRunner calls this unguarded over the unmutated seeds — they
-        // must open through BOTH paths and yield rows.
         internal static int OpenDifferentialSeedForSelfCheck(ReadOnlySpan<byte> data, bool xlsb)
         {
             byte[] bytes = data.ToArray();
@@ -329,8 +274,6 @@ namespace ExcelReader.Fuzz
             return stream.Count;
         }
 
-        // Polarity, in the spirit of FuzzOracle.SelfCheck: an AssertSameRows that accepted everything
-        // would leave both differential targets passing vacuously.
         internal static void AssertSameRowsSelfCheck()
         {
             try
@@ -345,8 +288,6 @@ namespace ExcelReader.Fuzz
             throw new InvalidOperationException("AssertSameRows accepted two different rows.");
         }
 
-        // Both sides must agree on failure as well as on success: one reader accepting an input the
-        // other rejects is itself a divergence, and the shape of that check mirrors CsvParallel.
         private static void CompareReaders(
             byte[] bytes,
             Func<byte[], IExcelRowReader> left,
@@ -390,9 +331,6 @@ namespace ExcelReader.Fuzz
             AssertSameRows(leftRows!, rightRows!, leftName, rightName);
         }
 
-        // Reports the first differing row rather than only the counts: a saved crash input is
-        // replayable either way, but the row text is what says whether the bug is a misdecoded value
-        // or a dropped row.
         private static void AssertSameRows(List<string> left, List<string> right, string leftName, string rightName)
         {
             int common = Math.Min(left.Count, right.Count);
@@ -421,8 +359,6 @@ namespace ExcelReader.Fuzz
                 for (int i = 0; i < sheets; i++)
                 {
                     reader.MoveToSheet(i);
-                    // A sheet marker, so a divergence in sheet count or in where one sheet ends is a
-                    // row difference rather than a silent re-alignment of the rows that follow.
                     rows.Add(string.Create(CultureInfo.InvariantCulture, $"#sheet{i}"));
                     using IExcelRowEnumerator e = reader.GetEnumerator();
                     while (e.MoveNext())
@@ -434,9 +370,6 @@ namespace ExcelReader.Fuzz
             }
         }
 
-        // Renders what a caller would actually observe: the column index, the cell type, the text,
-        // and the date interpretation. Comparing this rather than "did it throw" is the entire point
-        // of the differential targets.
         private static string RenderRow(Row row, bool isDate1904)
         {
             var sb = new StringBuilder();
@@ -477,9 +410,6 @@ namespace ExcelReader.Fuzz
             }
         }
 
-        // Materializing every cell is the point: Row/Cell hand out spans sliced from reader-owned
-        // buffers using offsets decoded from the input, so a bad offset only becomes observable once
-        // something actually reads through it.
         private static void TouchRow(Row row, bool isDate1904)
         {
             int columns = row.ColumnCount;
@@ -497,8 +427,6 @@ namespace ExcelReader.Fuzz
                 _ = cell.TryFormat(scratch, out _);
             }
 
-            // Indexer path: a separate binary search over the same descriptors as the enumerator
-            // above, bounded so a corrupt ColumnCount cannot turn this into a near-infinite loop.
             int probe = Math.Min(columns, 512);
             for (int c = 0; c < probe; c++)
             {

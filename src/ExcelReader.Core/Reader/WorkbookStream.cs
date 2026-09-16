@@ -4,12 +4,6 @@ using System.Runtime.InteropServices;
 
 namespace ExcelReader.Core.Reader
 {
-    // The Workbook OLE stream, read on demand instead of materialized. Three modes:
-    //  - streamed: a seekable source + the stream's physical FAT-sector chain. Only one sector
-    //    (plus a record-assembly scratch) is held at a time, so a 3 MB workbook costs ~KBs.
-    //  - contiguous: a contiguous buffer (mini-stream workbooks, or a non-seekable fallback).
-    //  - chained: the whole file in memory plus the workbook's FAT chain.
-    // Immutable and shareable; each consumer reads through its own BiffCursor.
     [ExcludeFromCodeCoverage(Justification = "Exercised through XlsReader integration tests; guard-rail branches are corrupt-OLE only.")]
     internal sealed class WorkbookStream : IDisposable
     {
@@ -17,15 +11,11 @@ namespace ExcelReader.Core.Reader
 
         private readonly Stream? _source;
         private readonly bool _ownsSource;
-        private readonly int[] _chain;        // physical sector numbers, in order (pooled, oversized)
-        private readonly int _chainLength;    // valid entry count in _chain; the pooled array is larger
-        private bool _chainReturned;          // guards against a double pool-return on repeated Dispose
+        private readonly int[] _chain;
+        private readonly int _chainLength;
+        private bool _chainReturned;
 
-        // The in-memory modes' buffer, resolved to its backing array once here rather than kept as a
-        // ReadOnlyMemory<byte>: reads happen per BIFF record, and ReadOnlyMemory.Span is a property that
-        // has to disambiguate array/MemoryManager/string backing on every access, whereas an array plus
-        // a base offset slices with plain pointer arithmetic.
-        private readonly int _fileLength; // usable bytes from _fileBase
+        private readonly int _fileLength;
 
         internal int SectorSize { get; }
         internal long Length { get; }
@@ -60,9 +50,6 @@ namespace ExcelReader.Core.Reader
                 _fileLength = segment.Count;
                 return;
             }
-            // Rare: a non-array-backed ReadOnlyMemory<byte> (a custom MemoryManager<byte>). One copy
-            // here keeps every subsequent record read on the array fast path, matching what
-            // BufferedStreamCursor and XlsCompoundFile.AsStream already do for this case.
             Buffer = memory.ToArray();
             _fileLength = Buffer.Length;
         }
@@ -88,8 +75,6 @@ namespace ExcelReader.Core.Reader
         }
 
 
-        // The in-memory buffer and the offset of its first byte, handed to each BiffCursor so the hot
-        // record path slices the array directly instead of loading them back through this object.
         internal byte[] Buffer { get; }
         internal int BufferBase { get; }
 
@@ -98,12 +83,6 @@ namespace ExcelReader.Core.Reader
             return Buffer.AsSpan(BufferBase + (int)pos, len);
         }
 
-        // The maximal run of physically consecutive sectors containing `pos`, in logical coordinates
-        // plus the run's byte offset into the buffer. BiffCursor caches this, so records inside one run
-        // translate with a compare and pointer arithmetic instead of a per-record chain walk — and
-        // Excel writes the Workbook stream as a single sequential run, so in practice one resolve
-        // covers the whole file. Walking both directions keeps a backward seek (the enumerator rewinds
-        // a record when a row ends) inside the cached run rather than re-resolving.
         internal void ResolveChainedRun(long pos, out long runStart, out long runEnd, out long bufferOffset)
         {
             int chainIndex = (int)(pos / SectorSize);
@@ -121,8 +100,6 @@ namespace ExcelReader.Core.Reader
             runStart = (long)first * SectorSize;
             runEnd = Math.Min(Length, (long)(last + 1) * SectorSize);
             bufferOffset = HeaderSize + ((long)_chain[first] * SectorSize);
-            // Trust boundary: the chain comes from untrusted bytes, so the whole run is range-checked
-            // once here. Every cached-run read afterwards is provably inside the buffer.
             if (_chain[first] < 0 || bufferOffset < 0 || bufferOffset + (runEnd - runStart) > _fileLength)
             {
                 throw new InvalidDataException("The OLE sector chain points past the end of the buffer.");
@@ -190,7 +167,6 @@ namespace ExcelReader.Core.Reader
             {
                 _source?.Dispose();
             }
-            // Streamed mode rents _chain from the pool; in-memory mode holds the shared empty array.
             if (_chainLength > 0 && !_chainReturned)
             {
                 _chainReturned = true;

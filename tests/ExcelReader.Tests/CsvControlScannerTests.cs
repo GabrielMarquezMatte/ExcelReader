@@ -152,18 +152,10 @@ namespace ExcelReader.Tests
             Assert.Equal(expected, actual);
         }
 
-        // --- Continue/SkipByte: the persistence machinery CsvReader.Enumerator relies on to reuse a
-        // scanner instance across records within the same buffered window. Next()/Reset() above are exercised extensively already; these
-        // target the two new entry points specifically, since a bug here would silently misreport
-        // control-byte positions rather than throw. ---
 
         [Fact]
         public void ContinuePreservesPendingMaskAcrossSimulatedRecordBoundary()
         {
-            // A chunk dense with control bytes so Next leaves several mask bits pending mid-chunk.
-            // Stopping partway through and calling Continue with the same array and length, matching
-            // what happens when no Fill occurred between two records, must yield the exact same stops
-            // in the same order as an uninterrupted scan.
             byte[] data = new byte[64];
             Array.Fill(data, (byte)'x');
             for (int i = 0; i < data.Length; i += 3)
@@ -195,8 +187,6 @@ namespace ExcelReader.Tests
         {
             byte[] data = Encoding.UTF8.GetBytes("a,b\r\nc,d\n");
             List<int> stops = ScanWithCrLfSkip(data);
-            // Comma index 1, CR index 3, comma index 6, final LF index 8 — the LF paired with that CR,
-            // at index 4, must never appear as its own stop.
             Assert.Equal([1, 3, 6, 8], stops);
         }
 
@@ -209,9 +199,6 @@ namespace ExcelReader.Tests
         [InlineData(33)]
         public void SkipByteHandlesCrLfAtChunkBoundary(int offset)
         {
-            // Places the CR/LF pair at (and around) both the AVX2 (32-byte) and SSE2/NEON (16-byte)
-            // chunk boundaries, so the LF lands inside the same loaded vector as the CR on some
-            // offsets and in a not-yet-loaded chunk on others — SkipByte must handle both correctly.
             byte[] data = new byte[offset + 10];
             Array.Fill(data, (byte)'x');
             data[offset] = (byte)'\r';
@@ -220,9 +207,6 @@ namespace ExcelReader.Tests
             Assert.Equal([offset], stops);
         }
 
-        // Mirrors exactly how CsvReader.Enumerator.TryParseSimpleRecord uses SkipByte: on finding a
-        // '\r' immediately followed by '\n', it consumes the '\n' via SkipByte instead of a further
-        // Next() call, so the next Next() must not re-report it.
         private static List<int> ScanWithCrLfSkip(byte[] data)
         {
             var scanner = new CsvControlScanner((byte)',', (byte)'"');
@@ -241,8 +225,6 @@ namespace ExcelReader.Tests
             return stops;
         }
 
-        // Deliberately not cryptographically secure — CA5394 doesn't apply: a seeded, reproducible
-        // PRNG is exactly what makes a parity failure reproducible, unlike a CSPRNG would be.
         [SuppressMessage("Security", "CA5394:Do not use insecure randomness",
             Justification = "Randomized parity test needs a reproducible seeded PRNG, not cryptographic randomness.")]
         [Theory]
@@ -259,7 +241,6 @@ namespace ExcelReader.Tests
             var random = new Random(seed);
             byte[] data = new byte[4096];
             random.NextBytes(data);
-            // Push control-byte density up: replace ~1 in 6 bytes with one of the four control bytes.
             byte[] controls = [(byte)',', (byte)'"', (byte)'\r', (byte)'\n'];
             foreach (ref var b in data.AsSpan())
             {

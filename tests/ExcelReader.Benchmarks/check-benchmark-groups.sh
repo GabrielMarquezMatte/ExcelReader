@@ -1,21 +1,10 @@
 #!/usr/bin/env bash
-# Fails when a benchmark is not matched by any group filter in benchmark-groups.json.
-#
-# The workflows build their job matrix from that file, so a benchmark missing from it is never run
-# and never published - silently, which is how ChunkedParseBenchmark and DataReaderBenchmark went a
-# whole release cycle without a single CI measurement.
 set -euo pipefail
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 groups_file="$here/benchmark-groups.json"
 project="$here/ExcelReader.Benchmarks.csproj"
 
-# Both lists land in variables rather than a process substitution: under `set -e` a pipeline that
-# dies inside <(...) leaves the loop reading an empty list, which would pass this check (or, worse,
-# fail it for every benchmark at once) instead of reporting the real failure.
-#
-# Both are stripped of carriage returns: on Windows the shell and `dotnet` hand back CRLF, and a
-# trailing \r inside a pattern silently fails every regex match but the last one.
 filters="$(python3 -c '
 import json, sys
 with open(sys.argv[1], encoding="utf-8") as f:

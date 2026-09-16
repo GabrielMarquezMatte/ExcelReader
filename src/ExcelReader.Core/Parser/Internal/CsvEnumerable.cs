@@ -22,11 +22,7 @@ namespace ExcelReader.Core.Parser.Internal
         private readonly CsvReader _reader;
         private readonly ExcelParserConfig _config;
         private readonly CancellationToken _ct;
-        // Resolved in the constructor, never in GetEnumerator()/GetAsyncEnumerator(): a trimmer/AOT
-        // analyzer decides reachability per method, and TypeMapper<T>.GetCsvInfo()'s reflection must
-        // not leak into the AOT-clean ExcelMappedParser<T> path.
         private readonly TypeMapInfo<T> _info;
-        // True only for the parallel factory's sequential fallback, which owns the reader it opened.
         private readonly bool _ownsReader;
 
         [RequiresUnreferencedCode("Typed parsing reflects over T's public properties, which trimming may remove.")]
@@ -36,7 +32,6 @@ namespace ExcelReader.Core.Parser.Internal
         {
         }
 
-        // ownsReader: the enumeration closes the reader when it is disposed.
         [RequiresUnreferencedCode("Typed parsing reflects over T's public properties, which trimming may remove.")]
         [RequiresDynamicCode("Typed parsing binds property setters at runtime (MethodInfo.CreateDelegate / MakeGenericMethod).")]
         internal CsvEnumerable(CsvReader reader, ExcelParserConfig config, bool ownsReader, CancellationToken ct)
@@ -148,7 +143,6 @@ namespace ExcelReader.Core.Parser.Internal
         }
     }
 
-    // Per-field binding state, shared read-only across parallel workers once bound.
     internal sealed class CsvBoundColumnMap<T>
     {
         internal CsvBoundColumnMap(
@@ -172,8 +166,6 @@ namespace ExcelReader.Core.Parser.Internal
         internal (int Field, string Name)[] RequiredFields { get; }
     }
 
-    // Per-row state machine: skip rows before the header, bind property -> field index at the header
-    // row, then project each data row by direct indexed field access.
     internal struct CsvRowProjector<T>
     {
         private readonly TypeMapInfo<T> _typeInfo;
@@ -182,8 +174,6 @@ namespace ExcelReader.Core.Parser.Internal
         private readonly int _headerRow;
         private readonly IFormatProvider _provider;
         private readonly bool _throwOnParseFailure;
-        // fieldParsers[i] is the parser bound to field i, or null if unmapped. _fieldNames/_fieldRequired
-        // are parallel to it (display name and [ExcelRequired] flag).
         private ColumnParser<T>[]? _fieldParsers;
         private string?[] _fieldNames;
         private bool[] _fieldRequired;
@@ -203,8 +193,6 @@ namespace ExcelReader.Core.Parser.Internal
             _requiredFields = [];
         }
 
-        // Parallel-path constructor: the header was already bound by CsvHeaderBinder, so every record
-        // this projector sees is data. _headerRow = -1 marks that.
         internal CsvRowProjector(TypeMapInfo<T> typeInfo, CsvBoundColumnMap<T> map, IFormatProvider provider, bool throwOnParseFailure)
         {
             _typeInfo = typeInfo;
@@ -248,8 +236,6 @@ namespace ExcelReader.Core.Parser.Internal
                 ParseCurrentRow(rows, ref model);
                 return ProjectionStep.Yield;
             }
-            // Steady state fast path: avoids re-deriving "this row is data" via ClassifyRow on every
-            // row once the header is behind us.
             if (_fieldParsers is not null && _rowNumber >= _headerRow)
             {
                 _rowNumber++;
@@ -271,7 +257,6 @@ namespace ExcelReader.Core.Parser.Internal
             {
                 return step;
             }
-            // A terminal blank line comes through as one empty field; treat it as absent.
             if (rows.FieldCount == 1 && rows.FieldAt(0).Type == CellType.Empty)
             {
                 return ProjectionStep.Skip;
@@ -290,7 +275,6 @@ namespace ExcelReader.Core.Parser.Internal
             _requiredFields = map.RequiredFields;
         }
 
-        // Shared by the sequential path (BuildColumnMap) and CsvHeaderBinder's parallel path.
         internal static CsvBoundColumnMap<T> BuildBoundMap(CsvReader.Enumerator rows, TypeMapInfo<T> typeInfo, StringComparer comparer, HeaderNormalization normalization)
         {
             int fieldCount = rows.FieldCount;
@@ -319,7 +303,6 @@ namespace ExcelReader.Core.Parser.Internal
                 {
                     continue;
                 }
-                // Unbind the lower-priority alias so each property maps to exactly one field.
                 if (fieldByProp[match.PropertyIndex] >= 0)
                 {
                     int previousField = fieldByProp[match.PropertyIndex];

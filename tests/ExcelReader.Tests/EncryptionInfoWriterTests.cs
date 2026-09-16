@@ -63,8 +63,6 @@ namespace ExcelReader.Tests
                 StringComparison.Ordinal);
         }
 
-        // Compares our descriptor's shape against a real Excel-written one, parsed through the same
-        // parser: same cipher parameters, same spin count, dataIntegrity present.
         [Fact]
         public void Build_Parameters_Match_A_Real_Excel_Descriptor()
         {

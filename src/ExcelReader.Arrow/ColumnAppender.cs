@@ -63,7 +63,6 @@ namespace ExcelReader.Arrow
                 }
             }
 
-            // TryFormat avoids allocating a managed string per cell, unlike GetString.
             internal override void Append(in Cell cell, bool isDate1904)
             {
                 int capacity = Math.Max(cell.Value.Length, NumberFormatMaxBytes);
@@ -263,7 +262,6 @@ namespace ExcelReader.Arrow
 
         private sealed class TimestampColumnAppender : ColumnAppender
         {
-            // No timezone: matches the native `xl_parse_arrow` path's "tsu:" format code.
             private static readonly TimestampType MicrosecondType = new(TimeUnit.Microsecond, timezone: (string?)null);
 
             private readonly TimestampArray.Builder _builder = new(MicrosecondType);
@@ -284,8 +282,6 @@ namespace ExcelReader.Arrow
             {
                 if (ExcelCellReaders.DateTimeAuto(in cell, isDate1904, CultureInfo.InvariantCulture, out DateTime value))
                 {
-                    // Kind can be Local when text carries an explicit offset/Z; strip it after
-                    // converting to UTC so the DateTimeOffset below never throws.
                     DateTime normalized = value.Kind == DateTimeKind.Unspecified
                         ? value
                         : DateTime.SpecifyKind(value.ToUniversalTime(), DateTimeKind.Unspecified);

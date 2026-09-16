@@ -6,7 +6,6 @@ on:
   pull_request:
     branches: [ master, develop ]
   schedule:
-    # Weekly scan (Mondays 06:00 UTC) to catch newly published query updates.
     - cron: '0 6 * * 1'
 
 concurrency:
@@ -18,13 +17,6 @@ permissions:
   security-events: write
 
 jobs:
-  # Only pull requests are narrowed: pushes to master/develop and the weekly scheduled scan still
-  # analyze both languages, since the point of the schedule is to re-run the full query set against
-  # unchanged code. A scheduled run also has no base commit for paths-filter to diff against.
-  #
-  # The matrix is built from the result rather than gated per entry, because the matrix context is not
-  # available in a job-level `if:` - and the `if:` has to stay at job level so a narrowed run still
-  # posts a check run for the required CodeQL check.
   changes:
     name: Detect changed languages
     runs-on: ubuntu-latest

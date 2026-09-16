@@ -156,10 +156,6 @@ namespace ExcelReader.Arrow
             await workbook.EndAsync(ct).ConfigureAwait(false);
         }
 
-        // Time64/Timestamp cells write as plain numbers by default (see IRowWriter.Write(TimeOnly)'s
-        // remarks) — without an explicit numFmt they render as a bare number in Excel. Date32 already
-        // defaults to the builtin date style (IRowWriter.Write(DateOnly) falls back to style 1), so this
-        // only reasserts it for clarity alongside the two columns that actually need the style call.
         private static void ApplyTemporalStyles<TSheet, TRow>(IWorkbookWriter<TSheet> workbook, TSheet sheet, IReadOnlyList<Field> fields)
             where TSheet : ISheetWriter<TRow>
             where TRow : IRowWriter
@@ -211,9 +207,6 @@ namespace ExcelReader.Arrow
                     row.Write(((Time64Array)array).GetTime(index));
                     return;
                 case ArrowTypeId.Timestamp:
-                    // UtcDateTime, not DateTime: matches ArrowConversionExtensions' own read-side
-                    // normalization (ToUniversalTime then strip Kind) for a batch built by another
-                    // producer whose timestamps carry a real, non-zero offset.
                     row.Write(((TimestampArray)array).GetTimestamp(index)?.UtcDateTime);
                     return;
                 default:

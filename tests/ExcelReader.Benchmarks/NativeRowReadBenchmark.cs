@@ -3,29 +3,10 @@ using ExcelReader.Native;
 
 namespace ExcelReader.Benchmarks
 {
-    // The row-oriented half of the C ABI, which NativeTypedParseBenchmark does not touch: the four
-    // ways a caller can pull raw rows out of a sheet, all over the same fixture so their costs can
-    // be read against each other and against ParseTyped's columnar number.
-    //
-    //   NextRowBlob      xl_next_row          — one crossing per row, caller-owned buffer
-    //   NextRowDecoded   (internal only)      — one crossing per row, one native block per row
-    //                                            ReadAllDecoded's per-row primitive, not itself an
-    //                                            exported ABI function
-    //   ReadAllBlob      xl_read_all_blob     — one crossing for the sheet, caller-owned buffer
-    //   ReadAllDecoded   xl_read_all_decoded  — one crossing for the sheet, one native block per row
-    //
-    // Drives NativeApi rather than the C ABI for the reason ExcelReader.Native's csproj states:
-    // [UnmanagedCallersOnly] exports cannot be invoked from managed code. That means the per-row
-    // ones do NOT pay a real native-to-managed transition here, so the gap between the per-row and
-    // whole-sheet pairs is a floor, not the figure a C caller sees.
-    //
     // NOTE: like NativeTypedParseBenchmark, MemoryDiagnoser sees MANAGED allocation only. The
-    // decoded paths' Marshal.AllocHGlobal blocks are the output, not the overhead, and are
-    // invisible here — wall clock is what moves when those paths change.
     [MemoryDiagnoser]
     public class NativeRowReadBenchmark
     {
-        // Every row of the fixture, header included: none of these paths knows about a header row.
         private const int ExpectedRows = 65536;
 
         private byte[] _xlsb = [];
@@ -34,8 +15,6 @@ namespace ExcelReader.Benchmarks
         [GlobalSetup]
         public void Setup()
         {
-            // Loud failure if the fixture was never copied to the output directory — a benchmark
-            // that silently ran on nothing would publish a number that reads like a large win.
             _xlsb = File.ReadAllBytes(Path.Combine(AppContext.BaseDirectory, "Data", "65K_Records_Data.xlsb"));
         }
 
@@ -49,7 +28,6 @@ namespace ExcelReader.Benchmarks
                 int status = NativeApi.NextRow(handle, _buffer, out int written);
                 if (status == NativeStatus.BufferTooSmall)
                 {
-                    // The row stays pending on the handle, so the retry costs a copy, not a re-read.
                     _buffer = new byte[written];
                     status = NativeApi.NextRow(handle, _buffer, out written);
                 }
@@ -76,8 +54,6 @@ namespace ExcelReader.Benchmarks
                     break;
                 }
                 Verify(status);
-                // Freed per row, as a real caller must: holding all 65K would measure a workload
-                // nobody runs, and the free is part of this path's cost.
                 NativeApi.FreeRow(ref row);
                 rows++;
             }
@@ -88,8 +64,6 @@ namespace ExcelReader.Benchmarks
         public int ReadAllBlob()
         {
             using NativeHandle handle = Open();
-            // The ask-the-size call is where the whole sheet is actually read and accumulated; the
-            // second call is the copy out. Both are part of what a caller pays.
             int status = NativeApi.ReadAllBlob(handle, Span<byte>.Empty, out int written);
             if (status != NativeStatus.BufferTooSmall)
             {
@@ -119,7 +93,6 @@ namespace ExcelReader.Benchmarks
             }
         }
 
-        // The blob opens with an int32 row count (see excelreader.h on xl_read_all_blob).
         private static int RowCountOf(byte[] blob)
         {
             return System.Buffers.Binary.BinaryPrimitives.ReadInt32LittleEndian(blob);
@@ -143,8 +116,6 @@ namespace ExcelReader.Benchmarks
             }
         }
 
-        // Checked every iteration, not once in setup: a read that quietly yields nothing still
-        // publishes a timing, and a timing measured over no work reads exactly like a win.
         private static int VerifyRows(int rows)
         {
             if (rows != ExpectedRows)

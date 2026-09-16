@@ -336,7 +336,6 @@ extern "C" {
         password_len: i32,
     ) -> c_int;
 
-    // ---- Streaming writer handle: see writer_handle::WriterHandle for the call-order contract. ----
 
     pub fn xl_open_write_handle(
         path: *const u8,

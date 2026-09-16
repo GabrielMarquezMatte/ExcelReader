@@ -5,19 +5,13 @@ using ExcelReader.Core.ValueObjects;
 namespace ExcelReader.Tests
 {
     // Hand-authored XML fragments mimicking known quirks of specific producers (LibreOffice, openpyxl,
-    // Apache POI, etc.) — not files actually exported by them. See RealWorldXlsxCorpusTests for tests
-    // against genuine producer-exported binaries.
     public class XlsxDialectShapeTests
     {
-        // One entry per real-world producer dialect. Split across the two methods below only
-        // to keep each within the method-length gate; this stays the single ordered sequence
-        // [MemberData] consumes.
         public static IEnumerable<object[]> Fixtures
         {
             get { return OpenSourceSuiteFixtures().Concat(LibraryAndCloudFixtures()); }
         }
 
-        // LibreOffice and openpyxl: whitespace, spans, single quotes, sparse inline/shared strings.
         private static IEnumerable<object[]> OpenSourceSuiteFixtures()
         {
             yield return
@@ -65,7 +59,6 @@ namespace ExcelReader.Tests
 
         }
 
-        // Apache POI, Excelize and Google Sheets: formulas, explicit types, CDATA, inter-cell markup.
         private static IEnumerable<object[]> LibraryAndCloudFixtures()
         {
             yield return

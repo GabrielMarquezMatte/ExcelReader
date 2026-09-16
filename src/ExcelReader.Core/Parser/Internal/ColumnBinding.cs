@@ -1,7 +1,5 @@
 namespace ExcelReader.Core.Parser.Internal
 {
-    // One resolved header->column->parser binding, shared by RowProjector<T> (class/struct models) and
-    // NamedRefRowEnumerator<TModel,...> (ref struct models) via SparseRowProjection.
     internal readonly struct ColumnBinding<TModel>
         where TModel : allows ref struct
     {

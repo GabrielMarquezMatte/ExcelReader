@@ -3,17 +3,6 @@ using ExcelReader.Core.ValueObjects;
 
 namespace ExcelReader.Core.Parser.Internal
 {
-    // The merge-walk column-binding loop shared by RowProjector<T> (class/struct models) and
-    // NamedRefRowEnumerator<TModel,...> (ref struct models). Both bind sparse Row.Cells to a
-    // header-resolved column map the same way; before this they carried two byte-identical copies. A
-    // `static` generic method — never storing TModel in a field — is what lets a ref-struct-constrained
-    // TModel flow through without CS8345.
-    //
-    // Deliberately NOT shared with CsvRowProjector<T>: CSV rows are dense (field index == column index,
-    // no gaps), so its fast path is a direct indexed scan with no merge-walk at all — forcing it through
-    // this sparse-cursor shape would trade a genuine O(1)-per-field win for unification that saves no
-    // real duplication (its BuildColumnMap/ParseCurrentRow are structurally different, not copies of
-    // this one). CsvRowProjector applies the same F3 parse-failure policy inline instead.
     internal static class SparseRowProjection
     {
         internal static ColumnBinding<TModel>[] BuildColumnMap<TModel>(
@@ -79,10 +68,6 @@ namespace ExcelReader.Core.Parser.Internal
             return bindings;
         }
 
-        // On a parse failure (non-empty cell, parser returned false): throws ExcelParseException when
-        // throwOnParseFailure is set; otherwise leaves `seen` unset for that binding, so a [ExcelRequired]
-        // column with an unparseable value fails the same way as a blank one via ValidateRowValues below
-        // (F3) — closing the "required-but-unparseable silently passes" gap even with the flag off.
         internal static void ParseRow<TModel>(
             in Row row,
             ColumnBinding<TModel>[] bindings,

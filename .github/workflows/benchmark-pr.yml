@@ -14,10 +14,6 @@ permissions:
   pull-requests: write
 
 jobs:
-  # Gates the benchmark jobs by path, the same way native-bindings.yml does and for the same reason:
-  # an `if:` per job, never `on.pull_request.paths`, so a skipped run still posts check runs instead
-  # of leaving a required check stuck at "expected". A PR touching only bindings, tests, docs or
-  # workflows cannot move a .NET benchmark number - that is a bit over a third of this repo's commits.
   changes:
     name: Detect changed paths
     runs-on: ubuntu-latest
@@ -49,8 +45,6 @@ jobs:
       - id: load
         run: echo "matrix=$(jq -c . tests/ExcelReader.Benchmarks/benchmark-groups.json)" >> "$GITHUB_OUTPUT"
 
-  # A benchmark that no group matches is never run and never published, in this workflow or in
-  # benchmark-pages.yml. This is the job that turns that from a silent omission into a failed check.
   guard:
     name: Every benchmark belongs to a group
     runs-on: ubuntu-latest
@@ -122,8 +116,6 @@ jobs:
           path: BenchmarkDotNet.Artifacts/results/*-report-github.md
           retention-days: 1
 
-      # The markdown report is for reading; the delta table is computed from the JSON, which is the
-      # only form carrying the raw mean this comparison needs.
       - name: Upload JSON results
         uses: actions/upload-artifact@v7
         with:
@@ -134,9 +126,6 @@ jobs:
   comment:
     name: Post PR Comment
     needs: [changes, benchmark]
-    # The paths check has to be repeated here: with `benchmark` skipped, always() still holds and its
-    # result is 'skipped', not 'cancelled', so without it this job would post an empty results comment
-    # on every PR the gate was meant to leave alone.
     if: always() && needs.changes.outputs.benchmarks == 'true' && needs.benchmark.result != 'cancelled'
     runs-on: ubuntu-latest
 
@@ -144,10 +133,6 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
 
-      # The series benchmark-pages.yml publishes for master is the baseline. Reading it costs one
-      # shallow checkout instead of benchmarking the merge base a second time. A fork without a
-      # gh-pages branch just fails this step; bench_delta.py then reports absolute numbers and says
-      # it had nothing to compare against.
       - name: Checkout the published benchmark series
         continue-on-error: true
         uses: actions/checkout@v7

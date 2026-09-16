@@ -36,8 +36,8 @@ namespace ExcelReader.Tests
         [Fact]
         public void Write_MiniAndBigStream_BothReadBackByteIdentical()
         {
-            byte[] small = Pattern(1300, 0x11);   // below the 4096 mini cutoff
-            byte[] big = Pattern(9000, 0x77);     // above it
+            byte[] small = Pattern(1300, 0x11);
+            byte[] big = Pattern(9000, 0x77);
 
             using var ms = new MemoryStream();
             OleCompoundWriter.Write(ms, [Spec("EncryptionInfo", small), Spec("EncryptedPackage", big)]);
@@ -104,8 +104,6 @@ namespace ExcelReader.Tests
             Assert.Equal(syncMs.ToArray(), asyncMs.ToArray());
         }
 
-        // A stream past 109 FAT sectors (109 * 128 * 512 ≈ 7.1 MB) is the only way to reach the DIFAT
-        // branch, so the size here is load-bearing, not arbitrary.
         [Fact]
         public void Write_StreamLargeEnoughToNeedDifat_ReadsBackByteIdentical()
         {

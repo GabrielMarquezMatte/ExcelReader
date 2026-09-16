@@ -3,12 +3,6 @@ namespace ExcelReader.Core.Reader
     /// <summary>Options controlling how <see cref="CsvSniffer.Detect(ReadOnlySpan{byte}, CsvSnifferOptions)"/> infers a <see cref="CsvDialect"/>.</summary>
     public sealed record CsvSnifferOptions
     {
-        // Defensive copy on every get: an array is mutable regardless of how the reference reached the
-        // caller, and CsvSnifferOptions.Default is one process-lifetime singleton — a caller mutating
-        // Default.CandidateDelimiters[0] in place (easy to do by accident, e.g. `options.CandidateDelimiters[0] = ...`
-        // reading through Default) would corrupt every future default-options detection in the process.
-        // The init accessor still stores the caller's array by reference, same cost as before for a
-        // caller who builds their own instance and never touches Default.
         private readonly byte[] _candidateDelimiters = [(byte)',', (byte)';', (byte)'\t', (byte)'|'];
         private readonly byte[] _candidateQuotes = [(byte)'"', (byte)'\''];
 

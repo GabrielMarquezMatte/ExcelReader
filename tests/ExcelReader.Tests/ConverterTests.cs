@@ -5,13 +5,10 @@ using ExcelReader.Core.ValueObjects;
 
 namespace ExcelReader.Tests
 {
-    // Covers custom [ExcelConverter] support: domain value objects, culture-aware parsing,
-    // failure-keeps-default, nullable targets, the isDate1904 plumbing, and type validation.
     public class ConverterTests
     {
         public readonly record struct Percent(double Fraction);
 
-        // Parses Brazilian money like "R$ 1.234,56" → 1234.56m.
         private sealed class BrlMoneyConverter : IExcelCellConverter<decimal>
         {
             public bool TryConvert(in Cell cell, bool isDate1904, IFormatProvider provider, out decimal value)
@@ -21,7 +18,6 @@ namespace ExcelReader.Tests
             }
         }
 
-        // "12.5%" or a raw number → Percent. Uses the configured culture for the numeric part.
         private sealed class PercentConverter : IExcelCellConverter<Percent>
         {
             public bool TryConvert(in Cell cell, bool isDate1904, IFormatProvider provider, out Percent value)
@@ -52,7 +48,6 @@ namespace ExcelReader.Tests
             }
         }
 
-        // Reads the year off a serial-date cell, honoring the workbook's 1904 epoch flag.
         private sealed class YearConverter : IExcelCellConverter<int>
         {
             public bool TryConvert(in Cell cell, bool isDate1904, IFormatProvider provider, out int value)
@@ -90,7 +85,6 @@ namespace ExcelReader.Tests
             public int Year { get; set; }
         }
 
-        // Converter target type does not match the property type → must throw when the map builds.
         private sealed class MismatchedConverter : IExcelCellConverter<int>
         {
             public bool TryConvert(in Cell cell, bool isDate1904, IFormatProvider provider, out int value)
@@ -147,14 +141,13 @@ namespace ExcelReader.Tests
 
             Assert.Equal(3, rows.Count);
             Assert.Equal(0.33, rows[0].Tax!.Value.Fraction, precision: 10);
-            Assert.Null(rows[1].Tax); // unparseable → default
-            Assert.Null(rows[2].Tax); // empty cell → skipped, default
+            Assert.Null(rows[1].Tax);
+            Assert.Null(rows[2].Tax);
         }
 
         [Fact]
         public void ConverterReceivesDate1904Flag()
         {
-            // 1904 workbook: serial 0 = 1904-01-01. The converter must apply the epoch shift.
             const string styles =
                 """<styleSheet><cellXfs count="2"><xf numFmtId="0"/><xf numFmtId="14"/></cellXfs></styleSheet>""";
             using var ms = WorkbookBuilder.Build(

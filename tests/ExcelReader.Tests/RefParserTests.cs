@@ -17,11 +17,6 @@ namespace ExcelReader.Tests
             public DateTime Date { get; set; }
         }
 
-        // ParseNamed target: reflection/attribute-driven, matched by header name (not column index).
-        // Deliberately declares Value before Id (order-independent — proves this isn't positional) and
-        // uses [ExcelRequired] to prove the existing ExcelParser<T> attribute pipeline threads through.
-        // A genuine `ref struct` — proves ParseNamed's reflection pipeline works for ref structs too,
-        // not just normal structs (which ExcelParser<T> already supports).
         private readonly ref struct SaleNamedRef
         {
             public string? Name { get; init; }
@@ -31,8 +26,6 @@ namespace ExcelReader.Tests
             public DateTime Date { get; init; }
         }
 
-        // Proves ColumnParserFactory.BuildSpanParser: a ReadOnlySpan<byte> property binds directly to
-        // Cell.Value (zero-copy) instead of falling back to string/GetString().
         private readonly ref struct SaleSpanRef
         {
             public ReadOnlySpan<byte> Name { get; init; }
@@ -48,10 +41,6 @@ namespace ExcelReader.Tests
             }
         }
 
-        // Exercises the three attributes not covered by SaleNamedRef/SaleSpanRef: [ExcelColumn] (header
-        // alias), [ExcelIgnore] (never bound, even if a matching header exists), and [ExcelConverter]
-        // (custom IExcelCellConverter<TProp> — TProp is the PROPERTY type, unrelated to the model being
-        // a ref struct, so this reuses BuildConverterCore<T,TProp,TConv> unchanged for T=ref struct).
         private readonly ref struct AttributeRef
         {
             [ExcelColumn("First Name")]
@@ -77,9 +66,9 @@ namespace ExcelReader.Tests
             var enumerator = RefParser.ParseNamed<AttributeRef>(reader).GetEnumerator();
             Assert.True(enumerator.MoveNext());
             AttributeRef a = enumerator.Current;
-            Assert.Equal("Alice", a.FirstName);   // [ExcelColumn] alias — header is "First Name", not "FirstName"
-            Assert.Equal(0, a.Ignored);            // [ExcelIgnore] — never bound despite a matching "Ignored" header
-            Assert.Equal("HELLO", a.Shout);        // [ExcelConverter] — UpperCaseConverter ran
+            Assert.Equal("Alice", a.FirstName);
+            Assert.Equal(0, a.Ignored);
+            Assert.Equal("HELLO", a.Shout);
         }
 
         [Fact]
@@ -130,8 +119,6 @@ namespace ExcelReader.Tests
         [Fact]
         public async Task ParseNamed_IsHeaderOrderIndependent()
         {
-            // Columns shuffled relative to SaleNamedRef's declaration order — proves binding is by
-            // header NAME, not by column position.
             await using var ms = await TypedWorkbook.BuildAsync(
                 ["Date", "Value", "Name", "Id"],
                 [SampleDate, 10.5, "Alice", 1]);
@@ -149,8 +136,6 @@ namespace ExcelReader.Tests
         [Fact]
         public async Task ParseNamed_MissingRequiredColumn_Throws()
         {
-            // No "Id" column — SaleNamedRef.Id is [ExcelRequired], matching ExcelParser<T>'s existing
-            // TypeMapper<T>.ValidateRequiredColumns behavior (reused unchanged for the ref-struct path).
             await using var ms = await TypedWorkbook.BuildAsync(
                 ["Name", "Value", "Date"],
                 ["Alice", 10.5, SampleDate]);
@@ -167,9 +152,6 @@ namespace ExcelReader.Tests
         [Fact]
         public async Task ParseNamed_EmptyCell_YieldsDefaultForThatColumn()
         {
-            // Value is NOT [ExcelRequired] — an empty cell there should yield 0.0, not throw (unlike
-            // Id, which is required and would throw on an empty cell — see ParseNamed_MissingRequiredColumn_Throws
-            // for the presence check and ExcelRequiredAttribute's own doc for the non-empty check).
             await using var ms = await TypedWorkbook.BuildAsync(
                 ["Name", "Id", "Value", "Date"],
                 ["Alice", 1, new Gap(), SampleDate]);
@@ -183,15 +165,13 @@ namespace ExcelReader.Tests
         [Fact]
         public async Task ParseNamed_RequiredColumnWithUnparseableValueThrowsAsIfMissing()
         {
-            // Id is [ExcelRequired] and present ("oops"), but unparseable as int — F3 applies to the
-            // ref-struct/NamedRef path too (shares SparseRowProjection with RowProjector<T> — F9).
             await using var ms = await TypedWorkbook.BuildAsync(
                 ["Name", "Id", "Value", "Date"],
                 ["Alice", "oops", 10.5, SampleDate]);
 
             using var reader = Excel.From(ms, leaveOpen: true);
             var enumerator = RefParser.ParseNamed<SaleNamedRef>(reader).GetEnumerator();
-            Assert.True(enumerator.MoveNext()); // header maps fine — Id IS present, just unparseable
+            Assert.True(enumerator.MoveNext());
             Assert.Throws<ExcelParseException>(() => { _ = enumerator.Current; });
         }
 
@@ -232,9 +212,6 @@ namespace ExcelReader.Tests
             Assert.True(e1904.MoveNext());
             DateTime date1904Result = e1904.Current.Date;
 
-            // ExcelRowContext.IsDate1904 must genuinely thread from the reader into NamedRefRowEnumerator
-            // — the same serial parses 1462 days apart (the 1904-system epoch offset) between the two
-            // runs. 1904-system dates are later for the same raw serial (epoch starts at OADate 1462).
             Assert.Equal(1462, (date1904Result - date1900).Days);
         }
 

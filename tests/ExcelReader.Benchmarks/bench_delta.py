@@ -23,7 +23,6 @@ def load_baseline(path: str | None) -> tuple[str | None, dict[str, float]]:
         return None, {}
     with open(path, encoding="utf-8") as handle:
         raw = handle.read()
-    # data.js is `window.BENCHMARK_DATA = { ... }`, not bare JSON.
     data = json.loads(raw[raw.index("{"):])
     runs = data.get("entries", {}).get("Benchmark", [])
     if not runs:

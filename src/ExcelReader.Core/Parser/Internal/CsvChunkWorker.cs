@@ -4,17 +4,12 @@ using Microsoft.Win32.SafeHandles;
 
 namespace ExcelReader.Core.Parser.Internal
 {
-    // One shape for both partitionable sources: a file read positionally off a shared handle, or an
-    // in-memory slice. Both extend to the end of the source rather than the chunk end, since a chunk
-    // must overshoot to finish the record straddling its boundary.
     internal readonly struct CsvChunkSource
     {
         private readonly SafeFileHandle? _handle;
         private readonly ReadOnlyMemory<byte> _memory;
         private readonly long _startOffset;
 
-        // Lets a FileStream positioned mid-file be honored; every other offset in the pipeline stays
-        // relative to the source's first byte.
         internal CsvChunkSource(SafeFileHandle handle, long fileLength, long startOffset = 0)
         {
             _handle = handle;
@@ -45,9 +40,6 @@ namespace ExcelReader.Core.Parser.Internal
             return _memory[(int)offset..];
         }
 
-        // A fresh, repeatable sequential reader over this whole source, for the header bind and the
-        // sequential fallback — derived from the source rather than a caller-supplied Stream, which a
-        // second read would resume mid-way through instead of restarting.
         internal CsvReader OpenReader(CsvReaderOptions options)
         {
             if (IsMemory)
@@ -57,8 +49,6 @@ namespace ExcelReader.Core.Parser.Internal
             return Excel.FromCsv(OpenAt(0), leaveOpen: false, options);
         }
 
-        // Fills a caller-owned buffer (GuessStart rents from ArrayPool) with up to buffer.Length bytes
-        // from `offset`. Returns the number of bytes actually available.
         internal int ReadWindow(long offset, Span<byte> buffer)
         {
             long available = Length - offset;
@@ -75,7 +65,6 @@ namespace ExcelReader.Core.Parser.Internal
             return RandomAccess.Read(_handle!, buffer[..want], _startOffset + offset);
         }
 
-        // Boundary scanning in place, no copy. Only valid for IsMemory sources.
         internal ReadOnlySpan<byte> WindowSpan(long offset, int length)
         {
             long available = Length - offset;
@@ -84,7 +73,6 @@ namespace ExcelReader.Core.Parser.Internal
         }
     }
 
-    // What one chunk contributes to the merged output, plus the two offsets the merge reconciles.
     internal sealed class CsvChunkResult<T>
     {
         internal CsvChunkResult(int index, List<T> models, long actualStart, long resolvedNextStart)
@@ -99,16 +87,10 @@ namespace ExcelReader.Core.Parser.Internal
 
         internal List<T> Models { get; }
 
-        // Where this chunk actually began parsing — a guess for every chunk but the first, checked
-        // against the predecessor's ResolvedNextStart during the merge.
         internal long ActualStart { get; }
 
-        // Offset of the first record at or after the chunk's nominal end, validated against the next
-        // chunk's ActualStart. long.MaxValue when this chunk ran to the end of the source.
         internal long ResolvedNextStart { get; }
 
-        // Carried, not thrown: only the merge knows this chunk's global row offset. FailureRowInChunk
-        // is zero-based within Models.
         internal ExcelParseException? Failure { get; set; }
 
         internal int FailureRowInChunk { get; set; }
@@ -116,15 +98,9 @@ namespace ExcelReader.Core.Parser.Internal
 
     internal static class CsvChunkWorker
     {
-        // Boundary-scan window sizing: 4 KB holds any realistic CSV record several times over and
-        // stays below the Large Object Heap threshold; growth is geometric for pathologically long
-        // records.
         private const int InitialBoundaryWindow = 4 * 1024;
         private const int BoundaryWindowGrowth = 8;
 
-        // Parses one chunk. `confirmedStart` is the offset the predecessor proved correct; null means
-        // the worker guesses under the Outside hypothesis — right whenever no quoted field straddles
-        // the chunk start, overwhelmingly the common case.
         internal static ValueTask<CsvChunkResult<T>> ParseAsync<T>(
             CsvChunkSource source,
             CsvChunk chunk,
@@ -142,7 +118,6 @@ namespace ExcelReader.Core.Parser.Internal
                 return new ValueTask<CsvChunkResult<T>>(new CsvChunkResult<T>(chunk.Index, models, start, long.MaxValue));
             }
 
-            // A mid-file chunk must not strip a BOM: those three bytes are ordinary data there.
             CsvReaderOptions chunkOptions = readerOptions with { DetectEncodingFromByteOrderMark = start == 0 };
             return ParseFromAsync(source, chunk, start, models, map, info, chunkOptions, config, ct);
         }
@@ -161,10 +136,6 @@ namespace ExcelReader.Core.Parser.Internal
             var projector = new CsvRowProjector<T>(info, map, config.Culture, config.ThrowOnParseFailure);
             (long resolvedNextStart, ExcelParseException? failure, int failureRow) outcome;
 
-            // The enumerator's stream constructor passes ownsSource: false — the worker owns
-            // `partitionStream` itself, disposed explicitly below. File/memory branches stay separate
-            // (rather than one nullable variable) so each resource's creation, `await using`, and
-            // disposal stays verifiable within one lexical scope.
             if (source.IsMemory)
             {
                 var rows = new CsvReader.Enumerator(source.SliceAt(start), options, ct);
@@ -198,7 +169,6 @@ namespace ExcelReader.Core.Parser.Internal
             };
         }
 
-        // Drains an already-open enumerator into `models`; disposal is the caller's job.
         private static async ValueTask<(long resolvedNextStart, ExcelParseException? failure, int failureRow)> ConsumeAsync<T>(
             CsvReader.Enumerator rows,
             long start,
@@ -236,11 +206,6 @@ namespace ExcelReader.Core.Parser.Internal
             return (resolvedNextStart, failure, failureRow);
         }
 
-        // Chunk 0 knows its start exactly (CsvHeaderBinder reported it). Every other chunk scans from
-        // its nominal start under the Outside hypothesis, bounded by the chunk's own length: a chunk
-        // with no boundary inside it holds no record start — its bytes belong to a record an earlier
-        // chunk overshoots into. The window starts small and only grows against pathological data,
-        // rather than reading the whole chunk up front.
         private static long GuessStart(CsvChunkSource source, CsvChunk chunk, byte quote)
         {
             long chunkLength = chunk.End - chunk.Start;
@@ -261,7 +226,6 @@ namespace ExcelReader.Core.Parser.Internal
             int windowLength = (int)Math.Min(remaining, InitialBoundaryWindow);
             while (true)
             {
-                // +1 so a \r at the window's last byte is resolved against real data.
                 int rentSize = windowLength == remaining ? windowLength + 1 : windowLength;
                 byte[] buffer = ArrayPool<byte>.Shared.Rent(rentSize);
                 try
@@ -277,9 +241,6 @@ namespace ExcelReader.Core.Parser.Internal
                     {
                         return chunk.Start + found;
                     }
-                    // No boundary found. Widen and rescan from the start (a left-to-right parity
-                    // scan gives the same answer either way) unless the window already covers the
-                    // whole chunk, meaning it genuinely holds no record start.
                     if (read >= remaining || windowLength >= remaining)
                     {
                         return long.MaxValue;

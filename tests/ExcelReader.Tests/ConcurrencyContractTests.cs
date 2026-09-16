@@ -3,10 +3,6 @@ using ExcelReader.Core.Writer;
 
 namespace ExcelReader.Tests
 {
-    // Covers the thread-safety contract documented on IExcelRowReader/IWorkbookWriter: instances are
-    // not thread-safe, but independent instances used one-per-thread must not interfere with each
-    // other. These tests would catch a regression where a reader/writer accidentally leaned on shared
-    // mutable state (a static cache, a shared buffer pool misuse, etc.) instead of per-instance state.
     public class ConcurrencyContractTests
     {
         [Fact]

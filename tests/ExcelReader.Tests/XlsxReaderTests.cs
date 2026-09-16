@@ -4,9 +4,6 @@ using ExcelReader.Core.Reader;
 
 namespace ExcelReader.Tests
 {
-    // Focused reader suite for XlsxReader itself — the flagship format's coverage was previously
-    // scattered across dialect/corpus/interop test files with no single place asserting the reader's
-    // own structural behaviors.
     public class XlsxReaderTests
     {
         [Fact]
@@ -63,7 +60,6 @@ namespace ExcelReader.Tests
                 Assert.False(first.MoveNext());
             }
 
-            // A fresh GetEnumerator() call re-opens the worksheet entry from the start.
             using XlsxReader.Enumerator second = reader.GetEnumerator();
             Assert.True(second.MoveNext());
             Assert.Equal("1", second.Current[0].GetString());
@@ -118,8 +114,6 @@ namespace ExcelReader.Tests
             {
                 sharedStrings.Append(CultureInfo.InvariantCulture, $"<si><t>value{i}</t></si>");
             }
-            // Every row references the same repeated index (exercises the shared-string dedup cache)
-            // plus a unique index per row (exercises the offset table across a large uniqueCount).
             for (int i = 0; i < 200; i++)
             {
                 rows.Append(CultureInfo.InvariantCulture,
@@ -137,9 +131,6 @@ namespace ExcelReader.Tests
                 Assert.Equal($"value{i}", e.Current[0].GetString());
                 string repeat = e.Current[1].GetString();
                 Assert.Equal("value0", repeat);
-                // Every row's second cell resolves the same shared-string index (0) — the reader's
-                // dedup cache should hand back the same instance every time rather than decoding UTF-8
-                // afresh per row.
                 firstRepeat ??= repeat;
                 Assert.Same(firstRepeat, repeat);
             }
@@ -193,10 +184,6 @@ namespace ExcelReader.Tests
             Assert.True(reader.IsDate1904);
         }
 
-        // The scan-time FastDouble fast path caches a parsed double alongside the cell's original text
-        // so TryGetDouble/TryParse<double> can skip re-parsing, but GetString() must still return the
-        // file's own text byte-for-byte — a naive "prefer the cached number" implementation would
-        // reformat "1.50" down to "1.5", silently dropping the trailing zero the workbook actually had.
         [Fact]
         public void GetStringPreservesOriginalNumericTextRatherThanReformattingCachedDouble()
         {
@@ -211,16 +198,9 @@ namespace ExcelReader.Tests
             Assert.Equal("1.50", e.Current[0].GetString());
         }
 
-        // Regression: found by the XLSX fuzz target. ParseStyleDateFlags located "<cellXfs", then
-        // anchored the search for "</cellXfs>" on the result of searching for '>' — without first
-        // checking that '>' was found. A styles part truncated mid-open-tag left that at -1, which
-        // sliced out of range and threw ArgumentOutOfRangeException out of the XlsxReader constructor
-        // instead of the reader simply reporting no date styles.
         [Theory]
-        // Truncated mid-open-tag: no '>' anywhere after "<cellXfs".
         [InlineData("<styleSheet><cellXfs")]
         [InlineData("<styleSheet><cellXfs count=\"1\"")]
-        // Open tag closes, but the element never does.
         [InlineData("<styleSheet><cellXfs count=\"1\"><xf numFmtId=\"14\"/>")]
         public void TruncatedCellXfsIsNotFatal(string styles)
         {
@@ -228,8 +208,6 @@ namespace ExcelReader.Tests
                 """<row r="1"><c r="A1"><v>1</v></c></row>""",
                 styles: styles);
 
-            // The workbook must still open and read; the styles part simply yields no date flags,
-            // so the cell reads as a plain number.
             using XlsxReader reader = Excel.From(ms);
             using XlsxReader.Enumerator e = reader.GetEnumerator();
             Assert.True(e.MoveNext());

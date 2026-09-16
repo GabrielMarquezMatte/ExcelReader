@@ -6,9 +6,6 @@ namespace ExcelReader.Core.Writer.Internal
 {
     internal sealed class SharedStringTable
     {
-        // Starting from 0 means ~14 rehashes by 50k unique strings, each doubling past ~5,300
-        // entries landing on the LOH. A modest starting capacity avoids most of that for typical
-        // workbooks while staying cheap for small ones.
         private const int DefaultCapacity = 1024;
 
         private readonly Dictionary<string, int> _indexes = new(DefaultCapacity, StringComparer.Ordinal);
@@ -30,8 +27,6 @@ namespace ExcelReader.Core.Writer.Internal
             return index;
         }
 
-        // Returns the fully-assembled sharedStrings.xml as UTF-8 bytes — no decode-to-string round trip,
-        // matching ToXlsbBytes's shape so the caller can write the ZIP entry directly.
         internal BiffBuffer ToXlsxBytes()
         {
             BiffBuffer xml = new(Math.Max(256, _values.Count * 32));

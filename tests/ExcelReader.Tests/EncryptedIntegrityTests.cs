@@ -18,8 +18,6 @@ namespace ExcelReader.Tests
             return n;
         }
 
-        // The memory overload documents that it never suspends, which forces eager decryption -
-        // so verification there is nearly free and always on.
         [Fact]
         public void Should_Read_When_Opened_From_Memory_With_Password()
         {
@@ -36,8 +34,6 @@ namespace ExcelReader.Tests
             Assert.Equal(ExcelEncryptionReason.PasswordRequired, ex.Reason);
         }
 
-        // Tampering must be reported as tampering, not as a wrong password - otherwise a user with
-        // a corrupt file retries passwords forever.
         [Fact]
         public void Should_Report_IntegrityFailure_When_Ciphertext_Tampered_On_Memory_Path()
         {
@@ -49,7 +45,6 @@ namespace ExcelReader.Tests
             Assert.Equal(ExcelEncryptionReason.IntegrityFailure, ex.Reason);
         }
 
-        // Default off on the streaming path: verifying would need a full pass before the first row.
         [Fact]
         public void Should_Not_Verify_By_Default_On_Streaming_Path()
         {
@@ -87,11 +82,6 @@ namespace ExcelReader.Tests
             }
         }
 
-        // Not every agile file has a dataIntegrity element (older writers can omit it); opting in
-        // must be a no-op then too, not a spurious failure. Simulated by stripping the element from
-        // a real descriptor rather than a standard-encryption fixture, since none exists in this
-        // pass (see "Execution Scope Note") — the wiring rule ("only AgileDescriptor, only when
-        // dataIntegrity is present") is the same thing a standard-encryption fixture would exercise.
         [Fact]
         public void Should_Open_When_Opted_In_But_Descriptor_Has_No_DataIntegrity()
         {
@@ -99,8 +89,6 @@ namespace ExcelReader.Tests
             string containerText = System.Text.Encoding.Latin1.GetString(bytes);
             int start = containerText.IndexOf("<dataIntegrity", StringComparison.Ordinal);
             int end = containerText.IndexOf("/>", start, StringComparison.Ordinal) + 2;
-            // Overwrite the element with spaces rather than removing it: keeps every offset in the
-            // OLE container - and every other field in EncryptionInfo - unchanged.
             Array.Fill(bytes, (byte)' ', start, end - start);
             string temp = Path.Combine(Path.GetTempPath(), $"no-integrity-{Guid.NewGuid():N}.xlsx");
             File.WriteAllBytes(temp, bytes);
@@ -116,9 +104,6 @@ namespace ExcelReader.Tests
             }
         }
 
-        // Flips a byte deep inside the EncryptedPackage ciphertext. The stream is stored in whole
-        // 512-byte CFB sectors, and the fixture is multi-segment, so an offset 3/4 of the way into
-        // the file lands in ciphertext rather than in container metadata.
         private static int FindCiphertextOffset(byte[] container)
         {
             return container.Length * 3 / 4;

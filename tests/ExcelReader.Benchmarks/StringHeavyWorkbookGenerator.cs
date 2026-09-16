@@ -4,13 +4,6 @@ using ExcelReader.Core.Writer;
 
 namespace ExcelReader.Benchmarks
 {
-    // Builds a string-heavy counterpart to WorkbookGenerator's mostly-numeric corpus: 8 text
-    // columns (short codes through long free-text) against 3 numeric/date columns, with tens of
-    // thousands of distinct strings so sharedStrings.xml grows into the multi-megabyte range that
-    // real business exports hit and the 65K_Records_Data.* corpus (5 KB of shared strings) does not.
-    // Names/companies/descriptions are synthetic pronounceable words built from a syllable table
-    // rather than a large literal dictionary, so cardinality is controlled purely by pool-size
-    // constants instead of by how many words happen to be typed into this file.
     internal static class StringHeavyWorkbookGenerator
     {
         private const int CodePoolSize = 15_000;
@@ -64,8 +57,6 @@ namespace ExcelReader.Benchmarks
                 rows, static ms => XlsbWorkbookWriter.CreateAsync(ms, leaveOpen: true, useSharedStrings: true));
         }
 
-        // XLS (BIFF8) always dedupes strings through its own SST; there is no inline-string mode to
-        // opt out of, and XlsWorkbookWriter's API is synchronous rather than async like the ZIP writers.
         public static async Task<byte[]> BuildXlsAsync(int rows)
         {
             await using MemoryStream ms = new();
@@ -89,8 +80,6 @@ namespace ExcelReader.Benchmarks
             return ms.ToArray();
         }
 
-        // Mirrors CsvGenerator's shape: same 11 columns, comma-joined, no quoting since none of the
-        // generated text contains commas or quotes.
         public static byte[] BuildCsv(int rows)
         {
             var sb = new StringBuilder(rows * 160);
@@ -179,12 +168,9 @@ namespace ExcelReader.Benchmarks
 
         private static DateTime RowDate(int r)
         {
-            return DateTime.FromOADate(45292 + (r % 3650) + 0.5); // dates spread over ~10 years
+            return DateTime.FromOADate(45292 + (r % 3650) + 0.5);
         }
 
-        // Multiplicative hash bringing row index `r` down into [0, modulus): rows outnumber every
-        // pool below, so this is what turns a monotonic row index into repeated, shuffled pool hits
-        // instead of every row producing a first-seen (and therefore unbounded-cardinality) value.
         private static int Spread(int r, int modulus)
         {
             unchecked
@@ -203,9 +189,6 @@ namespace ExcelReader.Benchmarks
             }
         }
 
-        // Builds a pronounceable, capitalized word from `syllables` consonant+vowel pairs, driven
-        // entirely by `seed` — same seed always yields the same word, which is what lets the pool
-        // constants above bound cardinality instead of it depending on row count.
         private static string BuildWord(uint seed, int syllables)
         {
             uint state = seed;
@@ -232,8 +215,6 @@ namespace ExcelReader.Benchmarks
 
         private static string City(int r)
         {
-            // No comma in the separator: BuildCsv joins fields with commas and does not quote, so
-            // an embedded comma here would misalign every column after it.
             int idx = Spread(r, CityPoolSize);
             string name = BuildWord((uint)idx * 2654435761u, 3);
             string state = States[Spread(idx, States.Length)];
@@ -259,8 +240,6 @@ namespace ExcelReader.Benchmarks
 
         private static string Email(string first, string last, int r)
         {
-            // BuildWord only capitalizes index 0, so lowercasing just that char sidesteps
-            // CA1308 (which flags ToLowerInvariant on whole strings, not single chars).
             string domain = Domains[Spread((r * 7) + 3, Domains.Length)];
             char firstLower = char.ToLowerInvariant(first[0]);
             char lastLower = char.ToLowerInvariant(last[0]);
@@ -269,8 +248,6 @@ namespace ExcelReader.Benchmarks
 
         private static string Address(int r)
         {
-            // Driven directly by `r` (not bounded through Spread) so, unlike the pool-bounded
-            // columns above, addresses land close to one distinct value per row.
             int number = 1 + (r % 9999);
             string street = BuildWord((uint)r * 2654435761u, 2);
             string type = StreetTypes[r % StreetTypes.Length];

@@ -4,8 +4,6 @@ on:
   pull_request:
     branches: [master, develop]
   schedule:
-    # Nightly. Coverage-guided fuzzing is only useful with sustained runtime, so this is where the
-    # real budget goes; the `check` job below is what gates pull requests.
     - cron: '0 3 * * *'
   workflow_dispatch:
     inputs:
@@ -24,7 +22,6 @@ permissions:
 jobs:
   libfuzzer:
     name: libFuzzer (${{ matrix.target }})
-    # Too slow to gate a pull request; PRs get the `check` job instead.
     if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     strategy:
@@ -54,14 +51,6 @@ jobs:
           dotnet publish tests/ExcelReader.Fuzz/ExcelReader.Fuzz.csproj -c Release -o fuzz-out
           chmod +x fuzz-out/ExcelReader.Fuzz
 
-      # MUST run before instrumentation. Seed generation drives the writers through the ordinary
-      # runtime, and an instrumented assembly writes coverage into a shared-memory region that only
-      # exists when libfuzzer-dotnet is the one launching the process — running it standalone kills
-      # the process with an AccessViolationException. Do not reorder these two steps.
-      # `seeds` writes one directory per target (corpus/xlsx, corpus/csv, ...). Only this target's
-      # directory is handed to libFuzzer below: it schedules and mutates every file it is given, so
-      # a .csv sitting in the xlsx corpus burns execution budget on inputs that die in the first
-      # format check. The extra real-world and regression inputs are filed the same way.
       - name: Generate seed corpus
         run: |
           dotnet fuzz-out/ExcelReader.Fuzz.dll seeds corpus
@@ -80,25 +69,9 @@ jobs:
           cp tests/ExcelReader.Fuzz/corpus/encrypted-*.bin corpus/encrypted/ 2>/dev/null || true
           ls -la "corpus/${{ matrix.target }}"
 
-      # SharpFuzz rewrites the assembly under test to emit coverage. Only ExcelReader.Core is
-      # instrumented: the harness itself is not the code under test, and instrumenting it would
-      # dilute the coverage signal the engine steers by. Everything after this step must run under
-      # libfuzzer-dotnet.
       - name: Instrument ExcelReader.Core
         run: sharpfuzz fuzz-out/ExcelReader.Core.dll
 
-      # Two things this invocation gets right, both of which fail confusingly otherwise:
-      #  * target_path is the published apphost, not `dotnet`. libfuzzer-dotnet passes --target_args
-      #    through as a SINGLE argv entry rather than splitting on spaces, so
-      #    `--target_path=dotnet --target_args="Foo.dll csv"` hands `dotnet` one bogus path; it
-      #    prints usage and exits, surfacing as "short read: expected 4 bytes, got 0 bytes".
-      #  * the target is selected via FUZZ_TARGET, not --target_args. SharpFuzz's
-      #    Fuzzer.LibFuzzer.Run parses argv itself and treats a lone argument as a single input file
-      #    to replay, so our own argument would be swallowed as a corpus path.
-      # -dict gives libFuzzer the tokens its byte-level mutators cannot invent: `<sheetData>`, a BIFF
-      # record id, a ZIP signature. Without one the engine spends the run failing at the container
-      # layer. Unlike our own smoke mutator, libFuzzer keeps the inputs a token unlocks and mutates
-      # them further, so the tokens compound over the run.
       - name: Fuzz
         env:
           FUZZ_TARGET: ${{ matrix.target }}
@@ -147,8 +120,6 @@ jobs:
       - name: Build
         run: dotnet build tests/ExcelReader.Fuzz/ExcelReader.Fuzz.csproj -c Release
 
-      # Unlike the libFuzzer jobs above, SmokeRunner walks the whole tree and drives EVERY target
-      # over EVERY file on purpose - its cross-format splice mutation is what that buys.
       - name: Generate corpus
         run: |
           mkdir -p corpus/real
@@ -157,7 +128,5 @@ jobs:
           cp tests/ExcelReader.Tests/data/*.xlsx corpus/real/ 2>/dev/null || true
           cp tests/ExcelReader.Fuzz/corpus/* corpus/real/ 2>/dev/null || true
 
-      # No engine, no native tooling: runs every target over the corpus plus deterministic mutations,
-      # and self-checks the oracle first so a green run cannot mean "the oracle accepts everything".
       - name: Run every target over mutated corpus
         run: dotnet run --project tests/ExcelReader.Fuzz -c Release --no-build -- check corpus 200 1

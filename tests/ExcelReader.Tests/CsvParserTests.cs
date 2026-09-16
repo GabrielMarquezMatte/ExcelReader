@@ -113,8 +113,6 @@ namespace ExcelReader.Tests
         [Fact]
         public void HigherPriorityAliasReplacesEarlierLowerPriorityBinding()
         {
-            // "Legacy Name" (alias index 1) binds first since it's the earlier column; "Preferred
-            // Name" (alias index 0) then takes over the property, unbinding the earlier column.
             using var ms = Csv("Legacy Name,Preferred Name\nOld,New\n");
             using var reader = Excel.FromCsv(ms);
 
@@ -152,9 +150,6 @@ namespace ExcelReader.Tests
         [Fact]
         public void EnumFromNumericTextBindsByValueInCsv()
         {
-            // Every CSV cell is text, so an enum written as its underlying number ("2") arrives as
-            // text. The enum name map registers each member's numeric string form alongside its name,
-            // so numeric-text enum columns resolve in CSV too.
             var id = Guid.NewGuid();
             using var ms = Csv($"Status,Id,Quantity\n2,{id},7\n");
             using var reader = Excel.FromCsv(ms);
@@ -208,8 +203,6 @@ namespace ExcelReader.Tests
         [Fact]
         public void RequiredCellWithUnparseableValueThrowsAsIfMissing()
         {
-            // "Id" is present and non-empty but "abc" isn't a valid int — F3: treated the same as a
-            // blank required cell instead of silently leaving the model's Id at 0.
             using var ms = Csv("Id,Note\nabc,hi\n");
             using var reader = Excel.FromCsv(ms);
 
@@ -246,8 +239,6 @@ namespace ExcelReader.Tests
         [Fact]
         public void PlainDateTimeAndDateOnlyColumnsParseTextNatively()
         {
-            // The CSV parser parses DateTime/DateOnly from the cell text (no [ExcelConverter] needed) —
-            // unlike the Excel readers, where those types interpret an Excel serial number.
             using var ms = Csv("Created,Day\n2026-07-02T08:30:00,2026-07-02\n");
             using var reader = Excel.FromCsv(ms);
 
@@ -272,7 +263,6 @@ namespace ExcelReader.Tests
         [Fact]
         public void DateColumnRespectsCulture()
         {
-            // pt-BR day-first format: "02/07/2026" is 2 July, not 7 February.
             using var ms = Csv("Created,Day\n02/07/2026,02/07/2026\n");
             using var reader = Excel.FromCsv(ms);
             var config = new ExcelParserConfig { Culture = CultureInfo.GetCultureInfo("pt-BR") };

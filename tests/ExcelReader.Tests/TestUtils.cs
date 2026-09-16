@@ -10,13 +10,6 @@ using ExcelReader.Core.Writer;
 
 namespace ExcelReader.Tests
 {
-    // Shared seeded-mutation fuzz harness used by FuzzTests, MemoryZipParityTests, and
-    // ZipMemoryIndexTests. Previously each file had its own copy of MutateCopy and its own
-    // AcceptableExceptionTypes list, and the lists had already drifted apart from each other:
-    // Span-bounds violation surfacing as ArgumentOutOfRangeException, or an unchecked-arithmetic
-    // wrap surfacing as OverflowException, is the same "parser forgot a check" bug class as
-    // IndexOutOfRangeException — which none of the three lists ever accepted. Only exceptions
-    // that mean "this input was deliberately and correctly rejected" belong here.
     internal static class FuzzMutation
     {
         internal static readonly Type[] AcceptableExceptionTypes =
@@ -41,9 +34,6 @@ namespace ExcelReader.Tests
             return false;
         }
 
-        // Flips 1-8 random bytes to random values; a copy so the seed itself is never mutated.
-        // Deliberately not cryptographically secure — CA5394 doesn't apply: a seeded, reproducible
-        // PRNG is exactly what makes a fuzz failure pinpoint-able, unlike a CSPRNG would be.
         [SuppressMessage("Security", "CA5394:Do not use insecure randomness",
             Justification = "Fuzzing needs a reproducible seeded PRNG, not cryptographic randomness.")]
         internal static byte[] MutateCopy(byte[] seed, Random rng, out int[] positions)
@@ -60,14 +50,6 @@ namespace ExcelReader.Tests
             return copy;
         }
 
-        // An attacker-controlled count driving an allocation the configured limits never see
-        // doesn't necessarily throw at all — it can succeed while
-        // burning far more time/memory than a few-KB seed file could ever legitimately need. A round
-        // that completes "successfully" after allocating hundreds of MB, or after seconds of spinning,
-        // is not a graceful rejection; it's the amplification attack working. The caps here are set
-        // generously above anything these tiny seeds should ever legitimately need (they normally
-        // allocate low hundreds of KB and run in low single-digit milliseconds), so tripping this is a
-        // real finding, not noise.
         private const long MaxAllocatedBytesPerRound = 32L * 1024 * 1024;
         private static readonly TimeSpan MaxDurationPerRound = TimeSpan.FromSeconds(2);
 
@@ -93,8 +75,6 @@ namespace ExcelReader.Tests
         }
     }
 
-    // Wraps a byte array as a read-only, forward-only stream (CanSeek == false), for exercising the
-    // non-seekable-source code paths (buffered .xls loading, CSV single-pass enumeration, etc.).
     internal sealed class NonSeekableStream : Stream
     {
         private readonly MemoryStream _inner;
@@ -174,11 +154,6 @@ namespace ExcelReader.Tests
         }
     }
 
-    // Was duplicated identically in BufferedStreamCursorTests and MemoryZipParityTests
-    // (GetSpan-backed, no Memory override — exercises the GetSpan-based read path). A third,
-    // deliberately different copy in MemorySourceParityTests (Memory-backed, GetSpan throws — exercises
-    // the opposite path on purpose) is NOT folded in here; merging it would silently change which code
-    // path that test covers.
     internal sealed class NonArrayMemoryManager : MemoryManager<byte>
     {
         private readonly byte[] _data;
@@ -208,10 +183,6 @@ namespace ExcelReader.Tests
         }
     }
 
-    // Was duplicated identically in MemoryZipParityTests and PrefetchDecompressionTests. A
-    // third, deliberately different copy in SyncAsyncParityTests (adds StyleIndex, and stores
-    // ValueBase64 instead of Value) is NOT folded in here for the same reason as NonArrayMemoryManager
-    // above — it snapshots more state than these two need.
     internal readonly record struct CellSnapshot(
         int Row,
         int Column,
@@ -227,18 +198,10 @@ namespace ExcelReader.Tests
         }
     }
 
-    // Marks a skipped (empty) column gap inside a TypedWorkbook row.
-    // A record class (not struct) so `new Gap()` honors the Count = 1 default.
     internal sealed record Gap(int Count = 1);
 
-    // Builds workbooks via the real XlsxWorkbookWriter from typed cell values.
-    // Use for reader/parser fixtures expressible as inline strings, numbers,
-    // dates (builtin numFmt 14), and bools. For shared strings, custom number
-    // formats, the 1904 date system, or error/formula cells, use WorkbookBuilder
-    // (raw XML) instead — XlsxWorkbookWriter cannot emit those.
     internal static class TypedWorkbook
     {
-        // Single sheet "S1"; each row is an array of cell values.
         internal static Task<MemoryStream> BuildAsync(params object?[][] rows)
         {
             return BuildMultiSheetAsync(("S1", rows));
@@ -340,10 +303,6 @@ namespace ExcelReader.Tests
             return ms;
         }
 
-        // Builds a workbook whose every SpreadsheetML element carries a namespace prefix (e.g. <x:row>),
-        // as some non-Excel producers emit. The caller supplies already-prefixed row/shared/style content
-        // this prefixes the structural elements (workbook/sheets/sheet/worksheet/sheetData/sst). The .rels
-        // part keeps the OPC package-relationships namespace (never the spreadsheet prefix), matching reality.
         internal static MemoryStream BuildPrefixed(
             string prefix,
             string sheetRows,
@@ -382,10 +341,6 @@ namespace ExcelReader.Tests
         }
     }
 
-    // An IUtf8SpanFormattable that formats as non-numeric text, so XlsbRowWriter.ToDouble's
-    // final fallback (double.TryParse on the formatted bytes) fails and must throw rather than
-    // silently return 0.0. Shared by XlsWriterTests and XlsbWriterTests since both formats route
-    // Write<T> through the same XlsbRowWriter.ToDouble.
     internal readonly struct NonNumericFormattable : IUtf8SpanFormattable
     {
         public bool TryFormat(Span<byte> utf8Destination, out int bytesWritten, ReadOnlySpan<char> format, IFormatProvider? provider)
@@ -394,9 +349,6 @@ namespace ExcelReader.Tests
         }
     }
 
-    // The other half of that fallback: double.TryParse *succeeds* on "1e400" and hands back
-    // +Infinity (since .NET Core 3.0 overflow no longer fails the parse), so the value only stops
-    // at the conversion guard. Also shared by XlsWriterTests and XlsbWriterTests.
     internal readonly struct OverflowingFormattable : IUtf8SpanFormattable
     {
         public bool TryFormat(Span<byte> utf8Destination, out int bytesWritten, ReadOnlySpan<char> format, IFormatProvider? provider)

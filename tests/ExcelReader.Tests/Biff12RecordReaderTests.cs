@@ -7,7 +7,6 @@ namespace ExcelReader.Tests
         [Fact]
         public void ReadsSequenceOfRecordsWithOneAndTwoByteFraming()
         {
-            // id 5 / len 8, then id 159 (2-byte id) / len 0, then id 2 / len 130 (2-byte length).
             byte[] data =
             [
                 .. Record(5, new byte[8]),
@@ -29,7 +28,7 @@ namespace ExcelReader.Tests
             Assert.Equal(2, id2);
             Assert.Equal(130, p2.Length);
             Assert.Equal(0, p2[0]);
-            Assert.Equal(129, p2[129]); // 130th byte, 0-based value 129
+            Assert.Equal(129, p2[129]);
 
             Assert.False(reader.TryReadRecord(out _, out _));
             Assert.Equal(data.Length, reader.Position);
@@ -38,7 +37,6 @@ namespace ExcelReader.Tests
         [Fact]
         public void TruncatedRecordPayloadReturnsFalseWithoutAdvancing()
         {
-            // id 5 declares len 8 but only 3 payload bytes are present.
             byte[] data = [.. Id(5), .. Length(8), 1, 2, 3];
             var reader = new Biff12RecordReader(data);
 
@@ -49,7 +47,6 @@ namespace ExcelReader.Tests
         [Fact]
         public void TruncatedLengthVarintReturnsFalse()
         {
-            // id 5, then a length byte with the continuation bit set but no following byte.
             byte[] data = [.. Id(5), 0x80];
             var reader = new Biff12RecordReader(data);
 

@@ -23,14 +23,8 @@ namespace ExcelReader.Fuzz
     /// </remarks>
     internal static class SeedCorpus
     {
-        // The password Harnesses.EncryptedLimits opens with; an encrypted seed written under any
-        // other password would dead-end on the verifier instead of reaching the decrypt path.
         private const string EncryptionPassword = "hunter2";
 
-        // Which seeds each target's corpus gets. Keys match Program.AllTargets, so the fuzz workflow
-        // can pass corpus/<target> straight through with no name mapping. The xlsx/xlsb "-memory"
-        // targets parse the same containers through a different reader, so they get the same seeds;
-        // duplicating a few KB is cheaper than teaching the workflow a target-to-format map.
         private static readonly (string Target, string[] Seeds)[] _layout =
         [
             ("xlsx", ["xlsx", "xlsx-multisheet", "xlsx-sharedstrings", "xlsx-blanks", "xlsx-empty-sheet"]),
@@ -87,9 +81,6 @@ namespace ExcelReader.Fuzz
                 ["xlsb-multisheet"] = await MultiSheetXlsbAsync(),
                 ["xls"] = await XlsAsync(),
 
-                // Agile-encrypted wrappers around the plaintext shapes above. EncryptPackage only
-                // writes agile; the standard/RC4 descriptor is read-only in this library, so its
-                // seed stays the committed corpus/encrypted-*.bin pair.
                 ["encrypted"] = Encrypt(xlsx),
                 ["encrypted-multisheet"] = Encrypt(xlsxMultiSheet),
                 ["encrypted-sharedstrings"] = Encrypt(xlsxSharedStrings),
@@ -110,9 +101,6 @@ namespace ExcelReader.Fuzz
             return destination.ToArray();
         }
 
-        // Each entry is one axis CsvSniffer branches on. The sniffer runs over untrusted bytes before
-        // any reader exists, so the seeds that decode to nothing valid (UTF-16, invalid UTF-8, an
-        // embedded NUL) matter as much as the well-formed ones: they are its rejection paths.
         private static IEnumerable<(string Name, byte[] Bytes)> CsvSeeds()
         {
             return DialectSeeds().Concat(ParallelSeeds());
@@ -127,45 +115,27 @@ namespace ExcelReader.Fuzz
             yield return ("csv-tab", Utf8("name\tqty\twhen\nplain\t1\t2024-01-02\n"));
             yield return ("csv-pipe", Utf8("name|qty|when\nplain|1|2024-01-02\n\"a|b\"|2|\n"));
 
-            // BOM and LF-only: two dialect axes the primary seed (CRLF, no BOM) never exercises.
             yield return ("csv-bom-lf", Concat([0xEF, 0xBB, 0xBF], Utf8("name,qty\nplain,1\n\"quoted\",2\n")));
 
-            // CR-only terminators: the third line-ending form, and the one a CRLF/LF scanner is most
-            // likely to mis-split.
             yield return ("csv-cr-only", Utf8("name,qty\rplain,1\r\"quoted\",2\r"));
 
-            // Ragged rows: column count varies per record, so every "row shorter/longer than the
-            // header" branch in binding and sniffing fires.
             yield return ("csv-ragged", Utf8("a,b,c\r\n1\r\n1,2\r\n1,2,3\r\n1,2,3,4,5,6\r\n,,\r\n"));
 
-            // No delimiter anywhere: the sniffer has to pick a dialect with no evidence for one.
             yield return ("csv-single-column", Utf8("justonecolumn\nvalue\nanother\n"));
 
-            // Header with no data rows, and no trailing terminator.
             yield return ("csv-header-only", Utf8("a,b,c"));
 
-            // An embedded NUL and a lone quote: both are legal bytes that most text heuristics treat
-            // as a binary-file signal.
             yield return ("csv-nul", Concat(Utf8("a,b\n1,"), [0x00], Utf8("2\n\"\n")));
 
-            // Bare UTF-8 continuation bytes and a truncated multi-byte sequence: the decoder's error
-            // path, reached with byte offsets that still have to stay inside the buffer.
             yield return ("csv-invalid-utf8", Concat(Utf8("a,b\n"), [0xC3, 0x28, 0x80, 0xFF, 0xE2, 0x82], Utf8("\n")));
 
-            // UTF-16 in both byte orders: the BOM says "text", but every other byte is a NUL, which is
-            // the combination most likely to walk a UTF-8 scanner off a record boundary.
             yield return ("csv-utf16le", Concat([0xFF, 0xFE], Encoding.Unicode.GetBytes("a,b\r\n1,2\r\n")));
             yield return ("csv-utf16be", Concat([0xFE, 0xFF], Encoding.BigEndianUnicode.GetBytes("a,b\r\n1,2\r\n")));
 
-            // A quote opened and never closed: the parser must terminate at end-of-input rather than
-            // scanning for a close quote that does not exist.
             yield return ("csv-unterminated-quote", Utf8("a,b\n\"never closed,1\n2,3\n"));
 
         }
 
-        // CsvParallel's oracle compares the sequential and parallel paths over the same bytes. These
-        // put a quote and a newline next to each other, which is what the chunk boundary resolver has
-        // to disambiguate — a chunk that guesses its start wrong diverges here.
         private static IEnumerable<(string Name, byte[] Bytes)> ParallelSeeds()
         {
             string[] parallel =
@@ -175,11 +145,7 @@ namespace ExcelReader.Fuzz
                 "\"\",3,",
                 "\"\n\n\n\",4,z",
                 "a,5,\"unterminated",
-                // A quoted field longer than a chunk: the resolver cannot decide this one from local
-                // context alone, so it has to carry state across the boundary.
                 "\"" + new string('x', 4096) + "\n" + new string('y', 4096) + "\",6,w",
-                // Every record boundary sits immediately after a quote close, the alignment most
-                // likely to make a chunk start mid-field while looking well-formed.
                 string.Concat(Enumerable.Repeat("\"q\",1,\"r\"\n", 64)),
             ];
             for (int i = 0; i < parallel.Length; i++)
@@ -252,8 +218,6 @@ namespace ExcelReader.Fuzz
             return ms.ToArray();
         }
 
-        // Two sheets: sheet-index bookkeeping (offsets/pointers into a sheet directory) is only
-        // exercised once there is more than one sheet to point past.
         private static async Task<byte[]> MultiSheetAsync()
         {
             using var ms = new MemoryStream();
@@ -290,8 +254,6 @@ namespace ExcelReader.Fuzz
             return ms.ToArray();
         }
 
-        // The same string repeated across many rows: forces a real shared-string dictionary with
-        // duplicate entries, instead of the one-string-per-cell table the plain seed builds.
         private static async Task<byte[]> SharedStringsAsync()
         {
             using var ms = new MemoryStream();
@@ -312,8 +274,6 @@ namespace ExcelReader.Fuzz
             return ms.ToArray();
         }
 
-        // Null cells interleaved with values: null-handling branches (blank vs. missing vs. typed)
-        // never fire if every cell in the seed corpus is populated.
         private static async Task<byte[]> BlanksAsync()
         {
             using var ms = new MemoryStream();
@@ -335,8 +295,6 @@ namespace ExcelReader.Fuzz
             return ms.ToArray();
         }
 
-        // A workbook whose only sheet has zero rows: SheetCount/MoveToSheet bookkeeping should still
-        // hold with nothing to enumerate.
         private static async Task<byte[]> EmptySheetAsync()
         {
             using var ms = new MemoryStream();
@@ -351,7 +309,6 @@ namespace ExcelReader.Fuzz
             return ms.ToArray();
         }
 
-        // A header plus one row of every cell kind the readers decode differently.
         private static async Task WriteSampleRowsAsync<TRow>(ISheetWriter<TRow> sheet)
             where TRow : IRowWriter, IAsyncDisposable
         {

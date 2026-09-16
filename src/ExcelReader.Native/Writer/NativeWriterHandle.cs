@@ -2,65 +2,34 @@ using ExcelReader.Core.Writer;
 
 namespace ExcelReader.Native.Writer
 {
-    // Everything one streaming write session needs on the managed side of the boundary — the
-    // writer-side counterpart to NativeHandle. The caller only ever sees an opaque id
-    // into NativeHandleTable.
-    //
-    // One sheet, one row open at a time: StartSheet must precede StartRow,
-    // which must precede the WriteXxx calls for that row, which must precede
-    // EndRow. Calling any of these out of order throws
-    // InvalidOperationException, which Exports turns into
-    // NativeStatus.Error plus a message from NativeApi.SetLastError —
-    // never lets it escape across the ABI.
     internal abstract class NativeWriterHandle : IDisposable
     {
         internal abstract void StartSheet(string name);
 
         internal abstract void StartRow();
 
-        // Writes a text cell, or a blank cell if value is null.
         internal abstract void WriteString(string? value);
 
-        // Writes an integer cell.
         internal abstract void WriteInt64(long value);
 
-        // Writes a floating-point cell.
         internal abstract void WriteFloat64(double value);
 
-        // Writes a boolean cell.
         internal abstract void WriteBool(bool value);
 
-        // Writes a date-only cell.
-        // daysSinceEpoch: Days since 1970-01-01 (mirrors NativeColumnType.Date's wire format).
         internal abstract void WriteDate(int daysSinceEpoch);
 
-        // Writes a time-of-day cell.
-        // microsecondsSinceMidnight: Mirrors NativeColumnType.Time's wire format.
         internal abstract void WriteTime(long microsecondsSinceMidnight);
 
-        // Writes a date/time cell.
-        // microsecondsSinceEpoch: Mirrors NativeColumnType.Timestamp's wire format.
         internal abstract void WriteTimestamp(long microsecondsSinceEpoch);
 
-        // Writes a blank cell of the given NativeColumnType.
         internal abstract void WriteNull(int type);
 
         internal abstract void EndRow();
 
         internal abstract void EndSheet();
 
-        // Finishes the workbook: closes any row/sheet still open, then writes the workbook's trailing
-        // structure (IWorkbookWriter.End) — the zip central directory for XLSX/XLSB, the BIFF
-        // EOF record for XLS. Must run before Dispose for the output file to be valid;
-        // NativeApi.CloseWriteHandle always calls both, in that order. Idempotent: a
-        // second call is a no-op, so NativeApi.GetWriteHandleBytes can call this to
-        // guarantee a complete result without caring whether the caller already ended the workbook.
         internal abstract void Close();
 
-        // Set by NativeApi.OpenWriteHandleToMemory right after construction, to the
-        // exact MemoryStream passed to Create — null for a file-backed
-        // handle. NativeApi.GetWriteHandleBytes reads it back out; nothing else here
-        // needs to know a handle is memory-backed rather than file-backed.
         internal MemoryStream? MemoryBuffer { get; set; }
 
         public void Dispose()
@@ -71,8 +40,6 @@ namespace ExcelReader.Native.Writer
 
         protected abstract void Dispose(bool disposing);
 
-        // Mirrors the per-format switch in NativeApi.Write.cs's WriteToStream, except the workbook
-        // writer this returns stays alive across calls instead of running start-to-end in one method.
         internal static NativeWriterHandle Create(Stream stream, int format, NativeWriteOptions options)
         {
             bool date1904 = options.Date1904 ?? false;
@@ -92,9 +59,6 @@ namespace ExcelReader.Native.Writer
                     return new NativeWriterHandle<CsvSheetWriter, CsvRowWriter>(
                         CsvWorkbookWriter.Create(stream, options: options.ToCsvWriterOptions()));
                 default:
-                    // Unreachable: NativeApi.OpenWriteHandle rejects every format but the four above
-                    // via IsWritableFormat before this runs. Kept as a hard failure rather than a
-                    // silent fall-through in case that guard is ever loosened without updating this.
                     throw new ArgumentOutOfRangeException(nameof(format), format, "Unsupported write format.");
             }
         }
@@ -165,8 +129,6 @@ namespace ExcelReader.Native.Writer
 
         internal override void WriteTime(long microsecondsSinceMidnight)
         {
-            // checked: an unchecked overflow here would silently write the wrong time instead of
-            // failing the call — same reasoning as NativeApi.WriteCell's Time case.
             Row().Write(new TimeOnly(checked(microsecondsSinceMidnight * TimeSpan.TicksPerMicrosecond)));
         }
 
@@ -212,19 +174,12 @@ namespace ExcelReader.Native.Writer
 
         internal override void Close()
         {
-            // Idempotent: GetWriteHandleBytes calls this to guarantee complete output regardless of
-            // whether the caller already ended the workbook, and CloseWriteHandle may then call it
-            // again on the same handle. A second _workbook.End() is not something every writer is
-            // guaranteed to tolerate, so the guard lives here rather than relying on that.
             if (_closed)
             {
                 return;
             }
             _closed = true;
 
-            // Unlike EndRow/EndSheet, Close is the forceful "finish whatever is pending" step: a row
-            // or sheet the caller forgot to end is closed here rather than rejected, since the whole
-            // point of xl_close_write_handle is to always leave a valid file behind.
             _row?.Dispose();
             _row = null;
             if (_sheet is not null)

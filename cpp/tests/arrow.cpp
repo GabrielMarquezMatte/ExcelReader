@@ -41,7 +41,6 @@ int main()
     auto table = xl::parse_arrow<Record>(*workbook);
     CHECK(table.has_value(), "xl::parse_arrow<Record> must succeed");
 
-    // The export hands back ONE top-level struct array whose children are the columns.
     CHECK(std::strcmp(table->schema.format, "+s") == 0, "top level must be a struct array");
     CHECK(table->schema.n_children == 2, "must have two child columns");
     CHECK(table->array.n_children == 2, "must have two child arrays");
@@ -50,22 +49,15 @@ int main()
     CHECK(std::strcmp(table->schema.children[1]->format, "l") == 0, "Coluna3 must be int64");
     CHECK(table->array.length == 100, "RealExcel.xlsb has 100 data rows");
 
-    // Destructor must release both; running under a leak checker in CI is what proves it, but a
-    // move-then-destroy here at least exercises the moved-from path being inert.
     {
         xl::ArrowTable moved = std::move(*table);
         CHECK(moved.array.release != nullptr, "moved-to table must still own a release callback");
         CHECK(table->array.release == nullptr, "moved-from table must be released/inert");
     }
 
-    // An out-of-range header_row must fail cleanly, leaving no half-built ArrowTable behind - this
-    // matters here more than on the happy path because ~ArrowTable calls through the release
-    // function pointers it holds, so a half-initialized table on the failure path would mean the
-    // destructor walks into garbage.
     auto failed = xl::parse_arrow<Record>(*workbook, 1'000'000);
     CHECK(!failed.has_value(), "xl::parse_arrow<Record> must fail for an out-of-range header_row");
 
-    // --- Chunked: xl::arrow_stream -------------------------------------------------------------
     {
         auto stream_workbook = xl::Workbook::open(EXCELREADER_FIXTURE_PATH, XL_FORMAT_XLSB, &options);
         CHECK(stream_workbook.has_value(), "opening a workbook for the Arrow stream must succeed");
@@ -96,14 +88,10 @@ int main()
         CHECK(rows == 100, "the stream must deliver all 100 data rows");
         CHECK(batches == 13, "100 rows at batch size 8 is 13 batches");
 
-        // One chunked read per workbook: a second stream must be rejected rather than quietly
-        // sharing the row cursor.
         auto second = xl::arrow_stream<Record>(*stream_workbook, 1, 8);
         CHECK(!second.has_value(), "a second stream on one workbook must be rejected");
     }
 
-    // A batch outlives the stream that produced it, and releasing it twice is a no-op - the
-    // ownership rule a hand-written Arrow consumer has to get right.
     {
         auto abandoned_workbook = xl::Workbook::open(EXCELREADER_FIXTURE_PATH, XL_FORMAT_XLSB, &options);
         CHECK(abandoned_workbook.has_value(), "opening a workbook for the abandonment test must succeed");
@@ -122,7 +110,6 @@ int main()
         CHECK(kept.array.release == nullptr, "releasing must null the release callback");
     }
 
-    // --- batch_size edge cases and content parity with xl::parse_arrow -------------------------
     {
         auto wb = xl::Workbook::open(EXCELREADER_FIXTURE_PATH, XL_FORMAT_XLSB, &options);
         CHECK(wb.has_value(), "opening a workbook for the batch_size=0 stream must succeed");
@@ -189,7 +176,6 @@ int main()
         CHECK(rows == whole->array.length, "streamed total row count must match the whole-sheet read");
     }
 
-    // --- foreign read invalidates a live stream, and the failure latches ------------------------
     {
         auto wb = xl::Workbook::open(EXCELREADER_FIXTURE_PATH, XL_FORMAT_XLSB, &options);
         CHECK(wb.has_value(), "opening a workbook for the foreign-read test must succeed");
@@ -211,7 +197,6 @@ int main()
         }
     }
 
-    // --- one chunked read per workbook, across kinds --------------------------------------------
     {
         auto wb = xl::Workbook::open(EXCELREADER_FIXTURE_PATH, XL_FORMAT_XLSB, &options);
         CHECK(wb.has_value(), "opening a workbook for the reader-then-stream test must succeed");

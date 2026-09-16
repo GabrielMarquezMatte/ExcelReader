@@ -234,7 +234,6 @@ namespace ExcelReader.Core.Writer
             _disposed = true;
             if (_state == WriterState.Started)
             {
-                // End rejects a zero-sheet workbook; disposal must still release a partial writer.
                 if (_sheets.Count == 0)
                 {
                     _state = WriterState.Ended;
@@ -265,7 +264,6 @@ namespace ExcelReader.Core.Writer
             _disposed = true;
             if (_state == WriterState.Started)
             {
-                // EndAsync rejects a zero-sheet workbook; disposal must still release a partial writer.
                 if (_sheets.Count == 0)
                 {
                     _state = WriterState.Ended;
@@ -337,8 +335,6 @@ namespace ExcelReader.Core.Writer
         {
             sb.Append(CultureInfo.InvariantCulture, $"<numFmts count=\"{1 + numFmtIds.Count}\">");
             sb.Append("<numFmt numFmtId=\"14\" formatCode=\"mm-dd-yy\"/>");
-            // Ordered by id: Dictionary enumeration order isn't guaranteed, but this XML must be
-            // deterministic across runs.
             foreach (KeyValuePair<string, int> entry in numFmtIds.OrderBy(static kv => kv.Value))
             {
                 sb.Append(CultureInfo.InvariantCulture, $"<numFmt numFmtId=\"{entry.Value}\" formatCode=\"{EscapeAttribute(entry.Key)}\"/>");

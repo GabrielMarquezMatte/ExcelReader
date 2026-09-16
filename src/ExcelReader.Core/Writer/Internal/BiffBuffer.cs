@@ -6,14 +6,8 @@ using System.Text;
 
 namespace ExcelReader.Core.Writer.Internal
 {
-    // Growable, pooled little-endian byte buffer for assembling a BIFF substream.
-    // Record framing: BeginRecord writes the id + a placeholder length; EndRecord back-patches
-    // the length once the payload is written, so records can be built field-by-field in place.
     internal sealed class BiffBuffer : IDisposable
     {
-        // A single sheet's cell buffer routinely exceeds ArrayPool.Shared's 1 MB cap (a 50k-row
-        // sheet is ~4 MB), so those rents would never be recycled — every doubling leaks to the GC
-        // as LOH garbage. A dedicated pool with a higher cap reuses them across sheets/workbooks.
         // ponytail: 32 MB cap; sheets past that fall back to plain allocs (same as Shared did).
         private static readonly ArrayPool<byte> Pool = ArrayPool<byte>.Create(32 * 1024 * 1024, 16);
 
@@ -30,17 +24,11 @@ namespace ExcelReader.Core.Writer.Internal
 
         internal ReadOnlyMemory<byte> Memory => _buffer.AsMemory(0, Length);
 
-        // Rewinds to empty, keeping the rented buffer for reuse.
         internal void Reset()
         {
             Length = 0;
         }
 
-        // Hands ownership of the current backing array to the caller (e.g. WriteOffloadStream,
-        // for a zero-copy handoff to a background writer) and immediately rents a fresh array of
-        // the same capacity so this buffer keeps working without any extra growth step. The caller
-        // becomes responsible for returning the detached array exactly once via ReturnDetached,
-        // once it is done with the bytes (e.g. after a background thread finishes writing them).
         internal byte[] Detach(out int length)
         {
             byte[] detached = _buffer;
@@ -50,8 +38,6 @@ namespace ExcelReader.Core.Writer.Internal
             return detached;
         }
 
-        // Returns an array previously obtained from Detach() to this buffer's dedicated pool.
-        // Must be called exactly once per Detach() call.
         internal static void ReturnDetached(byte[] buffer)
         {
             if (buffer.Length > 0)
@@ -103,9 +89,6 @@ namespace ExcelReader.Core.Writer.Internal
             Length += bytes.Length;
         }
 
-        // Reserves at least `sizeHint` free bytes and hands back the writable tail so callers can
-        // format directly into the buffer (e.g. Utf8Formatter), then commit with Advance — saves the
-        // temp-span + copy that Write would otherwise need.
         internal Span<byte> GetSpan(int sizeHint)
         {
             Ensure(sizeHint);
@@ -119,22 +102,18 @@ namespace ExcelReader.Core.Writer.Internal
 
         internal void WriteUtf8(ReadOnlySpan<char> chars)
         {
-            // Single pass: reserve the UTF-8 worst case (3 bytes per UTF-16 code unit) and encode once.
             Ensure(checked(chars.Length * 3));
             Length += Encoding.UTF8.GetBytes(chars, _buffer.AsSpan(Length));
         }
 
         internal void WriteUtf16(ReadOnlySpan<char> chars)
         {
-            // chars are already UTF-16LE in memory on every supported target, so this is a bulk
-            // reinterpret-and-copy instead of a per-char BinaryPrimitives write.
             int byteCount = checked(chars.Length * sizeof(char));
             Ensure(byteCount);
             MemoryMarshal.AsBytes(chars).CopyTo(_buffer.AsSpan(Length, byteCount));
             Length += byteCount;
         }
 
-        // Writes the record id + a 2-byte length placeholder; returns the placeholder offset.
         internal int BeginRecord(int id)
         {
             WriteU16(id);
@@ -143,13 +122,11 @@ namespace ExcelReader.Core.Writer.Internal
             return lengthPos;
         }
 
-        // Overwrites a previously written 32-bit value (e.g. a BoundSheet offset placeholder).
         internal void PatchI32(int position, int value)
         {
             BinaryPrimitives.WriteInt32LittleEndian(_buffer.AsSpan(position, 4), value);
         }
 
-        // Back-patches the length written by BeginRecord with the actual payload size.
         internal void EndRecord(int lengthPos)
         {
             int payload = Length - lengthPos - 2;

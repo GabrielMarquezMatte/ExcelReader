@@ -3,9 +3,6 @@ using ExcelReader.Core.Writer;
 
 namespace ExcelReader.Benchmarks
 {
-    // Writes `Rows` records (header + 4 columns) to an in-memory .xls via XlsWorkbookWriter.
-    // No third-party legacy-.xls writer exists in the referenced packages, so the .xlsx writer
-    // (same data) is included as a same-codebase reference point: binary BIFF8 vs zipped XML.
     [MemoryDiagnoser]
     public class XlsWriteBenchmark
     {
@@ -23,8 +20,6 @@ namespace ExcelReader.Benchmarks
         [Benchmark(Baseline = true)]
         public async Task<long> XlsWriter()
         {
-            // Pre-sized to the neighborhood of the actual output so MemoryStream's doubling growth
-            // doesn't dominate the GC/allocation numbers being measured.
             await using var ms = new MemoryStream(16 * 1024 * 1024);
             await using (XlsWorkbookWriter wb = XlsWorkbookWriter.Create(ms, leaveOpen: true))
             {

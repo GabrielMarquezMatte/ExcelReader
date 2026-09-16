@@ -100,9 +100,6 @@ impl Workbook {
         options: Option<&OpenOptions>,
     ) -> Result<Workbook, Error> {
         check_abi_version()?;
-        // `raw` (and the password bytes it may borrow out of `options`) outlives the call below -
-        // it is a local binding in this function's scope, not a temporary - and the native side
-        // copies the path before returning.
         let raw = options.map(OpenOptions::to_raw);
         let raw_ptr = raw
             .as_ref()
@@ -129,8 +126,6 @@ impl Workbook {
         options: Option<&OpenOptions>,
     ) -> Result<Workbook, Error> {
         check_abi_version()?;
-        // Same lifetime shape as `open_with` above: `raw` is a local binding that outlives the FFI
-        // call, so a password borrowed from `options` never dangles.
         let raw = options.map(OpenOptions::to_raw);
         let raw_ptr = raw
             .as_ref()
@@ -268,9 +263,6 @@ impl Workbook {
             crate::xl_infer_schema(self.handle, header_row, sample_size, &mut schema)
         })?;
 
-        // From here the schema is native-owned and must reach xl_free_schema. Nothing between this
-        // point and the free can fail - `copy_inferred` only reads through pointers the ABI
-        // guarantees - so a plain sequential free needs no drop guard.
         let columns = unsafe { copy_inferred(&schema) };
         unsafe { crate::xl_free_schema(&mut schema) };
         Ok(columns)
@@ -289,8 +281,6 @@ impl Workbook {
         &self,
         call: impl Fn(*mut XlWorkbook, *mut u8, i32, *mut i32) -> i32,
     ) -> Result<String, Error> {
-        // One sized attempt first: Excel caps sheet names at 31 characters, so 128 bytes clears
-        // even the 4-byte-per-character worst case and the retry never runs in practice.
         let mut buffer = [0u8; 128];
         let mut len: i32 = 0;
         let mut status = call(
@@ -342,8 +332,6 @@ unsafe fn copy_inferred(schema: &XlInferredSchema) -> Vec<InferredColumn> {
     specs
         .iter()
         .map(|spec| InferredColumn {
-            // A guessed name is exactly `name_len` bytes with no NUL terminator, and is NULL
-            // whenever the column had no usable header cell.
             name: if spec.name_count <= 0 || spec.names.is_null() || spec.name_lens.is_null() {
                 None
             } else {
@@ -596,7 +584,6 @@ impl<T: ExcelMapper> Iterator for TypedChunks<'_, T> {
     type Item = Result<TableView<T>, Error>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        // The ABI latches a failure, so ending here keeps a `for` loop from spinning on it forever.
         if self.done {
             return None;
         }
@@ -616,7 +603,6 @@ impl<T: ExcelMapper> Iterator for TypedChunks<'_, T> {
             return Some(Err(last_error(status)));
         }
 
-        // Without this the zip in `get` would silently leave trailing fields at their default.
         if table.column_count as usize != self.bindings.len() {
             let column_count = table.column_count;
             unsafe { crate::xl_free_table(&mut table) };
@@ -631,7 +617,6 @@ impl<T: ExcelMapper> Iterator for TypedChunks<'_, T> {
         }
 
         // ponytail: one small Vec of function pointers cloned per batch, not per row. Give
-        // TableView a borrowed slice only if a bench shows it.
         Some(Ok(TableView {
             table,
             bindings: self.bindings.clone(),
@@ -665,7 +650,6 @@ impl<T: ExcelMapper + Default> Iterator for TableViewIter<'_, T> {
     type Item = T;
 
     fn next(&mut self) -> Option<T> {
-        // `get` re-checks the bound, so this cannot walk off the end even if `row` were wrong.
         let item = self.view.get(self.row)?;
         self.row += 1;
         Some(item)
@@ -752,9 +736,6 @@ pub fn parse_sheet<T: ExcelMapper>(
         }
     }
 
-    // xl_parse_typed returns one column per spec, in spec order - but the zip in `get` would
-    // silently drop trailing bindings if that ever stopped holding, quietly leaving those fields at
-    // their default rather than failing. Check it once here instead of per row.
     if table.column_count as usize != bindings.len() {
         let column_count = table.column_count;
         unsafe { crate::xl_free_table(&mut table) };

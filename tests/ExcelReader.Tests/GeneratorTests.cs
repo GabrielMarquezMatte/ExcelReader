@@ -7,12 +7,6 @@ using Microsoft.CodeAnalysis.Emit;
 
 namespace ExcelReader.Tests
 {
-    // Exercises the generator's own plumbing — triggers on [ExcelSerializable], requires 'partial' up
-    // the containing-type chain (EXR001/EXR002), and emits code that type-checks against the real public
-    // ExcelRowMapBuilder<T>/ExcelRecordMapBuilder<T>/ExcelCellReaders surface. Runs ExcelRowMapGenerator
-    // directly via CSharpGeneratorDriver over an in-memory Compilation, rather than through the SDK's
-    // live build-time analyzer pipeline — a deliberately broken model (missing 'partial', for the
-    // EXR001/EXR002 cases) would otherwise fail this whole project's own build.
     public class GeneratorTests
     {
         private static (ImmutableCompilationResult Result, ImmutableArray<Diagnostic> GeneratorDiagnostics) RunGenerator(string source)
@@ -21,9 +15,6 @@ namespace ExcelReader.Tests
             return (result, diagnostics);
         }
 
-        // Same as RunGenerator, but also returns the generator's own emitted source (every AddSource'd
-        // tree beyond the original one, concatenated) — for tests that need to inspect what was actually
-        // generated rather than just whether it compiles.
         private static (ImmutableCompilationResult Result, ImmutableArray<Diagnostic> GeneratorDiagnostics, string GeneratedSource) RunGeneratorWithSource(string source)
         {
             SyntaxTree tree = CSharpSyntaxTree.ParseText(source);
@@ -43,7 +34,6 @@ namespace ExcelReader.Tests
             return (new ImmutableCompilationResult((CSharpCompilation)outputCompilation), generatorDiagnostics, generatedSource);
         }
 
-        // Wraps the updated Compilation so tests can Emit it without repeating the boilerplate.
         private readonly struct ImmutableCompilationResult
         {
             private readonly CSharpCompilation _compilation;
@@ -139,9 +129,6 @@ namespace ExcelReader.Tests
         [Fact]
         public void UnsupportedPropertyTypeIsSkippedWithoutDiagnostics()
         {
-            // A type with no built-in reader and no [ExcelConverter] is silently left unmapped, same as
-            // the reflection path's "no parser found" outcome for an unrecognized type — no diagnostic
-            // unless the property is also [ExcelRequired] (EXR003, tested separately below).
             const string source = """
                 using ExcelReader.Core.Parser;
 
@@ -341,8 +328,6 @@ namespace ExcelReader.Tests
             Assert.True(emit.Success, string.Join(Environment.NewLine, emit.Diagnostics.Select(static d => d.ToString())));
         }
 
-        // The self-contained model + driver this test compiles, loads and invokes. Held as a
-        // field rather than inline so the test body reads as the arrange/act/assert it is.
         private const string RoundTripSource = """
             using System;
             using System.Collections.Generic;
@@ -435,11 +420,6 @@ namespace ExcelReader.Tests
             }
             """;
 
-        // Behavioral parity: compiles a self-contained model + driver method into a real in-memory
-        // assembly (so ExcelMappedParser<Model> resolves with ordinary compile-time generics inside
-        // that assembly — no MakeGenericType reflection gymnastics needed here), loads it, and calls
-        // the driver via plain reflection (no generics needed for that part, since the driver method
-        // itself is non-generic and returns only strings).
         [Fact]
         public async Task GeneratedMapRoundTripsThroughRealXlsxReaderAndWriter()
         {

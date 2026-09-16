@@ -2,8 +2,6 @@ using ExcelReader.Core.Reader;
 
 namespace ExcelReader.Core.Writer.Internal
 {
-    // Emits BIFF8 records into a BiffBuffer. Layouts follow [MS-XLS]; field offsets match what
-    // XlsReader parses (e.g. XF format index at byte 2, Label string at byte 6).
     internal static class BiffRecordWriter
     {
         internal static void WriteBof(BiffBuffer buffer, int substreamType)
@@ -146,8 +144,8 @@ namespace ExcelReader.Core.Writer.Internal
         internal static void WriteStyleXf(BiffBuffer buffer, int formatIndex)
         {
             int len = buffer.BeginRecord(BiffRecord.Xf);
-            buffer.WriteU16(0);            // ifnt (font index)
-            buffer.WriteU16(formatIndex);  // ifmt
+            buffer.WriteU16(0);
+            buffer.WriteU16(formatIndex);
             buffer.Write(FirstPayload);
             buffer.EndRecord(len);
         }
@@ -161,8 +159,6 @@ namespace ExcelReader.Core.Writer.Internal
             buffer.EndRecord(len);
         }
 
-        // Custom number format string, referenced by formatIndex from a subsequent Xf record.
-        // ifmt must be >=164 (0-163 are Excel's builtins) — enforced by the caller (StyleTable).
         internal static void WriteFormat(BiffBuffer buffer, int formatIndex, ReadOnlySpan<char> formatCode)
         {
             int len = buffer.BeginRecord(BiffRecord.Format);
@@ -183,16 +179,13 @@ namespace ExcelReader.Core.Writer.Internal
         internal static void WriteBoundSheet(BiffBuffer buffer, int sheetOffset, ReadOnlySpan<char> name)
         {
             int len = buffer.BeginRecord(BiffRecord.BoundSheet);
-            buffer.WriteI32(sheetOffset);  // lbPlyPos
-            buffer.WriteU16(0);            // grbit (visible worksheet)
+            buffer.WriteI32(sheetOffset);
+            buffer.WriteU16(0);
             BiffStringEncoder.WriteShort(buffer, name);
             buffer.EndRecord(len);
         }
 
         // ponytail: field layout (colFirst/colLast/coldx/ixfe/grbit/reserved, all u16) follows the
-        // commonly documented [MS-XLS] COLINFO shape but is unverified against a real Excel-written
-        // file — our own reader never parses column info (only per-cell XF matters for round-tripping
-        // through this library), so a wrong field here can't be caught by this library's own tests.
         internal static void WriteColInfo(BiffBuffer buffer, int columnIndex, int width256ths, int xf)
         {
             int len = buffer.BeginRecord(BiffRecord.ColInfo);
@@ -208,11 +201,11 @@ namespace ExcelReader.Core.Writer.Internal
         internal static void WriteDimension(BiffBuffer buffer, int rowCount, int colCount)
         {
             int len = buffer.BeginRecord(BiffRecord.Dimension);
-            buffer.WriteI32(0);            // rwMic
-            buffer.WriteI32(rowCount);     // rwMac (last row + 1)
-            buffer.WriteU16(0);            // colMic
-            buffer.WriteU16(colCount);     // colMac (last col + 1)
-            buffer.WriteU16(0);            // reserved
+            buffer.WriteI32(0);
+            buffer.WriteI32(rowCount);
+            buffer.WriteU16(0);
+            buffer.WriteU16(colCount);
+            buffer.WriteU16(0);
             buffer.EndRecord(len);
         }
         private static ReadOnlySpan<byte> ThirdPayload => [0xB6, 0x06, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x40, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00];
@@ -259,7 +252,7 @@ namespace ExcelReader.Core.Writer.Internal
             while (offset < value.Length)
             {
                 int take = Math.Min(maxContChars, value.Length - offset);
-                int contLen = buffer.BeginRecord(0x003C); // CONTINUE record
+                int contLen = buffer.BeginRecord(0x003C);
                 buffer.WriteByte((byte)(compressed ? 0 : 1));
                 BiffStringEncoder.WriteChars(buffer, value.Slice(offset, take), compressed);
                 buffer.EndRecord(contLen);
@@ -272,7 +265,7 @@ namespace ExcelReader.Core.Writer.Internal
             int len = buffer.BeginRecord(BiffRecord.BoolErr);
             WriteCellHeader(buffer, row, col, xf);
             buffer.WriteByte((byte)(value ? 1 : 0));
-            buffer.WriteByte(0); // fError = 0 -> boolean
+            buffer.WriteByte(0);
             buffer.EndRecord(len);
         }
 

@@ -24,7 +24,6 @@ use crate::{XlOpenOptions, XlWriteOptions, XL_OPT_DEFAULT, XL_OPT_FALSE, XL_OPT_
 /// ```
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct OpenOptions {
-    // CSV only (format == XL_FORMAT_CSV); ignored for every other format.
     pub csv_sniff_dialect: Option<bool>,
     pub csv_delimiter: Option<i32>,
     pub csv_quote: Option<i32>,
@@ -32,7 +31,6 @@ pub struct OpenOptions {
     pub csv_max_cell_bytes: Option<i32>,
     pub csv_intern_strings: Option<bool>,
 
-    // XLS/XLSX/XLSB only; ignored for CSV.
     pub max_total_decompressed_bytes: Option<i64>,
     pub max_cell_bytes: Option<i32>,
     pub max_shared_string_bytes: Option<i64>,
@@ -196,7 +194,6 @@ pub struct WriteOptions {
     /// `: \ / ? * [ ]`) are enforced natively and reported through `xl_last_error`.
     pub sheet_name: Option<String>,
 
-    // CSV only; ignored for every other format. Byte value 1-255.
     pub csv_delimiter: Option<i32>,
     pub csv_quote: Option<i32>,
 
@@ -270,9 +267,6 @@ mod tests {
 
     #[test]
     fn unset_fields_lower_to_the_abi_defaults() {
-        // `options` is a named local kept alive for the guard's whole lifetime, rather than a
-        // temporary chained straight into `.to_raw()` - see `password_survives_a_temporary_source`
-        // below for why that distinction matters.
         let options = OpenOptions::new();
         let guard = options.to_raw();
         let raw = guard.raw;
@@ -297,7 +291,6 @@ mod tests {
         let raw = guard.raw;
         assert_eq!(raw.prefetch_decompression, XL_OPT_TRUE);
         assert_eq!(raw.intern_strings, XL_OPT_FALSE);
-        // Still "unset", and distinguishable from the explicit `false` above.
         assert_eq!(raw.csv_detect_bom, XL_OPT_DEFAULT);
     }
 

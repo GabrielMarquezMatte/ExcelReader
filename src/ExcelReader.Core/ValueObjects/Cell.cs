@@ -15,10 +15,8 @@ namespace ExcelReader.Core.ValueObjects
     {
         private readonly double _number;
         private readonly bool _hasNumber;
-        // Index into the reader's shared-string table (see CellDesc.ToCell); -1 for non-shared cells.
         private readonly int _sharedIndex;
         private readonly string?[]? _sharedCache;
-        // Content-keyed dedup cache for cells with no shared-string index (CSV, inline/formula strings).
         private readonly Utf8StringCache? _contentCache;
 
         /// <summary>The kind of value this cell holds.</summary>
@@ -78,8 +76,6 @@ namespace ExcelReader.Core.ValueObjects
                 value = _number;
                 return true;
             }
-            // NumberStyles.Float, not the default: AllowThousands would let a comma decimal (e.g.
-            // pt-BR "1,5") silently parse as 15.
             return FastDouble.TryParse(Value, out value)
                 || double.TryParse(Value, NumberStyles.Float, CultureInfo.InvariantCulture, out value);
         }
@@ -95,11 +91,8 @@ namespace ExcelReader.Core.ValueObjects
         [SkipLocalsInit]
         public bool TryParse<T>(IFormatProvider? provider, [MaybeNullWhen(false)] out T result) where T : IUtf8SpanParsable<T>
         {
-            // typeof(T) == ... guards are JIT constants; the branch for every other T compiles away.
             if (!_hasNumber)
             {
-                // FastDouble always treats '.' as the decimal separator, so it only applies when the
-                // caller's culture agrees — otherwise pt-BR "1.234" would misparse as 1.234.
                 if (typeof(T) == typeof(double) && UsesDotDecimalSeparator(provider) && FastDouble.TryParse(Value, out double fast))
                 {
                     result = Unsafe.As<double, T>(ref fast);
@@ -145,10 +138,6 @@ namespace ExcelReader.Core.ValueObjects
                 : T.TryParse(Value, provider, out result);
         }
 
-        // Fast path for plain ASCII digits into int/long, skipping the general number parser.
-        // Unsigned digits parse identically to T.TryParse under any culture, so those are always
-        // safe; a leading '-' is only accepted for the invariant culture, since another culture can
-        // spell its negative sign differently. Anything else falls through to T.TryParse unchanged.
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static bool TryParseAsciiDigits<T>(ReadOnlySpan<byte> utf8, IFormatProvider? provider, [MaybeNullWhen(false)] out T result)
             where T : IUtf8SpanParsable<T>
@@ -167,8 +156,6 @@ namespace ExcelReader.Core.ValueObjects
                 }
                 utf8 = utf8[1..];
             }
-            // 9 digits always fit an int, 18 always fit a long; longer runs go to T.TryParse instead
-            // of carrying overflow checks through the loop.
             int maxDigits = typeof(T) == typeof(int) ? 9 : 18;
             if (utf8.IsEmpty || utf8.Length > maxDigits)
             {
@@ -198,8 +185,6 @@ namespace ExcelReader.Core.ValueObjects
             return true;
         }
 
-        // Casts directly when the stored double is a whole number in range; otherwise false, so the
-        // caller falls back to the format+parse path.
         [SkipLocalsInit]
         private bool TryParseIntegral<T>([MaybeNullWhen(false)] out T result) where T : IUtf8SpanParsable<T>
         {
@@ -310,7 +295,6 @@ namespace ExcelReader.Core.ValueObjects
                 return false;
             }
             double oadate = ExcelEpoch.SerialToOADate(serial, isDate1904);
-            // FromOADate throws outside this range; guard first.
             if (oadate is > -657435.0 and < 2958466.0)
             {
                 result = DateTime.FromOADate(oadate);

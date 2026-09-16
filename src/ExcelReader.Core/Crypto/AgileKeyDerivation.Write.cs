@@ -9,9 +9,6 @@ namespace ExcelReader.Core.Crypto
         byte[] EncryptedVerifierHashValue,
         byte[] EncryptedKeyValue);
 
-    // Write direction of the agile derivation in AgileKeyDerivation.cs — same block keys, same
-    // Norm/BlockKey/PasswordHash helpers, run forwards. Randomness is a parameter, never generated
-    // here, so every function below is deterministic and unit-testable.
     internal static partial class AgileKeyDerivation
     {
         internal static PasswordEncryptorBlobs DeriveWriteBlobs(CryptoParameters passwordEncryptor,
@@ -23,7 +20,6 @@ namespace ExcelReader.Core.Crypto
             byte[] keyPackageKey = BlockKey(passwordEncryptor, hFinal, BlockKeyValue);
             try
             {
-                // The verifier IV is the encryptor's own salt, not a hash of it — mirrors VerifyPassword.
                 byte[] ivSalt = NormalizeToLength(passwordEncryptor.SaltValue, passwordEncryptor.BlockSize);
                 byte[] verifierHash = HashOne(passwordEncryptor.Hash, verifierInput);
                 return new PasswordEncryptorBlobs(
@@ -47,9 +43,6 @@ namespace ExcelReader.Core.Crypto
             return (EncryptNoPadding(hmacKey, packageKey, ivKey), EncryptNoPadding(hmacValue, packageKey, ivValue));
         }
 
-        // Every value this writer wraps is already a multiple of the 16-byte block under the fixed
-        // parameters (verifier input 16, verifier hash 64, package key 32, HMAC key/value 64), so a
-        // misaligned plaintext means a parameter changed and the caller's assumptions are stale.
         [SuppressMessage("Security", "CA5401", Justification = "Agile encryption uses derived IVs per ECMA-376.")]
         internal static byte[] EncryptNoPadding(byte[] plaintext, byte[] key, byte[] iv)
         {

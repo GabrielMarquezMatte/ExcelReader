@@ -5,9 +5,6 @@ using ExcelReader.Core.Writer;
 
 namespace ExcelReader.Tests
 {
-    // Proves the hand-written ExcelRowMapBuilder<T>/ExcelRecordMapBuilder<T> seam produces the exact
-    // same result as the reflection-based ExcelParser<T>/WorkbookRecordWriter for the same model — the
-    // seam a source generator can also emit into, without reflecting over the model at runtime.
     public class ExcelRowMapBuilderTests
     {
         private enum MapBuilderKind
@@ -47,8 +44,6 @@ namespace ExcelReader.Tests
             }
         }
 
-        // Mirrors MapBuilderTestModel's shape exactly, so ExcelParser<T>'s reflection path binds the same
-        // headers the same way, giving a same-source-model reflection baseline to compare against.
         private sealed class ReflectionTestModel
         {
             public string Name { get; set; } = "";
@@ -171,10 +166,6 @@ namespace ExcelReader.Tests
             }
         }
 
-        // Feature A4: the public CreateMapped*Async entries, one per format (symmetry rule) — each
-        // writes through MappedWorkbookRecordWriter<TSheet,TRow> and reads back through
-        // ExcelMappedParser<T>, so both halves of the seam are exercised end to end via the real public
-        // API surface rather than the internal builder plumbing the earlier tests drive directly.
         [Fact]
         public async Task MappedRecordWriterRoundTripsThroughXlsx()
         {
@@ -238,9 +229,6 @@ namespace ExcelReader.Tests
         [Fact]
         public async Task MappedRecordWriterRoundTripsThroughCsv()
         {
-            // CSV has no serial dates, so BirthDate round-trips as text — the model's map uses the
-            // serial-number reader/writer for it (matching every other format), so this asserts only the
-            // fields CSV can actually carry losslessly, same caveat ExcelMappedParser<T>'s own docs give.
             CancellationToken ct = TestContext.Current.CancellationToken;
             var record = new MapBuilderTestModel { Name = "Frank", Age = 19, BirthDate = SampleBirthDate, Active = false, Kind = MapBuilderKind.Beta };
 
@@ -261,11 +249,6 @@ namespace ExcelReader.Tests
             Assert.Equal(record.Kind, results[0].Kind);
         }
 
-        // The column plan is keyed by (T, TRow), not by T alone: the write actions compile against the
-        // concrete row writer, so each cell resolves to that sealed class's own method instead of an
-        // IRowWriter dispatch — the trade RecordColumns<T>.Plan<TRow> already makes on the reflection
-        // side. Its observable consequence, pinned here: the map is configured once per row-writer
-        // type, not once per record type.
         private sealed class ConfigureCountingModel : IExcelRecordMap<ConfigureCountingModel>
         {
             private static int _configurations;
@@ -295,7 +278,6 @@ namespace ExcelReader.Tests
             }
             Assert.Equal(1, ConfigureCountingModel.Configurations);
 
-            // Same (T, TRow) pair — the cached plan, no second configure call.
             await using var secondXlsxStream = new MemoryStream();
             await using (var again = await MappedRecordWriter.CreateMappedXlsxAsync(secondXlsxStream, leaveOpen: true, ct: ct))
             {
@@ -303,7 +285,6 @@ namespace ExcelReader.Tests
             }
             Assert.Equal(1, ConfigureCountingModel.Configurations);
 
-            // Different row writer — its own plan, compiled against CsvRowWriter.
             await using var csvStream = new MemoryStream();
             await using (var csv = await MappedRecordWriter.CreateMappedCsvAsync(csvStream, leaveOpen: true, ct: ct))
             {

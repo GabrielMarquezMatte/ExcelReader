@@ -1,20 +1,3 @@
-/* Real C consumer of the ExcelReader ABI, run in CI on Windows/Linux/macOS (see
- * .github/workflows/native-bindings.yml). Two jobs:
- *
- *   1. Compile-time _STATIC_ASSERTs (below) pin every ABI struct's layout against the C standard's
- *      own natural-alignment rules, on whatever compiler builds this file. Catches an accidental
- *      field reorder/insertion/padding change in excelreader.h itself.
- *   2. The runtime checks in main() call the real published library and assert on real values.
- *      Layer 1 alone cannot prove excelreader.h and the C# side (NativeColumn.cs, NativeRow.cs, ...)
- *      agree — only running real data through the real exports can. A mismatch there produces
- *      garbage values, and these assertions fail on the values, not on a crash.
- *
- * The library is loaded dynamically (LoadLibrary/dlopen) rather than linked at build time. This is
- * deliberate, not a shortcut: NativeAOT's publish output ships no `ExcelReader.Native.lib` import
- * library on Windows, so a normal `target_link_libraries` against the DLL does not work with MSVC
- * out of the box. Dynamic loading works identically on all three platforms and needs nothing
- * beyond the shared library file itself.
- */
 #include "excelreader.h"
 #include "excelreader_arrow.h"
 
@@ -32,7 +15,6 @@ typedef HMODULE xl_lib_handle;
 typedef void* xl_lib_handle;
 #endif
 
-/* ---- Layer 1: struct layout static asserts --------------------------------------------------- */
 
 #define XL_STATIC_ASSERT(cond, name) typedef char xl_static_assert_##name[(cond) ? 1 : -1]
 
@@ -112,7 +94,6 @@ XL_STATIC_ASSERT(offsetof(struct ArrowArray, release) == 64, arrow_array_release
 XL_STATIC_ASSERT(offsetof(struct ArrowArray, private_data) == 72, arrow_array_private_data);
 XL_STATIC_ASSERT(sizeof(struct ArrowArray) == 80, arrow_array_size);
 
-/* ---- Dynamic loading -------------------------------------------------------------------------- */
 
 static xl_lib_handle load_library(const char* path)
 {
@@ -211,7 +192,6 @@ static int bind_all(xl_lib_handle lib, api_t* api)
     return 1;
 }
 
-/* ---- Layer 2: runtime checks against the real library ---------------------------------------- */
 
 #define CHECK(cond, msg)                                                                            \
     do                                                                                              \
@@ -223,9 +203,6 @@ static int bind_all(xl_lib_handle lib, api_t* api)
         }                                                                                              \
     } while (0)
 
-/* Fills `spec` as a single-candidate name-based spec, using `name_slot`/`len_slot` as the
- * one-element backing storage `spec->names`/`spec->name_lens` point into — that storage must
- * outlive every use of `spec` (the caller declares it in the same or an outer scope). */
 static void set_spec_name1(xl_column_spec* spec, const uint8_t** name_slot, int32_t* len_slot, const char* text)
 {
     *name_slot = (const uint8_t*)text;
@@ -322,7 +299,6 @@ static int test_next_row_blob_and_growth(const api_t* api, const char* fixture)
     CHECK(value_len == 7 && memcmp(buffer + 16, "Coluna1", 7) == 0, "first header cell must read Coluna1");
     free(buffer);
 
-    /* Drain the rest (100 data rows) and confirm the total, then confirm XL_EOF at the end. */
     int row_count = 1;
     uint8_t scratch[4096];
     for (;;)
@@ -346,8 +322,6 @@ static int test_read_all_blob_and_decoded(const api_t* api, const char* fixture)
     xl_workbook* handle = NULL;
     CHECK(open_fixture(api, fixture, &handle) == XL_OK, "xl_open_file must succeed");
 
-    /* static, not stack-local: 1 MiB blows past MSVC's default 1 MiB thread stack reserve
-     * and faults with a stack overflow in Release builds. */
     static uint8_t buffer[1 << 20];
     int32_t written = 0;
     CHECK(api->read_all_blob(handle, buffer, (int32_t)sizeof(buffer), &written) == XL_OK,
@@ -356,8 +330,6 @@ static int test_read_all_blob_and_decoded(const api_t* api, const char* fixture)
     memcpy(&row_count, buffer, sizeof(int32_t));
     CHECK(row_count == 101, "xl_read_all_blob must report all 101 rows");
 
-    /* The sheet is now fully drained. A second call must be XL_OK with row_count == 0, never XL_EOF -
-     * xl_read_all_blob never returns XL_EOF, by contract. */
     CHECK(api->read_all_blob(handle, buffer, (int32_t)sizeof(buffer), &written) == XL_OK,
           "a drained xl_read_all_blob call must still be XL_OK");
     memcpy(&row_count, buffer, sizeof(int32_t));
@@ -365,7 +337,6 @@ static int test_read_all_blob_and_decoded(const api_t* api, const char* fixture)
 
     CHECK(api->close_(handle) == XL_OK, "xl_close must succeed");
 
-    /* Fresh handle for xl_read_all_decoded, so this is not entangled with the blob drain above. */
     CHECK(open_fixture(api, fixture, &handle) == XL_OK, "xl_open_file must succeed");
     xl_rows rows;
     memset(&rows, 0, sizeof(rows));
@@ -379,7 +350,6 @@ static int test_read_all_blob_and_decoded(const api_t* api, const char* fixture)
     CHECK(drained.row_count == 0, "a drained sheet's xl_read_all_decoded must report zero rows");
     api->free_rows(&drained);
 
-    /* Documented safe on a zeroed value. */
     xl_rows zeroed;
     memset(&zeroed, 0, sizeof(zeroed));
     api->free_rows(&zeroed);
@@ -393,7 +363,6 @@ static int test_open_file_ex(const api_t* api, const char* fixture)
     xl_workbook* handle = NULL;
     size_t path_len = strlen(fixture);
 
-    /* NULL options must behave exactly like xl_open_file. */
     CHECK(api->open_file_ex((const uint8_t*)fixture, (int32_t)path_len, XL_FORMAT_XLSB, NULL, &handle) == XL_OK,
           "xl_open_file_ex with NULL options must succeed like xl_open_file");
     int32_t sheet_count = 0;
@@ -401,7 +370,6 @@ static int test_open_file_ex(const api_t* api, const char* fixture)
           "a workbook opened via xl_open_file_ex(NULL) must behave normally");
     CHECK(api->close_(handle) == XL_OK, "xl_close must succeed");
 
-    /* A wrong struct_size must be rejected before anything else is inspected. */
     xl_open_options bad_options;
     memset(&bad_options, 0, sizeof(bad_options));
     bad_options.struct_size = 999999;
@@ -427,14 +395,6 @@ static int build_specs(xl_column_spec* specs, const uint8_t** name_ptrs, int32_t
     return 3;
 }
 
-/* The counts xl_parse_typed/xl_parse_arrow take are the only numbers a C caller hands over that
- * size an allocation AND drive a read across this process's memory. This is the only layer that can
- * test that guard: those entry points are [UnmanagedCallersOnly], so no managed test can invoke them
- * (the predicate itself is unit-tested in NativeApiTests).
- *
- * Every call below passes a ONE-element spec array while claiming more. Before the bound existed
- * these walked off the end of `specs` and sized an array from the claimed count — so a regression
- * here does not fail an assertion, it takes the process down, which CI reports just as loudly. */
 static int test_parse_rejects_hostile_counts(const api_t* api, const char* fixture)
 {
     xl_workbook* handle = NULL;
@@ -461,8 +421,6 @@ static int test_parse_rejects_hostile_counts(const api_t* api, const char* fixtu
     CHECK(api->parse_typed(handle, &one_spec, -1, 1, &table) == XL_INVALID_ARGUMENT,
           "xl_parse_typed must reject a negative spec_count");
 
-    /* A plausible count with an implausible name_len: the bound has to cover both, since name_len is
-     * what becomes a read length over the caller's string. */
     xl_column_spec wide_name = one_spec;
     int32_t wide_name_len = XL_MAX_COLUMN_NAME_BYTES + 1;
     wide_name.name_lens = &wide_name_len;
@@ -474,7 +432,6 @@ static int test_parse_rejects_hostile_counts(const api_t* api, const char* fixtu
     CHECK(api->parse_typed(handle, &wide_name, 1, 1, &table) == XL_INVALID_ARGUMENT,
           "xl_parse_typed must reject a negative name_len");
 
-    /* xl_parse_arrow decodes the same specs through the same path, so it needs the same guard. */
     struct ArrowArray array;
     struct ArrowSchema schema;
     memset(&array, 0, sizeof(array));
@@ -484,7 +441,6 @@ static int test_parse_rejects_hostile_counts(const api_t* api, const char* fixtu
     CHECK(array.release == NULL && schema.release == NULL,
           "a rejected xl_parse_arrow must leave both out params releasable-as-no-op");
 
-    /* A blank name would otherwise trim to "" and match the first empty header cell. */
     xl_column_spec blank_name;
     memset(&blank_name, 0, sizeof(blank_name));
     const uint8_t* blank_name_name;
@@ -494,8 +450,6 @@ static int test_parse_rejects_hostile_counts(const api_t* api, const char* fixtu
     CHECK(api->parse_typed(handle, &blank_name, 1, 1, &table) == XL_INVALID_ARGUMENT,
           "xl_parse_typed must reject a blank column name");
 
-    /* The handle must still be usable: every rejection above is an argument error, not a fault that
-     * leaves the workbook in a broken state. */
     xl_column_spec specs[3];
     const uint8_t* name_ptrs[3];
     int32_t name_lens[3];
@@ -514,9 +468,6 @@ static int test_parse_typed_and_cursor_independence(const api_t* api, const char
     xl_workbook* handle = NULL;
     CHECK(open_fixture(api, fixture, &handle) == XL_OK, "xl_open_file must succeed");
 
-    /* Advance the shared row cursor past the header before calling xl_parse_typed, then confirm
-     * xl_parse_typed did not disturb it: the next xl_next_row call below must still see the FIRST
-     * data row ("Valor1", not something further along), exactly as the header documents. */
     uint8_t scratch[4096];
     int32_t written = 0;
     CHECK(api->next_row(handle, scratch, (int32_t)sizeof(scratch), &written) == XL_OK,
@@ -550,7 +501,6 @@ static int test_parse_typed_and_cursor_independence(const api_t* api, const char
 
     api->free_table(&table);
 
-    /* The row cursor must still be positioned right after the header row. */
     CHECK(api->next_row(handle, scratch, (int32_t)sizeof(scratch), &written) == XL_OK,
           "xl_next_row after xl_parse_typed must still succeed");
     int32_t cell_count = 0;
@@ -616,7 +566,6 @@ static int test_parse_arrow(const api_t* api, const char* fixture)
     const int64_t* ints = (const int64_t*)int_array->buffers[1];
     CHECK(ints[0] == 1, "the exported I64 array's first value must be 1");
 
-    /* The real Arrow consumer contract: call release yourself. Not xl_free_table. */
     release_arrow_array(&array);
     release_arrow_schema(&schema);
 
@@ -629,9 +578,6 @@ static int test_infer_schema(const api_t* api, const char* fixture)
     xl_workbook* handle = NULL;
     CHECK(open_fixture(api, fixture, &handle) == XL_OK, "xl_open_file must succeed");
 
-    /* Advance the shared row cursor past the header, same setup as
-     * test_parse_typed_and_cursor_independence, to prove xl_infer_schema reads from the sheet's
-     * first row independent of it. */
     uint8_t scratch[4096];
     int32_t written = 0;
     CHECK(api->next_row(handle, scratch, (int32_t)sizeof(scratch), &written) == XL_OK,
@@ -655,7 +601,6 @@ static int test_infer_schema(const api_t* api, const char* fixture)
     CHECK(coluna3.name_count == 1 && coluna3.name_lens[0] == 7 && memcmp(coluna3.names[0], "Coluna3", 7) == 0, "column 2 must be named Coluna3");
     CHECK(coluna3.type == XL_T_I64, "Coluna3 must be guessed as XL_T_I64 - every sampled value is a whole number");
 
-    /* The row cursor must still be positioned right after the header row. */
     CHECK(api->next_row(handle, scratch, (int32_t)sizeof(scratch), &written) == XL_OK,
           "xl_next_row after xl_infer_schema must still succeed");
     int32_t value_len = 0;
@@ -663,9 +608,6 @@ static int test_infer_schema(const api_t* api, const char* fixture)
     CHECK(value_len == 6 && memcmp(scratch + 16, "Valor1", 6) == 0,
           "xl_infer_schema must not have disturbed the xl_next_row cursor - this must be the first data row");
 
-    /* The whole point of the shape match: an inferred schema is directly usable by xl_parse_typed.
-     * Each spec's name pointer is only valid until xl_free_schema runs, so parse_typed must be
-     * called first - copying the specs does not copy the name bytes they point to. */
     xl_column_spec first_three[3];
     memcpy(first_three, schema.columns, 3 * sizeof(xl_column_spec));
 
@@ -697,7 +639,6 @@ static int test_infer_schema_rejects_bad_arguments(const api_t* api, const char*
     CHECK(api->infer_schema(handle, 1, -1, &schema) == XL_INVALID_ARGUMENT,
           "xl_infer_schema must reject a negative sample_size");
 
-    /* Documented safe on a zeroed value. */
     xl_inferred_schema zeroed;
     memset(&zeroed, 0, sizeof(zeroed));
     api->free_schema(&zeroed);
@@ -721,9 +662,6 @@ static int test_double_close_is_rejected(const api_t* api, const char* fixture)
     return 0;
 }
 
-/* Writes a two-row table through xl_write_typed, reads it back with the existing read exports, and
- * asserts on the values. Layer 1's static asserts prove the header's own layout; only running real
- * data through both directions proves excelreader.h, the C# structs and the writer agree. */
 static int test_write_typed(const api_t* api)
 {
     const char* out_path = "excelreader_smoke_write.csv";

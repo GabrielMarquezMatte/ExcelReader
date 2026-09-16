@@ -21,8 +21,6 @@ namespace ExcelReader.Core.Parser
         private readonly ExcelParserConfig _config;
         private readonly TypeMapInfo<T> _info;
 
-        // Config first so a derived constructor's base(ValidateConfig(config), BuildMap()) rejects a
-        // bad HeaderRow before spending anything on the map.
         private protected ExcelRowMapParserBase(ExcelParserConfig config, TypeMapInfo<T> info)
         {
             _config = config;

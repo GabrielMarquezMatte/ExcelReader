@@ -23,8 +23,6 @@ namespace ExcelReader.Core.Reader
             ValidateOptions(_options);
             if (_options.Encoding is not null && _options.Encoding.CodePage != Encoding.UTF8.CodePage)
             {
-                // The transcoding stream is a fresh wrapper we alone own; its own leaveOpen setting
-                // already governs whether the underlying stream is closed with it.
                 _stream = Encoding.CreateTranscodingStream(stream, _options.Encoding, Encoding.UTF8, leaveOpen);
                 _leaveOpen = false;
             }
@@ -165,10 +163,6 @@ namespace ExcelReader.Core.Reader
             return await GetAsyncEnumeratorAsync(ct).ConfigureAwait(false);
         }
 
-        // Lets the same reader be enumerated more than once when the source stream supports seeking
-        // (mirrors XlsxReader.GetEnumerator reopening its ZIP entry fresh on every call). Over a
-        // non-seekable/transcoding stream there's no position to rewind to, so a second enumeration
-        // would silently yield zero rows instead of replaying the file — fail loudly instead.
         private void ResetToStart()
         {
             if (_stream is null)

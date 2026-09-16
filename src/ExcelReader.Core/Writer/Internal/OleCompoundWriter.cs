@@ -9,10 +9,6 @@ namespace ExcelReader.Core.Writer.Internal
         Action<Stream> WriteBody,
         Func<Stream, CancellationToken, ValueTask> WriteBodyAsync);
 
-    // Writes a minimal OLE/CFB container — the inverse of the XlsCompoundFile/CfbContainer readers.
-    // Sector order: header(512) + FAT + DIFAT (if needed) + directory + mini-FAT + mini stream +
-    // one run per big stream. A stream smaller than the 4096 mini cutoff goes in the mini stream,
-    // because that is where [MS-CFB] and both readers here look for it.
     internal static partial class OleCompoundWriter
     {
         private const int HeaderSize = 512;
@@ -20,15 +16,15 @@ namespace ExcelReader.Core.Writer.Internal
         private const int MiniSectorSize = 64;
         private const int MiniCutoff = 4096;
         private const int DirectoryEntrySize = 128;
-        private const int DirectoryEntriesPerSector = SectorSize / DirectoryEntrySize; // 4
+        private const int DirectoryEntriesPerSector = SectorSize / DirectoryEntrySize;
         private const int EndOfChain = unchecked((int)0xFFFFFFFE);
         private const int FatSectorMarker = unchecked((int)0xFFFFFFFD);
         private const int DifatSectorMarker = unchecked((int)0xFFFFFFFC);
         private const int FreeSector = unchecked((int)0xFFFFFFFF);
         private const int NoStream = unchecked((int)0xFFFFFFFF);
-        private const int FatEntriesPerSector = SectorSize / 4;            // 128
-        private const int MaxHeaderDifat = (HeaderSize - 0x4C) / 4;        // 109
-        private const int DifatEntriesPerSector = FatEntriesPerSector - 1; // 127 (last slot = next DIFAT)
+        private const int FatEntriesPerSector = SectorSize / 4;
+        private const int MaxHeaderDifat = (HeaderSize - 0x4C) / 4;
+        private const int DifatEntriesPerSector = FatEntriesPerSector - 1;
 
         internal static void Write(Stream destination, IReadOnlyList<CfbStreamSpec> streams)
         {
@@ -125,8 +121,6 @@ namespace ExcelReader.Core.Writer.Internal
             BinaryPrimitives.WriteInt32LittleEndian(dest.Slice(offset, 4), value);
         }
 
-        // Everything about the container that can be decided before a single body byte is written.
-        // Kept separate from the two Write methods so the sector math exists once, not twice.
         private sealed class Layout
         {
             internal byte[] Header = [];
@@ -151,8 +145,6 @@ namespace ExcelReader.Core.Writer.Internal
                 {
                     if (spec.Size <= 0)
                     {
-                        // An empty stream has no start sector to point at, and neither reader here has a
-                        // path for one; no caller needs it.
                         throw new ArgumentException($"Stream '{spec.Name}' must have a positive size.", nameof(streams));
                     }
                 }
@@ -167,7 +159,6 @@ namespace ExcelReader.Core.Writer.Internal
                 layout.MiniOrder = [.. mini];
                 layout.BigOrder = [.. big];
 
-                // Mini stream: each entry occupies whole 64-byte mini sectors, laid out back to back.
                 int[] firstMiniSector = new int[mini.Count];
                 layout.MiniPadding = new int[mini.Count];
                 int miniSectors = 0;
@@ -184,7 +175,6 @@ namespace ExcelReader.Core.Writer.Internal
                 layout.MiniBlobPadding = (miniStreamSectors * SectorSize) - miniBlobBytes;
                 int miniFatSectors = miniSectors == 0 ? 0 : CeilingDiv(miniSectors, FatEntriesPerSector);
 
-                // Big streams: whole 512-byte sectors each.
                 int[] bigSectorCount = new int[big.Count];
                 layout.BigPadding = new int[big.Count];
                 int bigSectorTotal = 0;
@@ -221,8 +211,6 @@ namespace ExcelReader.Core.Writer.Internal
                 return layout;
             }
 
-            // Resolves the circular dependency: more payload needs more FAT sectors, more FAT sectors
-            // may need DIFAT sectors, and those add to the total again. Converges in ≤ 2 rounds.
             private static (int fatCount, int difatCount) ComputeSectorCounts(int payloadSectors)
             {
                 int fat = CeilingDiv(payloadSectors, FatEntriesPerSector);
@@ -241,12 +229,11 @@ namespace ExcelReader.Core.Writer.Internal
                 byte[] header = new byte[HeaderSize];
                 ReadOnlySpan<byte> signature = [0xD0, 0xCF, 0x11, 0xE0, 0xA1, 0xB1, 0x1A, 0xE1];
                 signature.CopyTo(header);
-                WriteU16(header, 0x18, 0x003E); // minor version
-                WriteU16(header, 0x1A, 0x0003); // major version 3
-                WriteU16(header, 0x1C, 0xFFFE); // byte-order mark
-                WriteU16(header, 0x1E, 9);      // sector shift -> 512
-                WriteU16(header, 0x20, 6);      // mini-sector shift -> 64
-                // 0x28 (directory sector count) stays 0: [MS-CFB] requires that for major version 3.
+                WriteU16(header, 0x18, 0x003E);
+                WriteU16(header, 0x1A, 0x0003);
+                WriteU16(header, 0x1C, 0xFFFE);
+                WriteU16(header, 0x1E, 9);
+                WriteU16(header, 0x20, 6);
                 _ = directorySectors;
                 WriteI32(header, 0x2C, fatCount);
                 WriteI32(header, 0x30, directoryStart);
@@ -263,7 +250,7 @@ namespace ExcelReader.Core.Writer.Internal
                 int headerFatCount = Math.Min(fatCount, MaxHeaderDifat);
                 for (int i = 0; i < headerFatCount; i++)
                 {
-                    WriteI32(header, 0x4C + (i * 4), i); // FAT occupies sectors 0..fatCount-1
+                    WriteI32(header, 0x4C + (i * 4), i);
                 }
                 return header;
             }
@@ -273,7 +260,7 @@ namespace ExcelReader.Core.Writer.Internal
                 int bigStart, int[] bigSectorCount)
             {
                 byte[] fat = new byte[fatCount * FatEntriesPerSector * 4];
-                fat.AsSpan().Fill(0xFF); // FreeSector everywhere by default
+                fat.AsSpan().Fill(0xFF);
 
                 for (int i = 0; i < fatCount; i++)
                 {
@@ -296,7 +283,6 @@ namespace ExcelReader.Core.Writer.Internal
                 return fat;
             }
 
-            // Links `count` consecutive sectors starting at `start`, EndOfChain on the last.
             private static void ChainRun(byte[] table, int start, int count)
             {
                 for (int i = 0; i < count; i++)
@@ -310,7 +296,7 @@ namespace ExcelReader.Core.Writer.Internal
                 IReadOnlyList<CfbStreamSpec> streams, List<int> mini)
             {
                 byte[] miniFat = new byte[miniFatSectors * FatEntriesPerSector * 4];
-                miniFat.AsSpan().Fill(0xFF); // FreeSector for every unused slot
+                miniFat.AsSpan().Fill(0xFF);
                 for (int k = 0; k < miniCount; k++)
                 {
                     int sectors = CeilingDivLong(streams[mini[k]].Size, MiniSectorSize);
@@ -324,8 +310,6 @@ namespace ExcelReader.Core.Writer.Internal
                 List<int> big, int bigStart, int[] bigSectorCount)
             {
                 byte[] directory = new byte[directorySectors * SectorSize];
-                // Unused entries must read as "unallocated" (object type 0), which a zeroed entry is,
-                // except for the sibling/child pointers — those must be NoStream, not 0.
                 for (int i = streams.Count + 1; i < directorySectors * DirectoryEntriesPerSector; i++)
                 {
                     Span<byte> unused = directory.AsSpan(i * DirectoryEntrySize, DirectoryEntrySize);
@@ -334,9 +318,6 @@ namespace ExcelReader.Core.Writer.Internal
                     WriteI32(unused, 76, NoStream);
                 }
 
-                // Entry order in the directory is stream order; the red-black tree links below are what
-                // a tree-walking reader (Excel) follows, ordered by [MS-CFB]'s rule: name length first,
-                // then the uppercased name. CfbContainer scans linearly and ignores the links.
                 int[] sorted = [.. Enumerable.Range(0, streams.Count).OrderBy(i => streams[i].Name.Length)
                     .ThenBy(i => streams[i].Name, StringComparer.OrdinalIgnoreCase)];
 
@@ -351,7 +332,7 @@ namespace ExcelReader.Core.Writer.Internal
                     int miniPos = mini.IndexOf(index);
                     if (miniPos >= 0)
                     {
-                        startSector = firstMiniSector[miniPos]; // a MINI-sector index, not a FAT one
+                        startSector = firstMiniSector[miniPos];
                     }
                     else
                     {
@@ -362,8 +343,6 @@ namespace ExcelReader.Core.Writer.Internal
                             startSector += bigSectorCount[k];
                         }
                     }
-                    // A right-leaning chain: valid for an in-order tree walk, unbalanced but no reader
-                    // verifies balance.
                     int right = rank + 1 < sorted.Length ? sorted[rank + 1] + 1 : NoStream;
                     WriteEntry(directory.AsSpan((index + 1) * DirectoryEntrySize, DirectoryEntrySize),
                         streams[index].Name, objectType: 2, startSector: startSector, size: streams[index].Size,
@@ -380,9 +359,9 @@ namespace ExcelReader.Core.Writer.Internal
                     throw new ArgumentException($"CFB stream name '{name}' exceeds 31 characters.", nameof(name));
                 }
                 System.Text.Encoding.Unicode.GetBytes(name + '\0').CopyTo(entry);
-                WriteU16(entry, 64, (ushort)((name.Length + 1) * 2)); // name byte length incl. terminator
+                WriteU16(entry, 64, (ushort)((name.Length + 1) * 2));
                 entry[66] = objectType;
-                entry[67] = 1; // color = black
+                entry[67] = 1;
                 WriteI32(entry, 68, leftSibling);
                 WriteI32(entry, 72, rightSibling);
                 WriteI32(entry, 76, child);
@@ -390,7 +369,6 @@ namespace ExcelReader.Core.Writer.Internal
                 BinaryPrimitives.WriteInt64LittleEndian(entry[120..], size);
             }
 
-            // Each DIFAT sector: 127 FAT-sector indices (FreeSector padding if fewer) + next-DIFAT pointer.
             private static byte[] BuildDifat(int fatCount, int difatCount, int firstDifatSector)
             {
                 byte[] difat = new byte[difatCount * SectorSize];

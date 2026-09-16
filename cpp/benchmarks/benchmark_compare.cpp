@@ -1,17 +1,3 @@
-// Compares ExcelReader against xlnt (https://github.com/tfussell/xlnt), xlsxio
-// (https://github.com/brechtsanders/xlsxio) and DuckDB's (https://github.com/duckdb/duckdb)
-// "excel" extension reading the full row shape of
-// tests/ExcelReader.Benchmarks/Data/65K_Records_Data.xlsx: all 14 columns, 65,535 data rows. None
-// of the three competitors reads .xlsb, so this fixture is xlsx-only, unlike the RealExcel.xlsb
-// fixture the other benchmarks use.
-//
-// All four sides decode every cell into an owned value and fold it into one accumulator - the
-// ExcelReader side uses std::string bindings rather than the zero-copy std::string_view used
-// elsewhere in this suite, so no side gets an allocation-free advantage the others can't take.
-// DuckDB's case expresses the same accumulator as a single SQL aggregate query rather than a C++
-// loop, which is the idiomatic way to make a SQL engine touch every cell, not a concession to it.
-// Same methodology as BenchmarkAccumulators.cs (the .NET benchmark suite's ExcelReader-vs-Sylvan
-// comparison).
 
 #include <xl/excelreader.hpp>
 
@@ -139,11 +125,6 @@ static void BM_ExcelReader_Xlsx_Full(benchmark::State &state)
 }
 BENCHMARK(BM_ExcelReader_Xlsx_Full);
 
-// Same native call as BM_ExcelReader_Xlsx_Full (xl::parse_sheet is exactly one xl_parse_typed FFI
-// call - it returns a lazy TableView, no per-row work happens until iteration), but stops before
-// the for-loop. The gap against BM_ExcelReader_Xlsx_Full's number is exactly what materializing one
-// FullRow (with an owned std::string per text column) per row costs on the C++ side - the same
-// question rust/excelreader/benches/compare_bench.rs's *_parse_only benchmarks answer for Rust.
 static void BM_ExcelReader_Xlsx_ParseOnly(benchmark::State &state)
 {
     auto buffer_result = read_file_to_buffer(EXCELREADER_XLSX_FIXTURE_PATH);
@@ -191,7 +172,6 @@ static void BM_Xlnt_Xlsx_Full(benchmark::State &state)
         {
             if (first_row)
             {
-                // Row 1 is the header - ExcelReader's parse_sheet consumes it as schema, not data.
                 first_row = false;
                 continue;
             }
@@ -223,14 +203,6 @@ BENCHMARK(BM_Xlnt_Xlsx_Full);
 
 namespace
 {
-    // Column order matches the fixture's header exactly - xlsxio has no named-column lookup, only
-    // positional streaming, so each column's typed accessor is called in that fixed order.
-    //
-    // xlsxioread_sheet_next_cell() only marks a row as finished internally when it returns NULL -
-    // the call *after* the last real cell, not the last real cell itself. Stopping right after the
-    // 14th (known) column without making that trailing call leaves the row-end bookkeeping stale,
-    // and the next xlsxioread_sheet_next_row() desyncs every column by one from there on. Draining
-    // to NULL at the end of every row (like the header skip above) avoids that.
     int64_t accumulate_xlsxio_row(xlsxioreadersheet sheet)
     {
         int64_t acc = 0;
@@ -239,7 +211,6 @@ namespace
         double fvalue = 0.0;
         time_t tvalue = 0;
 
-        // Region, Country, Item Type, Sales Channel, Order Priority
         for (int i = 0; i < 5; ++i)
         {
             if (xlsxioread_sheet_next_cell_string(sheet, &text) && text)
@@ -252,27 +223,22 @@ namespace
                 text = nullptr;
             }
         }
-        // Order Date
         if (xlsxioread_sheet_next_cell_datetime(sheet, &tvalue))
         {
             acc += static_cast<int64_t>(tvalue);
         }
-        // Order ID
         if (xlsxioread_sheet_next_cell_int(sheet, &ivalue))
         {
             acc += ivalue;
         }
-        // Ship Date
         if (xlsxioread_sheet_next_cell_datetime(sheet, &tvalue))
         {
             acc += static_cast<int64_t>(tvalue);
         }
-        // Units Sold
         if (xlsxioread_sheet_next_cell_int(sheet, &ivalue))
         {
             acc += ivalue;
         }
-        // Unit Price, Unit Cost, Total Revenue, Total Cost, Total Profit
         for (int i = 0; i < 5; ++i)
         {
             if (xlsxioread_sheet_next_cell_float(sheet, &fvalue))
@@ -313,10 +279,6 @@ static void BM_Xlsxio_Xlsx_Full(benchmark::State &state)
             return;
         }
 
-        // Row 1 is the header - ExcelReader's parse_sheet consumes it as schema, not data. xlsxio's
-        // row cursor only advances correctly once every cell of the current row has been read (its
-        // SAX resume loop tracks column position), so the header's cells must be drained here, not
-        // just skipped - advancing past a partially-read row desyncs every subsequent typed read.
         xlsxioread_sheet_next_row(sheet);
         for (XLSXIOCHAR *header_cell; (header_cell = xlsxioread_sheet_next_cell(sheet)) != nullptr;)
         {
@@ -336,20 +298,11 @@ static void BM_Xlsxio_Xlsx_Full(benchmark::State &state)
 }
 BENCHMARK(BM_Xlsxio_Xlsx_Full);
 
-// DuckDB (https://github.com/duckdb/duckdb) reads via its "excel" extension's read_xlsx() table
-// function, invoked here as a single aggregate query rather than pulled apart row by row in C++:
-// DuckDB is a SQL engine, and an aggregate over every column is the idiomatic way to make it
-// decode every cell, not an artificial concession to it. The expression matches
-// accumulate_full_row() exactly - same columns, same "text length, numeric value" split, same
-// epoch-days conversion for the two date columns - so the three sides remain the same "touch every
-// cell into one accumulator" methodology, just expressed once in SQL instead of once per row.
 static void BM_DuckDB_Xlsx_Full(benchmark::State &state)
 {
     duckdb::DuckDB db(nullptr);
     duckdb::Connection con(db);
 
-    // INSTALL pulls the extension from DuckDB's extension repository on first use and caches it
-    // locally afterward; done once per process, outside the timed region.
     auto setup = con.Query("INSTALL excel; LOAD excel;");
     if (setup->HasError())
     {

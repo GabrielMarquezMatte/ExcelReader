@@ -1,12 +1,5 @@
 namespace ExcelReader.Core.Reader
 {
-    // Streaming twin of NsTokens for xl/sharedStrings.xml: every element token ParseShared matches,
-    // built once whether or not the part uses a namespace prefix. Unlike NsTokens (which only exists
-    // for the prefixed case, so the unprefixed scanner keeps compile-time literal fast paths), this
-    // always materializes byte[] copies — the shared-strings scan runs once per workbook, not once per
-    // cell, so the extra array beats holding a ReadOnlySpan<byte> literal across the Fill/FillAsync
-    // calls the streaming parser needs (a span cannot survive an await, and the sync growing-search
-    // helpers are shared with the async ones to avoid a second copy of that logic).
     internal sealed class SharedStringTokens
     {
         internal readonly byte[] SstTag;
@@ -17,8 +10,6 @@ namespace ExcelReader.Core.Reader
         internal readonly byte[] RPhOpen;
         internal readonly byte[] RPhClose;
 
-        // `prefix` includes the trailing ':' (e.g. "x:"), exactly as DetectElementPrefix returns it
-        // empty for the default-namespace case almost every producer emits.
         internal SharedStringTokens(ReadOnlySpan<byte> prefix)
         {
             if (prefix.IsEmpty)

@@ -5,9 +5,6 @@ using System.Threading.Channels;
 
 namespace ExcelReader.Core.Reader
 {
-    // Overlaps zlib inflate (producer thread) with XML/record parsing (consumer thread) for a single
-    // ZIP entry. Opt-in only (see ExcelReaderOptions.PrefetchDecompression) — wraps innermost, under
-    // LimitedReadStream, so the decompressed-byte counters stay on the consumer thread untouched.
     internal sealed class PrefetchStream : Stream
     {
         private const int ChunkSize = 64 * 1024;
@@ -21,8 +18,6 @@ namespace ExcelReader.Core.Reader
         private int _currentLength;
         private int _currentOffset;
         private ExceptionDispatchInfo? _producerException;
-        // Stream.DisposeAsync() forwards to Dispose(bool), so the async path would otherwise re-enter
-        // teardown after _cts is already disposed and Cancel() would throw ObjectDisposedException.
         private bool _disposed;
 
         internal PrefetchStream(Stream inner)
@@ -51,8 +46,6 @@ namespace ExcelReader.Core.Reader
             get => throw new NotSupportedException(); set => throw new NotSupportedException();
         }
 
-        // Read-only decorator: nothing is ever written, and _inner is touched exclusively by the
-        // producer task, so there is nothing for a consumer-thread Flush to do or safely reach.
         public override void Flush()
         {
         }
@@ -108,9 +101,6 @@ namespace ExcelReader.Core.Reader
             throw new NotSupportedException();
         }
 
-        // The blocking GetAwaiter().GetResult() below is the sync Read path's whole point: it lets a
-        // caller on the ordinary synchronous path still benefit from the background inflate without
-        // an async rewrite. It only ever blocks on the bounded channel, never on I/O.
         private bool EnsureCurrentChunk()
         {
             if (_currentBuffer is not null)
@@ -131,8 +121,6 @@ namespace ExcelReader.Core.Reader
             return false;
         }
 
-        // Isolated so the ValueTask from WaitToReadAsync is consumed along exactly one path (either
-        // the already-completed branch or the GetResult() branch), never both.
         private bool WaitForNextChunkSync()
         {
             ValueTask<bool> waitTask = _channel.Reader.WaitToReadAsync(_cts.Token);
@@ -171,9 +159,6 @@ namespace ExcelReader.Core.Reader
             _currentOffset = 0;
         }
 
-        // Copies as much of the current chunk as fits, returning the buffer to the pool only once the
-        // caller has drained it fully — a caller asking for fewer bytes than a chunk holds must see the
-        // remainder on its next call, not lose it.
         private int ConsumeCurrentChunk(Span<byte> destination)
         {
             byte[] buffer = _currentBuffer!;
@@ -189,11 +174,6 @@ namespace ExcelReader.Core.Reader
             return toCopy;
         }
 
-        // Drains the already-ensured current chunk, then keeps draining further chunks the producer has
-        // already queued -- a non-blocking TryRead, never another wait -- while the destination still
-        // has room. Without this, a destination bigger than ChunkSize (the caller's buffer can be up to
-        // 256 KB; see WorkbookLookups.InitialBufferCapacity) still only returns one 64 KB chunk per call,
-        // forcing extra Fill/Read round trips to satisfy one Ensure.
         private int ConsumeAvailableChunks(Span<byte> destination)
         {
             int total = ConsumeCurrentChunk(destination);
@@ -205,11 +185,6 @@ namespace ExcelReader.Core.Reader
             return total;
         }
 
-        // Runs on a pooled thread pool thread for the entry's whole lifetime. Blocking Read here is
-        // deliberate: this is CPU-bound inflate, not blocking I/O, so occupying the thread is not a
-        // starvation bug. Every exception path is caught so the Task
-        // itself always completes successfully — Dispose/DisposeAsync await it without risking an
-        // unobserved-exception or a rethrow at a moment nobody is prepared to catch it.
         [SuppressMessage("Design", "CA1031:Do not catch general exception types",
             Justification = "Any exception here (truncated entry, corrupt deflate, limit exceeded) must reach the consumer's next Read/ReadAsync with its original type preserved, so it is captured via ExceptionDispatchInfo rather than left to fault the producer Task unobserved.")]
         private async Task ProduceAsync(CancellationToken token)
@@ -226,13 +201,11 @@ namespace ExcelReader.Core.Reader
                         break;
                     }
                     await _channel.Writer.WriteAsync((pending, read), token).ConfigureAwait(false);
-                    pending = null; // ownership passed to the channel/consumer
+                    pending = null;
                 }
             }
             catch (OperationCanceledException) when (token.IsCancellationRequested)
             {
-                // Early abandonment (consumer disposed while WriteAsync was blocked on a full channel).
-                // Not an error — the consumer already stopped reading.
             }
             catch (Exception ex)
             {
@@ -248,8 +221,6 @@ namespace ExcelReader.Core.Reader
             }
         }
 
-        // Returns every pooled buffer still sitting in the channel plus the partially-consumed current
-        // one. Runs after the producer task has finished, so no new items can arrive underneath it.
         private void DrainRemainingBuffers()
         {
             while (_channel.Reader.TryRead(out var item))
@@ -275,8 +246,6 @@ namespace ExcelReader.Core.Reader
                 }
                 catch (OperationCanceledException) when (_cts.IsCancellationRequested)
                 {
-                    // Early abandonment (consumer disposed while WriteAsync was blocked on a full channel).
-                    // Not an error — the consumer already stopped reading.
                 }
                 DrainRemainingBuffers();
                 _cts.Dispose();
@@ -300,8 +269,6 @@ namespace ExcelReader.Core.Reader
             }
             catch (OperationCanceledException) when (_cts.IsCancellationRequested)
             {
-                // Early abandonment (consumer disposed while WriteAsync was blocked on a full channel).
-                // Not an error — the consumer already stopped reading.
             }
             DrainRemainingBuffers();
             _cts.Dispose();

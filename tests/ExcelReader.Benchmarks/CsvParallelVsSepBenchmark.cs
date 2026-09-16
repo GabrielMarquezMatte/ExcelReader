@@ -15,22 +15,9 @@ namespace ExcelReader.Benchmarks
         ConversionHeavy,
     }
 
-    // Head-to-head against Sep's own parallel API, both engines producing the same thing: one
-    // materialized model object per row, consumed so nothing is optimized away.
-    //
-    // The two designs partition differently, and the corpus decides which one that favours. Sep reads
-    // the file sequentially on one thread and parallelizes only the per-row delegate, so its record
-    // scanning never scales; ExcelReader partitions the file by byte offset, so scanning scales too
-    // but has to reconcile record boundaries and merge in order. Both sequential legs are here as
-    // well — a parallel number means nothing without the baseline it is supposed to beat.
-    //
-    // ExcelReader runs at its default degree of parallelism (Environment.ProcessorCount), which is
-    // what a caller gets without tuning; CsvParallelParseBenchmark is the one that sweeps dop.
     [MemoryDiagnoser]
     public class CsvParallelVsSepBenchmark
     {
-        // Sized so each corpus lands in the 100-200 MB range, where partitioning is worth doing at all
-        // and the file is far past any level of CPU cache.
         private const int NarrowRows = 8_000_000;
         private const int WideRows = 3_000_000;
 
@@ -79,12 +66,6 @@ namespace ExcelReader.Benchmarks
             };
         }
 
-        // The direct synchronous parser, not ParseCsvParallelAsync's dop:1 fallback. Sep_Sequential
-        // below is Sep's own synchronous API, so this keeps both sequential legs on the same footing —
-        // routing ours through the parallel entry point would have it pay an async enumerator per row
-        // that Sep's leg never pays, which is a difference in API shape rather than in parsing.
-        // ParseCsvParallelAsync's own dop:1 fallback is measured by CsvParallelParseBenchmark, which
-        // sweeps dop from 1.
         [Benchmark(Baseline = true)]
         public Task<long> ExcelReader_Sequential()
         {

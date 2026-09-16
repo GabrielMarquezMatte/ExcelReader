@@ -7,8 +7,6 @@ using static ExcelReader.Benchmarks.BenchmarkAccumulators;
 
 namespace ExcelReader.Benchmarks
 {
-    // Reads a headerless workbook cell-by-cell, accumulating a checksum, across
-    // ExcelReader (sync + async), MiniExcel, and Sylvan.
     [MemoryDiagnoser]
     public class ReadBenchmark
     {
@@ -67,9 +65,6 @@ namespace ExcelReader.Benchmarks
             return acc;
         }
 
-        // Matched-work counterpart to ExcelReader: materializes a string per cell like Sylvan's
-        // GetString below is forced to, instead of reading the zero-copy span (see the README's
-        // "Benchmark methodology" note).
         [Benchmark]
         public long ExcelReaderMaterialized()
         {

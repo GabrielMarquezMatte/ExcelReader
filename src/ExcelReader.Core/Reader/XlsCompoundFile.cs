@@ -4,10 +4,6 @@ using ExcelReader.Core.Crypto;
 
 namespace ExcelReader.Core.Reader
 {
-    // Parses the OLE/CFB container metadata (header, FAT, directory, mini-FAT/stream) via
-    // CfbContainer, then locates the Workbook stream and hands it back as a WorkbookStream that
-    // reads its sectors on demand. Non-seekable sources are buffered into a MemoryStream first
-    // (rare fallback, same cost as before).
     [ExcludeFromCodeCoverage(Justification = "Covered through XlsReader integration tests; most uncovered paths are corrupt-OLE guard rails.")]
     internal static class XlsCompoundFile
     {
@@ -99,7 +95,6 @@ namespace ExcelReader.Core.Reader
             CfbContainer cfb = CfbContainer.Parse(source, ownsSource, options, memory);
             try
             {
-                // "Workbook" is BIFF8; "Book" is BIFF5 - both mean the same stream to this reader.
                 string name;
                 if (cfb.ContainsStream("Workbook"))
                 {
@@ -115,18 +110,12 @@ namespace ExcelReader.Core.Reader
                 }
                 cfb.TryFindEntry(name, out CfbContainer.DirectoryEntry workbook);
 
-                // A stream cannot hold more content than the container's own byte length, so an
-                // inflated Size field (the same attack class as fatSectorCount/difatSectorCount above)
-                // is a crafted header — reject it before it drives an allocation or a chain walk sized
-                // off it. The caller's byte budget applies here too, since this is the one choke point
-                // both the mini-stream and chained/streamed branches below pass through.
                 if (workbook.Size < 0 || workbook.Size > source.Length)
                 {
                     throw new InvalidDataException("The OLE Workbook stream size exceeds the container.");
                 }
                 LimitChecks.ThrowIfEntryLengthExceeds(workbook.Size, options.MaxTotalDecompressedBytes, nameof(ExcelReaderOptions.MaxTotalDecompressedBytes));
 
-                // Mini-stream workbooks (tiny, rare) are materialized; everything else streams.
                 if (workbook.Size < cfb.MiniCutoff && workbook.StartSector >= 0)
                 {
                     byte[] data = cfb.ReadStream(name, options.MaxTotalDecompressedBytes);
@@ -147,10 +136,6 @@ namespace ExcelReader.Core.Reader
             }
             finally
             {
-                // Only return the pooled FAT array here. Disposal of `source` past this point is still
-                // governed by the `ownsSource` flag each branch above already handles explicitly
-                // (mini-stream disposes it itself; Chained/Streamed hand ownership off to WorkbookStream),
-                // so calling the container's full Dispose() here would double-dispose it.
                 cfb.ReturnFatBuffer();
             }
         }

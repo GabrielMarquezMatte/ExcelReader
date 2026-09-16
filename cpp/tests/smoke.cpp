@@ -64,8 +64,6 @@ static int test_parse(xl::Workbook &workbook)
     CHECK(first.Coluna3 == 1, "first row's Coluna3 must be 1");
     CHECK(first.Coluna16 == 0.1, "first row's Coluna16 must be 0.1");
 
-    // at() is the bounds-checked counterpart to operator[]; before it existed, every out-of-range
-    // row read past the columnar buffers and returned garbage.
     CHECK(table->at(0).has_value(), "at(0) must be in bounds");
     CHECK(table->at(table->size() - 1).has_value(), "at(size() - 1) must be in bounds");
     CHECK(!table->at(table->size()).has_value(), "at(size()) must be out of bounds");
@@ -92,7 +90,6 @@ static int test_sheets(xl::Workbook &workbook)
     CHECK(workbook.move_to_sheet(0).has_value(), "move_to_sheet(0) must succeed");
     CHECK(!workbook.move_to_sheet(*count).has_value(), "an index past the last sheet must fail");
 
-    // Reading it is enough - which system the fixture uses is not this test's business.
     CHECK(workbook.is_date1904().has_value(), "is_date1904 must succeed");
     return 0;
 }
@@ -122,8 +119,6 @@ static std::string encrypted_fixture_path(std::string_view filename)
     return std::string(EXCELREADER_ENCRYPTED_FIXTURE_DIR) + "/" + std::string(filename);
 }
 
-// The password pointer must outlive the open call; holding it in the options object (which owns a
-// std::string copy) is what makes that safe for a caller who passes a temporary.
 static int test_password_open()
 {
     xl::OpenOptions options{};
@@ -177,7 +172,6 @@ int main()
     {
         return failed;
     }
-    // Last: parse_sheet consumes the workbook's shared row cursor.
     if (int failed = test_parse(*workbook))
     {
         return failed;

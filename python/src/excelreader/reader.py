@@ -10,9 +10,6 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    # typing.Self is 3.11+; typing_extensions backports it for 3.9/3.10. Only needed for the
-    # annotation below, which `from __future__ import annotations` keeps unevaluated at runtime —
-    # so the wheel stays free of a runtime dependency on typing_extensions.
     from typing_extensions import Self
 
 from excelreader import _native
@@ -33,8 +30,7 @@ from excelreader.types import (
 try:
     import numpy as _numpy
 except ImportError:
-    _numpy = None  # NumPy is an optional extra (pip install excelreader-native[numpy]) — see
-    # _buffer_to_array()/_to_columnar_array() below, the only two places that consult it.
+    _numpy = None  
 
 _FORMATS = _native.FORMATS
 
@@ -44,10 +40,6 @@ _INITIAL_ALL_ROWS_BUFFER = 1024 * 1024
 
 
 def _last_error() -> str:
-    # xl_last_error_ptr borrows a pointer straight into the native side's thread-local error buffer —
-    # no ask-the-size-then-copy round trip. The pointer is only valid until the next ExcelReader call
-    # on this thread, so it must be decoded immediately, before any other native call — which is
-    # exactly how the sole caller below uses it.
     lib = _native.load_library()
     length = ctypes.c_int32()
     pointer = lib.xl_last_error_ptr(ctypes.byref(length))
@@ -76,8 +68,6 @@ def _resolve_format(name: str | None, path: Path | None) -> int:
             return _FORMATS[name.lower()]
         except KeyError:
             raise ValueError(f"unknown format {name!r}; expected one of {sorted(_FORMATS)}") from None
-    # The signature sniffer covers XLS/XLSX/XLSB but CSV has no signature, so the extension is the
-    # only hint available for it.
     if path is not None and path.suffix.lower() == ".csv":
         return _native.XL_FORMAT_CSV
     return _native.XL_FORMAT_AUTO
@@ -102,9 +92,6 @@ class Workbook:
         return count.value
 
     def _fill_buffer(self, fn: object, *args: object, initial: int) -> tuple[bytes, int]:
-        # Every buffer-returning export shares one convention: on XL_BUFFER_TOO_SMALL it reports the
-        # size it needs through the out-length and holds the result, so growing and retrying once is
-        # always enough and never re-reads.
         length = ctypes.c_int32()
         buffer = ctypes.create_string_buffer(initial)
         status = fn(*args, buffer, len(buffer), ctypes.byref(length))
@@ -154,7 +141,6 @@ class Workbook:
             if status == _native.XL_EOF:
                 return
             if status == _native.XL_BUFFER_TOO_SMALL:
-                # The native side holds the row until it fits, so growing loses nothing.
                 capacity = written.value
                 buffer = ctypes.create_string_buffer(capacity)
                 continue
@@ -205,8 +191,6 @@ class Workbook:
         try:
             return _decode_table(schema, table)
         finally:
-            # Every column is copied out above, so the native table is dead the moment we return —
-            # nothing this method hands back points into it.
             self._lib.xl_free_table(ctypes.byref(table))
 
     def iter_parse_typed(
@@ -240,10 +224,8 @@ class Workbook:
                 try:
                     yield _decode_table(schema, table)
                 finally:
-                    # _decode_table copied every column out, so nothing the caller holds points here.
                     self._lib.xl_free_table(ctypes.byref(table))
         finally:
-            # Also runs on GeneratorExit, the abandonment path that would otherwise leak the reader.
             self._lib.xl_typed_reader_close(reader)
 
     def to_arrow(self, schema: Sequence[ColumnSpec], header_row: int = 1) -> object:
@@ -266,9 +248,6 @@ class Workbook:
         array = _native.ArrowArray()
         arrow_schema = _native.ArrowSchema()
         _check(self._lib.xl_parse_arrow(handle, specs, len(specs), header_row, ctypes.byref(array), ctypes.byref(arrow_schema)))
-        # _import_from_c takes ownership of both structs' release callbacks — releasing either one
-        # here as well would be a double free. On failure _check raised above and the native side
-        # exported nothing, so there is no leak on that path either.
         return pyarrow.Array._import_from_c(ctypes.addressof(array), ctypes.addressof(arrow_schema))
 
     def to_record_batch(self, schema: Sequence[ColumnSpec], header_row: int = 1) -> object:
@@ -276,8 +255,6 @@ class Workbook:
 
         Requires pyarrow — see `to_arrow()`.
         """
-        # to_arrow() runs first so its own ImportError message (naming the exact install command)
-        # is what a pyarrow-less caller sees, not a bare "no module named pyarrow" from the import below.
         array = self.to_arrow(schema, header_row=header_row)
         import pyarrow
 
@@ -312,7 +289,6 @@ class Workbook:
                 handle, specs, len(specs), header_row, batch_size, ctypes.byref(stream)
             )
         )
-        # _import_from_c takes ownership of the stream's release callback.
         return pyarrow.RecordBatchReader._import_from_c(ctypes.addressof(stream))
 
     def iter_pandas(
@@ -363,7 +339,6 @@ class Workbook:
         chunk as pandas takes it, so the sheet is never held twice. Requires pyarrow and pandas.
         """
         reader = self.to_record_batch_reader(schema, header_row=header_row, batch_size=batch_size)
-        # Without both, the sheet is resident twice at the peak instead of once.
         return reader.read_all().to_pandas(self_destruct=True, split_blocks=True)
 
     def to_polars(
@@ -383,7 +358,6 @@ class Workbook:
             ) from None
 
         reader = self.to_record_batch_reader(schema, header_row=header_row, batch_size=batch_size)
-        # rechunk=True, the default, re-concatenates every batch and undoes the streaming.
         return polars.from_arrow(reader, rechunk=False)
 
     def infer_schema(self, header_row: int = 1, sample_size: int = 100) -> list[ColumnSpec]:
@@ -421,11 +395,6 @@ class Workbook:
         self.close()
 
     def __del__(self) -> None:
-        # Backstop only, not a substitute for explicit close()/`with`: if a Workbook is dropped
-        # without one, this still releases the native handle and the file lock it holds. During
-        # interpreter shutdown or GC, module globals (_native, ctypes) may already be partially torn
-        # down, so a finalizer must never let an exception escape — swallow anything broadly here,
-        # which is the standard, accepted exception to "never bare-except" for __del__ specifically.
         try:
             self.close()
         except Exception:  # noqa: BLE001, S110
@@ -457,17 +426,7 @@ def _decode_native_row(row: _native.NativeRow) -> list[Cell]:
 
 
 def _decode_columnar(blob: bytes, length: int) -> ColumnarSheet:
-    # xl_read_all_blob layout: int32 row_count, then row_count * {int32 row_length, row blob}, where
-    # a row blob is int32 cell_count, then cell_count * {int32 column, int32 type, int32 value_len,
-    # uint8 value[value_len]} (the same per-row shape xl_next_row/_decode_row already use).
-    #
-    # This loop only ever appends plain ints to array('i') and slices bytes — no Cell/str object is
-    # constructed per cell, which is the entire point of this method over read_all(). A fully
-    # vectorized (no-Python-loop) parse was considered and skipped: the values are variable-length
-    # and interleaved with their headers, so finding cell boundaries needs a pass over the blob
-    # regardless — int-list-append is already fast, the object construction was what was
     # expensive. (ponytail: if this loop measurably dominates for very wide/tall sheets, revisit with
-    # a vectorized header scan; not attempted without a measurement showing it's needed.)
     row_offsets = array("i", [0])
     columns = array("i")
     types = array("i")
@@ -537,8 +496,6 @@ def _build_specs(schema: Sequence[ColumnSpec]) -> ctypes.Array:
     return specs
 
 
-# ColumnType -> (ctypes element type, array.array typecode, NumPy dtype name). STRING is absent on
-# purpose: it is the one type whose `values` buffer is offsets rather than data, handled separately.
 _COLUMN_BUFFERS = {
     ColumnType.I64: (ctypes.c_int64, "q", "int64"),
     ColumnType.F64: (ctypes.c_double, "d", "float64"),
@@ -568,10 +525,6 @@ def _decode_table(schema: Sequence[ColumnSpec], table: _native.NativeTable) -> T
 
 
 def _buffer_to_array(raw: bytes, typecode: str, dtype: str) -> object:
-    # NumPy is optional, so every buffer decoded here lands as either an ndarray or an array.array;
-    # both give callers the same len()/index/slice interface, so nothing downstream has to branch.
-    # frombuffer over `raw` is a view on that bytes object, which keeps it alive — the native block
-    # it was copied from is already out of the picture by then.
     if _numpy is not None:
         return _numpy.frombuffer(raw, dtype=dtype)
     values = array(typecode)
@@ -586,23 +539,18 @@ def _decode_value_column(column: _native.NativeColumn, row_count: int) -> object
 
 
 def _decode_string_column(column: _native.NativeColumn, row_count: int) -> StringColumn:
-    # xl_column's STRING layout: `values` is (row_count + 1) int32 offsets, and `data` points just
-    # past them INTO THE SAME allocation (see excelreader.h) — one copy each, not one per row.
     offsets_bytes = ctypes.string_at(column.values, (row_count + 1) * ctypes.sizeof(ctypes.c_int32))
     data = ctypes.string_at(column.data, int(column.data_len)) if column.data_len else b""
     return StringColumn(_buffer_to_array(offsets_bytes, "i", "int32"), data)
 
 
 def _decode_validity(column: _native.NativeColumn, row_count: int) -> bytes | None:
-    # A NULL validity pointer is the native side's "this column has no nulls" signal, not an error.
     if not column.validity:
         return None
     return ctypes.string_at(column.validity, (row_count + 7) // 8)
 
 
 def _to_columnar_array(values: array) -> object:
-    # The already-an-array('i') counterpart to _buffer_to_array: with NumPy absent the accumulator is
-    # already the right type, so it is handed back untouched rather than round-tripped through bytes.
     if _numpy is None:
         return values
     return _numpy.frombuffer(values, dtype=_numpy.int32)

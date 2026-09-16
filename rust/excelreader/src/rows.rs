@@ -205,7 +205,6 @@ fn cell_from_blob(blob: &[u8], offset: usize) -> Option<(CellRef<'_>, usize)> {
 
 fn cell_from_decoded(raw: &XlRowCell) -> Option<CellRef<'_>> {
     let cell_type = CellType::from_raw(raw.cell_type)?;
-    // from_raw_parts requires a non-null, aligned pointer even for a zero-length slice.
     let value = if raw.value.is_null() || raw.value_len <= 0 {
         &[][..]
     } else {
@@ -495,7 +494,6 @@ mod tests {
 
     #[test]
     fn truncated_blob_is_rejected_not_panicked() {
-        // One cell declared, but the value bytes are cut short.
         let mut bytes = blob(&[(0, XL_CELL_STRING, "hello")]);
         bytes.truncate(bytes.len() - 3);
         let row = RowRef::from_blob(&bytes).expect("header is intact");

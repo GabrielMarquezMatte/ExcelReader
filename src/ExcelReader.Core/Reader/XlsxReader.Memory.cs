@@ -3,9 +3,6 @@ using System.Diagnostics.CodeAnalysis;
 
 namespace ExcelReader.Core.Reader
 {
-    // In-memory ZIP path: opens an XlsxReader directly over a
-    // ReadOnlyMemory<byte> via ZipMemoryIndex instead of ZipArchive/Stream. No refills, no async
-    // suspension — every part is already fully decompressed before the reader is constructed.
     public sealed partial class XlsxReader
     {
         internal static XlsxReader CreateFromMemory(ReadOnlyMemory<byte> data, ExcelReaderOptions? options = null)
@@ -14,8 +11,6 @@ namespace ExcelReader.Core.Reader
             return CreateFromMemory(ZipMemoryIndex.Create(data, effectiveOptions), effectiveOptions);
         }
 
-        // Takes an already-built index (from Excel.Open's format peek) so the central directory isn't
-        // walked a second time — the memory-path twin of CreateFromOpenZipAsync.
         internal static XlsxReader CreateFromMemory(ZipMemoryIndex memZip, ExcelReaderOptions effectiveOptions)
         {
             return ZipReaderOpen.FromMemory(memZip, zip => BuildFromMemory(zip, effectiveOptions));
@@ -54,9 +49,6 @@ namespace ExcelReader.Core.Reader
             ParseSharedFromMemory(part.Memory, entry.UncompressedSize);
         }
 
-        // Reuses the streaming sst/si parser with a pre-filled, EOF-from-construction cursor: every
-        // Fill it could call is unreachable (BufferedStreamCursor.Eof is already true), so passing a
-        // null Stream is safe and the whole table is decoded in one pass with no growth loop.
         private void ParseSharedFromMemory(ReadOnlyMemory<byte> content, long entryLength)
         {
             LimitChecks.ThrowIfEntryLengthExceeds(entryLength, Array.MaxLength, "ArrayMaxLength");
@@ -67,10 +59,6 @@ namespace ExcelReader.Core.Reader
             _sharedOffsets = ParseSharedBody(io, stream: null, partLength);
         }
 
-        // Worksheet entry only: opens a Stream (DeflateStream, optionally wrapped in PrefetchStream via
-        // ZipMemoryIndex.OpenEntryStream) instead of eagerly materializing a ZipPart, so
-        // PrefetchDecompression overlaps inflate with row parsing on this path exactly as it does for
-        // the ZipArchive-backed reader.
         private Enumerator GetEnumeratorFromMemory()
         {
             ZipEntryRef entry = WorkbookLookups.GetWorksheetEntry(_memZip!, _sheets, _current);

@@ -115,9 +115,6 @@ namespace ExcelReader.Tests
             Assert.Equal("C", e.Current[2].GetString());
         }
 
-        // Regression: CellAccumulator keeps binary-double values in a side array parallel to the cell
-        // descriptors, which SortByColumn must permute in lockstep — a mixed row of out-of-order numeric
-        // and text cells is the case that would silently misalign values if that sort were wrong.
         [Fact]
         public void OutOfOrderNumericAndTextCellsStayAlignedAfterSort()
         {
@@ -389,8 +386,6 @@ namespace ExcelReader.Tests
             Assert.Throws<OperationCanceledException>(() => reader.GetAsyncEnumerator(cts.Token));
         }
 
-        // Two cells referencing the same shared-string index should resolve through the reader's
-        // index-keyed dedup cache rather than each allocating and decoding its own copy.
         [Fact]
         public void RepeatedSharedStringDedupsIntoSameInstance()
         {
@@ -462,7 +457,6 @@ namespace ExcelReader.Tests
             var stream = new TrackingStream(XlsWorkbookBuilder.Build(sheets: [("S1", [["A"]])]).ToArray());
             using (Excel.FromXls(stream, leaveOpen: false))
             {
-                // nothing
             }
             Assert.True(stream.Disposed);
         }
@@ -486,8 +480,6 @@ namespace ExcelReader.Tests
         {
             using var ms = XlsWorkbookBuilder.BuildEncrypted();
             NotSupportedException ex = Assert.Throws<NotSupportedException>(() => Excel.FromXls(ms));
-            // The message must name the real boundary: OOXML encryption is supported, .xls is not —
-            // not read as a generic "this is broken" bug report.
             Assert.Contains("xls", ex.Message, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("not supported", ex.Message, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("xlsx", ex.Message, StringComparison.OrdinalIgnoreCase);
@@ -578,12 +570,10 @@ namespace ExcelReader.Tests
             ReadOnlySpan<double> expected = [12.5, 42, 123, -7.25];
             for (int c = 0; c < expected.Length; c++)
             {
-                // Raw fast path returns the exact stored double...
                 Assert.True(row[c].TryGetDouble(out double raw));
                 Assert.Equal(expected[c], raw);
                 Assert.True(row[c].TryParse(System.Globalization.CultureInfo.InvariantCulture, out double parsed));
                 Assert.Equal(expected[c], parsed);
-                // ...and the text representation stays consistent with parsing it back.
                 Assert.True(double.TryParse(row[c].GetString(), System.Globalization.CultureInfo.InvariantCulture, out double fromText));
                 Assert.Equal(expected[c], fromText);
             }
@@ -592,15 +582,12 @@ namespace ExcelReader.Tests
         [Fact]
         public void SharedStringSplitAcrossContinueBoundaryDecodesCorrectly()
         {
-            // SST record ends mid-way through string 1's character array; the CONTINUE record resumes
-            // with a fresh grbit byte. The decoder must consume that byte, not read it as a character.
-            // string 0 = "AB" (cch=2, compressed); string 1 = "CDEF" split after "CD".
             byte[] firstRegion =
             [
-                0x02, 0x00, 0x00, (byte)'A', (byte)'B',       // "AB"
-                0x04, 0x00, 0x00, (byte)'C', (byte)'D',       // "CDEF" header + first two chars
+                0x02, 0x00, 0x00, (byte)'A', (byte)'B',
+                0x04, 0x00, 0x00, (byte)'C', (byte)'D',
             ];
-            byte[] continueRegion = [0x00, (byte)'E', (byte)'F']; // grbit + remaining two chars
+            byte[] continueRegion = [0x00, (byte)'E', (byte)'F'];
             byte[] framed = XlsWorkbookBuilder.FrameSstWithContinue(2, 2, firstRegion, continueRegion);
 
             using var ms = XlsWorkbookBuilder.BuildRawSst(framed, labelSstCount: 2);
@@ -609,15 +596,13 @@ namespace ExcelReader.Tests
             using var e = reader.GetEnumerator();
             Assert.True(e.MoveNext());
             Assert.Equal("AB", e.Current[0].GetString());
-            Assert.Equal("CDEF", e.Current[1].GetString());   // was corrupted before the CONTINUE fix
+            Assert.Equal("CDEF", e.Current[1].GetString());
         }
 
         [Fact]
         public void WideSharedStringCodeUnitSplitAcrossContinueBoundaryDecodesCorrectly()
         {
-            // The low byte of Omega is the last byte in the SST; its high byte follows the CONTINUE grbit.
-            // The continuation switches to compressed mode for the final 'B', exercising both runs.
-            byte[] firstRegion = [0x03, 0x00, 0x01, 0x41, 0x00, 0xA9]; // "AΩB", wide through Omega's low byte
+            byte[] firstRegion = [0x03, 0x00, 0x01, 0x41, 0x00, 0xA9];
             byte[] continueRegion = [0x00, 0x03, (byte)'B'];
             byte[] framed = XlsWorkbookBuilder.FrameSstWithContinue(1, 1, firstRegion, continueRegion);
 
@@ -632,8 +617,7 @@ namespace ExcelReader.Tests
         [Fact]
         public void AstralCharInUnicodeStringRoundTripsAsValidUtf8()
         {
-            // A surrogate pair must encode as one 4-byte UTF-8 scalar, not two 3-byte CESU-8 sequences.
-            const string emoji = "A\U0001F600B"; // A, grinning face, B
+            const string emoji = "A\U0001F600B";
             using var ms = XlsWorkbookBuilder.Build(
                 sheets: [("S1", [[new XlsUnicodeString(emoji)]])]);
             using var reader = Excel.FromXls(ms);
@@ -646,7 +630,6 @@ namespace ExcelReader.Tests
         [Fact]
         public void CraftedFatSectorCountThrowsInsteadOfAllocating()
         {
-            // A bogus FAT sector count in the OLE header must be rejected, not turned into new int[huge].
             using var ms = XlsWorkbookBuilder.BuildPatched(
                 XlsWorkbookBuilder.FatSectorCountOffset, XlsWorkbookBuilder.LE32(0x40000000));
             Assert.Throws<InvalidDataException>(() => Excel.FromXls(ms));
@@ -655,8 +638,6 @@ namespace ExcelReader.Tests
         [Fact]
         public async Task WritesAndReadsLongLabelSplitsAcrossContinueRecords()
         {
-            // Create a string of 10,000 characters (exceeds 8,224 bytes MaxPayload)
-            // with some non-ASCII CP1252 characters to verify compression handles correctly.
             string longCompressed = new string('a', 5000) + "Café" + new string('b', 5000);
             string longWide = new string('Ω', 6000);
 

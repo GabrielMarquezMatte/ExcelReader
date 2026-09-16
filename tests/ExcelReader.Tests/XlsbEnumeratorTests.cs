@@ -32,7 +32,6 @@ namespace ExcelReader.Tests
             return new(reader, new MemoryStream(sheetBin), entryLength, ct ?? TestContext.Current.CancellationToken);
         }
 
-        // --- Basic enumeration ---
 
 
         [Fact]
@@ -57,7 +56,6 @@ namespace ExcelReader.Tests
             [
                 .. B.Record(Brt.RowHdr),
                 .. B.Record(Brt.EndSheetData),
-                // These must not be processed.
                 .. B.Record(Brt.RowHdr),
                 .. B.Record(Brt.CellBool, B.CellBool(0, 0, true)),
             ];
@@ -65,12 +63,11 @@ namespace ExcelReader.Tests
             Assert.False(e.MoveNext());
         }
 
-        // --- Cell type decoding ---
 
         [Fact]
         public void CellRkDecodesNumber()
         {
-            const uint rk = (42u << 2) | 0x02; // integer 42
+            const uint rk = (42u << 2) | 0x02;
             byte[] sheet =
             [
                 .. B.Record(Brt.RowHdr),
@@ -105,8 +102,8 @@ namespace ExcelReader.Tests
             byte[] sheet =
             [
                 .. B.Record(Brt.RowHdr),
-                .. B.Record(Brt.CellIsst, B.CellIsst(0, 0, 0)), // "Hello"
-                .. B.Record(Brt.CellIsst, B.CellIsst(1, 0, 1)), // "World"
+                .. B.Record(Brt.CellIsst, B.CellIsst(0, 0, 0)),
+                .. B.Record(Brt.CellIsst, B.CellIsst(1, 0, 1)),
             ];
             using var e = Open(reader, sheet);
             Assert.True(e.MoveNext());
@@ -115,8 +112,6 @@ namespace ExcelReader.Tests
             Assert.Equal("World", e.Current[1].GetString());
         }
 
-        // Two cells referencing the same shared-string index should resolve through the reader's
-        // index-keyed dedup cache rather than each allocating and decoding its own copy.
         [Fact]
         public void CellIsstDedupsRepeatedSharedStringIntoSameInstance()
         {
@@ -124,9 +119,9 @@ namespace ExcelReader.Tests
             byte[] sheet =
             [
                 .. B.Record(Brt.RowHdr),
-                .. B.Record(Brt.CellIsst, B.CellIsst(0, 0, 0)), // "Hello"
-                .. B.Record(Brt.CellIsst, B.CellIsst(1, 0, 1)), // "World"
-                .. B.Record(Brt.CellIsst, B.CellIsst(2, 0, 0)), // "Hello" again
+                .. B.Record(Brt.CellIsst, B.CellIsst(0, 0, 0)),
+                .. B.Record(Brt.CellIsst, B.CellIsst(1, 0, 1)),
+                .. B.Record(Brt.CellIsst, B.CellIsst(2, 0, 0)),
             ];
             using var e = Open(reader, sheet);
             Assert.True(e.MoveNext());
@@ -196,12 +191,10 @@ namespace ExcelReader.Tests
             ];
             using var e = Open(BlankReader(), sheet);
             Assert.True(e.MoveNext());
-            // Column 1 is the last populated; column 0 is blank (no CellDesc for it).
             Assert.Equal(CellType.Empty, e.Current[0].Type);
             Assert.Equal(CellType.Boolean, e.Current[1].Type);
         }
 
-        // --- Date style ---
 
         [Fact]
         public void DateStyleMapsRealToDateType()
@@ -210,8 +203,8 @@ namespace ExcelReader.Tests
             byte[] sheet =
             [
                 .. B.Record(Brt.RowHdr),
-                .. B.Record(Brt.CellReal, B.CellReal(0, 1, 45000.0)), // style=1 → date
-                .. B.Record(Brt.CellReal, B.CellReal(1, 0, 45000.0)), // style=0 → number
+                .. B.Record(Brt.CellReal, B.CellReal(0, 1, 45000.0)),
+                .. B.Record(Brt.CellReal, B.CellReal(1, 0, 45000.0)),
             ];
             using var e = Open(reader, sheet);
             Assert.True(e.MoveNext());
@@ -219,7 +212,6 @@ namespace ExcelReader.Tests
             Assert.Equal(CellType.Number, e.Current[1].Type);
         }
 
-        // --- Multi-row ---
 
         [Fact]
         public void MultipleRowsEnumeratedInOrder()
@@ -250,7 +242,7 @@ namespace ExcelReader.Tests
             [
                 .. B.Record(Brt.RowHdr),
                 .. B.Record(Brt.CellBool, B.CellBool(0, 0, true)),
-                .. B.Record(Brt.RowHdr), // empty — must be skipped
+                .. B.Record(Brt.RowHdr),
                 .. B.Record(Brt.RowHdr),
                 .. B.Record(Brt.CellBool, B.CellBool(0, 0, false)),
             ];
@@ -265,7 +257,6 @@ namespace ExcelReader.Tests
             Assert.False(e.MoveNext());
         }
 
-        // --- Async path ---
 
         [Fact]
         public async Task AsyncMoveNextEnumeratesRows()
@@ -275,7 +266,7 @@ namespace ExcelReader.Tests
                 .. B.Record(Brt.RowHdr),
                 .. B.Record(Brt.CellSt, B.CellSt(0, 0, "async")),
                 .. B.Record(Brt.RowHdr),
-                .. B.Record(Brt.CellRk, B.CellRk(0, 0, (7u << 2) | 0x02)), // integer 7
+                .. B.Record(Brt.CellRk, B.CellRk(0, 0, (7u << 2) | 0x02)),
             ];
             await using var e = Open(BlankReader(), sheet);
 
@@ -289,7 +280,6 @@ namespace ExcelReader.Tests
             Assert.False(await e.MoveNextAsync());
         }
 
-        // --- Formula cells (cached result) ---
 
         [Fact]
         public void FmlaNumDecodesCachedNumber()
@@ -362,7 +352,6 @@ namespace ExcelReader.Tests
             Assert.Equal("rich", e.Current[0].GetString());
         }
 
-        // --- Malformed cell records ---
 
         [Fact]
         public void CellRecordShorterThanColStyleHeaderIsIgnored()
@@ -370,7 +359,7 @@ namespace ExcelReader.Tests
             byte[] sheet =
             [
                 .. B.Record(Brt.RowHdr),
-                .. B.Record(Brt.CellBool, B.U32(0)), // only col, no style/value: length < 8
+                .. B.Record(Brt.CellBool, B.U32(0)),
                 .. B.Record(Brt.CellBool, B.CellBool(1, 0, true)),
             ];
             using var e = Open(BlankReader(), sheet);
@@ -385,7 +374,6 @@ namespace ExcelReader.Tests
             byte[] sheet =
             [
                 .. B.Record(Brt.RowHdr),
-                // col + style only, no bool value byte: length == 8, guard on CellBool needs >= 9.
                 .. B.Record(Brt.CellBool, [.. B.U32(0), .. B.U32(0)]),
                 .. B.Record(Brt.CellBool, B.CellBool(1, 0, false)),
             ];
@@ -395,7 +383,6 @@ namespace ExcelReader.Tests
             Assert.Equal(CellType.Boolean, e.Current[1].Type);
         }
 
-        // --- Truncated stream ---
 
         [Fact]
         public void TruncatedRecordBeforeAnyRowHdrThrows()
@@ -424,7 +411,6 @@ namespace ExcelReader.Tests
             await Assert.ThrowsAsync<InvalidDataException>(async () => await e.MoveNextAsync());
         }
 
-        // --- Cancellation ---
 
         [Fact]
         public void MoveNextHonorsCancellation()
@@ -446,7 +432,6 @@ namespace ExcelReader.Tests
             await Assert.ThrowsAsync<OperationCanceledException>(async () => await e.MoveNextAsync());
         }
 
-        // --- Buffer refill / growth across many rows ---
 
         private static byte[] BuildManyRowsSheet(int rowCount)
         {
@@ -464,8 +449,6 @@ namespace ExcelReader.Tests
         {
             const int rowCount = 300;
             byte[] sheet = BuildManyRowsSheet(rowCount);
-            // entryLength > 0 clamps the initial buffer to its 4 KB floor, forcing multiple
-            // Fill/PrepareBuffer(grow) cycles since the sheet is well over 4 KB.
             using var e = Open(BlankReader(), sheet, entryLength: 1);
 
             for (int i = 0; i < rowCount; i++)

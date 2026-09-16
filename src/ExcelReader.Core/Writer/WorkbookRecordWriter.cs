@@ -143,10 +143,6 @@ namespace ExcelReader.Core.Writer
         }
     }
 
-    // Per-type column plan, cached per (T, TRow) via the nested Plan<TRow>. Compiled against the
-    // concrete TRow rather than IRowWriter, so each call resolves directly to that sealed class's
-    // non-virtual method instead of an interface dispatch. Non-numeric/non-primitive properties fall
-    // back to ToString() text, since Write<U> only produces valid numeric cells.
     [RequiresUnreferencedCode("Record writing reflects over T's public properties, which trimming may remove.")]
     [RequiresDynamicCode("Record writing compiles the per-type column writer at runtime (Expression.Compile / MakeGenericMethod).")]
     internal static class RecordColumns<T>
@@ -171,26 +167,22 @@ namespace ExcelReader.Core.Writer
             var headers = new string[props.Length];
             for (int i = 0; i < props.Length; i++)
             {
-                // First [ExcelColumn] wins (the attribute allows aliases); fall back to the property name.
                 ExcelColumnAttribute? attr = props[i].GetCustomAttributes<ExcelColumnAttribute>().FirstOrDefault();
                 headers[i] = attr?.Name ?? props[i].Name;
             }
             return headers;
         }
 
-        // Keyed by TRow: one compiled Action<TRow, T> per concrete row-writer type actually used with T.
         [RequiresUnreferencedCode("Record writing reflects over T's public properties, which trimming may remove.")]
         [RequiresDynamicCode("Record writing compiles the per-type column writer at runtime (Expression.Compile / MakeGenericMethod).")]
         private static class Plan<TRow> where TRow : IRowWriter
         {
             internal static readonly Action<TRow, T> Write = Build();
-            // Null-safe ToString() for a non-string, non-numeric property, so it lands in a text cell.
             private static Expression ToStringExpression(Expression value, Type pt)
             {
                 MethodInfo toString = typeof(object).GetMethod(nameof(ToString), Type.EmptyTypes)!;
                 if (pt.IsValueType && Nullable.GetUnderlyingType(pt) is null)
                 {
-                    // Never null; box once for the virtual ToString call (rare path).
                     return Expression.Call(Expression.Convert(value, typeof(object)), toString);
                 }
                 Expression boxed = Expression.Convert(value, typeof(object));
@@ -199,7 +191,6 @@ namespace ExcelReader.Core.Writer
                     Expression.Call(boxed, toString),
                     Expression.Constant(null, typeof(string)));
             }
-            // `instances` caches by converter type so one used on multiple properties is built once.
             private static MethodCallExpression? TryBuildConverterWrite(
                 PropertyInfo prop, ParameterExpression rowParam, Expression value, Dictionary<Type, object> instances)
             {
@@ -251,8 +242,6 @@ namespace ExcelReader.Core.Writer
         }
     }
 
-    // Reflection resolved once per concrete TRow: the Write overloads it declares, plus the set of
-    // numeric property types that map to Write<U>.
     [RequiresUnreferencedCode("Record writing reflects over TRow's Write overloads, which trimming may remove.")]
     [RequiresDynamicCode("Record writing dispatches through MakeGenericMethod for numeric column types.")]
     internal static class RowWriteMethods<TRow> where TRow : IRowWriter
@@ -283,7 +272,7 @@ namespace ExcelReader.Core.Writer
                 if (m.IsGenericMethodDefinition)
                 {
                     if (p == m.GetGenericArguments()[0]) { generic = m; }
-                    else { genericN = m; } // Write<U>(U?)
+                    else { genericN = m; }
                 }
                 else if (p == typeof(string)) { str = m; }
                 else if (p == typeof(bool)) { boolean = m; }
@@ -298,8 +287,6 @@ namespace ExcelReader.Core.Writer
             return new(str!, boolean!, booleanN!, date!, dateN!, dateOnly!, dateOnlyN!, timeOnly!, timeOnlyN!, generic!, genericN!);
         }
 
-        // Picks the concrete TRow.Write overload for a property type; asString means the caller must
-        // first convert the value to a string (the non-numeric fallback).
         internal static MethodInfo Select(Type pt, out bool asString)
         {
             asString = false;

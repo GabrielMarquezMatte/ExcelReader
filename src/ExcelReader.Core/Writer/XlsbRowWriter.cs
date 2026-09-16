@@ -153,8 +153,6 @@ namespace ExcelReader.Core.Writer
             _columnIndex++;
         }
 
-        // typeof(T) == typeof(...) folds to a JIT constant per instantiation, eliding dead branches
-        // with no boxing.
         [SkipLocalsInit]
         internal static double ToDouble<T>(T value) where T : IUtf8SpanFormattable
         {
@@ -202,9 +200,6 @@ namespace ExcelReader.Core.Writer
             {
                 return Unsafe.As<T, sbyte>(ref value);
             }
-            // Past this point T is caller-defined, so the conversion can overflow to ±Infinity or land on
-            // NaN. The cell writers reject those downstream, but only as a bare "non-finite value 8" that
-            // never names T — check here so the failure points at the value the caller actually passed.
             if (value is IConvertible convertible)
             {
                 double converted = convertible.ToDouble(CultureInfo.InvariantCulture);

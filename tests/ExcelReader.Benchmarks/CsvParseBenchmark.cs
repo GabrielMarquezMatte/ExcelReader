@@ -8,8 +8,6 @@ using Sylvan.Data.Csv;
 
 namespace ExcelReader.Benchmarks
 {
-    // The CSV parser parses DateTime from the cell text natively (no converter), matching how Sep,
-    // Sylvan, and CsvHelper handle the Date column — a like-for-like comparison.
     public sealed class CsvRecord
     {
         public string? Name { get; set; }
@@ -18,8 +16,6 @@ namespace ExcelReader.Benchmarks
         public double Value { get; set; }
     }
 
-    // Maps a header + `Rows` data rows into strongly-typed CsvRecord objects, comparing
-    // ExcelReader's ExcelParser<T> (sync + async) against Sep, Sylvan.Data.Csv, and CsvHelper.
     [MemoryDiagnoser]
     public class CsvParseBenchmark
     {

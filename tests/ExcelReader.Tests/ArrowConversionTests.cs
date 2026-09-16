@@ -220,7 +220,7 @@ namespace ExcelReader.Tests
             {
                 if (managedColumn.IsNull(row))
                 {
-                    continue; // null positions already compared via NullCount equality above.
+                    continue;
                 }
 
                 switch (type)
@@ -247,7 +247,7 @@ namespace ExcelReader.Tests
                     case ExcelColumnType.DateColumn:
                         Assert.Equal(Marshal.ReadInt32(NativeApiTests.ArrowBuffer(nativeColumn, 1), row * sizeof(int)), ((Date32Array)managedColumn).GetValue(row));
                         break;
-                    default: // TimeColumn, TimestampColumn — both 8-byte microsecond values on both paths.
+                    default:
                         Assert.Equal(Marshal.ReadInt64(NativeApiTests.ArrowBuffer(nativeColumn, 1), row * sizeof(long)), ((PrimitiveArray<long>)managedColumn).GetValue(row));
                         break;
                 }

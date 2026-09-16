@@ -78,12 +78,6 @@ namespace ExcelReader.Core.Parser.Internal
             }
         }
 
-        // Advances the row-number/column-map state machine one step and reports what the caller should
-        // do: true = yield this row, false = stop enumerating, null = neither (a pre-header row was
-        // skipped, or the header row just built the column map) so the caller loops to the next row.
-        // One place, because the sync loop, the async fast path, and the awaiting continuation must not
-        // drift apart. Reads _rows.Current (a ref struct Row) only to pass it straight into
-        // BuildColumnMap — never stored, never returned, never crosses an await.
         private bool? Classify()
         {
             switch (ProjectionRules.ClassifyRow(ref _rowNumber, _headerRow, _bindings is not null))
@@ -96,7 +90,7 @@ namespace ExcelReader.Core.Parser.Internal
                     BuildColumnMap(_rows.Current);
                     return null;
                 default:
-                    return null; // Skip
+                    return null;
             }
         }
 
@@ -114,11 +108,6 @@ namespace ExcelReader.Core.Parser.Internal
             return false;
         }
 
-        // Async twin of MoveNext, mirroring AsyncRowEnumerator<T,TReader,TRows>.MoveNextAsync: a non-async
-        // fast path that stays synchronous whenever the underlying row-enumerator resolves synchronously
-        // (the common case — no second state machine on top of _rows' own), only falling to an awaiting
-        // continuation on a genuine buffer miss. Every state mutation (Classify's ref _rowNumber,
-        // BuildColumnMap) runs on the shared class instance, so it survives the await (see class remarks).
         /// <inheritdoc cref="IExcelRowEnumerator.MoveNextAsync"/>
         public ValueTask<bool> MoveNextAsync()
         {
