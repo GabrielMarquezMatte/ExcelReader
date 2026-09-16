@@ -92,6 +92,13 @@ namespace ExcelReader.Core.Parser
             return cell.TryParse(provider, out value);
         }
 
+        /// <summary>Reads a cell's raw UTF-8 bytes without allocating. The span aliases the reader's buffer and is valid only until the reader advances.</summary>
+        public static bool Utf8(scoped in Cell cell, bool isDate1904, IFormatProvider provider, out ReadOnlySpan<byte> value)
+        {
+            value = cell.Value;
+            return true;
+        }
+
         /// <summary>Reads a cell as an enum, by its declared value name (case-insensitive) or its underlying numeric value.</summary>
         /// <typeparam name="TEnum">The enum type to parse.</typeparam>
         public static bool Enum<TEnum>(in Cell cell, bool isDate1904, IFormatProvider provider, out TEnum value)
