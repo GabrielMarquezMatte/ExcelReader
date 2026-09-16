@@ -1,1 +1,29 @@
 #nullable enable
+ExcelReader.Core.Reader.CsvAggregation<TState>
+ExcelReader.Core.Reader.CsvAggregation<TState>.Accumulate.get -> ExcelReader.Core.Reader.CsvRowAction<TState>!
+ExcelReader.Core.Reader.CsvAggregation<TState>.Accumulate.init -> void
+ExcelReader.Core.Reader.CsvAggregation<TState>.Combine.get -> System.Func<TState, TState, TState>!
+ExcelReader.Core.Reader.CsvAggregation<TState>.Combine.init -> void
+ExcelReader.Core.Reader.CsvAggregation<TState>.CsvAggregation() -> void
+ExcelReader.Core.Reader.CsvAggregation<TState>.Seed.get -> System.Func<TState>!
+ExcelReader.Core.Reader.CsvAggregation<TState>.Seed.init -> void
+ExcelReader.Core.Reader.CsvParallelOptions
+ExcelReader.Core.Reader.CsvParallelOptions.CsvParallelOptions() -> void
+ExcelReader.Core.Reader.CsvParallelOptions.DegreeOfParallelism.get -> int
+ExcelReader.Core.Reader.CsvParallelOptions.DegreeOfParallelism.init -> void
+ExcelReader.Core.Reader.CsvParallelOptions.HeaderRow.get -> int
+ExcelReader.Core.Reader.CsvParallelOptions.HeaderRow.init -> void
+ExcelReader.Core.Reader.CsvParallelOptions.Reader.get -> ExcelReader.Core.Reader.CsvReaderOptions!
+ExcelReader.Core.Reader.CsvParallelOptions.Reader.init -> void
+ExcelReader.Core.Reader.CsvRowAction<TState>
+ExcelReader.Core.Reader.ICsvAccumulator<TSelf>
+ExcelReader.Core.Reader.ICsvAccumulator<TSelf>.Add(ExcelReader.Core.ValueObjects.Row row) -> void
+ExcelReader.Core.Reader.ICsvAccumulator<TSelf>.Merge(TSelf following) -> void
+static ExcelReader.Core.Reader.CsvParallelOptions.Default.get -> ExcelReader.Core.Reader.CsvParallelOptions!
+static ExcelReader.Core.Reader.Excel.AggregateCsvParallelAsync<TAccumulator>(System.IO.Stream! stream, ExcelReader.Core.Reader.CsvParallelOptions? options = null, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<TAccumulator>!
+static ExcelReader.Core.Reader.Excel.AggregateCsvParallelAsync<TAccumulator>(System.ReadOnlyMemory<byte> data, ExcelReader.Core.Reader.CsvParallelOptions? options = null, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<TAccumulator>!
+static ExcelReader.Core.Reader.Excel.AggregateCsvParallelAsync<TAccumulator>(string! path, ExcelReader.Core.Reader.CsvParallelOptions? options = null, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<TAccumulator>!
+static ExcelReader.Core.Reader.Excel.AggregateCsvParallelAsync<TState>(System.IO.Stream! stream, ExcelReader.Core.Reader.CsvAggregation<TState>! aggregation, ExcelReader.Core.Reader.CsvParallelOptions? options = null, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<TState>!
+static ExcelReader.Core.Reader.Excel.AggregateCsvParallelAsync<TState>(System.ReadOnlyMemory<byte> data, ExcelReader.Core.Reader.CsvAggregation<TState>! aggregation, ExcelReader.Core.Reader.CsvParallelOptions? options = null, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<TState>!
+static ExcelReader.Core.Reader.Excel.AggregateCsvParallelAsync<TState>(string! path, ExcelReader.Core.Reader.CsvAggregation<TState>! aggregation, ExcelReader.Core.Reader.CsvParallelOptions? options = null, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<TState>!
+virtual ExcelReader.Core.Reader.CsvRowAction<TState>.Invoke(ref TState state, ExcelReader.Core.ValueObjects.Row row) -> void
