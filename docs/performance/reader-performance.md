@@ -135,6 +135,11 @@ pass producing a mask of delimiter/quote/CR/LF, kept stateful across refills thr
 idea that lost badly in XLSX. It wins here because CSV fields are longer and the scanner is stateful
 rather than restarted per short hop.)
 
+**That comparison used a weak baseline.** A sweep that restarts `IndexOfAny` at every hit pays the
+vector setup 200,000 times, so 2.24 ms is not a floor — it is a fourth implementation of the same
+scan, and a bad one. The layered decomposition below re-measures against a real floor. The
+conclusion survives, for a different reason: framing is not 97% of a floor, it is 13% of the read.
+
 So the cost is downstream of framing:
 
 | conversion | per call |
@@ -170,6 +175,121 @@ designator is rejected rather than guessed at.
 date cell — measured at 85.4 ns with the wrong order against 40.4 ns with the right one. The guard
 keeps the XLSX serial-date path untouched; its consumer-conversion layer measured 6.3 ms before and
 after, inside the run-to-run band.
+
+### Where the CSV read actually goes
+
+A second harness split the read into layers that each add one stage to the same pass, so adjacent
+rows subtract. Two groups, interleaved separately because the typed variants allocate a model per
+row and their GC cost would otherwise land on their neighbours. Same 50,000-row corpus, same
+machine, one run.
+
+Framing prototypes, in memory, no reader machinery:
+
+| layer | | |
+|---|---|---|
+| L0 `Vector256` masking only, popcount the hits | 0.102 ms | |
+| L1 + drain bits, reload the byte to classify it | 0.384 ms | |
+| L2 + drain bits, separate masks per class, no reload | 0.389 ms | **0.99x** |
+| L3 + emit a 16-byte field descriptor | 0.562 ms | |
+| L4 + emit a 32-byte `CellDesc`-shaped descriptor | 0.666 ms | |
+| `IndexOfAny` restarted per hit (the old baseline) | 1.748 ms | |
+
+All four field-emitting layers were gated on an identical checksum.
+
+The shipped reader, same corpus, stream source:
+
+| stage | | delta | share |
+|---|---|---|---|
+| rows, no cell access | 1.476 ms | | 30% |
+| + four cell spans | 1.676 ms | +0.200 | 4% |
+| + int column | 2.174 ms | +0.498 | 10% |
+| + date column | 3.906 ms | +1.732 | 35% |
+| + double column | 4.942 ms | +1.036 | 21% |
+
+**The scan is 2% of the read and the date conversion is 35%.** Masking 2.3 MB costs 0.102 ms;
+everything above L0 is per-field bookkeeping, not scanning. `Cell` materialization is 1 ns per cell.
+Framing at 0.666 ms against the reader's 1.476 ms rows-only figure leaves ~0.8 ms of enumerator
+overhead — `MoveNext`, `_acc.Reset`, refill and compaction bookkeeping — which is the largest
+undecomposed block left in CSV after the conversions.
+
+**Unexplained:** spans-only is faster from a stream than from an already-resident buffer
+(1.676 vs 2.201 ms), but full conversion is faster from the buffer (4.942 vs 4.190 ms). Both
+directions reproduced across four runs. No explanation; recorded rather than guessed at.
+
+### The date parser: 1.49x from one vectorized pass over the round-trip form
+
+The date column is 35% of the CSV read, so it was decomposed next. Two candidate cost centres had
+never been separated: the digit loops, and building the `DateTime`.
+
+| variant | | |
+|---|---|---|
+| current `FastDate` | | 1.00x |
+| digits only, no `DateTime` built at all | | 1.19–1.23x |
+| one leap check + month-table ticks | | 0.83–0.86x |
+| branchless civil-days ticks (Hinnant) | | 0.76–0.81x |
+| + SWAR 4-digit year on civil-days | | 0.82–0.86x |
+| **one vectorized pass over the 27-byte form** | | **1.45–1.49x** |
+| + separators validated in the same vectors | | 1.44–1.50x |
+
+**Construction was not the problem.** `DateTime.DaysInMonth` followed by `new DateTime(y, m, d)`
+runs two independent leap-year computations, which looked like the obvious waste; removing both
+accounts for 19% at most, and every attempt to replace them with hand-written date arithmetic was
+**slower**. The BCL's constructor is not worth reimplementing.
+
+**88% of the cost was the digits.** `yyyy-MM-ddTHH:mm:ss.fffffff` is 27 bytes holding 21 digits at
+fixed offsets. Two overlapping 16-byte loads cover it (bytes 0..15 and 11..26); one unsigned compare
+per load validates every digit position at once against a constant mask; one shuffle per load packs
+the digits so they fold in pairs instead of one dependent multiply-add per digit. The seven-digit
+fraction loop, which the shape makes free, was the largest single piece.
+
+Anything that is not exactly 27 bytes falls through to the existing parser. Two extensions were
+measured and **not** built:
+
+- Validating the separators inside the vectors instead of with five scalar compares: **no
+  difference**. Those bytes are in L1 by definition and the branches are perfectly predicted.
+- Using the same vectorized date extraction for the 19-byte `yyyy-MM-ddTHH:mm:ss` form: **no
+  difference** (7.2 ns either way). Without the fraction there is not enough digit work to pay for
+  the load and shuffle.
+
+The masked validation has one trap worth recording. A first version ORed the digit mask and the
+separator mask without restricting each to its own positions, which accepts a digit sitting in a
+separator slot — `2024503-15T10:20:30.1234567` would have parsed as 2024-01-01. `FastDateTests`
+carries one case per separator position for this.
+
+### The double parser: nothing found, and the obvious hypothesis was wrong
+
+| variant | | |
+|---|---|---|
+| current `FastDouble` | 12.3–15.4 ns | 1.00x |
+| split at the dot, two tight digit loops | | 0.81–0.90x |
+| BCL `double.TryParse` | | 0.27–0.31x |
+
+`FastDouble`'s loop carries six branches per byte, and the corpus's value column varies in length,
+so mispredicted loop exits looked like the cost. Running the same parser over values of uniform
+length tests that directly — and it came out **slower**, not faster: 18.7 ns on uniform 8-byte
+values against 12.3 ns on the real mixed corpus. Cost tracks digit count at roughly 2.4 ns per
+digit, which is the signature of the serial `mantissa * 10 + d` dependency chain, not of
+misprediction.
+
+SWAR would break that chain, and this is the one place it would genuinely pay. It needs an 8-byte
+load, and the value column averages 5.9 bytes, so the fast path would have to read past the end of
+the field. Inside the reader those spans always point into a pooled buffer with slack, but
+`FastDouble` would then depend on an invariant nothing enforces. Not built, for 2 ns.
+
+### Parallel CSV converts — 3.46x, and it already ships
+
+`Excel.ParseCsvParallelAsync<T>` partitions by byte range with `CsvBoundaryResolver` confirming row
+starts. Typed models, allocating, own interleave:
+
+| | |
+|---|---|
+| dop 1 (falls through to the sequential path) | 14.202 ms |
+| dop 6 | 5.068 ms (2.80x) |
+| dop 12 | 4.107 ms (3.46x) |
+
+This is the one place in the library where parallelism converts, and it converts because CSV has no
+inflate floor. It is only available on the typed path: `Row` and `Cell` are `ref struct`s and cannot
+cross a thread boundary, so raw row enumeration hits the same wall as XLSX.
 
 ## Approaches measured and rejected
 
@@ -283,6 +403,29 @@ and a public API change. The 1.69x ceiling remains real but sits behind the prod
 which is the same constraint that caps parallel parsing — and the watermark, which looked like the
 shortcut to it, delivers less than a sixth.
 
+### Split character-class masks in the CSV scanner — 0.99x, rejected
+
+`CsvControlScanner` ORs four `Vector256.Equals` results into one mask, and the record loop then
+reloads `buf[stop]` to find out which class the hit belonged to. Keeping the four masks separate and
+testing the bit against them removes that second load. It measured 0.389 ms against 0.384 ms — **no
+difference**. Three extra `ExtractMostSignificantBits` cost exactly what an L1 hit costs, and the
+byte was in L1 by definition, having just been loaded into the vector register.
+
+### A CSV-specific narrow cell descriptor — 0.104 ms, not built
+
+`CellDesc` is 32 bytes because it carries `Number`, `HasNumber` and `SharedIndex` for the binary
+formats. CSV never sets any of them. A 16-byte descriptor measured 0.562 ms against 0.666 ms over
+200,000 fields — real, and **2% of the read**. Not worth a second descriptor type and a second
+`ToCell` path through `Row` and `Cell`.
+
+### Restructuring `FastDouble` around the decimal point — 0.81x, rejected
+
+`FastDouble` runs six branches per byte: dot seen, digit range, leading zero, digit counter,
+overflow guard, scale increment. Locating the dot once with `IndexOf` and running two tight digit
+loops removes all of that from the per-byte path. It measured **slower**: 17.0 ns against 13.9 ns.
+The corpus's value column averages 5.9 bytes, so the `IndexOf` call and the slicing cost more than
+the branches they eliminate. `FastDouble` is already 3.4x `double.TryParse` (13.9 ns vs 47.5 ns).
+
 ## What landed
 
 Two changes, both verified against the full suite (1535 tests):
@@ -305,6 +448,11 @@ A third change, from the CSV investigation: **`FastDate`, a UTF-8 ISO-8601 date 
 (0 of 50,000) to 40.4 ns each, against 163.7 ns for the `GetString()` + `DateTime.Parse` workaround
 that was previously the only option. It serves CSV, text dates in XLS, and XLSX `t="d"`.
 
+A fourth: **`FastDate.TryParseRoundTrip`**, a vectorized path for the 27-byte
+`yyyy-MM-ddTHH:mm:ss.fffffff` form — the shape this library's own `CsvWriter` emits. 1.45–1.49x over
+the scalar parser, gated by a 50,000-value differential and by `FastDateTests` cases covering a
+digit in each separator slot. Anything else falls through to the scalar parser unchanged.
+
 ## Known open items
 
 - The 8.9 ms of sheet parse above the inflate floor in the string-heavy corpus has not been
@@ -316,8 +464,13 @@ that was previously the only option. It serves CSV, text dates in XLS, and XLSX 
 - `XlsxReader.Enumerator.TryParseIsoDate` still has its own ISO date parse, copying bytes to chars on
   the stack and calling `DateTime.TryParse`. `FastDate` now covers the same shapes and should replace
   it, but that path was not measured, so it was left alone.
-- `FastDate` is now ~23 ns on a 27-character round-trip timestamp, after the two tuning changes
-  above. The remaining SWAR option was measured and rejected.
+- The enumerator overhead above framing — `MoveNext`, `_acc.Reset`, refill and compaction
+  bookkeeping — is ~0.8 ms, the largest undecomposed block left in CSV now that the conversions are
+  accounted for. `ExcelReaderWide` (32 columns, spans only, no conversions) runs 2.73x the narrow
+  benchmark and exercises exactly that path, so it is the place to look next.
+- Reading a CSV from an already-resident buffer is slower than from a stream for spans only, and
+  faster for full conversion. Reproduced in both directions across four runs, unexplained.
+
 ### Resolved: the CSV gap against Sylvan was the benchmark not using this library's date API
 
 `CsvReadBenchmark`'s accumulator parsed the date column with the BCL's
@@ -333,7 +486,25 @@ Switching the benchmark to the library's own accessor, then tuning the parser, u
 |---|---|
 | as published, date via `Utf8Parser.TryParse(…, 'O')` | 4.786 ms |
 | date via `Cell.TryGetDateTime` (`FastDate`) | 4.149 ms |
-| + `FastDate` tuned (below) | **3.966 ms** |
+| + `FastDate` tuned (below) | 3.966 ms |
+| + vectorized round-trip path in `FastDate` | **3.381 ms** |
+
+Those four figures come from four separate BenchmarkDotNet runs over a session during which the
+machine warmed and cooled, so the 4.786 → 3.381 span is not a clean single-run comparison. The
+drift-resistant statements are the isolated 1.45–1.49x on a date that is 35% of the read, which
+predicts about 1.13x end to end, and the same-run competitor ratio below.
+
+Same run, same corpus, 50,000 rows:
+
+| | mean | ratio | allocated |
+|---|---|---|---|
+| ExcelReader | 3.381 ms | 1.00 | 368 B |
+| ExcelReaderAsync | 3.309 ms | 0.98 | 440 B |
+| Sylvan | 4.282 ms | 1.27 | 1,688,737 B |
+| Sep | 7.115 ms | 2.10 | 4,024 B |
+| CsvHelper | 26.027 ms | 7.70 | 15,073,424 B |
+
+None of this goes to the README until it is re-run on the Ryzen 7 5700X.
 
 **17.1% on the same method.** Sylvan, the control, did not move across the first two runs
 (4.460 → 4.489 ms) — a third run reported 6.185 ms with a 1.56 ms standard deviation and is

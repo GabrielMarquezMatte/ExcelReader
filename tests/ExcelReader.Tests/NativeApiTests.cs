@@ -438,7 +438,7 @@ namespace ExcelReader.Tests
         [Fact]
         public void Should_Reject_When_Password_Len_Is_Negative()
         {
-            NativeOpenOptionsRaw options = DefaultRawOptions() with { Password = (IntPtr)1, PasswordLen = -1 };
+            NativeOpenOptionsRaw options = DefaultRawOptions() with { Password = 1, PasswordLen = -1 };
             int status = NativeApi.OpenFileEx(
                 Encoding.UTF8.GetBytes(EncryptedFixtures.Path_("agile-aes256-sha512.xlsx")),
                 NativeFormat.Auto, options, out NativeHandle? handle);

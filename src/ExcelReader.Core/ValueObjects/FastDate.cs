@@ -1,13 +1,32 @@
+using System.Runtime.InteropServices;
+using System.Runtime.Intrinsics;
+
 namespace ExcelReader.Core.ValueObjects
 {
     internal static class FastDate
     {
         private const int MaxFractionDigits = 7;
+        private const int RoundTripLength = 27;
 
         private static readonly long[] FractionScale = [1_000_000, 100_000, 10_000, 1_000, 100, 10, 1];
 
+        // Bytes 0..15 and 11..26 of yyyy-MM-ddTHH:mm:ss.fffffff, as positions that must hold a
+        // digit. Everything else in those two windows is a separator, checked by value.
+        private const uint HeadDigitPositions = 0xD96F;
+        private const uint TailDigitPositions = 0xFEDB;
+
+        private static readonly Vector128<byte> DateGather = Vector128.Create(
+            0, 1, 2, 3, 5, 6, 8, 9, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80);
+
+        private static readonly Vector128<byte> TimeGather = Vector128.Create(
+            0, 1, 3, 4, 6, 7, 0x80, 0x80, 9, 10, 11, 12, 13, 14, 15, 0x80);
+
         public static bool TryParse(ReadOnlySpan<byte> s, out DateTime value)
         {
+            if (s.Length == RoundTripLength && Vector128.IsHardwareAccelerated)
+            {
+                return TryParseRoundTrip(s, out value);
+            }
             value = default;
             if (s.Length < 10 || s[4] != (byte)'-' || s[7] != (byte)'-')
             {
@@ -62,6 +81,70 @@ namespace ExcelReader.Core.ValueObjects
 
             value = new DateTime(ticks);
             return true;
+        }
+
+        // The round-trip form has all 21 digits at fixed offsets, so two overlapping 16-byte loads
+        // validate every one of them with a single unsigned compare each, and a shuffle per load
+        // packs them so the digits fold in pairs instead of one multiply-add per digit.
+        private static bool TryParseRoundTrip(ReadOnlySpan<byte> s, out DateTime value)
+        {
+            value = default;
+            if (s[4] != (byte)'-' || s[7] != (byte)'-' || s[13] != (byte)':'
+                || s[16] != (byte)':' || s[19] != (byte)'.'
+                || s[10] is not ((byte)'T' or (byte)' '))
+            {
+                return false;
+            }
+
+            ref byte origin = ref MemoryMarshal.GetReference(s);
+            Vector128<byte> nine = Vector128.Create((byte)9);
+            Vector128<byte> ascii = Vector128.Create((byte)'0');
+            Vector128<byte> head = Vector128.LoadUnsafe(ref origin, 0) - ascii;
+            Vector128<byte> tail = Vector128.LoadUnsafe(ref origin, 11) - ascii;
+
+            if ((Vector128.LessThanOrEqual(head, nine).ExtractMostSignificantBits() & HeadDigitPositions) != HeadDigitPositions
+                || (Vector128.LessThanOrEqual(tail, nine).ExtractMostSignificantBits() & TailDigitPositions) != TailDigitPositions)
+            {
+                return false;
+            }
+
+            ulong date = Vector128.Shuffle(head, DateGather).AsUInt64().GetElement(0);
+            Vector128<ulong> rest = Vector128.Shuffle(tail, TimeGather).AsUInt64();
+
+            ulong datePairs = FoldPairs(date);
+            int year = (int)(((datePairs & 0xFF) * 100) + ((datePairs >> 16) & 0xFF));
+            int month = (int)((datePairs >> 32) & 0xFF);
+            int day = (int)((datePairs >> 48) & 0xFF);
+
+            ulong clockPairs = FoldPairs(rest.GetElement(0));
+            int hour = (int)(clockPairs & 0xFF);
+            int minute = (int)((clockPairs >> 16) & 0xFF);
+            int second = (int)((clockPairs >> 32) & 0xFF);
+
+            if (year < 1 || month is < 1 or > 12 || day < 1 || day > DateTime.DaysInMonth(year, month)
+                || hour > 23 || minute > 59 || second > 59)
+            {
+                return false;
+            }
+
+            // The gather leaves a zero byte after the seven fraction digits, so the eight-digit
+            // fold returns the fraction shifted up one decimal place.
+            ulong fractionPairs = FoldPairs(rest.GetElement(1));
+            ulong fractionQuads = ((fractionPairs * 100) + (fractionPairs >> 16)) & 0x0000FFFF0000FFFFUL;
+            ulong fraction = (((fractionQuads * 10000) + (fractionQuads >> 32)) & 0xFFFFFFFFUL) / 10;
+
+            value = new DateTime(
+                new DateTime(year, month, day).Ticks
+                + (hour * TimeSpan.TicksPerHour)
+                + (minute * TimeSpan.TicksPerMinute)
+                + (second * TimeSpan.TicksPerSecond)
+                + (long)fraction);
+            return true;
+        }
+
+        private static ulong FoldPairs(ulong digits)
+        {
+            return ((digits * 10) + (digits >> 8)) & 0x00FF00FF00FF00FFUL;
         }
 
         private static bool TryFraction(ReadOnlySpan<byte> s, out long ticks)

@@ -265,10 +265,10 @@ namespace ExcelReader.Fuzz
         {
             byte[] bytes = data.ToArray();
             List<string> stream = RenderAllSheets(xlsb
-                ? (IExcelRowReader)Excel.FromXlsb(new MemoryStream(bytes, writable: false), leaveOpen: false, Limits)
+                ? Excel.FromXlsb(new MemoryStream(bytes, writable: false), leaveOpen: false, Limits)
                 : Excel.FromXlsx(new MemoryStream(bytes, writable: false), leaveOpen: false, Limits));
             List<string> memory = RenderAllSheets(xlsb
-                ? (IExcelRowReader)Excel.FromXlsb(new ReadOnlyMemory<byte>(bytes), Limits)
+                ? Excel.FromXlsb(new ReadOnlyMemory<byte>(bytes), Limits)
                 : Excel.FromXlsx(new ReadOnlyMemory<byte>(bytes), Limits));
             AssertSameRows(stream, memory, "stream", "memory");
             return stream.Count;

@@ -129,7 +129,7 @@ namespace ExcelReader.Tests
                     Assert.Equal(NativeStatus.Ok, NativeApi.ParseTyped(live, IdSpecs(), headerRow: 1, out NativeTable whole));
                     long interleaved = RowsIn(whole);
                     NativeApi.FreeTable(ref whole);
-                    Assert.Equal((long)InterleaveRowCount, interleaved);
+                    Assert.Equal(InterleaveRowCount, interleaved);
 
                     Assert.Equal(NativeStatus.Error, NativeApi.NextTypedBatch(reader, out NativeTable after));
                     Assert.Equal(IntPtr.Zero, after.Columns);
@@ -365,7 +365,7 @@ namespace ExcelReader.Tests
                 long secondRows = RowsIn(second);
                 NativeApi.FreeTable(ref second);
 
-                Assert.Equal((long)SmallRowCount, firstRows);
+                Assert.Equal(SmallRowCount, firstRows);
                 Assert.Equal(firstRows, secondRows);
             }
             finally
