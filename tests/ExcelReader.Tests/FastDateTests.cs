@@ -48,9 +48,6 @@ namespace ExcelReader.Tests
             Assert.False(FastDate.TryParse(Encoding.ASCII.GetBytes(text), out _));
         }
 
-        // The round-trip form takes a vectorized path that validates digit positions with a mask.
-        // A digit sitting in a separator slot satisfies that mask, so only an exact check of the
-        // separators rejects these.
         [Theory]
         [InlineData("2024503-15T10:20:30.1234567")]
         [InlineData("2024-03515T10:20:30.1234567")]

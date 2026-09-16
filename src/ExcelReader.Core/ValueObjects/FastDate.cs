@@ -10,8 +10,6 @@ namespace ExcelReader.Core.ValueObjects
 
         private static readonly long[] FractionScale = [1_000_000, 100_000, 10_000, 1_000, 100, 10, 1];
 
-        // Bytes 0..15 and 11..26 of yyyy-MM-ddTHH:mm:ss.fffffff, as positions that must hold a
-        // digit. Everything else in those two windows is a separator, checked by value.
         private const uint HeadDigitPositions = 0xD96F;
         private const uint TailDigitPositions = 0xFEDB;
 
@@ -83,9 +81,6 @@ namespace ExcelReader.Core.ValueObjects
             return true;
         }
 
-        // The round-trip form has all 21 digits at fixed offsets, so two overlapping 16-byte loads
-        // validate every one of them with a single unsigned compare each, and a shuffle per load
-        // packs them so the digits fold in pairs instead of one multiply-add per digit.
         private static bool TryParseRoundTrip(ReadOnlySpan<byte> s, out DateTime value)
         {
             value = default;
@@ -127,8 +122,6 @@ namespace ExcelReader.Core.ValueObjects
                 return false;
             }
 
-            // The gather leaves a zero byte after the seven fraction digits, so the eight-digit
-            // fold returns the fraction shifted up one decimal place.
             ulong fractionPairs = FoldPairs(rest.GetElement(1));
             ulong fractionQuads = ((fractionPairs * 100) + (fractionPairs >> 16)) & 0x0000FFFF0000FFFFUL;
             ulong fraction = (((fractionQuads * 10000) + (fractionQuads >> 32)) & 0xFFFFFFFFUL) / 10;
