@@ -270,6 +270,90 @@ than the initial descriptor array, each read both from memory and through a stre
 between the old and new builds. The gate was checked by mutation: shifting the CRLF record end by
 one byte changed both the row count and the digest.
 
+### Against a One Billion Row Challenge workload
+
+A scaled-down 1BRC: 10,000,000 rows of `station;temperature`, 413 stations, 222 MB in memory
+(22 bytes per row, against ~14 in the real challenge), min/max/sum/count per station. Every variant
+shares one open-addressing aggregation table, so the differences are reading and parsing. All five
+produced identical checksums. 12 threads on the i7-1365U (2 performance + 8 efficiency cores).
+
+| | 10M rows | per row | linear extrapolation to 1B |
+|---|---|---|---|
+| hand-written parser, 1 thread | 423 ms | 42.3 ns | ~42 s |
+| hand-written parser, partitioned by newline | 92 ms | 9.2 ns | ~9 s |
+| ExcelReader rows, 1 thread | 813 ms | 81.3 ns | ~81 s |
+| ExcelReader rows, partitioned by the caller | 187 ms | 18.7 ns | ~19 s |
+| `Excel.ParseCsvParallelAsync<T>` | 2,417 ms | 241.7 ns | ~4 min |
+
+The hand-written baseline is deliberately naive (`IndexOf` for the separator, a digit loop, FNV over
+the key bytes) and is not a leaderboard entry; the winning entries add SWAR temperature parsing,
+branch-free key hashing and memory-mapped input, and run on server hardware. So these rows position
+the library against a plain specialized parser on the same machine, not against the leaderboard.
+
+- The general reader costs **~2x a naive specialized parser**, single-threaded or partitioned:
+  about 39 ns per row of generality on this shape (`Row`/`Cell` construction, the 32-byte `CellDesc`,
+  generic `TryParse<double>`, double-to-fixed-point conversion).
+- Partitioning converts well — 4.3x on 12 mixed threads — but only because the caller split the
+  buffer on newlines and opened one `Excel.FromCsv(ReadOnlyMemory<byte>)` per slice. There is no
+  public API for that; `Row` is a `ref struct`, so the library cannot do it for a raw row consumer.
+- The library's own parallel path allocates a model object and a station string per row, and is
+  **13x slower** than the caller-partitioned raw path on this workload. It is built for typed
+  mapping, not throughput.
+
+Cost of handing each `Row` to user code instead of an inline loop, same workload, one thread,
+interleaved, 5,000,000 rows, identical checksums:
+
+| | per row | |
+|---|---|---|
+| inline loop | 62.7 ns | 1.00x |
+| delegate `(ref TState state, Row row)` | 68.3 ns | 1.09x |
+| struct implementing a static-abstract processor interface, constrained generic | 76.8 ns | 1.23x |
+
+That measurement chose the engine behind `Excel.AggregateCsvParallelAsync`: a
+`CsvRowAction<TState>(ref TState state, Row row)` delegate, one accumulator per partition, and a
+combine folded left to right in file order. It reuses the typed path's speculative partitioning.
+The public surface has two shapes over that one engine: an `ICsvAccumulator<TSelf>` type
+(`Add(Row)`, `Merge(TSelf)`, parameterless constructor), and a `CsvAggregation<TState>` object
+holding `Seed`, `Accumulate` and `Combine`. Both take a `CsvParallelOptions` carrying
+`DegreeOfParallelism`, `Reader` and `HeaderRow`.
+A partition whose guessed start turns out wrong is read again from its confirmed start with a fresh
+accumulator, and the first attempt's accumulator and any exception its callbacks threw are
+discarded. That is why the callback may only mutate the accumulator it is handed. Partitions are
+sized at a quarter of a worker's share, clamped to 1–64 MB, so accumulator creation and merging stay
+per-partition costs, not per-64-KB ones.
+
+Same 1BRC sample, 12 threads, interleaved, identical checksums (the machine was warmer than for the
+first table, so compare within this table only):
+
+| | per row |
+|---|---|
+| caller-partitioned raw rows, inline loop | 25.7 ns, 25.0 ns |
+| three loose delegates (the first version of this API) | 31.5 ns, 28.5 ns |
+| `ParseCsvParallelAsync<T>` | 209.5 ns |
+
+About 1.15x the hand-partitioned loop — the delegate plus partition bookkeeping — and **7x faster
+than the typed parallel path**. Unlike the hand-partitioned loop, it is correct for quoted fields
+that span lines.
+
+The two public shapes, measured after the surface was settled, same sample, interleaved, identical
+checksums:
+
+| | 12 threads | 1 thread |
+|---|---|---|
+| caller-partitioned raw rows, inline loop | 24.1 ns, 26.0 ns | — |
+| `AggregateCsvParallelAsync(data, CsvAggregation<T>)` | 26.9 ns, 29.0 ns | 84.2 ns, 75.3 ns |
+| `AggregateCsvParallelAsync<TAccumulator>(data)` | 34.4 ns, 37.5 ns | 117.6 ns, 95.1 ns |
+
+The accumulator overload costs **~1.3x the aggregation overload** — more than the 1.15–1.23x a
+direct interface call measured, because it goes through the same delegate engine and so pays the
+delegate call and the interface call on every record. That is the price of keeping one engine; a
+second engine specialized on the accumulator type would remove the delegate hop. The one-thread
+fallback also runs above the inline loop's ~62 ns, since it enumerates through `MoveNextAsync`.
+
+The constrained-generic struct, the textbook zero-cost shape, came out slower than the delegate.
+The multithreaded version of this comparison was unusable: the same inline partitioned loop
+measured 16.9 ns per row when run fourth and 23.8 ns when run seventh, from heat alone.
+
 ### The date parser: 1.49x from one vectorized pass over the round-trip form
 
 The date column is 35% of the CSV read, so it was decomposed next. Two candidate cost centres had

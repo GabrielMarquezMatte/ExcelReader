@@ -75,12 +75,12 @@ namespace ExcelReader.Core.Parser.Internal
             return Build<T>(new CsvChunkSource(data), options, parserConfig, Normalize(degreeOfParallelism), chunkSize, ownedHandle: null, ct);
         }
 
-        private static int Normalize(int degreeOfParallelism)
+        internal static int Normalize(int degreeOfParallelism)
         {
             return degreeOfParallelism == 0 ? Environment.ProcessorCount : degreeOfParallelism;
         }
 
-        private static bool CanPartition(int dop, long length, CsvReaderOptions options)
+        internal static bool CanPartition(int dop, long length, CsvReaderOptions options)
         {
             if (dop <= 1 || length < MinParallelBytes)
             {

@@ -206,7 +206,7 @@ namespace ExcelReader.Core.Parser.Internal
             return (resolvedNextStart, failure, failureRow);
         }
 
-        private static long GuessStart(CsvChunkSource source, CsvChunk chunk, byte quote)
+        internal static long GuessStart(CsvChunkSource source, CsvChunk chunk, byte quote)
         {
             long chunkLength = chunk.End - chunk.Start;
             if (chunkLength <= 0)
