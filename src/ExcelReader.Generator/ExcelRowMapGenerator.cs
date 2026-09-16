@@ -107,6 +107,7 @@ namespace ExcelReader.Generator
             None,
             Direct,
             ToStringFallback,
+            Utf8Text,
         }
 
         private static readonly HashSet<SpecialType> NumericWriteSpecialTypes =
@@ -342,6 +343,10 @@ namespace ExcelReader.Generator
 
         private static string WriteValueExpression(WriteKind kind, bool needsNullConditional, string propertyName)
         {
+            if (kind == WriteKind.Utf8Text)
+            {
+                return $"global::System.Text.Encoding.UTF8.GetString(m.{propertyName})";
+            }
             if (kind == WriteKind.Direct)
             {
                 return $"m.{propertyName}";
@@ -351,6 +356,10 @@ namespace ExcelReader.Generator
 
         private static WriteKind GetWriteKind(ITypeSymbol underlying)
         {
+            if (IsUtf8Span(underlying))
+            {
+                return WriteKind.Utf8Text;
+            }
             if (underlying.SpecialType is SpecialType.System_String or SpecialType.System_Boolean
                 || IsSystemType(underlying, "DateTime") || IsSystemType(underlying, "DateOnly") || IsSystemType(underlying, "TimeOnly")
                 || NumericWriteSpecialTypes.Contains(underlying.SpecialType))
@@ -362,6 +371,10 @@ namespace ExcelReader.Generator
 
         private static (string Reader, string ValueType, bool IsGuid)? TryGetBuiltInReader(ITypeSymbol underlying)
         {
+            if (IsUtf8Span(underlying))
+            {
+                return ("global::ExcelReader.Core.Parser.ExcelCellReaders.Utf8", "global::System.ReadOnlySpan<byte>", false);
+            }
             if (underlying.SpecialType == SpecialType.System_String)
             {
                 return ("global::ExcelReader.Core.Parser.ExcelCellReaders.String", "string", false);
@@ -410,6 +423,13 @@ namespace ExcelReader.Generator
             return false;
         }
 
+        private static bool IsUtf8Span(ITypeSymbol type)
+        {
+            return type is INamedTypeSymbol { Name: "ReadOnlySpan", TypeArguments.Length: 1 } named
+                && named.TypeArguments[0].SpecialType == SpecialType.System_Byte
+                && string.Equals(named.ContainingNamespace?.ToDisplayString(), "System", StringComparison.Ordinal);
+        }
+
         private static bool IsSystemType(ITypeSymbol type, string name)
         {
             return type is INamedTypeSymbol { ContainingNamespace: { IsGlobalNamespace: false } ns } named
@@ -434,13 +454,17 @@ namespace ExcelReader.Generator
                 && SymbolEqualityComparer.Default.Equals(i.TypeArguments[0], exactArgument));
         }
 
-        private static string DeclarationKeyword(INamedTypeSymbol symbol)
+        private static string PartialDeclaration(INamedTypeSymbol symbol)
         {
             if (symbol.TypeKind == TypeKind.Struct)
             {
-                return symbol.IsRecord ? "record struct" : "struct";
+                if (symbol.IsRefLikeType)
+                {
+                    return "ref partial struct";
+                }
+                return symbol.IsRecord ? "partial record struct" : "partial struct";
             }
-            return symbol.IsRecord ? "record" : "class";
+            return symbol.IsRecord ? "partial record" : "partial class";
         }
 
         private static string GenerateSource(INamedTypeSymbol symbol, List<PropertyPlan> properties)
@@ -464,11 +488,11 @@ namespace ExcelReader.Generator
             }
             foreach (INamedTypeSymbol outer in containers)
             {
-                sb.AppendLine($"partial {DeclarationKeyword(outer)} {outer.Name}");
+                sb.AppendLine($"{PartialDeclaration(outer)} {outer.Name}");
                 sb.AppendLine("{");
             }
 
-            sb.AppendLine($"partial {DeclarationKeyword(symbol)} {symbol.Name} : global::ExcelReader.Core.Parser.IExcelRowMap<{qualifiedType}>, global::ExcelReader.Core.Writer.IExcelRecordMap<{qualifiedType}>");
+            sb.AppendLine($"{PartialDeclaration(symbol)} {symbol.Name} : global::ExcelReader.Core.Parser.IExcelRowMap<{qualifiedType}>, global::ExcelReader.Core.Writer.IExcelRecordMap<{qualifiedType}>");
             sb.AppendLine("{");
 
             foreach (string? decl in properties.Select(static p => p.ConverterFieldDecl).Where(static d => d is not null))
