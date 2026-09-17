@@ -1,4 +1,6 @@
+using System.Text;
 using ExcelReader.Core.Reader;
+using ExcelReader.Core.ValueObjects;
 using ExcelReader.Native;
 
 namespace ExcelReader.Tests
@@ -80,6 +82,64 @@ namespace ExcelReader.Tests
             int status = NativeCsvAggregateOptions.Translate(raw, out _);
 
             Assert.Equal(NativeStatus.InvalidArgument, status);
+        }
+
+        private static Row FirstRowOf(string csv)
+        {
+            CsvReader reader = Excel.FromCsv(Encoding.UTF8.GetBytes(csv), CsvReaderOptions.Default);
+            CsvReader.Enumerator rows = reader.GetEnumerator();
+            Assert.True(rows.MoveNext());
+            return rows.Current;
+        }
+
+        [Fact]
+        public void WriteRow_Should_Expose_Every_Field_As_A_NulTerminated_Cell()
+        {
+            using CsvAggregateState state = new();
+
+            NativeRow row = state.WriteRow(FirstRowOf("alpha,beta,gamma\n"));
+
+            Assert.Equal(3, row.CellCount);
+            NativeRowCell* cells = (NativeRowCell*)row.Cells;
+            Assert.Equal("alpha", ReadCell(cells[0]));
+            Assert.Equal("beta", ReadCell(cells[1]));
+            Assert.Equal("gamma", ReadCell(cells[2]));
+            Assert.Equal(0, cells[0].Column);
+            Assert.Equal(2, cells[2].Column);
+            Assert.Equal(1, cells[0].Type);
+            Assert.Equal(0, ((byte*)cells[0].Value)[cells[0].ValueLength]);
+        }
+
+        [Fact]
+        public void WriteRow_Should_Report_Empty_Type_When_A_Field_Is_Blank()
+        {
+            using CsvAggregateState state = new();
+
+            NativeRow row = state.WriteRow(FirstRowOf("alpha,,gamma\n"));
+
+            NativeRowCell* cells = (NativeRowCell*)row.Cells;
+            Assert.Equal(3, row.CellCount);
+            Assert.Equal(0, cells[1].Type);
+            Assert.Equal(0, cells[1].ValueLength);
+        }
+
+        [Fact]
+        public void WriteRow_Should_Reuse_Its_Buffer_When_A_Later_Row_Is_Smaller()
+        {
+            using CsvAggregateState state = new();
+
+            NativeRow wide = state.WriteRow(FirstRowOf("aaaaaaaaaa,bbbbbbbbbb,cccccccccc\n"));
+            IntPtr firstBuffer = wide.Cells;
+            NativeRow narrow = state.WriteRow(FirstRowOf("x\n"));
+
+            Assert.Equal(firstBuffer, narrow.Cells);
+            Assert.Equal(1, narrow.CellCount);
+            Assert.Equal("x", ReadCell(*(NativeRowCell*)narrow.Cells));
+        }
+
+        private static string ReadCell(NativeRowCell cell)
+        {
+            return Encoding.UTF8.GetString((byte*)cell.Value, cell.ValueLength);
         }
     }
 }
