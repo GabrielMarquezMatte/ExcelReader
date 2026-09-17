@@ -9,6 +9,7 @@
 #include <cstring>
 #include <expected>
 #include <iterator>
+#include <limits>
 #include <memory>
 #include <optional>
 #include <ranges>
@@ -2009,9 +2010,12 @@ namespace xl
     /// state. `combine` must fold `next` into `*this` without destroying it - the library owns
     /// `next`'s lifetime and frees it afterwards.
     ///
-    /// `accumulate` and `combine` run concurrently on worker threads, one `Acc` per partition,
-    /// never on the calling thread. Both must be noexcept in effect: an exception escaping into the
-    /// library is undefined behavior, so this wrapper catches everything and reports XL_ERROR.
+    /// `accumulate` runs concurrently on worker threads, one `Acc` per partition, never on the
+    /// calling thread. `combine` is effectively single-threaded but is not pinned to any particular
+    /// thread, per `excelreader.h`'s `xl_csv_aggregate_file` contract. Both must be noexcept in
+    /// effect: an exception escaping into the library is undefined behavior, so this wrapper catches
+    /// everything and reports a reserved sentinel status that this header maps back to a descriptive
+    /// error instead of `XL_ERROR`.
     template <typename Acc>
     concept CsvAccumulator =
         std::default_initializable<Acc> && std::move_constructible<Acc> &&
@@ -2022,6 +2026,15 @@ namespace xl
 
     namespace detail
     {
+        /// Reserved status a shim below returns to signal "a user callback threw", never a real
+        /// accumulate/combine/seed result. Positive, so it can never collide with a library status
+        /// (every one of those is <= 0) or a caller's own error code space in the same way `XL_ERROR`
+        /// would - `aggregate_csv_file`/`aggregate_csv_memory` recognize it and report a descriptive
+        /// error instead of the generic "unknown error" that `XL_ERROR` would produce here, since
+        /// `xl_last_error` is never populated for a callback exception. Mirrors the Rust wrapper's
+        /// `PANIC_STATUS`.
+        inline constexpr int32_t kCsvCallbackException = (std::numeric_limits<int32_t>::max)();
+
         template <typename Acc>
         int32_t csv_seed(void **out_state, void *) noexcept
         {
@@ -2032,7 +2045,7 @@ namespace xl
             }
             catch (...)
             {
-                return XL_ERROR;
+                return kCsvCallbackException;
             }
         }
 
@@ -2045,7 +2058,7 @@ namespace xl
             }
             catch (...)
             {
-                return XL_ERROR;
+                return kCsvCallbackException;
             }
         }
 
@@ -2058,7 +2071,7 @@ namespace xl
             }
             catch (...)
             {
-                return XL_ERROR;
+                return kCsvCallbackException;
             }
         }
 
@@ -2098,6 +2111,10 @@ namespace xl
         const int32_t status = xl_csv_aggregate_file(
             reinterpret_cast<const uint8_t *>(path.data()), static_cast<int32_t>(path.size()),
             &agg, c_options_ptr, &state);
+        if (status == detail::kCsvCallbackException)
+        {
+            return std::unexpected(Error{status, "an accumulator callback threw"});
+        }
         if (status != XL_OK)
         {
             return std::unexpected(detail::make_error(status));
@@ -2122,6 +2139,10 @@ namespace xl
         void *state = nullptr;
         const int32_t status = xl_csv_aggregate_memory(data.data(), static_cast<int32_t>(data.size()),
                                                         &agg, c_options_ptr, &state);
+        if (status == detail::kCsvCallbackException)
+        {
+            return std::unexpected(Error{status, "an accumulator callback threw"});
+        }
         if (status != XL_OK)
         {
             return std::unexpected(detail::make_error(status));

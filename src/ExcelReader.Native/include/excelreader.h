@@ -238,26 +238,37 @@ int32_t xl_write_handle_bytes(xl_writer_handle* handle, xl_buffer* out_buffer);
  * Ownership: every state the library seeds, the library frees with `free_state` - except the one
  * returned in `out_state`. `combine` folds `next` into `acc` and must NOT free `next`; the library
  * does that. `seed` must return a distinct pointer on every call. A NULL state is legal and is
- * never passed to `free_state`.
+ * never passed to `free_state` - but it IS still passed to `accumulate` and `combine` like any other
+ * state.
  *
  * `seed` is called at least once per partition and may be called again for a partition that has to
  * be re-read, so a seeded state can be discarded without ever being combined. Peak live states is
  * proportional to the partition count, not to `degree_of_parallelism`: a 40 GB source at 16 threads
  * holds roughly 640 states at once.
  *
- * Threading: `accumulate` runs concurrently on worker threads, each on its own state. `user_data`
- * is shared by all of them and must be read-only or internally synchronized. No callback ever runs
- * on the calling thread, not even when the source is too small to partition. A callback must not
- * call any xl_* function for the same aggregation, and must not let an exception or panic escape
- * into the library - wrap Rust shims in catch_unwind and mark C++ shims noexcept.
+ * Threading: `accumulate` runs concurrently on worker threads, each on its own state. `seed`,
+ * `combine` and `free_state` are effectively single-threaded but are not pinned to any particular
+ * thread. `user_data` is shared by all callbacks and must be read-only or internally synchronized.
+ * No callback ever runs on the calling thread, not even when the source is too small to partition.
+ * A callback must not call any xl_* function for the same aggregation, and must not let an
+ * exception or panic escape into the library - wrap Rust shims in catch_unwind and mark C++ shims
+ * noexcept.
  *
  * A row's cell pointers are valid only for the duration of the `accumulate` call that received
  * them. Copy anything you keep.
  *
- * Returning nonzero from `accumulate` aborts the run: `out_state` is not written, every state is
- * freed, and that code is returned verbatim. Sibling workers only notice the abort every few
- * thousand records, so `accumulate` must tolerate being called again after it has returned nonzero.
- * Use positive codes; every code the library returns is <= 0.
+ * Returning nonzero from `accumulate`, `seed`, or `combine` aborts the run: `out_state` is not
+ * written, every state already seeded is freed, and that code is returned verbatim. Sibling workers
+ * only notice the abort every few thousand records, so `accumulate` must tolerate being called
+ * again after it has returned nonzero. Use positive codes; every code the library returns is <= 0.
+ *
+ * `struct_size` on both `xl_csv_aggregation` and `xl_csv_parallel_options` must equal
+ * `sizeof(...)` of that struct exactly, not merely be large enough; a mismatch is rejected with a
+ * bare `XL_INVALID_ARGUMENT` and no message.
+ *
+ * `options` may be NULL, meaning every field takes its default - but a NULL `options` is NOT
+ * equivalent to a zeroed `xl_csv_parallel_options`, since a zeroed struct has `struct_size == 0`
+ * and is rejected by the rule above. Pass NULL for defaults, never a zeroed struct.
  */
 typedef int32_t (*xl_csv_seed_fn)      (void** out_state, void* user_data);
 typedef int32_t (*xl_csv_accumulate_fn)(void* state, const xl_row* row, void* user_data);
