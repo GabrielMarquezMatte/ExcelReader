@@ -150,7 +150,6 @@ namespace ExcelReader.Tests
             public int Seeds;
             public int Frees;
             public int Combines;
-            public long Sum;
         }
 
         [UnmanagedCallersOnly]
@@ -208,14 +207,32 @@ namespace ExcelReader.Tests
             };
         }
 
-        private static string WriteCsv(long rowCount, string? header = null)
+        [UnmanagedCallersOnly]
+        private static int SeedRecordThreadId(void** outState, void* userData)
+        {
+            *(int*)userData = Environment.CurrentManagedThreadId;
+            long* partial = (long*)NativeMemory.AllocZeroed((nuint)sizeof(long));
+            *outState = partial;
+            return 0;
+        }
+
+        private static NativeCsvAggregationRaw ThreadRecordingAggregation(int* threadId)
+        {
+            return new NativeCsvAggregationRaw
+            {
+                StructSize = sizeof(NativeCsvAggregationRaw),
+                Seed = (IntPtr)(delegate* unmanaged<void**, void*, int>)&SeedRecordThreadId,
+                Accumulate = (IntPtr)(delegate* unmanaged<void*, NativeRow*, void*, int>)&AccumulateFirstColumn,
+                Combine = (IntPtr)(delegate* unmanaged<void*, void*, void*, int>)&CombineTally,
+                FreeState = (IntPtr)(delegate* unmanaged<void*, void*, void>)&FreeTally,
+                UserData = (IntPtr)threadId,
+            };
+        }
+
+        private static string WriteCsv(long rowCount)
         {
             string path = Path.Combine(Path.GetTempPath(), $"xlagg-{Guid.NewGuid():N}.csv");
             using StreamWriter writer = new(path);
-            if (header is not null)
-            {
-                writer.WriteLine(header);
-            }
             for (long index = 1; index <= rowCount; index++)
             {
                 writer.WriteLine($"{index},filler-value-to-make-the-file-large-enough-to-partition");
@@ -241,6 +258,8 @@ namespace ExcelReader.Tests
 
                 Assert.Equal(NativeStatus.Ok, status);
                 Assert.Equal(400_000L * 400_001L / 2, *(long*)result);
+                Assert.True(tally.Seeds > 1);
+                Assert.True(tally.Combines > 0);
                 Assert.Equal(tally.Seeds - 1, tally.Frees);
                 NativeMemory.Free((void*)result);
             }
@@ -250,11 +269,28 @@ namespace ExcelReader.Tests
             }
         }
 
+        private static string WriteQuotedFieldSpanningToEof()
+        {
+            string path = Path.Combine(Path.GetTempPath(), $"xlagg-{Guid.NewGuid():N}.csv");
+            using StreamWriter writer = new(path);
+            writer.Write("1,a\n2,\"");
+            const string filler = "xxxxxxxxxx\n";
+            const long target = 3 * 1024 * 1024;
+            long written = 0;
+            while (written < target)
+            {
+                writer.Write(filler);
+                written += filler.Length;
+            }
+            writer.Write("\"\n");
+            return path;
+        }
+
         [Fact]
-        public void AggregateCsvFile_Should_Free_Every_Abandoned_State_When_The_Merge_Loop_Exits_Early()
+        public void AggregateCsvFile_Should_Free_Abandoned_Chunks_When_A_Quoted_Field_Spans_To_Eof()
         {
             Tally tally = default;
-            string path = WriteCsv(30_000);
+            string path = WriteQuotedFieldSpanningToEof();
             try
             {
                 NativeCsvParallelOptionsRaw options = new()
@@ -267,7 +303,9 @@ namespace ExcelReader.Tests
                     Encoding.UTF8.GetBytes(path), TallyAggregation(&tally), options, out nint result);
 
                 Assert.Equal(NativeStatus.Ok, status);
-                Assert.Equal(30_000L * 30_001L / 2, *(long*)result);
+                Assert.Equal(3L, *(long*)result);
+                Assert.True(tally.Seeds > 1);
+                Assert.Equal(0, tally.Combines);
                 Assert.Equal(tally.Seeds - 1, tally.Frees);
                 NativeMemory.Free((void*)result);
             }
@@ -340,6 +378,28 @@ namespace ExcelReader.Tests
                 Assert.Equal(1, tally.Seeds);
                 Assert.Equal(0, tally.Combines);
                 Assert.Equal(0, tally.Frees);
+                NativeMemory.Free((void*)result);
+            }
+        }
+
+        [Fact]
+        public void AggregateCsvMemory_Should_Not_Run_Seed_On_The_Calling_Thread_When_DegreeOfParallelism_Is_One()
+        {
+            int seedThreadId = -1;
+            byte[] csv = Encoding.UTF8.GetBytes("1,a\n2,b\n3,c\n");
+            fixed (byte* data = csv)
+            {
+                NativeCsvParallelOptionsRaw options = new()
+                {
+                    StructSize = sizeof(NativeCsvParallelOptionsRaw),
+                    DegreeOfParallelism = 1,
+                };
+
+                int status = NativeApi.AggregateCsvMemory(
+                    data, csv.Length, ThreadRecordingAggregation(&seedThreadId), options, out nint result);
+
+                Assert.Equal(NativeStatus.Ok, status);
+                Assert.NotEqual(Environment.CurrentManagedThreadId, seedThreadId);
                 NativeMemory.Free((void*)result);
             }
         }
