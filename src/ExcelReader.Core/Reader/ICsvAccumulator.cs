@@ -5,7 +5,7 @@ namespace ExcelReader.Core.Reader
     /// of the source gets its own instance.
     /// </summary>
     /// <typeparam name="TSelf">The implementing type.</typeparam>
-    /// <typeparam name="TModel">The record type, produced by <see cref="ICsvRecord{TSelf}.TryParse"/> or by a CsvModelMap{TModel}.</typeparam>
+    /// <typeparam name="TModel">The record type, produced by <see cref="ICsvRecord{TSelf}.TryParse"/> or by a <see cref="CsvModelMap{TModel}"/>.</typeparam>
     /// <remarks>
     /// <para>
     /// <see cref="Add"/> runs concurrently across instances on worker threads, and must mutate only the

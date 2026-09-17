@@ -71,7 +71,7 @@ namespace ExcelReader.Core.Parser.Internal
         internal static void ParseRow<TModel>(
             in Row row,
             ColumnBinding<TModel>[] bindings,
-            Span<bool> seen,
+            scoped Span<bool> seen,
             bool track,
             bool isDate1904,
             IFormatProvider provider,
