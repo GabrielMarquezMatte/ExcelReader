@@ -720,11 +720,6 @@ static int test_write_typed(const api_t* api)
     return 0;
 }
 
-/* seed/free_state run on worker threads that can overlap, so their shared counters need atomic
- * increments - a plain int++ across threads is a data race. Per excelreader.h's xl_csv_aggregate_file
- * contract, combine is effectively single-threaded (not pinned to any particular thread) for a given
- * aggregation, so it does not strictly need one; it gets one anyway so every counter in
- * smoke_csv_counters is handled the same way. */
 #ifdef _WIN32
 typedef volatile LONG smoke_counter_t;
 static void smoke_counter_increment(smoke_counter_t* counter) { InterlockedIncrement(counter); }
@@ -749,7 +744,7 @@ static int32_t smoke_csv_seed(void** out_state, void* user_data)
 {
     smoke_csv_counters* counters = (smoke_csv_counters*)user_data;
     int64_t* total = (int64_t*)calloc(1, sizeof(int64_t));
-    if (total == NULL) { return 1; } /* positive: every code the library itself returns is <= 0 */
+    if (total == NULL) { return 1; } 
     *out_state = total;
     smoke_counter_increment(&counters->seeds);
     return XL_OK;
@@ -760,8 +755,6 @@ static int32_t smoke_csv_accumulate(void* state, const xl_row* row, void* user_d
     (void)user_data;
     if (row->cell_count > 0)
     {
-        /* strtoll with no length argument relies on the marshal layer's NUL terminator - that is the
-         * point of this check, proving the termination guarantee from the C side. */
         *(int64_t*)state += strtoll((const char*)row->cells[0].value, NULL, 10);
     }
     return XL_OK;
@@ -770,7 +763,7 @@ static int32_t smoke_csv_accumulate(void* state, const xl_row* row, void* user_d
 static int32_t smoke_csv_combine(void* acc, void* next, void* user_data)
 {
     smoke_csv_counters* counters = (smoke_csv_counters*)user_data;
-    *(int64_t*)acc += *(int64_t*)next; /* next is not freed here - the library frees it */
+    *(int64_t*)acc += *(int64_t*)next; 
     smoke_counter_increment(&counters->combines);
     return XL_OK;
 }
@@ -817,7 +810,7 @@ static int smoke_csv_aggregate(xl_lib_handle lib, const char* csv_path)
     memset(&options, 0, sizeof(options));
     options.struct_size = (int32_t)sizeof(options);
     options.header_row = 1;
-    options.degree_of_parallelism = 8; /* force real partitioning, not the sequential path */
+    options.degree_of_parallelism = 8; 
 
     void* state = NULL;
     int32_t status = aggregate((const uint8_t*)csv_path, (int32_t)strlen(csv_path),
@@ -825,7 +818,7 @@ static int smoke_csv_aggregate(xl_lib_handle lib, const char* csv_path)
     CHECK(status == XL_OK, "xl_csv_aggregate_file must succeed on the smoke fixture");
 
     int64_t total = *(int64_t*)state;
-    free(state); /* out_state is ours to free exactly once on success */
+    free(state); 
 
     CHECK(total == SMOKE_CSV_EXPECTED_TOTAL, "xl_csv_aggregate_file must sum every row exactly once");
     CHECK(smoke_counter_get(&counters.seeds) > 0, "seed must be called at least once");
