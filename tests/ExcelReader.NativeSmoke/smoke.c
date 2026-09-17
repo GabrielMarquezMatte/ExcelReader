@@ -94,6 +94,11 @@ XL_STATIC_ASSERT(offsetof(struct ArrowArray, release) == 64, arrow_array_release
 XL_STATIC_ASSERT(offsetof(struct ArrowArray, private_data) == 72, arrow_array_private_data);
 XL_STATIC_ASSERT(sizeof(struct ArrowArray) == 80, arrow_array_size);
 
+XL_STATIC_ASSERT(offsetof(xl_csv_aggregation, seed) == 8, csv_agg_seed);
+XL_STATIC_ASSERT(sizeof(xl_csv_aggregation) == 48, csv_agg_size);
+XL_STATIC_ASSERT(offsetof(xl_csv_parallel_options, max_cell_bytes) == 24, csv_opt_max_cell_bytes);
+XL_STATIC_ASSERT(sizeof(xl_csv_parallel_options) == 28, csv_opt_size);
+
 
 static xl_lib_handle load_library(const char* path)
 {
@@ -133,6 +138,8 @@ typedef const uint8_t* (*xl_last_error_ptr_fn)(int32_t*);
 typedef int32_t (*xl_parse_arrow_fn)(xl_workbook*, const xl_column_spec*, int32_t, int32_t, struct ArrowArray*, struct ArrowSchema*);
 typedef int32_t (*xl_write_typed_fn)(const uint8_t*, int32_t, int32_t, const xl_column_spec*,
                                      const xl_table*, const xl_write_options*);
+typedef int32_t (*xl_csv_aggregate_file_fn)(const uint8_t*, int32_t, const xl_csv_aggregation*,
+                                            const xl_csv_parallel_options*, void**);
 
 typedef struct
 {
@@ -713,6 +720,137 @@ static int test_write_typed(const api_t* api)
     return 0;
 }
 
+/* seed/free_state run on worker threads that can overlap, so their shared counters need atomic
+ * increments - a plain int++ across threads is a data race. combine also runs on worker threads,
+ * but the library serializes calls to combine for a given aggregation, so it does not strictly
+ * need one; it gets one anyway so every counter in smoke_csv_counters is handled the same way. */
+#ifdef _WIN32
+typedef volatile LONG smoke_counter_t;
+static void smoke_counter_increment(smoke_counter_t* counter) { InterlockedIncrement(counter); }
+static long smoke_counter_get(smoke_counter_t* counter) { return (long)*counter; }
+#else
+typedef volatile long smoke_counter_t;
+static void smoke_counter_increment(smoke_counter_t* counter) { __sync_fetch_and_add(counter, 1); }
+static long smoke_counter_get(smoke_counter_t* counter) { return *counter; }
+#endif
+
+typedef struct
+{
+    smoke_counter_t seeds;
+    smoke_counter_t frees;
+    smoke_counter_t combines;
+} smoke_csv_counters;
+
+#define SMOKE_CSV_ROW_COUNT 420000
+#define SMOKE_CSV_EXPECTED_TOTAL 88200210000LL /* sum(1..SMOKE_CSV_ROW_COUNT) = N*(N+1)/2 */
+
+static int32_t smoke_csv_seed(void** out_state, void* user_data)
+{
+    smoke_csv_counters* counters = (smoke_csv_counters*)user_data;
+    int64_t* total = (int64_t*)calloc(1, sizeof(int64_t));
+    if (total == NULL) { return XL_ERROR; }
+    *out_state = total;
+    smoke_counter_increment(&counters->seeds);
+    return XL_OK;
+}
+
+static int32_t smoke_csv_accumulate(void* state, const xl_row* row, void* user_data)
+{
+    (void)user_data;
+    if (row->cell_count > 0)
+    {
+        /* strtoll with no length argument relies on the marshal layer's NUL terminator - that is the
+         * point of this check, proving the termination guarantee from the C side. */
+        *(int64_t*)state += strtoll((const char*)row->cells[0].value, NULL, 10);
+    }
+    return XL_OK;
+}
+
+static int32_t smoke_csv_combine(void* acc, void* next, void* user_data)
+{
+    smoke_csv_counters* counters = (smoke_csv_counters*)user_data;
+    *(int64_t*)acc += *(int64_t*)next; /* next is not freed here - the library frees it */
+    smoke_counter_increment(&counters->combines);
+    return XL_OK;
+}
+
+static void smoke_csv_free_state(void* state, void* user_data)
+{
+    smoke_csv_counters* counters = (smoke_csv_counters*)user_data;
+    smoke_counter_increment(&counters->frees);
+    free(state);
+}
+
+static int write_csv_fixture(const char* path, int32_t row_count)
+{
+    FILE* fixture = fopen(path, "w");
+    CHECK(fixture != NULL, "cannot write the CSV aggregate fixture");
+    fprintf(fixture, "amount\n");
+    for (int32_t i = 1; i <= row_count; i++)
+    {
+        fprintf(fixture, "%07d\n", i);
+    }
+    fclose(fixture);
+    return 0;
+}
+
+static int smoke_csv_aggregate(xl_lib_handle lib, const char* csv_path)
+{
+    xl_csv_aggregate_file_fn aggregate =
+        (xl_csv_aggregate_file_fn)load_symbol(lib, "xl_csv_aggregate_file");
+    CHECK(aggregate != NULL, "xl_csv_aggregate_file not exported");
+
+    smoke_csv_counters counters;
+    memset(&counters, 0, sizeof(counters));
+
+    xl_csv_aggregation agg;
+    memset(&agg, 0, sizeof(agg));
+    agg.struct_size = (int32_t)sizeof(agg);
+    agg.seed = smoke_csv_seed;
+    agg.accumulate = smoke_csv_accumulate;
+    agg.combine = smoke_csv_combine;
+    agg.free_state = smoke_csv_free_state;
+    agg.user_data = &counters;
+
+    xl_csv_parallel_options options;
+    memset(&options, 0, sizeof(options));
+    options.struct_size = (int32_t)sizeof(options);
+    options.header_row = 1;
+    options.degree_of_parallelism = 8; /* force real partitioning, not the sequential path */
+
+    void* state = NULL;
+    int32_t status = aggregate((const uint8_t*)csv_path, (int32_t)strlen(csv_path),
+                               &agg, &options, &state);
+    CHECK(status == XL_OK, "xl_csv_aggregate_file must succeed on the smoke fixture");
+
+    int64_t total = *(int64_t*)state;
+    free(state); /* out_state is ours to free exactly once on success */
+
+    CHECK(total == SMOKE_CSV_EXPECTED_TOTAL, "xl_csv_aggregate_file must sum every row exactly once");
+    CHECK(smoke_counter_get(&counters.seeds) > 0, "seed must be called at least once");
+    CHECK(smoke_counter_get(&counters.frees) == smoke_counter_get(&counters.seeds) - 1,
+          "free_state must run exactly once per seeded state except the one returned as out_state");
+    CHECK(smoke_counter_get(&counters.combines) >= 1,
+          "a multi-megabyte fixture at degree_of_parallelism=8 must partition and combine");
+
+    printf("ok: xl_csv_aggregate_file summed %d rows to %lld (seeds=%ld, frees=%ld, combines=%ld)\n",
+           SMOKE_CSV_ROW_COUNT, (long long)total, smoke_counter_get(&counters.seeds),
+           smoke_counter_get(&counters.frees), smoke_counter_get(&counters.combines));
+    return 0;
+}
+
+static int test_csv_aggregate_file(xl_lib_handle lib)
+{
+    const char* csv_path = "smoke_aggregate.csv";
+    int status = write_csv_fixture(csv_path, SMOKE_CSV_ROW_COUNT);
+    if (status == 0)
+    {
+        status = smoke_csv_aggregate(lib, csv_path);
+    }
+    remove(csv_path);
+    return status;
+}
+
 int main(int argc, char** argv)
 {
     const char* library_path = argc > 1 ? argv[1] : EXCELREADER_LIB_PATH_DEFAULT;
@@ -746,6 +884,7 @@ int main(int argc, char** argv)
     failures += test_infer_schema_rejects_bad_arguments(&api, fixture_path);
     failures += test_double_close_is_rejected(&api, fixture_path);
     failures += test_write_typed(&api);
+    failures += test_csv_aggregate_file(lib);
 
     if (failures == 0)
     {
