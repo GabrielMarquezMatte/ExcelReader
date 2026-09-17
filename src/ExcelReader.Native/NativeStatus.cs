@@ -12,7 +12,7 @@ namespace ExcelReader.Native
         internal const int PasswordRequired = -6;
         internal const int PasswordIncorrect = -7;
 
-        internal const int AbiVersion = 4;
+        internal const int AbiVersion = 5;
     }
 
     internal static class NativeLimits
