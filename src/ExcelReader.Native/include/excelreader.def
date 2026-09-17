@@ -43,5 +43,7 @@ EXPORTS
     xl_end_sheet
     xl_close_write_handle
     xl_write_handle_bytes
+    xl_csv_aggregate_file
+    xl_csv_aggregate_memory
     xl_last_error
     xl_last_error_ptr
