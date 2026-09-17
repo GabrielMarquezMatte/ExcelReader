@@ -249,16 +249,30 @@ namespace ExcelReader.Tests
             {
             }
 
-            public override int Read(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+            public override int Read(byte[] buffer, int offset, int count)
+            {
+                throw new NotSupportedException();
+            }
 
-            public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+            public override long Seek(long offset, SeekOrigin origin)
+            {
+                throw new NotSupportedException();
+            }
 
-            public override void SetLength(long value) => throw new NotSupportedException();
+            public override void SetLength(long value)
+            {
+                throw new NotSupportedException();
+            }
 
-            public override void Write(byte[] buffer, int offset, int count) => throw new TimeoutException("offload consumer failed");
+            public override void Write(byte[] buffer, int offset, int count)
+            {
+                throw new TimeoutException("offload consumer failed");
+            }
 
             public override ValueTask WriteAsync(ReadOnlyMemory<byte> buffer, CancellationToken cancellationToken = default)
-                => throw new TimeoutException("offload consumer failed");
+            {
+                throw new TimeoutException("offload consumer failed");
+            }
         }
 
         private static async Task<byte[]> BuildXlsxAsync(bool prefetchWrite, CancellationToken ct)
