@@ -8,6 +8,7 @@
     <TestingPlatformDotnetTestSupport>true</TestingPlatformDotnetTestSupport>
     <UseMicrosoftTestingPlatformRunner>true</UseMicrosoftTestingPlatformRunner>
     <EmitCompilerGeneratedFiles>true</EmitCompilerGeneratedFiles>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <!-- CA2007: ConfigureAwait is not needed in test code (no captured sync context). -->
     <!-- CA1849: tests deliberately exercise the sync reader/dispose paths;
          "use the async overload" is noise here. Core keeps this rule active. -->
