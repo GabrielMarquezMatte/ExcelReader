@@ -6,6 +6,11 @@
 //! bridge that contract to safe Rust: it boxes each seeded accumulator, catches any panic before it
 //! can unwind into the library, and resumes that panic on the calling thread once the run has
 //! finished freeing every state.
+//!
+//! A zero-sized `A` is exempt from the header's "`seed` must return a distinct pointer on every
+//! call" rule: `Box::into_raw` hands back the same dangling non-null address for every seed, which
+//! is safe here only because the library identifies states by managed handle, never by pointer
+//! value.
 
 use crate::{
     rows::RowRef, workbook, Error, XlCsvAggregation, XlCsvParallelOptions, XlRow, XL_OK,
@@ -19,7 +24,10 @@ use std::sync::Mutex;
 /// The status a shim returns to signal "a callback panicked". The library treats it like any other
 /// caller code - it aborts the run, frees every state and returns it verbatim - and the wrapper then
 /// resumes the stored payload instead of turning it into an [`Error`]. Positive, so it can never
-/// collide with a library status (every one of those is `<= 0`).
+/// collide with a library status (every one of those is `<= 0`) - but it CAN collide with a caller's
+/// own `Err(i32::MAX)`. `finish` does not disambiguate the two by status; it keys on whether the
+/// panic slot actually holds a payload, so an ordinary `Err(i32::MAX)` from `accumulate` or `combine`
+/// still surfaces as a normal [`Error`] rather than being resumed as a panic.
 const PANIC_STATUS: i32 = i32::MAX;
 
 /// A fold over CSV records, one instance per partition.

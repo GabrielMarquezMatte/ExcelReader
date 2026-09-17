@@ -721,9 +721,10 @@ static int test_write_typed(const api_t* api)
 }
 
 /* seed/free_state run on worker threads that can overlap, so their shared counters need atomic
- * increments - a plain int++ across threads is a data race. combine also runs on worker threads,
- * but the library serializes calls to combine for a given aggregation, so it does not strictly
- * need one; it gets one anyway so every counter in smoke_csv_counters is handled the same way. */
+ * increments - a plain int++ across threads is a data race. Per excelreader.h's xl_csv_aggregate_file
+ * contract, combine is effectively single-threaded (not pinned to any particular thread) for a given
+ * aggregation, so it does not strictly need one; it gets one anyway so every counter in
+ * smoke_csv_counters is handled the same way. */
 #ifdef _WIN32
 typedef volatile LONG smoke_counter_t;
 static void smoke_counter_increment(smoke_counter_t* counter) { InterlockedIncrement(counter); }
@@ -748,7 +749,7 @@ static int32_t smoke_csv_seed(void** out_state, void* user_data)
 {
     smoke_csv_counters* counters = (smoke_csv_counters*)user_data;
     int64_t* total = (int64_t*)calloc(1, sizeof(int64_t));
-    if (total == NULL) { return XL_ERROR; }
+    if (total == NULL) { return 1; } /* positive: every code the library itself returns is <= 0 */
     *out_state = total;
     smoke_counter_increment(&counters->seeds);
     return XL_OK;
@@ -832,6 +833,20 @@ static int smoke_csv_aggregate(xl_lib_handle lib, const char* csv_path)
           "free_state must run exactly once per seeded state except the one returned as out_state");
     CHECK(smoke_counter_get(&counters.combines) >= 1,
           "a multi-megabyte fixture at degree_of_parallelism=8 must partition and combine");
+
+    xl_csv_aggregation bad_size_agg = agg;
+    bad_size_agg.struct_size = (int32_t)sizeof(agg) - 1;
+    void* rejected_state = NULL;
+    CHECK(aggregate((const uint8_t*)csv_path, (int32_t)strlen(csv_path), &bad_size_agg, &options,
+                    &rejected_state) == XL_INVALID_ARGUMENT,
+          "a wrong xl_csv_aggregation.struct_size must be XL_INVALID_ARGUMENT");
+
+    xl_csv_aggregation null_combine_agg = agg;
+    null_combine_agg.combine = NULL;
+    rejected_state = NULL;
+    CHECK(aggregate((const uint8_t*)csv_path, (int32_t)strlen(csv_path), &null_combine_agg, &options,
+                    &rejected_state) == XL_INVALID_ARGUMENT,
+          "a NULL xl_csv_aggregation.combine must be XL_INVALID_ARGUMENT");
 
     printf("ok: xl_csv_aggregate_file summed %d rows to %lld (seeds=%ld, frees=%ld, combines=%ld)\n",
            SMOKE_CSV_ROW_COUNT, (long long)total, smoke_counter_get(&counters.seeds),

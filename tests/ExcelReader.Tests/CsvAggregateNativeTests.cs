@@ -412,6 +412,7 @@ namespace ExcelReader.Tests
                     data, csv.Length, ThreadRecordingAggregation(&seedThreadId), options, out nint result);
 
                 Assert.Equal(NativeStatus.Ok, status);
+                Assert.NotEqual(-1, seedThreadId);
                 Assert.NotEqual(Environment.CurrentManagedThreadId, seedThreadId);
                 NativeMemory.Free((void*)result);
             }
@@ -424,7 +425,6 @@ namespace ExcelReader.Tests
             public int Frees;
             public int Combines;
             public int Rows;
-            public int RowsAfterAbort;
             public int Aborted;
         }
 
@@ -443,7 +443,6 @@ namespace ExcelReader.Tests
             AbortTally* tally = (AbortTally*)userData;
             if (Volatile.Read(ref tally->Aborted) != 0)
             {
-                Interlocked.Increment(ref tally->RowsAfterAbort);
                 return 7;
             }
             if (Interlocked.Increment(ref tally->Rows) >= 1000)
