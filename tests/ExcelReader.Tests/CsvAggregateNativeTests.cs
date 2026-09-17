@@ -1,3 +1,5 @@
+using System.Globalization;
+using System.Runtime.InteropServices;
 using System.Text;
 using ExcelReader.Core.Reader;
 using ExcelReader.Core.ValueObjects;
@@ -140,6 +142,206 @@ namespace ExcelReader.Tests
         private static string ReadCell(NativeRowCell cell)
         {
             return Encoding.UTF8.GetString((byte*)cell.Value, cell.ValueLength);
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct Tally
+        {
+            public int Seeds;
+            public int Frees;
+            public int Combines;
+            public long Sum;
+        }
+
+        [UnmanagedCallersOnly]
+        private static int SeedTally(void** outState, void* userData)
+        {
+            Tally* tally = (Tally*)userData;
+            Interlocked.Increment(ref tally->Seeds);
+            long* partial = (long*)NativeMemory.AllocZeroed((nuint)sizeof(long));
+            *outState = partial;
+            return 0;
+        }
+
+        [UnmanagedCallersOnly]
+        private static int AccumulateFirstColumn(void* state, NativeRow* row, void* userData)
+        {
+            if (row->CellCount > 0)
+            {
+                NativeRowCell cell = *(NativeRowCell*)row->Cells;
+                if (long.TryParse(
+                        Encoding.UTF8.GetString((byte*)cell.Value, cell.ValueLength), CultureInfo.InvariantCulture, out long parsed))
+                {
+                    *(long*)state += parsed;
+                }
+            }
+            return 0;
+        }
+
+        [UnmanagedCallersOnly]
+        private static int CombineTally(void* accumulator, void* next, void* userData)
+        {
+            Tally* tally = (Tally*)userData;
+            Interlocked.Increment(ref tally->Combines);
+            *(long*)accumulator += *(long*)next;
+            return 0;
+        }
+
+        [UnmanagedCallersOnly]
+        private static void FreeTally(void* state, void* userData)
+        {
+            Tally* tally = (Tally*)userData;
+            Interlocked.Increment(ref tally->Frees);
+            NativeMemory.Free(state);
+        }
+
+        private static NativeCsvAggregationRaw TallyAggregation(Tally* tally)
+        {
+            return new NativeCsvAggregationRaw
+            {
+                StructSize = sizeof(NativeCsvAggregationRaw),
+                Seed = (IntPtr)(delegate* unmanaged<void**, void*, int>)&SeedTally,
+                Accumulate = (IntPtr)(delegate* unmanaged<void*, NativeRow*, void*, int>)&AccumulateFirstColumn,
+                Combine = (IntPtr)(delegate* unmanaged<void*, void*, void*, int>)&CombineTally,
+                FreeState = (IntPtr)(delegate* unmanaged<void*, void*, void>)&FreeTally,
+                UserData = (IntPtr)tally,
+            };
+        }
+
+        private static string WriteCsv(long rowCount, string? header = null)
+        {
+            string path = Path.Combine(Path.GetTempPath(), $"xlagg-{Guid.NewGuid():N}.csv");
+            using StreamWriter writer = new(path);
+            if (header is not null)
+            {
+                writer.WriteLine(header);
+            }
+            for (long index = 1; index <= rowCount; index++)
+            {
+                writer.WriteLine($"{index},filler-value-to-make-the-file-large-enough-to-partition");
+            }
+            return path;
+        }
+
+        [Fact]
+        public void AggregateCsvFile_Should_Sum_Every_Row_And_Balance_Frees_When_Partitioned()
+        {
+            Tally tally = default;
+            string path = WriteCsv(400_000);
+            try
+            {
+                NativeCsvParallelOptionsRaw options = new()
+                {
+                    StructSize = sizeof(NativeCsvParallelOptionsRaw),
+                    DegreeOfParallelism = 4,
+                };
+
+                int status = NativeApi.AggregateCsvFile(
+                    Encoding.UTF8.GetBytes(path), TallyAggregation(&tally), options, out nint result);
+
+                Assert.Equal(NativeStatus.Ok, status);
+                Assert.Equal(400_000L * 400_001L / 2, *(long*)result);
+                Assert.Equal(tally.Seeds - 1, tally.Frees);
+                NativeMemory.Free((void*)result);
+            }
+            finally
+            {
+                File.Delete(path);
+            }
+        }
+
+        [Fact]
+        public void AggregateCsvFile_Should_Free_Every_Abandoned_State_When_The_Merge_Loop_Exits_Early()
+        {
+            Tally tally = default;
+            string path = WriteCsv(30_000);
+            try
+            {
+                NativeCsvParallelOptionsRaw options = new()
+                {
+                    StructSize = sizeof(NativeCsvParallelOptionsRaw),
+                    DegreeOfParallelism = 8,
+                };
+
+                int status = NativeApi.AggregateCsvFile(
+                    Encoding.UTF8.GetBytes(path), TallyAggregation(&tally), options, out nint result);
+
+                Assert.Equal(NativeStatus.Ok, status);
+                Assert.Equal(30_000L * 30_001L / 2, *(long*)result);
+                Assert.Equal(tally.Seeds - 1, tally.Frees);
+                NativeMemory.Free((void*)result);
+            }
+            finally
+            {
+                File.Delete(path);
+            }
+        }
+
+        [Fact]
+        public void AggregateCsvMemory_Should_Skip_The_Header_When_HeaderRow_Is_Set()
+        {
+            Tally tally = default;
+            byte[] csv = Encoding.UTF8.GetBytes("amount,label\n10,a\n20,b\n30,c\n");
+            fixed (byte* data = csv)
+            {
+                NativeCsvParallelOptionsRaw options = new()
+                {
+                    StructSize = sizeof(NativeCsvParallelOptionsRaw),
+                    HeaderRow = 1,
+                };
+
+                int status = NativeApi.AggregateCsvMemory(
+                    data, csv.Length, TallyAggregation(&tally), options, out nint result);
+
+                Assert.Equal(NativeStatus.Ok, status);
+                Assert.Equal(60L, *(long*)result);
+                Assert.Equal(tally.Seeds - 1, tally.Frees);
+                NativeMemory.Free((void*)result);
+            }
+        }
+
+        [Fact]
+        public void AggregateCsvMemory_Should_Return_A_Seeded_State_When_The_Source_Is_Empty()
+        {
+            Tally tally = default;
+            byte[] csv = [];
+            fixed (byte* data = csv)
+            {
+                int status = NativeApi.AggregateCsvMemory(
+                    data, 0, TallyAggregation(&tally), null, out nint result);
+
+                Assert.Equal(NativeStatus.Ok, status);
+                Assert.Equal(0L, *(long*)result);
+                Assert.Equal(1, tally.Seeds);
+                Assert.Equal(0, tally.Frees);
+                Assert.Equal(0, tally.Combines);
+                NativeMemory.Free((void*)result);
+            }
+        }
+
+        [Fact]
+        public void AggregateCsvMemory_Should_Not_Combine_When_DegreeOfParallelism_Is_One()
+        {
+            Tally tally = default;
+            byte[] csv = Encoding.UTF8.GetBytes("1,a\n2,b\n3,c\n");
+            fixed (byte* data = csv)
+            {
+                NativeCsvParallelOptionsRaw options = new()
+                {
+                    StructSize = sizeof(NativeCsvParallelOptionsRaw),
+                    DegreeOfParallelism = 1,
+                };
+
+                int status = NativeApi.AggregateCsvMemory(
+                    data, csv.Length, TallyAggregation(&tally), options, out nint result);
+
+                Assert.Equal(NativeStatus.Ok, status);
+                Assert.Equal(6L, *(long*)result);
+                Assert.Equal(1, tally.Seeds);
+                Assert.Equal(0, tally.Combines);
+                Assert.Equal(0, tally.Frees);
+                NativeMemory.Free((void*)result);
+            }
         }
     }
 }
