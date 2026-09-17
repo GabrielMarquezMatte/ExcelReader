@@ -165,8 +165,6 @@ where
     A: CsvAccumulator,
     F: Fn() -> A,
 {
-    // A Drop impl on `A` could panic; that must not unwind into the library either, and there is no
-    // status to report it through, so it is swallowed here.
     let _ = catch_unwind(AssertUnwindSafe(|| drop(unsafe { Box::from_raw(state as *mut A) })));
 }
 

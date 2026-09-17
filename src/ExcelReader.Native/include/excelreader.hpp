@@ -2010,12 +2010,12 @@ namespace xl
     /// state. `combine` must fold `next` into `*this` without destroying it - the library owns
     /// `next`'s lifetime and frees it afterwards.
     ///
-    /// `accumulate` runs concurrently on worker threads, one `Acc` per partition, never on the
-    /// calling thread. `combine` is effectively single-threaded but is not pinned to any particular
-    /// thread, per `excelreader.h`'s `xl_csv_aggregate_file` contract. Both must be noexcept in
-    /// effect: an exception escaping into the library is undefined behavior, so this wrapper catches
-    /// everything and reports a reserved sentinel status that this header maps back to a descriptive
-    /// error instead of `XL_ERROR`.
+    /// `accumulate` and `seed` (the `Acc()` construction above) run concurrently on worker threads,
+    /// one `Acc` per partition, never on the calling thread. `combine` is effectively single-threaded
+    /// but is not pinned to any particular thread, per `excelreader.h`'s `xl_csv_aggregate_file`
+    /// contract. All three must be noexcept in effect: an exception escaping into the library is
+    /// undefined behavior, so this wrapper catches everything and reports a reserved sentinel status
+    /// that this header maps back to a descriptive error instead of `XL_ERROR`.
     template <typename Acc>
     concept CsvAccumulator =
         std::default_initializable<Acc> && std::move_constructible<Acc> &&
@@ -2026,13 +2026,14 @@ namespace xl
 
     namespace detail
     {
-        /// Reserved status a shim below returns to signal "a user callback threw", never a real
-        /// accumulate/combine/seed result. Positive, so it can never collide with a library status
-        /// (every one of those is <= 0) or a caller's own error code space in the same way `XL_ERROR`
-        /// would - `aggregate_csv_file`/`aggregate_csv_memory` recognize it and report a descriptive
-        /// error instead of the generic "unknown error" that `XL_ERROR` would produce here, since
-        /// `xl_last_error` is never populated for a callback exception. Mirrors the Rust wrapper's
-        /// `PANIC_STATUS`.
+        /// Status a shim below returns to signal "a user callback threw". Positive, so it can never
+        /// collide with a library status (every one of those is <= 0) - `aggregate_csv_file`/
+        /// `aggregate_csv_memory` recognize it and report a descriptive error instead of the generic
+        /// "unknown error" that `XL_ERROR` would produce here, since `xl_last_error` is never
+        /// populated for a callback exception. Nothing reserves this value from callers, though: an
+        /// `accumulate`/`combine`/`seed` that legitimately returns exactly `INT32_MAX` is reported as
+        /// a thrown exception, same as a real one - avoid returning that one value. Mirrors the Rust
+        /// wrapper's `PANIC_STATUS`, which documents the identical collision.
         inline constexpr int32_t kCsvCallbackException = (std::numeric_limits<int32_t>::max)();
 
         template <typename Acc>

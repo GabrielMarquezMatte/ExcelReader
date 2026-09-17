@@ -88,16 +88,9 @@ static int test_aggregate_default_options()
     return 0;
 }
 
-// The three tests above all run on a source too small to be split (the library only partitions
-// sources of at least 256 KB, with a 1 MB chunk floor) or pin degree_of_parallelism to 1, so none of
-// them can ever call `combine`. This test forces a real multi-partition run: several hundred
-// thousand short rows comfortably clears the partitioning floor, and a degree_of_parallelism above 1
-// lets the library actually split the work. It asserts both the aggregate total (correctness) and
-// that `combine` ran at least once (so this test cannot pass if the run silently fell back to a
-// single sequential partition).
 static int test_aggregate_csv_file_partitioned()
 {
-    constexpr int64_t kRowCount = 800'000; // ~3.2 MB of "1,2\n" rows, well past the 1 MB chunk floor
+    constexpr int64_t kRowCount = 800'000; 
     std::string content;
     content.reserve(static_cast<size_t>(kRowCount) * 4);
     for (int64_t i = 0; i < kRowCount; ++i)
