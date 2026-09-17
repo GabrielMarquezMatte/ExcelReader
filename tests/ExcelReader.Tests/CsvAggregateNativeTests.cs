@@ -216,6 +216,19 @@ namespace ExcelReader.Tests
             return 0;
         }
 
+        [UnmanagedCallersOnly]
+        private static int CombineIgnoringUserData(void* accumulator, void* next, void* userData)
+        {
+            *(long*)accumulator += *(long*)next;
+            return 0;
+        }
+
+        [UnmanagedCallersOnly]
+        private static void FreeIgnoringUserData(void* state, void* userData)
+        {
+            NativeMemory.Free(state);
+        }
+
         private static NativeCsvAggregationRaw ThreadRecordingAggregation(int* threadId)
         {
             return new NativeCsvAggregationRaw
@@ -223,8 +236,8 @@ namespace ExcelReader.Tests
                 StructSize = sizeof(NativeCsvAggregationRaw),
                 Seed = (IntPtr)(delegate* unmanaged<void**, void*, int>)&SeedRecordThreadId,
                 Accumulate = (IntPtr)(delegate* unmanaged<void*, NativeRow*, void*, int>)&AccumulateFirstColumn,
-                Combine = (IntPtr)(delegate* unmanaged<void*, void*, void*, int>)&CombineTally,
-                FreeState = (IntPtr)(delegate* unmanaged<void*, void*, void>)&FreeTally,
+                Combine = (IntPtr)(delegate* unmanaged<void*, void*, void*, int>)&CombineIgnoringUserData,
+                FreeState = (IntPtr)(delegate* unmanaged<void*, void*, void>)&FreeIgnoringUserData,
                 UserData = (IntPtr)threadId,
             };
         }
@@ -403,5 +416,216 @@ namespace ExcelReader.Tests
                 NativeMemory.Free((void*)result);
             }
         }
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct AbortTally
+        {
+            public int Seeds;
+            public int Frees;
+            public int Combines;
+            public int Rows;
+            public int RowsAfterAbort;
+            public int Aborted;
+        }
+
+        [UnmanagedCallersOnly]
+        private static int SeedAbort(void** outState, void* userData)
+        {
+            AbortTally* tally = (AbortTally*)userData;
+            Interlocked.Increment(ref tally->Seeds);
+            *outState = NativeMemory.AllocZeroed((nuint)sizeof(long));
+            return 0;
+        }
+
+        [UnmanagedCallersOnly]
+        private static int AccumulateFailAtRow1000(void* state, NativeRow* row, void* userData)
+        {
+            AbortTally* tally = (AbortTally*)userData;
+            if (Volatile.Read(ref tally->Aborted) != 0)
+            {
+                Interlocked.Increment(ref tally->RowsAfterAbort);
+                return 7;
+            }
+            if (Interlocked.Increment(ref tally->Rows) >= 1000)
+            {
+                Interlocked.Exchange(ref tally->Aborted, 1);
+                return 7;
+            }
+            return 0;
+        }
+
+        [UnmanagedCallersOnly]
+        private static int CombineAbort(void* accumulator, void* next, void* userData)
+        {
+            return 0;
+        }
+
+        [UnmanagedCallersOnly]
+        private static void FreeAbort(void* state, void* userData)
+        {
+            AbortTally* tally = (AbortTally*)userData;
+            Interlocked.Increment(ref tally->Frees);
+            NativeMemory.Free(state);
+        }
+
+        [UnmanagedCallersOnly]
+        private static int SeedNull(void** outState, void* userData)
+        {
+            AbortTally* tally = (AbortTally*)userData;
+            Interlocked.Increment(ref tally->Seeds);
+            *outState = null;
+            return 0;
+        }
+
+        [UnmanagedCallersOnly]
+        private static int AccumulateNothing(void* state, NativeRow* row, void* userData)
+        {
+            return 0;
+        }
+
+        [UnmanagedCallersOnly]
+        private static int SeedFailAfterAllocating(void** outState, void* userData)
+        {
+            AbortTally* tally = (AbortTally*)userData;
+            Interlocked.Increment(ref tally->Seeds);
+            *outState = NativeMemory.AllocZeroed((nuint)sizeof(long));
+            return 9;
+        }
+
+        [UnmanagedCallersOnly]
+        private static int CombineFail(void* accumulator, void* next, void* userData)
+        {
+            AbortTally* tally = (AbortTally*)userData;
+            Interlocked.Increment(ref tally->Combines);
+            return 11;
+        }
+
+        [Fact]
+        public void AggregateCsvFile_Should_Return_The_Callers_Code_And_Free_Everything_When_Accumulate_Fails()
+        {
+            AbortTally tally = default;
+            string path = WriteCsv(400_000);
+            try
+            {
+                NativeCsvAggregationRaw aggregation = new()
+                {
+                    StructSize = sizeof(NativeCsvAggregationRaw),
+                    Seed = (IntPtr)(delegate* unmanaged<void**, void*, int>)&SeedAbort,
+                    Accumulate = (IntPtr)(delegate* unmanaged<void*, NativeRow*, void*, int>)&AccumulateFailAtRow1000,
+                    Combine = (IntPtr)(delegate* unmanaged<void*, void*, void*, int>)&CombineAbort,
+                    FreeState = (IntPtr)(delegate* unmanaged<void*, void*, void>)&FreeAbort,
+                    UserData = (IntPtr)(&tally),
+                };
+                NativeCsvParallelOptionsRaw options = new()
+                {
+                    StructSize = sizeof(NativeCsvParallelOptionsRaw),
+                    DegreeOfParallelism = 4,
+                };
+
+                int status = NativeApi.AggregateCsvFile(
+                    Encoding.UTF8.GetBytes(path), aggregation, options, out nint result);
+
+                Assert.Equal(7, status);
+                Assert.Equal(0, result);
+                Assert.Equal(tally.Seeds, tally.Frees);
+            }
+            finally
+            {
+                File.Delete(path);
+            }
+        }
+
+        [Fact]
+        public void AggregateCsvFile_Should_Return_The_Callers_Code_And_Free_Everything_When_Combine_Fails()
+        {
+            AbortTally tally = default;
+            string path = WriteCsv(30_000);
+            try
+            {
+                NativeCsvAggregationRaw aggregation = new()
+                {
+                    StructSize = sizeof(NativeCsvAggregationRaw),
+                    Seed = (IntPtr)(delegate* unmanaged<void**, void*, int>)&SeedAbort,
+                    Accumulate = (IntPtr)(delegate* unmanaged<void*, NativeRow*, void*, int>)&AccumulateNothing,
+                    Combine = (IntPtr)(delegate* unmanaged<void*, void*, void*, int>)&CombineFail,
+                    FreeState = (IntPtr)(delegate* unmanaged<void*, void*, void>)&FreeAbort,
+                    UserData = (IntPtr)(&tally),
+                };
+                NativeCsvParallelOptionsRaw options = new()
+                {
+                    StructSize = sizeof(NativeCsvParallelOptionsRaw),
+                    DegreeOfParallelism = 8,
+                };
+
+                int status = NativeApi.AggregateCsvFile(
+                    Encoding.UTF8.GetBytes(path), aggregation, options, out nint result);
+
+                Assert.Equal(11, status);
+                Assert.Equal(0, result);
+                Assert.True(tally.Combines >= 1, "combine must run for this assertion to be meaningful");
+                Assert.Equal(tally.Seeds, tally.Frees);
+            }
+            finally
+            {
+                File.Delete(path);
+            }
+        }
+
+        [Fact]
+        public void AggregateCsvMemory_Should_Free_A_State_Whose_Seed_Failed_After_Allocating()
+        {
+            AbortTally tally = default;
+            byte[] csv = Encoding.UTF8.GetBytes("1,a\n2,b\n");
+            fixed (byte* data = csv)
+            {
+                NativeCsvAggregationRaw aggregation = new()
+                {
+                    StructSize = sizeof(NativeCsvAggregationRaw),
+                    Seed = (IntPtr)(delegate* unmanaged<void**, void*, int>)&SeedFailAfterAllocating,
+                    Accumulate = (IntPtr)(delegate* unmanaged<void*, NativeRow*, void*, int>)&AccumulateNothing,
+                    Combine = (IntPtr)(delegate* unmanaged<void*, void*, void*, int>)&CombineAbort,
+                    FreeState = (IntPtr)(delegate* unmanaged<void*, void*, void>)&FreeAbort,
+                    UserData = (IntPtr)(&tally),
+                };
+                NativeCsvParallelOptionsRaw options = new()
+                {
+                    StructSize = sizeof(NativeCsvParallelOptionsRaw),
+                    DegreeOfParallelism = 1,
+                };
+
+                int status = NativeApi.AggregateCsvMemory(data, csv.Length, aggregation, options, out nint result);
+
+                Assert.Equal(9, status);
+                Assert.Equal(0, result);
+                Assert.Equal(1, tally.Seeds);
+                Assert.Equal(1, tally.Frees);
+            }
+        }
+
+        [Fact]
+        public void AggregateCsvMemory_Should_Not_Free_A_Null_State()
+        {
+            AbortTally tally = default;
+            byte[] csv = Encoding.UTF8.GetBytes("1,a\n2,b\n");
+            fixed (byte* data = csv)
+            {
+                NativeCsvAggregationRaw aggregation = new()
+                {
+                    StructSize = sizeof(NativeCsvAggregationRaw),
+                    Seed = (IntPtr)(delegate* unmanaged<void**, void*, int>)&SeedNull,
+                    Accumulate = (IntPtr)(delegate* unmanaged<void*, NativeRow*, void*, int>)&AccumulateNothing,
+                    Combine = (IntPtr)(delegate* unmanaged<void*, void*, void*, int>)&CombineAbort,
+                    FreeState = (IntPtr)(delegate* unmanaged<void*, void*, void>)&FreeAbort,
+                    UserData = (IntPtr)(&tally),
+                };
+
+                int status = NativeApi.AggregateCsvMemory(data, csv.Length, aggregation, null, out nint result);
+
+                Assert.Equal(NativeStatus.Ok, status);
+                Assert.Equal(0, result);
+                Assert.Equal(0, tally.Frees);
+            }
+        }
+
     }
 }
