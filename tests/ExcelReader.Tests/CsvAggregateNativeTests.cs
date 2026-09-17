@@ -627,5 +627,41 @@ namespace ExcelReader.Tests
             }
         }
 
+        private static byte[] BuildQuotedFieldWithEscapedQuotes(int targetLength)
+        {
+            StringBuilder builder = new();
+            builder.Append("1,\"");
+            while (builder.Length < targetLength)
+            {
+                builder.Append("xxxxxxxxxx\"\"");
+            }
+            builder.Append("\"\n2,b\n");
+            return Encoding.UTF8.GetBytes(builder.ToString());
+        }
+
+        [Fact]
+        public void AggregateCsvMemory_Should_Set_LastError_On_The_Calling_Thread_When_A_Worker_Throws()
+        {
+            Tally tally = default;
+            byte[] csv = BuildQuotedFieldWithEscapedQuotes(64 * 1024);
+            fixed (byte* data = csv)
+            {
+                NativeCsvParallelOptionsRaw options = new()
+                {
+                    StructSize = sizeof(NativeCsvParallelOptionsRaw),
+                    MaxCellBytes = 1024,
+                };
+
+                int status = NativeApi.AggregateCsvMemory(
+                    data, csv.Length, TallyAggregation(&tally), options, out nint result);
+
+                Assert.Equal(NativeStatus.Error, status);
+                Assert.Equal(0, result);
+                Assert.Equal(tally.Seeds, tally.Frees);
+                string lastError = NativeApi.LastErrorText();
+                Assert.NotEmpty(lastError);
+                Assert.Contains("MaxCellBytes", lastError, StringComparison.Ordinal);
+            }
+        }
     }
 }
