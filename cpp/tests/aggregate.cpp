@@ -88,6 +88,44 @@ static int test_aggregate_default_options()
     return 0;
 }
 
+// The three tests above all run on a source too small to be split (the library only partitions
+// sources of at least 256 KB, with a 1 MB chunk floor) or pin degree_of_parallelism to 1, so none of
+// them can ever call `combine`. This test forces a real multi-partition run: several hundred
+// thousand short rows comfortably clears the partitioning floor, and a degree_of_parallelism above 1
+// lets the library actually split the work. It asserts both the aggregate total (correctness) and
+// that `combine` ran at least once (so this test cannot pass if the run silently fell back to a
+// single sequential partition).
+static int test_aggregate_csv_file_partitioned()
+{
+    constexpr int64_t kRowCount = 800'000; // ~3.2 MB of "1,2\n" rows, well past the 1 MB chunk floor
+    std::string content;
+    content.reserve(static_cast<size_t>(kRowCount) * 4);
+    for (int64_t i = 0; i < kRowCount; ++i)
+    {
+        content += "1,2\n";
+    }
+
+    const std::filesystem::path path =
+        std::filesystem::temp_directory_path() / "excelreader-cpp-aggregate-large.csv";
+    {
+        std::ofstream out(path, std::ios::binary);
+        out.write(content.data(), static_cast<std::streamsize>(content.size()));
+    }
+
+    xl::CsvParallelOptions options{};
+    options.degree_of_parallelism = 8;
+
+    auto result = xl::aggregate_csv_file<RowCounter>(path.string(), &options);
+    std::filesystem::remove(path);
+
+    CHECK(result.has_value(), "aggregate_csv_file must succeed on a large multi-partition CSV file");
+    CHECK(result->rows == kRowCount, "every one of the generated rows must be counted exactly once");
+    CHECK(result->combines >= 1,
+          "a source this large at degree_of_parallelism=8 must be split into more than one "
+          "partition, so combine must run at least once");
+    return 0;
+}
+
 int main()
 {
     if (int failed = test_aggregate_csv_memory())
@@ -99,6 +137,10 @@ int main()
         return failed;
     }
     if (int failed = test_aggregate_default_options())
+    {
+        return failed;
+    }
+    if (int failed = test_aggregate_csv_file_partitioned())
     {
         return failed;
     }
