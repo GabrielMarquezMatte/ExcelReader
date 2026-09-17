@@ -888,7 +888,7 @@ namespace ExcelReader.Native
         private static bool IsValidAggregation(NativeCsvAggregationRaw* aggregation)
         {
             return aggregation is not null
-                && aggregation->StructSize >= sizeof(NativeCsvAggregationRaw)
+                && aggregation->StructSize == sizeof(NativeCsvAggregationRaw)
                 && aggregation->Seed != IntPtr.Zero
                 && aggregation->Accumulate != IntPtr.Zero
                 && aggregation->Combine != IntPtr.Zero
