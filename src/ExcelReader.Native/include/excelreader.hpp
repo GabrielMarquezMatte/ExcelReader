@@ -4,10 +4,12 @@
 
 #include <array>
 #include <compare>
+#include <concepts>
 #include <cstdint>
 #include <cstring>
 #include <expected>
 #include <iterator>
+#include <memory>
 #include <optional>
 #include <ranges>
 #include <span>
@@ -170,6 +172,29 @@ namespace xl
             opts.csv_quote = csv_quote;
             opts.date1904 = date1904;
             opts.use_shared_strings = use_shared_strings;
+            return opts;
+        }
+    };
+
+    struct CsvParallelOptions
+    {
+        int32_t degree_of_parallelism = 0;
+        int32_t header_row = 0;
+        int32_t delimiter = 0;
+        int32_t quote = 0;
+        int32_t detect_bom = XL_OPT_DEFAULT;
+        int32_t max_cell_bytes = 0;
+
+        xl_csv_parallel_options to_c() const noexcept
+        {
+            xl_csv_parallel_options opts{};
+            opts.struct_size = sizeof(xl_csv_parallel_options);
+            opts.degree_of_parallelism = degree_of_parallelism;
+            opts.header_row = header_row;
+            opts.delimiter = delimiter;
+            opts.quote = quote;
+            opts.detect_bom = detect_bom;
+            opts.max_cell_bytes = max_cell_bytes;
             return opts;
         }
     };
@@ -1977,4 +2002,132 @@ namespace xl
 
         xl_writer_handle *handle_ = nullptr;
     };
-} 
+
+
+    /// A fold over CSV records. `Acc` must be default-constructible and move-constructible; `seed`
+    /// builds a fresh one with `Acc()` and the wrapper returns it by moving out of the surviving
+    /// state. `combine` must fold `next` into `*this` without destroying it - the library owns
+    /// `next`'s lifetime and frees it afterwards.
+    ///
+    /// `accumulate` and `combine` run concurrently on worker threads, one `Acc` per partition,
+    /// never on the calling thread. Both must be noexcept in effect: an exception escaping into the
+    /// library is undefined behavior, so this wrapper catches everything and reports XL_ERROR.
+    template <typename Acc>
+    concept CsvAccumulator =
+        std::default_initializable<Acc> && std::move_constructible<Acc> &&
+        requires(Acc acc, Acc &next, const xl_row *row) {
+            { acc.accumulate(row) } -> std::same_as<int32_t>;
+            { acc.combine(next) } -> std::same_as<int32_t>;
+        };
+
+    namespace detail
+    {
+        template <typename Acc>
+        int32_t csv_seed(void **out_state, void *) noexcept
+        {
+            try
+            {
+                *out_state = new Acc();
+                return XL_OK;
+            }
+            catch (...)
+            {
+                return XL_ERROR;
+            }
+        }
+
+        template <typename Acc>
+        int32_t csv_accumulate(void *state, const xl_row *row, void *) noexcept
+        {
+            try
+            {
+                return static_cast<Acc *>(state)->accumulate(row);
+            }
+            catch (...)
+            {
+                return XL_ERROR;
+            }
+        }
+
+        template <typename Acc>
+        int32_t csv_combine(void *acc, void *next, void *) noexcept
+        {
+            try
+            {
+                return static_cast<Acc *>(acc)->combine(*static_cast<Acc *>(next));
+            }
+            catch (...)
+            {
+                return XL_ERROR;
+            }
+        }
+
+        template <typename Acc>
+        void csv_free_state(void *state, void *) noexcept
+        {
+            delete static_cast<Acc *>(state);
+        }
+
+        template <typename Acc>
+        xl_csv_aggregation csv_aggregation() noexcept
+        {
+            xl_csv_aggregation agg{};
+            agg.struct_size = static_cast<int32_t>(sizeof(xl_csv_aggregation));
+            agg.seed = &csv_seed<Acc>;
+            agg.accumulate = &csv_accumulate<Acc>;
+            agg.combine = &csv_combine<Acc>;
+            agg.free_state = &csv_free_state<Acc>;
+            agg.user_data = nullptr;
+            return agg;
+        }
+    }
+
+    template <CsvAccumulator Acc>
+    std::expected<Acc, Error> aggregate_csv_file(std::string_view path,
+                                                 const CsvParallelOptions *options = nullptr)
+    {
+        if (const auto &abi = detail::check_abi_version(); !abi.has_value())
+        {
+            return std::unexpected(abi.error());
+        }
+
+        const xl_csv_aggregation agg = detail::csv_aggregation<Acc>();
+        xl_csv_parallel_options c_options{};
+        const xl_csv_parallel_options *c_options_ptr = detail::lower_options(options, c_options);
+        void *state = nullptr;
+        const int32_t status = xl_csv_aggregate_file(
+            reinterpret_cast<const uint8_t *>(path.data()), static_cast<int32_t>(path.size()),
+            &agg, c_options_ptr, &state);
+        if (status != XL_OK)
+        {
+            return std::unexpected(detail::make_error(status));
+        }
+
+        std::unique_ptr<Acc> owned(static_cast<Acc *>(state));
+        return std::move(*owned);
+    }
+
+    template <CsvAccumulator Acc>
+    std::expected<Acc, Error> aggregate_csv_memory(std::span<const uint8_t> data,
+                                                   const CsvParallelOptions *options = nullptr)
+    {
+        if (const auto &abi = detail::check_abi_version(); !abi.has_value())
+        {
+            return std::unexpected(abi.error());
+        }
+
+        const xl_csv_aggregation agg = detail::csv_aggregation<Acc>();
+        xl_csv_parallel_options c_options{};
+        const xl_csv_parallel_options *c_options_ptr = detail::lower_options(options, c_options);
+        void *state = nullptr;
+        const int32_t status = xl_csv_aggregate_memory(data.data(), static_cast<int32_t>(data.size()),
+                                                        &agg, c_options_ptr, &state);
+        if (status != XL_OK)
+        {
+            return std::unexpected(detail::make_error(status));
+        }
+
+        std::unique_ptr<Acc> owned(static_cast<Acc *>(state));
+        return std::move(*owned);
+    }
+}
