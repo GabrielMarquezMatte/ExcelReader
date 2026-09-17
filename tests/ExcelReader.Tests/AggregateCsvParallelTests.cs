@@ -333,6 +333,38 @@ namespace ExcelReader.Tests
             Assert.Equal(0, calls);
         }
 
+        [Fact]
+        public async Task RecordAccumulatorMatchesSequentialAcrossChunkSizes()
+        {
+            byte[] csv = LargeCsv(rows: 400);
+            List<string> expected = Sequential(csv, headerRow: 1);
+            CancellationToken ct = TestContext.Current.CancellationToken;
+            foreach (int dop in new[] { 2, 4, 8 })
+            {
+                foreach (int chunkSize in new[] { 1, 7, 64, 1024 })
+                {
+                    RowLog log = await ParallelCsvProcessor.RunWithChunkSizeAsync(
+                        csv.AsMemory(), RecordAggregation<RowLog, RowText>.Instance, null,
+                        new CsvParallelOptions { DegreeOfParallelism = dop, HeaderRow = 1 }, chunkSize, ct);
+                    Assert.Equal(expected, log.Rows);
+                }
+            }
+        }
+
+        [Fact]
+        public async Task SkipsRecordsWhoseTryParseReturnsFalseAndKeepsSpansValidDuringAdd()
+        {
+            byte[] csv = "name,id\nada,1\nbob,oops\n\"cid\nmulti\",3\n"u8.ToArray();
+            CancellationToken ct = TestContext.Current.CancellationToken;
+            foreach (int chunkSize in new[] { 1, 2, 5, 64 })
+            {
+                RowLog log = await ParallelCsvProcessor.RunWithChunkSizeAsync(
+                    csv.AsMemory(), RecordAggregation<RowLog, NumberedRow>.Instance, null,
+                    new CsvParallelOptions { DegreeOfParallelism = 4, HeaderRow = 1 }, chunkSize, ct);
+                Assert.Equal(["ada#1", "cid\nmulti#3"], log.Rows);
+            }
+        }
+
         private static byte[] LargeCsv(int rows)
         {
             var sb = new StringBuilder("name,id,note\n");
