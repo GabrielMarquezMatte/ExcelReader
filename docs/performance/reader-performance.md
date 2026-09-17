@@ -368,23 +368,23 @@ confirmed in the disassembly — is that `TryParse` is a static method on a valu
 specializes and inlines the `Row` work into the delegate, and the interface call then carries only a
 span and a double instead of the whole `Row`.
 
-The same prototype then filled the record automatically from a `TypeMapInfo<T>`, the map both
-attribute reflection and the `[ExcelSerializable]` generator produce, binding the header once and
-calling one `ColumnParser<T>` per column into a `ref struct` model. The generator-shape row uses
-`ExcelRowMapBuilder.PropertyRaw` lambdas written the way the generator emits them. Two columns, one
-thread, interleaved, two runs, identical checksums:
+The shipped overloads repeat this comparison directly: `CsvModelMap.FromAttributes` and
+`CsvModelMap.Generated` bind the header once and call one column parser per column into a
+`ref struct` model, the same shape the prototype used. A scaled-down 1BRC sample
+(`station;temperature`, 413 stations, one decimal temperature, seeded), 5,000,000 rows, one thread,
+interleaved, two runs, identical checksums:
 
-| | per row | |
+| | per row (two runs) | ratio vs `CsvAggregation` |
 |---|---|---|
-| `CsvAggregation`, `Row` | 65.0 ns, 66.0 ns | 1.00x |
-| `ICsvAccumulator<TSelf>`, `Add(Row)` | 92.8 ns, 92.1 ns | 1.40–1.43x |
-| record, static `TryParse` | 61.3 ns, 61.0 ns | 0.93–0.94x |
-| reflection `TypeMapInfo` | 80.6 ns, 79.6 ns | 1.21–1.24x |
-| generator-shape `TypeMapInfo` | 73.1 ns, 74.5 ns | 1.12–1.13x |
+| `CsvAggregation`, `Row` | 45.4 ns, 44.6 ns | 1.00x |
+| record, static `TryParse` | 45.5 ns, 45.2 ns | 1.00–1.01x |
+| reflection `CsvModelMap.FromAttributes` | 65.9 ns, 66.4 ns | 1.45–1.49x |
+| generated `CsvModelMap.Generated` | 63.3 ns, 62.9 ns | 1.39–1.41x |
 
-Both mapped paths beat the shipped `Add(Row)` interface. The per-column delegate costs roughly
-6–10 ns per column over the hand-written `TryParse` here; with two columns this says nothing yet
-about wide models, where that cost grows with every mapped column.
+Both mapped paths cost more than the record and `CsvAggregation` shapes, and the generated map is
+consistently a little cheaper than the reflected one — the same ordering the prototype found. The
+per-column cost over the hand-written `TryParse` here is roughly 9–10 ns per column; with two
+columns this says nothing yet about wide models, where that cost grows with every mapped column.
 
 The constrained-generic struct, the textbook zero-cost shape, came out slower than the delegate.
 The multithreaded version of this comparison was unusable: the same inline partitioned loop

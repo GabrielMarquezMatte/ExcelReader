@@ -577,7 +577,7 @@ namespace ExcelReader.Core.Reader
         /// <param name="options">Parallelism, dialect and header options. Defaults to <see cref="CsvParallelOptions.Default"/>.</param>
         /// <param name="ct">A token to cancel processing.</param>
         /// <returns>The combined accumulator.</returns>
-        /// <remarks>Carries the same fallbacks as the <see cref="ICsvAccumulator{TSelf, TModel}"/> overloads, at a lower per-record cost.</remarks>
+        /// <remarks>Carries the same fallbacks as the <see cref="ICsvAccumulator{TSelf, TModel}"/> overloads.</remarks>
         public static Task<TState> AggregateCsvParallelAsync<TState>(
             ReadOnlyMemory<byte> data,
             CsvAggregation<TState> aggregation,
@@ -597,7 +597,7 @@ namespace ExcelReader.Core.Reader
         /// <param name="options">Parallelism, dialect and header options. Defaults to <see cref="CsvParallelOptions.Default"/>.</param>
         /// <param name="ct">A token to cancel processing.</param>
         /// <returns>The combined accumulator.</returns>
-        /// <remarks>Carries the same fallbacks as the <see cref="ICsvAccumulator{TSelf, TModel}"/> overloads, at a lower per-record cost.</remarks>
+        /// <remarks>Carries the same fallbacks as the <see cref="ICsvAccumulator{TSelf, TModel}"/> overloads.</remarks>
         public static Task<TState> AggregateCsvParallelAsync<TState>(
             string path,
             CsvAggregation<TState> aggregation,
@@ -618,7 +618,7 @@ namespace ExcelReader.Core.Reader
         /// <param name="options">Parallelism, dialect and header options. Defaults to <see cref="CsvParallelOptions.Default"/>.</param>
         /// <param name="ct">A token to cancel processing.</param>
         /// <returns>The combined accumulator.</returns>
-        /// <remarks>Carries the same fallbacks and stream restrictions as the <see cref="ICsvAccumulator{TSelf, TModel}"/> stream overload, at a lower per-record cost.</remarks>
+        /// <remarks>Carries the same fallbacks and stream restrictions as the <see cref="ICsvAccumulator{TSelf, TModel}"/> stream overload.</remarks>
         public static Task<TState> AggregateCsvParallelAsync<TState>(
             Stream stream,
             CsvAggregation<TState> aggregation,
