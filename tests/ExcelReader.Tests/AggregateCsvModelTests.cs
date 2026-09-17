@@ -111,6 +111,32 @@ namespace ExcelReader.Tests
                 TestContext.Current.CancellationToken);
         }
 
+        private static Task<PeopleLog> Chunked(byte[] csv, CsvModelMap<IdOnly> map, int dop, int chunkSize, int headerRow)
+        {
+            return ParallelCsvProcessor.RunWithChunkSizeAsync(
+                csv.AsMemory(),
+                MappedAggregation<PeopleLog, IdOnly>.Unbound,
+                MappedAggregation<PeopleLog, IdOnly>.Binder(map, headerRow),
+                new CsvParallelOptions { DegreeOfParallelism = dop, HeaderRow = headerRow },
+                chunkSize,
+                TestContext.Current.CancellationToken);
+        }
+
+        private static byte[] IndexCsv(int rows, int headerRow)
+        {
+            var sb = new StringBuilder();
+            if (headerRow == 1)
+            {
+                sb.Append("Name,Id\n");
+            }
+            for (int i = 0; i < rows; i++)
+            {
+                string name = i % 5 == 0 ? $"\"multi\nline {i}, \"\"q\"\"\"" : $"name{i}";
+                sb.Append(CultureInfo.InvariantCulture, $"{name},{i}\n");
+            }
+            return Encoding.UTF8.GetBytes(sb.ToString());
+        }
+
         [Fact]
         public async Task EveryMapSourceMatchesSequentialAcrossDegreeChunkSizeAndHeaderRow()
         {
@@ -193,9 +219,27 @@ namespace ExcelReader.Tests
             await Assert.ThrowsAsync<ArgumentException>(() => Excel.AggregateCsvParallelAsync<PeopleLog, Person>(
                 csv, CsvModelMap.Generated<Person>(), new CsvParallelOptions { HeaderRow = 0 }, ct));
 
+            await Assert.ThrowsAsync<ArgumentNullException>(() => Excel.AggregateCsvParallelAsync<PeopleLog, Person>(
+                csv, (CsvModelMap<Person>)null!, new CsvParallelOptions { HeaderRow = 1 }, ct));
+
             CsvModelMap<IdOnly> byIndex = CsvModelMap.Build<IdOnly>(static b => b.PropertyAt(1, ExcelCellReaders.Parsable, static (ref IdOnly m, int v) => m.Id = v));
             PeopleLog log = await Excel.AggregateCsvParallelAsync<PeopleLog, IdOnly>(csv, byIndex, new CsvParallelOptions { HeaderRow = 0 }, ct);
             Assert.Equal(["1", "2"], log.Rows);
+        }
+
+        [Fact]
+        public async Task AnIndexMapRunsThroughThePartitionedPathForBothHeaderRowSettings()
+        {
+            CsvModelMap<IdOnly> byIndex = CsvModelMap.Build<IdOnly>(static b => b.PropertyAt(1, ExcelCellReaders.Parsable, static (ref IdOnly m, int v) => m.Id = v));
+            foreach (int headerRow in new[] { 0, 1 })
+            {
+                byte[] csv = IndexCsv(rows: 200, headerRow);
+                List<string> expected = [.. Enumerable.Range(0, 200).Select(static i => i.ToString(CultureInfo.InvariantCulture))];
+                foreach (int chunkSize in new[] { 1, 7, 64 })
+                {
+                    Assert.Equal(expected, (await Chunked(csv, byIndex, dop: 4, chunkSize, headerRow)).Rows);
+                }
+            }
         }
 
         [Fact]
