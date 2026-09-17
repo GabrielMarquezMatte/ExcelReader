@@ -28,8 +28,6 @@ namespace ExcelReader.Native
 
     internal static unsafe class NativeCsvAggregateOptions
     {
-        private const int OptTrue = 2;
-
         internal static int Translate(NativeCsvParallelOptionsRaw? raw, out CsvParallelOptions options)
         {
             options = CsvParallelOptions.Default;
@@ -39,29 +37,30 @@ namespace ExcelReader.Native
             }
 
             NativeCsvParallelOptionsRaw value = raw.Value;
-            if (value.StructSize < sizeof(NativeCsvParallelOptionsRaw)
+            int expectedSize = sizeof(NativeCsvParallelOptionsRaw);
+            if (value.StructSize != expectedSize
                 || value.DegreeOfParallelism < 0
                 || value.HeaderRow < 0
-                || value.Delimiter is < 0 or > 255
-                || value.Quote is < 0 or > 255
-                || value.DetectBom is < 0 or > OptTrue
+                || !NativeOptionDecode.TryByte(value.Delimiter, "csv_parallel_options", "delimiter", out byte? delimiter, out _)
+                || !NativeOptionDecode.TryByte(value.Quote, "csv_parallel_options", "quote", out byte? quote, out _)
+                || !NativeOptionDecode.TryState(value.DetectBom, "csv_parallel_options", "detect_bom", out bool? detectBom, out _)
                 || value.MaxCellBytes < 0)
             {
                 return NativeStatus.InvalidArgument;
             }
 
             CsvReaderOptions reader = CsvReaderOptions.Default;
-            if (value.Delimiter != 0)
+            if (delimiter is byte d)
             {
-                reader = reader with { Delimiter = (byte)value.Delimiter };
+                reader = reader with { Delimiter = d };
             }
-            if (value.Quote != 0)
+            if (quote is byte q)
             {
-                reader = reader with { Quote = (byte)value.Quote };
+                reader = reader with { Quote = q };
             }
-            if (value.DetectBom != 0)
+            if (detectBom is bool bom)
             {
-                reader = reader with { DetectEncodingFromByteOrderMark = value.DetectBom == OptTrue };
+                reader = reader with { DetectEncodingFromByteOrderMark = bom };
             }
             if (value.MaxCellBytes != 0)
             {

@@ -50,8 +50,9 @@ namespace ExcelReader.Tests
         [InlineData(0, 0, 256, 0, 0)]
         [InlineData(0, 0, 0, 256, 0)]
         [InlineData(0, 0, 0, 0, -1)]
+        [InlineData(0, 0, 0, 0, 0, 3)]
         public void Translate_Should_Reject_When_A_Field_Is_Out_Of_Range(
-            int dop, int headerRow, int delimiter, int quote, int maxCellBytes)
+            int dop, int headerRow, int delimiter, int quote, int maxCellBytes, int detectBom = 0)
         {
             NativeCsvParallelOptionsRaw raw = new()
             {
@@ -60,6 +61,7 @@ namespace ExcelReader.Tests
                 HeaderRow = headerRow,
                 Delimiter = delimiter,
                 Quote = quote,
+                DetectBom = detectBom,
                 MaxCellBytes = maxCellBytes,
             };
 
@@ -68,10 +70,12 @@ namespace ExcelReader.Tests
             Assert.Equal(NativeStatus.InvalidArgument, status);
         }
 
-        [Fact]
-        public void Translate_Should_Reject_When_StructSize_Is_Too_Small()
+        [Theory]
+        [InlineData(4)]
+        [InlineData(1024)]
+        public void Translate_Should_Reject_When_StructSize_Is_Invalid(int structSize)
         {
-            NativeCsvParallelOptionsRaw raw = new() { StructSize = 4 };
+            NativeCsvParallelOptionsRaw raw = new() { StructSize = structSize };
 
             int status = NativeCsvAggregateOptions.Translate(raw, out _);
 
