@@ -845,6 +845,56 @@ namespace ExcelReader.Native
             return writerHandle is not null;
         }
 
+        [UnmanagedCallersOnly(EntryPoint = "xl_csv_aggregate_file")]
+        public static int CsvAggregateFile(
+            byte* path, int pathLength, NativeCsvAggregationRaw* aggregation,
+            NativeCsvParallelOptionsRaw* options, void** outState)
+        {
+            if (path is null || pathLength <= 0 || outState is null || !IsValidAggregation(aggregation))
+            {
+                return NativeStatus.InvalidArgument;
+            }
+
+            NativeCsvParallelOptionsRaw? rawOptions = options is null ? null : *options;
+            int status = NativeApi.AggregateCsvFile(
+                new ReadOnlySpan<byte>(path, pathLength), *aggregation, rawOptions, out nint result);
+            if (status == NativeStatus.Ok)
+            {
+                *outState = (void*)result;
+            }
+            return status;
+        }
+
+        [UnmanagedCallersOnly(EntryPoint = "xl_csv_aggregate_memory")]
+        public static int CsvAggregateMemory(
+            byte* data, int dataLength, NativeCsvAggregationRaw* aggregation,
+            NativeCsvParallelOptionsRaw* options, void** outState)
+        {
+            if (dataLength < 0 || (data is null && dataLength > 0) || outState is null || !IsValidAggregation(aggregation))
+            {
+                return NativeStatus.InvalidArgument;
+            }
+
+            NativeCsvParallelOptionsRaw? rawOptions = options is null ? null : *options;
+            int status = NativeApi.AggregateCsvMemory(
+                data, dataLength, *aggregation, rawOptions, out nint result);
+            if (status == NativeStatus.Ok)
+            {
+                *outState = (void*)result;
+            }
+            return status;
+        }
+
+        private static bool IsValidAggregation(NativeCsvAggregationRaw* aggregation)
+        {
+            return aggregation is not null
+                && aggregation->StructSize >= sizeof(NativeCsvAggregationRaw)
+                && aggregation->Seed != IntPtr.Zero
+                && aggregation->Accumulate != IntPtr.Zero
+                && aggregation->Combine != IntPtr.Zero
+                && aggregation->FreeState != IntPtr.Zero;
+        }
+
         [UnmanagedCallersOnly(EntryPoint = "xl_last_error")]
         public static int LastError(byte* buffer, int capacity, int* outLength)
         {

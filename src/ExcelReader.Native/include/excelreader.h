@@ -16,7 +16,7 @@ extern "C" {
 #define XL_STATUS_PASSWORD_REQUIRED  (-6) /* the workbook is encrypted and no password was supplied */
 #define XL_STATUS_PASSWORD_INCORRECT (-7) /* the supplied password did not match the workbook's verifier */
 
-#define XL_ABI_VERSION 4
+#define XL_ABI_VERSION 5
 
 #define XL_FORMAT_AUTO  0  /* sniffs XLS/XLSX/XLSB; does NOT detect CSV */
 #define XL_FORMAT_XLS   1
@@ -228,6 +228,71 @@ int32_t xl_end_sheet(xl_writer_handle* handle);
 int32_t xl_close_write_handle(xl_writer_handle* handle);
 
 int32_t xl_write_handle_bytes(xl_writer_handle* handle, xl_buffer* out_buffer);
+
+/* Parallel CSV aggregation.
+ *
+ * The library partitions the source, seeds one accumulator per partition, calls `accumulate` for
+ * every record on worker threads, then folds the partitions together in source order with
+ * `combine`. The surviving accumulator is written to `out_state` and becomes the caller's to free.
+ *
+ * Ownership: every state the library seeds, the library frees with `free_state` - except the one
+ * returned in `out_state`. `combine` folds `next` into `acc` and must NOT free `next`; the library
+ * does that. `seed` must return a distinct pointer on every call. A NULL state is legal and is
+ * never passed to `free_state`.
+ *
+ * `seed` is called at least once per partition and may be called again for a partition that has to
+ * be re-read, so a seeded state can be discarded without ever being combined. Peak live states is
+ * proportional to the partition count, not to `degree_of_parallelism`: a 40 GB source at 16 threads
+ * holds roughly 640 states at once.
+ *
+ * Threading: `accumulate` runs concurrently on worker threads, each on its own state. `user_data`
+ * is shared by all of them and must be read-only or internally synchronized. No callback ever runs
+ * on the calling thread, not even when the source is too small to partition. A callback must not
+ * call any xl_* function for the same aggregation, and must not let an exception or panic escape
+ * into the library - wrap Rust shims in catch_unwind and mark C++ shims noexcept.
+ *
+ * A row's cell pointers are valid only for the duration of the `accumulate` call that received
+ * them. Copy anything you keep.
+ *
+ * Returning nonzero from `accumulate` aborts the run: `out_state` is not written, every state is
+ * freed, and that code is returned verbatim. Sibling workers only notice the abort every few
+ * thousand records, so `accumulate` must tolerate being called again after it has returned nonzero.
+ * Use positive codes; every code the library returns is <= 0.
+ */
+typedef int32_t (*xl_csv_seed_fn)      (void** out_state, void* user_data);
+typedef int32_t (*xl_csv_accumulate_fn)(void* state, const xl_row* row, void* user_data);
+typedef int32_t (*xl_csv_combine_fn)   (void* acc, void* next, void* user_data);
+typedef void    (*xl_csv_free_state_fn)(void* state, void* user_data);
+
+typedef struct xl_csv_aggregation {
+    int32_t struct_size;
+    xl_csv_seed_fn       seed;
+    xl_csv_accumulate_fn accumulate;
+    xl_csv_combine_fn    combine;
+    xl_csv_free_state_fn free_state;
+    void*                user_data;
+} xl_csv_aggregation;
+
+typedef struct xl_csv_parallel_options {
+    int32_t struct_size;
+    int32_t degree_of_parallelism;  /* 0 = processor count, 1 = sequential */
+    int32_t header_row;             /* 1-based; 0 = no header */
+    int32_t delimiter;              /* 0 = default (',') */
+    int32_t quote;                  /* 0 = default ('"') */
+    int32_t detect_bom;             /* XL_OPT_DEFAULT / XL_OPT_FALSE / XL_OPT_TRUE */
+    int32_t max_cell_bytes;         /* 0 = default */
+} xl_csv_parallel_options;
+
+int32_t xl_csv_aggregate_file(const uint8_t* path, int32_t path_len,
+                              const xl_csv_aggregation* agg,
+                              const xl_csv_parallel_options* options,
+                              void** out_state);
+
+/* `data` must stay valid and unmodified until this call returns; the library does not copy it. */
+int32_t xl_csv_aggregate_memory(const uint8_t* data, int32_t data_len,
+                                const xl_csv_aggregation* agg,
+                                const xl_csv_parallel_options* options,
+                                void** out_state);
 
 int32_t xl_last_error(uint8_t* buffer, int32_t capacity, int32_t* out_len);
 
