@@ -32,6 +32,9 @@ namespace ExcelReader.Core.ValueObjects
         /// <summary>Enumerates only the populated cells in this row, in ascending column order.</summary>
         public RowCellEnumerator Cells => new(_cells, _rowValues, _shared, _rowBuffer, _sharedStringCache, _contentCache);
 
+        internal bool IsEmptyRecord =>
+            _cells.IsEmpty || (_cells.Length == 1 && _cells[0].Column == 0 && _cells[0].Type == CellType.Empty);
+
         /// <summary>Gets the cell at the given column index, or an empty cell if the column has no value.</summary>
         public Cell this[int column]
         {
