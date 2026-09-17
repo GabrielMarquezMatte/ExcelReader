@@ -150,7 +150,6 @@ namespace ExcelReader.Tests
         [Fact]
         public async Task DiscardsExceptionsThrownWhileReadingAMisguessedPartition()
         {
-            // Read from the byte after a newline inside the quotes, "BOOM,x" looks like a record.
             byte[] csv = Encoding.UTF8.GetBytes("ok,\"one\nBOOM,x\"\nok,two\nok,\"three\nBOOM,y\"\nok,four\n");
             List<string> expected = Sequential(csv);
             int misguessedDeliveries = 0;

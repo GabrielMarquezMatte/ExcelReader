@@ -1,4 +1,3 @@
-using ExcelReader.Core.Enums;
 using ExcelReader.Core.Reader;
 using ExcelReader.Core.ValueObjects;
 
@@ -8,8 +7,6 @@ namespace ExcelReader.Core.Parser.Internal
         where TAccumulator : ICsvAccumulator<TAccumulator, TModel>, new()
         where TModel : allows ref struct
     {
-        private const int StackallocLimit = 256;
-
         internal static readonly CsvAggregation<TAccumulator> Unbound = new()
         {
             Seed = static () => new TAccumulator(),
@@ -46,30 +43,59 @@ namespace ExcelReader.Core.Parser.Internal
             bool throwOnParseFailure = config.ThrowOnParseFailure;
             int rowNumber = headerRow;
 
-            void Accumulate(ref TAccumulator accumulator, Row row)
+            void Plain(ref TAccumulator accumulator, Row row)
             {
-                int current = sequential ? ++rowNumber : 0;
-                if (row.ColumnCount <= 1 && row[0].Type == CellType.Empty)
+                if (row.IsEmptyRecord)
                 {
                     return;
                 }
                 TModel model = info.CreateInstance();
-                if (!track)
-                {
-                    SparseRowProjection.ParseRow(in row, bindings, default, track, false, provider, throwOnParseFailure, current, ref model);
-                }
-                else if (bindings.Length <= StackallocLimit)
-                {
-                    Span<bool> seen = stackalloc bool[bindings.Length];
-                    SparseRowProjection.ParseRow(in row, bindings, seen, track, false, provider, throwOnParseFailure, current, ref model);
-                }
-                else
-                {
-                    SparseRowProjection.ParseRow(in row, bindings, new bool[bindings.Length], track, false, provider, throwOnParseFailure, current, ref model);
-                }
+                SparseRowProjection.ParseRow(in row, bindings, default, false, false, provider, throwOnParseFailure, 0, ref model);
                 accumulator.Add(model);
             }
-            return Accumulate;
+
+            void PlainNumbered(ref TAccumulator accumulator, Row row)
+            {
+                int current = ++rowNumber;
+                if (row.IsEmptyRecord)
+                {
+                    return;
+                }
+                TModel model = info.CreateInstance();
+                SparseRowProjection.ParseRow(in row, bindings, default, false, false, provider, throwOnParseFailure, current, ref model);
+                accumulator.Add(model);
+            }
+
+            void Tracked(ref TAccumulator accumulator, Row row)
+            {
+                if (row.IsEmptyRecord)
+                {
+                    return;
+                }
+                TModel model = info.CreateInstance();
+                Span<bool> seen = stackalloc bool[bindings.Length];
+                SparseRowProjection.ParseRow(in row, bindings, seen, true, false, provider, throwOnParseFailure, 0, ref model);
+                accumulator.Add(model);
+            }
+
+            void TrackedNumbered(ref TAccumulator accumulator, Row row)
+            {
+                int current = ++rowNumber;
+                if (row.IsEmptyRecord)
+                {
+                    return;
+                }
+                TModel model = info.CreateInstance();
+                Span<bool> seen = stackalloc bool[bindings.Length];
+                SparseRowProjection.ParseRow(in row, bindings, seen, true, false, provider, throwOnParseFailure, current, ref model);
+                accumulator.Add(model);
+            }
+
+            if (track)
+            {
+                return sequential ? TrackedNumbered : Tracked;
+            }
+            return sequential ? PlainNumbered : Plain;
         }
     }
 }
