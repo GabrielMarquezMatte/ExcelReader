@@ -2,6 +2,7 @@ using System.Globalization;
 using System.IO.Compression;
 using System.Runtime.InteropServices;
 using System.Text;
+using System.Text.RegularExpressions;
 using ExcelReader.Core.Enums;
 using ExcelReader.Core.Reader;
 using ExcelReader.Core.ValueObjects;
@@ -521,9 +522,21 @@ namespace ExcelReader.Tests
         }
 
         [Fact]
-        public void Should_Report_Abi_Version_4()
+        public void Should_Report_The_Abi_Version_Declared_In_The_C_Header()
         {
-            Assert.Equal(4, NativeStatus.AbiVersion);
+            DirectoryInfo? dir = new(AppContext.BaseDirectory);
+            while (dir is not null && !File.Exists(Path.Combine(dir.FullName, "ExcelReader.slnx")))
+            {
+                dir = dir.Parent;
+            }
+            Assert.NotNull(dir);
+
+            string headerPath = Path.Combine(dir.FullName, "src", "ExcelReader.Native", "include", "excelreader.h");
+            string header = File.ReadAllText(headerPath);
+            Match match = Regex.Match(header, @"#define\s+XL_ABI_VERSION\s+(?<version>\d+)", RegexOptions.None, TimeSpan.FromSeconds(1));
+            Assert.True(match.Success, "XL_ABI_VERSION not found in excelreader.h");
+
+            Assert.Equal(NativeStatus.AbiVersion, int.Parse(match.Groups["version"].Value, CultureInfo.InvariantCulture));
         }
 
         [Fact]
