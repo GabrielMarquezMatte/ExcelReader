@@ -1,3 +1,4 @@
+using System.Buffers.Binary;
 using ExcelReader.Core.Crypto;
 using ExcelReader.Core.Reader;
 
@@ -9,6 +10,17 @@ namespace ExcelReader.Tests
         {
             var fs = File.OpenRead(EncryptedFixtures.Path_(fixture));
             return CfbContainer.Parse(fs, ownsSource: true, ExcelReaderOptions.Default);
+        }
+
+        [Fact]
+        public void Should_Throw_When_The_Only_Fat_Sector_Points_Past_The_End_Of_The_File()
+        {
+            using MemoryStream built = XlsWorkbookBuilder.Build(sheets: [("S1", [["Alice", 1, true]])]);
+            byte[] bytes = built.ToArray();
+            BinaryPrimitives.WriteInt32LittleEndian(bytes.AsSpan(0x4C), 1_048_576);
+
+            Assert.Throws<InvalidDataException>(
+                () => CfbContainer.Parse(new MemoryStream(bytes), ownsSource: true, ExcelReaderOptions.Default));
         }
 
         [Fact]
