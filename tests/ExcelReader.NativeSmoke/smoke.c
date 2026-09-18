@@ -140,6 +140,8 @@ typedef int32_t (*xl_write_typed_fn)(const uint8_t*, int32_t, int32_t, const xl_
                                      const xl_table*, const xl_write_options*);
 typedef int32_t (*xl_csv_aggregate_file_fn)(const uint8_t*, int32_t, const xl_csv_aggregation*,
                                             const xl_csv_parallel_options*, void**);
+typedef int32_t (*xl_csv_aggregate_memory_fn)(const uint8_t*, int32_t, const xl_csv_aggregation*,
+                                              const xl_csv_parallel_options*, void**);
 
 typedef struct
 {
@@ -735,6 +737,7 @@ typedef struct
     smoke_counter_t seeds;
     smoke_counter_t frees;
     smoke_counter_t combines;
+    smoke_counter_t unterminated;
 } smoke_csv_counters;
 
 #define SMOKE_CSV_ROW_COUNT 420000
@@ -752,11 +755,22 @@ static int32_t smoke_csv_seed(void** out_state, void* user_data)
 
 static int32_t smoke_csv_accumulate(void* state, const xl_row* row, void* user_data)
 {
-    (void)user_data;
-    if (row->cell_count > 0)
+    smoke_csv_counters* counters = (smoke_csv_counters*)user_data;
+    if (row->cell_count <= 0)
     {
-        *(int64_t*)state += strtoll((const char*)row->cells[0].value, NULL, 10);
+        return XL_OK;
     }
+    const xl_row_cell* cell = &row->cells[0];
+    if (cell->type == XL_CELL_EMPTY || cell->value == NULL)
+    {
+        return XL_OK;
+    }
+    if (cell->value[cell->value_len] != 0)
+    {
+        smoke_counter_increment(&counters->unterminated);
+        return XL_OK;
+    }
+    *(int64_t*)state += strtoll((const char*)cell->value, NULL, 10);
     return XL_OK;
 }
 
@@ -788,11 +802,53 @@ static int write_csv_fixture(const char* path, int32_t row_count)
     return 0;
 }
 
+static int write_quoted_csv_fixture(const char* path, int32_t records)
+{
+    FILE* fixture = fopen(path, "wb");
+    CHECK(fixture != NULL, "cannot write the quoted CSV aggregate fixture");
+    for (int32_t record = 1; record <= records; record++)
+    {
+        fprintf(fixture, "%d,\"", record);
+        for (int32_t filler = 0; filler < 40000; filler++)
+        {
+            fputs("BOOM,notint,x\n", fixture);
+        }
+        fputs("\"\n", fixture);
+    }
+    fclose(fixture);
+    return 0;
+}
+
+static int smoke_message_contains(const uint8_t* message, int32_t message_len, const char* needle)
+{
+    size_t needle_len = strlen(needle);
+    if (message == NULL || message_len < 0 || (size_t)message_len < needle_len)
+    {
+        return 0;
+    }
+    for (int32_t i = 0; i + (int32_t)needle_len <= message_len; i++)
+    {
+        if (memcmp(message + i, needle, needle_len) == 0)
+        {
+            return 1;
+        }
+    }
+    return 0;
+}
+
 static int smoke_csv_aggregate(xl_lib_handle lib, const char* csv_path)
 {
     xl_csv_aggregate_file_fn aggregate =
         (xl_csv_aggregate_file_fn)load_symbol(lib, "xl_csv_aggregate_file");
     CHECK(aggregate != NULL, "xl_csv_aggregate_file not exported");
+
+    xl_csv_aggregate_memory_fn aggregate_memory =
+        (xl_csv_aggregate_memory_fn)load_symbol(lib, "xl_csv_aggregate_memory");
+    CHECK(aggregate_memory != NULL, "xl_csv_aggregate_memory not exported");
+
+    xl_last_error_ptr_fn last_error_ptr =
+        (xl_last_error_ptr_fn)load_symbol(lib, "xl_last_error_ptr");
+    CHECK(last_error_ptr != NULL, "xl_last_error_ptr not exported");
 
     smoke_csv_counters counters;
     memset(&counters, 0, sizeof(counters));
@@ -826,6 +882,36 @@ static int smoke_csv_aggregate(xl_lib_handle lib, const char* csv_path)
           "free_state must run exactly once per seeded state except the one returned as out_state");
     CHECK(smoke_counter_get(&counters.combines) >= 1,
           "a multi-megabyte fixture at degree_of_parallelism=8 must partition and combine");
+    CHECK(smoke_counter_get(&counters.unterminated) == 0,
+          "every aggregate cell value must be NUL-terminated at value[value_len]");
+
+    FILE* source = fopen(csv_path, "rb");
+    CHECK(source != NULL, "cannot reopen the CSV aggregate fixture");
+    fseek(source, 0, SEEK_END);
+    long source_len = ftell(source);
+    fseek(source, 0, SEEK_SET);
+    uint8_t* buffer = (uint8_t*)malloc((size_t)source_len);
+    CHECK(buffer != NULL, "cannot allocate the in-memory CSV fixture");
+    CHECK(fread(buffer, 1, (size_t)source_len, source) == (size_t)source_len, "short read of the CSV fixture");
+    fclose(source);
+
+    smoke_csv_counters memory_counters;
+    memset(&memory_counters, 0, sizeof(memory_counters));
+    xl_csv_aggregation memory_agg = agg;
+    memory_agg.user_data = &memory_counters;
+
+    void* memory_state = NULL;
+    int32_t memory_status = aggregate_memory(buffer, (int32_t)source_len, &memory_agg, &options, &memory_state);
+    CHECK(memory_status == XL_OK, "xl_csv_aggregate_memory must succeed on the smoke fixture");
+
+    int64_t memory_total = *(int64_t*)memory_state;
+    free(memory_state);
+    free(buffer);
+
+    CHECK(memory_total == SMOKE_CSV_EXPECTED_TOTAL,
+          "xl_csv_aggregate_memory must sum every row exactly once");
+    CHECK(smoke_counter_get(&memory_counters.frees) == smoke_counter_get(&memory_counters.seeds) - 1,
+          "free_state must run once per seeded state except the one returned as out_state");
 
     xl_csv_aggregation bad_size_agg = agg;
     bad_size_agg.struct_size = (int32_t)sizeof(agg) - 1;
@@ -833,6 +919,14 @@ static int smoke_csv_aggregate(xl_lib_handle lib, const char* csv_path)
     CHECK(aggregate((const uint8_t*)csv_path, (int32_t)strlen(csv_path), &bad_size_agg, &options,
                     &rejected_state) == XL_INVALID_ARGUMENT,
           "a wrong xl_csv_aggregation.struct_size must be XL_INVALID_ARGUMENT");
+    {
+        int32_t error_len = 0;
+        const uint8_t* message = last_error_ptr(&error_len);
+        CHECK(message != NULL && error_len > 0,
+              "xl_last_error_ptr must report detail for a bad csv_aggregation.struct_size");
+        CHECK(smoke_message_contains(message, error_len, "csv_aggregation.struct_size"),
+              "the bad struct_size rejection must name csv_aggregation.struct_size");
+    }
 
     xl_csv_aggregation null_combine_agg = agg;
     null_combine_agg.combine = NULL;
@@ -840,8 +934,31 @@ static int smoke_csv_aggregate(xl_lib_handle lib, const char* csv_path)
     CHECK(aggregate((const uint8_t*)csv_path, (int32_t)strlen(csv_path), &null_combine_agg, &options,
                     &rejected_state) == XL_INVALID_ARGUMENT,
           "a NULL xl_csv_aggregation.combine must be XL_INVALID_ARGUMENT");
+    {
+        int32_t error_len = 0;
+        const uint8_t* message = last_error_ptr(&error_len);
+        CHECK(message != NULL && error_len > 0,
+              "xl_last_error_ptr must report detail for a NULL csv_aggregation.combine");
+        CHECK(smoke_message_contains(message, error_len, "csv_aggregation.combine"),
+              "the NULL callback rejection must name csv_aggregation.combine");
+    }
 
-    printf("ok: xl_csv_aggregate_file summed %d rows to %lld (seeds=%ld, frees=%ld, combines=%ld)\n",
+    xl_csv_parallel_options zeroed_options;
+    memset(&zeroed_options, 0, sizeof(zeroed_options));
+    rejected_state = NULL;
+    CHECK(aggregate((const uint8_t*)csv_path, (int32_t)strlen(csv_path), &agg, &zeroed_options,
+                    &rejected_state) == XL_INVALID_ARGUMENT,
+          "a zeroed xl_csv_parallel_options (struct_size 0) must be XL_INVALID_ARGUMENT");
+    {
+        int32_t error_len = 0;
+        const uint8_t* message = last_error_ptr(&error_len);
+        CHECK(message != NULL && error_len > 0,
+              "xl_last_error_ptr must report detail for a zeroed csv_parallel_options");
+        CHECK(smoke_message_contains(message, error_len, "csv_parallel_options.struct_size"),
+              "the zeroed options rejection must name csv_parallel_options.struct_size");
+    }
+
+    printf("ok: xl_csv_aggregate_file/memory summed %d rows to %lld (seeds=%ld, frees=%ld, combines=%ld)\n",
            SMOKE_CSV_ROW_COUNT, (long long)total, smoke_counter_get(&counters.seeds),
            smoke_counter_get(&counters.frees), smoke_counter_get(&counters.combines));
     return 0;
@@ -856,6 +973,61 @@ static int test_csv_aggregate_file(xl_lib_handle lib)
         status = smoke_csv_aggregate(lib, csv_path);
     }
     remove(csv_path);
+    return status;
+}
+
+static int smoke_csv_aggregate_quoted(xl_lib_handle lib, const char* csv_path, int32_t records)
+{
+    xl_csv_aggregate_file_fn aggregate =
+        (xl_csv_aggregate_file_fn)load_symbol(lib, "xl_csv_aggregate_file");
+    CHECK(aggregate != NULL, "xl_csv_aggregate_file not exported");
+
+    smoke_csv_counters counters;
+    memset(&counters, 0, sizeof(counters));
+
+    xl_csv_aggregation agg;
+    memset(&agg, 0, sizeof(agg));
+    agg.struct_size = (int32_t)sizeof(agg);
+    agg.seed = smoke_csv_seed;
+    agg.accumulate = smoke_csv_accumulate;
+    agg.combine = smoke_csv_combine;
+    agg.free_state = smoke_csv_free_state;
+    agg.user_data = &counters;
+
+    xl_csv_parallel_options options;
+    memset(&options, 0, sizeof(options));
+    options.struct_size = (int32_t)sizeof(options);
+    options.header_row = 0;
+    options.degree_of_parallelism = 8;
+
+    void* state = NULL;
+    int32_t status = aggregate((const uint8_t*)csv_path, (int32_t)strlen(csv_path), &agg, &options, &state);
+    CHECK(status == XL_OK, "xl_csv_aggregate_file must succeed on the quoted multi-line fixture");
+
+    int64_t total = *(int64_t*)state;
+    free(state);
+
+    int64_t expected = ((int64_t)records * (records + 1)) / 2;
+    CHECK(total == expected,
+          "each quoted record must contribute its first column exactly once, whatever the chunk boundaries did");
+    CHECK(smoke_counter_get(&counters.combines) >= 1,
+          "this quoted fixture must really be split, or the straddle case is never exercised");
+
+    printf("ok: xl_csv_aggregate_file summed %d quoted multi-line records to %lld\n",
+           records, (long long)total);
+    return 0;
+}
+
+static int test_csv_aggregate_quoted_records(xl_lib_handle lib)
+{
+    const char* quoted_path = "smoke_aggregate_quoted.csv";
+    const int32_t records = 8;
+    int status = write_quoted_csv_fixture(quoted_path, records);
+    if (status == 0)
+    {
+        status = smoke_csv_aggregate_quoted(lib, quoted_path, records);
+    }
+    remove(quoted_path);
     return status;
 }
 
@@ -893,6 +1065,7 @@ int main(int argc, char** argv)
     failures += test_double_close_is_rejected(&api, fixture_path);
     failures += test_write_typed(&api);
     failures += test_csv_aggregate_file(lib);
+    failures += test_csv_aggregate_quoted_records(lib);
 
     if (failures == 0)
     {

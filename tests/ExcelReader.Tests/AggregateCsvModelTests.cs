@@ -333,5 +333,64 @@ namespace ExcelReader.Tests
             }
             return rows;
         }
+
+        public struct WideRow : IEquatable<WideRow>
+        {
+            public int Last { get; set; }
+
+            public override bool Equals(object? obj) => obj is WideRow row && Equals(row);
+            public bool Equals(WideRow other) => Last == other.Last;
+            public override int GetHashCode() => Last.GetHashCode();
+            public static bool operator ==(WideRow left, WideRow right) => left.Equals(right);
+            public static bool operator !=(WideRow left, WideRow right) => !left.Equals(right);
+        }
+
+        private sealed class WideLog : ICsvAccumulator<WideLog, WideRow>
+        {
+            public List<int> Values { get; } = [];
+
+            public void Add(WideRow model)
+            {
+                Values.Add(model.Last);
+            }
+
+            public void Merge(WideLog following)
+            {
+                Values.AddRange(following.Values);
+            }
+        }
+
+        [Fact]
+        public async Task ATrackedMapWiderThanTheStackallocLimitStillBinds()
+        {
+            const int columns = 300;
+            var header = new StringBuilder();
+            var row = new StringBuilder();
+            for (int index = 0; index < columns; index++)
+            {
+                header.Append(CultureInfo.InvariantCulture, $"c{index}");
+                row.Append(index == columns - 1 ? "7" : "x");
+                if (index < columns - 1)
+                {
+                    header.Append(',');
+                    row.Append(',');
+                }
+            }
+            byte[] csv = Encoding.UTF8.GetBytes($"{header}\n{row}\n{row}\n");
+
+            CsvModelMap<WideRow> map = CsvModelMap.Build<WideRow>(b =>
+            {
+                for (int index = 0; index < columns - 1; index++)
+                {
+                    b.Property([$"c{index}"], ExcelCellReaders.String, static (ref WideRow m, string v) => { }, isRequired: true, requireValue: true);
+                }
+                b.Property([$"c{columns - 1}"], ExcelCellReaders.Parsable, static (ref WideRow m, int v) => m.Last = v, isRequired: true, requireValue: true);
+            });
+
+            WideLog log = await Excel.AggregateCsvParallelAsync<WideLog, WideRow>(
+                csv, map, new CsvParallelOptions { HeaderRow = 1 }, TestContext.Current.CancellationToken);
+
+            Assert.Equal([7, 7], log.Values);
+        }
     }
 }

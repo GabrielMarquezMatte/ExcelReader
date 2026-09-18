@@ -86,6 +86,52 @@ namespace ExcelReader.Tests
             Assert.Equal(NativeStatus.InvalidArgument, status);
         }
 
+        [Fact]
+        public void Translate_Should_Explain_Why_A_Zeroed_Options_Struct_Is_Rejected()
+        {
+            NativeApi.ClearLastError();
+            NativeCsvParallelOptionsRaw raw = default;
+
+            int status = NativeCsvAggregateOptions.Translate(raw, out _);
+
+            Assert.Equal(NativeStatus.InvalidArgument, status);
+            string message = NativeApi.LastErrorText();
+            Assert.Contains("csv_parallel_options.struct_size", message, StringComparison.Ordinal);
+            Assert.Contains(sizeof(NativeCsvParallelOptionsRaw).ToString(CultureInfo.InvariantCulture), message, StringComparison.Ordinal);
+        }
+
+        [Fact]
+        public void Translate_Should_Explain_Which_Dialect_Field_Was_Rejected()
+        {
+            NativeApi.ClearLastError();
+            NativeCsvParallelOptionsRaw raw = new()
+            {
+                StructSize = sizeof(NativeCsvParallelOptionsRaw),
+                Delimiter = 9000,
+            };
+
+            int status = NativeCsvAggregateOptions.Translate(raw, out _);
+
+            Assert.Equal(NativeStatus.InvalidArgument, status);
+            Assert.Contains("csv_parallel_options.delimiter", NativeApi.LastErrorText(), StringComparison.Ordinal);
+        }
+
+        [Fact]
+        public void AggregateCsvMemory_Should_Clear_A_Previous_Error_On_Success()
+        {
+            NativeApi.SetLastError("stale message from an earlier call");
+            Tally tally = default;
+            byte[] csv = Encoding.UTF8.GetBytes("1,a\n2,b\n");
+            fixed (byte* data = csv)
+            {
+                int status = NativeApi.AggregateCsvMemory(data, csv.Length, TallyAggregation(&tally), null, out nint result);
+
+                Assert.Equal(NativeStatus.Ok, status);
+                Assert.Empty(NativeApi.LastErrorText());
+                NativeMemory.Free((void*)result);
+            }
+        }
+
         private static Row FirstRowOf(string csv)
         {
             CsvReader reader = Excel.FromCsv(Encoding.UTF8.GetBytes(csv), CsvReaderOptions.Default);
@@ -139,6 +185,21 @@ namespace ExcelReader.Tests
             Assert.Equal("x", ReadCell(*(NativeRowCell*)narrow.Cells));
         }
 
+        [Fact]
+        public void WriteRow_Should_Terminate_Every_Value_With_A_Nul_Byte()
+        {
+            using CsvAggregateState state = new();
+
+            NativeRow row = state.WriteRow(FirstRowOf("ada,,42\n"));
+
+            Assert.Equal(3, row.CellCount);
+            for (int index = 0; index < row.CellCount; index++)
+            {
+                NativeRowCell cell = ((NativeRowCell*)row.Cells)[index];
+                Assert.Equal(0, ((byte*)cell.Value)[cell.ValueLength]);
+            }
+        }
+
         private static string ReadCell(NativeRowCell cell)
         {
             return Encoding.UTF8.GetString((byte*)cell.Value, cell.ValueLength);
@@ -150,6 +211,7 @@ namespace ExcelReader.Tests
             public int Seeds;
             public int Frees;
             public int Combines;
+            public int Rejects;
         }
 
         [UnmanagedCallersOnly]
@@ -636,6 +698,149 @@ namespace ExcelReader.Tests
             }
             builder.Append("\"\n2,b\n");
             return Encoding.UTF8.GetBytes(builder.ToString());
+        }
+
+        [UnmanagedCallersOnly]
+        private static int AccumulateRejectingNonNumericFirstColumn(void* state, NativeRow* row, void* userData)
+        {
+            Tally* tally = (Tally*)userData;
+            if (row->CellCount == 0)
+            {
+                return 0;
+            }
+            NativeRowCell cell = *(NativeRowCell*)row->Cells;
+            if (!long.TryParse(
+                    Encoding.UTF8.GetString((byte*)cell.Value, cell.ValueLength), CultureInfo.InvariantCulture, out long parsed))
+            {
+                Interlocked.Increment(ref tally->Rejects);
+                return 55;
+            }
+            *(long*)state += parsed;
+            return 0;
+        }
+
+        private static NativeCsvAggregationRaw RejectingAggregation(Tally* tally)
+        {
+            return new NativeCsvAggregationRaw
+            {
+                StructSize = sizeof(NativeCsvAggregationRaw),
+                Seed = (IntPtr)(delegate* unmanaged<void**, void*, int>)&SeedTally,
+                Accumulate = (IntPtr)(delegate* unmanaged<void*, NativeRow*, void*, int>)&AccumulateRejectingNonNumericFirstColumn,
+                Combine = (IntPtr)(delegate* unmanaged<void*, void*, void*, int>)&CombineTally,
+                FreeState = (IntPtr)(delegate* unmanaged<void*, void*, void>)&FreeTally,
+                UserData = (IntPtr)tally,
+            };
+        }
+
+        private static string WriteQuotedRecordsStraddlingChunks(int records)
+        {
+            string path = Path.Combine(Path.GetTempPath(), $"xlagg-{Guid.NewGuid():N}.csv");
+            using (StreamWriter writer = new(path))
+            {
+                for (int index = 1; index <= records; index++)
+                {
+                    writer.Write(index.ToString(CultureInfo.InvariantCulture));
+                    writer.Write(",\"");
+                    for (int filler = 0; filler < 40_000; filler++)
+                    {
+                        writer.Write("BOOM,notint,x\n");
+                    }
+                    writer.Write("\"\n");
+                }
+            }
+            return path;
+        }
+
+        [Fact]
+        public void AggregateCsvFile_Should_Survive_A_Caller_Abort_Inside_A_Misguessed_Chunk()
+        {
+            Tally tally = default;
+            string path = WriteQuotedRecordsStraddlingChunks(records: 16);
+            try
+            {
+                NativeCsvParallelOptionsRaw options = new()
+                {
+                    StructSize = sizeof(NativeCsvParallelOptionsRaw),
+                    DegreeOfParallelism = 8,
+                };
+
+                int status = NativeApi.AggregateCsvFile(
+                    Encoding.UTF8.GetBytes(path), RejectingAggregation(&tally), options, out nint result);
+
+                Assert.Equal(NativeStatus.Ok, status);
+                Assert.Equal(16L * 17L / 2L, *(long*)result);
+                Assert.True(tally.Rejects > 0, "the fixture must produce at least one rejected row from a misguessed chunk");
+                Assert.Equal(tally.Seeds - 1, tally.Frees);
+                NativeMemory.Free((void*)result);
+            }
+            finally
+            {
+                File.Delete(path);
+            }
+        }
+
+        [UnmanagedCallersOnly]
+        private static int AccumulateFailingByRowNumber(void* state, NativeRow* row, void* userData)
+        {
+            if (row->CellCount == 0)
+            {
+                return 0;
+            }
+            NativeRowCell cell = *(NativeRowCell*)row->Cells;
+            if (!long.TryParse(
+                    Encoding.UTF8.GetString((byte*)cell.Value, cell.ValueLength), CultureInfo.InvariantCulture, out long parsed))
+            {
+                return 0;
+            }
+            if (parsed == 100_000)
+            {
+                return 11;
+            }
+            if (parsed == 300_000)
+            {
+                return 12;
+            }
+            *(long*)state += parsed;
+            return 0;
+        }
+
+        private static NativeCsvAggregationRaw FailByRowNumberAggregation(Tally* tally)
+        {
+            return new NativeCsvAggregationRaw
+            {
+                StructSize = sizeof(NativeCsvAggregationRaw),
+                Seed = (IntPtr)(delegate* unmanaged<void**, void*, int>)&SeedTally,
+                Accumulate = (IntPtr)(delegate* unmanaged<void*, NativeRow*, void*, int>)&AccumulateFailingByRowNumber,
+                Combine = (IntPtr)(delegate* unmanaged<void*, void*, void*, int>)&CombineTally,
+                FreeState = (IntPtr)(delegate* unmanaged<void*, void*, void>)&FreeTally,
+                UserData = (IntPtr)tally,
+            };
+        }
+
+        [Fact]
+        public void AggregateCsvFile_Should_Return_The_First_Failure_In_Source_Order_When_Several_Chunks_Fail()
+        {
+            Tally tally = default;
+            string path = WriteCsv(400_000);
+            try
+            {
+                NativeCsvParallelOptionsRaw options = new()
+                {
+                    StructSize = sizeof(NativeCsvParallelOptionsRaw),
+                    DegreeOfParallelism = 8,
+                };
+
+                int status = NativeApi.AggregateCsvFile(
+                    Encoding.UTF8.GetBytes(path), FailByRowNumberAggregation(&tally), options, out nint result);
+
+                Assert.Equal(11, status);
+                Assert.Equal(0, result);
+                Assert.Equal(tally.Seeds, tally.Frees);
+            }
+            finally
+            {
+                File.Delete(path);
+            }
         }
 
         [Fact]

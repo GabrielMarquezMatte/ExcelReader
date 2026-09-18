@@ -3,6 +3,7 @@
 #include "excelreader.h"
 
 #include <array>
+#include <atomic>
 #include <compare>
 #include <concepts>
 #include <cstdint>
@@ -2005,99 +2006,174 @@ namespace xl
     };
 
 
-    /// A fold over CSV records. `Acc` must be default-constructible and move-constructible; `seed`
-    /// builds a fresh one with `Acc()` and the wrapper returns it by moving out of the surviving
-    /// state. `combine` must fold `next` into `*this` without destroying it - the library owns
-    /// `next`'s lifetime and frees it afterwards.
+    /// A fold over CSV records. `Acc` must be move-constructible; the wrapper returns the surviving
+    /// accumulator by moving out of it. `combine` must fold `next` into `*this` without destroying
+    /// it - the library owns `next`'s lifetime and frees it afterwards.
     ///
-    /// `accumulate` and `seed` (the `Acc()` construction above) run concurrently on worker threads,
-    /// one `Acc` per partition, never on the calling thread. `combine` is effectively single-threaded
-    /// but is not pinned to any particular thread, per `excelreader.h`'s `xl_csv_aggregate_file`
-    /// contract. All three must be noexcept in effect: an exception escaping into the library is
-    /// undefined behavior, so this wrapper catches everything and reports a reserved sentinel status
-    /// that this header maps back to a descriptive error instead of `XL_ERROR`.
+    /// `accumulate` runs concurrently on worker threads, one `Acc` per partition, never on the
+    /// calling thread. `combine` is effectively single-threaded but is not pinned to any particular
+    /// thread and also never runs on the calling thread. `~Acc()` does run on the calling thread,
+    /// once the run has finished, and must not throw - `std::move_constructible` subsumes
+    /// `std::destructible`, which is `is_nothrow_destructible_v`, so a throwing destructor fails
+    /// this concept rather than reaching the shims.
+    ///
+    /// The `RowView` handed to `accumulate` borrows the library's cell buffer and is valid only for
+    /// the duration of that one call; copy anything you keep.
+    ///
+    /// All callbacks must be noexcept in effect: an exception escaping into the library is undefined
+    /// behavior, so this wrapper catches everything and reports it as an error. See
+    /// `excelreader.h`'s `xl_csv_aggregate_file` contract.
     template <typename Acc>
     concept CsvAccumulator =
-        std::default_initializable<Acc> && std::move_constructible<Acc> &&
-        requires(Acc acc, Acc &next, const xl_row *row) {
+        std::move_constructible<Acc> && requires(Acc acc, Acc &next, RowView row) {
             { acc.accumulate(row) } -> std::same_as<int32_t>;
             { acc.combine(next) } -> std::same_as<int32_t>;
         };
 
     namespace detail
     {
-        /// Status a shim below returns to signal "a user callback threw". Positive, so it can never
-        /// collide with a library status (every one of those is <= 0) - `aggregate_csv_file`/
-        /// `aggregate_csv_memory` recognize it and report a descriptive error instead of the generic
-        /// "unknown error" that `XL_ERROR` would produce here, since `xl_last_error` is never
-        /// populated for a callback exception. Nothing reserves this value from callers, though: an
-        /// `accumulate`/`combine`/`seed` that legitimately returns exactly `INT32_MAX` is reported as
-        /// a thrown exception, same as a real one - avoid returning that one value. Mirrors the Rust
-        /// wrapper's `PANIC_STATUS`, which documents the identical collision.
+        /// Status a shim returns for "a callback threw". Positive, so it can never collide with a
+        /// library status (every one of those is <= 0). It CAN collide with a caller's own
+        /// `INT32_MAX`, so the entry points key on `threw` rather than on the status alone.
         inline constexpr int32_t kCsvCallbackException = (std::numeric_limits<int32_t>::max)();
 
-        template <typename Acc>
-        int32_t csv_seed(void **out_state, void *) noexcept
+        /// What the four shims reach through `user_data`. The C ABI shares one `user_data` across
+        /// every worker thread and requires it to be read-only or internally synchronized, so the
+        /// seed callable is held by pointer-to-const and the "a callback threw" flag is atomic.
+        template <typename Acc, typename Seed>
+        struct CsvContext
         {
+            const Seed *seed;
+            std::atomic<bool> threw{false};
+        };
+
+        template <typename Acc, typename Seed>
+        int32_t csv_seed(void **out_state, void *user_data) noexcept
+        {
+            auto *context = static_cast<CsvContext<Acc, Seed> *>(user_data);
+            *out_state = nullptr;
             try
             {
-                *out_state = new Acc();
+                *out_state = new Acc((*context->seed)());
                 return XL_OK;
             }
             catch (...)
             {
+                context->threw.store(true, std::memory_order_relaxed);
                 return kCsvCallbackException;
             }
         }
 
-        template <typename Acc>
-        int32_t csv_accumulate(void *state, const xl_row *row, void *) noexcept
+        template <typename Acc, typename Seed>
+        int32_t csv_accumulate(void *state, const xl_row *row, void *user_data) noexcept
         {
+            auto *context = static_cast<CsvContext<Acc, Seed> *>(user_data);
             try
             {
-                return static_cast<Acc *>(state)->accumulate(row);
+                const size_t count = row->cell_count > 0 ? static_cast<size_t>(row->cell_count) : 0;
+                return static_cast<Acc *>(state)->accumulate(RowView(row->cells, count));
             }
             catch (...)
             {
+                context->threw.store(true, std::memory_order_relaxed);
                 return kCsvCallbackException;
             }
         }
 
-        template <typename Acc>
-        int32_t csv_combine(void *acc, void *next, void *) noexcept
+        template <typename Acc, typename Seed>
+        int32_t csv_combine(void *acc, void *next, void *user_data) noexcept
         {
+            auto *context = static_cast<CsvContext<Acc, Seed> *>(user_data);
             try
             {
                 return static_cast<Acc *>(acc)->combine(*static_cast<Acc *>(next));
             }
             catch (...)
             {
+                context->threw.store(true, std::memory_order_relaxed);
                 return kCsvCallbackException;
             }
         }
 
-        template <typename Acc>
+        template <typename Acc, typename Seed>
         void csv_free_state(void *state, void *) noexcept
         {
             delete static_cast<Acc *>(state);
         }
 
-        template <typename Acc>
-        xl_csv_aggregation csv_aggregation() noexcept
+        template <typename Acc, typename Seed>
+        xl_csv_aggregation csv_aggregation(CsvContext<Acc, Seed> &context) noexcept
         {
             xl_csv_aggregation agg{};
             agg.struct_size = static_cast<int32_t>(sizeof(xl_csv_aggregation));
-            agg.seed = &csv_seed<Acc>;
-            agg.accumulate = &csv_accumulate<Acc>;
-            agg.combine = &csv_combine<Acc>;
-            agg.free_state = &csv_free_state<Acc>;
-            agg.user_data = nullptr;
+            agg.seed = &csv_seed<Acc, Seed>;
+            agg.accumulate = &csv_accumulate<Acc, Seed>;
+            agg.combine = &csv_combine<Acc, Seed>;
+            agg.free_state = &csv_free_state<Acc, Seed>;
+            agg.user_data = &context;
             return agg;
+        }
+
+        /// Turns the run's outcome into an `expected`, taking ownership of the surviving state.
+        ///
+        /// A recorded exception wins over the status on EVERY path, including `XL_OK`: an exception
+        /// is a bug in the caller's accumulator, not a data condition, so whether it surfaces must
+        /// not depend on how the library happened to chunk the source - a throw on a partition that
+        /// was later re-read and discarded would otherwise vanish. Keying on the flag rather than on
+        /// the status is also what keeps `kCsvCallbackException` distinguishable from a caller that
+        /// legitimately returned `INT32_MAX`.
+        template <typename Acc, typename Seed>
+        std::expected<Acc, Error> csv_finish(const CsvContext<Acc, Seed> &context, int32_t status, void *state)
+        {
+            const bool threw = context.threw.load(std::memory_order_relaxed);
+
+            std::unique_ptr<Acc> owned(static_cast<Acc *>(state));
+
+            if (threw)
+            {
+                if (status < XL_OK)
+                {
+                    return std::unexpected(
+                        Error{status, "an accumulator callback threw: " + make_error(status).message});
+                }
+                if (status == XL_OK)
+                {
+                    return std::unexpected(Error{kCsvCallbackException, "an accumulator callback threw"});
+                }
+                return std::unexpected(Error{status, "an accumulator callback threw"});
+            }
+            if (status != XL_OK)
+            {
+                if (status > 0)
+                {
+                    return std::unexpected(
+                        Error{status, "an aggregation callback returned status " + std::to_string(status)});
+                }
+                return std::unexpected(make_error(status));
+            }
+            if (owned == nullptr)
+            {
+                return std::unexpected(
+                    Error{XL_ERROR, "native reported success but wrote no aggregation state"});
+            }
+            return std::move(*owned);
         }
     }
 
-    template <CsvAccumulator Acc>
-    std::expected<Acc, Error> aggregate_csv_file(std::string_view path,
+    /// Folds the CSV file at `path` into one `Acc` across several threads.
+    ///
+    /// `seed` is called at least once per partition, on worker threads, and may be called again for
+    /// a partition that has to be re-read - a seeded accumulator can therefore be destroyed without
+    /// ever being combined. The call blocks until the run finishes, so `seed` may capture locals
+    /// freely. It must be const-callable: the C ABI shares one `user_data` across every worker and
+    /// requires it to be read-only or internally synchronized, so the shims invoke it through a
+    /// reference to const. A capturing `mutable` lambda therefore fails this constraint cleanly
+    /// instead of hard-erroring inside a shim. The `remove_cvref_t` is load-bearing - `Seed` deduces
+    /// to an lvalue reference for a named callable, and `const Seed &` would collapse the `const`
+    /// away.
+    template <CsvAccumulator Acc, typename Seed>
+        requires std::invocable<const std::remove_cvref_t<Seed> &>
+    std::expected<Acc, Error> aggregate_csv_file(std::string_view path, Seed &&seed,
                                                  const CsvParallelOptions *options = nullptr)
     {
         if (const auto &abi = detail::check_abi_version(); !abi.has_value())
@@ -2105,28 +2181,33 @@ namespace xl
             return std::unexpected(abi.error());
         }
 
-        const xl_csv_aggregation agg = detail::csv_aggregation<Acc>();
+        using SeedType = std::remove_cvref_t<Seed>;
+        detail::CsvContext<Acc, SeedType> context{std::addressof(seed), {}};
+        const xl_csv_aggregation agg = detail::csv_aggregation<Acc, SeedType>(context);
         xl_csv_parallel_options c_options{};
         const xl_csv_parallel_options *c_options_ptr = detail::lower_options(options, c_options);
         void *state = nullptr;
         const int32_t status = xl_csv_aggregate_file(
             reinterpret_cast<const uint8_t *>(path.data()), static_cast<int32_t>(path.size()),
             &agg, c_options_ptr, &state);
-        if (status == detail::kCsvCallbackException)
-        {
-            return std::unexpected(Error{status, "an accumulator callback threw"});
-        }
-        if (status != XL_OK)
-        {
-            return std::unexpected(detail::make_error(status));
-        }
-
-        std::unique_ptr<Acc> owned(static_cast<Acc *>(state));
-        return std::move(*owned);
+        return detail::csv_finish<Acc, SeedType>(context, status, state);
     }
 
+    /// Folds the CSV file at `path` into one `Acc`, seeding each partition with `Acc()`.
     template <CsvAccumulator Acc>
-    std::expected<Acc, Error> aggregate_csv_memory(std::span<const uint8_t> data,
+        requires std::default_initializable<Acc>
+    std::expected<Acc, Error> aggregate_csv_file(std::string_view path,
+                                                 const CsvParallelOptions *options = nullptr)
+    {
+        auto seed = [] { return Acc(); };
+        return aggregate_csv_file<Acc>(path, seed, options);
+    }
+
+    /// Folds an in-memory CSV buffer into one `Acc`. The buffer is not copied and must stay valid
+    /// for the duration of the call. Otherwise identical to `aggregate_csv_file`.
+    template <CsvAccumulator Acc, typename Seed>
+        requires std::invocable<const std::remove_cvref_t<Seed> &>
+    std::expected<Acc, Error> aggregate_csv_memory(std::span<const uint8_t> data, Seed &&seed,
                                                    const CsvParallelOptions *options = nullptr)
     {
         if (const auto &abi = detail::check_abi_version(); !abi.has_value())
@@ -2134,22 +2215,24 @@ namespace xl
             return std::unexpected(abi.error());
         }
 
-        const xl_csv_aggregation agg = detail::csv_aggregation<Acc>();
+        using SeedType = std::remove_cvref_t<Seed>;
+        detail::CsvContext<Acc, SeedType> context{std::addressof(seed), {}};
+        const xl_csv_aggregation agg = detail::csv_aggregation<Acc, SeedType>(context);
         xl_csv_parallel_options c_options{};
         const xl_csv_parallel_options *c_options_ptr = detail::lower_options(options, c_options);
         void *state = nullptr;
-        const int32_t status = xl_csv_aggregate_memory(data.data(), static_cast<int32_t>(data.size()),
-                                                        &agg, c_options_ptr, &state);
-        if (status == detail::kCsvCallbackException)
-        {
-            return std::unexpected(Error{status, "an accumulator callback threw"});
-        }
-        if (status != XL_OK)
-        {
-            return std::unexpected(detail::make_error(status));
-        }
+        const int32_t status = xl_csv_aggregate_memory(
+            data.data(), static_cast<int32_t>(data.size()), &agg, c_options_ptr, &state);
+        return detail::csv_finish<Acc, SeedType>(context, status, state);
+    }
 
-        std::unique_ptr<Acc> owned(static_cast<Acc *>(state));
-        return std::move(*owned);
+    /// Folds an in-memory CSV buffer into one `Acc`, seeding each partition with `Acc()`.
+    template <CsvAccumulator Acc>
+        requires std::default_initializable<Acc>
+    std::expected<Acc, Error> aggregate_csv_memory(std::span<const uint8_t> data,
+                                                   const CsvParallelOptions *options = nullptr)
+    {
+        auto seed = [] { return Acc(); };
+        return aggregate_csv_memory<Acc>(data, seed, options);
     }
 }
