@@ -10,6 +10,7 @@ namespace ExcelReader.Native
         private static string? _lastError;
 
         // ponytail: the handle for a thread that errors once and never calls again leaks for the
+        // thread's lifetime; free it in a thread-exit callback if that matters.
         [ThreadStatic]
         private static GCHandle _lastErrorHandle;
         [ThreadStatic]

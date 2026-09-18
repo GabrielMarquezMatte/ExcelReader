@@ -265,6 +265,8 @@ int32_t xl_csv_aggregate_memory(const uint8_t* data, int32_t data_len,
 
 int32_t xl_last_error(uint8_t* buffer, int32_t capacity, int32_t* out_len);
 
+/* The returned pointer is valid only until the next xl_* call on the same thread; copy the bytes
+ * out before making another call. */
 const uint8_t* xl_last_error_ptr(int32_t* out_len);
 
 int32_t xl_abi_version(void);
