@@ -1,7 +1,6 @@
 using System.Buffers;
 using System.Buffers.Text;
 using System.Runtime.CompilerServices;
-using System.Runtime.InteropServices;
 using System.Text;
 
 namespace ExcelReader.Core.Reader
@@ -68,26 +67,7 @@ namespace ExcelReader.Core.Reader
             {
                 return (int)(((((a + 1) * 26) + b + 1) * 26) + c);
             }
-            return ColumnIndexLong(cellRef);
-        }
-
-        private static int ColumnIndexLong(ReadOnlySpan<byte> cellRef)
-        {
-            ref var c0 = ref MemoryMarshal.GetReference(cellRef);
-            int col = 0;
-            int i = 0;
-            var length = cellRef.Length;
-            for (; i < length; i++)
-            {
-                var c = Unsafe.Add(ref c0, i);
-                uint val = (uint)(c - 'A');
-                if (val > 25)
-                {
-                    break;
-                }
-                col = (col * 26) + (int)val + 1;
-            }
-            return i == 0 ? -1 : col - 1;
+            return ExcelLimits.MaxColumns;
         }
 
         public static int Decode(ReadOnlySpan<byte> src, Span<byte> dest)

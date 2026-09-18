@@ -42,6 +42,32 @@ namespace ExcelReader.Tests
                 acc.Return();
             }
         }
+        [Theory]
+        [InlineData("AAAA1")]
+        [InlineData("MWLRALP1")]
+        public void FourOrMoreColumnLettersThrowColumnLimit(string cellRef)
+        {
+            using MemoryStream built = WorkbookBuilder.Build($"""<row r="1"><c r="{cellRef}"><v>1</v></c></row>""");
+
+            using XlsxReader reader = Excel.From(built);
+            Assert.Throws<ExcelLimitExceededException>(() =>
+            {
+                using XlsxReader.Enumerator e = reader.GetEnumerator();
+                Assert.True(e.MoveNext());
+            });
+        }
+
+        [Fact]
+        public void LastColumnXfdStillReads()
+        {
+            using MemoryStream built = WorkbookBuilder.Build("""<row r="1"><c r="XFD1"><v>1</v></c></row>""");
+
+            using XlsxReader reader = Excel.From(built);
+            using XlsxReader.Enumerator e = reader.GetEnumerator();
+            Assert.True(e.MoveNext());
+            Assert.Equal(16_384, e.Current.ColumnCount);
+        }
+
         private static void ForgeCentralDirectoryUncompressedSize(byte[] zipBytes, string entryName, uint forgedSize)
         {
             byte[] nameBytes = Encoding.UTF8.GetBytes(entryName);
