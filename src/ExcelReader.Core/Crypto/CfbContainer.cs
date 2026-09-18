@@ -351,6 +351,11 @@ namespace ExcelReader.Core.Crypto
                 }
                 return fat;
             }
+            catch
+            {
+                ArrayPool<int>.Shared.Return(fat);
+                throw;
+            }
             finally
             {
                 ArrayPool<byte>.Shared.Return(sectorBuf);
