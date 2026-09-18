@@ -92,6 +92,36 @@ namespace ExcelReader.Tests
         }
 
         [Theory]
+        [InlineData("2024-01-3/T00:00:00.0000000")]
+        [InlineData("2024-01-3 T00:00:00.0000000")]
+        public void RejectsNonDigitInDaySecondDigit(string text)
+        {
+            Assert.Equal(27, text.Length);
+            Assert.False(FastDate.TryParse(Encoding.ASCII.GetBytes(text), out _));
+        }
+
+        [Theory]
+        [InlineData(0)]
+        [InlineData(1)]
+        [InlineData(2)]
+        [InlineData(3)]
+        [InlineData(5)]
+        [InlineData(6)]
+        [InlineData(8)]
+        [InlineData(9)]
+        [InlineData(11)]
+        [InlineData(12)]
+        [InlineData(14)]
+        [InlineData(15)]
+        public void RejectsNonDigitAtEveryDigitPosition(int position)
+        {
+            byte[] bytes = Encoding.ASCII.GetBytes("2024-03-15T10:20:30.1234567");
+            bytes[position] = (byte)'/';
+
+            Assert.False(FastDate.TryParse(bytes, out _));
+        }
+
+        [Theory]
         [InlineData("2024-03-15T10:20:30Z")]
         [InlineData("2024-03-15T10:20:30+01:00")]
         [InlineData("2024-03-15T10:20:30.500Z")]
