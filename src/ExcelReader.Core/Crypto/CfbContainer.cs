@@ -335,7 +335,12 @@ namespace ExcelReader.Core.Crypto
         private static int[] ReadFat(Stream source, int sectorSize, ReadOnlySpan<int> fatSectorIds, out int fatLength)
         {
             int entriesPerSector = sectorSize / 4;
-            fatLength = fatSectorIds.Length * entriesPerSector;
+            long fatLengthLong = (long)fatSectorIds.Length * entriesPerSector;
+            if (fatLengthLong > int.MaxValue)
+            {
+                throw new InvalidDataException("The OLE FAT table is too large.");
+            }
+            fatLength = (int)fatLengthLong;
             int[] fat = ArrayPool<int>.Shared.Rent(fatLength);
             int index = 0;
             var sectorBuf = ArrayPool<byte>.Shared.Rent(sectorSize);
@@ -400,7 +405,12 @@ namespace ExcelReader.Core.Crypto
 
         internal static int[] ReadIntSectors(Stream source, int sectorSize, ReadOnlySpan<int> fat, int firstSector, int sectorCount)
         {
-            byte[] data = ReadChainBytes(source, sectorSize, fat, firstSector, checked(sectorCount * sectorSize));
+            long byteLimit = (long)sectorCount * sectorSize;
+            if (byteLimit > int.MaxValue)
+            {
+                throw new InvalidDataException("The OLE mini FAT sector count is too large.");
+            }
+            byte[] data = ReadChainBytes(source, sectorSize, fat, firstSector, (int)byteLimit);
             int[] result = new int[data.Length / 4];
             for (int i = 0; i < result.Length; i++)
             {
