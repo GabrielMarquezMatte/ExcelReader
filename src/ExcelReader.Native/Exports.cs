@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System.Runtime.InteropServices;
 using System.Text;
@@ -887,12 +888,41 @@ namespace ExcelReader.Native
 
         private static bool IsValidAggregation(NativeCsvAggregationRaw* aggregation)
         {
-            return aggregation is not null
-                && aggregation->StructSize == sizeof(NativeCsvAggregationRaw)
-                && aggregation->Seed != IntPtr.Zero
-                && aggregation->Accumulate != IntPtr.Zero
-                && aggregation->Combine != IntPtr.Zero
-                && aggregation->FreeState != IntPtr.Zero;
+            if (aggregation is null)
+            {
+                NativeApi.SetLastError("csv_aggregation must not be NULL.");
+                return false;
+            }
+            if (aggregation->StructSize != sizeof(NativeCsvAggregationRaw))
+            {
+                NativeApi.SetLastError(
+                    $"csv_aggregation.struct_size must be exactly {sizeof(NativeCsvAggregationRaw)}; got {aggregation->StructSize}.");
+                return false;
+            }
+            if (aggregation->Seed == IntPtr.Zero || aggregation->Accumulate == IntPtr.Zero
+                || aggregation->Combine == IntPtr.Zero || aggregation->FreeState == IntPtr.Zero)
+            {
+                List<string> missing = [];
+                if (aggregation->Seed == IntPtr.Zero)
+                {
+                    missing.Add("csv_aggregation.seed");
+                }
+                if (aggregation->Accumulate == IntPtr.Zero)
+                {
+                    missing.Add("csv_aggregation.accumulate");
+                }
+                if (aggregation->Combine == IntPtr.Zero)
+                {
+                    missing.Add("csv_aggregation.combine");
+                }
+                if (aggregation->FreeState == IntPtr.Zero)
+                {
+                    missing.Add("csv_aggregation.free_state");
+                }
+                NativeApi.SetLastError($"{string.Join(", ", missing)} must not be NULL.");
+                return false;
+            }
+            return true;
         }
 
         [UnmanagedCallersOnly(EntryPoint = "xl_last_error")]

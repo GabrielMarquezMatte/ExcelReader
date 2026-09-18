@@ -6,11 +6,6 @@
 //! bridge that contract to safe Rust: it boxes each seeded accumulator, catches any panic before it
 //! can unwind into the library, and resumes that panic on the calling thread once the run has
 //! finished freeing every state.
-//!
-//! A zero-sized `A` is exempt from the header's "`seed` must return a distinct pointer on every
-//! call" rule: `Box::into_raw` hands back the same dangling non-null address for every seed, which
-//! is safe here only because the library identifies states by managed handle, never by pointer
-//! value.
 
 use crate::{
     rows::RowRef, workbook, Error, XlCsvAggregation, XlCsvParallelOptions, XlRow, XL_OK,
@@ -22,13 +17,24 @@ use std::path::Path;
 use std::sync::Mutex;
 
 /// The status a shim returns to signal "a callback panicked". The library treats it like any other
-/// caller code - it aborts the run, frees every state and returns it verbatim - and the wrapper then
-/// resumes the stored payload instead of turning it into an [`Error`]. Positive, so it can never
-/// collide with a library status (every one of those is `<= 0`) - but it CAN collide with a caller's
-/// own `Err(i32::MAX)`. `finish` does not disambiguate the two by status; it keys on whether the
-/// panic slot actually holds a payload, so an ordinary `Err(i32::MAX)` from `accumulate` or `combine`
-/// still surfaces as a normal [`Error`] rather than being resumed as a panic.
+/// caller code: from `accumulate` it may be discarded along with the partition instead of ending the
+/// run, while from `seed` or `combine` it always ends the run, freeing every state and returning the
+/// status verbatim. Either way, the wrapper then resumes the stored payload instead of turning it
+/// into an [`Error`]. Positive, so it can never collide with a library status (every one of those is
+/// `<= 0`) - but it CAN collide with a caller's own `Err(i32::MAX)`. `finish` does not disambiguate
+/// the two by status; it keys on whether the panic slot actually holds a payload, so an ordinary
+/// `Err(i32::MAX)` from `accumulate` or `combine` still surfaces as a normal [`Error`] rather than
+/// being resumed as a panic.
 const PANIC_STATUS: i32 = i32::MAX;
+
+/// What each seeded accumulator is boxed in. The trailing byte keeps the allocation non-zero-sized,
+/// so `seed` hands the library a distinct pointer per partition even when `A` is zero-sized, as the
+/// header requires.
+#[repr(C)]
+struct State<A> {
+    value: A,
+    _nonzero: u8,
+}
 
 /// A fold over CSV records, one instance per partition.
 ///
@@ -37,10 +43,13 @@ const PANIC_STATUS: i32 = i32::MAX;
 /// consume it.
 ///
 /// `accumulate` runs concurrently on worker threads, each on its own instance, which is why `Send`
-/// is required and `Sync` is not. A nonzero code from either method aborts the whole run and is
-/// returned to the caller verbatim as [`Error::code`]; use positive codes, since every code the
-/// library itself returns is `<= 0`. Siblings only notice an abort every few thousand records, so
-/// both methods must tolerate being called again after returning an error.
+/// is required and `Sync` is not. A nonzero code from `accumulate` fails only that partition: if the
+/// library later re-reads the partition, the failure is discarded with it and the run continues;
+/// otherwise the run ends with that code. A nonzero code from `combine`, or a panic from the seed
+/// closure, always ends the run. However it ends, the code is returned to the caller verbatim as
+/// [`Error::code`]; use positive codes, since every code the library itself returns is `<= 0`.
+/// Sibling workers are never stopped, so both `accumulate` and `combine` must tolerate being called
+/// again after returning an error.
 pub trait CsvAccumulator: Send {
     /// Folds one record in. The row's cell bytes are only valid for the duration of this call.
     fn accumulate(&mut self, row: RowRef<'_>) -> Result<(), i32>;
@@ -105,9 +114,12 @@ where
     F: Fn() -> A,
 {
     let shared = unsafe { &*(user_data as *const Shared<'_, A, F>) };
+    unsafe { *out_state = std::ptr::null_mut() };
     match catch_unwind(AssertUnwindSafe(|| (shared.seed)())) {
         Ok(accumulator) => {
-            unsafe { *out_state = Box::into_raw(Box::new(accumulator)) as *mut c_void };
+            unsafe {
+                *out_state = Box::into_raw(Box::new(State { value: accumulator, _nonzero: 0 })) as *mut c_void
+            };
             XL_OK
         }
         Err(payload) => shared.store_panic(payload),
@@ -126,7 +138,7 @@ where
     F: Fn() -> A,
 {
     let shared = unsafe { &*(user_data as *const Shared<'_, A, F>) };
-    let accumulator = unsafe { &mut *(state as *mut A) };
+    let accumulator = unsafe { &mut (*(state as *mut State<A>)).value };
     let row = unsafe { &*row };
     match catch_unwind(AssertUnwindSafe(|| {
         accumulator.accumulate(unsafe { RowRef::from_decoded(row.cells, row.cell_count) })
@@ -149,8 +161,8 @@ where
     F: Fn() -> A,
 {
     let shared = unsafe { &*(user_data as *const Shared<'_, A, F>) };
-    let accumulator = unsafe { &mut *(acc as *mut A) };
-    let other = unsafe { &mut *(next as *mut A) };
+    let accumulator = unsafe { &mut (*(acc as *mut State<A>)).value };
+    let other = unsafe { &mut (*(next as *mut State<A>)).value };
     match catch_unwind(AssertUnwindSafe(|| accumulator.combine(other))) {
         Ok(Ok(())) => XL_OK,
         Ok(Err(code)) => code,
@@ -160,12 +172,18 @@ where
 
 /// # Safety
 /// `state` is a state boxed by `seed_shim` that the library is done with. Never called with NULL.
-unsafe extern "C" fn free_state_shim<A, F>(state: *mut c_void, _user_data: *mut c_void)
+/// `user_data` is the `Shared` this crate handed to `xl_csv_aggregate_*`, alive for the whole call.
+unsafe extern "C" fn free_state_shim<A, F>(state: *mut c_void, user_data: *mut c_void)
 where
     A: CsvAccumulator,
     F: Fn() -> A,
 {
-    let _ = catch_unwind(AssertUnwindSafe(|| drop(unsafe { Box::from_raw(state as *mut A) })));
+    let shared = unsafe { &*(user_data as *const Shared<'_, A, F>) };
+    if let Err(payload) =
+        catch_unwind(AssertUnwindSafe(|| drop(unsafe { Box::from_raw(state as *mut State<A>) })))
+    {
+        shared.store_panic(payload);
+    }
 }
 
 fn raw_aggregation<A, F>(shared: &Shared<'_, A, F>) -> XlCsvAggregation
@@ -202,7 +220,8 @@ fn length(len: usize, what: &str) -> Result<i32, Error> {
 ///
 /// `seed` is called at least once per partition, on worker threads, and may be called again for a
 /// partition that has to be re-read - a seeded accumulator can therefore be dropped without ever
-/// being combined. No callback ever runs on the calling thread.
+/// being combined. `seed`, `accumulate` and `combine` never run on the calling thread; each
+/// accumulator is dropped on the calling thread once the run has finished.
 ///
 /// The call blocks until the run finishes, so `seed` may borrow locals freely: there is no `'static`
 /// bound and none is needed. A panic inside any callback aborts the run and is resumed here, on the
@@ -217,7 +236,15 @@ where
     F: Fn() -> A + Sync,
 {
     workbook::check_abi_version()?;
-    let bytes = path.to_string_lossy().into_owned().into_bytes();
+    let bytes = path
+        .to_str()
+        .ok_or_else(|| {
+            Error::from_status(
+                crate::XL_INVALID_ARGUMENT,
+                format!("path {} is not valid UTF-8", path.display()),
+            )
+        })?
+        .as_bytes();
     let path_len = length(bytes.len(), "path")?;
     let shared = shared::<A, F>(&seed);
     let agg = raw_aggregation(&shared);
@@ -277,7 +304,11 @@ where
     A: CsvAccumulator,
     F: Fn() -> A,
 {
-    let winner = if state.is_null() { None } else { Some(unsafe { Box::from_raw(state as *mut A) }) };
+    let winner = if state.is_null() {
+        None
+    } else {
+        Some(unsafe { Box::from_raw(state as *mut State<A>) })
+    };
 
     if let Some(payload) = shared.panic.into_inner().unwrap_or_else(|poisoned| poisoned.into_inner())
     {
@@ -287,7 +318,7 @@ where
     if status != XL_OK {
         return Err(status_error(status));
     }
-    winner.map(|boxed| *boxed).ok_or_else(|| {
+    winner.map(|boxed| boxed.value).ok_or_else(|| {
         Error::from_status(
             crate::XL_ERROR,
             "native reported success but wrote no aggregation state".to_string(),

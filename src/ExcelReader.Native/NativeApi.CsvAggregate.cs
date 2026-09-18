@@ -1,5 +1,6 @@
 using System.Buffers;
 using System.Collections.Concurrent;
+using System.Diagnostics.CodeAnalysis;
 using System.Text;
 using ExcelReader.Core.Reader;
 using ExcelReader.Core.ValueObjects;
@@ -8,10 +9,17 @@ namespace ExcelReader.Native
 {
     internal static unsafe partial class NativeApi
     {
-        private sealed class CsvAggregateContext(NativeCsvAggregationRaw raw) : IDisposable
+        [SuppressMessage("Design", "CA1032:Implement standard exception constructors",
+            Justification = "A caller's abort always carries a code; a message-only abort has no meaning.")]
+        [SuppressMessage("Design", "CA1064:Exceptions should be public",
+            Justification = "Signals an abort between Build and Run; it never escapes to a caller.")]
+        private sealed class CsvAggregateAbortException(int code) : Exception
         {
-            private int _failure;
+            internal int Code { get; } = code;
+        }
 
+        private sealed class CsvAggregateContext(NativeCsvAggregationRaw raw)
+        {
             internal readonly delegate* unmanaged<void**, void*, int> Seed =
                 (delegate* unmanaged<void**, void*, int>)raw.Seed;
             internal readonly delegate* unmanaged<void*, NativeRow*, void*, int> Accumulate =
@@ -22,20 +30,10 @@ namespace ExcelReader.Native
                 (delegate* unmanaged<void*, void*, void>)raw.FreeState;
             internal readonly void* UserData = (void*)raw.UserData;
             internal readonly ConcurrentBag<CsvAggregateState> Seeded = [];
-            internal readonly CancellationTokenSource Cancellation = new();
 
-            internal int Failure => Volatile.Read(ref _failure);
-
-            internal void Abort(int code)
+            internal static void Abort(int code)
             {
-                Interlocked.CompareExchange(ref _failure, code, 0);
-                Cancellation.Cancel();
-                throw new OperationCanceledException(Cancellation.Token);
-            }
-
-            public void Dispose()
-            {
-                Cancellation.Dispose();
+                throw new CsvAggregateAbortException(code);
             }
         }
 
@@ -64,6 +62,7 @@ namespace ExcelReader.Native
             ReadOnlySpan<byte> utf8Path, NativeCsvAggregationRaw aggregation,
             NativeCsvParallelOptionsRaw? rawOptions, out nint result)
         {
+            ClearLastError();
             result = 0;
             int status = NativeCsvAggregateOptions.Translate(rawOptions, out CsvParallelOptions options);
             if (status != NativeStatus.Ok)
@@ -75,7 +74,7 @@ namespace ExcelReader.Native
             CsvAggregateContext context = new(aggregation);
             return Run(
                 context,
-                Task.Run(() => Excel.AggregateCsvParallelAsync(path, Build(context), options, context.Cancellation.Token)),
+                Task.Run(() => Excel.AggregateCsvParallelAsync(path, Build(context), options, CancellationToken.None)),
                 out result);
         }
 
@@ -83,6 +82,7 @@ namespace ExcelReader.Native
             byte* data, int dataLength, NativeCsvAggregationRaw aggregation,
             NativeCsvParallelOptionsRaw? rawOptions, out nint result)
         {
+            ClearLastError();
             result = 0;
             int status = NativeCsvAggregateOptions.Translate(rawOptions, out CsvParallelOptions options);
             if (status != NativeStatus.Ok)
@@ -94,7 +94,7 @@ namespace ExcelReader.Native
             CsvAggregateContext context = new(aggregation);
             return Run(
                 context,
-                Task.Run(() => Excel.AggregateCsvParallelAsync(manager.Memory, Build(context), options, context.Cancellation.Token)),
+                Task.Run(() => Excel.AggregateCsvParallelAsync(manager.Memory, Build(context), options, CancellationToken.None)),
                 out result);
         }
 
@@ -111,7 +111,7 @@ namespace ExcelReader.Native
                     state.Native = (nint)native;
                     if (status != NativeStatus.Ok)
                     {
-                        context.Abort(status);
+                        CsvAggregateContext.Abort(status);
                     }
                     return state;
                 },
@@ -121,7 +121,7 @@ namespace ExcelReader.Native
                     int status = context.Accumulate((void*)state.Native, &native, context.UserData);
                     if (status != NativeStatus.Ok)
                     {
-                        context.Abort(status);
+                        CsvAggregateContext.Abort(status);
                     }
                 },
                 Combine = (accumulator, next) =>
@@ -130,7 +130,7 @@ namespace ExcelReader.Native
                         (void*)accumulator.Native, (void*)next.Native, context.UserData);
                     if (status != NativeStatus.Ok)
                     {
-                        context.Abort(status);
+                        CsvAggregateContext.Abort(status);
                     }
                     return accumulator;
                 },
@@ -140,7 +140,6 @@ namespace ExcelReader.Native
         private static int Run(CsvAggregateContext context, Task<CsvAggregateState> pending, out nint result)
         {
             result = 0;
-            ClearLastError();
             CsvAggregateState? winner = null;
             try
             {
@@ -148,18 +147,12 @@ namespace ExcelReader.Native
                 result = winner.Native;
                 return NativeStatus.Ok;
             }
-            catch (OperationCanceledException)
+            catch (CsvAggregateAbortException abort)
             {
-                int failure = context.Failure;
-                return failure != 0 ? failure : NativeStatus.Error;
+                return abort.Code;
             }
             catch (Exception exception)
             {
-                int failure = context.Failure;
-                if (failure != 0)
-                {
-                    return failure;
-                }
                 SetLastError(exception.Message);
                 return NativeStatus.Error;
             }
@@ -179,7 +172,6 @@ namespace ExcelReader.Native
                 }
                 state.ReleaseScratch();
             }
-            context.Dispose();
         }
     }
 }

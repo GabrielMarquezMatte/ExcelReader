@@ -7,6 +7,8 @@ namespace ExcelReader.Core.Parser.Internal
         where TAccumulator : ICsvAccumulator<TAccumulator, TModel>, new()
         where TModel : allows ref struct
     {
+        private const int StackallocLimit = 256;
+
         internal static readonly CsvAggregation<TAccumulator> Unbound = new()
         {
             Seed = static () => new TAccumulator(),
@@ -73,8 +75,15 @@ namespace ExcelReader.Core.Parser.Internal
                     return;
                 }
                 TModel model = info.CreateInstance();
-                Span<bool> seen = stackalloc bool[bindings.Length];
-                SparseRowProjection.ParseRow(in row, bindings, seen, true, false, provider, throwOnParseFailure, 0, ref model);
+                if (bindings.Length <= StackallocLimit)
+                {
+                    Span<bool> seen = stackalloc bool[bindings.Length];
+                    SparseRowProjection.ParseRow(in row, bindings, seen, true, false, provider, throwOnParseFailure, 0, ref model);
+                }
+                else
+                {
+                    SparseRowProjection.ParseRow(in row, bindings, new bool[bindings.Length], true, false, provider, throwOnParseFailure, 0, ref model);
+                }
                 accumulator.Add(model);
             }
 
@@ -86,8 +95,15 @@ namespace ExcelReader.Core.Parser.Internal
                     return;
                 }
                 TModel model = info.CreateInstance();
-                Span<bool> seen = stackalloc bool[bindings.Length];
-                SparseRowProjection.ParseRow(in row, bindings, seen, true, false, provider, throwOnParseFailure, current, ref model);
+                if (bindings.Length <= StackallocLimit)
+                {
+                    Span<bool> seen = stackalloc bool[bindings.Length];
+                    SparseRowProjection.ParseRow(in row, bindings, seen, true, false, provider, throwOnParseFailure, current, ref model);
+                }
+                else
+                {
+                    SparseRowProjection.ParseRow(in row, bindings, new bool[bindings.Length], true, false, provider, throwOnParseFailure, current, ref model);
+                }
                 accumulator.Add(model);
             }
 

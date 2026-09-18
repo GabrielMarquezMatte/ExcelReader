@@ -197,7 +197,8 @@ pub struct XlRows {
     pub rows: *mut XlRow,
 }
 
-/// Mirrors `xl_csv_aggregation`. Every callback runs on a library worker thread and must not let a
+/// Mirrors `xl_csv_aggregation`. Every callback runs on a library worker thread except
+/// `free_state`, which runs on the calling thread after the run has finished; none may let a
 /// panic escape into the library - build one through [`aggregate`] rather than by hand.
 #[repr(C)]
 #[derive(Clone, Copy)]

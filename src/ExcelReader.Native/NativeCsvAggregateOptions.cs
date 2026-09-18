@@ -28,6 +28,8 @@ namespace ExcelReader.Native
 
     internal static unsafe class NativeCsvAggregateOptions
     {
+        private const string OptionsName = "csv_parallel_options";
+
         internal static int Translate(NativeCsvParallelOptionsRaw? raw, out CsvParallelOptions options)
         {
             options = CsvParallelOptions.Default;
@@ -38,14 +40,32 @@ namespace ExcelReader.Native
 
             NativeCsvParallelOptionsRaw value = raw.Value;
             int expectedSize = sizeof(NativeCsvParallelOptionsRaw);
-            if (value.StructSize != expectedSize
-                || value.DegreeOfParallelism < 0
-                || value.HeaderRow < 0
-                || !NativeOptionDecode.TryByte(value.Delimiter, "csv_parallel_options", "delimiter", out byte? delimiter, out _)
-                || !NativeOptionDecode.TryByte(value.Quote, "csv_parallel_options", "quote", out byte? quote, out _)
-                || !NativeOptionDecode.TryState(value.DetectBom, "csv_parallel_options", "detect_bom", out bool? detectBom, out _)
-                || value.MaxCellBytes < 0)
+            if (value.StructSize != expectedSize)
             {
+                NativeApi.SetLastError(
+                    $"{OptionsName}.struct_size must be exactly {expectedSize}; got {value.StructSize}. Pass NULL for defaults, not a zeroed struct.");
+                return NativeStatus.InvalidArgument;
+            }
+            if (value.DegreeOfParallelism < 0)
+            {
+                NativeApi.SetLastError($"{OptionsName}.degree_of_parallelism must be 0 (processor count) or positive; got {value.DegreeOfParallelism}.");
+                return NativeStatus.InvalidArgument;
+            }
+            if (value.HeaderRow < 0)
+            {
+                NativeApi.SetLastError($"{OptionsName}.header_row must be 0 (no header) or a 1-based record number; got {value.HeaderRow}.");
+                return NativeStatus.InvalidArgument;
+            }
+            if (value.MaxCellBytes < 0)
+            {
+                NativeApi.SetLastError($"{OptionsName}.max_cell_bytes must be 0 (default) or positive; got {value.MaxCellBytes}.");
+                return NativeStatus.InvalidArgument;
+            }
+            if (!NativeOptionDecode.TryByte(value.Delimiter, OptionsName, "delimiter", out byte? delimiter, out string? error)
+                || !NativeOptionDecode.TryByte(value.Quote, OptionsName, "quote", out byte? quote, out error)
+                || !NativeOptionDecode.TryState(value.DetectBom, OptionsName, "detect_bom", out bool? detectBom, out error))
+            {
+                NativeApi.SetLastError(error!);
                 return NativeStatus.InvalidArgument;
             }
 

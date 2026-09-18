@@ -120,12 +120,163 @@ fn a_failing_accumulate_returns_its_own_code() {
 
     let dir = TempDir::new("fail");
     let path = dir.0.join("fail.csv");
-    std::fs::write(&path, b"1,a\n2,b\n").unwrap();
+    let (text, _) = group_fixture();
+    std::fs::write(&path, &text).unwrap();
 
-    let error =
-        aggregate_csv_file(&path, || AlwaysFails, &CsvParallelOptions::default()).unwrap_err();
+    let options = CsvParallelOptions {
+        degree_of_parallelism: 8,
+        ..CsvParallelOptions::default()
+    };
+    let error = aggregate_csv_file(&path, || AlwaysFails, &options).unwrap_err();
 
     assert_eq!(error.code(), 42);
+}
+
+/// A zero-sized accumulator run for row-exactness: every row must still be counted exactly once
+/// across however many partitions and re-reads the library uses. The distinct-pointer rule this
+/// case can violate is asserted separately, in
+/// `a_zero_sized_accumulator_never_aliases_two_states_in_combine`.
+#[test]
+fn a_zero_sized_accumulator_gets_a_distinct_state_per_partition() {
+    use std::sync::atomic::{AtomicI64, Ordering};
+    static ROWS: AtomicI64 = AtomicI64::new(0);
+
+    struct Counter;
+    impl CsvAccumulator for Counter {
+        fn accumulate(&mut self, _row: RowRef<'_>) -> Result<(), i32> {
+            ROWS.fetch_add(1, Ordering::Relaxed);
+            Ok(())
+        }
+        fn combine(&mut self, _other: &mut Self) -> Result<(), i32> {
+            Ok(())
+        }
+    }
+
+    let (text, _) = group_fixture();
+    let options = CsvParallelOptions {
+        degree_of_parallelism: 8,
+        header_row: 1,
+        ..CsvParallelOptions::default()
+    };
+    aggregate_csv_memory(text.as_bytes(), || Counter, &options).unwrap();
+
+    assert_eq!(ROWS.load(Ordering::Relaxed), 300_000);
+}
+
+/// The header requires `seed` to return a distinct pointer on every call, and hands `combine` "two
+/// distinct states". A zero-sized accumulator is the case that breaks it: `Box::into_raw` of a ZST
+/// returns the same dangling address every time, so `acc` and `next` are one and the same object.
+#[test]
+fn a_zero_sized_accumulator_never_aliases_two_states_in_combine() {
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    static COMBINES: AtomicUsize = AtomicUsize::new(0);
+    static ALIASED: AtomicUsize = AtomicUsize::new(0);
+
+    struct Counter;
+    impl CsvAccumulator for Counter {
+        fn accumulate(&mut self, _row: RowRef<'_>) -> Result<(), i32> {
+            Ok(())
+        }
+        fn combine(&mut self, other: &mut Self) -> Result<(), i32> {
+            COMBINES.fetch_add(1, Ordering::Relaxed);
+            if std::ptr::eq(self as *const Self, other as *const Self) {
+                ALIASED.fetch_add(1, Ordering::Relaxed);
+            }
+            Ok(())
+        }
+    }
+
+    let (text, _) = group_fixture();
+    let options = CsvParallelOptions {
+        degree_of_parallelism: 8,
+        header_row: 1,
+        ..CsvParallelOptions::default()
+    };
+    aggregate_csv_memory(text.as_bytes(), || Counter, &options).unwrap();
+
+    let combines = COMBINES.load(Ordering::Relaxed);
+    let aliased = ALIASED.load(Ordering::Relaxed);
+    assert!(combines >= 1, "the fixture must partition, so combine must run at least once");
+    assert_eq!(aliased, 0, "{combines} combine calls, of which {aliased} folded a state into itself");
+}
+
+/// Every accumulator the library seeds must be dropped exactly once.
+#[test]
+fn every_seeded_accumulator_is_dropped_exactly_once() {
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    static SEEDED: AtomicUsize = AtomicUsize::new(0);
+    static DROPPED: AtomicUsize = AtomicUsize::new(0);
+
+    struct Tracked(i64);
+    impl Drop for Tracked {
+        fn drop(&mut self) {
+            DROPPED.fetch_add(1, Ordering::Relaxed);
+        }
+    }
+    impl CsvAccumulator for Tracked {
+        fn accumulate(&mut self, _row: RowRef<'_>) -> Result<(), i32> {
+            self.0 += 1;
+            Ok(())
+        }
+        fn combine(&mut self, other: &mut Self) -> Result<(), i32> {
+            self.0 += other.0;
+            Ok(())
+        }
+    }
+
+    let (text, _) = group_fixture();
+    let options = CsvParallelOptions {
+        degree_of_parallelism: 8,
+        header_row: 1,
+        ..CsvParallelOptions::default()
+    };
+    let result = aggregate_csv_memory(
+        text.as_bytes(),
+        || {
+            SEEDED.fetch_add(1, Ordering::Relaxed);
+            Tracked(0)
+        },
+        &options,
+    )
+    .unwrap();
+
+    assert_eq!(result.0, 300_000);
+    drop(result);
+    assert_eq!(SEEDED.load(Ordering::Relaxed), DROPPED.load(Ordering::Relaxed));
+}
+
+/// Quoted records that span lines are what make a guessed partition boundary wrong, so the run must
+/// still count each record exactly once.
+#[test]
+fn quoted_multi_line_records_straddling_chunks_are_counted_once() {
+    struct Rows(i64);
+    impl CsvAccumulator for Rows {
+        fn accumulate(&mut self, _row: RowRef<'_>) -> Result<(), i32> {
+            self.0 += 1;
+            Ok(())
+        }
+        fn combine(&mut self, other: &mut Self) -> Result<(), i32> {
+            self.0 += other.0;
+            Ok(())
+        }
+    }
+
+    let mut text = String::new();
+    for _ in 0..8 {
+        text.push_str("1,\"");
+        for _ in 0..40_000 {
+            text.push_str("BOOM,notint,x\n");
+        }
+        text.push_str("\"\n");
+    }
+
+    let options = CsvParallelOptions {
+        degree_of_parallelism: 8,
+        ..CsvParallelOptions::default()
+    };
+    let result = aggregate_csv_memory(text.as_bytes(), || Rows(0), &options).unwrap();
+
+    assert_eq!(result.0, 8);
 }
 
 /// A panic in `accumulate` runs on a library worker thread; it must be caught there, abort the run,
