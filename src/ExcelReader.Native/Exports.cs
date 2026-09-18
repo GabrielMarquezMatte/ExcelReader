@@ -29,7 +29,10 @@ namespace ExcelReader.Native
                 return NativeStatus.InvalidArgument;
             }
 
-            NativeOpenOptionsRaw? rawOptions = options is null ? null : *options;
+            if (!TryReadOpenOptions(options, out NativeOpenOptionsRaw? rawOptions))
+            {
+                return NativeStatus.InvalidArgument;
+            }
             int status = NativeApi.OpenFileEx(new ReadOnlySpan<byte>(path, pathLength), format, rawOptions, out NativeHandle? handle);
             return RegisterOpened(status, handle, outHandle);
         }
@@ -54,7 +57,10 @@ namespace ExcelReader.Native
                 return NativeStatus.InvalidArgument;
             }
 
-            NativeOpenOptionsRaw? rawOptions = options is null ? null : *options;
+            if (!TryReadOpenOptions(options, out NativeOpenOptionsRaw? rawOptions))
+            {
+                return NativeStatus.InvalidArgument;
+            }
             int status = NativeApi.OpenMemoryEx(new ReadOnlySpan<byte>(data, dataLength), format, rawOptions, out NativeHandle? handle);
             return RegisterOpened(status, handle, outHandle);
         }
@@ -402,15 +408,16 @@ namespace ExcelReader.Native
 
         private static bool TryDecodeWriteOptions(NativeWriteOptionsRaw* options, out NativeWriteOptions decoded)
         {
-            NativeWriteOptionsRaw raw = options is null
-                ? new NativeWriteOptionsRaw { StructSize = Marshal.SizeOf<NativeWriteOptionsRaw>() }
-                : *options;
             decoded = default;
-            if (!NativeWriteOptions.TryValidateStructSize(raw, out string? sizeError))
+            int expectedSize = sizeof(NativeWriteOptionsRaw);
+            if (options is not null && options->StructSize != expectedSize)
             {
-                NativeApi.SetLastError(sizeError);
+                NativeApi.SetLastError($"xl_write_options.struct_size is {options->StructSize}, but this library expects {expectedSize}.");
                 return false;
             }
+            NativeWriteOptionsRaw raw = options is null
+                ? new NativeWriteOptionsRaw { StructSize = expectedSize }
+                : *options;
             string? sheetName = null;
             if (raw.SheetName is not null)
             {
@@ -527,6 +534,24 @@ namespace ExcelReader.Native
         private static bool IsValidOpenRequest(byte* source, int sourceLength, nint* outHandle)
         {
             return source is not null && sourceLength >= 0 && outHandle is not null;
+        }
+
+        private static bool TryReadOpenOptions(NativeOpenOptionsRaw* options, out NativeOpenOptionsRaw? rawOptions)
+        {
+            if (options is null)
+            {
+                rawOptions = null;
+                return true;
+            }
+            int expectedSize = sizeof(NativeOpenOptionsRaw);
+            if (options->StructSize != expectedSize)
+            {
+                NativeApi.SetLastError($"xl_open_options.struct_size is {options->StructSize}, but this library expects {expectedSize}.");
+                rawOptions = null;
+                return false;
+            }
+            rawOptions = *options;
+            return true;
         }
 
         private static bool IsValidOutBuffer(byte* buffer, int capacity, int* outLength)
