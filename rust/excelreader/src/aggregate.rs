@@ -296,9 +296,16 @@ where
 
 /// Turns the run's outcome into a `Result`, taking ownership of the surviving state.
 ///
-/// A stored panic wins over the status: the library has already unwound and freed every state it
-/// owns by the time it returns, so resuming here delivers the original payload to the caller without
-/// it ever having crossed a foreign frame.
+/// A stored panic only wins over the status if the status itself is [`PANIC_STATUS`]: an
+/// `accumulate` panic on a chunk whose boundary guess was wrong is discarded exactly like a
+/// non-panic error would be once the library re-reads that chunk from the confirmed start, so the
+/// panic payload can be stale by the time this runs even though `shared.panic` still holds it. Only
+/// resume it when the library's own verdict says the run actually ended on a panic; otherwise a
+/// discarded panic from an abandoned first attempt would wrongly kill an otherwise-successful run
+/// (or shadow the real error from an unrelated later failure). When the status does say the run
+/// ended on a panic, the library has already unwound and freed every state it owns by the time it
+/// returns, so resuming here delivers the original payload to the caller without it ever having
+/// crossed a foreign frame.
 fn finish<A, F>(shared: Shared<'_, A, F>, status: i32, state: *mut c_void) -> Result<A, Error>
 where
     A: CsvAccumulator,
@@ -310,10 +317,13 @@ where
         Some(unsafe { Box::from_raw(state as *mut State<A>) })
     };
 
-    if let Some(payload) = shared.panic.into_inner().unwrap_or_else(|poisoned| poisoned.into_inner())
-    {
-        drop(winner);
-        resume_unwind(payload);
+    if status == PANIC_STATUS {
+        if let Some(payload) =
+            shared.panic.into_inner().unwrap_or_else(|poisoned| poisoned.into_inner())
+        {
+            drop(winner);
+            resume_unwind(payload);
+        }
     }
     if status != XL_OK {
         return Err(status_error(status));
