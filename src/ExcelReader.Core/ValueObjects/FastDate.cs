@@ -10,7 +10,7 @@ namespace ExcelReader.Core.ValueObjects
 
         private static readonly long[] FractionScale = [1_000_000, 100_000, 10_000, 1_000, 100, 10, 1];
 
-        private const uint HeadDigitPositions = 0xD96F;
+        private const uint HeadDigitPositions = 0xDB6F;
         private const uint TailDigitPositions = 0xFEDB;
 
         private static readonly Vector128<byte> DateGather = Vector128.Create(
