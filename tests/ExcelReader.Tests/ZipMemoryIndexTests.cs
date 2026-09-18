@@ -262,6 +262,54 @@ namespace ExcelReader.Tests
             Assert.Contains("central directory", ex.Message, StringComparison.OrdinalIgnoreCase);
         }
 
+        private static byte[] BuildCdWithZip64Field(uint compressedSize, uint uncompressedSize, long zip64Value)
+        {
+            byte[] name = "a"u8.ToArray();
+            byte[] extraData = new byte[8];
+            BinaryPrimitives.WriteInt64LittleEndian(extraData, zip64Value);
+            ushort extraLength = (ushort)(4 + extraData.Length);
+            int cdSize = CentralDirectoryFixedSize + name.Length + extraLength;
+            byte[] bytes = new byte[cdSize + 22];
+
+            BinaryPrimitives.WriteInt32LittleEndian(bytes.AsSpan(0), 0x02014b50);
+            BinaryPrimitives.WriteUInt32LittleEndian(bytes.AsSpan(20), compressedSize);
+            BinaryPrimitives.WriteUInt32LittleEndian(bytes.AsSpan(24), uncompressedSize);
+            BinaryPrimitives.WriteUInt16LittleEndian(bytes.AsSpan(28), (ushort)name.Length);
+            BinaryPrimitives.WriteUInt16LittleEndian(bytes.AsSpan(30), extraLength);
+
+            int nameOffset = CentralDirectoryFixedSize;
+            name.CopyTo(bytes.AsSpan(nameOffset));
+            int extraOffset = nameOffset + name.Length;
+            BinaryPrimitives.WriteUInt16LittleEndian(bytes.AsSpan(extraOffset), 0x0001);
+            BinaryPrimitives.WriteUInt16LittleEndian(bytes.AsSpan(extraOffset + 2), (ushort)extraData.Length);
+            extraData.CopyTo(bytes.AsSpan(extraOffset + 4));
+
+            WriteEocd(bytes, cdSize, declaredCount: 1, cdSize: (uint)cdSize, cdOffset: 0);
+            return bytes;
+        }
+
+        private const int CentralDirectoryFixedSize = 46;
+
+        [Fact]
+        public void NegativeZip64UncompressedSizeThrowsInvalidDataException()
+        {
+            byte[] bytes = BuildCdWithZip64Field(compressedSize: 5, uncompressedSize: Zip64SentinelU32, zip64Value: -1);
+
+            InvalidDataException ex = Assert.Throws<InvalidDataException>(
+                () => ZipMemoryIndex.Create(bytes, ExcelReaderOptions.Default));
+            Assert.Contains("negative", ex.Message, StringComparison.OrdinalIgnoreCase);
+        }
+
+        [Fact]
+        public void NegativeZip64CompressedSizeThrowsInvalidDataException()
+        {
+            byte[] bytes = BuildCdWithZip64Field(compressedSize: Zip64SentinelU32, uncompressedSize: 5, zip64Value: -1);
+
+            InvalidDataException ex = Assert.Throws<InvalidDataException>(
+                () => ZipMemoryIndex.Create(bytes, ExcelReaderOptions.Default));
+            Assert.Contains("negative", ex.Message, StringComparison.OrdinalIgnoreCase);
+        }
+
         [Fact]
         public void ZipEntryBytesReadThrowsInvalidDataWhenEntryUnderDelivers()
         {
