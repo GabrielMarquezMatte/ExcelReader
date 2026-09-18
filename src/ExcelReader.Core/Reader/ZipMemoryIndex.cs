@@ -412,6 +412,10 @@ namespace ExcelReader.Core.Reader
             long uncompressed = fields.UncompressedSize == Zip64SentinelU32 ? ReadNextInt64(data, ref pos) : fields.UncompressedSize;
             long compressed = fields.CompressedSize == Zip64SentinelU32 ? ReadNextInt64(data, ref pos) : fields.CompressedSize;
             long localOffset = fields.LocalHeaderOffset == Zip64SentinelU32 ? ReadNextInt64(data, ref pos) : fields.LocalHeaderOffset;
+            if (uncompressed < 0 || compressed < 0 || localOffset < 0)
+            {
+                throw new InvalidDataException("The ZIP64 extra field holds a negative size or offset.");
+            }
             return (compressed, uncompressed, localOffset);
         }
 
