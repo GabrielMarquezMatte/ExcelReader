@@ -297,6 +297,47 @@ fn a_panicking_accumulate_is_resumed_on_the_calling_thread() {
     let _ = aggregate_csv_memory(b"a,b\n1,2\n", || Explodes, &CsvParallelOptions::default());
 }
 
+/// A chunk whose initial boundary guess lands inside a giant quoted field sees garbled interior
+/// "rows" there and panics on them. The library re-reads that chunk from the correct boundary once
+/// the true start is confirmed, and the re-read succeeds without panicking - the stale panic from
+/// the discarded first attempt must not resume and kill an otherwise-successful run.
+#[test]
+fn a_panic_from_a_discarded_reread_does_not_resume() {
+    struct PanicsOnGarbledRows(i64);
+    impl CsvAccumulator for PanicsOnGarbledRows {
+        fn accumulate(&mut self, row: RowRef<'_>) -> Result<(), i32> {
+            let mut cells = row.iter();
+            let first = cells.next().ok_or(1)?.as_bytes();
+            if first != b"1" {
+                panic!("saw a garbled row starting with {:?}", String::from_utf8_lossy(first));
+            }
+            self.0 += 1;
+            Ok(())
+        }
+        fn combine(&mut self, other: &mut Self) -> Result<(), i32> {
+            self.0 += other.0;
+            Ok(())
+        }
+    }
+
+    let mut text = String::new();
+    for _ in 0..8 {
+        text.push_str("1,\"");
+        for _ in 0..40_000 {
+            text.push_str("BOOM,notint,x\n");
+        }
+        text.push_str("\"\n");
+    }
+
+    let options = CsvParallelOptions {
+        degree_of_parallelism: 8,
+        ..CsvParallelOptions::default()
+    };
+    let result = aggregate_csv_memory(text.as_bytes(), || PanicsOnGarbledRows(0), &options).unwrap();
+
+    assert_eq!(result.0, 8);
+}
+
 /// The seed closure borrows a local, which only compiles if the wrapper's signature carries no
 /// `'static` bound.
 #[test]
