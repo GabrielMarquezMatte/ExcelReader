@@ -149,16 +149,6 @@ jobs:
           EXCELREADER_NATIVE_LIB_DIR: ${{ github.workspace }}/${{ steps.lib.outputs.dir }}
         run: cargo test --workspace --all-features --verbose
 
-      # TEMPORARY diagnostic for the macOS SIGSEGV in the aggregate test binary: isolates the one
-      # test that panics on multiple concurrent native worker threads within a single call, to see
-      # whether it alone reproduces the crash. Remove once that's answered.
-      - name: cargo test (isolate discarded-reread panic test)
-        if: always() && runner.os == 'macOS'
-        working-directory: rust
-        env:
-          EXCELREADER_NATIVE_LIB_DIR: ${{ github.workspace }}/${{ steps.lib.outputs.dir }}
-        run: cargo test --test aggregate a_panic_from_a_discarded_reread_does_not_resume -- --exact
-
       - name: cargo build (default features)
         working-directory: rust
         env:
