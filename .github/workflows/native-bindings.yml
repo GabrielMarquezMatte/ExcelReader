@@ -149,24 +149,6 @@ jobs:
           EXCELREADER_NATIVE_LIB_DIR: ${{ github.workspace }}/${{ steps.lib.outputs.dir }}
         run: cargo test --workspace --all-features --verbose
 
-      # TEMPORARY diagnostics for the macOS SIGSEGV in the aggregate test binary. The panicking
-      # test alone (isolated last run) crashes with zero other tests running, ruling out cross-test
-      # concurrency. These two isolate WHICH property of that test triggers it: DOP=8 concurrent
-      # native worker threads in general (control 1, no panic, no reread), vs. the boundary-reread
-      # mechanism specifically (control 2, no panic, DOP=8). Neither panics. Remove once answered.
-      - name: "cargo test (control 1: DOP=8 concurrent workers, no panic, no reread)"
-        if: always() && runner.os == 'macOS'
-        working-directory: rust
-        env:
-          EXCELREADER_NATIVE_LIB_DIR: ${{ github.workspace }}/${{ steps.lib.outputs.dir }}
-        run: cargo test --test aggregate group_by_sum_over_a_file_is_partitioned_and_exact -- --exact
-      - name: "cargo test (control 2: DOP=8 with boundary reread, no panic)"
-        if: always() && runner.os == 'macOS'
-        working-directory: rust
-        env:
-          EXCELREADER_NATIVE_LIB_DIR: ${{ github.workspace }}/${{ steps.lib.outputs.dir }}
-        run: cargo test --test aggregate quoted_multi_line_records_straddling_chunks_are_counted_once -- --exact
-
       - name: cargo build (default features)
         working-directory: rust
         env:
