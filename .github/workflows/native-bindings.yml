@@ -149,17 +149,19 @@ jobs:
           EXCELREADER_NATIVE_LIB_DIR: ${{ github.workspace }}/${{ steps.lib.outputs.dir }}
         run: cargo test --workspace --all-features --verbose
 
-      # TEMPORARY: DOTNET_PROCESSOR_COUNT=1 fixed the macOS-only SIGSEGV (GC mode itself was
-      # already ruled out). Not shippable on its own (kills real parallelism), so this asks whether
-      # =2 also passes - meaning "no real concurrent OS threads" is what matters - or still crashes,
-      # meaning even minimal concurrency is enough and =1 only worked by removing it entirely.
-      # Remove once answered.
-      - name: "cargo test (verify: DOTNET_PROCESSOR_COUNT=2)"
+      # TEMPORARY: =1 and =2 both fixed the macOS-only SIGSEGV, so it's not "no real concurrency" -
+      # genuine 2-thread concurrency is fine. The threshold sits between 2 and the runner's real
+      # (unset) core count. Prints the actual core count and tests =3 to pin it. Remove once
+      # answered.
+      - name: "print the runner's real core count (macOS)"
+        if: always() && runner.os == 'macOS'
+        run: sysctl -n hw.ncpu hw.physicalcpu hw.logicalcpu
+      - name: "cargo test (verify: DOTNET_PROCESSOR_COUNT=3)"
         if: always() && runner.os == 'macOS'
         working-directory: rust
         env:
           EXCELREADER_NATIVE_LIB_DIR: ${{ github.workspace }}/${{ steps.lib.outputs.dir }}
-          DOTNET_PROCESSOR_COUNT: "2"
+          DOTNET_PROCESSOR_COUNT: "3"
         run: cargo test --test aggregate a_call_after_a_partitioned_run_still_succeeds -- --exact
 
       - name: cargo build (default features)
