@@ -17,6 +17,35 @@ def test_library_is_memoized():
     assert _native.load_library() is _native.load_library()
 
 
+def test_processor_count_workaround_sets_the_variable_on_macos(monkeypatch):
+    monkeypatch.setattr(_native.platform, "system", lambda: "Darwin")
+    monkeypatch.delenv("DOTNET_PROCESSOR_COUNT", raising=False)
+    monkeypatch.setattr(_native.os, "cpu_count", lambda: 7)
+
+    _native._work_around_macos_processor_count_detection()
+
+    assert _native.os.environ["DOTNET_PROCESSOR_COUNT"] == "7"
+
+
+def test_processor_count_workaround_never_overrides_an_existing_value(monkeypatch):
+    monkeypatch.setattr(_native.platform, "system", lambda: "Darwin")
+    monkeypatch.setenv("DOTNET_PROCESSOR_COUNT", "2")
+    monkeypatch.setattr(_native.os, "cpu_count", lambda: 7)
+
+    _native._work_around_macos_processor_count_detection()
+
+    assert _native.os.environ["DOTNET_PROCESSOR_COUNT"] == "2"
+
+
+def test_processor_count_workaround_is_a_no_op_off_macos(monkeypatch):
+    monkeypatch.setattr(_native.platform, "system", lambda: "Linux")
+    monkeypatch.delenv("DOTNET_PROCESSOR_COUNT", raising=False)
+
+    _native._work_around_macos_processor_count_detection()
+
+    assert "DOTNET_PROCESSOR_COUNT" not in _native.os.environ
+
+
 def test_exported_functions_are_present():
     lib = _native.load_library()
     for name in (

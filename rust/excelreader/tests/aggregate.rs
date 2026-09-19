@@ -310,10 +310,11 @@ impl CsvAccumulator for RowCounter {
     }
 }
 
-/// Regression coverage for a macOS/arm64-only SIGSEGV: NativeAOT's automatic CPU-count detection
-/// left runtime state that crashed the first native call to follow a concurrent
-/// (`degree_of_parallelism` > 1) run. Fixed by `check_abi_version` setting `DOTNET_PROCESSOR_COUNT`
-/// explicitly before its first native call.
+/// Coverage for a macOS/arm64-only SIGSEGV: NativeAOT's automatic CPU-count detection leaves
+/// runtime state that crashes the first native call to follow a concurrent
+/// (`degree_of_parallelism` > 1) run. Without `DOTNET_PROCESSOR_COUNT` in the process environment
+/// at startup this crashes there (setting it from Rust is too late - the native library is linked,
+/// so its runtime initializes at load). CI exports it for the macOS job; see the crate README.
 #[test]
 fn a_call_after_a_partitioned_run_still_succeeds() {
     let (text, _) = group_fixture();

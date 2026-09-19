@@ -137,6 +137,16 @@ jobs:
         if: runner.os == 'Windows'
         uses: ilammy/msvc-dev-cmd@v1
 
+      # NativeAOT's automatic CPU-count detection is broken on macOS/arm64 and crashes the first
+      # native call after a concurrent (degree_of_parallelism > 1) run. Any explicit
+      # DOTNET_PROCESSOR_COUNT sidesteps it, but it must be in the environment before the process
+      # starts: the Rust test binary links the native library, so the runtime initializes at load.
+      # See "macOS (Apple silicon)" in rust/excelreader/README.md.
+      - name: Work around the NativeAOT CPU-count bug (macOS)
+        if: runner.os == 'macOS'
+        shell: bash
+        run: echo "DOTNET_PROCESSOR_COUNT=$(sysctl -n hw.logicalcpu)" >> "$GITHUB_ENV"
+
       - name: cargo clippy
         working-directory: rust
         env:
