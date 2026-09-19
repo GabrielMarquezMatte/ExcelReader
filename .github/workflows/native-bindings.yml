@@ -80,6 +80,9 @@ jobs:
 
       - name: Build the native library
         shell: bash
+        # TEMPORARY: keep symbols so the crash-dump diagnostic can name native frames.
+        env:
+          StripSymbols: 'false'
         run: python python/scripts/build_native.py
 
       - name: Upload native library
@@ -148,6 +151,49 @@ jobs:
         env:
           EXCELREADER_NATIVE_LIB_DIR: ${{ github.workspace }}/${{ steps.lib.outputs.dir }}
         run: cargo test --workspace --all-features --verbose
+
+      # TEMPORARY: the Rust test binaries die silently (SIGABRT on Linux, SIGSEGV on macOS) right
+      # after starting. Loop the suite and capture a post-mortem backtrace without a debugger
+      # attached, which hid the crash. Remove once answered.
+      - name: "Diagnostic: crash dump of a Rust test binary"
+        if: always() && runner.os != 'Windows'
+        working-directory: rust
+        shell: bash
+        env:
+          EXCELREADER_NATIVE_LIB_DIR: ${{ github.workspace }}/${{ steps.lib.outputs.dir }}
+          LIBC_FATAL_STDERR_: '1'
+        run: |
+          set +e
+          ulimit -c unlimited
+          if [ "$RUNNER_OS" = Linux ]; then
+            sudo sysctl -qw kernel.core_pattern=/tmp/core.%p
+            command -v gdb >/dev/null || sudo apt-get install -y -qq gdb >/dev/null
+          fi
+          cargo test --workspace --all-features --no-run -q 2>/dev/null
+          for i in $(seq 1 15); do
+            out=$(cargo test --workspace --all-features 2>&1)
+            if echo "$out" | grep -q "signal: "; then
+              echo "=== crashed on iteration $i ==="
+              echo "$out" | grep -B 30 "signal: " | grep -v "^\s*$" | tail -n 40
+              break
+            fi
+            echo "iteration $i: ok"
+          done
+          sleep 5
+          if [ "$RUNNER_OS" = Linux ]; then
+            for c in /tmp/core.*; do
+              [ -f "$c" ] || { echo "no core file"; break; }
+              exe=$(file "$c" | sed -n "s/.*execfn: '\([^']*\)'.*/\1/p")
+              echo "=== core $c from $exe ==="
+              gdb -batch -ex "info threads" -ex "thread apply all bt 40" "$exe" "$c" 2>&1 | head -n 600
+              break
+            done
+          else
+            ls -la ~/Library/Logs/DiagnosticReports/ 2>&1 | tail -n 20
+            f=$(ls -t ~/Library/Logs/DiagnosticReports/*.ips 2>/dev/null | head -n 1)
+            if [ -n "$f" ]; then echo "=== $f ==="; head -c 120000 "$f"; else echo "no crash report"; fi
+          fi
+          exit 0
 
       - name: cargo build (default features)
         working-directory: rust
