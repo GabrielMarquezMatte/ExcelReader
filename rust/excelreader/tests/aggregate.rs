@@ -310,11 +310,8 @@ impl CsvAccumulator for RowCounter {
     }
 }
 
-/// Coverage for a macOS/arm64-only SIGSEGV: NativeAOT's automatic CPU-count detection leaves
-/// runtime state that crashes the first native call to follow a concurrent
-/// (`degree_of_parallelism` > 1) run. Without `DOTNET_PROCESSOR_COUNT` in the process environment
-/// at startup this crashes there (setting it from Rust is too late - the native library is linked,
-/// so its runtime initializes at load). CI exports it for the macOS job; see the crate README.
+/// Coverage for a macOS/arm64-only SIGSEGV after a concurrent (`degree_of_parallelism` > 1) run,
+/// seen only with a symbol-stripped dylib; see `StripSymbols` in ExcelReader.Native.csproj.
 #[test]
 fn a_call_after_a_partitioned_run_still_succeeds() {
     let (text, _) = group_fixture();

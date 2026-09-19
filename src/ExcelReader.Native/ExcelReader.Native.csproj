@@ -41,6 +41,12 @@
     <DebuggerSupport>false</DebuggerSupport>
   </PropertyGroup>
 
+  <!-- The stripped macOS/arm64 dylib SIGSEGVs intermittently in a host that links it (the Rust
+       aggregate tests), after a multi-threaded xl_csv_aggregate_* run; the unstripped one does not. -->
+  <PropertyGroup Condition="$(RuntimeIdentifier.StartsWith('osx'))">
+    <StripSymbols>false</StripSymbols>
+  </PropertyGroup>
+
   <ItemGroup>
     <ProjectReference Include="..\ExcelReader.Core\ExcelReader.Core.csproj" />
     <ProjectReference Include="..\ExcelReader.Generator\ExcelReader.Generator.csproj"
