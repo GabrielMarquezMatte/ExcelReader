@@ -159,6 +159,28 @@ jobs:
           EXCELREADER_NATIVE_LIB_DIR: ${{ github.workspace }}/${{ steps.lib.outputs.dir }}
         run: cargo test --workspace --all-features --verbose
 
+      # TEMPORARY: DOTNET_PROCESSOR_COUNT is set (see above) and the full aggregate test binary
+      # still SIGSEGVs on macOS, though the env var was only ever verified against one isolated
+      # test. Run every test on its own to see which still crash with it set. Remove once answered.
+      - name: "Diagnostic: each aggregate test alone, env var set (macOS)"
+        if: always() && runner.os == 'macOS'
+        working-directory: rust
+        shell: bash
+        env:
+          EXCELREADER_NATIVE_LIB_DIR: ${{ github.workspace }}/${{ steps.lib.outputs.dir }}
+        run: |
+          echo "DOTNET_PROCESSOR_COUNT=$DOTNET_PROCESSOR_COUNT"
+          cargo test --test aggregate --no-run 2>&1 | tail -n 2
+          for t in $(cargo test --test aggregate -- --list 2>/dev/null | grep ': test$' | sed 's/: test$//'); do
+            if cargo test --test aggregate "$t" -- --exact >/dev/null 2>&1; then
+              echo "PASS  $t"
+            else
+              echo "FAIL  $t"
+            fi
+          done
+          echo "--- whole binary, one test thread ---"
+          cargo test --test aggregate -- --test-threads=1 2>&1 | tail -n 15 || true
+
       - name: cargo build (default features)
         working-directory: rust
         env:
