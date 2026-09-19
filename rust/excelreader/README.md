@@ -303,6 +303,24 @@ Every constructor first checks the loaded library's `xl_abi_version()` against t
 this crate was compiled against, and fails with a explanatory error rather than reading native memory
 through a layout that may have changed.
 
+### macOS (Apple silicon): set `DOTNET_PROCESSOR_COUNT`
+
+On macOS/arm64, NativeAOT's automatic CPU-count detection leaves runtime state that crashes the
+process (`SIGSEGV`) on the first native call that follows a concurrent run - for example
+`aggregate_csv_file`/`aggregate_csv_memory` with `degree_of_parallelism` above 1, followed by any other
+call. Any explicit `DOTNET_PROCESSOR_COUNT` avoids it, including one equal to the real core count.
+
+The variable has to be in the process environment *before the program starts*: this crate links the
+native library at build time, so the runtime initializes when the loader maps it, before any Rust code
+(including `main`) can call `std::env::set_var`. Export it in the shell, service definition or CI job
+that runs your binary:
+
+```sh
+export DOTNET_PROCESSOR_COUNT="$(sysctl -n hw.logicalcpu)"
+```
+
+Windows and Linux are unaffected. This repository's macOS CI job sets it for the same reason.
+
 ## Benchmarks
 
 Criterion suite in `benches/`. Measured on Windows 10 (22H2), 16 logical CPUs @ 3.39 GHz,
