@@ -387,6 +387,238 @@ jobs:
           fi
           exit 0
 
+  # TEMPORARY: the synthetic repro above stays clean, so drive THIS library from a plain C host in
+  # the two shapes that crash under Rust. Tells us whether Rust is needed at all, and whether the
+  # macOS crash needs a spawned (smaller-stack) calling thread - the C smoke test, which passes,
+  # only ever calls from the main thread. Remove once answered.
+  repro-c-host:
+    name: "Repro: C host, this library (${{ matrix.os }})"
+    needs: build-native
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Download native library
+        uses: actions/download-artifact@v8
+        with:
+          name: native-lib-${{ matrix.os }}
+          path: lib
+
+      - name: Build the host
+        shell: bash
+        run: |
+          chmod +x lib/*
+          cat > host.c <<'EOF'
+          // Drives ExcelReader.Native the way the Rust tests do, from plain C.
+          //   concurrent  : 8 spawned threads open a workbook for the first time at once
+          //   fanout      : one spawned thread runs a degree_of_parallelism=8 CSV aggregation
+          //   fanout-main : the same aggregation on the main thread (the C smoke test's shape)
+          #include <dlfcn.h>
+          #include <pthread.h>
+          #include <stdint.h>
+          #include <stdio.h>
+          #include <stdlib.h>
+          #include <string.h>
+
+          typedef struct { int32_t struct_size; int32_t degree_of_parallelism; int32_t header_row;
+                           int32_t delimiter; int32_t quote; int32_t detect_bom; int32_t max_cell_bytes; } xl_csv_parallel_options;
+          typedef struct { int32_t column; int32_t type; int32_t value_len; const uint8_t *value; } xl_row_cell;
+          typedef struct { int32_t cell_count; xl_row_cell *cells; } xl_row;
+          typedef struct { int32_t struct_size;
+                           int32_t (*seed)(void **, void *);
+                           int32_t (*accumulate)(void *, const xl_row *, void *);
+                           int32_t (*combine)(void *, void *, void *);
+                           void (*free_state)(void *, void *);
+                           void *user_data; } xl_csv_aggregation;
+
+          static int32_t (*xl_open_file_ex)(const uint8_t *, int32_t, int32_t, const void *, void **);
+          static int32_t (*xl_close)(void *);
+          static int32_t (*xl_sheet_count)(void *, int32_t *);
+          static int32_t (*xl_csv_aggregate_memory)(const uint8_t *, int32_t, const xl_csv_aggregation *,
+                                                    const xl_csv_parallel_options *, void **);
+
+          static const char *workbook_path;
+          static uint8_t *csv_data;
+          static int32_t csv_len;
+
+          static int32_t seed(void **out_state, void *user_data)
+          {
+              (void)user_data;
+              *out_state = calloc(1, sizeof(int64_t));
+              return *out_state ? 0 : -1;
+          }
+
+          static int32_t accumulate(void *state, const xl_row *row, void *user_data)
+          {
+              (void)user_data;
+              *(int64_t *)state += row->cell_count;
+              return 0;
+          }
+
+          static int32_t combine(void *acc, void *next, void *user_data)
+          {
+              (void)user_data;
+              *(int64_t *)acc += *(int64_t *)next;
+              return 0;
+          }
+
+          static void free_state(void *state, void *user_data)
+          {
+              (void)user_data;
+              free(state);
+          }
+
+          static void *open_once(void *arg)
+          {
+              (void)arg;
+              void *workbook = NULL;
+              int32_t status = xl_open_file_ex((const uint8_t *)workbook_path, (int32_t)strlen(workbook_path), 0, NULL, &workbook);
+              if (status != 0)
+              {
+                  fprintf(stderr, "open failed: %d\n", status);
+                  exit(2);
+              }
+              int32_t sheets = 0;
+              xl_sheet_count(workbook, &sheets);
+              xl_close(workbook);
+              return NULL;
+          }
+
+          static void *aggregate_once(void *arg)
+          {
+              (void)arg;
+              xl_csv_aggregation agg;
+              memset(&agg, 0, sizeof(agg));
+              agg.struct_size = (int32_t)sizeof(agg);
+              agg.seed = seed;
+              agg.accumulate = accumulate;
+              agg.combine = combine;
+              agg.free_state = free_state;
+
+              xl_csv_parallel_options options;
+              memset(&options, 0, sizeof(options));
+              options.struct_size = (int32_t)sizeof(options);
+              options.degree_of_parallelism = 8;
+              options.header_row = 1;
+
+              void *state = NULL;
+              int32_t status = xl_csv_aggregate_memory(csv_data, csv_len, &agg, &options, &state);
+              if (status != 0)
+              {
+                  fprintf(stderr, "aggregate failed: %d\n", status);
+                  exit(2);
+              }
+              free(state);
+              return NULL;
+          }
+
+          static void build_csv(void)
+          {
+              size_t capacity = 8u * 1024 * 1024;
+              csv_data = malloc(capacity);
+              int written = snprintf((char *)csv_data, capacity, "group,amount\n");
+              for (int i = 0; i < 300000; i++)
+              {
+                  written += snprintf((char *)csv_data + written, capacity - written, "%s,%d\n",
+                                      (i % 3 == 0) ? "alpha" : ((i % 3 == 1) ? "beta" : "gamma"), i);
+              }
+              csv_len = written;
+          }
+
+          int main(int argc, char **argv)
+          {
+              const char *mode = argc > 1 ? argv[1] : "concurrent";
+              const char *lib_path = argv[2];
+              workbook_path = argv[3];
+
+              void *lib = dlopen(lib_path, RTLD_NOW);
+              if (!lib)
+              {
+                  fprintf(stderr, "dlopen: %s\n", dlerror());
+                  return 3;
+              }
+              xl_open_file_ex = dlsym(lib, "xl_open_file_ex");
+              xl_close = dlsym(lib, "xl_close");
+              xl_sheet_count = dlsym(lib, "xl_sheet_count");
+              xl_csv_aggregate_memory = dlsym(lib, "xl_csv_aggregate_memory");
+              if (!xl_open_file_ex || !xl_close || !xl_sheet_count || !xl_csv_aggregate_memory)
+              {
+                  fprintf(stderr, "missing export\n");
+                  return 3;
+              }
+
+              if (strcmp(mode, "concurrent") == 0)
+              {
+                  pthread_attr_t attr;
+                  pthread_attr_init(&attr);
+                  pthread_attr_setstacksize(&attr, 2 * 1024 * 1024);
+                  pthread_t threads[8];
+                  for (int i = 0; i < 8; i++)
+                  {
+                      if (pthread_create(&threads[i], &attr, open_once, NULL) != 0)
+                      {
+                          return 3;
+                      }
+                  }
+                  for (int i = 0; i < 8; i++)
+                  {
+                      pthread_join(threads[i], NULL);
+                  }
+                  return 0;
+              }
+
+              build_csv();
+              if (strcmp(mode, "fanout-main") == 0)
+              {
+                  aggregate_once(NULL);
+                  aggregate_once(NULL);
+                  return 0;
+              }
+
+              pthread_attr_t attr;
+              pthread_attr_init(&attr);
+              pthread_attr_setstacksize(&attr, 2 * 1024 * 1024);
+              pthread_t thread;
+              if (pthread_create(&thread, &attr, aggregate_once, NULL) != 0)
+              {
+                  return 3;
+              }
+              pthread_join(thread, NULL);
+              return 0;
+          }
+          EOF
+          cc -O2 host.c -o host -ldl -lpthread 2>/dev/null || cc -O2 host.c -o host -lpthread
+
+      - name: Run each shape 40 times
+        shell: bash
+        run: |
+          set +e
+          case "$RUNNER_OS" in
+            Linux) lib=lib/ExcelReader.Native.so ;;
+            *)     lib=lib/ExcelReader.Native.dylib ;;
+          esac
+          for mode in concurrent fanout fanout-main; do
+            crashes=0
+            for i in $(seq 1 40); do
+              ./host $mode "$PWD/$lib" "$PWD/RealExcel.xlsx"
+              status=$?
+              if [ $status -gt 128 ]; then
+                crashes=$((crashes + 1))
+                echo "$mode iteration $i: signal $((status - 128))"
+              elif [ $status -ne 0 ]; then
+                echo "$mode iteration $i: exit $status"
+              fi
+            done
+            echo "=== $mode: $crashes crashes in 40 runs ==="
+          done
+          exit 0
+
   test-python:
     name: Native + Python + C smoke (${{ matrix.os }})
     needs: [changes, build-native]
