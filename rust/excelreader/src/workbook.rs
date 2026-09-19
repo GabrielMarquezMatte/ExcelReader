@@ -61,6 +61,7 @@ pub(crate) fn check_abi_version() -> Result<(), Error> {
 
     CHECKED
         .get_or_init(|| {
+            workaround_macos_processor_count_detection();
             let loaded = unsafe { crate::xl_abi_version() };
             if loaded == crate::XL_ABI_VERSION {
                 Ok(())
@@ -77,6 +78,30 @@ pub(crate) fn check_abi_version() -> Result<(), Error> {
         })
         .clone()
 }
+
+/// NativeAOT's automatic CPU-count detection is broken on macOS/arm64: it silently corrupts
+/// runtime state that only crashes later, the first time a call into the library follows a prior
+/// concurrent (`degree_of_parallelism` > 1) run. Any explicit `DOTNET_PROCESSOR_COUNT` override
+/// sidesteps the broken auto-detection entirely - including one that matches the real core count -
+/// so this sets it to the real value rather than lie about the machine's topology. Runs exactly
+/// once, before the first native call `check_abi_version` makes, and never overrides a value the
+/// embedding process already set. A no-op on every other OS.
+#[cfg(target_os = "macos")]
+fn workaround_macos_processor_count_detection() {
+    if std::env::var_os("DOTNET_PROCESSOR_COUNT").is_none() {
+        let cores = std::thread::available_parallelism().map(|n| n.get()).unwrap_or(1);
+        // SAFETY: only unsound if another thread concurrently reads or writes the process
+        // environment while this runs. This executes at most once, as early as this crate can hook
+        // - inside check_abi_version's OnceLock initializer, before its own first native call -
+        // the same caveat any early-init environment mutation carries.
+        unsafe {
+            std::env::set_var("DOTNET_PROCESSOR_COUNT", cores.to_string());
+        }
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+fn workaround_macos_processor_count_detection() {}
 
 /// An open workbook. Not thread-safe - use one per thread, same contract as the C ABI. (The raw
 /// handle makes this type neither `Send` nor `Sync`, so the compiler enforces that for you.)
