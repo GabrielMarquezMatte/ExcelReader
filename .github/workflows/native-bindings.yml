@@ -419,6 +419,9 @@ jobs:
           //   concurrent  : 8 spawned threads open a workbook for the first time at once
           //   fanout      : one spawned thread runs a degree_of_parallelism=8 CSV aggregation
           //   fanout-main : the same aggregation on the main thread (the C smoke test's shape)
+          //   churn       : 20 rounds of ONE fresh thread that aggregates and exits - what a Rust
+          //                 test binary does, a new thread per test entering and leaving the runtime
+          //   churn-open  : 20 rounds of 4 fresh threads that open a workbook and exit
           #include <dlfcn.h>
           #include <pthread.h>
           #include <stdint.h>
@@ -573,11 +576,51 @@ jobs:
                   return 0;
               }
 
+              if (strcmp(mode, "churn-open") == 0)
+              {
+                  pthread_attr_t attr;
+                  pthread_attr_init(&attr);
+                  pthread_attr_setstacksize(&attr, 2 * 1024 * 1024);
+                  for (int round = 0; round < 20; round++)
+                  {
+                      pthread_t threads[4];
+                      for (int i = 0; i < 4; i++)
+                      {
+                          if (pthread_create(&threads[i], &attr, open_once, NULL) != 0)
+                          {
+                              return 3;
+                          }
+                      }
+                      for (int i = 0; i < 4; i++)
+                      {
+                          pthread_join(threads[i], NULL);
+                      }
+                  }
+                  return 0;
+              }
+
               build_csv();
               if (strcmp(mode, "fanout-main") == 0)
               {
                   aggregate_once(NULL);
                   aggregate_once(NULL);
+                  return 0;
+              }
+
+              if (strcmp(mode, "churn") == 0)
+              {
+                  pthread_attr_t attr;
+                  pthread_attr_init(&attr);
+                  pthread_attr_setstacksize(&attr, 2 * 1024 * 1024);
+                  for (int round = 0; round < 20; round++)
+                  {
+                      pthread_t thread;
+                      if (pthread_create(&thread, &attr, aggregate_once, NULL) != 0)
+                      {
+                          return 3;
+                      }
+                      pthread_join(thread, NULL);
+                  }
                   return 0;
               }
 
@@ -603,7 +646,7 @@ jobs:
             Linux) lib=lib/ExcelReader.Native.so ;;
             *)     lib=lib/ExcelReader.Native.dylib ;;
           esac
-          for mode in concurrent fanout fanout-main; do
+          for mode in churn churn-open concurrent fanout; do
             crashes=0
             for i in $(seq 1 40); do
               ./host $mode "$PWD/$lib" "$PWD/RealExcel.xlsx"
