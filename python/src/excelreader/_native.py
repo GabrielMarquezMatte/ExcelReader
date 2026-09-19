@@ -369,21 +369,8 @@ def _candidate_paths() -> list[Path]:
     return [Path(__file__).resolve().parent / "_lib" / library_filename()]
 
 
-def _work_around_macos_processor_count_detection() -> None:
-    """NativeAOT's automatic CPU-count detection is broken on macOS/arm64: it silently corrupts
-    runtime state that only crashes later, the first time a call into the library follows a prior
-    concurrent (degree_of_parallelism > 1) run. Any explicit DOTNET_PROCESSOR_COUNT override
-    sidesteps the broken auto-detection entirely - including one that matches the real core count -
-    so this sets it to the real value rather than lie about the machine's topology. Never overrides
-    a value the embedding process already set. A no-op on every other OS."""
-    if platform.system() != "Darwin" or "DOTNET_PROCESSOR_COUNT" in os.environ:
-        return
-    os.environ["DOTNET_PROCESSOR_COUNT"] = str(os.cpu_count() or 1)
-
-
 @lru_cache(maxsize=1)
 def load_library() -> ctypes.CDLL:
-    _work_around_macos_processor_count_detection()
     for path in _candidate_paths():
         if not path.exists():
             continue
