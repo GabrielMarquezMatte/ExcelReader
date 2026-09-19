@@ -80,6 +80,9 @@ jobs:
 
       - name: Build the native library
         shell: bash
+        # TEMPORARY: keep symbols so the macOS lldb diagnostic can name managed frames.
+        env:
+          StripSymbols: ${{ runner.os == 'macOS' && 'false' || '' }}
         run: python python/scripts/build_native.py
 
       - name: Upload native library
@@ -159,27 +162,40 @@ jobs:
           EXCELREADER_NATIVE_LIB_DIR: ${{ github.workspace }}/${{ steps.lib.outputs.dir }}
         run: cargo test --workspace --all-features --verbose
 
-      # TEMPORARY: DOTNET_PROCESSOR_COUNT is set (see above) and the full aggregate test binary
-      # still SIGSEGVs on macOS, though the env var was only ever verified against one isolated
-      # test. Run every test on its own to see which still crash with it set. Remove once answered.
-      - name: "Diagnostic: each aggregate test alone, env var set (macOS)"
+      # TEMPORARY: capture a native backtrace of the macOS aggregate SIGSEGV. Remove once answered.
+      - name: "Diagnostic: aggregate SIGSEGV backtrace under lldb (macOS)"
         if: always() && runner.os == 'macOS'
         working-directory: rust
         shell: bash
         env:
           EXCELREADER_NATIVE_LIB_DIR: ${{ github.workspace }}/${{ steps.lib.outputs.dir }}
         run: |
-          echo "DOTNET_PROCESSOR_COUNT=$DOTNET_PROCESSOR_COUNT"
-          cargo test --test aggregate --no-run 2>&1 | tail -n 2
-          for t in $(cargo test --test aggregate -- --list 2>/dev/null | grep ': test$' | sed 's/: test$//'); do
-            if cargo test --test aggregate "$t" -- --exact >/dev/null 2>&1; then
-              echo "PASS  $t"
-            else
-              echo "FAIL  $t"
+          BIN=$(cargo test --workspace --all-features --test aggregate --no-run --message-format=json 2>/dev/null \
+            | jq -r 'select(.target.name == "aggregate" and .executable != null) | .executable')
+          echo "binary: $BIN"
+          for i in 1 2 3 4 5 6; do
+            echo "=== attempt $i ==="
+            lldb --batch \
+              -o "process launch --stop-at-entry -- --test-threads=1" \
+              -o "process handle -p true -s false -n false SIGUSR1 SIGUSR2 SIGPIPE SIGCHLD" \
+              -o "continue" \
+              -k "thread list" \
+              -k "thread backtrace all -c 60" \
+              -k "register read" \
+              -k "disassemble -p -c 12" \
+              -k "kill" \
+              "$BIN" > "lldb-$i.txt" 2>&1 || true
+            if grep -q "stop reason = EXC_\|stop reason = signal SIGSEGV\|stop reason = signal SIGBUS" "lldb-$i.txt"; then
+              cat "lldb-$i.txt"
+              break
             fi
+            tail -n 5 "lldb-$i.txt"
           done
-          echo "--- whole binary, one test thread ---"
-          cargo test --test aggregate -- --test-threads=1 2>&1 | tail -n 15 || true
+          echo "=== crash reports ==="
+          ls -la ~/Library/Logs/DiagnosticReports/ 2>/dev/null | grep -i aggregate || echo "none"
+          for f in ~/Library/Logs/DiagnosticReports/aggregate-*.ips; do
+            [ -f "$f" ] && head -c 60000 "$f" && break
+          done
 
       - name: cargo build (default features)
         working-directory: rust
