@@ -149,6 +149,16 @@ jobs:
           EXCELREADER_NATIVE_LIB_DIR: ${{ github.workspace }}/${{ steps.lib.outputs.dir }}
         run: cargo test --workspace --all-features --verbose
 
+      # TEMPORARY: verifies whether disabling ConcurrentGarbageCollection on the native lib
+      # (ExcelReader.Native.csproj) fixes the macOS-only SIGSEGV that reliably crashes this one
+      # test alone. Remove this step (and the csproj property, if it didn't help) once answered.
+      - name: "cargo test (verify: ConcurrentGarbageCollection=false)"
+        if: always() && runner.os == 'macOS'
+        working-directory: rust
+        env:
+          EXCELREADER_NATIVE_LIB_DIR: ${{ github.workspace }}/${{ steps.lib.outputs.dir }}
+        run: cargo test --test aggregate a_call_after_a_partitioned_run_still_succeeds -- --exact
+
       - name: cargo build (default features)
         working-directory: rust
         env:
