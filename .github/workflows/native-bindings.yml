@@ -152,10 +152,10 @@ jobs:
           EXCELREADER_NATIVE_LIB_DIR: ${{ github.workspace }}/${{ steps.lib.outputs.dir }}
         run: cargo test --workspace --all-features --verbose
 
-      # TEMPORARY: the Rust test binaries die silently (SIGABRT on Linux, SIGSEGV on macOS) right
-      # after starting. Loop the suite and capture a post-mortem backtrace without a debugger
-      # attached, which hid the crash. Remove once answered.
-      - name: "Diagnostic: crash dump of a Rust test binary"
+      # TEMPORARY: the crash dumps point at several threads entering the runtime at once. Loop the
+      # suite one test thread at a time: if that is clean where the parallel loop crashes within a
+      # few iterations, first-call concurrency is the trigger. Remove once answered.
+      - name: "Diagnostic: 15 serial runs of the Rust suite"
         if: always() && runner.os != 'Windows'
         working-directory: rust
         shell: bash
@@ -164,37 +164,19 @@ jobs:
           LIBC_FATAL_STDERR_: '1'
         run: |
           set +e
-          ulimit -c unlimited
-          if [ "$RUNNER_OS" = Linux ]; then
-            sudo sysctl -qw kernel.core_pattern=/tmp/core.%p
-            command -v gdb >/dev/null || { sudo apt-get update -qq && sudo apt-get install -y -qq gdb; } >/dev/null 2>&1
-            command -v gdb || echo "gdb still missing"
-          fi
           cargo test --workspace --all-features --no-run -q 2>/dev/null
+          crashed=0
           for i in $(seq 1 15); do
-            out=$(cargo test --workspace --all-features 2>&1)
+            out=$(cargo test --workspace --all-features -- --test-threads=1 2>&1)
             if echo "$out" | grep -q "signal: "; then
               echo "=== crashed on iteration $i ==="
-              echo "$out" | grep -B 30 "signal: " | grep -v "^\s*$" | tail -n 40
+              echo "$out" | grep -B 20 "signal: " | grep -v "^\s*$" | tail -n 25
+              crashed=1
               break
             fi
             echo "iteration $i: ok"
           done
-          sleep 5
-          if [ "$RUNNER_OS" = Linux ]; then
-            for c in /tmp/core.*; do
-              [ -f "$c" ] || { echo "no core file"; break; }
-              exe=$(file "$c" | sed -n "s/.*execfn: '\([^']*\)'.*/\1/p")
-              echo "=== core $c from $exe ==="
-              gdb -batch -ex "info threads" -ex "bt 40" -ex "info registers pc sp" -ex "x/6i \$pc" \
-                -ex "thread apply all bt 40" "$exe" "$c" 2>&1 | head -n 700
-              break
-            done
-          else
-            ls -la ~/Library/Logs/DiagnosticReports/ 2>&1 | tail -n 20
-            f=$(ls -t ~/Library/Logs/DiagnosticReports/*.ips 2>/dev/null | head -n 1)
-            if [ -n "$f" ]; then echo "=== $f ==="; head -c 120000 "$f"; else echo "no crash report"; fi
-          fi
+          echo "serial-crashed=$crashed"
           exit 0
 
       - name: cargo build (default features)
@@ -208,6 +190,159 @@ jobs:
         env:
           EXCELREADER_NATIVE_LIB_DIR: ${{ github.workspace }}/${{ steps.lib.outputs.dir }}
         run: cargo bench --benches -- --test
+
+  # TEMPORARY: a standalone repro for the runtime crash our Rust tests hit, with none of this
+  # project's code in it - a NativeAOT shared library whose exports several threads call for the
+  # first time at once. Also tells us whether a newer 10.0.x SDK already fixes it. Remove once
+  # answered; if it crashes, it is what goes upstream.
+  repro-concurrent-entry:
+    name: "Repro: concurrent first calls (${{ matrix.os }}, SDK ${{ matrix.sdk }})"
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        sdk: ['10.0.100', '10.0.x']
+
+    steps:
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: ${{ matrix.sdk }}
+
+      - name: Write the repro
+        shell: bash
+        run: |
+          mkdir -p "$RUNNER_TEMP/repro"
+          cd "$RUNNER_TEMP/repro"
+          cat > repro.csproj <<'EOF'
+          <Project Sdk="Microsoft.NET.Sdk">
+            <PropertyGroup>
+              <TargetFramework>net10.0</TargetFramework>
+              <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+              <PublishAot>true</PublishAot>
+              <NativeLib>Shared</NativeLib>
+              <InvariantGlobalization>true</InvariantGlobalization>
+              <StackTraceSupport>false</StackTraceSupport>
+              <UseSystemResourceKeys>true</UseSystemResourceKeys>
+            </PropertyGroup>
+          </Project>
+          EOF
+          cat > Exports.cs <<'EOF'
+          using System;
+          using System.Buffers;
+          using System.Runtime.InteropServices;
+          using System.Text;
+
+          public static class Exports
+          {
+              [UnmanagedCallersOnly(EntryPoint = "work")]
+              public static int Work(int n)
+              {
+                  try
+                  {
+                      StringBuilder builder = new();
+                      for (int i = 0; i < n; i++)
+                      {
+                          builder.Append(i);
+                      }
+                      byte[] buffer = ArrayPool<byte>.Shared.Rent(64 * 1024);
+                      ArrayPool<byte>.Shared.Return(buffer);
+                      return builder.Length;
+                  }
+                  catch (Exception exception)
+                  {
+                      Console.Error.WriteLine(exception.Message);
+                      return -1;
+                  }
+              }
+          }
+          EOF
+          cat > host.c <<'EOF'
+          // Mirrors what a Rust test binary does: threads with 2 MiB stacks (Rust's default), each
+          // making its first call into a linked NativeAOT shared library at the same moment.
+          #include <pthread.h>
+          #include <stdio.h>
+          #include <stdlib.h>
+
+          extern int work(int n);
+
+          static void *run(void *arg)
+          {
+              (void)arg;
+              if (work(4000) < 0)
+              {
+                  fprintf(stderr, "work reported failure\n");
+                  exit(2);
+              }
+              return NULL;
+          }
+
+          int main(void)
+          {
+              enum { THREADS = 8 };
+              pthread_attr_t attr;
+              pthread_attr_init(&attr);
+              pthread_attr_setstacksize(&attr, 2 * 1024 * 1024);
+              pthread_t threads[THREADS];
+              for (int i = 0; i < THREADS; i++)
+              {
+                  if (pthread_create(&threads[i], &attr, run, NULL) != 0)
+                  {
+                      return 3;
+                  }
+              }
+              for (int i = 0; i < THREADS; i++)
+              {
+                  pthread_join(threads[i], NULL);
+              }
+              return 0;
+          }
+          EOF
+
+      - name: Build
+        shell: bash
+        run: |
+          cd "$RUNNER_TEMP/repro"
+          dotnet --version
+          case "$RUNNER_OS" in
+            Linux) rid=linux-x64;  ext=so ;;
+            *)     rid=osx-arm64;  ext=dylib ;;
+          esac
+          dotnet publish -c Release -r $rid | tail -n 3
+          lib=$(find bin -name "repro.$ext" | head -n 1)
+          echo "lib=$lib"
+          cc -O2 host.c "$lib" -o host -Wl,-rpath,"$(cd "$(dirname "$lib")" && pwd)" -lpthread
+
+      - name: Run it 50 times
+        shell: bash
+        run: |
+          set +e
+          cd "$RUNNER_TEMP/repro"
+          ulimit -c unlimited
+          [ "$RUNNER_OS" = Linux ] && sudo sysctl -qw kernel.core_pattern=/tmp/core.%p
+          crashes=0
+          for i in $(seq 1 50); do
+            ./host
+            status=$?
+            if [ $status -ne 0 ]; then
+              crashes=$((crashes + 1))
+              echo "iteration $i: exit $status$([ $status -gt 128 ] && echo " (signal $((status - 128)))")"
+            fi
+          done
+          echo "=== $crashes crashes in 50 runs ==="
+          if [ "$RUNNER_OS" = Linux ] && [ $crashes -gt 0 ]; then
+            command -v gdb >/dev/null || { sudo apt-get update -qq && sudo apt-get install -y -qq gdb; } >/dev/null 2>&1
+            for c in /tmp/core.*; do
+              [ -f "$c" ] || break
+              gdb -batch -ex "bt 40" -ex "thread apply all bt 25" ./host "$c" 2>&1 | head -n 300
+              break
+            done
+          elif [ $crashes -gt 0 ]; then
+            f=$(ls -t ~/Library/Logs/DiagnosticReports/host-*.ips 2>/dev/null | head -n 1)
+            [ -n "$f" ] && head -c 60000 "$f"
+          fi
+          exit 0
 
   test-python:
     name: Native + Python + C smoke (${{ matrix.os }})
