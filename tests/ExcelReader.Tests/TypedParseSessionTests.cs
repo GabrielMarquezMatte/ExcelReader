@@ -14,7 +14,6 @@ namespace ExcelReader.Tests
             return [new() { Index = 0, Type = NativeColumnType.String, Nullable = true }];
         }
 
-        // Reads every batch at `maxRows` and returns the flattened per-row strings of column 0.
         private static List<string> ReadInBatches(long maxRows, out int batchCount)
         {
             Assert.Equal(NativeStatus.Ok, NativeApiTests.OpenPath(XlsxFixture, NativeFormat.Auto, out NativeHandle? handle));
@@ -61,9 +60,6 @@ namespace ExcelReader.Tests
             }
         }
 
-        // The load-bearing property: batching never changes the data. Sizes that are not multiples
-        // of 8 are deliberate — the validity and bool buffers are LSB-first bit-packed, so a batch
-        // ending mid-byte is exactly where a packing bug surfaces.
         [Theory]
         [InlineData(1)]
         [InlineData(7)]
@@ -77,38 +73,20 @@ namespace ExcelReader.Tests
 
             Assert.Equal(1, wholeBatches);
             Assert.Equal(whole, batched);
-            // Concatenated values alone cannot tell batching apart from a NextBatch that ignored
-            // maxRows and returned the whole sheet in one call, so the batch count is pinned too:
-            // ceil(rows / maxRows), with the row count taken from the unbounded read so this stays
-            // correct if the fixture grows.
             long expectedBatches = (whole.Count + maxRows - 1) / maxRows;
             Assert.Equal(expectedBatches, batches);
         }
 
-        // sample.xlsx holds 3 rows, so on it every batch size above 2 collapses to a single batch and
-        // no batch ever ends mid-byte. This second sweep runs the same property over a fixture tall
-        // enough that 7, 8 and 9 each produce several batches plus a partial final one — 43 is
-        // coprime with all three, so no size divides it evenly.
         private const int TallRowCount = 43;
 
-        // One decoded row of the tall fixture. Compared as a whole so a bit-packing bug in the bool
-        // values or the validity bitmap fails the assertion, which a string-only comparison would miss.
         private readonly record struct TallRow(string Name, bool Active, bool QtyValid, long Qty);
 
-        // A temp CSV is exactly how NativeApiTests.cs builds its own ParseTyped fixtures
-        // (ParseTyped_Should_Return_Typed_Columns_By_Name and friends), so this follows that pattern
-        // rather than standing up an XlsxWorkbookWriter for data no part of this test cares about.
-        // rowCount defaults to TallRowCount for the bit-packing sweep above; the memory-ceiling
-        // test below scales it up instead of inventing a second fixture-generation approach.
         private static string WriteTallFixture(int rowCount = TallRowCount)
         {
             string path = Path.Combine(Path.GetTempPath(), $"excelreader-session-{Guid.NewGuid():N}.csv");
             StringBuilder csv = new("name,active,qty\n");
             for (int i = 0; i < rowCount; i++)
             {
-                // Periods 3 and 5 rather than powers of two: the flags and the null pattern have to
-                // stay out of phase with the 8-row byte boundary, or a batch that mis-packed its
-                // final partial byte could still come out looking right.
                 string active = i % 3 == 0 ? "true" : "false";
                 string qty = i % 5 == 0 ? string.Empty : (i * 3).ToString(CultureInfo.InvariantCulture);
                 csv.Append(CultureInfo.InvariantCulture, $"row-{i},{active},{qty}\n");
@@ -123,8 +101,6 @@ namespace ExcelReader.Tests
             [
                 new() { Names = ["name"], Type = NativeColumnType.String },
                 new() { Names = ["active"], Type = NativeColumnType.Bool },
-                // Nullable, and blank on every fifth row, so this column's validity bitmap actually
-                // has zero bits to mis-pack at a batch boundary.
                 new() { Names = ["qty"], Type = NativeColumnType.Int64, Nullable = true },
             ];
         }
@@ -197,8 +173,6 @@ namespace ExcelReader.Tests
             return Encoding.UTF8.GetString(bytes);
         }
 
-        // Same LSB-first unpacking NativeApiTests uses: bit i of byte i/8, 1 = valid, and a NULL
-        // pointer means the column has no nulls at all.
         private static bool[] DecodeValidity(NativeColumn column, int rowCount)
         {
             bool[] result = new bool[rowCount];
@@ -232,8 +206,6 @@ namespace ExcelReader.Tests
 
                 Assert.Equal(1, wholeBatches);
                 Assert.Equal(TallRowCount, whole.Count);
-                // Guards the fixture itself: with no nulls and no false flags, the bool values and the
-                // validity bitmap would be uniform and could not expose a packing bug.
                 Assert.Contains(whole, row => row.Active);
                 Assert.Contains(whole, row => !row.Active);
                 Assert.Contains(whole, row => row.QtyValid);
@@ -249,31 +221,9 @@ namespace ExcelReader.Tests
             }
         }
 
-        // The feature's actual claim is about peak memory, not cumulative allocation - see
-        // ChunkedParseBenchmark's class comment for why a BenchmarkDotNet [MemoryDiagnoser] run
-        // cannot show this. Bytes owned by the single largest live NativeTable is deterministic, and
-        // unlike a managed allocation count it includes the Marshal.AllocHGlobal blocks that are the
-        // bulk of what this feature bounds.
-        //
-        // It is the OUTPUT-BLOCK half of the two things TypedParseSession's remarks promise to bound
-        // ("one batch's columns plus one batch's output block"). The builder-side half needs no
-        // measurement: a ColumnBuilder's ChunkedBuffer chain only ever grows by appending a new chunk
-        // per row appended (ChunkedBuffer.Grow), the builders are constructed fresh inside NextBatch,
-        // and nothing outside that call can reach them - so a batch's builders are bounded by the same
-        // maxRows the block below is measured against, structurally rather than by assertion. If
-        // NextBatch ever hoisted its builders out of the row loop, that is what this test would NOT
-        // catch, and the sizes below would still pass.
         private const int CeilingRowCount = 4000;
         private const long CeilingBatchSize = 200;
 
-        // NativeColumn's own doc comment (NativeTypedTable.cs:53-60) is the authority here: for a
-        // string column, Values is the ONE allocation the column owns - ColumnBuilder.BuildStringColumn
-        // (NativeApi.Typed.cs:468-478) writes the Length+1 int32 offsets array immediately followed
-        // by the DataLen-byte UTF-8 blob into that single block, and Data is an interior pointer into
-        // it (freeing it separately would be a double free). So (Length + 1) * sizeof(int) + DataLen
-        // is the size of that one block, not two summed allocations. Every fixed-width type is Length
-        // elements of its own size; Validity, when present, is a second, independent allocation of one
-        // bit per row rounded up to a byte.
         private static long ColumnBytes(NativeColumn column)
         {
             long bytes = column.Type switch
@@ -282,7 +232,7 @@ namespace ExcelReader.Tests
                 NativeColumnType.Bool => column.Length,
                 NativeColumnType.Date => column.Length * sizeof(int),
                 NativeColumnType.Float64 => column.Length * sizeof(double),
-                _ => column.Length * sizeof(long), // Int64, Time, Timestamp
+                _ => column.Length * sizeof(long),
             };
             if (column.Validity != IntPtr.Zero)
             {
@@ -301,9 +251,6 @@ namespace ExcelReader.Tests
             return total;
         }
 
-        // Returns the byte size of every batch NextBatch produces at the given maxRows, freeing
-        // each one immediately after measuring it - the same discipline a real streaming consumer
-        // follows, so the measurement cannot pass by accident from a table kept alive past its batch.
         private static List<long> MeasureBatchByteSizes(string path, long maxRows)
         {
             Assert.Equal(NativeStatus.Ok, NativeApiTests.OpenPath(path, NativeFormat.Csv, out NativeHandle? handle));
@@ -333,11 +280,6 @@ namespace ExcelReader.Tests
             return sizes;
         }
 
-        // The deterministic proof ChunkedParseBenchmark's class comment points to: at 200-row
-        // batches over a 4000-row sheet, the largest live table must stay close to a twentieth of
-        // the unbounded table's size, not equal to it. This is the test that actually exercises
-        // TypedParseSession's memory-ceiling claim - the benchmark measures a different quantity
-        // (cumulative managed churn) that does not and cannot show this.
         [Fact]
         public void NextBatch_Should_Bound_The_Largest_Live_Table_To_Roughly_One_Batch()
         {
@@ -348,21 +290,11 @@ namespace ExcelReader.Tests
                 List<long> batched = MeasureBatchByteSizes(path, CeilingBatchSize);
 
                 Assert.Single(unbounded);
-                // 4000 / 200 = 20 batches exactly, so this also incidentally guards against a
-                // NextBatch that silently coalesced everything into one call.
                 Assert.True(batched.Count > 1, $"expected more than one batch, got {batched.Count}.");
 
                 long unboundedBytes = unbounded[0];
                 long maxBatchBytes = batched.Max();
 
-                // Generous (3x) slack absorbs fixed per-column overhead (each string column's +1
-                // offset element, a validity byte shared unevenly across a batch boundary) at this
-                // 200-row batch size. It is tight against the failure modes that matter most - batching
-                // removed entirely, or the batch size inflated by roughly an order of magnitude, both
-                // land far outside 3x the ideal ~5% fraction - but it is not tight in general: a
-                // partial regression that merely doubled or tripled the intended batch size would
-                // still pass. Verified against the total-removal case by temporarily changing
-                // NextBatch's row loop to ignore maxRows and confirming this assertion fails.
                 double expectedFraction = (double)CeilingBatchSize / CeilingRowCount;
                 long bound = (long)(unboundedBytes * expectedFraction * 3);
                 Assert.True(maxBatchBytes <= bound,
@@ -417,12 +349,10 @@ namespace ExcelReader.Tests
             Assert.Equal(NativeStatus.Ok, NativeApi.OpenTypedReader(live, Specs(), 0, 10, out nint reader));
 
             NativeApi.CloseTypedReader(reader);
-            NativeApi.CloseTypedReader(reader); // must not throw
-            NativeApi.CloseTypedReader(0);      // must not throw
+            NativeApi.CloseTypedReader(reader);
+            NativeApi.CloseTypedReader(0);
         }
 
-        // A reader id must never resolve to a workbook id, and vice versa - NativeHandleTable's
-        // type check is what makes a cross-kind call a clean no-op instead of a wrong-object free.
         [Fact]
         public void NextTypedBatch_Should_Reject_A_Workbook_Id()
         {

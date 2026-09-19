@@ -1,9 +1,5 @@
 namespace ExcelReader.Core.Writer.Internal
 {
-    // Shared WriterState guard checks for the three state-tracking workbook writers (XlsxWorkbookWriter,
-    // XlsbWorkbookWriter, XlsWorkbookWriter): each StartAsync/AddSheet/EndAsync call site repeats the
-    // same "already disposed" / "wrong state" checks, differing only in the writer's type name and
-    // the action being guarded.
     internal static class WriterStateGuard
     {
         internal static void ThrowIfEnded(WriterState state, object writer)
@@ -27,8 +23,6 @@ namespace ExcelReader.Core.Writer.Internal
             }
         }
 
-        // Guards row-writer re-entrancy at the start of a new row — every sheet writer must reject
-        // starting row N+1 while row N's writer is still open.
         internal static void RequireNoActiveRowForStart(bool rowActive, string rowWriterTypeName)
         {
             if (rowActive)
@@ -37,7 +31,6 @@ namespace ExcelReader.Core.Writer.Internal
             }
         }
 
-        // Guards ending the sheet while its row writer is still open.
         internal static void RequireNoActiveRowForEnd(bool rowActive, string rowWriterTypeName)
         {
             if (rowActive)
@@ -46,10 +39,6 @@ namespace ExcelReader.Core.Writer.Internal
             }
         }
 
-        // The four workbook writers all gate AddSheet the same way: the workbook must be started and not
-        // ended, the name must be a legal sheet name, and the previously added sheet must have been ended
-        // first (each writer exposes exactly one live sheet at a time). Centralized so a new format cannot
-        // accidentally enforce three of the four.
         internal static void RequireCanAddSheet(
             WriterState state, object owner, string workbookTypeName, string name,
             bool sheetActive, string sheetWriterTypeName)

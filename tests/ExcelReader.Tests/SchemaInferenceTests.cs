@@ -8,9 +8,6 @@ namespace ExcelReader.Tests
         [Fact]
         public void Should_MatchTheNativeTypeCodes_When_CastingExcelColumnType()
         {
-            // These values are the XL_T_* constants in src/ExcelReader.Native/include/excelreader.h.
-            // NativeApi marshals with a plain (int) cast, so a renumbering here silently corrupts
-            // every FFI caller's schema.
             Assert.Equal(0, (int)ExcelColumnType.StringColumn);
             Assert.Equal(1, (int)ExcelColumnType.Int64Column);
             Assert.Equal(2, (int)ExcelColumnType.Float64Column);
@@ -38,10 +35,6 @@ namespace ExcelReader.Tests
             return SchemaInference.Infer(rows, isDate1904: false, headerRow, sampleSize);
         }
 
-        // CSV cells carry no type of their own - every field is CellType.ExcelString, by design (see
-        // SchemaInference's "no text sniffing" remark). Numeric-type inference can only be proven
-        // against a format whose cells actually carry a Number/Bool/Date CellType, so these two tests
-        // build a minimal XLSX fixture instead of CSV.
         private static ExcelColumnSchema[] InferFromXlsx(string sheetRows, int headerRow = 1, int sampleSize = 100)
         {
             using MemoryStream ms = WorkbookBuilder.Build(sheetRows);
@@ -108,8 +101,6 @@ namespace ExcelReader.Tests
         [Fact]
         public void Should_LeaveNameNull_When_AHeaderCellIsBlank()
         {
-            // An empty name would later fail the parser's own "blank name" validation, so a blank
-            // header cell must produce null (index-addressable), never "".
             ExcelColumnSchema[] schema = InferFromCsv("Id,,Tail\n1,2,3\n");
 
             Assert.Equal("Id", schema[0].Name);
@@ -129,8 +120,6 @@ namespace ExcelReader.Tests
         [Fact]
         public void Should_SampleAtMostSampleSizeRows_When_TheSheetIsLonger()
         {
-            // Row 3 is a string, but a sample size of 1 never reaches it — proving the bound is real
-            // rather than the whole sheet being read every time.
             ExcelColumnSchema[] schema = InferFromXlsx(
                 """
                 <row r="1"><c r="A1" t="inlineStr"><is><t>Id</t></is></c></row>
@@ -150,7 +139,6 @@ namespace ExcelReader.Tests
 
             Assert.NotEmpty(schema);
             Assert.All(schema, column => Assert.True(column.Index >= 0));
-            // Index must always equal the array position — callers address columns by it.
             for (int i = 0; i < schema.Length; i++)
             {
                 Assert.Equal(i, schema[i].Index);
@@ -160,8 +148,6 @@ namespace ExcelReader.Tests
         [Fact]
         public void Should_NotDisturbTheReader_When_InferSchemaRunsBeforeEnumeration()
         {
-            // InferSchema opens its own enumerator; a caller who then enumerates normally must still
-            // see the sheet from its first row.
             using IExcelRowReader reader = Excel.FromCsv(System.Text.Encoding.UTF8.GetBytes("Id\n1\n2\n"));
             _ = Excel.InferSchema(reader);
 

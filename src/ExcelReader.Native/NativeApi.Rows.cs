@@ -27,12 +27,6 @@ namespace ExcelReader.Native
             }
         }
 
-        /// <summary>
-        /// Releases the single block allocated by <see cref="DecodePendingRow"/>. Every
-        /// <see cref="NativeRowCell.Value"/> points INTO that block (see <see cref="DecodePendingRow"/>), so
-        /// freeing them individually would be a double free — this one <see cref="Marshal.FreeHGlobal(IntPtr)"/>
-        /// covers the cell array and every value.
-        /// </summary>
         internal static void FreeRow(ref NativeRow row)
         {
             if (row.Cells != IntPtr.Zero)
@@ -55,10 +49,6 @@ namespace ExcelReader.Native
             {
                 if (!handle.HasPending)
                 {
-                    // Taking (or advancing) the workbook's own row cursor invalidates any chunked read
-                    // holding an enumerator open across calls - the workbook cannot serve both. A
-                    // pending row needs no fault: it is copied out of the scratch buffer without
-                    // touching the reader at all.
                     handle.FaultLiveSession("xl_next_row");
                     handle.Rows ??= handle.Reader.GetEnumerator();
                     if (!handle.Rows.MoveNext())
@@ -90,15 +80,6 @@ namespace ExcelReader.Native
             }
         }
 
-        /// <summary>
-        /// Decodes the row blob held pending in <paramref name="handle"/>'s scratch buffer into a
-        /// <see cref="NativeRow"/> backed by a SINGLE allocation: the <see cref="NativeRowCell"/> array
-        /// followed immediately by every cell's value bytes (each NUL-terminated), laid out back to back.
-        /// Every <see cref="NativeRowCell.Value"/> pointer is an interior pointer into that one block — this
-        /// is what lets <see cref="FreeRow"/> release a whole row with one <see cref="Marshal.FreeHGlobal"/>
-        /// instead of one call per cell, cutting a 65K-row/10-column sheet from ~650K native allocations to
-        /// one per row (see docs/NATIVE_BINDINGS_PLAN.md Task 1).
-        /// </summary>
         private static int DecodePendingRow(NativeHandle handle, out NativeRow row)
         {
             row = default;

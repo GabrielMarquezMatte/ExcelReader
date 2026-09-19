@@ -4,8 +4,6 @@ using ExcelReader.Core.Reader;
 
 namespace ExcelReader.Tests
 {
-    // Covers the parser additions: format-agnostic Parse(IExcelRowReader), configurable Culture,
-    // and enum/Guid column support.
     public class ParserFeatureTests
     {
         private enum Status
@@ -39,13 +37,11 @@ namespace ExcelReader.Tests
             public Guid? OptionalId { get; set; }
         }
 
-        // --- #1 Parse(IExcelRowReader) ---
 
         [Fact]
         public async Task ParseAcceptsAutoDetectedReader()
         {
             await using var ms = await TypedWorkbook.BuildAsync(["Name", "Amount"], ["Alice", 12.5]);
-            // Excel.Open returns the format-agnostic IExcelRowReader.
             using IExcelRowReader reader = Excel.Open(ms);
 
             MoneyRow row = new ExcelParser<MoneyRow>().Parse(reader).Single();
@@ -71,12 +67,10 @@ namespace ExcelReader.Tests
             Assert.Equal(7.0m, only.Amount);
         }
 
-        // --- #2 Culture ---
 
         [Fact]
         public async Task PtBrCultureParsesCommaDecimalAndThousandsSeparator()
         {
-            // Brazilian text cell: "1.234,56" → 1234.56. Inline strings keep the text verbatim.
             await using var ms = await TypedWorkbook.BuildAsync(["Name", "Amount"], ["Conta", "1.234,56"]);
             await using var reader = await Excel.FromAsync(ms, ct: TestContext.Current.CancellationToken);
             var config = new ExcelParserConfig { Culture = CultureInfo.GetCultureInfo("pt-BR") };
@@ -89,7 +83,6 @@ namespace ExcelReader.Tests
         [Fact]
         public async Task InvariantCultureRejectsCommaDecimal()
         {
-            // With the default invariant culture, "1.234,56" is not a valid decimal → keeps default.
             await using var ms = await TypedWorkbook.BuildAsync(["Name", "Amount"], ["Conta", "1.234,56"]);
             await using var reader = await Excel.FromAsync(ms, ct: TestContext.Current.CancellationToken);
 
@@ -98,7 +91,6 @@ namespace ExcelReader.Tests
             Assert.Equal(0m, row.Amount);
         }
 
-        // --- #5 ThrowOnParseFailure (F3) ---
 
         [Fact]
         public async Task ThrowOnParseFailureThrowsForUnparseableNonRequiredColumn()
@@ -116,8 +108,6 @@ namespace ExcelReader.Tests
         [Fact]
         public async Task DefaultConfigLeavesUnparseableNonRequiredColumnAtDefault()
         {
-            // Same input as ThrowOnParseFailureThrowsForUnparseableNonRequiredColumn, default config:
-            // stays lenient (pre-existing behavior, unchanged by F3 — see also InvariantCultureRejectsCommaDecimal).
             await using var ms = await TypedWorkbook.BuildAsync(["Name", "Amount"], ["Conta", "not-a-number"]);
             await using var reader = await Excel.FromAsync(ms, ct: TestContext.Current.CancellationToken);
 
@@ -126,7 +116,6 @@ namespace ExcelReader.Tests
             Assert.Equal(0m, row.Amount);
         }
 
-        // --- #4 Enum + Guid ---
 
         [Fact]
         public async Task EnumColumnsParseByNameAndNumber()
@@ -135,13 +124,13 @@ namespace ExcelReader.Tests
             var optId = Guid.NewGuid();
             await using var ms = await TypedWorkbook.BuildAsync(
                 ["Status", "OptionalStatus", "Id", "OptionalId"],
-                ["Active", 2, id.ToString(), optId.ToString()]); // name, numeric, guid, guid
+                ["Active", 2, id.ToString(), optId.ToString()]);
             await using var reader = await Excel.FromAsync(ms, ct: TestContext.Current.CancellationToken);
 
             TypedRow row = new ExcelParser<TypedRow>().Parse(reader).Single();
 
-            Assert.Equal(Status.Active, row.Status);          // by name
-            Assert.Equal(Status.Closed, row.OptionalStatus);  // by underlying number
+            Assert.Equal(Status.Active, row.Status);
+            Assert.Equal(Status.Closed, row.OptionalStatus);
             Assert.Equal(id, row.Id);
             Assert.Equal(optId, row.OptionalId);
         }
@@ -151,25 +140,21 @@ namespace ExcelReader.Tests
         {
             await using var ms = await TypedWorkbook.BuildAsync(
                 ["Status", "OptionalStatus"],
-                ["active", "garbage"]); // lowercase name; unparseable
+                ["active", "garbage"]);
             await using var reader = await Excel.FromAsync(ms, ct: TestContext.Current.CancellationToken);
 
             TypedRow row = new ExcelParser<TypedRow>().Parse(reader).Single();
 
-            Assert.Equal(Status.Active, row.Status);     // case-insensitive
-            Assert.Null(row.OptionalStatus);             // invalid → left null
+            Assert.Equal(Status.Active, row.Status);
+            Assert.Null(row.OptionalStatus);
         }
 
         [Fact]
         public async Task EnumFromNumericTextCellBindsByValue()
         {
-            // A *text* cell holding the underlying number ("2", not a numeric cell) binds by value:
-            // the enum's name map registers each member's numeric string form ("2") alongside its
-            // name ("Closed"), so both resolve through the same lookup. Number cells bind by value too
-            // (see EnumColumnsParseByNameAndNumber).
             await using var ms = await TypedWorkbook.BuildAsync(
                 ["Status", "OptionalStatus"],
-                ["2", "1"]); // numeric values written as text, not number cells
+                ["2", "1"]);
             await using var reader = await Excel.FromAsync(ms, ct: TestContext.Current.CancellationToken);
 
             TypedRow row = new ExcelParser<TypedRow>().Parse(reader).Single();

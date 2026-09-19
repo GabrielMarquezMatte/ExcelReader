@@ -29,8 +29,6 @@ namespace ExcelReader.Tests
 
             List<CellSnapshot> sync = ReadSync(workbook, fixture.OpenSync);
             List<CellSnapshot> asyncCells = await ReadAsync(workbook, fixture.OpenAsync, ct);
-            // The reader's GetAsyncEnumerator() (synchronous open, async row streaming — the 'await foreach'
-            // entry point) must produce the same cells as both the sync path and the async-open path.
             List<CellSnapshot> asyncEnum = await ReadViaAsyncEnumeratorAsync(workbook, fixture.OpenSync);
 
             Assert.Equal(sync, asyncCells);
@@ -68,9 +66,6 @@ namespace ExcelReader.Tests
             return cells;
         }
 
-        // Drives the reader's GetAsyncEnumerator() — a synchronous sheet open whose rows are then streamed
-        // via MoveNextAsync (what 'await foreach' binds to). Opens the workbook synchronously; only the
-        // per-row advance is awaited.
         private static async Task<List<CellSnapshot>> ReadViaAsyncEnumeratorAsync(byte[] workbook, Func<Stream, IExcelRowReader> open)
         {
             await using MemoryStream stream = new(workbook, writable: false);
@@ -85,8 +80,6 @@ namespace ExcelReader.Tests
             return cells;
         }
 
-        // DecryptedPackageStream has its own sync/async twins (a completed-ValueTask fast path plus a
-        // split-out slow path), which is exactly the drift risk this suite exists to catch.
         [Theory]
         [MemberData(nameof(EncryptedFixtureNames))]
         public async Task Should_Match_Across_Sync_And_Async_When_Encrypted(string fixture)
@@ -172,9 +165,6 @@ namespace ExcelReader.Tests
             return ValueTask.FromResult(ms.ToArray());
         }
 
-        // Many small rows so the sheet spans several 64 KB buffer fills. Unlike the single-giant-cell
-        // boundary fixture, the refills here happen deep into the sheet (when _pos is large), which is
-        // where the async row-buffering slow path mishandled the compacted buffer.
         private static ValueTask<byte[]> BuildManyRowsXlsxAsync(CancellationToken ct)
         {
             ct.ThrowIfCancellationRequested();
@@ -248,8 +238,8 @@ namespace ExcelReader.Tests
             const string csv =
                 "Name,Age,Active\n" +
                 "Ana,31,true\n" +
-                "\"Bia, Jr.\",27,false\n" +   // quoted field with an embedded comma
-                "Cid,,\n";                     // trailing empty fields
+                "\"Bia, Jr.\",27,false\n" +
+                "Cid,,\n";
             return ValueTask.FromResult(System.Text.Encoding.UTF8.GetBytes(csv));
         }
 

@@ -7,8 +7,6 @@ using Sylvan.Data.Excel;
 
 namespace ExcelReader.Benchmarks
 {
-    // Maps a header + `Rows` data rows into strongly-typed Record objects,
-    // comparing ExcelReader's ExcelParser<T> (sync + async) against MiniExcel.
     [MemoryDiagnoser]
     public class ParseBenchmark
     {
@@ -56,13 +54,6 @@ namespace ExcelReader.Benchmarks
             return acc;
         }
 
-        // Same as ExcelParserSync, but Name comes from a shared-strings workbook instead of inline
-        // strings. Name is drawn from an 8-value Pool, so this is where the reader's shared-string dedup
-        // cache actually engages: cell.GetString() (called by BuildStringParser, ColumnParserFactory.cs)
-        // resolves 8 distinct string instances instead of allocating one per row — ExcelParserSync's
-        // inline-string workbook can never hit that cache (CellValueSource.RowValues/RowBuffer, not
-        // Shared), so its 1.59 MB Name-string allocation is a property of the benchmark's input shape,
-        // not an inherent parser cost.
         [Benchmark]
         public long ExcelParserSyncSharedStrings()
         {
@@ -76,10 +67,6 @@ namespace ExcelReader.Benchmarks
             return acc;
         }
 
-        // Same workbook/columns as ExcelParserSync, but the target is a struct — proves out the
-        // zero-per-row-allocation path: ExcelParser<T> binds columns via `ref TModel`
-        // (ColumnParser<T>/RefAction<T,TProperty>, see Delegates.cs) all the way down, and Row/RowCell
-        // are ref structs, so a struct T and a direct foreach never box or allocate a model per row.
         [Benchmark]
         public long ExcelParserStructSync()
         {
@@ -93,11 +80,6 @@ namespace ExcelReader.Benchmarks
             return acc;
         }
 
-        // Reflection/attribute-driven ref-struct parse (ExcelReader.Core.Parser.RefParser.ParseNamed) —
-        // same workbook/columns, matched by header name instead of ExcelParser<T>'s reflection-built
-        // property setters. Name binds via ColumnParserFactory's span parser (zero-copy Cell.Value),
-        // not GetString(), so this measures the fully-zero-alloc path, not just the container saving
-        // ExcelParserStructSync/RecordStruct already showed.
         [Benchmark]
         public long RefParserParseNamedSync()
         {

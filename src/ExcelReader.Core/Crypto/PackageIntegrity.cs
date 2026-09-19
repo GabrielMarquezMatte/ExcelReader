@@ -5,14 +5,10 @@ using ExcelReader.Core.Reader;
 
 namespace ExcelReader.Core.Crypto
 {
-    // The HMAC is computed over the whole "EncryptedPackage" stream, including its 8-byte
-    // plaintext-size prefix — not just the ciphertext that follows it.
     internal static class PackageIntegrity
     {
         private const int StreamBufferSize = 81920;
 
-        // `ciphertext` must be a view over the WHOLE EncryptedPackage stream (prefix included).
-        // Position is saved and restored so callers can invoke this mid-construction.
         internal static void Verify(Stream ciphertext, AgileDescriptor d, byte[] intermediateKey)
         {
             (byte[] key, byte[] expected) = AgileKeyDerivation.UnwrapHmac(d, intermediateKey);
@@ -35,8 +31,6 @@ namespace ExcelReader.Core.Crypto
         }
 
         [SuppressMessage("Security", "CA5350:Do Not Use Weak Cryptographic Algorithms",
-            Justification = "The hash algorithm is dictated by the workbook's own EncryptionInfo descriptor, not chosen here; verifying a file written with SHA1 requires HMACSHA1.")]
-        [SuppressMessage("Major Code Smell", "S4790:Use a stronger hashing algorithm",
             Justification = "The hash algorithm is dictated by the workbook's own EncryptionInfo descriptor, not chosen here; verifying a file written with SHA1 requires HMACSHA1.")]
         internal static IncrementalHash CreateHmac(HashKind kind, byte[] key)
         {

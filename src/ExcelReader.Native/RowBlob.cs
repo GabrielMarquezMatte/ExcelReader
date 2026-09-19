@@ -3,24 +3,11 @@ using ExcelReader.Core.ValueObjects;
 
 namespace ExcelReader.Native
 {
-    /// <summary>
-    /// Serializes a <see cref="Row"/> into the flat little-endian blob described in
-    /// docs/plans/2026-08-13-native-ffi-python-reading.md (ABI Contract, "Row blob layout").
-    /// </summary>
-    /// <remarks>
-    /// <see cref="Row"/> and <see cref="Cell"/> are ref structs over the reader's internal buffers,
-    /// so they cannot be handed across the FFI boundary or stored between calls. Copying the whole
-    /// row once per call keeps the boundary to a single crossing per row and leaves the caller with
-    /// no lifetime rules to obey.
-    /// </remarks>
     internal static class RowBlob
     {
-        /// <summary>Byte size of one cell header (column, type, value_len) in the row blob. Shared with
-        /// <see cref="NativeApi"/>'s decoder so the two can never disagree about the layout.</summary>
         internal const int CellHeaderSize = 3 * sizeof(int);
         private const int MaxFormattedValueLength = 32;
 
-        /// <summary>Writes <paramref name="row"/> into <paramref name="scratch"/>, growing it if needed. Returns the byte count.</summary>
         internal static int Serialize(in Row row, ref byte[] scratch)
         {
             int required = sizeof(int);

@@ -107,8 +107,6 @@ fn writer_handle_round_trips_through_open_file() {
     let path = temp_path("full.xlsx");
     let target = path.to_str().expect("temp path must be UTF-8").to_string();
     {
-        // Scoped so Drop closes and releases the handle - including the exclusive file lock
-        // xl_open_write_handle takes - before Workbook::open reopens the same path below.
         let mut handle = WriterHandle::open_with(&target, XL_FORMAT_XLSX, None)
             .expect("WriterHandle::open_with must succeed");
         write_full_rows(&mut handle);
@@ -154,8 +152,6 @@ fn writer_handle_to_memory_round_trips() {
     assert_eq!(table.len(), 2);
     assert_eq!(table.get(0).expect("row 0").texto, "uma");
 
-    // bytes() must not have released the handle: a second call is still valid and returns the
-    // same content.
     let bytes_again = handle.bytes().expect("a second bytes() call must still succeed");
     assert_eq!(bytes_again, bytes);
 }

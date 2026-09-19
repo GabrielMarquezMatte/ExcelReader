@@ -26,12 +26,8 @@ namespace ExcelReader.Core.Parser
     /// <param name="model">The model instance to mutate.</param>
     /// <param name="value">The value to assign.</param>
     public delegate void ExcelPropertySetter<TModel, in TValue>(ref TModel model, TValue value)
-#if NET9_0_OR_GREATER
         where TModel : allows ref struct
         where TValue : allows ref struct;
-#else
-        ;
-#endif
 
     /// <summary>
     /// Reads a matched, non-empty cell and assigns the result directly onto <paramref name="model"/> in
@@ -48,9 +44,5 @@ namespace ExcelReader.Core.Parser
     /// <param name="provider">The format provider configured for parsing.</param>
     /// <returns><see langword="true"/> if the cell was read and assigned successfully.</returns>
     public delegate bool ExcelRowParser<TModel>(ref TModel model, in Cell cell, bool isDate1904, IFormatProvider provider)
-#if NET9_0_OR_GREATER
         where TModel : allows ref struct;
-#else
-        ;
-#endif
 }

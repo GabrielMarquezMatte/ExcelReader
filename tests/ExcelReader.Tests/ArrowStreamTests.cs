@@ -23,8 +23,6 @@ namespace ExcelReader.Tests
             return stream;
         }
 
-        // Arrow's contract: end-of-stream is get_next returning 0 with a RELEASED array, never an
-        // error code. Getting this wrong breaks every consumer subtly, so it is pinned directly.
         [Fact]
         public void GetNext_Should_Signal_End_Of_Stream_With_Zero_And_A_Null_Release()
         {
@@ -53,9 +51,6 @@ namespace ExcelReader.Tests
             }
         }
 
-        // One child schema flattened to the three things an Arrow consumer actually validates. A
-        // child count alone would let a stream whose format codes, names or nullability drifted
-        // between batches pass, which is precisely the breakage the spec's same-schema rule forbids.
         private readonly record struct SchemaShape(string? Format, string? Name, long Flags);
 
         private static List<SchemaShape> DescribeChildren(ArrowSchema schema)
@@ -73,9 +68,6 @@ namespace ExcelReader.Tests
             return children;
         }
 
-        // The Arrow spec requires every batch in a stream to carry the same schema. The two calls
-        // deliberately straddle a drained batch: taken back to back, before the stream has advanced at
-        // all, "identical across batches" is only asserted in the ordering where it cannot fail.
         [Fact]
         public void GetSchema_Should_Return_The_Same_Shape_Every_Time()
         {
@@ -97,8 +89,6 @@ namespace ExcelReader.Tests
                     Assert.Equal("+s", Marshal.PtrToStringUTF8(first.Format));
                     Assert.Equal(Marshal.PtrToStringUTF8(first.Format), Marshal.PtrToStringUTF8(second.Format));
 
-                    // Ground truth for Specs(), so this cannot pass by both calls agreeing on the
-                    // wrong answer: one unnamed nullable string column, named by its index.
                     Assert.Equal([new SchemaShape("u", "0", ArrowFlags.Nullable)], firstChildren);
 
                     ReleaseSchema(ref first);
@@ -111,7 +101,6 @@ namespace ExcelReader.Tests
             }
         }
 
-        // Abandoning a stream part-way must not leak the session or the enumerator.
         [Fact]
         public void Release_Should_Be_Safe_Mid_Stream_And_Idempotent()
         {
@@ -124,11 +113,8 @@ namespace ExcelReader.Tests
 
                 InvokeRelease(ref stream);
                 Assert.Equal(IntPtr.Zero, stream.Release);
-                InvokeRelease(ref stream); // must not throw
+                InvokeRelease(ref stream);
 
-                // The stream BORROWS the workbook - release closes the read, never the handle. If it
-                // ever disposed the workbook instead, this second open would fail rather than hand
-                // back a fresh stream over the same still-live handle.
                 Assert.Equal(NativeStatus.Ok,
                     NativeApi.OpenArrowStream(live, Specs(), headerRow: 0, maxRows: 1, out ArrowArrayStream reopened));
                 Assert.Equal(0, InvokeGetNext(ref reopened, out ArrowArray fromReopened));
@@ -138,21 +124,10 @@ namespace ExcelReader.Tests
             }
         }
 
-        // Arrow's boolean layout and its validity bitmap are both LSB-first bit-packed, and the repack
-        // from xl_column's byte-per-row bools (NativeApi.Arrow.cs's BitPackBoolColumn) runs ONLY on this
-        // export path - the NativeTable batching sweep in TypedParseSessionTests never reaches it. A
-        // batch whose row count is not a multiple of 8 ends mid-byte, which is exactly where an
-        // LSB-first packing bug hides, so this drives the stream at such sizes and compares against the
-        // single unbounded batch.
         private const int TallRowCount = 43;
 
-        // One decoded row, compared as a whole so a mis-packed bool bit or validity bit fails the
-        // assertion rather than being averaged away.
         private readonly record struct TallRow(bool Active, bool QtyValid, long Qty);
 
-        // Same temp-CSV approach TypedParseSessionTests uses for its own tall fixture: 43 rows is
-        // coprime with every batch size below, and the flag/null periods (3 and 5) stay out of phase
-        // with the 8-row byte boundary so a mis-packed final partial byte cannot look correct anyway.
         private static string WriteTallFixture()
         {
             string path = Path.Combine(Path.GetTempPath(), $"excelreader-arrowstream-{Guid.NewGuid():N}.csv");
@@ -172,8 +147,6 @@ namespace ExcelReader.Tests
             return
             [
                 new() { Names = ["active"], Type = NativeColumnType.Bool },
-                // Nullable, and blank on every fifth row, so this column's validity bitmap actually has
-                // zero bits to mis-pack at a batch boundary.
                 new() { Names = ["qty"], Type = NativeColumnType.Int64, Nullable = true },
             ];
         }
@@ -221,21 +194,14 @@ namespace ExcelReader.Tests
             ArrowArray qty = ChildAt(array, 1);
             int rowCount = (int)array.Length;
 
-            // Buffer 0 is always validity; the bool column's values live in buffer 1 bit-packed, the
-            // int64 column's in buffer 1 as eight bytes per row.
             bool[] flags = DecodeBits(BufferAt(active, 1), rowCount, whenAbsent: false);
             bool[] valid = DecodeBits(BufferAt(qty, 0), rowCount, whenAbsent: true);
             long[] quantities = new long[rowCount];
             Marshal.Copy(BufferAt(qty, 1), quantities, 0, rowCount);
 
-            // null_count must agree with the validity bitmap this same batch carries. CountUnset
-            // popcounts whole bytes on the assumption that every bit past `length` is zero, so a batch
-            // whose row count is not a multiple of 8 is exactly where a stale tail bit would inflate
-            // null_count - a discrepancy the row values alone cannot show, and one pyarrow would act on
-            // because it trusts null_count for its validity fast paths.
             Assert.Equal(valid.Count(v => !v), qty.NullCount);
-            Assert.Equal(0, active.NullCount); // non-nullable: no validity bitmap, so no nulls
-            Assert.Equal(0, array.NullCount);  // the top-level struct array has no row-level nulls
+            Assert.Equal(0, active.NullCount);
+            Assert.Equal(0, array.NullCount);
 
             List<TallRow> decoded = [];
             for (int i = 0; i < rowCount; i++)
@@ -245,10 +211,6 @@ namespace ExcelReader.Tests
             return decoded;
         }
 
-        // Ground truth straight from WriteTallFixture's generating rules, so the comparison below does
-        // not rest solely on the unbounded read agreeing with the batched one: both sides run the same
-        // PackBitsLsbFirst, so a batch-size-invariant bug (a global bit inversion, say) would cancel
-        // out between them and pass. These assertions are absolute.
         private static void AssertMatchesFixtureRules(List<TallRow> rows)
         {
             Assert.Equal(TallRowCount, rows.Count);
@@ -273,8 +235,6 @@ namespace ExcelReader.Tests
             return Marshal.ReadIntPtr(array.Buffers, index * IntPtr.Size);
         }
 
-        // LSB-first: bit i lives in bit (i & 7) of byte (i >> 3). A NULL buffer is Arrow's "absent"
-        // marker, which for a validity bitmap means every row is valid.
         private static bool[] DecodeBits(IntPtr bits, int rowCount, bool whenAbsent)
         {
             bool[] result = new bool[rowCount];
@@ -305,14 +265,11 @@ namespace ExcelReader.Tests
                 List<TallRow> batched = ReadTallThroughStream(path, maxRows, out int batches);
 
                 Assert.Equal(1, wholeBatches);
-                // Guards the fixture: uniform flags or no nulls at all would leave nothing to mis-pack.
                 Assert.Contains(whole, row => row.Active);
                 Assert.Contains(whole, row => !row.Active);
                 Assert.Contains(whole, row => row.QtyValid);
                 Assert.Contains(whole, row => !row.QtyValid);
 
-                // Absolute first, then relative: the batched read must match the fixture's own rules,
-                // and the unbounded read must agree with it.
                 AssertMatchesFixtureRules(batched);
                 AssertMatchesFixtureRules(whole);
                 Assert.Equal(whole, batched);
@@ -325,9 +282,6 @@ namespace ExcelReader.Tests
             }
         }
 
-        // TypedParseSessionTests pins this guard for the typed reader. It matters more here, not less:
-        // the stream's out param carries a `release` that a consumer ignoring the return code will
-        // call, so zeroing it on this failure is what keeps that call a no-op.
         [Fact]
         public void OpenArrowStream_Should_Reject_A_Negative_Batch_Size_And_Zero_The_Stream()
         {
@@ -342,9 +296,6 @@ namespace ExcelReader.Tests
             Assert.Equal(IntPtr.Zero, stream.PrivateData);
         }
 
-        // A non-nullable column whose value cannot convert. Row 3 fails, so at a batch size of 2 the
-        // first batch is a clean success and the fault lands on the second call - the same shape
-        // xl_typed_reader_next has, and the only thing that exercises SetBatchError at all.
         private static string WriteUnconvertibleFixture()
         {
             string path = Path.Combine(Path.GetTempPath(), $"excelreader-arrowstream-{Guid.NewGuid():N}.csv");
@@ -352,10 +303,6 @@ namespace ExcelReader.Tests
             return path;
         }
 
-        // The stream half of the LATCHES promise, plus the get_last_error contract: a non-zero return
-        // must come with a message, on the failing call AND on every call after it. That second part is
-        // what the session's own latched fault message is for - re-reading the thread's xl_last_error
-        // would come back empty (or, worse, carry an unrelated call's message) the second time.
         [Fact]
         public void GetNext_Should_Latch_A_Conversion_Failure_With_A_Message()
         {
@@ -394,8 +341,6 @@ namespace ExcelReader.Tests
             }
         }
 
-        // The spec's Testing section: the workbook closed mid-stream is a clean errno with a message,
-        // not a crash, and it latches too.
         [Fact]
         public void GetNext_Should_Fail_Cleanly_After_The_Workbook_Is_Closed()
         {
@@ -406,7 +351,7 @@ namespace ExcelReader.Tests
                 Assert.NotEqual(IntPtr.Zero, first.Release);
                 ReleaseArray(ref first);
 
-                live.Dispose(); // xl_close
+                live.Dispose();
 
                 Assert.NotEqual(0, InvokeGetNext(ref stream, out ArrowArray after));
                 Assert.Equal(IntPtr.Zero, after.Release);

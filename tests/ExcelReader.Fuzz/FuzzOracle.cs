@@ -20,42 +20,31 @@ namespace ExcelReader.Fuzz
     {
         internal static bool IsExpected(Exception ex)
         {
-            // Malformed container/records, and everything ZipArchive/DeflateStream raise for a
-            // corrupt archive, all surface as InvalidDataException.
             if (ex is InvalidDataException or EndOfStreamException)
             {
                 return true;
             }
 
-            // A structurally valid file using a feature this library does not implement.
             if (ex is NotSupportedException)
             {
                 return true;
             }
 
-            // The resource limits doing exactly what they exist for.
             if (ex is ExcelLimitExceededException)
             {
                 return true;
             }
 
-            // Typed-parse failures (only reachable from the parser harnesses).
             if (ex is ExcelParseException)
             {
                 return true;
             }
 
-            // A bad/missing password, an unsupported encryption scheme, or a tampered ciphertext caught
-            // by the dataIntegrity HMAC - all deliberate rejections from the encrypted-container path,
-            // reachable from any target now that the corpus includes an encrypted seed.
             if (ex is ExcelEncryptionException)
             {
                 return true;
             }
 
-            // Exact types only. ArgumentOutOfRangeException derives from ArgumentException and
-            // IndexOutOfRangeException is its own type — both mean an internal slice or index was
-            // computed from attacker-controlled bytes without validation, which is a real defect.
             Type type = ex.GetType();
             return type == typeof(ArgumentException)
                 || type == typeof(InvalidOperationException);
@@ -88,8 +77,6 @@ namespace ExcelReader.Fuzz
                 }
             }
 
-            // These are precisely the symptoms the suite exists to surface: an index or slice computed
-            // from untrusted bytes, a null that "cannot" happen, and a limit that failed to hold.
             Exception[] mustReject =
             [
                 new IndexOutOfRangeException(),
@@ -120,7 +107,6 @@ namespace ExcelReader.Fuzz
             }
             catch (Exception ex) when (IsExpected(ex))
             {
-                // Correct rejection of malformed input.
             }
         }
     }

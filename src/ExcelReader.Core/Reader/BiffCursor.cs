@@ -4,35 +4,24 @@ using System.Runtime.CompilerServices;
 
 namespace ExcelReader.Core.Reader
 {
-    // Forward/seekable record cursor over a WorkbookStream. Each consumer (globals parse, each
-    // enumerator) holds its own, so positions never collide; the shared source is repositioned on
-    // every sector load. Not thread-safe across cursors used concurrently from multiple threads.
     internal sealed class BiffCursor : IDisposable
     {
         private readonly WorkbookStream _wb;
-        // Cached from _wb: both are get-only properties, fixed for the stream's lifetime, so caching
-        // them here saves the _wb -> field indirection on every PeekId/TryReadRecord/ReadSpan call —
-        // several of those per BIFF8 record, across ~910K records on a large real-world workbook.
         private readonly WorkbookStream.SourceKind _kind;
         private readonly int _sectorSize;
         private readonly int _maxSectors;
-        private byte[]? _sector;     // current sector buffer window (streamed mode only)
-        private int _loadedStart = -1;       // start chain index loaded in _sector
-        private int _loadedCount;        // number of sectors loaded in _sector
-        private byte[]? _scratch;             // assembles records that span sectors
+        private byte[]? _sector;
+        private int _loadedStart = -1;
+        private int _loadedCount;
+        private byte[]? _scratch;
 
-        // In-memory modes: the whole buffer, copied into locals here so the per-record path never
-        // reloads them through _wb.
         private readonly byte[] _file;
         private readonly int _fileBase;
 
-        // Chained mode's cached contiguous sector run (logical bounds + the run's buffer offset).
-        // Empty until the first read; -1 can never satisfy the fast-path compare.
         private long _runStart = -1;
         private long _runEnd = -1;
         private long _runBufferOffset;
 
-        // Streamed mode's loaded sector window, in logical stream bytes — same trick as _runStart/_runEnd.
         private long _windowStart = -1;
         private long _windowEnd = -1;
 
@@ -56,9 +45,6 @@ namespace ExcelReader.Core.Reader
 
         internal long Position { get; set; }
 
-        // Exposes the Workbook stream's total length so a caller with an attacker-controlled offset
-        // (e.g. BoundSheet8.lbPlyPos) can validate it before ever assigning Position — see
-        // ParseWorkbookGlobals's BoundSheet8 handling.
         internal long Length { get; }
 
         internal int PeekId()
@@ -92,8 +78,6 @@ namespace ExcelReader.Core.Reader
             return true;
         }
 
-        // A contiguous view of [pos, pos+len). Zero-copy when in-memory or within one sector
-        // otherwise assembled into the scratch buffer. Valid only until the next cursor read.
         private ReadOnlySpan<byte> ReadSpan(long pos, int len)
         {
             if (_kind == WorkbookStream.SourceKind.Contiguous)
@@ -104,7 +88,6 @@ namespace ExcelReader.Core.Reader
             {
                 return ReadChainedSpan(pos, len);
             }
-            // Same shape as ReadChainedSpan's fast path above.
             if (pos >= _windowStart && pos + len <= _windowEnd)
             {
                 return _sector.AsSpan((int)(pos - _windowStart), len);
@@ -128,8 +111,6 @@ namespace ExcelReader.Core.Reader
             return scratch.AsSpan(0, len);
         }
 
-        // Inlined into ReadSpan: for a sequentially written Workbook stream the cached run covers the
-        // whole file, so this collapses to one compare plus an array slice per record.
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private ReadOnlySpan<byte> ReadChainedSpan(long pos, int len)
         {
@@ -147,8 +128,6 @@ namespace ExcelReader.Core.Reader
             {
                 return _file.AsSpan(_fileBase + (int)(_runBufferOffset + pos - _runStart), len);
             }
-            // Straddles a chain discontinuity: assemble sector-by-sector, as the streamed path does
-            // when a record crosses its sector window.
             byte[] scratch = EnsureScratch(len);
             _wb.CopyChained(pos, scratch.AsSpan(0, len));
             return scratch.AsSpan(0, len);

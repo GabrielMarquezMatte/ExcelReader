@@ -29,9 +29,7 @@ jobs:
       - name: Setup .NET
         uses: actions/setup-dotnet@v6
         with:
-          dotnet-version: |
-            8.0.x
-            10.0.x
+          dotnet-version: 10.0.x
 
       - name: Cache NuGet packages
         uses: actions/cache@v6
@@ -87,12 +85,10 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # Vector256 off, Vector128 still accelerated: exercises the SSE2 path on an AVX2 runner.
           - name: sse2-only
             enableAVX2: '0'
             enableAVX512F: '0'
             enableHWIntrinsic: '1'
-          # No hardware intrinsics at all: exercises the scalar fallback end to end.
           - name: no-simd
             enableAVX2: '1'
             enableAVX512F: '1'
@@ -108,9 +104,7 @@ jobs:
       - name: Setup .NET
         uses: actions/setup-dotnet@v6
         with:
-          dotnet-version: |
-            8.0.x
-            10.0.x
+          dotnet-version: 10.0.x
 
       - name: Cache NuGet packages
         uses: actions/cache@v6
@@ -143,9 +137,7 @@ jobs:
       - name: Setup .NET
         uses: actions/setup-dotnet@v6
         with:
-          dotnet-version: |
-            8.0.x
-            10.0.x
+          dotnet-version: 10.0.x
 
       - name: Cache NuGet packages
         uses: actions/cache@v6
@@ -158,21 +150,12 @@ jobs:
       - name: Restore
         run: dotnet restore ExcelReader.slnx
 
-      # Any IL2xxx (trim) or IL3xxx (AOT) diagnostic here is a build error (TrimmerSingleWarn=false
-      # in the project so none of them get collapsed into one hidden summary line). This is the one
-      # thing that actually proves the mapped read path never reaches ExcelParser<T>'s reflection.
       - name: Publish ExcelReader.AotSanity (PublishAot)
         run: dotnet publish tests/ExcelReader.AotSanity/ExcelReader.AotSanity.csproj -c Release -r win-x64
 
       - name: Run published binary
         run: .\tests\ExcelReader.AotSanity\bin\Release\net10.0\win-x64\publish\ExcelReader.AotSanity.exe
 
-      # R-A6: the generator is packed into ExcelReader.Core's nupkg via a hardcoded bin/ path
-      # (ExcelReader.Core.csproj's `None Include`), which is fragile to configuration/TFM drift with
-      # no build error if it silently stops matching — a consumer would only find out when their own
-      # [ExcelSerializable] model fails with "does not implement IExcelRowMap<T>", with nothing pointing
-      # at the real cause. This step is what actually catches that drift, by unzipping the real .nupkg
-      # release.yml would ship and checking analyzers/dotnet/cs/ExcelReader.Generator.dll is in it.
       - name: Pack and verify the generator ships inside the nupkg
         shell: pwsh
         run: |
@@ -195,10 +178,6 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      # promote_public_api.py runs unattended on every release (release.yml's
-      # promote-public-api job) with no chance to catch a bad promotion before it's committed -
-      # a bug here previously let removed API entries pile up in PublicAPI.Shipped.txt across
-      # two releases before the next build caught it as RS0017.
       - name: Test promote_public_api.py
         working-directory: .github/scripts
         run: python3 test_promote_public_api.py -v

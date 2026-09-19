@@ -7,10 +7,6 @@ using ExcelReader.Core.Writer;
 
 namespace ExcelReader.Tests
 {
-    // PrefetchStream overlaps the ZIP entry's zlib inflate with parsing on a background thread.
-    // Each test here pins one specific way that can go wrong: deadlock on early abandonment, a
-    // swallowed or rewrapped exception, a byte-for-byte mismatch versus the serial path, a limit
-    // that stops firing, or cancellation that stops being prompt.
     public class PrefetchDecompressionTests
     {
         private static readonly TimeSpan HangGuard = TimeSpan.FromSeconds(10);
@@ -24,7 +20,6 @@ namespace ExcelReader.Tests
             }
         }
 
-        // ---- 1. Equivalence (load-bearing) ----
 
         [Theory]
         [MemberData(nameof(Fixtures))]
@@ -57,11 +52,7 @@ namespace ExcelReader.Tests
             Assert.Equal(serial, prefetched);
         }
 
-        // ---- 2. Early abandonment ----
 
-        // The disposables inside the Task.Run delegate are owned and disposed entirely within that
-        // delegate's own scope before it completes; returning the outer Task without an outer 'using'
-        // is exactly what AssertCompletesWithinGuardAsync's own await drains before this call returns.
         [SuppressMessage("Reliability", "CA2025:Ensure task instances are complete before disposing them",
             Justification = "The disposables live inside the Task.Run delegate and are disposed there before the delegate completes; the returned Task is fully awaited by AssertCompletesWithinGuardAsync.")]
         [Theory]
@@ -104,11 +95,6 @@ namespace ExcelReader.Tests
             return AssertCompletesWithinGuardAsync(work, ct);
         }
 
-        // work is this method's own Task.Run started immediately above by every caller, brought to
-        // completion (or observed via the timeout) exactly once here — not a fire-and-forget foreign
-        // Task, so awaiting it is safe despite VSTHRD003's default assumption otherwise.
-        [SuppressMessage("VisualStudio.Threading", "VSTHRD003:Avoid awaiting foreign Tasks",
-            Justification = "work is the caller's own Task.Run, started immediately before this call and awaited exactly once here.")]
         private static async Task AssertCompletesWithinGuardAsync(Task work, CancellationToken ct)
         {
             using CancellationTokenSource delayCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
@@ -119,7 +105,6 @@ namespace ExcelReader.Tests
             await work;
         }
 
-        // ---- 3. Exception propagation ----
 
         [Fact]
         public void CorruptEntryThrowsSameExceptionTypeSyncWithPrefetchOnAndOff()
@@ -196,7 +181,6 @@ namespace ExcelReader.Tests
             }
         }
 
-        // ---- 4. Limit enforcement ----
 
         [Fact]
         public void PrefetchOnStillTripsTotalDecompressedLimitSync()
@@ -241,7 +225,6 @@ namespace ExcelReader.Tests
             Assert.Equal(nameof(ExcelReaderOptions.MaxTotalDecompressedBytes), ex.LimitName);
         }
 
-        // ---- 5. Cancellation ----
 
         [Fact]
         public async Task AlreadyCancelledTokenThrowsWithPrefetchOn()
@@ -278,13 +261,6 @@ namespace ExcelReader.Tests
             await AssertCompletesWithinGuardAsync(moveNext, openCt);
         }
 
-        // ---- 6. Small-entry threshold ----
-        //
-        // WorkbookLookups.Wrap skips PrefetchStream below a size floor: the background-thread
-        // dispatch/teardown cost isn't worth it for a small sheet, and it would only add overhead.
-        // These reach into LimitedReadStream's private _inner field because that decision has no other
-        // externally observable effect for a tiny, fast-to-read stream — both paths return identical
-        // data (SyncReadIsIdenticalWithPrefetchOnAndOff already covers correctness at large sizes).
 
         [Fact]
         public void WrapSkipsPrefetchForAnEntrySmallerThanTheThreshold()
@@ -325,7 +301,6 @@ namespace ExcelReader.Tests
             return (Stream)field.GetValue(stream)!;
         }
 
-        // ---- Shared read helpers ----
 
         private static List<CellSnapshot> ReadSync(
             byte[] bytes,
@@ -380,10 +355,7 @@ namespace ExcelReader.Tests
             }
         }
 
-        // ---- Fixture builders ----
 
-        // Many mixed-type rows so the decompressed sheet spans several 64 KiB prefetch chunks and
-        // several full 256 KiB channel-capacity cycles, not just a single producer/consumer handoff.
         private static byte[] BuildLargeXlsx()
         {
             StringBuilder sb = new(512 * 1024);
@@ -400,10 +372,6 @@ namespace ExcelReader.Tests
             return ms.ToArray();
         }
 
-        // MemberData factories run before any test body and have no async context to await into,
-        // so building the xlsb fixture (which needs XlsbWorkbookWriter's async API) has to block here.
-        [SuppressMessage("VisualStudio.Threading", "VSTHRD002:Avoid problematic synchronous waits",
-            Justification = "MemberData factories are synchronous by contract; there is no async context to await from here.")]
         private static byte[] BuildLargeXlsb()
         {
             return BuildLargeXlsbAsync().GetAwaiter().GetResult();
@@ -431,7 +399,6 @@ namespace ExcelReader.Tests
             return ms.ToArray();
         }
 
-        // ---- Open delegates ----
 
         private static XlsxReader OpenXlsx(Stream stream, ExcelReaderOptions options)
         {
@@ -453,10 +420,6 @@ namespace ExcelReader.Tests
             return await Excel.FromXlsbAsync(stream, options: options, ct: ct);
         }
 
-        // Scrambles a ZIP entry's raw compressed bytes in place, leaving every declared size/offset
-        // untouched, so the archive still opens and the entry's Length/CompressedLength still check
-        // out — the corruption only shows up once something actually tries to inflate the payload
-        // (i.e. on the producer thread when PrefetchDecompression is on).
         private static void CorruptEntryCompressedData(byte[] zipBytes, string entryName)
         {
             byte[] nameBytes = Encoding.UTF8.GetBytes(entryName);

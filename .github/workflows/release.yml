@@ -56,11 +56,6 @@ jobs:
           -p:Version=${{ steps.version.outputs.value }}
           --output ./artifacts
 
-      # Portable IL tool package (see the csproj: "a dotnet tool ships as IL and is launched by
-      # whatever SDK the user has") - not the self-contained AOT binaries publish-cli attaches to
-      # the GitHub Release below, which need no .NET runtime installed but must be built per-RID.
-      # `dotnet tool install --global ExcelReader.NET.Cli` (README's documented install command)
-      # resolves this package.
       - name: Pack CLI
         run: >-
           dotnet pack src/ExcelReader.Cli/ExcelReader.Cli.csproj
@@ -184,20 +179,6 @@ jobs:
           esac
           echo "value=${os}-${arch}" >> "$GITHUB_OUTPUT"
 
-      # PublishAot/PackAsTool=false override the project's normal dotnet-tool packaging (a
-      # dotnet tool ships as IL, launched by the caller's own SDK) with a single self-contained
-      # native executable instead - no .NET runtime required on the machine that runs it.
-      # ConsoleAppFramework is already compile-time only and Spectre.Console is AOT-compatible,
-      # so this publishes clean with zero IL2xxx/IL3xxx trim warnings.
-      #
-      # Do NOT split this into a separate `dotnet restore` (without PublishAot/the RID) followed by
-      # `dotnet publish --no-restore`: restoring without PublishAot=true skips pulling in both the
-      # AOT trim analyzer AND the NativeAOT compiler toolchain (both are gated on it at restore
-      # time), so the later publish step silently produces no binary at all instead of failing loud.
-      # ExcelReader.Generator (a netstandard2.0 analyzer-only reference from ExcelReader.Core) sets
-      # _RequiresILLinkPack=false in its own csproj specifically so this single-command restore+
-      # publish, with PublishAot=true present the whole way through, doesn't fail on it with
-      # NETSDK1207.
       - name: Publish native AOT binary
         shell: bash
         run: >-
@@ -260,10 +241,6 @@ jobs:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
         run: cargo publish --allow-dirty
 
-      # crates.io's sparse index needs a moment to propagate a freshly published version -
-      # excelreader's own `cargo publish` below resolves its excelreader-derive dependency
-      # against that index, so without this it can fail with "no matching package found"
-      # even though the publish above just succeeded.
       - name: Wait for excelreader-derive to become available
         run: sleep 30
 
@@ -360,12 +337,6 @@ jobs:
           path: dist/
           merge-multiple: true
 
-      # No sdist: this package has no pure-Python fallback path. _lib/ ships only a
-      # per-platform native binary that build_native.py produces at build time - a
-      # sdist built here would carry an empty _lib/ (just .gitkeep, since the real
-      # binary is gitignored) and would install "successfully" while being unusable
-      # at import time. Publishing wheels only means an unsupported platform/Python
-      # combination fails at install time instead.
 
       - name: Publish to PyPI (Trusted Publishing)
         uses: pypa/gh-action-pypi-publish@release/v1
@@ -419,5 +390,5 @@ jobs:
           base: develop
           delete-branch: true
           add-paths: |
-            src/*/PublicAPI/*/PublicAPI.Shipped.txt
-            src/*/PublicAPI/*/PublicAPI.Unshipped.txt
+            src/*/PublicAPI/PublicAPI.Shipped.txt
+            src/*/PublicAPI/PublicAPI.Unshipped.txt

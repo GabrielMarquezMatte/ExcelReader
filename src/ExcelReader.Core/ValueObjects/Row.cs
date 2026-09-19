@@ -8,17 +8,11 @@ namespace ExcelReader.Core.ValueObjects
     /// </summary>
     public readonly ref struct Row
     {
-        private readonly ReadOnlySpan<CellDesc> _cells; // ascending by Column, gaps allowed
+        private readonly ReadOnlySpan<CellDesc> _cells;
         private readonly ReadOnlySpan<byte> _rowValues;
         private readonly ReadOnlySpan<byte> _shared;
-        // Aliases the reader's live read buffer directly (currently only XLSX's bare-<v> fast path uses
-        // this) — empty for readers that never emit a CellValueSource.RowBuffer cell.
         private readonly ReadOnlySpan<byte> _rowBuffer;
-        // Non-null only for readers with a true, cross-row-stable shared-string table (XLSX/XLSB/XLS); see
-        // CellDesc.ToCell. Defaults to null so existing 3-arg call sites (CSV) are unaffected.
         private readonly string?[]? _sharedStringCache;
-        // Content-keyed dedup cache (see Utf8StringCache) for cells _sharedStringCache can't serve —
-        // set only when the reader was constructed with string interning enabled.
         private readonly Utf8StringCache? _contentCache;
 
         internal Row(ReadOnlySpan<CellDesc> cells, ReadOnlySpan<byte> rowValues, ReadOnlySpan<byte> shared,
@@ -38,6 +32,9 @@ namespace ExcelReader.Core.ValueObjects
         /// <summary>Enumerates only the populated cells in this row, in ascending column order.</summary>
         public RowCellEnumerator Cells => new(_cells, _rowValues, _shared, _rowBuffer, _sharedStringCache, _contentCache);
 
+        internal bool IsEmptyRecord =>
+            _cells.IsEmpty || (_cells.Length == 1 && _cells[0].Column == 0 && _cells[0].Type == CellType.Empty);
+
         /// <summary>Gets the cell at the given column index, or an empty cell if the column has no value.</summary>
         public Cell this[int column]
         {
@@ -52,7 +49,6 @@ namespace ExcelReader.Core.ValueObjects
             }
         }
 
-        // Binary search by Column (cells are sorted ascending) — keeps wide-row access O(log n).
         private int IndexOf(int column)
         {
             if ((uint)column < (uint)_cells.Length && _cells[column].Column == column)

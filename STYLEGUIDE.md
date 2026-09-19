@@ -151,14 +151,50 @@ same change.
 
 ## Comments
 
-Write a comment only when the **why** is not obvious from the code. Do not describe what the code does — the code already says that. Do not reference the task, the ticket, or the caller.
+**The default is no comment.** Code is expected to explain itself through naming and execution flow.
+Reaching for a comment is the signal to look at the code again first: if a reader cannot follow the
+logic, that is a defect in the code, not a gap in its documentation. Rename the variable, extract the
+method, flatten the branch. Fix it there, and the comment becomes unnecessary.
+
+A comment is justified only once that has been tried and the code still cannot carry the meaning —
+because the reason lives outside the code and no amount of naming can bring it in:
+
+- A constraint imposed by a format spec, a platform, or an external producer.
+- An invariant a reader could silently break, where breaking it stays compiling and passes review.
 
 ```csharp
-// OK: non-obvious invariant
+// OK: an invariant the type system cannot express
 // Decoded output is never longer than its XML source, so src.Length bounds the flat buffer.
 
 // NOT OK: describes what the code does
 // Loop through each cell and parse its value.
+
+// NOT OK: the code should have said this itself
+// p is the position of the '<' that starts the row's closing tag
+int p = ...;          // -> name it rowCloseTagStart and delete the comment
+```
+
+Never reference the task, the ticket, or the caller.
+
+### Findings do not belong in code
+
+Measurements, benchmark results, memory-footprint numbers, and the reasoning that picked one
+approach over another are **not comments**. They go in [`docs/`](docs/).
+
+This includes the whole class of "why it is this way" content: a throughput figure that justified a
+buffer size, an allocation count that motivated pooling, a design that was prototyped and measured
+and then rejected. Put it in a document, with the numbers, the machine, and the corpus. Then the
+next person can re-run it and disagree with the evidence — which a comment asserting `// 2.4x faster`
+never lets them do.
+
+What may stay in the code is the constraint itself, stated without its evidence:
+
+```csharp
+// OK: the ceiling, not the benchmark that found it
+// ponytail: 32 MB cap; sheets past that fall back to plain allocs.
+
+// NOT OK: a finding, and it rots the moment anything around it changes
+// Measured 11.3 ms vs 36.5 ms for Sylvan on the 65K-row corpus, so the span path stays.
 ```
 
 ### A comment must stay true, or it is worse than no comment
@@ -168,11 +204,12 @@ Comments carry maintenance cost. Two failure modes are specifically banned:
 - **Do not describe a state the code is no longer in.** A header that says "these lookups are
   duplicated across the three readers" is actively misleading once the class exists precisely so they
   are not duplicated. When you refactor, reread the comments on what you touched.
-- **Do not cite a file that can disappear.** Never point a comment at a design doc, plan, or section
-  marker (`docs/foo.md`, "see step Z4") as the authoritative explanation. Docs get renamed, merged,
-  and deleted; the comment then sends a reader to nothing, which is worse than silence. Explain the
-  reasoning inline, on its own terms. A link may *supplement* a self-contained comment, never replace
-  it.
+- **Do not cite a file that can disappear.** Never point a comment at a plan, a spec, or a section
+  marker ("see step Z4") as the authoritative explanation. Those are working artifacts: they get
+  renamed, merged and deleted, and the comment then sends a reader to nothing, which is worse than
+  silence. A committed document under [`docs/`](docs/) is different in kind — it is permanent, and
+  pointing at one is how a finding stays out of the code. The test is whether the target is expected
+  to still exist in a year, not whether a link is involved.
 
 ---
 
@@ -290,8 +327,9 @@ These rules apply only when a function is on a measured hot path (cell parsing, 
 - Avoid LINQ in hot paths; use `IndexOf` on spans which benefits from SIMD.
 - Split cold paths (growth, throw helpers) into `[MethodImpl(MethodImplOptions.NoInlining)]` methods so
   they do not bloat the hot caller's IL and cost it inlining.
-- Optimize against a measurement, and record what it showed in a comment. An optimization with no
-  number behind it is a guess that costs readability. Caches in particular are a trade, not a win:
-  note the workload where the cache pays and the one where it does not.
+- Optimize against a measurement, and record what it showed in [`docs/`](docs/) — never in a comment.
+  An optimization with no number behind it is a guess that costs readability. Caches in particular are
+  a trade, not a win: document the workload where the cache pays and the one where it does not, with
+  the numbers that showed it.
 
 Outside the hot path (workbook loading, shared-strings init), ordinary allocations are fine.

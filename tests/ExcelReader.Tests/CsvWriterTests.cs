@@ -1,4 +1,3 @@
-using System.Diagnostics.CodeAnalysis;
 using System.Text;
 using ExcelReader.Core.Enums;
 using ExcelReader.Core.Parser;
@@ -19,14 +18,8 @@ namespace ExcelReader.Tests
             return Encoding.UTF8.GetString(ms.ToArray());
         }
 
-        // IUtf8SpanFormattable with a fully controllable formatted length — used to force
-        // CsvRowWriter's overflow paths (WriteUtf8Field's stackalloc-too-small fallback and
-        // WriteUtf8FieldSlow's rented-buffer-grows-until-it-fits loop), which no BCL numeric
-        // type is long enough to reach on its own.
         private readonly struct HugeUtf8Formattable(int length) : IUtf8SpanFormattable
         {
-            [SuppressMessage("Major Code Smell", "S1172:Unused method parameters should be removed",
-                Justification = "Signature required by IFormattable; this test type ignores format/culture.")]
             public string ToString(string? format, IFormatProvider? formatProvider)
             {
                 return new string('x', length);
@@ -162,7 +155,7 @@ namespace ExcelReader.Tests
         {
             var ms = new MemoryStream();
             using CsvWriter writer = CsvWriter.Create(ms, leaveOpen: true);
-            CsvRowWriter row = writer.StartRow(); // intentionally left un-disposed
+            CsvRowWriter row = writer.StartRow();
             row.Write("a");
 
             Assert.Throws<InvalidOperationException>(writer.StartRow);
@@ -229,7 +222,6 @@ namespace ExcelReader.Tests
         [Fact]
         public void NumericFieldContainingDelimiterIsQuoted()
         {
-            // Delimiter '.' collides with the decimal point, so the UTF-8 numeric path must quote it.
             string csv = Write(w =>
             {
                 using CsvRowWriter row = w.StartRow();
@@ -244,9 +236,6 @@ namespace ExcelReader.Tests
         [Fact]
         public void NumericFieldContainingQuoteByteIsEscaped()
         {
-            // Quote='5' makes the digit '5' inside a numeric value collide with the quote byte,
-            // forcing WriteFieldBytes's escape-doubling loop (the UTF-8/numeric sibling of
-            // WriteStringField's, exercised separately by FieldContainingQuoteIsEscaped).
             var options = new CsvWriterOptions { Quote = (byte)'5' };
             var ms = new MemoryStream();
             using (CsvWriter writer = CsvWriter.Create(ms, leaveOpen: true, options: options))
@@ -265,8 +254,6 @@ namespace ExcelReader.Tests
         [Fact]
         public void PathologicallyLongFormattableValueUsesOverflowPath()
         {
-            // 300 bytes: too big for WriteUtf8Field's 64-byte stack buffer, and too big for
-            // WriteUtf8FieldSlow's initial 256-byte rental, forcing it to grow once and retry.
             var value = new HugeUtf8Formattable(300);
             string csv = Write(w =>
             {
@@ -284,7 +271,7 @@ namespace ExcelReader.Tests
             {
                 using CsvRowWriter row = w.StartRow();
                 row.Write("a");
-                row.Write("b,c"); // comma no longer special once delimiter is ';'
+                row.Write("b,c");
             }, options: new CsvWriterOptions { Delimiter = (byte)';' });
 
             Assert.Equal("a;b,c\r\n", csv);
@@ -299,7 +286,6 @@ namespace ExcelReader.Tests
                 CsvRowWriter row = writer.StartRow();
                 row.Write("a");
                 row.Write("b");
-                // row intentionally left un-disposed
             }
 
             Assert.Equal("a,b\r\n", Encoding.UTF8.GetString(ms.ToArray()));
@@ -353,7 +339,8 @@ namespace ExcelReader.Tests
             Assert.Equal("has, comma", row2[0].GetString());
             Assert.Equal(CellType.ExcelString, row2[1].Type);
             Assert.Equal("true", row2[1].GetString());
-            Assert.False(row2[2].TryGetDateTime(out _)); // CSV cells have no serial date form
+            Assert.True(row2[2].TryGetDateTime(out DateTime readBack));
+            Assert.Equal(date, readBack);
             Assert.Equal(date.ToString("O"), row2[2].GetString());
         }
 
@@ -383,7 +370,6 @@ namespace ExcelReader.Tests
             }
             ms.Position = 0;
 
-            // Concrete CsvReader (not IExcelRowReader) so Parse picks the CSV text-date overload.
             using var reader = Excel.FromCsv(ms);
             var parsed = new ExcelParser<CsvPerson>().Parse(reader).ToList();
 
@@ -443,14 +429,13 @@ namespace ExcelReader.Tests
         public void LargeFieldTriggersAutomaticFlushBeforeDispose()
         {
             var ms = new MemoryStream();
-            string bigField = new('a', 2 * 1024 * 1024); // exceeds the 1 MB auto-flush threshold
+            string bigField = new('a', 2 * 1024 * 1024);
             using (CsvWriter writer = CsvWriter.Create(ms, leaveOpen: true))
             {
                 using (CsvRowWriter row = writer.StartRow())
                 {
                     row.Write(bigField);
                 }
-                // EndRow's threshold check must have flushed to the stream already, before Dispose.
                 Assert.True(ms.Length > 0);
             }
 
@@ -466,7 +451,7 @@ namespace ExcelReader.Tests
             {
                 row.Write("a");
             }
-            Assert.Equal(0, ms.Length); // still buffered, not yet flushed to the stream
+            Assert.Equal(0, ms.Length);
 
             writer.Flush();
 

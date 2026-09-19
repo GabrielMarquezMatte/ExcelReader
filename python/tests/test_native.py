@@ -55,9 +55,6 @@ def test_status_constants_match_the_abi():
 
 
 def test_last_error_two_call_form_still_works():
-    # reader.py uses xl_last_error_ptr exclusively now, but xl_last_error (the ask-the-size-then-copy
-    # form) is still part of the public ABI for callers who prefer to own the buffer — exercise its
-    # ctypes binding directly so a signature mismatch here doesn't go unnoticed.
     lib = _native.load_library()
     path = str(REPO_ROOT / "nonexistent-workbook-for-error-test.xlsx").encode("utf-8")
     handle = ctypes.c_void_p()
@@ -75,9 +72,6 @@ def test_last_error_two_call_form_still_works():
 
 
 def test_open_file_ex_with_default_options_opens_like_open_file(xlsx_path):
-    # Exercises the NativeOpenOptions ctypes.Structure layout end-to-end against the real library —
-    # a field-order/size mismatch with the C# NativeOpenOptionsRaw would show up here as
-    # XL_INVALID_ARGUMENT (struct_size mismatch) or a crash, not merely a missing symbol.
     lib = _native.load_library()
     path = str(xlsx_path).encode("utf-8")
     options = _native.default_open_options()
@@ -133,10 +127,6 @@ def test_open_file_ex_rejects_an_unrecognized_struct_size(xlsx_path):
 
 
 def test_parse_typed_returns_typed_columns_by_name(tmp_path):
-    # Exercises the NativeColumnSpec/NativeColumn/NativeTable ctypes.Structure layouts end-to-end
-    # against the real library, the same way test_open_file_ex_with_default_options_opens_like_open_file
-    # does for NativeOpenOptions — a field mismatch here would surface as garbage values or a crash,
-    # not a clean assertion failure, so this is the test that actually proves the layouts match.
     lib = _native.load_library()
     csv_file = tmp_path / "typed.csv"
     csv_file.write_text("name,qty\nwidget,3\ngadget,7\n", encoding="utf-8")
@@ -189,10 +179,6 @@ def test_parse_typed_resolves_the_first_alias_present_in_the_header_row(tmp_path
 
 
 def test_parse_arrow_returns_a_struct_array_with_a_matching_schema(tmp_path):
-    # Exercises the ArrowSchema/ArrowArray ctypes.Structure layouts end-to-end against the real
-    # library — same rationale as test_open_file_ex_with_default_options_opens_like_open_file and
-    # test_parse_typed_returns_typed_columns_by_name: a layout mismatch here would surface as garbage
-    # values or a crash, not a clean assertion failure.
     lib = _native.load_library()
     csv_file = tmp_path / "typed.csv"
     csv_file.write_text("name,qty\nwidget,3\ngadget,7\n", encoding="utf-8")
@@ -222,7 +208,7 @@ def test_parse_arrow_returns_a_struct_array_with_a_matching_schema(tmp_path):
     name_array = array.children[0].contents
     qty_array = array.children[1].contents
 
-    offsets = ctypes.cast(qty_array.buffers[0], ctypes.c_void_p)  # qty has no nulls -> validity is NULL
+    offsets = ctypes.cast(qty_array.buffers[0], ctypes.c_void_p)  
     assert not offsets.value
     qty_values = ctypes.cast(qty_array.buffers[1], ctypes.POINTER(ctypes.c_int64))
     assert [qty_values[i] for i in range(2)] == [3, 7]
@@ -232,15 +218,12 @@ def test_parse_arrow_returns_a_struct_array_with_a_matching_schema(tmp_path):
     names = [name_data[name_offsets[i] : name_offsets[i + 1]].decode("utf-8") for i in range(2)]
     assert names == ["widget", "gadget"]
 
-    # release() is a real native function pointer, callable from Python via ctypes just like any
-    # other Arrow consumer would — this is the actual consumer contract, not merely a symbol check.
     array_release = ctypes.CFUNCTYPE(None, ctypes.POINTER(_native.ArrowArray))(array.release)
     schema_release = ctypes.CFUNCTYPE(None, ctypes.POINTER(_native.ArrowSchema))(schema.release)
     array_release(ctypes.byref(array))
     schema_release(ctypes.byref(schema))
     assert not array.release
     assert not schema.release
-    # A second release must be a harmless no-op, matching every other xl_free_*'s idempotency.
     array_release(ctypes.byref(array))
     schema_release(ctypes.byref(schema))
 
@@ -248,9 +231,6 @@ def test_parse_arrow_returns_a_struct_array_with_a_matching_schema(tmp_path):
 
 
 def test_write_typed_round_trips_through_parse_typed(tmp_path):
-    # Exercises the NativeWriteOptions ctypes layout end-to-end against the real library, the same way
-    # test_open_file_ex_with_default_options_opens_like_open_file does for NativeOpenOptions — a field
-    # mismatch with the C# NativeWriteOptionsRaw surfaces as XL_INVALID_ARGUMENT, not a missing symbol.
     lib = _native.load_library()
     out_path = tmp_path / "written.csv"
 

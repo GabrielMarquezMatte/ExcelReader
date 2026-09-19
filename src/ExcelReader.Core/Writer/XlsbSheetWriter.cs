@@ -9,7 +9,6 @@ namespace ExcelReader.Core.Writer
     /// <summary>Writes a single worksheet's rows into an .xlsb workbook produced by <see cref="XlsbWorkbookWriter"/>.</summary>
     public sealed class XlsbSheetWriter : ISheetWriter<XlsbRowWriter>
     {
-        // Kept under the LOH threshold instead of parking the pooled backing array there permanently.
         private const int SpillThreshold = 64 * 1024;
 
         private readonly XlsbWorkbookWriter _owner;
@@ -73,8 +72,6 @@ namespace ExcelReader.Core.Writer
             SheetColumnValidation.SetColumnWidth(ref _columnWidths, columnIndex, width, _state, this, nameof(StartAsync));
         }
 
-        // A row style always wins over a column style; falls back to 0. Every BIFF12 cell record
-        // carries a mandatory ixfe field, so this is consulted for every cell write, not only dates.
         private int EffectiveStyle(int columnIndex)
         {
             if (_activeRowStyle != 0)
@@ -116,15 +113,10 @@ namespace ExcelReader.Core.Writer
             return ValueTask.CompletedTask;
         }
 
-        // Excel's own default column width, in characters.
         private const double DefaultColumnWidth = 8.43;
 
-        // BrtColInfo flags: bit 1 is fUserSet. Excel ignores coldx on a column that doesn't claim it,
-        // so an explicit SetColumnWidth must set this or the width silently has no effect.
         private const int ColInfoUserSet = 0x0002;
 
-        // Payload layout verified byte-for-byte against a real Excel-authored .xlsb (18 bytes:
-        // colFirst/colLast/coldx/ixfe as u32, then flags as u16 — ixfe is a u32, not u16).
         private void WriteColInfos()
         {
             if (_columnStyles is null && _columnWidths is null)
@@ -151,11 +143,11 @@ namespace ExcelReader.Core.Writer
                     width = explicitWidth;
                 }
                 Payload.Reset();
-                Payload.WriteU32((uint)columnIndex);                 // colFirst
-                Payload.WriteU32((uint)columnIndex);                 // colLast
-                Payload.WriteU32((uint)Math.Round(width * 256));     // coldx (1/256th of a character)
-                Payload.WriteU32((uint)styleId);                     // ixfe
-                Payload.WriteU16(hasWidth ? ColInfoUserSet : 0);     // flags
+                Payload.WriteU32((uint)columnIndex);
+                Payload.WriteU32((uint)columnIndex);
+                Payload.WriteU32((uint)Math.Round(width * 256));
+                Payload.WriteU32((uint)styleId);
+                Payload.WriteU16(hasWidth ? ColInfoUserSet : 0);
                 WriteRecord(Brt.ColInfo, Payload.Span);
             }
         }
@@ -329,8 +321,6 @@ namespace ExcelReader.Core.Writer
             _stream = _offloadWrite ? new WriteOffloadStream(stream) : stream;
         }
 
-        // When offloading, hands the buffer's array to the background writer directly instead of
-        // copying; Detach rents _records its own replacement so it keeps working immediately.
         private void FlushRecords()
         {
             if (_records.Length == 0)
@@ -358,11 +348,7 @@ namespace ExcelReader.Core.Writer
         private async ValueTask WriteBufferedSheetAsync(CancellationToken ct)
         {
             ZipArchiveEntry entry = _zip.CreateEntry($"xl/worksheets/sheet{SheetId}.bin", _compression);
-#if NET10_0_OR_GREATER
             Stream stream = await entry.OpenAsync(ct).ConfigureAwait(false);
-#else
-            Stream stream = entry.Open();
-#endif
             await using (stream.ConfigureAwait(false))
             {
                 await stream.WriteAsync(_records.Memory, ct).ConfigureAwait(false);
@@ -397,7 +383,7 @@ namespace ExcelReader.Core.Writer
 
         private void WriteRowHeader(int rowNumber)
         {
-            const int Length = (6 * 4) + 1; // 6 x u32 + 1 byte
+            const int Length = (6 * 4) + 1;
             Biff12RecordWriter.WriteFixedRecord(_records, Brt.RowHdr, Length, out Span<byte> p);
             BinaryPrimitives.WriteUInt32LittleEndian(p, (uint)rowNumber);
             BinaryPrimitives.WriteUInt32LittleEndian(p.Slice(4, 4), 0);
@@ -408,7 +394,6 @@ namespace ExcelReader.Core.Writer
             p[24] = 0;
             MaybeFlush();
         }
-        // Fixed byte blobs Excel expects verbatim; nothing in them varies per workbook.
         private void WriteBlobRecord(int id, ReadOnlySpan<byte> blob)
         {
             Payload.Reset();
@@ -460,8 +445,8 @@ namespace ExcelReader.Core.Writer
             }
         }
 
-        private const int CellHeaderLength = 8; // column u32 + style u32
-        private const int RkIntMin = -(1 << 29);  // RkNumber's fInt field is a 30-bit signed integer
+        private const int CellHeaderLength = 8;
+        private const int RkIntMin = -(1 << 29);
         private const int RkIntMax = (1 << 29) - 1;
 
         internal void WriteStringCell(int columnIndex, string? value)
@@ -475,14 +460,13 @@ namespace ExcelReader.Core.Writer
             int style = EffectiveStyle(columnIndex);
             if (_owner.UseSharedStrings)
             {
-                const int Length = CellHeaderLength + 4; // + shared-string index u32
+                const int Length = CellHeaderLength + 4;
                 Biff12RecordWriter.WriteFixedRecord(_records, Brt.CellIsst, Length, out Span<byte> shared);
                 Biff12RecordWriter.WriteCellHeader(shared, columnIndex, style);
                 BinaryPrimitives.WriteUInt32LittleEndian(shared.Slice(8, 4), (uint)_owner.GetSharedStringIndex(value));
                 MaybeFlush();
                 return;
             }
-            // Wide-string payload is u32 length + UTF-16LE chars: an exact, known-upfront byte count.
             int length = CellHeaderLength + 4 + checked(value.Length * 2);
             Biff12RecordWriter.WriteFixedRecord(_records, Brt.CellSt, length, out Span<byte> p);
             Biff12RecordWriter.WriteCellHeader(p, columnIndex, style);
@@ -494,7 +478,7 @@ namespace ExcelReader.Core.Writer
         internal void WriteBoolCell(int columnIndex, bool value)
         {
             ValidateColumn(columnIndex);
-            const int Length = CellHeaderLength + 1; // + bool byte
+            const int Length = CellHeaderLength + 1;
             Biff12RecordWriter.WriteFixedRecord(_records, Brt.CellBool, Length, out Span<byte> p);
             Biff12RecordWriter.WriteCellHeader(p, columnIndex, EffectiveStyle(columnIndex));
             p[8] = value ? (byte)1 : (byte)0;
@@ -518,26 +502,20 @@ namespace ExcelReader.Core.Writer
             CellValueGuards.ThrowIfNonFinite(value, nameof(value));
             if (TryEncodeRkInt(value, out uint rk))
             {
-                const int RkLength = CellHeaderLength + 4; // + RkNumber u32
+                const int RkLength = CellHeaderLength + 4;
                 Biff12RecordWriter.WriteFixedRecord(_records, Brt.CellRk, RkLength, out Span<byte> rkPayload);
                 Biff12RecordWriter.WriteCellHeader(rkPayload, columnIndex, style);
                 BinaryPrimitives.WriteUInt32LittleEndian(rkPayload.Slice(8, 4), rk);
                 MaybeFlush();
                 return;
             }
-            const int Length = CellHeaderLength + 8; // + double
+            const int Length = CellHeaderLength + 8;
             Biff12RecordWriter.WriteFixedRecord(_records, Brt.CellReal, Length, out Span<byte> p);
             Biff12RecordWriter.WriteCellHeader(p, columnIndex, style);
             BinaryPrimitives.WriteDoubleLittleEndian(p.Slice(8, 8), value);
             MaybeFlush();
         }
 
-        // RkNumber ([MS-XLSB] 2.5.122) with fInt set: its upper 30 bits are a signed integer, so a
-        // whole number in [-2^29, 2^29) costs 4 payload bytes instead of Xnum's 8 — the encoding Excel
-        // emits for integers, and the one Biff12.Rk reads back on the way in. A sheet of integers is
-        // about half the size for it. The fX100 form is deliberately left out: it would trade the same
-        // 4 bytes for a divide-by-100 round trip that is not bit-exact for every multiple of 0.01.
-        // Negative zero is excluded too — fInt has no sign bit for zero, so RK would hand back +0.0.
         private static bool TryEncodeRkInt(double value, out uint rk)
         {
             rk = 0;
@@ -546,7 +524,7 @@ namespace ExcelReader.Core.Writer
             {
                 return false;
             }
-            rk = ((uint)(int)value << 2) | 0x02; // fInt set, fX100 clear
+            rk = ((uint)(int)value << 2) | 0x02;
             return true;
         }
 

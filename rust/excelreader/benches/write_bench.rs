@@ -67,8 +67,6 @@ fn output_path(name: &str) -> PathBuf {
 
 fn benchmark_write(criterion: &mut Criterion) {
     let rows = load_rows();
-    // Transposed once, outside the measured region: the `columns` group exists to measure the
-    // write, not the transpose the `sheet` group already covers.
     let owned: Vec<OwnedColumn> =
         <Row as excelreader::writer::ExcelWriter>::to_columns(&rows).expect("transpose must succeed");
     let borrowed: Vec<Column<'_>> = owned.iter().map(OwnedColumn::as_column).collect();

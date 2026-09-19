@@ -3,16 +3,9 @@ using ExcelReader.Core.Reader;
 
 namespace ExcelReader.Tests
 {
-    // Fixtures in this class are genuine binaries actually exported by the named producer — unlike
     // XlsxDialectShapeTests/XlsxProducerDialectShapeTests, which hand-author XML mimicking known
-    // quirks. Keep fixtures tiny (a handful of rows) to bound repo size.
     public class RealWorldXlsxCorpusTests
     {
-        // Generated via the SheetJS "xlsx" npm package (v0.18.5): XLSX.utils.aoa_to_sheet +
-        // XLSX.writeFile({ cellDates: true }). Notably exercises two dialect quirks XlsxReader
-        // supports specifically because non-Excel producers emit them: string cells typed t="str"
-        // (normally a cached formula-result type) instead of t="s"/"inlineStr", and date cells typed
-        // t="d" holding literal ISO-8601 text instead of a numeric serial.
         [Fact]
         public void ReadsSheetJsGeneratedWorkbook()
         {
@@ -26,8 +19,6 @@ namespace ExcelReader.Tests
             Assert.Equal("price", e.Current[2].GetString());
             Assert.Equal("in_stock", e.Current[3].GetString());
             Assert.Equal("restock_date", e.Current[4].GetString());
-            // SheetJS writes plain strings as t="str" (normally a cached-formula-result type) rather
-            // than t="s"/"inlineStr" — this is CellType.Formula here, not CellType.ExcelString.
             Assert.Equal(CellType.Formula, e.Current[0].Type);
 
             Assert.True(e.MoveNext());

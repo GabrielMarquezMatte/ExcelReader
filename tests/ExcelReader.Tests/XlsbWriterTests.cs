@@ -375,8 +375,6 @@ namespace ExcelReader.Tests
             Assert.Equal(7d, XlsbCell.Create((short?)7).Number);
         }
 
-        // XlsbRowWriter.Skip had no bound anywhere in the class before this fix — not even
-        // downstream at Write time, unlike XLS. BIFF12/.xlsb uses the modern 16,384-column grid.
         [Fact]
         public async Task SkipBeyondColumnLimitThrows()
         {
@@ -391,8 +389,6 @@ namespace ExcelReader.Tests
             Assert.Throws<ExcelLimitExceededException>(() => row.Skip(16_385));
         }
 
-        // Write<T> falls back through XlsbRowWriter.ToDouble, whose final fallback used to
-        // silently return 0.0 for a T that formats as non-numeric text instead of throwing.
         [Fact]
         public async Task WriteNonNumericFormattableThrowsArgumentException()
         {
@@ -407,10 +403,6 @@ namespace ExcelReader.Tests
             Assert.Throws<ArgumentException>(() => row.Write(new NonNumericFormattable()));
         }
 
-        // The overflow half of the same fallback: "1e400" parses fine and yields +Infinity, so only
-        // the conversion guard stops it. Asserting on the message, not just the type: without that
-        // guard the value still throws, but from the cell writer's ThrowIfNonFinite, which reports
-        // "non-finite value ∞" and never names the T the caller actually passed.
         [Fact]
         public async Task WriteOverflowingFormattableThrowsNamingTheSourceType()
         {
@@ -426,16 +418,12 @@ namespace ExcelReader.Tests
             Assert.Contains(typeof(OverflowingFormattable).ToString(), ex.Message, StringComparison.Ordinal);
         }
 
-        // RkNumber's fInt form ([MS-XLSB] 2.5.122) carries a 30-bit signed integer, so an integral
-        // value in [-2^29, 2^29) fits BrtCellRk's 4-byte payload instead of BrtCellReal's 8-byte Xnum
-        // — what Excel itself emits. Writing every number as BrtCellReal made a sheet of integers
-        // about twice the size of the one Excel produces for the same data.
         [Theory]
         [InlineData(0d)]
         [InlineData(1d)]
         [InlineData(-1d)]
-        [InlineData(536_870_911d)]  // 2^29 - 1, the largest fInt RkNumber
-        [InlineData(-536_870_912d)] // -2^29, the smallest
+        [InlineData(536_870_911d)]
+        [InlineData(-536_870_912d)]
         public async Task IntegralNumberInRkRangeUsesFourByteRkCell(double value)
         {
             (int Id, int PayloadLength)[] cells;
@@ -447,7 +435,7 @@ namespace ExcelReader.Tests
         }
 
         [Theory]
-        [InlineData(536_870_912d)]  // 2^29, one past fInt's range
+        [InlineData(536_870_912d)]
         [InlineData(-536_870_913d)]
         [InlineData(0.5d)]
         [InlineData(1e300d)]
@@ -461,8 +449,6 @@ namespace ExcelReader.Tests
             Assert.Equal(value, readBack);
         }
 
-        // -0.0 is integral and inside the range, but RkNumber's fInt form has no way to carry the
-        // sign of zero: encoding it would silently hand back +0.0 on the way out.
         [Fact]
         public async Task NegativeZeroKeepsRealCellSoItsSignSurvives()
         {
@@ -474,10 +460,8 @@ namespace ExcelReader.Tests
             Assert.True(double.IsNegative(readBack));
         }
 
-        private const int CellHeaderLength = 8; // column u32 + style u32, ahead of every cell payload
+        private const int CellHeaderLength = 8;
 
-        // Writes `value` as the only cell of the only row, then reports how that cell was encoded in
-        // xl/worksheets/sheet1.bin and what the reader gets back for it.
         private static async Task<((int Id, int PayloadLength)[] Cells, double ReadBack)> NumericCellAsync(double value)
         {
             CancellationToken ct = TestContext.Current.CancellationToken;
@@ -526,10 +510,6 @@ namespace ExcelReader.Tests
             return [.. cells];
         }
 
-        // EndAsync used to flip _state to Ended before the zero-sheet check threw, so a failed
-        // EndAsync left DisposeAsync's state check matching neither Started nor Created — _zip was
-        // never disposed on this path. After the reorder, _state stays Started when EndAsync throws,
-        // so DisposeAsync correctly falls into its Started branch instead of silently skipping _zip.
         [Fact]
         public async Task DisposeAfterFailedZeroSheetEndDoesNotThrow()
         {
@@ -540,10 +520,6 @@ namespace ExcelReader.Tests
 
             await Assert.ThrowsAsync<InvalidOperationException>(() => wb.EndAsync(ct).AsTask());
 
-            // Before the fix, _state was already Ended here, so DisposeAsync's Started/Created branches
-            // both missed and _zip leaked silently — this call completing without throwing or hanging is
-            // the observable half of the fix; the other half (that _zip's Dispose actually ran) is
-            // internal and not directly assertable from the test.
             await wb.DisposeAsync();
         }
     }

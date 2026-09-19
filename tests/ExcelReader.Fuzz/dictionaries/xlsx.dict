@@ -1,0 +1,74 @@
+# libFuzzer token dictionary for the XLSX targets (OOXML sheet XML inside a ZIP).
+#
+# Why this exists: libFuzzer's mutators are byte-level. The probability of it inventing the literal
+# `<sheetData>` from random edits is effectively zero, so without a dictionary the engine spends the
+# whole run on inputs that fail the ZIP or XML layer and never reach cell decoding. Every token here
+# is one the reader actually branches on.
+
+# ZIP framing
+"PK\x03\x04"
+"PK\x01\x02"
+"PK\x05\x06"
+
+# Part names the reader resolves by path
+"[Content_Types].xml"
+"xl/workbook.xml"
+"xl/worksheets/sheet1.xml"
+"xl/sharedStrings.xml"
+"xl/styles.xml"
+"_rels/.rels"
+"xl/_rels/workbook.xml.rels"
+
+# Sheet XML structure
+"<worksheet"
+"<sheetData>"
+"</sheetData>"
+"<row "
+"</row>"
+"<c "
+"</c>"
+"<v>"
+"</v>"
+"<is>"
+"<t>"
+"</t>"
+"<f>"
+"<dimension ref=\""
+"<mergeCell ref=\""
+"<sheetFormatPr "
+"<cols>"
+"<col "
+
+# Cell type discriminators - each selects a different decode path
+"t=\"s\""
+"t=\"inlineStr\""
+"t=\"str\""
+"t=\"b\""
+"t=\"e\""
+"t=\"d\""
+"t=\"n\""
+"s=\"1\""
+"r=\"A1\""
+"spans=\"1:4\""
+"xml:space=\"preserve\""
+
+# Shared strings and styles
+"<sst "
+"<si>"
+"<rPh "
+"count=\""
+"uniqueCount=\""
+"<cellXfs "
+"<numFmt "
+"numFmtId=\""
+"applyNumberFormat=\"1\""
+"formatCode=\""
+
+# Workbook part
+"<sheets>"
+"<sheet name=\""
+"sheetId=\""
+"r:id=\"rId1\""
+"<Relationship "
+"Target=\""
+"date1904=\"1\""

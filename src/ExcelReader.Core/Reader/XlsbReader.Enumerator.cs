@@ -21,14 +21,10 @@ namespace ExcelReader.Core.Reader
             [SuppressMessage("Usage", "CA2213:Disposable fields should be disposed",
                 Justification = "XlsbReader is borrowed; its lifetime is managed by the caller, not this enumerator.")]
             private readonly XlsbReader _reader;
-            // Hoisted out of _reader to avoid a dependent load on the per-cell hot path.
             private readonly bool[] _styleIsDate;
             private readonly int[] _sharedOffsets;
-            // Content-keyed dedup cache for inline/formula-string cells (see ExcelReaderOptions.InternStrings).
             private readonly Utf8StringCache? _contentCache;
             private bool _ended;
-            // A BrtRowHdr for the NEXT row was already consumed while collecting the current row's
-            // cells; the next MoveNext skips the "seek to row header" step.
             private bool _pendingRowHdr;
 
             internal Enumerator(XlsbReader reader, Stream sheet, long entryLength = 0, CancellationToken ct = default)
@@ -51,8 +47,6 @@ namespace ExcelReader.Core.Reader
                 return MoveNextCore();
             }
 
-            // Runs the same *FromBuffer primitives as MoveNextCore synchronously, paying for an async
-            // state machine only when a primitive reports a real buffer miss (result == 2).
             /// <inheritdoc/>
             public ValueTask<bool> MoveNextAsync()
             {
@@ -93,9 +87,6 @@ namespace ExcelReader.Core.Reader
                 }
             }
 
-            // Resumes a row attempt that hit a buffer miss mid-seek (seekDone: false) or mid-collect
-            // (seekDone: true, since the seek step already ran synchronously). _acc already holds
-            // whatever cells were collected before the miss; CollectCellsAsync appends, not restarts.
             private async ValueTask<bool> MoveNextRowAsync(bool seekDone)
             {
                 if (!seekDone && !await SeekRowHdrAsync().ConfigureAwait(false))
@@ -145,7 +136,7 @@ namespace ExcelReader.Core.Reader
                     }
                     if (!_pendingRowHdr)
                     {
-                        return false; // EOF or BrtEndSheetData with no cells in sight
+                        return false;
                     }
                 }
             }
@@ -201,7 +192,6 @@ namespace ExcelReader.Core.Reader
                 }
             }
 
-            // 1 = found BrtRowHdr; 0 = ended (EndSheetData/EOF); 2 = buffer exhausted (needs refill).
             private int SeekRowHdrFromBuffer()
             {
                 Biff12RecordReader reader = new(_buf.AsSpan(_pos, _len - _pos));
@@ -229,7 +219,6 @@ namespace ExcelReader.Core.Reader
                 return 2;
             }
 
-            // 1 = found next BrtRowHdr (_pendingRowHdr set); 0 = ended; 2 = needs refill.
             private int CollectCellsFromBuffer()
             {
                 var reader = new Biff12RecordReader(_buf.AsSpan(_pos, _len - _pos));
@@ -259,7 +248,6 @@ namespace ExcelReader.Core.Reader
                 return 2;
             }
 
-            // All cell records: col (u32 @ 0) + styleAndFlags (u32 @ 4); iStyleRef = low 24 bits.
             private void ProcessCell(int id, ReadOnlySpan<byte> payload)
             {
                 if (payload.Length < 8)
@@ -274,8 +262,6 @@ namespace ExcelReader.Core.Reader
                     case Brt.CellRk when payload.Length >= 12:
                         AddDouble(col, style, Biff12.Rk(Biff12.ReadU32(payload, 8)));
                         break;
-                    // Formula cells: the cached result immediately follows the col/style header, same
-                    // shape as the equivalent plain-cell record.
                     case Brt.CellReal or Brt.FmlaNum when payload.Length >= 16:
                         AddDouble(col, style, Biff12.ReadF64(payload, 8));
                         break;
@@ -296,13 +282,9 @@ namespace ExcelReader.Core.Reader
                     case Brt.CellRString when payload.Length >= 9:
                         AddInlineString(col, style, payload, 9);
                         break;
-                        // CellBlank: no value to emit
                 }
             }
 
-            // The `out ReadOnlySpan<char>` deliberately lives here rather than in ProcessCell, so a
-            // cell that never touches a string doesn't pay for zero-initializing it. NoInlining so
-            // the JIT can't undo the split.
             [MethodImpl(MethodImplOptions.NoInlining)]
             private void AddInlineString(int col, int style, ReadOnlySpan<byte> payload, int offset)
             {
@@ -317,18 +299,15 @@ namespace ExcelReader.Core.Reader
                 return id == Brt.EndSheetData;
             }
 
-            // Deliberately inlinable, unlike AddInlineString above: RK/Real cells dominate a typical
-            // numeric-heavy workbook, so the extra call from NoInlining here costs more than it saves.
             private void AddDouble(int col, int style, double value)
             {
                 CellType type = WorkbookLookups.IsDateStyle(_styleIsDate, style) ? CellType.Date : CellType.Number;
-                CellAccumulator acc = _acc; // avoids a redundant _acc field reload for the ValueLength argument
+                CellAccumulator acc = _acc;
                 acc.Add(col, acc.ValueLength, 0, type, style, CellValueSource.RowValues, number: value, hasNumber: true);
             }
 
             private void AppendString(int col, int style, ReadOnlySpan<char> chars)
             {
-                // Reserve the UTF-8 worst case and encode once, instead of a separate GetByteCount pass.
                 int start = _acc.ValueLength;
                 Span<byte> dst = _acc.ReserveValueSpan(Encoding.UTF8.GetMaxByteCount(chars.Length));
                 _acc.Advance(Encoding.UTF8.GetBytes(chars, dst));
@@ -350,12 +329,7 @@ namespace ExcelReader.Core.Reader
                 _acc.Reset();
             }
 
-            // --- Binary streaming ---
 
-            // Called when the record loop hits EOF unable to decode another record. Unconsumed bytes at
-            // that point (_pos < _len) are a record whose framing/payload ran past the end of the stream —
-            // i.e. a truncated part. TryReadRecord leaves _pos at that record's start, so the leftover is
-            // exactly the partial record. Surface it instead of silently returning the rows read so far.
             private void ThrowIfTruncated()
             {
                 if (_pos < _len)

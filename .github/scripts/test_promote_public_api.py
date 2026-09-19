@@ -40,10 +40,6 @@ class PromoteTests(unittest.TestCase):
         self.assertEqual(self._read(self.unshipped), set())
 
     def test_removed_entry_deletes_the_plain_entry_from_shipped(self):
-        # This is the exact regression this PR fixes: a *REMOVED* entry used to be unioned
-        # into Shipped as a literal string instead of deleting its plain counterpart, leaving
-        # the plain entry (a symbol no longer in the code) permanently stuck in Shipped.txt —
-        # which the PublicApiAnalyzer then flags as RS0017 on every subsequent build.
         self._write(self.shipped, ["Foo.Bar() -> void", "Foo.Baz() -> void"])
         self._write(self.unshipped, ["*REMOVED*Foo.Bar() -> void"])
 
@@ -53,9 +49,6 @@ class PromoteTests(unittest.TestCase):
         self.assertEqual(self._read(self.unshipped), set())
 
     def test_removed_entry_is_never_written_to_shipped(self):
-        # RS0024: "The shipped API file can't have removed members" - a *REMOVED* line is only
-        # ever meaningful in Unshipped.txt (an instruction to delete on promotion); it must not
-        # survive into Shipped.txt itself.
         self._write(self.shipped, ["Foo.Bar() -> void"])
         self._write(self.unshipped, ["*REMOVED*Foo.Bar() -> void"])
 
@@ -65,8 +58,6 @@ class PromoteTests(unittest.TestCase):
             self.assertFalse(entry.startswith("*REMOVED*"), entry)
 
     def test_removed_entry_with_no_matching_shipped_entry_is_a_noop_delete(self):
-        # Removing something that was added and removed within the same unshipped window (never
-        # actually promoted as a plain entry) must not crash and must not leave any trace.
         self._write(self.shipped, ["Foo.Bar() -> void"])
         self._write(self.unshipped, ["*REMOVED*Foo.NeverShipped() -> void"])
 

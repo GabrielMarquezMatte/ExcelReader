@@ -7,22 +7,10 @@ namespace ExcelReader.Native
 {
     internal static unsafe partial class NativeApi
     {
-        /// <summary>Style index 1 is always the builtin date style (see IWorkbookWriter.AddStyle).</summary>
         private const int BuiltinDateStyleId = 1;
 
-        // Named distinctly from NativeApi.Typed.cs's field of the same value to avoid S3218 (field
-        // shadows an outer-class member).
         internal static readonly int WriteUnixEpochDayNumber = new DateOnly(1970, 1, 1).DayNumber;
 
-        /// <summary>
-        /// Writes <paramref name="table"/> to <paramref name="path"/> as one sheet. Mirrors
-        /// <see cref="ParseTyped"/> in reverse and consumes the exact structs it produces.
-        /// </summary>
-        /// <remarks>
-        /// Every buffer reachable from <paramref name="table"/> is borrowed, never copied and never
-        /// freed here. Validation runs to completion before the file is created, so a rejected call
-        /// leaves nothing behind on disk.
-        /// </remarks>
         internal static int WriteTyped(ReadOnlySpan<byte> path, int format, NativeColumnSpec[] specs, NativeTable table, NativeWriteOptions options)
         {
             if (path.IsEmpty)
@@ -57,10 +45,6 @@ namespace ExcelReader.Native
             }
         }
 
-        /// <summary>
-        /// Same as <see cref="WriteTyped"/>, except the result is returned as bytes rather than
-        /// written to a path — everything else about validation and content is identical.
-        /// </summary>
         internal static int WriteTypedToMemory(int format, NativeColumnSpec[] specs, NativeTable table, NativeWriteOptions options, out byte[]? bytes)
         {
             bytes = null;
@@ -114,19 +98,12 @@ namespace ExcelReader.Native
             }
             catch (Exception exception)
             {
-                // NativeWriterHandle.Create has not taken ownership of stream if it throws (e.g. a
-                // workbook writer's Start() fails), so this is the only place left to close it — an
-                // un-disposed FileStream here leaks a locked file handle for the process lifetime.
                 stream.Dispose();
                 SetLastError(exception.Message);
                 return NativeStatus.Error;
             }
         }
 
-        /// <summary>
-        /// Same as <see cref="OpenWriteHandle"/>, except the handle is backed by an in-memory buffer
-        /// rather than a file — see <see cref="GetWriteHandleBytes"/> to read it out.
-        /// </summary>
         internal static int OpenWriteHandleToMemory(int format, NativeWriteOptions options, out NativeWriterHandle? handle)
         {
             handle = null;
@@ -151,11 +128,6 @@ namespace ExcelReader.Native
             }
         }
 
-        /// <summary>
-        /// Finishes and releases a writer handle opened by <see cref="OpenWriteHandle"/>. Always
-        /// disposes <paramref name="handle"/>, even when <see cref="NativeWriterHandle.Close"/> throws
-        /// — an unregistered-but-undisposed handle would otherwise leak its open <see cref="FileStream"/>.
-        /// </summary>
         internal static int CloseWriteHandle(NativeWriterHandle? handle)
         {
             if (handle is null)
@@ -179,14 +151,6 @@ namespace ExcelReader.Native
             }
         }
 
-        /// <summary>
-        /// Reads back everything written so far to a handle opened by
-        /// <see cref="OpenWriteHandleToMemory"/>, ending the workbook's content first if that has not
-        /// already happened (see <see cref="NativeWriterHandle.Close"/> — idempotent, so this is safe
-        /// to call whether or not the caller ended every sheet/row itself). Does NOT dispose
-        /// <paramref name="handle"/>: the caller must still call <see cref="CloseWriteHandle"/>
-        /// afterward to release it, same as a file-backed handle.
-        /// </summary>
         internal static int GetWriteHandleBytes(NativeWriterHandle? handle, out byte[]? bytes)
         {
             bytes = null;
@@ -213,15 +177,11 @@ namespace ExcelReader.Native
             }
         }
 
-        // XL_FORMAT_AUTO is deliberately absent: sniffing reads an existing file's signature bytes, and
-        // a file being created has none.
         private static bool IsWritableFormat(int format)
         {
             return format is NativeFormat.Xls or NativeFormat.Xlsx or NativeFormat.Xlsb or NativeFormat.Csv;
         }
 
-        // Each branch contributes only its construction line and hands off to the one generic body
-        // below, since the four writers share no non-generic base.
         private static void WriteToStream(Stream stream, int format, NativeColumnSpec[] specs, NativeTable table, NativeWriteOptions options, string sheetName, bool hasHeader)
         {
             bool date1904 = options.Date1904 ?? false;
@@ -277,8 +237,6 @@ namespace ExcelReader.Native
             }
         }
 
-        // Must run before sheet.Start (SetColumnStyle throws afterward). Without a number format a
-        // temporal cell renders in Excel as its raw serial number.
         private static void ApplyTemporalStyles<TSheet, TRow>(IWorkbookWriter<TSheet> workbook, TSheet sheet, NativeTable table)
             where TSheet : ISheetWriter<TRow>
             where TRow : IRowWriter
@@ -339,13 +297,8 @@ namespace ExcelReader.Native
             {
                 case NativeColumnType.String:
                     // ponytail: one managed string per cell — IRowWriter has no UTF-8/span overload.
-                    // Upgrade path is a Write(ReadOnlySpan<byte>) overload in ExcelReader.Core, which is
-                    // a public-API change and out of this plan's scope.
                     int* offsets = (int*)column.Values;
                     int start = offsets[rowIndex];
-                    // Length first: TryValidateStringOffsets permits Data == NULL when data_len is 0 (a
-                    // legal all-empty-strings column), and Encoding.UTF8.GetString null-checks its
-                    // pointer BEFORE its zero-count fast path, so it would throw on that valid input.
                     int length = offsets[rowIndex + 1] - start;
                     row.Write(length == 0 ? string.Empty : Encoding.UTF8.GetString((byte*)column.Data + start, length));
                     return;
@@ -363,10 +316,6 @@ namespace ExcelReader.Native
                     return;
                 case NativeColumnType.Time:
                     {
-                        // checked: an unchecked overflow here would silently write the wrong time instead of
-                        // failing the call. The pointer cast happens outside the checked block: CA2020 treats
-                        // a checked native-int-to-pointer conversion as throwing on overflow starting in .NET
-                        // 7, which is not what this line means to check (the multiplication is).
                         long* values = (long*)column.Values;
                         row.Write(new TimeOnly(checked(values[rowIndex] * TimeSpan.TicksPerMicrosecond)));
                         return;
@@ -380,7 +329,6 @@ namespace ExcelReader.Native
             }
         }
 
-        // The nullable overloads make a blank cell; a default value would write a real 0/false/epoch.
         internal static void WriteNullCell(IRowWriter row, int type)
         {
             switch (type)
@@ -409,7 +357,6 @@ namespace ExcelReader.Native
             }
         }
 
-        // NULL validity pointer is "no nulls in this column", not an error.
         private static bool IsValidAt(NativeColumn column, long rowIndex)
         {
             if (column.Validity == IntPtr.Zero)
@@ -420,18 +367,6 @@ namespace ExcelReader.Native
             return (bitmap[rowIndex >> 3] & (1 << (int)(rowIndex & 7))) != 0;
         }
 
-        /// <summary>
-        /// Validates a caller-supplied write table before a single byte is written.
-        /// </summary>
-        /// <remarks>
-        /// This is the trust boundary. Every pointer reachable from <paramref name="table"/> belongs to
-        /// the caller and is about to be dereferenced against lengths the caller also supplied, so a
-        /// value that is merely wrong here becomes an out-of-bounds read of the caller's process
-        /// memory a few frames later. The string-offset walk below is the reason this runs to
-        /// completion up front rather than checking each row as it is written: a partially written
-        /// file plus a segfault is strictly worse than a rejected call.
-        /// </remarks>
-        /// <param name="hasHeader">True when every spec carries a name, so a header row must be written.</param>
         internal static bool TryValidateWriteTable(NativeColumnSpec[] specs, NativeTable table, out bool hasHeader, [NotNullWhen(false)] out string? error)
         {
             hasHeader = false;
@@ -504,8 +439,6 @@ namespace ExcelReader.Native
             return TryValidateStringOffsets(column, index, rowCount, out error);
         }
 
-        // The whole offsets array is walked once before any of it is used as a slice bound; checking
-        // lazily per row would let a hostile offset reach `data` before validation catches it.
         private static bool TryValidateStringOffsets(NativeColumn column, int index, long rowCount, [NotNullWhen(false)] out string? error)
         {
             error = null;

@@ -11,8 +11,6 @@ namespace ExcelReader.Tests
             Assert.DoesNotContain("hunter2", password.ToString(), StringComparison.Ordinal);
         }
 
-        // ExcelReaderOptions is a record: its synthesized ToString prints every property, so a bare
-        // string Password would leak into any structured log of the options object.
         [Fact]
         public void Should_Not_Leak_Password_When_Options_Are_Formatted()
         {

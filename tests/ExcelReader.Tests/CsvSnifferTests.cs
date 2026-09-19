@@ -38,10 +38,6 @@ namespace ExcelReader.Tests
         [Fact]
         public void DelimiterInsideQuotesIsNotCounted()
         {
-            // Real delimiter is ';'. The number of commas embedded in the quoted field varies line
-            // to line, so a naive ',' candidate (which, unquoted, counts them as real delimiters)
-            // scores inconsistently and must lose to ';', even though ',' comes first in candidate
-            // order.
             var sb = new StringBuilder();
             string[] rows = ["a;\"b,c\";d\n", "a;\"b,c,e\";d\n", "a;\"b\";d\n"];
             for (int i = 0; i < 6; i++)
@@ -84,9 +80,6 @@ namespace ExcelReader.Tests
         [Fact]
         public void TieBreaksByCandidateOrder()
         {
-            // Every line has exactly one ',' and one ';' — both delimiters score a perfectly
-            // consistent (variance-zero) two-field split. ',' must win because it comes first in
-            // CsvSnifferOptions.Default.CandidateDelimiters.
             byte[] sample = RepeatedRows("a,b;c\n", 6);
             CsvDialect dialect = CsvSniffer.Detect(sample);
             Assert.Equal((byte)',', dialect.Delimiter);
@@ -118,10 +111,6 @@ namespace ExcelReader.Tests
         [Fact]
         public void SingleQuoteDialectIsDetected()
         {
-            // Delimiter is ';'. Each line embeds a different number of ';' inside the single-quoted
-            // field, so only the quote="'" interpretation gives a consistent field count per line —
-            // quote='"' (never present) counts every embedded ';' as a real delimiter, which varies
-            // line to line and must lose.
             var sb = new StringBuilder();
             string[] rows = ["a;'x;y';b\n", "a;'x;y;z';b\n", "a;'x';b\n"];
             for (int i = 0; i < 6; i++)
@@ -149,11 +138,6 @@ namespace ExcelReader.Tests
         [Fact]
         public void SingleLineWithoutTrailingNewlineReturnsDefault()
         {
-            // No newline at all: the whole sample is the unterminated trailing segment, which
-            // CountFieldsPerLine never counts (it might be truncated mid-field) — so no candidate ever
-            // scores, and this is Default by design, not a bug. TruncatedLastLineDoesNotChangeResult
-            // covers the "it was actually truncated" case; this one is genuinely a single, complete,
-            // un-terminated line.
             byte[] sample = Bytes("a;b;c");
             CsvDialect dialect = CsvSniffer.Detect(sample);
             Assert.Equal(CsvDialect.Default, dialect);
@@ -207,8 +191,6 @@ namespace ExcelReader.Tests
             Assert.False(e.MoveNext());
         }
 
-        // Deliberately not cryptographically secure — CA5394 doesn't apply: a seeded, reproducible
-        // PRNG is exactly what makes a sniffer failure on random input reproducible.
         [SuppressMessage("Security", "CA5394:Do not use insecure randomness",
             Justification = "Fuzzing the sniffer needs a reproducible seeded PRNG, not cryptographic randomness.")]
         [Theory]

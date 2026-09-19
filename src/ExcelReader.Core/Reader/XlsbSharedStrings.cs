@@ -3,22 +3,8 @@ using System.Text;
 
 namespace ExcelReader.Core.Reader
 {
-    // Decodes xl/sharedStrings.bin (binary BIFF12) into a flat UTF-8 buffer + offsets, matching how
-    // XlsxReader stores shared strings so Cell consumes UTF-8 either way:
-    // string i = Flat[Offsets[i]..Offsets[i+1]].
     internal static class XlsbSharedStrings
     {
-        // Used by the memory-workbook path (the whole part is already decompressed and in hand, so
-        // there is no stream to read incrementally) and as the reference decoder XlsbPartsTests
-        // checks the streaming overloads' output against.
-        //
-        // Builds through the same ArrayPool-backed growth ParseCore uses for the streamed variant
-        // (AppendItemPooled/PrepareOffsets/AddOffset below), rather than a plain array trimmed with
-        // Array.Resize at the end. UTF-8 almost always comes out smaller than the BIFF12 binary it
-        // was decoded from, so that trim fired on essentially every call — two full-size GC
-        // allocations per open (one of them immediately discarded), both large enough to land on the
-        // LOH for any real workbook. Now only the one the caller actually keeps is GC-owned; the
-        // growth buffer is a pool rental, returned once the exact-size result has been copied out.
         internal static (byte[] Flat, int[] Offsets) Parse(ReadOnlySpan<byte> sharedBin, ExcelReaderOptions? options = null)
         {
             ExcelReaderOptions effectiveOptions = options ?? ExcelReaderOptions.Default;
@@ -39,8 +25,6 @@ namespace ExcelReader.Core.Reader
                 {
                     if (id == Brt.BeginSst)
                     {
-                        // The whole part is in hand, so its length stands in for the streaming path's
-                        // entryLength — both bound PrepareOffsets' sanity check the same way.
                         PrepareOffsets(payload, sharedBin.Length, ref offsets, ref offsetCount);
                     }
                     else if (id == Brt.SSTItem)
@@ -59,9 +43,6 @@ namespace ExcelReader.Core.Reader
             }
         }
 
-        // BrtSSTItem records carry their own payload length, so a BufferedStreamCursor can compact
-        // everything before the current record while growing only for one unusually large record.
-        // The returned flat buffer is rented and belongs to XlsbReader for its lifetime.
         internal static (byte[] Flat, int[] Offsets) ParseStreaming(Stream stream, long entryLength, ExcelReaderOptions options)
         {
             var io = new BufferedStreamCursor(GrowthCap(options), nameof(ExcelReaderOptions.MaxSharedStringBytes),
@@ -169,9 +150,6 @@ namespace ExcelReader.Core.Reader
             }
         }
 
-        // BeginSst stores total strings then unique strings. The latter lets the common well-formed
-        // path allocate its offsets table once; do not trust it when it exceeds the physical maximum
-        // number of seven-byte empty BrtSSTItem records the entry could contain.
         private static void PrepareOffsets(ReadOnlySpan<byte> payload, long entryLength, ref int[] offsets, ref int offsetCount)
         {
             if (payload.Length < 8)

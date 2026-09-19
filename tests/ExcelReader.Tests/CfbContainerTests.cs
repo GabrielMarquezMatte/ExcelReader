@@ -1,3 +1,4 @@
+using System.Buffers.Binary;
 using ExcelReader.Core.Crypto;
 using ExcelReader.Core.Reader;
 
@@ -12,6 +13,17 @@ namespace ExcelReader.Tests
         }
 
         [Fact]
+        public void Should_Throw_When_The_Only_Fat_Sector_Points_Past_The_End_Of_The_File()
+        {
+            using MemoryStream built = XlsWorkbookBuilder.Build(sheets: [("S1", [["Alice", 1, true]])]);
+            byte[] bytes = built.ToArray();
+            BinaryPrimitives.WriteInt32LittleEndian(bytes.AsSpan(0x4C), 1_048_576);
+
+            Assert.Throws<InvalidDataException>(
+                () => CfbContainer.Parse(new MemoryStream(bytes), ownsSource: true, ExcelReaderOptions.Default));
+        }
+
+        [Fact]
         public void Should_Find_Both_Encryption_Streams_When_Encrypted_Container()
         {
             using CfbContainer cfb = Open("agile-aes256-sha512.xlsx");
@@ -20,16 +32,14 @@ namespace ExcelReader.Tests
             Assert.False(cfb.ContainsStream("Workbook"));
         }
 
-        // EncryptionInfo is a few hundred bytes and sits below the 4096-byte mini-stream cutoff,
-        // so this also exercises the mini-FAT path.
         [Fact]
         public void Should_Read_EncryptionInfo_When_Below_Mini_Cutoff()
         {
             using CfbContainer cfb = Open("agile-aes256-sha512.xlsx");
             byte[] info = cfb.ReadStream("EncryptionInfo", maxBytes: 64 * 1024);
             Assert.InRange(info.Length, 64, 64 * 1024);
-            Assert.Equal(4, info[0] | (info[1] << 8));   // major version 4 = agile
-            Assert.Equal(4, info[2] | (info[3] << 8));   // minor version 4 = agile
+            Assert.Equal(4, info[0] | (info[1] << 8));
+            Assert.Equal(4, info[2] | (info[3] << 8));
         }
 
         [Fact]
@@ -47,8 +57,6 @@ namespace ExcelReader.Tests
             Assert.Throws<InvalidDataException>(() => cfb.ReadStream("NoSuchStream", 1024));
         }
 
-        // The EncryptedPackage view is what ZipArchive will eventually seek over, so seekability
-        // and an accurate Length are load-bearing, not incidental.
         [Fact]
         public void Should_Expose_Seekable_View_When_Opening_EncryptedPackage()
         {
@@ -59,15 +67,12 @@ namespace ExcelReader.Tests
             Assert.False(view.CanWrite);
             Assert.Equal(cfb.StreamLength("EncryptedPackage"), view.Length);
 
-            // The first 8 bytes are the little-endian plaintext size; the ciphertext follows.
             byte[] prefix = new byte[8];
             view.ReadExactly(prefix);
             long declared = BitConverter.ToInt64(prefix);
             Assert.InRange(declared, 1, view.Length);
         }
 
-        // Reading the tail via Seek must agree with reading it sequentially - the whole point of
-        // the view is that ZipArchive can jump to the central directory.
         [Fact]
         public void Should_Match_Sequential_Read_When_Seeking()
         {

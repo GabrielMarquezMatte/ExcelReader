@@ -35,15 +35,6 @@ namespace ExcelReader.Core.Parser.Internal
         private readonly TReader _reader;
         private readonly ExcelParserConfig _config;
         private readonly CancellationToken _ct;
-        // Resolved once here, in the constructor — never in GetEnumerator()/GetAsyncEnumerator() — so
-        // that ExcelMappedParser<T>'s constructor overload below is the only path into this type whose
-        // *method bodies* ever mention TypeMapper<T>. A trimmer/AOT analyzer decides reachability per
-        // method, not per field: a `_info ?? TypeMapper<T>.GetInfo()` fallback living inside the shared
-        // GetEnumerator() would make the reflection-based TypeMapper<T>.Build() reachable from every
-        // caller, including ExcelMappedParser<T>'s, even though that field would always be non-null for
-        // it at runtime — trimming can't see that far. Keeping the two constructors as the only two call
-        // sites for the two info sources is what lets NativeAOT drop TypeMapper<T>'s reflection entirely
-        // when only the explicit-info constructor is ever called from a published app's reachable code.
         private readonly TypeMapInfo<T> _info;
 
         [RequiresUnreferencedCode("Typed parsing reflects over T's public properties, which trimming may remove.")]

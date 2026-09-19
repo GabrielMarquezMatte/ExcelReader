@@ -16,7 +16,6 @@ namespace ExcelReader.Tests
             {
                 if (r == 0)
                 {
-                    // Header row: all shared strings, resolved to text.
                     Assert.Equal("file", row[0].GetString());
                     Assert.Equal("changes", row[1].GetString());
                     Assert.Equal("lines_added", row[2].GetString());
@@ -25,7 +24,6 @@ namespace ExcelReader.Tests
                 }
                 else if (r == 1)
                 {
-                    // Styled shared string (s="1") + UTF-8 numeric parse.
                     Assert.Equal("global.json", row[0].GetString());
                     Assert.Equal(1, row[0].StyleIndex);
                     Assert.True(row[1].TryParse(null, out int n));
@@ -40,11 +38,7 @@ namespace ExcelReader.Tests
         [Fact]
         public async Task HandlesSparseCellsAndBufferGrowth()
         {
-            // A row with a gap (no B), and an inline string far larger than the 64 KB scan buffer
-            // to exercise compaction/grow and the cross-boundary </c> search.
             string big = new('x', 100_000);
-            // Deliberately raw: the writer now rejects values beyond Excel's 32,767-character
-            // cell limit, while this reader test needs an oversized XML value to cross its buffer.
             await using var ms = WorkbookBuilder.Build(
                 $$"""<row r="1"><c r="A1"><v>10</v></c><c r="C1"><v>30</v></c></row><row r="2"><c r="A2" t="inlineStr"><is><t>{{big}}</t></is></c></row>""");
 
@@ -58,7 +52,7 @@ namespace ExcelReader.Tests
                     Assert.Equal(3, enumerator.Current.ColumnCount);
                     Assert.True(enumerator.Current[0].TryParse(null, out int a));
                     Assert.Equal(10, a);
-                    Assert.Equal(CellType.Empty, enumerator.Current[1].Type); // the gap
+                    Assert.Equal(CellType.Empty, enumerator.Current[1].Type);
                     Assert.True(enumerator.Current[2].TryParse(null, out int c));
                     Assert.Equal(30, c);
                 }
@@ -100,7 +94,6 @@ namespace ExcelReader.Tests
         [Fact]
         public void DecodesXmlEntitiesInSharedStrings()
         {
-            // Shared strings are a raw-XML feature XlsxWorkbookWriter does not emit.
             using var ms = WorkbookBuilder.Build(
                 """<row r="1"><c r="A1" t="s"><v>0</v></c></row>""",
                 sharedStrings: "<si><t>a &amp; b &lt;tag&gt; &#65;</t></si>");
@@ -115,7 +108,6 @@ namespace ExcelReader.Tests
         [Fact]
         public void DecodePassesThroughLoneAmpersandAndUnknownEntities()
         {
-            // Exercises Decode's bulk-copy paths: a '&' with no terminator, and an unrecognized entity.
             using var ms = WorkbookBuilder.Build(
                 """<row r="1"><c r="A1" t="s"><v>0</v></c><c r="B1" t="s"><v>1</v></c></row>""",
                 sharedStrings: "<si><t>a&b</t></si><si><t>x&foo;y</t></si>");
@@ -131,8 +123,6 @@ namespace ExcelReader.Tests
         [Fact]
         public void DetectsDateStylesAndConvertsSerial()
         {
-            // s="1" -> cellXfs[1] -> builtin numFmtId 14 (date); s="2" -> custom 164 (date); s="0" -> General.
-            // Custom number formats are a raw-XML feature XlsxWorkbookWriter does not emit.
             const string styles =
                 """<styleSheet><numFmts count="1"><numFmt numFmtId="164" formatCode="yyyy-mm-dd hh:mm"/></numFmts>""" +
                 """<cellXfs count="3"><xf numFmtId="0"/><xf numFmtId="14"/><xf numFmtId="164"/></cellXfs></styleSheet>""";
@@ -153,7 +143,6 @@ namespace ExcelReader.Tests
             Assert.True(row[1].TryGetDateTime(out var d1));
             Assert.Equal(new DateTime(2024, 1, 1, 12, 0, 0, DateTimeKind.Unspecified), d1);
 
-            // Same serial, no date style -> plain number.
             Assert.Equal(CellType.Number, row[2].Type);
         }
 
@@ -187,13 +176,10 @@ namespace ExcelReader.Tests
         [Fact]
         public async Task AsyncHandlesBufferGrowthAndDates()
         {
-            // Inline string far larger than the 64 KB scan buffer exercises FillAsync compaction/grow and
-            // the cross-refill </c> search on the async path; the date cell exercises style detection.
             var ct = TestContext.Current.CancellationToken;
             string big = new('x', 100_000);
             const string styles =
                 """<styleSheet><cellXfs count="2"><xf numFmtId="0"/><xf numFmtId="14"/></cellXfs></styleSheet>""";
-            // Deliberately raw for the same reason as the synchronous buffer-growth test above.
             await using var ms = WorkbookBuilder.Build(
                 $$"""<row r="1"><c r="A1" s="1"><v>45292</v></c></row><row r="2"><c r="A2" t="inlineStr"><is><t>{{big}}</t></is></c></row>""",
                 styles: styles);

@@ -3,10 +3,6 @@ using ExcelReader.Core.Reader;
 
 namespace ExcelReader.Tests
 {
-    // EncryptionInfo is attacker-controlled and parsed before any password check, so every negative
-    // case here forges a specific malformed field and asserts the exact rejection. The fuzz oracle
-    // treats an index/range exception from this path as a defect, so "it threw something" is not
-    // good enough.
     public sealed class StandardDescriptorTests
     {
         private const int AlgIdAes128 = 0x0000660E;
@@ -87,7 +83,7 @@ namespace ExcelReader.Tests
         }
 
         [Theory]
-        [InlineData(4)]     // shorter than the eight fixed header fields
+        [InlineData(4)]
         [InlineData(31)]
         public void Should_Reject_When_HeaderSize_Is_Too_Small(int headerSize)
         {

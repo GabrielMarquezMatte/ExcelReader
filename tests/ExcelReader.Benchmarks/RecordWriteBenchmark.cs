@@ -3,11 +3,6 @@ using ExcelReader.Core.Writer;
 
 namespace ExcelReader.Benchmarks
 {
-    // Writes `Rows` records via the high-level RecordWriter (WorkbookRecordWriter.WriteSheetAsync), the
-    // POCO-dump API an application uses. Unlike WriteBenchmark (which drives the low-level cell writers
-    // directly), this routes every numeric property through the generic Write<T> overload — the path
-    // that resolves through ToDouble<T> for XLSB/XLS. It is the only benchmark that exercises that path,
-    // so the MemoryDiagnoser allocation numbers here reflect any per-numeric-cell boxing in it.
     [MemoryDiagnoser]
     public class RecordWriteBenchmark
     {
@@ -74,9 +69,6 @@ namespace ExcelReader.Benchmarks
             return ms.Length;
         }
 
-        // The AOT-clean twins. Their column plan writes through Action<IRowWriter, T>, so every cell is
-        // an interface call, where the reflection path above compiles Action<TRow, T> against the
-        // concrete row writer. These pairs are what measures whether that difference costs anything.
         [Benchmark]
         public async Task<long> XlsxMapped()
         {
@@ -111,8 +103,6 @@ namespace ExcelReader.Benchmarks
         }
     }
 
-    // Record's twin with a hand-written map, so the mapped benchmarks write the same four columns in
-    // the same order as the reflection-driven ones.
     public sealed class MappedRecord : IExcelRecordMap<MappedRecord>
     {
         public string? Name { get; set; }

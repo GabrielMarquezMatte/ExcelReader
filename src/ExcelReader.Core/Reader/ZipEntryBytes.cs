@@ -3,16 +3,8 @@ using System.IO.Compression;
 
 namespace ExcelReader.Core.Reader
 {
-    // Reads a whole ZIP entry (workbook.xml/.rels/styles.xml and the XLSB equivalents) into a pooled
-    // buffer instead of a GC array: these are transient parse inputs, read once and discarded within
-    // the same constructor/factory method, so there is no reason to hand the caller anything that
-    // outlives a `using` block. Returns ZipPart (defined in ZipMemoryIndex.cs) for the same reason the
-    // in-memory ZIP path already does: a pooled array with an exact-length view, Dispose returns it.
     internal static class ZipEntryBytes
     {
-        // Guards entry.Length — the attacker-controlled central-directory uncompressed size — against
-        // both the workbook-wide remaining budget and any smaller per-entry limit, before the caller
-        // sizes a destination buffer from it.
         private static void ThrowIfEntryLengthExceedsLimits(
             ZipArchiveEntry entry, DecompressedByteCounter counter, string entryLimitName, long entryLimit)
         {
@@ -43,8 +35,6 @@ namespace ExcelReader.Core.Reader
         {
             ThrowIfEntryLengthExceedsLimits(entry, counter, entryLimitName, entryLimit);
             using var stream = new LimitedReadStream(entry.Open(), counter, entryLimitName, entryLimit);
-            // ZipArchiveEntry.Length is the exact uncompressed size from the central directory, so the
-            // destination can be sized once instead of growing/copying through an intermediate MemoryStream.
             int length = checked((int)entry.Length);
             byte[] rented = ArrayPool<byte>.Shared.Rent(length);
             try
@@ -59,14 +49,6 @@ namespace ExcelReader.Core.Reader
             return new ZipPart(rented.AsMemory(0, length), rented);
         }
 
-        // An entry whose real decompressed data is *shorter* than its declared central-directory
-        // size is a malformed file, not a raw BCL stream-plumbing exception — matches
-        // ZipMemoryIndex.InflateToPart's equivalent rewrap on the in-memory path. There is no equivalent
-        // over-delivery check here (InflateToPart has one): confirmed by direct experiment that
-        // ZipArchiveEntry.Open()'s stream silently truncates at the entry's declared Length regardless of
-        // how much more the underlying compressed data would actually produce — a trailing "is there
-        // more?" read always reports EOF, so over-delivery is invisible on this BCL-backed path, not
-        // fixable without bypassing ZipArchiveEntry.Open() entirely (a far larger change).
         private static void ReadExactlyChecked(Stream stream, Span<byte> destination)
         {
             try
@@ -95,7 +77,6 @@ namespace ExcelReader.Core.Reader
             return await ReadAsync(entry, counter, ct, entryLimitName, entryLimit).ConfigureAwait(false);
         }
 
-#if NET10_0_OR_GREATER
         internal static async ValueTask<ZipPart> ReadAsync(
             ZipArchiveEntry entry,
             DecompressedByteCounter counter,
@@ -134,18 +115,6 @@ namespace ExcelReader.Core.Reader
                 throw new InvalidDataException("The ZIP entry produced less data than its declared uncompressed size.", ex);
             }
         }
-#else
-        internal static ValueTask<ZipPart> ReadAsync(
-            ZipArchiveEntry entry,
-            DecompressedByteCounter counter,
-            CancellationToken ct,
-            string entryLimitName = "",
-            long entryLimit = 0)
-        {
-            ct.ThrowIfCancellationRequested();
-            return new ValueTask<ZipPart>(Read(entry, counter, entryLimitName, entryLimit));
-        }
-#endif
 
     }
 }

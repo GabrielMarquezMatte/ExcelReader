@@ -110,8 +110,6 @@ class SheetWriter:
         if value is None:
             self.write_null(ColumnType.TIMESTAMP)
             return
-        # A tz-aware value is converted to UTC first, because the ABI's wire format is
-        # microseconds since the Unix epoch in UTC.
         if value.tzinfo is not None:
             value = value.astimezone(datetime.timezone.utc).replace(tzinfo=None)
         delta = value - _EPOCH_DATETIME
@@ -130,7 +128,6 @@ class SheetWriter:
 
         Raises `TypeError`, before writing anything, for a value whose type has no mapping.
         """
-        # Validate first: a TypeError halfway through would leave a half-written row open.
         for position, value in enumerate(values):
             if not _is_writable(value):
                 raise TypeError(
@@ -144,8 +141,6 @@ class SheetWriter:
         self.end_row()
 
     def _write_inferred(self, value: Any) -> None:
-        # Order matters twice over: bool is a subclass of int, and datetime.datetime is a subclass
-        # of datetime.date. Checking the general case first would silently mis-dispatch both.
         if value is None:
             self.write_str(None)
         elif isinstance(value, bool):
@@ -184,8 +179,6 @@ class SheetWriter:
         if self._handle is None:
             return
         handle, self._handle = self._handle, None
-        # xl_close_write_handle always releases the handle, including on error, so the field is
-        # cleared before the call rather than after.
         _check(self._lib.xl_close_write_handle(handle))
 
     def __enter__(self) -> "SheetWriter":
@@ -195,11 +188,6 @@ class SheetWriter:
         self.close()
 
     def __del__(self) -> None:
-        # Backstop only, not a substitute for explicit close()/`with`: if a SheetWriter is dropped
-        # without one, this still releases the native handle and the file lock it holds. During
-        # interpreter shutdown or GC, module globals (_native, ctypes) may already be partially torn
-        # down, so a finalizer must never let an exception escape — swallow anything broadly here,
-        # which is the standard, accepted exception to "never bare-except" for __del__ specifically.
         try:
             self.close()
         except Exception:  # noqa: BLE001, S110

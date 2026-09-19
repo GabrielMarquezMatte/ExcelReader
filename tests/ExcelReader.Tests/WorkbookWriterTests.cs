@@ -10,7 +10,6 @@ namespace ExcelReader.Tests
 {
     public class WorkbookWriterTests
     {
-        // --- Helpers ---
 
         private sealed class StringRow
         {
@@ -55,7 +54,6 @@ namespace ExcelReader.Tests
             return ms;
         }
 
-        // --- Basic type round-trips ---
 
         [Fact]
         public async Task StringCellRoundTrip()
@@ -92,8 +90,6 @@ namespace ExcelReader.Tests
 
         public enum Priority { Low, Medium, High }
 
-        // Non-numeric, non-primitive properties: exercise the record writer's ToString() fallback
-        // (they must land in text cells, not corrupt number cells). Both round-trip via ExcelParser.
         private sealed class FallbackRow
         {
             public Priority Priority { get; set; }
@@ -116,8 +112,6 @@ namespace ExcelReader.Tests
 
         private readonly record struct Money(decimal Amount);
 
-        // Round-trips a custom value object: writes via IExcelCellWriter, reads via IExcelCellConverter,
-        // both bound with the same [ExcelConverter] attribute.
         private sealed class MoneyConverter : IExcelCellConverter<Money>, IExcelCellWriter<Money>
         {
             public bool TryConvert(in Cell cell, bool isDate1904, IFormatProvider provider, out Money value)
@@ -154,7 +148,6 @@ namespace ExcelReader.Tests
 
         public enum RecordFormat { Xlsx, Xlsb, Xls }
 
-        // Runs body against a record writer for the given format, returning the finished stream.
         private static async Task<MemoryStream> WriteRecordsAsync<T>(
             RecordFormat format, Func<Func<string, IEnumerable<T>, ValueTask>, ValueTask> body)
         {
@@ -225,8 +218,6 @@ namespace ExcelReader.Tests
             await using var reader = Excel.Open(ms);
             var parsed = new ExcelParser<FallbackRow>().Parse(reader).ToList();
             var row = Assert.Single(parsed);
-            // If the writer had routed these through the numeric Write<U> path, the cells would be
-            // corrupt numbers and neither would parse back — so a clean round-trip proves the text fallback.
             Assert.Equal(Priority.High, row.Priority);
             Assert.Equal(id, row.Id);
         }
@@ -241,7 +232,6 @@ namespace ExcelReader.Tests
             }
             ms.Position = 0;
 
-            // Header row is written even with no records; the parser then yields zero data rows.
             await using var reader = Excel.From(ms);
             using XlsxReader.Enumerator e = reader.GetEnumerator();
             Assert.True(e.MoveNext());
@@ -289,7 +279,6 @@ namespace ExcelReader.Tests
             }
             ms.Position = 0;
 
-            // Only "Name" is written; the [ExcelIgnore] property produces no column.
             await using var reader = Excel.From(ms);
             using XlsxReader.Enumerator e = reader.GetEnumerator();
             Assert.True(e.MoveNext());
@@ -300,7 +289,7 @@ namespace ExcelReader.Tests
             var parsed = new ExcelParser<IgnoreRow>().Parse(reader2).ToList();
             var row = Assert.Single(parsed);
             Assert.Equal("Alice", row.Name);
-            Assert.Equal(0, row.Computed); // ignored on read as well
+            Assert.Equal(0, row.Computed);
         }
 
         [Theory]
@@ -309,7 +298,6 @@ namespace ExcelReader.Tests
         [InlineData(RecordFormat.Xls)]
         public async Task RecordWriterUsesExcelConverterOnWrite(RecordFormat format)
         {
-            // Exactly double-representable so the test exercises the converter, not decimal/double rounding.
             var rows = new[] { new MoneyRow { Price = new Money(19.5m) }, new MoneyRow { Price = new Money(1234.25m) } };
 
             await using var ms = await WriteRecordsAsync<MoneyRow>(format,
@@ -607,7 +595,6 @@ namespace ExcelReader.Tests
 
         private static readonly string[] stringArray = ["Alice", "Bob", "Carol", "Dave", "Eve"];
 
-        // --- Multiple rows ---
 
         [Fact]
         public async Task MultipleRowsRoundTrip()
@@ -641,7 +628,6 @@ namespace ExcelReader.Tests
             Assert.Equal("Eve", rows[4].Name);
         }
 
-        // --- Multiple sheets ---
 
         [Fact]
         public async Task MultipleSheetsRoundTrip()
@@ -686,7 +672,6 @@ namespace ExcelReader.Tests
             Assert.Equal("FromBeta", rowsSheet2[0].Value);
         }
 
-        // --- Skip (column gaps) ---
 
         [Fact]
         public async Task SkipCreatesColumnGap()
@@ -746,7 +731,6 @@ namespace ExcelReader.Tests
             Assert.Throws<ArgumentException>(() => wb.AddSheet(name));
         }
 
-        // --- XML special characters in strings ---
 
         [Fact]
         public async Task XmlSpecialCharsAreEscaped()
@@ -775,7 +759,6 @@ namespace ExcelReader.Tests
             Assert.Equal("<Alice & \"Bob\">", rows[0].Name);
         }
 
-        // --- DisposeAsync auto-closes ---
 
         [Fact]
         public async Task DisposeAsyncWithoutEndAsyncProducesReadableWorkbook()
@@ -797,7 +780,6 @@ namespace ExcelReader.Tests
                 row.Write("Auto");
             }
 
-            // Do NOT call EndAsync — rely on DisposeAsync chain
             await wb.DisposeAsync().ConfigureAwait(true);
             ms.Position = 0;
 
@@ -807,7 +789,6 @@ namespace ExcelReader.Tests
             Assert.Equal("Auto", rows[0].Name);
         }
 
-        // --- HeaderRow config ---
 
         [Fact]
         public async Task HeaderRowTwoConfig()
@@ -842,7 +823,6 @@ namespace ExcelReader.Tests
             Assert.Equal("HeaderRow2", rows[0].Name);
         }
 
-        // --- State machine violations ---
 
         [Fact]
         public async Task AddSheetBeforeStartAsyncThrows()
@@ -925,7 +905,6 @@ namespace ExcelReader.Tests
             await sheet.EndAsync(TestContext.Current.CancellationToken).ConfigureAwait(true);
         }
 
-        // --- Large workbook ---
 
         [Fact]
         public async Task LargeWorkbookRoundTrip()
@@ -960,7 +939,6 @@ namespace ExcelReader.Tests
             }
         }
 
-        // --- FlushAsync ---
 
         [Fact]
         public async Task FlushAsyncDoesNotThrow()
@@ -972,7 +950,6 @@ namespace ExcelReader.Tests
             Assert.True(ms.Length >= 0);
         }
 
-        // --- DisposeAsync is idempotent ---
 
         [Fact]
         public async Task DisposeAsyncIsIdempotent()

@@ -57,8 +57,6 @@ fn batches_equal_the_whole_sheet() {
 
         assert_eq!(actual, expected, "batch_size={batch_size}");
 
-        // Pins the batching itself: an implementation that ignored batch_size and returned one big
-        // batch would satisfy every assertion above.
         let rows = expected.len() as i64;
         let want = if batch_size == 0 { 1 } else { (rows + batch_size - 1) / batch_size };
         assert_eq!(batches, want, "batch count for batch_size={batch_size}");

@@ -66,7 +66,6 @@ def test_reads_xlsb(xlsb_path):
 def test_reads_xls(xls_path):
     with open_workbook(xls_path) as workbook:
         rows = workbook.rows()
-        # 65K rows / 11 MB: reading a handful proves the path works without the wall-clock cost.
         sampled = [next(rows) for _ in range(10)]
 
     assert all(len(row) > 0 for row in sampled)
@@ -100,8 +99,6 @@ def test_sheet_names_does_not_disturb_row_enumeration(xlsx_path):
         first = next(rows)
         second = next(rows)
 
-        # sheet_names must read every sheet name without touching the current sheet or the row
-        # cursor — unlike move_to_sheet, which resets enumeration back to the sheet's first row.
         assert workbook.sheet_names
 
         third = next(rows)
@@ -149,8 +146,6 @@ def test_rows_iterator_raises_after_close_mid_iteration(xlsx_path):
 
 
 def test_dropping_a_workbook_without_close_still_releases_the_file(xlsx_path, tmp_path):
-    # Work on a copy — never touch the real fixture, and a copy also lets us assert the OS-level
-    # file lock is actually gone by deleting it afterwards.
     copy_path = tmp_path / "dropped.xlsx"
     shutil.copyfile(xlsx_path, copy_path)
 
@@ -159,8 +154,6 @@ def test_dropping_a_workbook_without_close_still_releases_the_file(xlsx_path, tm
     del workbook
     gc.collect()
 
-    # If __del__ didn't close the native handle, the native side still holds the file open and this
-    # raises PermissionError on Windows (the platform where an open-file lock is actually enforced).
     copy_path.unlink()
 
 
@@ -197,7 +190,7 @@ def test_read_all_matches_row_by_row_iteration(xlsx_path):
 
 def test_read_all_returns_empty_list_at_end_of_sheet(xlsx_path):
     with open_workbook(xlsx_path) as workbook:
-        workbook.read_all()  # drain the sheet
+        workbook.read_all()  
         assert workbook.read_all() == []
 
 
@@ -236,9 +229,6 @@ def test_read_all_columnar_without_numpy(xlsx_path, monkeypatch):
 
 
 def test_read_all_columnar_grows_the_buffer(xlsx_path, monkeypatch):
-    # Force the initial buffer far too small so the first native call returns XL_BUFFER_TOO_SMALL and
-    # read_all_columnar must retry with the required capacity, per xl_read_all_blob's contract that no
-    # rows are lost across that retry.
     monkeypatch.setattr(reader_module, "_INITIAL_ALL_ROWS_BUFFER", 4)
 
     with open_workbook(xlsx_path) as workbook:
@@ -252,7 +242,7 @@ def test_read_all_columnar_grows_the_buffer(xlsx_path, monkeypatch):
 
 def test_read_all_columnar_on_empty_sheet(xlsx_path):
     with open_workbook(xlsx_path) as workbook:
-        workbook.read_all_columnar()  # drain the sheet
+        workbook.read_all_columnar()  
         sheet = workbook.read_all_columnar()
 
     assert list(sheet.row_offsets) == [0]
@@ -260,7 +250,6 @@ def test_read_all_columnar_on_empty_sheet(xlsx_path):
     assert sheet.values == b""
 
 
-# --- parse_typed / to_arrow ---------------------------------------------------------------------
 
 
 @pytest.fixture
@@ -297,9 +286,9 @@ def test_parse_typed_returns_every_column_type(typed_csv):
     assert list(qty) == [3, 7]
     assert list(price) == [1.5, 2.5]
     assert list(flag) == [1, 0]
-    assert list(day) == [18263, 0]  # days since 1970-01-01
-    assert list(clock) == [3_600_000_000, 1_000_000]  # microseconds since midnight
-    assert list(stamp) == [1_577_926_800_000_000, 1_000_000]  # microseconds since the epoch
+    assert list(day) == [18263, 0]  
+    assert list(clock) == [3_600_000_000, 1_000_000]  
+    assert list(stamp) == [1_577_926_800_000_000, 1_000_000]  
 
 
 def test_parse_typed_resolves_columns_by_index_when_name_is_none(typed_csv):
@@ -336,7 +325,6 @@ def test_parse_typed_builds_a_validity_bitmap_for_a_nullable_column(tmp_path):
 
     assert table.row_count == 3
     assert list(table.columns[0]) == [3, 0, 9]
-    # Arrow-style bit-packed, least-significant bit first: valid, null, valid.
     assert table.validity[0][0] & 0b111 == 0b101
 
 
@@ -359,7 +347,6 @@ def test_parse_typed_rejects_an_empty_schema(typed_csv):
 
 
 def test_parse_typed_reads_the_whole_sheet_regardless_of_the_row_cursor(typed_csv):
-    # xl_parse_typed restarts at the sheet's first row — an advanced rows() cursor must not shorten it.
     with open_workbook(typed_csv) as workbook:
         next(workbook.rows())
         table = workbook.parse_typed([ColumnSpec(ColumnType.I64, name="qty")])
@@ -385,8 +372,6 @@ def test_to_arrow_returns_a_struct_array_matching_parse_typed(typed_csv):
 
 
 def test_to_arrow_survives_the_workbook_being_closed(typed_csv):
-    # pyarrow owns the exported buffers via ArrowArray.release, not the workbook handle — the data
-    # must stay readable after close(), which is the whole point of handing ownership over.
     pytest.importorskip("pyarrow")
 
     with open_workbook(typed_csv) as workbook:
@@ -449,9 +434,6 @@ def test_to_polars_raises_for_an_unknown_column_name(typed_csv):
 
 
 def test_open_options_reaches_the_csv_reader(tmp_path):
-    # A semicolon file parses as ONE column under the default comma dialect and as three under the
-    # override. Asserting the column split, rather than just that the call succeeded, is what proves
-    # the option travelled all the way into the reader instead of being silently dropped.
     path = tmp_path / "semicolons.csv"
     path.write_text("name;qty;price\nwidget;3;9.99\n", encoding="utf-8")
 
@@ -470,26 +452,16 @@ def test_open_options_apply_to_open_bytes_too(tmp_path):
 
 
 def test_open_options_default_to_the_library_defaults(xlsx_path):
-    # An all-None OpenOptions must behave exactly like passing none at all: every field decodes to
-    # the ABI's "use the default" sentinel rather than to a zero that means something else.
     with open_workbook(xlsx_path) as plain, open_workbook(xlsx_path, options=OpenOptions()) as explicit:
         assert [c.value for c in next(plain.rows())] == [c.value for c in next(explicit.rows())]
 
 
 def test_open_options_rejects_an_out_of_range_value(csv_path):
-    # Validation lives on the native side; the wrapper's job is to surface its reason, not to
-    # re-implement the bound.
     with pytest.raises(ExcelReaderError):
         open_workbook(csv_path, format="csv", options=OpenOptions(csv_delimiter=999))
 
 
 def test_open_options_limit_actually_aborts_an_oversized_read(tmp_path):
-    # The max_* fields are resource limits, not tuning knobs, so this asserts one BITES: the same file
-    # reads fine at the default and raises under a lower cap. Only the pair proves the limit did the
-    # rejecting rather than the file simply being broken.
-    #
-    # The cell has to exceed the reader's 64 KiB starting buffer, because these caps bound buffer
-    # GROWTH — a value that fits the initial allocation never consults them.
     path = tmp_path / "wide-cell.csv"
     path.write_text("value\n" + ("x" * 200_000) + "\n", encoding="utf-8")
 
@@ -500,12 +472,6 @@ def test_open_options_limit_actually_aborts_an_oversized_read(tmp_path):
             list(workbook.rows())
 
 
-# --- password support -----------------------------------------------------------------------------
-#
-# open_workbook()/open_bytes() are this project's actual "open the workbook" entry points (there is
-# no bare excelreader.open()) — format is left at its auto-detect default throughout, since an
-# explicit xlsx/xlsb format bypasses the CFB-container sniffing that detects encryption in the first
-# place (see open_workbook()'s docstring).
 
 
 def test_opens_encrypted_workbook_with_password():
@@ -530,19 +496,15 @@ def test_encrypted_rows_match_plaintext():
         assert plain.read_all() == encrypted_rows
 
 
-# A password must not surface in a traceback or a log line.
 def test_password_is_not_in_repr():
     with open_workbook(ENCRYPTED / "agile-aes256-sha512.xlsx", password="hunter2") as book:
         assert "hunter2" not in repr(book)
 
 
-# --- chunked typed reading ------------------------------------------------------------------
 
 
 @pytest.fixture
 def batched_csv(tmp_path):
-    # 50 rows, not the 2 of typed_csv: a batch sweep needs enough rows for the batch count to mean
-    # something and for a mid-sheet boundary to exist.
     path = tmp_path / "batched.csv"
     lines = ["name,qty"] + [f"row{i},{i}" for i in range(50)]
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
@@ -570,7 +532,6 @@ def test_iter_parse_typed_matches_parse_typed(batched_csv, batch_size):
 
     assert [row for batch in batches for row in _batch_rows(batch)] == expected
 
-    # Pins the batching: an implementation that ignored batch_size would pass the equality above.
     rows = len(expected)
     want = 1 if batch_size == 0 else (rows + batch_size - 1) // batch_size
     assert len(batches) == want
@@ -587,7 +548,7 @@ def test_iter_parse_typed_rejects_a_negative_batch_size(batched_csv):
 def test_a_second_reader_on_one_workbook_is_rejected(batched_csv):
     with open_workbook(batched_csv) as workbook:
         first = workbook.iter_parse_typed(_BATCH_SCHEMA, batch_size=4)
-        next(first)  # a generator opens nothing until it is first iterated
+        next(first)  
         second = workbook.iter_parse_typed(_BATCH_SCHEMA, batch_size=4)
         with pytest.raises(ExcelReaderError):
             next(second)
@@ -598,7 +559,7 @@ def test_a_foreign_read_latches_the_readers_error(batched_csv):
     with open_workbook(batched_csv) as workbook:
         batches = workbook.iter_parse_typed(_BATCH_SCHEMA, batch_size=4)
         next(batches)
-        workbook.parse_typed(_BATCH_SCHEMA)  # steals the row cursor, invalidating the reader
+        workbook.parse_typed(_BATCH_SCHEMA)  
         with pytest.raises(ExcelReaderError):
             next(batches)
 
@@ -607,14 +568,12 @@ def test_abandoning_the_generator_closes_the_reader(batched_csv):
     with open_workbook(batched_csv) as workbook:
         batches = workbook.iter_parse_typed(_BATCH_SCHEMA, batch_size=4)
         next(batches)
-        batches.close()  # runs the generator's finally, closing the native reader
-        # Proof it really closed: a second reader now opens instead of being rejected.
+        batches.close()  
         again = workbook.iter_parse_typed(_BATCH_SCHEMA, batch_size=4)
         assert next(again).row_count == 4
         again.close()
 
 
-# --- Arrow stream / streaming pandas & polars ----------------------------------------------------
 
 
 def test_to_record_batch_reader_matches_to_record_batch(batched_csv):
@@ -643,7 +602,7 @@ def test_a_stream_is_rejected_while_a_reader_is_live(batched_csv):
     pytest.importorskip("pyarrow")
     with open_workbook(batched_csv) as workbook:
         reader = workbook.iter_parse_typed(_BATCH_SCHEMA, batch_size=4)
-        next(reader)  # a generator opens nothing until it is first iterated
+        next(reader)  
         with pytest.raises(ExcelReaderError):
             workbook.to_record_batch_reader(_BATCH_SCHEMA, batch_size=4)
         reader.close()
@@ -657,15 +616,12 @@ def test_a_reader_is_rejected_while_a_stream_is_live(batched_csv):
             next(workbook.iter_parse_typed(_BATCH_SCHEMA, batch_size=4))
 
 
-# pyarrow's RecordBatchReader surfaces a faulted C stream as a plain OSError, not ExcelReaderError -
-# get_next's errno-style failure crosses the Arrow C Data Interface before this library's own
-# exception wrapping ever gets a chance to run.
 def test_a_foreign_read_latches_the_streams_error(batched_csv):
     pytest.importorskip("pyarrow")
     with open_workbook(batched_csv) as workbook:
         reader = workbook.to_record_batch_reader(_BATCH_SCHEMA, batch_size=4)
         reader.read_next_batch()
-        workbook.parse_typed(_BATCH_SCHEMA)  # steals the row cursor, invalidating the stream
+        workbook.parse_typed(_BATCH_SCHEMA)  
 
         with pytest.raises(OSError) as first:
             reader.read_next_batch()
@@ -692,8 +648,6 @@ def test_iter_polars_yields_one_frame_per_batch(batched_csv):
     assert sum(frame.height for frame in frames) == 50
 
 
-# The flag that carries the whole streaming win: polars.from_arrow defaults to rechunk=True, which
-# re-concatenates every batch into contiguous memory and puts peak right back where it started.
 def test_to_polars_stays_chunked(batched_csv):
     pytest.importorskip("pyarrow")
     polars = pytest.importorskip("polars")
@@ -713,17 +667,6 @@ def test_to_pandas_still_reads_the_whole_sheet(batched_csv):
     assert list(frame.columns) == ["name", "qty"]
 
 
-# _BATCH_SCHEMA's two columns (name: string, qty: int64) already land in separate pandas blocks by
-# dtype alone, split_blocks or not, so it can't pin split_blocks=True. Reading "qty" a second time
-# (once by name, once by its own position) gives two same-dtype int64 columns instead: without
-# split_blocks=True pandas would consolidate them into one 2-D block (2 blocks total); with it, each
-# column keeps its own block (3 total). An implementation that dropped self_destruct/split_blocks
-# would still pass every other test in this file and silently double peak memory - this is the one
-# check that fails if it does.
-#
-# frame._mgr.nblocks is private pandas API (no public block-count accessor exists on pandas 3.0.5):
-# reached for here because the flags have no public observable, and leaving them unguarded is worse
-# than depending on an internal.
 def test_to_pandas_splits_blocks_per_column(batched_csv):
     pytest.importorskip("pyarrow")
     pytest.importorskip("pandas")

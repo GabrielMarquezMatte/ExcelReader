@@ -101,9 +101,6 @@ namespace ExcelReader.Tests
                 Assert.Equal(NativeStatus.Ok, OpenWriteHandle(path, NativeFormat.Xlsx, out NativeWriterHandle? handle));
                 Assert.Throws<InvalidOperationException>(() => handle!.StartRow());
 
-                // A workbook with zero sheets is not a file IWorkbookWriter.End can finalize, so the
-                // handle needs a sheet before it can be closed successfully - this is the underlying
-                // writer's own contract, not something xl_close_write_handle relaxes.
                 handle!.StartSheet("S");
                 Assert.Equal(NativeStatus.Ok, NativeApi.CloseWriteHandle(handle));
             }
@@ -156,8 +153,6 @@ namespace ExcelReader.Tests
                 Assert.Equal(NativeStatus.Ok, OpenWriteHandle(path, NativeFormat.Xlsx, out NativeWriterHandle? handle));
                 Assert.Throws<InvalidOperationException>(() => handle!.EndSheet());
 
-                // See StartRow_Should_Throw_Before_StartSheet: a sheet-less workbook can't be closed
-                // successfully, so add one before asserting the close status.
                 handle!.StartSheet("S");
                 Assert.Equal(NativeStatus.Ok, NativeApi.CloseWriteHandle(handle));
             }
@@ -190,8 +185,6 @@ namespace ExcelReader.Tests
         [Fact]
         public void CloseWriteHandle_Should_Produce_A_Valid_File_Even_When_EndSheet_Was_Never_Called()
         {
-            // The row/sheet are left open on purpose: xl_close_write_handle must still leave a
-            // readable file behind, unlike EndRow/EndSheet's strict single-step guards above.
             string path = TempPath("xlsx");
             try
             {
@@ -227,9 +220,6 @@ namespace ExcelReader.Tests
                 handle!.StartSheet("S");
                 Assert.Equal(NativeStatus.Ok, NativeApi.CloseWriteHandle(handle));
 
-                // Close() a second time on the same, already-disposed handle: whatever the workbook
-                // writer does with a repeat End()/Dispose() must not throw past NativeApi's own
-                // try/catch and must not resurrect the file.
                 int status = NativeApi.CloseWriteHandle(handle);
                 Assert.True(status is NativeStatus.Ok or NativeStatus.Error);
             }
@@ -278,10 +268,6 @@ namespace ExcelReader.Tests
         [Fact]
         public void OpenWriteHandle_Should_Carry_UseSharedStrings_Into_An_Xlsb_Writer()
         {
-            // Regression guard for the bug where NativeWriterHandle.Create dropped
-            // useSharedStrings for the XLSB branch: this only asserts the handle opens and closes
-            // cleanly with the option set, since the shared-strings table itself is an internal
-            // implementation detail XlsbWorkbookWriter doesn't expose for direct inspection.
             string path = TempPath("xlsb");
             NativeWriteOptionsRaw raw = new()
             {
@@ -301,13 +287,6 @@ namespace ExcelReader.Tests
             }
         }
 
-        // Regression guard for the id-collision bug: NativeHandleTable used to be generic
-        // (NativeHandleTable<THandle>), which gave reader ids and writer ids independent counters
-        // that both start at 1 - a live reader and a live writer could then share the same id, and
-        // an entry point for one kind would resolve the other kind's object instead of failing
-        // cleanly. The shared, single-counter, runtime-type-checked table must keep that from ever
-        // happening again, for handles that are simultaneously live AND for a retired id reused by
-        // the other kind.
         [Fact]
         public void NativeHandleTable_Should_Never_Resolve_A_Writer_Id_As_A_Reader_Or_Vice_Versa()
         {
@@ -321,23 +300,19 @@ namespace ExcelReader.Tests
                 Assert.Equal(NativeStatus.Ok, OpenWriteHandle(writePath, NativeFormat.Xlsx, out NativeWriterHandle? writer));
                 nint writerId = NativeHandleTable.Register(writer!);
 
-                // A live reader id resolved as a writer, and a live writer id resolved as a reader,
-                // must both come back null - never the other kind's object.
                 Assert.Null(NativeHandleTable.Resolve<NativeWriterHandle>(readerId));
                 Assert.Null(NativeHandleTable.Resolve<NativeHandle>(writerId));
                 Assert.False(NativeHandleTable.TryUnregister(readerId, out NativeWriterHandle? _));
                 Assert.False(NativeHandleTable.TryUnregister(writerId, out NativeHandle? _));
 
-                // The failed cross-type TryUnregister calls above must not have removed either
-                // handle from the table - both must still resolve as their own, correct kind.
                 Assert.Same(reader, NativeHandleTable.Resolve<NativeHandle>(readerId));
                 Assert.Same(writer, NativeHandleTable.Resolve<NativeWriterHandle>(writerId));
 
                 Assert.True(NativeHandleTable.TryUnregister(readerId, out NativeHandle? freedReader));
                 NativeApi.Close(freedReader);
-                writer!.StartSheet("S"); // a sheet-less workbook cannot be closed successfully
+                writer!.StartSheet("S");
                 Assert.Equal(NativeStatus.Ok, NativeApi.CloseWriteHandle(writer));
-                NativeHandleTable.TryUnregister(writerId, out NativeWriterHandle? _); // already closed above; just drop the id
+                NativeHandleTable.TryUnregister(writerId, out NativeWriterHandle? _);
             }
             finally
             {
@@ -380,17 +355,12 @@ namespace ExcelReader.Tests
                 NativeApi.Close(reader);
             }
 
-            // GetWriteHandleBytes must not have released the handle: xl_close_write_handle is still
-            // required, same contract as a file-backed handle.
             Assert.Equal(NativeStatus.Ok, NativeApi.CloseWriteHandle(handle));
         }
 
         [Fact]
         public void GetWriteHandleBytes_Should_Not_Require_EndSheet_First()
         {
-            // Same idempotent-Close contract CloseWriteHandle relies on (see
-            // CloseWriteHandle_Should_Produce_A_Valid_File_Even_When_EndSheet_Was_Never_Called): the
-            // row/sheet are left open on purpose.
             Assert.Equal(NativeStatus.Ok, OpenWriteHandleToMemory(NativeFormat.Xlsx, out NativeWriterHandle? handle));
             handle!.StartSheet("S");
             handle.StartRow();
@@ -408,8 +378,6 @@ namespace ExcelReader.Tests
         [Fact]
         public void GetWriteHandleBytes_Called_Twice_Should_Return_The_Same_Content()
         {
-            // Exercises Close()'s new idempotency guard directly: a second GetWriteHandleBytes call
-            // must not re-run _workbook.End() and must not throw or corrupt the buffer.
             Assert.Equal(NativeStatus.Ok, OpenWriteHandleToMemory(NativeFormat.Xlsx, out NativeWriterHandle? handle));
             handle!.StartSheet("S");
 
@@ -458,9 +426,6 @@ namespace ExcelReader.Tests
         [Fact]
         public void CloseWriteHandle_After_GetWriteHandleBytes_Should_Not_Reopen_The_Workbook()
         {
-            // GetWriteHandleBytes's internal Close() call must be indistinguishable, from
-            // CloseWriteHandle's perspective, from having already been closed once - no exception, no
-            // attempt to append more workbook structure.
             Assert.Equal(NativeStatus.Ok, OpenWriteHandleToMemory(NativeFormat.Xlsx, out NativeWriterHandle? handle));
             handle!.StartSheet("S");
             Assert.Equal(NativeStatus.Ok, NativeApi.GetWriteHandleBytes(handle, out _));

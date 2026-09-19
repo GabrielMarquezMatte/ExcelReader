@@ -6,9 +6,6 @@ using ExcelReader.Core.Writer.Internal;
 
 namespace ExcelReader.Tests
 {
-    // Forges a standard-encrypted container from the agile fixture's decrypted plaintext. This is a
-    // wiring fixture, not a conformance oracle: it is encrypted by the same derivation that decrypts
-    // it. See StandardEncryptionOpenTests' class comment.
     internal static class StandardContainerFixture
     {
         internal const string Password = "hunter2";
@@ -73,9 +70,6 @@ namespace ExcelReader.Tests
         private static byte[] BuildInfo(byte[] encryptedVerifier, byte[] encryptedVerifierHash)
         {
             byte[] info = StandardInfoBuilder.Build(4, 2, algId: AlgIdAes256, keySize: 256);
-            // StandardInfoBuilder writes zeroed salt/verifier placeholders; overwrite them with the
-            // real values this container is encrypted under. They are the last 68 bytes: salt(16),
-            // encryptedVerifier(16), verifierHashSize(4), encryptedVerifierHash(32).
             int saltOffset = info.Length - 68;
             Salt.CopyTo(info.AsSpan(saltOffset));
             encryptedVerifier.CopyTo(info.AsSpan(saltOffset + 16));
@@ -83,8 +77,6 @@ namespace ExcelReader.Tests
             return info;
         }
 
-        // Reuses the agile fixture's decrypted plaintext, which is a real XLSX package and is
-        // already asserted to be a ZIP and larger than one segment.
         private static byte[] PlainPackage()
         {
             return EncryptedFixtures.PlainBytes("agile-aes256-sha512.xlsx");

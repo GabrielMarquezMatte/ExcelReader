@@ -33,11 +33,11 @@ namespace ExcelReader.Tests
                 s.Start();
                 using (var r = s.StartRow())
                 {
-                    r.Write("João");      // compressed Latin-1
-                    r.Write(42);          // int via generic
-                    r.Write(3.5);         // double
-                    r.Write(true);        // bool
-                    r.Write(date);        // date
+                    r.Write("João");
+                    r.Write(42);
+                    r.Write(3.5);
+                    r.Write(true);
+                    r.Write(date);
                 }
                 s.End();
             }, ct: ct);
@@ -161,8 +161,8 @@ namespace ExcelReader.Tests
                 using (var r = s.StartRow())
                 {
                     r.Write("A");
-                    r.Write((string?)null);  // empty
-                    r.Skip();                // empty
+                    r.Write((string?)null);
+                    r.Skip();
                     r.Write("D");
                 }
                 s.End();
@@ -270,13 +270,10 @@ namespace ExcelReader.Tests
             var s = wb.AddSheet("S1");
             s.Start();
             using var r = s.StartRow();
-            r.Skip(256); // column index 256 (0-based) is out of range
+            r.Skip(256);
             Assert.Throws<InvalidOperationException>(() => r.Write("x"));
         }
 
-        // Skip itself does no I/O for XLS (unlike CSV), so the risk isn't write amplification —
-        // it's that _columnIndex could advance unboundedly with nothing checking it until (if ever) a
-        // later Write. Skip must now reject on its own once it would exceed BIFF8's 256-column grid.
         [Fact]
         public async Task SkipBeyondColumnLimitThrows()
         {
@@ -289,8 +286,6 @@ namespace ExcelReader.Tests
             Assert.Throws<InvalidOperationException>(() => r.Skip(257));
         }
 
-        // XlsRowWriter.Write<T> routes through the same XlsbRowWriter.ToDouble as XlsbRowWriter
-        // does, so a T that formats as non-numeric text must throw instead of silently writing 0.0.
         [Fact]
         public async Task WriteNonNumericFormattableThrowsArgumentException()
         {
@@ -357,9 +352,6 @@ namespace ExcelReader.Tests
         [Fact]
         public async Task LargeWorkbookForcesDifatSectors()
         {
-            // The OLE container only allocates DIFAT sectors once the FAT exceeds the 109 entries that
-            // fit in the header — that needs a workbook stream past ~7.1 MB (>~13,900 512-byte sectors).
-            // 64000 rows x 8 NUMBER cells (18 bytes each) ≈ 9.2 MB, comfortably over the threshold.
             CancellationToken ct = TestContext.Current.CancellationToken;
             const int rows = 64000;
             const int cols = 8;
@@ -402,7 +394,7 @@ namespace ExcelReader.Tests
         public async Task RowOverflowAutoSplitsIntoNewSheet()
         {
             CancellationToken ct = TestContext.Current.CancellationToken;
-            const int rows = 65537; // one past the BIFF8 per-sheet cap (65536)
+            const int rows = 65537;
             byte[] bytes = await WriteAsync(wb =>
             {
                 var s = wb.AddSheet("S");
