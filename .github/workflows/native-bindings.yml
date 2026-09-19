@@ -149,27 +149,6 @@ jobs:
           EXCELREADER_NATIVE_LIB_DIR: ${{ github.workspace }}/${{ steps.lib.outputs.dir }}
         run: cargo test --workspace --all-features --verbose
 
-      # TEMPORARY diagnostics for the macOS SIGSEGV in the aggregate test binary. Prior round: a
-      # concurrent DOP=8 run with no reread passed; the same shape WITH a boundary reread crashed -
-      # so the reread mechanism itself is implicated, not concurrency alone. These two ask a
-      # sharper question: is it really about "a call after concurrent native activity has already
-      # run and joined" (independent of the reread machinery specifically), or something narrower?
-      # Control 3: two trivial unrelated sequential calls back to back - no concurrency at all.
-      # Control 4: one concurrent DOP=8 run (no reread) followed by one trivial sequential call.
-      # Remove once answered.
-      - name: "cargo test (control 3: two sequential calls, no concurrency at all)"
-        if: always() && runner.os == 'macOS'
-        working-directory: rust
-        env:
-          EXCELREADER_NATIVE_LIB_DIR: ${{ github.workspace }}/${{ steps.lib.outputs.dir }}
-        run: cargo test --test aggregate two_sequential_calls_in_a_row_both_succeed -- --exact
-      - name: "cargo test (control 4: a sequential call right after a concurrent run, no reread)"
-        if: always() && runner.os == 'macOS'
-        working-directory: rust
-        env:
-          EXCELREADER_NATIVE_LIB_DIR: ${{ github.workspace }}/${{ steps.lib.outputs.dir }}
-        run: cargo test --test aggregate a_call_after_a_partitioned_run_still_succeeds -- --exact
-
       - name: cargo build (default features)
         working-directory: rust
         env:
