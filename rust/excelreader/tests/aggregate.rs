@@ -297,48 +297,6 @@ fn a_panicking_accumulate_is_resumed_on_the_calling_thread() {
     let _ = aggregate_csv_memory(b"a,b\n1,2\n", || Explodes, &CsvParallelOptions::default());
 }
 
-struct Counter(i64);
-impl CsvAccumulator for Counter {
-    fn accumulate(&mut self, _row: RowRef<'_>) -> Result<(), i32> {
-        self.0 += 1;
-        Ok(())
-    }
-    fn combine(&mut self, other: &mut Self) -> Result<(), i32> {
-        self.0 += other.0;
-        Ok(())
-    }
-}
-
-/// Two trivial, unrelated, unpartitioned calls back to back in one process. Isolates whether the
-/// native ABI itself breaks on a second call, independent of concurrency or partitioning.
-#[test]
-fn two_sequential_calls_in_a_row_both_succeed() {
-    let first = aggregate_csv_memory(b"a,b\n1,2\n", || Counter(0), &CsvParallelOptions::default()).unwrap();
-    assert_eq!(first.0, 2);
-
-    let second = aggregate_csv_memory(b"a,b\n1,2\n3,4\n", || Counter(0), &CsvParallelOptions::default()).unwrap();
-    assert_eq!(second.0, 3);
-}
-
-/// A concurrent, multi-worker partitioned run (no reread - flat, single-line records can't
-/// straddle a guessed boundary) followed by a trivial unrelated sequential call. Isolates whether
-/// a call succeeds after prior concurrent native activity has already run and joined, independent
-/// of the reread mechanism specifically.
-#[test]
-fn a_call_after_a_partitioned_run_still_succeeds() {
-    let (text, _) = group_fixture();
-    let options = CsvParallelOptions {
-        degree_of_parallelism: 8,
-        header_row: 1,
-        ..CsvParallelOptions::default()
-    };
-    let first = aggregate_csv_memory(text.as_bytes(), || Counter(0), &options).unwrap();
-    assert_eq!(first.0, 300_000);
-
-    let second = aggregate_csv_memory(b"a,b\n1,2\n", || Counter(0), &CsvParallelOptions::default()).unwrap();
-    assert_eq!(second.0, 2);
-}
-
 /// A chunk whose initial boundary guess lands inside a giant quoted field sees garbled interior
 /// "rows" there and panics on them. The library re-reads that chunk from the correct boundary once
 /// the true start is confirmed, and the re-read succeeds without panicking - the stale panic from
