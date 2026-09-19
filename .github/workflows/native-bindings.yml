@@ -149,24 +149,14 @@ jobs:
           EXCELREADER_NATIVE_LIB_DIR: ${{ github.workspace }}/${{ steps.lib.outputs.dir }}
         run: cargo test --workspace --all-features --verbose
 
-      # TEMPORARY: NativeAOT still reads standard DOTNET_* GC knobs at process start, so these test
-      # GC configs against the SAME crashing test without rebuilding the native lib.
-      # ConcurrentGarbageCollection=false at build time (prior round) did NOT fix it. These pin GC
-      # mode explicitly at runtime to find out which mode is actually active by default and whether
-      # workstation vs. server GC matters at all. Remove once answered.
-      - name: "cargo test (verify: DOTNET_gcServer=0, workstation GC)"
+      # TEMPORARY: verifies whether disabling ConcurrentGarbageCollection on the native lib
+      # (ExcelReader.Native.csproj) fixes the macOS-only SIGSEGV that reliably crashes this one
+      # test alone. Remove this step (and the csproj property, if it didn't help) once answered.
+      - name: "cargo test (verify: ConcurrentGarbageCollection=false)"
         if: always() && runner.os == 'macOS'
         working-directory: rust
         env:
           EXCELREADER_NATIVE_LIB_DIR: ${{ github.workspace }}/${{ steps.lib.outputs.dir }}
-          DOTNET_gcServer: "0"
-        run: cargo test --test aggregate a_call_after_a_partitioned_run_still_succeeds -- --exact
-      - name: "cargo test (verify: DOTNET_gcServer=1, server GC)"
-        if: always() && runner.os == 'macOS'
-        working-directory: rust
-        env:
-          EXCELREADER_NATIVE_LIB_DIR: ${{ github.workspace }}/${{ steps.lib.outputs.dir }}
-          DOTNET_gcServer: "1"
         run: cargo test --test aggregate a_call_after_a_partitioned_run_still_succeeds -- --exact
 
       - name: cargo build (default features)
