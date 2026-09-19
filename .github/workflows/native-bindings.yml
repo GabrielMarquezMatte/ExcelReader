@@ -152,33 +152,6 @@ jobs:
           EXCELREADER_NATIVE_LIB_DIR: ${{ github.workspace }}/${{ steps.lib.outputs.dir }}
         run: cargo test --workspace --all-features --verbose
 
-      # TEMPORARY: the crash dumps point at several threads entering the runtime at once. Loop the
-      # suite one test thread at a time: if that is clean where the parallel loop crashes within a
-      # few iterations, first-call concurrency is the trigger. Remove once answered.
-      - name: "Diagnostic: 15 serial runs of the Rust suite"
-        if: always() && runner.os != 'Windows'
-        working-directory: rust
-        shell: bash
-        env:
-          EXCELREADER_NATIVE_LIB_DIR: ${{ github.workspace }}/${{ steps.lib.outputs.dir }}
-          LIBC_FATAL_STDERR_: '1'
-        run: |
-          set +e
-          cargo test --workspace --all-features --no-run -q 2>/dev/null
-          crashed=0
-          for i in $(seq 1 15); do
-            out=$(cargo test --workspace --all-features -- --test-threads=1 2>&1)
-            if echo "$out" | grep -q "signal: "; then
-              echo "=== crashed on iteration $i ==="
-              echo "$out" | grep -B 20 "signal: " | grep -v "^\s*$" | tail -n 25
-              crashed=1
-              break
-            fi
-            echo "iteration $i: ok"
-          done
-          echo "serial-crashed=$crashed"
-          exit 0
-
       - name: cargo build (default features)
         working-directory: rust
         env:
@@ -212,9 +185,15 @@ jobs:
 
       - name: Write the repro
         shell: bash
+        env:
+          SDK: ${{ matrix.sdk }}
         run: |
           mkdir -p "$RUNNER_TEMP/repro"
           cd "$RUNNER_TEMP/repro"
+          # The repro lives outside the repo, so nothing pins the SDK here unless we say so.
+          if [ "$SDK" != "10.0.x" ]; then
+            printf '{"sdk":{"version":"%s","rollForward":"disable"}}\n' "$SDK" > global.json
+          fi
           cat > repro.csproj <<'EOF'
           <Project Sdk="Microsoft.NET.Sdk">
             <PropertyGroup>
@@ -233,9 +212,11 @@ jobs:
           using System.Buffers;
           using System.Runtime.InteropServices;
           using System.Text;
+          using System.Threading.Tasks;
 
           public static class Exports
           {
+              // What a Rust test thread's first call runs into: class construction plus allocation.
               [UnmanagedCallersOnly(EntryPoint = "work")]
               public static int Work(int n)
               {
@@ -256,18 +237,61 @@ jobs:
                       return -1;
                   }
               }
+
+              // What xl_csv_aggregate_* runs: the call blocks on a fan-out across thread pool
+              // workers that allocate enough to collect, which is where macOS crashes.
+              [UnmanagedCallersOnly(EntryPoint = "fanout")]
+              public static int Fanout(int workers, int perWorker)
+              {
+                  try
+                  {
+                      Task<int>[] tasks = new Task<int>[workers];
+                      for (int w = 0; w < workers; w++)
+                      {
+                          tasks[w] = Task.Run(() =>
+                          {
+                              int total = 0;
+                              for (int i = 0; i < perWorker; i++)
+                              {
+                                  byte[] chunk = new byte[1024];
+                                  total += chunk.Length;
+                                  StringBuilder builder = new();
+                                  builder.Append(i);
+                                  total += builder.Length;
+                              }
+                              return total;
+                          });
+                      }
+                      Task.WhenAll(tasks).GetAwaiter().GetResult();
+                      int sum = 0;
+                      foreach (Task<int> task in tasks)
+                      {
+                          sum += task.Result;
+                      }
+                      return sum;
+                  }
+                  catch (Exception exception)
+                  {
+                      Console.Error.WriteLine(exception.Message);
+                      return -1;
+                  }
+              }
           }
           EOF
           cat > host.c <<'EOF'
-          // Mirrors what a Rust test binary does: threads with 2 MiB stacks (Rust's default), each
-          // making its first call into a linked NativeAOT shared library at the same moment.
+          // Mirrors a Rust test binary: every call into the linked NativeAOT shared library comes
+          // from a spawned thread with Rust's default 2 MiB stack, never from the main thread.
+          //   argv[1] = concurrent : 8 threads make their first call at the same moment (Linux)
+          //   argv[1] = fanout     : one thread calls an export that fans out across the thread pool (macOS)
           #include <pthread.h>
           #include <stdio.h>
           #include <stdlib.h>
+          #include <string.h>
 
           extern int work(int n);
+          extern int fanout(int workers, int per_worker);
 
-          static void *run(void *arg)
+          static void *run_work(void *arg)
           {
               (void)arg;
               if (work(4000) < 0)
@@ -278,21 +302,36 @@ jobs:
               return NULL;
           }
 
-          int main(void)
+          static void *run_fanout(void *arg)
           {
-              enum { THREADS = 8 };
+              (void)arg;
+              for (int i = 0; i < 3; i++)
+              {
+                  if (fanout(8, 4000) < 0)
+                  {
+                      fprintf(stderr, "fanout reported failure\n");
+                      exit(2);
+                  }
+              }
+              return NULL;
+          }
+
+          int main(int argc, char **argv)
+          {
+              int concurrent = argc > 1 && strcmp(argv[1], "concurrent") == 0;
+              int count = concurrent ? 8 : 1;
               pthread_attr_t attr;
               pthread_attr_init(&attr);
               pthread_attr_setstacksize(&attr, 2 * 1024 * 1024);
-              pthread_t threads[THREADS];
-              for (int i = 0; i < THREADS; i++)
+              pthread_t threads[8];
+              for (int i = 0; i < count; i++)
               {
-                  if (pthread_create(&threads[i], &attr, run, NULL) != 0)
+                  if (pthread_create(&threads[i], &attr, concurrent ? run_work : run_fanout, NULL) != 0)
                   {
                       return 3;
                   }
               }
-              for (int i = 0; i < THREADS; i++)
+              for (int i = 0; i < count; i++)
               {
                   pthread_join(threads[i], NULL);
               }
@@ -314,7 +353,7 @@ jobs:
           echo "lib=$lib"
           cc -O2 host.c "$lib" -o host -Wl,-rpath,"$(cd "$(dirname "$lib")" && pwd)" -lpthread
 
-      - name: Run it 50 times
+      - name: Run both shapes 50 times each
         shell: bash
         run: |
           set +e
@@ -322,15 +361,19 @@ jobs:
           ulimit -c unlimited
           [ "$RUNNER_OS" = Linux ] && sudo sysctl -qw kernel.core_pattern=/tmp/core.%p
           crashes=0
-          for i in $(seq 1 50); do
-            ./host
-            status=$?
-            if [ $status -ne 0 ]; then
-              crashes=$((crashes + 1))
-              echo "iteration $i: exit $status$([ $status -gt 128 ] && echo " (signal $((status - 128)))")"
-            fi
+          for mode in concurrent fanout; do
+            modecrashes=0
+            for i in $(seq 1 50); do
+              ./host $mode
+              status=$?
+              if [ $status -ne 0 ]; then
+                modecrashes=$((modecrashes + 1))
+                echo "$mode iteration $i: exit $status$([ $status -gt 128 ] && echo " (signal $((status - 128)))")"
+              fi
+            done
+            echo "=== $mode: $modecrashes crashes in 50 runs ==="
+            crashes=$((crashes + modecrashes))
           done
-          echo "=== $crashes crashes in 50 runs ==="
           if [ "$RUNNER_OS" = Linux ] && [ $crashes -gt 0 ]; then
             command -v gdb >/dev/null || { sudo apt-get update -qq && sudo apt-get install -y -qq gdb; } >/dev/null 2>&1
             for c in /tmp/core.*; do
