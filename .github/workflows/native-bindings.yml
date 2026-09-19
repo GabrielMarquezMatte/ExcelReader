@@ -149,24 +149,17 @@ jobs:
           EXCELREADER_NATIVE_LIB_DIR: ${{ github.workspace }}/${{ steps.lib.outputs.dir }}
         run: cargo test --workspace --all-features --verbose
 
-      # TEMPORARY: NativeAOT still reads standard DOTNET_* GC knobs at process start, so these test
-      # GC configs against the SAME crashing test without rebuilding the native lib.
-      # ConcurrentGarbageCollection=false at build time (prior round) did NOT fix it. These pin GC
-      # mode explicitly at runtime to find out which mode is actually active by default and whether
-      # workstation vs. server GC matters at all. Remove once answered.
-      - name: "cargo test (verify: DOTNET_gcServer=0, workstation GC)"
+      # TEMPORARY: neither ConcurrentGarbageCollection=false (build-time) nor DOTNET_gcServer=0/1
+      # (runtime) fixed the macOS-only SIGSEGV, so GC mode itself is ruled out. Testing next whether
+      # it scales with the runner's core count (GC heap balancing / thread-pool sizing) rather than
+      # GC mode - DOTNET_PROCESSOR_COUNT=1 makes the runtime see a single logical CPU. Remove once
+      # answered.
+      - name: "cargo test (verify: DOTNET_PROCESSOR_COUNT=1)"
         if: always() && runner.os == 'macOS'
         working-directory: rust
         env:
           EXCELREADER_NATIVE_LIB_DIR: ${{ github.workspace }}/${{ steps.lib.outputs.dir }}
-          DOTNET_gcServer: "0"
-        run: cargo test --test aggregate a_call_after_a_partitioned_run_still_succeeds -- --exact
-      - name: "cargo test (verify: DOTNET_gcServer=1, server GC)"
-        if: always() && runner.os == 'macOS'
-        working-directory: rust
-        env:
-          EXCELREADER_NATIVE_LIB_DIR: ${{ github.workspace }}/${{ steps.lib.outputs.dir }}
-          DOTNET_gcServer: "1"
+          DOTNET_PROCESSOR_COUNT: "1"
         run: cargo test --test aggregate a_call_after_a_partitioned_run_still_succeeds -- --exact
 
       - name: cargo build (default features)
