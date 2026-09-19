@@ -9,11 +9,6 @@
          managed assembly, which is what ExcelReader.Tests references. -->
     <PublishAot>true</PublishAot>
     <NativeLib>Shared</NativeLib>
-    <!-- TEMPORARY diagnostic for a macOS-only SIGSEGV: any native aggregate call after a prior
-         DOP>1 concurrent one crashes, independent of panics or reread. Testing whether disabling
-         the background GC thread avoids a suspend/resume race across the ephemeral Task.Run
-         worker threads. Remove once answered. -->
-    <ConcurrentGarbageCollection>false</ConcurrentGarbageCollection>
     <TrimmerSingleWarn>false</TrimmerSingleWarn>
     <!-- Keeps ICU out of the shared library; this layer does no culture-sensitive formatting. -->
     <InvariantGlobalization>true</InvariantGlobalization>
