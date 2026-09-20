@@ -47,7 +47,7 @@ fn write_columns_round_trips_every_column_type() {
     let inteiros = [1i64, 2];
     let numeros = [0.5f64, 1.5];
     let ativos = [1u8, 0];
-    let datas = [20454i32, 20455]; // 2026-01-01, 2026-01-02
+    let datas = [20454i32, 20455]; 
     let horas = [3_600_000_000i64, 7_200_000_000];
     let instantes = [1_767_225_600_000_000i64, 1_767_312_000_000_000];
 
@@ -164,7 +164,6 @@ fn write_columns_to_memory_round_trips_every_column_type() {
 #[test]
 fn write_columns_writes_nulls_from_the_validity_bitmap() {
     let valores = [10i64, 0, 30];
-    // LSB-first: bits 0 and 2 set, bit 1 clear - row 1 is null.
     let validity = [0b0000_0101u8];
     let columns = [Column {
         name: Some("quantidade"),
@@ -231,7 +230,6 @@ fn write_columns_rejects_inconsistent_input() {
         excelreader::writer::write_columns(target, XL_FORMAT_XLSX, &partial_header, None).is_err()
     );
 
-    // Two rows need one byte of bitmap; hand it an empty slice.
     let short_bitmap = [Column {
         name: Some("a"),
         data: ColumnData::I64(&two),

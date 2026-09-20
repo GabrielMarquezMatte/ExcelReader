@@ -7,7 +7,7 @@ namespace ExcelReader.Core.Writer
     /// property list and attributes.
     /// </summary>
     /// <typeparam name="T">The record type this map configures.</typeparam>
-    public interface IExcelRecordMap<T>
+    public interface IExcelRecordMap<T> where T : allows ref struct
     {
         /// <summary>Configures <paramref name="builder"/> with one column per mapped property.</summary>
         /// <typeparam name="TRow">

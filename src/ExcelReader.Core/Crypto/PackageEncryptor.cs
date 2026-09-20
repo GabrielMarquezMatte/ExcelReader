@@ -6,14 +6,6 @@ using ExcelReader.Core.Writer.Internal;
 
 namespace ExcelReader.Core.Crypto
 {
-    // Wraps a plaintext OOXML package in an agile-encrypted CFB container: the write direction of
-    // EncryptedPackageOpener.
-    //
-    // The ciphertext is produced twice. The CFB layout needs every stream's size up front and the
-    // dataIntegrity HMAC needs the finished ciphertext, so pass 1 encrypts to feed the HMAC and
-    // discards the output, then pass 2 encrypts again straight into the container. That trades a
-    // second AES pass (deterministic: same key, same IVs, same plaintext) for O(1) memory at any
-    // workbook size, and it leaves `destination` free to be non-seekable.
     internal static class PackageEncryptor
     {
         private const int SegmentSize = 4096;
@@ -151,8 +143,6 @@ namespace ExcelReader.Core.Crypto
             return total;
         }
 
-        // Generates every random value, runs pass 1 to get the HMAC, and builds the descriptor. Leaves
-        // `package` rewound to where pass 2 must start.
         private static (byte[] EncryptionInfo, Session Session) Prepare(Stream package, ExcelPassword password)
         {
             ArgumentNullException.ThrowIfNull(package);
@@ -221,8 +211,6 @@ namespace ExcelReader.Core.Crypto
             }
         }
 
-        // Encrypting a non-OPC input would silently produce a container that decrypts to garbage and
-        // fails much later inside the ZIP reader.
         private static void EnsureOpcSignature(Stream package, long origin)
         {
             Span<byte> signature = stackalloc byte[4];
@@ -236,8 +224,6 @@ namespace ExcelReader.Core.Crypto
             }
         }
 
-        // Holds the package key, the descriptor's keyData, and the buffers the segment loops need.
-        // Owns the key material and zeroes it on disposal.
         private sealed class Session : IDisposable
         {
             private readonly AgileDescriptor _descriptor;
@@ -262,7 +248,6 @@ namespace ExcelReader.Core.Crypto
 
             internal byte[] Prefix { get; }
 
-            // Pass 1: encrypt every segment into the HMAC and throw the ciphertext away.
             internal byte[] ComputeHmac(byte[] hmacKey)
             {
                 using IncrementalHash hmac = PackageIntegrity.CreateHmac(_descriptor.KeyData.Hash, hmacKey);
@@ -295,8 +280,6 @@ namespace ExcelReader.Core.Crypto
                 CryptographicOperations.ZeroMemory(_packageKey);
             }
 
-            // Per-pass state: the AES instance, the IV hasher, the segment buffers, and the segment
-            // counter that drives the per-segment IV.
             internal sealed class Local : IDisposable
             {
                 private readonly AgileDescriptor _descriptor;
@@ -308,9 +291,6 @@ namespace ExcelReader.Core.Crypto
                 internal Local(AgileDescriptor descriptor, byte[] packageKey)
                 {
                     _descriptor = descriptor;
-                    // One transform for the whole pass. A pass is a fresh Local, so its chaining
-                    // state starts where CbcSegmentCipher seeds it and the two passes stay
-                    // independent.
                     _cipher = CbcSegmentCipher.CreateEncryptor(packageKey);
                     _ivHasher = AgileKeyDerivation.CreateHasher(descriptor.KeyData.Hash);
                     _iv = new byte[descriptor.KeyData.BlockSize];
@@ -322,8 +302,6 @@ namespace ExcelReader.Core.Crypto
 
                 internal byte[] Cipher { get; }
 
-                // Encrypts `length` plaintext bytes from Plain into Cipher, zero-padding the tail up to
-                // the cipher block, and returns the ciphertext length.
                 internal int EncryptSegment(int length)
                 {
                     int padded = (length + CipherBlockSize - 1) / CipherBlockSize * CipherBlockSize;

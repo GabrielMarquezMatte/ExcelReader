@@ -1,4 +1,3 @@
-#if NET9_0_OR_GREATER
 namespace ExcelReader.Core.Parser
 {
     /// <summary>
@@ -26,4 +25,3 @@ namespace ExcelReader.Core.Parser
         }
     }
 }
-#endif

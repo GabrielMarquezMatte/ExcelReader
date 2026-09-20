@@ -12,6 +12,18 @@ High-performance Excel reading and writing for .NET 10. Reads `.xlsx`, `.xlsb`, 
 
 ExcelReader is built for streaming spreadsheet workloads where low allocations matter. It reads worksheet rows as lightweight `ref struct` values, resolves shared strings, recognizes date styles, handles sparse cells, and includes writers for producing `.xlsx` (Open XML), `.xlsb` (BIFF12), and `.xls` (BIFF8) workbooks. The library also supports opening workbook data directly from in-memory buffers without requiring a stream, which makes it convenient for API and network-based scenarios. `Excel.FromCsv(ReadOnlyMemory<byte>)` and `Excel.FromXls(ReadOnlyMemory<byte>)` now accept caller-owned buffers directly, and `Excel.Open(ReadOnlyMemory<byte>)` routes XLS workbooks through the same true-memory path instead of wrapping the bytes in `MemoryStream`.
 
+## Contents
+
+**Getting started** — [Install](#install) · [Command line](#command-line) · [Read rows](#read-rows) · [Open by auto-detecting the format](#open-by-auto-detecting-the-format) · [Read asynchronously](#read-asynchronously)
+
+**Reading** — [Prefetch decompression (XLSX/XLSB)](#prefetch-decompression-xlsxxlsb) · [Encrypted workbooks](#encrypted-workbooks) · [Read CSV](#read-csv) · [Sniff a CSV dialect](#sniff-a-csv-dialect)
+
+**Typed parsing** — [Parse typed rows](#parse-typed-rows) · [Bridge to ADO.NET (`IDataReader`)](#bridge-to-adonet-idatareader) · [Generate typed maps at compile time (Native AOT / trimming)](#generate-typed-maps-at-compile-time-native-aot--trimming) · [Map columns at runtime (fluent API)](#map-columns-at-runtime-fluent-api) · [Parser configuration](#parser-configuration) · [Required columns](#required-columns) · [Custom converters](#custom-converters) · [Parse into a ref struct (zero-copy)](#parse-into-a-ref-struct-zero-copy)
+
+**Writing** — [Write XLSX workbooks](#write-xlsx-workbooks) · [Cell styles on write](#cell-styles-on-write) · [Read and write XLSB workbooks (BIFF12)](#read-and-write-xlsb-workbooks-biff12) · [Write XLS workbooks (BIFF8)](#write-xls-workbooks-biff8) · [Write typed records](#write-typed-records) · [Prefetch compression (XLSX/XLSB writing)](#prefetch-compression-xlsxxlsb-writing) · [Write CSV](#write-csv)
+
+**Project** — [Benchmarks](#benchmarks) · [Notes](#notes) · [Build](#build) · [Other languages](#other-languages) · [Contributing](#contributing) · [License](#license)
+
 ## Install
 
 ```bash
@@ -228,6 +240,9 @@ and 25 KB to 71 KB for XLSB — and neither path triggers a garbage collection.
 Do **not** enable it for concurrent server workloads: a caller already reading many files
 in parallel is CPU-saturated, and an extra background thread per read only doubles thread
 demand for no gain. It's meant for single-file batch processing.
+
+Writing has the same option, under a different name: see
+[Prefetch compression](#prefetch-compression-xlsxxlsb-writing).
 
 ## Encrypted workbooks
 
@@ -728,6 +743,48 @@ Column behavior mirrors the parser attributes:
 `DateTime` and `DateOnly` are written as Excel date serials; `TimeOnly` as a time-of-day fraction. Numeric properties become number cells; any other type is written as its `ToString()` text. (`CreateCsvAsync` follows the CSV rules instead — see [Write CSV](#write-csv) — writing `DateTime`/`DateOnly` as ISO text and `TimeOnly` as a time-of-day fraction, all still round-tripping through `ExcelParser<T>`.)
 
 For a model marked `[ExcelSerializable]`, use `MappedRecordWriter.CreateMapped*Async` instead — same behavior, but driven by the source-generated map instead of reflection, so it stays Native AOT/trim-safe. See [Generate typed maps at compile time](#generate-typed-maps-at-compile-time-native-aot--trimming).
+
+## Prefetch compression (XLSX/XLSB writing)
+
+The write-side mirror of [Prefetch decompression](#prefetch-decompression-xlsxxlsb). XLSX and XLSB
+are ZIP-backed, so every row a writer serializes has to be deflated before it reaches the stream,
+and by default that happens on the calling thread. Pass `prefetchWrite: true` to move the deflate
+onto a background thread, so the caller keeps building the next batch of rows while the previous one
+compresses:
+
+```csharp
+await using var wb = await XlsxWorkbookWriter.CreateAsync(stream, leaveOpen: true, prefetchWrite: true);
+await wb.StartAsync();
+XlsxSheetWriter sheet = wb.AddSheet("S1");
+await sheet.StartAsync();
+
+foreach (var record in records)
+{
+    using XlsxRowWriter row = sheet.StartRow();
+    row.Write(record.Name);
+    row.Write(record.Value);
+}
+
+await sheet.EndAsync();
+```
+
+The same parameter is on `XlsbWorkbookWriter.CreateAsync`, `RecordWriter.CreateXlsxAsync`/
+`CreateXlsbAsync`, and their `MappedRecordWriter` counterparts. XLS and CSV are uncompressed, so
+they have nothing to overlap and do not offer it.
+
+Writing a 50,000-row workbook (`WriteBenchmark`, both figures from one run):
+
+| Workload | Default | `prefetchWrite: true` | Gain |
+|---|---:|---:|---:|
+| XLSX | 17.128 ms | 12.629 ms | 26% |
+| XLSB | 7.662 ms | 6.128 ms | 20% |
+
+Allocations are unchanged (4.02 MB vs. 4.03 MB) — the background writer hands over buffers the row
+writer already owns rather than copying them.
+
+The same caveat as the read side applies: **do not enable it for concurrent server workloads**. A
+caller already writing many files in parallel is CPU-saturated, and an extra background thread per
+writer only doubles thread demand for no gain. It's meant for single-file batch work.
 
 ## Read CSV
 

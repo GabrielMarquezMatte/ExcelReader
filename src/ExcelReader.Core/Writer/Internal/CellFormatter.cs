@@ -7,16 +7,11 @@ namespace ExcelReader.Core.Writer.Internal
 {
     internal static class CellFormatter
     {
-        // The 5 XML entity chars, '_' (to detect literal "_xHHHH_" escape sequences that must be
-        // themselves escaped), and every C0 control char that's illegal in XML 1.0 text content
-        // (0x00-0x08, 0x0B, 0x0C, 0x0E-0x1F — tab/LF/CR are legal and excluded).
         private static readonly SearchValues<char> SpecialChars = SearchValues.Create(
             "&<>\"'_" +
             "\u0000\u0001\u0002\u0003\u0004\u0005\u0006\u0007\u0008\u000B\u000C" +
             "\u000E\u000F\u0010\u0011\u0012\u0013\u0014\u0015\u0016\u0017\u0018\u0019\u001A\u001B\u001C\u001D\u001E\u001F");
 
-        // Writes the cell reference (e.g. "B7") directly to the writer.
-        // Max XLSX cell is XFD1048576 -> 3 column letters + 7 row digits.
         [SkipLocalsInit]
         private static void WriteRef(BiffBuffer xml, int columnIndex, int rowNumber)
         {
@@ -26,9 +21,6 @@ namespace ExcelReader.Core.Writer.Internal
             xml.Write(buf[..(len + rowLen)]);
         }
 
-        // Writes "<c", the optional r="..." reference, the optional s="N" style (only when styleId is
-        // non-zero, so an unstyled cell costs exactly the bytes it cost before this attribute existed),
-        // then typeAttr (e.g. " t=\"b\"", or empty for a plain number), then the tag's closing ">"/"/>".
         private static void WriteCellOpen(BiffBuffer xml, int columnIndex, int rowNumber, bool includeReference,
             int styleId, ReadOnlySpan<byte> typeAttr, bool selfClose)
         {
@@ -83,9 +75,6 @@ namespace ExcelReader.Core.Writer.Internal
             xml.Write("</v></c>"u8);
         }
 
-        // styleId has no zero-means-omit default here: a date cell always needs an explicit style (it
-        // is how the serial number renders as a date instead of a plain number), so the caller always
-        // passes either the builtin date style (1) or an active row/column style override.
         internal static void WriteDateTime(BiffBuffer xml, DateTime value, int columnIndex, int rowNumber, bool includeReference, int styleId)
         {
             WriteCellOpen(xml, columnIndex, rowNumber, includeReference, styleId, default, selfClose: false);
@@ -135,10 +124,6 @@ namespace ExcelReader.Core.Writer.Internal
             xml.Write("</v></c>"u8);
         }
 
-        // Utf8Formatter is culture-free (no NumberFormatInfo.GetInstance lookup per cell) and matches
-        // IUtf8SpanFormattable's default/InvariantCulture output for these types exactly, including
-        // double's shortest-round-trip format since .NET Core 3.0. These non-generic overloads bind
-        // ahead of the generic one below for int/long/double call sites.
         private static void WriteValue(BiffBuffer xml, int value, int sizeHint)
         {
             int size = sizeHint;
@@ -173,9 +158,6 @@ namespace ExcelReader.Core.Writer.Internal
             xml.Advance(written);
         }
 
-        // Formats a numeric value straight into the buffer's free tail (no temp span + copy). The default
-        // format is shortest round-trippable for floating point, so cells stay small and exactly readable.
-        // Used by decimal and the generic WriteNumber<T> overload (Utf8Formatter doesn't cover either).
         private static void WriteValue<T>(BiffBuffer xml, T value, int sizeHint)
             where T : IUtf8SpanFormattable
         {
@@ -197,9 +179,6 @@ namespace ExcelReader.Core.Writer.Internal
             }
             if (!CellValueGuards.IsAlwaysFinite<T>() && typeof(T) != typeof(double) && typeof(T) != typeof(float))
             {
-                // Checked on the formatted bytes, not the value: T is caller-defined here, so its text is
-                // the only thing that reaches the cell. XLSB/XLS route the same value through a double and
-                // are already covered by their own non-finite guard.
                 CellValueGuards.ThrowIfNotFiniteNumberText(destination[..written], typeof(T), nameof(value));
             }
             xml.Advance(written);
@@ -224,9 +203,6 @@ namespace ExcelReader.Core.Writer.Internal
                 }
                 else if (c == '_')
                 {
-                    // A literal "_xHHHH_" in the source text must itself be escaped, or Excel reads it
-                    // back as a ST_Xstring unicode escape instead of the literal characters the writer
-                    // put there (the underscore's own escape is "_x005F_").
                     if (IsXHHHHUnderscorePattern(value, i))
                     {
                         if (i > start)
@@ -238,8 +214,6 @@ namespace ExcelReader.Core.Writer.Internal
                     }
                     else
                     {
-                        // A plain '_' remains in the pending run, but the next scan must move past
-                        // it; otherwise this loop would rediscover the same underscore forever.
                         int following = value[(i + 1)..].IndexOfAny(SpecialChars);
                         if (following < 0)
                         {
@@ -251,8 +225,6 @@ namespace ExcelReader.Core.Writer.Internal
                 }
                 else
                 {
-                    // Illegal XML 1.0 control character: encode as ST_Xstring's "_xHHHH_" escape, which
-                    // Excel writes and reads for exactly this case, instead of emitting invalid XML.
                     if (i > start)
                     {
                         xml.WriteUtf8(value[start..i]);
@@ -281,7 +253,6 @@ namespace ExcelReader.Core.Writer.Internal
             }
         }
 
-        // True when value[i..] starts with the ECMA-376 ST_Xstring escape shape "_xHHHH_" (4 hex digits).
         private static bool IsXHHHHUnderscorePattern(ReadOnlySpan<char> value, int i)
         {
             if (i + 6 >= value.Length || (value[i + 1] != 'x' && value[i + 1] != 'X'))

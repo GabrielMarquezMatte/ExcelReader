@@ -18,12 +18,6 @@ const REPO: &str = "GabrielMarquezMatte/ExcelReader";
 
 fn main() {
     println!("cargo:rerun-if-env-changed=EXCELREADER_NATIVE_LIB_DIR");
-    // PHASE1_DEF_EXPORTS below embeds this file's content via include_str! at build-script COMPILE
-    // time. Emitting any rerun-if-* directive opts this build script out of Cargo's default "rerun
-    // if any file in the package changed" fallback, so without this the compiled build-script-build
-    // binary keeps an outdated symbol list baked in after excelreader.def changes - it is not
-    // recompiled, and only re-*run*, which just regenerates the import lib from the same stale
-    // constant.
     println!("cargo:rerun-if-changed=excelreader.def");
 
     let out_dir = PathBuf::from(env::var("OUT_DIR").unwrap());
@@ -43,10 +37,6 @@ fn main() {
     };
     let asset_name = format!("excelreader-native-{os}-{arch}.{ext}");
 
-    // The actual filename of the native binary that ends up in `lib_dir`. For a downloaded
-    // release asset this is always `asset_name`. For the `EXCELREADER_NATIVE_LIB_DIR` override
-    // it can be anything (e.g. `ExcelReader.Native.dll` from a local `dotnet publish`), so it
-    // must be discovered by scanning the directory rather than assumed.
     let (lib_dir, dll_basename) = if let Ok(dir) = env::var("EXCELREADER_NATIVE_LIB_DIR") {
         let dir = PathBuf::from(dir);
         let dll_basename = find_native_lib(&dir, ext);
@@ -66,13 +56,6 @@ fn main() {
 
     if target_os == "windows" {
         let implib = out_dir.join("excelreader_native.lib");
-        // Regenerate when the .lib is missing, or when it exists but was built from a different
-        // .def content (e.g. excelreader.def gained/lost a symbol since OUT_DIR was last populated -
-        // OUT_DIR persists across incremental builds, and rerun-if-changed only guarantees this
-        // build script re-*runs*, not that a stale .lib sitting next to a fresh generated_def gets
-        // rebuilt). Comparing against the previous generated_def's content (not the .lib's mtime,
-        // which the generation below always bumps regardless of content) is what makes this check
-        // meaningful instead of always-stale or always-skip.
         let generated_def = out_dir.join("excelreader.generated.def");
         let new_def_content = format!("LIBRARY {dll_basename}\n{PHASE1_DEF_EXPORTS}");
         let up_to_date = implib.exists()
@@ -83,21 +66,8 @@ fn main() {
                 &dll_basename,
             );
         }
-        // The import library lives in OUT_DIR, not lib_dir (the DLL's own directory) - without
-        // this, the linker can locate the DLL for cargo:rustc-link-search purposes but never finds
-        // excelreader_native.lib/.a itself, so any real link step (e.g. `cargo test`) fails.
         println!("cargo:rustc-link-search=native={}", out_dir.display());
-        // The import library above is always generated with this fixed name, regardless of what
-        // the underlying DLL is actually called (its LIBRARY line handles that indirection), so a
-        // plain name-based link works here.
         println!("cargo:rustc-link-lib=dylib=excelreader_native");
-        // The two steps above only satisfy the *build-time* linker. Windows has no rpath
-        // equivalent - the loader searches the launching executable's own directory, then PATH,
-        // then a few system directories, none of which include lib_dir - so without this, running
-        // the built test binary fails with STATUS_DLL_NOT_FOUND even though linking succeeded.
-        // `cargo test` binaries live in `target/<profile>/deps`, reached from OUT_DIR
-        // (`target/<profile>/build/<pkg>-<hash>/out`) by going up three levels; copy the real DLL
-        // there so it's sitting next to the .exe that needs to load it.
         if let Some(profile_dir) = out_dir.ancestors().nth(3) {
             let deps_dir = profile_dir.join("deps");
             fs::create_dir_all(&deps_dir)
@@ -108,29 +78,10 @@ fn main() {
             });
         }
     } else {
-        // On macOS/Linux there's no import library indirection - rustc/the linker must find the
-        // shared object under its own real name. That name is NOT a fixed `libexcelreader_native.*`
-        // - it's `asset_name` on the download path (e.g. `excelreader-native-linux-x64.so`) or
-        // whatever `find_native_lib` discovered on the `EXCELREADER_NATIVE_LIB_DIR` override path
-        // (e.g. `ExcelReader.Native.dylib`), neither of which fits the conventional `lib<name>.<ext>`
-        // pattern a plain `-l<name>` link line assumes. `dylib:+verbatim=<name>` was tried here to
-        // link against the exact filename without that convention, but the `verbatim` modifier is
-        // only honored by linker flavors with a literal-name `-l` syntax (GNU ld/lld's `-l:name`);
-        // Apple's `ld` has none, silently falls back to its normal `-l<name>` mangling, and fails to
-        // find the file. Passing the full path directly as a link arg sidesteps `-l` name-mangling
-        // entirely, on every linker flavor.
         println!(
             "cargo:rustc-link-arg={}",
             lib_dir.join(&dll_basename).display()
         );
-        // The path above only satisfies the *build-time* linker. NativeAOT publishes macOS dylibs
-        // with their own install name set to `@rpath/<name>` (visible in `otool -D`/dyld errors),
-        // so whatever path we link against, the *runtime* dependency recorded in the test binary is
-        // always that `@rpath`-relative name, not our real path - `@rpath` resolves via `LC_RPATH`
-        // entries in the loading binary, and without one dyld falls back to a handful of unrelated
-        // default locations and never finds it. Embed lib_dir as an rpath entry so it does. Also
-        // covers the equivalent (if less commonly hit) case on Linux, where `DT_NEEDED` may likewise
-        // resolve to a bare name that only `DT_RUNPATH` steers back to a non-standard directory.
         println!("cargo:rustc-link-arg=-Wl,-rpath,{}", lib_dir.display());
     }
 }
@@ -171,9 +122,6 @@ fn find_native_lib(dir: &Path, ext: &str) -> String {
 }
 
 fn download(url: &str, dest: &Path) {
-    // A tiny hand-rolled HTTPS GET via curl/PowerShell rather than a new crate dependency
-    // (reqwest, ureq, ...) - this is a one-shot build-time download, not runtime networking, and
-    // every supported CI/dev platform already ships one of these tools.
     let status = if cfg!(windows) {
         Command::new("powershell")
             .args([
@@ -199,16 +147,6 @@ fn download(url: &str, dest: &Path) {
     }
 }
 
-// Embedded (not read from disk at build time) so the crate published to crates.io still has it:
-// `rust/excelreader/build.rs` itself gets shipped as source in the package tarball, and Cargo
-// compiles it fresh at the consumer's build time - `include_str!` is resolved then too, against
-// wherever this very build.rs file lives on disk. Reaching outside the crate directory (e.g.
-// `../../src/ExcelReader.Native/include/excelreader.def`) does not survive that: `cargo
-// package` only ships files under `rust/excelreader/`, so a path escaping the crate root doesn't
-// exist in the extracted tarball and the consumer's build fails. Keeping this copy inside the
-// crate directory (kept in sync with the canonical copy at
-// src/ExcelReader.Native/include/excelreader.def) makes `include_str!` resolve correctly
-// both in this repo checkout and in the packaged/published crate.
 const PHASE1_DEF_EXPORTS: &str = include_str!("excelreader.def");
 
 fn generate_windows_implib(
@@ -220,13 +158,6 @@ fn generate_windows_implib(
     out_dir: &Path,
     dll_basename: &str,
 ) {
-    // The checked-in .def has no LIBRARY statement, so neither lib.exe nor dlltool would
-    // otherwise know what DLL name to bake into the import descriptors of the generated import
-    // lib - they'd fall back to the .def file's own basename (`excelreader.dll`), which is
-    // wrong: the real binary is named `excelreader-native-<os>-<arch>.dll` (downloaded) or
-    // whatever EXCELREADER_NATIVE_LIB_DIR points at (override, e.g. `ExcelReader.Native.dll`).
-    // Generate a temporary copy of the .def with an explicit LIBRARY line naming the real file,
-    // and feed that to both tools instead of the checked-in .def directly.
     fs::write(generated_def, def_content)
         .unwrap_or_else(|e| panic!("failed to write {}: {e}", generated_def.display()));
 
@@ -242,11 +173,6 @@ fn generate_windows_implib(
             });
         assert!(status.success(), "{lib_exe} /def failed");
     } else {
-        // dlltool derives names for the temporary object files it generates internally from the
-        // `-l` output path, mangling path separators into underscores; with a long absolute path
-        // (routine for a Cargo OUT_DIR nested several directories deep) it fails with "failed to
-        // open temporary head file". Run it with `out_dir` as the working directory and pass a
-        // bare relative filename for `-l` to keep that derived name short.
         let implib_name = implib
             .file_name()
             .expect("implib path has no file name")

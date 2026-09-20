@@ -17,8 +17,6 @@ namespace ExcelReader.Core.Writer
         private readonly bool _offloadWrite;
         private readonly BiffBuffer _rowBuffer = new(512);
         // ponytail: flush to the deflate stream once buffered rows pass 64 KB — bounds memory on huge
-        // sheets while turning ~50k tiny per-row Writes into a handful of big ones. Kept at/under the
-        // ArrayPool.Shared LOH threshold (a larger request would rent from the LOH and never leave it).
         private const int FlushThreshold = 64 * 1024;
         private XlsxRowWriter? _rowWriter;
         private Stream? _stream;
@@ -100,12 +98,7 @@ namespace ExcelReader.Core.Writer
             WriterStateGuard.RequireCreated(_state, nameof(XlsxSheetWriter));
             ct.ThrowIfCancellationRequested();
             ZipArchiveEntry entry = _zip.CreateEntry($"xl/worksheets/sheet{SheetId}.xml", _compression);
-#if NET10_0_OR_GREATER
             Stream stream = await entry.OpenAsync(ct).ConfigureAwait(false);
-#else
-            ct.ThrowIfCancellationRequested();
-            Stream stream = entry.Open();
-#endif
             _stream = _offloadWrite ? new WriteOffloadStream(stream) : stream;
             _rowBuffer.Reset();
             _rowBuffer.WriteUtf8(
@@ -117,8 +110,6 @@ namespace ExcelReader.Core.Writer
             _owner.RegisterSheet(Name, SheetId);
         }
 
-        // <cols> must precede <sheetData>, so it's built once up front from whatever
-        // SetColumnStyle/SetColumnWidth calls landed before StartAsync.
         private string BuildColsXml()
         {
             if (_columnStyles is null && _columnWidths is null)
@@ -201,9 +192,6 @@ namespace ExcelReader.Core.Writer
             return _rowWriter;
         }
 
-        // Explicit, not public: a public zero-arg StartRow would collide with the existing
-        // StartRow(CancellationToken ct = default) overload. Reached via the ISheetWriter<TRow>
-        // constraint (see NativeApi.Write.cs).
         XlsxRowWriter ISheetWriter<XlsxRowWriter>.StartRow()
         {
             return StartRow(styleId: 0, default);
@@ -229,11 +217,11 @@ namespace ExcelReader.Core.Writer
             WriterStateGuard.RequireNoActiveRowForEnd(_rowActive, nameof(XlsxRowWriter));
             _state = WriterState.Ended;
             _rowBuffer.Write("</sheetData></worksheet>"u8);
-#pragma warning disable CS8602 // Dereference of a possibly null reference.
+#pragma warning disable CS8602 
             _stream.Write(_rowBuffer.Span);
             _stream.Flush();
             _stream.Dispose();
-#pragma warning restore CS8602 // Dereference of a possibly null reference.
+#pragma warning restore CS8602 
             _stream = null;
             _rowBuffer.Dispose();
             _owner.NotifySheetEnded();
@@ -250,9 +238,9 @@ namespace ExcelReader.Core.Writer
             ct.ThrowIfCancellationRequested();
             _state = WriterState.Ended;
             _rowBuffer.Write("</sheetData></worksheet>"u8);
-#pragma warning disable CS8602 // Dereference of a possibly null reference.
+#pragma warning disable CS8602 
             await _stream.WriteAsync(_rowBuffer.Memory, ct).ConfigureAwait(false);
-#pragma warning restore CS8602 // Dereference of a possibly null reference.
+#pragma warning restore CS8602 
             await _stream.FlushAsync(ct).ConfigureAwait(false);
             await _stream.DisposeAsync().ConfigureAwait(false);
             _stream = null;
@@ -303,8 +291,6 @@ namespace ExcelReader.Core.Writer
             }
             _rowNumber++;
             _rowActive = true;
-            // The `r` attribute on <row> is optional per ECMA-376 (rows are positional); omitting it
-            // shrinks the XML and skips a format call on every row.
             if (styleId == 0)
             {
                 _rowBuffer.Write("<row>"u8);
@@ -326,8 +312,6 @@ namespace ExcelReader.Core.Writer
             _rowActive = false;
         }
 
-        // When offloading, hands the buffer's array to the background writer directly instead of
-        // copying; Detach rents _rowBuffer its own replacement so it keeps working immediately.
         private void FlushRowBuffer()
         {
             if (_stream is WriteOffloadStream offload)
@@ -360,9 +344,9 @@ namespace ExcelReader.Core.Writer
                 _rowActive = false;
                 return;
             }
-#pragma warning disable CS8602 // Dereference of a possibly null reference.
+#pragma warning disable CS8602 
             await _stream.WriteAsync(_rowBuffer.Memory, ct).ConfigureAwait(false);
-#pragma warning restore CS8602 // Dereference of a possibly null reference.
+#pragma warning restore CS8602 
             _rowBuffer.Reset();
             _rowActive = false;
         }

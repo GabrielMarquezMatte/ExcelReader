@@ -5,17 +5,6 @@ using ExcelReader.Core.ValueObjects;
 
 namespace ExcelReader.Tests
 {
-    // Parity between the reflection path (ExcelParser<T>/WorkbookRecordWriter<TSheet,TRow>) and the
-    // source-generated path (ExcelMappedParser<T>/MappedWorkbookRecordWriter<TSheet,TRow>, requiring
-    // [ExcelSerializable]) — the generator's own tabela de decisão (type -> reader/writer) is a second,
-    // independent copy of ColumnParserFactory's/RecordColumns<T>'s, and the two can diverge silently
-    // (see GeneratorTests.InheritedPropertiesAreMapped's history, and GeneratedRecordMapHeadersMatchReflectionHeaders
-    // below, which failed before the generator's write side stopped omitting unsupported-type columns).
-    // Every model here is declared directly in this file, not as a string literal fed to
-    // CSharpGeneratorDriver, so the real build-time analyzer (wired into ExcelReader.Tests.csproj with
-    // OutputItemType="Analyzer") produces its IExcelRowMap<T>/IExcelRecordMap<T> for it —
-    // ExcelMappedParser<T>/MappedRecordWriter resolve as ordinary compile-time generics, no
-    // reflection-over-a-synthetic-assembly gymnastics needed.
     public partial class GeneratedMapParityTests
     {
         public enum ParityKind { Alpha, Beta, Gamma }
@@ -96,11 +85,6 @@ namespace ExcelReader.Tests
             public int Own { get; set; }
         }
 
-        // A plain class with no built-in reader and no [ExcelConverter] — reflection's write side
-        // (RecordColumns<T>.Plan<TRow>.Build) always writes it via ToString(); before the generator's
-        // GetWriteKind stopped defaulting to WriteKind.None, the generated write side silently omitted
-        // this column instead. Read side is untouched: neither path can read it back typed, which is
-        // fine — this model only exercises the write side (GeneratedRecordMapHeadersMatchReflectionHeaders).
         public sealed class CustomTag
         {
             private readonly string _text;
@@ -130,10 +114,6 @@ namespace ExcelReader.Tests
             public string Name { get; set; } = "";
         }
 
-        // Includes DateTime/DateOnly: CsvRowWriter writes them as ISO text while XLSX/XLSB/XLS write an
-        // Excel serial number — ExcelCellReaders.DateTimeAuto/DateOnlyAuto (T8) is what lets one
-        // generated map read both shapes, since ExcelMappedParser<T> reuses a single map across every
-        // reader (unlike the reflection path's dedicated csvTextDates map for CSV).
         [ExcelSerializable]
         public partial class CrossFormatModel
         {
@@ -156,11 +136,7 @@ namespace ExcelReader.Tests
             var id = Guid.Parse("11111111-2222-3333-4444-555555555555");
             object?[] row =
             [
-                // BirthDay is a DateTime here, not a DateOnly: TypedWorkbook.WriteCell has no DateOnly
-                // case, and the underlying cell is just a date serial number either way — ReadDateOnly
-                // truncates a DateTime-typed cell the same way regardless of which typed overload wrote it.
                 "Alice", true, new DateTime(2024, 5, 6), new DateTime(2024, 5, 6),
-                // BirthTime is a day-fraction (0.5 = noon), matching what TimeOnly's serial actually is.
                 0.5, id.ToString(), 200, -100, -30000, 60000,
                 2_000_000_000, 3_000_000_000d, 9_000_000_000d, 9_000_000_000d,
                 1.5, 2.5, 12345.67m, kind.ToString(),
@@ -202,8 +178,6 @@ namespace ExcelReader.Tests
             Assert.Equal(reflectionResult.CategoryN, generatedResult.CategoryN);
             Assert.Equal(reflectionResult.IdN, generatedResult.IdN);
 
-            // Pin the actual values too, not just "the two paths agree" — two independently wrong
-            // readers could still agree with each other.
             Assert.Equal("Alice", generatedResult.Name);
             Assert.Equal(ParityKind.Beta, generatedResult.Category);
             Assert.Equal(id, generatedResult.Id);
@@ -224,8 +198,6 @@ namespace ExcelReader.Tests
         [Fact]
         public async Task GeneratedMapHonorsColumnAliases()
         {
-            // Header uses the second alias, not the first — proves alias matching, not just
-            // "first name happens to be the header".
             await using var ms = await TypedWorkbook.BuildAsync(["Name"], ["Alice"]);
 
             AliasModel reflectionResult = await ParseFirstXlsxAsync(ms, static reader => new ExcelParser<AliasModel>().Parse(reader));
@@ -454,7 +426,6 @@ namespace ExcelReader.Tests
             Assert.Equal(reflectionResult.Id, generatedResult.Id);
             Assert.Equal(reflectionResult.OptionalAge, generatedResult.OptionalAge);
 
-            // Pin the actual values, not just mutual agreement.
             Assert.Equal("Alice", generatedResult.Name);
             Assert.Equal(ParityKind.Beta, generatedResult.Category);
         }
@@ -466,10 +437,6 @@ namespace ExcelReader.Tests
             return parse(reader).First();
         }
 
-        // T10: write-side parity. WorkbookRecordWriter<TSheet,TRow> (reflection, RecordColumns<T>) vs
-        // MappedWorkbookRecordWriter<TSheet,TRow> (generated, IExcelRecordMap<T>) writing the same
-        // record — read back through the raw, untyped Row/Cell API (not a typed parser) so a column
-        // neither path can read back typed (WriteOnlyTypeModel.Tag) still gets compared, text for text.
         private static string[] ReadRowText(Row row)
         {
             var values = new string[row.ColumnCount];
@@ -661,9 +628,6 @@ namespace ExcelReader.Tests
             Assert.True(generatedEnum.MoveNext());
             string[] generatedValues = ReadRowText(generatedEnum.Current);
 
-            // Before the generator's GetWriteKind stopped defaulting to WriteKind.None for an
-            // unrecognized type, "Tag" would be missing entirely from generatedHeaders/generatedValues
-            // here, and the header-count mismatch alone would fail this assertion.
             Assert.Equal(reflectionHeaders, generatedHeaders);
             Assert.Equal(reflectionValues, generatedValues);
             Assert.Contains("Tag", generatedHeaders, StringComparer.Ordinal);

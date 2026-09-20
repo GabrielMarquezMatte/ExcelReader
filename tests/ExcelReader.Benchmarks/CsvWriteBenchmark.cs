@@ -5,8 +5,6 @@ using nietras.SeparatedValues;
 
 namespace ExcelReader.Benchmarks
 {
-    // Writes `Rows` records (header + 4 columns) to an in-memory CSV, comparing ExcelReader's
-    // CsvWriter against Sep, Sylvan.Data.Csv, and CsvHelper — same shape as WriteBenchmark/XlsWriteBenchmark.
     [MemoryDiagnoser]
     public class CsvWriteBenchmark
     {
@@ -24,8 +22,6 @@ namespace ExcelReader.Benchmarks
         [Benchmark(Baseline = true)]
         public long ExcelReaderWriter()
         {
-            // Pre-sized to the neighborhood of the actual output so MemoryStream's doubling growth
-            // doesn't dominate the GC/allocation numbers being measured.
             using var ms = new MemoryStream(4 * 1024 * 1024);
             using (CsvWriter writer = CsvWriter.Create(ms, leaveOpen: true))
             {
@@ -52,8 +48,6 @@ namespace ExcelReader.Benchmarks
         [Benchmark]
         public long Sep()
         {
-            // Pre-sized to the neighborhood of the actual output so MemoryStream's doubling growth
-            // doesn't dominate the GC/allocation numbers being measured.
             using var ms = new MemoryStream(4 * 1024 * 1024);
             using (var writer = nietras.SeparatedValues.Sep.Writer(o => o with
             {
@@ -77,8 +71,6 @@ namespace ExcelReader.Benchmarks
         [Benchmark]
         public long SylvanWriter()
         {
-            // Pre-sized to the neighborhood of the actual output so MemoryStream's doubling growth
-            // doesn't dominate the GC/allocation numbers being measured.
             using var ms = new MemoryStream(4 * 1024 * 1024);
             using (var tw = new StreamWriter(ms, leaveOpen: true))
             using (var writer = Sylvan.Data.Csv.CsvDataWriter.Create(tw))
@@ -92,8 +84,6 @@ namespace ExcelReader.Benchmarks
         [Benchmark]
         public long CsvHelperLib()
         {
-            // Pre-sized to the neighborhood of the actual output so MemoryStream's doubling growth
-            // doesn't dominate the GC/allocation numbers being measured.
             using var ms = new MemoryStream(4 * 1024 * 1024);
             using (var sw = new StreamWriter(ms, leaveOpen: true))
             using (var csv = new CsvHelper.CsvWriter(sw, CultureInfo.InvariantCulture))

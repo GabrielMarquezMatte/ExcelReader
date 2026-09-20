@@ -4,7 +4,6 @@ using System.IO.Compression;
 using System.Runtime.CompilerServices;
 using ExcelReader.Core.Crypto;
 using ExcelReader.Core.Enums;
-using ExcelReader.Core.Internal;
 using ExcelReader.Core.Parser;
 using ExcelReader.Core.Parser.Internal;
 
@@ -50,7 +49,6 @@ namespace ExcelReader.Core.Reader
         public static XlsxReader From(ReadOnlyMemory<byte> data, ExcelReaderOptions? options = null)
         {
             ExcelReaderOptions effective = options ?? ExcelReaderOptions.Default;
-            // Eager decryption, not a DecryptedPackageStream: this overload never suspends.
             if (data.Span.StartsWith(XlsCompoundFile.Signature) && EncryptedPackageOpener.IsEncryptedMemory(data, effective))
             {
                 ReadOnlyMemory<byte> plain = EncryptedPackageOpener.DecryptToMemory(data, effective);
@@ -141,7 +139,6 @@ namespace ExcelReader.Core.Reader
         public static XlsbReader FromXlsb(ReadOnlyMemory<byte> data, ExcelReaderOptions? options = null)
         {
             ExcelReaderOptions effective = options ?? ExcelReaderOptions.Default;
-            // Eager decryption, not a DecryptedPackageStream: this overload never suspends.
             if (data.Span.StartsWith(XlsCompoundFile.Signature) && EncryptedPackageOpener.IsEncryptedMemory(data, effective))
             {
                 ReadOnlyMemory<byte> plain = EncryptedPackageOpener.DecryptToMemory(data, effective);
@@ -386,8 +383,270 @@ namespace ExcelReader.Core.Reader
             return ParallelCsvFactory.Create<T>(stream, degreeOfParallelism, readerOptions, config, ct);
         }
 
-        // Bounds bytes pulled from an untrusted stream/file, independent of
-        // CsvSnifferOptions.MaxSampleLines, which only bounds lines within the sample.
+        /// <summary>
+        /// Reads an in-memory CSV buffer across several threads, parses every record into a
+        /// <typeparamref name="TRecord"/> and folds it into a <typeparamref name="TAccumulator"/>, one
+        /// instance per partition, merged in buffer order.
+        /// </summary>
+        /// <typeparam name="TAccumulator">The accumulator type. See <see cref="ICsvAccumulator{TSelf, TModel}"/> for the contract it must honor.</typeparam>
+        /// <typeparam name="TRecord">The record type. A record whose <see cref="ICsvRecord{TSelf}.TryParse"/> returns <see langword="false"/> is skipped.</typeparam>
+        /// <param name="data">The CSV bytes. The caller keeps ownership; the buffer must not be mutated during processing.</param>
+        /// <param name="options">Parallelism, dialect and header options. Defaults to <see cref="CsvParallelOptions.Default"/>.</param>
+        /// <param name="ct">A token to cancel processing.</param>
+        /// <returns>The accumulator holding every record.</returns>
+        /// <remarks>
+        /// <para>
+        /// Partitions start at guessed record boundaries; one whose guess landed inside a quoted field
+        /// spanning lines is read again into a new accumulator, as <see cref="ICsvAccumulator{TSelf, TModel}"/> describes.
+        /// </para>
+        /// <para>
+        /// Falls back to one sequential pass, with a single accumulator and no call to
+        /// <see cref="ICsvAccumulator{TSelf, TModel}.Merge"/>, when the source is too small to partition usefully
+        /// or when <see cref="CsvReaderOptions.Encoding"/> is set to a non-UTF-8 encoding.
+        /// </para>
+        /// </remarks>
+        public static Task<TAccumulator> AggregateCsvParallelAsync<TAccumulator, TRecord>(
+            ReadOnlyMemory<byte> data,
+            CsvParallelOptions? options = null,
+            CancellationToken ct = default)
+            where TAccumulator : ICsvAccumulator<TAccumulator, TRecord>, new()
+            where TRecord : ICsvRecord<TRecord>, allows ref struct
+        {
+            return ParallelCsvProcessor.RunAsync(data, RecordAggregation<TAccumulator, TRecord>.Instance, null, Validated(options), ct);
+        }
+
+        /// <summary>
+        /// Reads a CSV file across several threads, parses every record into a <typeparamref name="TRecord"/>
+        /// and folds it into a <typeparamref name="TAccumulator"/>, one instance per partition, merged in file order.
+        /// </summary>
+        /// <typeparam name="TAccumulator">The accumulator type. See <see cref="ICsvAccumulator{TSelf, TModel}"/> for the contract it must honor.</typeparam>
+        /// <typeparam name="TRecord">The record type. A record whose <see cref="ICsvRecord{TSelf}.TryParse"/> returns <see langword="false"/> is skipped.</typeparam>
+        /// <param name="path">The path of the CSV file to read.</param>
+        /// <param name="options">Parallelism, dialect and header options. Defaults to <see cref="CsvParallelOptions.Default"/>.</param>
+        /// <param name="ct">A token to cancel processing.</param>
+        /// <returns>The accumulator holding every record.</returns>
+        /// <remarks>Carries the same contract and fallbacks as the in-memory overload.</remarks>
+        public static Task<TAccumulator> AggregateCsvParallelAsync<TAccumulator, TRecord>(
+            string path,
+            CsvParallelOptions? options = null,
+            CancellationToken ct = default)
+            where TAccumulator : ICsvAccumulator<TAccumulator, TRecord>, new()
+            where TRecord : ICsvRecord<TRecord>, allows ref struct
+        {
+            ArgumentException.ThrowIfNullOrEmpty(path);
+            return ParallelCsvProcessor.RunAsync(path, RecordAggregation<TAccumulator, TRecord>.Instance, null, Validated(options), ct);
+        }
+
+        /// <summary>
+        /// Reads a CSV stream, in parallel where the stream can be partitioned, parses every record into a
+        /// <typeparamref name="TRecord"/> and folds it into a <typeparamref name="TAccumulator"/>, one instance
+        /// per partition, merged in stream order.
+        /// </summary>
+        /// <typeparam name="TAccumulator">The accumulator type. See <see cref="ICsvAccumulator{TSelf, TModel}"/> for the contract it must honor.</typeparam>
+        /// <typeparam name="TRecord">The record type. A record whose <see cref="ICsvRecord{TSelf}.TryParse"/> returns <see langword="false"/> is skipped.</typeparam>
+        /// <param name="stream">The CSV stream, read from its current position. The caller keeps ownership and must not read from it concurrently.</param>
+        /// <param name="options">Parallelism, dialect and header options. Defaults to <see cref="CsvParallelOptions.Default"/>.</param>
+        /// <param name="ct">A token to cancel processing.</param>
+        /// <returns>The accumulator holding every record.</returns>
+        /// <remarks>
+        /// Carries the same contract and fallbacks as the in-memory overload, and partitions only a
+        /// <see cref="FileStream"/> or a <see cref="MemoryStream"/> whose buffer is publicly visible;
+        /// every other stream is read sequentially.
+        /// </remarks>
+        public static Task<TAccumulator> AggregateCsvParallelAsync<TAccumulator, TRecord>(
+            Stream stream,
+            CsvParallelOptions? options = null,
+            CancellationToken ct = default)
+            where TAccumulator : ICsvAccumulator<TAccumulator, TRecord>, new()
+            where TRecord : ICsvRecord<TRecord>, allows ref struct
+        {
+            ArgumentNullException.ThrowIfNull(stream);
+            return ParallelCsvProcessor.RunAsync(stream, RecordAggregation<TAccumulator, TRecord>.Instance, null, Validated(options), ct);
+        }
+
+        /// <summary>
+        /// Reads an in-memory CSV buffer across several threads, binds every record to a
+        /// <typeparamref name="TModel"/> through <paramref name="map"/> and folds it into a
+        /// <typeparamref name="TAccumulator"/>, one instance per partition, merged in buffer order.
+        /// </summary>
+        /// <typeparam name="TAccumulator">The accumulator type. See <see cref="ICsvAccumulator{TSelf, TModel}"/> for the contract it must honor.</typeparam>
+        /// <typeparam name="TModel">The model type.</typeparam>
+        /// <param name="data">The CSV bytes. The caller keeps ownership; the buffer must not be mutated during processing.</param>
+        /// <param name="map">How columns bind to <typeparamref name="TModel"/>.</param>
+        /// <param name="options">Parallelism, dialect and header options. Defaults to <see cref="CsvParallelOptions.Default"/>.</param>
+        /// <param name="ct">A token to cancel processing.</param>
+        /// <returns>The accumulator holding every record.</returns>
+        /// <exception cref="ArgumentException"><paramref name="map"/> binds columns by header name and <see cref="CsvParallelOptions.HeaderRow"/> is 0.</exception>
+        /// <remarks>
+        /// <para>
+        /// The header is bound once, before any record is folded. A property that fails to parse keeps its
+        /// default unless <see cref="ExcelParserConfig.ThrowOnParseFailure"/> is set; a missing
+        /// <c>[ExcelRequired]</c> column or value throws <see cref="ExcelParseException"/>; empty records are skipped.
+        /// </para>
+        /// <para>
+        /// <see cref="ExcelParseException.Row"/> is exact when the source is read sequentially and 0 when it is
+        /// partitioned, since a partition does not know how many records precede it.
+        /// </para>
+        /// <para>Otherwise carries the same contract and fallbacks as the <see cref="ICsvRecord{TSelf}"/> overloads.</para>
+        /// </remarks>
+        public static Task<TAccumulator> AggregateCsvParallelAsync<TAccumulator, TModel>(
+            ReadOnlyMemory<byte> data,
+            CsvModelMap<TModel> map,
+            CsvParallelOptions? options = null,
+            CancellationToken ct = default)
+            where TAccumulator : ICsvAccumulator<TAccumulator, TModel>, new()
+            where TModel : allows ref struct
+        {
+            CsvParallelOptions validated = Validated(options);
+            return ParallelCsvProcessor.RunAsync(data, MappedAggregation<TAccumulator, TModel>.Unbound, Bound<TAccumulator, TModel>(map, validated), validated, ct);
+        }
+
+        /// <summary>
+        /// Reads a CSV file across several threads, binds every record to a <typeparamref name="TModel"/>
+        /// through <paramref name="map"/> and folds it into a <typeparamref name="TAccumulator"/>, one instance
+        /// per partition, merged in file order.
+        /// </summary>
+        /// <typeparam name="TAccumulator">The accumulator type. See <see cref="ICsvAccumulator{TSelf, TModel}"/> for the contract it must honor.</typeparam>
+        /// <typeparam name="TModel">The model type.</typeparam>
+        /// <param name="path">The path of the CSV file to read.</param>
+        /// <param name="map">How columns bind to <typeparamref name="TModel"/>.</param>
+        /// <param name="options">Parallelism, dialect and header options. Defaults to <see cref="CsvParallelOptions.Default"/>.</param>
+        /// <param name="ct">A token to cancel processing.</param>
+        /// <returns>The accumulator holding every record.</returns>
+        /// <exception cref="ArgumentException"><paramref name="map"/> binds columns by header name and <see cref="CsvParallelOptions.HeaderRow"/> is 0.</exception>
+        /// <remarks>Carries the same contract and fallbacks as the in-memory overload.</remarks>
+        public static Task<TAccumulator> AggregateCsvParallelAsync<TAccumulator, TModel>(
+            string path,
+            CsvModelMap<TModel> map,
+            CsvParallelOptions? options = null,
+            CancellationToken ct = default)
+            where TAccumulator : ICsvAccumulator<TAccumulator, TModel>, new()
+            where TModel : allows ref struct
+        {
+            ArgumentException.ThrowIfNullOrEmpty(path);
+            CsvParallelOptions validated = Validated(options);
+            return ParallelCsvProcessor.RunAsync(path, MappedAggregation<TAccumulator, TModel>.Unbound, Bound<TAccumulator, TModel>(map, validated), validated, ct);
+        }
+
+        /// <summary>
+        /// Reads a CSV stream, in parallel where the stream can be partitioned, binds every record to a
+        /// <typeparamref name="TModel"/> through <paramref name="map"/> and folds it into a
+        /// <typeparamref name="TAccumulator"/>, one instance per partition, merged in stream order.
+        /// </summary>
+        /// <typeparam name="TAccumulator">The accumulator type. See <see cref="ICsvAccumulator{TSelf, TModel}"/> for the contract it must honor.</typeparam>
+        /// <typeparam name="TModel">The model type.</typeparam>
+        /// <param name="stream">The CSV stream, read from its current position. The caller keeps ownership and must not read from it concurrently.</param>
+        /// <param name="map">How columns bind to <typeparamref name="TModel"/>.</param>
+        /// <param name="options">Parallelism, dialect and header options. Defaults to <see cref="CsvParallelOptions.Default"/>.</param>
+        /// <param name="ct">A token to cancel processing.</param>
+        /// <returns>The accumulator holding every record.</returns>
+        /// <exception cref="ArgumentException"><paramref name="map"/> binds columns by header name and <see cref="CsvParallelOptions.HeaderRow"/> is 0.</exception>
+        /// <remarks>Carries the same contract and fallbacks as the in-memory overload, and the stream restrictions of the <see cref="ICsvRecord{TSelf}"/> stream overload.</remarks>
+        public static Task<TAccumulator> AggregateCsvParallelAsync<TAccumulator, TModel>(
+            Stream stream,
+            CsvModelMap<TModel> map,
+            CsvParallelOptions? options = null,
+            CancellationToken ct = default)
+            where TAccumulator : ICsvAccumulator<TAccumulator, TModel>, new()
+            where TModel : allows ref struct
+        {
+            ArgumentNullException.ThrowIfNull(stream);
+            CsvParallelOptions validated = Validated(options);
+            return ParallelCsvProcessor.RunAsync(stream, MappedAggregation<TAccumulator, TModel>.Unbound, Bound<TAccumulator, TModel>(map, validated), validated, ct);
+        }
+
+        private static CsvAccumulateFactory<TAccumulator> Bound<TAccumulator, TModel>(CsvModelMap<TModel> map, CsvParallelOptions options)
+            where TAccumulator : ICsvAccumulator<TAccumulator, TModel>, new()
+            where TModel : allows ref struct
+        {
+            ArgumentNullException.ThrowIfNull(map);
+            if (options.HeaderRow == 0 && !map.Info.IsIndexBased)
+            {
+                throw new ArgumentException("A map that binds columns by header name needs CsvParallelOptions.HeaderRow of at least 1.", nameof(map));
+            }
+            return MappedAggregation<TAccumulator, TModel>.Binder(map, options.HeaderRow);
+        }
+
+        /// <summary>
+        /// Reads an in-memory CSV buffer across several threads and folds every record with the functions of
+        /// <paramref name="aggregation"/>, one accumulator per partition, combined in buffer order.
+        /// </summary>
+        /// <typeparam name="TState">The accumulator type.</typeparam>
+        /// <param name="data">The CSV bytes. The caller keeps ownership; the buffer must not be mutated during processing.</param>
+        /// <param name="aggregation">The seed, accumulate and combine functions. They carry the same contract as <see cref="ICsvAccumulator{TSelf, TModel}"/>.</param>
+        /// <param name="options">Parallelism, dialect and header options. Defaults to <see cref="CsvParallelOptions.Default"/>.</param>
+        /// <param name="ct">A token to cancel processing.</param>
+        /// <returns>The combined accumulator.</returns>
+        /// <remarks>Carries the same fallbacks as the <see cref="ICsvAccumulator{TSelf, TModel}"/> overloads.</remarks>
+        public static Task<TState> AggregateCsvParallelAsync<TState>(
+            ReadOnlyMemory<byte> data,
+            CsvAggregation<TState> aggregation,
+            CsvParallelOptions? options = null,
+            CancellationToken ct = default)
+        {
+            return ParallelCsvProcessor.RunAsync(data, Validated(aggregation), null, Validated(options), ct);
+        }
+
+        /// <summary>
+        /// Reads a CSV file across several threads and folds every record with the functions of
+        /// <paramref name="aggregation"/>, one accumulator per partition, combined in file order.
+        /// </summary>
+        /// <typeparam name="TState">The accumulator type.</typeparam>
+        /// <param name="path">The path of the CSV file to read.</param>
+        /// <param name="aggregation">The seed, accumulate and combine functions. They carry the same contract as <see cref="ICsvAccumulator{TSelf, TModel}"/>.</param>
+        /// <param name="options">Parallelism, dialect and header options. Defaults to <see cref="CsvParallelOptions.Default"/>.</param>
+        /// <param name="ct">A token to cancel processing.</param>
+        /// <returns>The combined accumulator.</returns>
+        /// <remarks>Carries the same fallbacks as the <see cref="ICsvAccumulator{TSelf, TModel}"/> overloads.</remarks>
+        public static Task<TState> AggregateCsvParallelAsync<TState>(
+            string path,
+            CsvAggregation<TState> aggregation,
+            CsvParallelOptions? options = null,
+            CancellationToken ct = default)
+        {
+            ArgumentException.ThrowIfNullOrEmpty(path);
+            return ParallelCsvProcessor.RunAsync(path, Validated(aggregation), null, Validated(options), ct);
+        }
+
+        /// <summary>
+        /// Reads a CSV stream, in parallel where the stream can be partitioned, and folds every record with the
+        /// functions of <paramref name="aggregation"/>, one accumulator per partition, combined in stream order.
+        /// </summary>
+        /// <typeparam name="TState">The accumulator type.</typeparam>
+        /// <param name="stream">The CSV stream, read from its current position. The caller keeps ownership and must not read from it concurrently.</param>
+        /// <param name="aggregation">The seed, accumulate and combine functions. They carry the same contract as <see cref="ICsvAccumulator{TSelf, TModel}"/>.</param>
+        /// <param name="options">Parallelism, dialect and header options. Defaults to <see cref="CsvParallelOptions.Default"/>.</param>
+        /// <param name="ct">A token to cancel processing.</param>
+        /// <returns>The combined accumulator.</returns>
+        /// <remarks>Carries the same fallbacks and stream restrictions as the <see cref="ICsvAccumulator{TSelf, TModel}"/> stream overload.</remarks>
+        public static Task<TState> AggregateCsvParallelAsync<TState>(
+            Stream stream,
+            CsvAggregation<TState> aggregation,
+            CsvParallelOptions? options = null,
+            CancellationToken ct = default)
+        {
+            ArgumentNullException.ThrowIfNull(stream);
+            return ParallelCsvProcessor.RunAsync(stream, Validated(aggregation), null, Validated(options), ct);
+        }
+
+        private static CsvAggregation<TState> Validated<TState>(CsvAggregation<TState> aggregation)
+        {
+            ArgumentNullException.ThrowIfNull(aggregation);
+            ArgumentNullException.ThrowIfNull(aggregation.Seed, nameof(aggregation));
+            ArgumentNullException.ThrowIfNull(aggregation.Accumulate, nameof(aggregation));
+            ArgumentNullException.ThrowIfNull(aggregation.Combine, nameof(aggregation));
+            return aggregation;
+        }
+
+        private static CsvParallelOptions Validated(CsvParallelOptions? options)
+        {
+            options ??= CsvParallelOptions.Default;
+            ArgumentOutOfRangeException.ThrowIfNegative(options.DegreeOfParallelism, nameof(options));
+            ArgumentOutOfRangeException.ThrowIfNegative(options.HeaderRow, nameof(options));
+            ArgumentNullException.ThrowIfNull(options.Reader, nameof(options));
+            return options;
+        }
+
         private const int CsvDialectSampleBytes = 64 * 1024;
 
         /// <summary>Reads a sample from the start of a seekable stream and infers its CSV dialect. The stream's position is restored before returning.</summary>
@@ -513,8 +772,6 @@ namespace ExcelReader.Core.Reader
             return SchemaInference.Infer(rows, reader.IsDate1904, headerRow, sampleSize);
         }
 
-        // XLSX/XLSB are ZIP ("PK\x03\x04"); XLS is OLE2/CFB. XLSB is told apart from XLSX by
-        // "xl/workbook.bin" in the ZIP central directory.
         private static ReadOnlySpan<byte> ZipSignature => [0x50, 0x4B, 0x03, 0x04];
 
         /// <summary>
@@ -563,7 +820,6 @@ namespace ExcelReader.Core.Reader
         public static IExcelRowReader Open(ReadOnlyMemory<byte> data, ExcelReaderOptions? options = null)
         {
             ExcelReaderOptions effective = options ?? ExcelReaderOptions.Default;
-            // Eager decryption, not a DecryptedPackageStream: this overload never suspends.
             if (data.Span.StartsWith(XlsCompoundFile.Signature) && EncryptedPackageOpener.IsEncryptedMemory(data, effective))
             {
                 ReadOnlyMemory<byte> plain = EncryptedPackageOpener.DecryptToMemory(data, effective);
@@ -584,8 +840,6 @@ namespace ExcelReader.Core.Reader
             };
         }
 
-        // A genuinely decrypted OOXML package is always Xlsb/Xlsx; anything else means decryption
-        // produced something that isn't a workbook.
         private static IExcelRowReader OpenFromPlainMemory(ReadOnlyMemory<byte> plain, ExcelReaderOptions options)
         {
             ExcelFileFormat format = ClassifyMemory(plain, options, out ZipMemoryIndex? memZip);
@@ -602,8 +856,6 @@ namespace ExcelReader.Core.Reader
             };
         }
 
-        // The ZIP central directory must be walked to tell XLSB from XLSX, so the resulting
-        // ZipMemoryIndex is handed back for reuse instead of being parsed a second time.
         private static ExcelFileFormat ClassifyMemory(ReadOnlyMemory<byte> data, ExcelReaderOptions options, out ZipMemoryIndex? memZip)
         {
             memZip = null;
@@ -615,8 +867,6 @@ namespace ExcelReader.Core.Reader
             }
             if (header.StartsWith(XlsCompoundFile.Signature))
             {
-                // Same two-stage CFB probe as DetectSeekable: only the OLE directory (not the 8-byte
-                // signature) can tell a legacy .xls apart from an encrypted OOXML package.
                 return EncryptedPackageOpener.IsEncryptedMemory(data, options)
                     ? ExcelFileFormat.EncryptedOoxml
                     : ExcelFileFormat.Xls;
@@ -696,7 +946,7 @@ namespace ExcelReader.Core.Reader
             (ExcelFileFormat format, ZipArchive? zip) = await DetectSeekableAsync(stream, ct).ConfigureAwait(false);
             if (zip is not null)
             {
-                await ZipArchiveDisposal.DisposeAsync(zip).ConfigureAwait(false);
+                await zip.DisposeAsync().ConfigureAwait(false);
             }
             return format;
         }
@@ -734,8 +984,6 @@ namespace ExcelReader.Core.Reader
             };
         }
 
-        // `decrypted` is a brand-new stream nobody else references, so it's always handed to the
-        // chosen reader with leaveOpen:false; disposing that reader cascades to the CFB container.
         private static IExcelRowReader OpenDecryptedZip(Stream decrypted, ExcelReaderOptions options)
         {
             ZipArchive? zip = null;
@@ -770,7 +1018,7 @@ namespace ExcelReader.Core.Reader
             {
                 if (zip is not null)
                 {
-                    await ZipArchiveDisposal.DisposeAsync(zip).ConfigureAwait(false);
+                    await zip.DisposeAsync().ConfigureAwait(false);
                 }
                 await DisposeOnFailureAsync(stream, leaveOpen).ConfigureAwait(false);
                 throw;
@@ -795,8 +1043,6 @@ namespace ExcelReader.Core.Reader
             };
         }
 
-        // Async twin of OpenDecryptedZip: the central-directory peek is synchronous, but reader
-        // construction goes through CreateFromOpenZipAsync so worksheet reads stay fully async after.
         private static async ValueTask<IExcelRowReader> OpenDecryptedZipAsync(Stream decrypted, ExcelReaderOptions options, CancellationToken ct)
         {
             ZipArchive? zip = null;
@@ -815,7 +1061,7 @@ namespace ExcelReader.Core.Reader
             {
                 if (zip is not null)
                 {
-                    await ZipArchiveDisposal.DisposeAsync(zip).ConfigureAwait(false);
+                    await zip.DisposeAsync().ConfigureAwait(false);
                 }
                 await decrypted.DisposeAsync().ConfigureAwait(false);
                 throw;
@@ -848,10 +1094,6 @@ namespace ExcelReader.Core.Reader
             throw new InvalidDataException("Unrecognized file format; expected an XLSX/XLSB (ZIP) or XLS (OLE2) workbook.");
         }
 
-        // Returns true (with the final answer) only for Unknown; false means the caller must probe
-        // further — a ZIP central directory (XLSB vs XLSX) or, for a CFB signature, the OLE directory
-        // (legacy .xls vs encrypted OOXML). Callers distinguish the two "false" cases by re-checking
-        // `sig` themselves, since `format` carries no signal here.
         private static bool TryClassifyHeader(ReadOnlySpan<byte> sig, out ExcelFileFormat format)
         {
             if (sig.StartsWith(XlsCompoundFile.Signature) || sig.StartsWith(ZipSignature))
@@ -863,19 +1105,15 @@ namespace ExcelReader.Core.Reader
             return true;
         }
 
-        // Peeks the central directory to distinguish XLSB from XLSX; kept open so the caller can hand
-        // the archive straight to the chosen reader instead of re-parsing it.
         private static ExcelFileFormat ClassifyZipStream(Stream stream, long start, out ZipArchive zip)
         {
             var zipPeek = new ZipArchive(stream, ZipArchiveMode.Read, leaveOpen: true);
-            zip = zipPeek; // assigned before GetEntry can throw, so a caller-side catch can dispose it
+            zip = zipPeek;
             bool isXlsb = zipPeek.GetEntry("xl/workbook.bin") is not null;
             stream.Position = start;
             return isXlsb ? ExcelFileFormat.Xlsb : ExcelFileFormat.Xlsx;
         }
 
-        // `zip` receives the archive opened to peek the central directory (null for Xls/Unknown) so the
-        // caller can hand it straight to the chosen reader instead of re-parsing it.
         [SkipLocalsInit]
         private static ExcelFileFormat DetectSeekable(Stream stream, out ZipArchive? zip)
         {
@@ -901,11 +1139,6 @@ namespace ExcelReader.Core.Reader
             return zipFormat;
         }
 
-        // Only the 8-byte signature read is asynchronous. Telling a legacy .xls from an encrypted OOXML
-        // package needs the OLE directory, and XLSB from XLSX needs the ZIP central directory; CfbContainer
-        // parses synchronously and ZipArchive has no async API at all, so both probes block. They read a
-        // bounded prefix once per open, and every worksheet read after this stays fully async — the same
-        // trade-off OpenDecryptedZipAsync already documents for its own central-directory peek.
         private static async ValueTask<(ExcelFileFormat Format, ZipArchive? Zip)> DetectSeekableAsync(Stream stream, CancellationToken ct)
         {
             RequireSeekable(stream);
@@ -939,8 +1172,6 @@ namespace ExcelReader.Core.Reader
             return (zipFormat, zip);
         }
 
-        // If the caller supplied a password and the stream is a CFB container, decrypt it up front so
-        // the ZIP-based reader constructor gets a plaintext ZIP instead of a confusing "not a ZIP" error.
         private static bool TryDecryptCfbStream(Stream stream, bool leaveOpen, ExcelReaderOptions? options, out Stream decrypted)
         {
             if (options?.Password is not null && stream.CanSeek && HasCfbSignature(stream))

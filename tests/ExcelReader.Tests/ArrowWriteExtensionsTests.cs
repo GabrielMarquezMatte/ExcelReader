@@ -18,9 +18,6 @@ namespace ExcelReader.Tests
             name.Append("alice");
             name.AppendNull();
 
-            // qty stays non-null in both rows: a row with every other column blank still needs one
-            // real cell, or a sparse-format writer (XLSB) has nothing to record for that row at all
-            // and it disappears entirely on read-back instead of coming back as an empty row.
             var qty = new Int64Array.Builder();
             qty.Append(3);
             qty.Append(99);
@@ -76,8 +73,6 @@ namespace ExcelReader.Tests
         {
             Assert.Equal(2, roundTripped.Length);
 
-            // ToArrowRecordBatch's StringColumnAppender never appends null (see ColumnAppender.cs) — a
-            // blank string cell always round-trips as "", regardless of the column's IsNullable flag.
             var name = Assert.IsType<StringArray>(roundTripped.Column(0));
             Assert.Equal("alice", name.GetString(0));
             Assert.Equal("", name.GetString(1));

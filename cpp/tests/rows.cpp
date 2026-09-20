@@ -72,7 +72,6 @@ int main()
     }
     check(found_coluna1, "the header row contains Coluna1");
 
-    // A cell far larger than the cursor's initial buffer forces the XL_BUFFER_TOO_SMALL retry.
     {
         const auto dir = std::filesystem::temp_directory_path() / "excelreader-cpp-rows-test";
         std::filesystem::create_directories(dir);
@@ -102,7 +101,6 @@ int main()
         std::filesystem::remove(path, ignored);
     }
 
-    // read_all_decoded must agree with the cursor cell for cell.
     {
         auto workbook = xl::Workbook::open(fixture());
         check(workbook.has_value(), "open for read_all_decoded");
@@ -131,7 +129,6 @@ int main()
         }
     }
 
-    // An exhausted sheet decodes to an empty set, not an error.
     {
         auto workbook = xl::Workbook::open(fixture());
         if (workbook.has_value())
@@ -146,7 +143,6 @@ int main()
         }
     }
 
-    // A moved-from DecodedRows must not double-free.
     {
         auto workbook = xl::Workbook::open(fixture());
         if (workbook.has_value())

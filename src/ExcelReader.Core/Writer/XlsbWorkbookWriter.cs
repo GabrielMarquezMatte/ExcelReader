@@ -2,7 +2,6 @@ using System.Globalization;
 using System.IO.Compression;
 using System.Runtime.InteropServices;
 using System.Text;
-using ExcelReader.Core.Internal;
 using ExcelReader.Core.Reader;
 using ExcelReader.Core.Writer.Internal;
 
@@ -146,7 +145,6 @@ namespace ExcelReader.Core.Writer
         {
             WriterStateGuard.ThrowIfEnded(_state, this);
             WriterStateGuard.RequireStarted(_state, nameof(XlsbWorkbookWriter), "ending");
-            // Must dispose (and thus register) the active sheet before checking _sheets.Count.
             _activeSheet?.Dispose();
             if (_sheets.Count == 0)
             {
@@ -161,7 +159,7 @@ namespace ExcelReader.Core.Writer
             WriteSharedStrings();
             WriteAppProperties();
             WriteContentTypes();
-            ZipArchiveDisposal.Dispose(_zip);
+            _zip.Dispose();
         }
 
         /// <inheritdoc/>
@@ -170,8 +168,6 @@ namespace ExcelReader.Core.Writer
             WriterStateGuard.ThrowIfEnded(_state, this);
             WriterStateGuard.RequireStarted(_state, nameof(XlsbWorkbookWriter), "ending");
             ct.ThrowIfCancellationRequested();
-            // XlsbSheetWriter registers itself in EndAsync/DisposeAsync, not StartAsync, so the active
-            // sheet must be disposed (and thus registered) before checking _sheets.Count below.
             if (_activeSheet is not null)
             {
                 await _activeSheet.DisposeAsync().ConfigureAwait(false);
@@ -189,7 +185,7 @@ namespace ExcelReader.Core.Writer
             await WriteSharedStringsAsync(ct).ConfigureAwait(false);
             await WriteAppPropertiesAsync(ct).ConfigureAwait(false);
             await WriteContentTypesAsync(ct).ConfigureAwait(false);
-            await ZipArchiveDisposal.DisposeAsync(_zip).ConfigureAwait(false);
+            await _zip.DisposeAsync().ConfigureAwait(false);
         }
 
         /// <summary>
@@ -223,7 +219,7 @@ namespace ExcelReader.Core.Writer
                 if (_sheets.Count == 0 && _activeSheet is null)
                 {
                     _state = WriterState.Ended;
-                    ZipArchiveDisposal.Dispose(_zip);
+                    _zip.Dispose();
                 }
                 else
                 {
@@ -232,7 +228,7 @@ namespace ExcelReader.Core.Writer
             }
             else if (_state == WriterState.Created)
             {
-                ZipArchiveDisposal.Dispose(_zip);
+                _zip.Dispose();
             }
             if (!_leaveOpen)
             {
@@ -250,12 +246,10 @@ namespace ExcelReader.Core.Writer
             _disposed = true;
             if (_state == WriterState.Started)
             {
-                // _activeSheet is checked too: XlsbSheetWriter only registers itself in EndAsync, so a
-                // still-open sheet must route through EndAsync rather than being silently abandoned.
                 if (_sheets.Count == 0 && _activeSheet is null)
                 {
                     _state = WriterState.Ended;
-                    await ZipArchiveDisposal.DisposeAsync(_zip).ConfigureAwait(false);
+                    await _zip.DisposeAsync().ConfigureAwait(false);
                 }
                 else
                 {
@@ -264,7 +258,7 @@ namespace ExcelReader.Core.Writer
             }
             else if (_state == WriterState.Created)
             {
-                await ZipArchiveDisposal.DisposeAsync(_zip).ConfigureAwait(false);
+                await _zip.DisposeAsync().ConfigureAwait(false);
             }
             if (!_leaveOpen)
             {
@@ -354,9 +348,6 @@ namespace ExcelReader.Core.Writer
             return WriteEntryAsync("xl/_rels/workbook.bin.rels", BuildWorkbookRelsXml(), ct);
         }
 
-        // Bold/italic not represented here: BrtFont's payload is an opaque, byte-exact blob
-        // (DefaultFontPayload) reverse-engineered from a real file, and no field in it is safe to flip
-        // without a verified [MS-XLSB] field map. Every custom style's Xf keeps font index 0.
         private void BuildStylesBin(BiffBuffer payload, BiffBuffer data)
         {
             Dictionary<string, int> numFmtIds = _styles.AssignCustomNumberFormatIds();
@@ -402,9 +393,6 @@ namespace ExcelReader.Core.Writer
             WriteEntry("xl/styles.bin", data.Span);
         }
 
-        // Bold/italic not represented here: BrtFont's payload is an opaque, byte-exact blob
-        // (DefaultFontPayload) reverse-engineered from a real file, and no field in it is safe to flip
-        // without a verified [MS-XLSB] field map. Every custom style's Xf keeps font index 0.
         private async ValueTask WriteStylesAsync(CancellationToken ct)
         {
             using BiffBuffer payload = new(96);
@@ -413,25 +401,19 @@ namespace ExcelReader.Core.Writer
             await WriteEntryAsync("xl/styles.bin", data.Memory, ct).ConfigureAwait(false);
         }
 
-        // The STYLES production is mandatory in a styles part; one built-in "Normal" cell style
-        // pointing at cellStyleXfs[0] is the minimum Excel accepts without repairing the workbook.
-        //
-        // BrtStyle payload, verified byte-for-byte against a real Excel-authored .xlsb:
-        //   ixf (u32) | grbit (u16) | iStyBuiltIn (u8) | iLevel (u8) | stName (XLWideString)
         private static void WriteStyles(BiffBuffer data, BiffBuffer payload)
         {
             WriteCountedRecord(data, payload, Brt.BeginStyles, 1);
             payload.Reset();
-            payload.WriteU32(0);            // ixf -> cellStyleXfs[0]
-            payload.WriteU16(StyleBuiltIn); // grbit
-            payload.WriteByte(0);           // iStyBuiltIn: 0 == the "Normal" built-in style
-            payload.WriteByte(0);           // iLevel
+            payload.WriteU32(0);
+            payload.WriteU16(StyleBuiltIn);
+            payload.WriteByte(0);
+            payload.WriteByte(0);
             Biff12RecordWriter.WriteWideString(payload, "Normal");
             Biff12RecordWriter.WriteRecord(data, Brt.Style, payload.Span);
             Biff12RecordWriter.WriteRecord(data, Brt.EndStyles);
         }
 
-        // BrtStyle grbit bit 0: the style is one of Excel's built-ins rather than a user-defined one.
         private const int StyleBuiltIn = 0x0001;
 
         private static void WriteFmt(BiffBuffer data, BiffBuffer payload, int numFmtId, string formatCode)
@@ -472,7 +454,6 @@ namespace ExcelReader.Core.Writer
             Biff12RecordWriter.WriteRecord(data, id, payload.Span);
         }
 
-        // Fixed byte blobs Excel expects verbatim; nothing in them varies per workbook.
         private static void WriteBlobRecord(BiffBuffer data, BiffBuffer payload, int id, ReadOnlySpan<byte> blob)
         {
             payload.Reset();
@@ -487,9 +468,6 @@ namespace ExcelReader.Core.Writer
             0x00, 0x43, 0x00, 0x61, 0x00, 0x6C, 0x00, 0x69,
             0x00, 0x62, 0x00, 0x72, 0x00, 0x69, 0x00,
         ];
-        // BrtFill is fls (u32 pattern type) followed by this 64-byte remainder — the fg/bg BrtColor
-        // pair plus the gradient-stop area a solid fill leaves zeroed. Verified byte-for-byte against
-        // a real Excel-authored .xlsb.
         private static ReadOnlySpan<byte> FillPayloadAfterPattern => [
             0x03, 0x40, 0x00, 0x00, 0x00, 0x00, 0x00, 0xFF,
             0x03, 0x41, 0x00, 0x00, 0xFF, 0xFF, 0xFF, 0xFF,
@@ -501,7 +479,6 @@ namespace ExcelReader.Core.Writer
             0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
         ];
 
-        // Excel requires the first two fills to be exactly these, in this order, in every styles part.
         private const uint FillPatternNone = 0x00;
         private const uint FillPatternGray125 = 0x11;
 
@@ -536,25 +513,21 @@ namespace ExcelReader.Core.Writer
             return WriteEntryAsync("docProps/app.xml", AppPropertiesXml, ct);
         }
 
-        // BrtXF, 16 bytes ([MS-XLSB] 2.4.816). Field-by-field, not a partial blob: every field must be
-        // explicitly zeroed rather than left to whatever garbage a stackalloc might carry, since a
-        // stray value here produces an index pointing at a font/fill the part never declared.
         private static void WriteXf(BiffBuffer data, BiffBuffer payload, int numFmtId, bool isStyleXf = false)
         {
             payload.Reset();
-            payload.WriteU16(isStyleXf ? ushort.MaxValue : 0); // ixfeParent (0xFFFF for a style XF)
-            payload.WriteU16(numFmtId);                        // iFmt
-            payload.WriteU16(0);                               // iFont
-            payload.WriteU16(0);                               // iFill
-            payload.WriteU16(0);                               // ixBorder
-            payload.WriteByte(0);                              // trot
-            payload.WriteByte(0);                              // indent
+            payload.WriteU16(isStyleXf ? ushort.MaxValue : 0);
+            payload.WriteU16(numFmtId);
+            payload.WriteU16(0);
+            payload.WriteU16(0);
+            payload.WriteU16(0);
+            payload.WriteByte(0);
+            payload.WriteByte(0);
             payload.WriteU16(XfDefaultFlags);
-            payload.WriteU16(numFmtId != 0 ? XfAttributeNumberFormat : 0); // xfGrbitAtr
+            payload.WriteU16(numFmtId != 0 ? XfAttributeNumberFormat : 0);
             Biff12RecordWriter.WriteRecord(data, Brt.Xf, payload.Span);
         }
 
-        // Vertical alignment "bottom" plus fLocked, Excel's default cell protection state.
         private const int XfDefaultFlags = 0x1010;
         private const int XfAttributeNumberFormat = 0x0001;
 

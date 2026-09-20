@@ -20,7 +20,7 @@ namespace ExcelReader.Tests
             Assert.Equal(2, data.FieldCount);
             Assert.Equal("Id", data.GetName(0));
             Assert.Equal("Name", data.GetName(1));
-            Assert.Equal(0, data.GetOrdinal("id"));   // case-insensitive
+            Assert.Equal(0, data.GetOrdinal("id"));
             Assert.Equal(1, data.GetOrdinal("Name"));
         }
 
@@ -55,7 +55,7 @@ namespace ExcelReader.Tests
             Assert.True(data.Read());
             Assert.Equal("hi", data.GetValue(0));
             Assert.Equal(42.0, data.GetValue(1));
-            Assert.Equal((object)true, data.GetValue(2));
+            Assert.Equal(true, data.GetValue(2));
             Assert.Equal(new DateTime(2024, 1, 1), data.GetValue(3));
             Assert.Equal(DBNull.Value, data.GetValue(4));
             Assert.True(data.IsDBNull(4));
@@ -72,7 +72,7 @@ namespace ExcelReader.Tests
             Assert.Equal("Column0", data.GetName(0));
             Assert.True(data.Read());
             Assert.Equal(1.0, data.GetValue(0));
-            Assert.False(data.Read()); // that first row was the only row
+            Assert.False(data.Read());
         }
 
         [Fact]
@@ -118,9 +118,6 @@ namespace ExcelReader.Tests
             Assert.False(data.NextResult());
         }
 
-        // GetBytes reads a text cell's raw UTF-8 bytes directly (no string round trip for a
-        // multi-byte character to trip on) and windows them by fieldOffset/length exactly like
-        // IDataRecord.GetBytes documents.
         [Fact]
         public async Task GetBytesReturnsTheCellsUtf8BytesWindowedByOffsetAndLength()
         {
@@ -130,22 +127,19 @@ namespace ExcelReader.Tests
             Assert.True(data.Read());
 
             byte[] expected = Encoding.UTF8.GetBytes("héllo");
-            Assert.Equal(expected.Length, data.GetBytes(0, 0, null, 0, 0)); // null buffer: just the length
+            Assert.Equal(expected.Length, data.GetBytes(0, 0, null, 0, 0));
 
             byte[] buffer = new byte[expected.Length];
             long read = data.GetBytes(0, 0, buffer, 0, buffer.Length);
             Assert.Equal(expected.Length, read);
             Assert.Equal(expected, buffer);
 
-            // Windowed: skip the 2-byte 'é' (UTF-8 bytes 1-2), read the remaining 3 bytes ("llo").
             byte[] window = new byte[3];
             long windowRead = data.GetBytes(0, 3, window, 0, window.Length);
             Assert.Equal(3, windowRead);
             Assert.Equal("llo"u8.ToArray(), window);
         }
 
-        // A numeric cell's bytes never touched Cell.Value (see Cell.GetString's own hasNumber
-        // branch) — GetBytes has to format the number itself instead of just slicing Value.
         [Fact]
         public async Task GetBytesFormatsANumericCellInsteadOfReturningNothing()
         {
@@ -180,7 +174,7 @@ namespace ExcelReader.Tests
             using var data = new ExcelDataReader(reader);
             Assert.True(data.Read());
 
-            Assert.Equal(11, data.GetChars(0, 0, null, 0, 0)); // null buffer: just the length
+            Assert.Equal(11, data.GetChars(0, 0, null, 0, 0));
 
             char[] window = new char[5];
             long read = data.GetChars(0, 6, window, 0, window.Length);
@@ -188,9 +182,6 @@ namespace ExcelReader.Tests
             Assert.Equal("world", new string(window));
         }
 
-        // An XLSB numeric cell carries its double in the record, never as raw text, so Cell.Value is
-        // empty and GetBytes has to format the number itself - the branch an XLSX numeric cell (whose
-        // Value still holds the literal "42" from the sheet XML) never reaches.
         [Fact]
         public async Task GetBytesFormatsAnXlsbNumericCellFromItsBinaryValue()
         {

@@ -16,11 +16,6 @@
 
 namespace xl
 {
-    // Owns one ArrowArray/ArrowSchema pair produced by parse_arrow, releasing both on destruction.
-    //
-    // Ownership note: xl_parse_arrow's results are released through their OWN release callbacks,
-    // never through xl_free_table - the native side already freed its intermediate table before
-    // returning. Releasing the schema and array is independent; both are done here.
     struct ArrowTable
     {
         ArrowArray array{};
@@ -31,8 +26,6 @@ namespace xl
         ArrowTable(const ArrowTable &) = delete;
         ArrowTable &operator=(const ArrowTable &) = delete;
 
-        // A released-or-moved-from ArrowArray/ArrowSchema is defined by the Arrow spec as one whose
-        // `release` member is null, so zeroing the source is exactly what "moved-from" means here.
         ArrowTable(ArrowTable &&other) noexcept
             : array(std::exchange(other.array, ArrowArray{})),
               schema(std::exchange(other.schema, ArrowSchema{}))
@@ -52,8 +45,6 @@ namespace xl
 
         ~ArrowTable() { release(); }
 
-        // Releases both structures early. Idempotent: the Arrow spec requires a release callback to
-        // null its own struct's `release` member, so a second call is a no-op.
         void release() noexcept
         {
             if (array.release != nullptr)
@@ -67,15 +58,9 @@ namespace xl
         }
     };
 
-    // Same schema-driven parse as xl::parse_sheet<T>, returned as one top-level Arrow struct
-    // array/schema instead of a TableView<T>. `header_row` has the same meaning as in parse_sheet
-    // (0 = no header). Consumes the workbook's shared row cursor, hence Workbook&.
     template <typename T>
     std::expected<ArrowTable, Error> parse_arrow(Workbook &workbook, int32_t header_row = 1)
     {
-        // The next four lines are xl::parse_sheet<T>'s own spec-building block
-        // (cpp/include/xl/excelreader.hpp:1101-1106), copied verbatim: both entry points take an
-        // identical xl_column_spec array, built from the same ExcelMapper<T>::get_bindings().
         static constexpr auto bindings = ExcelMapper<T>::get_bindings();
         static constexpr size_t num_fields = std::tuple_size_v<decltype(bindings)>;
         std::array<std::vector<int32_t>, num_fields> name_lens_storage{};
@@ -89,15 +74,11 @@ namespace xl
                                         &result.array, &result.schema);
         if (status != XL_OK)
         {
-            // On failure the ABI leaves both outputs untouched (still zeroed), so ~ArrowTable is a
-            // no-op and there is nothing to release here.
             return std::unexpected(detail::make_error(status));
         }
         return result;
     }
 
-    // Separate from ArrowTable: a stream hands schemas and arrays out independently, so they cannot
-    // share one guard.
     struct ArrowSchemaGuard
     {
         ArrowSchema schema{};
@@ -168,8 +149,6 @@ namespace xl
         }
     };
 
-    // parse_arrow a batch at a time. Releasing the stream is what closes the underlying read.
-    // Borrows the workbook under the same rules as xl::TypedReader.
     class ArrowStream
     {
     public:
@@ -193,7 +172,6 @@ namespace xl
 
         ~ArrowStream() { release(); }
 
-        // A fresh allocation per call, so polling this without keeping the guards would leak.
         std::expected<ArrowSchemaGuard, Error> schema()
         {
             if (stream_.release == nullptr)
@@ -209,7 +187,6 @@ namespace xl
             return guard;
         }
 
-        // Arrow signals end of stream by returning success with a released array.
         std::expected<std::optional<ArrowArrayGuard>, Error> next()
         {
             if (stream_.release == nullptr)
@@ -242,7 +219,6 @@ namespace xl
             }
         }
 
-        // errno-style, not XL_*. get_last_error's message dies on the next call, so copy it now.
         Error stream_error(int rc)
         {
             const char *message =
@@ -257,7 +233,6 @@ namespace xl
         ArrowArrayStream stream_{};
     };
 
-    // `header_row` and `batch_size` mean what they do in xl::typed_reader.
     template <typename T>
     std::expected<ArrowStream, Error> arrow_stream(Workbook &workbook, int32_t header_row = 1,
                                                    int64_t batch_size = 10000)
@@ -274,7 +249,6 @@ namespace xl
                                                batch_size, &stream);
         if (status != XL_OK)
         {
-            // Every failure path zeroes *out_stream, so there is nothing to release here.
             return std::unexpected(detail::make_error(status));
         }
         return ArrowStream::from_raw(stream);

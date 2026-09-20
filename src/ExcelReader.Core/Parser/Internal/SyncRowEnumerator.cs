@@ -20,8 +20,6 @@ namespace ExcelReader.Core.Parser.Internal
     /// </remarks>
     [SuppressMessage("Design", "CA1063:Implement IDisposable correctly",
         Justification = "No unmanaged resources and no finalizer; every derived Enumerator is sealed and adds no disposal logic, so the full Dispose(bool) pattern buys nothing here.")]
-    [SuppressMessage("Sonar", "S3881:IDisposable should be implemented correctly",
-        Justification = "No unmanaged resources and no finalizer; every derived Enumerator is sealed and adds no disposal logic.")]
     public abstract class SyncRowEnumerator<T, TRows> : IEnumerator<T>
         where TRows : class, IExcelRowEnumerator
     {

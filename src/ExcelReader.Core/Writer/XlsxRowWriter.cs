@@ -31,7 +31,6 @@ namespace ExcelReader.Core.Writer
             _disposed = false;
         }
 
-        // A row style always wins over a column style; falls back to 0 (no explicit attribute).
         private int EffectiveStyle()
         {
             return _rowStyleId != 0 ? _rowStyleId : _owner.GetColumnStyle(_columnIndex);
@@ -205,7 +204,6 @@ namespace ExcelReader.Core.Writer
             _columnIndex += count;
         }
 
-        // Only the first cell written after a real Skip() needs an explicit r="..." reference.
         private bool ConsumeCellReference()
         {
             ExcelLimits.ThrowIfColumnOutOfRange(_columnIndex);

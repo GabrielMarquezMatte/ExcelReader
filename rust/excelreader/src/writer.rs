@@ -40,7 +40,6 @@ impl ColumnData<'_> {
     #[must_use]
     pub fn len(&self) -> i64 {
         match self {
-            // An offsets array of n + 1 entries describes n rows; an empty one describes none.
             ColumnData::Str { offsets, .. } => (offsets.len().max(1) - 1) as i64,
             ColumnData::I64(values) | ColumnData::Time(values) | ColumnData::Timestamp(values) => {
                 values.len() as i64
@@ -209,8 +208,6 @@ pub fn write_columns(
     check_abi_version()?;
     let row_count = validate(columns)?;
 
-    // Three parallel arrays that must outlive the call: each spec's `names` points at one slot of
-    // `names`, and its `name_lens` at one slot of `name_lens`. A temporary would dangle.
     let names: Vec<*const u8> = columns
         .iter()
         .map(|c| c.name.map_or(std::ptr::null(), str::as_ptr))
@@ -225,8 +222,6 @@ pub fn write_columns(
         .map(|(index, column)| XlColumnSpec {
             names: &names[index],
             name_lens: &name_lens[index],
-            // Exactly one name per write spec, or none: the ABI rejects a spec carrying an alias
-            // list, which only exists to resolve a header on the way IN.
             name_count: i32::from(column.name.is_some()),
             index: 0,
             r#type: column.data.xl_type(),
@@ -238,12 +233,8 @@ pub fn write_columns(
     let table = XlTable {
         column_count: columns.len() as i32,
         row_count,
-        // `columns` is `*mut` in the C struct only because the reader fills one in; the writer
-        // takes the table as `const` and never writes through it.
         columns: raw_columns.as_ptr().cast_mut(),
     };
-    // Lowered here rather than by the caller: the raw struct holds a pointer into
-    // `options.sheet_name`, and this borrow provably covers the FFI call below.
     let raw_options = options.map(WriteOptions::to_raw);
     let options_ptr = crate::options::ptr_or_null(&raw_options);
 
@@ -478,14 +469,13 @@ mod tests {
         assert_eq!(format_from_path("out.csv"), XL_FORMAT_CSV);
         assert_eq!(format_from_path("out.txt"), XL_FORMAT_AUTO);
         assert_eq!(format_from_path("out"), XL_FORMAT_AUTO);
-        // A dot in a directory name is not an extension.
         assert_eq!(format_from_path("v1.2/report"), XL_FORMAT_AUTO);
     }
 
     #[test]
     fn validate_rejects_a_short_validity_bitmap() {
         let values = [1i64, 2, 3, 4, 5, 6, 7, 8, 9];
-        let bitmap = [0u8]; // 9 rows need 2 bytes
+        let bitmap = [0u8]; 
         let columns = [Column {
             name: Some("a"),
             data: ColumnData::I64(&values),
@@ -518,7 +508,6 @@ mod tests {
             },
             validity: None,
         }];
-        // One row, so the offsets array is right - but claiming two rows' worth is not.
         assert_eq!(validate(&columns).expect("1 row, 2 offsets"), 1);
 
         let bad = [0i32, 3, 6, 9];

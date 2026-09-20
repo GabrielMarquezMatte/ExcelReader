@@ -4,18 +4,17 @@
     <IsPackable>false</IsPackable>
     <OutputType>Exe</OutputType>
     <RootNamespace>ExcelReader.Tests</RootNamespace>
-    <TargetFrameworks>net10.0;net8.0</TargetFrameworks>
+    <TargetFramework>net10.0</TargetFramework>
     <TestingPlatformDotnetTestSupport>true</TestingPlatformDotnetTestSupport>
     <UseMicrosoftTestingPlatformRunner>true</UseMicrosoftTestingPlatformRunner>
     <EmitCompilerGeneratedFiles>true</EmitCompilerGeneratedFiles>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <!-- CA2007: ConfigureAwait is not needed in test code (no captured sync context). -->
-    <!-- CA1849/S6966: tests deliberately exercise the sync reader/dispose paths;
-         "use the async overload" is noise here. Core keeps these rules active. -->
+    <!-- CA1849: tests deliberately exercise the sync reader/dispose paths;
+         "use the async overload" is noise here. Core keeps this rule active. -->
     <!-- CA1707: xUnit test names use underscores (Should_X_When_Y) for readability. -->
-    <!-- S6562: assertion dates are compared against TryGetDateTime results, which are always
-         DateTimeKind.Unspecified (the library never sets Kind) — no ambiguity in practice. -->
-    <NoWarn>$(NoWarn);CA2007;CA1849;S6966;CA1707;S6562;HLQ005;S3459;S1144;MA0004;IDISP004;VSTHRD103;AsyncFixer02;IDISP005;IDISP001</NoWarn>
-    <NoWarn>$(NoWarn);S3878;CA2000;IDISP016;CA1034;CA1812;IDISP012;CA1835;CA1034;S2094;MA0060;CA2022</NoWarn>
+    <NoWarn>$(NoWarn);CA2007;CA1849;CA1707;MA0004</NoWarn>
+    <NoWarn>$(NoWarn);CA2000;CA1034;CA1812;CA1835;CA1034;MA0060;CA2022</NoWarn>
     <!-- RS0016/RS0026/RS0037: the public-API-tracking analyzer is for ExcelReader.Core's shipped
          NuGet surface. This is a test project — its public test classes/methods are an xUnit
          convention, not an API commitment, so there's no PublicAPI.txt here by design. -->
@@ -34,13 +33,13 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.Testing.Extensions.TrxReport" Version="2.4.0" />
+    <PackageReference Include="Microsoft.Testing.Extensions.TrxReport" Version="2.4.1" />
     <PackageReference Include="Microsoft.Testing.Extensions.CodeCoverage" Version="18.11.0" />
     <PackageReference Include="xunit.runner.visualstudio" Version="4.0.0">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
-    <PackageReference Include="xunit.v3.mtp-v2" Version="4.0.0" />
+    <PackageReference Include="xunit.v3.mtp-v2" Version="4.0.1" />
     <!-- Drives ExcelRowMapGenerator directly (CSharpGeneratorDriver over an in-memory Compilation) in
          GeneratorTests.cs, instead of relying on the live build-time analyzer pipeline — a deliberately
          broken test model (e.g. missing 'partial', for the EXR001 test) would otherwise fail this
@@ -50,11 +49,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <!-- ExcelReader.Cli is single-target (net10.0) - a dotnet tool has no reachable net8.0 consumer -
-         so only pull it into the net10.0 leg of this multi-targeted test project; CliTests.cs is
-         excluded from the net8.0 leg below for the same reason. -->
-    <ProjectReference Include="..\..\src\ExcelReader.Cli\ExcelReader.Cli.csproj" Condition="'$(TargetFramework)' == 'net10.0'" />
-    <Compile Remove="CliTests.cs" Condition="'$(TargetFramework)' != 'net10.0'" />
+    <ProjectReference Include="..\..\src\ExcelReader.Cli\ExcelReader.Cli.csproj" />
     <ProjectReference Include="..\..\src\ExcelReader.Core\ExcelReader.Core.csproj" />
     <ProjectReference Include="..\..\src\ExcelReader.Arrow\ExcelReader.Arrow.csproj" />
     <ProjectReference Include="..\..\src\ExcelReader.Native\ExcelReader.Native.csproj" />

@@ -4,14 +4,6 @@ using ExcelReader.Core.Writer;
 
 namespace ExcelReader.Tests
 {
-    // BrtColInfo is the one record this library writes that its own reader never parses — only
-    // per-cell style matters for round-tripping — so no read-back test can catch a wrong field
-    // layout here. These assert the emitted bytes directly.
-    //
-    // The expected layout was established by dumping a real Excel-authored .xlsb: an 18-byte payload
-    // of colFirst/colLast/coldx/ixfe as u32 followed by flags as u16. This previously wrote a
-    // 16-byte record (ixfe as u16), two bytes short of what Excel emits, with fUserSet left clear so
-    // an explicit SetColumnWidth had no effect in Excel.
     public class XlsbColInfoTests
     {
         private const int ColInfoPayloadLength = 18;
@@ -61,16 +53,14 @@ namespace ExcelReader.Tests
         [Fact]
         public async Task ColumnWidthEmitsEighteenByteRecordMatchingExcelLayout()
         {
-            // 13.28515625 * 256 == 3401 exactly — the same column/width pair a real Excel file was
-            // dumped from, so coldx is comparable byte-for-byte rather than rounding-dependent.
             byte[] sheet = await WriteSheetBinAsync(s => s.SetColumnWidth(4, 13.28515625));
             byte[] payload = Assert.Single(ReadColInfoPayloads(sheet));
 
             Assert.Equal(ColInfoPayloadLength, payload.Length);
-            Assert.Equal(4u, BitConverter.ToUInt32(payload, 0));      // colFirst
-            Assert.Equal(4u, BitConverter.ToUInt32(payload, 4));      // colLast
-            Assert.Equal(3401u, BitConverter.ToUInt32(payload, 8));   // coldx
-            Assert.Equal(0u, BitConverter.ToUInt32(payload, 12));     // ixfe (no style set)
+            Assert.Equal(4u, BitConverter.ToUInt32(payload, 0));
+            Assert.Equal(4u, BitConverter.ToUInt32(payload, 4));
+            Assert.Equal(3401u, BitConverter.ToUInt32(payload, 8));
+            Assert.Equal(0u, BitConverter.ToUInt32(payload, 12));
             Assert.Equal(FUserSet, BitConverter.ToUInt16(payload, 16));
         }
 
@@ -90,8 +80,6 @@ namespace ExcelReader.Tests
         [Fact]
         public async Task StyleWithoutExplicitWidthLeavesUserSetClear()
         {
-            // Nothing claimed the width, so fUserSet must stay clear — otherwise Excel would treat the
-            // library's 8.43 default as a deliberate user override of the sheet's own default width.
             byte[] sheet = await WriteSheetBinAsync(s => s.SetColumnStyle(2, 0));
             byte[] payload = Assert.Single(ReadColInfoPayloads(sheet));
 
@@ -112,7 +100,6 @@ namespace ExcelReader.Tests
             Assert.Equal(3, payloads.Count);
             Assert.All(payloads, p => Assert.Equal(ColInfoPayloadLength, p.Length));
             Assert.Equal([1u, 3u, 5u], [.. payloads.Select(p => BitConverter.ToUInt32(p, 0))]);
-            // Only the two columns given an explicit width claim fUserSet.
             Assert.Equal([FUserSet, 0, FUserSet], [.. payloads.Select(p => (int)BitConverter.ToUInt16(p, 16))]);
         }
     }

@@ -116,12 +116,10 @@ namespace ExcelReader.Tests
             string outputPath = Path.Combine(Path.GetTempPath(), $"excelreader-encrypt-{Guid.NewGuid():N}.xlsx");
             try
             {
-                // Create a placeholder file to verify FileMode.Create overwrites it.
                 File.WriteAllBytes(outputPath, new byte[] { 0x00, 0x01, 0x02, 0x03 });
 
                 Excel.EncryptPackage(plainPath, outputPath, Password);
 
-                // Verify the destination now holds the real encrypted output, not the placeholder.
                 ExcelReaderOptions options = new() { Password = Password, VerifyEncryptedIntegrity = true };
                 using IExcelRowReader reader = Excel.Open(outputPath, options);
                 Assert.NotEmpty(ReadAllRows(reader));

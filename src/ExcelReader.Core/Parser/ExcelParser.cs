@@ -49,8 +49,6 @@ namespace ExcelReader.Core.Parser
         /// <param name="reader">The XLSX reader to pull rows from.</param>
         /// <returns>An enumerable that yields one <typeparamref name="T"/> per data row.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="reader"/> is <see langword="null"/>.</exception>
-        [SuppressMessage("Usage", "VSTHRD200:Use \"Async\" suffix for async methods",
-            Justification = "Synchronous entry point; the enumerable also implements IAsyncEnumerable, but ParseAsync is the async counterpart.")]
         public ExcelEnumerable<T> Parse(XlsxReader reader)
         {
             ArgumentNullException.ThrowIfNull(reader);
@@ -61,8 +59,6 @@ namespace ExcelReader.Core.Parser
         /// <param name="reader">The XLS reader to pull rows from.</param>
         /// <returns>An enumerable that yields one <typeparamref name="T"/> per data row.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="reader"/> is <see langword="null"/>.</exception>
-        [SuppressMessage("Usage", "VSTHRD200:Use \"Async\" suffix for async methods",
-            Justification = "Synchronous entry point; the enumerable also implements IAsyncEnumerable, but ParseAsync is the async counterpart.")]
         public ExcelEnumerable<T, XlsReader, XlsReader.Enumerator> Parse(XlsReader reader)
         {
             ArgumentNullException.ThrowIfNull(reader);
@@ -73,8 +69,6 @@ namespace ExcelReader.Core.Parser
         /// <param name="reader">The XLSB reader to pull rows from.</param>
         /// <returns>An enumerable that yields one <typeparamref name="T"/> per data row.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="reader"/> is <see langword="null"/>.</exception>
-        [SuppressMessage("Usage", "VSTHRD200:Use \"Async\" suffix for async methods",
-            Justification = "Synchronous entry point; the enumerable also implements IAsyncEnumerable, but ParseAsync is the async counterpart.")]
         public ExcelEnumerable<T, XlsbReader, XlsbReader.Enumerator> Parse(XlsbReader reader)
         {
             ArgumentNullException.ThrowIfNull(reader);
@@ -85,8 +79,6 @@ namespace ExcelReader.Core.Parser
         /// <param name="reader">The reader to pull rows from.</param>
         /// <returns>An enumerable that yields one <typeparamref name="T"/> per data row.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="reader"/> is <see langword="null"/>.</exception>
-        [SuppressMessage("Usage", "VSTHRD200:Use \"Async\" suffix for async methods",
-            Justification = "Synchronous entry point; the enumerable also implements IAsyncEnumerable, but ParseAsync is the async counterpart.")]
         public ExcelEnumerable<T, IExcelRowReader, IExcelRowEnumerator> Parse(IExcelRowReader reader)
         {
             ArgumentNullException.ThrowIfNull(reader);
@@ -104,8 +96,6 @@ namespace ExcelReader.Core.Parser
         /// for CSV — holding the reader as <see cref="IExcelRowReader"/> instead routes through the
         /// generic path (serial-date semantics).
         /// </remarks>
-        [SuppressMessage("Usage", "VSTHRD200:Use \"Async\" suffix for async methods",
-            Justification = "Synchronous entry point; the enumerable also implements IAsyncEnumerable, but ParseAsync is the async counterpart.")]
         public CsvEnumerable<T> Parse(CsvReader reader)
         {
             ArgumentNullException.ThrowIfNull(reader);

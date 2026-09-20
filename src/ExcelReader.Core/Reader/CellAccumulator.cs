@@ -5,11 +5,6 @@ using ExcelReader.Core.ValueObjects;
 
 namespace ExcelReader.Core.Reader
 {
-    // Per-row cell/value accumulator shared by the XLSX/XLSB/XLS worksheet enumerators. Owns two pooled
-    // buffers: `Values` (decoded UTF-8 cell text, appended as cells are parsed) and `Cells` (the
-    // CellDesc list). Rent once per enumerator, Reset() per row, Return() on dispose. Column-sortedness
-    // is tracked as cells are added so the XLS reader (whose cells can arrive out of order) can sort
-    // lazily; the XLSX/XLSB readers, whose cells are always ascending, simply never call SortByColumn.
     internal sealed class CellAccumulator
     {
         private const int InitialVals = 4 * 1024;
@@ -46,8 +41,6 @@ namespace ExcelReader.Core.Reader
             _sorted = true;
         }
 
-        // Reserves at least `additional` free bytes in the value buffer and returns the free tail to
-        // write into; the caller must follow with Advance(bytesWritten).
         internal Span<byte> ReserveValueSpan(int additional)
         {
             EnsureCapacity(ValueLength + additional);
@@ -68,8 +61,6 @@ namespace ExcelReader.Core.Reader
             GrowVals(needed);
         }
 
-        // Split from EnsureCapacity so the (rarely taken) grow path doesn't bloat the hot caller's IL,
-        // leaving more headroom for the JIT to inline the capacity check itself.
         [MethodImpl(MethodImplOptions.NoInlining)]
         private void GrowVals(int needed)
         {
@@ -79,14 +70,12 @@ namespace ExcelReader.Core.Reader
             _vals = bigger;
         }
 
-        // Appends one raw value byte (used for the bool '0'/'1' text).
         internal void AppendByte(byte b)
         {
             EnsureCapacity(ValueLength + 1);
             _vals[ValueLength++] = b;
         }
 
-        // Appends the display text for a BIFF numeric error code and returns its byte length.
         internal int AppendErrorText(byte code)
         {
             ReadOnlySpan<byte> text = BiffErrorText(code);
@@ -110,14 +99,16 @@ namespace ExcelReader.Core.Reader
             Add(col, start, length, CellType.Error, style, CellValueSource.RowValues);
         }
 
+        internal CellDesc[] RawCells => _cells;
+
+        internal void CommitAscending(int count, int lastCol)
+        {
+            Count = count;
+            _lastCol = lastCol;
+        }
+
         internal void Add(int col, int start, int len, CellType type, int style, CellValueSource source, double number = 0, bool hasNumber = false, int sharedIndex = -1)
         {
-            // A corrupted/malicious file can encode an arbitrary column index in a per-cell record
-            // (e.g. a 4-byte BIFF12/BIFF8 column field); without this bound, Row.ColumnCount (Column +
-            // 1 of the last cell) can come out in the billions, turning a naive column-index loop over
-            // the row into a near-infinite spin instead of a crash — far worse than an exception.
-            // ExcelLimits.MaxColumns is Excel's own hard column cap (A..XFD), enforced symmetrically
-            // on the writer side too.
             if ((uint)col >= ExcelLimits.MaxColumns)
             {
                 ExcelLimits.ThrowColumnLimit(col);
@@ -145,8 +136,6 @@ namespace ExcelReader.Core.Reader
             };
         }
 
-        // Split from Add so the (rarely taken) grow path doesn't bloat the hot caller's IL, leaving
-        // more headroom for the JIT to inline the capacity check itself.
         [MethodImpl(MethodImplOptions.NoInlining)]
         private void GrowCells()
         {
@@ -169,10 +158,6 @@ namespace ExcelReader.Core.Reader
                 _sorted = true;
                 return;
             }
-            // Insertion sort directly over CellDesc: rows needing this (XLS, whose cells can arrive
-            // out of order) are typically small and only mildly disordered, so this beats renting a
-            // parallel int[] key array for Array.Sort — no rent/return, and O(n) on the common
-            // near-sorted case instead of Array.Sort's O(n log n) regardless of input order.
             Span<CellDesc> cells = _cells.AsSpan(0, Count);
             for (int i = 1; i < cells.Length; i++)
             {
@@ -202,7 +187,6 @@ namespace ExcelReader.Core.Reader
             }
         }
 
-        // BIFF error code -> Excel display text (shared by the XLS and XLSB binary readers).
         internal static ReadOnlySpan<byte> BiffErrorText(byte code)
         {
             return code switch

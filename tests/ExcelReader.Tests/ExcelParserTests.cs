@@ -38,8 +38,6 @@ namespace ExcelReader.Tests
             public string? Label { get; set; }
         }
 
-        // A C# 10+ struct with an explicit parameterless constructor: CreateInstance() must still run
-        // it per row rather than shortcut to default(T), which would silently skip Tag's initializer.
         private struct MeasurementRowWithCtor
         {
             public double X { get; set; }
@@ -61,10 +59,8 @@ namespace ExcelReader.Tests
         private const string DateStyles =
             """<styleSheet><cellXfs count="2"><xf numFmtId="0"/><xf numFmtId="14"/></cellXfs></styleSheet>""";
 
-        // OADate 25569 = January 1, 1970
         private static readonly DateTime Jan1970 = DateTime.FromOADate(25569);
 
-        // --- Basic property mapping ---
 
         [Fact]
         public async Task StringPropertyIsMapped()
@@ -142,7 +138,6 @@ namespace ExcelReader.Tests
             Assert.Equal(500.00m, result[0].Balance);
         }
 
-        // --- ExcelColumnAttribute ---
 
         [Fact]
         public async Task ExcelColumnAttributeOverridesPropertyName()
@@ -161,7 +156,6 @@ namespace ExcelReader.Tests
         [Fact]
         public async Task HeaderMatchingPropertyNameNotAttributeNameIsIgnored()
         {
-            // "FirstName" matches the property name but ExcelColumn says "First Name" — should not match
             await using var ms = await TypedWorkbook.BuildAsync(["FirstName"], ["Jane"]);
             await using var reader = await Excel.FromAsync(ms, ct: TestContext.Current.CancellationToken);
             var result = new ExcelParser<AttributeRow>().Parse(reader).ToList();
@@ -213,7 +207,6 @@ namespace ExcelReader.Tests
             Assert.Equal("New", result[0].Name);
         }
 
-        // --- Config: ColumnNameComparer ---
 
         [Fact]
         public async Task DefaultComparerIsOrdinalIgnoreCase()
@@ -247,7 +240,6 @@ namespace ExcelReader.Tests
             Assert.Equal("Alice", result[0].Name);
         }
 
-        // --- Config: HeaderRow ---
 
         [Fact]
         public async Task HeaderRowTwoSkipsFirstRow()
@@ -278,7 +270,6 @@ namespace ExcelReader.Tests
             Assert.Equal("Bob", result[0].Name);
         }
 
-        // --- Config: invalid config ---
 
         [Fact]
         public void ZeroHeaderRowThrows()
@@ -294,7 +285,6 @@ namespace ExcelReader.Tests
                 new ExcelParser<PersonRow>(new ExcelParserConfig { HeaderRow = -1 }));
         }
 
-        // --- Robustness ---
 
         [Fact]
         public async Task ExtraColumnsAreIgnored()
@@ -335,7 +325,6 @@ namespace ExcelReader.Tests
             Assert.Equal(25, result[0].Age);
         }
 
-        // --- Multiple rows ---
 
         [Fact]
         public async Task MultipleRowsHaveNoStateBleed()
@@ -357,7 +346,6 @@ namespace ExcelReader.Tests
             }
         }
 
-        // --- Empty sheet ---
 
         [Fact]
         public async Task EmptySheetYieldsNoRows()
@@ -377,7 +365,6 @@ namespace ExcelReader.Tests
             Assert.Empty(result);
         }
 
-        // --- Nullable types ---
 
         [Fact]
         public async Task NullableIntFilledCellYieldsValue()
@@ -392,7 +379,6 @@ namespace ExcelReader.Tests
         [Fact]
         public async Task NullableIntMissingCellYieldsNull()
         {
-            // Quantity exists in header at col A; data row leaves col A as a gap.
             await using var ms = await TypedWorkbook.BuildAsync(
                 ["Quantity", "Rate"],
                 [new Gap(), 1.5]);
@@ -435,7 +421,6 @@ namespace ExcelReader.Tests
             Assert.Null(result[0].EventDate);
         }
 
-        // --- Struct support ---
 
         [Fact]
         public async Task StructRowIsSupported()
@@ -472,9 +457,6 @@ namespace ExcelReader.Tests
         [Fact]
         public async Task StructWithExplicitParameterlessConstructorRunsItsInitializer()
         {
-            // The workbook has no "Tag" column at all, so Tag is never touched by parsing -- whatever
-            // it holds came straight from CreateInstance(). If that shortcut to default(T) instead of
-            // calling the constructor, Tag would come back null instead of "ctor-default".
             await using var ms = await TypedWorkbook.BuildAsync(["X"], [1.5]);
             await using var reader = await Excel.FromAsync(ms, ct: TestContext.Current.CancellationToken);
             var result = new ExcelParser<MeasurementRowWithCtor>().Parse(reader).ToList();
@@ -483,7 +465,6 @@ namespace ExcelReader.Tests
             Assert.Equal("ctor-default", result[0].Tag);
         }
 
-        // --- Date cells ---
 
         [Fact]
         public async Task DateCellWithStandardDateStyleIsConverted()
@@ -498,8 +479,6 @@ namespace ExcelReader.Tests
         [Fact]
         public void Date1904IsHandledCorrectly()
         {
-            // 1904 date system: serial 0 = Jan 1, 1904. XlsxWorkbookWriter only emits the
-            // 1900 system, so this fixture stays on the raw-XML builder.
             using var ms = WorkbookBuilder.Build(
                 """<row r="1"><c r="A1" t="inlineStr"><is><t>BirthDate</t></is></c></row>""" +
                 """<row r="2"><c r="A2" s="1"><v>0</v></c></row>""",
@@ -512,7 +491,6 @@ namespace ExcelReader.Tests
             Assert.Equal(new DateTime(1904, 1, 1, 0, 0, 0, DateTimeKind.Unspecified), result[0].BirthDate);
         }
 
-        // --- Parse failure (no exceptions) ---
 
         [Fact]
         public async Task NonNumericValueInIntColumnKeepsDefault()
@@ -533,7 +511,6 @@ namespace ExcelReader.Tests
             Assert.Null(ex);
         }
 
-        // --- Async parity ---
 
         [Fact]
         public async Task AsyncParseMatchesSyncParse()
@@ -592,12 +569,10 @@ namespace ExcelReader.Tests
             }
         }
 
-        // --- Shared strings in header ---
 
         [Fact]
         public void SharedStringHeaderIsResolved()
         {
-            // Shared-strings table is a raw-XML feature XlsxWorkbookWriter does not emit.
             using var ms = WorkbookBuilder.Build(
                 """<row r="1"><c r="A1" t="s"><v>0</v></c></row>""" +
                 """<row r="2"><c r="A2" t="inlineStr"><is><t>Alice</t></is></c></row>""",

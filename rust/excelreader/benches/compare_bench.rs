@@ -1,9 +1,3 @@
-// Compares ExcelReader against calamine reading the full row shape of
-// tests/ExcelReader.Benchmarks/Data/65K_Records_Data.{xlsx,xlsb}: all 14 columns, 65,535 data
-// rows. Both sides decode every cell into an owned value (String for text) and fold it into one
-// accumulator, so neither side gets a zero-copy advantage the other can't take - see
-// BenchmarkAccumulators.cs (the .NET benchmark suite's ExcelReader-vs-Sylvan comparison) for the
-// same methodology.
 
 use calamine::{open_workbook_auto, Data, Reader};
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
@@ -103,11 +97,6 @@ fn bench_excelreader(c: &mut Criterion, group: &str, path: String, format: i32) 
     });
 }
 
-// Same 14-column schema and the same native call as bench_excelreader, but stopping at the parsed
-// table instead of walking it. parse_sheet is eager - xl_parse_typed reads the whole sheet into
-// columnar native buffers before returning - so this measures the native parse plus the FFI
-// crossing alone, and the gap against bench_excelreader's number is exactly what materializing one
-// FullRow (with an owned String per text column) per row costs on the Rust side.
 fn bench_excelreader_parse_only(c: &mut Criterion, group: &str, path: String, format: i32) {
     c.bench_function(group, |b| {
         b.iter_batched(

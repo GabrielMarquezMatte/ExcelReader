@@ -55,12 +55,6 @@ namespace ExcelReader.Core.Parser
         /// <summary>Reads a cell as an Excel time-of-day serial number, falling back to time-only text when the cell isn't numeric — the <see cref="TimeOnly"/> counterpart of <see cref="DateTimeAuto"/>, same trade-off.</summary>
         public static readonly ExcelCellReader<TimeOnly> TimeOnlyAuto = ReadTimeOnlyAuto;
 
-#if NET8_0
-        /// <summary>Reads a cell as a <see cref="System.Guid"/> (net8.0 only — net9.0+ uses <see cref="Parsable{TValue}"/> instead, since <see cref="System.Guid"/> implements <see cref="IUtf8SpanParsable{TSelf}"/> there).</summary>
-        [SuppressMessage("Naming", "CA1720:Identifier contains type name",
-            Justification = "Matches the property type it reads, mirroring the other members of this class (Bool, DateTimeSerial, ...).")]
-        public static readonly ExcelCellReader<Guid> Guid = ColumnParserFactory.ReadGuid;
-#endif
 
         private static bool ReadString(in Cell cell, bool isDate1904, IFormatProvider provider, out string value)
         {
@@ -88,7 +82,7 @@ namespace ExcelReader.Core.Parser
 
         /// <summary>
         /// Reads a cell as any type <see cref="Cell.TryParse{T}"/> supports: every integral type,
-        /// <see cref="float"/>/<see cref="double"/>/<see cref="decimal"/>, and (net9.0+ only)
+        /// <see cref="float"/>/<see cref="double"/>/<see cref="decimal"/>, and
         /// <see cref="Guid"/>.
         /// </summary>
         /// <typeparam name="TValue">The value type to parse.</typeparam>
@@ -98,10 +92,15 @@ namespace ExcelReader.Core.Parser
             return cell.TryParse(provider, out value);
         }
 
+        /// <summary>Reads a cell's raw UTF-8 bytes without allocating. The span aliases the reader's buffer and is valid only until the reader advances.</summary>
+        public static bool Utf8(scoped in Cell cell, bool isDate1904, IFormatProvider provider, out ReadOnlySpan<byte> value)
+        {
+            value = cell.Value;
+            return true;
+        }
+
         /// <summary>Reads a cell as an enum, by its declared value name (case-insensitive) or its underlying numeric value.</summary>
         /// <typeparam name="TEnum">The enum type to parse.</typeparam>
-        [SuppressMessage("Design", "S1172:Unused method parameters should be removed",
-            Justification = "isDate1904/provider are part of the fixed ExcelCellReader<T> shape every reader matches; this one has no use for them.")]
         public static bool Enum<TEnum>(in Cell cell, bool isDate1904, IFormatProvider provider, out TEnum value)
             where TEnum : struct, Enum
         {

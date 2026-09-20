@@ -6,18 +6,14 @@ using ExcelReader.Core.Reader;
 
 namespace ExcelReader.Core.Crypto
 {
-    // ECMA-376/[MS-OFFCRYPTO] agile encryption key derivation.
     internal static partial class AgileKeyDerivation
     {
-        // [MS-OFFCRYPTO] 2.3.4.10 password key encryptor block keys.
         private static ReadOnlySpan<byte> BlockVerifierHashInput => [0xfe, 0xa7, 0xd2, 0x76, 0x3b, 0x4b, 0x9e, 0x79];
         private static ReadOnlySpan<byte> BlockVerifierHashValue => [0xd7, 0xaa, 0x0f, 0x6d, 0x30, 0x61, 0x34, 0x4e];
         private static ReadOnlySpan<byte> BlockKeyValue => [0x14, 0x6e, 0x0b, 0xe7, 0xab, 0xac, 0xd0, 0xd6];
-        // [MS-OFFCRYPTO] 2.3.4.14 data integrity block keys.
         private static ReadOnlySpan<byte> BlockHmacKey => [0x5f, 0xb2, 0xad, 0x01, 0x0c, 0xb9, 0xe1, 0xf6];
         private static ReadOnlySpan<byte> BlockHmacValue => [0xa0, 0x67, 0x7f, 0x02, 0xb2, 0x2c, 0x84, 0x33];
 
-        // SHA-512, the longest hash the descriptor can name.
         private const int MaxHashLength = 64;
 
         internal static byte[] DeriveIntermediateKey(AgileDescriptor d, ReadOnlySpan<char> password)
@@ -28,13 +24,9 @@ namespace ExcelReader.Core.Crypto
             {
                 VerifyPassword(p, hFinal);
 
-                // encryptedKeyValue's IV is the encryptor's own salt, not a hash of it.
                 byte[] ivSalt = NormalizeToLength(p.SaltValue, p.BlockSize);
                 byte[] raw = DecryptNoPadding(p.EncryptedKeyValue, BlockKey(p, hFinal, BlockKeyValue), ivSalt);
 
-                // encryptedKeyValue is untrusted, pre-authentication input: a producer can wrap fewer
-                // bytes than keyBits/8 declares, so reject that explicitly rather than let the slice
-                // below throw a raw BCL exception.
                 int keyLen = d.KeyData.KeyBits / 8;
                 if (raw.Length < keyLen)
                 {
@@ -57,16 +49,12 @@ namespace ExcelReader.Core.Crypto
             return iv;
         }
 
-        // Allocation-free twin for the per-segment decryption loops: the array-returning overload
-        // above allocates and builds a fresh IncrementalHash per segment, which a 100 MB package
-        // calls 25,600 times.
         internal static void SegmentIv(AgileDescriptor d, int segmentIndex, IncrementalHash hasher, Span<byte> destination)
         {
             CryptoParameters keyData = d.KeyData;
             Span<byte> input = stackalloc byte[MaxHashLength + 4];
             if (keyData.SaltValue.Length + 4 > input.Length)
             {
-                // Descriptor is untrusted; fall back rather than overrun the stack buffer.
                 NormalizeToLength(SegmentIvSlow(keyData, segmentIndex), keyData.BlockSize).CopyTo(destination);
                 return;
             }
@@ -87,7 +75,6 @@ namespace ExcelReader.Core.Crypto
             return HashTwo(keyData.Hash, keyData.SaltValue, counter);
         }
 
-        // Created once by the decryption loop and handed to every SegmentIv call.
         internal static IncrementalHash CreateHasher(HashKind kind)
         {
             return IncrementalHash.CreateHash(AlgorithmName(kind));
@@ -102,8 +89,6 @@ namespace ExcelReader.Core.Crypto
             byte[] hmacKey = DecryptNoPadding(d.EncryptedHmacKey, intermediateKey, ivKey);
             byte[] hmacValue = DecryptNoPadding(d.EncryptedHmacValue, intermediateKey, ivValue);
 
-            // Wrapped plaintexts are the hash's native output length in both cases; the producer may
-            // pad the ciphertext out to a blockSize multiple.
             int hashLen = HashLength(keyData.Hash);
             return (
                 hmacKey.Length > hashLen ? hmacKey[..hashLen] : hmacKey,
@@ -136,7 +121,6 @@ namespace ExcelReader.Core.Crypto
             };
         }
 
-        // H0 = H(salt || UTF16LE(password)), then spinCount iterations of Hn = H(LE32(n) || Hn-1).
         private static byte[] PasswordHash(CryptoParameters p, ReadOnlySpan<char> password)
         {
             HashAlgorithmName name = AlgorithmName(p.Hash);
@@ -144,9 +128,6 @@ namespace ExcelReader.Core.Crypto
             int pwByteLen = checked(password.Length * 2);
             byte[] pwRented = pwByteLen == 0 ? [] : ArrayPool<byte>.Shared.Rent(pwByteLen);
 
-            // Two rotating LE32(n) || Hn-1 buffers, laid out contiguously so each spin iteration
-            // (commonly 100,000) costs one AppendData instead of two, alternating to avoid copying
-            // the result back into the input.
             Span<byte> bufferA = stackalloc byte[MaxHashLength + 4];
             Span<byte> bufferB = stackalloc byte[MaxHashLength + 4];
             try
@@ -166,7 +147,6 @@ namespace ExcelReader.Core.Crypto
                     BinaryPrimitives.WriteUInt32LittleEndian(current, unchecked((uint)i));
                     hasher.AppendData(current[..(4 + hashLen)]);
                     hasher.GetHashAndReset(next[4..(4 + hashLen)]);
-                    // No tuple swap: Span<byte> is a ref struct and cannot be a tuple element.
                     Span<byte> previous = current;
                     current = next;
                     next = previous;
@@ -185,8 +165,6 @@ namespace ExcelReader.Core.Crypto
             }
         }
 
-        // Hfinal = H(hFinal || blockKey), sized to p.KeyBits / 8: truncated when longer, padded with
-        // 0x36 (not zero) when shorter.
         private static byte[] BlockKey(CryptoParameters p, ReadOnlySpan<byte> hFinal, ReadOnlySpan<byte> blockKey)
         {
             byte[] combined = HashTwo(p.Hash, hFinal, blockKey);
@@ -194,7 +172,6 @@ namespace ExcelReader.Core.Crypto
             return NormalizeToLength(combined, keyLen);
         }
 
-        // Checks that hashing the decrypted verifier input reproduces the decrypted verifier value.
         private static void VerifyPassword(CryptoParameters p, ReadOnlySpan<byte> hFinal)
         {
             byte[] ivSalt = NormalizeToLength(p.SaltValue, p.BlockSize);
@@ -222,8 +199,6 @@ namespace ExcelReader.Core.Crypto
             using Aes aes = Aes.Create();
             aes.Mode = CipherMode.CBC;
             aes.Padding = PaddingMode.None;
-            // EncryptionInfo is untrusted input; reject a misaligned ciphertext explicitly rather than
-            // let TransformFinalBlock throw a raw CryptographicException.
             int blockBytes = aes.BlockSize / 8;
             if (ciphertext.Length % blockBytes != 0)
             {
@@ -251,7 +226,6 @@ namespace ExcelReader.Core.Crypto
             return result;
         }
 
-        // Span twin of NormalizeToLength, for callers that already own the destination.
         private static void NormalizeInto(ReadOnlySpan<byte> value, Span<byte> destination)
         {
             if (value.Length >= destination.Length)

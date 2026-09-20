@@ -69,7 +69,6 @@ namespace ExcelReader.Tests
         [Fact]
         public async Task SheetNavigationWorksThroughFormatAgnosticInterface()
         {
-            // The whole point of #1: walk every sheet via IExcelRowReader (Excel.Open) with no downcast.
             await using var ms = await TypedWorkbook.BuildMultiSheetAsync(
                 ("A", [[11]]),
                 ("B", [[22]]));
@@ -101,10 +100,10 @@ namespace ExcelReader.Tests
 
             Assert.Equal(1, reader.SheetCount);
             Assert.Equal("", reader.SheetName);
-            reader.MoveToSheet(0);                                 // in range → no throw
+            reader.MoveToSheet(0);
             Assert.Throws<ArgumentOutOfRangeException>(() => reader.MoveToSheet(1));
-            Assert.True(reader.TryMoveToSheet(""));                // matches the one unnamed sheet
-            Assert.False(reader.TryMoveToSheet("Sheet1"));         // no named sheets
+            Assert.True(reader.TryMoveToSheet(""));
+            Assert.False(reader.TryMoveToSheet("Sheet1"));
         }
 
         [Fact]

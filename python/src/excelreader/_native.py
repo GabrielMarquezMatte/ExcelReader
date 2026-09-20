@@ -14,8 +14,6 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    # Import-time only: types.py imports nothing from this module, but keeping the dependency out of
-    # the runtime path keeps this file loadable on its own, the way the rest of it already is.
     from excelreader.types import OpenOptions, WriteOptions
 
 XL_OK = 0
@@ -27,17 +25,13 @@ XL_ERROR = -5
 XL_STATUS_PASSWORD_REQUIRED = -6
 XL_STATUS_PASSWORD_INCORRECT = -7
 
-# Bumped on any change to a struct layout, a status code, or the meaning of an existing function;
-# adding a new function does not bump it. Mirrors XL_ABI_VERSION in include/excelreader.h.
-XL_ABI_VERSION = 4
+XL_ABI_VERSION = 5
 
 XL_FORMAT_AUTO = 0
 XL_FORMAT_XLS = 1
 XL_FORMAT_XLSX = 2
 XL_FORMAT_XLSB = 3
 XL_FORMAT_CSV = 4
-# The one mapping from a public format name to its XL_FORMAT_* value. reader.py and writer.py both
-# derive their tables from these rather than restating them.
 FORMATS = {
     "auto": XL_FORMAT_AUTO,
     "xls": XL_FORMAT_XLS,
@@ -45,18 +39,12 @@ FORMATS = {
     "xlsb": XL_FORMAT_XLSB,
     "csv": XL_FORMAT_CSV,
 }
-# xl_write_typed rejects XL_FORMAT_AUTO - a file being created has no signature bytes to sniff - so
-# the write side gets the same table minus that entry.
 WRITE_FORMATS = {name: value for name, value in FORMATS.items() if name != "auto"}
 
-# Every boolean-shaped NativeOpenOptions field uses one of these three states, never a plain 0/1 -
-# several of them default to true, so a bare 0 would be ambiguous between "off" and "use the library
-# default". Mirrors XL_OPT_* in include/excelreader.h.
 XL_OPT_DEFAULT = 0
 XL_OPT_FALSE = 1
 XL_OPT_TRUE = 2
 
-# xl_column_spec.type / xl_column.type. Mirrors XL_T_* in include/excelreader.h.
 XL_T_STRING = 0
 XL_T_I64 = 1
 XL_T_F64 = 2
@@ -100,8 +88,6 @@ class NativeColumnSpec(ctypes.Structure):
 
 def column_spec_by_names(names: Sequence[str], type_: int, *, nullable: bool = False) -> NativeColumnSpec:
     encoded = [name.encode("utf-8") for name in names]
-    # One ctypes buffer per name (kept alive by `spec._objects` through the pointer array below),
-    # plus the pointer array and length array themselves.
     buffers = [ctypes.create_string_buffer(e, len(e)) for e in encoded]
     name_ptrs = (ctypes.POINTER(ctypes.c_uint8) * len(buffers))(
         *(ctypes.cast(b, ctypes.POINTER(ctypes.c_uint8)) for b in buffers)
@@ -115,8 +101,6 @@ def column_spec_by_names(names: Sequence[str], type_: int, *, nullable: bool = F
         type=type_,
         nullable=int(nullable),
     )
-    # ctypes only auto-keeps-alive objects assigned directly to a field; `name_ptrs`/`name_lens`/
-    # `buffers` were only cast/wrapped, so pin them explicitly on the returned struct.
     spec._name_storage = (buffers, name_ptrs, name_lens)  # type: ignore[attr-defined]
     return spec
 
@@ -177,11 +161,6 @@ class NativeTable(ctypes.Structure):
     ]
 
 
-# Mirrors the Arrow C Data Interface's struct ArrowSchema/struct ArrowArray (see
-# excelreader_arrow.h) — a fixed, versioned ABI shared across every Arrow producer/consumer, not an
-# ExcelReader invention. Defined here (not left to pyarrow) so xl_parse_arrow is usable via plain
-# ctypes even without pyarrow installed; pyarrow.Array._import_from_c consumes the same layout for a
-# zero-copy handoff when it IS installed.
 class ArrowSchema(ctypes.Structure):
     pass
 
@@ -215,12 +194,9 @@ ArrowArray._fields_ = [
     ("private_data", ctypes.c_void_p),
 ]
 
-# ARROW_FLAG_NULLABLE from the Arrow C Data Interface spec.
 ARROW_FLAG_NULLABLE = 2
 
 
-# The Arrow C stream interface, kept separate from the data interface above for the same reason the
-# C header guards it separately: a consumer can have the data structs without the stream one.
 class ArrowArrayStream(ctypes.Structure):
     pass
 
@@ -298,9 +274,6 @@ def _opt_state(value: bool | None) -> int:
 
 
 def _opt_number(value: int | None) -> int:
-    # Explicit None test rather than `value or 0`: the latter would also collapse a caller's
-    # deliberate 0, and a limit silently turning into "use the default" is exactly the kind of
-    # quiet semantic change the reader's own rules forbid.
     return 0 if value is None else value
 
 
@@ -369,10 +342,6 @@ def to_native_write_options(options: WriteOptions) -> NativeWriteOptions:
         encoded = options.sheet_name.encode("utf-8")
         raw.sheet_name = encoded
         raw.sheet_name_len = len(encoded)
-        # No separate keepalive is needed, but NOT because anything is copied: assigning a bytes
-        # object to a c_char_p field stores a POINTER into that object's buffer and files the object
-        # in the structure's `_objects` dict, so `raw` itself keeps `encoded` alive. Drop `raw` (or
-        # rebuild the field from a temporary) and the pointer dangles.
     raw.csv_delimiter = _opt_number(options.csv_delimiter)
     raw.csv_quote = _opt_number(options.csv_quote)
     raw.date1904 = _opt_state(options.date1904)
@@ -386,7 +355,6 @@ _LIB_NAMES = {
     "Darwin": "ExcelReader.Native.dylib",
 }
 
-# NativeAOT emits no "lib" prefix, so the filename is the assembly name on every platform.
 def library_filename() -> str:
     try:
         return _LIB_NAMES[platform.system()]
@@ -442,10 +410,6 @@ def _bind(lib: ctypes.CDLL) -> ctypes.CDLL:
     lib.xl_close.restype = c_int
     lib.xl_sheet_count.argtypes = [p_void, p_int]
     lib.xl_sheet_count.restype = c_int
-    # xl_sheet_name / xl_next_row / xl_last_error write INTO their buffer argument.
-    # Callers MUST pass ctypes.create_string_buffer(n), never a bytes literal — bytes
-    # objects are immutable/interned in CPython, and letting native code write into
-    # one is undefined behavior.
     lib.xl_sheet_name.argtypes = [p_void, p_bytes, c_int, p_int]
     lib.xl_sheet_name.restype = c_int
     lib.xl_sheet_name_at.argtypes = [p_void, c_int, p_bytes, c_int, p_int]

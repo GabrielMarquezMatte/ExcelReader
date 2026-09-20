@@ -2,8 +2,6 @@ namespace ExcelReader.Core.Reader
 {
     public sealed partial class XlsxReader
     {
-        // Builds the cellXfs-index -> isDate table from xl/styles.xml. A style is a date when its
-        // numFmtId is a builtin date/time format or a custom <numFmt> whose code reads as a date.
         private static bool[] ParseStyleDateFlags(ReadOnlySpan<byte> src)
         {
             if (src.IsEmpty)
@@ -11,8 +9,6 @@ namespace ExcelReader.Core.Reader
                 return [];
             }
 
-            // Match prefixed numFmt/cellXfs/xf element names when the styles part uses a namespace
-            // prefix; built once, otherwise the compile-time literals with no allocation.
             ReadOnlySpan<byte> prefix = XlsxXml.DetectElementPrefix(src);
             ReadOnlySpan<byte> numFmtTag = "<numFmt "u8, cellXfsTag = "<cellXfs"u8;
             ReadOnlySpan<byte> cellXfsClose = "</cellXfs>"u8, xfTag = "<xf "u8;
@@ -24,7 +20,6 @@ namespace ExcelReader.Core.Reader
                 xfTag = XlsxXml.Token("<"u8, prefix, "xf "u8);
             }
 
-            // Custom formats: numFmtId -> isDate(formatCode). Builtin ids (<164) handled by IsBuiltinDate.
             Dictionary<int, bool> custom = new(capacity: 16);
             foreach (var tag in Tags(src, numFmtTag))
             {
@@ -35,15 +30,11 @@ namespace ExcelReader.Core.Reader
                 }
             }
 
-            // Only the <xf> entries inside <cellXfs> are cell styles; <cellStyleXfs> is the master table.
             int region = IdxOf(src, 0, cellXfsTag);
             if (region < 0)
             {
                 return [];
             }
-            // `open` must be validated before it anchors the next search: a truncated "<cellXfs" with
-            // no closing '>' leaves it at -1, and passing that as the `from` index sliced out of range.
-            // Found by the XLSX fuzz target.
             int open = IdxOf(src, region, (byte)'>');
             if (open < 0)
             {

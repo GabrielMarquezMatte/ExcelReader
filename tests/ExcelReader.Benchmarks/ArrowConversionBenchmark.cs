@@ -6,9 +6,6 @@ using ExcelReader.Core.Reader;
 
 namespace ExcelReader.Benchmarks
 {
-    // CsvAllString is the shape every ToArrowRecordBatch() call without an explicit schema actually
-    // takes (CSV has no type tags, so inference can only return StringColumn). XlsbTyped uses the
-    // reader's shared-string cache, which favors the string path least.
     [MemoryDiagnoser]
     public class ArrowConversionBenchmark
     {

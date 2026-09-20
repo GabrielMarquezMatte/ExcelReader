@@ -1,6 +1,5 @@
 namespace ExcelReader.Native
 {
-    /// <summary>Status codes returned by every exported C function. Mirrors include/excelreader.h.</summary>
     internal static class NativeStatus
     {
         internal const int Ok = 0;
@@ -10,50 +9,21 @@ namespace ExcelReader.Native
         internal const int InvalidArgument = -4;
         internal const int Error = -5;
 
-        /// <summary>The workbook is encrypted and no password was supplied.</summary>
         internal const int PasswordRequired = -6;
-        /// <summary>The supplied password did not match the workbook's verifier.</summary>
         internal const int PasswordIncorrect = -7;
 
-        /// <summary>ABI revision returned by <c>xl_abi_version</c>. Mirrors XL_ABI_VERSION in include/excelreader.h.
-        /// Bump on any change to a struct layout, a status code, or the meaning of an existing function; adding a
-        /// new function does not bump it.</summary>
-        internal const int AbiVersion = 4;
+        internal const int AbiVersion = 5;
     }
 
-    /// <summary>
-    /// Upper bounds on the counts a caller hands across the ABI. Mirrors XL_MAX_* in
-    /// include/excelreader.h.
-    /// </summary>
-    /// <remarks>
-    /// Every one of these drives an allocation or a pointer walk over caller memory, so an
-    /// unvalidated value is the same class of hole the readers guard against for file bytes (see
-    /// STYLEGUIDE.md, "Untrusted Input") — the difference is only that the hostile number arrives as
-    /// an argument instead. The values come from Excel's own ceilings, which
-    /// <c>ExcelReader.Core.Reader.ExcelLimits</c> holds for the managed side: a request naming more
-    /// columns than a sheet can hold, or a header wider than a cell can hold, cannot describe a real
-    /// workbook and is rejected rather than clamped.
-    /// </remarks>
     internal static class NativeLimits
     {
-        /// <summary>A..XFD — no sheet has more columns, so no spec list needs more entries.</summary>
         internal const int MaxColumnSpecs = 16_384;
 
-        /// <summary>Excel's 32,767-character cell limit at UTF-8's 4-byte worst case.</summary>
         internal const int MaxColumnNameBytes = 131_068;
 
-        /// <summary>Bounds how many candidate names a single xl_column_spec may carry.</summary>
         internal const int MaxNamesPerSpec = 32;
     }
 
-    /// <summary>
-    /// Format selectors accepted by the open functions. Values 1-3 deliberately match
-    /// <see cref="Core.Enums.ExcelFileFormat"/>; CSV has no signature to sniff, so it has no
-    /// counterpart there and must always be requested explicitly. Note the enums are NOT
-    /// interchangeable beyond 3: managed 4 is <see cref="Core.Enums.ExcelFileFormat.EncryptedOoxml"/>
-    /// (a detection result) while native 4 is <see cref="Csv"/> (a request). Encryption is requested
-    /// via xl_open_options.password, not via a format selector.
-    /// </summary>
     internal static class NativeFormat
     {
         internal const int Auto = 0;

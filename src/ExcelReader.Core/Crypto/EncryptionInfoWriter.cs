@@ -5,13 +5,6 @@ using System.Text;
 namespace ExcelReader.Core.Crypto
 {
     // Serializes the CFB "EncryptionInfo" stream: an 8-byte version tuple plus the agile descriptor
-    // XML. Hand-rolled, matching this codebase's XML custom — the reader's XmlReader use is the one
-    // documented departure.
-    //
-    // Element nesting and attribute order below are copied from a real Excel-written fixture
-    // (data/encrypted/agile-aes256-sha512.xlsx). EncryptionDescriptor.Parse is far more lenient than
-    // Excel — it finds elements by local name and ignores the structure around them — so matching the
-    // fixture, not merely satisfying our own parser, is the requirement here.
     internal static class EncryptionInfoWriter
     {
         private const string EncryptionNamespace = "http://schemas.microsoft.com/office/2006/encryption";
@@ -46,14 +39,13 @@ namespace ExcelReader.Core.Crypto
 
             byte[] body = Encoding.UTF8.GetBytes(xml.ToString());
             byte[] info = new byte[8 + body.Length];
-            BinaryPrimitives.WriteUInt16LittleEndian(info.AsSpan(0), 4);   // major
-            BinaryPrimitives.WriteUInt16LittleEndian(info.AsSpan(2), 4);   // minor
-            BinaryPrimitives.WriteUInt32LittleEndian(info.AsSpan(4), 0x40); // reserved flags, as Excel writes
+            BinaryPrimitives.WriteUInt16LittleEndian(info.AsSpan(0), 4);
+            BinaryPrimitives.WriteUInt16LittleEndian(info.AsSpan(2), 4);
+            BinaryPrimitives.WriteUInt32LittleEndian(info.AsSpan(4), 0x40);
             body.CopyTo(info.AsSpan(8));
             return info;
         }
 
-        // The attribute set <keyData> and <p:encryptedKey> share, in the order Excel emits them.
         private static void AppendCommonAttributes(StringBuilder xml, CryptoParameters p)
         {
             xml.Append(" saltSize=\"").Append(p.SaltSize.ToString(CultureInfo.InvariantCulture))

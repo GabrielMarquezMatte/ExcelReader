@@ -64,8 +64,6 @@ namespace ExcelReader.Tests
             return BuildOle(globals.ToArray());
         }
 
-        // Byte[] twin of BuildEncrypted(), for tests that open via Excel.Open(ReadOnlyMemory<byte>, ...)
-        // instead of a Stream.
         internal static byte[] WithFilePassRecord()
         {
             using MemoryStream ms = BuildEncrypted();
@@ -115,22 +113,15 @@ namespace ExcelReader.Tests
             return BuildOle(workbook.ToArray());
         }
 
-        // OLE header/layout offsets, matching Header() and BuildOle() below. Used by error-path
-        // tests to corrupt one field of an otherwise-valid container.
-        internal const int SectorShiftOffset = 0x1E;     // log2(sector size); valid is 9 -> 512
-        internal const int FatSectorCountOffset = 0x2C;  // header DIFAT lists this many FAT sectors
-        internal const int MiniCutoffOffset = 0x38;      // header's mini stream cutoff field (Int32)
-        internal const int MiniFatSectorCountOffset = 0x40; // number of mini-FAT sectors (Int32)
+        internal const int SectorShiftOffset = 0x1E;
+        internal const int FatSectorCountOffset = 0x2C;
+        internal const int MiniCutoffOffset = 0x38;
+        internal const int MiniFatSectorCountOffset = 0x40;
         internal const int SignatureOffset = 0x00;
-        // Directory is sector 1: header (512) + FAT sector (512) = byte 1024. The Workbook entry
-        // is the second 128-byte directory entry, so its UTF-16 name starts at 1024 + 128.
         internal const int WorkbookEntryNameOffset = 1024 + 128;
-        // The Workbook entry's Int64 Size field (see WriteDirectoryEntry: offset 120 within the entry).
         internal const int WorkbookSizeOffset = 1024 + 128 + 120;
-        // The Root Entry's Int64 Size field — the first 128-byte directory entry, so no +128 offset.
         internal const int RootEntrySizeOffset = 1024 + 120;
 
-        // A valid single-sheet workbook with `replacement` overwritten at `offset`.
         internal static MemoryStream BuildPatched(int offset, params byte[] replacement)
         {
             byte[] bytes = Build(sheets: [("S1", [["A"]])]).ToArray();
@@ -165,10 +156,6 @@ namespace ExcelReader.Tests
             return U16(row);
         }
 
-        // Builds a workbook whose SST is supplied pre-framed (a 0x00FC record plus any 0x003C CONTINUE
-        // records), so a test can force a shared string's character array to straddle a CONTINUE
-        // boundary. `labelSstCount` LabelSst cells (indices 0..count-1) are written to sheet "S1" so the
-        // strings are actually resolved on read. Mirrors BuildGlobals' record order (SST before BoundSheet).
         internal static MemoryStream BuildRawSst(byte[] framedSst, int labelSstCount)
         {
             using MemoryStream sheet = new();
@@ -196,9 +183,6 @@ namespace ExcelReader.Tests
             return BuildOle(workbook.ToArray());
         }
 
-        // Frames a 0x00FC SST record carrying `firstRegion`, then one 0x003C CONTINUE record carrying
-        // `continueRegion`. Both regions are raw string bytes; the SST's 8-byte cstTotal/cstUnique header
-        // is prepended here.
         internal static byte[] FrameSstWithContinue(int cstTotal, int cstUnique, byte[] firstRegion, byte[] continueRegion)
         {
             using MemoryStream ms = new();
@@ -214,14 +198,14 @@ namespace ExcelReader.Tests
             bool date1904,
             string? customDateFormat)
         {
-            int globalsLength = 4 + 16; // BOF
+            int globalsLength = 4 + 16;
             byte[]? format = customDateFormat is null ? null : Format(165, customDateFormat);
             if (format is not null)
             {
                 globalsLength += 4 + format.Length;
             }
-            globalsLength += 4 + 20; // default XF
-            globalsLength += 4 + 20; // date XF
+            globalsLength += 4 + 20;
+            globalsLength += 4 + 20;
             if (date1904)
             {
                 globalsLength += 4 + 2;
@@ -235,7 +219,7 @@ namespace ExcelReader.Tests
             {
                 globalsLength += 4 + 6 + EncodedByteCount(name);
             }
-            globalsLength += 4; // EOF
+            globalsLength += 4;
 
             using MemoryStream globals = new();
             WriteRecord(globals, 0x0809, [.. U16(0x0600), .. U16(0x0005), .. new byte[12]]);

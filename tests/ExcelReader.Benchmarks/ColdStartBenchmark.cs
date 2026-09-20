@@ -6,15 +6,6 @@ using ExcelReader.Core.Writer;
 
 namespace ExcelReader.Benchmarks
 {
-    // First-use (cold) cost of the reflection + Expression.Compile machinery behind the typed parser and
-    // the record writer. RunStrategy.ColdStart with launchCount>1 runs each benchmark in a fresh process
-    // with no warmup, so every measured invocation pays JIT compilation plus the one-time per-type setter/
-    // column-writer compilation — the startup cost that steady-state throughput benchmarks warm away.
-    // Rows is deliberately small so the fixed compile cost dominates the per-row work.
-    //
-    // GlobalSetup builds the parse workbook through the LOW-LEVEL writer (XlsxRowWriter), never through
-    // ExcelParser<T> or the record writer, so neither TypeMapper<Record> (parser) nor RecordColumns<Record>
-    // (writer) is warmed before the measured invocation.
     [MemoryDiagnoser]
     [SimpleJob(RunStrategy.ColdStart, launchCount: 16, warmupCount: 0, iterationCount: 1, invocationCount: 1)]
     public class ColdStartBenchmark
@@ -32,8 +23,6 @@ namespace ExcelReader.Benchmarks
             _workbook = await BuildTypedLowLevelAsync(_records);
         }
 
-        // Header + one row per record via the low-level cell writer — the same bytes RecordWriter would
-        // produce, but built without touching the record-writer's compiled column plan.
         private static async Task<byte[]> BuildTypedLowLevelAsync(List<Record> records)
         {
             await using var ms = new MemoryStream();
@@ -63,7 +52,6 @@ namespace ExcelReader.Benchmarks
             return ms.ToArray();
         }
 
-        // Cold cost of the first typed parse: JIT + TypeMapper<Record> reflection and setter compilation.
         [Benchmark]
         public long TypedParseFirstUse()
         {
@@ -77,7 +65,6 @@ namespace ExcelReader.Benchmarks
             return acc;
         }
 
-        // Cold cost of the first record write: JIT + RecordColumns<Record> column-writer compilation.
         [Benchmark]
         public async Task<long> RecordWriteFirstUse()
         {
@@ -89,10 +76,6 @@ namespace ExcelReader.Benchmarks
             return ms.Length;
         }
 
-        // Cold cost of the plain ExcelFluentParser<T> constructor: no reflection at all — `configure`
-        // only allocates delegates and a PropertyMap<T>[] via ExcelRowMapBuilder<T>. Contrast with
-        // TypedParseFirstUse to check the "no reflection => faster cold start" claim empirically instead
-        // of by heuristic.
         [Benchmark]
         public long FluentParseFirstUse()
         {
@@ -112,9 +95,6 @@ namespace ExcelReader.Benchmarks
             return acc;
         }
 
-        // Cold cost of ExcelFluentParser<T>.WithAttributeFallback: it reflects via TypeMapper<T>.GetInfo()
-        // for the fallback half, so it pays the same reflection/setter-compilation cost as
-        // TypedParseFirstUse, plus the fluent build and merge on top.
         [Benchmark]
         public long FluentParseWithAttributeFallbackFirstUse()
         {

@@ -1,9 +1,5 @@
 namespace ExcelReader.Core.Reader
 {
-    // Decodes the BIFF12 record framing used by .xlsb parts: a variable-length record id
-    // (1–2 bytes, 7 bits each, high bit = continuation) followed by a variable-length payload
-    // size (1–4 bytes, same varint scheme), then the payload. Forward-only over an in-memory
-    // span; the worksheet enumerator feeds it a buffer window holding whole records.
     internal ref struct Biff12RecordReader
     {
         private readonly ReadOnlySpan<byte> _data;
@@ -16,16 +12,8 @@ namespace ExcelReader.Core.Reader
 
         internal int Position { get; private set; }
 
-        // Reads the next (id, payload). Returns false at end of data, or when a record's framing
-        // or payload would run past the end — leaving Position unchanged, so a streaming caller can
-        // refill its buffer and retry from the same record.
         internal bool TryReadRecord(out int id, out ReadOnlySpan<byte> payload)
         {
-            // Fast path: single-byte id and single-byte length, which is every cell record in a normal
-            // sheet (ids 1..11, payloads 12-16 bytes). Skips both varint loops -- TryReadLength is a
-            // general 4-iteration loop, and paying it to read one plain byte dominated the record loop.
-            // Anything else (2-byte id, payload >= 128 bytes, or a record straddling the buffer tail)
-            // falls through to the general decoder below, which owns the retry contract.
             ReadOnlySpan<byte> data = _data;
             int fast = Position;
             if (fast + 1 >= data.Length)
@@ -84,7 +72,6 @@ namespace ExcelReader.Core.Reader
             {
                 return false;
             }
-            // Two-byte id: low 7 bits of b0, then the next byte shifted up. Ids fit in 14 bits.
             id = (b0 & 0x7F) | (_data[pos + 1] << 7);
             pos += 2;
             return true;
@@ -93,7 +80,6 @@ namespace ExcelReader.Core.Reader
         private readonly bool TryReadLength(ref int pos, out int length)
         {
             length = 0;
-            // Up to 4 bytes, 7 bits each (28 bits total — well within int).
             for (int shift = 0; shift < 28; shift += 7)
             {
                 if (pos >= _data.Length)

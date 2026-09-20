@@ -2,7 +2,6 @@ using System.Globalization;
 using System.IO.Compression;
 using System.Security;
 using System.Text;
-using ExcelReader.Core.Internal;
 using ExcelReader.Core.Writer.Internal;
 
 namespace ExcelReader.Core.Writer
@@ -176,7 +175,7 @@ namespace ExcelReader.Core.Writer
             WriteEntry("xl/workbook.xml", BuildWorkbookXml());
             WriteEntry("xl/_rels/workbook.xml.rels", BuildWorkbookRelsXml());
             WriteEntry("[Content_Types].xml", BuildContentTypesXml());
-            ZipArchiveDisposal.Dispose(_zip);
+            _zip.Dispose();
         }
 
         /// <inheritdoc/>
@@ -204,7 +203,7 @@ namespace ExcelReader.Core.Writer
             await WriteWorkbookAsync(ct).ConfigureAwait(false);
             await WriteWorkbookRelsAsync(ct).ConfigureAwait(false);
             await WriteContentTypesAsync(ct).ConfigureAwait(false);
-            await ZipArchiveDisposal.DisposeAsync(_zip).ConfigureAwait(false);
+            await _zip.DisposeAsync().ConfigureAwait(false);
         }
 
         /// <summary>
@@ -235,11 +234,10 @@ namespace ExcelReader.Core.Writer
             _disposed = true;
             if (_state == WriterState.Started)
             {
-                // End rejects a zero-sheet workbook; disposal must still release a partial writer.
                 if (_sheets.Count == 0)
                 {
                     _state = WriterState.Ended;
-                    ZipArchiveDisposal.Dispose(_zip);
+                    _zip.Dispose();
                 }
                 else
                 {
@@ -248,7 +246,7 @@ namespace ExcelReader.Core.Writer
             }
             else if (_state == WriterState.Created)
             {
-                ZipArchiveDisposal.Dispose(_zip);
+                _zip.Dispose();
             }
             if (!_leaveOpen)
             {
@@ -266,11 +264,10 @@ namespace ExcelReader.Core.Writer
             _disposed = true;
             if (_state == WriterState.Started)
             {
-                // EndAsync rejects a zero-sheet workbook; disposal must still release a partial writer.
                 if (_sheets.Count == 0)
                 {
                     _state = WriterState.Ended;
-                    await ZipArchiveDisposal.DisposeAsync(_zip).ConfigureAwait(false);
+                    await _zip.DisposeAsync().ConfigureAwait(false);
                 }
                 else
                 {
@@ -279,7 +276,7 @@ namespace ExcelReader.Core.Writer
             }
             else if (_state == WriterState.Created)
             {
-                await ZipArchiveDisposal.DisposeAsync(_zip).ConfigureAwait(false);
+                await _zip.DisposeAsync().ConfigureAwait(false);
             }
             if (!_leaveOpen)
             {
@@ -338,8 +335,6 @@ namespace ExcelReader.Core.Writer
         {
             sb.Append(CultureInfo.InvariantCulture, $"<numFmts count=\"{1 + numFmtIds.Count}\">");
             sb.Append("<numFmt numFmtId=\"14\" formatCode=\"mm-dd-yy\"/>");
-            // Ordered by id: Dictionary enumeration order isn't guaranteed, but this XML must be
-            // deterministic across runs.
             foreach (KeyValuePair<string, int> entry in numFmtIds.OrderBy(static kv => kv.Value))
             {
                 sb.Append(CultureInfo.InvariantCulture, $"<numFmt numFmtId=\"{entry.Value}\" formatCode=\"{EscapeAttribute(entry.Key)}\"/>");

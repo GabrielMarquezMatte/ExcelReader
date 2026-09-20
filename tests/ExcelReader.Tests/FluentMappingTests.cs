@@ -4,9 +4,6 @@ using ExcelReader.Core.Writer;
 
 namespace ExcelReader.Tests
 {
-    // Feature C: mapping decided at runtime by ExcelFluentParser<T>/ExcelRowMapBuilder<T>.PropertyAt,
-    // rather than by [ExcelColumn]/[ExcelRequired] attributes (ExcelParser<T>) or a compile-time map
-    // (ExcelMappedParser<T>). See docs/v2-plan.md §4 for the acceptance criteria these tests cover.
     public class FluentMappingTests
     {
         private sealed class SharedModel
@@ -15,18 +12,12 @@ namespace ExcelReader.Tests
             public int Age { get; set; }
         }
 
-        // No [ExcelColumn]/[ExcelRequired] anywhere — proves criterion 2 (fully fluent-mappable model)
-        // and doubles as the attribute-driven fallback target for WithAttributeFallback tests, since its
-        // default reflection map (property name = header name) is exactly what a caller would replicate
-        // by hand with Property().
         private sealed class AttributedModel
         {
             public string Name { get; set; } = "";
             public int Age { get; set; }
         }
 
-        // For FluentBindingWithDifferentHeaderDoesNotOverrideAttribute: the attribute's own header name
-        // ("file") differs from whatever the builder is configured with, on purpose.
         private sealed class AliasedModel
         {
             [ExcelColumn("file")]
@@ -82,7 +73,6 @@ namespace ExcelReader.Tests
         public async Task MapByColumnIndexWithoutHeaderRow()
         {
             CancellationToken ct = TestContext.Current.CancellationToken;
-            // No header row at all: the first (and only) row is already data.
             await using MemoryStream ms = await TypedWorkbook.BuildAsync(["Carol", 21]);
 
             var parser = new ExcelFluentParser<SharedModel>(static b => b
@@ -101,7 +91,6 @@ namespace ExcelReader.Tests
         public async Task RequiredColumnMissingByIndexThrows()
         {
             CancellationToken ct = TestContext.Current.CancellationToken;
-            // Only column 0 exists; the map also binds column 1 as required.
             await using MemoryStream ms = await TypedWorkbook.BuildAsync(["Dave"]);
 
             var parser = new ExcelFluentParser<SharedModel>(static b => b
@@ -134,8 +123,6 @@ namespace ExcelReader.Tests
             CancellationToken ct = TestContext.Current.CancellationToken;
             await using MemoryStream ms = await TypedWorkbook.BuildAsync(["Name", "Age"], ["Frank", 19]);
 
-            // Only Name is configured; Age is never mentioned in the builder, so it must still bind via
-            // the attribute-driven (reflection) fallback.
             ExcelFluentParser<AttributedModel> parser = ExcelFluentParser<AttributedModel>.WithAttributeFallback(static b => b
                 .Property(["Name"], ExcelCellReaders.String, static (ref m, v) => m.Name = v.ToUpperInvariant()));
             await using XlsxReader reader = await Excel.FromAsync(ms, ct: ct);
@@ -219,11 +206,6 @@ namespace ExcelReader.Tests
         public async Task FluentBindingWithDifferentHeaderDoesNotOverrideAttribute()
         {
             CancellationToken ct = TestContext.Current.CancellationToken;
-            // "file" is the attribute's own header name; "arquivo" is a different name the builder
-            // configures for the same property. Precedence is by header name, not property identity
-            // (docs/v2-plan.md §4.4.3), so neither binding is suppressed — both survive, and whichever
-            // column comes later in the row wins the assignment. Reusing "file" in the builder instead
-            // of "arquivo" is what would actually override the attribute.
             await using MemoryStream ms = await TypedWorkbook.BuildAsync(["file", "arquivo"], ["FromAttribute", "FromFluent"]);
 
             ExcelFluentParser<AliasedModel> parser = ExcelFluentParser<AliasedModel>.WithAttributeFallback(static b => b
@@ -248,10 +230,6 @@ namespace ExcelReader.Tests
         [Fact]
         public void PlainConstructorRejectsReferenceTypeModelWithNoFactory()
         {
-            // AttributedModel is a class; default(T) is null. Not calling Factory(...) used to build
-            // successfully and only fail with a NullReferenceException on the first row parsed —
-            // rejecting it here, at construction, is what makes the actual mistake (forgetting
-            // Factory(...)) visible instead of a confusing NRE deep inside SparseRowProjection.
             InvalidOperationException ex = Assert.Throws<InvalidOperationException>(() =>
                 new ExcelFluentParser<AttributedModel>(static b => b
                     .Property(["Name"], ExcelCellReaders.String, static (ref m, v) => m.Name = v)));
@@ -262,9 +240,6 @@ namespace ExcelReader.Tests
         [Fact]
         public async Task PlainConstructorAllowsValueTypeModelWithNoFactory()
         {
-            // SharedModel is a struct with no explicit parameterless constructor here — default(T) is
-            // the correct, zero-cost instance, exactly like TypeMapper<T>.Build()'s own rule for a plain
-            // struct. Skipping Factory(...) must still work for this case.
             CancellationToken ct = TestContext.Current.CancellationToken;
             await using MemoryStream ms = await TypedWorkbook.BuildAsync(["Age"], [42]);
 

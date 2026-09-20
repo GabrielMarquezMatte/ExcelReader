@@ -36,9 +36,9 @@ namespace ExcelReader.Core.Reader
         }
 
         /// <summary>Releases the sheet stream (when owned) and returns both pooled buffers to the pool.</summary>
-#pragma warning disable S2953 // Methods named "Dispose" should implement "IDisposable.Dispose"
+#pragma warning disable S2953
         public void Dispose()
-#pragma warning restore S2953 // Methods named "Dispose" should implement "IDisposable.Dispose"
+#pragma warning restore S2953 
         {
             if (_ownsSource)
             {

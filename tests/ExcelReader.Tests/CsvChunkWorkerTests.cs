@@ -36,10 +36,8 @@ namespace ExcelReader.Tests
         [Fact]
         public async Task ParsesOnlyTheRecordsStartingInsideItsChunk()
         {
-            //                  0        9        18       27
             byte[] csv = "Name,Age\nAda,0001\nBob,0002\nCid,0003\n"u8.ToArray();
 
-            // Chunk covering just the "Bob" record.
             CsvChunkResult<Row> result = await ParseAsync(csv, start: 18, end: 27, confirmedStart: 18);
 
             Assert.Single(result.Models);
@@ -51,7 +49,6 @@ namespace ExcelReader.Tests
         {
             byte[] csv = "Name,Age\nAda,0001\nBob,0002\nCid,0003\n"u8.ToArray();
 
-            // End lands in the middle of the "Bob" record, which started inside the chunk.
             CsvChunkResult<Row> result = await ParseAsync(csv, start: 9, end: 22, confirmedStart: 9);
 
             Assert.Equal(2, result.Models.Count);
@@ -85,7 +82,6 @@ namespace ExcelReader.Tests
         {
             byte[] csv = "Name,Age\nAda,0001\nBob,0002\nCid,0003\n"u8.ToArray();
 
-            // Start lands mid-record (inside "Ada,0001"); the resolver must skip to the next record.
             CsvChunkResult<Row> result = await ParseAsync(csv, start: 12, end: 27);
 
             Assert.Equal(18, result.ActualStart);
@@ -96,21 +92,16 @@ namespace ExcelReader.Tests
         [Fact]
         public async Task GuessesWrongWhenANewlineHidesInsideAQuotedField()
         {
-            // The \n inside the quoted "a\nb" is not a record boundary, but a chunk starting
-            // mid-field cannot know that. This test pins the *wrong* guess so the merge in Task 7
-            // has something concrete to correct.
             byte[] csv = "Name,Age\n\"a\nb\",0001\nCid,0003\n"u8.ToArray();
 
             CsvChunkResult<Row> result = await ParseAsync(csv, start: 10, end: 20);
 
-            // The Outside hypothesis takes the \n at index 11 as a terminator, so it starts at 12.
             Assert.Equal(12, result.ActualStart);
         }
 
         [Fact]
         public async Task YieldsNothingWhenTheChunkContainsNoRecordStart()
         {
-            // One enormous quoted field spanning the whole chunk: no record starts inside it.
             byte[] csv = "Name,Age\n\"aaaaaaaaaaaaaaaaaaaaaaaaaaaa\",1\n"u8.ToArray();
 
             CsvChunkResult<Row> result = await ParseAsync(csv, start: 15, end: 25);
@@ -121,7 +112,6 @@ namespace ExcelReader.Tests
         [Fact]
         public async Task ParsesTheSameRecordFromAFileBackedSourceAsFromMemory()
         {
-            //                  0        9        18       27
             byte[] csv = "Name,Age\nAda,0001\nBob,0002\nCid,0003\n"u8.ToArray();
             string path = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName());
             await File.WriteAllBytesAsync(path, csv, TestContext.Current.CancellationToken);
@@ -134,8 +124,6 @@ namespace ExcelReader.Tests
                 using SafeFileHandle handle = File.OpenHandle(path, FileMode.Open, FileAccess.Read, FileShare.Read);
                 var source = new CsvChunkSource(handle, csv.Length);
 
-                // Same chunk bounds as ParsesOnlyTheRecordsStartingInsideItsChunk, exercised through the
-                // SafeFileHandle/RangedFileStream branch instead of the ReadOnlyMemory<byte> one.
                 CsvChunkResult<Row> result = await CsvChunkWorker.ParseAsync(
                     source,
                     new CsvChunk(0, 18, 27),

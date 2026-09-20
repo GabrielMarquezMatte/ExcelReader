@@ -22,7 +22,6 @@ namespace ExcelReader.Tests
         [Fact]
         public void ErrorCellHasErrorType()
         {
-            // Error cells (t="e") are a raw-XML feature XlsxWorkbookWriter does not emit.
             using var ms = WorkbookBuilder.Build(
                 """<row r="1"><c r="A1" t="e"><v>#DIV/0!</v></c></row>""");
             using var reader = Excel.From(ms);
@@ -35,7 +34,6 @@ namespace ExcelReader.Tests
         [Fact]
         public void FormulaCellHasFormulaType()
         {
-            // Formula string cells (t="str") are a raw-XML feature XlsxWorkbookWriter does not emit.
             using var ms = WorkbookBuilder.Build(
                 """<row r="1"><c r="A1" t="str"><v>Hello</v></c></row>""");
             using var reader = Excel.From(ms);
@@ -48,9 +46,6 @@ namespace ExcelReader.Tests
         [Fact]
         public void TryGetDoubleRejectsCommaDecimalInsteadOfMisreadingIt()
         {
-            // Text-backed cell (t="str", not Number-typed, so TryGetDouble falls through to its
-            // text-parsing branch). Default NumberStyles treats ',' as a thousands separator, so a
-            // pt-BR-formatted "1,5" used to silently parse as 15.0 instead of failing.
             using var ms = WorkbookBuilder.Build(
                 """<row r="1"><c r="A1" t="str"><v>1,5</v></c><c r="B1" t="str"><v>1.5</v></c></row>""");
             using var reader = Excel.From(ms);
@@ -79,7 +74,6 @@ namespace ExcelReader.Tests
         [Fact]
         public void SelfClosingRowYieldsZeroColumnCount()
         {
-            // Self-closing <row/> is a raw-XML shape XlsxWorkbookWriter never produces.
             using var ms = WorkbookBuilder.Build("""<row r="1"/>""");
             using var reader = Excel.From(ms);
             using var e = reader.GetEnumerator();
@@ -90,7 +84,6 @@ namespace ExcelReader.Tests
         [Fact]
         public void DecodesQuotAndAposEntities()
         {
-            // Shared strings are a raw-XML feature XlsxWorkbookWriter does not emit.
             using var ms = WorkbookBuilder.Build(
                 """<row r="1"><c r="A1" t="s"><v>0</v></c><c r="B1" t="s"><v>1</v></c></row>""",
                 sharedStrings: "<si><t>say &quot;hi&quot;</t></si><si><t>it&apos;s</t></si>");
@@ -105,7 +98,6 @@ namespace ExcelReader.Tests
         [Fact]
         public void DecodesHexNumericEntity()
         {
-            // &#x41; = 'A', &#X7A; = 'z' (uppercase X prefix is also accepted)
             using var ms = WorkbookBuilder.Build(
                 """<row r="1"><c r="A1" t="s"><v>0</v></c></row>""",
                 sharedStrings: "<si><t>&#x41;&#X7A;</t></si>");
@@ -118,7 +110,6 @@ namespace ExcelReader.Tests
         [Fact]
         public void RichTextRunsConcatenated()
         {
-            // Two <r> runs per shared string; WriteTextRuns must concatenate both <t> values.
             using var ms = WorkbookBuilder.Build(
                 """<row r="1"><c r="A1" t="s"><v>0</v></c></row>""",
                 sharedStrings: "<si><r><rPr><b/></rPr><t>Hello</t></r><r><rPr><i/></rPr><t> World</t></r></si>");
@@ -131,7 +122,6 @@ namespace ExcelReader.Tests
         [Fact]
         public void DateFormatLettersInsideQuotesIsNotDate()
         {
-            // &quot;dd/mm/yyyy&quot; decodes to "dd/mm/yyyy" — every letter is quoted → not a date.
             const string styles =
                 """<styleSheet><numFmts count="1"><numFmt numFmtId="164" formatCode="&quot;dd/mm/yyyy&quot;"/></numFmts>""" +
                 """<cellXfs count="2"><xf numFmtId="0"/><xf numFmtId="164"/></cellXfs></styleSheet>""";
@@ -146,7 +136,6 @@ namespace ExcelReader.Tests
         [Fact]
         public void DateFormatLettersInsideBracketsIsNotDate()
         {
-            // [y] — the letter is inside a bracket section → not a date.
             const string styles =
                 """<styleSheet><numFmts count="1"><numFmt numFmtId="164" formatCode="[y]"/></numFmts>""" +
                 """<cellXfs count="2"><xf numFmtId="0"/><xf numFmtId="164"/></cellXfs></styleSheet>""";
@@ -161,7 +150,6 @@ namespace ExcelReader.Tests
         [Fact]
         public void DateFormatBackslashEscapedLetterIsNotDate()
         {
-            // \y — the backslash escapes the letter, so it doesn't count → not a date.
             const string styles =
                 """<styleSheet><numFmts count="1"><numFmt numFmtId="164" formatCode="\y"/></numFmts>""" +
                 """<cellXfs count="2"><xf numFmtId="0"/><xf numFmtId="164"/></cellXfs></styleSheet>""";
@@ -186,7 +174,6 @@ namespace ExcelReader.Tests
         [Fact]
         public async Task TryGetDateTimeOutOfRangeSerialReturnsFalse()
         {
-            // 3000000 exceeds the OADate upper bound of 2958466.
             await using var ms = await TypedWorkbook.BuildAsync([3000000]);
             await using var reader = await Excel.FromAsync(ms, ct: TestContext.Current.CancellationToken);
             await using var e = reader.GetEnumerator();
@@ -219,7 +206,6 @@ namespace ExcelReader.Tests
         [Fact]
         public async Task LargeColumnReferenceAAIsColumn26()
         {
-            // AA in base-26: 1*26 + 1 = 27 → zero-based index 26.
             await using var ms = await TypedWorkbook.BuildAsync([new Gap(26), 99]);
             await using var reader = await Excel.FromAsync(ms, ct: TestContext.Current.CancellationToken);
             await using var e = reader.GetEnumerator();
@@ -255,9 +241,6 @@ namespace ExcelReader.Tests
         [Fact]
         public void Date1904WorkbookReadsCorrectDates()
         {
-            // 1904 system: serial 0 = Jan 1 1904, serial 1 = Jan 2 1904.
-            // XlsxWorkbookWriter only emits the 1900 system, so this fixture stays raw XML.
-            // IsDate1904 must be true; TryGetDateTime(true) shifts by +1462 days to reach the OADate epoch.
             const string styles =
                 """<styleSheet><cellXfs count="2"><xf numFmtId="0"/><xf numFmtId="14"/></cellXfs></styleSheet>""";
             using var ms = WorkbookBuilder.Build(
