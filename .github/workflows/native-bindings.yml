@@ -422,7 +422,11 @@ jobs:
           //   churn       : 20 rounds of ONE fresh thread that aggregates and exits - what a Rust
           //                 test binary does, a new thread per test entering and leaving the runtime
           //   churn-open  : 20 rounds of 4 fresh threads that open a workbook and exit
+          // Built twice: once resolving the exports with dlopen, once (-DLINKED) linking the library
+          // so it loads before main, which is what the Rust test binaries do.
+          #ifndef LINKED
           #include <dlfcn.h>
+          #endif
           #include <pthread.h>
           #include <stdint.h>
           #include <stdio.h>
@@ -440,11 +444,19 @@ jobs:
                            void (*free_state)(void *, void *);
                            void *user_data; } xl_csv_aggregation;
 
+          #ifdef LINKED
+          extern int32_t xl_open_file_ex(const uint8_t *, int32_t, int32_t, const void *, void **);
+          extern int32_t xl_close(void *);
+          extern int32_t xl_sheet_count(void *, int32_t *);
+          extern int32_t xl_csv_aggregate_memory(const uint8_t *, int32_t, const xl_csv_aggregation *,
+                                                 const xl_csv_parallel_options *, void **);
+          #else
           static int32_t (*xl_open_file_ex)(const uint8_t *, int32_t, int32_t, const void *, void **);
           static int32_t (*xl_close)(void *);
           static int32_t (*xl_sheet_count)(void *, int32_t *);
           static int32_t (*xl_csv_aggregate_memory)(const uint8_t *, int32_t, const xl_csv_aggregation *,
                                                     const xl_csv_parallel_options *, void **);
+          #endif
 
           static const char *workbook_path;
           static uint8_t *csv_data;
@@ -540,6 +552,7 @@ jobs:
               const char *lib_path = argv[2];
               workbook_path = argv[3];
 
+          #ifndef LINKED
               void *lib = dlopen(lib_path, RTLD_NOW);
               if (!lib)
               {
@@ -555,6 +568,9 @@ jobs:
                   fprintf(stderr, "missing export\n");
                   return 3;
               }
+          #else
+              (void)lib_path;
+          #endif
 
               if (strcmp(mode, "concurrent") == 0)
               {
@@ -637,6 +653,11 @@ jobs:
           }
           EOF
           cc -O2 host.c -o host -ldl -lpthread 2>/dev/null || cc -O2 host.c -o host -lpthread
+          case "$RUNNER_OS" in
+            Linux) lib=lib/ExcelReader.Native.so ;;
+            *)     lib=lib/ExcelReader.Native.dylib ;;
+          esac
+          cc -O2 -DLINKED host.c "$PWD/$lib" -o host_linked -Wl,-rpath,"$PWD/lib" -lpthread
 
       - name: Run each shape 40 times
         shell: bash
@@ -646,19 +667,21 @@ jobs:
             Linux) lib=lib/ExcelReader.Native.so ;;
             *)     lib=lib/ExcelReader.Native.dylib ;;
           esac
-          for mode in churn churn-open concurrent fanout; do
-            crashes=0
-            for i in $(seq 1 40); do
-              ./host $mode "$PWD/$lib" "$PWD/RealExcel.xlsx"
-              status=$?
-              if [ $status -gt 128 ]; then
-                crashes=$((crashes + 1))
-                echo "$mode iteration $i: signal $((status - 128))"
-              elif [ $status -ne 0 ]; then
-                echo "$mode iteration $i: exit $status"
-              fi
+          for binary in ./host_linked ./host; do
+            for mode in churn churn-open concurrent fanout; do
+              crashes=0
+              for i in $(seq 1 40); do
+                $binary $mode "$PWD/$lib" "$PWD/RealExcel.xlsx"
+                status=$?
+                if [ $status -gt 128 ]; then
+                  crashes=$((crashes + 1))
+                  echo "$binary $mode iteration $i: signal $((status - 128))"
+                elif [ $status -ne 0 ]; then
+                  echo "$binary $mode iteration $i: exit $status"
+                fi
+              done
+              echo "=== $binary $mode: $crashes crashes in 40 runs ==="
             done
-            echo "=== $mode: $crashes crashes in 40 runs ==="
           done
           exit 0
 
