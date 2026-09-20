@@ -25,8 +25,24 @@ if(NOT EXCELREADER_VERSION)
     endif()
 endif()
 
+# include/xl is a git symlink to the real header directory. Git on Windows checks a symlink out as a
+# text file unless core.symlinks is on, which it is not by default - and FetchContent clones with
+# whatever the consumer's git does. Copy the headers into the build tree in that case, so
+# `#include <xl/excelreader.hpp>` and the .def below resolve either way.
+set(_headers_dir "${CMAKE_CURRENT_SOURCE_DIR}/../src/ExcelReader.Native/include")
+if(IS_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/include/xl")
+    set(_include_dir "${CMAKE_CURRENT_SOURCE_DIR}/include")
+elseif(IS_DIRECTORY "${_headers_dir}")
+    set(_include_dir "${CMAKE_CURRENT_BINARY_DIR}/include")
+    file(COPY "${_headers_dir}/" DESTINATION "${_include_dir}/xl")
+else()
+    message(FATAL_ERROR
+        "ExcelReader headers not found: neither ${CMAKE_CURRENT_SOURCE_DIR}/include/xl nor ${_headers_dir} is a directory")
+endif()
+set(EXCELREADER_DEF_FILE "${_include_dir}/xl/excelreader.def")
+
 add_library(xl_excelreader INTERFACE)
-target_include_directories(xl_excelreader INTERFACE "${CMAKE_CURRENT_SOURCE_DIR}/include")
+target_include_directories(xl_excelreader INTERFACE "${_include_dir}")
 target_compile_features(xl_excelreader INTERFACE cxx_std_23)
 add_library(xl::excelreader ALIAS xl_excelreader)
 
@@ -44,10 +60,6 @@ option(EXCELREADER_INSTALL "Generate install rules and a find_package(excelreade
 if(EXCELREADER_INSTALL)
     include(GNUInstallDirs)
     include(CMakePackageConfigHelpers)
-
-    # include/xl is a git symlink to the real header directory; a Windows checkout without symlink
-    # support turns it into a text file, so install from the target path instead.
-    set(_headers_dir "${CMAKE_CURRENT_SOURCE_DIR}/../src/ExcelReader.Native/include")
 
     get_target_property(_native_lib excelreader_native IMPORTED_LOCATION)
     get_filename_component(EXCELREADER_INSTALLED_NATIVE_NAME "${_native_lib}" NAME)
