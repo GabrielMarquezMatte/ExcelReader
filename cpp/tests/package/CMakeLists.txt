@@ -13,11 +13,7 @@ add_executable(package_consumer main.cpp)
 target_link_libraries(package_consumer PRIVATE xl::excelreader)
 target_compile_definitions(package_consumer PRIVATE EXCELREADER_FIXTURE_PATH="${EXCELREADER_FIXTURE}")
 
-if(WIN32)
-    add_custom_command(TARGET package_consumer POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different
-            "$<TARGET_FILE:xl::native>" "$<TARGET_FILE_DIR:package_consumer>")
-endif()
+excelreader_copy_native_library(package_consumer)
 
 enable_testing()
 add_test(NAME package_consumer COMMAND package_consumer)
