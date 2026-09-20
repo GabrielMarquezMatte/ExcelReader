@@ -62,7 +62,12 @@ function(excelreader_fetch_native_lib)
     set_target_properties(excelreader_native PROPERTIES IMPORTED_LOCATION "${_lib_path}")
 
     if(WIN32)
-        set(_src_def_file "${CMAKE_CURRENT_SOURCE_DIR}/include/xl/excelreader.def")
+        # Set by cpp/CMakeLists.txt, which resolves include/xl even when the symlink did not
+        # survive checkout.
+        set(_src_def_file "${EXCELREADER_DEF_FILE}")
+        if(NOT EXISTS "${_src_def_file}")
+            message(FATAL_ERROR "excelreader.def not found at ${_src_def_file}")
+        endif()
         set(_implib_path "${_cache_dir}/excelreader_native.lib")
 
         # The checked-in .def has no LIBRARY statement, so neither lib.exe nor dlltool would
