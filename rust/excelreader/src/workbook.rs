@@ -61,6 +61,7 @@ pub(crate) fn check_abi_version() -> Result<(), Error> {
 
     CHECKED
         .get_or_init(|| {
+            restore_default_fault_handlers();
             let loaded = unsafe { crate::xl_abi_version() };
             if loaded == crate::XL_ABI_VERSION {
                 warm_up();
@@ -127,6 +128,32 @@ fn warm_up() {
     };
     let _ = crate::aggregate::aggregate_csv_memory_unchecked(CSV, || CountRows(0), &options);
 }
+
+/// Rust std installs its own SIGSEGV/SIGBUS handler (with `SA_ONSTACK`) at startup. The NativeAOT
+/// runtime, which starts on the first native call, copies that flag onto its own SIGSEGV handler and
+/// chains faults it does not handle into Rust's, which resets SIGSEGV to the default action for the
+/// whole process. Put the default dispositions back first, so the runtime installs a clean handler.
+/// Rust then no longer prints its stack-overflow message; the process still dies on an overflow.
+#[cfg(unix)]
+fn restore_default_fault_handlers() {
+    use std::ffi::c_int;
+    extern "C" {
+        fn signal(signum: c_int, handler: usize) -> usize;
+    }
+    const SIG_DFL: usize = 0;
+    const SIGSEGV: c_int = 11;
+    #[cfg(target_os = "linux")]
+    const SIGBUS: c_int = 7;
+    #[cfg(not(target_os = "linux"))]
+    const SIGBUS: c_int = 10;
+    unsafe {
+        signal(SIGSEGV, SIG_DFL);
+        signal(SIGBUS, SIG_DFL);
+    }
+}
+
+#[cfg(not(unix))]
+fn restore_default_fault_handlers() {}
 
 /// An open workbook. Not thread-safe - use one per thread, same contract as the C ABI. (The raw
 /// handle makes this type neither `Send` nor `Sync`, so the compiler enforces that for you.)
