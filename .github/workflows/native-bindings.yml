@@ -228,11 +228,9 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Enable symlinks (Windows)
-        if: runner.os == 'Windows'
-        run: |
-          git config core.symlinks true
-          git checkout -- cpp/include
+      # No symlink workaround here on purpose: git on Windows checks cpp/include/xl out as a text
+      # file by default, which is exactly what a consumer's FetchContent clone gets, so the build
+      # has to cope with it (cpp/CMakeLists.txt copies the headers into the build tree).
 
       - name: Download native library
         uses: actions/download-artifact@v8
