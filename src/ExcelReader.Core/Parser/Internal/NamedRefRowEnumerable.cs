@@ -1,4 +1,3 @@
-#if NET9_0_OR_GREATER
 using System.Collections;
 using System.Collections.Generic;
 using System.Globalization;
@@ -69,9 +68,6 @@ namespace ExcelReader.Core.Parser.Internal
         /// <summary>Asynchronously opens the underlying sheet and returns an enumerator to drive manually with <c>MoveNextAsync</c>, for callers who cannot use <c>await foreach</c>.</summary>
         /// <param name="ct">A token to cancel the open operation.</param>
         /// <returns>An enumerator positioned before the first row.</returns>
-        // Manual-use alternative that opens the sheet asynchronously (awaits the reader's async open).
-        // Not reachable by 'await foreach' — its shape (returning a ValueTask of the enumerator) doesn't
-        // match the pattern. Await it, then drive the returned enumerator with MoveNextAsync in a loop.
         public async ValueTask<NamedRefRowEnumerator<TModel, TEnumerator>> GetAsyncEnumeratorAsync(CancellationToken ct = default)
         {
             var enumerator = await _reader.GetAsyncEnumeratorAsync(ct).ConfigureAwait(false);
@@ -91,4 +87,3 @@ namespace ExcelReader.Core.Parser.Internal
         }
     }
 }
-#endif

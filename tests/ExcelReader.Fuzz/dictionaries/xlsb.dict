@@ -1,0 +1,44 @@
+# libFuzzer token dictionary for the XLSB targets (BIFF12 records inside a ZIP).
+#
+# BIFF12 frames every record as a varint record id followed by a varint length. The ids below are
+# the single-byte forms for the record types the reader dispatches on; feeding them as tokens lets
+# the engine assemble record sequences it would otherwise have to discover one byte at a time.
+
+# ZIP framing
+"PK\x03\x04"
+"PK\x01\x02"
+"PK\x05\x06"
+
+# Binary part names
+"xl/workbook.bin"
+"xl/worksheets/sheet1.bin"
+"xl/sharedStrings.bin"
+"xl/styles.bin"
+"[Content_Types].xml"
+
+# Cell records: BrtRowHdr, BrtCellBlank, BrtCellRk, BrtCellError, BrtCellBool, BrtCellReal,
+# BrtCellSt, BrtCellIsst, BrtFmlaString, BrtFmlaNum, BrtFmlaBool, BrtFmlaError
+"\x00"
+"\x01"
+"\x02"
+"\x03"
+"\x04"
+"\x05"
+"\x06"
+"\x07"
+"\x08"
+"\x09"
+"\x0a"
+"\x0b"
+
+# Sheet and dimension framing: BrtBeginSheet, BrtEndSheet, BrtWsDim, BrtBeginSheetData,
+# BrtEndSheetData (two-byte varint ids)
+"\x81\x01"
+"\x82\x01"
+"\x94\x01"
+"\x91\x01"
+"\x92\x01"
+
+# Shared string table: BrtBeginSst, BrtSSTItem
+"\x9f\x01"
+"\x13"

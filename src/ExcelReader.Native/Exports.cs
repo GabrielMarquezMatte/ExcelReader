@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System.Runtime.InteropServices;
 using System.Text;
@@ -5,12 +6,7 @@ using ExcelReader.Native.Writer;
 
 namespace ExcelReader.Native
 {
-    /// <summary>
-    /// The C ABI. Every function here does exactly two things: turn raw pointers into spans and a
-    /// handle id (see <see cref="NativeHandleTable"/>) into a <see cref="NativeHandle"/>, then
-    /// delegate to <see cref="NativeApi"/>. Keep the logic in NativeApi — managed code cannot call an
-    /// [UnmanagedCallersOnly] method, so anything implemented here is untestable.
-    /// </summary>
+    [ExcludeFromCodeCoverage]
     internal static unsafe class Exports
     {
         [UnmanagedCallersOnly(EntryPoint = "xl_open_file")]
@@ -33,7 +29,10 @@ namespace ExcelReader.Native
                 return NativeStatus.InvalidArgument;
             }
 
-            NativeOpenOptionsRaw? rawOptions = options is null ? null : *options;
+            if (!TryReadOpenOptions(options, out NativeOpenOptionsRaw? rawOptions))
+            {
+                return NativeStatus.InvalidArgument;
+            }
             int status = NativeApi.OpenFileEx(new ReadOnlySpan<byte>(path, pathLength), format, rawOptions, out NativeHandle? handle);
             return RegisterOpened(status, handle, outHandle);
         }
@@ -58,7 +57,10 @@ namespace ExcelReader.Native
                 return NativeStatus.InvalidArgument;
             }
 
-            NativeOpenOptionsRaw? rawOptions = options is null ? null : *options;
+            if (!TryReadOpenOptions(options, out NativeOpenOptionsRaw? rawOptions))
+            {
+                return NativeStatus.InvalidArgument;
+            }
             int status = NativeApi.OpenMemoryEx(new ReadOnlySpan<byte>(data, dataLength), format, rawOptions, out NativeHandle? handle);
             return RegisterOpened(status, handle, outHandle);
         }
@@ -71,8 +73,6 @@ namespace ExcelReader.Native
                 return NativeStatus.InvalidHandle;
             }
 
-            // A stale or garbage handle value reports the same InvalidHandle a null one does;
-            // NativeHandleTable retires an id permanently on unregister.
             if (!TryFree(handle, out NativeHandle? target))
             {
                 return NativeStatus.InvalidHandle;
@@ -185,10 +185,6 @@ namespace ExcelReader.Native
             {
                 return;
             }
-            // void in the ABI, so an exception escaping [UnmanagedCallersOnly] would abort the native
-            // caller's process (uncatchable in C/C++/Rust/Python). A double-free (a stale copy of an
-            // already-freed struct) can make Marshal.FreeHGlobal throw; caught here and surfaced
-            // through xl_last_error instead of crashing.
             try
             {
                 NativeApi.FreeRows(ref *rows);
@@ -221,9 +217,6 @@ namespace ExcelReader.Native
             }
             catch (Exception exception)
             {
-                // Decoding walks caller memory and allocates from a caller-supplied count, so it can
-                // still fail in ways the guards above cannot see. Letting that escape would unwind
-                // through the C caller's frame.
                 NativeApi.SetLastError(exception.Message);
                 *outTable = default;
                 return NativeStatus.Error;
@@ -237,7 +230,6 @@ namespace ExcelReader.Native
             {
                 return;
             }
-            // See FreeRows' remarks: void in the ABI, so an exception here must never escape.
             try
             {
                 NativeApi.FreeTable(ref *table);
@@ -256,10 +248,6 @@ namespace ExcelReader.Native
             {
                 return NativeStatus.InvalidArgument;
             }
-            // Zeroed before the remaining guards, not after, so *out_reader really is zeroed on ANY
-            // failure as documented - a combined guard would have returned with the caller's variable
-            // untouched for a NULL specs or an out-of-range spec_count. Same shape as
-            // xl_parse_arrow_stream's out_stream.
             *outReader = 0;
             if (specs is null || !NativeApi.IsValidSpecCount(specCount))
             {
@@ -311,7 +299,6 @@ namespace ExcelReader.Native
         [UnmanagedCallersOnly(EntryPoint = "xl_typed_reader_close")]
         public static void TypedReaderClose(nint reader)
         {
-            // void in the ABI, so an exception here must never escape - same shape as FreeTable.
             try
             {
                 NativeApi.CloseTypedReader(reader);
@@ -345,8 +332,6 @@ namespace ExcelReader.Native
             }
             catch (Exception exception)
             {
-                // Decoding walks caller memory and allocates from a caller-supplied count, so it can
-                // still fail in ways the guards above cannot see.
                 NativeApi.SetLastError(exception.Message);
                 return NativeStatus.Error;
             }
@@ -377,8 +362,6 @@ namespace ExcelReader.Native
             }
             catch (Exception exception)
             {
-                // Same reasoning as xl_write_typed's catch: decoding walks caller memory and can still
-                // fail in ways the guards above cannot see.
                 NativeApi.SetLastError(exception.Message);
                 return NativeStatus.Error;
             }
@@ -411,8 +394,6 @@ namespace ExcelReader.Native
             *buffer = default;
         }
 
-        // Copies a managed byte[] into unmanaged memory the caller owns until it calls xl_free_buffer.
-        // A null/empty result publishes a zeroed xl_buffer rather than a 0-length allocation.
         private static void PublishBuffer(byte[]? bytes, NativeBuffer* outBuffer)
         {
             if (bytes is null || bytes.Length == 0)
@@ -425,21 +406,18 @@ namespace ExcelReader.Native
             outBuffer->Length = bytes.Length;
         }
 
-        // A NULL options pointer means "every default". The sheet name is UTF-8-decoded here because
-        // everything below this layer stays pointer-free.
         private static bool TryDecodeWriteOptions(NativeWriteOptionsRaw* options, out NativeWriteOptions decoded)
         {
-            NativeWriteOptionsRaw raw = options is null
-                ? new NativeWriteOptionsRaw { StructSize = Marshal.SizeOf<NativeWriteOptionsRaw>() }
-                : *options;
             decoded = default;
-            // Checked before sheet_name is touched: a size mismatch means the caller's struct layout
-            // isn't this one, so sheet_name_len/sheet_name can't be trusted to read.
-            if (!NativeWriteOptions.TryValidateStructSize(raw, out string? sizeError))
+            int expectedSize = sizeof(NativeWriteOptionsRaw);
+            if (options is not null && options->StructSize != expectedSize)
             {
-                NativeApi.SetLastError(sizeError);
+                NativeApi.SetLastError($"xl_write_options.struct_size is {options->StructSize}, but this library expects {expectedSize}.");
                 return false;
             }
+            NativeWriteOptionsRaw raw = options is null
+                ? new NativeWriteOptionsRaw { StructSize = expectedSize }
+                : *options;
             string? sheetName = null;
             if (raw.SheetName is not null)
             {
@@ -478,7 +456,6 @@ namespace ExcelReader.Native
             {
                 return;
             }
-            // See FreeRows' remarks: void in the ABI, so an exception here must never escape.
             try
             {
                 NativeApi.FreeSchema(ref *schema);
@@ -528,10 +505,6 @@ namespace ExcelReader.Native
             {
                 return NativeStatus.InvalidArgument;
             }
-            // Zeroed before the remaining guards, not after: unlike xl_parse_typed's out_table, a
-            // non-zeroed ArrowArrayStream carries a garbage `release` that a caller ignoring the return
-            // code would call. Every failure path below therefore leaves a released stream, never
-            // untouched caller memory.
             *outStream = default;
             if (specs is null || !NativeApi.IsValidSpecCount(specCount))
             {
@@ -563,6 +536,24 @@ namespace ExcelReader.Native
             return source is not null && sourceLength >= 0 && outHandle is not null;
         }
 
+        private static bool TryReadOpenOptions(NativeOpenOptionsRaw* options, out NativeOpenOptionsRaw? rawOptions)
+        {
+            if (options is null)
+            {
+                rawOptions = null;
+                return true;
+            }
+            int expectedSize = sizeof(NativeOpenOptionsRaw);
+            if (options->StructSize != expectedSize)
+            {
+                NativeApi.SetLastError($"xl_open_options.struct_size is {options->StructSize}, but this library expects {expectedSize}.");
+                rawOptions = null;
+                return false;
+            }
+            rawOptions = *options;
+            return true;
+        }
+
         private static bool IsValidOutBuffer(byte* buffer, int capacity, int* outLength)
         {
             return capacity >= 0 && outLength is not null && (buffer is not null || capacity == 0);
@@ -579,8 +570,6 @@ namespace ExcelReader.Native
             return status;
         }
 
-        // Returns false for a name length that cannot describe a real header, rather than passing it
-        // to GetString as a read length over caller memory.
         private static bool TryDecodeColumnSpecs(NativeColumnSpecRaw* specs, int specCount, out NativeColumnSpec[] decoded)
         {
             decoded = new NativeColumnSpec[specCount];
@@ -618,7 +607,6 @@ namespace ExcelReader.Native
             return true;
         }
 
-        // Invoked only as a native function pointer value (ArrowSchema.Release), never directly.
         [UnmanagedCallersOnly]
         public static void ReleaseArrowSchemaCallback(ArrowSchema* schema)
         {
@@ -626,7 +614,6 @@ namespace ExcelReader.Native
             {
                 return;
             }
-            // See FreeRows' remarks: void in the ABI, so an exception must never escape.
             try
             {
                 NativeApi.ReleaseArrowSchema((IntPtr)schema);
@@ -644,7 +631,6 @@ namespace ExcelReader.Native
             {
                 return;
             }
-            // See ReleaseArrowSchemaCallback's remarks.
             try
             {
                 NativeApi.ReleaseArrowArray((IntPtr)array);
@@ -655,10 +641,6 @@ namespace ExcelReader.Native
             }
         }
 
-        // The four ArrowArrayStream callbacks, reached only as function pointer values stored in the
-        // struct xl_parse_arrow_stream hands out. Each catches everything: they are called from native
-        // code, so an escaping exception would unwind through the consumer's frame. The error codes are
-        // Arrow's errno-style convention, not this ABI's XL_* — 5 is EIO.
         [UnmanagedCallersOnly]
         internal static int ArrowStreamGetSchema(ArrowArrayStream* stream, ArrowSchema* outSchema)
         {
@@ -684,7 +666,7 @@ namespace ExcelReader.Native
         internal static void ArrowStreamRelease(ArrowArrayStream* stream)
         {
             try { NativeApi.ArrowStreamReleaseCore(stream); }
-            catch { /* void in the ABI - an exception must never escape */ }
+            catch { }
         }
 
         [UnmanagedCallersOnly(EntryPoint = "xl_open_write_handle")]
@@ -735,8 +717,6 @@ namespace ExcelReader.Native
                 return NativeStatus.InvalidArgument;
             }
             *outBuffer = default;
-            // Resolved directly rather than via TryResolveWriter: a wrong-kind handle here is a caller
-            // usage error, which NativeApi.GetWriteHandleBytes reports as InvalidArgument, not InvalidHandle.
             NativeWriterHandle? writerHandle = NativeHandleTable.Resolve<NativeWriterHandle>(handle);
             int status = NativeApi.GetWriteHandleBytes(writerHandle, out byte[]? bytes);
             PublishBuffer(bytes, outBuffer);
@@ -867,8 +847,6 @@ namespace ExcelReader.Native
             return NativeApi.CloseWriteHandle(target);
         }
 
-        // xl_start_sheet and xl_write_string keep their own inline try/catch instead of this, since
-        // both also decode a caller buffer that can itself throw on malformed UTF-8.
         private static int RunWriterOp(nint handle, Action<NativeWriterHandle> operation)
         {
             if (!TryResolveWriter(handle, out NativeWriterHandle? writerHandle))
@@ -891,6 +869,85 @@ namespace ExcelReader.Native
         {
             writerHandle = NativeHandleTable.Resolve<NativeWriterHandle>(handle);
             return writerHandle is not null;
+        }
+
+        [UnmanagedCallersOnly(EntryPoint = "xl_csv_aggregate_file")]
+        public static int CsvAggregateFile(
+            byte* path, int pathLength, NativeCsvAggregationRaw* aggregation,
+            NativeCsvParallelOptionsRaw* options, void** outState)
+        {
+            if (path is null || pathLength <= 0 || outState is null || !IsValidAggregation(aggregation))
+            {
+                return NativeStatus.InvalidArgument;
+            }
+
+            NativeCsvParallelOptionsRaw? rawOptions = options is null ? null : *options;
+            int status = NativeApi.AggregateCsvFile(
+                new ReadOnlySpan<byte>(path, pathLength), *aggregation, rawOptions, out nint result);
+            if (status == NativeStatus.Ok)
+            {
+                *outState = (void*)result;
+            }
+            return status;
+        }
+
+        [UnmanagedCallersOnly(EntryPoint = "xl_csv_aggregate_memory")]
+        public static int CsvAggregateMemory(
+            byte* data, int dataLength, NativeCsvAggregationRaw* aggregation,
+            NativeCsvParallelOptionsRaw* options, void** outState)
+        {
+            if (dataLength < 0 || (data is null && dataLength > 0) || outState is null || !IsValidAggregation(aggregation))
+            {
+                return NativeStatus.InvalidArgument;
+            }
+
+            NativeCsvParallelOptionsRaw? rawOptions = options is null ? null : *options;
+            int status = NativeApi.AggregateCsvMemory(
+                data, dataLength, *aggregation, rawOptions, out nint result);
+            if (status == NativeStatus.Ok)
+            {
+                *outState = (void*)result;
+            }
+            return status;
+        }
+
+        private static bool IsValidAggregation(NativeCsvAggregationRaw* aggregation)
+        {
+            if (aggregation is null)
+            {
+                NativeApi.SetLastError("csv_aggregation must not be NULL.");
+                return false;
+            }
+            if (aggregation->StructSize != sizeof(NativeCsvAggregationRaw))
+            {
+                NativeApi.SetLastError(
+                    $"csv_aggregation.struct_size must be exactly {sizeof(NativeCsvAggregationRaw)}; got {aggregation->StructSize}.");
+                return false;
+            }
+            if (aggregation->Seed == IntPtr.Zero || aggregation->Accumulate == IntPtr.Zero
+                || aggregation->Combine == IntPtr.Zero || aggregation->FreeState == IntPtr.Zero)
+            {
+                List<string> missing = [];
+                if (aggregation->Seed == IntPtr.Zero)
+                {
+                    missing.Add("csv_aggregation.seed");
+                }
+                if (aggregation->Accumulate == IntPtr.Zero)
+                {
+                    missing.Add("csv_aggregation.accumulate");
+                }
+                if (aggregation->Combine == IntPtr.Zero)
+                {
+                    missing.Add("csv_aggregation.combine");
+                }
+                if (aggregation->FreeState == IntPtr.Zero)
+                {
+                    missing.Add("csv_aggregation.free_state");
+                }
+                NativeApi.SetLastError($"{string.Join(", ", missing)} must not be NULL.");
+                return false;
+            }
+            return true;
         }
 
         [UnmanagedCallersOnly(EntryPoint = "xl_last_error")]

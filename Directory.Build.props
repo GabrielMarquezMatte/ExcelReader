@@ -14,9 +14,7 @@
          new overload later can rebind existing callers). Several intentional overloads (e.g.
          Excel.Open) already accept this tradeoff for ergonomics; fixing it means redesigning
          those APIs, not a PublicAPI.txt entry, so it stays suppressed. -->
-    <NoWarn>
-      $(NoWarn);CA1062;RS0026;S1244;CA1819;CA1515</NoWarn>
-    <NoWarn>$(NoWarn);MA0051;MA0048</NoWarn>
+    <NoWarn>$(NoWarn);CA1062;RS0026;CA1819;CA1515;MA0048</NoWarn>
     <AccelerateBuildsInVisualStudio>true</AccelerateBuildsInVisualStudio>
     <AutoGenerateBindingRedirects>true</AutoGenerateBindingRedirects>
     <GenerateBindingRedirectsOutputType>true</GenerateBindingRedirectsOutputType>
@@ -26,32 +24,20 @@
     <DefineConstants>$(DefineConstants.Replace("DEBUG;", ""))</DefineConstants>
     <DefineConstants>$(DefineConstants.Replace("TRACE;", ""))</DefineConstants>
   </PropertyGroup>
+  <!-- AnalysisMode=All already turns on every NetAnalyzers rule; Meziantou adds the async/culture
+       rules it doesn't cover. PublicApiAnalyzers is referenced directly for RS0016/RS0026/RS0037 —
+       it used to arrive transitively through Roslyn.Diagnostics.Analyzers, which brought a whole
+       Roslyn-internal ruleset along for those three rules. -->
   <ItemGroup>
-    <PackageReference Include="SonarAnalyzer.CSharp" Version="10.34.0.3385">
-      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
-      <PrivateAssets>all</PrivateAssets>
-    </PackageReference>
-    <PackageReference Include="Meziantou.Analyzer" Version="3.0.231">
-      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
-      <PrivateAssets>all</PrivateAssets>
-    </PackageReference>
     <PackageReference Include="Microsoft.CodeAnalysis.NetAnalyzers" Version="10.0.401">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
-    <PackageReference Include="Microsoft.VisualStudio.Threading.Analyzers" Version="18.7.23">
+    <PackageReference Include="Meziantou.Analyzer" Version="3.0.259">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
-    <PackageReference Include="Roslynator.Analyzers" Version="5.0.0">
-      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
-      <PrivateAssets>all</PrivateAssets>
-    </PackageReference>
-    <PackageReference Include="Roslynator.Formatting.Analyzers" Version="5.0.0">
-      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
-      <PrivateAssets>all</PrivateAssets>
-    </PackageReference>
-    <PackageReference Include="Roslyn.Diagnostics.Analyzers" Version="5.6.0">
+    <PackageReference Include="Microsoft.CodeAnalysis.PublicApiAnalyzers" Version="5.6.0">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>

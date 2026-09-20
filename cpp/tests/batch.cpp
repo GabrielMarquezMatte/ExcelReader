@@ -37,8 +37,6 @@ namespace
         }
     }
 
-    // Row::Coluna1 is a string_view into the batch's own buffers, so every comparison copies it
-    // out - the batch it points into is freed before the next one is compared.
     using OwnedRow = std::pair<std::string, int64_t>;
 
     std::vector<OwnedRow> whole_sheet()
@@ -64,8 +62,6 @@ namespace
         return rows;
     }
 
-    // The load-bearing property: chunked output equals whole-sheet output, at every batch size.
-    // The sizes that are not multiples of 8 are where a validity-bitmap boundary bug surfaces.
     void test_batches_equal_whole_sheet(const std::vector<OwnedRow> &expected)
     {
         const int64_t rows = static_cast<int64_t>(expected.size());
@@ -108,8 +104,6 @@ namespace
 
             check(actual == expected, "batched rows match the whole-sheet read");
 
-            // Pins the batching itself: an implementation that ignored batch_size and returned one
-            // big batch would satisfy every assertion above.
             const int64_t want = batch_size == 0 ? 1 : (rows + batch_size - 1) / batch_size;
             check(batches == want, "batch count matches ceil(rows / batch_size)");
         }
@@ -178,8 +172,6 @@ namespace
         }
     }
 
-    // ABI rule: any other read on the workbook invalidates a live reader, and the failure latches
-    // rather than silently resuming from the moved cursor.
     void test_foreign_read_latches_the_error()
     {
         auto workbook = xl::Workbook::open(EXCELREADER_FIXTURE_PATH);

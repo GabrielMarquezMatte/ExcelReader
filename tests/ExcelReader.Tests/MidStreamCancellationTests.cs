@@ -4,12 +4,6 @@ using ExcelReader.Core.Writer;
 
 namespace ExcelReader.Tests
 {
-    // Cancelling partway through a large sheet, not just at open time (PrefetchDecompressionTests
-    // already covers the already-cancelled/prefetch cases). XLS and XLSB check the token on every
-    // MoveNextAsync call, so cancellation is observed on the very next call regardless of buffering.
-    // XLSX and CSV only observe it when the pooled buffer actually needs a refill (via the
-    // underlying Stream.ReadAsync honoring the token), so those two need a workbook big enough to
-    // force a real refill after cancellation to prove the token is wired through at all.
     public class MidStreamCancellationTests
     {
         [Fact]
@@ -67,8 +61,6 @@ namespace ExcelReader.Tests
         [Fact]
         public async Task XlsCancellationAfterCancelThrowsOnNextMoveNext()
         {
-            // XlsReader.Enumerator checks the token unconditionally on every call, so a small
-            // workbook already proves the contract — no need to force a buffer refill.
             CancellationToken outer = TestContext.Current.CancellationToken;
             using MemoryStream ms = XlsWorkbookBuilder.Build(sheets: [("S1", [["Row1"], ["Row2"], ["Row3"]])]);
             using CancellationTokenSource cts = new();
@@ -85,7 +77,6 @@ namespace ExcelReader.Tests
         [Fact]
         public async Task XlsbCancellationAfterCancelThrowsOnNextMoveNext()
         {
-            // XlsbReader.Enumerator checks the token unconditionally on every call too.
             CancellationToken outer = TestContext.Current.CancellationToken;
             byte[] bytes = await BuildSmallXlsbAsync(outer);
             using CancellationTokenSource cts = new();
@@ -100,8 +91,6 @@ namespace ExcelReader.Tests
             await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await e.MoveNextAsync());
         }
 
-        // Many mixed-type rows so the sheet spans several 64 KiB buffer refills, not just the
-        // initial fill — the point where XLSX/CSV's implicit (stream-driven) cancellation fires.
         private static byte[] BuildLargeXlsx()
         {
             StringBuilder sb = new(512 * 1024);

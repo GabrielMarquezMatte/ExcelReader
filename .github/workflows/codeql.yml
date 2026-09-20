@@ -6,7 +6,6 @@ on:
   pull_request:
     branches: [ master, develop ]
   schedule:
-    # Weekly scan (Mondays 06:00 UTC) to catch newly published query updates.
     - cron: '0 6 * * 1'
 
 concurrency:
@@ -18,14 +17,57 @@ permissions:
   security-events: write
 
 jobs:
+  changes:
+    name: Detect changed languages
+    runs-on: ubuntu-latest
+    outputs:
+      languages: ${{ steps.languages.outputs.value }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Filter
+        id: filter
+        if: github.event_name == 'pull_request'
+        uses: dorny/paths-filter@v4
+        with:
+          filters: |
+            csharp:
+              - 'src/**'
+              - 'tests/**'
+              - 'Directory.Build.props'
+              - 'global.json'
+              - '.github/workflows/codeql.yml'
+            python:
+              - 'python/**'
+              - '.github/workflows/codeql.yml'
+
+      - name: Select languages
+        id: languages
+        run: |
+          if [ '${{ github.event_name }}' != 'pull_request' ]; then
+            echo 'value=["csharp","python"]' >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          languages=()
+          if [ '${{ steps.filter.outputs.csharp }}' = 'true' ]; then
+            languages+=('"csharp"')
+          fi
+          if [ '${{ steps.filter.outputs.python }}' = 'true' ]; then
+            languages+=('"python"')
+          fi
+          echo "value=[$(IFS=,; echo "${languages[*]}")]" >> "$GITHUB_OUTPUT"
+
   analyze:
     name: Analyze (${{ matrix.language }})
     runs-on: ubuntu-latest
+    needs: changes
+    if: needs.changes.outputs.languages != '[]'
 
     strategy:
       fail-fast: false
       matrix:
-        language: [ csharp, python ]
+        language: ${{ fromJSON(needs.changes.outputs.languages) }}
 
     steps:
       - name: Checkout

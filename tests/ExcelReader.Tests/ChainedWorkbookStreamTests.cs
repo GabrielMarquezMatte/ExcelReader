@@ -3,19 +3,12 @@ using ExcelReader.Core.Reader;
 
 namespace ExcelReader.Tests
 {
-    // The chained (whole-file-in-memory + FAT chain) WorkbookStream mode, driven directly rather than
-    // through XlsReader: XlsWorkbookBuilder always emits a strictly sequential sector chain, so the
-    // discontinuity handling below — run resolution and the sector-by-sector assembly a straddling
-    // record falls back to — is unreachable from the builder-based fixtures.
     public class ChainedWorkbookStreamTests
     {
         private const int SectorSize = 512;
         private const int HeaderSize = 512;
         private const int FileSectors = 3;
 
-        // Logical sector 0 -> file sector 2, logical sector 1 -> file sector 0. The chain is therefore
-        // discontinuous at the boundary (0 != 2 + 1), so a record crossing it cannot be served as one
-        // zero-copy slice.
         private static (byte[] Buffer, int[] Chain) BuildFragmented(int firstSector = 2)
         {
             byte[] buffer = new byte[HeaderSize + (FileSectors * SectorSize)];
@@ -35,16 +28,14 @@ namespace ExcelReader.Tests
         {
             (byte[] buffer, int[] chain) = BuildFragmented();
 
-            // Header at logical 504 (inside logical sector 0), so its 8 data bytes span logical
-            // 508..515 — four bytes at the tail of file sector 2, four at the head of file sector 0.
             buffer[FileOffset(2, 504)] = 0x03;
-            buffer[FileOffset(2, 505)] = 0x02; // id 0x0203
+            buffer[FileOffset(2, 505)] = 0x02;
             buffer[FileOffset(2, 506)] = 8;
-            buffer[FileOffset(2, 507)] = 0;    // len 8
+            buffer[FileOffset(2, 507)] = 0;
             for (int i = 0; i < 4; i++)
             {
-                buffer[FileOffset(2, 508 + i)] = (byte)(i + 1);  // logical 508..511 -> 1,2,3,4
-                buffer[FileOffset(0, i)] = (byte)(i + 5);        // logical 512..515 -> 5,6,7,8
+                buffer[FileOffset(2, 508 + i)] = (byte)(i + 1);
+                buffer[FileOffset(0, i)] = (byte)(i + 5);
             }
 
             using WorkbookStream wb = WorkbookStream.Chained(buffer, chain, chainLength: 2, SectorSize, length: 2 * SectorSize);
@@ -62,8 +53,6 @@ namespace ExcelReader.Tests
         {
             (byte[] buffer, int[] chain) = BuildFragmented();
 
-            // Two back-to-back records inside logical sector 0; the second must come from the run
-            // cached by the first, not a re-resolve.
             buffer[FileOffset(2, 0)] = 0x03;
             buffer[FileOffset(2, 1)] = 0x02;
             buffer[FileOffset(2, 2)] = 2;
@@ -86,9 +75,6 @@ namespace ExcelReader.Tests
             Assert.Equal<byte>([0xCC], secondData.ToArray());
         }
 
-        // A crafted chain entry pointing past the buffer must surface as InvalidDataException, the same
-        // type the streamed path raises for a corrupt container — not an IndexOutOfRange from slicing,
-        // and never a read of whatever happens to sit past the workbook in the caller's buffer.
         [Fact]
         public void ThrowsInvalidDataWhenAChainEntryPointsPastTheBuffer()
         {

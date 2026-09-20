@@ -60,7 +60,6 @@ fn get_returns_none_outside_the_row_range() {
         table.get(table.len() - 1).is_some(),
         "last row is in bounds"
     );
-    // Before the bounds check these read past the columnar buffers and returned garbage.
     assert!(table.get(table.len()).is_none(), "one past the end");
     assert!(table.get(i64::MAX).is_none(), "far past the end");
     assert!(table.get(-1).is_none(), "negative row");
@@ -85,7 +84,6 @@ fn parses_integer_widths_floats_and_dates() {
     assert_eq!(first.coluna1, "Valor1");
     assert_eq!(first.coluna3, 1u16);
     assert!((first.coluna16 - 0.1f32).abs() < f32::EPSILON);
-    // 2026-01-01 is 20454 days after 1970-01-01.
     assert_eq!(first.coluna2, Date::new(20_454));
 }
 
@@ -135,7 +133,6 @@ fn exposes_sheet_navigation() {
         .expect("move_to_sheet must succeed");
     assert_eq!(workbook.sheet_name().unwrap(), names[0]);
 
-    // Reading it is enough - which system the fixture uses is not this test's business.
     workbook.is_date1904().expect("is_date1904 must succeed");
 }
 
@@ -178,8 +175,6 @@ fn infer_schema_leaves_the_row_cursor_alone() {
         .infer_schema(1, 100)
         .expect("infer_schema must succeed");
 
-    // The ABI documents infer_schema as sampling independently of the shared cursor, so a parse
-    // afterwards must still see every row.
     let table = parse_sheet::<Row>(&mut workbook, 1).expect("parse_sheet must succeed");
     assert_eq!(table.len(), 100);
 }
@@ -232,8 +227,6 @@ fn parse_sheet_reports_the_native_error_for_an_unknown_column() {
 
 #[test]
 fn abi_version_matches_the_loaded_library() {
-    // Every constructor gates on this; assert it directly so a mismatch is reported as itself
-    // rather than as every other test failing at once.
     assert_eq!(
         unsafe { excelreader::xl_abi_version() },
         excelreader::XL_ABI_VERSION,

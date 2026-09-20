@@ -34,9 +34,6 @@ sys.path.insert(0, str(REPO_ROOT / "python" / "src"))
 
 import excelreader
 
-# The 14 columns of the default fixture, in file order — same schema bench_read.py uses, so both
-# scripts describe the same data. Passing --path a different file makes this schema meaningless, so
-# the whole script is skipped there rather than silently benchmarking a failure.
 _T = excelreader.ColumnType
 _FIXTURE_SCHEMA = [
     excelreader.ColumnSpec(type_, name=name)

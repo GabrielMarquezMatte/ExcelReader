@@ -11,11 +11,6 @@ namespace ExcelReader.Core.Writer.Internal
             dest.Write(payload);
         }
 
-        // One reservation (one Ensure/bounds check) for the whole record — id + length header + payload
-        // — instead of a separate Ensure per field (WriteRecordHeader's two WriteByte calls, then one
-        // per WriteU32/WriteDouble the caller would otherwise make). The returned span aliases dest's
-        // buffer at the payload's offset; the caller fills it directly (e.g. via BinaryPrimitives) and
-        // must fill every byte, since dest.Length has already been advanced past it.
         internal static void WriteFixedRecord(BiffBuffer dest, int id, int payloadLen, out Span<byte> payload)
         {
             int idLen = (uint)id < 0x80 ? 1 : 2;
@@ -70,7 +65,6 @@ namespace ExcelReader.Core.Writer.Internal
             }
         }
 
-        // Span counterpart for callers already holding a WriteFixedRecord payload span.
         internal static void WriteCellHeader(Span<byte> dest, int column, int style)
         {
             BinaryPrimitives.WriteUInt32LittleEndian(dest, (uint)column);

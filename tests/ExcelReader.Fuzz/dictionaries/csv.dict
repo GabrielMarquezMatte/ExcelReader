@@ -1,0 +1,37 @@
+# libFuzzer token dictionary for the CSV targets (csv, csv-sniff, csv-parallel).
+#
+# CSV has no magic number, so the tokens that matter are the delimiters, quoting forms and
+# terminators the parser and the dialect sniffer branch on - plus the BOMs, which decide the
+# encoding before any of that runs.
+
+# Delimiters the sniffer scores
+","
+";"
+"\x09"
+"|"
+
+# Quoting: a bare quote, an escaped quote, and an empty quoted field
+"\""
+"\"\""
+"\"\"\""
+
+# Terminators, including the bare CR that a CRLF scanner is most likely to mis-split
+"\x0d\x0a"
+"\x0a"
+"\x0d"
+
+# Byte order marks
+"\xef\xbb\xbf"
+"\xff\xfe"
+"\xfe\xff"
+
+# Shapes that combine a quote with a boundary - what the parallel chunk resolver disambiguates
+"\",\""
+"\"\x0d\x0a\""
+"\"\x0a"
+",\"\""
+",,"
+
+# Bytes that make a text heuristic call the input binary
+"\x00"
+"\x1a"

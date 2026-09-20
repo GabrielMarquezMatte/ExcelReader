@@ -2,15 +2,6 @@ namespace ExcelReader.Native
 {
     internal static unsafe partial class NativeApi
     {
-        /// <summary>
-        /// Opens a batch-at-a-time typed read over the current sheet and registers it, returning the
-        /// opaque id <c>xl_typed_reader_next</c>/<c>xl_typed_reader_close</c> take.
-        /// </summary>
-        /// <remarks>
-        /// The id comes from <see cref="NativeHandleTable"/>, so it is never recycled and is
-        /// type-checked on resolve: a stale reader id stays permanently invalid rather than naming
-        /// some later workbook or writer.
-        /// </remarks>
         internal static int OpenTypedReader(NativeHandle? handle, NativeColumnSpec[] specs, int headerRow,
             long maxRows, out nint reader)
         {

@@ -121,8 +121,6 @@ fn reports_password_incorrect_with_wrong_password() {
     );
 }
 
-// The regression this task exists to prevent: the raw struct's password pointer must not dangle
-// when the password came from a temporary.
 #[test]
 fn password_survives_a_temporary_source() {
     let options = OpenOptions::new().password(String::from("hunter2"));

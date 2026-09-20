@@ -2,11 +2,6 @@ using ExcelReader.Core.Crypto;
 
 namespace ExcelReader.Tests
 {
-    // Known-answer vectors published by msoffcrypto-tool (ECMA376Standard.makekey_from_password and
-    // ECMA376Standard.verifykey), an independent implementation of the same scheme. They are the
-    // oracle for this derivation: the two vectors share a key, so deriving from the password and
-    // then verifying with the derived key proves both halves against values this codebase did not
-    // produce.
     public sealed class StandardKeyDerivationTests
     {
         private const string VectorPassword = "Password1234_";

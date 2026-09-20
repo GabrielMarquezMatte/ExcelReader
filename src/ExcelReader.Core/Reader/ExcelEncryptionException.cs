@@ -23,10 +23,6 @@ namespace ExcelReader.Core.Reader
     /// </summary>
     public sealed class ExcelEncryptionException : IOException
     {
-        // CA1032/RCS1194 require the three standard exception constructors alongside the domain
-        // ones below, matching the convention already used by ExcelParseException. None of these are
-        // ever constructed by this library — Reason would be left at its default (PasswordRequired) —
-        // but they exist so this remains a well-behaved Exception type for callers/serializers.
         /// <summary>Creates an exception with no message.</summary>
         [ExcludeFromCodeCoverage]
         public ExcelEncryptionException()

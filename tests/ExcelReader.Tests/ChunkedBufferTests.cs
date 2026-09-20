@@ -3,9 +3,6 @@ using ExcelReader.Native;
 
 namespace ExcelReader.Tests
 {
-    // ChunkedBuffer's whole point is that its storage is discontiguous, so every test here pushes
-    // past its first chunk (256 elements) and well past the point where chunk size hits its cap —
-    // a bug in the chunk-boundary arithmetic is invisible below that.
     public sealed class ChunkedBufferTests
     {
         private const int Count = 30_000;
@@ -34,7 +31,7 @@ namespace ExcelReader.Tests
         {
             ChunkedBuffer<byte> buffer = new();
             List<byte> expected = [];
-            byte[] source = new byte[997]; // deliberately coprime with every chunk size
+            byte[] source = new byte[997];
             for (int i = 0; i < source.Length; i++)
             {
                 source[i] = (byte)(i * 7);
@@ -70,8 +67,6 @@ namespace ExcelReader.Tests
         [Fact]
         public void Last_Should_Address_The_Most_Recent_Element_After_A_Chunk_Rollover()
         {
-            // The validity bitmap's read-modify-write goes through Last, so it has to keep working
-            // on the first element of a freshly allocated chunk, not just mid-chunk.
             ChunkedBuffer<byte> buffer = new();
             for (int i = 0; i < Count; i++)
             {
@@ -89,7 +84,7 @@ namespace ExcelReader.Tests
 
             Assert.Equal(0, buffer.Count);
             Assert.Equal(0, buffer.ByteLength);
-            buffer.CopyTo(Span<byte>.Empty); // must not throw
+            buffer.CopyTo(Span<byte>.Empty);
         }
 
         private static T[] Flatten<T>(ChunkedBuffer<T> buffer) where T : unmanaged

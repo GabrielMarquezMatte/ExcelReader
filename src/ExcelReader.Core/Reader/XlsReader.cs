@@ -15,7 +15,6 @@ namespace ExcelReader.Core.Reader
         private readonly bool _date1904;
         private byte[] _sharedFlat;
         private int[] _sharedOffsets;
-        // Lazily created: dedups repeated LABELSST values into one string instance per shared index.
         private string?[]? _sharedStringCache;
         private int _current;
 
@@ -207,9 +206,6 @@ namespace ExcelReader.Core.Reader
                         {
                             break;
                         }
-                        // lbPlyPos is attacker-controlled and later becomes a raw cursor position
-                        // reject an out-of-range value here rather than let it silently resolve to
-                        // wrong data elsewhere in the file.
                         if (sheet.Offset < 0 || sheet.Offset > cursor.Length)
                         {
                             throw new InvalidDataException("The OLE BoundSheet8 offset is out of range.");
@@ -247,7 +243,6 @@ namespace ExcelReader.Core.Reader
         private static bool TryParseBoundSheet(ReadOnlySpan<byte> data, out (string Name, int Offset) sheet)
         {
             sheet = default;
-            // Byte 5 is the sheet type (0 = worksheet); charts/macro/dialog sheets are excluded.
             if (data.Length < 8 || data[5] != 0
                 || !TryDecodeBiffString(data, start: 8, charCount: data[6], flags: data[7], out string name))
             {
@@ -269,7 +264,6 @@ namespace ExcelReader.Core.Reader
             return true;
         }
 
-        // BIFF8 string: bit 0 of the flags byte picks compressed (1 byte/char) vs UTF-16.
         private static bool TryDecodeBiffString(ReadOnlySpan<byte> data, int start, int charCount, byte flags, out string value)
         {
             bool compressed = (flags & 1) == 0;
@@ -286,8 +280,6 @@ namespace ExcelReader.Core.Reader
             return true;
         }
 
-        // Strings can straddle record boundaries, so the SST payload plus any CONTINUE records must
-        // be gathered contiguously before decoding.
         private static void DecodeSstFromCursor(
             BiffCursor cursor,
             ReadOnlySpan<byte> first,
@@ -304,16 +296,10 @@ namespace ExcelReader.Core.Reader
                 first[8..].CopyTo(buffer);
                 len = initialLen;
             }
-            // A string's character array can split across a CONTINUE boundary; the record resumes with
-            // a fresh grbit (compression) byte that is not part of the character data ([MS-XLS] 2.5.240).
-            // Record where each payload begins so the decoder consumes that byte instead of misreading
-            // it as a character.
             List<int> boundaries = [];
             while (cursor.PeekId() == Rec.Continue && cursor.TryReadRecord(out _, out ReadOnlySpan<byte> cont))
             {
                 boundaries.Add(len);
-                // A zero-length CONTINUE payload never trips EnsureSharedCapacity's own limit check, but
-                // still costs 4 real header bytes on disk — charge that fixed cost here.
                 LimitChecks.ThrowIfOverSharedStringLimit(options, (long)boundaries.Count * ContinueRecordHeaderBytes);
                 EnsureSharedCapacity(options, ref buffer, len + cont.Length);
                 cont.CopyTo(buffer.AsSpan(len));
@@ -323,14 +309,9 @@ namespace ExcelReader.Core.Reader
             ArrayPool<byte>.Shared.Return(buffer);
         }
 
-        // `boundaries` holds the offsets where each CONTINUE payload starts. One falling inside a
-        // string's character array marks an inserted grbit byte to consume; a wide (UTF-16) unit whose
-        // two bytes straddle the boundary is handled too (the `boundaries[boundaryIdx] == pos + 1`
-        // branch in DecodeChars).
         private static void DecodeSharedStrings(ReadOnlySpan<byte> sst, ReadOnlySpan<int> boundaries, ExcelReaderOptions options, out byte[] sharedFlat, out int[] sharedOffsets)
         {
             LimitChecks.ThrowIfOverSharedStringLimit(options, sst.Length);
-            // long, not int: sst.Length * 3 wraps negative above ~715M.
             long estimatedFlatSize = Math.Max(256L, (long)sst.Length * 3);
             byte[] flat = ArrayPool<byte>.Shared.Rent((int)Math.Min(estimatedFlatSize, Array.MaxLength));
             char[] scratch = ArrayPool<char>.Shared.Rent(Math.Max(64, sst.Length));
@@ -366,7 +347,6 @@ namespace ExcelReader.Core.Reader
                     flatLen += System.Text.Encoding.UTF8.GetBytes(scratch.AsSpan(0, produced), flat.AsSpan(flatLen));
                     offsets.Add(flatLen);
                     if (truncated) { break; }
-                    // Formatting runs (4 bytes each) and extended data follow, carrying no grbit.
                     long next = pos + ((long)richRuns * 4) + extBytes;
                     if (richRuns < 0 || extBytes < 0 || next > sst.Length) { break; }
                     pos = (int)next;
@@ -382,7 +362,6 @@ namespace ExcelReader.Core.Reader
             }
         }
 
-        // Decodes one shared string's code units, flipping compression mode at each grbit boundary.
         private static int DecodeChars(ReadOnlySpan<byte> sst, ReadOnlySpan<int> boundaries, int chars, char[] scratch, ref int pos, ref int boundaryIdx, ref bool compressed, out bool truncated)
         {
             truncated = false;
@@ -398,7 +377,6 @@ namespace ExcelReader.Core.Reader
                     boundaryIdx++;
                 }
 
-                // A wide code unit straddling the boundary: low byte, then the grbit, then high byte.
                 if (!compressed && boundaryIdx < boundaries.Length && boundaries[boundaryIdx] == pos + 1)
                 {
                     if (pos + 2 >= sst.Length) { truncated = true; break; }
@@ -436,7 +414,6 @@ namespace ExcelReader.Core.Reader
         private const int SubstreamWorksheet = 0x0010;
         private const int ContinueRecordHeaderBytes = 4;
 
-        // BIFF8 record type IDs (see [MS-XLS]).
         private static class Rec
         {
             internal const int Bof = 0x0809;

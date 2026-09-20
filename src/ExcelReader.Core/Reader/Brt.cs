@@ -1,6 +1,5 @@
 namespace ExcelReader.Core.Reader
 {
-    // BIFF12 (.xlsb) record type ids. Verified against [MS-XLSB] and pyxlsb.
     internal static class Brt
     {
         internal const int RowHdr = 0;
@@ -9,13 +8,13 @@ namespace ExcelReader.Core.Reader
         internal const int CellError = 3;
         internal const int CellBool = 4;
         internal const int CellReal = 5;
-        internal const int CellSt = 6;     // inline string
-        internal const int CellIsst = 7;   // shared-string index
-        internal const int FmlaString = 8; // formula cell, cached string result
-        internal const int FmlaNum = 9;    // formula cell, cached numeric result
-        internal const int FmlaBool = 10;  // formula cell, cached bool result
-        internal const int FmlaError = 11; // formula cell, cached error result
-        internal const int CellRString = 62; // inline rich string
+        internal const int CellSt = 6;
+        internal const int CellIsst = 7;
+        internal const int FmlaString = 8;
+        internal const int FmlaNum = 9;
+        internal const int FmlaBool = 10;
+        internal const int FmlaError = 11;
+        internal const int CellRString = 62;
         internal const int SSTItem = 19;
         internal const int ColInfo = 60;
         internal const int Font = 43;
@@ -54,9 +53,6 @@ namespace ExcelReader.Core.Reader
         internal const int EndFmts = 616;
         internal const int BeginCellXFs = 617;
         internal const int EndCellXFs = 618;
-        // The STYLES production ([MS-XLSB] 2.1.7.50) is mandatory in a styles part, unlike the
-        // optional DXFS/TABLESTYLES blocks around it — Excel reports "Formato de parte de
-        // /xl/styles.bin" and repairs the file when it is missing.
         internal const int BeginStyles = 619;
         internal const int EndStyles = 620;
         internal const int Style = 48;

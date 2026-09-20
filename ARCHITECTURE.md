@@ -1,7 +1,12 @@
 # Architecture
 
 A map of how the codebase fits together, not a manual. Start here, then follow the file/type names
-into the source — the code comments carry the detailed reasoning.
+into the source: the code is expected to carry its own meaning through naming and flow, so read it
+directly rather than looking for a commentary alongside it.
+
+What the code deliberately does *not* carry is the evidence behind a decision — benchmark numbers,
+memory-footprint measurements, approaches that were tried and rejected. That lives in
+[`docs/`](docs/), and [`STYLEGUIDE.md`](STYLEGUIDE.md#comments) says why.
 
 ## The four format families
 
@@ -176,9 +181,8 @@ compound-file container has no in-memory-ZIP equivalent).
 
 ## The sync/async twin convention
 
-Hot-path search/refill primitives (e.g. `IndexOf`/`IndexOfAsync`/`IndexOfSlowAsync`,
-`EnsureRowBuffered`/`...Async`/`...SlowAsync` in `XlsxReader.Enumerator.cs`) come in three tiers, not
-one generic async method:
+Hot-path search/refill primitives (e.g. `IndexOf`/`IndexOfAsync`/`IndexOfSlowAsync` in
+`XlsxReader.Enumerator.cs`) come in three tiers, not one generic async method:
 
 1. A blocking sync loop for the sync caller.
 2. An async method whose common case — the data is already in the buffered window — is a synchronous
@@ -187,8 +191,11 @@ one generic async method:
 3. A separate `...SlowAsync` method holding the actual `await`-in-a-loop, split out so the rare
    awaiting branch doesn't bloat the fast path's IL/JIT inlining.
 
-Once a row is fully buffered, parsing it (`ParseRow`) has no async twin at all — a fully-buffered
-span never needs to await, so both `MoveNext` and `MoveNextAsync` call the same synchronous parse.
+Parsing a row (`ParseRowInWindow`) has no async twin at all — it is pure span work over the
+buffered window, so both `MoveNext` and `MoveNextAsync` call the same synchronous parse. It finds
+the row's cells and its `</row` on one forward walk, and returns false without committing anything
+if the row runs past the window; only the refill loop around it (`ParseRowBody` /
+`ParseRowBodySlowAsync`) differs between the two callers.
 
 A parity test suite (`tests/ExcelReader.Tests/SyncAsyncParityTests.cs`) asserts identical cell
 snapshots across sync / async-open / `GetAsyncEnumerator` for all four formats, guarding against the

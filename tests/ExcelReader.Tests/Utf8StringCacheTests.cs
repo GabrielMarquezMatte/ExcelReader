@@ -39,18 +39,12 @@ namespace ExcelReader.Tests
             string longValue = new string('x', 200);
             byte[] utf8 = Encoding.UTF8.GetBytes(longValue);
             Assert.Equal(longValue, cache.GetOrAdd(utf8));
-            // Not the same instance twice, since values past the cap are never cached — this is the
-            // documented tradeoff, not a bug.
             Assert.NotSame(cache.GetOrAdd(utf8), cache.GetOrAdd(utf8));
         }
 
         [Fact]
         public void BucketCollisionEvictsOlderEntryWithoutCorruptingEither()
         {
-            // Two distinct values landing in the same bucket must never return each other's text —
-            // GetOrAdd re-verifies the cached bytes on every hit, so a collision only costs cache
-            // effectiveness, never correctness. Mirrors the cache's own HashCode.AddBytes/1024-bucket
-            // scheme to search for a real collision instead of assuming internal layout.
             const int bucketCount = 1024;
             byte[] keyA = Encoding.UTF8.GetBytes("v0");
             int bucketOfA = BucketOf(keyA, bucketCount);
@@ -84,9 +78,6 @@ namespace ExcelReader.Tests
         [Fact]
         public void CsvInternStringsDefaultsToFalse()
         {
-            // Off by default (see CsvReaderOptions.InternStrings) — a real-world, mixed-cardinality
-            // corpus measured this as a net loss when left on unconditionally, so a caller who hasn't
-            // explicitly opted in must never see cache-driven reference-equality behavior.
             using MemoryStream ms = new(Encoding.UTF8.GetBytes("alpha,1\nalpha,2\n"));
             using CsvReader reader = Excel.FromCsv(ms);
             using CsvReader.Enumerator e = reader.GetEnumerator();

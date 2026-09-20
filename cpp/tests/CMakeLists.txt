@@ -81,3 +81,15 @@ if(WIN32)
             "$<TARGET_PROPERTY:excelreader_native,IMPORTED_LOCATION>"
             "$<TARGET_FILE_DIR:excelreader_cpp_batch>")
 endif()
+
+add_executable(excelreader_cpp_aggregate aggregate.cpp)
+target_link_libraries(excelreader_cpp_aggregate PRIVATE xl::excelreader)
+
+add_test(NAME excelreader_cpp_aggregate COMMAND excelreader_cpp_aggregate)
+if(WIN32)
+    # Same reason as the smoke test: the native DLL has no import-time PATH entry.
+    add_custom_command(TARGET excelreader_cpp_aggregate POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "$<TARGET_PROPERTY:excelreader_native,IMPORTED_LOCATION>"
+            "$<TARGET_FILE_DIR:excelreader_cpp_aggregate>")
+endif()

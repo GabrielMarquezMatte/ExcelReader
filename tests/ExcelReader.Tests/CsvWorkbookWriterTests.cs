@@ -2,9 +2,6 @@ using ExcelReader.Core.Writer;
 
 namespace ExcelReader.Tests
 {
-    // CsvWorkbookWriter previously had no WriterState tracking at all — AddSheet worked
-    // identically before StartAsync, after EndAsync, or called a second time, and had no null check.
-    // These pin down the state machine now shared with XlsxWorkbookWriter/XlsbWorkbookWriter/XlsWorkbookWriter.
     public class CsvWorkbookWriterTests
     {
         [Fact]

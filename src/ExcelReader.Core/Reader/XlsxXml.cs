@@ -1,13 +1,10 @@
 using System.Buffers;
 using System.Buffers.Text;
 using System.Runtime.CompilerServices;
-using System.Runtime.InteropServices;
 using System.Text;
 
 namespace ExcelReader.Core.Reader
 {
-    // Byte-scan + XML-entity-decode primitives for the tiny SpreadsheetML subset we read.
-    // Everything works on UTF-8 ReadOnlySpan<byte> so cell values never round-trip through string.
     internal static class XlsxXml
     {
         internal static int ParseIntOr(ReadOnlySpan<byte> source, int fallback)
@@ -15,11 +12,6 @@ namespace ExcelReader.Core.Reader
             return Utf8Parser.TryParse(source, out int value, out _) ? value : fallback;
         }
 
-        // Returns the value of attribute `name` inside an open tag span like `<c r="A1" s="1" t="s">`,
-        // or its single-quoted form `<c r='A1'>`. `name` must include the leading space and trailing '=',
-        // e.g. " t=" — the leading space gives a cheap word boundary so " r=" doesn't match inside another
-        // attribute. Accepts either ' or " as the value delimiter (both legal per XML); the closing quote
-        // must match the opening one. Empty span if the attribute is absent or malformed.
         public static ReadOnlySpan<byte> Attr(ReadOnlySpan<byte> openTag, ReadOnlySpan<byte> name)
         {
             int i = openTag.IndexOf(name);
@@ -42,36 +34,47 @@ namespace ExcelReader.Core.Reader
             return end < 0 ? default : openTag.Slice(start, end);
         }
 
-        // Column reference letters (the "B" in "B2") -> 0-based column index. "" -> -1.
         public static int ColumnIndex(ReadOnlySpan<byte> cellRef)
         {
-            ref var c0 = ref MemoryMarshal.GetReference(cellRef);
-            int col = 0;
-            int i = 0;
-            var length = cellRef.Length;
-            for (; i < length; i++)
+            if (cellRef.IsEmpty)
             {
-                var c = Unsafe.Add(ref c0, i);
-                uint val = (uint)(c - 'A');
-                if (val > 25)
-                {
-                    break;
-                }
-                col = (col * 26) + (int)val + 1;
+                return -1;
             }
-            return i == 0 ? -1 : col - 1;
+            uint a = (uint)(cellRef[0] - 'A');
+            if (a > 25)
+            {
+                return -1;
+            }
+            if (cellRef.Length == 1)
+            {
+                return (int)a;
+            }
+            uint b = (uint)(cellRef[1] - 'A');
+            if (b > 25)
+            {
+                return (int)a;
+            }
+            if (cellRef.Length == 2)
+            {
+                return (int)(((a + 1) * 26) + b);
+            }
+            uint c = (uint)(cellRef[2] - 'A');
+            if (c > 25)
+            {
+                return (int)(((a + 1) * 26) + b);
+            }
+            if (cellRef.Length == 3 || (uint)(cellRef[3] - 'A') > 25)
+            {
+                return (int)(((((a + 1) * 26) + b + 1) * 26) + c);
+            }
+            return ExcelLimits.MaxColumns;
         }
 
-        // Decode the 5 predefined XML entities + numeric &#d;/&#xH; from `src` into `dest`,
-        // returning bytes written. Decoded output is never longer than `src`, so a dest sized to
-        // src.Length always fits. Unknown entities are copied through literally.
         public static int Decode(ReadOnlySpan<byte> src, Span<byte> dest)
         {
             int w = 0;
             while (!src.IsEmpty)
             {
-                // The literal run up to the next '&' or '<' is bulk-copied; IndexOfAny and CopyTo
-                // are both SIMD-vectorized, so plain text still costs one scan + one copy.
                 int special = src.IndexOfAny((byte)'&', (byte)'<');
                 if (special < 0)
                 {
@@ -107,7 +110,6 @@ namespace ExcelReader.Core.Reader
                 int semi = src.IndexOf((byte)';');
                 if (semi < 0)
                 {
-                    // No terminator anywhere in what remains, so no entity can follow — copy it all.
                     src.CopyTo(dest[w..]);
                     return w + src.Length;
                 }
@@ -123,7 +125,6 @@ namespace ExcelReader.Core.Reader
                 }
                 else
                 {
-                    // Unknown entity: copy the raw "&...;" through unchanged.
                     src[..(semi + 1)].CopyTo(dest[w..]);
                     w += semi + 1;
                 }
@@ -132,13 +133,8 @@ namespace ExcelReader.Core.Reader
             return w;
         }
 
-        // `body` is the part after '#': decimal digits, or 'x'/'X' + hex. `raw` is the whole "&#..;"
-        // used as the literal fallback when the codepoint is malformed.
         private static int DecodeNumeric(ReadOnlySpan<byte> body, Span<byte> dest, ReadOnlySpan<byte> raw)
         {
-            // Bails once cp exceeds the highest valid codepoint rather than accumulating unchecked:
-            // an overlong run (e.g. "&#99999999999999999999;") would otherwise wrap the int silently
-            // into a different, unrelated valid codepoint instead of being rejected as malformed.
             const int MaxCodepoint = 0x10FFFF;
             int cp = 0;
             bool ok = false;
@@ -169,17 +165,11 @@ namespace ExcelReader.Core.Reader
             return raw.Length;
         }
 
-        // Scans every <t>...</t> run inside `si`, entity-decodes each one, and writes the result
-        // into `dest` starting at offset 0. Returns total bytes written. Text inside <rPh> (phonetic
-        // guide runs, e.g. Japanese furigana) is skipped — it's a pronunciation hint, not cell content.
-        // `dest` must be at least `si.Length` bytes — decoded text is never longer than its source XML.
         internal static int WriteTextRuns(ReadOnlySpan<byte> si, Span<byte> dest)
         {
             return WriteTextRuns(si, dest, "<t"u8, "</t>"u8, "<rPh"u8, "</rPh>"u8);
         }
 
-        // Namespace-prefixed overload: the element tokens (e.g. "<x:t", "</x:t>") are supplied by the
-        // caller, which built them once from the part's root-element prefix (see NsTokens / DetectElementPrefix).
         internal static int WriteTextRuns(ReadOnlySpan<byte> si, Span<byte> dest,
             ReadOnlySpan<byte> tOpen, ReadOnlySpan<byte> tClose, ReadOnlySpan<byte> rPhOpen, ReadOnlySpan<byte> rPhClose)
         {
@@ -201,10 +191,10 @@ namespace ExcelReader.Core.Reader
                     {
                         break;
                     }
-                    remaining = remaining[(rPhEnd + rPhClose.Length)..]; // Skip past "</rPh>"
+                    remaining = remaining[(rPhEnd + rPhClose.Length)..];
                     continue;
                 }
-                remaining = remaining[(tIndex + tOpen.Length)..]; // Skip past "<t"
+                remaining = remaining[(tIndex + tOpen.Length)..];
                 var openIndex = remaining.IndexOf((byte)'>');
                 if (openIndex < 0)
                 {
@@ -212,10 +202,10 @@ namespace ExcelReader.Core.Reader
                 }
                 if (openIndex > 0 && remaining[openIndex - 1] == '/')
                 {
-                    remaining = remaining[(openIndex + 1)..]; // Skip past the self-closing tag
+                    remaining = remaining[(openIndex + 1)..];
                     continue;
                 }
-                remaining = remaining[(openIndex + 1)..]; // Skip past the opening tag
+                remaining = remaining[(openIndex + 1)..];
                 var closeIndex = remaining.IndexOf(tClose);
                 if (closeIndex < 0)
                 {
@@ -225,14 +215,11 @@ namespace ExcelReader.Core.Reader
                 var written = Decode(innerText, destSlice);
                 totalWritten += written;
                 destSlice = destSlice[written..];
-                remaining = remaining[(closeIndex + tClose.Length)..]; // Skip past the closing tag
+                remaining = remaining[(closeIndex + tClose.Length)..];
             }
             return totalWritten;
         }
 
-        // The element-name prefix on the document's root element (e.g. "x:" in <x:worksheet ...>),
-        // including the trailing ':'. Empty span when elements are unprefixed — the default-namespace
-        // case Excel and most producers emit. Skips the XML declaration, comments, and DOCTYPE.
         internal static ReadOnlySpan<byte> DetectElementPrefix(ReadOnlySpan<byte> src)
         {
             int i = 0;
@@ -248,7 +235,6 @@ namespace ExcelReader.Core.Reader
                 {
                     return default;
                 }
-                // '?' = <?xml?>, '!' = <!-- --> / <!DOCTYPE>, '/' = stray close tag — none are the root.
                 if (src[i] is (byte)'?' or (byte)'!' or (byte)'/')
                 {
                     continue;
@@ -259,18 +245,17 @@ namespace ExcelReader.Core.Reader
                     byte b = src[j];
                     if (b is (byte)' ' or (byte)'\t' or (byte)'\r' or (byte)'\n' or (byte)'>' or (byte)'/')
                     {
-                        return default; // root element name has no ':' — unprefixed
+                        return default;
                     }
                     if (b == (byte)':')
                     {
-                        return src.Slice(nameStart, j - nameStart + 1); // "x:" (colon included)
+                        return src.Slice(nameStart, j - nameStart + 1);
                     }
                 }
                 return default;
             }
         }
 
-        // Builds a literal element token "lead + prefix + rest", e.g. ("</", "x:", "row") -> "</x:row".
         internal static byte[] Token(ReadOnlySpan<byte> lead, ReadOnlySpan<byte> prefix, ReadOnlySpan<byte> rest)
         {
             byte[] token = new byte[lead.Length + prefix.Length + rest.Length];
@@ -289,8 +274,6 @@ namespace ExcelReader.Core.Reader
             return (isNum || isAlpha) ? value : -1;
         }
 
-        // Decode an XML-entity-encoded attribute/text value straight to a string. Small values (the
-        // common case: rIds, sheet names, part paths) use a stack buffer; larger ones use a pooled array.
         [SkipLocalsInit]
         internal static string DecodeToString(ReadOnlySpan<byte> src)
         {
@@ -316,8 +299,6 @@ namespace ExcelReader.Core.Reader
             }
         }
 
-        // "/xl/worksheets/sheet1.xml" -> "xl/worksheets/sheet1.xml"; a bare "worksheets/sheet1.xml"
-        // gets the "xl/" prefix that OPC part paths in workbook rels are always relative to.
         internal static string NormalizePart(ReadOnlySpan<char> target)
         {
             if (target.Length > 0 && target[0] == '/')
@@ -331,9 +312,6 @@ namespace ExcelReader.Core.Reader
             return $"xl/{target}";
         }
 
-        // Parses a `.rels` part (a list of <Relationship Id="rIdN" Target="..."/> elements) into an
-        // rId -> target-part-path lookup. Shared by the XLSX and XLSB loaders — both use the same OPC
-        // relationships schema.
         internal static Dictionary<string, string> ParseRelationships(ReadOnlySpan<byte> relsBytes)
         {
             Dictionary<string, string> rels = new(StringComparer.Ordinal);

@@ -10,9 +10,7 @@ namespace ExcelReader.Core.Parser
     /// </summary>
     /// <typeparam name="T">The row model type being mapped.</typeparam>
     public sealed class ExcelRowMapBuilder<T>
-#if NET9_0_OR_GREATER
         where T : allows ref struct
-#endif
     {
         private readonly List<PropertyMap<T>> _properties = [];
         private readonly List<ColumnBinding<T>> _indexBindings = [];
@@ -114,8 +112,6 @@ namespace ExcelReader.Core.Parser
         {
             ArgumentNullException.ThrowIfNull(names);
             ArgumentNullException.ThrowIfNull(parse);
-            // ExcelRowParser<T> and ColumnParser<T> share an identical invoke signature, so this
-            // targets the same method/closure directly rather than wrapping parse.Invoke(...).
             _properties.Add(new PropertyMap<T>(names, new ColumnParser<T>(parse), isRequired, requireValue));
             return this;
         }
@@ -209,8 +205,6 @@ namespace ExcelReader.Core.Parser
             return this;
         }
 
-        // requireFactory: false for ExcelFluentParser<T>.WithAttributeFallback's fluent-only builder,
-        // which merges this map with an attribute-driven fallback that supplies the factory instead.
         internal TypeMapInfo<T> Build(bool requireFactory = true)
         {
             if (requireFactory && _factory is null && !typeof(T).IsValueType)

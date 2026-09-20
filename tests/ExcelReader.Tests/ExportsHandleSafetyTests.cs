@@ -49,8 +49,6 @@ namespace ExcelReader.Tests
             Assert.True(Exports.TryFree(id, out NativeHandle? target));
             NativeApi.Close(target);
 
-            // The double-close case: a second TryFree on the same id must fail cleanly, never
-            // resolve to (or free) some other, unrelated live handle.
             Assert.False(Exports.TryFree(id, out NativeHandle? second));
             Assert.Null(second);
         }
@@ -68,7 +66,6 @@ namespace ExcelReader.Tests
                 NativeHandle other = OpenRealHandle();
                 nint otherId = NativeHandleTable.Register(other);
 
-                // The retired id must never be handed back out, and must never resolve again.
                 Assert.NotEqual(retiredId, otherId);
                 Assert.Null(Exports.Resolve(retiredId));
 

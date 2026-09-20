@@ -1,8 +1,5 @@
 namespace ExcelReader.Core.Writer.Internal
 {
-    // BIFF8 record type IDs and stream markers emitted by the writer (see [MS-XLS]).
-    // The reader keeps its own private copy of the subset it consumes; sharing is deferred
-    // to avoid churning the read path.
     internal static class BiffRecord
     {
         internal const int Bof = 0x0809;
@@ -38,7 +35,6 @@ namespace ExcelReader.Core.Writer.Internal
         internal const int SubstreamGlobals = 0x0005;
         internal const int SubstreamWorksheet = 0x0010;
 
-        // Largest payload a single BIFF8 record can hold.
         internal const int MaxPayload = 8224;
     }
 }

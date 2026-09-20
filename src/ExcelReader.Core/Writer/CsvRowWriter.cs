@@ -12,16 +12,12 @@ namespace ExcelReader.Core.Writer
     /// </summary>
     public sealed class CsvRowWriter : IRowWriter
     {
-        // Numbers, dates, Guids, and every other BCL formattable fit an ASCII field well under this;
-        // the rare overflow falls back to a rented buffer in WriteUtf8FieldSlow.
         private const int StackFieldBytes = 64;
 
         private readonly CsvWriter _owner;
         private readonly BiffBuffer _buffer;
         private readonly byte _delimiter;
         private readonly byte _quote;
-        // Prebuilt (once per CsvWriter) so the per-field quote check is a vectorized scan rather than
-        // a byte-at-a-time loop. Bytes for UTF-8 field output, chars for the string transcode path.
         private readonly SearchValues<byte> _specialBytes;
         private readonly SearchValues<char> _specialChars;
         private int _columnIndex;
@@ -38,7 +34,6 @@ namespace ExcelReader.Core.Writer
             _specialChars = specialChars;
         }
 
-        // Reused across rows by CsvWriter: rents one instance per writer instead of one per row.
         internal void Reset()
         {
             _columnIndex = 0;
@@ -182,9 +177,6 @@ namespace ExcelReader.Core.Writer
         private void WriteUtf8Field<T>(T value, ReadOnlySpan<char> format) where T : IUtf8SpanFormattable
         {
             Span<byte> buf = stackalloc byte[StackFieldBytes];
-            // Utf8Formatter is culture-free (no per-field NumberFormatInfo lookup) and matches the
-            // InvariantCulture/default-format output below for these types. Guards are JIT constants,
-            // so non-matching T compiles them away (mirrors Cell.TryParse's dispatch).
             if (format.IsEmpty && typeof(T) == typeof(int) && Utf8Formatter.TryFormat(Unsafe.As<T, int>(ref value), buf, out var written))
             {
                 WriteFieldBytes(buf[..written]);
@@ -208,8 +200,6 @@ namespace ExcelReader.Core.Writer
             WriteFieldBytes(buf[..written]);
         }
 
-        // Overflow path for a pathologically long formatted value; standard numeric/date/Guid output
-        // never reaches here. Grows a pooled buffer until the value fits, then writes it.
         private void WriteUtf8FieldSlow<T>(T value, ReadOnlySpan<char> format)
             where T : IUtf8SpanFormattable
         {
@@ -225,7 +215,6 @@ namespace ExcelReader.Core.Writer
             ArrayPool<byte>.Shared.Return(rented);
         }
 
-        // Writes an already-UTF-8 field, quoting only if it contains the delimiter, quote, CR, or LF.
         private void WriteFieldBytes(ReadOnlySpan<byte> value)
         {
             int firstSpecial = value.IndexOfAny(_specialBytes);
@@ -251,8 +240,6 @@ namespace ExcelReader.Core.Writer
             _buffer.WriteByte(_quote);
         }
 
-        // String fields transcode to UTF-8 exactly once; the special-char scan runs on the chars first
-        // so the common (unquoted) case is a single vectorized scan plus one WriteUtf8.
         private void WriteStringField(ReadOnlySpan<char> value)
         {
             int firstSpecial = value.IndexOfAny(_specialChars);

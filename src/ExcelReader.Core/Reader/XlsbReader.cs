@@ -1,6 +1,5 @@
 using System.Buffers;
 using System.IO.Compression;
-using ExcelReader.Core.Internal;
 
 namespace ExcelReader.Core.Reader
 {
@@ -12,21 +11,15 @@ namespace ExcelReader.Core.Reader
     /// </remarks>
     public sealed partial class XlsbReader : IExcelRowReader, IExcelRowReader<XlsbReader.Enumerator>
     {
-        // Shared-string pool: string i = _sharedFlat[_sharedOffsets[i].._sharedOffsets[i+1]].
         private readonly byte[] _sharedFlat = [];
         private readonly int[] _sharedOffsets = [0];
         private readonly bool _pooledSharedFlat;
-        // Lazily created: dedups repeated shared-string values (categorical columns) into one string
-        // instance instead of re-decoding UTF-8 per row. Indexed by shared-string index (see
-        // WorkbookLookups.CreateSharedStringCache, CellDesc.ToCell, Cell.GetString).
         private string?[]? _sharedStringCache;
         private readonly bool[] _styleIsDate = [];
         private readonly ExcelReaderOptions _options;
         private readonly DecompressedByteCounter _decompressedBytes;
 
         private readonly ZipArchive? _zip;
-        // Non-null instead of _zip/_stream for the in-memory ZIP path — exactly one of _zip or _memZip
-        // is non-null for any reader instance other than the test-only ctor.
         private readonly ZipMemoryIndex? _memZip;
         private readonly Stream? _stream;
         private readonly bool _leaveOpen;
@@ -34,7 +27,6 @@ namespace ExcelReader.Core.Reader
         private int _current;
         private int _disposed;
 
-        // Test-only: accepts pre-parsed components (no ZIP, no stream navigation).
         internal XlsbReader(byte[] sharedFlat, int[] sharedOffsets, bool[] styleIsDate, bool date1904)
         {
             _options = ExcelReaderOptions.Default;
@@ -45,15 +37,11 @@ namespace ExcelReader.Core.Reader
             IsDate1904 = date1904;
         }
 
-        // Sync open: reads the three small workbook parts, keeps _zip open for worksheet streaming.
         internal XlsbReader(Stream stream, bool leaveOpen, ExcelReaderOptions? options = null)
             : this(stream, leaveOpen, new ZipArchive(stream, ZipArchiveMode.Read, leaveOpen: true), options)
         {
         }
 
-        // Sync open over an already-opened ZipArchive — lets a caller that already opened the archive
-        // for format detection (Excel.Open's DetectSeekable) hand it straight to the reader instead of
-        // re-parsing the central directory a second time.
         internal XlsbReader(Stream stream, bool leaveOpen, ZipArchive zip, ExcelReaderOptions? options = null)
         {
             _stream = stream;
@@ -88,7 +76,6 @@ namespace ExcelReader.Core.Reader
             }
         }
 
-        // Private constructor used by CreateAsync — all parts already parsed.
         private XlsbReader(Stream stream, bool leaveOpen, ZipArchive zip,
             (string Name, string Path)[] sheets, bool[] styleIsDate, bool date1904,
             byte[] sharedFlat, int[] sharedOffsets, ExcelReaderOptions options, DecompressedByteCounter decompressedBytes)
@@ -106,9 +93,6 @@ namespace ExcelReader.Core.Reader
             _pooledSharedFlat = sharedFlat.Length != 0;
         }
 
-        // In-memory ZIP path: no stream, no ZipArchive. sharedFlat here
-        // comes from XlsbSharedStrings.Parse (a plain array, not ArrayPool-rented), unlike the streamed
-        // ctor above — _pooledSharedFlat is always false.
         private XlsbReader(ZipMemoryIndex memZip,
             (string Name, string Path)[] sheets, bool[] styleIsDate, bool date1904,
             byte[] sharedFlat, int[] sharedOffsets, ExcelReaderOptions options, DecompressedByteCounter decompressedBytes)
@@ -133,9 +117,6 @@ namespace ExcelReader.Core.Reader
                 zip => ParseAsync(stream, leaveOpen, zip, effectiveOptions, decompressedBytes, ct), ct);
         }
 
-        // Async open over an already-opened ZipArchive — the async twin of the ZipArchive-taking sync
-        // ctor above, for callers (Excel.OpenAsync's DetectSeekableAsync) that already opened the
-        // archive for format detection.
         internal static ValueTask<XlsbReader> CreateFromOpenZipAsync(
             Stream stream, bool leaveOpen, ZipArchive zip, ExcelReaderOptions? options, CancellationToken ct)
         {
@@ -193,7 +174,6 @@ namespace ExcelReader.Core.Reader
             }
         }
 
-        // --- IExcelReader ---
 
         /// <inheritdoc/>
         public bool IsDate1904 { get; }
@@ -226,7 +206,6 @@ namespace ExcelReader.Core.Reader
             _current = index;
         }
 
-        // --- Enumeration ---
 
         internal ReadOnlySpan<byte> SharedSpan => _sharedFlat;
 
@@ -294,7 +273,6 @@ namespace ExcelReader.Core.Reader
             return await GetAsyncEnumeratorAsync(ct).ConfigureAwait(false);
         }
 
-        // --- Dispose ---
 
         /// <inheritdoc/>
         public void Dispose()
@@ -304,7 +282,7 @@ namespace ExcelReader.Core.Reader
                 return;
             }
             _memZip?.Dispose();
-            _zip?.Dispose(); // ZipArchive was opened with leaveOpen:true — does not close _stream
+            _zip?.Dispose();
             if (!_leaveOpen)
             {
                 _stream?.Dispose();
@@ -325,7 +303,7 @@ namespace ExcelReader.Core.Reader
             _memZip?.Dispose();
             if (_zip is not null)
             {
-                await ZipArchiveDisposal.DisposeAsync(_zip).ConfigureAwait(false);
+                await _zip.DisposeAsync().ConfigureAwait(false);
             }
             if (!_leaveOpen && _stream is not null)
             {

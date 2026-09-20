@@ -15,8 +15,8 @@ namespace ExcelReader.Core.ValueObjects
     /// </summary>
     internal sealed class Utf8StringCache
     {
-        private const int BucketCount = 1024; // power of two, so hash & (BucketCount - 1) is a mask
-        private const int MaxKeyLength = 64; // longer values rarely repeat; not worth caching
+        private const int BucketCount = 1024;
+        private const int MaxKeyLength = 64;
         private readonly string?[] _values = new string[BucketCount];
 
         /// <summary>Returns a cached, deduplicated string for <paramref name="utf8"/> when one is
@@ -39,26 +39,21 @@ namespace ExcelReader.Core.ValueObjects
             {
                 return cached;
             }
-            // Either no entry yet, or a bucket collision with a different value — either way,
-            // overwrite unconditionally; a non-matching cached value must never be returned.
             string value = Encoding.UTF8.GetString(utf8);
             _values[bucket] = value;
             return value;
         }
 
-        // Re-encodes the cached string back to UTF-8 into a stack buffer and compares bytes directly,
-        // instead of keeping a persisted byte[] copy of the key — a round trip through a string can
-        // never grow past its original UTF-8 byte length, so MaxKeyLength bounds this buffer too.
         [SkipLocalsInit]
         private static bool Matches(string cached, ReadOnlySpan<byte> utf8)
         {
             if (cached.Length > utf8.Length)
             {
-                return false; // can't match: re-encoding could only add bytes, never fewer
+                return false;
             }
             if (cached.Length == utf8.Length && Ascii.Equals(cached, utf8))
             {
-                return true; // fast path for ASCII-only strings
+                return true;
             }
             Span<byte> buffer = stackalloc byte[MaxKeyLength];
             return Encoding.UTF8.TryGetBytes(cached, buffer, out int written)

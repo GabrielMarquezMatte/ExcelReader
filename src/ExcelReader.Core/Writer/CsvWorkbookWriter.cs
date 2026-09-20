@@ -116,7 +116,6 @@ namespace ExcelReader.Core.Writer
         /// <inheritdoc/>
         public ValueTask DisposeAsync()
         {
-            // The workbook owns the CsvWriter's lifetime; nothing to release here.
             return ValueTask.CompletedTask;
         }
     }
@@ -179,7 +178,6 @@ namespace ExcelReader.Core.Writer
         /// <exception cref="InvalidOperationException">The workbook has not been started, or a sheet was already added; a CSV file holds only one.</exception>
         public CsvSheetWriter AddSheet(string name)
         {
-            // sheetActive: false — the "only one sheet" rule is the permanent _sheetAdded flag below.
             WriterStateGuard.RequireCanAddSheet(_state, this, nameof(CsvWorkbookWriter), name, sheetActive: false, nameof(CsvSheetWriter));
             if (_sheetAdded)
             {

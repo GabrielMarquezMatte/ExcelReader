@@ -8,8 +8,6 @@ namespace ExcelReader.Tests
     {
         private const string Password = "hunter2";
 
-        // A plaintext that is deliberately not a multiple of either 4096 or 16, so the final short
-        // segment and its padding are exercised.
         private static byte[] SamplePackage(int length = 10_000)
         {
             byte[] content = new byte[length];
@@ -34,7 +32,6 @@ namespace ExcelReader.Tests
             using CfbContainer cfb = CfbContainer.Parse(container, ownsSource: false, ExcelReaderOptions.Default);
             Assert.True(cfb.ContainsStream("EncryptionInfo"));
             Assert.True(cfb.ContainsStream("EncryptedPackage"));
-            // 8-byte prefix + ciphertext rounded up to the cipher block.
             Assert.Equal(8 + (((plain.Length + 15) / 16) * 16), cfb.StreamLength("EncryptedPackage"));
         }
 
@@ -85,7 +82,6 @@ namespace ExcelReader.Tests
         [Fact]
         public void Encrypt_MultiSegmentPackage_DecryptsBack()
         {
-            // > 2 segments, so a wrong per-segment IV or segment counter shows up here and nowhere else.
             byte[] plain = SamplePackage(9_500);
             using var source = new MemoryStream(plain, writable: false);
             using var destination = new MemoryStream();
@@ -127,9 +123,6 @@ namespace ExcelReader.Tests
             Assert.Throws<ArgumentException>(() => PackageEncryptor.Encrypt(source, destination, Password));
         }
 
-        // The index of a stream's last real data byte, as opposed to the zero padding a big stream
-        // carries out to its final sector boundary — nothing reads that padding, so flipping a byte
-        // in it cannot be detected as tampering.
         private static int TamperableOffset(byte[] container, string name)
         {
             using var view = new MemoryStream(container, writable: false);

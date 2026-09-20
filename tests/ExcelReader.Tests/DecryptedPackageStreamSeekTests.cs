@@ -16,9 +16,6 @@ namespace ExcelReader.Tests
             return DecryptedPackageStream.Create(cfb, EncryptionDescriptor.Parse(info, options), options);
         }
 
-        // Every offset in the first three segments, plus the segment boundaries themselves: a
-        // one-segment-off cache or a bad in-segment offset shows up as a mismatch at exactly one
-        // of these, which pinpoints the bug.
         [Fact]
         public void Should_Match_Oracle_When_Seeking_To_Every_Offset_Near_Boundaries()
         {
@@ -41,7 +38,6 @@ namespace ExcelReader.Tests
             }
         }
 
-        // ZipArchive's first move is to find the end-of-central-directory record at the tail.
         [Fact]
         public void Should_Match_Oracle_When_Seeking_From_End()
         {
@@ -56,8 +52,6 @@ namespace ExcelReader.Tests
             }
         }
 
-        // Backwards seeks must invalidate nothing incorrectly: re-reading an earlier segment after
-        // a later one is exactly what ZipArchive does after reading the central directory.
         [Fact]
         public void Should_Match_Oracle_When_Seeking_Backwards_After_Reading_Tail()
         {

@@ -22,9 +22,6 @@ namespace ExcelReader.Tests
         };
         }
 
-        // Only AES-256/SHA-512 has a real fixture in this pass (see "Execution Scope Note"); Task 3's
-        // Should_Parse_Agile_When_KeyBits_And_Hash_Vary pins the AES-128/SHA-1 field layout separately,
-        // without a derivation oracle to check it against.
         [Theory]
         [MemberData(nameof(AgileFixtures))]
         public void Should_Derive_Key_When_Password_Correct(string fixture)
@@ -44,11 +41,6 @@ namespace ExcelReader.Tests
             Assert.Equal(ExcelEncryptionReason.PasswordIncorrect, ex.Reason);
         }
 
-        // EncryptionInfo is untrusted, attacker-controlled input parsed before any password check.
-        // A ciphertext length that isn't a multiple of the AES block size must be reported as
-        // malformed input (InvalidDataException), not let AES's own CryptographicException escape —
-        // callers of DeriveIntermediateKey only expect ExcelEncryptionException/InvalidDataException,
-        // and a raw CryptographicException would also fail FuzzMutation.AcceptableExceptionTypes.
         [Fact]
         public void Should_Throw_InvalidData_When_Ciphertext_Length_Is_Misaligned()
         {
@@ -61,12 +53,6 @@ namespace ExcelReader.Tests
                 () => AgileKeyDerivation.DeriveIntermediateKey(tampered, EncryptedFixtures.Password));
         }
 
-        // encryptedKeyValue is untrusted, pre-authentication input parsed before any password check.
-        // The spec defines its plaintext to be exactly KeyData.keyBits/8 bytes (32 here); a producer
-        // that wraps fewer bytes than that must be reported as malformed input (InvalidDataException),
-        // not let `raw[..keyLen]` throw a raw ArgumentOutOfRangeException. Truncating to one AES block
-        // (16 of the expected 32 bytes) keeps the ciphertext itself block-aligned - so it still
-        // decrypts cleanly under CBC - while decrypting to fewer bytes than KeyBits declares.
         [Fact]
         public void Should_Throw_InvalidData_When_EncryptedKeyValue_Decrypts_Shorter_Than_KeyBits()
         {
@@ -79,8 +65,6 @@ namespace ExcelReader.Tests
                 () => AgileKeyDerivation.DeriveIntermediateKey(tampered, EncryptedFixtures.Password));
         }
 
-        // Each 4096-byte segment gets its own IV derived from its index; if these collided, the
-        // multi-segment fixture would decrypt to garbage past the first segment.
         [Fact]
         public void Should_Produce_Distinct_Ivs_Per_Segment()
         {
@@ -102,8 +86,6 @@ namespace ExcelReader.Tests
             Assert.NotEmpty(hmacKey);
         }
 
-        // A crafted descriptor can ask for billions of iterations; that must be a bounded rejection,
-        // not an hours-long stall.
         [Fact]
         public void Should_Throw_When_SpinCount_Exceeds_Limit()
         {

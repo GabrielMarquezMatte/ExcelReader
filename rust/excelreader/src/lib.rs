@@ -2,6 +2,7 @@
 //! declared directly in this crate root (not a submodule), so `crate::xl_open_file_ex` etc. resolve
 //! from anywhere in the crate. See the `workbook` module for the safe wrapper built on top of this.
 
+pub mod aggregate;
 mod error;
 mod options;
 mod temporal;
@@ -13,6 +14,7 @@ pub mod rows;
 #[cfg(feature = "arrow")]
 pub mod arrow;
 
+pub use aggregate::{aggregate_csv_file, aggregate_csv_memory, CsvAccumulator, CsvParallelOptions};
 pub use error::Error;
 pub use rows::{AllRows, CellIter, CellRef, CellType, DecodedRows, RowCursor, RowRef};
 pub use options::{OpenOptions, OpenOptionsRaw, WriteOptions};
@@ -41,7 +43,7 @@ pub const XL_CELL_ERROR: i32 = 6;
 
 /// ABI revision this crate is compiled against. `Workbook::open` refuses to proceed when the loaded
 /// library's `xl_abi_version()` disagrees - see `workbook::check_abi_version`.
-pub const XL_ABI_VERSION: i32 = 4;
+pub const XL_ABI_VERSION: i32 = 5;
 
 pub const XL_T_STRING: i32 = 0;
 pub const XL_T_I64: i32 = 1;
@@ -195,6 +197,34 @@ pub struct XlRows {
     pub rows: *mut XlRow,
 }
 
+/// Mirrors `xl_csv_aggregation`. Every callback runs on a library worker thread except
+/// `free_state`, which runs on the calling thread after the run has finished; none may let a
+/// panic escape into the library - build one through [`aggregate`] rather than by hand.
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub struct XlCsvAggregation {
+    pub struct_size: i32,
+    pub seed: Option<unsafe extern "C" fn(*mut *mut c_void, *mut c_void) -> i32>,
+    pub accumulate: Option<unsafe extern "C" fn(*mut c_void, *const XlRow, *mut c_void) -> i32>,
+    pub combine: Option<unsafe extern "C" fn(*mut c_void, *mut c_void, *mut c_void) -> i32>,
+    pub free_state: Option<unsafe extern "C" fn(*mut c_void, *mut c_void)>,
+    pub user_data: *mut c_void,
+}
+
+/// Mirrors `xl_csv_parallel_options`. `struct_size` must be set to
+/// `size_of::<XlCsvParallelOptions>()`; build one through [`CsvParallelOptions`] rather than by hand.
+#[repr(C)]
+#[derive(Clone, Copy, Debug)]
+pub struct XlCsvParallelOptions {
+    pub struct_size: i32,
+    pub degree_of_parallelism: i32,
+    pub header_row: i32,
+    pub delimiter: i32,
+    pub quote: i32,
+    pub detect_bom: i32,
+    pub max_cell_bytes: i32,
+}
+
 extern "C" {
     pub fn xl_abi_version() -> c_int;
 
@@ -336,7 +366,6 @@ extern "C" {
         password_len: i32,
     ) -> c_int;
 
-    // ---- Streaming writer handle: see writer_handle::WriterHandle for the call-order contract. ----
 
     pub fn xl_open_write_handle(
         path: *const u8,
@@ -388,6 +417,28 @@ extern "C" {
         buffer: *mut u8,
         capacity: i32,
         out_written: *mut i32,
+    ) -> c_int;
+
+    /// Folds a CSV file into one caller-owned accumulator across several threads. Blocks until the
+    /// run finishes; the surviving state is written to `out_state` only on `XL_OK` and becomes the
+    /// caller's to free. See the contract above `xl_csv_aggregation` in `excelreader.h`, and
+    /// [`aggregate::aggregate_csv_file`] for the safe wrapper.
+    pub fn xl_csv_aggregate_file(
+        path: *const u8,
+        path_len: i32,
+        agg: *const XlCsvAggregation,
+        options: *const XlCsvParallelOptions,
+        out_state: *mut *mut c_void,
+    ) -> c_int;
+
+    /// Same as `xl_csv_aggregate_file` over an in-memory buffer, which must stay valid and
+    /// unmodified until the call returns - the library does not copy it.
+    pub fn xl_csv_aggregate_memory(
+        data: *const u8,
+        data_len: i32,
+        agg: *const XlCsvAggregation,
+        options: *const XlCsvParallelOptions,
+        out_state: *mut *mut c_void,
     ) -> c_int;
 
     pub fn xl_last_error_ptr(out_len: *mut i32) -> *const u8;

@@ -9,9 +9,7 @@ namespace ExcelReader.Core.Parser
     /// </summary>
     /// <typeparam name="T">The row model type this map configures.</typeparam>
     public interface IExcelRowMap<T>
-#if NET9_0_OR_GREATER
         where T : allows ref struct
-#endif
     {
         /// <summary>Configures <paramref name="builder"/> with one binding per mapped property.</summary>
         /// <param name="builder">The builder to configure.</param>

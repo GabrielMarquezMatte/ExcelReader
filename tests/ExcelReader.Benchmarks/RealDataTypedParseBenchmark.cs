@@ -4,14 +4,6 @@ using ExcelReader.Core.Reader;
 
 namespace ExcelReader.Benchmarks
 {
-    // Full-schema typed parse of the real 65K_Records_Data workbook (all 14 columns, 65,535 rows) -
-    // the JIT/CoreCLR counterpart to the C++/Rust native-binding benchmarks' `parse_sheet<FullRow>`
-    // (cpp/benchmarks/benchmark_compare.cpp, rust/excelreader/benches/compare_bench.rs), which run
-    // the same ExcelReader.Core parsing logic ahead-of-time compiled via NativeAOT and called
-    // through the C ABI instead of JIT-compiled in-process. RealDataReadBenchmark's Xlsx_ExcelReader
-    // is not a fair comparison against those: it reads raw cells zero-copy with no column-name
-    // resolution, while parse_sheet<FullRow> resolves 14 named columns into a typed struct - this
-    // class does the same schema-resolution work ExcelParser<T> does, so the two are matched work.
     public sealed class FullRow
     {
         [ExcelColumn("Region")]

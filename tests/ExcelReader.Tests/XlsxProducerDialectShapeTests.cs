@@ -8,7 +8,6 @@ using ExcelReader.Core.Writer;
 namespace ExcelReader.Tests
 {
     // Hand-authored XML/ZIP fragments mimicking known producer quirks — not files actually exported by
-    // those producers. See RealWorldXlsxCorpusTests for tests against genuine producer-exported binaries.
     public class XlsxProducerDialectShapeTests
     {
         private const string SpreadsheetNs = "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
@@ -22,122 +21,128 @@ namespace ExcelReader.Tests
 
         public static IEnumerable<object[]> ProducerFixtures
         {
-            get
-            {
-                yield return
-                [
-                    new ProducerFixture(
-                        "ClosedXML-like dimensions, ignored views, and empty typed cells",
-                        """
-                        <dimension ref="A1:D2"/>
-                        <sheetViews><sheetView workbookViewId="0"/></sheetViews>
-                        <sheetFormatPr defaultRowHeight="15"/>
-                        <sheetData>
-                            <row r="1" spans="1:4" x14ac:dyDescent="0.25">
-                                <c r="A1" t="s"><v>0</v></c>
-                                <c r="B1"/>
-                                <c r="C1" t="n"><v>123.45</v></c>
-                                <c r="D1" t="b"><v>1</v></c>
-                            </row>
-                        </sheetData>
-                        """,
-                        "<si><t>ClosedXML</t></si>",
-                        [
-                            new ExpectedCell(0, 0, CellType.ExcelString, "ClosedXML"),
-                            new ExpectedCell(0, 1, CellType.Empty, ""),
-                            new ExpectedCell(0, 2, CellType.Number, "123.45"),
-                            new ExpectedCell(0, 3, CellType.Boolean, "1"),
-                        ])
-                ];
+            get { return DotNetAndJsProducerFixtures().Concat(CloudAndJavaProducerFixtures()); }
+        }
 
-                yield return
-                [
-                    new ProducerFixture(
-                        "SheetJS-like dense refs, styled numbers, formula caches, and gaps",
-                        """
-                        <sheetData>
-                            <row r="5">
-                                <c r="A5" s="1"><v>45292</v></c>
-                                <c r="C5" t="str"><f>CONCAT("A","B")</f><v>AB</v></c>
-                                <c r="E5" t="e"><v>#N/A</v></c>
-                            </row>
-                        </sheetData>
-                        <phoneticPr fontId="1" type="noConversion"/>
-                        """,
-                        null,
-                        """<styleSheet><cellXfs count="2"><xf numFmtId="0"/><xf numFmtId="14"/></cellXfs></styleSheet>""",
-                        [
-                            new ExpectedCell(0, 0, CellType.Date, "45292"),
-                            new ExpectedCell(0, 1, CellType.Empty, ""),
-                            new ExpectedCell(0, 2, CellType.Formula, "AB"),
-                            new ExpectedCell(0, 3, CellType.Empty, ""),
-                            new ExpectedCell(0, 4, CellType.Error, "#N/A"),
-                        ])
-                ];
+        private static IEnumerable<object[]> DotNetAndJsProducerFixtures()
+        {
+            yield return
+            [
+                new ProducerFixture(
+                    "ClosedXML-like dimensions, ignored views, and empty typed cells",
+                    """
+                    <dimension ref="A1:D2"/>
+                    <sheetViews><sheetView workbookViewId="0"/></sheetViews>
+                    <sheetFormatPr defaultRowHeight="15"/>
+                    <sheetData>
+                        <row r="1" spans="1:4" x14ac:dyDescent="0.25">
+                            <c r="A1" t="s"><v>0</v></c>
+                            <c r="B1"/>
+                            <c r="C1" t="n"><v>123.45</v></c>
+                            <c r="D1" t="b"><v>1</v></c>
+                        </row>
+                    </sheetData>
+                    """,
+                    "<si><t>ClosedXML</t></si>",
+                    [
+                        new ExpectedCell(0, 0, CellType.ExcelString, "ClosedXML"),
+                        new ExpectedCell(0, 1, CellType.Empty, ""),
+                        new ExpectedCell(0, 2, CellType.Number, "123.45"),
+                        new ExpectedCell(0, 3, CellType.Boolean, "1"),
+                    ])
+            ];
 
-                yield return
-                [
-                    new ProducerFixture(
-                        "Numbers-like preserved whitespace, rich shared strings, and extension lists",
-                        """
-                        <sheetData>
-                            <row r="1">
-                                <c r="A1" t="inlineStr"><is><t xml:space="preserve">  padded  </t></is></c>
-                                <c r="B1" t="s"><v>0</v></c>
-                            </row>
-                        </sheetData>
-                        <extLst><ext uri="{interop-fixture}"><ignored value="true"/></ext></extLst>
-                        """,
-                        "<si><r><rPr><b/></rPr><t>rich</t></r><r><t xml:space=\"preserve\"> text</t></r></si>",
-                        [
-                            new ExpectedCell(0, 0, CellType.ExcelString, "  padded  "),
-                            new ExpectedCell(0, 1, CellType.ExcelString, "rich text"),
-                        ])
-                ];
+            yield return
+            [
+                new ProducerFixture(
+                    "SheetJS-like dense refs, styled numbers, formula caches, and gaps",
+                    """
+                    <sheetData>
+                        <row r="5">
+                            <c r="A5" s="1"><v>45292</v></c>
+                            <c r="C5" t="str"><f>CONCAT("A","B")</f><v>AB</v></c>
+                            <c r="E5" t="e"><v>#N/A</v></c>
+                        </row>
+                    </sheetData>
+                    <phoneticPr fontId="1" type="noConversion"/>
+                    """,
+                    null,
+                    """<styleSheet><cellXfs count="2"><xf numFmtId="0"/><xf numFmtId="14"/></cellXfs></styleSheet>""",
+                    [
+                        new ExpectedCell(0, 0, CellType.Date, "45292"),
+                        new ExpectedCell(0, 1, CellType.Empty, ""),
+                        new ExpectedCell(0, 2, CellType.Formula, "AB"),
+                        new ExpectedCell(0, 3, CellType.Empty, ""),
+                        new ExpectedCell(0, 4, CellType.Error, "#N/A"),
+                    ])
+            ];
 
-                yield return
-                [
-                    new ProducerFixture(
-                        "Google-Sheets-like ISO-8601 date cells (t=\"d\") alongside typed strings",
-                        """
-                        <sheetData>
-                            <row r="1">
-                                <c r="A1" t="d"><v>2024-01-01</v></c>
-                                <c r="B1" t="d"><v>2024-01-01T00:00:00</v></c>
-                                <c r="C1" t="s"><v>0</v></c>
-                            </row>
-                        </sheetData>
-                        """,
-                        "<si><t>label</t></si>",
-                        [
-                            new ExpectedCell(0, 0, CellType.Date, "45292"),
-                            new ExpectedCell(0, 1, CellType.Date, "45292"),
-                            new ExpectedCell(0, 2, CellType.ExcelString, "label"),
-                        ])
-                ];
+        }
 
-                yield return
-                [
-                    new ProducerFixture(
-                        "Aspose/Java-like namespace-prefixed worksheet with an unprefixed workbook part",
-                        """
-                        <x:sheetData>
-                            <x:row r="1">
-                                <x:c r="A1"><x:v>3.14</x:v></x:c>
-                                <x:c r="B1" t="s"><x:v>0</x:v></x:c>
-                                <x:c r="C1" t="inlineStr"><x:is><x:t>inline</x:t></x:is></x:c>
-                            </x:row>
-                        </x:sheetData>
-                        """,
-                        "<x:si><x:t>shared</x:t></x:si>",
-                        [
-                            new ExpectedCell(0, 0, CellType.Number, "3.14"),
-                            new ExpectedCell(0, 1, CellType.ExcelString, "shared"),
-                            new ExpectedCell(0, 2, CellType.ExcelString, "inline"),
-                        ])
-                    { Prefix = "x" }
-                ];
-            }
+        private static IEnumerable<object[]> CloudAndJavaProducerFixtures()
+        {
+            yield return
+            [
+                new ProducerFixture(
+                    "Numbers-like preserved whitespace, rich shared strings, and extension lists",
+                    """
+                    <sheetData>
+                        <row r="1">
+                            <c r="A1" t="inlineStr"><is><t xml:space="preserve">  padded  </t></is></c>
+                            <c r="B1" t="s"><v>0</v></c>
+                        </row>
+                    </sheetData>
+                    <extLst><ext uri="{interop-fixture}"><ignored value="true"/></ext></extLst>
+                    """,
+                    "<si><r><rPr><b/></rPr><t>rich</t></r><r><t xml:space=\"preserve\"> text</t></r></si>",
+                    [
+                        new ExpectedCell(0, 0, CellType.ExcelString, "  padded  "),
+                        new ExpectedCell(0, 1, CellType.ExcelString, "rich text"),
+                    ])
+            ];
+
+            yield return
+            [
+                new ProducerFixture(
+                    "Google-Sheets-like ISO-8601 date cells (t=\"d\") alongside typed strings",
+                    """
+                    <sheetData>
+                        <row r="1">
+                            <c r="A1" t="d"><v>2024-01-01</v></c>
+                            <c r="B1" t="d"><v>2024-01-01T00:00:00</v></c>
+                            <c r="C1" t="s"><v>0</v></c>
+                        </row>
+                    </sheetData>
+                    """,
+                    "<si><t>label</t></si>",
+                    [
+                        new ExpectedCell(0, 0, CellType.Date, "45292"),
+                        new ExpectedCell(0, 1, CellType.Date, "45292"),
+                        new ExpectedCell(0, 2, CellType.ExcelString, "label"),
+                    ])
+            ];
+
+            yield return
+            [
+                new ProducerFixture(
+                    "Aspose/Java-like namespace-prefixed worksheet with an unprefixed workbook part",
+                    """
+                    <x:sheetData>
+                        <x:row r="1">
+                            <x:c r="A1"><x:v>3.14</x:v></x:c>
+                            <x:c r="B1" t="s"><x:v>0</x:v></x:c>
+                            <x:c r="C1" t="inlineStr"><x:is><x:t>inline</x:t></x:is></x:c>
+                        </x:row>
+                    </x:sheetData>
+                    """,
+                    "<x:si><x:t>shared</x:t></x:si>",
+                    [
+                        new ExpectedCell(0, 0, CellType.Number, "3.14"),
+                        new ExpectedCell(0, 1, CellType.ExcelString, "shared"),
+                        new ExpectedCell(0, 2, CellType.ExcelString, "inline"),
+                    ])
+                { Prefix = "x" }
+            ];
         }
 
         [Theory]
@@ -201,7 +206,7 @@ namespace ExcelReader.Tests
             XDocument workbookXml = ReadXml(zip, "xl/workbook.xml");
             XNamespace s = SpreadsheetNs;
             XNamespace r = RelationshipsNs;
-#pragma warning disable CS8602 // Dereference of a possibly null reference.
+#pragma warning disable CS8602 
             XElement[] sheets = [.. workbookXml.Root.Element(s + "sheets")!.Elements(s + "sheet")];
             Assert.Collection(
                 sheets,
@@ -323,8 +328,6 @@ namespace ExcelReader.Tests
 
         private static MemoryStream BuildProducerFixture(ProducerFixture fixture)
         {
-            // A fixture may prefix its worksheet/shared-strings elements (e.g. <x:row>) while the workbook
-            // part stays unprefixed — the mixed shape where a prefixed worksheet previously read as zero rows.
             string pfx = fixture.Prefix is null ? "" : fixture.Prefix + ":";
             string wsNs = fixture.Prefix is null
                 ? $"""xmlns="{SpreadsheetNs}" """
@@ -478,7 +481,6 @@ namespace ExcelReader.Tests
 
             public string? StylesXml { get; init; }
 
-            // When set, the worksheet (and shared-strings) elements are namespace-prefixed, e.g. <x:row>.
             public string? Prefix { get; init; }
 
             public override string ToString()
@@ -490,4 +492,4 @@ namespace ExcelReader.Tests
         public readonly record struct ExpectedCell(int Row, int Column, CellType Type, string Value);
     }
 }
-#pragma warning restore CS8602 // Dereference of a possibly null reference.
+#pragma warning restore CS8602 

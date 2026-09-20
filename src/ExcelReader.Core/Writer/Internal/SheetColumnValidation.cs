@@ -1,10 +1,5 @@
 namespace ExcelReader.Core.Writer.Internal
 {
-    // Shared SetColumnStyle/SetColumnWidth validation for the three sheet writers (XlsxSheetWriter,
-    // XlsbSheetWriter, XlsSheetWriter): both methods were byte-for-byte identical across all three —
-    // validate, gate on WriterState, then stash into the caller's own dictionary — differing only in
-    // which writer's _state/_owner.StyleCount is consulted and the "must be called before ___" wording
-    // (the XLS writer has no async twin worth naming, so it points at Start instead of StartAsync).
     internal static class SheetColumnValidation
     {
         internal static void SetColumnStyle(

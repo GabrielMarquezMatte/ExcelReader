@@ -9,26 +9,9 @@ namespace ExcelReader.Native
 {
     internal static unsafe partial class NativeApi
     {
-        /// <summary>
-        /// Schema-driven columnar read of the WHOLE current sheet, from its first row. It drives the
-        /// workbook's row cursor for the duration of this call — succeeding normally even while a
-        /// caller-visible <see cref="TypedParseSession"/> (<c>xl_typed_reader</c>/Arrow stream) is open
-        /// on <paramref name="handle"/>, but faulting it rather than resuming it from a rewound
-        /// position; see <see cref="TypedParseSession.OpenTransient"/>. This is not a new parser: each
-        /// column dispatches to the same <see cref="ExcelCellReaders"/> members
-        /// <c>ExcelParser&lt;T&gt;</c>'s reflective path already uses (see
-        /// docs/NATIVE_BINDINGS_PLAN.md §7's feasibility finding).
-        /// </summary>
-        /// <param name="headerRow">1-based row number to resolve name-based <paramref name="specs"/>
-        /// against; rows before it are skipped entirely and it is never itself yielded as data. 0 means
-        /// "no header" — every row from the first is data, and every spec must be index-based.</param>
         internal static int ParseTyped(NativeHandle? handle, NativeColumnSpec[] specs, int headerRow, out NativeTable table)
         {
             table = default;
-            // One unbounded batch, drained and closed inside this call, which is exactly this method's
-            // contract - so the row loop lives in TypedParseSession only, with no second copy here to
-            // drift from it. Transient because it must not be refused by (or trip over) the workbook's
-            // one-live-session rule; see TypedParseSession.OpenTransient.
             int status = TypedParseSession.OpenTransient(handle, specs, headerRow, "xl_parse_typed",
                 out TypedParseSession? session);
             if (status != NativeStatus.Ok)
@@ -43,9 +26,6 @@ namespace ExcelReader.Native
                 return status;
             }
 
-            // An empty sheet produced no batch at all; the old contract is an OK result with a
-            // zero-row table, which BuildTable over empty builders is exactly. Inside a try because
-            // it allocates: no exception may leave this layer (see NativeApi's class remarks).
             try
             {
                 table = BuildEmptyTable(specs);
@@ -53,16 +33,12 @@ namespace ExcelReader.Native
             }
             catch (Exception exception)
             {
-                // BuildTable releases whatever it had allocated before a throw (see its own catch), so
-                // there is nothing left to free here.
                 SetLastError(exception.Message);
                 table = default;
                 return NativeStatus.Error;
             }
         }
 
-        // Zero rows, one column per spec - what the pre-session ParseTyped returned when the sheet
-        // had no data rows.
         private static NativeTable BuildEmptyTable(NativeColumnSpec[] specs)
         {
             ColumnBuilder[] builders = new ColumnBuilder[specs.Length];
@@ -73,8 +49,6 @@ namespace ExcelReader.Native
             return BuildTable(builders);
         }
 
-        // Shared by ParseTyped and TypedParseSession.NextBatch: only the caller holds the specs
-        // needed to name the column that failed.
         private static string DescribeFailedColumn(NativeColumnSpec[] specs, int failedColumn)
         {
             NativeColumnSpec spec = specs[failedColumn];
@@ -84,8 +58,6 @@ namespace ExcelReader.Native
             return $"column {failedColumn} (\"{columnLabel}\") has a value that failed to convert and is not nullable.";
         }
 
-        // The failing column travels back through `failedColumn` rather than being reported here,
-        // because only the caller holds the specs needed to name it in the message.
         private static bool TryAppendRow(ColumnBuilder[] builders, in Row row, int[] columnIndices, bool isDate1904, out int failedColumn)
         {
             for (int i = 0; i < builders.Length; i++)
@@ -100,7 +72,6 @@ namespace ExcelReader.Native
             return true;
         }
 
-        /// <summary>Releases a result returned by <see cref="ParseTyped"/> and resets it to zero. Safe on a zeroed value.</summary>
         internal static void FreeTable(ref NativeTable table)
         {
             if (table.Columns == IntPtr.Zero)
@@ -112,8 +83,6 @@ namespace ExcelReader.Native
             for (int index = 0; index < table.ColumnCount; index++)
             {
                 NativeColumn column = ColumnAt(table, index);
-                // Data is an interior pointer into Values for string columns; freeing it here would
-                // be a double free.
                 if (column.Values != IntPtr.Zero)
                 {
                     Marshal.FreeHGlobal(column.Values);
@@ -127,28 +96,16 @@ namespace ExcelReader.Native
             table = default;
         }
 
-        /// <summary>
-        /// Bounds the spec count xl_parse_typed/xl_parse_arrow receive before it sizes an array and
-        /// drives a walk over the caller's spec block.
-        /// </summary>
-        /// <remarks>
-        /// Internal rather than private so tests can pin the boundary directly: the
-        /// [UnmanagedCallersOnly] entry points that enforce this cannot be invoked from managed code,
-        /// so the predicate is the only part of that guard a unit test can reach. The C smoke test
-        /// covers the entry points themselves.
-        /// </remarks>
         internal static bool IsValidSpecCount(int specCount)
         {
             return specCount is > 0 and <= NativeLimits.MaxColumnSpecs;
         }
 
-        /// <summary>Bounds one spec's name length before it becomes a read length over caller memory.</summary>
         internal static bool IsValidNameLength(int nameLength)
         {
             return nameLength is >= 0 and <= NativeLimits.MaxColumnNameBytes;
         }
 
-        /// <summary>Bounds one spec's candidate-name count before it sizes an array and drives a walk over the caller's spec block.</summary>
         internal static bool IsValidNameCount(int nameCount)
         {
             return nameCount is >= 0 and <= NativeLimits.MaxNamesPerSpec;
@@ -196,8 +153,6 @@ namespace ExcelReader.Native
             return true;
         }
 
-        // Advances `rows` past any skipped rows and the header row itself, or leaves it untouched at
-        // the sheet's first row for index-only specs — either way, positioned at the first data row.
         private static bool TryResolveColumns(IExcelRowEnumerator rows, NativeColumnSpec[] specs, int headerRow, int[] columnIndices, [NotNullWhen(false)] out string? error)
         {
             error = null;
@@ -248,8 +203,6 @@ namespace ExcelReader.Native
             return string.Join(", ", Array.ConvertAll(names, n => $"\"{n}\""));
         }
 
-        // Mirrors ExcelParserConfig's own defaults (Trim + OrdinalIgnoreCase), reimplemented with
-        // public APIs only: HeaderNormalizationExtensions.Apply is internal to ExcelReader.Core.
         private static int FindHeaderColumn(Row header, string name)
         {
             string target = name.Trim();
@@ -279,8 +232,6 @@ namespace ExcelReader.Native
             }
             catch
             {
-                // Every column before the one that threw already has its Values/Validity block
-                // allocated; hand FreeTable a table truncated to what actually got built.
                 NativeTable partial = new() { ColumnCount = built, RowCount = rowCount, Columns = columnsBlock };
                 FreeTable(ref partial);
                 throw;
@@ -288,8 +239,6 @@ namespace ExcelReader.Native
             return new NativeTable { ColumnCount = columnCount, RowCount = rowCount, Columns = columnsBlock };
         }
 
-        // Never returns a zero-size allocation, since a column with no rows still needs a non-null
-        // pointer the caller can free.
         private static IntPtr CopyToNativeBlock<T>(ChunkedBuffer<T> source) where T : unmanaged
         {
             int byteLength = source.ByteLength;
@@ -298,7 +247,6 @@ namespace ExcelReader.Native
             return block;
         }
 
-        // Arrow's canonical boolean layout is one LSB-first bit per row, same as a validity bitmap.
         private static IntPtr PackBitsLsbFirst(ReadOnlySpan<byte> flags)
         {
             int byteLength = Math.Max((flags.Length + 7) / 8, 1);
@@ -315,33 +263,19 @@ namespace ExcelReader.Native
             return block;
         }
 
-        /// <summary>
-        /// Accumulates one column's values in managed memory as rows are read, then marshals to a single
-        /// <see cref="NativeColumn"/> in <see cref="Build"/> once every row has been read successfully —
-        /// deferring native allocation until success is certain means a conversion failure mid-sheet
-        /// (<see cref="AppendFrom"/> returning <see langword="false"/>) never has to unwind any native
-        /// memory, unlike <see cref="ReadAllDecoded"/>'s per-row native allocations.
-        /// </summary>
         private sealed class ColumnBuilder(int type, bool nullable)
         {
-            // Already in the layout the ABI hands out: one LSB-first bit per row, 1 = valid, 0 = null.
-            // Accumulating packed rather than a byte per row keeps this eight times smaller for a tall
-            // sheet, so Build just copies it instead of converting.
             private readonly ChunkedBuffer<byte> _validity = new();
             private int _rowCount;
             private bool _anyNull;
 
-            // Only one of these is populated, chosen by `type` — see AppendFrom. ChunkedBuffer rather
-            // than List<T>, which regrows by copying the whole column and discarding the old array.
-            private readonly ChunkedBuffer<long> _longs = new(); // Int64, Time, Timestamp — all 8-byte
-            private readonly ChunkedBuffer<int> _ints = new(); // Date, which the ABI defines as a 4-byte day count
-            private readonly ChunkedBuffer<double> _doubles = new(); // Float64
-            private readonly ChunkedBuffer<byte> _bools = new(); // Bool, one byte (0/1) per row
-            private readonly ChunkedBuffer<int> _stringOffsets = NewStringOffsets(type); // String
-            private readonly ChunkedBuffer<byte> _stringData = new(); // String
+            private readonly ChunkedBuffer<long> _longs = new();
+            private readonly ChunkedBuffer<int> _ints = new();
+            private readonly ChunkedBuffer<double> _doubles = new();
+            private readonly ChunkedBuffer<byte> _bools = new();
+            private readonly ChunkedBuffer<int> _stringOffsets = NewStringOffsets(type);
+            private readonly ChunkedBuffer<byte> _stringData = new();
 
-            // Seeded here rather than in the field initializer so a non-string column never allocates
-            // the buffer's first chunk for an entry it will never use.
             private static ChunkedBuffer<int> NewStringOffsets(int type)
             {
                 ChunkedBuffer<int> offsets = new();
@@ -352,7 +286,6 @@ namespace ExcelReader.Native
                 return offsets;
             }
 
-            // Reused across every row of a string column. Grows to the widest cell seen, never shrinks.
             private byte[] _scratch = [];
 
             internal int RowCount
@@ -373,23 +306,14 @@ namespace ExcelReader.Native
                     NativeColumnType.Bool => Append(_bools, ExcelCellReaders.Bool(in cell, isDate1904, CultureInfo.InvariantCulture, out bool flag), (byte)(flag ? 1 : 0)),
                     NativeColumnType.Date => AppendDate(in cell, isDate1904),
                     NativeColumnType.Time => AppendTime(in cell, isDate1904),
-                    _ => AppendTimestamp(in cell, isDate1904), // NativeColumnType.Timestamp; range already validated
+                    _ => AppendTimestamp(in cell, isDate1904),
                 };
             }
 
-            // Cell.GetString's own stack buffer for the format-a-number branch. Matched here so an
-            // unformattable number lands on the same empty result it would have through GetString.
             private const int NumberFormatMaxBytes = 32;
 
             private bool AppendString(in Cell cell)
             {
-                // Reading a string column always succeeds, including for an empty cell (-> ""), so it is
-                // never null regardless of `nullable`.
-                //
-                // Cell.TryFormat emits exactly the bytes GetString would have decoded, without decoding
-                // to a managed string and re-encoding it. It also copies the file's bytes through
-                // unchanged rather than sanitizing malformed UTF-8 to U+FFFD, matching every other read
-                // path in this library.
                 int capacity = Math.Max(cell.Value.Length, NumberFormatMaxBytes);
                 if (_scratch.Length < capacity)
                 {
@@ -410,15 +334,13 @@ namespace ExcelReader.Native
             private bool AppendDate(in Cell cell, bool isDate1904)
             {
                 bool ok = ExcelCellReaders.DateOnlyAuto(in cell, isDate1904, CultureInfo.InvariantCulture, out DateOnly value);
-                // DateOnly.DayNumber is already an int and the ABI's Date column is 4-byte, so this
-                // accumulates as int end to end — no widening to long and narrowing back on marshal.
                 return Append(_ints, ok, value.DayNumber - UnixEpochDayNumber);
             }
 
             private bool AppendTime(in Cell cell, bool isDate1904)
             {
                 bool ok = ExcelCellReaders.TimeOnlyAuto(in cell, isDate1904, CultureInfo.InvariantCulture, out TimeOnly value);
-                return Append(_longs, ok, value.ToTimeSpan().Ticks / 10); // 1 tick = 100ns -> /10 = microseconds
+                return Append(_longs, ok, value.ToTimeSpan().Ticks / 10);
             }
 
             private bool AppendTimestamp(in Cell cell, bool isDate1904)
@@ -427,8 +349,6 @@ namespace ExcelReader.Native
                 return Append(_longs, ok, (value - DateTime.UnixEpoch).Ticks / 10);
             }
 
-            // A failed conversion is only tolerable on a nullable column; its slot holds default(T) so
-            // every column stays row-aligned.
             private bool Append<T>(ChunkedBuffer<T> target, bool converted, T value) where T : unmanaged
             {
                 if (!converted && !nullable)
@@ -444,7 +364,7 @@ namespace ExcelReader.Native
             {
                 if ((_rowCount & 7) == 0)
                 {
-                    _validity.Add(0); // every eighth row opens a fresh byte
+                    _validity.Add(0);
                 }
                 if (valid)
                 {
@@ -462,7 +382,6 @@ namespace ExcelReader.Native
                 IntPtr validity = IntPtr.Zero;
                 if (_anyNull)
                 {
-                    // NULL validity pointer is the ABI's "no nulls in this column" signal.
                     validity = CopyToNativeBlock(_validity);
                 }
                 return type switch
@@ -471,18 +390,16 @@ namespace ExcelReader.Native
                     NativeColumnType.Bool => BuildFixedWidthColumn(_bools, validity),
                     NativeColumnType.Float64 => BuildFixedWidthColumn(_doubles, validity),
                     NativeColumnType.Date => BuildFixedWidthColumn(_ints, validity),
-                    _ => BuildFixedWidthColumn(_longs, validity), // Int64, Time, Timestamp — all 8-byte
+                    _ => BuildFixedWidthColumn(_longs, validity),
                 };
             }
 
-            // A single copy straight from the accumulated chunks into one native block.
             private NativeColumn BuildFixedWidthColumn<T>(ChunkedBuffer<T> values, IntPtr validity) where T : unmanaged
             {
                 IntPtr block = CopyToNativeBlock(values);
                 return new NativeColumn { Type = type, Length = RowCount, Values = block, Validity = validity, Data = IntPtr.Zero, DataLen = 0 };
             }
 
-            // Offsets and data share a single block, with Data an interior pointer just past the offsets.
             private NativeColumn BuildStringColumn(IntPtr validity)
             {
                 int offsetBytes = _stringOffsets.ByteLength;

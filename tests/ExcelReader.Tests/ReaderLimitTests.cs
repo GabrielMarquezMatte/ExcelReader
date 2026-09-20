@@ -12,11 +12,6 @@ namespace ExcelReader.Tests
 {
     public class ReaderLimitTests
     {
-        // Regression: a corrupted/malicious file can encode an arbitrary column index in a per-cell
-        // record (e.g. a raw 4-byte BIFF12 column field), which used to flow straight into
-        // Row.ColumnCount unchecked — turning a fuzzed single-byte flip into a near-infinite loop for
-        // any caller iterating 0..ColumnCount, instead of a graceful rejection. CellAccumulator.Add is
-        // the one choke point shared by every reader (XLS/XLSB/XLSX/CSV), so the bound lives there.
         [Fact]
         public void CellAccumulatorRejectsColumnIndexAtOrAboveExcelLimit()
         {
@@ -47,9 +42,32 @@ namespace ExcelReader.Tests
                 acc.Return();
             }
         }
-        // Patches the uncompressed-size field of a central-directory record in place, so the entry's
-        // declared size (what ZipArchiveEntry.Length reports) lies far above its real, tiny compressed
-        // content — the exact shape of a zip-bomb-style amplification attack.
+        [Theory]
+        [InlineData("AAAA1")]
+        [InlineData("MWLRALP1")]
+        public void FourOrMoreColumnLettersThrowColumnLimit(string cellRef)
+        {
+            using MemoryStream built = WorkbookBuilder.Build($"""<row r="1"><c r="{cellRef}"><v>1</v></c></row>""");
+
+            using XlsxReader reader = Excel.From(built);
+            Assert.Throws<ExcelLimitExceededException>(() =>
+            {
+                using XlsxReader.Enumerator e = reader.GetEnumerator();
+                Assert.True(e.MoveNext());
+            });
+        }
+
+        [Fact]
+        public void LastColumnXfdStillReads()
+        {
+            using MemoryStream built = WorkbookBuilder.Build("""<row r="1"><c r="XFD1"><v>1</v></c></row>""");
+
+            using XlsxReader reader = Excel.From(built);
+            using XlsxReader.Enumerator e = reader.GetEnumerator();
+            Assert.True(e.MoveNext());
+            Assert.Equal(16_384, e.Current.ColumnCount);
+        }
+
         private static void ForgeCentralDirectoryUncompressedSize(byte[] zipBytes, string entryName, uint forgedSize)
         {
             byte[] nameBytes = Encoding.UTF8.GetBytes(entryName);
@@ -119,13 +137,6 @@ namespace ExcelReader.Tests
             Assert.Equal(50_000_000, ex.Actual);
         }
 
-        // <sst uniqueCount="…"> is attacker-controlled independent of the part's real byte
-        // length — unlike ForgedOversizedSharedStringsEntryTripsSharedStringLimitBeforeReading above,
-        // this entry's *declared central-directory size* is honest and tiny; only the XML attribute
-        // lies. Before the fix, `new int[uniqueCount + 1]` sized the offsets array straight from this
-        // attribute, so a ~100-byte part could force an allocation many times its own MaxSharedStringBytes
-        // budget. LimitChecks.ThrowIfSharedStringCountImplausible now rejects a count the part could not
-        // physically contain before that allocation happens.
         [Fact]
         public void ImplausibleUniqueCountTripsSharedStringLimitBeforeAllocating()
         {
@@ -153,17 +164,6 @@ namespace ExcelReader.Tests
             Assert.Equal(500_000_000, ex.Actual);
         }
 
-        // BoundSheet8.lbPlyPos is read as a raw signed int32 with no validation before it becomes
-        // a BiffCursor.Position assignment. On the Chained WorkbookStream kind, a negative position used
-        // to resolve to a valid-looking byte range elsewhere in the file (the OLE header/preceding
-        // sectors) and silently decode wrong bytes as BIFF records — no exception, wrong data — while
-        // the Streamed/Contiguous kinds already threw. The fix validates lbPlyPos once, in
-        // ParseWorkbookGlobals, before OpenCursor is ever called with it — which runs identically
-        // regardless of which WorkbookStream kind BuildWorkbook chose, so this is structurally the same
-        // fix for all three kinds rather than three separate ones. Exercised here through the
-        // Stream-based open (Streamed/Contiguous, depending on the forged workbook's size) and the
-        // ReadOnlyMemory-based open (Contiguous for a small workbook); a dedicated large-workbook fixture
-        // to force the Chained kind specifically would strengthen this further but wasn't built here.
         private static void PatchBoundSheetLbPlyPos(byte[] bytes, int forgedOffset)
         {
             for (int i = 0; i + 8 <= bytes.Length; i++)
@@ -194,14 +194,10 @@ namespace ExcelReader.Tests
             Assert.Equal(streamEx.Message, memoryEx.Message);
         }
 
-        // The FAT sector immediately follows the 512-byte OLE header (XlsWorkbookBuilder.SectorSize),
-        // so sector index N sits at absolute byte offset (N + 1) * 512 — mirrors XlsCompoundFile.SectorOffset.
-        // Sector 0 is the FAT sector itself (marked FatSector by the builder); sector 1 is the directory.
-        // Overwriting both entries with each other's index turns the FAT into a 2-sector cycle.
         private static void PatchFatCycle(byte[] oleBytes, int sectorA, int sectorB)
         {
             const int SectorSize = 512;
-            const int FatSectorOffset = SectorSize; // FAT sector sits right after the header
+            const int FatSectorOffset = SectorSize;
             BinaryPrimitives.WriteInt32LittleEndian(oleBytes.AsSpan(FatSectorOffset + (sectorA * 4)), sectorB);
             BinaryPrimitives.WriteInt32LittleEndian(oleBytes.AsSpan(FatSectorOffset + (sectorB * 4)), sectorA);
         }
@@ -211,8 +207,6 @@ namespace ExcelReader.Tests
         {
             using MemoryStream built = XlsWorkbookBuilder.Build(sheets: [("S1", [["Alice", 1, true]])]);
             byte[] bytes = built.ToArray();
-            // Directory (sector 1) -> FAT sector (sector 0) -> back to directory: a 2-sector cycle in
-            // the chain XlsCompoundFile.BuildWorkbook walks to read the OLE directory itself.
             PatchFatCycle(bytes, sectorA: 1, sectorB: 0);
 
             InvalidDataException ex = Assert.Throws<InvalidDataException>(
@@ -220,23 +214,18 @@ namespace ExcelReader.Tests
             Assert.Contains("cycle", ex.Message, StringComparison.OrdinalIgnoreCase);
         }
 
-        // [MS-CFB] fixes the mini sector size at 64 bytes (shift = 6, header offset 0x20).
         [Fact]
         public void MiniSectorShiftOtherThan64BytesThrows()
         {
             using MemoryStream built = XlsWorkbookBuilder.Build(sheets: [("S1", [["Alice", 1, true]])]);
             byte[] bytes = built.ToArray();
-            BinaryPrimitives.WriteUInt16LittleEndian(bytes.AsSpan(0x20), 7); // shift 7 -> 128-byte mini sectors
+            BinaryPrimitives.WriteUInt16LittleEndian(bytes.AsSpan(0x20), 7);
 
             InvalidDataException ex = Assert.Throws<InvalidDataException>(
                 () => Excel.FromXls(new MemoryStream(bytes)));
             Assert.Contains("sector size", ex.Message, StringComparison.OrdinalIgnoreCase);
         }
 
-        // A run of zero-length CONTINUE records after an SST record never grows EnsureSharedCapacity's
-        // buffer (needed <= buffer.Length stays true), so only the boundaries.Count-based charge added in
-        // DecodeSstFromCursor can stop it. A tiny MaxSharedStringBytes makes this trip long before any real
-        // memory pressure, without needing millions of records to prove the point.
         private static byte[] BuildFramedSstWithEmptyContinues(int continueCount)
         {
             using MemoryStream ms = new();
@@ -251,10 +240,10 @@ namespace ExcelReader.Tests
                     ms.Write(new byte[payloadLength]);
                 }
             }
-            WriteRecord(0x00FC, 8); // BIFF8 SST: cstTotal=0, cstUnique=0, no <si> data
+            WriteRecord(0x00FC, 8);
             for (int i = 0; i < continueCount; i++)
             {
-                WriteRecord(0x003C, 0); // zero-length CONTINUE
+                WriteRecord(0x003C, 0);
             }
             return ms.ToArray();
         }
@@ -413,7 +402,6 @@ namespace ExcelReader.Tests
             Assert.Equal(4, ex.Actual);
         }
 
-        // --- XlsCompoundFile (.xls / OLE-CFB) container-phase guard rails ---
 
         [Fact]
         public void ForgedWorkbookSizeNearUInt32MaxThrowsInvalidDataException()
@@ -434,11 +422,6 @@ namespace ExcelReader.Tests
         [Fact]
         public void ForgedRootEntrySizeAboveIntMaxValueThrowsInvalidDataException()
         {
-            // The root entry's mini-stream length used to be cast straight from a long to an int; a
-            // value above the signed 32-bit range truncated to a negative limit, which the chain
-            // reader interpreted as "read everything" instead of "read N bytes". The default builder's
-            // workbook size always sits above the mini-stream cutoff, so the workbook size is shrunk
-            // here too, forcing the one branch that reads the root entry's length at all.
             byte[] bytes = XlsWorkbookBuilder.Build(sheets: [("S1", [["A"]])]).ToArray();
             XlsWorkbookBuilder.LE64(100).CopyTo(bytes, XlsWorkbookBuilder.WorkbookSizeOffset);
             XlsWorkbookBuilder.LE64(int.MaxValue + 1L).CopyTo(bytes, XlsWorkbookBuilder.RootEntrySizeOffset);
@@ -482,10 +465,7 @@ namespace ExcelReader.Tests
             Assert.Same(inner, withInner.InnerException);
         }
 
-        // --- Encrypted-container resource guards ---
 
-        // Every one of these numbers comes from the file, so each must be a bounded rejection rather than
-        // an allocation, a stall, or an arithmetic fault.
         [Fact]
         public void Should_Throw_When_Encrypted_Package_Declares_More_Plaintext_Than_Budget()
         {
@@ -510,9 +490,6 @@ namespace ExcelReader.Tests
             Assert.Throws<ExcelLimitExceededException>(() => Excel.Open(bytes, tight));
         }
 
-        // Standard encryption's iteration count is fixed by the scheme at 50,000 rather than stated
-        // in the file, so there is no file-supplied value for this cap to guard and a lowered cap
-        // must not make a legitimate file unopenable.
         [Fact]
         public void Should_Ignore_SpinCount_Cap_When_Scheme_Is_Standard()
         {
@@ -538,11 +515,6 @@ namespace ExcelReader.Tests
             return data;
         }
 
-        // Byte-flipping an encrypted container must never hang, OOM, or throw an arithmetic fault - only
-        // the acceptable rejection types. Covers all three encrypted fixtures (not just the agile one)
-        // so the standard-encryption pre-authentication parse path (ParseBinary/ResolveKeyBits/
-        // ParseVerifier/StandardPackageCipher) gets mutation coverage too - mutating the agile seed alone
-        // would never realistically produce a coherent binary standard header.
         [Theory]
         [MemberData(nameof(EncryptedMutationFixtures))]
         [SuppressMessage("Design", "CA1031:Do not catch general exception types",
@@ -584,13 +556,9 @@ namespace ExcelReader.Tests
                 }
                 catch (Exception ex) when (FuzzMutation.IsAcceptable(ex))
                 {
-                    // Correctly rejected.
                 }
                 catch (Exception ex)
                 {
-                    // Recorded rather than rethrown: with rounds running concurrently, several can fail
-                    // at once and Parallel.For would surface whichever thread lost the race. Reporting
-                    // the lowest failing index instead yields the same message the serial loop gave.
                     failures[i] = ex;
                     return;
                 }
@@ -610,32 +578,20 @@ namespace ExcelReader.Tests
             Assert.Equal(Rounds, completed);
         }
 
-        // Regression: found by the new "encrypted" fuzz target's mutation of agile-aes256-sha512.xlsx.
-        // A mini-FAT chain entry is an attacker-controlled int32 with no upper bound of its own, and
-        // ReadMiniStream computed `checked(sector * miniSectorSize)` in Int32 arithmetic - a large
-        // sector value overflowed that multiply into an OverflowException before the bounds check
-        // that follows it ever ran, leaking an arithmetic fault instead of the InvalidDataException
-        // malformed input is contracted to produce. Fixed by promoting the multiply to Int64 first.
         [Fact]
         public void MiniStreamSectorNearIntMaxThrowsInvalidDataInsteadOfOverflow()
         {
             byte[] miniStream = new byte[128];
             int[] miniFat = [-1];
-            const int HugeSector = 40_000_000; // * miniSectorSize (64) overflows Int32
+            const int HugeSector = 40_000_000;
             Assert.Throws<InvalidDataException>(() =>
                 CfbContainer.ReadMiniStream(miniStream, miniFat, miniSectorSize: 64, startSector: HugeSector, size: 64));
         }
 
-        // Regression: found by libFuzzer's "encrypted" harness. ReadMiniStream validated that a mini
-        // sector's starting offset fell inside miniStream, but not that the full miniSectorSize (or
-        // remaining-bytes) slice starting there also fit - so a sector near the end of a truncated
-        // mini stream passed the offset check and then Span.Slice's own bounds check threw
-        // ArgumentOutOfRangeException instead of the InvalidDataException malformed input is
-        // contracted to produce.
         [Fact]
         public void MiniStreamSectorNearEndOfStreamThrowsInvalidDataInsteadOfRangeError()
         {
-            byte[] miniStream = new byte[100]; // not an even multiple of the 64-byte mini sector size
+            byte[] miniStream = new byte[100];
             int[] miniFat = [-1];
             Assert.Throws<InvalidDataException>(() =>
                 CfbContainer.ReadMiniStream(miniStream, miniFat, miniSectorSize: 64, startSector: 1, size: 64));

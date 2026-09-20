@@ -5,7 +5,6 @@ namespace ExcelReader.Tests
     public class CsvChunkPlanTests
     {
         // Chunk size is a constant, not a share of the file: doubling the input doubles the chunk
-        // count and leaves chunk size — and therefore the parallel path's peak memory — untouched.
         [Theory]
         [InlineData(16 * 1024 * 1024, 256)]
         [InlineData(32 * 1024 * 1024, 512)]

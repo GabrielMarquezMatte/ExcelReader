@@ -5,8 +5,6 @@ using SpreadCheetah;
 
 namespace ExcelReader.Benchmarks
 {
-    // Writes `Rows` records (header + 4 columns) to an in-memory .xlsx, comparing
-    // ExcelReader's XlsxWorkbookWriter against MiniExcel's object serializer.
     [MemoryDiagnoser]
     public class WriteBenchmark
     {
@@ -24,8 +22,6 @@ namespace ExcelReader.Benchmarks
         [Benchmark(Baseline = true)]
         public async Task<long> ExcelReaderWriter()
         {
-            // Pre-sized to the neighborhood of the actual output so MemoryStream's doubling growth
-            // (256B -> ... -> 4MB) doesn't dominate the GC/allocation numbers being measured.
             await using var ms = new MemoryStream(4 * 1024 * 1024);
             await using (XlsxWorkbookWriter wb = await XlsxWorkbookWriter.CreateAsync(ms, leaveOpen: true))
             {
@@ -57,8 +53,6 @@ namespace ExcelReader.Benchmarks
         [Benchmark]
         public async Task<long> ExcelReaderWriterSharedStrings()
         {
-            // Pre-sized to the neighborhood of the actual output so MemoryStream's doubling growth
-            // (256B -> ... -> 4MB) doesn't dominate the GC/allocation numbers being measured.
             await using var ms = new MemoryStream(4 * 1024 * 1024);
             await using (XlsxWorkbookWriter wb = await XlsxWorkbookWriter.CreateAsync(ms, leaveOpen: true, useSharedStrings: true))
             {
@@ -90,8 +84,6 @@ namespace ExcelReader.Benchmarks
         [Benchmark]
         public async Task<long> ExcelReaderWriterPrefetch()
         {
-            // Pre-sized to the neighborhood of the actual output so MemoryStream's doubling growth
-            // (256B -> ... -> 4MB) doesn't dominate the GC/allocation numbers being measured.
             await using var ms = new MemoryStream(4 * 1024 * 1024);
             await using (XlsxWorkbookWriter wb = await XlsxWorkbookWriter.CreateAsync(ms, leaveOpen: true, prefetchWrite: true))
             {
@@ -123,8 +115,6 @@ namespace ExcelReader.Benchmarks
         [Benchmark]
         public async Task<long> ExcelReaderXlsbWriter()
         {
-            // Pre-sized to the neighborhood of the actual output so MemoryStream's doubling growth
-            // (256B -> ... -> 4MB) doesn't dominate the GC/allocation numbers being measured.
             await using var ms = new MemoryStream(4 * 1024 * 1024);
             await using (XlsbWorkbookWriter wb = await XlsbWorkbookWriter.CreateAsync(ms, leaveOpen: true))
             {
@@ -149,8 +139,6 @@ namespace ExcelReader.Benchmarks
         [Benchmark]
         public async Task<long> ExcelReaderXlsbWriterSharedStrings()
         {
-            // Pre-sized to the neighborhood of the actual output so MemoryStream's doubling growth
-            // (256B -> ... -> 4MB) doesn't dominate the GC/allocation numbers being measured.
             await using var ms = new MemoryStream(4 * 1024 * 1024);
             await using (XlsbWorkbookWriter wb = await XlsbWorkbookWriter.CreateAsync(ms, leaveOpen: true, useSharedStrings: true))
             {
@@ -175,8 +163,6 @@ namespace ExcelReader.Benchmarks
         [Benchmark]
         public async Task<long> ExcelReaderXlsbWriterPrefetch()
         {
-            // Pre-sized to the neighborhood of the actual output so MemoryStream's doubling growth
-            // (256B -> ... -> 4MB) doesn't dominate the GC/allocation numbers being measured.
             await using var ms = new MemoryStream(4 * 1024 * 1024);
             await using (XlsbWorkbookWriter wb = await XlsbWorkbookWriter.CreateAsync(ms, leaveOpen: true, prefetchWrite: true))
             {
@@ -201,8 +187,6 @@ namespace ExcelReader.Benchmarks
         [Benchmark]
         public async Task<long> MiniExcel()
         {
-            // Pre-sized to the neighborhood of the actual output so MemoryStream's doubling growth
-            // (256B -> ... -> 4MB) doesn't dominate the GC/allocation numbers being measured.
             await using var ms = new MemoryStream(4 * 1024 * 1024);
             await ms.SaveAsAsync(_records, excelType: ExcelType.XLSX).ConfigureAwait(false);
             return ms.Length;
@@ -211,8 +195,6 @@ namespace ExcelReader.Benchmarks
         [Benchmark]
         public async Task<long> SpreadCheetah()
         {
-            // Pre-sized to the neighborhood of the actual output so MemoryStream's doubling growth
-            // (256B -> ... -> 4MB) doesn't dominate the GC/allocation numbers being measured.
             await using var ms = new MemoryStream(4 * 1024 * 1024);
             await using (var writer = await Spreadsheet.CreateNewAsync(ms))
             {

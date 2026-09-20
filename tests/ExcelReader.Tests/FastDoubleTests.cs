@@ -14,8 +14,6 @@ namespace ExcelReader.Tests
 
             if (!expectedOk)
             {
-                // FastDouble may reject inputs double.TryParse accepts (it only handles a subset), but
-                // it must never claim success where double.TryParse fails.
                 Assert.False(actualOk, $"FastDouble accepted \"{text}\" but double.TryParse rejected it.");
                 return;
             }
@@ -35,16 +33,16 @@ namespace ExcelReader.Tests
         [InlineData("-3.14")]
         [InlineData("0.1")]
         [InlineData("100000")]
-        [InlineData("999999999999999")] // 15 digits, at the exactness boundary
+        [InlineData("999999999999999")]
         [InlineData("1.")]
         [InlineData(".5")]
         [InlineData("-.5")]
         [InlineData("0.0")]
         [InlineData("-0")]
         [InlineData("00042")]
-        [InlineData("123456789.123456")] // 15 significant digits, mixed
-        [InlineData("000000000000000123")] // 15 leading zeros + 3 significant digits — must not hit the digit cap on padding alone
-        [InlineData("0.00000000000000123")] // leading zeros after the decimal point, same non-significance rule
+        [InlineData("123456789.123456")]
+        [InlineData("000000000000000123")]
+        [InlineData("0.00000000000000123")]
         public void AcceptsAndMatchesPlainDecimals(string text)
         {
             AssertMatchesDoubleTryParse(text);
@@ -57,8 +55,8 @@ namespace ExcelReader.Tests
         [InlineData("1E5")]
         [InlineData("1e-5")]
         [InlineData("1.5e10")]
-        [InlineData("12345678901234567")] // 17 significant digits — exceeds exact-mantissa bound
-        [InlineData("9999999999999999999999999")] // way past 15-digit bound
+        [InlineData("12345678901234567")]
+        [InlineData("9999999999999999999999999")]
         [InlineData("")]
         [InlineData("-")]
         [InlineData("+")]

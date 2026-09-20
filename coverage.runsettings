@@ -20,6 +20,12 @@
                 <Source>.*[\/]ExcelReader\.Native[\/]Exports\.cs</Source>
               </Exclude>
             </Sources>
+            <Functions>
+              <Exclude>
+                <Function>*&lt;.*&gt;.*</Function>
+                <Function>^ConsoleAppFramework\..*</Function>
+              </Exclude>
+            </Functions>
           </CodeCoverage>
         </Configuration>
       </DataCollector>

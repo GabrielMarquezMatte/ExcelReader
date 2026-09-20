@@ -19,8 +19,10 @@ namespace ExcelReader.Fuzz
             {
                 ["xlsx"] = Harnesses.Xlsx,
                 ["xlsx-memory"] = Harnesses.XlsxMemory,
+                ["xlsx-differential"] = Harnesses.XlsxDifferential,
                 ["xlsb"] = Harnesses.Xlsb,
                 ["xlsb-memory"] = Harnesses.XlsbMemory,
+                ["xlsb-differential"] = Harnesses.XlsbDifferential,
                 ["xls"] = Harnesses.Xls,
                 ["encrypted"] = Harnesses.Encrypted,
                 ["csv"] = Harnesses.Csv,
@@ -43,11 +45,6 @@ namespace ExcelReader.Fuzz
                 return SmokeRunner.Run(args[1], mutations, seed);
             }
 
-            // FUZZ_TARGET takes precedence over argv, and under libFuzzer it is the ONLY supported
-            // way to pick a target: SharpFuzz's Fuzzer.LibFuzzer.Run parses argv itself (a lone
-            // argument is treated as a single input file to replay), so an extra argument of ours
-            // would be misread as a corpus path. Passing the target through the environment leaves
-            // argv entirely to SharpFuzz. argv stays supported for the standalone modes above.
             string? name = Environment.GetEnvironmentVariable("FUZZ_TARGET");
             if (string.IsNullOrEmpty(name) && args.Length > 0)
             {

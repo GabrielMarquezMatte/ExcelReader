@@ -6,17 +6,11 @@ using ExcelReader.Core.Reader;
 namespace ExcelReader.Core.Crypto
 {
     // Parses the CFB "EncryptionInfo" stream: an 8-byte little-endian (major, minor) version tuple,
-    // followed by either a UTF-8 XML descriptor (agile, 4.4) or a binary header+verifier (standard,
-    // 3.2/4.2). Runs on wholly untrusted input before any password check.
-    //
-    // ParseAgile uses XmlReader — the one departure from this codebase's hand-rolled XML custom. The
-    // descriptor is ~1 KB, parsed once on a cold path, so throughput isn't the concern here.
     internal abstract record EncryptionDescriptor
     {
         private const string EncryptionNamespace = "http://schemas.microsoft.com/office/2006/encryption";
         private const string PasswordKeyEncryptorNamespace = "http://schemas.microsoft.com/office/2006/keyEncryptor/password";
 
-        // Untrusted, pre-authentication input: DTD processing and external resolution stay off.
         private static readonly XmlReaderSettings XmlSettings = new()
         {
             DtdProcessing = DtdProcessing.Prohibit,
@@ -38,9 +32,6 @@ namespace ExcelReader.Core.Crypto
             return (major, minor) switch
             {
                 (4, 4) => ParseAgile(info[8..], options),
-                // The binary descriptor's own fields start right after the 4-byte version tuple.
-                // Agile skips 8 instead because a 4-byte reserved field sits between its version
-                // and its XML; the asymmetry is in the format, not a mistake here.
                 (2, 2) or (3, 2) or (4, 2) => ParseBinary(info[4..], major, minor),
                 (3, 1) or (4, 1) => throw new ExcelEncryptionException(
                     ExcelEncryptionReason.UnsupportedScheme,
@@ -54,18 +45,13 @@ namespace ExcelReader.Core.Crypto
             };
         }
 
-        // [MS-OFFCRYPTO] 2.3.4.5-2.3.4.6. Versions 2.2/3.2/4.2 all carry this binary
-        // header+verifier, for standard AES *and* for RC4 CryptoAPI — the cipher is named by
-        // algId, so the header must be read before the scheme can be decided.
         private static StandardDescriptor ParseBinary(ReadOnlySpan<byte> body, int major, int minor)
         {
-            // headerFlags, then the header's own byte count.
             if (body.Length < 8)
             {
                 throw new InvalidDataException("The EncryptionInfo stream is truncated.");
             }
             int headerSize = BinaryPrimitives.ReadInt32LittleEndian(body[4..]);
-            // Eight fixed uint32 fields precede the variable-length CSP name.
             if (headerSize < 32 || headerSize > body.Length - 8)
             {
                 throw new InvalidDataException(
@@ -78,7 +64,6 @@ namespace ExcelReader.Core.Crypto
             int keySize = BinaryPrimitives.ReadInt32LittleEndian(header[16..]);
 
             int keyBits = ResolveKeyBits(algId, keySize, major, minor);
-            // 0 means "the scheme's default", which for standard encryption is SHA-1.
             if (algIdHash is not (0x00008004 or 0))
             {
                 throw new ExcelEncryptionException(ExcelEncryptionReason.UnsupportedScheme,
@@ -88,8 +73,6 @@ namespace ExcelReader.Core.Crypto
             return ParseVerifier(body[(8 + headerSize)..], algId, keyBits);
         }
 
-        // AES key size is implied by algId, so a stated keySize that disagrees with it means the
-        // descriptor is internally inconsistent and one of the two would have to be ignored.
         private static int ResolveKeyBits(int algId, int keySize, int major, int minor)
         {
             int implied = algId switch
@@ -112,17 +95,6 @@ namespace ExcelReader.Core.Crypto
             return implied;
         }
 
-        // [MS-OFFCRYPTO] 2.3.3 EncryptionVerifier: SaltSize is fixed for AES, so a different value
-        // is a malformed descriptor. The 4-byte VerifierHashSize field that follows the verifier is
-        // NOT the byte count of the encrypted blob that follows it in the stream — it's the native
-        // output length of the hash algorithm (SHA-1, the only hash this library's standard-
-        // encryption scope supports), which is 20 bytes. The encrypted blob itself is a completely
-        // separate quantity: that SHA-1 digest padded up to the next 16-byte AES block boundary,
-        // i.e. VerifierHashLength (32) bytes, which is what actually drives the slice below. This
-        // parser deliberately does not read or validate VerifierHashSize: nothing downstream
-        // consumes it, so bounding it would only reject producers that declare a technically-true
-        // value we don't act on (a real Apache POI fixture declares 20; a hypothetical writer could
-        // just as validly declare 32, or 0 for "unspecified") without protecting anything.
         private static StandardDescriptor ParseVerifier(ReadOnlySpan<byte> verifier, int algId, int keyBits)
         {
             const int SaltLength = 16;
@@ -139,9 +111,6 @@ namespace ExcelReader.Core.Crypto
                 throw new InvalidDataException(
                     $"The encryption descriptor declares a {saltSize}-byte salt; AES requires {SaltLength}.");
             }
-            // Bytes (4 + SaltLength + VerifierLength) .. (8 + SaltLength + VerifierLength) hold the
-            // unread, unvalidated VerifierHashSize field described above; the slices below skip past
-            // it without reading it.
 
             byte[] salt = verifier.Slice(4, SaltLength).ToArray();
             byte[] encryptedVerifier = verifier.Slice(4 + SaltLength, VerifierLength).ToArray();
@@ -158,7 +127,6 @@ namespace ExcelReader.Core.Crypto
             byte[] encryptedHmacKey = [];
             byte[] encryptedHmacValue = [];
 
-            // XmlReader needs a Stream/TextReader, not a span.
             using var stream = new MemoryStream(xml.ToArray(), writable: false);
             try
             {
@@ -198,8 +166,6 @@ namespace ExcelReader.Core.Crypto
             }
             if (passwordEncryptor is null)
             {
-                // Not malformed: a certificate-only key encryptor is a legitimate shape this library
-                // simply can't open.
                 throw new ExcelEncryptionException(ExcelEncryptionReason.UnsupportedScheme,
                     "The EncryptionInfo descriptor has no password key encryptor.");
             }
@@ -207,8 +173,6 @@ namespace ExcelReader.Core.Crypto
             return new AgileDescriptor(keyData, passwordEncryptor, encryptedHmacKey, encryptedHmacValue);
         }
 
-        // Reads and validates the attribute set shared by <keyData> and <p:encryptedKey>. keyData
-        // never carries spinCount/encryptedVerifierHash*/encryptedKeyValue, which default to 0/empty.
         private static CryptoParameters ReadCryptoParameters(XmlReader reader, ExcelReaderOptions options)
         {
             int saltSize = ReadIntAttribute(reader, "saltSize");
@@ -229,7 +193,6 @@ namespace ExcelReader.Core.Crypto
                 throw new ExcelEncryptionException(ExcelEncryptionReason.UnsupportedScheme,
                     $"Unsupported cipher algorithm '{cipherAlgorithm}' in the encryption descriptor.");
             }
-            // CFB chaining is spec-permitted but has no fixture to verify a decrypt against.
             if (!string.Equals(cipherChaining, "ChainingModeCBC", StringComparison.Ordinal))
             {
                 throw new ExcelEncryptionException(ExcelEncryptionReason.UnsupportedScheme,
@@ -240,8 +203,6 @@ namespace ExcelReader.Core.Crypto
                 throw new ExcelEncryptionException(ExcelEncryptionReason.UnsupportedScheme,
                     $"Unsupported key size ({keyBits} bits) in the encryption descriptor.");
             }
-            // AES-CBC has a fixed 16-byte block size; any other declared value is rejected here rather
-            // than surfacing as a raw CryptographicException out of `aes.IV = ...`.
             if (blockSize != 16)
             {
                 throw new ExcelEncryptionException(ExcelEncryptionReason.UnsupportedScheme,
@@ -255,7 +216,6 @@ namespace ExcelReader.Core.Crypto
             {
                 throw new InvalidDataException($"The encryption descriptor's hash size ({hashSize}) is out of range.");
             }
-            // A resource limit (DoS knob), not a scheme problem, so ExcelLimitExceededException here.
             if (spinCount < 0 || spinCount > options.MaxPasswordSpinCount)
             {
                 throw new ExcelLimitExceededException(nameof(options.MaxPasswordSpinCount), options.MaxPasswordSpinCount, spinCount);
@@ -273,8 +233,6 @@ namespace ExcelReader.Core.Crypto
                 "SHA256" or "SHA-256" => HashKind.Sha256,
                 "SHA384" or "SHA-384" => HashKind.Sha384,
                 "SHA512" or "SHA-512" => HashKind.Sha512,
-                // Never HashAlgorithm.Create(name): reflecting a file-supplied string is both an AOT
-                // hazard and an injection surface.
                 _ => throw new ExcelEncryptionException(ExcelEncryptionReason.UnsupportedScheme,
                         $"Unsupported hash algorithm '{name}' in the encryption descriptor."),
             };
@@ -310,8 +268,6 @@ namespace ExcelReader.Core.Crypto
         }
     }
 
-    // Populated from <keyData> and from <p:encryptedKey>; keyData leaves SpinCount/encrypted* at
-    // 0/empty. See EncryptionDescriptor.ReadCryptoParameters.
     internal sealed record CryptoParameters(
         int SaltSize,
         int BlockSize,
@@ -330,16 +286,9 @@ namespace ExcelReader.Core.Crypto
         byte[] EncryptedHmacKey,
         byte[] EncryptedHmacValue) : EncryptionDescriptor
     {
-        // False only when the descriptor has no <dataIntegrity> element at all (older writers can omit
-        // it) — a real element always carries both attributes.
         internal bool HasDataIntegrity => EncryptedHmacKey.Length > 0 && EncryptedHmacValue.Length > 0;
     }
 
-    // ECMA-376 standard encryption (EncryptionInfo 3.2/4.2). Deliberately not reusing
-    // CryptoParameters: its SpinCount/EncryptedKeyValue/HashSize/BlockSize fields describe agile's
-    // XML descriptor and would sit permanently empty here, implying they mean something. The hash
-    // is not a field either — standard encryption is SHA-1 by definition, and algIdHash is
-    // validated at parse time rather than carried forward.
     internal sealed record StandardDescriptor(
         int AlgId,
         int KeyBits,

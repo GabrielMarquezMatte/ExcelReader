@@ -17,15 +17,11 @@ namespace ExcelReader.Core.Reader
         {
             [SuppressMessage("Usage", "CA2213:Disposable fields should be disposed", Justification = "Borrowed, not owned.")]
             private readonly XlsxReader _reader;
-            // Hoisted out of _reader to avoid a dependent load on the per-cell hot path.
             private readonly bool[] _styleIsDate;
             private readonly int[] _sharedOffsets;
-            // Content-keyed dedup cache for inline/formula-string cells (see ExcelReaderOptions.InternStrings).
             private readonly Utf8StringCache? _contentCache;
             private int _nextCol;
 
-            // Non-null only when this sheet's elements carry a namespace prefix (e.g. <x:row>), holding
-            // the prefixed forms of every token the scanner matches. Detected once, lazily.
             private NsTokens? _ns;
             private bool _nsChecked;
 
@@ -46,10 +42,6 @@ namespace ExcelReader.Core.Reader
             public Row Current =>
                 new(_acc.CellSpan, _acc.ValueSpan, _reader.SharedSpan, _buf.AsSpan(0, _len), _reader.SharedStringCache, _contentCache);
 
-            // Top-level scanning differs between sync and async only in whether the buffer refill
-            // awaits, so that span work stays in sync helpers that never hold a span across an await.
-            // Once inside a row, EnsureRowBuffered(Async) guarantees the whole row is buffered first,
-            // so ParseRow/ParseCellSpan/EmitCell are shared by both paths unchanged.
 
             /// <inheritdoc/>
             public bool MoveNext()
@@ -60,7 +52,6 @@ namespace ExcelReader.Core.Reader
                 }
                 while (true)
                 {
-                    // Fast path: in compact output _pos already sits on the next '<', so skip the scan.
                     int lt = _pos < _len && _buf[_pos] == (byte)'<' ? _pos : IndexOf((byte)'<');
                     if (lt < 0)
                     {
@@ -75,7 +66,7 @@ namespace ExcelReader.Core.Reader
                         case HeadKind.Row:
                             if (!BeginRow())
                             {
-                                ParseRow(EnsureRowBuffered());
+                                ParseRowBody();
                             }
                             return true;
                         default:
@@ -88,11 +79,7 @@ namespace ExcelReader.Core.Reader
                 }
             }
 
-            // Returns a completed ValueTask when every step resolves synchronously, only falling to an
-            // awaiting continuation at the exact step that needs a refill.
             /// <inheritdoc/>
-            [SuppressMessage("VisualStudio.Threading", "VSTHRD103:Result synchronously blocks",
-                Justification = "Every .Result access is guarded by IsCompletedSuccessfully immediately above it — never blocks.")]
             public ValueTask<bool> MoveNextAsync()
             {
                 if (!_nsChecked)
@@ -137,15 +124,13 @@ namespace ExcelReader.Core.Reader
                             ValueTask<bool>? skipResult = SkipMarkupOrContinue();
                             if (skipResult is null)
                             {
-                                break; // markup skipped — continue scanning for the next element
+                                break;
                             }
                             return skipResult.Value;
                     }
                 }
             }
 
-            [SuppressMessage("VisualStudio.Threading", "VSTHRD103:Result synchronously blocks",
-                Justification = "Every .Result access is guarded by IsCompletedSuccessfully immediately above it — never blocks.")]
             private ValueTask<bool> ReadRowAsync()
             {
                 ValueTask<bool> beginTask = BeginRowAsync();
@@ -158,18 +143,19 @@ namespace ExcelReader.Core.Reader
                     return new ValueTask<bool>(true);
                 }
 
-                ValueTask<int> rowBufferTask = EnsureRowBufferedAsync();
-                if (!rowBufferTask.IsCompletedSuccessfully)
+                int rowStart = _pos;
+                if (ParseRowInWindow())
                 {
-                    return FinishRowAfterAsync(rowBufferTask);
+                    return new ValueTask<bool>(true);
                 }
-                ParseRow(rowBufferTask.Result);
-                return new ValueTask<bool>(true);
+                if (_eof)
+                {
+                    ParseTruncatedRow(rowStart);
+                    return new ValueTask<bool>(true);
+                }
+                return ParseRowBodySlowAsync(rowStart);
             }
 
-            // Returns null only when markup was skipped and enumeration should continue immediately.
-            [SuppressMessage("VisualStudio.Threading", "VSTHRD002:Avoid problematic synchronous waits",
-                Justification = "The .Result access is guarded by IsCompletedSuccessfully immediately above it — never blocks.")]
             [SuppressMessage("Reliability", "CA2012:Use ValueTasks correctly",
                 Justification = "The ValueTask is either returned through AwaitThenRestartAsync or consumed once after confirming synchronous completion.")]
             private ValueTask<bool>? SkipMarkupOrContinue()
@@ -181,13 +167,11 @@ namespace ExcelReader.Core.Reader
                 }
                 if (skipTask.Result)
                 {
-                    return null; // markup skipped — caller continues the scan loop
+                    return null;
                 }
-                return new ValueTask<bool>(false); // end of sheetData/worksheet
+                return new ValueTask<bool>(false);
             }
 
-            // Safe to re-enter from the top: none of the pending steps this restarts commit a position
-            // change until they resolve, so once the fill completes the (now-buffered) work just redoes.
             private async ValueTask<bool> AwaitThenRestartAsync(ValueTask pending)
             {
                 await pending.ConfigureAwait(false);
@@ -200,21 +184,58 @@ namespace ExcelReader.Core.Reader
                 return await MoveNextAsync().ConfigureAwait(false);
             }
 
-            // Unlike AwaitThenRestartAsync, must not re-enter MoveNextAsync from the top — the row is
-            // already open and that would misread its first cell as a new top-level element.
-            private async ValueTask<bool> FinishRowAfterAsync(ValueTask<int> pendingRowBuffered)
+            private void ParseRowBody()
             {
-                int rowEnd = await pendingRowBuffered.ConfigureAwait(false);
-                ParseRow(rowEnd);
-                return true;
+                int rowStart = _pos;
+                while (!ParseRowInWindow())
+                {
+                    if (_eof)
+                    {
+                        ParseTruncatedRow(rowStart);
+                        return;
+                    }
+                    RestartRowAt(rowStart);
+                    Fill();
+                    rowStart = _pos;
+                }
             }
 
-            // Detects the sheet's element-name prefix (e.g. "x:" in <x:worksheet>) once, from the root
-            // element at the start of the stream. Prefixed worksheets are rare.
+            private async ValueTask<bool> ParseRowBodySlowAsync(int rowStart)
+            {
+                while (true)
+                {
+                    RestartRowAt(rowStart);
+                    await FillAsync().ConfigureAwait(false);
+                    rowStart = _pos;
+                    if (ParseRowInWindow())
+                    {
+                        return true;
+                    }
+                    if (_eof)
+                    {
+                        ParseTruncatedRow(rowStart);
+                        return true;
+                    }
+                }
+            }
+
+            private void RestartRowAt(int rowStart)
+            {
+                _pos = rowStart;
+                _acc.Reset();
+                _nextCol = 0;
+            }
+
+            private void ParseTruncatedRow(int rowStart)
+            {
+                RestartRowAt(rowStart);
+                ParseRow(_len);
+            }
+
             private void DetectNamespace()
             {
                 _nsChecked = true;
-                Ensure(256); // root element + its xmlns declarations sit at the head of the part
+                Ensure(256);
                 DetectNamespaceFromBuffer();
             }
 
@@ -235,7 +256,6 @@ namespace ExcelReader.Core.Reader
                 }
             }
 
-            // Consumes the <row ...> open tag and resets per-row state. Call only after ClassifyHead()==Row.
             private bool BeginRow()
             {
                 int gt = IndexOf((byte)'>');
@@ -245,11 +265,42 @@ namespace ExcelReader.Core.Reader
                 }
                 return BeginRowAt(gt);
             }
+            private bool ParseRowInWindow()
+            {
+                byte[] buf = _buf;
+                int len = _len;
+                int p = _pos;
+                ReadOnlySpan<byte> rowEnd = _ns is null ? "</row"u8 : _ns.RowEnd;
+                while (true)
+                {
+                    int lt = p < len && buf[p] == (byte)'<' ? p : IndexOfBounded(buf, len, p, (byte)'<');
+                    if (lt < 0)
+                    {
+                        return false;
+                    }
+                    p = lt;
+                    if (IsCellStart(buf, len, p))
+                    {
+                        p = ParseCellSpan(buf, len, p);
+                        continue;
+                    }
+                    if (buf.AsSpan(p, Math.Min(rowEnd.Length, len - p)).StartsWith(rowEnd))
+                    {
+                        int gt = IndexOfBounded(buf, len, p, (byte)'>');
+                        if (gt < 0)
+                        {
+                            return false;
+                        }
+                        _pos = gt + 1;
+                        return true;
+                    }
+                    if (!SkipMarkupSpan(buf, len, ref p))
+                    {
+                        return false;
+                    }
+                }
+            }
 
-            // `rowEnd` (the '<' starting "</row") is supplied by EnsureRowBuffered(Async), which already
-            // grew the buffer until the whole row is present — so everything below is pure
-            // ReadOnlySpan<byte> work with no Ensure/Fill and no mid-row compaction risk. `_pos` is
-            // written back exactly once, after the whole row is consumed.
             private void ParseRow(int rowEnd)
             {
                 byte[] buf = _buf;
@@ -260,7 +311,7 @@ namespace ExcelReader.Core.Reader
                     int lt = p < len && buf[p] == (byte)'<' ? p : IndexOfBounded(buf, len, p, (byte)'<');
                     if (lt < 0 || lt >= rowEnd)
                     {
-                        break; // no more cells before "</row" (or, on a truncated file, at all)
+                        break;
                     }
                     p = lt;
                     if (IsCellStart(buf, len, p))
@@ -277,25 +328,19 @@ namespace ExcelReader.Core.Reader
                 _pos = gt < 0 ? len : gt + 1;
             }
 
-            // Parses one <c>...</c> element starting at `p` (already known to be a cell) and returns the
-            // position right after it. `buf`/`len` cover the whole row, so a fast-path miss can safely
-            // fall through to the general "</c>" search without rewinding `p`.
             private int ParseCellSpan(byte[] buf, int len, int p)
             {
-                int gt = IndexOfBounded(buf, len, p, (byte)'>'); // end of the <c ...> open tag
+                int gt = IndexOfBounded(buf, len, p, (byte)'>');
                 if (gt < 0)
                 {
-                    return len; // malformed: unclosed <c open tag within the buffered row
+                    return len;
                 }
                 var header = ReadCellOpenTagSpan(buf, ref p, gt);
                 if (header.SelfClose)
                 {
-                    return p; // empty cell — store nothing
+                    return p;
                 }
 
-                // Fast path for the common bare-<v> shape: raw '<' can never appear inside valid XML
-                // text content, so the next '<' after "<v>" is guaranteed to start "</v>" — one
-                // single-byte search instead of a "</c>" scan plus a nested "<v>"/"</v>" scan.
                 if (buf.AsSpan(p, Math.Min(3, len - p)).StartsWith("<v>"u8))
                 {
                     int valueStart = p + 3;
@@ -327,8 +372,6 @@ namespace ExcelReader.Core.Reader
 
             private enum HeadKind { End, Row, Skip }
 
-            // Dispatches on the byte right after '<' before any StartsWith work, so the common "<row"
-            // case costs one span comparison instead of several mostly-missing probes.
             private HeadKind ClassifyHead()
             {
                 int avail = _len - _pos;
@@ -357,7 +400,6 @@ namespace ExcelReader.Core.Reader
                 }
             }
 
-            // Prefixed twin of ClassifyHead. Runs once per top-level element, never per cell.
             private HeadKind ClassifyHeadPrefixed(ReadOnlySpan<byte> head)
             {
                 if (StartsWithElement(head, _ns!.RowOpen))
@@ -371,7 +413,6 @@ namespace ExcelReader.Core.Reader
                 return HeadKind.Skip;
             }
 
-            // Requires a name-boundary byte after `token` so "<x:row" doesn't swallow "<x:rowBreaks".
             private static bool StartsWithElement(ReadOnlySpan<byte> span, ReadOnlySpan<byte> token)
             {
                 return span.StartsWith(token) && (span.Length == token.Length || IsBoundary(span[token.Length]));
@@ -399,7 +440,6 @@ namespace ExcelReader.Core.Reader
                 var open = buf.AsSpan(p, gt - p + 1);
                 ScanCellAttributes(open, out var rRef, out var sVal, out var tVal);
 
-                // ColumnIndex returns -1 for a missing or malformed ref; fall back to the running column.
                 int col = XlsxXml.ColumnIndex(rRef);
                 if (col < 0)
                 {
@@ -449,8 +489,6 @@ namespace ExcelReader.Core.Reader
                 return true;
             }
 
-            // Extracts the r/s/t attribute values from a `<c ...>` open tag in one forward pass rather
-            // than three separate IndexOf scans. Returned spans alias `open`.
             private static void ScanCellAttributes(
                 ReadOnlySpan<byte> open,
                 out ReadOnlySpan<byte> rRef,
@@ -510,8 +548,6 @@ namespace ExcelReader.Core.Reader
 
             private enum Kind { Number, Shared, Inline, Bool, Error, Formula, IsoDate }
 
-            // "" / "n" -> Number; "s" shared; "inlineStr" inline; "b" bool; "e" error; "str" formula
-            // result; "d" ISO-8601 date (written by some non-Excel producers).
             private static Kind ClassifyKind(ReadOnlySpan<byte> t)
             {
                 return t.Length switch
@@ -524,14 +560,12 @@ namespace ExcelReader.Core.Reader
                         (byte)'d' => Kind.IsoDate,
                         _ => Kind.Number,
                     },
-                    3 => Kind.Formula,   // "str"
-                    9 => Kind.Inline,    // "inlineStr"
+                    3 => Kind.Formula,
+                    9 => Kind.Inline,
                     _ => Kind.Number,
                 };
             }
 
-            // A non-numeric or negative index yields an empty string cell, never a silent substitution
-            // of shared string 0.
             private void EmitShared(ReadOnlySpan<byte> indexText, int col, int style)
             {
                 if (Utf8Parser.TryParse(indexText, out int index, out _) && index >= 0)
@@ -566,11 +600,8 @@ namespace ExcelReader.Core.Reader
                 _acc.Add(col, vStart, _acc.ValueLength - vStart, CellType.ExcelString, style, CellValueSource.RowValues);
             }
 
-            // Handles every Kind whose content is bare "<v>...</v>": Number, Bool, Error, Formula.
             private void EmitScalarValue(Kind kind, ReadOnlySpan<byte> v, int col, int style)
             {
-                // t="d": <v> holds ISO-8601 date text, not a serial; store a 1900-system serial so the
-                // cell behaves like a style-based date cell.
                 if (kind == Kind.IsoDate)
                 {
                     EmitIsoDate(v, col, style);
@@ -584,7 +615,6 @@ namespace ExcelReader.Core.Reader
                     _ => WorkbookLookups.IsDateStyle(_styleIsDate, style) ? CellType.Date : CellType.Number,
                 };
                 int vStart = _acc.ValueLength;
-                // Number/Bool/Error <v> text can never contain an XML entity; only formula results can.
                 if (kind == Kind.Formula)
                 {
                     AppendDecoded(v);
@@ -592,17 +622,12 @@ namespace ExcelReader.Core.Reader
                     return;
                 }
                 AppendRaw(v);
-                // FastDouble.TryParse only accepts inputs bit-identical to double.TryParse; anything
-                // else leaves hasNumber false and falls back at consume time.
                 double number = 0;
                 bool hasNumber = kind == Kind.Number && FastDouble.TryParse(v, out number);
                 _acc.Add(col, vStart, _acc.ValueLength - vStart, cellType, style, CellValueSource.RowValues,
                     number: number, hasNumber: hasNumber);
             }
 
-            // Fast-path counterpart to EmitScalarValue: aliases `buf` directly instead of copying into
-            // the accumulator. Falls back to EmitScalarValue for IsoDate (always reformats) or a
-            // Formula result containing '&' (needs entity decoding).
             private void EmitScalarValueFast(Kind kind, ReadOnlySpan<byte> v, int valueStart, int col, int style)
             {
                 if (kind == Kind.IsoDate || (kind == Kind.Formula && v.IndexOf((byte)'&') >= 0))
@@ -628,7 +653,6 @@ namespace ExcelReader.Core.Reader
                 if (TryParseIsoDate(v, out DateTime dt))
                 {
                     // ponytail: dt.ToOADate() is exact for dates >= 1900-03-01, which every real t="d"
-                    // value is; pre-1900-03-01 would shift a day through the reader's 1900-leap fixup.
                     double serial = dt.ToOADate();
                     int start = _acc.ValueLength;
                     Span<byte> dst = _acc.ReserveValueSpan(32);
@@ -660,7 +684,6 @@ namespace ExcelReader.Core.Reader
                 {
                     return false;
                 }
-                // ToOADate throws below year 100; treat that as unparseable rather than crash the read.
                 if (value.Year < 100)
                 {
                     value = default;
@@ -691,7 +714,6 @@ namespace ExcelReader.Core.Reader
                 _acc.Advance(XlsxXml.Decode(src, dst));
             }
 
-            // Copies verbatim, skipping the entity-decode scan.
             private void AppendRaw(ReadOnlySpan<byte> src)
             {
                 if (src.IsEmpty)
@@ -753,7 +775,6 @@ namespace ExcelReader.Core.Reader
                 return true;
             }
 
-            // ParseRow's counterpart to SkipMarkup, bounded to the buffered window via a local cursor.
             private static bool SkipMarkupSpan(byte[] buf, int len, ref int p)
             {
                 if (buf.AsSpan(p, Math.Min(4, len - p)).StartsWith("<!--"u8))
@@ -817,8 +838,6 @@ namespace ExcelReader.Core.Reader
                 }
             }
 
-            // Bounded, Fill-free counterparts used once EnsureRowBuffered(Async) has already
-            // guaranteed the whole row is buffered.
             private static int IndexOfBounded(byte[] buf, int boundExclusive, int from, byte b)
             {
                 int rel = buf.AsSpan(from, boundExclusive - from).IndexOf(b);
@@ -856,60 +875,13 @@ namespace ExcelReader.Core.Reader
                 return -1;
             }
 
-            // Grows the buffer until the whole row (through "</row...>"'s closing '>') is present.
-            // Returns _len instead on a truncated file, so ParseRow still parses whatever is present.
-            private int EnsureRowBuffered()
-            {
-                while (true)
-                {
-                    int rowEnd = FindSeq(MarkupSeq.RowEnd, _pos);
-                    if (rowEnd >= 0 && _buf.AsSpan(rowEnd, _len - rowEnd).IndexOf((byte)'>') >= 0)
-                    {
-                        return rowEnd;
-                    }
-                    if (_eof)
-                    {
-                        return _len;
-                    }
-                    Fill();
-                }
-            }
-
-            private ValueTask<int> EnsureRowBufferedAsync()
-            {
-                int rowEnd = FindSeq(MarkupSeq.RowEnd, _pos);
-                if (rowEnd >= 0 && _buf.AsSpan(rowEnd, _len - rowEnd).IndexOf((byte)'>') >= 0)
-                {
-                    return new ValueTask<int>(rowEnd);
-                }
-                return _eof ? new ValueTask<int>(_len) : EnsureRowBufferedSlowAsync();
-            }
-
-            private async ValueTask<int> EnsureRowBufferedSlowAsync()
-            {
-                do
-                {
-                    await FillAsync().ConfigureAwait(false);
-                    int rowEnd = FindSeq(MarkupSeq.RowEnd, _pos);
-                    if (rowEnd >= 0 && _buf.AsSpan(rowEnd, _len - rowEnd).IndexOf((byte)'>') >= 0)
-                    {
-                        return rowEnd;
-                    }
-                }
-                while (!_eof);
-                return _len;
-            }
-
-            private enum MarkupSeq { CommentEnd, CDataEnd, RowEnd }
+            private enum MarkupSeq { CommentEnd, CDataEnd }
 
             private int FindSeq(MarkupSeq seq, int start)
             {
-                int rel = seq switch
-                {
-                    MarkupSeq.CommentEnd => _buf.AsSpan(start, _len - start).IndexOf("-->"u8),
-                    MarkupSeq.CDataEnd => _buf.AsSpan(start, _len - start).IndexOf("]]>"u8),
-                    _ => _buf.AsSpan(start, _len - start).IndexOf(_ns is null ? "</row"u8 : _ns.RowEnd),
-                };
+                int rel = seq == MarkupSeq.CommentEnd
+                    ? _buf.AsSpan(start, _len - start).IndexOf("-->"u8)
+                    : _buf.AsSpan(start, _len - start).IndexOf("]]>"u8);
                 return rel < 0 ? -1 : start + rel;
             }
 
@@ -923,8 +895,6 @@ namespace ExcelReader.Core.Reader
                 return _eof ? new ValueTask<int>(-1) : IndexOfSeqFromAsync(seq);
             }
 
-            // Rescans the retained window from _pos each time, since compaction invalidates an
-            // absolute index captured before the fill.
             private async ValueTask<int> IndexOfSeqFromAsync(MarkupSeq seq)
             {
                 do

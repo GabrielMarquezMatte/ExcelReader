@@ -15,16 +15,12 @@ namespace ExcelReader.Core.Writer
     public sealed class CsvWriter : IDisposable, IAsyncDisposable
     {
         // ponytail: same 64 KB flush threshold as the XLSX XlsxSheetWriter — bounds memory on huge
-        // files while turning many tiny row writes into a handful of big stream writes, and keeps
-        // the pooled backing array under the LOH threshold instead of parking it there permanently.
         private const int FlushThreshold = 64 * 1024;
 
         private readonly Stream _stream;
         private readonly bool _leaveOpen;
         private readonly byte _delimiter;
         private readonly byte _quote;
-        // Built once here and shared with the (reused) CsvRowWriter so per-field quote detection is a
-        // vectorized scan; CR/LF join the delimiter/quote as the bytes that force a field to be quoted.
         private readonly SearchValues<byte> _specialBytes;
         private readonly SearchValues<char> _specialChars;
         private readonly BiffBuffer _buffer = new(4096);
@@ -38,8 +34,6 @@ namespace ExcelReader.Core.Writer
             _leaveOpen = leaveOpen;
             _delimiter = options.Delimiter;
             _quote = options.Quote;
-            // Via explicitly-typed spans so this binds to SearchValues.Create(ReadOnlySpan<T>) on both
-            // target frameworks (net8.0 has no params overload) with no intermediate array allocation.
             ReadOnlySpan<byte> specialBytes = [_delimiter, _quote, (byte)'\r', (byte)'\n'];
             ReadOnlySpan<char> specialChars = [(char)_delimiter, (char)_quote, '\r', '\n'];
             _specialBytes = SearchValues.Create(specialBytes);
@@ -159,9 +153,6 @@ namespace ExcelReader.Core.Writer
             }
         }
 
-        // Emits the terminating newline for a row left open when the writer is disposed (the caller
-        // disposed the writer without disposing the last CsvRowWriter). Buffer-only, so it is safe on
-        // both the sync and async dispose paths.
         private void TerminateOpenRow()
         {
             if (_rowActive)

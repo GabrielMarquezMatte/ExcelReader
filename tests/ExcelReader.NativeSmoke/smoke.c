@@ -1,20 +1,3 @@
-/* Real C consumer of the ExcelReader ABI, run in CI on Windows/Linux/macOS (see
- * .github/workflows/native-bindings.yml). Two jobs:
- *
- *   1. Compile-time _STATIC_ASSERTs (below) pin every ABI struct's layout against the C standard's
- *      own natural-alignment rules, on whatever compiler builds this file. Catches an accidental
- *      field reorder/insertion/padding change in excelreader.h itself.
- *   2. The runtime checks in main() call the real published library and assert on real values.
- *      Layer 1 alone cannot prove excelreader.h and the C# side (NativeColumn.cs, NativeRow.cs, ...)
- *      agree — only running real data through the real exports can. A mismatch there produces
- *      garbage values, and these assertions fail on the values, not on a crash.
- *
- * The library is loaded dynamically (LoadLibrary/dlopen) rather than linked at build time. This is
- * deliberate, not a shortcut: NativeAOT's publish output ships no `ExcelReader.Native.lib` import
- * library on Windows, so a normal `target_link_libraries` against the DLL does not work with MSVC
- * out of the box. Dynamic loading works identically on all three platforms and needs nothing
- * beyond the shared library file itself.
- */
 #include "excelreader.h"
 #include "excelreader_arrow.h"
 
@@ -32,7 +15,6 @@ typedef HMODULE xl_lib_handle;
 typedef void* xl_lib_handle;
 #endif
 
-/* ---- Layer 1: struct layout static asserts --------------------------------------------------- */
 
 #define XL_STATIC_ASSERT(cond, name) typedef char xl_static_assert_##name[(cond) ? 1 : -1]
 
@@ -112,7 +94,11 @@ XL_STATIC_ASSERT(offsetof(struct ArrowArray, release) == 64, arrow_array_release
 XL_STATIC_ASSERT(offsetof(struct ArrowArray, private_data) == 72, arrow_array_private_data);
 XL_STATIC_ASSERT(sizeof(struct ArrowArray) == 80, arrow_array_size);
 
-/* ---- Dynamic loading -------------------------------------------------------------------------- */
+XL_STATIC_ASSERT(offsetof(xl_csv_aggregation, seed) == 8, csv_agg_seed);
+XL_STATIC_ASSERT(sizeof(xl_csv_aggregation) == 48, csv_agg_size);
+XL_STATIC_ASSERT(offsetof(xl_csv_parallel_options, max_cell_bytes) == 24, csv_opt_max_cell_bytes);
+XL_STATIC_ASSERT(sizeof(xl_csv_parallel_options) == 28, csv_opt_size);
+
 
 static xl_lib_handle load_library(const char* path)
 {
@@ -152,6 +138,10 @@ typedef const uint8_t* (*xl_last_error_ptr_fn)(int32_t*);
 typedef int32_t (*xl_parse_arrow_fn)(xl_workbook*, const xl_column_spec*, int32_t, int32_t, struct ArrowArray*, struct ArrowSchema*);
 typedef int32_t (*xl_write_typed_fn)(const uint8_t*, int32_t, int32_t, const xl_column_spec*,
                                      const xl_table*, const xl_write_options*);
+typedef int32_t (*xl_csv_aggregate_file_fn)(const uint8_t*, int32_t, const xl_csv_aggregation*,
+                                            const xl_csv_parallel_options*, void**);
+typedef int32_t (*xl_csv_aggregate_memory_fn)(const uint8_t*, int32_t, const xl_csv_aggregation*,
+                                              const xl_csv_parallel_options*, void**);
 
 typedef struct
 {
@@ -211,7 +201,6 @@ static int bind_all(xl_lib_handle lib, api_t* api)
     return 1;
 }
 
-/* ---- Layer 2: runtime checks against the real library ---------------------------------------- */
 
 #define CHECK(cond, msg)                                                                            \
     do                                                                                              \
@@ -223,9 +212,6 @@ static int bind_all(xl_lib_handle lib, api_t* api)
         }                                                                                              \
     } while (0)
 
-/* Fills `spec` as a single-candidate name-based spec, using `name_slot`/`len_slot` as the
- * one-element backing storage `spec->names`/`spec->name_lens` point into — that storage must
- * outlive every use of `spec` (the caller declares it in the same or an outer scope). */
 static void set_spec_name1(xl_column_spec* spec, const uint8_t** name_slot, int32_t* len_slot, const char* text)
 {
     *name_slot = (const uint8_t*)text;
@@ -322,7 +308,6 @@ static int test_next_row_blob_and_growth(const api_t* api, const char* fixture)
     CHECK(value_len == 7 && memcmp(buffer + 16, "Coluna1", 7) == 0, "first header cell must read Coluna1");
     free(buffer);
 
-    /* Drain the rest (100 data rows) and confirm the total, then confirm XL_EOF at the end. */
     int row_count = 1;
     uint8_t scratch[4096];
     for (;;)
@@ -346,8 +331,6 @@ static int test_read_all_blob_and_decoded(const api_t* api, const char* fixture)
     xl_workbook* handle = NULL;
     CHECK(open_fixture(api, fixture, &handle) == XL_OK, "xl_open_file must succeed");
 
-    /* static, not stack-local: 1 MiB blows past MSVC's default 1 MiB thread stack reserve
-     * and faults with a stack overflow in Release builds. */
     static uint8_t buffer[1 << 20];
     int32_t written = 0;
     CHECK(api->read_all_blob(handle, buffer, (int32_t)sizeof(buffer), &written) == XL_OK,
@@ -356,8 +339,6 @@ static int test_read_all_blob_and_decoded(const api_t* api, const char* fixture)
     memcpy(&row_count, buffer, sizeof(int32_t));
     CHECK(row_count == 101, "xl_read_all_blob must report all 101 rows");
 
-    /* The sheet is now fully drained. A second call must be XL_OK with row_count == 0, never XL_EOF -
-     * xl_read_all_blob never returns XL_EOF, by contract. */
     CHECK(api->read_all_blob(handle, buffer, (int32_t)sizeof(buffer), &written) == XL_OK,
           "a drained xl_read_all_blob call must still be XL_OK");
     memcpy(&row_count, buffer, sizeof(int32_t));
@@ -365,7 +346,6 @@ static int test_read_all_blob_and_decoded(const api_t* api, const char* fixture)
 
     CHECK(api->close_(handle) == XL_OK, "xl_close must succeed");
 
-    /* Fresh handle for xl_read_all_decoded, so this is not entangled with the blob drain above. */
     CHECK(open_fixture(api, fixture, &handle) == XL_OK, "xl_open_file must succeed");
     xl_rows rows;
     memset(&rows, 0, sizeof(rows));
@@ -379,7 +359,6 @@ static int test_read_all_blob_and_decoded(const api_t* api, const char* fixture)
     CHECK(drained.row_count == 0, "a drained sheet's xl_read_all_decoded must report zero rows");
     api->free_rows(&drained);
 
-    /* Documented safe on a zeroed value. */
     xl_rows zeroed;
     memset(&zeroed, 0, sizeof(zeroed));
     api->free_rows(&zeroed);
@@ -393,7 +372,6 @@ static int test_open_file_ex(const api_t* api, const char* fixture)
     xl_workbook* handle = NULL;
     size_t path_len = strlen(fixture);
 
-    /* NULL options must behave exactly like xl_open_file. */
     CHECK(api->open_file_ex((const uint8_t*)fixture, (int32_t)path_len, XL_FORMAT_XLSB, NULL, &handle) == XL_OK,
           "xl_open_file_ex with NULL options must succeed like xl_open_file");
     int32_t sheet_count = 0;
@@ -401,7 +379,6 @@ static int test_open_file_ex(const api_t* api, const char* fixture)
           "a workbook opened via xl_open_file_ex(NULL) must behave normally");
     CHECK(api->close_(handle) == XL_OK, "xl_close must succeed");
 
-    /* A wrong struct_size must be rejected before anything else is inspected. */
     xl_open_options bad_options;
     memset(&bad_options, 0, sizeof(bad_options));
     bad_options.struct_size = 999999;
@@ -427,14 +404,6 @@ static int build_specs(xl_column_spec* specs, const uint8_t** name_ptrs, int32_t
     return 3;
 }
 
-/* The counts xl_parse_typed/xl_parse_arrow take are the only numbers a C caller hands over that
- * size an allocation AND drive a read across this process's memory. This is the only layer that can
- * test that guard: those entry points are [UnmanagedCallersOnly], so no managed test can invoke them
- * (the predicate itself is unit-tested in NativeApiTests).
- *
- * Every call below passes a ONE-element spec array while claiming more. Before the bound existed
- * these walked off the end of `specs` and sized an array from the claimed count — so a regression
- * here does not fail an assertion, it takes the process down, which CI reports just as loudly. */
 static int test_parse_rejects_hostile_counts(const api_t* api, const char* fixture)
 {
     xl_workbook* handle = NULL;
@@ -461,8 +430,6 @@ static int test_parse_rejects_hostile_counts(const api_t* api, const char* fixtu
     CHECK(api->parse_typed(handle, &one_spec, -1, 1, &table) == XL_INVALID_ARGUMENT,
           "xl_parse_typed must reject a negative spec_count");
 
-    /* A plausible count with an implausible name_len: the bound has to cover both, since name_len is
-     * what becomes a read length over the caller's string. */
     xl_column_spec wide_name = one_spec;
     int32_t wide_name_len = XL_MAX_COLUMN_NAME_BYTES + 1;
     wide_name.name_lens = &wide_name_len;
@@ -474,7 +441,6 @@ static int test_parse_rejects_hostile_counts(const api_t* api, const char* fixtu
     CHECK(api->parse_typed(handle, &wide_name, 1, 1, &table) == XL_INVALID_ARGUMENT,
           "xl_parse_typed must reject a negative name_len");
 
-    /* xl_parse_arrow decodes the same specs through the same path, so it needs the same guard. */
     struct ArrowArray array;
     struct ArrowSchema schema;
     memset(&array, 0, sizeof(array));
@@ -484,7 +450,6 @@ static int test_parse_rejects_hostile_counts(const api_t* api, const char* fixtu
     CHECK(array.release == NULL && schema.release == NULL,
           "a rejected xl_parse_arrow must leave both out params releasable-as-no-op");
 
-    /* A blank name would otherwise trim to "" and match the first empty header cell. */
     xl_column_spec blank_name;
     memset(&blank_name, 0, sizeof(blank_name));
     const uint8_t* blank_name_name;
@@ -494,8 +459,6 @@ static int test_parse_rejects_hostile_counts(const api_t* api, const char* fixtu
     CHECK(api->parse_typed(handle, &blank_name, 1, 1, &table) == XL_INVALID_ARGUMENT,
           "xl_parse_typed must reject a blank column name");
 
-    /* The handle must still be usable: every rejection above is an argument error, not a fault that
-     * leaves the workbook in a broken state. */
     xl_column_spec specs[3];
     const uint8_t* name_ptrs[3];
     int32_t name_lens[3];
@@ -514,9 +477,6 @@ static int test_parse_typed_and_cursor_independence(const api_t* api, const char
     xl_workbook* handle = NULL;
     CHECK(open_fixture(api, fixture, &handle) == XL_OK, "xl_open_file must succeed");
 
-    /* Advance the shared row cursor past the header before calling xl_parse_typed, then confirm
-     * xl_parse_typed did not disturb it: the next xl_next_row call below must still see the FIRST
-     * data row ("Valor1", not something further along), exactly as the header documents. */
     uint8_t scratch[4096];
     int32_t written = 0;
     CHECK(api->next_row(handle, scratch, (int32_t)sizeof(scratch), &written) == XL_OK,
@@ -550,7 +510,6 @@ static int test_parse_typed_and_cursor_independence(const api_t* api, const char
 
     api->free_table(&table);
 
-    /* The row cursor must still be positioned right after the header row. */
     CHECK(api->next_row(handle, scratch, (int32_t)sizeof(scratch), &written) == XL_OK,
           "xl_next_row after xl_parse_typed must still succeed");
     int32_t cell_count = 0;
@@ -616,7 +575,6 @@ static int test_parse_arrow(const api_t* api, const char* fixture)
     const int64_t* ints = (const int64_t*)int_array->buffers[1];
     CHECK(ints[0] == 1, "the exported I64 array's first value must be 1");
 
-    /* The real Arrow consumer contract: call release yourself. Not xl_free_table. */
     release_arrow_array(&array);
     release_arrow_schema(&schema);
 
@@ -629,9 +587,6 @@ static int test_infer_schema(const api_t* api, const char* fixture)
     xl_workbook* handle = NULL;
     CHECK(open_fixture(api, fixture, &handle) == XL_OK, "xl_open_file must succeed");
 
-    /* Advance the shared row cursor past the header, same setup as
-     * test_parse_typed_and_cursor_independence, to prove xl_infer_schema reads from the sheet's
-     * first row independent of it. */
     uint8_t scratch[4096];
     int32_t written = 0;
     CHECK(api->next_row(handle, scratch, (int32_t)sizeof(scratch), &written) == XL_OK,
@@ -655,7 +610,6 @@ static int test_infer_schema(const api_t* api, const char* fixture)
     CHECK(coluna3.name_count == 1 && coluna3.name_lens[0] == 7 && memcmp(coluna3.names[0], "Coluna3", 7) == 0, "column 2 must be named Coluna3");
     CHECK(coluna3.type == XL_T_I64, "Coluna3 must be guessed as XL_T_I64 - every sampled value is a whole number");
 
-    /* The row cursor must still be positioned right after the header row. */
     CHECK(api->next_row(handle, scratch, (int32_t)sizeof(scratch), &written) == XL_OK,
           "xl_next_row after xl_infer_schema must still succeed");
     int32_t value_len = 0;
@@ -663,9 +617,6 @@ static int test_infer_schema(const api_t* api, const char* fixture)
     CHECK(value_len == 6 && memcmp(scratch + 16, "Valor1", 6) == 0,
           "xl_infer_schema must not have disturbed the xl_next_row cursor - this must be the first data row");
 
-    /* The whole point of the shape match: an inferred schema is directly usable by xl_parse_typed.
-     * Each spec's name pointer is only valid until xl_free_schema runs, so parse_typed must be
-     * called first - copying the specs does not copy the name bytes they point to. */
     xl_column_spec first_three[3];
     memcpy(first_three, schema.columns, 3 * sizeof(xl_column_spec));
 
@@ -697,7 +648,6 @@ static int test_infer_schema_rejects_bad_arguments(const api_t* api, const char*
     CHECK(api->infer_schema(handle, 1, -1, &schema) == XL_INVALID_ARGUMENT,
           "xl_infer_schema must reject a negative sample_size");
 
-    /* Documented safe on a zeroed value. */
     xl_inferred_schema zeroed;
     memset(&zeroed, 0, sizeof(zeroed));
     api->free_schema(&zeroed);
@@ -721,9 +671,6 @@ static int test_double_close_is_rejected(const api_t* api, const char* fixture)
     return 0;
 }
 
-/* Writes a two-row table through xl_write_typed, reads it back with the existing read exports, and
- * asserts on the values. Layer 1's static asserts prove the header's own layout; only running real
- * data through both directions proves excelreader.h, the C# structs and the writer agree. */
 static int test_write_typed(const api_t* api)
 {
     const char* out_path = "excelreader_smoke_write.csv";
@@ -775,6 +722,315 @@ static int test_write_typed(const api_t* api)
     return 0;
 }
 
+#ifdef _WIN32
+typedef volatile LONG smoke_counter_t;
+static void smoke_counter_increment(smoke_counter_t* counter) { InterlockedIncrement(counter); }
+static long smoke_counter_get(smoke_counter_t* counter) { return (long)*counter; }
+#else
+typedef volatile long smoke_counter_t;
+static void smoke_counter_increment(smoke_counter_t* counter) { __sync_fetch_and_add(counter, 1); }
+static long smoke_counter_get(smoke_counter_t* counter) { return *counter; }
+#endif
+
+typedef struct
+{
+    smoke_counter_t seeds;
+    smoke_counter_t frees;
+    smoke_counter_t combines;
+    smoke_counter_t unterminated;
+} smoke_csv_counters;
+
+#define SMOKE_CSV_ROW_COUNT 420000
+#define SMOKE_CSV_EXPECTED_TOTAL 88200210000LL /* sum(1..SMOKE_CSV_ROW_COUNT) = N*(N+1)/2 */
+
+static int32_t smoke_csv_seed(void** out_state, void* user_data)
+{
+    smoke_csv_counters* counters = (smoke_csv_counters*)user_data;
+    int64_t* total = (int64_t*)calloc(1, sizeof(int64_t));
+    if (total == NULL) { return 1; } 
+    *out_state = total;
+    smoke_counter_increment(&counters->seeds);
+    return XL_OK;
+}
+
+static int32_t smoke_csv_accumulate(void* state, const xl_row* row, void* user_data)
+{
+    smoke_csv_counters* counters = (smoke_csv_counters*)user_data;
+    if (row->cell_count <= 0)
+    {
+        return XL_OK;
+    }
+    const xl_row_cell* cell = &row->cells[0];
+    if (cell->type == XL_CELL_EMPTY || cell->value == NULL)
+    {
+        return XL_OK;
+    }
+    if (cell->value[cell->value_len] != 0)
+    {
+        smoke_counter_increment(&counters->unterminated);
+        return XL_OK;
+    }
+    *(int64_t*)state += strtoll((const char*)cell->value, NULL, 10);
+    return XL_OK;
+}
+
+static int32_t smoke_csv_combine(void* acc, void* next, void* user_data)
+{
+    smoke_csv_counters* counters = (smoke_csv_counters*)user_data;
+    *(int64_t*)acc += *(int64_t*)next; 
+    smoke_counter_increment(&counters->combines);
+    return XL_OK;
+}
+
+static void smoke_csv_free_state(void* state, void* user_data)
+{
+    smoke_csv_counters* counters = (smoke_csv_counters*)user_data;
+    smoke_counter_increment(&counters->frees);
+    free(state);
+}
+
+static int write_csv_fixture(const char* path, int32_t row_count)
+{
+    FILE* fixture = fopen(path, "w");
+    CHECK(fixture != NULL, "cannot write the CSV aggregate fixture");
+    fprintf(fixture, "amount\n");
+    for (int32_t i = 1; i <= row_count; i++)
+    {
+        fprintf(fixture, "%07d\n", i);
+    }
+    fclose(fixture);
+    return 0;
+}
+
+static int write_quoted_csv_fixture(const char* path, int32_t records)
+{
+    FILE* fixture = fopen(path, "wb");
+    CHECK(fixture != NULL, "cannot write the quoted CSV aggregate fixture");
+    for (int32_t record = 1; record <= records; record++)
+    {
+        fprintf(fixture, "%d,\"", record);
+        for (int32_t filler = 0; filler < 40000; filler++)
+        {
+            fputs("BOOM,notint,x\n", fixture);
+        }
+        fputs("\"\n", fixture);
+    }
+    fclose(fixture);
+    return 0;
+}
+
+static int smoke_message_contains(const uint8_t* message, int32_t message_len, const char* needle)
+{
+    size_t needle_len = strlen(needle);
+    if (message == NULL || message_len < 0 || (size_t)message_len < needle_len)
+    {
+        return 0;
+    }
+    for (int32_t i = 0; i + (int32_t)needle_len <= message_len; i++)
+    {
+        if (memcmp(message + i, needle, needle_len) == 0)
+        {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+static int smoke_csv_aggregate(xl_lib_handle lib, const char* csv_path)
+{
+    xl_csv_aggregate_file_fn aggregate =
+        (xl_csv_aggregate_file_fn)load_symbol(lib, "xl_csv_aggregate_file");
+    CHECK(aggregate != NULL, "xl_csv_aggregate_file not exported");
+
+    xl_csv_aggregate_memory_fn aggregate_memory =
+        (xl_csv_aggregate_memory_fn)load_symbol(lib, "xl_csv_aggregate_memory");
+    CHECK(aggregate_memory != NULL, "xl_csv_aggregate_memory not exported");
+
+    xl_last_error_ptr_fn last_error_ptr =
+        (xl_last_error_ptr_fn)load_symbol(lib, "xl_last_error_ptr");
+    CHECK(last_error_ptr != NULL, "xl_last_error_ptr not exported");
+
+    smoke_csv_counters counters;
+    memset(&counters, 0, sizeof(counters));
+
+    xl_csv_aggregation agg;
+    memset(&agg, 0, sizeof(agg));
+    agg.struct_size = (int32_t)sizeof(agg);
+    agg.seed = smoke_csv_seed;
+    agg.accumulate = smoke_csv_accumulate;
+    agg.combine = smoke_csv_combine;
+    agg.free_state = smoke_csv_free_state;
+    agg.user_data = &counters;
+
+    xl_csv_parallel_options options;
+    memset(&options, 0, sizeof(options));
+    options.struct_size = (int32_t)sizeof(options);
+    options.header_row = 1;
+    options.degree_of_parallelism = 8; 
+
+    void* state = NULL;
+    int32_t status = aggregate((const uint8_t*)csv_path, (int32_t)strlen(csv_path),
+                               &agg, &options, &state);
+    CHECK(status == XL_OK, "xl_csv_aggregate_file must succeed on the smoke fixture");
+
+    int64_t total = *(int64_t*)state;
+    free(state); 
+
+    CHECK(total == SMOKE_CSV_EXPECTED_TOTAL, "xl_csv_aggregate_file must sum every row exactly once");
+    CHECK(smoke_counter_get(&counters.seeds) > 0, "seed must be called at least once");
+    CHECK(smoke_counter_get(&counters.frees) == smoke_counter_get(&counters.seeds) - 1,
+          "free_state must run exactly once per seeded state except the one returned as out_state");
+    CHECK(smoke_counter_get(&counters.combines) >= 1,
+          "a multi-megabyte fixture at degree_of_parallelism=8 must partition and combine");
+    CHECK(smoke_counter_get(&counters.unterminated) == 0,
+          "every aggregate cell value must be NUL-terminated at value[value_len]");
+
+    FILE* source = fopen(csv_path, "rb");
+    CHECK(source != NULL, "cannot reopen the CSV aggregate fixture");
+    fseek(source, 0, SEEK_END);
+    long source_len = ftell(source);
+    fseek(source, 0, SEEK_SET);
+    uint8_t* buffer = (uint8_t*)malloc((size_t)source_len);
+    CHECK(buffer != NULL, "cannot allocate the in-memory CSV fixture");
+    CHECK(fread(buffer, 1, (size_t)source_len, source) == (size_t)source_len, "short read of the CSV fixture");
+    fclose(source);
+
+    smoke_csv_counters memory_counters;
+    memset(&memory_counters, 0, sizeof(memory_counters));
+    xl_csv_aggregation memory_agg = agg;
+    memory_agg.user_data = &memory_counters;
+
+    void* memory_state = NULL;
+    int32_t memory_status = aggregate_memory(buffer, (int32_t)source_len, &memory_agg, &options, &memory_state);
+    CHECK(memory_status == XL_OK, "xl_csv_aggregate_memory must succeed on the smoke fixture");
+
+    int64_t memory_total = *(int64_t*)memory_state;
+    free(memory_state);
+    free(buffer);
+
+    CHECK(memory_total == SMOKE_CSV_EXPECTED_TOTAL,
+          "xl_csv_aggregate_memory must sum every row exactly once");
+    CHECK(smoke_counter_get(&memory_counters.frees) == smoke_counter_get(&memory_counters.seeds) - 1,
+          "free_state must run once per seeded state except the one returned as out_state");
+
+    xl_csv_aggregation bad_size_agg = agg;
+    bad_size_agg.struct_size = (int32_t)sizeof(agg) - 1;
+    void* rejected_state = NULL;
+    CHECK(aggregate((const uint8_t*)csv_path, (int32_t)strlen(csv_path), &bad_size_agg, &options,
+                    &rejected_state) == XL_INVALID_ARGUMENT,
+          "a wrong xl_csv_aggregation.struct_size must be XL_INVALID_ARGUMENT");
+    {
+        int32_t error_len = 0;
+        const uint8_t* message = last_error_ptr(&error_len);
+        CHECK(message != NULL && error_len > 0,
+              "xl_last_error_ptr must report detail for a bad csv_aggregation.struct_size");
+        CHECK(smoke_message_contains(message, error_len, "csv_aggregation.struct_size"),
+              "the bad struct_size rejection must name csv_aggregation.struct_size");
+    }
+
+    xl_csv_aggregation null_combine_agg = agg;
+    null_combine_agg.combine = NULL;
+    rejected_state = NULL;
+    CHECK(aggregate((const uint8_t*)csv_path, (int32_t)strlen(csv_path), &null_combine_agg, &options,
+                    &rejected_state) == XL_INVALID_ARGUMENT,
+          "a NULL xl_csv_aggregation.combine must be XL_INVALID_ARGUMENT");
+    {
+        int32_t error_len = 0;
+        const uint8_t* message = last_error_ptr(&error_len);
+        CHECK(message != NULL && error_len > 0,
+              "xl_last_error_ptr must report detail for a NULL csv_aggregation.combine");
+        CHECK(smoke_message_contains(message, error_len, "csv_aggregation.combine"),
+              "the NULL callback rejection must name csv_aggregation.combine");
+    }
+
+    xl_csv_parallel_options zeroed_options;
+    memset(&zeroed_options, 0, sizeof(zeroed_options));
+    rejected_state = NULL;
+    CHECK(aggregate((const uint8_t*)csv_path, (int32_t)strlen(csv_path), &agg, &zeroed_options,
+                    &rejected_state) == XL_INVALID_ARGUMENT,
+          "a zeroed xl_csv_parallel_options (struct_size 0) must be XL_INVALID_ARGUMENT");
+    {
+        int32_t error_len = 0;
+        const uint8_t* message = last_error_ptr(&error_len);
+        CHECK(message != NULL && error_len > 0,
+              "xl_last_error_ptr must report detail for a zeroed csv_parallel_options");
+        CHECK(smoke_message_contains(message, error_len, "csv_parallel_options.struct_size"),
+              "the zeroed options rejection must name csv_parallel_options.struct_size");
+    }
+
+    printf("ok: xl_csv_aggregate_file/memory summed %d rows to %lld (seeds=%ld, frees=%ld, combines=%ld)\n",
+           SMOKE_CSV_ROW_COUNT, (long long)total, smoke_counter_get(&counters.seeds),
+           smoke_counter_get(&counters.frees), smoke_counter_get(&counters.combines));
+    return 0;
+}
+
+static int test_csv_aggregate_file(xl_lib_handle lib)
+{
+    const char* csv_path = "smoke_aggregate.csv";
+    int status = write_csv_fixture(csv_path, SMOKE_CSV_ROW_COUNT);
+    if (status == 0)
+    {
+        status = smoke_csv_aggregate(lib, csv_path);
+    }
+    remove(csv_path);
+    return status;
+}
+
+static int smoke_csv_aggregate_quoted(xl_lib_handle lib, const char* csv_path, int32_t records)
+{
+    xl_csv_aggregate_file_fn aggregate =
+        (xl_csv_aggregate_file_fn)load_symbol(lib, "xl_csv_aggregate_file");
+    CHECK(aggregate != NULL, "xl_csv_aggregate_file not exported");
+
+    smoke_csv_counters counters;
+    memset(&counters, 0, sizeof(counters));
+
+    xl_csv_aggregation agg;
+    memset(&agg, 0, sizeof(agg));
+    agg.struct_size = (int32_t)sizeof(agg);
+    agg.seed = smoke_csv_seed;
+    agg.accumulate = smoke_csv_accumulate;
+    agg.combine = smoke_csv_combine;
+    agg.free_state = smoke_csv_free_state;
+    agg.user_data = &counters;
+
+    xl_csv_parallel_options options;
+    memset(&options, 0, sizeof(options));
+    options.struct_size = (int32_t)sizeof(options);
+    options.header_row = 0;
+    options.degree_of_parallelism = 8;
+
+    void* state = NULL;
+    int32_t status = aggregate((const uint8_t*)csv_path, (int32_t)strlen(csv_path), &agg, &options, &state);
+    CHECK(status == XL_OK, "xl_csv_aggregate_file must succeed on the quoted multi-line fixture");
+
+    int64_t total = *(int64_t*)state;
+    free(state);
+
+    int64_t expected = ((int64_t)records * (records + 1)) / 2;
+    CHECK(total == expected,
+          "each quoted record must contribute its first column exactly once, whatever the chunk boundaries did");
+    CHECK(smoke_counter_get(&counters.combines) >= 1,
+          "this quoted fixture must really be split, or the straddle case is never exercised");
+
+    printf("ok: xl_csv_aggregate_file summed %d quoted multi-line records to %lld\n",
+           records, (long long)total);
+    return 0;
+}
+
+static int test_csv_aggregate_quoted_records(xl_lib_handle lib)
+{
+    const char* quoted_path = "smoke_aggregate_quoted.csv";
+    const int32_t records = 8;
+    int status = write_quoted_csv_fixture(quoted_path, records);
+    if (status == 0)
+    {
+        status = smoke_csv_aggregate_quoted(lib, quoted_path, records);
+    }
+    remove(quoted_path);
+    return status;
+}
+
 int main(int argc, char** argv)
 {
     const char* library_path = argc > 1 ? argv[1] : EXCELREADER_LIB_PATH_DEFAULT;
@@ -808,6 +1064,8 @@ int main(int argc, char** argv)
     failures += test_infer_schema_rejects_bad_arguments(&api, fixture_path);
     failures += test_double_close_is_rejected(&api, fixture_path);
     failures += test_write_typed(&api);
+    failures += test_csv_aggregate_file(lib);
+    failures += test_csv_aggregate_quoted_records(lib);
 
     if (failures == 0)
     {

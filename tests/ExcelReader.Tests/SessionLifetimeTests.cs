@@ -17,18 +17,8 @@ namespace ExcelReader.Tests
     {
         private static readonly string XlsxFixture = Path.Combine(AppContext.BaseDirectory, "data", "sample.xlsx");
 
-        // Enough rows that a 10-row batch leaves the overwhelming majority unread: a session that
-        // resumed after an interleaved call would come back with data, which is exactly the failure
-        // these tests have to be able to see.
         private const int SmallRowCount = 500;
 
-        // The scenario the interlock exists for, at the size it was measured at: 200,000 rows read in
-        // 1,000-row batches, with one ordinary xl_parse_typed interleaved after the first batch. Before
-        // the interlock that call rewound the shared CSV stream under the live reader, which then
-        // reported XL_EOF - a clean success, with an EMPTY xl_last_error - after 12,774 of its 200,000
-        // rows: 94% of the data dropped with no way for the caller to notice. Kept at full size
-        // because a short fixture cannot show the difference between truncation and completion; a
-        // 200k-row single-column CSV parses in well under a second.
         private const int InterleaveRowCount = 200_000;
         private const long InterleaveBatchSize = 1000;
 
@@ -37,14 +27,11 @@ namespace ExcelReader.Tests
             return [new() { Names = ["id"], Type = NativeColumnType.Int64 }];
         }
 
-        // Index-based, so it needs no header row - what the header-less sample.xlsx opens are for.
         private static NativeColumnSpec[] FirstColumnSpecs()
         {
             return [new() { Index = 0, Type = NativeColumnType.String, Nullable = true }];
         }
 
-        // One non-nullable int64 column: the cheapest fixture that can also carry an unconvertible
-        // value (see WriteUnconvertibleCsv) for the conversion-fault tests.
         private static string WriteCsv(int rowCount)
         {
             string path = Path.Combine(Path.GetTempPath(), $"excelreader-lifetime-{Guid.NewGuid():N}.csv");
@@ -57,9 +44,6 @@ namespace ExcelReader.Tests
             return path;
         }
 
-        // Row 3 cannot convert to int64 and the column is non-nullable, so the fault lands on the
-        // SECOND batch at a batch size of 2 - after one batch has already been handed out and freed,
-        // which is what makes "batches already handed out stay valid" observable.
         private static string WriteUnconvertibleCsv()
         {
             string path = Path.Combine(Path.GetTempPath(), $"excelreader-lifetime-{Guid.NewGuid():N}.csv");
@@ -72,7 +56,6 @@ namespace ExcelReader.Tests
             return table.RowCount;
         }
 
-        // ---- one live session per workbook ---------------------------------------------------
 
         [Fact]
         public void OpenTypedReader_Should_Refuse_A_Second_Live_Reader_On_The_Same_Workbook()
@@ -87,8 +70,6 @@ namespace ExcelReader.Tests
             Assert.Equal(0, second);
             Assert.NotEmpty(NativeApi.LastErrorText());
 
-            // Closing the first releases the slot, so the refusal is a live-session rule and not a
-            // once-per-workbook rule.
             NativeApi.CloseTypedReader(first);
             Assert.Equal(NativeStatus.Ok, NativeApi.OpenTypedReader(live, FirstColumnSpecs(), headerRow: 0, maxRows: 1, out nint third));
             NativeApi.CloseTypedReader(third);
@@ -122,17 +103,12 @@ namespace ExcelReader.Tests
             Assert.Equal(NativeStatus.Error, status);
             Assert.Equal(0, reader);
 
-            // The stream's own release frees the slot the same way xl_typed_reader_close does.
             ReleaseStream(ref stream);
             Assert.Equal(NativeStatus.Ok, NativeApi.OpenTypedReader(live, FirstColumnSpecs(), headerRow: 0, maxRows: 1, out nint after));
             NativeApi.CloseTypedReader(after);
         }
 
-        // ---- the measured interleaving scenario ----------------------------------------------
 
-        // See InterleaveRowCount for the measurement this pins. The reader must fail loudly rather
-        // than resume from a rewound cursor, and xl_parse_typed's own result must still be complete -
-        // the interleaved call is the one entitled to the workbook for the length of its own call.
         [Fact]
         public void ParseTyped_Should_Fault_A_Live_Reader_Instead_Of_Truncating_It()
         {
@@ -153,11 +129,8 @@ namespace ExcelReader.Tests
                     Assert.Equal(NativeStatus.Ok, NativeApi.ParseTyped(live, IdSpecs(), headerRow: 1, out NativeTable whole));
                     long interleaved = RowsIn(whole);
                     NativeApi.FreeTable(ref whole);
-                    // The interleaved call is the one that is allowed to succeed - it owns the
-                    // workbook's cursor for the duration of its own call.
-                    Assert.Equal((long)InterleaveRowCount, interleaved);
+                    Assert.Equal(InterleaveRowCount, interleaved);
 
-                    // And the reader is dead, loudly: not XL_EOF, not a short batch.
                     Assert.Equal(NativeStatus.Error, NativeApi.NextTypedBatch(reader, out NativeTable after));
                     Assert.Equal(IntPtr.Zero, after.Columns);
                     Assert.NotEmpty(NativeApi.LastErrorText());
@@ -173,11 +146,7 @@ namespace ExcelReader.Tests
             }
         }
 
-        // ---- every other read on the workbook faults a live reader ----------------------------
 
-        // Shared by the per-entry-point tests below: one live reader, one batch already taken, then
-        // `interleaved` runs on the same workbook. The reader must report XL_ERROR with a message,
-        // and must keep reporting the same one - a faulted reader never resumes.
         private static void AssertFaultsTheLiveReader(Action<NativeHandle> interleaved)
         {
             string path = WriteCsv(SmallRowCount);
@@ -229,8 +198,6 @@ namespace ExcelReader.Tests
         [Fact]
         public void NextRow_Should_Fault_A_Live_Reader()
         {
-            // Span<byte>.Empty asks for the row's size, which is what actually advances the
-            // workbook's own cursor - the copy-out afterwards is irrelevant here.
             AssertFaultsTheLiveReader(static live =>
                 Assert.Equal(NativeStatus.BufferTooSmall, NativeApi.NextRow(live, Span<byte>.Empty, out _)));
         }
@@ -262,19 +229,13 @@ namespace ExcelReader.Tests
             });
         }
 
-        // excelreader.h's chunked-reading section promises exactly this. Index 0 is deliberate: the
-        // rule is not "moving to a DIFFERENT sheet", it is that xl_move_to_sheet drops and rebuilds
-        // the workbook's row cursor, which invalidates the reader's position either way.
         [Fact]
         public void MoveToSheet_Should_Fault_A_Live_Reader()
         {
             AssertFaultsTheLiveReader(static live => Assert.Equal(NativeStatus.Ok, NativeApi.MoveToSheet(live, 0)));
         }
 
-        // ---- closing the workbook mid-session -------------------------------------------------
 
-        // The spec's Testing section, and the other half of the header's borrow rule: xl_close while
-        // a reader is open is a clean XL_ERROR, not a crash, and it latches.
         [Fact]
         public void Dispose_Should_Fault_A_Live_Reader_And_Latch()
         {
@@ -290,7 +251,7 @@ namespace ExcelReader.Tests
                     Assert.Equal(NativeStatus.Ok, NativeApi.NextTypedBatch(reader, out NativeTable first));
                     NativeApi.FreeTable(ref first);
 
-                    live.Dispose(); // xl_close
+                    live.Dispose();
 
                     Assert.Equal(NativeStatus.Error, NativeApi.NextTypedBatch(reader, out NativeTable after));
                     Assert.Equal(IntPtr.Zero, after.Columns);
@@ -311,12 +272,7 @@ namespace ExcelReader.Tests
             }
         }
 
-        // ---- xl_parse_typed must not fault a live reader on pure argument validation -----------
 
-        // OpenTransient used to fault the live session before OpenCore's own argument validation ran,
-        // so a xl_parse_typed call that was always going to fail XL_INVALID_ARGUMENT (a spec with a
-        // blank name, here) destroyed an unrelated caller's open reader without ever touching the
-        // cursor. Validation must run first; the reader must come out of this untouched.
         [Fact]
         public void ParseTyped_Should_Not_Fault_A_Live_Reader_When_Argument_Validation_Fails()
         {
@@ -339,8 +295,6 @@ namespace ExcelReader.Tests
                     Assert.Equal(IntPtr.Zero, invalid.Columns);
                     Assert.NotEmpty(NativeApi.LastErrorText());
 
-                    // The reader is still alive and still returns real data - the failed call never
-                    // touched the cursor.
                     Assert.Equal(NativeStatus.Ok, NativeApi.NextTypedBatch(reader, out NativeTable after));
                     long rowsAfter = RowsIn(after);
                     NativeApi.FreeTable(ref after);
@@ -357,11 +311,7 @@ namespace ExcelReader.Tests
             }
         }
 
-        // ---- the conversion fault itself ------------------------------------------------------
 
-        // The LATCHES promise in excelreader.h, exercised through the status codes rather than
-        // inferred from the implementation: a non-nullable column whose value fails to convert is
-        // XL_ERROR, with a message, on this call and on every call after it.
         [Fact]
         public void NextTypedBatch_Should_Latch_A_Conversion_Failure()
         {
@@ -374,7 +324,6 @@ namespace ExcelReader.Tests
                     NativeApi.OpenTypedReader(live, IdSpecs(), headerRow: 1, maxRows: 2, out nint reader));
                 try
                 {
-                    // Rows 1 and 2 convert, so the first batch is a normal success the caller owns.
                     Assert.Equal(NativeStatus.Ok, NativeApi.NextTypedBatch(reader, out NativeTable good));
                     Assert.Equal(2L, RowsIn(good));
                     NativeApi.FreeTable(ref good);
@@ -387,8 +336,6 @@ namespace ExcelReader.Tests
 
                     Assert.Equal(NativeStatus.Error, NativeApi.NextTypedBatch(reader, out NativeTable again));
                     Assert.Equal(IntPtr.Zero, again.Columns);
-                    // Same message, not an empty one: a caller that only reads xl_last_error after the
-                    // second call still learns what went wrong.
                     Assert.Equal(latched, NativeApi.LastErrorText());
                 }
                 finally
@@ -402,9 +349,6 @@ namespace ExcelReader.Tests
             }
         }
 
-        // xl_parse_typed opens a session of its own internally. It must not be refused by, or trip
-        // over, the one-live-session rule - it drains and closes inside its own call, so two calls in
-        // a row have to be indistinguishable from one.
         [Fact]
         public void ParseTyped_Should_Stay_Repeatable_On_The_Same_Workbook()
         {
@@ -421,7 +365,7 @@ namespace ExcelReader.Tests
                 long secondRows = RowsIn(second);
                 NativeApi.FreeTable(ref second);
 
-                Assert.Equal((long)SmallRowCount, firstRows);
+                Assert.Equal(SmallRowCount, firstRows);
                 Assert.Equal(firstRows, secondRows);
             }
             finally
@@ -430,8 +374,6 @@ namespace ExcelReader.Tests
             }
         }
 
-        // The Arrow release callbacks are plain function pointers in the structs, exactly as a C
-        // consumer sees them - same invocation shape ArrowStreamTests uses.
         private delegate void ReleaseStreamFn(ref ArrowArrayStream stream);
         private delegate void ReleaseArrayFn(ref ArrowArray array);
         private delegate void ReleaseSchemaFn(ref ArrowSchema schema);

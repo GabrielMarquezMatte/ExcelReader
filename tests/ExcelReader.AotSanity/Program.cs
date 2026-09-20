@@ -6,12 +6,6 @@ using ExcelReader.Core.Writer;
 
 namespace ExcelReader.AotSanity
 {
-    // Exercises the ExcelMappedParser/IExcelRowMap/ExcelRowMapBuilder seam plus the raw, always-AOT-safe
-    // Excel.FromCsv reader, under PublishAot=true (see the project file for the AOT/trim settings).
-    // Deliberately does not reference the reflection-based typed parser or record writer: doing so must
-    // fail "dotnet publish" with a trimming/AOT diagnostic, which is what proves this harness actually
-    // detects the problem it exists to catch — confirmed by hand before this file was committed, by
-    // temporarily adding such a call here and observing the publish fail.
     internal static class Program
     {
         private static async Task<int> Main()
@@ -25,9 +19,6 @@ namespace ExcelReader.AotSanity
                 return 1;
             }
 
-            // Same check, but through the source-generated IExcelRowMap<T> (ExcelSerializableAttribute)
-            // instead of the hand-written one above — proves the generator's own emitted code, not just
-            // the hand-written seam, survives PublishAot.
             var generatedRows = new ExcelMappedParser<GeneratedAotModel>().Parse(reader).ToList();
             if (generatedRows.Count != 1 || !string.Equals(generatedRows[0].Name, "Alice", StringComparison.Ordinal)
                 || generatedRows[0].Age != 30 || !generatedRows[0].Active)
@@ -36,8 +27,6 @@ namespace ExcelReader.AotSanity
                 return 1;
             }
 
-            // Feature A4: the public MappedRecordWriter.CreateMapped*Async write entries, driven by the
-            // same source-generated map (IExcelRecordMap<T>), also under PublishAot.
             await using var writtenStream = new MemoryStream();
             await using (var writer = await MappedRecordWriter.CreateMappedXlsxAsync(writtenStream, leaveOpen: true))
             {
@@ -66,8 +55,6 @@ namespace ExcelReader.AotSanity
                 return 1;
             }
 
-            // Crypto must work under NativeAOT: this is why hash and cipher algorithms are chosen through a
-            // switch over an allowlist rather than reflected from the descriptor's algorithm name.
             if (!EncryptedWorkbookReadsUnderAot())
             {
                 return 1;

@@ -1,6 +1,5 @@
 using System.Buffers;
 using System.IO.Compression;
-using ExcelReader.Core.Internal;
 
 namespace ExcelReader.Core.Reader
 {
@@ -10,33 +9,23 @@ namespace ExcelReader.Core.Reader
         private readonly Stream? _stream;
         private readonly bool _leaveOpen;
         private readonly ZipArchive? _zip;
-        // Non-null instead of _zip/_stream for the in-memory ZIP path — exactly one of _zip or _memZip
-        // is non-null for any given reader instance.
         private readonly ZipMemoryIndex? _memZip;
         private readonly ExcelReaderOptions _options;
         private readonly DecompressedByteCounter _decompressedBytes;
         private readonly (string Name, string Path)[] _sheets;
-        private readonly bool[] _styleIsDate; // cellXfs index -> true when that style renders as a date/time
+        private readonly bool[] _styleIsDate;
         private int _current;
 
-        private byte[] _sharedFlat = [];      // pooled; all decoded shared-string bytes concatenated
-        private int[] _sharedOffsets = [0];   // string i = _sharedFlat[_offsets[i].._offsets[i+1]]
+        private byte[] _sharedFlat = [];
+        private int[] _sharedOffsets = [0];
         private bool _sharedLoaded;
-        // Lazily created: dedups repeated shared-string values (categorical columns) into one string
-        // instance instead of re-decoding UTF-8 per row. Indexed by shared-string index (see
-        // WorkbookLookups.CreateSharedStringCache, CellDesc.ToCell, Cell.GetString). Workbook-scoped, so
-        // it survives sheet switches (the shared-string table is shared across all sheets in a workbook).
         private string?[]? _sharedStringCache;
 
-        // Sync open: reads the central directory and workbook/styles parts synchronously.
         internal XlsxReader(Stream stream, bool leaveOpen, ExcelReaderOptions? options = null)
             : this(stream, leaveOpen, new ZipArchive(stream, ZipArchiveMode.Read, leaveOpen: true), options)
         {
         }
 
-        // Sync open over an already-opened ZipArchive — lets a caller that already opened the archive
-        // for format detection (Excel.Open's DetectSeekable) hand it straight to the reader instead of
-        // re-parsing the central directory a second time.
         internal XlsxReader(Stream stream, bool leaveOpen, ZipArchive zip, ExcelReaderOptions? options = null)
         {
             _stream = stream;
@@ -83,8 +72,6 @@ namespace ExcelReader.Core.Reader
             IsDate1904 = date1904;
         }
 
-        // In-memory ZIP path: no stream, no ZipArchive — everything is
-        // already-decompressed parts resolved from memZip on demand.
         private XlsxReader(ZipMemoryIndex memZip,
             (string Name, string Path)[] sheets, bool[] styleIsDate, bool date1904,
             ExcelReaderOptions options, DecompressedByteCounter decompressedBytes)
@@ -98,7 +85,6 @@ namespace ExcelReader.Core.Reader
             IsDate1904 = date1904;
         }
 
-        // Async open: central directory and parts are read with the .NET 10 async zip APIs.
         internal static ValueTask<XlsxReader> CreateAsync(Stream stream, bool leaveOpen, ExcelReaderOptions? options = null, CancellationToken ct = default)
         {
             ExcelReaderOptions effectiveOptions = options ?? ExcelReaderOptions.Default;
@@ -107,9 +93,6 @@ namespace ExcelReader.Core.Reader
                 zip => ParseAsync(stream, leaveOpen, zip, effectiveOptions, decompressedBytes, ct), ct);
         }
 
-        // Async open over an already-opened ZipArchive — the async twin of the ZipArchive-taking sync
-        // ctor above, for callers (Excel.OpenAsync's DetectSeekableAsync) that already opened the
-        // archive for format detection.
         internal static ValueTask<XlsxReader> CreateFromOpenZipAsync(
             Stream stream, bool leaveOpen, ZipArchive zip, ExcelReaderOptions? options, CancellationToken ct)
         {
@@ -149,7 +132,6 @@ namespace ExcelReader.Core.Reader
         /// <inheritdoc/>
         public bool IsDate1904 { get; }
 
-        // A numeric cell whose style index maps to a date/time format is reported as CellType.Date.
         internal bool IsDateStyle(int style)
         {
             return WorkbookLookups.IsDateStyle(_styleIsDate, style);
@@ -260,7 +242,7 @@ namespace ExcelReader.Core.Reader
             _memZip?.Dispose();
             if (_zip is not null)
             {
-                await ZipArchiveDisposal.DisposeAsync(_zip).ConfigureAwait(false);
+                await _zip.DisposeAsync().ConfigureAwait(false);
             }
             if (!_leaveOpen && _stream is not null)
             {

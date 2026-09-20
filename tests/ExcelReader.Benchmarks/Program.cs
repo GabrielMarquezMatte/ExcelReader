@@ -11,7 +11,6 @@ namespace ExcelReader.Benchmarks
             .AddExporter(MarkdownExporter.GitHub)
             .AddExporter(JsonExporter.Full);
 
-        // Run all benchmarks, or filter: `dotnet run -c Release -- --filter *Write*`
         public static void Main(string[] args)
         {
             BenchmarkSwitcher.FromAssembly(typeof(Program).Assembly).Run(args, Config);

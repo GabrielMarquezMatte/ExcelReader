@@ -9,10 +9,6 @@ struct Row {
     coluna3: i64,
 }
 
-// Matches tests/ExcelReader.Benchmarks/Data/65K_Records_Data.xlsb's header: Region, Country, Item
-// Type, Sales Channel, Order Priority, Order Date, Order ID, Ship Date, Units Sold, Unit Price,
-// Unit Cost, Total Revenue, Total Cost, Total Profit. Only a subset is bound - enough to exercise
-// string/date/int/float decoding, not every column.
 #[derive(Default, ExcelMapper)]
 struct LargeRow {
     #[excel(name = "Region")]
@@ -33,8 +29,6 @@ fn fixture_path() -> String {
     concat!(env!("CARGO_MANIFEST_DIR"), "/../../RealExcel.xlsb").to_string()
 }
 
-// Isolates per-row cost from the fixed open overhead the 100-row RealExcel.xlsb benchmarks below
-// can't separate out.
 fn large_fixture_path() -> String {
     concat!(
         env!("CARGO_MANIFEST_DIR"),
@@ -43,7 +37,6 @@ fn large_fixture_path() -> String {
     .to_string()
 }
 
-// Isolates Workbook::open's cost: file read, container parse, header decode - no row typing.
 fn bench_open(c: &mut Criterion) {
     let path = fixture_path();
     c.bench_function("open", |b| {
@@ -54,8 +47,6 @@ fn bench_open(c: &mut Criterion) {
     });
 }
 
-// Isolates parse_sheet's cost on top of an already-open workbook: schema resolution and the
-// columnar typed decode over all 100 rows.
 fn bench_parse_sheet(c: &mut Criterion) {
     let path = fixture_path();
     c.bench_function("parse_sheet", |b| {
@@ -71,8 +62,6 @@ fn bench_parse_sheet(c: &mut Criterion) {
     });
 }
 
-// Isolates Workbook::infer_schema's cost: sampling the header + up to 100 rows to guess a schema,
-// independent of any typed parse.
 fn bench_infer_schema(c: &mut Criterion) {
     let path = fixture_path();
     c.bench_function("infer_schema", |b| {
@@ -130,8 +119,6 @@ fn bench_infer_schema_large(c: &mut Criterion) {
     });
 }
 
-// The comparison point is bench_parse_sheet_large: same rows, same mapper, one batch resident at a
-// time instead of the whole sheet.
 fn bench_typed_chunks_large(c: &mut Criterion) {
     let path = large_fixture_path();
     for batch_size in [1_000_i64, 10_000, 0] {

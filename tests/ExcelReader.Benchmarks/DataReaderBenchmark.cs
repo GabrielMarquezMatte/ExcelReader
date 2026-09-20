@@ -6,23 +6,6 @@ using ExcelReader.Core.ValueObjects;
 
 namespace ExcelReader.Benchmarks
 {
-    // ExcelDataReader — the System.Data.IDataReader adapter — is the entry point for SqlBulkCopy,
-    // DataTable.Load and Dapper, and had no benchmark at all. What the legs separate:
-    //
-    // - Baseline_RawRows is the same sheet read straight through IExcelRowReader, so the adapter's
-    //   own cost is the gap between it and everything below, not an absolute number.
-    // - GetValue is how SqlBulkCopy actually drives a reader: one boxed object per cell, which is
-    //   the allocation floor of any bulk load through this adapter.
-    // - TypedGetters is the same rows read by a consumer that already knows its schema, and is the
-    //   honest comparison for "what does the adapter cost", since it skips the boxing GetValue
-    //   cannot avoid.
-    // - GetBytes is the binary-column path on a bulk load: it reads Cell.Value's UTF-8 straight out
-    //   with no string in between, so it should not allocate per cell.
-    // - DataTable_Load is the other headline consumer, and carries DataTable's own per-row cost —
-    //   it is here to size that against the adapter, not to measure the adapter alone.
-    //
-    // The corpus is WorkbookGenerator.BuildTypedAsync: a header row plus Name/Id/Date/Value, so the
-    // four columns exercise the string, integer, date and floating-point getters respectively.
     [MemoryDiagnoser]
     [SuppressMessage("Performance", "CA1859:Use concrete types when possible for improved performance",
         Justification = "The interface dispatch is the thing being measured: SqlBulkCopy, DataTable.Load and " +
@@ -44,11 +27,9 @@ namespace ExcelReader.Benchmarks
 
         private IExcelRowReader OpenReader()
         {
-            // leaveOpen: false so disposing the reader disposes the stream with it.
             return Excel.FromXlsx(new MemoryStream(_xlsx, writable: false), leaveOpen: false);
         }
 
-        // What the sheet costs with no adapter in the way.
         [Benchmark(Baseline = true)]
         public long Baseline_RawRows()
         {
@@ -64,7 +45,6 @@ namespace ExcelReader.Benchmarks
             return acc;
         }
 
-        // SqlBulkCopy's access pattern: an untyped, boxed read per cell.
         [Benchmark]
         public long DataReader_GetValue()
         {
@@ -81,7 +61,6 @@ namespace ExcelReader.Benchmarks
             return acc;
         }
 
-        // A consumer that already knows the schema, so nothing boxes.
         [Benchmark]
         public long DataReader_TypedGetters()
         {
@@ -98,7 +77,6 @@ namespace ExcelReader.Benchmarks
             return acc;
         }
 
-        // The binary-column path: straight out of the cell's UTF-8, no string round-trip.
         [Benchmark]
         public long DataReader_GetBytes()
         {
@@ -112,7 +90,6 @@ namespace ExcelReader.Benchmarks
             return acc;
         }
 
-        // Carries DataTable's own per-row cost on top of the adapter's.
         [Benchmark]
         public int DataTable_Load()
         {

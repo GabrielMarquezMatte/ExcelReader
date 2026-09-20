@@ -21,9 +21,6 @@ namespace ExcelReader.Benchmarks
         public int C { get; set; }
     }
 
-    // Measures the parallel CSV path against the sequential parser on a corpus large enough for
-    // partitioning to mean anything. The dop=1 leg is the baseline; it runs the sequential fallback,
-    // so the speedup column reads directly as "what parallelism bought".
     [MemoryDiagnoser]
     public class CsvParallelParseBenchmark
     {
@@ -36,8 +33,6 @@ namespace ExcelReader.Benchmarks
         [GlobalSetup]
         public void Setup()
         {
-            // 2,000,000 rows measured ~92 MB on this machine (the brief's row count assumed a
-            // shorter average row); 4,300,000 lands the conversion-heavy corpus at ~200 MB too.
             _wide = CsvGenerator.WriteConversionHeavyFile(4_300_000);
             _narrow = CsvGenerator.WriteNarrowIntFile(8_000_000);
         }

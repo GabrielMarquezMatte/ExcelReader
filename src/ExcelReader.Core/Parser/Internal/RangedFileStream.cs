@@ -2,16 +2,6 @@ using Microsoft.Win32.SafeHandles;
 
 namespace ExcelReader.Core.Parser.Internal
 {
-    // A forward-only view of a file starting at an arbitrary offset, backed by positional
-    // RandomAccess reads rather than the handle's own file pointer. That is what lets N of these
-    // coexist over one SafeFileHandle with no seek contention and no per-worker file open:
-    // RandomAccess.Read is thread-safe and never mutates the handle's position.
-    //
-    // Reads run to the end of the file, not to the end of the caller's chunk. A chunk owns the
-    // records that *start* inside it, and the record starting just before its end runs past that
-    // end; a hard cut here would hand the parser a truncated final record, which it would happily
-    // emit because EOF terminates a record. Bounding is therefore the worker's job (CsvChunkWorker),
-    // which stops once a record starts at or after its chunk end.
     internal sealed class RangedFileStream : Stream
     {
         private readonly SafeFileHandle _handle;
@@ -67,7 +57,6 @@ namespace ExcelReader.Core.Parser.Internal
 
         public override void Flush()
         {
-            // Read-only stream: nothing is buffered on the write side.
         }
 
         public override long Seek(long offset, SeekOrigin origin)

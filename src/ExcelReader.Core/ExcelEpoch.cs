@@ -1,7 +1,6 @@
 namespace ExcelReader.Core
 {
     // Excel reserves serial 60 for the fictitious 1900-02-29; OADate does not. Keep this conversion
-    // shared so the binary writers and the public Cell date reader cannot drift at the boundary.
     internal static class ExcelEpoch
     {
         internal static double SerialToOADate(double serial, bool date1904)

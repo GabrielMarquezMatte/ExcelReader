@@ -13,8 +13,6 @@ use arrow::ffi::{from_ffi, FFI_ArrowArray, FFI_ArrowSchema};
 use arrow::ffi_stream::{ArrowArrayStreamReader, FFI_ArrowArrayStream};
 use arrow::record_batch::RecordBatchReader;
 
-// `check` is `pub(crate)` in workbook.rs (not error.rs) - visible from this sibling module because
-// pub(crate) means "crate-wide", not "same file".
 use crate::workbook::{build_specs, check, ExcelMapper, Workbook};
 use crate::{Error, XL_ERROR};
 
@@ -29,8 +27,6 @@ pub fn parse_arrow<T: ExcelMapper>(
 ) -> Result<RecordBatch, Error> {
     let arena = build_specs::<T>();
 
-    // Both start with a null `release`, which the Arrow spec defines as "owns nothing" - so if the
-    // call below fails and leaves them untouched, dropping them is a no-op and nothing leaks.
     let mut array = FFI_ArrowArray::empty();
     let mut schema = FFI_ArrowSchema::empty();
 
@@ -45,9 +41,6 @@ pub fn parse_arrow<T: ExcelMapper>(
         )
     })?;
 
-    // from_ffi consumes `array` by value: arrow-rs now owns it and will invoke its release callback
-    // when the resulting ArrayData is dropped. `schema` stays owned here and releases on drop at
-    // the end of this function, which is correct - the two are released independently.
     let data = unsafe { from_ffi(array, &schema) }.map_err(|e| {
         Error::from_status(
             XL_ERROR,
@@ -94,7 +87,6 @@ pub fn parse_arrow_stream<T: ExcelMapper>(
 ) -> Result<ArrowChunks<'_>, Error> {
     let arena = build_specs::<T>();
 
-    // Null `release` means "owns nothing", so an early failure leaves nothing to clean up.
     let mut stream = FFI_ArrowArrayStream::empty();
 
     check(unsafe {
@@ -108,7 +100,6 @@ pub fn parse_arrow_stream<T: ExcelMapper>(
         )
     })?;
 
-    // By value, so ownership of the release callback moves exactly once.
     let inner = ArrowArrayStreamReader::try_new(stream).map_err(|e| {
         Error::from_status(
             XL_ERROR,

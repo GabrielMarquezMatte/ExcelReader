@@ -14,11 +14,6 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  # Gates the expensive jobs below by which paths actually changed. Filtering happens inside the
-  # workflow (an `if:` per job), not at the trigger level (`on.pull_request.paths`) - the trigger-level
-  # form skips the whole workflow run for a non-matching PR, which leaves every required status check
-  # it owns stuck at "expected" forever and blocks the merge button. A skipped *job* still posts a real
-  # check run with conclusion=skipped, which GitHub does treat as passing for a required check.
   changes:
     name: Detect changed paths
     runs-on: ubuntu-latest
@@ -52,15 +47,6 @@ jobs:
             cpp:
               - 'cpp/**'
 
-  # Rust/Python/C++ bindings each need the same NativeAOT-published ExcelReader.Native binary per OS.
-  # Building it once here and sharing it via artifact (instead of each binding workflow calling
-  # build_native.py itself) cuts three redundant NativeAOT publishes per OS down to one. Required as
-  # its own status check: a failure here fails a job with no `needs` gating it on another job's
-  # result, so it can't be masked by GitHub treating a skipped downstream job as a passed required
-  # check.
-  #
-  # Runs whenever any binding might need the binary it produces - narrower than any single test job,
-  # since it feeds all three.
   build-native:
     name: Build native library (${{ matrix.os }})
     needs: changes
@@ -117,9 +103,6 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
 
-      # Pinned explicitly rather than relying on the runner image's preinstalled Rust: the clippy
-      # step below needs the component to be present, and which components an image ships is not
-      # part of its compatibility promise.
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
         with:
@@ -136,18 +119,11 @@ jobs:
           name: native-lib-${{ matrix.os }}
           path: python/src/excelreader/_lib
 
-      # actions/upload-artifact drops the executable bit on the way through. dlopen()'s initial ELF
-      # header read tolerates that, but the NativeAOT runtime's own PAL init - triggered by the first
-      # real P/Invoke, not by CDLL() itself - remaps the file with PROT_EXEC and aborts the whole
-      # process (SIGABRT, not a catchable dlopen error) when that mapping fails.
       - name: Restore executable bit (Linux/macOS)
         if: runner.os != 'Windows'
         shell: bash
         run: chmod +x python/src/excelreader/_lib/*
 
-      # rust/excelreader/excelreader.def is a hand-kept copy of the canonical list, needed
-      # because `cargo package` only ships files under the crate directory (see build.rs). A silent
-      # divergence would surface as an unresolved symbol at link time in a consumer's build, not here.
       - name: Verify the .def copy matches the canonical one
         shell: bash
         run: diff src/ExcelReader.Native/include/excelreader.def rust/excelreader/excelreader.def
@@ -161,8 +137,6 @@ jobs:
         if: runner.os == 'Windows'
         uses: ilammy/msvc-dev-cmd@v1
 
-      # --all-targets covers the integration and trybuild suites, not just the library; --all-features
-      # covers the optional `chrono` interop, which is otherwise never compiled.
       - name: cargo clippy
         working-directory: rust
         env:
@@ -175,13 +149,17 @@ jobs:
           EXCELREADER_NATIVE_LIB_DIR: ${{ github.workspace }}/${{ steps.lib.outputs.dir }}
         run: cargo test --workspace --all-features --verbose
 
-      # The default feature set is what crates.io consumers get by default, so it has to build on
-      # its own - `chrono` being the only feature makes it cheap to prove rather than assume.
       - name: cargo build (default features)
         working-directory: rust
         env:
           EXCELREADER_NATIVE_LIB_DIR: ${{ github.workspace }}/${{ steps.lib.outputs.dir }}
         run: cargo build --workspace --verbose
+
+      - name: cargo bench (smoke)
+        working-directory: rust
+        env:
+          EXCELREADER_NATIVE_LIB_DIR: ${{ github.workspace }}/${{ steps.lib.outputs.dir }}
+        run: cargo bench --benches -- --test
 
   test-python:
     name: Native + Python + C smoke (${{ matrix.os }})
@@ -210,8 +188,6 @@ jobs:
           name: native-lib-${{ matrix.os }}
           path: python/src/excelreader/_lib
 
-      # See the matching step in test-rust: upload-artifact strips the executable bit, and the
-      # NativeAOT runtime aborts the process (not a catchable Python exception) without it.
       - name: Restore executable bit (Linux/macOS)
         if: runner.os != 'Windows'
         shell: bash
@@ -230,6 +206,11 @@ jobs:
 
       - name: Run the C smoke test
         run: ctest --test-dir build/nativesmoke --output-on-failure -C Release
+
+      - name: Run the Python benchmarks (smoke)
+        run: |
+          python python/benchmarks/bench_read.py --n 1
+          python python/benchmarks/bench_write.py --n 1
 
   test-cpp:
     name: C++ package + smoke test (${{ matrix.os }})
@@ -259,8 +240,6 @@ jobs:
           name: native-lib-${{ matrix.os }}
           path: python/src/excelreader/_lib
 
-      # See the matching step in test-rust: upload-artifact strips the executable bit, and the
-      # NativeAOT runtime aborts the process (not a catchable error) without it.
       - name: Restore executable bit (Linux/macOS)
         if: runner.os != 'Windows'
         shell: bash
@@ -283,13 +262,27 @@ jobs:
       - name: Configure
         env:
           EXCELREADER_NATIVE_LIB: ${{ steps.lib.outputs.path }}
-        run: cmake -S cpp -B build/cpp -DEXCELREADER_BUILD_TESTS=ON -DCMAKE_BUILD_TYPE=Release
+        run: cmake -S cpp -B build/cpp -DEXCELREADER_BUILD_TESTS=ON -DEXCELREADER_BUILD_BENCHMARKS=ON -DCMAKE_BUILD_TYPE=Release
 
       - name: Build
         run: cmake --build build/cpp --config Release
 
       - name: Test
         run: ctest --test-dir build/cpp --output-on-failure -C Release
+
+      - name: Run the C++ benchmarks (smoke)
+        shell: bash
+        run: |
+          for name in excelreader_cpp_benchmarks excelreader_cpp_write_benchmarks; do
+            # A multi-config generator (Visual Studio on the Windows runner) nests the binary under a
+            # per-configuration directory; the single-config ones do not.
+            exe=$(find build/cpp/benchmarks -type f \( -name "$name" -o -name "$name.exe" \) | head -n 1)
+            if [ -z "$exe" ]; then
+              echo "benchmark binary $name not found under build/cpp/benchmarks" >&2
+              exit 1
+            fi
+            "$exe" --benchmark_min_time=1x
+          done
 
       - name: Install the package
         run: cmake --install build/cpp --config Release --prefix "${{ github.workspace }}/build/prefix"

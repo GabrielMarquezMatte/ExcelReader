@@ -17,6 +17,7 @@ namespace ExcelReader.Core.Writer
     /// <typeparamref name="T"/>: a record written to three formats configures its map three times.
     /// </typeparam>
     public sealed class ExcelRecordMapBuilder<T, TRow>
+        where T : allows ref struct
         where TRow : IRowWriter
     {
         private readonly List<string> _headers = [];

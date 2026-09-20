@@ -127,9 +127,6 @@ namespace ExcelReader.Tests
             using var reader = Excel.FromXls(ms);
             using var e = reader.GetEnumerator();
             Assert.True(e.MoveNext());
-            // XlsReader reports the file's raw XF index (unlike Xlsx/Xlsb, XLS offsets every style by
-            // the 16 builtin style XFs written ahead of the general/date pair), not the abstract
-            // AddStyle index — DateXf is that raw index for the builtin date style.
             Assert.Equal(XlsGlobals.DateXf, e.Current[0].StyleIndex);
         }
 
@@ -449,10 +446,6 @@ namespace ExcelReader.Tests
             Assert.Throws<ArgumentOutOfRangeException>(() => sheet.StartRow(1000));
         }
 
-        // CSV only rejects negative arguments — a styleId that no format's AddStyle ever handed out
-        // still no-ops here rather than throwing (CsvWorkbookWriter.AddStyle's doc comment / the
-        // SetColumnStyle no-op above explain why: CSV never writes styleId anywhere, so a caller
-        // sharing one styleId literal across all four formats must not have the CSV leg alone reject it).
         [Fact]
         public async Task InvalidStyleArgumentsThrowCsv()
         {
@@ -468,7 +461,6 @@ namespace ExcelReader.Tests
 
             await sheet.StartAsync(TestContext.Current.CancellationToken);
             await Assert.ThrowsAsync<ArgumentOutOfRangeException>(async () => await sheet.StartRowAsync(-1, TestContext.Current.CancellationToken));
-            // Unregistered but non-negative: no-op, not an exception.
             await using (CsvRowWriter row = await sheet.StartRowAsync(1000, TestContext.Current.CancellationToken))
             {
                 row.Write(1);

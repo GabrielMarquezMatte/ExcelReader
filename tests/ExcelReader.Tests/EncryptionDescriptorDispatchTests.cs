@@ -4,9 +4,7 @@ using ExcelReader.Core.Reader;
 namespace ExcelReader.Tests
 {
     // The version tuple alone does not identify the cipher: [MS-OFFCRYPTO] allows 2.2/3.2/4.2 for
-    // both standard AES and RC4 CryptoAPI, and EncryptionHeader.algId is what distinguishes them.
     // These cases pin that, including the two combinations the previous version-only dispatch named
-    // wrongly.
     public sealed class EncryptionDescriptorDispatchTests
     {
         private static EncryptionDescriptor Parse(byte[] info)
@@ -68,8 +66,6 @@ namespace ExcelReader.Tests
             Assert.Contains("extensible", ex.Message, StringComparison.OrdinalIgnoreCase);
         }
 
-        // Undefined minors under major 2 used to be swept into the RC4 message by a (2, _)
-        // catch-all. They are not RC4; they are not any defined scheme.
         [Theory]
         [InlineData(2, 0)]
         [InlineData(2, 1)]

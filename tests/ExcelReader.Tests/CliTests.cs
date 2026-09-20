@@ -28,7 +28,6 @@ namespace ExcelReader.Tests
 
             using IExcelRowReader reader = Excel.Open(Fixture("RealExcel.xlsb"));
 
-            // One line per sheet, "<index>\t<name>" - every sheet, not just the first.
             string[] lines = output.Split('\n', StringSplitOptions.RemoveEmptyEntries);
             Assert.Equal(reader.SheetCount, lines.Length);
             for (int i = 0; i < lines.Length; i++)
@@ -49,7 +48,6 @@ namespace ExcelReader.Tests
             Assert.Equal(1, code);
             Assert.Empty(output);
             Assert.NotEmpty(error);
-            // A message the user can act on, not a stack trace.
             Assert.DoesNotContain("   at ", error, StringComparison.Ordinal);
         }
 
@@ -130,7 +128,6 @@ namespace ExcelReader.Tests
 
                 Assert.Equal(0, code);
                 Assert.Empty(error);
-                // Nothing on the stdout stream: the CSV went to the file.
                 Assert.Empty(output);
                 Assert.True(File.Exists(target));
                 Assert.NotEmpty(File.ReadAllText(target));
@@ -150,8 +147,6 @@ namespace ExcelReader.Tests
             Assert.Equal(0, commaCode);
             Assert.Equal(0, code);
 
-            // Same header row, same field count either way - every comma became a semicolon, not
-            // just some stray one somewhere in the output (which "Contains(';')" alone would miss).
             string commaHeader = commaOutput.Split('\n', StringSplitOptions.RemoveEmptyEntries)[0];
             string semicolonHeader = output.Split('\n', StringSplitOptions.RemoveEmptyEntries)[0];
             int fieldCount = commaHeader.Split(',').Length;
@@ -184,9 +179,6 @@ namespace ExcelReader.Tests
                 Assert.Empty(error);
                 Assert.Empty(output);
 
-                // Round-trip: every row and every cell value in the written file matches the source
-                // exactly - not just the first row's column count, which a writer that emitted only
-                // one row (or wrong values) would still satisfy.
                 using IExcelRowReader source = Excel.Open(Fixture("RealExcel.xlsb"));
                 using IExcelRowEnumerator sourceRows = source.GetEnumerator();
                 using IExcelRowReader written = Excel.Open(target);
@@ -217,13 +209,10 @@ namespace ExcelReader.Tests
         [Fact]
         public void Should_UseTheExplicitFormat_When_FormatOverridesTheOutputExtension()
         {
-            // No --output at all (stdout), so extension-inference has nothing to go on - --format is
-            // the only way to ask for a binary target here.
             (int code, string output, string error) = Convert(Fixture("RealExcel.xlsb"), format: "xlsx");
 
             Assert.Equal(0, code);
             Assert.Empty(error);
-            // XLSX is a ZIP container - "PK" is every ZIP's local-file-header signature.
             Assert.StartsWith("PK", output, StringComparison.Ordinal);
         }
 
@@ -269,7 +258,6 @@ namespace ExcelReader.Tests
 
             string[] lines = output.Split('\n', StringSplitOptions.RemoveEmptyEntries);
             Assert.NotEmpty(lines);
-            // "<index>\t<name>\t<type>[?]"
             foreach (string line in lines)
             {
                 string[] parts = line.TrimEnd('\r').Split('\t');
@@ -285,7 +273,6 @@ namespace ExcelReader.Tests
             (int code, string output, _) = Schema(Fixture("RealExcel.xlsb"), headerRow: 0);
 
             Assert.Equal(0, code);
-            // A null name renders as an empty middle field, never as the literal "null".
             string firstLine = output.Split('\n', StringSplitOptions.RemoveEmptyEntries)[0].TrimEnd('\r');
             Assert.Equal(string.Empty, firstLine.Split('\t')[1]);
         }
@@ -293,7 +280,6 @@ namespace ExcelReader.Tests
         [Fact]
         public void Should_MarkNullableColumnsWithAQuestionMark_When_PrintingTheSchema()
         {
-            // A CSV with a gap guarantees at least one nullable column, independent of the fixture.
             string target = Path.Combine(Path.GetTempPath(), $"excelreader-cli-{Guid.NewGuid():N}.csv");
             File.WriteAllText(target, "Id,Note\n1,here\n2,\n");
             try

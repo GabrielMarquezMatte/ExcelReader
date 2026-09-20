@@ -58,7 +58,6 @@ def test_write_workbook_round_trips_a_nullable_column(tmp_path):
         result = workbook.parse_typed(schema)
 
     assert result.row_count == 3
-    # Bit 1 clear: valid, null, valid.
     assert result.validity[0][0] & 0b111 == 0b101
 
 
@@ -115,6 +114,46 @@ def test_write_pandas_round_trips(tmp_path):
 
     assert list(result.columns[0]) == ["widget", "gadget"]
     assert list(result.columns[1]) == [3, 7]
+
+
+def test_write_pandas_round_trips_a_multi_chunk_frame(tmp_path):
+    pa = pytest.importorskip("pyarrow")
+    pd = pytest.importorskip("pandas")
+
+    chunked = pa.Table.from_batches(
+        [
+            pa.RecordBatch.from_pydict({"name": ["widget"], "qty": [3]}),
+            pa.RecordBatch.from_pydict({"name": ["gadget"], "qty": [7]}),
+        ]
+    )
+    frame = chunked.to_pandas(split_blocks=True)
+    assert pa.Table.from_pandas(frame, preserve_index=False).column(0).num_chunks > 1
+
+    out = tmp_path / "chunked.xlsx"
+    write_pandas(out, frame)
+
+    with open_workbook(out) as workbook:
+        result = workbook.parse_typed(_SCHEMA)
+
+    assert list(result.columns[0]) == ["widget", "gadget"]
+    assert list(result.columns[1]) == [3, 7]
+
+
+def test_write_pandas_writes_a_header_only_sheet_for_an_empty_frame(tmp_path):
+    pytest.importorskip("pyarrow")
+    pd = pytest.importorskip("pandas")
+
+    out = tmp_path / "empty.xlsx"
+    write_pandas(
+        out,
+        pd.DataFrame({"name": pd.Series([], dtype="string"), "qty": pd.Series([], dtype="int64")}),
+    )
+
+    with open_workbook(out) as workbook:
+        rows = workbook.read_all()
+
+    assert [cell.value for cell in rows[0]] == ["name", "qty"]
+    assert len(rows) == 1
 
 
 def test_write_polars_round_trips(tmp_path):

@@ -49,7 +49,6 @@ impl WriterHandle {
         let raw = options.map(WriteOptions::to_raw);
         let raw_ptr = crate::options::ptr_or_null(&raw);
         let mut handle: *mut XlWriterHandle = std::ptr::null_mut();
-        // `raw` outlives the call below, and the native side copies the path before returning.
         let status = unsafe {
             crate::xl_open_write_handle(
                 path.as_ptr(),

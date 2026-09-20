@@ -44,7 +44,6 @@ namespace ExcelReader.Tests
                 TypeMapper<Person>.GetCsvInfo(),
                 out long dataStart);
 
-            // Feed the projector a source that begins at the first data record — no header in sight.
             using var dataReader = Excel.FromCsv(all.AsMemory((int)dataStart));
             using CsvReader.Enumerator rows = dataReader.GetEnumerator();
             var projector = new CsvRowProjector<Person>(

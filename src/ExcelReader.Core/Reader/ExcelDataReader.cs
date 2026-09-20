@@ -65,7 +65,6 @@ namespace ExcelReader.Core.Reader
             }
             else if (headerRow > 0)
             {
-                // Sheet has fewer rows than headerRow: an empty, columnless result set.
                 _names = [];
             }
             else
@@ -95,7 +94,7 @@ namespace ExcelReader.Core.Reader
             {
                 if (names[i] is { } name)
                 {
-                    map[name] = i; // a repeated header name keeps its last column
+                    map[name] = i;
                 }
             }
             return map;
@@ -173,10 +172,6 @@ namespace ExcelReader.Core.Reader
         }
 
         /// <inheritdoc/>
-        // IDataRecord.GetFieldType's return value carries this same annotation in the BCL (DataTable's
-        // schema machinery inspects a column's Type via its public fields/properties). An override must
-        // repeat an interface member's DynamicallyAccessedMembersAttribute exactly — IL2093 otherwise —
-        // even though every branch below returns a closed, well-known type that needs no such access.
         [return: DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicFields | DynamicallyAccessedMemberTypes.PublicProperties)]
         public Type GetFieldType(int i)
         {
@@ -291,11 +286,7 @@ namespace ExcelReader.Core.Reader
         public Guid GetGuid(int i)
         {
             Cell cell = CurrentCell(i);
-#if NET8_0
-            return ExcelCellReaders.Guid(in cell, _isDate1904, CultureInfo.InvariantCulture, out Guid value)
-#else
             return cell.TryParse(CultureInfo.InvariantCulture, out Guid value)
-#endif
                 ? value
                 : throw new FormatException($"Column {i} is not a valid Guid.");
         }
@@ -364,23 +355,10 @@ namespace ExcelReader.Core.Reader
         }
 
         /// <inheritdoc/>
-        // IL2111: DataColumnCollection.Add(string, Type)'s `type` parameter carries the same
-        // PublicFields|PublicProperties DynamicallyAccessedMembersAttribute as GetFieldType's return
-        // above. Passing `typeof(Type)` itself as that argument — the "DataType" schema column's own
-        // type is System.Type, describing the DataType column, not a real cell type — trips a known
-        // ILC/trimmer quirk: satisfying that annotation for the argument `Type` requires inspecting
-        // Type's own public properties, one of which (TypeInitializer) is itself DAM-annotated, and the
-        // linker can't statically prove that recursive requirement holds. Safe here: this DataTable is
-        // schema metadata for DataTable.Load/FillSchema; nothing ever reflects over the value stored in
-        // this column via the annotated members.
         [UnconditionalSuppressMessage("Trimming", "IL2111",
             Justification = "typeof(Type) as the 'DataType' schema column's own type is a metadata literal, never reflected over.")]
         public DataTable GetSchemaTable()
         {
-            // DataTable.Load (via DbDataAdapter.FillSchema) reads this exact standard shape
-            // (System.Data.Common.SchemaTableColumn/SchemaTableOptionalColumn) — trimming it down to
-            // just the columns this reader actually varies (ColumnName/ColumnOrdinal/DataType/AllowDBNull)
-            // makes DataTable.Load throw internally, since it indexes the rest unconditionally.
             var table = new DataTable();
             table.Columns.Add(SchemaTableColumn.ColumnName, typeof(string));
             table.Columns.Add(SchemaTableColumn.ColumnOrdinal, typeof(int));
@@ -404,8 +382,6 @@ namespace ExcelReader.Core.Reader
             table.Columns.Add(SchemaTableColumn.BaseColumnName, typeof(string));
             for (int i = 0; i < FieldCount; i++)
             {
-                // No type is known before the first row is read; guess string, the type every cell can
-                // represent verbatim (same fallback SchemaInference uses for an unresolved column).
                 Type type = _rowAvailable ? GetFieldType(i) : typeof(string);
                 string name = GetName(i);
                 DataRow row = table.NewRow();

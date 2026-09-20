@@ -5,35 +5,12 @@ using System.Security.Cryptography;
 
 namespace ExcelReader.Core.Crypto
 {
-    // ECMA-376 agile encrypts every 4096-byte segment under its own IV, derived from the keyData
-    // salt and the segment index. The one-shot Aes.DecryptCbc/EncryptCbc APIs build and tear down a
-    // cipher object on every call - a CNG key import per segment on Windows. Measured over 25,600
-    // segments (a ~100 MB package) that setup was 115.5 ms of a 141.5 ms total: 82%. The segment
-    // size is fixed by the spec, so it does not amortize away with a bigger buffer; it scales
-    // linearly with file size, on both the read and the write side.
-    //
-    // One ICryptoTransform is reused across every segment instead. A CBC transform carries its
-    // chaining state across TransformBlock calls - that is what lets CryptoStream feed a cipher in
-    // arbitrary buffer sizes - so the state it holds entering a segment is the last ciphertext
-    // block it processed, call it S, rather than the IV this segment wants. A single 16-byte XOR
-    // corrects for that, because only the first block of a segment reads the chaining state:
-    //
-    //   decrypt: TransformBlock yields P0 = D(C0) ^ S, so P0 ^= S ^ iv leaves D(C0) ^ iv.
-    //   encrypt: feeding P0' = P0 ^ iv ^ S yields E(P0' ^ S) = E(P0 ^ iv).
-    //
-    // Every later block in the segment chains against its own neighbour, which is exactly CBC, so
-    // it needs no correction in either direction. The fix-up reads only the state this class
-    // tracks and never assumes which segment produced it, so a caller that seeks
-    // (DecryptedPackageStream) may request segments in any order.
     internal sealed class CbcSegmentCipher : IDisposable
     {
         internal const int BlockSize = 16;
 
         private readonly Aes _aes;
         private readonly ICryptoTransform _transform;
-        // The transform's chaining state: the last ciphertext block it processed. Seeded from the
-        // all-zero IV the transform is created with, so its starting value is known rather than the
-        // random IV Aes.Create() hands out.
         private readonly byte[] _tail = new byte[BlockSize];
         private bool _disposed;
 
@@ -47,12 +24,7 @@ namespace ExcelReader.Core.Crypto
             try
             {
                 aes.Mode = CipherMode.CBC;
-                // PaddingMode.None is load-bearing, not just a default: it is what makes
-                // TransformBlock consume and produce exactly inputCount bytes, which every offset in
-                // Transform below depends on. See the length check there.
                 aes.Padding = PaddingMode.None;
-                // No aes.Key assignment: CreateEncryptor/CreateDecryptor take the key explicitly, so
-                // setting the property as well would only generate a second key schedule to discard.
                 _transform = encrypting ? aes.CreateEncryptor(key, _tail) : aes.CreateDecryptor(key, _tail);
                 _aes = aes;
             }
@@ -73,9 +45,6 @@ namespace ExcelReader.Core.Crypto
             return new CbcSegmentCipher(key, encrypting: true);
         }
 
-        // Decrypts one segment under `iv`. `cipher` and `plain` are equal-length, a whole number of
-        // cipher blocks, and must not overlap - the correction reads `cipher`'s final block after
-        // the transform has written `plain`.
         internal void Decrypt(ReadOnlyMemory<byte> cipher, ReadOnlySpan<byte> iv, Memory<byte> plain)
         {
             Transform(cipher, plain);
@@ -85,9 +54,6 @@ namespace ExcelReader.Core.Crypto
             cipher.Span[^BlockSize..].CopyTo(_tail);
         }
 
-        // Encrypts one segment under `iv`. The first block of `plain` is XORed in place as part of
-        // the correction: every caller refills its plaintext buffer from the package stream before
-        // the next segment, so the mutated bytes are never read again.
         internal void Encrypt(Memory<byte> plain, ReadOnlySpan<byte> iv, Memory<byte> cipher)
         {
             Span<byte> first = plain.Span[..BlockSize];
@@ -99,11 +65,6 @@ namespace ExcelReader.Core.Crypto
 
         private void Transform(ReadOnlyMemory<byte> source, Memory<byte> destination)
         {
-            // TransformBlock has no Span overload. Every caller hands over array-backed memory (a
-            // rented ArrayPool buffer, a whole-file byte[]), so the staging path below never runs in
-            // practice. It exists because there is no one-shot fallback that keeps _tail honest: a
-            // transform's chaining state only advances by feeding the transform, so a segment routed
-            // around it would desynchronise every segment after it.
             if (MemoryMarshal.TryGetArray(source, out ArraySegment<byte> src)
                 && MemoryMarshal.TryGetArray((ReadOnlyMemory<byte>)destination, out ArraySegment<byte> dst))
             {
@@ -124,12 +85,6 @@ namespace ExcelReader.Core.Crypto
             }
         }
 
-        // With PaddingMode.None over a whole number of blocks, TransformBlock always writes exactly
-        // inputCount bytes - and every caller here relies on that identity: the segment's plaintext
-        // length, the correction's final-block offset, and _tail all assume the whole segment was
-        // transformed. If that ever stopped holding (a changed padding mode, a provider that buffers a
-        // block) the failure would otherwise be a silently truncated segment, decrypted to plausible
-        // garbage. Cheaper to assert than to debug.
         private static void RequireWholeBlock(int written, int expected)
         {
             if (written != expected)

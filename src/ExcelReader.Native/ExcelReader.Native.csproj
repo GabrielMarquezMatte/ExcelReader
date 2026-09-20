@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFrameworks>net10.0;net8.0</TargetFrameworks>
+    <TargetFramework>net10.0</TargetFramework>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <IsPackable>false</IsPackable>
     <!-- Publishing this project with -r <rid> produces the C-ABI shared library
@@ -30,15 +30,11 @@
          If a floor is ever wanted, pin a fixed one (x86-64-v2/v3) — never `native`. -->
     <!-- RS0016/RS0026/RS0037: public-API tracking is for ExcelReader.Core's shipped NuGet surface.
          This project is never packed — its C ABI is tracked by include/excelreader.h instead. -->
-    <!-- CA1031/S2221: every exported function is a hard boundary. An escaping exception would
+    <!-- CA1031: every exported function is a hard boundary. An escaping exception would
          corrupt the caller's stack, so catch-all plus a status code is the required behavior. -->
-    <!-- CA2000/IDISP001/IDISP004: file streams handed to Excel.From*(leaveOpen: false) are owned
-         and disposed by the reader — the same ownership-transfer pattern used across the tests.
-         IDISP007: NativeHandle.Dispose disposes the IExcelRowReader it was constructed with — same
-         ownership-transfer pattern; the analyzer only sees a field assignment, not the transfer. -->
-    <!-- S6640: Exports.cs is the C ABI boundary — [UnmanagedCallersOnly] methods require pointer
-         parameters, so "avoid unsafe" does not apply to this file's entire reason for existing. -->
-    <NoWarn>$(NoWarn);RS0016;RS0026;RS0037;CA1031;S2221;CA2000;IDISP001;IDISP004;IDISP007;S6640</NoWarn>
+    <!-- CA2000: file streams handed to Excel.From*(leaveOpen: false) are owned and disposed by the
+         reader — the same ownership-transfer pattern used across the tests. -->
+    <NoWarn>$(NoWarn);RS0016;RS0026;RS0037;CA1031;CA2000</NoWarn>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(Configuration)'=='Release'">

@@ -1,4 +1,3 @@
-using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Text;
 using ExcelReader.Core.Enums;
@@ -36,18 +35,11 @@ namespace ExcelReader.Tests
             await using CsvReader.Enumerator e = await reader.GetAsyncEnumeratorAsync(TestContext.Current.CancellationToken);
             while (await e.MoveNextAsync())
             {
-                // Row is a ref struct: extracted into a plain sync method so no ref-struct local
-                // lives inside this async method's body (pre-C#13 async state machines disallow that).
                 rows.Add(ToArray(e));
             }
             return rows;
         }
 
-        // Consumes the reader through 'await foreach', which binds by pattern to its GetAsyncEnumerator()
-        // (synchronous open, then MoveNextAsync per row) — the whole reason that method exists. Row is a
-        // ref struct, so the body must read it without awaiting (it never lives across the loop's await).
-        [SuppressMessage("VisualStudio.Threading", "VSTHRD200:Use \"Async\" suffix in names of methods that return an awaitable type",
-            Justification = "The name already communicates the async enumerator path (\"ViaAsyncEnumerator\"); appending another Async suffix would be redundant.")]
         private static async Task<List<string[]>> ReadAllViaAsyncEnumerator(CsvReader reader)
         {
             var rows = new List<string[]>();
@@ -263,7 +255,7 @@ namespace ExcelReader.Tests
         [Fact]
         public void LargeFieldExceedingInitialBufferIsReadInFull()
         {
-            string big = new('x', 200 * 1024); // larger than the 64KB initial scan buffer
+            string big = new('x', 200 * 1024);
             using var ms = Csv($"a,{big},c\n");
             using var reader = Excel.FromCsv(ms);
 
@@ -275,7 +267,6 @@ namespace ExcelReader.Tests
         [Fact]
         public void QuotedFieldSplitAcrossBufferBoundaryIsHandled()
         {
-            // Force the quoted field's closing quote to fall right at/after typical buffer refills.
             string big = new('y', 130 * 1024);
             using var ms = Csv($"a,\"{big}\",c\n");
             using var reader = Excel.FromCsv(ms);
@@ -300,7 +291,6 @@ namespace ExcelReader.Tests
         [Fact]
         public void FieldExceedingMaxCellBytesThrows()
         {
-            // Must exceed the initial buffer so growth (and the limit check) actually happens.
             using var ms = Csv("a," + new string('x', 128 * 1024) + ",c\n");
             var options = new CsvReaderOptions { MaxCellBytes = 1024 };
             using var reader = Excel.FromCsv(ms, options: options);
@@ -313,7 +303,6 @@ namespace ExcelReader.Tests
         [Fact]
         public void EmptyFieldsExceedingMaxCellBytesThrows()
         {
-            // Empty fields add no value bytes, so this specifically exercises the cell-descriptor limit.
             using var ms = Csv(new string(',', 32));
             var options = new CsvReaderOptions { MaxCellBytes = 1024 };
             using var reader = Excel.FromCsv(ms, options: options);
@@ -415,7 +404,6 @@ namespace ExcelReader.Tests
             Assert.Throws<InvalidOperationException>(reader.GetEnumerator);
         }
 
-        // --- async twins of edge cases only previously exercised on the sync path ---
 
         [Fact]
         public async Task EscapedQuoteIsUnescapedAsync()
@@ -468,7 +456,6 @@ namespace ExcelReader.Tests
             Assert.Equal(["a", "b"], Assert.Single(rows));
         }
 
-        // --- lenient handling of an unterminated quoted field ---
 
         [Fact]
         public void UnterminatedQuotedFieldAtEofIsReadLeniently()
@@ -492,7 +479,6 @@ namespace ExcelReader.Tests
             Assert.Equal(["a", "unterminated"], Assert.Single(rows));
         }
 
-        // --- options: BOM detection off, non-ASCII/non-UTF8 rejection, non-UTF8 encoding ---
 
         [Fact]
         public void BomDetectionCanBeDisabled()
@@ -557,7 +543,6 @@ namespace ExcelReader.Tests
             Assert.Throws<ArgumentException>(() => Excel.FromCsv(ms, options: options));
         }
 
-        // --- more fields than the enumerator's initial capacity (forces internal array growth) ---
 
         [Fact]
         public void ManyColumnsExceedingInitialCapacityAreAllRead()
@@ -571,7 +556,6 @@ namespace ExcelReader.Tests
             Assert.Equal(cols, Assert.Single(rows));
         }
 
-        // --- factory methods: file, async, async-file ---
 
         [Fact]
         public void FromCsvFileReadsFile()
@@ -622,7 +606,6 @@ namespace ExcelReader.Tests
             Assert.Equal(2, rows.Count);
         }
 
-        // --- Dispose/DisposeAsync stream ownership ---
 
         [Fact]
         public void DisposeClosesStreamWhenNotLeaveOpen()
@@ -654,12 +637,11 @@ namespace ExcelReader.Tests
 
             await reader.DisposeAsync();
 
-            ms.ReadByte(); // must not throw
+            ms.ReadByte();
 
             Assert.True(ms.CanRead);
         }
 
-        // --- CsvControlScanner integration boundaries (single-pass fused fast path) ---
 
         [Theory]
         [InlineData(14)]
@@ -771,7 +753,6 @@ namespace ExcelReader.Tests
             Assert.Equal([field], Assert.Single(rows));
         }
 
-        // --- explicit IExcelRowReader interface members (format-agnostic consumers) ---
 
         [Fact]
         public void ExplicitInterfaceGetEnumeratorWorks()
@@ -810,7 +791,6 @@ namespace ExcelReader.Tests
                 starts.Add(rows.CurrentRecordStart);
             }
 
-            // "ab,cd\r\n" is 7 bytes; "ef,gh\n" is 6.
             Assert.Equal([0L, 7L, 13L], starts);
         }
 
@@ -834,8 +814,6 @@ namespace ExcelReader.Tests
         [Fact]
         public void CurrentRecordStartStaysCorrectWhenRecordsSpanBufferRefills()
         {
-            // 4000 records of ~20 bytes each blows well past the 64 KiB initial buffer, forcing
-            // repeated compaction — the case BaseOffset exists to survive.
             var sb = new System.Text.StringBuilder();
             var expected = new List<long>();
             long offset = 0;

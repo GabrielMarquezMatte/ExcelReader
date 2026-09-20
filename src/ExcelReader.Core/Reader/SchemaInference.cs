@@ -53,9 +53,6 @@ namespace ExcelReader.Core.Reader
             return schema;
         }
 
-        // Advances `rows` so that `rows.Current` is the header row itself. Shared with the typed
-        // parser in ExcelReader.Native so the two cannot drift on the row arithmetic or on the
-        // message a too-short sheet produces.
         internal static bool TrySkipToHeaderRow(IExcelRowEnumerator rows, int headerRow, [NotNullWhen(false)] out string? error)
         {
             error = null;
@@ -79,9 +76,6 @@ namespace ExcelReader.Core.Reader
             }
         }
 
-        // Advances `rows` past headerRow and records each populated header cell's trimmed text as that
-        // column's name. A blank header cell leaves its column name null (index-based) rather than an
-        // empty string — an empty name would fail xl_parse_typed's own "blank name" validation later.
         private static bool TryReadHeader(IExcelRowEnumerator rows, int headerRow, List<string?> names, List<ColumnStat> stats, out string? error)
         {
             if (!TrySkipToHeaderRow(rows, headerRow, out error))
@@ -98,9 +92,6 @@ namespace ExcelReader.Core.Reader
             return true;
         }
 
-        // Reads up to sampleSize rows after the header, folding each populated cell's type into that
-        // column's ColumnStat. Returns how many data rows were actually sampled (fewer than sampleSize
-        // at end of sheet), used by MarkSparseColumnsNullable below.
         private static int SampleDataRows(IExcelRowEnumerator rows, int sampleSize, bool isDate1904, List<string?> names, List<ColumnStat> stats)
         {
             int dataRowCount = 0;
@@ -118,10 +109,6 @@ namespace ExcelReader.Core.Reader
             return dataRowCount;
         }
 
-        // A column absent from some sampled rows never triggers ColumnStat.Observe for them — which is
-        // exactly what row[index] would have reported for it: CellType.Empty. Comparing each column's
-        // Observe count against the number of rows actually sampled catches that without a second,
-        // O(columns) walk of every row via the indexer.
         private static void MarkSparseColumnsNullable(Span<ColumnStat> stats, int dataRowCount)
         {
             foreach (ref ColumnStat stat in stats)
@@ -133,8 +120,6 @@ namespace ExcelReader.Core.Reader
             }
         }
 
-        // Accumulates what kinds of CellType a column's sampled cells held, enough to guess a
-        // xl_parse_typed ColumnSpec without ever storing a cell's value past its own row.
         [StructLayout(LayoutKind.Auto)]
         private struct ColumnStat
         {
@@ -171,20 +156,15 @@ namespace ExcelReader.Core.Reader
                     case CellType.Boolean:
                         SawBool = true;
                         break;
-                    default: // Formula, Error — the cached result was never sampled as a plain value.
+                    default:
                         SawFormulaOrError = true;
                         break;
                 }
             }
 
-            // A column only gets a non-string guess when every sampled cell agreed on one single kind.
-            // A real mix, any formula/error result, or nothing seen at all falls back to the string
-            // type, since it is the only one able to represent every one of those verbatim.
             internal readonly ExcelColumnType InferType()
             {
                 int kinds = (SawString ? 1 : 0) + (SawNumber ? 1 : 0) + (SawDate ? 1 : 0) + (SawBool ? 1 : 0);
-                // A mix of kinds, a formula/error result, nothing sampled at all, or plain text — all
-                // four fall back to the string type, the only one able to represent them verbatim.
                 if (SawFormulaOrError || kinds != 1 || SawString)
                 {
                     return ExcelColumnType.StringColumn;

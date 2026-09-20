@@ -5,8 +5,6 @@ namespace ExcelReader.Native
 {
     internal static partial class NativeApi
     {
-        // Same ceiling as NativeOpenOptions's password field - the two are the same class of
-        // caller-supplied length driving an allocation, so they share a bound.
         private const int MaxEncryptPasswordBytes = 4096;
 
         internal static int EncryptPackage(ReadOnlySpan<byte> packagePathUtf8, ReadOnlySpan<byte> destinationPathUtf8, ReadOnlySpan<byte> passwordUtf8)
