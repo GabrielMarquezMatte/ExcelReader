@@ -210,13 +210,17 @@ jobs:
           cat > Exports.cs <<'EOF'
           using System;
           using System.Buffers;
+          using System.Collections.Generic;
+          using System.IO;
           using System.Runtime.InteropServices;
           using System.Text;
           using System.Threading.Tasks;
 
           public static class Exports
           {
-              // What a Rust test thread's first call runs into: class construction plus allocation.
+              // A first call has to run a lot of class constructors before it does anything: file
+              // I/O, encoding, environment, collections, async. A trivial body does not, which is
+              // why the first version of this repro stayed clean where the real library crashed.
               [UnmanagedCallersOnly(EntryPoint = "work")]
               public static int Work(int n)
               {
@@ -228,8 +232,23 @@ jobs:
                           builder.Append(i);
                       }
                       byte[] buffer = ArrayPool<byte>.Shared.Rent(64 * 1024);
+                      string path = Path.Combine(Path.GetTempPath(), $"repro-{Environment.CurrentManagedThreadId}.txt");
+                      File.WriteAllText(path, builder.ToString());
+                      using (FileStream stream = File.OpenRead(path))
+                      {
+                          int read = stream.Read(buffer, 0, buffer.Length);
+                          builder.Append(Encoding.UTF8.GetString(buffer, 0, Math.Min(read, 64)));
+                      }
+                      File.Delete(path);
+                      Dictionary<string, int> map = new(StringComparer.Ordinal);
+                      foreach (string part in builder.ToString().Split('0', StringSplitOptions.RemoveEmptyEntries))
+                      {
+                          map[part] = part.Length;
+                      }
+                      _ = Environment.GetEnvironmentVariable("PATH");
+                      _ = Task.Run(() => map.Count).GetAwaiter().GetResult();
                       ArrayPool<byte>.Shared.Return(buffer);
-                      return builder.Length;
+                      return builder.Length + map.Count;
                   }
                   catch (Exception exception)
                   {
@@ -319,11 +338,11 @@ jobs:
           int main(int argc, char **argv)
           {
               int concurrent = argc > 1 && strcmp(argv[1], "concurrent") == 0;
-              int count = concurrent ? 8 : 1;
+              int count = concurrent ? 16 : 1;
               pthread_attr_t attr;
               pthread_attr_init(&attr);
               pthread_attr_setstacksize(&attr, 2 * 1024 * 1024);
-              pthread_t threads[8];
+              pthread_t threads[16];
               for (int i = 0; i < count; i++)
               {
                   if (pthread_create(&threads[i], &attr, concurrent ? run_work : run_fanout, NULL) != 0)
@@ -363,7 +382,7 @@ jobs:
           crashes=0
           for mode in concurrent fanout; do
             modecrashes=0
-            for i in $(seq 1 50); do
+            for i in $(seq 1 120); do
               ./host $mode
               status=$?
               if [ $status -ne 0 ]; then
@@ -371,7 +390,7 @@ jobs:
                 echo "$mode iteration $i: exit $status$([ $status -gt 128 ] && echo " (signal $((status - 128)))")"
               fi
             done
-            echo "=== $mode: $modecrashes crashes in 50 runs ==="
+            echo "=== $mode: $modecrashes crashes in 120 runs ==="
             crashes=$((crashes + modecrashes))
           done
           if [ "$RUNNER_OS" = Linux ] && [ $crashes -gt 0 ]; then
@@ -659,18 +678,27 @@ jobs:
           esac
           cc -O2 -DLINKED host.c "$PWD/$lib" -o host_linked -Wl,-rpath,"$PWD/lib" -lpthread
 
-      - name: Run each shape 40 times
+      - name: Run each shape, with a backtrace on the first crash
         shell: bash
+        env:
+          LIBC_FATAL_STDERR_: '1'
         run: |
           set +e
           case "$RUNNER_OS" in
             Linux) lib=lib/ExcelReader.Native.so ;;
             *)     lib=lib/ExcelReader.Native.dylib ;;
           esac
-          for binary in ./host_linked ./host; do
-            for mode in churn churn-open concurrent fanout; do
+          ulimit -c unlimited
+          if [ "$RUNNER_OS" = Linux ]; then
+            sudo sysctl -qw kernel.core_pattern=/tmp/core.%p
+            command -v gdb >/dev/null || { sudo apt-get update -qq && sudo apt-get install -y -qq gdb; } >/dev/null 2>&1
+          fi
+          # concurrent is the shape that crashed (1 in 40), so give it the most attempts.
+          for binary in ./host ./host_linked; do
+            for mode in concurrent churn churn-open fanout; do
+              [ "$mode" = concurrent ] && runs=120 || runs=40
               crashes=0
-              for i in $(seq 1 40); do
+              for i in $(seq 1 $runs); do
                 $binary $mode "$PWD/$lib" "$PWD/RealExcel.xlsx"
                 status=$?
                 if [ $status -gt 128 ]; then
@@ -680,9 +708,21 @@ jobs:
                   echo "$binary $mode iteration $i: exit $status"
                 fi
               done
-              echo "=== $binary $mode: $crashes crashes in 40 runs ==="
+              echo "=== $binary $mode: $crashes crashes in $runs runs ==="
             done
           done
+          if [ "$RUNNER_OS" = Linux ]; then
+            for c in /tmp/core.*; do
+              [ -f "$c" ] || { echo "no core file"; break; }
+              exe=$(file "$c" | sed -n "s/.*execfn: '\([^']*\)'.*/\1/p")
+              echo "=== core $c from $exe ==="
+              gdb -batch -ex "bt 40" -ex "thread apply all bt 30" "$exe" "$c" 2>&1 | head -n 400
+              break
+            done
+          else
+            f=$(ls -t ~/Library/Logs/DiagnosticReports/host*.ips 2>/dev/null | head -n 1)
+            [ -n "$f" ] && { echo "=== $f ==="; head -c 60000 "$f"; } || echo "no crash report"
+          fi
           exit 0
 
   test-python:
