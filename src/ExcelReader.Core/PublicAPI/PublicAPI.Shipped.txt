@@ -143,6 +143,14 @@ ExcelReader.Core.Parser.Internal.SyncRowEnumerator<T, TRows>.MoveNext() -> bool
 ExcelReader.Core.Parser.Internal.SyncRowEnumerator<T, TRows>.Reset() -> void
 ExcelReader.Core.Parser.Internal.SyncRowEnumerator<T, TRows>.SyncRowEnumerator(TRows! rows) -> void
 ExcelReader.Core.Parser.RefParser
+ExcelReader.Core.Reader.CsvAggregation<TState>
+ExcelReader.Core.Reader.CsvAggregation<TState>.Accumulate.get -> ExcelReader.Core.Reader.CsvRowAction<TState>!
+ExcelReader.Core.Reader.CsvAggregation<TState>.Accumulate.init -> void
+ExcelReader.Core.Reader.CsvAggregation<TState>.Combine.get -> System.Func<TState, TState, TState>!
+ExcelReader.Core.Reader.CsvAggregation<TState>.Combine.init -> void
+ExcelReader.Core.Reader.CsvAggregation<TState>.CsvAggregation() -> void
+ExcelReader.Core.Reader.CsvAggregation<TState>.Seed.get -> System.Func<TState>!
+ExcelReader.Core.Reader.CsvAggregation<TState>.Seed.init -> void
 ExcelReader.Core.Reader.CsvDialect
 ExcelReader.Core.Reader.CsvDialect.CsvDialect() -> void
 ExcelReader.Core.Reader.CsvDialect.Delimiter.get -> byte
@@ -154,6 +162,16 @@ ExcelReader.Core.Reader.CsvDialect.HasByteOrderMark.get -> bool
 ExcelReader.Core.Reader.CsvDialect.HasByteOrderMark.init -> void
 ExcelReader.Core.Reader.CsvDialect.Quote.get -> byte
 ExcelReader.Core.Reader.CsvDialect.Quote.init -> void
+ExcelReader.Core.Reader.CsvModelMap
+ExcelReader.Core.Reader.CsvModelMap<TModel>
+ExcelReader.Core.Reader.CsvParallelOptions
+ExcelReader.Core.Reader.CsvParallelOptions.CsvParallelOptions() -> void
+ExcelReader.Core.Reader.CsvParallelOptions.DegreeOfParallelism.get -> int
+ExcelReader.Core.Reader.CsvParallelOptions.DegreeOfParallelism.init -> void
+ExcelReader.Core.Reader.CsvParallelOptions.HeaderRow.get -> int
+ExcelReader.Core.Reader.CsvParallelOptions.HeaderRow.init -> void
+ExcelReader.Core.Reader.CsvParallelOptions.Reader.get -> ExcelReader.Core.Reader.CsvReaderOptions!
+ExcelReader.Core.Reader.CsvParallelOptions.Reader.init -> void
 ExcelReader.Core.Reader.CsvReader
 ExcelReader.Core.Reader.CsvReader.Dispose() -> void
 ExcelReader.Core.Reader.CsvReader.DisposeAsync() -> System.Threading.Tasks.ValueTask
@@ -187,6 +205,7 @@ ExcelReader.Core.Reader.CsvReaderOptions.MaxCellBytes.init -> void
 ExcelReader.Core.Reader.CsvReaderOptions.Quote.get -> byte
 ExcelReader.Core.Reader.CsvReaderOptions.Quote.init -> void
 ExcelReader.Core.Reader.CsvReaderOptions.WithDialect(ExcelReader.Core.Reader.CsvDialect dialect) -> ExcelReader.Core.Reader.CsvReaderOptions!
+ExcelReader.Core.Reader.CsvRowAction<TState>
 ExcelReader.Core.Reader.CsvSniffer
 ExcelReader.Core.Reader.CsvSnifferOptions
 ExcelReader.Core.Reader.CsvSnifferOptions.<Clone>$() -> ExcelReader.Core.Reader.CsvSnifferOptions!
@@ -301,6 +320,11 @@ ExcelReader.Core.Reader.ExcelSheet.Index.get -> int
 ExcelReader.Core.Reader.ExcelSheet.Index.init -> void
 ExcelReader.Core.Reader.ExcelSheet.Name.get -> string!
 ExcelReader.Core.Reader.ExcelSheet.Name.init -> void
+ExcelReader.Core.Reader.ICsvAccumulator<TSelf, TModel>
+ExcelReader.Core.Reader.ICsvAccumulator<TSelf, TModel>.Add(TModel model) -> void
+ExcelReader.Core.Reader.ICsvAccumulator<TSelf, TModel>.Merge(TSelf following) -> void
+ExcelReader.Core.Reader.ICsvRecord<TSelf>
+ExcelReader.Core.Reader.ICsvRecord<TSelf>.TryParse(ExcelReader.Core.ValueObjects.Row row, out TSelf record) -> bool
 ExcelReader.Core.Reader.IExcelRowEnumerator
 ExcelReader.Core.Reader.IExcelRowEnumerator.Current.get -> ExcelReader.Core.ValueObjects.Row
 ExcelReader.Core.Reader.IExcelRowEnumerator.MoveNext() -> bool
@@ -656,6 +680,7 @@ override ExcelReader.Core.Writer.XlsbCell.GetHashCode() -> int
 readonly ExcelReader.Core.Parser.Internal.SyncRowEnumerator<T, TRows>.Rows -> TRows!
 static ExcelReader.Core.Parser.ExcelCellReaders.Enum<TEnum>(in ExcelReader.Core.ValueObjects.Cell cell, bool isDate1904, System.IFormatProvider! provider, out TEnum value) -> bool
 static ExcelReader.Core.Parser.ExcelCellReaders.Parsable<TValue>(in ExcelReader.Core.ValueObjects.Cell cell, bool isDate1904, System.IFormatProvider! provider, out TValue value) -> bool
+static ExcelReader.Core.Parser.ExcelCellReaders.Utf8(scoped in ExcelReader.Core.ValueObjects.Cell cell, bool isDate1904, System.IFormatProvider! provider, out System.ReadOnlySpan<byte> value) -> bool
 static ExcelReader.Core.Parser.ExcelFluentParser<T>.WithAttributeFallback(System.Action<ExcelReader.Core.Parser.ExcelRowMapBuilder<T>!>! configure, ExcelReader.Core.Parser.ExcelParserConfig? config = null) -> ExcelReader.Core.Parser.ExcelFluentParser<T>!
 static ExcelReader.Core.Parser.ExcelRowContext.operator !=(ExcelReader.Core.Parser.ExcelRowContext left, ExcelReader.Core.Parser.ExcelRowContext right) -> bool
 static ExcelReader.Core.Parser.ExcelRowContext.operator ==(ExcelReader.Core.Parser.ExcelRowContext left, ExcelReader.Core.Parser.ExcelRowContext right) -> bool
@@ -667,6 +692,10 @@ static ExcelReader.Core.Parser.RefParser.ParseNamed<TModel>(ExcelReader.Core.Rea
 static ExcelReader.Core.Reader.CsvDialect.Default.get -> ExcelReader.Core.Reader.CsvDialect
 static ExcelReader.Core.Reader.CsvDialect.operator !=(ExcelReader.Core.Reader.CsvDialect left, ExcelReader.Core.Reader.CsvDialect right) -> bool
 static ExcelReader.Core.Reader.CsvDialect.operator ==(ExcelReader.Core.Reader.CsvDialect left, ExcelReader.Core.Reader.CsvDialect right) -> bool
+static ExcelReader.Core.Reader.CsvModelMap.Build<T>(System.Action<ExcelReader.Core.Parser.ExcelRowMapBuilder<T>!>! configure, ExcelReader.Core.Parser.ExcelParserConfig? config = null) -> ExcelReader.Core.Reader.CsvModelMap<T>!
+static ExcelReader.Core.Reader.CsvModelMap.FromAttributes<T>(ExcelReader.Core.Parser.ExcelParserConfig? config = null) -> ExcelReader.Core.Reader.CsvModelMap<T>!
+static ExcelReader.Core.Reader.CsvModelMap.Generated<T>(ExcelReader.Core.Parser.ExcelParserConfig? config = null) -> ExcelReader.Core.Reader.CsvModelMap<T>!
+static ExcelReader.Core.Reader.CsvParallelOptions.Default.get -> ExcelReader.Core.Reader.CsvParallelOptions!
 static ExcelReader.Core.Reader.CsvReaderOptions.Default.get -> ExcelReader.Core.Reader.CsvReaderOptions!
 static ExcelReader.Core.Reader.CsvReaderOptions.operator !=(ExcelReader.Core.Reader.CsvReaderOptions? left, ExcelReader.Core.Reader.CsvReaderOptions? right) -> bool
 static ExcelReader.Core.Reader.CsvReaderOptions.operator ==(ExcelReader.Core.Reader.CsvReaderOptions? left, ExcelReader.Core.Reader.CsvReaderOptions? right) -> bool
@@ -675,6 +704,15 @@ static ExcelReader.Core.Reader.CsvSniffer.Detect(System.ReadOnlySpan<byte> sampl
 static ExcelReader.Core.Reader.CsvSnifferOptions.Default.get -> ExcelReader.Core.Reader.CsvSnifferOptions!
 static ExcelReader.Core.Reader.CsvSnifferOptions.operator !=(ExcelReader.Core.Reader.CsvSnifferOptions? left, ExcelReader.Core.Reader.CsvSnifferOptions? right) -> bool
 static ExcelReader.Core.Reader.CsvSnifferOptions.operator ==(ExcelReader.Core.Reader.CsvSnifferOptions? left, ExcelReader.Core.Reader.CsvSnifferOptions? right) -> bool
+static ExcelReader.Core.Reader.Excel.AggregateCsvParallelAsync<TAccumulator, TModel>(System.IO.Stream! stream, ExcelReader.Core.Reader.CsvModelMap<TModel>! map, ExcelReader.Core.Reader.CsvParallelOptions? options = null, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<TAccumulator>!
+static ExcelReader.Core.Reader.Excel.AggregateCsvParallelAsync<TAccumulator, TModel>(System.ReadOnlyMemory<byte> data, ExcelReader.Core.Reader.CsvModelMap<TModel>! map, ExcelReader.Core.Reader.CsvParallelOptions? options = null, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<TAccumulator>!
+static ExcelReader.Core.Reader.Excel.AggregateCsvParallelAsync<TAccumulator, TModel>(string! path, ExcelReader.Core.Reader.CsvModelMap<TModel>! map, ExcelReader.Core.Reader.CsvParallelOptions? options = null, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<TAccumulator>!
+static ExcelReader.Core.Reader.Excel.AggregateCsvParallelAsync<TAccumulator, TRecord>(System.IO.Stream! stream, ExcelReader.Core.Reader.CsvParallelOptions? options = null, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<TAccumulator>!
+static ExcelReader.Core.Reader.Excel.AggregateCsvParallelAsync<TAccumulator, TRecord>(System.ReadOnlyMemory<byte> data, ExcelReader.Core.Reader.CsvParallelOptions? options = null, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<TAccumulator>!
+static ExcelReader.Core.Reader.Excel.AggregateCsvParallelAsync<TAccumulator, TRecord>(string! path, ExcelReader.Core.Reader.CsvParallelOptions? options = null, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<TAccumulator>!
+static ExcelReader.Core.Reader.Excel.AggregateCsvParallelAsync<TState>(System.IO.Stream! stream, ExcelReader.Core.Reader.CsvAggregation<TState>! aggregation, ExcelReader.Core.Reader.CsvParallelOptions? options = null, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<TState>!
+static ExcelReader.Core.Reader.Excel.AggregateCsvParallelAsync<TState>(System.ReadOnlyMemory<byte> data, ExcelReader.Core.Reader.CsvAggregation<TState>! aggregation, ExcelReader.Core.Reader.CsvParallelOptions? options = null, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<TState>!
+static ExcelReader.Core.Reader.Excel.AggregateCsvParallelAsync<TState>(string! path, ExcelReader.Core.Reader.CsvAggregation<TState>! aggregation, ExcelReader.Core.Reader.CsvParallelOptions? options = null, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<TState>!
 static ExcelReader.Core.Reader.Excel.DetectFileFormat(System.IO.Stream! stream) -> ExcelReader.Core.Enums.ExcelFileFormat
 static ExcelReader.Core.Reader.Excel.DetectFileFormat(System.ReadOnlyMemory<byte> data) -> ExcelReader.Core.Enums.ExcelFileFormat
 static ExcelReader.Core.Reader.Excel.DetectFileFormatAsync(System.IO.Stream! stream, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<ExcelReader.Core.Enums.ExcelFileFormat>
@@ -789,6 +827,7 @@ virtual ExcelReader.Core.Parser.ExcelCellReader<TValue>.Invoke(in ExcelReader.Co
 virtual ExcelReader.Core.Parser.ExcelPropertySetter<TModel, TValue>.Invoke(ref TModel model, TValue value) -> void
 virtual ExcelReader.Core.Parser.ExcelRowParser<TModel>.Invoke(ref TModel model, in ExcelReader.Core.ValueObjects.Cell cell, bool isDate1904, System.IFormatProvider! provider) -> bool
 virtual ExcelReader.Core.Parser.Internal.AsyncRowEnumerator<T, TReader, TRows>.DisposeAsync() -> System.Threading.Tasks.ValueTask
+virtual ExcelReader.Core.Reader.CsvRowAction<TState>.Invoke(ref TState state, ExcelReader.Core.ValueObjects.Row row) -> void
 ~ExcelReader.Core.Parser.Internal.ExcelEnumerable<T, TReader, TEnumerator>.GetAsyncEnumerator(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> ExcelReader.Core.Parser.Internal.ExcelEnumerable<T, TReader, TEnumerator>.AsyncEnumerator!
 ~ExcelReader.Core.Parser.Internal.ExcelEnumerable<T, TReader, TEnumerator>.GetEnumerator() -> ExcelReader.Core.Parser.Internal.ExcelEnumerable<T, TReader, TEnumerator>.Enumerator!
 ~override ExcelReader.Core.Parser.ExcelRowContext.Equals(object obj) -> bool
