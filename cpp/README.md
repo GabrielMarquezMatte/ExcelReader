@@ -18,15 +18,21 @@ typed table parsing, schema-driven writing, row-by-row decoded reads, and Arrow 
 include(FetchContent)
 FetchContent_Declare(excelreader
     GIT_REPOSITORY https://github.com/GabrielMarquezMatte/ExcelReader.git
-    GIT_TAG v2.1.3
+    GIT_TAG v4.0.1
     SOURCE_SUBDIR cpp)
 FetchContent_MakeAvailable(excelreader)
 
 target_link_libraries(your_app PRIVATE xl::excelreader)
+excelreader_copy_native_library(your_app)
 ```
 
 `FetchContent_MakeAvailable` downloads the matching native binary for your platform from that tag's
 GitHub Release automatically (see `cmake/FetchNativeLib.cmake`).
+
+`excelreader_copy_native_library` puts that binary next to your executable once it links. On Windows
+it is required: the DLL is loaded by name at startup, and one that sits neither beside the executable
+nor on `PATH` makes the process exit with `0xc0000135` (`STATUS_DLL_NOT_FOUND`) before `main` runs.
+The call is a no-op elsewhere, where the rpath baked in at link time already resolves the library.
 
 ### Install once, `find_package` after
 
@@ -47,9 +53,9 @@ Point `CMAKE_PREFIX_PATH` at the prefix you installed into. The native binary is
 install time — `find_package` never touches the network. The package version comes from
 `EXCELREADER_VERSION`, so a checkout that isn't on a tag installs as `0.0.0` and any versioned
 `find_package` request against it fails; pass `-DEXCELREADER_VERSION=v3.0.2` to install under a real
-version. On Windows the generated import library is installed next to the DLL, and consumers need
-the DLL beside their executable (or on `PATH`) at run time — `$<TARGET_FILE:xl::native>` names it,
-see `tests/package/CMakeLists.txt`.
+version. On Windows the generated import library is installed next to the DLL, and the package ships
+`excelreader_copy_native_library` as well, so a `find_package` consumer copies the DLL next to its
+executable the same way a `FetchContent` one does.
 
 Pass `-DEXCELREADER_INSTALL=OFF` to skip the install rules. They default off when `cpp` is pulled in
 with `add_subdirectory`/`FetchContent`, so a parent project's `install` step never picks them up.

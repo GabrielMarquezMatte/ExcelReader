@@ -10,27 +10,13 @@ target_compile_definitions(excelreader_cpp_smoke PRIVATE
     EXCELREADER_ENCRYPTED_FIXTURE_DIR="${EXCELREADER_ENCRYPTED_FIXTURE_DIR}")
 
 add_test(NAME excelreader_cpp_smoke COMMAND excelreader_cpp_smoke)
-if(WIN32)
-    # The native DLL has no import-time PATH entry; copy it next to the test executable so the
-    # loader finds it without requiring the caller to fiddle with PATH.
-    add_custom_command(TARGET excelreader_cpp_smoke POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different
-            "$<TARGET_PROPERTY:excelreader_native,IMPORTED_LOCATION>"
-            "$<TARGET_FILE_DIR:excelreader_cpp_smoke>")
-endif()
+excelreader_copy_native_library(excelreader_cpp_smoke)
 
 add_executable(excelreader_cpp_write write.cpp)
 target_link_libraries(excelreader_cpp_write PRIVATE xl::excelreader)
 
 add_test(NAME excelreader_cpp_write COMMAND excelreader_cpp_write)
-if(WIN32)
-    # Same reason as the smoke test: the native DLL has no import-time PATH entry, so copy it next
-    # to the test executable for the loader to find.
-    add_custom_command(TARGET excelreader_cpp_write POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different
-            "$<TARGET_PROPERTY:excelreader_native,IMPORTED_LOCATION>"
-            "$<TARGET_FILE_DIR:excelreader_cpp_write>")
-endif()
+excelreader_copy_native_library(excelreader_cpp_write)
 
 add_executable(excelreader_cpp_arrow arrow.cpp)
 target_link_libraries(excelreader_cpp_arrow PRIVATE xl::excelreader)
@@ -38,14 +24,7 @@ target_compile_definitions(excelreader_cpp_arrow PRIVATE
     EXCELREADER_FIXTURE_PATH="${EXCELREADER_FIXTURE_PATH}")
 
 add_test(NAME excelreader_cpp_arrow COMMAND excelreader_cpp_arrow)
-if(WIN32)
-    # Same reason as the smoke test: the native DLL has no import-time PATH entry, so copy it next
-    # to the test executable for the loader to find.
-    add_custom_command(TARGET excelreader_cpp_arrow POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different
-            "$<TARGET_PROPERTY:excelreader_native,IMPORTED_LOCATION>"
-            "$<TARGET_FILE_DIR:excelreader_cpp_arrow>")
-endif()
+excelreader_copy_native_library(excelreader_cpp_arrow)
 
 add_executable(excelreader_cpp_rows rows.cpp)
 target_link_libraries(excelreader_cpp_rows PRIVATE xl::excelreader)
@@ -57,14 +36,7 @@ target_compile_definitions(excelreader_cpp_rows PRIVATE
     EXCELREADER_XLSX_FIXTURE_PATH="${EXCELREADER_XLSX_FIXTURE_PATH}")
 
 add_test(NAME excelreader_cpp_rows COMMAND excelreader_cpp_rows)
-if(WIN32)
-    # Same reason as the smoke test: the native DLL has no import-time PATH entry, so copy it next
-    # to the test executable for the loader to find.
-    add_custom_command(TARGET excelreader_cpp_rows POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different
-            "$<TARGET_PROPERTY:excelreader_native,IMPORTED_LOCATION>"
-            "$<TARGET_FILE_DIR:excelreader_cpp_rows>")
-endif()
+excelreader_copy_native_library(excelreader_cpp_rows)
 
 add_executable(excelreader_cpp_batch batch.cpp)
 target_link_libraries(excelreader_cpp_batch PRIVATE xl::excelreader)
@@ -74,22 +46,10 @@ target_compile_definitions(excelreader_cpp_batch PRIVATE
     EXCELREADER_FIXTURE_PATH="${EXCELREADER_FIXTURE_PATH}")
 
 add_test(NAME excelreader_cpp_batch COMMAND excelreader_cpp_batch)
-if(WIN32)
-    # Same reason as the smoke test: the native DLL has no import-time PATH entry.
-    add_custom_command(TARGET excelreader_cpp_batch POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different
-            "$<TARGET_PROPERTY:excelreader_native,IMPORTED_LOCATION>"
-            "$<TARGET_FILE_DIR:excelreader_cpp_batch>")
-endif()
+excelreader_copy_native_library(excelreader_cpp_batch)
 
 add_executable(excelreader_cpp_aggregate aggregate.cpp)
 target_link_libraries(excelreader_cpp_aggregate PRIVATE xl::excelreader)
 
 add_test(NAME excelreader_cpp_aggregate COMMAND excelreader_cpp_aggregate)
-if(WIN32)
-    # Same reason as the smoke test: the native DLL has no import-time PATH entry.
-    add_custom_command(TARGET excelreader_cpp_aggregate POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different
-            "$<TARGET_PROPERTY:excelreader_native,IMPORTED_LOCATION>"
-            "$<TARGET_FILE_DIR:excelreader_cpp_aggregate>")
-endif()
+excelreader_copy_native_library(excelreader_cpp_aggregate)
