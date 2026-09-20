@@ -163,6 +163,7 @@ jobs:
           LIBC_FATAL_STDERR_: '1'
         run: |
           set +e
+          ulimit -c unlimited
           crashed=0
           for i in $(seq 1 10); do
             out=$(cargo test --workspace --all-features 2>&1)
@@ -175,6 +176,13 @@ jobs:
             echo "iteration $i: ok"
           done
           echo "loop-crashed=$crashed"
+          # Confirm the macOS signature after the warm-up: the pre-warm-up report showed a thread
+          # redirected to address 0 from a signal handler while the GC was suspending threads.
+          if [ "$RUNNER_OS" = macOS ] && [ $crashed -eq 1 ]; then
+            sleep 5
+            f=$(ls -t ~/Library/Logs/DiagnosticReports/aggregate*.ips 2>/dev/null | head -n 1)
+            [ -n "$f" ] && { echo "=== $f ==="; head -c 90000 "$f"; } || echo "no crash report"
+          fi
           exit 0
 
       - name: cargo build (default features)
