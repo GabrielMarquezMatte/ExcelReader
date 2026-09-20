@@ -152,6 +152,31 @@ jobs:
           EXCELREADER_NATIVE_LIB_DIR: ${{ github.workspace }}/${{ steps.lib.outputs.dir }}
         run: cargo test --workspace --all-features --verbose
 
+      # TEMPORARY: measures the warm-up. Before it, this loop crashed by iteration 5 on Linux and
+      # iteration 1-2 on macOS. Remove once the fix has held for a few runs.
+      - name: "Diagnostic: 10 more runs of the Rust suite"
+        if: always() && runner.os != 'Windows'
+        working-directory: rust
+        shell: bash
+        env:
+          EXCELREADER_NATIVE_LIB_DIR: ${{ github.workspace }}/${{ steps.lib.outputs.dir }}
+          LIBC_FATAL_STDERR_: '1'
+        run: |
+          set +e
+          crashed=0
+          for i in $(seq 1 10); do
+            out=$(cargo test --workspace --all-features 2>&1)
+            if echo "$out" | grep -q "signal: "; then
+              echo "=== crashed on iteration $i ==="
+              echo "$out" | grep -B 15 "signal: " | grep -v "^\s*$" | tail -n 20
+              crashed=1
+              break
+            fi
+            echo "iteration $i: ok"
+          done
+          echo "loop-crashed=$crashed"
+          exit 0
+
       - name: cargo build (default features)
         working-directory: rust
         env:

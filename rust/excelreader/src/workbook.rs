@@ -63,6 +63,7 @@ pub(crate) fn check_abi_version() -> Result<(), Error> {
         .get_or_init(|| {
             let loaded = unsafe { crate::xl_abi_version() };
             if loaded == crate::XL_ABI_VERSION {
+                warm_up();
                 Ok(())
             } else {
                 Err(Error::from_status(
@@ -76,6 +77,55 @@ pub(crate) fn check_abi_version() -> Result<(), Error> {
             }
         })
         .clone()
+}
+
+/// Runs one small read and one small aggregation, so the native runtime finishes starting up on a
+/// single thread.
+///
+/// Several threads whose FIRST call into the library lands in the runtime's class-constructor
+/// machinery at the same moment can crash it: a thread comes back from a spin in `Thread.Yield` on
+/// a corrupted return address, which ends the process with no message (SIGABRT on Linux, SIGSEGV on
+/// macOS). It is not this crate's bug - a plain C host doing the same thing crashes too, just far
+/// less often - but this crate makes it likely, because a Rust test binary calls in from a fresh
+/// thread per test. [`check_abi_version`]'s `OnceLock` already serializes the first call, so doing
+/// the heavy initialization here means later threads find the constructors already run.
+///
+/// Failures are ignored on purpose: this is a warm-up, and a real call will report the same problem
+/// properly.
+fn warm_up() {
+    const CSV: &[u8] = b"a,b\n1,2\n3,4\n";
+
+    let mut handle: *mut XlWorkbook = std::ptr::null_mut();
+    let status = unsafe {
+        crate::xl_open_memory_ex(
+            CSV.as_ptr(),
+            CSV.len() as i32,
+            crate::XL_FORMAT_CSV,
+            std::ptr::null(),
+            &mut handle,
+        )
+    };
+    if status == XL_OK && !handle.is_null() {
+        unsafe { crate::xl_close(handle) };
+    }
+
+    struct CountRows(i64);
+    impl crate::CsvAccumulator for CountRows {
+        fn accumulate(&mut self, _row: crate::RowRef<'_>) -> Result<(), i32> {
+            self.0 += 1;
+            Ok(())
+        }
+        fn combine(&mut self, other: &mut Self) -> Result<(), i32> {
+            self.0 += other.0;
+            Ok(())
+        }
+    }
+
+    let options = crate::CsvParallelOptions {
+        degree_of_parallelism: 2,
+        ..crate::CsvParallelOptions::default()
+    };
+    let _ = crate::aggregate::aggregate_csv_memory_unchecked(CSV, || CountRows(0), &options);
 }
 
 /// An open workbook. Not thread-safe - use one per thread, same contract as the C ABI. (The raw
