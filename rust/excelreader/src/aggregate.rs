@@ -276,6 +276,21 @@ where
     F: Fn() -> A + Sync,
 {
     workbook::check_abi_version()?;
+    aggregate_csv_memory_unchecked(data, seed, options)
+}
+
+/// [`aggregate_csv_memory`] without the ABI check, for the warm-up run in
+/// [`workbook::check_abi_version`] itself - calling the public entry point from there would
+/// re-enter its `OnceLock` and deadlock.
+pub(crate) fn aggregate_csv_memory_unchecked<A, F>(
+    data: &[u8],
+    seed: F,
+    options: &CsvParallelOptions,
+) -> Result<A, Error>
+where
+    A: CsvAccumulator,
+    F: Fn() -> A + Sync,
+{
     let data_len = length(data.len(), "buffer")?;
     let shared = shared::<A, F>(&seed);
     let agg = raw_aggregation(&shared);
