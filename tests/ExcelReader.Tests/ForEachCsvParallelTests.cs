@@ -1,6 +1,8 @@
+using System.Collections.Concurrent;
 using System.Globalization;
 using System.Text;
 using ExcelReader.Core.Parser;
+using ExcelReader.Core.Parser.Internal;
 using ExcelReader.Core.Reader;
 using ExcelReader.Core.ValueObjects;
 
@@ -267,27 +269,222 @@ namespace ExcelReader.Tests
                     TestContext.Current.CancellationToken));
         }
 
-        [Fact]
-        public async Task ForEachMapped_QuotedNewlines_DeliversEveryRecord()
+        private sealed class ChunkProbe
+        {
+            private int _chunks;
+
+            internal int Chunks => Volatile.Read(ref _chunks);
+
+            internal CsvAggregation<byte> Wrap(CsvAggregation<byte> inner)
+            {
+                Func<byte> seed = inner.Seed;
+                return new CsvAggregation<byte>
+                {
+                    Seed = () =>
+                    {
+                        Interlocked.Increment(ref _chunks);
+                        return seed();
+                    },
+                    Accumulate = inner.Accumulate,
+                    Combine = inner.Combine,
+                };
+            }
+        }
+
+        private static Task<byte> ChunkedRecord(byte[] csv, CsvRecordAction<Sale> body, ChunkProbe probe, int dop, int chunkSize)
+        {
+            return ParallelCsvProcessor.RunWithChunkSizeAsync(
+                csv.AsMemory(),
+                probe.Wrap(RecordCallback<Sale>.For(body)),
+                null,
+                new CsvParallelOptions { DegreeOfParallelism = dop, HeaderRow = 1 },
+                chunkSize,
+                TestContext.Current.CancellationToken);
+        }
+
+        private static Task<byte> ChunkedMapped(byte[] csv, CsvRecordAction<Order> body, ChunkProbe probe, int dop, int chunkSize)
+        {
+            return ParallelCsvProcessor.RunWithChunkSizeAsync(
+                csv.AsMemory(),
+                probe.Wrap(MappedCallback<Order>.Unbound),
+                MappedCallback<Order>.Binder(CsvModelMap.FromAttributes<Order>(), 1, body),
+                new CsvParallelOptions { DegreeOfParallelism = dop, HeaderRow = 1 },
+                chunkSize,
+                TestContext.Current.CancellationToken);
+        }
+
+        private const int AlignedRowBytes = 16;
+
+        private static byte[] AlignedOrdersCsv(int rows, string terminator)
         {
             var sb = new StringBuilder();
-            sb.Append("Region,Units\n");
-            const int rows = 20_000;
+            sb.Append("Region,Units").Append(terminator);
+            int digits = AlignedRowBytes - 3 - terminator.Length;
             for (int i = 0; i < rows; i++)
             {
-                sb.Append(CultureInfo.InvariantCulture, $"\"multi\nline {i}\",{i + 1}\n");
+                sb.Append(CultureInfo.InvariantCulture, $"r{i % 4},{(i + 1).ToString($"D{digits}", CultureInfo.InvariantCulture)}{terminator}");
             }
-            byte[] csv = Encoding.UTF8.GetBytes(sb.ToString());
+            return Encoding.UTF8.GetBytes(sb.ToString());
+        }
+
+        [Theory]
+        [InlineData(1)]
+        [InlineData(4)]
+        [InlineData(16)]
+        public async Task ForEachRecord_Chunked_AlignedBoundaries_DeliversExactlyOnce(int dop)
+        {
+            const int rows = 8192;
+            byte[] csv = AlignedOrdersCsv(rows, "\n");
+            var probe = new ChunkProbe();
+            long total = 0;
             long count = 0;
 
-            await Excel.ForEachCsvParallelAsync(
-                csv.AsMemory(),
-                CsvModelMap.FromAttributes<Order>(),
-                _ => Interlocked.Increment(ref count),
-                new CsvParallelOptions { DegreeOfParallelism = 8, HeaderRow = 1 },
-                TestContext.Current.CancellationToken);
+            await ChunkedRecord(
+                csv,
+                sale =>
+                {
+                    Interlocked.Add(ref total, sale.Units);
+                    Interlocked.Increment(ref count);
+                },
+                probe,
+                dop,
+                chunkSize: AlignedRowBytes * 256);
 
-            Assert.True(count >= rows, $"expected at least {rows} deliveries, saw {count}");
+            Assert.True(probe.Chunks > 1, $"expected the source to partition, parsed {probe.Chunks} chunk(s)");
+            Assert.Equal(rows, count);
+            Assert.Equal(ExpectedUnits(rows), total);
+        }
+
+        [Theory]
+        [InlineData(1)]
+        [InlineData(4)]
+        [InlineData(16)]
+        public async Task ForEachMapped_Chunked_AlignedBoundaries_DeliversExactlyOnce(int dop)
+        {
+            const int rows = 8192;
+            byte[] csv = AlignedOrdersCsv(rows, "\n");
+            var probe = new ChunkProbe();
+            long total = 0;
+            long count = 0;
+
+            await ChunkedMapped(
+                csv,
+                order =>
+                {
+                    Interlocked.Add(ref total, order.Units);
+                    Interlocked.Increment(ref count);
+                },
+                probe,
+                dop,
+                chunkSize: AlignedRowBytes * 256);
+
+            Assert.True(probe.Chunks > 1, $"expected the source to partition, parsed {probe.Chunks} chunk(s)");
+            Assert.Equal(rows, count);
+            Assert.Equal(ExpectedUnits(rows), total);
+        }
+
+        [Fact]
+        public async Task ForEachMapped_Chunked_CrLfBoundarySplit_DeliversExactlyOnce()
+        {
+            const int rows = 8192;
+            byte[] csv = AlignedOrdersCsv(rows, "\r\n");
+            var probe = new ChunkProbe();
+            long count = 0;
+
+            await ChunkedMapped(
+                csv,
+                _ => Interlocked.Increment(ref count),
+                probe,
+                dop: 4,
+                chunkSize: (AlignedRowBytes * 256) - 1);
+
+            Assert.True(probe.Chunks > 1, $"expected the source to partition, parsed {probe.Chunks} chunk(s)");
+            Assert.Equal(rows, count);
+        }
+
+        [Fact]
+        public async Task ForEachMapped_Chunked_VariableLengthRows_DeliversExactlyOnce()
+        {
+            const int rows = 20_000;
+            byte[] csv = OrdersCsv(rows);
+            var probe = new ChunkProbe();
+            long total = 0;
+            long count = 0;
+
+            await ChunkedMapped(
+                csv,
+                order =>
+                {
+                    Interlocked.Add(ref total, order.Units);
+                    Interlocked.Increment(ref count);
+                },
+                probe,
+                dop: 4,
+                chunkSize: 3000);
+
+            Assert.True(probe.Chunks > 1, $"expected the source to partition, parsed {probe.Chunks} chunk(s)");
+            Assert.Equal(rows, count);
+            Assert.Equal(ExpectedUnits(rows), total);
+        }
+
+        [Fact]
+        public async Task ForEachMapped_Chunked_RaggedQuoteFreeRows_MatchesSinglePartition()
+        {
+            const int rows = 20_000;
+            var sb = new StringBuilder();
+            sb.Append("Region,Units\r\n");
+            for (int i = 0; i < rows; i++)
+            {
+                sb.Append(CultureInfo.InvariantCulture, $"region{i % 4},{i + 1}");
+                sb.Append(i % 3 == 0 ? "\n" : "\r\n");
+                if (i % 5 == 0)
+                {
+                    sb.Append('\n');
+                }
+            }
+            byte[] csv = Encoding.UTF8.GetBytes(sb.ToString());
+
+            long chunked = 0;
+            var probe = new ChunkProbe();
+            await ChunkedMapped(csv, _ => Interlocked.Increment(ref chunked), probe, dop: 4, chunkSize: 2048);
+
+            long single = 0;
+            var whole = new ChunkProbe();
+            await ChunkedMapped(csv, _ => single++, whole, dop: 1, chunkSize: csv.Length);
+
+            Assert.True(probe.Chunks > 1, $"expected the source to partition, parsed {probe.Chunks} chunk(s)");
+            Assert.Equal(1, whole.Chunks);
+            Assert.Equal(single, chunked);
+        }
+
+        [Fact]
+        public async Task ForEachMapped_Chunked_QuotedFields_DeliversSupersetOfSequential()
+        {
+            const int rows = 4000;
+            var sb = new StringBuilder();
+            sb.Append("Region,Units\n");
+            for (int i = 0; i < rows; i++)
+            {
+                sb.Append(CultureInfo.InvariantCulture, $"\"north,\nsouth {i}\",{i + 1}\n");
+            }
+            byte[] csv = Encoding.UTF8.GetBytes(sb.ToString());
+            var probe = new ChunkProbe();
+            var delivered = new ConcurrentBag<string>();
+
+            await ChunkedMapped(
+                csv,
+                order => delivered.Add($"{Encoding.UTF8.GetString(order.Region)}|{order.Units}"),
+                probe,
+                dop: 4,
+                chunkSize: 2048);
+
+            Assert.True(probe.Chunks > 1, $"expected the source to partition, parsed {probe.Chunks} chunk(s)");
+            var seen = new HashSet<string>(delivered, StringComparer.Ordinal);
+            for (int i = 0; i < rows; i++)
+            {
+                string expected = string.Create(CultureInfo.InvariantCulture, $"north,\nsouth {i}|{i + 1}");
+                Assert.Contains(expected, seen);
+            }
         }
     }
 }
