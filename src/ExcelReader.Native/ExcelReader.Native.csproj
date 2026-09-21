@@ -47,12 +47,19 @@
                       OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
   </ItemGroup>
 
+  <!-- Static PGO profile for NativeAOT: without it the AOT library runs up to ~1.26x slower than the
+       same code under the JIT's dynamic PGO. Regenerate it after changing a hot path; see README.md. -->
+  <ItemGroup>
+    <MibcFile Include="pgo\excelreader.mibc" />
+  </ItemGroup>
+
   <!-- The span-based NativeApi is the tested surface; [UnmanagedCallersOnly] exports cannot be
        invoked from managed code, so the tests drive the layer underneath them. The benchmarks are
        here for the same reason: measuring xl_parse_typed means calling NativeApi.ParseTyped. -->
   <ItemGroup>
     <InternalsVisibleTo Include="ExcelReader.Tests" />
     <InternalsVisibleTo Include="ExcelReader.Benchmarks" />
+    <InternalsVisibleTo Include="ExcelReader.NativePgoTrainer" />
   </ItemGroup>
 
 </Project>

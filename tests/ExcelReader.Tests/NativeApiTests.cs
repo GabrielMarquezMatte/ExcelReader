@@ -1915,6 +1915,48 @@ namespace ExcelReader.Tests
             }
         }
 
+        [Theory]
+        [InlineData(1)]
+        [InlineData(7)]
+        [InlineData(8)]
+        [InlineData(9)]
+        [InlineData(17)]
+        public void ParseTyped_Validity_Bitmap_Should_Backfill_Rows_Before_The_First_Null(int firstNull)
+        {
+            const int rowCount = 20;
+            StringBuilder csv = new("qty\n");
+            for (int i = 0; i < rowCount; i++)
+            {
+                csv.Append(i == firstNull || i == rowCount - 1 ? "notanumber" : i.ToString(CultureInfo.InvariantCulture)).Append('\n');
+            }
+
+            string path = Path.Combine(Path.GetTempPath(), $"excelreader-native-{Guid.NewGuid():N}.csv");
+            File.WriteAllText(path, csv.ToString());
+            try
+            {
+                Assert.Equal(NativeStatus.Ok, OpenPath(path, NativeFormat.Csv, out NativeHandle? handle));
+                NativeColumnSpec[] specs = [new() { Names = ["qty"], Type = NativeColumnType.Int64, Nullable = true }];
+                Assert.Equal(NativeStatus.Ok, NativeApi.ParseTyped(handle, specs, headerRow: 1, out NativeTable table));
+                try
+                {
+                    bool[] expected = new bool[rowCount];
+                    Array.Fill(expected, true);
+                    expected[firstNull] = false;
+                    expected[rowCount - 1] = false;
+                    Assert.Equal(expected, DecodeValidity(ColumnAt(table, 0)));
+                }
+                finally
+                {
+                    NativeApi.FreeTable(ref table);
+                    NativeApi.Close(handle);
+                }
+            }
+            finally
+            {
+                File.Delete(path);
+            }
+        }
+
         [Fact]
         public void ParseTyped_Validity_Bitmap_Should_Survive_Byte_Boundaries()
         {

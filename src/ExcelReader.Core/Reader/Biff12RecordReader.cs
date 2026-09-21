@@ -1,3 +1,5 @@
+using System.Runtime.CompilerServices;
+
 namespace ExcelReader.Core.Reader
 {
     internal ref struct Biff12RecordReader
@@ -12,6 +14,7 @@ namespace ExcelReader.Core.Reader
 
         internal int Position { get; private set; }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         internal bool TryReadRecord(out int id, out ReadOnlySpan<byte> payload)
         {
             ReadOnlySpan<byte> data = _data;
