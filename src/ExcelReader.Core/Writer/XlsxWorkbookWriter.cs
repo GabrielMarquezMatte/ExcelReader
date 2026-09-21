@@ -139,6 +139,11 @@ namespace ExcelReader.Core.Writer
             return _sharedStrings!.GetOrAdd(value);
         }
 
+        internal int GetSharedStringIndex(ReadOnlySpan<char> value)
+        {
+            return _sharedStrings!.GetOrAdd(value);
+        }
+
         /// <inheritdoc/>
         public int AddStyle(CellStyle style)
         {

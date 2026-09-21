@@ -49,3 +49,5 @@ static ExcelReader.Core.Reader.Excel.ForEachCsvParallelAsync<TModel>(System.IO.S
 ExcelReader.Core.Writer.CsvRowWriter.WriteUtf8(System.ReadOnlySpan<byte> utf8) -> void
 ExcelReader.Core.Writer.IRowWriter.WriteUtf8(System.ReadOnlySpan<byte> utf8) -> void
 ExcelReader.Core.Writer.XlsxRowWriter.WriteUtf8(System.ReadOnlySpan<byte> utf8) -> void
+ExcelReader.Core.Writer.XlsbRowWriter.WriteUtf8(System.ReadOnlySpan<byte> utf8) -> void
+ExcelReader.Core.Writer.XlsRowWriter.WriteUtf8(System.ReadOnlySpan<byte> utf8) -> void

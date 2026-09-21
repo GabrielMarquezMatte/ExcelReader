@@ -92,6 +92,10 @@ namespace ExcelReader.Native
                 {
                     Marshal.FreeHGlobal(column.Validity);
                 }
+                if (column.Data != IntPtr.Zero)
+                {
+                    Marshal.FreeHGlobal(column.Data);
+                }
             }
             Marshal.FreeHGlobal(table.Columns);
             table = default;
@@ -431,14 +435,18 @@ namespace ExcelReader.Native
 
             private NativeColumn BuildStringColumn(IntPtr validity)
             {
-                int offsetBytes = _stringOffsets.ByteLength;
-                int dataBytes = _stringData.ByteLength;
-                int total = checked(offsetBytes + dataBytes);
-                IntPtr block = Marshal.AllocHGlobal(total);
-                Span<byte> destination = new((void*)block, total);
-                _stringOffsets.CopyTo(destination);
-                _stringData.CopyTo(destination[offsetBytes..]);
-                return new NativeColumn { Type = type, Length = RowCount, Values = block, Validity = validity, Data = IntPtr.Add(block, offsetBytes), DataLen = dataBytes };
+                IntPtr offsets = CopyToNativeBlock(_stringOffsets);
+                IntPtr data;
+                try
+                {
+                    data = CopyToNativeBlock(_stringData);
+                }
+                catch
+                {
+                    Marshal.FreeHGlobal(offsets);
+                    throw;
+                }
+                return new NativeColumn { Type = type, Length = RowCount, Values = offsets, Validity = validity, Data = data, DataLen = _stringData.ByteLength };
             }
         }
     }

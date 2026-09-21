@@ -188,9 +188,8 @@ namespace ExcelReader.Native
             {
                 for (; built < count; built++)
                 {
-                    NativeColumn column = ColumnAt(table, built);
                     IntPtr child = Marshal.AllocHGlobal(Marshal.SizeOf<ArrowArray>());
-                    Marshal.StructureToPtr(BuildChildArray(specs[built].Type, column), child, false);
+                    Marshal.StructureToPtr(BuildChildArray(specs[built].Type, &((NativeColumn*)table.Columns)[built]), child, false);
                     Marshal.WriteIntPtr(children, built * IntPtr.Size, child);
                 }
 
@@ -220,32 +219,42 @@ namespace ExcelReader.Native
             }
         }
 
-        private static ArrowArray BuildChildArray(int type, NativeColumn column)
+        // Takes ownership of the column's buffers and clears them, so FreeTable leaves them to the Arrow release.
+        private static ArrowArray BuildChildArray(int type, NativeColumn* column)
         {
-            IntPtr validity = CopyOptionalBuffer(column.Validity, (column.Length + 7) / 8);
-            IntPtr[] dataBuffers = type switch
+            int bufferCount = type == NativeColumnType.String ? 3 : 2;
+            IntPtr* buffers = (IntPtr*)Marshal.AllocHGlobal(bufferCount * IntPtr.Size);
+            if (type == NativeColumnType.Bool)
             {
-                NativeColumnType.String => [CopyBuffer(column.Values, (column.Length + 1) * sizeof(int)), CopyBuffer(column.Data, column.DataLen)],
-                NativeColumnType.Bool => [BitPackBoolColumn(column.Values, column.Length)],
-                NativeColumnType.Float64 => [CopyBuffer(column.Values, column.Length * sizeof(double))],
-                NativeColumnType.Date => [CopyBuffer(column.Values, column.Length * sizeof(int))],
-                _ => [CopyBuffer(column.Values, column.Length * sizeof(long))],
-            };
-
-            int bufferCount = 1 + dataBuffers.Length;
-            IntPtr buffers = Marshal.AllocHGlobal(checked(bufferCount * IntPtr.Size));
-            Marshal.WriteIntPtr(buffers, 0, validity);
-            for (int i = 0; i < dataBuffers.Length; i++)
-            {
-                Marshal.WriteIntPtr(buffers, (i + 1) * IntPtr.Size, dataBuffers[i]);
+                try
+                {
+                    buffers[1] = BitPackBoolColumn(column->Values, column->Length);
+                }
+                catch
+                {
+                    Marshal.FreeHGlobal((IntPtr)buffers);
+                    throw;
+                }
             }
+            else
+            {
+                buffers[1] = column->Values;
+                column->Values = IntPtr.Zero;
+            }
+            if (type == NativeColumnType.String)
+            {
+                buffers[2] = column->Data;
+                column->Data = IntPtr.Zero;
+            }
+            buffers[0] = column->Validity;
+            column->Validity = IntPtr.Zero;
 
             return new ArrowArray
             {
-                Length = column.Length,
-                NullCount = CountUnset(column.Validity, column.Length),
+                Length = column->Length,
+                NullCount = CountUnset(buffers[0], column->Length),
                 NBuffers = bufferCount,
-                Buffers = buffers,
+                Buffers = (IntPtr)buffers,
                 Release = ArrayReleaseCallback,
             };
         }
@@ -268,25 +277,6 @@ namespace ExcelReader.Native
                 set += BitOperations.PopCount(packed);
             }
             return length - set;
-        }
-
-        private static IntPtr CopyBuffer(IntPtr source, long byteLength)
-        {
-            IntPtr destination = Marshal.AllocHGlobal((nint)Math.Max(byteLength, 1));
-            if (byteLength > 0)
-            {
-                Buffer.MemoryCopy((void*)source, (void*)destination, byteLength, byteLength);
-            }
-            return destination;
-        }
-
-        private static IntPtr CopyOptionalBuffer(IntPtr source, long byteLength)
-        {
-            if (source == IntPtr.Zero)
-            {
-                return IntPtr.Zero;
-            }
-            return CopyBuffer(source, byteLength);
         }
 
         private static IntPtr BitPackBoolColumn(IntPtr byteValues, long length)

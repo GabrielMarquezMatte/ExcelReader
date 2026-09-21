@@ -452,18 +452,29 @@ namespace ExcelReader.Core.Writer
         internal void WriteStringCell(int columnIndex, string? value)
         {
             ValidateColumn(columnIndex);
-            if (value is null)
+            if (value is not null)
             {
-                return;
+                WriteTextCell(columnIndex, value, value);
             }
+        }
+
+        internal void WriteStringCell(int columnIndex, ReadOnlySpan<char> value)
+        {
+            ValidateColumn(columnIndex);
+            WriteTextCell(columnIndex, value, owned: null);
+        }
+
+        private void WriteTextCell(int columnIndex, ReadOnlySpan<char> value, string? owned)
+        {
             ExcelLimits.ThrowIfCellTextTooLong(value.Length, nameof(value));
             int style = EffectiveStyle(columnIndex);
             if (_owner.UseSharedStrings)
             {
+                int index = owned is null ? _owner.GetSharedStringIndex(value) : _owner.GetSharedStringIndex(owned);
                 const int Length = CellHeaderLength + 4;
                 Biff12RecordWriter.WriteFixedRecord(_records, Brt.CellIsst, Length, out Span<byte> shared);
                 Biff12RecordWriter.WriteCellHeader(shared, columnIndex, style);
-                BinaryPrimitives.WriteUInt32LittleEndian(shared.Slice(8, 4), (uint)_owner.GetSharedStringIndex(value));
+                BinaryPrimitives.WriteUInt32LittleEndian(shared.Slice(8, 4), (uint)index);
                 MaybeFlush();
                 return;
             }
@@ -471,7 +482,7 @@ namespace ExcelReader.Core.Writer
             Biff12RecordWriter.WriteFixedRecord(_records, Brt.CellSt, length, out Span<byte> p);
             Biff12RecordWriter.WriteCellHeader(p, columnIndex, style);
             BinaryPrimitives.WriteUInt32LittleEndian(p.Slice(8, 4), (uint)value.Length);
-            MemoryMarshal.AsBytes(value.AsSpan()).CopyTo(p[12..]);
+            MemoryMarshal.AsBytes(value).CopyTo(p[12..]);
             MaybeFlush();
         }
 

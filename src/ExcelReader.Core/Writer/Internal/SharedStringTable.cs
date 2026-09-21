@@ -10,6 +10,12 @@ namespace ExcelReader.Core.Writer.Internal
 
         private readonly Dictionary<string, int> _indexes = new(DefaultCapacity, StringComparer.Ordinal);
         private readonly List<string> _values = new(DefaultCapacity);
+        private readonly Dictionary<string, int>.AlternateLookup<ReadOnlySpan<char>> _spanIndexes;
+
+        internal SharedStringTable()
+        {
+            _spanIndexes = _indexes.GetAlternateLookup<ReadOnlySpan<char>>();
+        }
 
         internal int Count { get; private set; }
         internal int UniqueCount => _values.Count;
@@ -24,6 +30,20 @@ namespace ExcelReader.Core.Writer.Internal
             }
             index = _values.Count;
             _values.Add(value);
+            return index;
+        }
+
+        internal int GetOrAdd(ReadOnlySpan<char> value)
+        {
+            Count++;
+            if (_spanIndexes.TryGetValue(value, out int index))
+            {
+                return index;
+            }
+            string added = value.ToString();
+            index = _values.Count;
+            _indexes.Add(added, index);
+            _values.Add(added);
             return index;
         }
 

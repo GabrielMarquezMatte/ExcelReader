@@ -1,3 +1,5 @@
+using ExcelReader.Core.Writer.Internal;
+
 namespace ExcelReader.Core.Writer
 {
     /// <summary>
@@ -31,6 +33,14 @@ namespace ExcelReader.Core.Writer
             {
                 _owner.EmitLabel(_rowNumber, _columnIndex, value);
             }
+            _columnIndex++;
+        }
+
+        /// <inheritdoc/>
+        public void WriteUtf8(ReadOnlySpan<byte> utf8)
+        {
+            ThrowIfDisposed();
+            Utf8Chars.Decode(utf8, this, static (chars, self) => self._owner.EmitLabel(self._rowNumber, self._columnIndex, chars));
             _columnIndex++;
         }
 
