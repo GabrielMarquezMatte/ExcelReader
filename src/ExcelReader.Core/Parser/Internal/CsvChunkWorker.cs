@@ -214,6 +214,13 @@ namespace ExcelReader.Core.Parser.Internal
                 return long.MaxValue;
             }
 
+            // FindRecordStart always scans past a terminator, so without this a chunk already aligned to a
+            // record would overshoot by a whole record and force the merge loop to re-parse it.
+            if (chunk.Start > 0 && AlreadyAtRecordStart(source, chunk.Start))
+            {
+                return chunk.Start;
+            }
+
             if (source.IsMemory)
             {
                 int cap = (int)Math.Min(chunkLength, int.MaxValue - 1);
@@ -252,6 +259,13 @@ namespace ExcelReader.Core.Parser.Internal
                 }
                 windowLength = (int)Math.Min(remaining, (long)windowLength * BoundaryWindowGrowth);
             }
+        }
+
+        private static bool AlreadyAtRecordStart(CsvChunkSource source, long start)
+        {
+            Span<byte> pair = stackalloc byte[2];
+            // A short read leaves the answer unknown; scanning forward is still correct, only wasteful.
+            return source.ReadWindow(start - 1, pair) == pair.Length && CsvBoundaryResolver.StartsRecord(pair);
         }
     }
 }
