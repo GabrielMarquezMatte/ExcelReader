@@ -78,6 +78,25 @@ Still unresolved, and untested by any of the above: whether true unordered emiss
 differently. The ordered merge is the safer default and the only mode either public overload can
 reach, so it stays absent a specific reason to revisit.
 
+`Excel.ForEachCsvParallelAsync` exposes the same partitioning to a per-row callback rather than an
+accumulator type. It accepts a `ref struct` row, which the enumerating `ParseCsvParallelAsync` cannot:
+`IAsyncEnumerable<T>`'s `T` is not declared `allows ref struct`, and more fundamentally a row holding
+spans into a worker's buffer cannot cross to the consumer thread at all.
+
+That constraint also settles what an ordered `ref struct` enumerator would cost. Since a worker cannot
+convert a row it must hand onward, conversion would run on the consumer thread — and conversion is the
+floor here, at 1,213.7 ms single-threaded on the conversion-heavy corpus against 353.3 ms for the typed
+path at dop 16. Such an API would be ~3.4x slower than what already ships while adding nothing over the
+sequential `RefParser.ParseNamed`, so it was not built. Ordered delivery at full speed needs workers to
+convert into a per-chunk arena of packed fields that the consumer rehydrates; that remains unbuilt.
+
+Because partitions start at guessed record boundaries, a partition whose guess was wrong is read again
+and the callback sees those records twice. For an accumulator this is invisible — the discarded instance
+is thrown away — so the repeat is documented as a caller obligation rather than designed out. Removing
+it needs exact boundaries, which needs a quote-parity prefix pass over the bytes before any parsing
+starts; that pass is a barrier and would cost roughly half the dop-16 runtime unless pipelined, which is
+more machinery than the hazard currently warrants.
+
 ## Shared plumbing
 
 Reader internals that would otherwise be duplicated four times over live in one place:
