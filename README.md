@@ -924,15 +924,19 @@ For raw CSV reads, ExcelReader is ~2.2x faster than Sep while allocating ~11x le
 
 `Excel.ParseCsvParallelAsync<T>` and `Excel.AggregateCsvParallelAsync` on generated files (8,000,000 rows of three ints for the narrow corpus, 4,300,000 rows of two strings, a date, two decimals and an int for the conversion-heavy one), by `degreeOfParallelism`. The machine has 8 physical / 16 logical cores.
 
-| Dop | Conversion-heavy, typed | Narrow ints, typed | Conversion-heavy, aggregate |
+| Dop | Conversion-heavy, typed | Narrow ints, typed | Conversion-heavy, `ref struct` aggregate |
 |---:|---:|---:|---:|
-| 1 | 1,420.2 ms, 670.98 MB | 547.7 ms, 245.32 MB | 210.34 ms, 846.93 KB |
-| 2 | 901.7 ms, 691.02 MB | 425.2 ms, 260.19 MB | 115.02 ms, 1.39 MB |
-| 4 | 516.2 ms, 691.10 MB | 232.8 ms, 260.17 MB | 61.99 ms, 1.61 MB |
-| 8 | 387.6 ms, 691.01 MB | 202.3 ms, 260.16 MB | 46.99 ms, 1.73 MB |
-| 16 | 359.2 ms, 691.29 MB | 209.7 ms, 260.65 MB | 35.46 ms, 1.78 MB |
+| 1 | 1,367.9 ms, 670.98 MB | 569.5 ms, 245.32 MB | 1,213.7 ms, 847.45 KB |
+| 2 | 905.9 ms, 691.03 MB | 422.4 ms, 260.16 MB | 647.2 ms, 1.23 MB |
+| 4 | 493.2 ms, 691.10 MB | 243.1 ms, 260.18 MB | 337.3 ms, 1.30 MB |
+| 8 | 400.5 ms, 691.00 MB | 207.9 ms, 260.14 MB | 241.0 ms, 1.47 MB |
+| 16 | 353.3 ms, 691.31 MB | 209.9 ms, 260.63 MB | 177.9 ms, 1.55 MB |
 
-The typed path scales ~4.0x on the conversion-heavy corpus and ~2.6x on narrow ints at dop 16, and stops improving past dop 8. Its ~690 MB is one materialized row object per record. The aggregate path folds rows into a per-worker accumulator without materializing them, so it allocates under 2 MB and scales ~5.9x at dop 16 (35.46 ms against 359.2 ms for typed at the same dop, ~10x).
+The typed path scales ~3.9x on the conversion-heavy corpus and ~2.7x on narrow ints, both stopping at dop 8. Its ~690 MB is one materialized row object per record, and at dop 16 that costs 43,000 Gen0 plus 40,000 Gen1 collections.
+
+The aggregate column folds each record into a per-partition accumulator through a `ref struct` model, so text columns stay as `ReadOnlySpan<byte>` and no row object is ever materialized. It scales better than the typed path — ~6.8x at dop 16 — because it is not fighting the allocator: at dop 16 it is ~2.0x faster than typed while allocating ~446x less (1.55 MB against 691.31 MB), with **zero** garbage collections at every degree. The remaining allocation is per-partition bookkeeping, not per-row.
+
+Type conversion is the floor under both. A single-threaded pass that allocates nothing still costs 1,213.7 ms, so parsing bytes into `DateTime`/`decimal`/`int` — not allocation and not I/O — is what the parallelism is actually buying down.
 
 Against [Sep](https://github.com/nietras/Sep)'s own `ParallelEnumerate` (all cores; 8,000,000 narrow rows, 3,000,000 conversion-heavy rows):
 
