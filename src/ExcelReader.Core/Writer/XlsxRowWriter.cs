@@ -1,3 +1,4 @@
+using System.Text;
 using ExcelReader.Core.Writer.Internal;
 using ExcelReader.Core.Reader;
 
@@ -61,6 +62,20 @@ namespace ExcelReader.Core.Writer
                 return;
             }
             CellFormatter.WriteString(_row, value, _columnIndex, _rowNumber, ConsumeCellReference(), EffectiveStyle());
+            _columnIndex++;
+        }
+
+        /// <inheritdoc/>
+        /// <exception cref="ObjectDisposedException">The row has already been disposed.</exception>
+        public void WriteUtf8(ReadOnlySpan<byte> utf8)
+        {
+            if (_owner.UseSharedStrings || !CellFormatter.IsPlainUtf8Text(utf8))
+            {
+                Write(Encoding.UTF8.GetString(utf8));
+                return;
+            }
+            ThrowIfDisposed();
+            CellFormatter.WritePlainUtf8String(_row, utf8, _columnIndex, _rowNumber, ConsumeCellReference(), EffectiveStyle());
             _columnIndex++;
         }
 

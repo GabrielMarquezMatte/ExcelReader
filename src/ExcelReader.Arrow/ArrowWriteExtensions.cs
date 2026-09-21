@@ -189,7 +189,12 @@ namespace ExcelReader.Arrow
             {
                 case ArrowTypeId.String:
                     var strings = (StringArray)array;
-                    row.Write(strings.IsNull(index) ? null : strings.GetString(index, Encoding.UTF8));
+                    if (strings.IsNull(index))
+                    {
+                        row.Write((string?)null);
+                        return;
+                    }
+                    row.WriteUtf8(strings.GetBytes(index));
                     return;
                 case ArrowTypeId.Int64:
                     row.Write(((Int64Array)array).GetValue(index));

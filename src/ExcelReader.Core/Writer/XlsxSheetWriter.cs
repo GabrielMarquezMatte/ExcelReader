@@ -1,3 +1,4 @@
+using System.Buffers.Text;
 using System.Globalization;
 using System.IO.Compression;
 using System.Text;
@@ -297,7 +298,10 @@ namespace ExcelReader.Core.Writer
             }
             else
             {
-                _rowBuffer.WriteUtf8($"<row s=\"{styleId}\" customFormat=\"1\">");
+                _rowBuffer.Write("<row s=\""u8);
+                Utf8Formatter.TryFormat(styleId, _rowBuffer.GetSpan(11), out int written);
+                _rowBuffer.Advance(written);
+                _rowBuffer.Write("\" customFormat=\"1\">"u8);
             }
             return _rowNumber;
         }
