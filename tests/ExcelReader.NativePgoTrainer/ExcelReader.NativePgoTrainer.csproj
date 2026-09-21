@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>false</IsPackable>
+    <!-- RS0016/RS0026/RS0037: public-API tracking is for ExcelReader.Core's shipped NuGet surface.
+         This app is never packaged, so there's no PublicAPI.txt here by design. -->
+    <NoWarn>$(NoWarn);RS0016;RS0026;RS0037</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\ExcelReader.Native\ExcelReader.Native.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="..\ExcelReader.Benchmarks\Data\65K_Records_Data.xlsx;..\ExcelReader.Benchmarks\Data\65K_Records_Data.xlsb;..\ExcelReader.Benchmarks\Data\65K_Records_Data.csv"
+             LinkBase="data" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+</Project>

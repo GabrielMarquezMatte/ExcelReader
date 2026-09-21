@@ -774,6 +774,55 @@ Re-running the binding suites against a library published from this tree: the C+
 went from 110.4 to 98.0 ms and Rust's from 123.5 to 108.5 ms, and the C++ `write_sheet` from
 136.6 to 100.1–105.3 ms, the last mostly from `TryFormatDouble`.
 
+#### Second pass: XLSB, the ABI layer, and a static profile
+
+Same harness, now over all three formats (14 typed columns, 65K rows), min ms:
+
+| | Core, JIT | ABI, JIT | ABI, NativeAOT |
+|---|---|---|---|
+| XLSB | 29.2 | 45.3 | 52.2 |
+| CSV | 12.2 | 26.9 | 33.7 |
+
+**XLSB record reader.** `Biff12RecordReader.TryReadRecord` runs once per cell and was refused inline
+without PGO. Forcing it inline moved the Core XLSB read from 33.3 to 27.1 ms without PGO, faster than
+the PGO'd JIT's 28.8. No change with PGO.
+
+**The ABI layer** costs more than the whole CSV read. A CPU-sampled trace (`dotnet-trace`,
+`dotnet-sampled-thread-time`) and a counter around `BuildTable` split its ~15 ms on CSV into 0.6 ms
+copying the caller's buffer in `xl_open_memory`, 2.5 ms copying the column chunks into the native
+table, and ~12 ms of per-cell work. By column type, ABI minus Core: string ~33 ns/cell, date ~24,
+double ~24, int ~8. Three changes, worth 2.5–3 ms with PGO and ~1 ms without:
+
+- string cells append their UTF-8 bytes directly instead of `TryFormat` into a scratch buffer and
+  then copying;
+- date/time/bool columns call the `ColumnParserFactory` readers directly instead of through the
+  `ExcelCellReaders` delegate fields;
+- the validity bitmap is not touched until a column's first null, which backfills every earlier row;
+  a column with no nulls ships no bitmap, so writing a bit per cell was wasted.
+
+Building the table in native memory directly would remove the 2.5 ms copy but needs realloc growth
+(which copies too) and a change to what `xl_free_table` frees. Not done.
+
+**Static PGO profile.** `tests/ExcelReader.NativePgoTrainer` runs the typed parse over the three
+fixtures; a trace of it becomes `src/ExcelReader.Native/pgo/excelreader.mibc`, which ILC now
+consumes on every publish. ABI through NativeAOT, min ms:
+
+| | no profile | full profile | profile without XLSB methods | JIT with PGO |
+|---|---|---|---|---|
+| XLSX | 95.8 | 85.5 | **84.9** (1.13x) | ~83 |
+| XLSB | 42.9 | 44.1 | **38.4** (1.12x) | ~41.4 |
+| CSV | 32.1 | 25.8 | **25.6** (1.26x) | ~24.4 |
+
+The profile's XLSB counts made the XLSB parse slower; dropping those methods from it made XLSB faster
+than both the unprofiled build and the JIT. The shipped profile excludes them.
+
+**Typed mapping, not changed.** A generated `[ExcelSerializable]` map parses the 50K-row CSV in
+5.44 ms against 3.99 ms for a hand-written loop doing the same conversions. The generator's fused
+lambdas still invoke `ExcelCellReaders.String`/`DateTimeAuto`, which are delegate fields, so string and
+date cells pay two indirect calls. Emitting direct calls through a hidden public helper class
+measured ~3%, inside noise. Not worth new public surface. Most of the 1.36x gap is the per-column
+binding loop, which only a generator emitting whole-row parse code would remove.
+
 ## Known open items
 
 - The 8.9 ms of sheet parse above the inflate floor in the string-heavy corpus has not been
