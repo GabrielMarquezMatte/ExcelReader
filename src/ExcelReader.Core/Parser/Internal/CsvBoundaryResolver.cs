@@ -11,6 +11,16 @@ namespace ExcelReader.Core.Parser.Internal
         private const byte Cr = (byte)'\r';
         private const byte Lf = (byte)'\n';
 
+        internal static bool StartsRecord(ReadOnlySpan<byte> pair)
+        {
+            if (pair[0] == Lf)
+            {
+                return true;
+            }
+            // CR LF is one terminator, so an offset between the two splits it instead of starting a record.
+            return pair[0] == Cr && pair[1] != Lf;
+        }
+
         internal static int FindRecordStart(ReadOnlySpan<byte> window, byte quote, CsvQuoteParity parity)
         {
             bool inside = parity == CsvQuoteParity.Inside;
