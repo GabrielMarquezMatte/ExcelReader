@@ -238,7 +238,7 @@ namespace ExcelReader.Core.Parser.Internal
 
         internal static bool ReadTimeOnly(in Cell cell, bool isDate1904, IFormatProvider provider, out TimeOnly value)
         {
-            if (!cell.TryGetDouble(out double serial))
+            if (!cell.TryGetDouble(out double serial) || !double.IsFinite(serial))
             {
                 value = default;
                 return false;
