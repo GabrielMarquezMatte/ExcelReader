@@ -18,7 +18,7 @@ namespace ExcelReader.Tests
             byte[] bytes = await BuildXlsxAsync(prefetchWrite: true, ct);
 
             using MemoryStream ms = new(bytes, writable: false);
-            using XlsxReader reader = Excel.From(ms);
+            using XlsxReader reader = Excel.FromXlsx(ms);
             using XlsxReader.Enumerator e = reader.GetEnumerator();
             int rowIndex = 0;
             while (e.MoveNext())
@@ -72,7 +72,7 @@ namespace ExcelReader.Tests
             }
 
             ms.Position = 0;
-            using XlsxReader reader = Excel.From(ms);
+            using XlsxReader reader = Excel.FromXlsx(ms);
             using XlsxReader.Enumerator e = reader.GetEnumerator();
             int rowIndex = 0;
             while (e.MoveNext())

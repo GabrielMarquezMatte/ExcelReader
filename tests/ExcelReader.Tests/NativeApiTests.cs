@@ -3073,7 +3073,7 @@ namespace ExcelReader.Tests
         private static void AssertTemporalColumnsCarryANumberFormat(string path)
         {
             using (FileStream file = File.OpenRead(path))
-            using (XlsxReader reader = Excel.From(file))
+            using (XlsxReader reader = Excel.FromXlsx(file))
             using (XlsxReader.Enumerator rows = reader.GetEnumerator())
             {
                 Assert.True(rows.MoveNext());

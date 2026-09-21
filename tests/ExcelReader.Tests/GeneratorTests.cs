@@ -397,7 +397,7 @@ namespace ExcelReader.Tests
                         }
 
                         writeStream.Position = 0;
-                        await using XlsxReader reader = await Excel.FromAsync(writeStream);
+                        await using XlsxReader reader = await Excel.FromXlsxAsync(writeStream);
                         var results = new List<Model>();
                         foreach (Model m in new ExcelMappedParser<Model>().Parse(reader))
                         {

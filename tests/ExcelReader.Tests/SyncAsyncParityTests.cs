@@ -11,9 +11,9 @@ namespace ExcelReader.Tests
         {
             get
             {
-                yield return [new ParityFixture("xlsx mixed rows", BuildMixedXlsxAsync, stream => Excel.From(stream), OpenXlsxAsync)];
-                yield return [new ParityFixture("xlsx refill boundary", BuildBoundaryXlsxAsync, stream => Excel.From(stream), OpenXlsxAsync)];
-                yield return [new ParityFixture("xlsx many rows (mid-stream refills)", BuildManyRowsXlsxAsync, stream => Excel.From(stream), OpenXlsxAsync)];
+                yield return [new ParityFixture("xlsx mixed rows", BuildMixedXlsxAsync, stream => Excel.FromXlsx(stream), OpenXlsxAsync)];
+                yield return [new ParityFixture("xlsx refill boundary", BuildBoundaryXlsxAsync, stream => Excel.FromXlsx(stream), OpenXlsxAsync)];
+                yield return [new ParityFixture("xlsx many rows (mid-stream refills)", BuildManyRowsXlsxAsync, stream => Excel.FromXlsx(stream), OpenXlsxAsync)];
                 yield return [new ParityFixture("xls mixed rows", BuildMixedXlsAsync, stream => Excel.FromXls(stream), OpenXlsAsync)];
                 yield return [new ParityFixture("xlsb mixed rows", BuildMixedXlsbAsync, stream => Excel.FromXlsb(stream), OpenXlsbAsync)];
                 yield return [new ParityFixture("csv mixed rows", BuildCsvAsync, stream => Excel.FromCsv(stream), OpenCsvAsync)];
@@ -250,7 +250,7 @@ namespace ExcelReader.Tests
 
         private static async ValueTask<IExcelRowReader> OpenXlsxAsync(Stream stream, CancellationToken ct)
         {
-            return await Excel.FromAsync(stream, ct: ct);
+            return await Excel.FromXlsxAsync(stream, ct: ct);
         }
 
         private static async ValueTask<IExcelRowReader> OpenXlsAsync(Stream stream, CancellationToken ct)

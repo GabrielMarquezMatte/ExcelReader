@@ -150,7 +150,7 @@ namespace ExcelReader.Tests
         public async Task ReaderHandlesProducerShapedXlsxFixtures(ProducerFixture fixture)
         {
             await using MemoryStream workbook = BuildProducerFixture(fixture);
-            await using XlsxReader reader = await Excel.FromAsync(
+            await using XlsxReader reader = await Excel.FromXlsxAsync(
                 workbook,
                 ct: TestContext.Current.CancellationToken);
             await using XlsxReader.Enumerator rows = await reader.GetAsyncEnumeratorAsync(TestContext.Current.CancellationToken);
