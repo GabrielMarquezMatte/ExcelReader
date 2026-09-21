@@ -290,8 +290,7 @@ namespace ExcelReader.Core.Parser.Internal
         private static bool TryParseDateTimeText(in Cell cell, IFormatProvider provider, out DateTime value)
         {
             ReadOnlySpan<byte> utf8 = cell.Value;
-            if (utf8.Length == 27 && utf8[10] == (byte)'T'
-                && Utf8Parser.TryParse(utf8, out value, out int consumed, 'O') && consumed == 27)
+            if (FastDate.TryParse(utf8, out value))
             {
                 return true;
             }
@@ -310,6 +309,11 @@ namespace ExcelReader.Core.Parser.Internal
         [SkipLocalsInit]
         private static bool TryParseDateOnlyText(in Cell cell, IFormatProvider provider, out DateOnly value)
         {
+            if (cell.Value.Length == 10 && FastDate.TryParse(cell.Value, out DateTime date))
+            {
+                value = DateOnly.FromDateTime(date);
+                return true;
+            }
             Span<char> stack = stackalloc char[Utf8Text.StackChars];
             ReadOnlySpan<char> chars = Utf8Text.Decode(cell.Value, stack, out char[]? rented);
             try

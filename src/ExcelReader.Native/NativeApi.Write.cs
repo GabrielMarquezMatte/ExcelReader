@@ -296,11 +296,10 @@ namespace ExcelReader.Native
             switch (column.Type)
             {
                 case NativeColumnType.String:
-                    // ponytail: one managed string per cell — IRowWriter has no UTF-8/span overload.
                     int* offsets = (int*)column.Values;
                     int start = offsets[rowIndex];
                     int length = offsets[rowIndex + 1] - start;
-                    row.Write(length == 0 ? string.Empty : Encoding.UTF8.GetString((byte*)column.Data + start, length));
+                    row.WriteUtf8(new ReadOnlySpan<byte>((byte*)column.Data + start, length));
                     return;
                 case NativeColumnType.Int64:
                     row.Write(((long*)column.Values)[rowIndex]);

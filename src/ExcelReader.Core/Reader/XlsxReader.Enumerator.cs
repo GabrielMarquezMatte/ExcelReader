@@ -674,6 +674,10 @@ namespace ExcelReader.Core.Reader
                     value = default;
                     return false;
                 }
+                if (FastDate.TryParse(utf8, out value))
+                {
+                    return value.Year >= 100 || RejectDate(out value);
+                }
                 Span<char> chars = stackalloc char[40];
                 for (int i = 0; i < utf8.Length; i++)
                 {
@@ -684,12 +688,13 @@ namespace ExcelReader.Core.Reader
                 {
                     return false;
                 }
-                if (value.Year < 100)
-                {
-                    value = default;
-                    return false;
-                }
-                return true;
+                return value.Year >= 100 || RejectDate(out value);
+            }
+
+            private static bool RejectDate(out DateTime value)
+            {
+                value = default;
+                return false;
             }
 
             private static ReadOnlySpan<byte> ElementText(ReadOnlySpan<byte> inner, ReadOnlySpan<byte> openTag, ReadOnlySpan<byte> closeTag)
