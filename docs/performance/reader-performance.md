@@ -702,6 +702,78 @@ three times, min of 25):
 BenchmarkDotNet afterwards: XLSX writing 12.261 ms against SpreadCheetah's 15.548 ms, CSV writing
 4.624 ms against Sep's 7.075 ms. XLSB writes doubles in binary and is unaffected.
 
+Not extended to serials with a time of day: `days + seconds/86400` has a factor of 3³ in the
+denominator, so its shortest form is ~17 digits and no scale reaches it. Only a full shortest-float
+algorithm (Ryu-class) would, for ~85 ns per such cell. Not built.
+
+### Write-side decomposition of XLSB and XLS — nothing to take
+
+Same per-column-type method as above, 50k rows:
+
+| | XLSB, `Fastest` | XLSB, no compression | XLS |
+|---|---|---|---|
+| all four columns | 8.37 ms | 3.98 ms | 5.19 ms |
+| empty rows | 1.79 ms | 0.94 ms | 0.53 ms |
+
+XLSB is deflate-bound: more than half its time is compression, and serialization costs 10–17 ns per
+cell. `prefetchWrite` already moves that deflate off the caller's thread. XLS costs 5–7 ns per cell.
+
+**RK encoding for non-integral doubles — measured, reverted.** The XLSB writer emits `BrtCellRk` only
+for integers. Adding the other two RK forms (truncated IEEE, integer/100), each accepted only when
+`Biff12.Rk` decodes it back to the same bits, turned 1.5 and 45293.25 into 4-byte cells: the raw sheet
+shrank 8% (3.75 → 3.45 MB) but the compressed one 1.3% (706 → 697 KB), and write time moved ~1%,
+inside noise. Deflate was already squeezing those 8-byte doubles. Not worth the diff or the Excel
+compatibility check an XLSB writer change needs.
+
+### The native bindings: NativeAOT loses dynamic PGO
+
+The C++ and Rust bindings read `65K_Records_Data.xlsx` in ~110 ms, against ~65 ms for the .NET
+reader. One harness ran the same `xl_open_memory` + `xl_parse_typed` exports (14 typed columns) three
+ways, plus the equivalent Core-only read:
+
+| | ms |
+|---|---|
+| Core read, JIT | 70.9 |
+| ABI, JIT (`delegate* unmanaged` over the managed assembly) | 84.1 |
+| ABI, NativeAOT (P/Invoke into the published library) | 109.3 |
+| ABI, NativeAOT, `IlcInstructionSet=x86-64-v3` | 107.3 |
+| ABI, NativeAOT, `IlcPgoOptimize` (framework profile) | 109.4 |
+| ABI, JIT, `DOTNET_TieredPGO=0` | 106.6 |
+
+The C++ binding's published 110.4 ms matches the AOT row, so its `std::string` conversion is
+negligible. The ABI layer costs ~13 ms. The rest, ~25 ms, is **dynamic PGO**: with it off, the JIT
+lands exactly on NativeAOT. The instruction set is not the cause.
+
+Where PGO acts, `DOTNET_TieredPGO=0` against the default, JIT:
+
+| | PGO | no PGO |
+|---|---|---|
+| inflate only | 23.1 ms | 23.2 ms |
+| rows only | 61.8 ms | 79.7 ms |
+| + 14 cell spans | +1.3 ms | +9.5 ms |
+
+The XLSX scan. `MethodJitInliningFailed` events (runtime keyword `0x1000`, read with an in-process
+`EventListener`) showed what PGO inlines into the per-cell path that static heuristics refuse, as
+"too many il bytes" or "unprofitable": `ReadCellOpenTagSpan`, `ScanCellAttributes`, `IsXmlSpace` (a
+call per attribute byte), `XlsxXml.ColumnIndex`, `IsCellStart`, `FastDouble.TryParse` and
+`CellAccumulator.Add`. `[MethodImpl(AggressiveInlining)]` on those seven:
+
+| | before | after |
+|---|---|---|
+| rows only, JIT without PGO | 79.6 ms | 66.3 ms |
+| ABI, JIT without PGO | 107.4 ms | 94.0 ms |
+| **ABI, NativeAOT** | **109.9 ms** | **97.2 ms** (1.13x) |
+| rows only, JIT with PGO | 60.0–62.2 ms | 60.8–62.8 ms (alternated three times; noise) |
+
+Remaining gap to the PGO'd JIT is ~13 ms. Forcing `Row`'s column lookup inline changed nothing, so
+what is left in the cell accessor is block layout and register allocation, which attributes do not
+reach. A trace-derived `.mibc` fed to ILC (`MibcFile` items become `--mibc`) is the tool for that; it
+needs `dotnet-pgo`, which is not on nuget.org.
+
+Re-running the binding suites against a library published from this tree: the C++ full XLSX read
+went from 110.4 to 98.0 ms and Rust's from 123.5 to 108.5 ms, and the C++ `write_sheet` from
+136.6 to 100.1–105.3 ms, the last mostly from `TryFormatDouble`.
+
 ## Known open items
 
 - The 8.9 ms of sheet parse above the inflate floor in the string-heavy corpus has not been

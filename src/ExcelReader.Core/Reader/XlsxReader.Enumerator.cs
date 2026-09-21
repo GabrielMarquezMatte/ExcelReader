@@ -418,6 +418,7 @@ namespace ExcelReader.Core.Reader
                 return span.StartsWith(token) && (span.Length == token.Length || IsBoundary(span[token.Length]));
             }
 
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
             private bool IsCellStart(byte[] buf, int len, int p)
             {
                 int avail = len - p;
@@ -435,6 +436,7 @@ namespace ExcelReader.Core.Reader
 
             private readonly record struct CellHeader(int Col, int Style, Kind Kind, bool SelfClose);
 
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
             private CellHeader ReadCellOpenTagSpan(byte[] buf, ref int p, int gt)
             {
                 var open = buf.AsSpan(p, gt - p + 1);
@@ -489,6 +491,7 @@ namespace ExcelReader.Core.Reader
                 return true;
             }
 
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
             private static void ScanCellAttributes(
                 ReadOnlySpan<byte> open,
                 out ReadOnlySpan<byte> rRef,
@@ -541,6 +544,7 @@ namespace ExcelReader.Core.Reader
                 }
             }
 
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
             private static bool IsXmlSpace(byte b)
             {
                 return b is (byte)' ' or (byte)'\t' or (byte)'\r' or (byte)'\n';
