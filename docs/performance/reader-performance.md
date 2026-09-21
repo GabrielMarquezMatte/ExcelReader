@@ -820,8 +820,24 @@ than both the unprofiled build and the JIT. The shipped profile excludes them.
 5.44 ms against 3.99 ms for a hand-written loop doing the same conversions. The generator's fused
 lambdas still invoke `ExcelCellReaders.String`/`DateTimeAuto`, which are delegate fields, so string and
 date cells pay two indirect calls. Emitting direct calls through a hidden public helper class
-measured ~3%, inside noise. Not worth new public surface. Most of the 1.36x gap is the per-column
-binding loop, which only a generator emitting whole-row parse code would remove.
+measured ~3%, inside noise. Not worth new public surface.
+
+A prototype of the bigger change, the generator emitting one static whole-row parse over
+header-resolved column indices, showed the rest of the gap is not the mapping either. Stepping from the
+hand-written loop to the shipped path, min ms of one clean run:
+
+| step | ms | delta |
+|---|---|---|
+| hand-written loop | 4.05 | |
+| + empty-cell checks and a column-index indirection | 4.35 | +0.30 |
+| + the whole-row parse as a separate static method | 4.49 | +0.13 |
+| + handing each model to a per-row callback | 5.04 | +0.55 |
+| + handing it out through an `IEnumerable<T>` iterator | 5.40 | +0.36 |
+| shipped generated map | 5.45 | +0.05 |
+
+The per-column delegates and binding loop cost ~0.05 ms over a whole-row parse. The 1.36x is the
+API's shape, one model per row delivered to the caller, plus the empty-cell checks any correct mapper
+needs. A generator rewrite would recover ~1–5%. Not built.
 
 ## Known open items
 

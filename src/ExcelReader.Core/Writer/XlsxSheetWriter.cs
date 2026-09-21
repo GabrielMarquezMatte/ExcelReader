@@ -46,6 +46,11 @@ namespace ExcelReader.Core.Writer
             return _owner.GetSharedStringIndex(value);
         }
 
+        internal int GetSharedStringIndex(ReadOnlySpan<char> value)
+        {
+            return _owner.GetSharedStringIndex(value);
+        }
+
         internal int GetColumnStyle(int columnIndex)
         {
             return _columnStyles is not null && _columnStyles.TryGetValue(columnIndex, out int styleId) ? styleId : 0;

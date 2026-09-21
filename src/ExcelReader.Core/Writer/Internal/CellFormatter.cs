@@ -53,7 +53,7 @@ namespace ExcelReader.Core.Writer.Internal
             WriteCellOpen(xml, columnIndex, rowNumber, includeReference, styleId, default, selfClose: true);
         }
 
-        internal static void WriteString(BiffBuffer xml, string value, int columnIndex, int rowNumber, bool includeReference, int styleId = 0)
+        internal static void WriteString(BiffBuffer xml, ReadOnlySpan<char> value, int columnIndex, int rowNumber, bool includeReference, int styleId = 0)
         {
             WriteCellOpen(xml, columnIndex, rowNumber, includeReference, styleId, " t=\"inlineStr\""u8, selfClose: false);
             xml.Write(HasEdgeWhitespace(value) ? "<is><t xml:space=\"preserve\">"u8 : "<is><t>"u8);
@@ -90,7 +90,7 @@ namespace ExcelReader.Core.Writer.Internal
             return b is (byte)' ' or (byte)'\t' or (byte)'\n' or (byte)'\r' or >= 0x80;
         }
 
-        private static bool HasEdgeWhitespace(string value)
+        private static bool HasEdgeWhitespace(ReadOnlySpan<char> value)
         {
             return value.Length != 0 && (char.IsWhiteSpace(value[0]) || char.IsWhiteSpace(value[^1]));
         }
