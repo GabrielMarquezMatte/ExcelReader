@@ -481,10 +481,18 @@ namespace ExcelReader.Core.Reader
         /// several at once; the caller owns any synchronization. Records arrive in no particular order.
         /// </para>
         /// <para>
-        /// <paramref name="body"/> may be invoked more than once for the same record. A partition whose
-        /// start was guessed inside a quoted field spanning lines is read again from the confirmed offset,
-        /// so records near a partition boundary can be delivered twice. Make <paramref name="body"/>
-        /// idempotent, or tolerant of repeats. This cannot happen on a source with no quoted fields.
+        /// <paramref name="body"/> may be invoked more than once for the same record. A partition whose start
+        /// was guessed wrongly is read again from the confirmed offset, and the discarded speculative pass may
+        /// already have delivered a whole partition's worth of records — 1 MiB to 64 MiB of them, not just a
+        /// few near the seam. Those records may also be misparsed: a wrong start shifts every field boundary,
+        /// so a quoted field holding a delimiter can split into values that appear nowhere in the source. An
+        /// exception <paramref name="body"/> throws during a discarded pass is discarded with it.
+        /// </para>
+        /// <para>
+        /// A start is only guessed wrongly when it falls inside a quoted field, so a source in which the quote
+        /// character never appears delivers every record exactly once. For that guarantee on any source, use
+        /// <see cref="AggregateCsvParallelAsync{TAccumulator, TRecord}(string, CsvParallelOptions?, CancellationToken)"/>,
+        /// where the discarded partition's accumulator is thrown away.
         /// </para>
         /// <para>
         /// A <see cref="ReadOnlySpan{T}"/> column points into a pooled buffer the worker reuses once
