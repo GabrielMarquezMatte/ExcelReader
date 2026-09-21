@@ -373,32 +373,50 @@ namespace ExcelReader.Core.Crypto
             {
                 return [];
             }
-            using MemoryStream ms = new();
+            byte[] result = new byte[ChainByteLength(fat, sectorSize, startSector, byteLimit)];
             int sector = startSector;
             int written = 0;
-            byte[] sectorBuf = ArrayPool<byte>.Shared.Rent(sectorSize);
+            while (written < result.Length)
+            {
+                int runStart = sector;
+                int runLength = sectorSize;
+                int next = NextSector(fat, sector);
+                while (next == sector + 1 && written + runLength < result.Length)
+                {
+                    sector = next;
+                    runLength += sectorSize;
+                    next = NextSector(fat, sector);
+                }
+                int take = Math.Min(runLength, result.Length - written);
+                ReadAt(source, SectorOffset(runStart, sectorSize), result.AsSpan(written, take));
+                written += take;
+                sector = next;
+            }
+            return result;
+        }
+
+        private static int ChainByteLength(ReadOnlySpan<int> fat, int sectorSize, int startSector, int byteLimit)
+        {
             bool[] visited = ArrayPool<bool>.Shared.Rent(Math.Max(1, fat.Length));
             Array.Clear(visited, 0, fat.Length);
             try
             {
-                while (sector is >= 0 and not EndOfChain && (byteLimit < 0 || written < byteLimit))
+                int sector = startSector;
+                int length = 0;
+                while (sector is >= 0 and not EndOfChain && (byteLimit < 0 || length < byteLimit))
                 {
                     if ((uint)sector >= (uint)fat.Length || visited[sector])
                     {
                         throw new InvalidDataException("OLE FAT chain contains a cycle.");
                     }
                     visited[sector] = true;
-                    int take = byteLimit < 0 ? sectorSize : Math.Min(sectorSize, byteLimit - written);
-                    ReadAt(source, SectorOffset(sector, sectorSize), sectorBuf.AsSpan(0, take));
-                    ms.Write(sectorBuf, 0, take);
-                    written += take;
+                    length = checked(length + (byteLimit < 0 ? sectorSize : Math.Min(sectorSize, byteLimit - length)));
                     sector = NextSector(fat, sector);
                 }
-                return ms.ToArray();
+                return length;
             }
             finally
             {
-                ArrayPool<byte>.Shared.Return(sectorBuf);
                 ArrayPool<bool>.Shared.Return(visited);
             }
         }
@@ -426,6 +444,7 @@ namespace ExcelReader.Core.Crypto
                 throw new InvalidDataException("Invalid OLE mini stream size.");
             }
             byte[] result = new byte[size];
+            bool[] visited = new bool[miniFat.Length];
             int sector = startSector;
             int written = 0;
             while (sector is >= 0 and not EndOfChain && written < result.Length)
@@ -438,10 +457,11 @@ namespace ExcelReader.Core.Crypto
                 }
                 miniStream.Slice((int)offset, take).CopyTo(result.AsSpan(written));
                 written += take;
-                if ((uint)sector >= (uint)miniFat.Length)
+                if ((uint)sector >= (uint)miniFat.Length || visited[sector])
                 {
                     throw new InvalidDataException("Invalid OLE mini FAT chain.");
                 }
+                visited[sector] = true;
                 sector = miniFat[sector];
             }
             return result;

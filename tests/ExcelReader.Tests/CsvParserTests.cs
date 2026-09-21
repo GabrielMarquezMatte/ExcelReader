@@ -224,6 +224,53 @@ namespace ExcelReader.Tests
             Assert.Equal("not-a-number", ex.RawValue);
         }
 
+        private sealed class ShiftRow
+        {
+            public TimeOnly Start { get; set; }
+        }
+
+        private sealed class StampRow
+        {
+            public DateTime At { get; set; }
+            public DateOnly Day { get; set; }
+        }
+
+        [Theory]
+        [InlineData("2024-01-15")]
+        [InlineData("2024-01-15 13:30:05")]
+        [InlineData("2024-01-15T13:30:05")]
+        [InlineData("2024-01-15T13:30:05.1234567")]
+        [InlineData("2024-01-15 13:30:05.1234567")]
+        [InlineData("2024-01-15T13:30:05.5")]
+        [InlineData("2024-01-15T13:30:05Z")]
+        [InlineData("2024-01-15T13:30:05+03:00")]
+        [InlineData("01/15/2024")]
+        public void TextDatesBindExactlyAsTheCultureParserWould(string text)
+        {
+            using var ms = Csv($"At,Day\n{text},{text[..Math.Min(10, text.Length)]}\n");
+            using var reader = Excel.FromCsv(ms);
+
+            StampRow row = Assert.Single(new ExcelParser<StampRow>().Parse(reader).ToList());
+
+            Assert.Equal(DateTime.Parse(text, CultureInfo.InvariantCulture, DateTimeStyles.None), row.At);
+            Assert.Equal(DateOnly.Parse(text[..Math.Min(10, text.Length)], CultureInfo.InvariantCulture, DateTimeStyles.None), row.Day);
+        }
+
+        [Theory]
+        [InlineData("NaN")]
+        [InlineData("Infinity")]
+        [InlineData("-Infinity")]
+        public void ANonFiniteTimeOnlyCellFailsToParseInsteadOfBecomingMidnight(string text)
+        {
+            using var ms = Csv($"Start\n{text}\n");
+            using var reader = Excel.FromCsv(ms);
+            var config = new ExcelParserConfig { ThrowOnParseFailure = true };
+
+            ExcelParseException ex = Assert.Throws<ExcelParseException>(
+                () => new ExcelParser<ShiftRow>(config).Parse(reader).ToList());
+            Assert.Equal("Start", ex.ColumnName);
+        }
+
         [Fact]
         public void TerminalBlankLineDoesNotYieldPhantomModelOrRequiredFailure()
         {

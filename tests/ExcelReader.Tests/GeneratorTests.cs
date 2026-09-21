@@ -127,6 +127,38 @@ namespace ExcelReader.Tests
         }
 
         [Fact]
+        public void KeywordNamedPropertiesCompile()
+        {
+            const string source = """
+                using ExcelReader.Core.Parser;
+
+                namespace GeneratorTests.Keywords
+                {
+                    [ExcelSerializable]
+                    public partial class Model
+                    {
+                        public string @class { get; set; } = "";
+                        public int @event { get; set; }
+                        public System.DateTime? @default { get; set; }
+                    }
+
+                    public partial class @struct
+                    {
+                        [ExcelSerializable]
+                        public partial class @object
+                        {
+                            public string Name { get; set; } = "";
+                        }
+                    }
+                }
+                """;
+            (ImmutableCompilationResult result, ImmutableArray<Diagnostic> diagnostics) = RunGenerator(source);
+            Assert.Empty(diagnostics);
+            EmitResult emit = result.Emit();
+            Assert.True(emit.Success, string.Join(Environment.NewLine, emit.Diagnostics.Select(static d => d.ToString())));
+        }
+
+        [Fact]
         public void UnsupportedPropertyTypeIsSkippedWithoutDiagnostics()
         {
             const string source = """
@@ -397,7 +429,7 @@ namespace ExcelReader.Tests
                         }
 
                         writeStream.Position = 0;
-                        await using XlsxReader reader = await Excel.FromAsync(writeStream);
+                        await using XlsxReader reader = await Excel.FromXlsxAsync(writeStream);
                         var results = new List<Model>();
                         foreach (Model m in new ExcelMappedParser<Model>().Parse(reader))
                         {

@@ -14,7 +14,7 @@ namespace ExcelReader.Tests
             using CancellationTokenSource cts = new();
 
             await using MemoryStream ms = new(bytes, writable: false);
-            await using XlsxReader reader = await Excel.FromAsync(ms, ct: outer);
+            await using XlsxReader reader = await Excel.FromXlsxAsync(ms, ct: outer);
             await using XlsxReader.Enumerator e = await reader.GetAsyncEnumeratorAsync(cts.Token);
 
             for (int i = 0; i < 5; i++)

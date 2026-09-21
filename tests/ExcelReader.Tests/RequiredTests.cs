@@ -54,7 +54,7 @@ namespace ExcelReader.Tests
             await using var ms = await TypedWorkbook.BuildAsync(
                 ["Id", "FullName", "Note"],
                 [1, "Alice", "hi"]);
-            await using var reader = await Excel.FromAsync(ms, ct: TestContext.Current.CancellationToken);
+            await using var reader = await Excel.FromXlsxAsync(ms, ct: TestContext.Current.CancellationToken);
 
             Row row = new ExcelParser<Row>().Parse(reader).Single();
 
@@ -67,7 +67,7 @@ namespace ExcelReader.Tests
         public async Task OptionalColumnMayBeAbsent()
         {
             await using var ms = await TypedWorkbook.BuildAsync(["Id", "FullName"], [2, "Bob"]);
-            await using var reader = await Excel.FromAsync(ms, ct: TestContext.Current.CancellationToken);
+            await using var reader = await Excel.FromXlsxAsync(ms, ct: TestContext.Current.CancellationToken);
 
             Row row = new ExcelParser<Row>().Parse(reader).Single();
 
@@ -80,7 +80,7 @@ namespace ExcelReader.Tests
         public async Task MissingRequiredColumnThrowsListingAll()
         {
             await using var ms = await TypedWorkbook.BuildAsync(["Note"], ["x"]);
-            await using var reader = await Excel.FromAsync(ms, ct: TestContext.Current.CancellationToken);
+            await using var reader = await Excel.FromXlsxAsync(ms, ct: TestContext.Current.CancellationToken);
 
             ExcelParseException ex = Assert.Throws<ExcelParseException>(
                 () => new ExcelParser<Row>().Parse(reader).ToList());
@@ -93,7 +93,7 @@ namespace ExcelReader.Tests
         public async Task RequiredColumnMatchedByAliasSucceeds()
         {
             await using var ms = await TypedWorkbook.BuildAsync(["Id", "FullName"], [3, "Carol"]);
-            await using var reader = await Excel.FromAsync(ms, ct: TestContext.Current.CancellationToken);
+            await using var reader = await Excel.FromXlsxAsync(ms, ct: TestContext.Current.CancellationToken);
 
             Row row = new ExcelParser<Row>().Parse(reader).Single();
 
@@ -105,7 +105,7 @@ namespace ExcelReader.Tests
         {
             await using var ms = await TypedWorkbook.BuildMultiSheetAsync(
                 ("S1", [["Code"], ["A1"], [null]]));
-            await using var reader = await Excel.FromAsync(ms, ct: TestContext.Current.CancellationToken);
+            await using var reader = await Excel.FromXlsxAsync(ms, ct: TestContext.Current.CancellationToken);
 
             var enumerator = new ExcelParser<ValueRow>().Parse(reader).GetEnumerator();
             Assert.True(enumerator.MoveNext());
@@ -120,7 +120,7 @@ namespace ExcelReader.Tests
         public async Task RequiredColumnWithUnparseableValueThrowsAsIfMissing()
         {
             await using var ms = await TypedWorkbook.BuildAsync(["Id", "FullName"], ["oops", "Alice"]);
-            await using var reader = await Excel.FromAsync(ms, ct: TestContext.Current.CancellationToken);
+            await using var reader = await Excel.FromXlsxAsync(ms, ct: TestContext.Current.CancellationToken);
 
             ExcelParseException ex = Assert.Throws<ExcelParseException>(
                 () => new ExcelParser<Row>().Parse(reader).ToList());
@@ -131,7 +131,7 @@ namespace ExcelReader.Tests
         public async Task ThrowOnParseFailureReportsColumnAndRawValueEvenForRequiredColumn()
         {
             await using var ms = await TypedWorkbook.BuildAsync(["Id", "FullName"], ["oops", "Alice"]);
-            await using var reader = await Excel.FromAsync(ms, ct: TestContext.Current.CancellationToken);
+            await using var reader = await Excel.FromXlsxAsync(ms, ct: TestContext.Current.CancellationToken);
             var config = new ExcelParserConfig { ThrowOnParseFailure = true };
 
             ExcelParseException ex = Assert.Throws<ExcelParseException>(
@@ -145,7 +145,7 @@ namespace ExcelReader.Tests
         {
             await using var ms = await TypedWorkbook.BuildMultiSheetAsync(
                 ("S1", [["Note", "Code"], ["n1", "c1"], ["n2"]]));
-            await using var reader = await Excel.FromAsync(ms, ct: TestContext.Current.CancellationToken);
+            await using var reader = await Excel.FromXlsxAsync(ms, ct: TestContext.Current.CancellationToken);
 
             ExcelParseException ex = Assert.Throws<ExcelParseException>(
                 () => new ExcelParser<TwoColRow>().Parse(reader).ToList());
@@ -157,7 +157,7 @@ namespace ExcelReader.Tests
         {
             await using var ms = await TypedWorkbook.BuildMultiSheetAsync(
                 ("S1", [["Code"], ["A1"], [null]]));
-            await using var reader = await Excel.FromAsync(ms, ct: TestContext.Current.CancellationToken);
+            await using var reader = await Excel.FromXlsxAsync(ms, ct: TestContext.Current.CancellationToken);
 
             List<PresenceOnlyRow> rows = [.. new ExcelParser<PresenceOnlyRow>().Parse(reader)];
 
@@ -170,7 +170,7 @@ namespace ExcelReader.Tests
         public async Task RequiredPropertyWithNoParserThrows()
         {
             await using var ms = await TypedWorkbook.BuildAsync(["Thing"], ["v"]);
-            await using var reader = await Excel.FromAsync(ms, ct: TestContext.Current.CancellationToken);
+            await using var reader = await Excel.FromXlsxAsync(ms, ct: TestContext.Current.CancellationToken);
 
             InvalidOperationException ex = Assert.Throws<InvalidOperationException>(
                 () => new ExcelParser<UnsupportedRequiredRow>().Parse(reader).ToList());

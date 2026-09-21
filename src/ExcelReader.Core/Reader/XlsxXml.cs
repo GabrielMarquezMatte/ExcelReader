@@ -34,6 +34,7 @@ namespace ExcelReader.Core.Reader
             return end < 0 ? default : openTag.Slice(start, end);
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static int ColumnIndex(ReadOnlySpan<byte> cellRef)
         {
             if (cellRef.IsEmpty)

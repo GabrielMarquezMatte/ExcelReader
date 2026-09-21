@@ -56,7 +56,7 @@ namespace ExcelReader.Benchmarks
         public long TypedParseFirstUse()
         {
             using var ms = new MemoryStream(_workbook, writable: false);
-            using var reader = Excel.From(ms);
+            using var reader = Excel.FromXlsx(ms);
             long acc = 0;
             foreach (Record rec in new ExcelParser<Record>().Parse(reader))
             {
@@ -80,7 +80,7 @@ namespace ExcelReader.Benchmarks
         public long FluentParseFirstUse()
         {
             using var ms = new MemoryStream(_workbook, writable: false);
-            using var reader = Excel.From(ms);
+            using var reader = Excel.FromXlsx(ms);
             var parser = new ExcelFluentParser<Record>(static builder => builder
                 .Factory(static () => new Record())
                 .Property(["Name"], ExcelCellReaders.String, static (ref r, v) => r.Name = v)
@@ -99,7 +99,7 @@ namespace ExcelReader.Benchmarks
         public long FluentParseWithAttributeFallbackFirstUse()
         {
             using var ms = new MemoryStream(_workbook, writable: false);
-            using var reader = Excel.From(ms);
+            using var reader = Excel.FromXlsx(ms);
             ExcelFluentParser<Record> parser = ExcelFluentParser<Record>.WithAttributeFallback(static builder => builder
                 .Property(["Id"], ExcelCellReaders.Parsable, static (ref Record r, int v) => r.Id = v));
             long acc = 0;

@@ -90,7 +90,7 @@ namespace ExcelReader.Tests
             }
 
             workbook.Position = 0;
-            await using XlsxReader reader = Excel.From(workbook);
+            await using XlsxReader reader = Excel.FromXlsx(workbook);
             using XlsxReader.Enumerator rows = reader.GetEnumerator();
             Assert.True(rows.MoveNext());
             Assert.Equal("repeat", rows.Current[0].GetString());

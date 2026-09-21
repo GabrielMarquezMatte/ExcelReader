@@ -37,6 +37,14 @@ namespace ExcelReader.Core.Writer
         }
 
         /// <inheritdoc/>
+        public void WriteUtf8(ReadOnlySpan<byte> utf8)
+        {
+            ThrowIfDisposed();
+            Utf8Chars.Decode(utf8, this, static (chars, self) => self._owner.WriteStringCell(self._columnIndex, chars));
+            _columnIndex++;
+        }
+
+        /// <inheritdoc/>
         public void Write(bool value)
         {
             ThrowIfDisposed();

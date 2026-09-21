@@ -11,5 +11,6 @@
     <Project Path="tests/ExcelReader.Tests/ExcelReader.Tests.csproj" />
     <Project Path="tests/ExcelReader.Benchmarks/ExcelReader.Benchmarks.csproj" />
     <Project Path="tests/ExcelReader.AotSanity/ExcelReader.AotSanity.csproj" />
+    <Project Path="tests/ExcelReader.NativePgoTrainer/ExcelReader.NativePgoTrainer.csproj" />
   </Folder>
 </Solution>

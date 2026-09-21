@@ -15,7 +15,7 @@ namespace ExcelReader.Tests
                 ("Second", """<row r="1"><c r="A1"><v>2</v></c></row>"""),
                 ("Third", """<row r="1"><c r="A1"><v>3</v></c></row>"""),
             ]);
-            using XlsxReader reader = Excel.From(ms);
+            using XlsxReader reader = Excel.FromXlsx(ms);
 
             Assert.Equal(3, reader.SheetCount);
             for (int i = 0; i < reader.SheetCount; i++)
@@ -35,7 +35,7 @@ namespace ExcelReader.Tests
                 ("Alpha", """<row r="1"><c r="A1"><v>10</v></c></row>"""),
                 ("Beta", """<row r="1"><c r="A1"><v>20</v></c></row>"""),
             ]);
-            using XlsxReader reader = Excel.From(ms);
+            using XlsxReader reader = Excel.FromXlsx(ms);
 
             Assert.True(reader.TryMoveToSheet("beta"));
             Assert.Equal("Beta", reader.SheetName);
@@ -49,7 +49,7 @@ namespace ExcelReader.Tests
         {
             using MemoryStream ms = WorkbookBuilder.Build(
                 """<row r="1"><c r="A1"><v>1</v></c></row><row r="2"><c r="A2"><v>2</v></c></row>""");
-            using XlsxReader reader = Excel.From(ms);
+            using XlsxReader reader = Excel.FromXlsx(ms);
 
             using (XlsxReader.Enumerator first = reader.GetEnumerator())
             {
@@ -73,7 +73,7 @@ namespace ExcelReader.Tests
                 ("A", """<row r="1"><c r="A1"><v>11</v></c></row>"""),
                 ("B", """<row r="1"><c r="A1"><v>22</v></c></row>"""),
             ]);
-            using XlsxReader reader = Excel.From(ms);
+            using XlsxReader reader = Excel.FromXlsx(ms);
 
             using (XlsxReader.Enumerator e = reader.GetEnumerator())
             {
@@ -98,7 +98,7 @@ namespace ExcelReader.Tests
         public void EmptySheetYieldsNoRows()
         {
             using MemoryStream ms = WorkbookBuilder.Build(sheetRows: "");
-            using XlsxReader reader = Excel.From(ms);
+            using XlsxReader reader = Excel.FromXlsx(ms);
 
             using XlsxReader.Enumerator e = reader.GetEnumerator();
             Assert.False(e.MoveNext());
@@ -121,7 +121,7 @@ namespace ExcelReader.Tests
             }
 
             using MemoryStream ms = WorkbookBuilder.Build(rows.ToString(), sharedStrings: sharedStrings.ToString());
-            using XlsxReader reader = Excel.From(ms);
+            using XlsxReader reader = Excel.FromXlsx(ms);
             using XlsxReader.Enumerator e = reader.GetEnumerator();
 
             string? firstRepeat = null;
@@ -141,7 +141,7 @@ namespace ExcelReader.Tests
         public void NumericCellIsTypedAsNumber()
         {
             using MemoryStream ms = WorkbookBuilder.Build("""<row r="1"><c r="A1"><v>3.14</v></c></row>""");
-            using XlsxReader reader = Excel.From(ms);
+            using XlsxReader reader = Excel.FromXlsx(ms);
             using XlsxReader.Enumerator e = reader.GetEnumerator();
 
             Assert.True(e.MoveNext());
@@ -156,7 +156,7 @@ namespace ExcelReader.Tests
             using MemoryStream ms = WorkbookBuilder.Build(
                 """<row r="1"><c r="A1" s="0"><v>45658</v></c></row>""",
                 styles: "<styleSheet><cellXfs count=\"1\"><xf numFmtId=\"14\"/></cellXfs></styleSheet>");
-            using XlsxReader reader = Excel.From(ms);
+            using XlsxReader reader = Excel.FromXlsx(ms);
             using XlsxReader.Enumerator e = reader.GetEnumerator();
 
             Assert.True(e.MoveNext());
@@ -169,7 +169,7 @@ namespace ExcelReader.Tests
         public void IsDate1904DefaultsToFalse()
         {
             using MemoryStream ms = WorkbookBuilder.Build("""<row r="1"><c r="A1"><v>1</v></c></row>""");
-            using XlsxReader reader = Excel.From(ms);
+            using XlsxReader reader = Excel.FromXlsx(ms);
 
             Assert.False(reader.IsDate1904);
         }
@@ -179,7 +179,7 @@ namespace ExcelReader.Tests
         {
             using MemoryStream ms = WorkbookBuilder.Build(
                 """<row r="1"><c r="A1"><v>1</v></c></row>""", date1904: true);
-            using XlsxReader reader = Excel.From(ms);
+            using XlsxReader reader = Excel.FromXlsx(ms);
 
             Assert.True(reader.IsDate1904);
         }
@@ -189,7 +189,7 @@ namespace ExcelReader.Tests
         {
             using MemoryStream ms = WorkbookBuilder.Build(
                 """<row r="1"><c r="A1"><v>1.50</v></c></row>""");
-            using XlsxReader reader = Excel.From(ms);
+            using XlsxReader reader = Excel.FromXlsx(ms);
             using XlsxReader.Enumerator e = reader.GetEnumerator();
 
             Assert.True(e.MoveNext());
@@ -208,7 +208,7 @@ namespace ExcelReader.Tests
                 """<row r="1"><c r="A1"><v>1</v></c></row>""",
                 styles: styles);
 
-            using XlsxReader reader = Excel.From(ms);
+            using XlsxReader reader = Excel.FromXlsx(ms);
             using XlsxReader.Enumerator e = reader.GetEnumerator();
             Assert.True(e.MoveNext());
             Assert.Equal(CellType.Number, e.Current[0].Type);

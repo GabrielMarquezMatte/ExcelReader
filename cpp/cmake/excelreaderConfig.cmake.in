@@ -22,4 +22,6 @@ if(NOT TARGET xl::excelreader)
         INTERFACE_LINK_LIBRARIES xl::native)
 endif()
 
+include("${CMAKE_CURRENT_LIST_DIR}/CopyNativeLibrary.cmake")
+
 check_required_components(excelreader)

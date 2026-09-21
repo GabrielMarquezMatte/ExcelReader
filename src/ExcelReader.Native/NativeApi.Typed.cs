@@ -2,6 +2,7 @@ using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Runtime.InteropServices;
 using ExcelReader.Core.Parser;
+using ExcelReader.Core.Parser.Internal;
 using ExcelReader.Core.Reader;
 using ExcelReader.Core.ValueObjects;
 
@@ -90,6 +91,10 @@ namespace ExcelReader.Native
                 if (column.Validity != IntPtr.Zero)
                 {
                     Marshal.FreeHGlobal(column.Validity);
+                }
+                if (column.Data != IntPtr.Zero)
+                {
+                    Marshal.FreeHGlobal(column.Data);
                 }
             }
             Marshal.FreeHGlobal(table.Columns);
@@ -303,7 +308,7 @@ namespace ExcelReader.Native
                     NativeColumnType.String => AppendString(in cell),
                     NativeColumnType.Int64 => Append(_longs, ExcelCellReaders.Parsable(in cell, isDate1904, CultureInfo.InvariantCulture, out long i64), i64),
                     NativeColumnType.Float64 => Append(_doubles, ExcelCellReaders.Parsable(in cell, isDate1904, CultureInfo.InvariantCulture, out double f64), f64),
-                    NativeColumnType.Bool => Append(_bools, ExcelCellReaders.Bool(in cell, isDate1904, CultureInfo.InvariantCulture, out bool flag), (byte)(flag ? 1 : 0)),
+                    NativeColumnType.Bool => Append(_bools, ColumnParserFactory.ReadBool(in cell, isDate1904, CultureInfo.InvariantCulture, out bool flag), (byte)(flag ? 1 : 0)),
                     NativeColumnType.Date => AppendDate(in cell, isDate1904),
                     NativeColumnType.Time => AppendTime(in cell, isDate1904),
                     _ => AppendTimestamp(in cell, isDate1904),
@@ -314,6 +319,13 @@ namespace ExcelReader.Native
 
             private bool AppendString(in Cell cell)
             {
+                if (!cell.Value.IsEmpty)
+                {
+                    _stringData.AddRange(cell.Value);
+                    _stringOffsets.Add(_stringData.Count);
+                    RecordValidity(valid: true);
+                    return true;
+                }
                 int capacity = Math.Max(cell.Value.Length, NumberFormatMaxBytes);
                 if (_scratch.Length < capacity)
                 {
@@ -333,19 +345,22 @@ namespace ExcelReader.Native
 
             private bool AppendDate(in Cell cell, bool isDate1904)
             {
-                bool ok = ExcelCellReaders.DateOnlyAuto(in cell, isDate1904, CultureInfo.InvariantCulture, out DateOnly value);
+                bool ok = ColumnParserFactory.ReadDateOnly(in cell, isDate1904, CultureInfo.InvariantCulture, out DateOnly value)
+                    || ColumnParserFactory.ReadTextDateOnly(in cell, isDate1904, CultureInfo.InvariantCulture, out value);
                 return Append(_ints, ok, value.DayNumber - UnixEpochDayNumber);
             }
 
             private bool AppendTime(in Cell cell, bool isDate1904)
             {
-                bool ok = ExcelCellReaders.TimeOnlyAuto(in cell, isDate1904, CultureInfo.InvariantCulture, out TimeOnly value);
+                bool ok = ColumnParserFactory.ReadTimeOnly(in cell, isDate1904, CultureInfo.InvariantCulture, out TimeOnly value)
+                    || ColumnParserFactory.ReadTextTimeOnly(in cell, isDate1904, CultureInfo.InvariantCulture, out value);
                 return Append(_longs, ok, value.ToTimeSpan().Ticks / 10);
             }
 
             private bool AppendTimestamp(in Cell cell, bool isDate1904)
             {
-                bool ok = ExcelCellReaders.DateTimeAuto(in cell, isDate1904, CultureInfo.InvariantCulture, out DateTime value);
+                bool ok = ColumnParserFactory.ReadDateTime(in cell, isDate1904, CultureInfo.InvariantCulture, out DateTime value)
+                    || ColumnParserFactory.ReadTextDateTime(in cell, isDate1904, CultureInfo.InvariantCulture, out value);
                 return Append(_longs, ok, (value - DateTime.UnixEpoch).Ticks / 10);
             }
 
@@ -360,8 +375,30 @@ namespace ExcelReader.Native
                 return true;
             }
 
+            /// <summary>
+            /// Tracks validity without touching the bitmap until the first null: a column with no nulls
+            /// ships no bitmap, so writing one bit per cell up to then is wasted work. The first null
+            /// backfills every earlier row as valid.
+            /// </summary>
             private void RecordValidity(bool valid)
             {
+                if (!_anyNull)
+                {
+                    if (valid)
+                    {
+                        _rowCount++;
+                        return;
+                    }
+                    _anyNull = true;
+                    for (int i = 0; i < _rowCount >> 3; i++)
+                    {
+                        _validity.Add(0xFF);
+                    }
+                    if ((_rowCount & 7) != 0)
+                    {
+                        _validity.Add((byte)((1 << (_rowCount & 7)) - 1));
+                    }
+                }
                 if ((_rowCount & 7) == 0)
                 {
                     _validity.Add(0);
@@ -369,10 +406,6 @@ namespace ExcelReader.Native
                 if (valid)
                 {
                     _validity.Last |= (byte)(1 << (_rowCount & 7));
-                }
-                else
-                {
-                    _anyNull = true;
                 }
                 _rowCount++;
             }
@@ -402,14 +435,18 @@ namespace ExcelReader.Native
 
             private NativeColumn BuildStringColumn(IntPtr validity)
             {
-                int offsetBytes = _stringOffsets.ByteLength;
-                int dataBytes = _stringData.ByteLength;
-                int total = checked(offsetBytes + dataBytes);
-                IntPtr block = Marshal.AllocHGlobal(total);
-                Span<byte> destination = new((void*)block, total);
-                _stringOffsets.CopyTo(destination);
-                _stringData.CopyTo(destination[offsetBytes..]);
-                return new NativeColumn { Type = type, Length = RowCount, Values = block, Validity = validity, Data = IntPtr.Add(block, offsetBytes), DataLen = dataBytes };
+                IntPtr offsets = CopyToNativeBlock(_stringOffsets);
+                IntPtr data;
+                try
+                {
+                    data = CopyToNativeBlock(_stringData);
+                }
+                catch
+                {
+                    Marshal.FreeHGlobal(offsets);
+                    throw;
+                }
+                return new NativeColumn { Type = type, Length = RowCount, Values = offsets, Validity = validity, Data = data, DataLen = _stringData.ByteLength };
             }
         }
     }

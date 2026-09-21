@@ -13,7 +13,7 @@ namespace ExcelReader.Tests
             {
                 string expected = $"value-{i}";
                 using MemoryStream ms = WorkbookBuilder.Build($"""<row r="1"><c r="A1" t="inlineStr"><is><t>{expected}</t></is></c></row>""");
-                using XlsxReader reader = Excel.From(ms);
+                using XlsxReader reader = Excel.FromXlsx(ms);
                 using XlsxReader.Enumerator e = reader.GetEnumerator();
                 Assert.True(e.MoveNext());
                 Assert.Equal(expected, e.Current[0].GetString());
@@ -43,7 +43,7 @@ namespace ExcelReader.Tests
                     await wb.EndAsync(TestContext.Current.CancellationToken);
                 }
                 ms.Position = 0;
-                using XlsxReader reader = Excel.From(ms);
+                using XlsxReader reader = Excel.FromXlsx(ms);
                 using XlsxReader.Enumerator e = reader.GetEnumerator();
                 Assert.True(e.MoveNext());
                 Assert.Equal(expected, e.Current[0].GetString());

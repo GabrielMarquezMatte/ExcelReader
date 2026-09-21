@@ -10,7 +10,7 @@ namespace ExcelReader.Tests
             using MemoryStream ms = WorkbookBuilder.Build(
                 """<row r="1"><c r='C1' t='s'><v>0</v></c></row>""",
                 sharedStrings: "<si><t>single quoted</t></si>");
-            using XlsxReader reader = Excel.From(ms);
+            using XlsxReader reader = Excel.FromXlsx(ms);
             using XlsxReader.Enumerator e = reader.GetEnumerator();
 
             Assert.True(e.MoveNext());
@@ -22,7 +22,7 @@ namespace ExcelReader.Tests
         {
             using MemoryStream ms = WorkbookBuilder.Build(
                 """<row r="1"><c r="A1"><v>1</v></c></row><!-- a > b --><row r="2"><c r="A2"><v>2</v></c></row>""");
-            using XlsxReader reader = Excel.From(ms);
+            using XlsxReader reader = Excel.FromXlsx(ms);
             using XlsxReader.Enumerator e = reader.GetEnumerator();
 
             Assert.True(e.MoveNext());
@@ -37,7 +37,7 @@ namespace ExcelReader.Tests
         {
             await using MemoryStream ms = WorkbookBuilder.Build(
                 """<row r="1"><c r="A1"><v>1</v></c></row><!-- a > b --><row r="2"><c r="A2"><v>2</v></c></row>""");
-            await using XlsxReader reader = await Excel.FromAsync(ms, ct: TestContext.Current.CancellationToken);
+            await using XlsxReader reader = await Excel.FromXlsxAsync(ms, ct: TestContext.Current.CancellationToken);
             await using XlsxReader.Enumerator e = await reader.GetAsyncEnumeratorAsync(TestContext.Current.CancellationToken);
 
             Assert.True(await e.MoveNextAsync());
@@ -52,7 +52,7 @@ namespace ExcelReader.Tests
         {
             using MemoryStream ms = WorkbookBuilder.Build(
                 """<row r="1"><c r="A1" t="inlineStr"><is><t><![CDATA[raw &amp; <tag>]]></t></is></c></row>""");
-            using XlsxReader reader = Excel.From(ms);
+            using XlsxReader reader = Excel.FromXlsx(ms);
             using XlsxReader.Enumerator e = reader.GetEnumerator();
 
             Assert.True(e.MoveNext());
@@ -65,7 +65,7 @@ namespace ExcelReader.Tests
             using MemoryStream ms = WorkbookBuilder.Build(
                 """<row r="1"><c r="A1" t="s"><v>0</v></c></row>""",
                 sharedStrings: "<si><t><![CDATA[shared &amp; <tag>]]></t></si>");
-            using XlsxReader reader = Excel.From(ms);
+            using XlsxReader reader = Excel.FromXlsx(ms);
             using XlsxReader.Enumerator e = reader.GetEnumerator();
 
             Assert.True(e.MoveNext());

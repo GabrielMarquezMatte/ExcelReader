@@ -84,7 +84,7 @@ namespace ExcelReader.Tests
                 ]);
             byte[] bytes = built.ToArray();
 
-            using XlsxReader reader = Excel.From(bytes.AsMemory());
+            using XlsxReader reader = Excel.FromXlsx(bytes.AsMemory());
             Assert.Equal(2, reader.SheetCount);
 
             reader.MoveToSheet(1);
@@ -114,7 +114,7 @@ namespace ExcelReader.Tests
             byte[] bytes = built.ToArray();
             var manager = new NonArrayMemoryManager(bytes);
 
-            using XlsxReader reader = Excel.From(manager.Memory);
+            using XlsxReader reader = Excel.FromXlsx(manager.Memory);
             using XlsxReader.Enumerator e = reader.GetEnumerator();
             Assert.True(e.MoveNext());
             Assert.Equal("42", e.Current[0].GetString());
@@ -200,11 +200,11 @@ namespace ExcelReader.Tests
 
             ExcelLimitExceededException streamedEx = Assert.Throws<ExcelLimitExceededException>(() =>
             {
-                using XlsxReader reader = Excel.From(new MemoryStream(bytes), options: options);
+                using XlsxReader reader = Excel.FromXlsx(new MemoryStream(bytes), options: options);
             });
             ExcelLimitExceededException memoryEx = Assert.Throws<ExcelLimitExceededException>(() =>
             {
-                using XlsxReader reader = Excel.From(bytes.AsMemory(), options);
+                using XlsxReader reader = Excel.FromXlsx(bytes.AsMemory(), options);
             });
             Assert.Equal(streamedEx.LimitName, memoryEx.LimitName);
         }
@@ -218,12 +218,12 @@ namespace ExcelReader.Tests
 
             Assert.Throws<InvalidDataException>(() =>
             {
-                using XlsxReader reader = Excel.From(new MemoryStream(withoutSheet));
+                using XlsxReader reader = Excel.FromXlsx(new MemoryStream(withoutSheet));
                 using XlsxReader.Enumerator e = reader.GetEnumerator();
             });
             Assert.Throws<InvalidDataException>(() =>
             {
-                using XlsxReader reader = Excel.From(withoutSheet.AsMemory());
+                using XlsxReader reader = Excel.FromXlsx(withoutSheet.AsMemory());
                 using XlsxReader.Enumerator e = reader.GetEnumerator();
             });
         }
@@ -404,12 +404,12 @@ namespace ExcelReader.Tests
 
         private static IExcelRowReader OpenXlsxStream(Stream stream, ExcelReaderOptions options)
         {
-            return Excel.From(stream, options: options);
+            return Excel.FromXlsx(stream, options: options);
         }
 
         private static IExcelRowReader OpenXlsxMemory(byte[] bytes, ExcelReaderOptions options)
         {
-            return Excel.From(bytes.AsMemory(), options);
+            return Excel.FromXlsx(bytes.AsMemory(), options);
         }
 
         [SuppressMessage("Performance", "CA1859:Use concrete types when possible for improved performance",

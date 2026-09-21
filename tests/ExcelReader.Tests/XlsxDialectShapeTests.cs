@@ -124,7 +124,7 @@ namespace ExcelReader.Tests
         public void SyncReaderHandlesCorpusFixture(CorpusFixture fixture)
         {
             using MemoryStream ms = WorkbookBuilder.Build(fixture.Rows, fixture.SharedStrings);
-            using XlsxReader reader = Excel.From(ms);
+            using XlsxReader reader = Excel.FromXlsx(ms);
 
             Assert.NotEmpty(fixture.Expected);
             AssertExpected(reader.GetEnumerator(), fixture.Expected);
@@ -136,7 +136,7 @@ namespace ExcelReader.Tests
         {
             CancellationToken ct = TestContext.Current.CancellationToken;
             await using MemoryStream ms = WorkbookBuilder.Build(fixture.Rows, fixture.SharedStrings);
-            await using XlsxReader reader = await Excel.FromAsync(ms, ct: ct);
+            await using XlsxReader reader = await Excel.FromXlsxAsync(ms, ct: ct);
             await using XlsxReader.Enumerator rows = await reader.GetAsyncEnumeratorAsync(ct);
 
             Assert.NotEmpty(fixture.Expected);

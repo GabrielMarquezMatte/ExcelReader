@@ -12,6 +12,7 @@
     <!-- RS0016/RS0026/RS0037: public-API tracking is for ExcelReader.Core's shipped NuGet
          surface. This app is never packaged, so there's no PublicAPI.txt here by design. -->
     <NoWarn>$(NoWarn);CA2007;MA0004;CA1707;CA1849;CA1815;RS0016;RS0026;RS0037</NoWarn>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
 
   <ItemGroup>

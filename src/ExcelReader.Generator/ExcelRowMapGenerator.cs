@@ -195,6 +195,7 @@ namespace ExcelReader.Generator
             string source = GenerateSource(symbol, plans);
             string hintName = symbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)
                 .Replace("global::", "")
+                .Replace("@", "")
                 .Replace('.', '_');
             return new GeneratedResult(hintName, source, new EquatableArray<DiagnosticInfo>([.. diagnostics]));
         }
@@ -269,6 +270,7 @@ namespace ExcelReader.Generator
             bool allowEmpty = required?.NamedArguments.FirstOrDefault(static kv => string.Equals(kv.Key, "AllowEmpty", StringComparison.Ordinal)).Value.Value is true;
             bool requireValue = isRequired && !allowEmpty;
 
+            string member = Identifier(property.Name);
             bool canSet = property.SetMethod is { DeclaredAccessibility: Accessibility.Public, IsInitOnly: false };
             bool canGet = property.GetMethod is { DeclaredAccessibility: Accessibility.Public };
             string qualifiedProperty = property.Type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
@@ -302,7 +304,7 @@ namespace ExcelReader.Generator
                 }
                 if (implementsWriter && canGet)
                 {
-                    writeEmit = $"            .Column(\"{names[0].Replace("\"", "\\\"")}\", static (row, m) => {fieldName}.Write(row, m.{property.Name}))";
+                    writeEmit = $"            .Column(\"{names[0].Replace("\"", "\\\"")}\", static (row, m) => {fieldName}.Write(row, m.{member}))";
                 }
             }
             else
@@ -324,12 +326,17 @@ namespace ExcelReader.Generator
                 if (canGet && writeKind != WriteKind.None)
                 {
                     bool needsNullConditional = isNullable || !underlying.IsValueType;
-                    string valueExpr = WriteValueExpression(writeKind, needsNullConditional, property.Name);
+                    string valueExpr = WriteValueExpression(writeKind, needsNullConditional, member);
                     writeEmit = $"            .Column(\"{names[0].Replace("\"", "\\\"")}\", static (row, m) => row.Write({valueExpr}))";
                 }
             }
 
-            return new PropertyPlan(property.Name, names, read, isRequired, requireValue, writeEmit, converterFieldDecl);
+            return new PropertyPlan(member, names, read, isRequired, requireValue, writeEmit, converterFieldDecl);
+        }
+
+        private static string Identifier(string name)
+        {
+            return SyntaxFacts.GetKeywordKind(name) == SyntaxKind.None ? name : "@" + name;
         }
 
         private static ReadKind SelectReadKind(bool isGuid, bool isNullable)
@@ -488,11 +495,11 @@ namespace ExcelReader.Generator
             }
             foreach (INamedTypeSymbol outer in containers)
             {
-                sb.AppendLine($"{PartialDeclaration(outer)} {outer.Name}");
+                sb.AppendLine($"{PartialDeclaration(outer)} {Identifier(outer.Name)}");
                 sb.AppendLine("{");
             }
 
-            sb.AppendLine($"{PartialDeclaration(symbol)} {symbol.Name} : global::ExcelReader.Core.Parser.IExcelRowMap<{qualifiedType}>, global::ExcelReader.Core.Writer.IExcelRecordMap<{qualifiedType}>");
+            sb.AppendLine($"{PartialDeclaration(symbol)} {Identifier(symbol.Name)} : global::ExcelReader.Core.Parser.IExcelRowMap<{qualifiedType}>, global::ExcelReader.Core.Writer.IExcelRecordMap<{qualifiedType}>");
             sb.AppendLine("{");
 
             foreach (string? decl in properties.Select(static p => p.ConverterFieldDecl).Where(static d => d is not null))

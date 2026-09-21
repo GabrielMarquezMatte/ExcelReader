@@ -556,7 +556,12 @@ namespace ExcelReader.Native
 
         private static bool IsValidOutBuffer(byte* buffer, int capacity, int* outLength)
         {
-            return capacity >= 0 && outLength is not null && (buffer is not null || capacity == 0);
+            if (outLength is null)
+            {
+                return false;
+            }
+            *outLength = 0;
+            return capacity >= 0 && (buffer is not null || capacity == 0);
         }
 
         private static int RegisterOpened(int status, NativeHandle? handle, nint* outHandle)
@@ -876,7 +881,12 @@ namespace ExcelReader.Native
             byte* path, int pathLength, NativeCsvAggregationRaw* aggregation,
             NativeCsvParallelOptionsRaw* options, void** outState)
         {
-            if (path is null || pathLength <= 0 || outState is null || !IsValidAggregation(aggregation))
+            if (outState is null)
+            {
+                return NativeStatus.InvalidArgument;
+            }
+            *outState = null;
+            if (path is null || pathLength <= 0 || !IsValidAggregation(aggregation))
             {
                 return NativeStatus.InvalidArgument;
             }
@@ -896,7 +906,12 @@ namespace ExcelReader.Native
             byte* data, int dataLength, NativeCsvAggregationRaw* aggregation,
             NativeCsvParallelOptionsRaw* options, void** outState)
         {
-            if (dataLength < 0 || (data is null && dataLength > 0) || outState is null || !IsValidAggregation(aggregation))
+            if (outState is null)
+            {
+                return NativeStatus.InvalidArgument;
+            }
+            *outState = null;
+            if (dataLength < 0 || (data is null && dataLength > 0) || !IsValidAggregation(aggregation))
             {
                 return NativeStatus.InvalidArgument;
             }

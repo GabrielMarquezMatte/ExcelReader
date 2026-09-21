@@ -74,7 +74,7 @@ namespace ExcelReader.Tests
             }
             ms.Position = 0;
 
-            using XlsxReader reader = Excel.From(ms);
+            using XlsxReader reader = Excel.FromXlsx(ms);
             Assert.Equal("Data", reader.SheetName);
             Assert.True(reader.IsDate1904);
             using XlsxReader.Enumerator e = reader.GetEnumerator();
@@ -88,7 +88,7 @@ namespace ExcelReader.Tests
             using MemoryStream ms = WorkbookBuilder.Build(
                 """<row r="1"><c r="A1" s="0"><v>45658</v></c></row>""",
                 styles: "<styleSheet><numFmts count='1'><numFmt numFmtId='164' formatCode='yyyy-mm-dd'/></numFmts><cellXfs count='1'><xf numFmtId='164'/></cellXfs></styleSheet>");
-            using XlsxReader reader = Excel.From(ms);
+            using XlsxReader reader = Excel.FromXlsx(ms);
             using XlsxReader.Enumerator e = reader.GetEnumerator();
 
             Assert.True(e.MoveNext());
@@ -102,7 +102,7 @@ namespace ExcelReader.Tests
             using MemoryStream ms = WorkbookBuilder.Build(
                 """<row r="1"><c r="A1" t="s"><v>x</v></c><c r="B1" t="s"><v>0</v></c></row>""",
                 sharedStrings: "<si><t>first</t></si><si><t>second</t></si>");
-            using XlsxReader reader = Excel.From(ms);
+            using XlsxReader reader = Excel.FromXlsx(ms);
             using XlsxReader.Enumerator e = reader.GetEnumerator();
 
             Assert.True(e.MoveNext());
@@ -116,7 +116,7 @@ namespace ExcelReader.Tests
             using MemoryStream ms = WorkbookBuilder.Build(
                 """<row r="1"><c r="A1" t="s"><v></v></c></row>""",
                 sharedStrings: "<si><t>first</t></si>");
-            using XlsxReader reader = Excel.From(ms);
+            using XlsxReader reader = Excel.FromXlsx(ms);
             using XlsxReader.Enumerator e = reader.GetEnumerator();
 
             Assert.True(e.MoveNext());
