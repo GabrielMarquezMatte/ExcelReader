@@ -116,7 +116,7 @@ Unlike `ParseCsvParallelAsync`, the callback runs on the worker threads, so reco
 particular order and the callback must be safe to call from several threads at once. It may also be
 invoked more than once for records near a partition boundary, which happens only on a source with
 quoted fields spanning lines — make it idempotent. Spans are valid only for the duration of the call.
-See the [parallel CSV benchmarks](#parallel-csv) for what this buys: at dop 16 it is ~2.0x faster than
+See the [parallel CSV benchmarks](#parallel-csv) for what this buys. Those figures are `AggregateCsvParallelAsync`'s, measured over the same projection path this shares: at dop 16 it is ~2.0x faster than
 the typed path while allocating ~446x less, with zero garbage collections.
 
 Properties need setters. A get-only property is skipped during binding and silently receives nothing.
