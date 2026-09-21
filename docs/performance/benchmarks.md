@@ -248,12 +248,18 @@ zero-copy advantage the other can't take:
 
 | Comparison | Format | ExcelReader | Competitor | Ratio |
 |---|---|---:|---:|---:|
-| vs. [calamine](https://github.com/tafia/calamine) (Rust) | XLSX | 123.5 ms | 273.4 ms | ~2.2x faster |
-| vs. calamine (Rust) | XLSB | 70.6 ms | 84.9 ms | ~1.2x faster |
-| vs. [xlsxio](https://github.com/brechtsanders/xlsxio) (C) | XLSX | 110.4 ms | 509.3 ms | ~4.6x faster |
-| vs. [xlnt](https://github.com/tfussell/xlnt) (C++) | XLSX | 110.4 ms | 2,335.9 ms | ~21x faster |
+| vs. [calamine](https://github.com/tafia/calamine) (Rust) | XLSX | 108.5 ms | 279.7 ms | ~2.6x faster |
+| vs. calamine (Rust) | XLSB | 66.6 ms | 91.9 ms | ~1.4x faster |
+| vs. [DuckDB](https://github.com/duckdb/duckdb) `read_xlsx` (C++) | XLSX | 98.0 ms | 412.3 ms | ~4.2x faster |
+| vs. [xlsxio](https://github.com/brechtsanders/xlsxio) (C) | XLSX | 98.0 ms | 497.2 ms | ~5.1x faster |
+| vs. [xlnt](https://github.com/tfussell/xlnt) (C++) | XLSX | 98.0 ms | 2,388.5 ms | ~24x faster |
 
-Neither xlsxio nor xlnt reads `.xlsb`, so those two comparisons are XLSX-only. calamine is a fast,
+Writing the same 14 columns × 65,535 rows from row-shaped data, the C++ suite measures
+`write_sheet` at 100.1–105.3 ms against DuckDB's 824 ms (~8x), libxlsxwriter's 1,177 ms (~11x),
+xlsxio's 2,398 ms (~24x) and xlnt's 5,418 ms (~54x). The Rust suite measures 52.4 ms against
+rust_xlsxwriter's 322.8 ms (~6.2x) over 7 columns. Caveats for both are in the binding READMEs.
+
+DuckDB, xlsxio and xlnt do not read `.xlsb`, so those comparisons are XLSX-only. calamine is a fast,
 well-optimized reader in its own right — the gap there is real but not the order of magnitude seen
 against the C/C++ competitors.
 

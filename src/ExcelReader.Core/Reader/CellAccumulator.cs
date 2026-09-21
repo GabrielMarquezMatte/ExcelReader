@@ -107,6 +107,7 @@ namespace ExcelReader.Core.Reader
             _lastCol = lastCol;
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         internal void Add(int col, int start, int len, CellType type, int style, CellValueSource source, double number = 0, bool hasNumber = false, int sharedIndex = -1)
         {
             if ((uint)col >= ExcelLimits.MaxColumns)

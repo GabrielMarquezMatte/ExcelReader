@@ -305,14 +305,16 @@ on Windows 10 (22H2), 16 logical CPUs @ 3.39 GHz, MSVC 19.51 (Release), Google B
 
 | Benchmark | RealExcel.xlsb (100 rows) | 65K_Records_Data.xlsb (65,535 rows) |
 |---|---:|---:|
-| `open` | 78.5 µs | 92.5 µs |
-| `parse_sheet` (4 or 6 bound columns) | 87.7 µs | 39.9 ms |
-| `infer_schema` (sample 100 / 1,000 rows) | 152.6 µs | 1.22 ms |
+| `open` (`open_memory`) | 24.6–47.3 µs | 1.22 ms |
+| `parse_sheet` (4 or 6 bound columns) | 78.2 µs | 37.4 ms |
+| `infer_schema` (sample 100 / 1,000 rows) | 139.3 µs | 1.18 ms |
 
-`open` is nearly flat across a 655x row-count increase (+18%, not +65,435%) — XLSB keeps its
-dimensions/index up front, so opening costs header/metadata, not row data. `parse_sheet` scales
-linearly with rows × columns, at roughly 608 ns/row here. `infer_schema` scales with its sample
-size, not the file's total row count.
+`open` here is `open_memory`, which copies the caller's buffer before returning (the caller may free
+it afterwards), so it scales with file size: 1.22 ms is mostly copying the 3.7 MB fixture. Opening by
+path reads only the package directory and stays nearly flat — ~81 µs vs ~96 µs in the Rust suite
+below. The small-fixture figure varied between 24.6 and 47.3 µs across two runs. `parse_sheet`
+scales linearly with rows × columns, at roughly 571 ns/row here. `infer_schema` scales with its
+sample size, not the file's total row count.
 
 A separate opt-in suite (`-DEXCELREADER_BUILD_BENCHMARKS_COMPARE=ON`, gated separately because it
 pulls in [xlnt](https://github.com/tfussell/xlnt) and [xlsxio](https://github.com/brechtsanders/xlsxio)
@@ -324,11 +326,13 @@ sides decode every cell into an owned value (`std::string` for text, not the zer
 
 | Library | Mean |
 |---|---:|
-| ExcelReader (`parse_sheet<FullRow>`) | 110.4 ms |
-| xlsxio (`xlsxioread_sheet_next_cell_*`) | 509.3 ms |
-| xlnt (`worksheet::rows()` + `cell::to_string()`/`value<double>()`) | 2,335.9 ms |
+| ExcelReader (`parse_sheet<FullRow>`) | 98.0 ms |
+| DuckDB (`read_xlsx`, summing every column in SQL) | 412.3 ms |
+| xlsxio (`xlsxioread_sheet_next_cell_*`) | 497.2 ms |
+| xlnt (`worksheet::rows()` + `cell::to_string()`/`value<double>()`) | 2,388.5 ms |
 
-ExcelReader is ~4.6x faster than xlsxio and ~21x faster than xlnt on this workload. xlsxio is a
+ExcelReader is ~4.2x faster than DuckDB, ~5.1x faster than xlsxio and ~24x faster than xlnt on this
+workload. xlsxio is a
 lean, purpose-built C streaming reader — the same abstraction level as ExcelReader's own native
 core — so it was the strongest of the two competitors tested, though still well behind.
 
@@ -354,11 +358,11 @@ is handed buffers that are already columnar, while `BM_WriteSheet` starts from a
 
 | Benchmark | Time | Rows/s |
 |---|---:|---:|
-| `BM_WriteColumns` (pre-transposed) | 60.2 ms | 1.07 M/s |
-| `BM_WriteSheet` (from `std::vector<Row>`) | 67.4 ms | 961 k/s |
+| `BM_WriteColumns` (pre-transposed) | 46.5 ms | 1.43 M/s |
+| `BM_WriteSheet` (from `std::vector<Row>`) | 52.6 ms | 1.23 M/s |
 
-The transpose costs ~12% here. It is not free, but it is far from the dominant cost of producing
-the file — see the comparison below, where the same two cases over 14 columns land within ~7%.
+The transpose costs ~13% here. It is not free, but it is not the dominant cost of producing the
+file — see the comparison below, where the same two cases over 14 columns land within ~12–17%.
 
 `excelreader_cpp_write_compare_benchmarks` (under `-DEXCELREADER_BUILD_BENCHMARKS_COMPARE=ON`) puts
 that against xlnt, xlsxio and [DuckDB](https://github.com/duckdb/duckdb)'s `excel` extension, all
@@ -375,12 +379,12 @@ competitor.
 
 | Library | Wall | CPU |
 |---|---:|---:|
-| ExcelReader (`xl::write_columns`, pre-transposed) | 126.3–128.1 ms | 127.6 ms |
-| ExcelReader (`xl::write_sheet<FullRow>`) | 135.7–136.6 ms | 137.5 ms |
-| DuckDB (`COPY ... TO ... WITH (FORMAT xlsx)`) | 826.3–863.6 ms | 828.1–843.8 ms |
-| libxlsxwriter (`worksheet_write_string`/`_number`) | 1,188.0 ms | 1,187.5 ms |
-| xlsxio (`xlsxiowrite_add_cell_*`) | 2,450.6 ms | 1,171.9 ms |
-| xlnt (`worksheet::cell().value()` + `save()`) | 5,737.9 ms | 5,703.1 ms |
+| ExcelReader (`xl::write_columns`, pre-transposed) | 89.3–90.1 ms | 89.3 ms |
+| ExcelReader (`xl::write_sheet<FullRow>`) | 100.1–105.3 ms | 100.4–107.1 ms |
+| DuckDB (`COPY ... TO ... WITH (FORMAT xlsx)`) | 824.3–824.7 ms | 812.5 ms |
+| libxlsxwriter (`worksheet_write_string`/`_number`) | 1,176.5 ms | 1,171.9 ms |
+| xlsxio (`xlsxiowrite_add_cell_*`) | 2,397.6 ms | 687.5 ms |
+| xlnt (`worksheet::cell().value()` + `save()`) | 5,417.8 ms | 5,421.9 ms |
 
 Same machine as above; Google Benchmark's own iteration counts, no `--benchmark_repetitions` (each
 iteration writes a whole 65,535-row file, so the slower cases run once or a handful of times). xlnt
@@ -390,8 +394,8 @@ DuckDB rows appear in both, and the small ranges above are those two independent
 sampling within one run.
 
 `write_sheet` — the matched-work number, since it starts from the same `std::vector<FullRow>` every
-competitor is handed — is ~6.1–6.4x faster than DuckDB, ~8.7x faster than libxlsxwriter, ~18.1x
-faster than xlsxio, and ~42x faster than xlnt on wall time.
+competitor is handed — is ~7.8–8.2x faster than DuckDB, ~11.2x faster than libxlsxwriter, ~24x
+faster than xlsxio, and ~54x faster than xlnt on wall time.
 
 ### Known issue: xlsxio + libxlsxwriter cannot share a binary
 
@@ -426,14 +430,12 @@ MSVC's exact symbol-resolution algorithm to be certain which way it went here.
 
 Caveats, none of them optional when quoting these:
 
-- **xlsxio's CPU time moved after the fix**, from 843.8–906.3 ms (pre-fix, some runs missing the
-  workbook.xml entry) to a confirmed 1,171.9 ms — about 30% more real work, consistent with the
-  entry no longer being silently dropped. Wall time barely moved (2,450.6 ms vs. 2,383.5–2,453.9 ms),
-  because xlsxio's wall time is dominated by I/O wait either way: CPU is now ~48% of wall,
-  against every other case here being CPU-bound (wall ≈ CPU). Against CPU time the gap from
-  `write_sheet` to xlsxio is ~8.5x, not ~18.1x — which number is the honest one depends on what you
-  are asking: the wall-time ratio is what a caller waits, the CPU-time ratio is what the library
-  costs.
+- **xlsxio's CPU time is not stable across runs.** It read 843.8–906.3 ms before the fix (some
+  runs missing the workbook.xml entry), 1,171.9 ms in the first run after it, and 687.5 ms in this
+  one, while its wall time stayed at ~2.4 s throughout. Its wall time is dominated by I/O wait —
+  CPU is well under half of wall, against every other case here being CPU-bound (wall ≈ CPU) — so
+  quote the wall-time ratio, which is what a caller waits. Against this run's CPU time the gap from
+  `write_sheet` to xlsxio is ~6.8x, not ~24x.
 - **ExcelReader does slightly more work here**, not less: it attaches a number format to the two
   date columns so Excel shows a date, while every competitor case writes those as bare serial
   numbers. That difference favours the competitors.
@@ -445,6 +447,6 @@ Caveats, none of them optional when quoting these:
   a full analytical query engine doing far more than any Excel-writing library here; this measures
   one narrow slice of it, not "DuckDB" as a whole.
 
-The two ExcelReader cases land within ~6% of each other, which is the interesting internal result:
-the row-to-column transpose is nearly free next to the cost of producing the file. Reach for
+The two ExcelReader cases land within ~12–17% of each other. The transpose's share grew as producing
+the file got cheaper, but it is still a minority of the cost. Reach for
 `write_columns` when your data is already columnar, but `write_sheet` is not the slow path.

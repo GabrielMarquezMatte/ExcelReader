@@ -1,7 +1,10 @@
+using System.Runtime.CompilerServices;
+
 namespace ExcelReader.Core.ValueObjects
 {
     internal static class FastDouble
     {
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static bool TryParse(ReadOnlySpan<byte> s, out double value)
         {
             value = 0;
