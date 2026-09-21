@@ -94,8 +94,9 @@ threads; whatever your loop body does per row does not — if that dominates, ra
 not help. Sources that cannot be partitioned (non-seekable streams, non-UTF-8 encodings, small files)
 fall back to sequential parsing with the same results.
 
-For a fold or a per-row side effect, `ForEachCsvParallelAsync` skips the per-row model allocation
-entirely and accepts a `ref struct` row type, so text columns stay as `ReadOnlySpan<byte>`:
+For a fold or a per-row side effect, `ForEachCsvParallelAsync` accepts a `ref struct` row type, so text
+columns stay as `ReadOnlySpan<byte>` and the per-row model allocation disappears entirely — a class
+model still costs one instance per row:
 
 ```csharp
 public ref struct SaleRow
@@ -113,11 +114,21 @@ await Excel.ForEachCsvParallelAsync(
 ```
 
 Unlike `ParseCsvParallelAsync`, the callback runs on the worker threads, so records arrive in no
-particular order and the callback must be safe to call from several threads at once. It may also be
-invoked more than once for records near a partition boundary, which happens only on a source with
-quoted fields spanning lines — make it idempotent. Spans are valid only for the duration of the call.
-See the [parallel CSV benchmarks](#parallel-csv) for what this buys. Those figures are `AggregateCsvParallelAsync`'s, measured over the same projection path this shares: at dop 16 it is ~2.0x faster than
-the typed path while allocating ~446x less, with zero garbage collections.
+particular order and the callback must be safe to call from several threads at once. Spans are valid
+only for the duration of the call.
+
+The callback may also be invoked more than once for the same record. A partition whose start offset was
+guessed wrongly is read again from the confirmed offset, and the discarded pass may already have
+delivered a whole partition's worth of records — 1 MiB to 64 MiB of them, not just a few near the seam.
+On a source with quoted fields those records may also be misparsed, carrying values that appear nowhere
+in the file, and an exception the callback threw during a discarded pass is discarded with it. A start
+is only guessed wrongly inside a quoted field, so a source in which the quote character never appears
+delivers every record exactly once; for that guarantee on any source, use `AggregateCsvParallelAsync`,
+where the discarded partition's accumulator is thrown away.
+
+See the [parallel CSV benchmarks](#parallel-csv) for what this buys. Those figures are
+`AggregateCsvParallelAsync`'s, measured over the same projection path this shares: at dop 16 it is
+~2.0x faster than the typed path while allocating ~446x less, with zero garbage collections.
 
 Properties need setters. A get-only property is skipped during binding and silently receives nothing.
 

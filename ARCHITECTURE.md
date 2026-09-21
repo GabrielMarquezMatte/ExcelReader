@@ -85,17 +85,27 @@ spans into a worker's buffer cannot cross to the consumer thread at all.
 
 That constraint also settles what an ordered `ref struct` enumerator would cost. Since a worker cannot
 convert a row it must hand onward, conversion would run on the consumer thread — and conversion is the
-floor here: the `ref struct` aggregate path, which shares this projection code, costs 1,213.7 ms single-threaded on the conversion-heavy corpus, against 353.3 ms for the typed
-path at dop 16. Such an API would be ~3.4x slower than what already ships while adding nothing over the
+floor here: the `ref struct` aggregate path, which shares this projection code, costs 1,213.7 ms
+single-threaded on the conversion-heavy corpus, against 353.3 ms for the typed path at dop 16. Such an
+API would be ~3.4x slower than what already ships while adding nothing over the
 sequential `RefParser.ParseNamed`, so it was not built. Ordered delivery at full speed needs workers to
 convert into a per-chunk arena of packed fields that the consumer rehydrates; that remains unbuilt.
 
 Because partitions start at guessed record boundaries, a partition whose guess was wrong is read again
-and the callback sees those records twice. For an accumulator this is invisible — the discarded instance
-is thrown away — so the repeat is documented as a caller obligation rather than designed out. Removing
-it needs exact boundaries, which needs a quote-parity prefix pass over the bytes before any parsing
-starts; that pass is a barrier and would cost roughly half the dop-16 runtime unless pipelined, which is
-more machinery than the hazard currently warrants.
+and the callback sees a whole partition's records twice — 1 MiB to 64 MiB of them, not a handful near
+the seam. A wrong start also shifts every field boundary, so on a source with quoted fields the
+discarded pass can hand the callback values that appear nowhere in the file. For an accumulator both are
+invisible: the discarded instance is thrown away.
+
+A guess is only wrong when the offset falls inside a quoted field. `CsvChunkWorker.GuessStart` first
+reads the byte before the chunk start and returns the chunk start unchanged when it already sits on a
+record boundary, because `CsvBoundaryResolver.FindRecordStart` only ever scans past a terminator and
+would otherwise overshoot by a whole record on every chunk that happens to be aligned — which, at a
+1 MiB minimum chunk size, is every chunk of a fixed-width file. That leaves quote-free sources exact,
+and the repeat documented as a caller obligation for the rest rather than designed out. Removing it
+there too needs a quote-parity prefix pass over the bytes before any parsing starts; that pass is a
+barrier and would cost roughly half the dop-16 runtime unless pipelined, which is more machinery than
+the hazard currently warrants.
 
 ## Shared plumbing
 
