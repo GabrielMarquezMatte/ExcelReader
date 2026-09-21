@@ -22,7 +22,7 @@ namespace ExcelReader.Tests
         public void Should_Read_When_Opened_From_Memory_With_Password()
         {
             byte[] bytes = EncryptedFixtures.Bytes("agile-aes256-sha512.xlsx");
-            using XlsxReader reader = Excel.From(bytes, WithPassword);
+            using XlsxReader reader = Excel.FromXlsx(bytes, WithPassword);
             Assert.True(CountRows(reader) > 0);
         }
 

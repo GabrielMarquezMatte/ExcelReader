@@ -45,7 +45,7 @@ namespace ExcelReader.Benchmarks
         public long ExcelParserSync()
         {
             using var ms = new MemoryStream(_workbook, writable: false);
-            using var reader = Excel.From(ms);
+            using var reader = Excel.FromXlsx(ms);
             long acc = 0;
             foreach (Record rec in new ExcelParser<Record>().Parse(reader))
             {
@@ -58,7 +58,7 @@ namespace ExcelReader.Benchmarks
         public long ExcelParserSyncSharedStrings()
         {
             using var ms = new MemoryStream(_workbookSharedStrings, writable: false);
-            using var reader = Excel.From(ms);
+            using var reader = Excel.FromXlsx(ms);
             long acc = 0;
             foreach (Record rec in new ExcelParser<Record>().Parse(reader))
             {
@@ -71,7 +71,7 @@ namespace ExcelReader.Benchmarks
         public long ExcelParserStructSync()
         {
             using var ms = new MemoryStream(_workbook, writable: false);
-            using var reader = Excel.From(ms);
+            using var reader = Excel.FromXlsx(ms);
             long acc = 0;
             foreach (RecordStruct rec in new ExcelParser<RecordStruct>().Parse(reader))
             {
@@ -84,7 +84,7 @@ namespace ExcelReader.Benchmarks
         public long RefParserParseNamedSync()
         {
             using var ms = new MemoryStream(_workbook, writable: false);
-            using var reader = Excel.From(ms);
+            using var reader = Excel.FromXlsx(ms);
             long acc = 0;
             foreach (RecordNamedRef rec in RefParser.ParseNamed<RecordNamedRef>(reader))
             {
@@ -97,7 +97,7 @@ namespace ExcelReader.Benchmarks
         public async Task<long> ExcelParserAsync()
         {
             await using var ms = new MemoryStream(_workbook, writable: false);
-            await using var reader = await Excel.FromAsync(ms);
+            await using var reader = await Excel.FromXlsxAsync(ms);
             long acc = 0;
             await foreach (Record rec in new ExcelParser<Record>().ParseAsync(reader))
             {

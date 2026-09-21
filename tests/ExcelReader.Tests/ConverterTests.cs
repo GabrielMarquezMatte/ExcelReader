@@ -106,7 +106,7 @@ namespace ExcelReader.Tests
             await using var ms = await TypedWorkbook.BuildAsync(
                 ["Total", "Tax", "Ref"],
                 ["R$ 1.234,56", "12.5%", "INV-1"]);
-            await using var reader = await Excel.FromAsync(ms, ct: TestContext.Current.CancellationToken);
+            await using var reader = await Excel.FromXlsxAsync(ms, ct: TestContext.Current.CancellationToken);
 
             InvoiceRow row = new ExcelParser<InvoiceRow>().Parse(reader).Single();
 
@@ -121,7 +121,7 @@ namespace ExcelReader.Tests
             await using var ms = await TypedWorkbook.BuildAsync(
                 ["Total", "Tax", "Ref"],
                 ["garbage", "nope", "INV-2"]);
-            await using var reader = await Excel.FromAsync(ms, ct: TestContext.Current.CancellationToken);
+            await using var reader = await Excel.FromXlsxAsync(ms, ct: TestContext.Current.CancellationToken);
 
             InvoiceRow row = new ExcelParser<InvoiceRow>().Parse(reader).Single();
 
@@ -135,7 +135,7 @@ namespace ExcelReader.Tests
         {
             await using var ms = await TypedWorkbook.BuildMultiSheetAsync(
                 ("S1", [["Tax"], ["33%"], ["bad"], [null]]));
-            await using var reader = await Excel.FromAsync(ms, ct: TestContext.Current.CancellationToken);
+            await using var reader = await Excel.FromXlsxAsync(ms, ct: TestContext.Current.CancellationToken);
 
             List<NullableRow> rows = [.. new ExcelParser<NullableRow>().Parse(reader)];
 
@@ -154,7 +154,7 @@ namespace ExcelReader.Tests
                 """<row r="1"><c r="A1" t="inlineStr"><is><t>Year</t></is></c></row><row r="2"><c r="A2" s="1"><v>0</v></c></row>""",
                 styles: styles,
                 date1904: true);
-            using var reader = Excel.From(ms);
+            using var reader = Excel.FromXlsx(ms);
             Assert.True(reader.IsDate1904);
 
             DatedRow row = new ExcelParser<DatedRow>().Parse(reader).Single();
@@ -166,7 +166,7 @@ namespace ExcelReader.Tests
         public async Task MismatchedConverterTypeThrows()
         {
             await using var ms = await TypedWorkbook.BuildAsync(["Name"], ["x"]);
-            await using var reader = await Excel.FromAsync(ms, ct: TestContext.Current.CancellationToken);
+            await using var reader = await Excel.FromXlsxAsync(ms, ct: TestContext.Current.CancellationToken);
 
             InvalidOperationException ex = Assert.Throws<InvalidOperationException>(
                 () => new ExcelParser<BadRow>().Parse(reader).ToList());

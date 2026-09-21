@@ -11,7 +11,7 @@ namespace ExcelReader.AotSanity
         private static async Task<int> Main()
         {
             await using MemoryStream xlsx = await BuildSampleXlsxAsync();
-            await using XlsxReader reader = await Excel.FromAsync(xlsx);
+            await using XlsxReader reader = await Excel.FromXlsxAsync(xlsx);
             var rows = new ExcelMappedParser<AotModel>().Parse(reader).ToList();
             if (rows.Count != 1 || !string.Equals(rows[0].Name, "Alice", StringComparison.Ordinal) || rows[0].Age != 30 || !rows[0].Active)
             {
@@ -33,7 +33,7 @@ namespace ExcelReader.AotSanity
                 await writer.WriteSheetAsync("S1", [new GeneratedAotModel { Name = "Zoe", Age = 8, Active = true }]);
             }
             writtenStream.Position = 0;
-            await using XlsxReader writtenReader = await Excel.FromAsync(writtenStream);
+            await using XlsxReader writtenReader = await Excel.FromXlsxAsync(writtenStream);
             var writtenRows = new ExcelMappedParser<GeneratedAotModel>().Parse(writtenReader).ToList();
             if (writtenRows.Count != 1 || !string.Equals(writtenRows[0].Name, "Zoe", StringComparison.Ordinal) || writtenRows[0].Age != 8 || !writtenRows[0].Active)
             {

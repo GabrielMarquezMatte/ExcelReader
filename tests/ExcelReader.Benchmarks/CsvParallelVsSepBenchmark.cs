@@ -143,13 +143,13 @@ namespace ExcelReader.Benchmarks
             long acc = 0;
             if (Corpus == ParallelCorpus.NarrowInt)
             {
-                await foreach (NarrowRow row in Excel.ParseCsvParallelAsync<NarrowRow>(Path, degreeOfParallelism))
+                await foreach (NarrowRow row in Excel.ParseCsvParallelAsync<NarrowRow>(Path, new CsvParallelOptions { DegreeOfParallelism = degreeOfParallelism }))
                 {
                     acc += row.A;
                 }
                 return acc;
             }
-            await foreach (WideRow row in Excel.ParseCsvParallelAsync<WideRow>(Path, degreeOfParallelism))
+            await foreach (WideRow row in Excel.ParseCsvParallelAsync<WideRow>(Path, new CsvParallelOptions { DegreeOfParallelism = degreeOfParallelism }))
             {
                 acc += row.Units;
             }

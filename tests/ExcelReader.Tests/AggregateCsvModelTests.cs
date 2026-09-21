@@ -315,7 +315,7 @@ namespace ExcelReader.Tests
             }
 
             stream.Position = 0;
-            await using XlsxReader reader = await Excel.FromAsync(stream, ct: ct);
+            await using XlsxReader reader = await Excel.FromXlsxAsync(stream, ct: ct);
             Assert.Equal(["Ada Lovelace|7|first"], ReadPeople(reader));
         }
 

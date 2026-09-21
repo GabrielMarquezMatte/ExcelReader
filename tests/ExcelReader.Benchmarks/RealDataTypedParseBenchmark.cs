@@ -76,7 +76,7 @@ namespace ExcelReader.Benchmarks
         public long Xlsx_ExcelParser()
         {
             using MemoryStream ms = new(_xlsx, writable: false);
-            using XlsxReader reader = Excel.From(ms);
+            using XlsxReader reader = Excel.FromXlsx(ms);
             long acc = 0;
             foreach (FullRow row in new ExcelParser<FullRow>().Parse(reader))
             {

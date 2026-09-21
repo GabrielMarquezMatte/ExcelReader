@@ -9,7 +9,7 @@ namespace ExcelReader.Tests
         public void ReadsSharedStringsStylesAndNumbers()
         {
             string path = Path.Combine(AppContext.BaseDirectory, "data", "sample.xlsx");
-            using var reader = Excel.FromFile(path);
+            using var reader = Excel.FromXlsxFile(path);
 
             int r = 0;
             foreach (var row in reader)
@@ -42,7 +42,7 @@ namespace ExcelReader.Tests
             await using var ms = WorkbookBuilder.Build(
                 $$"""<row r="1"><c r="A1"><v>10</v></c><c r="C1"><v>30</v></c></row><row r="2"><c r="A2" t="inlineStr"><is><t>{{big}}</t></is></c></row>""");
 
-            await using var reader = await Excel.FromAsync(ms, ct: TestContext.Current.CancellationToken);
+            await using var reader = await Excel.FromXlsxAsync(ms, ct: TestContext.Current.CancellationToken);
             await using var enumerator = await reader.GetAsyncEnumeratorAsync(TestContext.Current.CancellationToken);
             int r = 0;
             while (await enumerator.MoveNextAsync())
@@ -71,7 +71,7 @@ namespace ExcelReader.Tests
             using var ms = WorkbookBuilder.Build(
                 """<row r="1"><c r="A1"><v>10</v></c><c r="AA1"><v>30</v></c></row>""");
 
-            using var reader = Excel.From(ms);
+            using var reader = Excel.FromXlsx(ms);
             using var e = reader.GetEnumerator();
             Assert.True(e.MoveNext());
 
@@ -98,7 +98,7 @@ namespace ExcelReader.Tests
                 """<row r="1"><c r="A1" t="s"><v>0</v></c></row>""",
                 sharedStrings: "<si><t>a &amp; b &lt;tag&gt; &#65;</t></si>");
 
-            using var reader = Excel.From(ms);
+            using var reader = Excel.FromXlsx(ms);
             using var enumerator = reader.GetEnumerator();
             Assert.True(enumerator.MoveNext(), "Expected at least one row");
             var row = enumerator.Current;
@@ -112,7 +112,7 @@ namespace ExcelReader.Tests
                 """<row r="1"><c r="A1" t="s"><v>0</v></c><c r="B1" t="s"><v>1</v></c></row>""",
                 sharedStrings: "<si><t>a&b</t></si><si><t>x&foo;y</t></si>");
 
-            using var reader = Excel.From(ms);
+            using var reader = Excel.FromXlsx(ms);
             using var e = reader.GetEnumerator();
             Assert.True(e.MoveNext());
             var row = e.Current;
@@ -130,7 +130,7 @@ namespace ExcelReader.Tests
                 """<row r="1"><c r="A1" s="1"><v>45292</v></c><c r="B1" s="2"><v>45292.5</v></c><c r="C1" s="0"><v>45292</v></c></row>""",
                 styles: styles);
 
-            using var reader = Excel.From(ms);
+            using var reader = Excel.FromXlsx(ms);
             using var e = reader.GetEnumerator();
             Assert.True(e.MoveNext());
             var row = e.Current;
@@ -151,7 +151,7 @@ namespace ExcelReader.Tests
         {
             var ct = TestContext.Current.CancellationToken;
             string path = Path.Combine(AppContext.BaseDirectory, "data", "sample.xlsx");
-            await using var reader = await Excel.FromFileAsync(path, ct: ct);
+            await using var reader = await Excel.FromXlsxFileAsync(path, ct: ct);
             await using var e = await reader.GetAsyncEnumeratorAsync(ct);
 
             int r = 0;
@@ -184,7 +184,7 @@ namespace ExcelReader.Tests
                 $$"""<row r="1"><c r="A1" s="1"><v>45292</v></c></row><row r="2"><c r="A2" t="inlineStr"><is><t>{{big}}</t></is></c></row>""",
                 styles: styles);
 
-            await using var reader = await Excel.FromAsync(ms, ct: ct);
+            await using var reader = await Excel.FromXlsxAsync(ms, ct: ct);
             await using var e = await reader.GetAsyncEnumeratorAsync(ct);
 
             Assert.True(await e.MoveNextAsync());

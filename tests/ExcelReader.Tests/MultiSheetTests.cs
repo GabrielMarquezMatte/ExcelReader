@@ -11,7 +11,7 @@ namespace ExcelReader.Tests
             await using var ms = await TypedWorkbook.BuildMultiSheetAsync(
                 ("Alpha", [[1]]),
                 ("Beta", [[2]]));
-            await using var reader = await Excel.FromAsync(ms, ct: TestContext.Current.CancellationToken);
+            await using var reader = await Excel.FromXlsxAsync(ms, ct: TestContext.Current.CancellationToken);
             Assert.Equal(2, reader.SheetCount);
         }
 
@@ -19,7 +19,7 @@ namespace ExcelReader.Tests
         public async Task SheetNameMatchesCurrentSheet()
         {
             await using var ms = await TypedWorkbook.BuildMultiSheetAsync(("MySheet", []));
-            await using var reader = await Excel.FromAsync(ms, ct: TestContext.Current.CancellationToken);
+            await using var reader = await Excel.FromXlsxAsync(ms, ct: TestContext.Current.CancellationToken);
             Assert.Equal("MySheet", reader.SheetName);
         }
 
@@ -27,7 +27,7 @@ namespace ExcelReader.Tests
         public async Task TryMoveToSheetMatchesCaseInsensitively()
         {
             await using var ms = await TypedWorkbook.BuildMultiSheetAsync(("Sheet1", []));
-            await using var reader = await Excel.FromAsync(ms, ct: TestContext.Current.CancellationToken);
+            await using var reader = await Excel.FromXlsxAsync(ms, ct: TestContext.Current.CancellationToken);
             Assert.True(reader.TryMoveToSheet("sheet1"));
             Assert.Equal("Sheet1", reader.SheetName);
         }
@@ -36,7 +36,7 @@ namespace ExcelReader.Tests
         public async Task TryMoveToSheetReturnsFalseWhenNotFound()
         {
             await using var ms = await TypedWorkbook.BuildAsync();
-            await using var reader = await Excel.FromAsync(ms, ct: TestContext.Current.CancellationToken);
+            await using var reader = await Excel.FromXlsxAsync(ms, ct: TestContext.Current.CancellationToken);
             Assert.False(reader.TryMoveToSheet("DoesNotExist"));
         }
 
@@ -45,7 +45,7 @@ namespace ExcelReader.Tests
         {
             await using var ms = await TypedWorkbook.BuildMultiSheetAsync(
                 ("First", []), ("Second", []));
-            await using var reader = await Excel.FromAsync(ms, ct: TestContext.Current.CancellationToken);
+            await using var reader = await Excel.FromXlsxAsync(ms, ct: TestContext.Current.CancellationToken);
             reader.MoveToSheet(1);
             Assert.Equal("Second", reader.SheetName);
         }
@@ -54,7 +54,7 @@ namespace ExcelReader.Tests
         public async Task MoveToSheetNegativeIndexThrows()
         {
             await using var ms = await TypedWorkbook.BuildAsync();
-            await using var reader = await Excel.FromAsync(ms, ct: TestContext.Current.CancellationToken);
+            await using var reader = await Excel.FromXlsxAsync(ms, ct: TestContext.Current.CancellationToken);
             Assert.Throws<ArgumentOutOfRangeException>(() => reader.MoveToSheet(-1));
         }
 
@@ -62,7 +62,7 @@ namespace ExcelReader.Tests
         public async Task MoveToSheetOutOfRangeIndexThrows()
         {
             await using var ms = await TypedWorkbook.BuildAsync();
-            await using var reader = await Excel.FromAsync(ms, ct: TestContext.Current.CancellationToken);
+            await using var reader = await Excel.FromXlsxAsync(ms, ct: TestContext.Current.CancellationToken);
             Assert.Throws<ArgumentOutOfRangeException>(() => reader.MoveToSheet(1));
         }
 
@@ -112,7 +112,7 @@ namespace ExcelReader.Tests
             await using var ms = await TypedWorkbook.BuildMultiSheetAsync(
                 ("A", [[11]]),
                 ("B", [[22]]));
-            await using var reader = await Excel.FromAsync(ms, ct: TestContext.Current.CancellationToken);
+            await using var reader = await Excel.FromXlsxAsync(ms, ct: TestContext.Current.CancellationToken);
 
             await using var e1 = reader.GetEnumerator();
             Assert.True(await e1.MoveNextAsync());

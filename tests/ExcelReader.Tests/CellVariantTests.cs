@@ -10,7 +10,7 @@ namespace ExcelReader.Tests
         public async Task BooleanCellHasBooleanType()
         {
             await using var ms = await TypedWorkbook.BuildAsync([true, false]);
-            await using var reader = await Excel.FromAsync(ms, ct: TestContext.Current.CancellationToken);
+            await using var reader = await Excel.FromXlsxAsync(ms, ct: TestContext.Current.CancellationToken);
             await using var e = reader.GetEnumerator();
             Assert.True(await e.MoveNextAsync());
             Assert.Equal(CellType.Boolean, e.Current[0].Type);
@@ -24,7 +24,7 @@ namespace ExcelReader.Tests
         {
             using var ms = WorkbookBuilder.Build(
                 """<row r="1"><c r="A1" t="e"><v>#DIV/0!</v></c></row>""");
-            using var reader = Excel.From(ms);
+            using var reader = Excel.FromXlsx(ms);
             using var e = reader.GetEnumerator();
             Assert.True(e.MoveNext());
             Assert.Equal(CellType.Error, e.Current[0].Type);
@@ -36,7 +36,7 @@ namespace ExcelReader.Tests
         {
             using var ms = WorkbookBuilder.Build(
                 """<row r="1"><c r="A1" t="str"><v>Hello</v></c></row>""");
-            using var reader = Excel.From(ms);
+            using var reader = Excel.FromXlsx(ms);
             using var e = reader.GetEnumerator();
             Assert.True(e.MoveNext());
             Assert.Equal(CellType.Formula, e.Current[0].Type);
@@ -48,7 +48,7 @@ namespace ExcelReader.Tests
         {
             using var ms = WorkbookBuilder.Build(
                 """<row r="1"><c r="A1" t="str"><v>1,5</v></c><c r="B1" t="str"><v>1.5</v></c></row>""");
-            using var reader = Excel.From(ms);
+            using var reader = Excel.FromXlsx(ms);
             using var e = reader.GetEnumerator();
             Assert.True(e.MoveNext());
             Assert.False(e.Current[0].TryGetDouble(out double ambiguous));
@@ -61,7 +61,7 @@ namespace ExcelReader.Tests
         public async Task EmptyWorksheetYieldsNoRows()
         {
             await using var ms = await TypedWorkbook.BuildAsync();
-            await using var reader = await Excel.FromAsync(ms, ct: TestContext.Current.CancellationToken);
+            await using var reader = await Excel.FromXlsxAsync(ms, ct: TestContext.Current.CancellationToken);
             await using var enumerator = await reader.GetAsyncEnumeratorAsync(TestContext.Current.CancellationToken);
             int count = 0;
             while (await enumerator.MoveNextAsync())
@@ -75,7 +75,7 @@ namespace ExcelReader.Tests
         public void SelfClosingRowYieldsZeroColumnCount()
         {
             using var ms = WorkbookBuilder.Build("""<row r="1"/>""");
-            using var reader = Excel.From(ms);
+            using var reader = Excel.FromXlsx(ms);
             using var e = reader.GetEnumerator();
             Assert.True(e.MoveNext());
             Assert.Equal(0, e.Current.ColumnCount);
@@ -87,7 +87,7 @@ namespace ExcelReader.Tests
             using var ms = WorkbookBuilder.Build(
                 """<row r="1"><c r="A1" t="s"><v>0</v></c><c r="B1" t="s"><v>1</v></c></row>""",
                 sharedStrings: "<si><t>say &quot;hi&quot;</t></si><si><t>it&apos;s</t></si>");
-            using var reader = Excel.From(ms);
+            using var reader = Excel.FromXlsx(ms);
             using var e = reader.GetEnumerator();
             Assert.True(e.MoveNext());
             var row = e.Current;
@@ -101,7 +101,7 @@ namespace ExcelReader.Tests
             using var ms = WorkbookBuilder.Build(
                 """<row r="1"><c r="A1" t="s"><v>0</v></c></row>""",
                 sharedStrings: "<si><t>&#x41;&#X7A;</t></si>");
-            using var reader = Excel.From(ms);
+            using var reader = Excel.FromXlsx(ms);
             using var e = reader.GetEnumerator();
             Assert.True(e.MoveNext());
             Assert.Equal("Az", e.Current[0].GetString());
@@ -113,7 +113,7 @@ namespace ExcelReader.Tests
             using var ms = WorkbookBuilder.Build(
                 """<row r="1"><c r="A1" t="s"><v>0</v></c></row>""",
                 sharedStrings: "<si><r><rPr><b/></rPr><t>Hello</t></r><r><rPr><i/></rPr><t> World</t></r></si>");
-            using var reader = Excel.From(ms);
+            using var reader = Excel.FromXlsx(ms);
             using var e = reader.GetEnumerator();
             Assert.True(e.MoveNext());
             Assert.Equal("Hello World", e.Current[0].GetString());
@@ -127,7 +127,7 @@ namespace ExcelReader.Tests
                 """<cellXfs count="2"><xf numFmtId="0"/><xf numFmtId="164"/></cellXfs></styleSheet>""";
             using var ms = WorkbookBuilder.Build(
                 """<row r="1"><c r="A1" s="1"><v>45292</v></c></row>""", styles: styles);
-            using var reader = Excel.From(ms);
+            using var reader = Excel.FromXlsx(ms);
             using var e = reader.GetEnumerator();
             Assert.True(e.MoveNext());
             Assert.Equal(CellType.Number, e.Current[0].Type);
@@ -141,7 +141,7 @@ namespace ExcelReader.Tests
                 """<cellXfs count="2"><xf numFmtId="0"/><xf numFmtId="164"/></cellXfs></styleSheet>""";
             using var ms = WorkbookBuilder.Build(
                 """<row r="1"><c r="A1" s="1"><v>45292</v></c></row>""", styles: styles);
-            using var reader = Excel.From(ms);
+            using var reader = Excel.FromXlsx(ms);
             using var e = reader.GetEnumerator();
             Assert.True(e.MoveNext());
             Assert.Equal(CellType.Number, e.Current[0].Type);
@@ -155,7 +155,7 @@ namespace ExcelReader.Tests
                 """<cellXfs count="2"><xf numFmtId="0"/><xf numFmtId="164"/></cellXfs></styleSheet>""";
             using var ms = WorkbookBuilder.Build(
                 """<row r="1"><c r="A1" s="1"><v>45292</v></c></row>""", styles: styles);
-            using var reader = Excel.From(ms);
+            using var reader = Excel.FromXlsx(ms);
             using var e = reader.GetEnumerator();
             Assert.True(e.MoveNext());
             Assert.Equal(CellType.Number, e.Current[0].Type);
@@ -165,7 +165,7 @@ namespace ExcelReader.Tests
         public async Task TryGetDateTimeOnInlineStringReturnsFalse()
         {
             await using var ms = await TypedWorkbook.BuildAsync(["not-a-date"]);
-            await using var reader = await Excel.FromAsync(ms, ct: TestContext.Current.CancellationToken);
+            await using var reader = await Excel.FromXlsxAsync(ms, ct: TestContext.Current.CancellationToken);
             await using var e = reader.GetEnumerator();
             Assert.True(await e.MoveNextAsync());
             Assert.False(e.Current[0].TryGetDateTime(out _));
@@ -175,7 +175,7 @@ namespace ExcelReader.Tests
         public async Task TryGetDateTimeOutOfRangeSerialReturnsFalse()
         {
             await using var ms = await TypedWorkbook.BuildAsync([3000000]);
-            await using var reader = await Excel.FromAsync(ms, ct: TestContext.Current.CancellationToken);
+            await using var reader = await Excel.FromXlsxAsync(ms, ct: TestContext.Current.CancellationToken);
             await using var e = reader.GetEnumerator();
             Assert.True(await e.MoveNextAsync());
             Assert.False(e.Current[0].TryGetDateTime(out _));
@@ -185,7 +185,7 @@ namespace ExcelReader.Tests
         public async Task LeaveOpenFalseClosesStreamOnDispose()
         {
             await using var ms = await TypedWorkbook.BuildAsync();
-            await using (var reader = await Excel.FromAsync(ms, leaveOpen: false, ct: TestContext.Current.CancellationToken))
+            await using (var reader = await Excel.FromXlsxAsync(ms, leaveOpen: false, ct: TestContext.Current.CancellationToken))
             {
                 Assert.Equal(1, reader.SheetCount);
             }
@@ -196,7 +196,7 @@ namespace ExcelReader.Tests
         public async Task LeaveOpenTrueKeepsStreamOpenAfterDispose()
         {
             await using var ms = await TypedWorkbook.BuildAsync();
-            await using (var reader = await Excel.FromAsync(ms, leaveOpen: true, ct: TestContext.Current.CancellationToken))
+            await using (var reader = await Excel.FromXlsxAsync(ms, leaveOpen: true, ct: TestContext.Current.CancellationToken))
             {
                 Assert.Equal(1, reader.SheetCount);
             }
@@ -207,7 +207,7 @@ namespace ExcelReader.Tests
         public async Task LargeColumnReferenceAAIsColumn26()
         {
             await using var ms = await TypedWorkbook.BuildAsync([new Gap(26), 99]);
-            await using var reader = await Excel.FromAsync(ms, ct: TestContext.Current.CancellationToken);
+            await using var reader = await Excel.FromXlsxAsync(ms, ct: TestContext.Current.CancellationToken);
             await using var e = reader.GetEnumerator();
             Assert.True(await e.MoveNextAsync());
             Assert.Equal(CellType.Empty, e.Current[0].Type);
@@ -220,7 +220,7 @@ namespace ExcelReader.Tests
         public async Task TryParseDoubleSucceeds()
         {
             await using var ms = await TypedWorkbook.BuildAsync([3.14]);
-            await using var reader = await Excel.FromAsync(ms, ct: TestContext.Current.CancellationToken);
+            await using var reader = await Excel.FromXlsxAsync(ms, ct: TestContext.Current.CancellationToken);
             await using var e = reader.GetEnumerator();
             Assert.True(await e.MoveNextAsync());
             Assert.True(e.Current[0].TryParse(CultureInfo.InvariantCulture, out double d));
@@ -231,7 +231,7 @@ namespace ExcelReader.Tests
         public async Task TryParseLongSucceeds()
         {
             await using var ms = await TypedWorkbook.BuildAsync([long.MaxValue]);
-            await using var reader = await Excel.FromAsync(ms, ct: TestContext.Current.CancellationToken);
+            await using var reader = await Excel.FromXlsxAsync(ms, ct: TestContext.Current.CancellationToken);
             await using var e = reader.GetEnumerator();
             Assert.True(await e.MoveNextAsync());
             Assert.True(e.Current[0].TryParse(null, out long l));
@@ -247,7 +247,7 @@ namespace ExcelReader.Tests
                 """<row r="1"><c r="A1" s="1"><v>0</v></c><c r="B1" s="1"><v>1</v></c></row>""",
                 styles: styles,
                 date1904: true);
-            using var reader = Excel.From(ms);
+            using var reader = Excel.FromXlsx(ms);
             Assert.True(reader.IsDate1904);
             using var e = reader.GetEnumerator();
             Assert.True(e.MoveNext());
@@ -263,7 +263,7 @@ namespace ExcelReader.Tests
         public async Task IsDate1904FalseForStandard1900Workbook()
         {
             await using var ms = await TypedWorkbook.BuildAsync();
-            await using var reader = Excel.From(ms);
+            await using var reader = Excel.FromXlsx(ms);
             Assert.False(reader.IsDate1904);
         }
 
@@ -275,7 +275,7 @@ namespace ExcelReader.Tests
             using var ms = WorkbookBuilder.Build(
                 """<row r="1"><c r="A1" s="1"><v>1</v></c><c r="B1" s="1"><v>59</v></c><c r="C1" s="1"><v>60</v></c></row>""",
                 styles: styles);
-            using var reader = Excel.From(ms);
+            using var reader = Excel.FromXlsx(ms);
             using var e = reader.GetEnumerator();
 
             Assert.True(e.MoveNext());
@@ -291,7 +291,7 @@ namespace ExcelReader.Tests
         public void BinaryNumberOutsideDecimalRangeDoesNotThrow()
         {
             using var ms = WorkbookBuilder.Build("""<row r="1"><c r="A1"><v>1E+30</v></c></row>""");
-            using var reader = Excel.From(ms);
+            using var reader = Excel.FromXlsx(ms);
             using var e = reader.GetEnumerator();
 
             Assert.True(e.MoveNext());

@@ -49,7 +49,7 @@ namespace ExcelReader.Tests
         {
             using MemoryStream built = WorkbookBuilder.Build($"""<row r="1"><c r="{cellRef}"><v>1</v></c></row>""");
 
-            using XlsxReader reader = Excel.From(built);
+            using XlsxReader reader = Excel.FromXlsx(built);
             Assert.Throws<ExcelLimitExceededException>(() =>
             {
                 using XlsxReader.Enumerator e = reader.GetEnumerator();
@@ -62,7 +62,7 @@ namespace ExcelReader.Tests
         {
             using MemoryStream built = WorkbookBuilder.Build("""<row r="1"><c r="XFD1"><v>1</v></c></row>""");
 
-            using XlsxReader reader = Excel.From(built);
+            using XlsxReader reader = Excel.FromXlsx(built);
             using XlsxReader.Enumerator e = reader.GetEnumerator();
             Assert.True(e.MoveNext());
             Assert.Equal(16_384, e.Current.ColumnCount);
@@ -106,7 +106,7 @@ namespace ExcelReader.Tests
 
             ExcelLimitExceededException ex = Assert.Throws<ExcelLimitExceededException>(() =>
             {
-                using XlsxReader reader = Excel.From(forged, options: options);
+                using XlsxReader reader = Excel.FromXlsx(forged, options: options);
             });
             Assert.Equal(nameof(ExcelReaderOptions.MaxTotalDecompressedBytes), ex.LimitName);
             Assert.Equal(50_000_000, ex.Actual);
@@ -128,7 +128,7 @@ namespace ExcelReader.Tests
                 MaxSharedStringBytes = 1024,
             };
 
-            using XlsxReader reader = Excel.From(forged, options: options);
+            using XlsxReader reader = Excel.FromXlsx(forged, options: options);
             ExcelLimitExceededException ex = Assert.Throws<ExcelLimitExceededException>(() =>
             {
                 using XlsxReader.Enumerator e = reader.GetEnumerator();
@@ -155,7 +155,7 @@ namespace ExcelReader.Tests
             }
             ms.Position = 0;
 
-            using XlsxReader reader = Excel.From(ms);
+            using XlsxReader reader = Excel.FromXlsx(ms);
             ExcelLimitExceededException ex = Assert.Throws<ExcelLimitExceededException>(() =>
             {
                 using XlsxReader.Enumerator e = reader.GetEnumerator();
@@ -280,7 +280,7 @@ namespace ExcelReader.Tests
 
             ExcelLimitExceededException ex = Assert.Throws<ExcelLimitExceededException>(() =>
             {
-                using XlsxReader reader = Excel.From(ms, options: options);
+                using XlsxReader reader = Excel.FromXlsx(ms, options: options);
             });
             Assert.Equal(nameof(ExcelReaderOptions.MaxZipEntries), ex.LimitName);
             Assert.Equal(10, ex.Limit);
@@ -299,7 +299,7 @@ namespace ExcelReader.Tests
                 MaxTotalDecompressedBytes = 16 * 1024,
             };
 
-            using XlsxReader reader = Excel.From(ms, options: options);
+            using XlsxReader reader = Excel.FromXlsx(ms, options: options);
             ExcelLimitExceededException ex = Assert.Throws<ExcelLimitExceededException>(() =>
             {
                 using XlsxReader.Enumerator e = reader.GetEnumerator();
@@ -323,7 +323,7 @@ namespace ExcelReader.Tests
                 MaxSharedStringBytes = 1024,
             };
 
-            using XlsxReader reader = Excel.From(ms, options: options);
+            using XlsxReader reader = Excel.FromXlsx(ms, options: options);
             ExcelLimitExceededException ex = Assert.Throws<ExcelLimitExceededException>(() =>
             {
                 using XlsxReader.Enumerator e = reader.GetEnumerator();
@@ -343,7 +343,7 @@ namespace ExcelReader.Tests
                 MaxTotalDecompressedBytes = 0,
             };
 
-            using XlsxReader reader = Excel.From(ms, options: options);
+            using XlsxReader reader = Excel.FromXlsx(ms, options: options);
             using XlsxReader.Enumerator e = reader.GetEnumerator();
             Assert.True(e.MoveNext());
             Assert.Equal(value.Length, e.Current[0].GetString().Length);

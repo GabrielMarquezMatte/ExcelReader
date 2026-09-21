@@ -76,7 +76,7 @@ namespace ExcelReader.Tests
                 }
                 await sheet.EndAsync(TestContext.Current.CancellationToken);
             });
-            using var reader = Excel.From(ms);
+            using var reader = Excel.FromXlsx(ms);
             using var e = reader.GetEnumerator();
             Assert.True(e.MoveNext());
             Assert.Equal(1, e.Current[0].StyleIndex);
@@ -199,7 +199,7 @@ namespace ExcelReader.Tests
                 }
                 await sheet.EndAsync(TestContext.Current.CancellationToken);
             });
-            using var reader = Excel.From(ms);
+            using var reader = Excel.FromXlsx(ms);
             using var e = reader.GetEnumerator();
             Assert.True(e.MoveNext());
             Assert.Equal(2, e.Current[0].StyleIndex);
@@ -289,7 +289,7 @@ namespace ExcelReader.Tests
                 }
                 await sheet.EndAsync(TestContext.Current.CancellationToken);
             });
-            using var reader = Excel.From(ms);
+            using var reader = Excel.FromXlsx(ms);
             using var e = reader.GetEnumerator();
             Assert.True(e.MoveNext());
             Assert.Equal(2, e.Current[0].StyleIndex);

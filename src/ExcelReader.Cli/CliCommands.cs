@@ -12,22 +12,14 @@ namespace ExcelReader.Cli
     {
         internal static int Sheets(string path, TextWriter stdout, TextWriter stderr, string? password = null)
         {
-            return Sheets(path, (index, name) =>
-            {
-                stdout.Write(index.ToString(CultureInfo.InvariantCulture));
-                stdout.Write('\t');
-                stdout.WriteLine(name);
-            }, stderr, password);
-        }
-
-        internal static int Sheets(string path, Action<int, string> onSheet, TextWriter stderr, string? password = null)
-        {
             return Execute(() =>
             {
                 using IExcelRowReader reader = Open(path, sheet: null, password);
                 for (int i = 0; i < reader.SheetCount; i++)
                 {
-                    onSheet(i, reader.SheetNameAt(i));
+                    stdout.Write(i.ToString(CultureInfo.InvariantCulture));
+                    stdout.Write('\t');
+                    stdout.WriteLine(reader.SheetNameAt(i));
                 }
                 return 0;
             }, stderr);
@@ -198,26 +190,18 @@ namespace ExcelReader.Cli
 
         internal static int Schema(string path, string? sheet, int headerRow, int sampleSize, TextWriter stdout, TextWriter stderr, string? password = null)
         {
-            return Schema(path, sheet, headerRow, sampleSize, column =>
-            {
-                stdout.Write(column.Index.ToString(CultureInfo.InvariantCulture));
-                stdout.Write('\t');
-                stdout.Write(column.Name ?? string.Empty);
-                stdout.Write('\t');
-                stdout.Write(column.Type.ToString());
-                stdout.WriteLine(column.IsNullable ? "?" : string.Empty);
-            }, stderr, password);
-        }
-
-        internal static int Schema(string path, string? sheet, int headerRow, int sampleSize, Action<ExcelColumnSchema> onColumn, TextWriter stderr, string? password = null)
-        {
             return Execute(() =>
             {
                 using IExcelRowReader reader = Open(path, sheet, password);
 
                 foreach (ExcelColumnSchema column in Excel.InferSchema(reader, headerRow, sampleSize))
                 {
-                    onColumn(column);
+                    stdout.Write(column.Index.ToString(CultureInfo.InvariantCulture));
+                    stdout.Write('\t');
+                    stdout.Write(column.Name ?? string.Empty);
+                    stdout.Write('\t');
+                    stdout.Write(column.Type.ToString());
+                    stdout.WriteLine(column.IsNullable ? "?" : string.Empty);
                 }
                 return 0;
             }, stderr);
