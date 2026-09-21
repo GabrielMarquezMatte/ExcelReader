@@ -426,6 +426,7 @@ namespace ExcelReader.Core.Crypto
                 throw new InvalidDataException("Invalid OLE mini stream size.");
             }
             byte[] result = new byte[size];
+            bool[] visited = new bool[miniFat.Length];
             int sector = startSector;
             int written = 0;
             while (sector is >= 0 and not EndOfChain && written < result.Length)
@@ -438,10 +439,11 @@ namespace ExcelReader.Core.Crypto
                 }
                 miniStream.Slice((int)offset, take).CopyTo(result.AsSpan(written));
                 written += take;
-                if ((uint)sector >= (uint)miniFat.Length)
+                if ((uint)sector >= (uint)miniFat.Length || visited[sector])
                 {
                     throw new InvalidDataException("Invalid OLE mini FAT chain.");
                 }
+                visited[sector] = true;
                 sector = miniFat[sector];
             }
             return result;

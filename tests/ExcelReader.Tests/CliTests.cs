@@ -1,5 +1,6 @@
 using ExcelReader.Cli;
 using ExcelReader.Core.Reader;
+using ExcelReader.Core.Writer;
 
 namespace ExcelReader.Tests
 {
@@ -59,6 +60,37 @@ namespace ExcelReader.Tests
 
             using IExcelRowReader byName = CliCommands.Open(Fixture("RealExcel.xlsb"), firstSheetName);
             Assert.Equal(firstSheetName, byName.SheetName);
+        }
+
+        [Fact]
+        public void Should_PreferASheetNamedLikeANumber_Over_TheSheetAtThatIndex()
+        {
+            string path = Path.Combine(Path.GetTempPath(), $"cli-numeric-sheet-{Guid.NewGuid():N}.xlsx");
+            try
+            {
+                using (FileStream file = File.Create(path))
+                using (XlsxWorkbookWriter workbook = XlsxWorkbookWriter.Create(file, leaveOpen: true))
+                {
+                    workbook.Start();
+                    foreach (string name in (string[])["Data", "0"])
+                    {
+                        using XlsxSheetWriter sheet = workbook.AddSheet(name);
+                        sheet.Start();
+                        sheet.End();
+                    }
+                    workbook.End();
+                }
+
+                using IExcelRowReader named = CliCommands.Open(path, "0");
+                Assert.Equal("0", named.SheetName);
+
+                using IExcelRowReader indexed = CliCommands.Open(path, "1");
+                Assert.Equal("0", indexed.SheetName);
+            }
+            finally
+            {
+                File.Delete(path);
+            }
         }
 
         [Fact]

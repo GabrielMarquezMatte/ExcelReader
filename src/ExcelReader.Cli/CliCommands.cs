@@ -241,16 +241,16 @@ namespace ExcelReader.Cli
 
             try
             {
+                if (reader.TryMoveToSheet(sheet))
+                {
+                    return reader;
+                }
                 if (int.TryParse(sheet, CultureInfo.InvariantCulture, out int index))
                 {
                     reader.MoveToSheet(index);
                     return reader;
                 }
-                if (!reader.TryMoveToSheet(sheet))
-                {
-                    throw new ArgumentException($"no sheet named '{sheet}' in {path}.", nameof(sheet));
-                }
-                return reader;
+                throw new ArgumentException($"no sheet named '{sheet}' in {path}.", nameof(sheet));
             }
             catch
             {

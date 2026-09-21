@@ -60,7 +60,8 @@ Flags: `--sheet|-s <name|index>`, `--header-row N` (0 = no header), `--sample-si
 `--output|-o <file>`, `--format|-f <xlsx|xlsb|xls|csv>` (defaults to `--output`'s extension, or csv
 for stdout), `--delimiter|-d <char>` (csv only). Run `excelreader <command> --help` for the full list.
 
-`sheets` and `schema` write plain tab-separated text. `convert` reports progress on stderr while it
+`--sheet` matches a sheet name first and falls back to a 0-based index, so a sheet literally named
+`2` is reachable by name. `sheets` and `schema` write plain tab-separated text. `convert` reports progress on stderr while it
 runs, unless stderr is redirected. Exit codes are `0` ok and `1` failure; results go to stdout and
 errors to stderr, so `convert` is safe to pipe.
 
