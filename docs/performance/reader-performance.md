@@ -5,11 +5,12 @@ AVX2, no AVX-512, .NET 10. Corpus: `tests/ExcelReader.Benchmarks/Data/65K_Record
 rows, 14 columns, numeric and date heavy, with only ~5 KB of shared strings. The string-heavy section
 uses `StringHeavyWorkbookGenerator`'s 65,536-row fixture instead.
 
-**This is not the machine the README's tables come from.** Those are a Ryzen 7 5700X desktop. A
-throttling mobile part with P and E cores is exactly the hardware `ARCHITECTURE.md` describes
-discarding an earlier parallel-CSV measurement over, so nothing here should be compared against a
-README number by absolute milliseconds — only ratios measured within one run are meaningful, and
-anything destined for the README has to be re-run on the documented machine.
+**This is not the machine the published tables come from.** Those, in `benchmarks.md`, are a Ryzen 7
+5700X desktop. A throttling mobile part with P and E cores is exactly the hardware `ARCHITECTURE.md`
+describes discarding an earlier parallel-CSV measurement over, so nothing here should be compared
+against a published number by absolute milliseconds — only ratios measured within one run are
+meaningful, and anything destined for `benchmarks.md` has to be re-run on the documented machine.
+The exception is "Second round" below, which was measured on the Ryzen.
 
 The harness was a throwaway console app, not committed. Every table below comes from a single
 interleaved round-robin run, where each variant runs once per round so thermal drift hits all of
@@ -627,6 +628,80 @@ A fourth: **`FastDate.TryParseRoundTrip`**, a vectorized path for the 27-byte
 the scalar parser, gated by a 50,000-value differential and by `FastDateTests` cases covering a
 digit in each separator slot. Anything else falls through to the scalar parser unchanged.
 
+### Second round (2026-09-21, Ryzen 7 5700X)
+
+Measured on the published tables' machine, BenchmarkDotNet `--job Medium`, one run before and one
+after, each whole benchmark class. Baseline was the previous commit built from a `git archive`.
+Full suite at 1759/1759 afterwards.
+
+- **`FastDate` reached the typed path.** `ColumnParserFactory.TryParseDateTimeText` tried
+  `Utf8Parser.TryParse(…, 'O')` before the culture parse, and `TryParseDateOnlyText` went straight to
+  the culture parse. Both now try `FastDate` first and keep the culture parse as the fallback.
+  `CsvParserTests.TextDatesBindExactlyAsTheCultureParserWould` pins nine shapes to the old result.
+- **XLSX `t="d"` cells use `FastDate`.** `XlsxReader.Enumerator.TryParseIsoDate` tries it first and
+  keeps its char-copy `DateTime.TryParse` for shapes `FastDate` rejects. Years below 100 are rejected
+  as before. No benchmark reads `t="d"` cells, so this one is unmeasured; it is the same parser the
+  CSV rows below measure.
+- **`IRowWriter.WriteUtf8(ReadOnlySpan<byte>)`**, a default interface method that decodes to a
+  string. `CsvRowWriter` and `XlsxRowWriter` override it to copy the bytes straight through when they
+  are valid UTF-8 and need no escaping, and fall back to `Write(string)` otherwise — always for XLSX
+  shared strings. The C ABI and the Arrow writer now call it instead of building a string per cell.
+  `WriteUtf8ParityTests` checks 14 values byte-for-byte against `Write(string)` on all three paths.
+- **Styled rows format the style id with `Utf8Formatter`** into the row buffer instead of an
+  interpolated string per row.
+
+| | before | after | |
+|---|---|---|---|
+| `CsvParseBenchmark.ExcelParserSync` (typed, 50k rows) | 7.081 ms | 5.979 ms | 1.18x |
+| `CsvParallelParseBenchmark.ConversionHeavy`, dop 1 | 1,372.6 ms | 981.9 ms | 1.40x |
+| `CsvParallelParseBenchmark.ConversionHeavy`, dop 16 | 331.6 ms | 271.8 ms | 1.22x |
+| `CsvParallelParseBenchmark.ConversionHeavyAggregate`, dop 1 | 1,217.1 ms | 845.9 ms | 1.44x |
+| `CsvParallelParseBenchmark.ConversionHeavyAggregate`, dop 8 | 240.0 ms | 160.8 ms | 1.49x |
+| `WritePathBenchmark.NativeStrings_Csv` | 10.14 ms / 21.36 MB | 4.881 ms / 384 B | 2.08x |
+| `WritePathBenchmark.NativeStrings_Xlsx` | 27.16 ms / 21.38 MB | 21.053 ms / 18 KB | 1.29x |
+| `WritePathBenchmark.ArrowStrings_Xlsx` | 31.49 ms / 21.38 MB | 26.087 ms / 18 KB | 1.21x |
+| `WritePathBenchmark.StyledRows_Xlsx` | 10.07 ms / 7.65 MB | 7.814 ms / 18 KB | 1.29x |
+
+Controls: `NarrowInt`, which has no dates, and Sylvan both stayed inside run-to-run noise (Sylvan
+11.97 → 12.78 ms, in the unfavourable direction). Allocation on the typed paths did not change; the
+model object per row is what they allocate. The published tables in `benchmarks.md` come from a
+third, separate run after these changes.
+
+### Writing doubles (2026-09-21, Ryzen 7 5700X)
+
+`WriteBenchmark` had SpreadCheetah ~8% ahead of the XLSX writer. With compression off the writer
+still took 13.6 ms of its 17.5, so the cost was generating XML, not deflate. Per cell, above an
+empty row: string ~30 ns, int ~18 ns, double ~92 ns, date ~118 ns. Both of the last two end in
+`Utf8Formatter.TryFormat(double)`, the general shortest-round-trip formatter.
+
+`CellFormatter.TryFormatDouble` tries scales 10⁰–10⁴ and takes the first where `round(v·10ᵈ) / 10ᵈ == v`
+exactly, for `0 < |v| < 1e9`. That integer, with a decimal point inserted, is the shortest form, so
+the output is byte-identical. Anything else, including `-0`, falls through to `Utf8Formatter`. The
+XLSX writer (numbers and date serials) and the CSV writer use it.
+
+| per value | `Utf8Formatter` | `TryFormatDouble` | |
+|---|---|---|---|
+| short decimals (`1.5`, `45293.25`) | 61.6 ns | 15.1 ns | 4.07x |
+| integral | 55.2 ns | 12.5 ns | 4.40x |
+| serials with a time of day | 99.5 ns | 98.9 ns | 1.01x |
+
+Correctness gate: 6.1M values (short decimals, random doubles across magnitudes, random bit
+patterns, edges and their neighbours), zero mismatches. `DoubleFormatTests` keeps 600k of them.
+
+End to end, A/B harness (one executable built against each `ExcelReader.Core.dll`, alternated
+three times, min of 25):
+
+| 50k rows | before | after | |
+|---|---|---|---|
+| XLSX | 17.50 ms | 12.68 ms | 1.38x |
+| XLSX, shared strings | 17.08 ms | 12.11 ms | 1.41x |
+| CSV | 6.71 ms | 4.23 ms | 1.59x |
+| XLSB (control) | 7.65 ms | 7.63 ms | — |
+| SpreadCheetah (control) | 15.66 ms | 15.52 ms | — |
+
+BenchmarkDotNet afterwards: XLSX writing 12.261 ms against SpreadCheetah's 15.548 ms, CSV writing
+4.624 ms against Sep's 7.075 ms. XLSB writes doubles in binary and is unaffected.
+
 ## Known open items
 
 - The 8.9 ms of sheet parse above the inflate floor in the string-heavy corpus has not been
@@ -635,9 +710,6 @@ digit in each separator slot. Anything else falls through to the scalar parser u
   producer's pooled chunk into the consumer's buffer. Removing it means replacing the `Stream` seam
   with a buffer-exchange protocol — and that seam is where the decompressed-byte limit counters sit,
   so it is a trust boundary, not just a copy.
-- `XlsxReader.Enumerator.TryParseIsoDate` still has its own ISO date parse, copying bytes to chars on
-  the stack and calling `DateTime.TryParse`. `FastDate` now covers the same shapes and should replace
-  it, but that path was not measured, so it was left alone.
 - After `DrainFields`, rows-only enumeration of wide rows still runs ~1.75x the framing prototype.
   What remains is per record rather than per field (the `MoveNext` → `TryParseRecordFromBuffer` →
   `TryParseSimpleRecord` call chain, `BeginRecord`, the write barrier from `CsvControlScanner.Continue`

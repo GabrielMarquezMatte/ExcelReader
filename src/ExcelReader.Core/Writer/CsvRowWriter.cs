@@ -205,7 +205,7 @@ namespace ExcelReader.Core.Writer
                 WriteFieldBytes(buf[..written]);
                 return;
             }
-            if (format.IsEmpty && typeof(T) == typeof(double) && Utf8Formatter.TryFormat(Unsafe.As<T, double>(ref value), buf, out written))
+            if (format.IsEmpty && typeof(T) == typeof(double) && CellFormatter.TryFormatDouble(Unsafe.As<T, double>(ref value), buf, out written))
             {
                 WriteFieldBytes(buf[..written]);
                 return;

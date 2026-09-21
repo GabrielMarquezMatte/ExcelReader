@@ -20,10 +20,10 @@ Compares ExcelReader against established XLSX libraries on the same generated wo
 | Typed row parsing | 15.741 ms, 3.87 MB | 167.768 ms, 256.15 MB | 56.143 ms, 10.47 MB | - |
 | Typed row parsing async | 15.352 ms, 3.88 MB | - | 60.307 ms, 10.48 MB | - |
 | Typed row parsing, shared strings | 12.347 ms, 2.30 MB | - | - | - |
-| Workbook writing | 17.812 ms, 4.02 MB | 293.130 ms, 84.88 MB | - | 16.418 ms, 15.84 MB |
-| Workbook writing, shared strings | 17.246 ms, 4.06 MB | - | - | - |
+| Workbook writing | 12.261 ms, 4.02 MB | 287.048 ms, 84.89 MB | - | 15.548 ms, 15.84 MB |
+| Workbook writing, shared strings | 11.890 ms, 4.06 MB | - | - | - |
 
-ExcelReader is ~14.1x faster than MiniExcel and ~3.3x faster than Sylvan for raw XLSX reads, allocating ~24,593x and ~174x less respectively. For typed parsing, it is ~10.7x faster than MiniExcel and ~3.6x faster than Sylvan. For XLSX writing, SpreadCheetah is ~8% faster than ExcelReader, which allocates ~3.9x less memory; ExcelReader is ~16.5x faster than MiniExcel and allocates ~21x less.
+ExcelReader is ~14.1x faster than MiniExcel and ~3.3x faster than Sylvan for raw XLSX reads, allocating ~24,593x and ~174x less respectively. For typed parsing, it is ~10.7x faster than MiniExcel and ~3.6x faster than Sylvan. For XLSX writing, ExcelReader is ~1.3x faster than SpreadCheetah while allocating ~3.9x less memory, and ~23x faster than MiniExcel while allocating ~21x less.
 
 Reading a shared-strings XLSX workbook with typed parsing is ~22% faster than the inline-string sheet above (12.347 ms vs. 15.741 ms) and allocates ~41% less (2.30 MB vs. 3.87 MB) — each distinct string decodes once into the shared-string cache instead of once per cell occurrence.
 
@@ -35,10 +35,10 @@ Reading a shared-strings XLSX workbook with typed parsing is ~22% faster than th
 | Cell-by-cell read async | 5.809 ms, 15.79 KB |
 | Typed row parsing | 7.963 ms, 3.88 MB |
 | Typed row parsing async | 8.281 ms, 3.88 MB |
-| Workbook writing | 7.695 ms, 4.02 MB |
-| Workbook writing, shared strings | 7.170 ms, 4.06 MB |
+| Workbook writing | 7.515 ms, 4.02 MB |
+| Workbook writing, shared strings | 7.148 ms, 4.06 MB |
 
-XLSB is the fastest generated Excel format in these results: raw reads are ~2.1x faster than XLSX reads, typed parsing is ~2.0x faster than XLSX parsing, and writing is ~2.3x faster than XLSX writing. The XLSB writer is also ~2.1x faster than SpreadCheetah on this benchmark while allocating ~75% less memory.
+XLSB is the fastest generated Excel format in these results: raw reads are ~2.1x faster than XLSX reads, typed parsing is ~2.0x faster than XLSX parsing, and writing is ~1.6x faster than XLSX writing. The XLSB writer is also ~2.1x faster than SpreadCheetah on this benchmark while allocating ~75% less memory.
 
 ### XLS (BIFF8)
 
@@ -46,9 +46,9 @@ XLSB is the fastest generated Excel format in these results: raw reads are ~2.1x
 |---|---:|---:|
 | Cell-by-cell read | 3.328 ms, 3.04 KB | 5.410 ms, 1,717.73 KB |
 | Cell-by-cell read async | 3.977 ms, 3.11 KB | - |
-| Workbook writing | 5.107 ms, 16.03 MB | - |
+| Workbook writing | 5.182 ms, 16.03 MB | - |
 
-ExcelReader is ~1.6x faster than Sylvan for generated XLS reads while allocating ~565x less memory. The XLS writer is ~3.4x faster than the XLSX writer in this benchmark, but it allocates more because the BIFF8/OLE container is assembled in memory.
+ExcelReader is ~1.6x faster than Sylvan for generated XLS reads while allocating ~565x less memory. The XLS writer is ~2.3x faster than the XLSX writer in this benchmark (`XlsWriteBenchmark`, 5.182 ms vs 12.145 ms in the same run). Most of its 16.03 MB is the benchmark's pre-sized 16 MB destination `MemoryStream`; the typed-record table below measures it at 4.03 MB like the other formats.
 
 ### CSV
 
@@ -56,11 +56,11 @@ ExcelReader is ~1.6x faster than Sylvan for generated XLS reads while allocating
 |---|---:|---:|---:|---:|
 | Cell-by-cell read | 3.428 ms, 368 B | 7.697 ms, 3.93 KB | 4.463 ms, 1.61 MB | 23.805 ms, 14.38 MB |
 | Cell-by-cell read async | 3.657 ms, 440 B | - | - | - |
-| Typed row parsing | 7.057 ms, 3.86 MB | 8.649 ms, 3.87 MB | 12.132 ms, 10.95 MB | 23.443 ms, 14.41 MB |
-| Typed row parsing async | 6.328 ms, 3.86 MB | - | - | - |
-| Row writing | 6.702 ms, 4.00 MB | 7.036 ms, 4.01 MB | 7.071 ms, 4.04 MB | 14.621 ms, 13.78 MB |
+| Typed row parsing | 5.860 ms, 3.86 MB | 8.641 ms, 3.87 MB | 12.113 ms, 10.95 MB | 22.996 ms, 14.41 MB |
+| Typed row parsing async | 5.503 ms, 3.86 MB | - | - | - |
+| Row writing | 4.624 ms, 4.00 MB | 7.075 ms, 4.01 MB | 7.066 ms, 4.04 MB | 14.181 ms, 13.79 MB |
 
-For raw CSV reads, ExcelReader is ~2.2x faster than Sep while allocating ~11x less, ~1.3x faster than Sylvan.Data.Csv while allocating ~4,589x less (1.61 MB vs 368 B), and ~6.9x faster than CsvHelper while allocating ~40,960x less. For typed CSV parsing (the more common case — building actual records), ExcelReader is ~1.2x faster than Sep, ~1.7x faster than Sylvan.Data.Csv, and ~3.3x faster than CsvHelper, with the lowest allocation of the group. For CSV writing, ExcelReader, Sep, and Sylvan.Data.Csv are all within ~6% of each other, and ~2.2x faster than CsvHelper; the ~4 MB shown across the first three is primarily the benchmark's pre-sized destination `MemoryStream`, not per-row writer state.
+For raw CSV reads, ExcelReader is ~2.2x faster than Sep while allocating ~11x less, ~1.3x faster than Sylvan.Data.Csv while allocating ~4,589x less (1.61 MB vs 368 B), and ~6.9x faster than CsvHelper while allocating ~40,960x less. For typed CSV parsing (the more common case — building actual records), ExcelReader is ~1.5x faster than Sep, ~2.1x faster than Sylvan.Data.Csv, and ~3.9x faster than CsvHelper, with the lowest allocation of the group. For CSV writing, ExcelReader is ~1.5x faster than both Sep and Sylvan.Data.Csv, which are tied, and ~3.1x faster than CsvHelper; the ~4 MB shown across the first three is primarily the benchmark's pre-sized destination `MemoryStream`, not per-row writer state.
 
 ### Parallel CSV
 
@@ -68,26 +68,26 @@ For raw CSV reads, ExcelReader is ~2.2x faster than Sep while allocating ~11x le
 
 | Dop | Conversion-heavy, typed | Narrow ints, typed | Conversion-heavy, `ref struct` aggregate |
 |---:|---:|---:|---:|
-| 1 | 1,367.9 ms, 670.98 MB | 569.5 ms, 245.32 MB | 1,213.7 ms, 847.45 KB |
-| 2 | 905.9 ms, 691.03 MB | 422.4 ms, 260.16 MB | 647.2 ms, 1.23 MB |
-| 4 | 493.2 ms, 691.10 MB | 243.1 ms, 260.18 MB | 337.3 ms, 1.30 MB |
-| 8 | 400.5 ms, 691.00 MB | 207.9 ms, 260.14 MB | 241.0 ms, 1.47 MB |
-| 16 | 353.3 ms, 691.31 MB | 209.9 ms, 260.63 MB | 177.9 ms, 1.55 MB |
+| 1 | 930.0 ms, 670.98 MB | 531.2 ms, 245.32 MB | 834.4 ms, 916.53 KB |
+| 2 | 638.8 ms, 679.85 MB | 409.5 ms, 254.38 MB | 442.1 ms, 1.24 MB |
+| 4 | 371.2 ms, 679.95 MB | 238.2 ms, 254.44 MB | 228.2 ms, 1.36 MB |
+| 8 | 286.0 ms, 679.83 MB | 199.0 ms, 254.34 MB | 162.3 ms, 1.53 MB |
+| 16 | 283.9 ms, 680.05 MB | 207.4 ms, 254.83 MB | 120.1 ms, 1.64 MB |
 
-The typed path scales ~3.9x on the conversion-heavy corpus and ~2.7x on narrow ints, both stopping at dop 8. Its ~690 MB is one materialized row object per record, and at dop 16 that costs 43,000 Gen0 plus 40,000 Gen1 collections.
+The typed path scales ~3.3x on the conversion-heavy corpus and ~2.7x on narrow ints, both stopping at dop 8. Its ~680 MB is one materialized row object per record, and at dop 16 that costs 42,000 Gen0 plus 41,000 Gen1 collections.
 
-The aggregate column folds each record into a per-partition accumulator through a `ref struct` model, so text columns stay as `ReadOnlySpan<byte>` and no row object is ever materialized. It scales better than the typed path — ~6.8x at dop 16 — because it is not fighting the allocator: at dop 16 it is ~2.0x faster than typed while allocating ~446x less (1.55 MB against 691.31 MB), with **zero** garbage collections at every degree. The remaining allocation is per-partition bookkeeping, not per-row.
+The aggregate column folds each record into a per-partition accumulator through a `ref struct` model, so text columns stay as `ReadOnlySpan<byte>` and no row object is ever materialized. It scales better than the typed path — ~6.9x at dop 16 — because it is not fighting the allocator: at dop 16 it is ~2.4x faster than typed while allocating ~413x less (1.64 MB against 680.05 MB), with **zero** garbage collections at every degree. The remaining allocation is per-partition bookkeeping, not per-row.
 
-Type conversion is the floor under both. A single-threaded pass that allocates nothing still costs 1,213.7 ms, so parsing bytes into `DateTime`/`decimal`/`int` — not allocation and not I/O — is what the parallelism is actually buying down.
+Type conversion is the floor under both. A single-threaded pass that allocates nothing still costs 834.4 ms, so parsing bytes into `DateTime`/`decimal`/`int` — not allocation and not I/O — is what the parallelism is actually buying down.
 
 Against [Sep](https://github.com/nietras/Sep)'s own `ParallelEnumerate` (all cores; 8,000,000 narrow rows, 3,000,000 conversion-heavy rows):
 
 | Corpus | ExcelReader sequential | ExcelReader parallel | Sep sequential | Sep parallel |
 |---|---:|---:|---:|---:|
-| Narrow ints | 548.1 ms, 244.15 MB | 207.6 ms, 260.63 MB | 527.4 ms, 244.15 MB | 445.0 ms, 245.61 MB |
-| Conversion-heavy | 1,056.3 ms, 467.31 MB | 288.6 ms, 483.02 MB | 887.3 ms, 467.31 MB | 645.8 ms, 468.50 MB |
+| Narrow ints | 563.9 ms, 244.15 MB | 192.2 ms, 254.83 MB | 516.3 ms, 244.15 MB | 430.7 ms, 247.51 MB |
+| Conversion-heavy | 657.3 ms, 467.31 MB | 183.6 ms, 474.62 MB | 802.4 ms, 467.31 MB | 624.1 ms, 468.37 MB |
 
-Sequentially Sep is ~4% (narrow) to ~16% (conversion-heavy) faster than ExcelReader's typed parser; in parallel ExcelReader is ~2.1x and ~2.2x faster than Sep's, while yielding rows in file order.
+Sequentially, Sep is ~9% faster than ExcelReader's typed parser on narrow ints, and ExcelReader is ~1.2x faster than Sep on the conversion-heavy corpus. In parallel ExcelReader is ~2.2x (narrow) and ~3.4x (conversion-heavy) faster than Sep's, while yielding rows in file order.
 
 ### Real data reads
 
@@ -176,12 +176,25 @@ The takeaway is not that one column beats the other: it is that ExcelReader's he
 
 | Format | Mean | Allocated |
 |---|---:|---:|
-| XLSX | 20.363 ms | 4.02 MB |
-| XLSB | 7.967 ms | 4.02 MB |
-| XLS | 5.246 ms | 4.03 MB |
-| CSV | 7.122 ms | 4.00 MB |
+| XLSX | 14.539 ms | 4.02 MB |
+| XLSB | 7.347 ms | 4.02 MB |
+| XLS | 5.365 ms | 4.03 MB |
+| CSV | 5.022 ms | 4.00 MB |
 
-Relative ordering matches the lower-level writers above (XLS fastest, then CSV, then XLSB, then XLSX) — the record-mapping layer adds negligible overhead over hand-written cell-by-cell writes.
+Relative ordering: CSV and XLS close at the front, then XLSB, then XLSX — the record-mapping layer adds negligible overhead over hand-written cell-by-cell writes.
+
+### Native and Arrow string writes
+
+`WritePathBenchmark`: 100,000 rows of four text columns written from UTF-8 buffers, the way the C ABI's `xl_write_typed` and `ArrowWriteExtensions.WriteRecordBatch` hand them over, plus 100,000 rows that each carry a row style.
+
+| Scenario | Mean | Allocated |
+|---|---:|---:|
+| Native string columns → XLSX | 21.032 ms | 17.84 KB |
+| Native string columns → CSV | 4.957 ms | 384 B |
+| Arrow `StringArray` → XLSX | 26.738 ms | 17.88 KB |
+| Styled rows → XLSX | 7.948 ms | 18.02 KB |
+
+Text arrives through `IRowWriter.WriteUtf8`, which the XLSX and CSV writers copy through as bytes whenever the text needs no escaping, so none of these allocate per cell: the ~18 KB is per-workbook ZIP and part setup, which CSV does not have.
 
 ### Ref struct typed parsing (zero-copy)
 
