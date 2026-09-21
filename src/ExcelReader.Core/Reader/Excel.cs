@@ -560,6 +560,101 @@ namespace ExcelReader.Core.Reader
         }
 
         /// <summary>
+        /// Reads a CSV file across several threads, binds every record to a <typeparamref name="TModel"/>
+        /// through <paramref name="map"/> and hands it to <paramref name="body"/>.
+        /// </summary>
+        /// <typeparam name="TModel">The model type. May be a <see langword="ref struct"/> with <see cref="ReadOnlySpan{T}"/> of <see cref="byte"/> properties.</typeparam>
+        /// <param name="path">The path of the CSV file to read.</param>
+        /// <param name="map">How columns bind to <typeparamref name="TModel"/>.</param>
+        /// <param name="body">Receives each record. See the remarks for the contract it must honor.</param>
+        /// <param name="options">Parallelism, dialect and header options. Defaults to <see cref="CsvParallelOptions.Default"/>.</param>
+        /// <param name="ct">A token to cancel processing.</param>
+        /// <returns>A task that completes when every record has been delivered.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="map"/> or <paramref name="body"/> is <see langword="null"/>.</exception>
+        /// <exception cref="ArgumentException"><paramref name="map"/> binds columns by header name and <see cref="CsvParallelOptions.HeaderRow"/> is 0.</exception>
+        /// <remarks>
+        /// <para>
+        /// Carries the same concurrency, repeat-invocation and span-lifetime contract as the
+        /// <see cref="ICsvRecord{TSelf}"/> overloads. A property that fails to parse keeps its default
+        /// unless <see cref="Parser.ExcelParserConfig.ThrowOnParseFailure"/> is set; a missing
+        /// <c>[ExcelRequired]</c> column or value throws <see cref="Parser.ExcelParseException"/>; empty
+        /// records are skipped.
+        /// </para>
+        /// <para>
+        /// <see cref="Parser.ExcelParseException.Row"/> is exact when the source is read sequentially and
+        /// 0 when it is partitioned, since a partition does not know how many records precede it.
+        /// </para>
+        /// </remarks>
+        public static Task ForEachCsvParallelAsync<TModel>(
+            string path,
+            CsvModelMap<TModel> map,
+            CsvRecordAction<TModel> body,
+            CsvParallelOptions? options = null,
+            CancellationToken ct = default)
+            where TModel : allows ref struct
+        {
+            ArgumentException.ThrowIfNullOrEmpty(path);
+            CsvParallelOptions validated = Validated(options);
+            return ParallelCsvProcessor.RunAsync(path, MappedCallback<TModel>.Unbound, BoundCallback(map, body, validated), validated, ct);
+        }
+
+        /// <summary>
+        /// Reads an in-memory CSV buffer across several threads, binds every record to a
+        /// <typeparamref name="TModel"/> through <paramref name="map"/> and hands it to <paramref name="body"/>.
+        /// </summary>
+        /// <typeparam name="TModel">The model type. May be a <see langword="ref struct"/> with <see cref="ReadOnlySpan{T}"/> of <see cref="byte"/> properties.</typeparam>
+        /// <param name="data">The CSV bytes. The caller keeps ownership; the buffer must not be mutated during processing.</param>
+        /// <param name="map">How columns bind to <typeparamref name="TModel"/>.</param>
+        /// <param name="body">Receives each record. See the remarks for the contract it must honor.</param>
+        /// <param name="options">Parallelism, dialect and header options. Defaults to <see cref="CsvParallelOptions.Default"/>.</param>
+        /// <param name="ct">A token to cancel processing.</param>
+        /// <returns>A task that completes when every record has been delivered.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="map"/> or <paramref name="body"/> is <see langword="null"/>.</exception>
+        /// <exception cref="ArgumentException"><paramref name="map"/> binds columns by header name and <see cref="CsvParallelOptions.HeaderRow"/> is 0.</exception>
+        /// <remarks>Carries the same contract and fallbacks as the path-based overload.</remarks>
+        public static Task ForEachCsvParallelAsync<TModel>(
+            ReadOnlyMemory<byte> data,
+            CsvModelMap<TModel> map,
+            CsvRecordAction<TModel> body,
+            CsvParallelOptions? options = null,
+            CancellationToken ct = default)
+            where TModel : allows ref struct
+        {
+            CsvParallelOptions validated = Validated(options);
+            return ParallelCsvProcessor.RunAsync(data, MappedCallback<TModel>.Unbound, BoundCallback(map, body, validated), validated, ct);
+        }
+
+        /// <summary>
+        /// Reads a CSV stream, in parallel where the stream can be partitioned, binds every record to a
+        /// <typeparamref name="TModel"/> through <paramref name="map"/> and hands it to <paramref name="body"/>.
+        /// </summary>
+        /// <typeparam name="TModel">The model type. May be a <see langword="ref struct"/> with <see cref="ReadOnlySpan{T}"/> of <see cref="byte"/> properties.</typeparam>
+        /// <param name="stream">The CSV stream, read from its current position. The caller keeps ownership and must not read from it concurrently.</param>
+        /// <param name="map">How columns bind to <typeparamref name="TModel"/>.</param>
+        /// <param name="body">Receives each record. See the remarks for the contract it must honor.</param>
+        /// <param name="options">Parallelism, dialect and header options. Defaults to <see cref="CsvParallelOptions.Default"/>.</param>
+        /// <param name="ct">A token to cancel processing.</param>
+        /// <returns>A task that completes when every record has been delivered.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="stream"/>, <paramref name="map"/> or <paramref name="body"/> is <see langword="null"/>.</exception>
+        /// <exception cref="ArgumentException"><paramref name="map"/> binds columns by header name and <see cref="CsvParallelOptions.HeaderRow"/> is 0.</exception>
+        /// <remarks>
+        /// Carries the same contract and fallbacks as the path-based overload, and the stream restrictions
+        /// of the <see cref="ICsvRecord{TSelf}"/> stream overload.
+        /// </remarks>
+        public static Task ForEachCsvParallelAsync<TModel>(
+            Stream stream,
+            CsvModelMap<TModel> map,
+            CsvRecordAction<TModel> body,
+            CsvParallelOptions? options = null,
+            CancellationToken ct = default)
+            where TModel : allows ref struct
+        {
+            ArgumentNullException.ThrowIfNull(stream);
+            CsvParallelOptions validated = Validated(options);
+            return ParallelCsvProcessor.RunAsync(stream, MappedCallback<TModel>.Unbound, BoundCallback(map, body, validated), validated, ct);
+        }
+
+        /// <summary>
         /// Reads an in-memory CSV buffer across several threads, binds every record to a
         /// <typeparamref name="TModel"/> through <paramref name="map"/> and folds it into a
         /// <typeparamref name="TAccumulator"/>, one instance per partition, merged in buffer order.
@@ -660,6 +755,19 @@ namespace ExcelReader.Core.Reader
                 throw new ArgumentException("A map that binds columns by header name needs CsvParallelOptions.HeaderRow of at least 1.", nameof(map));
             }
             return MappedAggregation<TAccumulator, TModel>.Binder(map, options.HeaderRow);
+        }
+
+        private static CsvAccumulateFactory<byte> BoundCallback<TModel>(
+            CsvModelMap<TModel> map, CsvRecordAction<TModel> body, CsvParallelOptions options)
+            where TModel : allows ref struct
+        {
+            ArgumentNullException.ThrowIfNull(map);
+            ArgumentNullException.ThrowIfNull(body);
+            if (options.HeaderRow == 0 && !map.Info.IsIndexBased)
+            {
+                throw new ArgumentException("A map that binds columns by header name needs CsvParallelOptions.HeaderRow of at least 1.", nameof(map));
+            }
+            return MappedCallback<TModel>.Binder(map, options.HeaderRow, body);
         }
 
         /// <summary>
