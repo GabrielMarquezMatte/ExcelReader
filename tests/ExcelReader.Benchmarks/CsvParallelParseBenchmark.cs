@@ -1,3 +1,4 @@
+using System.Runtime.InteropServices;
 using BenchmarkDotNet.Attributes;
 using ExcelReader.Core.Reader;
 
@@ -23,6 +24,13 @@ namespace ExcelReader.Benchmarks
     }
 
     public sealed class NarrowRow
+    {
+        public int A { get; set; }
+        public int B { get; set; }
+        public int C { get; set; }
+    }
+    [StructLayout(LayoutKind.Auto)]
+    public struct NarrowRowStruct
     {
         public int A { get; set; }
         public int B { get; set; }
@@ -88,6 +96,20 @@ namespace ExcelReader.Benchmarks
             }
         }
 
+        private sealed class AggregationNarrow : ICsvAccumulator<AggregationNarrow, NarrowRowStruct>
+        {
+            public long Units { get; private set; }
+            public void Add(NarrowRowStruct model)
+            {
+                Units += model.A;
+            }
+
+            public void Merge(AggregationNarrow following)
+            {
+                Units += following.Units;
+            }
+        }
+
         [Benchmark]
         public async Task<long> ConversionHeavyAggregate()
         {
@@ -99,6 +121,19 @@ namespace ExcelReader.Benchmarks
             if (aggregation.Units == 0)
             {
                 throw new InvalidOperationException("WideRowRef bound no columns; the aggregate benchmark is measuring nothing.");
+            }
+            return aggregation.Units;
+        }
+
+        [Benchmark]
+        public async Task<long> NarrowIntAggregate()
+        {
+            CsvParallelOptions options = new() { DegreeOfParallelism = Dop, HeaderRow = 1 };
+            CsvModelMap<NarrowRowStruct> map = CsvModelMap.FromAttributes<NarrowRowStruct>();
+            var aggregation = await Excel.AggregateCsvParallelAsync<AggregationNarrow, NarrowRowStruct>(_narrow, map, options);
+            if (aggregation.Units == 0)
+            {
+                throw new InvalidOperationException("NarrowRowStruct bound no columns; the aggregate benchmark is measuring nothing.");
             }
             return aggregation.Units;
         }
