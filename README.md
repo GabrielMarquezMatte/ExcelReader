@@ -94,6 +94,33 @@ threads; whatever your loop body does per row does not — if that dominates, ra
 not help. Sources that cannot be partitioned (non-seekable streams, non-UTF-8 encodings, small files)
 fall back to sequential parsing with the same results.
 
+For a fold or a per-row side effect, `ForEachCsvParallelAsync` skips the per-row model allocation
+entirely and accepts a `ref struct` row type, so text columns stay as `ReadOnlySpan<byte>`:
+
+```csharp
+public ref struct SaleRow
+{
+    [ExcelColumn("Region")] public ReadOnlySpan<byte> Region { get; set; }
+    [ExcelColumn("Units")]  public int Units { get; set; }
+}
+
+long total = 0;
+await Excel.ForEachCsvParallelAsync(
+    "big.csv",
+    CsvModelMap.FromAttributes<SaleRow>(),
+    row => Interlocked.Add(ref total, row.Units),
+    new CsvParallelOptions { DegreeOfParallelism = 8, HeaderRow = 1 });
+```
+
+Unlike `ParseCsvParallelAsync`, the callback runs on the worker threads, so records arrive in no
+particular order and the callback must be safe to call from several threads at once. It may also be
+invoked more than once for records near a partition boundary, which happens only on a source with
+quoted fields spanning lines — make it idempotent. Spans are valid only for the duration of the call.
+See the [parallel CSV benchmarks](#parallel-csv) for what this buys: at dop 16 it is ~2.0x faster than
+the typed path while allocating ~446x less, with zero garbage collections.
+
+Properties need setters. A get-only property is skipped during binding and silently receives nothing.
+
 ### Apache Arrow conversion (opt-in)
 
 ```bash
