@@ -1,5 +1,4 @@
 using BenchmarkDotNet.Attributes;
-using ExcelReader.Core.Parser;
 using ExcelReader.Core.Reader;
 
 namespace ExcelReader.Benchmarks
@@ -12,6 +11,15 @@ namespace ExcelReader.Benchmarks
         public decimal UnitPrice { get; set; }
         public decimal TotalRevenue { get; set; }
         public int Units { get; set; }
+    }
+    public readonly ref struct WideRowRef
+    {
+        public ReadOnlySpan<byte> Region { get; }
+        public ReadOnlySpan<byte> Country { get; }
+        public DateTime OrderDate { get; }
+        public decimal UnitPrice { get; }
+        public decimal TotalRevenue { get; }
+        public int Units { get; }
     }
 
     public sealed class NarrowRow
@@ -64,6 +72,29 @@ namespace ExcelReader.Benchmarks
                 n += row.A;
             }
             return n;
+        }
+
+        private sealed class Aggregation : ICsvAccumulator<Aggregation, WideRowRef>
+        {
+            public long Units { get; private set; }
+            public void Add(WideRowRef model)
+            {
+                Units += model.Units;
+            }
+
+            public void Merge(Aggregation following)
+            {
+                Units += following.Units;
+            }
+        }
+
+        [Benchmark]
+        public async Task<long> ConversionHeavyAggregate()
+        {
+            CsvParallelOptions options = new() { DegreeOfParallelism = Dop, HeaderRow = 1 };
+            CsvModelMap<WideRowRef> map = CsvModelMap.FromAttributes<WideRowRef>();
+            var aggregation = await Excel.AggregateCsvParallelAsync<Aggregation, WideRowRef>(_wide, map, options);
+            return aggregation.Units;
         }
     }
 }
