@@ -60,8 +60,8 @@ confirmation-decoupling variant, and the ordered merge stays the only shipped mo
 The first measurement, on a thermally-limited mobile CPU, was discarded: flat-to-worse at mid-range
 degrees of parallelism and improving only at the extremes, which is throttling under sustained
 multi-threaded load rather than the algorithm's own scaling. The clean re-run (Ryzen 7 5700X, 8C/16T,
-`CsvParallelParseBenchmark`, MediumRun) shows the path scaling monotonically instead — 3.79x on the
-conversion-heavy corpus and 2.54x on narrow ints at dop 16, saturating past dop 4 as it becomes
+`CsvParallelParseBenchmark`, MediumRun) shows the path scaling monotonically instead — 3.95x on the
+conversion-heavy corpus and 2.61x on narrow ints at dop 16, saturating past dop 8 as it becomes
 bandwidth-bound.
 
 With that baseline trustworthy, the variant itself was measured: confirmation decoupled from
