@@ -12,14 +12,14 @@ namespace ExcelReader.Benchmarks
         public decimal TotalRevenue { get; set; }
         public int Units { get; set; }
     }
-    public readonly ref struct WideRowRef
+    public ref struct WideRowRef
     {
-        public ReadOnlySpan<byte> Region { get; }
-        public ReadOnlySpan<byte> Country { get; }
-        public DateTime OrderDate { get; }
-        public decimal UnitPrice { get; }
-        public decimal TotalRevenue { get; }
-        public int Units { get; }
+        public ReadOnlySpan<byte> Region { get; set; }
+        public ReadOnlySpan<byte> Country { get; set; }
+        public DateTime OrderDate { get; set; }
+        public decimal UnitPrice { get; set; }
+        public decimal TotalRevenue { get; set; }
+        public int Units { get; set; }
     }
 
     public sealed class NarrowRow
@@ -94,6 +94,12 @@ namespace ExcelReader.Benchmarks
             CsvParallelOptions options = new() { DegreeOfParallelism = Dop, HeaderRow = 1 };
             CsvModelMap<WideRowRef> map = CsvModelMap.FromAttributes<WideRowRef>();
             var aggregation = await Excel.AggregateCsvParallelAsync<Aggregation, WideRowRef>(_wide, map, options);
+            // Every generated row has Units >= 1, so a zero total means the map bound no columns
+            // and this benchmark is timing record splitting rather than conversion.
+            if (aggregation.Units == 0)
+            {
+                throw new InvalidOperationException("WideRowRef bound no columns; the aggregate benchmark is measuring nothing.");
+            }
             return aggregation.Units;
         }
     }
