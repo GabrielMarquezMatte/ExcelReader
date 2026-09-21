@@ -465,6 +465,101 @@ namespace ExcelReader.Core.Reader
         }
 
         /// <summary>
+        /// Reads a CSV file across several threads, parses every record into a <typeparamref name="TRecord"/>
+        /// and hands it to <paramref name="body"/>.
+        /// </summary>
+        /// <typeparam name="TRecord">The record type. A record whose <see cref="ICsvRecord{TSelf}.TryParse"/> returns <see langword="false"/> is skipped.</typeparam>
+        /// <param name="path">The path of the CSV file to read.</param>
+        /// <param name="body">Receives each record. See the remarks for the contract it must honor.</param>
+        /// <param name="options">Parallelism, dialect and header options. Defaults to <see cref="CsvParallelOptions.Default"/>.</param>
+        /// <param name="ct">A token to cancel processing.</param>
+        /// <returns>A task that completes when every record has been delivered.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="body"/> is <see langword="null"/>.</exception>
+        /// <remarks>
+        /// <para>
+        /// <paramref name="body"/> runs concurrently on worker threads and must be safe to call from
+        /// several at once; the caller owns any synchronization. Records arrive in no particular order.
+        /// </para>
+        /// <para>
+        /// <paramref name="body"/> may be invoked more than once for the same record. A partition whose
+        /// start was guessed inside a quoted field spanning lines is read again from the confirmed offset,
+        /// so records near a partition boundary can be delivered twice. Make <paramref name="body"/>
+        /// idempotent, or tolerant of repeats. This cannot happen on a source with no quoted fields.
+        /// </para>
+        /// <para>
+        /// A <see cref="ReadOnlySpan{T}"/> column points into a pooled buffer the worker reuses once
+        /// <paramref name="body"/> returns. Copy anything that must outlive the call.
+        /// </para>
+        /// <para>
+        /// Falls back to one sequential pass, delivering records once each in source order on a single
+        /// thread, when the source is too small to partition usefully or when
+        /// <see cref="CsvReaderOptions.Encoding"/> is set to a non-UTF-8 encoding.
+        /// </para>
+        /// </remarks>
+        public static Task ForEachCsvParallelAsync<TRecord>(
+            string path,
+            CsvRecordAction<TRecord> body,
+            CsvParallelOptions? options = null,
+            CancellationToken ct = default)
+            where TRecord : ICsvRecord<TRecord>, allows ref struct
+        {
+            ArgumentException.ThrowIfNullOrEmpty(path);
+            ArgumentNullException.ThrowIfNull(body);
+            return ParallelCsvProcessor.RunAsync(path, RecordCallback<TRecord>.For(body), null, Validated(options), ct);
+        }
+
+        /// <summary>
+        /// Reads an in-memory CSV buffer across several threads, parses every record into a
+        /// <typeparamref name="TRecord"/> and hands it to <paramref name="body"/>.
+        /// </summary>
+        /// <typeparam name="TRecord">The record type. A record whose <see cref="ICsvRecord{TSelf}.TryParse"/> returns <see langword="false"/> is skipped.</typeparam>
+        /// <param name="data">The CSV bytes. The caller keeps ownership; the buffer must not be mutated during processing.</param>
+        /// <param name="body">Receives each record. See the remarks for the contract it must honor.</param>
+        /// <param name="options">Parallelism, dialect and header options. Defaults to <see cref="CsvParallelOptions.Default"/>.</param>
+        /// <param name="ct">A token to cancel processing.</param>
+        /// <returns>A task that completes when every record has been delivered.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="body"/> is <see langword="null"/>.</exception>
+        /// <remarks>Carries the same contract and fallbacks as the path-based overload.</remarks>
+        public static Task ForEachCsvParallelAsync<TRecord>(
+            ReadOnlyMemory<byte> data,
+            CsvRecordAction<TRecord> body,
+            CsvParallelOptions? options = null,
+            CancellationToken ct = default)
+            where TRecord : ICsvRecord<TRecord>, allows ref struct
+        {
+            ArgumentNullException.ThrowIfNull(body);
+            return ParallelCsvProcessor.RunAsync(data, RecordCallback<TRecord>.For(body), null, Validated(options), ct);
+        }
+
+        /// <summary>
+        /// Reads a CSV stream, in parallel where the stream can be partitioned, parses every record into a
+        /// <typeparamref name="TRecord"/> and hands it to <paramref name="body"/>.
+        /// </summary>
+        /// <typeparam name="TRecord">The record type. A record whose <see cref="ICsvRecord{TSelf}.TryParse"/> returns <see langword="false"/> is skipped.</typeparam>
+        /// <param name="stream">The CSV stream, read from its current position. The caller keeps ownership and must not read from it concurrently.</param>
+        /// <param name="body">Receives each record. See the remarks for the contract it must honor.</param>
+        /// <param name="options">Parallelism, dialect and header options. Defaults to <see cref="CsvParallelOptions.Default"/>.</param>
+        /// <param name="ct">A token to cancel processing.</param>
+        /// <returns>A task that completes when every record has been delivered.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="stream"/> or <paramref name="body"/> is <see langword="null"/>.</exception>
+        /// <remarks>
+        /// Carries the same contract and fallbacks as the path-based overload, and partitions only a
+        /// <see cref="FileStream"/> or a <see cref="MemoryStream"/> whose buffer is publicly visible;
+        /// every other stream is read sequentially.
+        /// </remarks>
+        public static Task ForEachCsvParallelAsync<TRecord>(
+            Stream stream,
+            CsvRecordAction<TRecord> body,
+            CsvParallelOptions? options = null,
+            CancellationToken ct = default)
+            where TRecord : ICsvRecord<TRecord>, allows ref struct
+        {
+            ArgumentNullException.ThrowIfNull(stream);
+            ArgumentNullException.ThrowIfNull(body);
+            return ParallelCsvProcessor.RunAsync(stream, RecordCallback<TRecord>.For(body), null, Validated(options), ct);
+        }
+
+        /// <summary>
         /// Reads an in-memory CSV buffer across several threads, binds every record to a
         /// <typeparamref name="TModel"/> through <paramref name="map"/> and folds it into a
         /// <typeparamref name="TAccumulator"/>, one instance per partition, merged in buffer order.
