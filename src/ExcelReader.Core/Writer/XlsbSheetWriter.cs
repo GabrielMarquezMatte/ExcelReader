@@ -51,11 +51,6 @@ namespace ExcelReader.Core.Writer
         internal BiffBuffer Payload { get; } = new(256);
         internal bool UseSharedStrings => _owner.UseSharedStrings;
 
-        internal int GetSharedStringIndex(string value)
-        {
-            return _owner.GetSharedStringIndex(value);
-        }
-
         /// <inheritdoc/>
         /// <exception cref="ArgumentOutOfRangeException"><paramref name="columnIndex"/> is negative, or <paramref name="styleId"/> is negative or was never returned by <see cref="XlsbWorkbookWriter.AddStyle"/>.</exception>
         /// <exception cref="InvalidOperationException">The sheet has already been started.</exception>
