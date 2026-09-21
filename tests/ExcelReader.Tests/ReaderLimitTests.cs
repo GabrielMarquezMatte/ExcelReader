@@ -596,5 +596,14 @@ namespace ExcelReader.Tests
             Assert.Throws<InvalidDataException>(() =>
                 CfbContainer.ReadMiniStream(miniStream, miniFat, miniSectorSize: 64, startSector: 1, size: 64));
         }
+
+        [Fact]
+        public void MiniStreamChainWithACycleThrowsInvalidDataInsteadOfRepeatingSectors()
+        {
+            byte[] miniStream = new byte[256];
+            int[] miniFat = [1, 0, -2, -2];
+            Assert.Throws<InvalidDataException>(() =>
+                CfbContainer.ReadMiniStream(miniStream, miniFat, miniSectorSize: 64, startSector: 0, size: 256));
+        }
     }
 }
