@@ -20,16 +20,16 @@ namespace ExcelReader.Core.Reader
         /// <summary>Opens an XLSX workbook from a file path, taking ownership of the file stream.</summary>
         /// <param name="path">The path to the XLSX file.</param>
         /// <param name="options">Resource limits and behavior toggles; <see cref="ExcelReaderOptions.Default"/> when <see langword="null"/>.</param>
-        public static XlsxReader FromFile(string path, ExcelReaderOptions? options = null)
+        public static XlsxReader FromXlsxFile(string path, ExcelReaderOptions? options = null)
         {
-            return From(File.OpenRead(path), leaveOpen: false, options);
+            return FromXlsx(File.OpenRead(path), leaveOpen: false, options);
         }
 
         /// <summary>Opens an XLSX workbook from an existing stream.</summary>
         /// <param name="stream">The stream containing the XLSX data.</param>
         /// <param name="leaveOpen">When <see langword="true"/> (the default), <paramref name="stream"/> is not disposed when the reader is disposed.</param>
         /// <param name="options">Resource limits and behavior toggles; <see cref="ExcelReaderOptions.Default"/> when <see langword="null"/>.</param>
-        public static XlsxReader From(Stream stream, bool leaveOpen = true, ExcelReaderOptions? options = null)
+        public static XlsxReader FromXlsx(Stream stream, bool leaveOpen = true, ExcelReaderOptions? options = null)
         {
             if (TryDecryptCfbStream(stream, leaveOpen, options, out Stream decrypted))
             {
@@ -46,7 +46,7 @@ namespace ExcelReader.Core.Reader
         /// </summary>
         /// <param name="data">The whole XLSX file's bytes. Must outlive the returned reader.</param>
         /// <param name="options">Resource limits and behavior toggles; <see cref="ExcelReaderOptions.Default"/> when <see langword="null"/>. <see cref="ExcelReaderOptions.PrefetchDecompression"/> is ignored on this path — there is nothing left to overlap.</param>
-        public static XlsxReader From(ReadOnlyMemory<byte> data, ExcelReaderOptions? options = null)
+        public static XlsxReader FromXlsx(ReadOnlyMemory<byte> data, ExcelReaderOptions? options = null)
         {
             ExcelReaderOptions effective = options ?? ExcelReaderOptions.Default;
             if (data.Span.StartsWith(XlsCompoundFile.Signature) && EncryptedPackageOpener.IsEncryptedMemory(data, effective))
@@ -55,31 +55,6 @@ namespace ExcelReader.Core.Reader
                 return XlsxReader.CreateFromMemory(plain, effective);
             }
             return XlsxReader.CreateFromMemory(data, effective);
-        }
-
-        /// <summary>Opens an XLSX workbook from a file path, taking ownership of the file stream. Alias for <see cref="FromFile(string, ExcelReaderOptions?)"/>, keeping the format-named factory STYLEGUIDE.md requires for every format.</summary>
-        /// <param name="path">The path to the XLSX file.</param>
-        /// <param name="options">Resource limits and behavior toggles; <see cref="ExcelReaderOptions.Default"/> when <see langword="null"/>.</param>
-        public static XlsxReader FromXlsxFile(string path, ExcelReaderOptions? options = null)
-        {
-            return FromFile(path, options);
-        }
-
-        /// <summary>Opens an XLSX workbook from an existing stream. Alias for <see cref="From(Stream, bool, ExcelReaderOptions?)"/>, keeping the format-named factory STYLEGUIDE.md requires for every format.</summary>
-        /// <param name="stream">The stream containing the XLSX data.</param>
-        /// <param name="leaveOpen">When <see langword="true"/> (the default), <paramref name="stream"/> is not disposed when the reader is disposed.</param>
-        /// <param name="options">Resource limits and behavior toggles; <see cref="ExcelReaderOptions.Default"/> when <see langword="null"/>.</param>
-        public static XlsxReader FromXlsx(Stream stream, bool leaveOpen = true, ExcelReaderOptions? options = null)
-        {
-            return From(stream, leaveOpen, options);
-        }
-
-        /// <summary>Opens an XLSX workbook directly from an in-memory buffer. Alias for <see cref="From(ReadOnlyMemory{byte}, ExcelReaderOptions?)"/>, keeping the format-named factory STYLEGUIDE.md requires for every format.</summary>
-        /// <param name="data">The whole XLSX file's bytes. Must outlive the returned reader.</param>
-        /// <param name="options">Resource limits and behavior toggles; <see cref="ExcelReaderOptions.Default"/> when <see langword="null"/>.</param>
-        public static XlsxReader FromXlsx(ReadOnlyMemory<byte> data, ExcelReaderOptions? options = null)
-        {
-            return From(data, options);
         }
 
         /// <summary>Opens a legacy binary (XLS) workbook from a file path, taking ownership of the file stream.</summary>
@@ -151,10 +126,10 @@ namespace ExcelReader.Core.Reader
         /// <param name="path">The path to the XLSX file.</param>
         /// <param name="options">Resource limits and behavior toggles; <see cref="ExcelReaderOptions.Default"/> when <see langword="null"/>.</param>
         /// <param name="ct">A token to cancel the open operation.</param>
-        public static ValueTask<XlsxReader> FromFileAsync(string path, ExcelReaderOptions? options = null, CancellationToken ct = default)
+        public static ValueTask<XlsxReader> FromXlsxFileAsync(string path, ExcelReaderOptions? options = null, CancellationToken ct = default)
         {
             FileStream stream = OpenAsyncFile(path);
-            return FromAsync(stream, leaveOpen: false, options, ct);
+            return FromXlsxAsync(stream, leaveOpen: false, options, ct);
         }
 
         /// <summary>Asynchronously opens an XLSX workbook from an existing stream.</summary>
@@ -162,32 +137,13 @@ namespace ExcelReader.Core.Reader
         /// <param name="leaveOpen">When <see langword="true"/> (the default), <paramref name="stream"/> is not disposed when the reader is disposed.</param>
         /// <param name="options">Resource limits and behavior toggles; <see cref="ExcelReaderOptions.Default"/> when <see langword="null"/>.</param>
         /// <param name="ct">A token to cancel the open operation.</param>
-        public static ValueTask<XlsxReader> FromAsync(Stream stream, bool leaveOpen = true, ExcelReaderOptions? options = null, CancellationToken ct = default)
+        public static ValueTask<XlsxReader> FromXlsxAsync(Stream stream, bool leaveOpen = true, ExcelReaderOptions? options = null, CancellationToken ct = default)
         {
             if (TryDecryptCfbStream(stream, leaveOpen, options, out Stream decrypted))
             {
                 return XlsxReader.CreateAsync(decrypted, leaveOpen: false, options, ct);
             }
             return XlsxReader.CreateAsync(stream, leaveOpen, options, ct);
-        }
-
-        /// <summary>Asynchronously opens an XLSX workbook from a file path, taking ownership of the file stream. Alias for <see cref="FromFileAsync(string, ExcelReaderOptions?, CancellationToken)"/>, keeping the format-named factory STYLEGUIDE.md requires for every format.</summary>
-        /// <param name="path">The path to the XLSX file.</param>
-        /// <param name="options">Resource limits and behavior toggles; <see cref="ExcelReaderOptions.Default"/> when <see langword="null"/>.</param>
-        /// <param name="ct">A token to cancel the open operation.</param>
-        public static ValueTask<XlsxReader> FromXlsxFileAsync(string path, ExcelReaderOptions? options = null, CancellationToken ct = default)
-        {
-            return FromFileAsync(path, options, ct);
-        }
-
-        /// <summary>Asynchronously opens an XLSX workbook from an existing stream. Alias for <see cref="FromAsync(Stream, bool, ExcelReaderOptions?, CancellationToken)"/>, keeping the format-named factory STYLEGUIDE.md requires for every format.</summary>
-        /// <param name="stream">The stream containing the XLSX data.</param>
-        /// <param name="leaveOpen">When <see langword="true"/> (the default), <paramref name="stream"/> is not disposed when the reader is disposed.</param>
-        /// <param name="options">Resource limits and behavior toggles; <see cref="ExcelReaderOptions.Default"/> when <see langword="null"/>.</param>
-        /// <param name="ct">A token to cancel the open operation.</param>
-        public static ValueTask<XlsxReader> FromXlsxAsync(Stream stream, bool leaveOpen = true, ExcelReaderOptions? options = null, CancellationToken ct = default)
-        {
-            return FromAsync(stream, leaveOpen, options, ct);
         }
 
         /// <summary>Asynchronously opens a legacy binary (XLS) workbook from a file path, taking ownership of the file stream.</summary>
@@ -285,14 +241,13 @@ namespace ExcelReader.Core.Reader
         /// </summary>
         /// <typeparam name="T">The row model type to bind each CSV record to.</typeparam>
         /// <param name="path">The path of the CSV file to read.</param>
-        /// <param name="degreeOfParallelism">The maximum number of parsing threads. <c>0</c> means <see cref="Environment.ProcessorCount"/>; <c>1</c> parses sequentially.</param>
-        /// <param name="readerOptions">CSV dialect options. Defaults to <see cref="CsvReaderOptions.Default"/>.</param>
+        /// <param name="options">Parallelism and dialect options. Defaults to <see cref="CsvParallelOptions.Default"/>. <see cref="CsvParallelOptions.HeaderRow"/> does not apply here and must be left at <c>0</c>; <paramref name="config"/> locates the header.</param>
         /// <param name="config">Typed-parsing configuration. Defaults to a new <see cref="Parser.ExcelParserConfig"/>.</param>
         /// <param name="ct">A token to cancel enumeration.</param>
         /// <remarks>
         /// <para>
         /// Parsing and type conversion run in parallel; whatever the caller does per row does not. A caller
-        /// whose per-row work dominates will see little gain from raising <paramref name="degreeOfParallelism"/>.
+        /// whose per-row work dominates will see little gain from raising <see cref="CsvParallelOptions.DegreeOfParallelism"/>.
         /// </para>
         /// <para>
         /// Falls back to sequential parsing — same results, one thread — when the source is too small to
@@ -309,14 +264,13 @@ namespace ExcelReader.Core.Reader
         [RequiresDynamicCode("Typed parsing binds property setters at runtime (MethodInfo.CreateDelegate / MakeGenericMethod).")]
         public static IAsyncEnumerable<T> ParseCsvParallelAsync<T>(
             string path,
-            int degreeOfParallelism = 0,
-            CsvReaderOptions? readerOptions = null,
+            CsvParallelOptions? options = null,
             ExcelParserConfig? config = null,
             CancellationToken ct = default)
         {
             ArgumentException.ThrowIfNullOrEmpty(path);
-            ArgumentOutOfRangeException.ThrowIfNegative(degreeOfParallelism);
-            return ParallelCsvFactory.Create<T>(path, degreeOfParallelism, readerOptions, config, ct);
+            CsvParallelOptions parallel = ValidatedForTypedParse(options);
+            return ParallelCsvFactory.Create<T>(path, parallel.DegreeOfParallelism, parallel.Reader, config, ct);
         }
 
         /// <summary>
@@ -325,8 +279,7 @@ namespace ExcelReader.Core.Reader
         /// </summary>
         /// <typeparam name="T">The row model type to bind each CSV record to.</typeparam>
         /// <param name="data">The CSV bytes. The caller keeps ownership; the buffer must not be mutated during enumeration.</param>
-        /// <param name="degreeOfParallelism">The maximum number of parsing threads. <c>0</c> means <see cref="Environment.ProcessorCount"/>; <c>1</c> parses sequentially.</param>
-        /// <param name="readerOptions">CSV dialect options. Defaults to <see cref="CsvReaderOptions.Default"/>.</param>
+        /// <param name="options">Parallelism and dialect options. Defaults to <see cref="CsvParallelOptions.Default"/>. <see cref="CsvParallelOptions.HeaderRow"/> does not apply here and must be left at <c>0</c>; <paramref name="config"/> locates the header.</param>
         /// <param name="config">Typed-parsing configuration. Defaults to a new <see cref="Parser.ExcelParserConfig"/>.</param>
         /// <param name="ct">A token to cancel enumeration.</param>
         /// <remarks>Carries the same fallback and <see cref="CsvReaderOptions.InternStrings"/> caveats as the path-based overload.</remarks>
@@ -334,13 +287,12 @@ namespace ExcelReader.Core.Reader
         [RequiresDynamicCode("Typed parsing binds property setters at runtime (MethodInfo.CreateDelegate / MakeGenericMethod).")]
         public static IAsyncEnumerable<T> ParseCsvParallelAsync<T>(
             ReadOnlyMemory<byte> data,
-            int degreeOfParallelism = 0,
-            CsvReaderOptions? readerOptions = null,
+            CsvParallelOptions? options = null,
             ExcelParserConfig? config = null,
             CancellationToken ct = default)
         {
-            ArgumentOutOfRangeException.ThrowIfNegative(degreeOfParallelism);
-            return ParallelCsvFactory.Create<T>(data, degreeOfParallelism, readerOptions, config, ct);
+            CsvParallelOptions parallel = ValidatedForTypedParse(options);
+            return ParallelCsvFactory.Create<T>(data, parallel.DegreeOfParallelism, parallel.Reader, config, ct);
         }
 
         /// <summary>
@@ -350,8 +302,7 @@ namespace ExcelReader.Core.Reader
         /// </summary>
         /// <typeparam name="T">The row model type to bind each CSV record to.</typeparam>
         /// <param name="stream">The CSV stream, read from its current position. The caller keeps ownership and must not read from it concurrently.</param>
-        /// <param name="degreeOfParallelism">The maximum number of parsing threads. <c>0</c> means <see cref="Environment.ProcessorCount"/>; <c>1</c> parses sequentially.</param>
-        /// <param name="readerOptions">CSV dialect options. Defaults to <see cref="CsvReaderOptions.Default"/>.</param>
+        /// <param name="options">Parallelism and dialect options. Defaults to <see cref="CsvParallelOptions.Default"/>. <see cref="CsvParallelOptions.HeaderRow"/> does not apply here and must be left at <c>0</c>; <paramref name="config"/> locates the header.</param>
         /// <param name="config">Typed-parsing configuration. Defaults to a new <see cref="Parser.ExcelParserConfig"/>.</param>
         /// <param name="ct">A token to cancel enumeration.</param>
         /// <remarks>
@@ -373,14 +324,13 @@ namespace ExcelReader.Core.Reader
         [RequiresDynamicCode("Typed parsing binds property setters at runtime (MethodInfo.CreateDelegate / MakeGenericMethod).")]
         public static IAsyncEnumerable<T> ParseCsvParallelAsync<T>(
             Stream stream,
-            int degreeOfParallelism = 0,
-            CsvReaderOptions? readerOptions = null,
+            CsvParallelOptions? options = null,
             ExcelParserConfig? config = null,
             CancellationToken ct = default)
         {
             ArgumentNullException.ThrowIfNull(stream);
-            ArgumentOutOfRangeException.ThrowIfNegative(degreeOfParallelism);
-            return ParallelCsvFactory.Create<T>(stream, degreeOfParallelism, readerOptions, config, ct);
+            CsvParallelOptions parallel = ValidatedForTypedParse(options);
+            return ParallelCsvFactory.Create<T>(stream, parallel.DegreeOfParallelism, parallel.Reader, config, ct);
         }
 
         /// <summary>
@@ -462,6 +412,204 @@ namespace ExcelReader.Core.Reader
         {
             ArgumentNullException.ThrowIfNull(stream);
             return ParallelCsvProcessor.RunAsync(stream, RecordAggregation<TAccumulator, TRecord>.Instance, null, Validated(options), ct);
+        }
+
+        /// <summary>
+        /// Reads a CSV file across several threads, parses every record into a <typeparamref name="TRecord"/>
+        /// and hands it to <paramref name="body"/>.
+        /// </summary>
+        /// <typeparam name="TRecord">The record type. A record whose <see cref="ICsvRecord{TSelf}.TryParse"/> returns <see langword="false"/> is skipped.</typeparam>
+        /// <param name="path">The path of the CSV file to read.</param>
+        /// <param name="body">Receives each record. See the remarks for the contract it must honor.</param>
+        /// <param name="options">Parallelism, dialect and header options. Defaults to <see cref="CsvParallelOptions.Default"/>.</param>
+        /// <param name="ct">A token to cancel processing.</param>
+        /// <returns>A task that completes when every record has been delivered.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="body"/> is <see langword="null"/>.</exception>
+        /// <remarks>
+        /// <para>
+        /// <paramref name="body"/> runs concurrently on worker threads and must be safe to call from
+        /// several at once; the caller owns any synchronization. Records arrive in no particular order.
+        /// </para>
+        /// <para>
+        /// <paramref name="body"/> may be invoked more than once for the same record. A partition whose start
+        /// was guessed wrongly is read again from the confirmed offset, and the discarded speculative pass may
+        /// already have delivered a whole partition's worth of records — 1 MiB to 64 MiB of them, not just a
+        /// few near the seam. Those records may also be misparsed: a wrong start shifts every field boundary,
+        /// so a quoted field holding a delimiter can split into values that appear nowhere in the source. An
+        /// exception <paramref name="body"/> throws during a discarded pass is discarded with it.
+        /// </para>
+        /// <para>
+        /// A start is only guessed wrongly when it falls inside a quoted field, so a source in which the quote
+        /// character never appears delivers every record exactly once. For that guarantee on any source, use
+        /// <see cref="AggregateCsvParallelAsync{TAccumulator, TRecord}(string, CsvParallelOptions?, CancellationToken)"/>,
+        /// where the discarded partition's accumulator is thrown away.
+        /// </para>
+        /// <para>
+        /// A <see cref="ReadOnlySpan{T}"/> column points into a pooled buffer the worker reuses once
+        /// <paramref name="body"/> returns. Copy anything that must outlive the call.
+        /// </para>
+        /// <para>
+        /// Falls back to one sequential pass, delivering records once each in source order on a single
+        /// thread, when the source is too small to partition usefully or when
+        /// <see cref="CsvReaderOptions.Encoding"/> is set to a non-UTF-8 encoding.
+        /// </para>
+        /// </remarks>
+        public static Task ForEachCsvParallelAsync<TRecord>(
+            string path,
+            CsvRecordAction<TRecord> body,
+            CsvParallelOptions? options = null,
+            CancellationToken ct = default)
+            where TRecord : ICsvRecord<TRecord>, allows ref struct
+        {
+            ArgumentException.ThrowIfNullOrEmpty(path);
+            ArgumentNullException.ThrowIfNull(body);
+            return ParallelCsvProcessor.RunAsync(path, RecordCallback<TRecord>.For(body), null, Validated(options), ct);
+        }
+
+        /// <summary>
+        /// Reads an in-memory CSV buffer across several threads, parses every record into a
+        /// <typeparamref name="TRecord"/> and hands it to <paramref name="body"/>.
+        /// </summary>
+        /// <typeparam name="TRecord">The record type. A record whose <see cref="ICsvRecord{TSelf}.TryParse"/> returns <see langword="false"/> is skipped.</typeparam>
+        /// <param name="data">The CSV bytes. The caller keeps ownership; the buffer must not be mutated during processing.</param>
+        /// <param name="body">Receives each record. See the remarks for the contract it must honor.</param>
+        /// <param name="options">Parallelism, dialect and header options. Defaults to <see cref="CsvParallelOptions.Default"/>.</param>
+        /// <param name="ct">A token to cancel processing.</param>
+        /// <returns>A task that completes when every record has been delivered.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="body"/> is <see langword="null"/>.</exception>
+        /// <remarks>Carries the same contract and fallbacks as the path-based overload.</remarks>
+        public static Task ForEachCsvParallelAsync<TRecord>(
+            ReadOnlyMemory<byte> data,
+            CsvRecordAction<TRecord> body,
+            CsvParallelOptions? options = null,
+            CancellationToken ct = default)
+            where TRecord : ICsvRecord<TRecord>, allows ref struct
+        {
+            ArgumentNullException.ThrowIfNull(body);
+            return ParallelCsvProcessor.RunAsync(data, RecordCallback<TRecord>.For(body), null, Validated(options), ct);
+        }
+
+        /// <summary>
+        /// Reads a CSV stream, in parallel where the stream can be partitioned, parses every record into a
+        /// <typeparamref name="TRecord"/> and hands it to <paramref name="body"/>.
+        /// </summary>
+        /// <typeparam name="TRecord">The record type. A record whose <see cref="ICsvRecord{TSelf}.TryParse"/> returns <see langword="false"/> is skipped.</typeparam>
+        /// <param name="stream">The CSV stream, read from its current position. The caller keeps ownership and must not read from it concurrently.</param>
+        /// <param name="body">Receives each record. See the remarks for the contract it must honor.</param>
+        /// <param name="options">Parallelism, dialect and header options. Defaults to <see cref="CsvParallelOptions.Default"/>.</param>
+        /// <param name="ct">A token to cancel processing.</param>
+        /// <returns>A task that completes when every record has been delivered.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="stream"/> or <paramref name="body"/> is <see langword="null"/>.</exception>
+        /// <remarks>
+        /// Carries the same contract and fallbacks as the path-based overload, and partitions only a
+        /// <see cref="FileStream"/> or a <see cref="MemoryStream"/> whose buffer is publicly visible;
+        /// every other stream is read sequentially.
+        /// </remarks>
+        public static Task ForEachCsvParallelAsync<TRecord>(
+            Stream stream,
+            CsvRecordAction<TRecord> body,
+            CsvParallelOptions? options = null,
+            CancellationToken ct = default)
+            where TRecord : ICsvRecord<TRecord>, allows ref struct
+        {
+            ArgumentNullException.ThrowIfNull(stream);
+            ArgumentNullException.ThrowIfNull(body);
+            return ParallelCsvProcessor.RunAsync(stream, RecordCallback<TRecord>.For(body), null, Validated(options), ct);
+        }
+
+        /// <summary>
+        /// Reads a CSV file across several threads, binds every record to a <typeparamref name="TModel"/>
+        /// through <paramref name="map"/> and hands it to <paramref name="body"/>.
+        /// </summary>
+        /// <typeparam name="TModel">The model type. May be a <see langword="ref struct"/> with <see cref="ReadOnlySpan{T}"/> of <see cref="byte"/> properties.</typeparam>
+        /// <param name="path">The path of the CSV file to read.</param>
+        /// <param name="map">How columns bind to <typeparamref name="TModel"/>.</param>
+        /// <param name="body">Receives each record. See the remarks for the contract it must honor.</param>
+        /// <param name="options">Parallelism, dialect and header options. Defaults to <see cref="CsvParallelOptions.Default"/>.</param>
+        /// <param name="ct">A token to cancel processing.</param>
+        /// <returns>A task that completes when every record has been delivered.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="map"/> or <paramref name="body"/> is <see langword="null"/>.</exception>
+        /// <exception cref="ArgumentException"><paramref name="map"/> binds columns by header name and <see cref="CsvParallelOptions.HeaderRow"/> is 0.</exception>
+        /// <remarks>
+        /// <para>
+        /// Carries the same concurrency, repeat-invocation and span-lifetime contract as the
+        /// <see cref="ICsvRecord{TSelf}"/> overloads. A property that fails to parse keeps its default
+        /// unless <see cref="Parser.ExcelParserConfig.ThrowOnParseFailure"/> is set; a missing
+        /// <c>[ExcelRequired]</c> column or value throws <see cref="Parser.ExcelParseException"/>; empty
+        /// records are skipped.
+        /// </para>
+        /// <para>
+        /// <see cref="Parser.ExcelParseException.Row"/> is exact when the source is read sequentially and
+        /// 0 when it is partitioned, since a partition does not know how many records precede it.
+        /// </para>
+        /// </remarks>
+        public static Task ForEachCsvParallelAsync<TModel>(
+            string path,
+            CsvModelMap<TModel> map,
+            CsvRecordAction<TModel> body,
+            CsvParallelOptions? options = null,
+            CancellationToken ct = default)
+            where TModel : allows ref struct
+        {
+            ArgumentException.ThrowIfNullOrEmpty(path);
+            CsvParallelOptions validated = Validated(options);
+            return ParallelCsvProcessor.RunAsync(path, MappedCallback<TModel>.Unbound, BoundCallback(map, body, validated), validated, ct);
+        }
+
+        /// <summary>
+        /// Reads an in-memory CSV buffer across several threads, binds every record to a
+        /// <typeparamref name="TModel"/> through <paramref name="map"/> and hands it to <paramref name="body"/>.
+        /// </summary>
+        /// <typeparam name="TModel">The model type. May be a <see langword="ref struct"/> with <see cref="ReadOnlySpan{T}"/> of <see cref="byte"/> properties.</typeparam>
+        /// <param name="data">The CSV bytes. The caller keeps ownership; the buffer must not be mutated during processing.</param>
+        /// <param name="map">How columns bind to <typeparamref name="TModel"/>.</param>
+        /// <param name="body">Receives each record. See the remarks for the contract it must honor.</param>
+        /// <param name="options">Parallelism, dialect and header options. Defaults to <see cref="CsvParallelOptions.Default"/>.</param>
+        /// <param name="ct">A token to cancel processing.</param>
+        /// <returns>A task that completes when every record has been delivered.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="map"/> or <paramref name="body"/> is <see langword="null"/>.</exception>
+        /// <exception cref="ArgumentException"><paramref name="map"/> binds columns by header name and <see cref="CsvParallelOptions.HeaderRow"/> is 0.</exception>
+        /// <remarks>Carries the same contract and fallbacks as the path-based overload.</remarks>
+        public static Task ForEachCsvParallelAsync<TModel>(
+            ReadOnlyMemory<byte> data,
+            CsvModelMap<TModel> map,
+            CsvRecordAction<TModel> body,
+            CsvParallelOptions? options = null,
+            CancellationToken ct = default)
+            where TModel : allows ref struct
+        {
+            CsvParallelOptions validated = Validated(options);
+            return ParallelCsvProcessor.RunAsync(data, MappedCallback<TModel>.Unbound, BoundCallback(map, body, validated), validated, ct);
+        }
+
+        /// <summary>
+        /// Reads a CSV stream, in parallel where the stream can be partitioned, binds every record to a
+        /// <typeparamref name="TModel"/> through <paramref name="map"/> and hands it to <paramref name="body"/>.
+        /// </summary>
+        /// <typeparam name="TModel">The model type. May be a <see langword="ref struct"/> with <see cref="ReadOnlySpan{T}"/> of <see cref="byte"/> properties.</typeparam>
+        /// <param name="stream">The CSV stream, read from its current position. The caller keeps ownership and must not read from it concurrently.</param>
+        /// <param name="map">How columns bind to <typeparamref name="TModel"/>.</param>
+        /// <param name="body">Receives each record. See the remarks for the contract it must honor.</param>
+        /// <param name="options">Parallelism, dialect and header options. Defaults to <see cref="CsvParallelOptions.Default"/>.</param>
+        /// <param name="ct">A token to cancel processing.</param>
+        /// <returns>A task that completes when every record has been delivered.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="stream"/>, <paramref name="map"/> or <paramref name="body"/> is <see langword="null"/>.</exception>
+        /// <exception cref="ArgumentException"><paramref name="map"/> binds columns by header name and <see cref="CsvParallelOptions.HeaderRow"/> is 0.</exception>
+        /// <remarks>
+        /// Carries the same contract and fallbacks as the path-based overload, and the stream restrictions
+        /// of the <see cref="ICsvRecord{TSelf}"/> stream overload.
+        /// </remarks>
+        public static Task ForEachCsvParallelAsync<TModel>(
+            Stream stream,
+            CsvModelMap<TModel> map,
+            CsvRecordAction<TModel> body,
+            CsvParallelOptions? options = null,
+            CancellationToken ct = default)
+            where TModel : allows ref struct
+        {
+            ArgumentNullException.ThrowIfNull(stream);
+            CsvParallelOptions validated = Validated(options);
+            return ParallelCsvProcessor.RunAsync(stream, MappedCallback<TModel>.Unbound, BoundCallback(map, body, validated), validated, ct);
         }
 
         /// <summary>
@@ -567,6 +715,19 @@ namespace ExcelReader.Core.Reader
             return MappedAggregation<TAccumulator, TModel>.Binder(map, options.HeaderRow);
         }
 
+        private static CsvAccumulateFactory<byte> BoundCallback<TModel>(
+            CsvModelMap<TModel> map, CsvRecordAction<TModel> body, CsvParallelOptions options)
+            where TModel : allows ref struct
+        {
+            ArgumentNullException.ThrowIfNull(map);
+            ArgumentNullException.ThrowIfNull(body);
+            if (options.HeaderRow == 0 && !map.Info.IsIndexBased)
+            {
+                throw new ArgumentException("A map that binds columns by header name needs CsvParallelOptions.HeaderRow of at least 1.", nameof(map));
+            }
+            return MappedCallback<TModel>.Binder(map, options.HeaderRow, body);
+        }
+
         /// <summary>
         /// Reads an in-memory CSV buffer across several threads and folds every record with the functions of
         /// <paramref name="aggregation"/>, one accumulator per partition, combined in buffer order.
@@ -645,6 +806,18 @@ namespace ExcelReader.Core.Reader
             ArgumentOutOfRangeException.ThrowIfNegative(options.HeaderRow, nameof(options));
             ArgumentNullException.ThrowIfNull(options.Reader, nameof(options));
             return options;
+        }
+
+        private static CsvParallelOptions ValidatedForTypedParse(CsvParallelOptions? options)
+        {
+            CsvParallelOptions validated = Validated(options);
+            if (validated.HeaderRow != 0)
+            {
+                throw new ArgumentException(
+                    $"{nameof(CsvParallelOptions)}.{nameof(CsvParallelOptions.HeaderRow)} does not apply to typed parsing; set {nameof(ExcelParserConfig)}.{nameof(ExcelParserConfig.HeaderRow)} instead.",
+                    nameof(options));
+            }
+            return validated;
         }
 
         private const int CsvDialectSampleBytes = 64 * 1024;

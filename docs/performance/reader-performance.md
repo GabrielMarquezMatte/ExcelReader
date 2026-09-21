@@ -5,11 +5,12 @@ AVX2, no AVX-512, .NET 10. Corpus: `tests/ExcelReader.Benchmarks/Data/65K_Record
 rows, 14 columns, numeric and date heavy, with only ~5 KB of shared strings. The string-heavy section
 uses `StringHeavyWorkbookGenerator`'s 65,536-row fixture instead.
 
-**This is not the machine the README's tables come from.** Those are a Ryzen 7 5700X desktop. A
-throttling mobile part with P and E cores is exactly the hardware `ARCHITECTURE.md` describes
-discarding an earlier parallel-CSV measurement over, so nothing here should be compared against a
-README number by absolute milliseconds — only ratios measured within one run are meaningful, and
-anything destined for the README has to be re-run on the documented machine.
+**This is not the machine the published tables come from.** Those, in `benchmarks.md`, are a Ryzen 7
+5700X desktop. A throttling mobile part with P and E cores is exactly the hardware `ARCHITECTURE.md`
+describes discarding an earlier parallel-CSV measurement over, so nothing here should be compared
+against a published number by absolute milliseconds — only ratios measured within one run are
+meaningful, and anything destined for `benchmarks.md` has to be re-run on the documented machine.
+The exception is "Second round" below, which was measured on the Ryzen.
 
 The harness was a throwaway console app, not committed. Every table below comes from a single
 interleaved round-robin run, where each variant runs once per round so thermal drift hits all of
@@ -627,6 +628,217 @@ A fourth: **`FastDate.TryParseRoundTrip`**, a vectorized path for the 27-byte
 the scalar parser, gated by a 50,000-value differential and by `FastDateTests` cases covering a
 digit in each separator slot. Anything else falls through to the scalar parser unchanged.
 
+### Second round (2026-09-21, Ryzen 7 5700X)
+
+Measured on the published tables' machine, BenchmarkDotNet `--job Medium`, one run before and one
+after, each whole benchmark class. Baseline was the previous commit built from a `git archive`.
+Full suite at 1759/1759 afterwards.
+
+- **`FastDate` reached the typed path.** `ColumnParserFactory.TryParseDateTimeText` tried
+  `Utf8Parser.TryParse(…, 'O')` before the culture parse, and `TryParseDateOnlyText` went straight to
+  the culture parse. Both now try `FastDate` first and keep the culture parse as the fallback.
+  `CsvParserTests.TextDatesBindExactlyAsTheCultureParserWould` pins nine shapes to the old result.
+- **XLSX `t="d"` cells use `FastDate`.** `XlsxReader.Enumerator.TryParseIsoDate` tries it first and
+  keeps its char-copy `DateTime.TryParse` for shapes `FastDate` rejects. Years below 100 are rejected
+  as before. No benchmark reads `t="d"` cells, so this one is unmeasured; it is the same parser the
+  CSV rows below measure.
+- **`IRowWriter.WriteUtf8(ReadOnlySpan<byte>)`**, a default interface method that decodes to a
+  string. `CsvRowWriter` and `XlsxRowWriter` override it to copy the bytes straight through when they
+  are valid UTF-8 and need no escaping, and fall back to `Write(string)` otherwise — always for XLSX
+  shared strings. The C ABI and the Arrow writer now call it instead of building a string per cell.
+  `WriteUtf8ParityTests` checks 14 values byte-for-byte against `Write(string)` on all three paths.
+- **Styled rows format the style id with `Utf8Formatter`** into the row buffer instead of an
+  interpolated string per row.
+
+| | before | after | |
+|---|---|---|---|
+| `CsvParseBenchmark.ExcelParserSync` (typed, 50k rows) | 7.081 ms | 5.979 ms | 1.18x |
+| `CsvParallelParseBenchmark.ConversionHeavy`, dop 1 | 1,372.6 ms | 981.9 ms | 1.40x |
+| `CsvParallelParseBenchmark.ConversionHeavy`, dop 16 | 331.6 ms | 271.8 ms | 1.22x |
+| `CsvParallelParseBenchmark.ConversionHeavyAggregate`, dop 1 | 1,217.1 ms | 845.9 ms | 1.44x |
+| `CsvParallelParseBenchmark.ConversionHeavyAggregate`, dop 8 | 240.0 ms | 160.8 ms | 1.49x |
+| `WritePathBenchmark.NativeStrings_Csv` | 10.14 ms / 21.36 MB | 4.881 ms / 384 B | 2.08x |
+| `WritePathBenchmark.NativeStrings_Xlsx` | 27.16 ms / 21.38 MB | 21.053 ms / 18 KB | 1.29x |
+| `WritePathBenchmark.ArrowStrings_Xlsx` | 31.49 ms / 21.38 MB | 26.087 ms / 18 KB | 1.21x |
+| `WritePathBenchmark.StyledRows_Xlsx` | 10.07 ms / 7.65 MB | 7.814 ms / 18 KB | 1.29x |
+
+Controls: `NarrowInt`, which has no dates, and Sylvan both stayed inside run-to-run noise (Sylvan
+11.97 → 12.78 ms, in the unfavourable direction). Allocation on the typed paths did not change; the
+model object per row is what they allocate. The published tables in `benchmarks.md` come from a
+third, separate run after these changes.
+
+### Writing doubles (2026-09-21, Ryzen 7 5700X)
+
+`WriteBenchmark` had SpreadCheetah ~8% ahead of the XLSX writer. With compression off the writer
+still took 13.6 ms of its 17.5, so the cost was generating XML, not deflate. Per cell, above an
+empty row: string ~30 ns, int ~18 ns, double ~92 ns, date ~118 ns. Both of the last two end in
+`Utf8Formatter.TryFormat(double)`, the general shortest-round-trip formatter.
+
+`CellFormatter.TryFormatDouble` tries scales 10⁰–10⁴ and takes the first where `round(v·10ᵈ) / 10ᵈ == v`
+exactly, for `0 < |v| < 1e9`. That integer, with a decimal point inserted, is the shortest form, so
+the output is byte-identical. Anything else, including `-0`, falls through to `Utf8Formatter`. The
+XLSX writer (numbers and date serials) and the CSV writer use it.
+
+| per value | `Utf8Formatter` | `TryFormatDouble` | |
+|---|---|---|---|
+| short decimals (`1.5`, `45293.25`) | 61.6 ns | 15.1 ns | 4.07x |
+| integral | 55.2 ns | 12.5 ns | 4.40x |
+| serials with a time of day | 99.5 ns | 98.9 ns | 1.01x |
+
+Correctness gate: 6.1M values (short decimals, random doubles across magnitudes, random bit
+patterns, edges and their neighbours), zero mismatches. `DoubleFormatTests` keeps 600k of them.
+
+End to end, A/B harness (one executable built against each `ExcelReader.Core.dll`, alternated
+three times, min of 25):
+
+| 50k rows | before | after | |
+|---|---|---|---|
+| XLSX | 17.50 ms | 12.68 ms | 1.38x |
+| XLSX, shared strings | 17.08 ms | 12.11 ms | 1.41x |
+| CSV | 6.71 ms | 4.23 ms | 1.59x |
+| XLSB (control) | 7.65 ms | 7.63 ms | — |
+| SpreadCheetah (control) | 15.66 ms | 15.52 ms | — |
+
+BenchmarkDotNet afterwards: XLSX writing 12.261 ms against SpreadCheetah's 15.548 ms, CSV writing
+4.624 ms against Sep's 7.075 ms. XLSB writes doubles in binary and is unaffected.
+
+Not extended to serials with a time of day: `days + seconds/86400` has a factor of 3³ in the
+denominator, so its shortest form is ~17 digits and no scale reaches it. Only a full shortest-float
+algorithm (Ryu-class) would, for ~85 ns per such cell. Not built.
+
+### Write-side decomposition of XLSB and XLS — nothing to take
+
+Same per-column-type method as above, 50k rows:
+
+| | XLSB, `Fastest` | XLSB, no compression | XLS |
+|---|---|---|---|
+| all four columns | 8.37 ms | 3.98 ms | 5.19 ms |
+| empty rows | 1.79 ms | 0.94 ms | 0.53 ms |
+
+XLSB is deflate-bound: more than half its time is compression, and serialization costs 10–17 ns per
+cell. `prefetchWrite` already moves that deflate off the caller's thread. XLS costs 5–7 ns per cell.
+
+**RK encoding for non-integral doubles — measured, reverted.** The XLSB writer emits `BrtCellRk` only
+for integers. Adding the other two RK forms (truncated IEEE, integer/100), each accepted only when
+`Biff12.Rk` decodes it back to the same bits, turned 1.5 and 45293.25 into 4-byte cells: the raw sheet
+shrank 8% (3.75 → 3.45 MB) but the compressed one 1.3% (706 → 697 KB), and write time moved ~1%,
+inside noise. Deflate was already squeezing those 8-byte doubles. Not worth the diff or the Excel
+compatibility check an XLSB writer change needs.
+
+### The native bindings: NativeAOT loses dynamic PGO
+
+The C++ and Rust bindings read `65K_Records_Data.xlsx` in ~110 ms, against ~65 ms for the .NET
+reader. One harness ran the same `xl_open_memory` + `xl_parse_typed` exports (14 typed columns) three
+ways, plus the equivalent Core-only read:
+
+| | ms |
+|---|---|
+| Core read, JIT | 70.9 |
+| ABI, JIT (`delegate* unmanaged` over the managed assembly) | 84.1 |
+| ABI, NativeAOT (P/Invoke into the published library) | 109.3 |
+| ABI, NativeAOT, `IlcInstructionSet=x86-64-v3` | 107.3 |
+| ABI, NativeAOT, `IlcPgoOptimize` (framework profile) | 109.4 |
+| ABI, JIT, `DOTNET_TieredPGO=0` | 106.6 |
+
+The C++ binding's published 110.4 ms matches the AOT row, so its `std::string` conversion is
+negligible. The ABI layer costs ~13 ms. The rest, ~25 ms, is **dynamic PGO**: with it off, the JIT
+lands exactly on NativeAOT. The instruction set is not the cause.
+
+Where PGO acts, `DOTNET_TieredPGO=0` against the default, JIT:
+
+| | PGO | no PGO |
+|---|---|---|
+| inflate only | 23.1 ms | 23.2 ms |
+| rows only | 61.8 ms | 79.7 ms |
+| + 14 cell spans | +1.3 ms | +9.5 ms |
+
+The XLSX scan. `MethodJitInliningFailed` events (runtime keyword `0x1000`, read with an in-process
+`EventListener`) showed what PGO inlines into the per-cell path that static heuristics refuse, as
+"too many il bytes" or "unprofitable": `ReadCellOpenTagSpan`, `ScanCellAttributes`, `IsXmlSpace` (a
+call per attribute byte), `XlsxXml.ColumnIndex`, `IsCellStart`, `FastDouble.TryParse` and
+`CellAccumulator.Add`. `[MethodImpl(AggressiveInlining)]` on those seven:
+
+| | before | after |
+|---|---|---|
+| rows only, JIT without PGO | 79.6 ms | 66.3 ms |
+| ABI, JIT without PGO | 107.4 ms | 94.0 ms |
+| **ABI, NativeAOT** | **109.9 ms** | **97.2 ms** (1.13x) |
+| rows only, JIT with PGO | 60.0–62.2 ms | 60.8–62.8 ms (alternated three times; noise) |
+
+Remaining gap to the PGO'd JIT is ~13 ms. Forcing `Row`'s column lookup inline changed nothing, so
+what is left in the cell accessor is block layout and register allocation, which attributes do not
+reach. A trace-derived `.mibc` fed to ILC (`MibcFile` items become `--mibc`) is the tool for that; it
+needs `dotnet-pgo`, which is not on nuget.org.
+
+Re-running the binding suites against a library published from this tree: the C++ full XLSX read
+went from 110.4 to 98.0 ms and Rust's from 123.5 to 108.5 ms, and the C++ `write_sheet` from
+136.6 to 100.1–105.3 ms, the last mostly from `TryFormatDouble`.
+
+#### Second pass: XLSB, the ABI layer, and a static profile
+
+Same harness, now over all three formats (14 typed columns, 65K rows), min ms:
+
+| | Core, JIT | ABI, JIT | ABI, NativeAOT |
+|---|---|---|---|
+| XLSB | 29.2 | 45.3 | 52.2 |
+| CSV | 12.2 | 26.9 | 33.7 |
+
+**XLSB record reader.** `Biff12RecordReader.TryReadRecord` runs once per cell and was refused inline
+without PGO. Forcing it inline moved the Core XLSB read from 33.3 to 27.1 ms without PGO, faster than
+the PGO'd JIT's 28.8. No change with PGO.
+
+**The ABI layer** costs more than the whole CSV read. A CPU-sampled trace (`dotnet-trace`,
+`dotnet-sampled-thread-time`) and a counter around `BuildTable` split its ~15 ms on CSV into 0.6 ms
+copying the caller's buffer in `xl_open_memory`, 2.5 ms copying the column chunks into the native
+table, and ~12 ms of per-cell work. By column type, ABI minus Core: string ~33 ns/cell, date ~24,
+double ~24, int ~8. Three changes, worth 2.5–3 ms with PGO and ~1 ms without:
+
+- string cells append their UTF-8 bytes directly instead of `TryFormat` into a scratch buffer and
+  then copying;
+- date/time/bool columns call the `ColumnParserFactory` readers directly instead of through the
+  `ExcelCellReaders` delegate fields;
+- the validity bitmap is not touched until a column's first null, which backfills every earlier row;
+  a column with no nulls ships no bitmap, so writing a bit per cell was wasted.
+
+Building the table in native memory directly would remove the 2.5 ms copy but needs realloc growth
+(which copies too) and a change to what `xl_free_table` frees. Not done.
+
+**Static PGO profile.** `tests/ExcelReader.NativePgoTrainer` runs the typed parse over the three
+fixtures; a trace of it becomes `src/ExcelReader.Native/pgo/excelreader.mibc`, which ILC now
+consumes on every publish. ABI through NativeAOT, min ms:
+
+| | no profile | full profile | profile without XLSB methods | JIT with PGO |
+|---|---|---|---|---|
+| XLSX | 95.8 | 85.5 | **84.9** (1.13x) | ~83 |
+| XLSB | 42.9 | 44.1 | **38.4** (1.12x) | ~41.4 |
+| CSV | 32.1 | 25.8 | **25.6** (1.26x) | ~24.4 |
+
+The profile's XLSB counts made the XLSB parse slower; dropping those methods from it made XLSB faster
+than both the unprofiled build and the JIT. The shipped profile excludes them.
+
+**Typed mapping, not changed.** A generated `[ExcelSerializable]` map parses the 50K-row CSV in
+5.44 ms against 3.99 ms for a hand-written loop doing the same conversions. The generator's fused
+lambdas still invoke `ExcelCellReaders.String`/`DateTimeAuto`, which are delegate fields, so string and
+date cells pay two indirect calls. Emitting direct calls through a hidden public helper class
+measured ~3%, inside noise. Not worth new public surface.
+
+A prototype of the bigger change, the generator emitting one static whole-row parse over
+header-resolved column indices, showed the rest of the gap is not the mapping either. Stepping from the
+hand-written loop to the shipped path, min ms of one clean run:
+
+| step | ms | delta |
+|---|---|---|
+| hand-written loop | 4.05 | |
+| + empty-cell checks and a column-index indirection | 4.35 | +0.30 |
+| + the whole-row parse as a separate static method | 4.49 | +0.13 |
+| + handing each model to a per-row callback | 5.04 | +0.55 |
+| + handing it out through an `IEnumerable<T>` iterator | 5.40 | +0.36 |
+| shipped generated map | 5.45 | +0.05 |
+
+The per-column delegates and binding loop cost ~0.05 ms over a whole-row parse. The 1.36x is the
+API's shape, one model per row delivered to the caller, plus the empty-cell checks any correct mapper
+needs. A generator rewrite would recover ~1–5%. Not built.
+
 ## Known open items
 
 - The 8.9 ms of sheet parse above the inflate floor in the string-heavy corpus has not been
@@ -635,9 +847,6 @@ digit in each separator slot. Anything else falls through to the scalar parser u
   producer's pooled chunk into the consumer's buffer. Removing it means replacing the `Stream` seam
   with a buffer-exchange protocol — and that seam is where the decompressed-byte limit counters sit,
   so it is a trust boundary, not just a copy.
-- `XlsxReader.Enumerator.TryParseIsoDate` still has its own ISO date parse, copying bytes to chars on
-  the stack and calling `DateTime.TryParse`. `FastDate` now covers the same shapes and should replace
-  it, but that path was not measured, so it was left alone.
 - After `DrainFields`, rows-only enumeration of wide rows still runs ~1.75x the framing prototype.
   What remains is per record rather than per field (the `MoveNext` → `TryParseRecordFromBuffer` →
   `TryParseSimpleRecord` call chain, `BeginRecord`, the write barrier from `CsvControlScanner.Continue`

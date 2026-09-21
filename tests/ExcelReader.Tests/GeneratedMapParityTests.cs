@@ -270,10 +270,10 @@ namespace ExcelReader.Tests
                 await sheet.EndAsync(TestContext.Current.CancellationToken);
             }
             ms.Position = 0;
-            await using XlsxReader reflectionReader = await Excel.FromAsync(ms, ct: TestContext.Current.CancellationToken);
+            await using XlsxReader reflectionReader = await Excel.FromXlsxAsync(ms, ct: TestContext.Current.CancellationToken);
             CrossFormatModel reflectionResult = new ExcelParser<CrossFormatModel>().Parse(reflectionReader).First();
             ms.Position = 0;
-            await using XlsxReader generatedReader = await Excel.FromAsync(ms, ct: TestContext.Current.CancellationToken);
+            await using XlsxReader generatedReader = await Excel.FromXlsxAsync(ms, ct: TestContext.Current.CancellationToken);
             CrossFormatModel generatedResult = new ExcelMappedParser<CrossFormatModel>().Parse(generatedReader).First();
 
             AssertCrossFormatEqual(reflectionResult, generatedResult);
@@ -433,7 +433,7 @@ namespace ExcelReader.Tests
         private static async Task<T> ParseFirstXlsxAsync<T>(MemoryStream ms, Func<XlsxReader, IEnumerable<T>> parse)
         {
             ms.Position = 0;
-            await using XlsxReader reader = await Excel.FromAsync(ms, ct: TestContext.Current.CancellationToken);
+            await using XlsxReader reader = await Excel.FromXlsxAsync(ms, ct: TestContext.Current.CancellationToken);
             return parse(reader).First();
         }
 
@@ -465,7 +465,7 @@ namespace ExcelReader.Tests
             }
 
             reflectionMs.Position = 0;
-            using XlsxReader reflectionReader = Excel.From(reflectionMs);
+            using XlsxReader reflectionReader = Excel.FromXlsx(reflectionMs);
             using XlsxReader.Enumerator reflectionEnum = reflectionReader.GetEnumerator();
             Assert.True(reflectionEnum.MoveNext());
             string[] reflectionHeaders = ReadRowText(reflectionEnum.Current);
@@ -473,7 +473,7 @@ namespace ExcelReader.Tests
             string[] reflectionValues = ReadRowText(reflectionEnum.Current);
 
             generatedMs.Position = 0;
-            using XlsxReader generatedReader = Excel.From(generatedMs);
+            using XlsxReader generatedReader = Excel.FromXlsx(generatedMs);
             using XlsxReader.Enumerator generatedEnum = generatedReader.GetEnumerator();
             Assert.True(generatedEnum.MoveNext());
             string[] generatedHeaders = ReadRowText(generatedEnum.Current);
@@ -613,7 +613,7 @@ namespace ExcelReader.Tests
             }
 
             reflectionMs.Position = 0;
-            using XlsxReader reflectionReader = Excel.From(reflectionMs);
+            using XlsxReader reflectionReader = Excel.FromXlsx(reflectionMs);
             using XlsxReader.Enumerator reflectionEnum = reflectionReader.GetEnumerator();
             Assert.True(reflectionEnum.MoveNext());
             string[] reflectionHeaders = ReadRowText(reflectionEnum.Current);
@@ -621,7 +621,7 @@ namespace ExcelReader.Tests
             string[] reflectionValues = ReadRowText(reflectionEnum.Current);
 
             generatedMs.Position = 0;
-            using XlsxReader generatedReader = Excel.From(generatedMs);
+            using XlsxReader generatedReader = Excel.FromXlsx(generatedMs);
             using XlsxReader.Enumerator generatedEnum = generatedReader.GetEnumerator();
             Assert.True(generatedEnum.MoveNext());
             string[] generatedHeaders = ReadRowText(generatedEnum.Current);

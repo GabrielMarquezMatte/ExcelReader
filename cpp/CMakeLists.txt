@@ -47,6 +47,7 @@ target_compile_features(xl_excelreader INTERFACE cxx_std_23)
 add_library(xl::excelreader ALIAS xl_excelreader)
 
 include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/FetchNativeLib.cmake")
+include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/CopyNativeLibrary.cmake")
 excelreader_fetch_native_lib()
 target_link_libraries(xl_excelreader INTERFACE xl::native)
 
@@ -103,6 +104,7 @@ if(EXCELREADER_INSTALL)
     install(FILES
         "${CMAKE_CURRENT_BINARY_DIR}/excelreaderConfig.cmake"
         "${CMAKE_CURRENT_BINARY_DIR}/excelreaderConfigVersion.cmake"
+        "${CMAKE_CURRENT_SOURCE_DIR}/cmake/CopyNativeLibrary.cmake"
         DESTINATION "${_config_dir}")
 endif()
 

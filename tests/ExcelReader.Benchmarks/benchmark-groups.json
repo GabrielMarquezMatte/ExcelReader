@@ -19,7 +19,7 @@
   },
   {
     "name": "write",
-    "filter": "ExcelReader.Benchmarks.WriteBenchmark.* ExcelReader.Benchmarks.RecordWriteBenchmark.* ExcelReader.Benchmarks.XlsWriteBenchmark.* ExcelReader.Benchmarks.CsvWriteBenchmark.*",
+    "filter": "ExcelReader.Benchmarks.WriteBenchmark.* ExcelReader.Benchmarks.RecordWriteBenchmark.* ExcelReader.Benchmarks.XlsWriteBenchmark.* ExcelReader.Benchmarks.CsvWriteBenchmark.* ExcelReader.Benchmarks.WritePathBenchmark.*",
     "pagesArgs": "--warmupCount 3 --iterationCount 10",
     "prArgs": "--warmupCount 1 --iterationCount 5"
   },

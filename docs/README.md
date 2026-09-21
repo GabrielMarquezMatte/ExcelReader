@@ -14,11 +14,16 @@ changes. A document with the numbers, the machine and the corpus can be reproduc
   valuable documents here** — they are what stops the same idea being rebuilt next year.
 - A performance ceiling and what it is bounded by.
 
+- Usage documentation under [`guide/`](guide/), split out of the root README so the NuGet landing
+  page stays short. This is prose for a caller deciding *how* to use the library, not a substitute
+  for the `///` comments that document *what* each member does.
+
 ## What does not
 
 - Plans, specs and task breakdowns. Those are working artifacts with a short life; they do not get
   committed, and the style guide forbids pointing a comment at one.
-- API documentation. That is `///` XML doc comments on the public surface, shipped in the package.
+- Reference documentation of the public surface. That is `///` XML doc comments, shipped in the
+  package — never duplicated in `guide/`, which would then drift.
 - Anything the code itself should be saying through naming and flow.
 
 ## Writing one
@@ -35,3 +40,8 @@ invariant) without restating the evidence for it.
 
 - [`performance/reader-performance.md`](performance/reader-performance.md) — where read time goes in
   each format, the ceiling on each, and the optimizations measured and rejected.
+- [`performance/benchmarks.md`](performance/benchmarks.md) — throughput and allocation against
+  CsvHelper, Sep, Sylvan, MiniExcel and SpreadCheetah.
+- [`guide/`](guide/) — usage documentation: [reading](guide/reading.md),
+  [parsing](guide/parsing.md), [writing](guide/writing.md), [csv](guide/csv.md),
+  [encryption](guide/encryption.md).

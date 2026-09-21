@@ -2,6 +2,8 @@ using System.Buffers;
 using System.Buffers.Text;
 using System.Globalization;
 using System.Runtime.CompilerServices;
+using System.Text;
+using System.Text.Unicode;
 using ExcelReader.Core.Writer.Internal;
 
 namespace ExcelReader.Core.Writer
@@ -62,6 +64,22 @@ namespace ExcelReader.Core.Writer
             if (!string.IsNullOrEmpty(value))
             {
                 WriteStringField(value);
+            }
+        }
+
+        /// <inheritdoc/>
+        public void WriteUtf8(ReadOnlySpan<byte> utf8)
+        {
+            if (!Utf8.IsValid(utf8))
+            {
+                Write(Encoding.UTF8.GetString(utf8));
+                return;
+            }
+            ThrowIfDisposed();
+            BeginField();
+            if (!utf8.IsEmpty)
+            {
+                WriteFieldBytes(utf8);
             }
         }
 
@@ -187,7 +205,7 @@ namespace ExcelReader.Core.Writer
                 WriteFieldBytes(buf[..written]);
                 return;
             }
-            if (format.IsEmpty && typeof(T) == typeof(double) && Utf8Formatter.TryFormat(Unsafe.As<T, double>(ref value), buf, out written))
+            if (format.IsEmpty && typeof(T) == typeof(double) && CellFormatter.TryFormatDouble(Unsafe.As<T, double>(ref value), buf, out written))
             {
                 WriteFieldBytes(buf[..written]);
                 return;

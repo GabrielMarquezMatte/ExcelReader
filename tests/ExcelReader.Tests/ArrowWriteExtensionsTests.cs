@@ -75,7 +75,7 @@ namespace ExcelReader.Tests
 
             var name = Assert.IsType<StringArray>(roundTripped.Column(0));
             Assert.Equal("alice", name.GetString(0));
-            Assert.Equal("", name.GetString(1));
+            Assert.True(name.IsNull(1));
 
             var qty = Assert.IsType<Int64Array>(roundTripped.Column(1));
             Assert.Equal(3L, qty.GetValue(0));

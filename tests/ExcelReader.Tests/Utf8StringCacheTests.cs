@@ -116,7 +116,7 @@ namespace ExcelReader.Tests
         public async Task XlsxInternStringsDefaultsToFalse()
         {
             await using MemoryStream ms = await TypedWorkbook.BuildAsync(["alpha"], ["alpha"], ["beta"]);
-            await using var reader = Excel.From(ms);
+            await using var reader = Excel.FromXlsx(ms);
             using var e = reader.GetEnumerator();
 
             Assert.True(e.MoveNext());
@@ -133,7 +133,7 @@ namespace ExcelReader.Tests
         {
             await using MemoryStream ms = await TypedWorkbook.BuildAsync(["alpha"], ["alpha"], ["beta"]);
             var options = new ExcelReaderOptions { InternStrings = true };
-            await using var reader = Excel.From(ms, options: options);
+            await using var reader = Excel.FromXlsx(ms, options: options);
             using var e = reader.GetEnumerator();
 
             Assert.True(e.MoveNext());

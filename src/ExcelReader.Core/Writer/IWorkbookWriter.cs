@@ -1,4 +1,5 @@
 using System.Diagnostics.CodeAnalysis;
+using System.Text;
 
 namespace ExcelReader.Core.Writer
 {
@@ -192,6 +193,18 @@ namespace ExcelReader.Core.Writer
         /// <param name="value">The text to write.</param>
         /// <exception cref="ArgumentException"><paramref name="value"/> exceeds Excel's per-cell text limit (32,767 characters).</exception>
         void Write(string? value);
+
+        /// <summary>
+        /// Writes a text cell from UTF-8 bytes, producing exactly the cell <see cref="Write(string?)"/>
+        /// would for the decoded text. Writers whose output is UTF-8 copy plain text through without
+        /// materializing a <see cref="string"/>; the default implementation decodes and delegates.
+        /// </summary>
+        /// <param name="utf8">The UTF-8 encoded text to write. Invalid sequences are replaced as <see cref="Encoding.UTF8"/> decoding would.</param>
+        /// <exception cref="ArgumentException">The decoded text exceeds Excel's per-cell text limit (32,767 characters).</exception>
+        void WriteUtf8(ReadOnlySpan<byte> utf8)
+        {
+            Write(Encoding.UTF8.GetString(utf8));
+        }
 
         /// <summary>Writes a boolean cell.</summary>
         /// <param name="value">The value to write.</param>

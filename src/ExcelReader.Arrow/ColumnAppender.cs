@@ -65,6 +65,11 @@ namespace ExcelReader.Arrow
 
             internal override void Append(in Cell cell, bool isDate1904)
             {
+                if (IsNullable && cell.Type == CellType.Empty)
+                {
+                    _builder.AppendNull();
+                    return;
+                }
                 int capacity = Math.Max(cell.Value.Length, NumberFormatMaxBytes);
                 if (_scratch.Length < capacity)
                 {

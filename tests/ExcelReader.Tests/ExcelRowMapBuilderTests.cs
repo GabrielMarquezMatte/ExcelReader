@@ -62,11 +62,11 @@ namespace ExcelReader.Tests
                 ["Name", "Age", "BirthDate", "Active", "Kind"],
                 ["Alice", 30, SampleBirthDate, true, "Beta"]);
 
-            await using XlsxReader mappedReader = await Excel.FromAsync(ms, leaveOpen: true, ct: TestContext.Current.CancellationToken);
+            await using XlsxReader mappedReader = await Excel.FromXlsxAsync(ms, leaveOpen: true, ct: TestContext.Current.CancellationToken);
             List<MapBuilderTestModel> mapped = new ExcelMappedParser<MapBuilderTestModel>().Parse(mappedReader).ToList();
 
             ms.Position = 0;
-            await using XlsxReader reflectionReader = await Excel.FromAsync(ms, ct: TestContext.Current.CancellationToken);
+            await using XlsxReader reflectionReader = await Excel.FromXlsxAsync(ms, ct: TestContext.Current.CancellationToken);
             List<ReflectionTestModel> reflected = new ExcelParser<ReflectionTestModel>().Parse(reflectionReader).ToList();
 
             Assert.Single(mapped);
@@ -88,12 +88,12 @@ namespace ExcelReader.Tests
                 .Property(["Age"], ExcelCellReaders.Parsable, static (ref MapBuilderTestModel m, int v) => m.Age = v, isRequired: true);
             TypeMapInfo<MapBuilderTestModel> info = builder.Build();
 
-            await using XlsxReader mappedReader = await Excel.FromAsync(mappedStream, ct: TestContext.Current.CancellationToken);
+            await using XlsxReader mappedReader = await Excel.FromXlsxAsync(mappedStream, ct: TestContext.Current.CancellationToken);
             var mappedEnumerable = new ExcelEnumerable<MapBuilderTestModel>(mappedReader, new ExcelParserConfig(), info);
             ExcelParseException mappedEx = Assert.Throws<ExcelParseException>(() => mappedEnumerable.ToList());
 
             await using MemoryStream reflectedStream = await TypedWorkbook.BuildAsync(["Name"], ["Alice"]);
-            await using XlsxReader reflectedReader = await Excel.FromAsync(reflectedStream, ct: TestContext.Current.CancellationToken);
+            await using XlsxReader reflectedReader = await Excel.FromXlsxAsync(reflectedStream, ct: TestContext.Current.CancellationToken);
             ExcelParseException reflectedEx = Assert.Throws<ExcelParseException>(
                 () => new ExcelParser<RequiredAgeRow>().Parse(reflectedReader).ToList());
 
@@ -135,8 +135,8 @@ namespace ExcelReader.Tests
 
             mappedStream.Position = 0;
             reflectedStream.Position = 0;
-            await using XlsxReader mappedReader = await Excel.FromAsync(mappedStream, ct: TestContext.Current.CancellationToken);
-            await using XlsxReader reflectedReader = await Excel.FromAsync(reflectedStream, ct: TestContext.Current.CancellationToken);
+            await using XlsxReader mappedReader = await Excel.FromXlsxAsync(mappedStream, ct: TestContext.Current.CancellationToken);
+            await using XlsxReader reflectedReader = await Excel.FromXlsxAsync(reflectedStream, ct: TestContext.Current.CancellationToken);
             List<ReflectionTestModel> mapped = new ExcelParser<ReflectionTestModel>().Parse(mappedReader).ToList();
             List<ReflectionTestModel> reflected = new ExcelParser<ReflectionTestModel>().Parse(reflectedReader).ToList();
 
@@ -179,7 +179,7 @@ namespace ExcelReader.Tests
             }
 
             stream.Position = 0;
-            await using XlsxReader reader = await Excel.FromAsync(stream, ct: ct);
+            await using XlsxReader reader = await Excel.FromXlsxAsync(stream, ct: ct);
             List<MapBuilderTestModel> results = new ExcelMappedParser<MapBuilderTestModel>().Parse(reader).ToList();
 
             Assert.Single(results);

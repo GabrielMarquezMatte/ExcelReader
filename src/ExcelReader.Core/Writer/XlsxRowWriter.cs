@@ -52,10 +52,29 @@ namespace ExcelReader.Core.Writer
                 WriteEmptyCell();
                 return;
             }
+            WriteText(value, value);
+        }
+
+        /// <inheritdoc/>
+        /// <exception cref="ObjectDisposedException">The row has already been disposed.</exception>
+        public void WriteUtf8(ReadOnlySpan<byte> utf8)
+        {
+            ThrowIfDisposed();
+            if (!_owner.UseSharedStrings && CellFormatter.IsPlainUtf8Text(utf8))
+            {
+                CellFormatter.WritePlainUtf8String(_row, utf8, _columnIndex, _rowNumber, ConsumeCellReference(), EffectiveStyle());
+                _columnIndex++;
+                return;
+            }
+            Utf8Chars.Decode(utf8, this, static (chars, self) => self.WriteText(chars, owned: null));
+        }
+
+        private void WriteText(ReadOnlySpan<char> value, string? owned)
+        {
             ExcelLimits.ThrowIfCellTextTooLong(value.Length, nameof(value));
             if (_owner.UseSharedStrings)
             {
-                int index = _owner.GetSharedStringIndex(value);
+                int index = owned is null ? _owner.GetSharedStringIndex(value) : _owner.GetSharedStringIndex(owned);
                 CellFormatter.WriteSharedString(_row, index, _columnIndex, _rowNumber, ConsumeCellReference(), EffectiveStyle());
                 _columnIndex++;
                 return;
