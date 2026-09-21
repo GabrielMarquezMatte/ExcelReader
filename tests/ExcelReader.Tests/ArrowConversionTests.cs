@@ -48,6 +48,41 @@ namespace ExcelReader.Tests
         }
 
         [Fact]
+        public void ToArrowRecordBatch_Should_Append_Null_For_Blank_Cells_On_Nullable_String_Columns()
+        {
+            using CsvReader reader = Excel.FromCsv(Encoding.UTF8.GetBytes("name,qty\nwidget,1\n,2\n"));
+            ExcelColumnSchema[] schema =
+            [
+                new() { Index = 0, Name = "name", Type = ExcelColumnType.StringColumn, IsNullable = true },
+                new() { Index = 1, Name = "qty", Type = ExcelColumnType.Int64Column },
+            ];
+
+            RecordBatch batch = reader.ToArrowRecordBatch(schema);
+
+            var name = Assert.IsType<StringArray>(batch.Column(0));
+            Assert.Equal("widget", name.GetString(0));
+            Assert.True(name.IsNull(1));
+            Assert.Equal(1, name.NullCount);
+        }
+
+        [Fact]
+        public void ToArrowRecordBatch_Should_Keep_Blank_Cells_As_Empty_Strings_On_NonNullable_String_Columns()
+        {
+            using CsvReader reader = Excel.FromCsv(Encoding.UTF8.GetBytes("name,qty\n,2\n"));
+            ExcelColumnSchema[] schema =
+            [
+                new() { Index = 0, Name = "name", Type = ExcelColumnType.StringColumn },
+                new() { Index = 1, Name = "qty", Type = ExcelColumnType.Int64Column },
+            ];
+
+            RecordBatch batch = reader.ToArrowRecordBatch(schema);
+
+            var name = Assert.IsType<StringArray>(batch.Column(0));
+            Assert.False(name.IsNull(0));
+            Assert.Equal(string.Empty, name.GetString(0));
+        }
+
+        [Fact]
         public void ToArrowRecordBatch_Should_Throw_When_A_NonNullable_Value_Fails_To_Convert()
         {
             using CsvReader reader = Excel.FromCsv(Encoding.UTF8.GetBytes("qty\nnotanumber\n"));

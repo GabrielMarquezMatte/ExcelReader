@@ -224,6 +224,26 @@ namespace ExcelReader.Tests
             Assert.Equal("not-a-number", ex.RawValue);
         }
 
+        private sealed class ShiftRow
+        {
+            public TimeOnly Start { get; set; }
+        }
+
+        [Theory]
+        [InlineData("NaN")]
+        [InlineData("Infinity")]
+        [InlineData("-Infinity")]
+        public void ANonFiniteTimeOnlyCellFailsToParseInsteadOfBecomingMidnight(string text)
+        {
+            using var ms = Csv($"Start\n{text}\n");
+            using var reader = Excel.FromCsv(ms);
+            var config = new ExcelParserConfig { ThrowOnParseFailure = true };
+
+            ExcelParseException ex = Assert.Throws<ExcelParseException>(
+                () => new ExcelParser<ShiftRow>(config).Parse(reader).ToList());
+            Assert.Equal("Start", ex.ColumnName);
+        }
+
         [Fact]
         public void TerminalBlankLineDoesNotYieldPhantomModelOrRequiredFailure()
         {
