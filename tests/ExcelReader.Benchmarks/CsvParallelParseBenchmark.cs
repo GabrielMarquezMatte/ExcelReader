@@ -116,8 +116,6 @@ namespace ExcelReader.Benchmarks
             CsvParallelOptions options = new() { DegreeOfParallelism = Dop, HeaderRow = 1 };
             CsvModelMap<WideRowRef> map = CsvModelMap.FromAttributes<WideRowRef>();
             var aggregation = await Excel.AggregateCsvParallelAsync<Aggregation, WideRowRef>(_wide, map, options);
-            // Every generated row has Units >= 1, so a zero total means the map bound no columns
-            // and this benchmark is timing record splitting rather than conversion.
             if (aggregation.Units == 0)
             {
                 throw new InvalidOperationException("WideRowRef bound no columns; the aggregate benchmark is measuring nothing.");

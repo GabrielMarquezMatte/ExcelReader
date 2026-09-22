@@ -17,7 +17,6 @@ namespace ExcelReader.Core.Parser.Internal
             {
                 return true;
             }
-            // CR LF is one terminator, so an offset between the two splits it instead of starting a record.
             return pair[0] == Cr && pair[1] != Lf;
         }
 

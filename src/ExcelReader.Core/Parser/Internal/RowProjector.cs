@@ -49,8 +49,6 @@ namespace ExcelReader.Core.Parser.Internal
             return ProjectionStep.Skip;
         }
 
-        // Row by value, not `in`: the model may alias the row's buffers, so an `in` to a caller local
-        // would fail ref-safety (CS8168) once T allows ref struct.
         internal T Project(Row row)
         {
             T model = _typeInfo.CreateInstance();
