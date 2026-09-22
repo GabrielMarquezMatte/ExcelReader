@@ -50,6 +50,8 @@ namespace ExcelReader.Benchmarks
             return acc;
         }
 
+        // Sylvan.Data.Excel exposes no span accessor, so this allocates a string per text cell and its
+        // apples-to-apples counterpart is AccumulateRowMaterialized, not AccumulateRow.
         internal static long AccumulateSylvanExcel(ExcelDataReader reader)
         {
             long acc = 0;

@@ -270,7 +270,7 @@ namespace ExcelReader.Benchmarks
             {
                 for (int i = 0; i < reader.FieldCount; i++)
                 {
-                    acc += reader.GetString(i).Length;
+                    acc += reader.GetFieldSpan(i).Length;
                 }
             }
             return acc;

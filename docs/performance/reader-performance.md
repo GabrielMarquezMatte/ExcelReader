@@ -273,33 +273,53 @@ one byte changed both the row count and the digest.
 
 ### Against a One Billion Row Challenge workload
 
-A scaled-down 1BRC: 10,000,000 rows of `station;temperature`, 413 stations, 222 MB in memory
-(22 bytes per row, against ~14 in the real challenge), min/max/sum/count per station. Every variant
-shares one open-addressing aggregation table, so the differences are reading and parsing. All five
-produced identical checksums. 12 threads on the i7-1365U (2 performance + 8 efficiency cores).
+A scaled-down 1BRC: 10,000,000 rows of `station;temperature`, 413 stations, min/max/sum/count per
+station. Every variant shares one open-addressing aggregation table, so the differences are reading
+and parsing. All variants produced identical checksums, station counts and row counts. 12 threads on
+the i7-1365U (2 performance + 8 efficiency cores).
 
-| | 10M rows | per row | linear extrapolation to 1B |
+Re-measured 2026-09-22, after `CsvStructuralScanner` (de49a45) and the `DrainFields` work. Min of
+five rounds, three separate processes, all three within a few percent of each other:
+
+| | per row | MB/s | linear extrapolation to 1B |
 |---|---|---|---|
-| hand-written parser, 1 thread | 423 ms | 42.3 ns | ~42 s |
-| hand-written parser, partitioned by newline | 92 ms | 9.2 ns | ~9 s |
-| ExcelReader rows, 1 thread | 813 ms | 81.3 ns | ~81 s |
-| ExcelReader rows, partitioned by the caller | 187 ms | 18.7 ns | ~19 s |
-| `Excel.ParseCsvParallelAsync<T>` | 2,417 ms | 241.7 ns | ~4 min |
+| hand-written parser, 1 thread | 43.5 ns | 420 | ~44 s |
+| hand-written parser, partitioned by newline | 7.1 ns | 2,600 | ~7 s |
+| ExcelReader rows, 1 thread | 60.0 ns | 305 | ~60 s |
+| ExcelReader rows, partitioned by the caller | 11.2 ns | 1,630 | ~11 s |
+| `Excel.AggregateCsvParallelAsync`, dop 1 | 66.2 ns | 275 | ~66 s |
+| `Excel.AggregateCsvParallelAsync`, dop 12 | 11.4 ns | 1,600 | ~11 s |
+
+The corpus is a rebuild, not the original bytes: 183 MB at 19.2 bytes per row against the first
+run's 222 MB at 22, because the station names are synthetic and shorter. **What makes the two tables
+comparable is the control**: the hand-written parser measured 42.3 ns then and 43.5 ns now. With the
+baseline standing still, the reader's movement is the library's, not the corpus's.
+
+| | 2026-09-21 | 2026-09-22 | |
+|---|---|---|---|
+| ExcelReader rows, 1 thread | 81.3 ns | 60.0 ns | 1.36x |
+| ExcelReader rows, partitioned | 18.7 ns | 11.2 ns | 1.67x |
+| the library's own parallel path | 241.7 ns (`ParseCsvParallelAsync<T>`) | 11.4 ns (`AggregateCsvParallelAsync`) | — |
 
 The hand-written baseline is deliberately naive (`IndexOf` for the separator, a digit loop, FNV over
 the key bytes) and is not a leaderboard entry; the winning entries add SWAR temperature parsing,
 branch-free key hashing and memory-mapped input, and run on server hardware. So these rows position
 the library against a plain specialized parser on the same machine, not against the leaderboard.
 
-- The general reader costs **~2x a naive specialized parser**, single-threaded or partitioned:
-  about 39 ns per row of generality on this shape (`Row`/`Cell` construction, the 32-byte `CellDesc`,
-  generic `TryParse<double>`, double-to-fixed-point conversion).
-- Partitioning converts well — 4.3x on 12 mixed threads — but only because the caller split the
-  buffer on newlines and opened one `Excel.FromCsv(ReadOnlyMemory<byte>)` per slice. There is no
-  public API for that; `Row` is a `ref struct`, so the library cannot do it for a raw row consumer.
-- The library's own parallel path allocates a model object and a station string per row, and is
-  **13x slower** than the caller-partitioned raw path on this workload. It is built for typed
-  mapping, not throughput.
+- The general reader costs **1.38x a naive specialized parser**, about 16.5 ns per row of generality
+  on this shape (`Row`/`Cell` construction, the 32-byte `CellDesc`, generic `TryParse<double>`,
+  double-to-fixed-point conversion). It was ~2x and ~39 ns before the structural scanner. The same
+  1.38x holds partitioned, 11.2 ns against 7.1.
+- Partitioning converts: 5.4x on 12 mixed threads for raw rows, 5.8x for the aggregation API, 6.1x
+  for the hand-written parser.
+- **`AggregateCsvParallelAsync` is now at parity with hand-partitioning** — 11.4 ns against 11.2 for
+  a caller that splits the buffer itself. The earlier reading, that the library's own parallel path
+  ran 13x slower than the caller-partitioned raw path, was measured against
+  `ParseCsvParallelAsync<T>`, which allocates a model object and a string per row. The aggregation
+  overload does not, and closes the gap. Its cost over the plain single-threaded reader is 1.10x
+  (66.2 ns against 60.0), which is the delegate plus partition bookkeeping.
+- So the missing public API for partitioned raw rows costs nothing on an aggregation workload.
+  It would still matter for a consumer that must see each `Row` itself rather than fold it.
 
 Cost of handing each `Row` to user code instead of an inline loop, same workload, one thread,
 interleaved, 5,000,000 rows, identical checksums:
@@ -847,7 +867,11 @@ needs. A generator rewrite would recover ~1–5%. Not built.
   producer's pooled chunk into the consumer's buffer. Removing it means replacing the `Stream` seam
   with a buffer-exchange protocol — and that seam is where the decompressed-byte limit counters sit,
   so it is a trust boundary, not just a copy.
-- After `DrainFields`, rows-only enumeration of wide rows still runs ~1.75x the framing prototype.
+- **Needs re-measuring.** This reading predates `CsvStructuralScanner` (de49a45, 2026-09-22), which
+  moved the enumerator off `CsvControlScanner` and made `Reset` per buffer rather than per record,
+  so the write barrier named below is likely already gone. The 1BRC re-run above found 1.36x on
+  rows-only enumeration over the same period, so the gap quoted here is stale.
+  After `DrainFields`, rows-only enumeration of wide rows still runs ~1.75x the framing prototype.
   What remains is per record rather than per field (the `MoveNext` → `TryParseRecordFromBuffer` →
   `TryParseSimpleRecord` call chain, `BeginRecord`, the write barrier from `CsvControlScanner.Continue`
   storing the buffer reference every record) plus the consumer side: `Row` indexer access costs
