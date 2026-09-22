@@ -198,13 +198,13 @@ Text arrives through `IRowWriter.WriteUtf8`, which the XLSX and CSV writers copy
 
 ### Ref struct typed parsing (zero-copy)
 
-`RefParser.ParseNamed<T>` (see [Parse into a ref struct](../guide/parsing.md#parse-into-a-ref-struct-zero-copy)) extends `ExcelParser<T>`'s reflection/attribute-driven column mapping to `ref struct` targets, binding a `ReadOnlySpan<byte>` property directly to the cell's raw bytes instead of allocating a `string`. Same generated XLSX workbook, same 50,000 rows, same four columns — only the target type and binding strategy change:
+A `ref struct` model (see [Parse into a ref struct](../guide/parsing.md#parse-into-a-ref-struct-zero-copy)) extends `ExcelParser<T>`'s reflection/attribute-driven column mapping to `ref struct` targets, binding a `ReadOnlySpan<byte>` property directly to the cell's raw bytes instead of allocating a `string`. Same generated XLSX workbook, same 50,000 rows, same four columns — only the target type and binding strategy change:
 
 | Target | Mean | Allocated |
 |---|---:|---:|
 | `class` (`ExcelParser<T>`) | 15.74 ms | 3.87 MB |
 | `struct` (`ExcelParser<T>`) | 14.55 ms | 1.58 MB |
-| `ref struct` + span binding (`RefParser.ParseNamed<T>`) | 14.18 ms | 11.63 KB |
+| `ref struct` + span binding (`ExcelParser<T>`) | 14.18 ms | 11.63 KB |
 
 Parsing into a `ref struct` with a `ReadOnlySpan<byte>` text column removes essentially all per-row allocation — ~99.7% less than the `class` baseline — and is ~10% faster, since there's no per-row model allocation and no per-row `string` allocation for the text column. It is not AOT/trim-safe (reflection-based, same tradeoff as `ExcelParser<T>`). It can be consumed with `foreach` or `await foreach` but not through `IEnumerable<T>`/`IAsyncEnumerable<T>`/LINQ — a `ref struct` element can't be boxed through those interfaces.
 

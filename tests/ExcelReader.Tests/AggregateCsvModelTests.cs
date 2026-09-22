@@ -74,7 +74,7 @@ namespace ExcelReader.Tests
         {
             using CsvReader reader = Excel.FromCsv(csv);
             var rows = new List<string>();
-            foreach (Person person in RefParser.ParseNamed<Person>(reader, new ExcelParserConfig { HeaderRow = headerRow }))
+            foreach (Person person in new ExcelParser<Person>(new ExcelParserConfig { HeaderRow = headerRow }).Parse(reader))
             {
                 rows.Add(Render(person));
             }
@@ -327,7 +327,7 @@ namespace ExcelReader.Tests
         private static List<string> ReadPeople(XlsxReader reader)
         {
             var rows = new List<string>();
-            foreach (Person person in RefParser.ParseNamed<Person>(reader))
+            foreach (Person person in new ExcelParser<Person>().Parse(reader))
             {
                 rows.Add(Render(person));
             }

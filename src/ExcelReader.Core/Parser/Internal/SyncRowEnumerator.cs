@@ -21,16 +21,13 @@ namespace ExcelReader.Core.Parser.Internal
     [SuppressMessage("Design", "CA1063:Implement IDisposable correctly",
         Justification = "No unmanaged resources and no finalizer; every derived Enumerator is sealed and adds no disposal logic, so the full Dispose(bool) pattern buys nothing here.")]
     public abstract class SyncRowEnumerator<T, TRows> : IEnumerator<T>
+        where T : allows ref struct
         where TRows : class, IExcelRowEnumerator
     {
         /// <summary>The underlying row cursor this enumerator advances.</summary>
         [SuppressMessage("Design", "CA1051:Do not declare visible instance fields",
             Justification = "Hot-path base class (MoveNext runs per row); a field avoids a property-call indirection in the tightest loop of the library.")]
         protected readonly TRows Rows;
-        /// <summary>The most recently projected row model, returned by <see cref="Current"/>.</summary>
-        [SuppressMessage("Design", "CA1051:Do not declare visible instance fields",
-            Justification = "Hot-path base class (MoveNext runs per row); a field avoids a property-call indirection in the tightest loop of the library.")]
-        protected T CurrentValue = default!;
 
         /// <summary>Initializes the base enumerator with the row cursor it will drive.</summary>
         /// <param name="rows">The row enumerator to advance and project from.</param>
@@ -39,17 +36,22 @@ namespace ExcelReader.Core.Parser.Internal
             Rows = rows;
         }
 
-        /// <inheritdoc/>
-        public T Current => CurrentValue;
+        /// <summary>The model for the row the cursor currently sits on, built on access.</summary>
+        /// <remarks>
+        /// Built here rather than cached by <see cref="MoveNext"/> because a class cannot hold a field
+        /// of a <c>ref struct</c> <typeparamref name="T"/>. <c>foreach</c> reads this once per row, so
+        /// the parse count is unchanged; reading it twice parses twice.
+        /// </remarks>
+        public T Current => Project();
 
-        object? IEnumerator.Current => CurrentValue;
+        object? IEnumerator.Current => throw new NotSupportedException();
 
         /// <inheritdoc/>
         public bool MoveNext()
         {
             while (Rows.MoveNext())
             {
-                switch (Project())
+                switch (Classify())
                 {
                     case ProjectionStep.Yield:
                         return true;
@@ -60,7 +62,11 @@ namespace ExcelReader.Core.Parser.Internal
             return false;
         }
 
-        private protected abstract ProjectionStep Project();
+        /// <summary>Decides what the current row is (header, blank, data, end) without building a model.</summary>
+        private protected abstract ProjectionStep Classify();
+
+        /// <summary>Builds the model for a row <see cref="Classify"/> already resolved to <see cref="ProjectionStep.Yield"/>.</summary>
+        private protected abstract T Project();
 
         /// <inheritdoc/>
         [SuppressMessage("Design", "CA1816:Dispose methods should call SuppressFinalize",

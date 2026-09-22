@@ -17,6 +17,7 @@ namespace ExcelReader.Core.Parser.Internal
     /// <c>XlsxReader.Enumerator.MoveNextAsync</c> / <c>CsvReader.Enumerator.MoveNextAsync</c>).
     /// </remarks>
     public abstract class AsyncRowEnumerator<T, TReader, TRows> : IAsyncEnumerator<T>
+        where T : allows ref struct
         where TReader : IExcelRowReader<TRows>
         where TRows : class, IExcelRowEnumerator
     {
@@ -26,10 +27,6 @@ namespace ExcelReader.Core.Parser.Internal
         [SuppressMessage("Design", "CA1051:Do not declare visible instance fields",
             Justification = "Hot-path base class (MoveNextAsync runs per row); a field avoids a property-call indirection in the tightest loop of the library.")]
         protected TRows? Rows;
-        /// <summary>The most recently projected row model, returned by <see cref="Current"/>.</summary>
-        [SuppressMessage("Design", "CA1051:Do not declare visible instance fields",
-            Justification = "Hot-path base class (MoveNextAsync runs per row); a field avoids a property-call indirection in the tightest loop of the library.")]
-        protected T CurrentValue = default!;
 
         /// <summary>Initializes the base enumerator with the reader it will lazily open a row cursor from.</summary>
         /// <param name="reader">The row reader used to open the row cursor on first advancement.</param>
@@ -40,8 +37,14 @@ namespace ExcelReader.Core.Parser.Internal
             _ct = ct;
         }
 
-        /// <inheritdoc/>
-        public T Current => CurrentValue;
+        /// <summary>The model for the row the cursor currently sits on, built on access.</summary>
+        /// <remarks>
+        /// Built here rather than cached by <see cref="MoveNextAsync"/> because a class cannot hold a
+        /// field of a <c>ref struct</c> <typeparamref name="T"/>, and such a value could not survive an
+        /// <c>await</c> anyway. Building it outside the awaiting path is what lets a ref struct model
+        /// flow through <see cref="IAsyncEnumerator{T}"/> at all.
+        /// </remarks>
+        public T Current => Project();
 
         /// <inheritdoc/>
         public ValueTask<bool> MoveNextAsync()
@@ -61,7 +64,7 @@ namespace ExcelReader.Core.Parser.Internal
                 {
                     return new ValueTask<bool>(false);
                 }
-                switch (Project())
+                switch (Classify())
                 {
                     case ProjectionStep.Yield:
                         return new ValueTask<bool>(true);
@@ -71,7 +74,11 @@ namespace ExcelReader.Core.Parser.Internal
             }
         }
 
-        private protected abstract ProjectionStep Project();
+        /// <summary>Decides what the current row is (header, blank, data, end) without building a model.</summary>
+        private protected abstract ProjectionStep Classify();
+
+        /// <summary>Builds the model for a row <see cref="Classify"/> already resolved to <see cref="ProjectionStep.Yield"/>.</summary>
+        private protected abstract T Project();
 
         private async ValueTask<bool> AwaitThenContinueAsync(ValueTask<bool> pendingMoveNext)
         {
@@ -79,7 +86,7 @@ namespace ExcelReader.Core.Parser.Internal
             {
                 return false;
             }
-            switch (Project())
+            switch (Classify())
             {
                 case ProjectionStep.Yield:
                     return true;

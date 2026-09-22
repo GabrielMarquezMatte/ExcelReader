@@ -55,10 +55,9 @@ namespace ExcelReader.Tests
             var people = new List<Person>();
             while (rows.MoveNext())
             {
-                Person model = null!;
-                if (projector.Advance(rows, ref model) == ProjectionStep.Yield)
+                if (projector.Classify(rows) == ProjectionStep.Yield)
                 {
-                    people.Add(model);
+                    people.Add(projector.Project(rows));
                 }
             }
 
@@ -90,10 +89,9 @@ namespace ExcelReader.Tests
                 var local = new List<Person>();
                 while (rows.MoveNext())
                 {
-                    Person model = null!;
-                    if (projector.Advance(rows, ref model) == ProjectionStep.Yield)
+                    if (projector.Classify(rows) == ProjectionStep.Yield)
                     {
-                        local.Add(model);
+                        local.Add(projector.Project(rows));
                     }
                 }
                 results[i] = local;

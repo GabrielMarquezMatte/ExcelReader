@@ -11,11 +11,10 @@ namespace ExcelReader.Core.Parser
     /// </summary>
     /// <typeparam name="T">
     /// The model type to bind each row to; must implement <see cref="IExcelRowMap{T}"/>. Not implementing
-    /// it is a compile error here, rather than a silent runtime fallback to reflection. Must not be a
-    /// <see langword="ref struct"/>: unlike <see cref="ExcelParser{T}"/>/<c>RefParser</c>, this
-    /// map-based path has no <see langword="ref struct"/>-model entry. A <see langword="ref struct"/>
-    /// model, or a <c>ReadOnlySpan&lt;byte&gt;</c> property, stays exclusive to <c>RefParser</c>'s
-    /// reflection-based path.
+    /// it is a compile error here, rather than a silent runtime fallback to reflection. May be a
+    /// <see langword="ref struct"/>, including one with a <c>ReadOnlySpan&lt;byte&gt;</c> property: the
+    /// generator emits the map onto a <c>ref partial struct</c> like any other shape, so the zero-copy
+    /// model is available here too, without <see cref="ExcelParser{T}"/>'s reflection.
     /// </typeparam>
     /// <remarks>
     /// No <c>[RequiresUnreferencedCode]</c>/<c>[RequiresDynamicCode]</c>: the <c>where T : IExcelRowMap&lt;T&gt;</c>
@@ -36,7 +35,7 @@ namespace ExcelReader.Core.Parser
     /// directly.
     /// </para>
     /// </remarks>
-    public sealed class ExcelMappedParser<T> : ExcelRowMapParserBase<T> where T : IExcelRowMap<T>
+    public sealed class ExcelMappedParser<T> : ExcelRowMapParserBase<T> where T : IExcelRowMap<T>, allows ref struct
     {
         /// <summary>Creates a parser configured with the given options, or with defaults if none are supplied.</summary>
         /// <param name="config">The options controlling header matching, culture, and parse-failure behavior. Defaults to a new <see cref="ExcelParserConfig"/> when <see langword="null"/>.</param>

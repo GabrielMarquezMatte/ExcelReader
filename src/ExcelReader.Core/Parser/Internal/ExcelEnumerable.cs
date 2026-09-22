@@ -8,6 +8,7 @@ namespace ExcelReader.Core.Parser.Internal
     /// <summary>Lazily projects XLSX rows into <typeparamref name="T"/> instances, for both synchronous and asynchronous enumeration.</summary>
     /// <typeparam name="T">The row model type to bind each row to.</typeparam>
     public sealed class ExcelEnumerable<T> : ExcelEnumerable<T, XlsxReader, XlsxReader.Enumerator>
+        where T : allows ref struct
     {
         [RequiresUnreferencedCode("Typed parsing reflects over T's public properties, which trimming may remove.")]
         [RequiresDynamicCode("Typed parsing binds property setters at runtime (MethodInfo.CreateDelegate / MakeGenericMethod).")]
@@ -29,6 +30,7 @@ namespace ExcelReader.Core.Parser.Internal
     [SuppressMessage("Design", "CA1034:Nested types should not be visible",
         Justification = "Public nested Enumerator/AsyncEnumerator are the standard foreach/await-foreach pattern.")]
     public class ExcelEnumerable<T, TReader, TEnumerator> : IEnumerable<T>, IAsyncEnumerable<T>
+        where T : allows ref struct
         where TReader : IExcelRowReader<TEnumerator>
         where TEnumerator : class, IExcelRowEnumerator
     {
@@ -57,7 +59,7 @@ namespace ExcelReader.Core.Parser.Internal
 
         /// <inheritdoc cref="IEnumerable{T}.GetEnumerator"/>
         [SuppressMessage("ApiDesign", "RS0041:Public members should not use oblivious types",
-            Justification = "T is intentionally unconstrained so a row model can be a class or a struct (see RefParser/struct-binding support); constraining it would break that.")]
+            Justification = "T allows ref struct so a row model can be a class, a struct or a ref struct; constraining it would break that.")]
         public Enumerator GetEnumerator()
         {
             TEnumerator rows = _reader.GetEnumerator();
@@ -81,7 +83,7 @@ namespace ExcelReader.Core.Parser.Internal
 
         /// <inheritdoc cref="IAsyncEnumerable{T}.GetAsyncEnumerator"/>
         [SuppressMessage("ApiDesign", "RS0041:Public members should not use oblivious types",
-            Justification = "T is intentionally unconstrained so a row model can be a class or a struct (see RefParser/struct-binding support); constraining it would break that.")]
+            Justification = "T allows ref struct so a row model can be a class, a struct or a ref struct; constraining it would break that.")]
         public AsyncEnumerator GetAsyncEnumerator(CancellationToken cancellationToken = default)
         {
             CancellationToken effective = cancellationToken.CanBeCanceled ? cancellationToken : _ct;
@@ -107,10 +109,15 @@ namespace ExcelReader.Core.Parser.Internal
                 _projector = new RowProjector<T>(typeInfo, comparer, normalization, headerRow, isDate1904, provider, throwOnParseFailure);
             }
 
-            private protected override ProjectionStep Project()
+            private protected override ProjectionStep Classify()
             {
                 Row row = Rows.Current;
-                return _projector.Advance(in row, ref CurrentValue);
+                return _projector.Classify(in row);
+            }
+
+            private protected override T Project()
+            {
+                return _projector.Project(Rows.Current);
             }
         }
 
@@ -133,10 +140,15 @@ namespace ExcelReader.Core.Parser.Internal
                 _projector = new RowProjector<T>(typeInfo, comparer, normalization, headerRow, reader.IsDate1904, provider, throwOnParseFailure);
             }
 
-            private protected override ProjectionStep Project()
+            private protected override ProjectionStep Classify()
             {
                 Row row = Rows!.Current;
-                return _projector.Advance(in row, ref CurrentValue);
+                return _projector.Classify(in row);
+            }
+
+            private protected override T Project()
+            {
+                return _projector.Project(Rows!.Current);
             }
         }
     }

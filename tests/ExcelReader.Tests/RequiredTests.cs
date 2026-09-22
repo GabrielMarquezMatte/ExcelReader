@@ -111,7 +111,9 @@ namespace ExcelReader.Tests
             Assert.True(enumerator.MoveNext());
             Assert.Equal("A1", enumerator.Current.Code);
 
-            ExcelParseException ex = Assert.Throws<ExcelParseException>(() => enumerator.MoveNext());
+            // Advancing a row never parses it, so a bad row can be skipped; the failure surfaces on Current.
+            Assert.True(enumerator.MoveNext());
+            ExcelParseException ex = Assert.Throws<ExcelParseException>(() => enumerator.Current);
             Assert.Contains("Code", ex.Message, StringComparison.Ordinal);
             Assert.Contains("row 3", ex.Message, StringComparison.Ordinal);
         }

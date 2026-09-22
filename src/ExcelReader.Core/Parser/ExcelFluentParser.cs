@@ -27,6 +27,7 @@ namespace ExcelReader.Core.Parser
     /// </para>
     /// </remarks>
     public sealed class ExcelFluentParser<T> : ExcelRowMapParserBase<T>
+        where T : allows ref struct
     {
         /// <summary>Creates a parser whose map comes entirely from <paramref name="configure"/> — no attribute fallback.</summary>
         /// <param name="configure">Configures the row map by calling <see cref="ExcelRowMapBuilder{T}.Property{TValue}"/> and its siblings.</param>

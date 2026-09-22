@@ -81,12 +81,12 @@ namespace ExcelReader.Benchmarks
         }
 
         [Benchmark]
-        public long RefParserParseNamedSync()
+        public long RefStructModelSync()
         {
             using var ms = new MemoryStream(_workbook, writable: false);
             using var reader = Excel.FromXlsx(ms);
             long acc = 0;
-            foreach (RecordNamedRef rec in RefParser.ParseNamed<RecordNamedRef>(reader))
+            foreach (RecordNamedRef rec in new ExcelParser<RecordNamedRef>().Parse(reader))
             {
                 acc += Accumulate(rec);
             }

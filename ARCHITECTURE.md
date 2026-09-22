@@ -25,9 +25,9 @@ stream, no sheets/styles/shared-strings machinery); `CsvWorkbookWriter` adapts i
 `IWorkbookWriter<CsvSheetWriter>` contract, exposing exactly one sheet.
 
 On top of all four readers sits the typed-parsing layer (`src/ExcelReader.Core/Parser/`):
-`ExcelParser<T>` (reflection/attribute-driven, allocates a model per row) and `RefParser`
-(binds a `ref struct` model directly to `Cell.Value` spans — zero allocation for the container and,
-for span-typed columns, for the values too). Both consume `Row`/`Cell` from any reader uniformly.
+`ExcelParser<T>` (reflection/attribute-driven). Its model may be a class, a struct or a `ref struct`;
+a `ref struct` model binds directly to `Cell.Value` spans — zero allocation for the container and,
+for span-typed columns, for the values too. It consumes `Row`/`Cell` from any reader uniformly.
 
 ## Parallel CSV parsing
 
@@ -79,16 +79,16 @@ differently. The ordered merge is the safer default and the only mode either pub
 reach, so it stays absent a specific reason to revisit.
 
 `Excel.ForEachCsvParallelAsync` exposes the same partitioning to a per-row callback rather than an
-accumulator type. It accepts a `ref struct` row, which the enumerating `ParseCsvParallelAsync` cannot:
-`IAsyncEnumerable<T>`'s `T` is not declared `allows ref struct`, and more fundamentally a row holding
-spans into a worker's buffer cannot cross to the consumer thread at all.
+accumulator type. It accepts a `ref struct` row, which the enumerating `ParseCsvParallelAsync` cannot —
+not because of the interface (`IAsyncEnumerable<T>`'s `T` is declared `allows ref struct` on net9.0+),
+but because a row holding spans into a worker's buffer cannot cross to the consumer thread at all.
 
 That constraint also settles what an ordered `ref struct` enumerator would cost. Since a worker cannot
 convert a row it must hand onward, conversion would run on the consumer thread — and conversion is the
 floor here: the `ref struct` aggregate path, which shares this projection code, costs 834.4 ms
 single-threaded on the conversion-heavy corpus, against 283.9 ms for the typed path at dop 16. Such an
 API would be ~2.9x slower than what already ships while adding nothing over the
-sequential `RefParser.ParseNamed`, so it was not built. Ordered delivery at full speed needs workers to
+sequential `ref struct` parse, so it was not built. Ordered delivery at full speed needs workers to
 convert into a per-chunk arena of packed fields that the consumer rehydrates; that remains unbuilt.
 
 Because partitions start at guessed record boundaries, a partition whose guess was wrong is read again
