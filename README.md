@@ -58,16 +58,21 @@ excelreader convert book.xlsb --format xlsx | head -c 4   # to stdout, --format 
 
 Flags: `--sheet|-s <name|index>`, `--header-row N` (0 = no header), `--sample-size N`,
 `--output|-o <file>`, `--format|-f <xlsx|xlsb|xls|csv>` (defaults to `--output`'s extension, or csv
-for stdout), `--delimiter|-d <char>` (csv only). Run `excelreader <command> --help` for the full list.
+for stdout), `--delimiter|-d <char>` (csv output), `--input-delimiter <char>` (csv input). Run
+`excelreader <command> --help` for the full list.
 
 `--sheet` matches a sheet name first and falls back to a 0-based index, so a sheet literally named
-`2` is reachable by name. `sheets` and `schema` write plain tab-separated text. `convert` reports progress on stderr while it
+`2` is reachable by name. A `.csv` input has its dialect sniffed unless `--input-delimiter` names one,
+so a `;`-separated export reads as columns rather than as one field; `--delimiter` stays on the output
+side, so `convert data.csv -o out.csv -d ';'` still means "read as sniffed, write semicolons".
+`sheets` and `schema` write plain tab-separated text. `convert` reports progress on stderr while it
 runs, unless stderr is redirected. Exit codes are `0` ok and `1` failure; results go to stdout and
 errors to stderr, so `convert` is safe to pipe.
 
 ## Notes
 
 - Reads `.xlsx`, `.xlsb` (BIFF12), `.xls` (BIFF8), and `.csv`; writes `.xlsx`, `.xlsb`, `.xls`, and `.csv`.
+- `Excel.Open`/`OpenAsync` auto-detect XLSX/XLSB/XLS from the file signature. CSV has none, so pass `ExcelFileFormat.Csv` to open delimited text through the same entry point; `ExcelReaderOptions.Csv` carries the dialect, and `CsvReaderOptions.SniffDialect` infers it from the source.
 - Reads one sheet at a time (XLSX/XLSB/XLS); use `MoveToSheet(index)` or `TryMoveToSheet(name)` to switch sheets. CSV has no sheets.
 - Missing cells in sparse rows are exposed as empty cells.
 - String conversion allocates only when you call `GetString()`.

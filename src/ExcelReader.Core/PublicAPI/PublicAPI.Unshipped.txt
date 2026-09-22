@@ -1,1 +1,20 @@
 #nullable enable
+ExcelReader.Core.Enums.CsvNewLine
+ExcelReader.Core.Enums.CsvNewLine.CarriageReturnLineFeed = 0 -> ExcelReader.Core.Enums.CsvNewLine
+ExcelReader.Core.Enums.CsvNewLine.LineFeed = 1 -> ExcelReader.Core.Enums.CsvNewLine
+ExcelReader.Core.Enums.ExcelFileFormat.Csv = 5 -> ExcelReader.Core.Enums.ExcelFileFormat
+ExcelReader.Core.Reader.CsvReaderOptions.SniffDialect.get -> bool
+ExcelReader.Core.Reader.CsvReaderOptions.SniffDialect.init -> void
+ExcelReader.Core.Reader.ExcelReaderOptions.Csv.get -> ExcelReader.Core.Reader.CsvReaderOptions?
+ExcelReader.Core.Reader.ExcelReaderOptions.Csv.init -> void
+ExcelReader.Core.Writer.CsvWriterOptions.Encoding.get -> System.Text.Encoding?
+ExcelReader.Core.Writer.CsvWriterOptions.Encoding.init -> void
+ExcelReader.Core.Writer.CsvWriterOptions.NewLine.get -> ExcelReader.Core.Enums.CsvNewLine
+ExcelReader.Core.Writer.CsvWriterOptions.NewLine.init -> void
+ExcelReader.Core.Writer.CsvWriterOptions.WriteByteOrderMark.get -> bool
+ExcelReader.Core.Writer.CsvWriterOptions.WriteByteOrderMark.init -> void
+static ExcelReader.Core.Reader.Excel.Open(System.IO.Stream! stream, ExcelReader.Core.Enums.ExcelFileFormat format, bool leaveOpen = true, ExcelReader.Core.Reader.ExcelReaderOptions? options = null) -> ExcelReader.Core.Reader.IExcelRowReader!
+static ExcelReader.Core.Reader.Excel.Open(System.ReadOnlyMemory<byte> data, ExcelReader.Core.Enums.ExcelFileFormat format, ExcelReader.Core.Reader.ExcelReaderOptions? options = null) -> ExcelReader.Core.Reader.IExcelRowReader!
+static ExcelReader.Core.Reader.Excel.Open(string! path, ExcelReader.Core.Enums.ExcelFileFormat format, ExcelReader.Core.Reader.ExcelReaderOptions? options = null) -> ExcelReader.Core.Reader.IExcelRowReader!
+static ExcelReader.Core.Reader.Excel.OpenAsync(System.IO.Stream! stream, ExcelReader.Core.Enums.ExcelFileFormat format, bool leaveOpen = true, ExcelReader.Core.Reader.ExcelReaderOptions? options = null, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<ExcelReader.Core.Reader.IExcelRowReader!>
+static ExcelReader.Core.Reader.Excel.OpenAsync(string! path, ExcelReader.Core.Enums.ExcelFileFormat format, ExcelReader.Core.Reader.ExcelReaderOptions? options = null, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<ExcelReader.Core.Reader.IExcelRowReader!>

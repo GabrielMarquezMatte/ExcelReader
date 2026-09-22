@@ -15,6 +15,9 @@ namespace ExcelReader.Core.Enums
         Xlsb = 3,
         /// <summary>An encrypted Office Open XML workbook. The concrete format (XLSX or XLSB) is
         /// unknowable until it has been decrypted, so detection reports this instead.</summary>
-        EncryptedOoxml = 4
+        EncryptedOoxml = 4,
+        /// <summary>Delimited text (.csv). Carries no signature, so detection never reports it;
+        /// it has to be requested explicitly.</summary>
+        Csv = 5
     }
 }

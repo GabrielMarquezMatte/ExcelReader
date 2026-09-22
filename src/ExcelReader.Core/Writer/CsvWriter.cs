@@ -1,4 +1,6 @@
 using System.Buffers;
+using System.Text;
+using ExcelReader.Core.Enums;
 using ExcelReader.Core.Writer.Internal;
 
 namespace ExcelReader.Core.Writer
@@ -23,6 +25,7 @@ namespace ExcelReader.Core.Writer
         private readonly byte _quote;
         private readonly SearchValues<byte> _specialBytes;
         private readonly SearchValues<char> _specialChars;
+        private readonly bool _lineFeedOnly;
         private readonly BiffBuffer _buffer = new(4096);
         private CsvRowWriter? _rowWriter;
         private bool _rowActive;
@@ -34,6 +37,7 @@ namespace ExcelReader.Core.Writer
             _leaveOpen = leaveOpen;
             _delimiter = options.Delimiter;
             _quote = options.Quote;
+            _lineFeedOnly = options.NewLine is CsvNewLine.LineFeed;
             ReadOnlySpan<byte> specialBytes = [_delimiter, _quote, (byte)'\r', (byte)'\n'];
             ReadOnlySpan<char> specialChars = [(char)_delimiter, (char)_quote, '\r', '\n'];
             _specialBytes = SearchValues.Create(specialBytes);
@@ -45,14 +49,28 @@ namespace ExcelReader.Core.Writer
         /// </summary>
         /// <param name="stream">The destination stream.</param>
         /// <param name="leaveOpen">If <see langword="true"/>, the stream is left open when the writer is disposed.</param>
-        /// <param name="options">Delimiter/quote options; defaults to <see cref="CsvWriterOptions.Default"/> when omitted.</param>
-        /// <exception cref="ArgumentException">The delimiter and quote byte are the same, or either is a carriage return or line feed.</exception>
+        /// <param name="options">Dialect, encoding, and record-terminator options; defaults to <see cref="CsvWriterOptions.Default"/> when omitted.</param>
+        /// <exception cref="ArgumentException">The delimiter and quote byte are the same, either is a carriage return or line feed, or <see cref="CsvWriterOptions.NewLine"/> is not a defined value.</exception>
         public static CsvWriter Create(Stream stream, bool leaveOpen = false, CsvWriterOptions? options = null)
         {
             ArgumentNullException.ThrowIfNull(stream);
             CsvWriterOptions effective = options ?? CsvWriterOptions.Default;
             ValidateOptions(effective);
-            return new CsvWriter(stream, leaveOpen, effective);
+            Encoding? target = Transcoded(effective.Encoding);
+            if (effective.WriteByteOrderMark)
+            {
+                stream.Write((target ?? Encoding.UTF8).GetPreamble());
+            }
+            if (target is null)
+            {
+                return new CsvWriter(stream, leaveOpen, effective);
+            }
+            return new CsvWriter(Encoding.CreateTranscodingStream(stream, target, Encoding.UTF8, leaveOpen), leaveOpen: false, effective);
+        }
+
+        private static Encoding? Transcoded(Encoding? encoding)
+        {
+            return encoding is null || encoding.CodePage == Encoding.UTF8.CodePage ? null : encoding;
         }
 
         private static void ValidateOptions(CsvWriterOptions options)
@@ -68,6 +86,10 @@ namespace ExcelReader.Core.Writer
             if (options.Quote is (byte)'\r' or (byte)'\n')
             {
                 throw new ArgumentException("Quote cannot be a carriage return or line feed.", nameof(options));
+            }
+            if (options.NewLine is not (CsvNewLine.CarriageReturnLineFeed or CsvNewLine.LineFeed))
+            {
+                throw new ArgumentException($"NewLine must be a defined CsvNewLine value; got {options.NewLine}.", nameof(options));
             }
         }
 
@@ -90,9 +112,14 @@ namespace ExcelReader.Core.Writer
             return _rowWriter;
         }
 
+        private void WriteNewLine()
+        {
+            _buffer.Write(_lineFeedOnly ? "\n"u8 : "\r\n"u8);
+        }
+
         internal void EndRow()
         {
-            _buffer.Write("\r\n"u8);
+            WriteNewLine();
             _rowActive = false;
             if (_buffer.Length >= FlushThreshold)
             {
@@ -103,7 +130,7 @@ namespace ExcelReader.Core.Writer
 
         internal ValueTask EndRowAsync(CancellationToken ct = default)
         {
-            _buffer.Write("\r\n"u8);
+            WriteNewLine();
             _rowActive = false;
             if (_buffer.Length >= FlushThreshold)
             {
@@ -157,7 +184,7 @@ namespace ExcelReader.Core.Writer
         {
             if (_rowActive)
             {
-                _buffer.Write("\r\n"u8);
+                WriteNewLine();
                 _rowActive = false;
             }
         }

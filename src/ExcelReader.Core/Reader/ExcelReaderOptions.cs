@@ -72,6 +72,16 @@ namespace ExcelReader.Core.Reader
         /// file-supplied value to bound and this limit is not applied on that path.</remarks>
         public int MaxPasswordSpinCount { get; init; } = 100_000;
 
+        /// <summary>Gets the delimited-text settings used when a source is opened as
+        /// <see cref="Enums.ExcelFileFormat.Csv"/>. Defaults to <see langword="null"/>, meaning
+        /// <see cref="CsvReaderOptions.Default"/>.</summary>
+        /// <remarks>Lets one options object carry both format families, so a caller that does not know
+        /// which one it will get — <see cref="Excel.Open(string,Enums.ExcelFileFormat,ExcelReaderOptions?)"/>,
+        /// or the <c>xl_open_options</c> struct the native ABI passes through — configures both in one
+        /// place. The other properties on this record cover the Excel formats only and are ignored on the
+        /// CSV path, as this one is on every other path.</remarks>
+        public CsvReaderOptions? Csv { get; init; }
+
         /// <summary>Gets the default options instance, used whenever a reader is opened without explicit options.</summary>
         public static ExcelReaderOptions Default { get; } = new();
     }
