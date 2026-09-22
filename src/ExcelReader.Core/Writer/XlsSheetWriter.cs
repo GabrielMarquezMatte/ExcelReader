@@ -1,4 +1,5 @@
 using System.Diagnostics.CodeAnalysis;
+using ExcelReader.Core.Enums;
 using ExcelReader.Core.Writer.Internal;
 
 namespace ExcelReader.Core.Writer
@@ -36,16 +37,20 @@ namespace ExcelReader.Core.Writer
         private int _activeRowStyle;
         private XlsRowWriter? _rowWriter;
 
-        internal XlsSheetWriter(XlsWorkbookWriter owner, string name, bool date1904, bool isContinuation = false, string? baseName = null)
+        internal XlsSheetWriter(XlsWorkbookWriter owner, string name, bool date1904,
+            ExcelSheetVisibility visibility = ExcelSheetVisibility.Visible, bool isContinuation = false, string? baseName = null)
         {
             _owner = owner;
             Name = name;
+            Visibility = visibility;
             _date1904 = date1904;
             _isContinuation = isContinuation;
             _baseName = baseName ?? name;
         }
 
         internal string Name { get; }
+
+        internal ExcelSheetVisibility Visibility { get; }
 
         internal int SubstreamLength => FramingBytes + _colInfos.Length + _cells.Length;
 
@@ -222,7 +227,7 @@ namespace ExcelReader.Core.Writer
             string contName = _baseName.Length + suffix.Length <= MaxSheetNameLength
                 ? _baseName + suffix
                 : _baseName[..(MaxSheetNameLength - suffix.Length)] + suffix;
-            var cont = new XlsSheetWriter(_owner, contName, _date1904, isContinuation: true, baseName: _baseName);
+            var cont = new XlsSheetWriter(_owner, contName, _date1904, Visibility, isContinuation: true, baseName: _baseName);
             cont.Start();
             return cont;
         }

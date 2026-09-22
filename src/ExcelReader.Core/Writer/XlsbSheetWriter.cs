@@ -1,6 +1,7 @@
 using System.Buffers.Binary;
 using System.IO.Compression;
 using System.Runtime.InteropServices;
+using ExcelReader.Core.Enums;
 using ExcelReader.Core.Reader;
 using ExcelReader.Core.Writer.Internal;
 
@@ -33,6 +34,7 @@ namespace ExcelReader.Core.Writer
             ZipArchive zip,
             string name,
             int sheetId,
+            ExcelSheetVisibility visibility,
             bool date1904,
             CompressionLevel compression,
             bool offloadWrite)
@@ -41,6 +43,7 @@ namespace ExcelReader.Core.Writer
             _zip = zip;
             Name = name;
             SheetId = sheetId;
+            Visibility = visibility;
             _date1904 = date1904;
             _compression = compression;
             _offloadWrite = offloadWrite;
@@ -48,6 +51,7 @@ namespace ExcelReader.Core.Writer
 
         internal string Name { get; }
         internal int SheetId { get; }
+        internal ExcelSheetVisibility Visibility { get; }
         internal BiffBuffer Payload { get; } = new(256);
         internal bool UseSharedStrings => _owner.UseSharedStrings;
 

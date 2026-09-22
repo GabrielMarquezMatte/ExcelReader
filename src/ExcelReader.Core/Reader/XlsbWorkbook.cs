@@ -1,11 +1,13 @@
+using ExcelReader.Core.Enums;
+
 namespace ExcelReader.Core.Reader
 {
     internal static class XlsbWorkbook
     {
-        internal static (string Name, string Path)[] ParseSheets(ReadOnlySpan<byte> workbookBin, ReadOnlySpan<byte> relsBytes)
+        internal static (string Name, string Path, ExcelSheetVisibility Visibility)[] ParseSheets(ReadOnlySpan<byte> workbookBin, ReadOnlySpan<byte> relsBytes)
         {
             Dictionary<string, string> rels = XlsxXml.ParseRelationships(relsBytes);
-            List<(string, string)> sheets = [];
+            List<(string, string, ExcelSheetVisibility)> sheets = [];
             var reader = new Biff12RecordReader(workbookBin);
             while (reader.TryReadRecord(out int id, out ReadOnlySpan<byte> payload))
             {
@@ -18,7 +20,7 @@ namespace ExcelReader.Core.Reader
             return [.. sheets];
         }
 
-        private static void AddSheet(ReadOnlySpan<byte> payload, Dictionary<string, string> rels, List<(string, string)> sheets)
+        private static void AddSheet(ReadOnlySpan<byte> payload, Dictionary<string, string> rels, List<(string, string, ExcelSheetVisibility)> sheets)
         {
             if (payload.Length < 8)
             {
@@ -34,8 +36,18 @@ namespace ExcelReader.Core.Reader
             }
             if (rels.TryGetValue(new string(relId), out string? target))
             {
-                sheets.Add((new string(name), XlsxXml.NormalizePart(target)));
+                sheets.Add((new string(name), XlsxXml.NormalizePart(target), Visibility(Biff12.ReadU32(payload, 0))));
             }
+        }
+
+        private static ExcelSheetVisibility Visibility(uint state)
+        {
+            return state switch
+            {
+                1 => ExcelSheetVisibility.Hidden,
+                2 => ExcelSheetVisibility.VeryHidden,
+                _ => ExcelSheetVisibility.Visible,
+            };
         }
 
         internal static bool ParseDate1904(ReadOnlySpan<byte> workbookBin)

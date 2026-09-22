@@ -1,12 +1,13 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Text;
+using ExcelReader.Core.Enums;
 
 namespace ExcelReader.Core.Writer
 {
     /// <summary>
     /// Writes a whole workbook (XLSX, XLSB, XLS or CSV) to a destination stream, one sheet at a time.
     /// Implementations open the underlying stream/archive on construction, so a caller only needs to
-    /// call <see cref="StartAsync"/>, add sheets with <see cref="AddSheet"/>, and dispose the workbook
+    /// call <see cref="StartAsync"/>, add sheets with <see cref="AddSheet(string)"/>, and dispose the workbook
     /// (or call <see cref="EndAsync"/> then dispose) when finished.
     /// </summary>
     /// <typeparam name="TSheet">The concrete <see cref="ISheetWriter{TRow}"/> this workbook produces.</typeparam>
@@ -21,13 +22,13 @@ namespace ExcelReader.Core.Writer
         /// <summary>
         /// Synchronous counterpart to <see cref="StartAsync"/>: writes the workbook's leading structure
         /// and moves the writer into the started state, without the async/await machinery, for native/
-        /// unmanaged callers whose ABI is synchronous. Must be called exactly once, before <see cref="AddSheet"/>.
+        /// unmanaged callers whose ABI is synchronous. Must be called exactly once, before <see cref="AddSheet(string)"/>.
         /// </summary>
         void Start();
 
         /// <summary>
         /// Writes the workbook's leading structure (e.g. archive/package headers) and moves the writer
-        /// into the started state. Must be called exactly once, before <see cref="AddSheet"/>.
+        /// into the started state. Must be called exactly once, before <see cref="AddSheet(string)"/>.
         /// </summary>
         /// <param name="ct">A token to cancel the operation.</param>
         ValueTask StartAsync(CancellationToken ct = default);
@@ -41,6 +42,18 @@ namespace ExcelReader.Core.Writer
         /// meet Excel's sheet-name restrictions (1-31 characters, no <c>: \ / ? * [ ]</c>).</param>
         /// <returns>The writer for the new sheet.</returns>
         TSheet AddSheet(string name);
+
+        /// <summary>
+        /// Begins a new sheet named <paramref name="name"/> with the given tab-bar visibility, and returns
+        /// its writer. Same contract as <see cref="AddSheet(string)"/> otherwise.
+        /// </summary>
+        /// <param name="name">The sheet's name, shown to Excel; must be unique within the workbook and
+        /// meet Excel's sheet-name restrictions (1-31 characters, no <c>: \ / ? * [ ]</c>).</param>
+        /// <param name="visibility">Whether the sheet is shown in the workbook's tab bar. A workbook whose
+        /// sheets are all hidden is rejected when it is ended, since Excel reports such a file as damaged.</param>
+        /// <returns>The writer for the new sheet.</returns>
+        /// <exception cref="ArgumentOutOfRangeException"><paramref name="visibility"/> is not a defined value.</exception>
+        TSheet AddSheet(string name, ExcelSheetVisibility visibility);
 
         /// <summary>
         /// Synchronous counterpart to <see cref="EndAsync"/>: finalizes the workbook without the
@@ -82,7 +95,7 @@ namespace ExcelReader.Core.Writer
     }
 
     /// <summary>
-    /// Writes one sheet's rows to the workbook. Obtained from <see cref="IWorkbookWriter{TSheet}.AddSheet"/>;
+    /// Writes one sheet's rows to the workbook. Obtained from <see cref="IWorkbookWriter{TSheet}.AddSheet(string)"/>;
     /// a caller starts the sheet, writes rows in order via <see cref="StartRowAsync(CancellationToken)"/>, then ends the sheet.
     /// </summary>
     /// <typeparam name="TRow">The concrete <see cref="IRowWriter"/> this sheet produces.</typeparam>

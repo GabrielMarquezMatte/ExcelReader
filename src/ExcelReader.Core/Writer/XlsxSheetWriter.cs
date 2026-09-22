@@ -2,6 +2,7 @@ using System.Buffers.Text;
 using System.Globalization;
 using System.IO.Compression;
 using System.Text;
+using ExcelReader.Core.Enums;
 using ExcelReader.Core.Reader;
 using ExcelReader.Core.Writer.Internal;
 
@@ -27,18 +28,21 @@ namespace ExcelReader.Core.Writer
         private Dictionary<int, int>? _columnStyles;
         private Dictionary<int, double>? _columnWidths;
 
-        internal XlsxSheetWriter(XlsxWorkbookWriter owner, ZipArchive zip, string name, int sheetId, CompressionLevel compression, bool offloadWrite)
+        internal XlsxSheetWriter(XlsxWorkbookWriter owner, ZipArchive zip, string name, int sheetId,
+            ExcelSheetVisibility visibility, CompressionLevel compression, bool offloadWrite)
         {
             _owner = owner;
             _zip = zip;
             Name = name;
             SheetId = sheetId;
+            Visibility = visibility;
             _compression = compression;
             _offloadWrite = offloadWrite;
         }
 
         internal string Name { get; }
         internal int SheetId { get; }
+        internal ExcelSheetVisibility Visibility { get; }
         internal bool UseSharedStrings => _owner.UseSharedStrings;
 
         internal int GetSharedStringIndex(string value)
@@ -92,7 +96,7 @@ namespace ExcelReader.Core.Writer
             _stream.Write(_rowBuffer.Span);
             _rowBuffer.Reset();
             _state = WriterState.Started;
-            _owner.RegisterSheet(Name, SheetId);
+            _owner.RegisterSheet(Name, SheetId, Visibility);
         }
 
         /// <inheritdoc/>
@@ -113,7 +117,7 @@ namespace ExcelReader.Core.Writer
             await _stream.WriteAsync(_rowBuffer.Memory, ct).ConfigureAwait(false);
             _rowBuffer.Reset();
             _state = WriterState.Started;
-            _owner.RegisterSheet(Name, SheetId);
+            _owner.RegisterSheet(Name, SheetId, Visibility);
         }
 
         private string BuildColsXml()

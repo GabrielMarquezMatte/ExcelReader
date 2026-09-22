@@ -3,16 +3,37 @@ ExcelReader.Core.Enums.CsvNewLine
 ExcelReader.Core.Enums.CsvNewLine.CarriageReturnLineFeed = 0 -> ExcelReader.Core.Enums.CsvNewLine
 ExcelReader.Core.Enums.CsvNewLine.LineFeed = 1 -> ExcelReader.Core.Enums.CsvNewLine
 ExcelReader.Core.Enums.ExcelFileFormat.Csv = 5 -> ExcelReader.Core.Enums.ExcelFileFormat
+ExcelReader.Core.Enums.ExcelSheetVisibility
+ExcelReader.Core.Enums.ExcelSheetVisibility.Hidden = 1 -> ExcelReader.Core.Enums.ExcelSheetVisibility
+ExcelReader.Core.Enums.ExcelSheetVisibility.VeryHidden = 2 -> ExcelReader.Core.Enums.ExcelSheetVisibility
+ExcelReader.Core.Enums.ExcelSheetVisibility.Visible = 0 -> ExcelReader.Core.Enums.ExcelSheetVisibility
+ExcelReader.Core.Reader.CsvReader.SheetVisibility.get -> ExcelReader.Core.Enums.ExcelSheetVisibility
+ExcelReader.Core.Reader.CsvReader.SheetVisibilityAt(int index) -> ExcelReader.Core.Enums.ExcelSheetVisibility
+ExcelReader.Core.Reader.ExcelSheet.Visibility.get -> ExcelReader.Core.Enums.ExcelSheetVisibility
+ExcelReader.Core.Reader.ExcelSheet.Visibility.init -> void
+ExcelReader.Core.Reader.IExcelRowReader.SheetVisibility.get -> ExcelReader.Core.Enums.ExcelSheetVisibility
+ExcelReader.Core.Reader.IExcelRowReader.SheetVisibilityAt(int index) -> ExcelReader.Core.Enums.ExcelSheetVisibility
+ExcelReader.Core.Reader.XlsReader.SheetVisibility.get -> ExcelReader.Core.Enums.ExcelSheetVisibility
+ExcelReader.Core.Reader.XlsReader.SheetVisibilityAt(int index) -> ExcelReader.Core.Enums.ExcelSheetVisibility
+ExcelReader.Core.Reader.XlsbReader.SheetVisibility.get -> ExcelReader.Core.Enums.ExcelSheetVisibility
+ExcelReader.Core.Reader.XlsbReader.SheetVisibilityAt(int index) -> ExcelReader.Core.Enums.ExcelSheetVisibility
+ExcelReader.Core.Reader.XlsxReader.SheetVisibility.get -> ExcelReader.Core.Enums.ExcelSheetVisibility
+ExcelReader.Core.Reader.XlsxReader.SheetVisibilityAt(int index) -> ExcelReader.Core.Enums.ExcelSheetVisibility
 ExcelReader.Core.Reader.CsvReaderOptions.SniffDialect.get -> bool
 ExcelReader.Core.Reader.CsvReaderOptions.SniffDialect.init -> void
 ExcelReader.Core.Reader.ExcelReaderOptions.Csv.get -> ExcelReader.Core.Reader.CsvReaderOptions?
 ExcelReader.Core.Reader.ExcelReaderOptions.Csv.init -> void
+ExcelReader.Core.Writer.CsvWorkbookWriter.AddSheet(string! name, ExcelReader.Core.Enums.ExcelSheetVisibility visibility) -> ExcelReader.Core.Writer.CsvSheetWriter!
 ExcelReader.Core.Writer.CsvWriterOptions.Encoding.get -> System.Text.Encoding?
 ExcelReader.Core.Writer.CsvWriterOptions.Encoding.init -> void
 ExcelReader.Core.Writer.CsvWriterOptions.NewLine.get -> ExcelReader.Core.Enums.CsvNewLine
 ExcelReader.Core.Writer.CsvWriterOptions.NewLine.init -> void
 ExcelReader.Core.Writer.CsvWriterOptions.WriteByteOrderMark.get -> bool
 ExcelReader.Core.Writer.CsvWriterOptions.WriteByteOrderMark.init -> void
+ExcelReader.Core.Writer.IWorkbookWriter<TSheet>.AddSheet(string! name, ExcelReader.Core.Enums.ExcelSheetVisibility visibility) -> TSheet
+ExcelReader.Core.Writer.XlsWorkbookWriter.AddSheet(string! name, ExcelReader.Core.Enums.ExcelSheetVisibility visibility) -> ExcelReader.Core.Writer.XlsSheetWriter!
+ExcelReader.Core.Writer.XlsbWorkbookWriter.AddSheet(string! name, ExcelReader.Core.Enums.ExcelSheetVisibility visibility) -> ExcelReader.Core.Writer.XlsbSheetWriter!
+ExcelReader.Core.Writer.XlsxWorkbookWriter.AddSheet(string! name, ExcelReader.Core.Enums.ExcelSheetVisibility visibility) -> ExcelReader.Core.Writer.XlsxSheetWriter!
 static ExcelReader.Core.Reader.Excel.Open(System.IO.Stream! stream, ExcelReader.Core.Enums.ExcelFileFormat format, bool leaveOpen = true, ExcelReader.Core.Reader.ExcelReaderOptions? options = null) -> ExcelReader.Core.Reader.IExcelRowReader!
 static ExcelReader.Core.Reader.Excel.Open(System.ReadOnlyMemory<byte> data, ExcelReader.Core.Enums.ExcelFileFormat format, ExcelReader.Core.Reader.ExcelReaderOptions? options = null) -> ExcelReader.Core.Reader.IExcelRowReader!
 static ExcelReader.Core.Reader.Excel.Open(string! path, ExcelReader.Core.Enums.ExcelFileFormat format, ExcelReader.Core.Reader.ExcelReaderOptions? options = null) -> ExcelReader.Core.Reader.IExcelRowReader!

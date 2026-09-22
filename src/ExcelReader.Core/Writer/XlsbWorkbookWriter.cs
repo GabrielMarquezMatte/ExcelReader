@@ -2,6 +2,7 @@ using System.Globalization;
 using System.IO.Compression;
 using System.Runtime.InteropServices;
 using System.Text;
+using ExcelReader.Core.Enums;
 using ExcelReader.Core.Reader;
 using ExcelReader.Core.Writer.Internal;
 
@@ -105,10 +106,16 @@ namespace ExcelReader.Core.Writer
         /// <inheritdoc/>
         public XlsbSheetWriter AddSheet(string name)
         {
+            return AddSheet(name, ExcelSheetVisibility.Visible);
+        }
+
+        /// <inheritdoc/>
+        public XlsbSheetWriter AddSheet(string name, ExcelSheetVisibility visibility)
+        {
             WriterStateGuard.RequireCanAddSheet(
-                _state, this, nameof(XlsbWorkbookWriter), name, _activeSheet is not null, nameof(XlsbSheetWriter));
+                _state, this, nameof(XlsbWorkbookWriter), name, _activeSheet is not null, nameof(XlsbSheetWriter), visibility);
             int sheetId = _sheets.Count + 1;
-            _activeSheet = new XlsbSheetWriter(this, _zip, name, sheetId, _date1904, _compression, _prefetchWrite);
+            _activeSheet = new XlsbSheetWriter(this, _zip, name, sheetId, visibility, _date1904, _compression, _prefetchWrite);
             return _activeSheet;
         }
 
@@ -299,15 +306,18 @@ namespace ExcelReader.Core.Writer
             Biff12RecordWriter.WriteRecord(data, Brt.WbProp, payload.Span);
 
             Biff12RecordWriter.WriteRecord(data, Brt.BeginBundleShs);
+            bool anyVisible = false;
             foreach (ref readonly var sheet in CollectionsMarshal.AsSpan(_sheets))
             {
+                anyVisible |= sheet.Visibility is ExcelSheetVisibility.Visible;
                 payload.Reset();
-                payload.WriteU32(0);
+                payload.WriteU32((uint)sheet.Visibility);
                 payload.WriteU32((uint)sheet.SheetId);
                 Biff12RecordWriter.WriteWideString(payload, $"s{sheet.SheetId}");
                 Biff12RecordWriter.WriteWideString(payload, sheet.Name);
                 Biff12RecordWriter.WriteRecord(data, Brt.BundleSh, payload.Span);
             }
+            WriterStateGuard.RequireVisibleSheet(anyVisible, nameof(XlsbWorkbookWriter));
             Biff12RecordWriter.WriteRecord(data, Brt.EndBundleShs);
             Biff12RecordWriter.WriteRecord(data, Brt.EndBook);
         }

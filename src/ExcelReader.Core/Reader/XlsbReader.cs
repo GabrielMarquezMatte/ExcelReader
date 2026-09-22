@@ -1,5 +1,6 @@
 using System.Buffers;
 using System.IO.Compression;
+using ExcelReader.Core.Enums;
 
 namespace ExcelReader.Core.Reader
 {
@@ -23,7 +24,7 @@ namespace ExcelReader.Core.Reader
         private readonly ZipMemoryIndex? _memZip;
         private readonly Stream? _stream;
         private readonly bool _leaveOpen;
-        private readonly (string Name, string Path)[]? _sheets;
+        private readonly (string Name, string Path, ExcelSheetVisibility Visibility)[]? _sheets;
         private int _current;
         private int _disposed;
 
@@ -77,7 +78,7 @@ namespace ExcelReader.Core.Reader
         }
 
         private XlsbReader(Stream stream, bool leaveOpen, ZipArchive zip,
-            (string Name, string Path)[] sheets, bool[] styleIsDate, bool date1904,
+            (string Name, string Path, ExcelSheetVisibility Visibility)[] sheets, bool[] styleIsDate, bool date1904,
             byte[] sharedFlat, int[] sharedOffsets, ExcelReaderOptions options, DecompressedByteCounter decompressedBytes)
         {
             _stream = stream;
@@ -94,7 +95,7 @@ namespace ExcelReader.Core.Reader
         }
 
         private XlsbReader(ZipMemoryIndex memZip,
-            (string Name, string Path)[] sheets, bool[] styleIsDate, bool date1904,
+            (string Name, string Path, ExcelSheetVisibility Visibility)[] sheets, bool[] styleIsDate, bool date1904,
             byte[] sharedFlat, int[] sharedOffsets, ExcelReaderOptions options, DecompressedByteCounter decompressedBytes)
         {
             _leaveOpen = true;
@@ -187,6 +188,14 @@ namespace ExcelReader.Core.Reader
             WorkbookLookups.ValidateSheetIndex(index, _sheets!.Length);
             return _sheets[index].Name;
         }
+        /// <inheritdoc/>
+        public ExcelSheetVisibility SheetVisibility => _sheets![_current].Visibility;
+        /// <inheritdoc/>
+        public ExcelSheetVisibility SheetVisibilityAt(int index)
+        {
+            WorkbookLookups.ValidateSheetIndex(index, _sheets!.Length);
+            return _sheets[index].Visibility;
+        }
 
         /// <inheritdoc/>
         public bool TryMoveToSheet(ReadOnlySpan<char> name)
@@ -223,7 +232,7 @@ namespace ExcelReader.Core.Reader
             {
                 return GetEnumeratorFromMemory();
             }
-            var entry = WorkbookLookups.GetWorksheetEntry(_zip!, _sheets!, _current);
+            var entry = WorkbookLookups.GetWorksheetEntry(_zip!, _sheets![_current].Path);
             return new Enumerator(this, WorkbookLookups.OpenEntryStream(entry, _decompressedBytes, _options), entry.Length);
         }
 
@@ -262,7 +271,7 @@ namespace ExcelReader.Core.Reader
 
         private async ValueTask<Enumerator> GetAsyncEnumeratorFromStreamAsync(CancellationToken ct)
         {
-            var entry = WorkbookLookups.GetWorksheetEntry(_zip!, _sheets!, _current);
+            var entry = WorkbookLookups.GetWorksheetEntry(_zip!, _sheets![_current].Path);
             Stream sheet = await WorkbookLookups
                 .OpenEntryStreamAsync(entry, _decompressedBytes, _options, ct).ConfigureAwait(false);
             return new Enumerator(this, sheet, entry.Length, ct);

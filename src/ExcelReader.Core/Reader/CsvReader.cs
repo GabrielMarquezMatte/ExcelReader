@@ -1,4 +1,5 @@
 using System.Text;
+using ExcelReader.Core.Enums;
 
 namespace ExcelReader.Core.Reader
 {
@@ -99,6 +100,19 @@ namespace ExcelReader.Core.Reader
             ArgumentOutOfRangeException.ThrowIfNegative(index);
             ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(index, SheetCount);
             return "";
+        }
+
+        /// <summary>Gets the sheet's visibility. Always <see cref="ExcelSheetVisibility.Visible"/>: delimited text has no tab bar to hide from.</summary>
+        public ExcelSheetVisibility SheetVisibility => ExcelSheetVisibility.Visible;
+
+        /// <summary>Gets the visibility of the sheet at <paramref name="index"/>. Always <see cref="ExcelSheetVisibility.Visible"/>.</summary>
+        /// <param name="index">The zero-based sheet index. Must be 0.</param>
+        /// <exception cref="ArgumentOutOfRangeException"><paramref name="index"/> is not 0.</exception>
+        public ExcelSheetVisibility SheetVisibilityAt(int index)
+        {
+            ArgumentOutOfRangeException.ThrowIfNegative(index);
+            ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(index, SheetCount);
+            return ExcelSheetVisibility.Visible;
         }
 
         /// <summary>Checks whether <paramref name="name"/> matches the (empty) CSV sheet name, case-insensitively.</summary>

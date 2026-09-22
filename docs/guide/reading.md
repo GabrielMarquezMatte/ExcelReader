@@ -152,7 +152,22 @@ foreach (var sheet in reader.Sheets())
 }
 ```
 
-CSV is exposed as a single, unnamed sheet (`SheetCount == 1`, `SheetName == ""`). Pattern-match to the concrete type only for reader-specific internals beyond this surface.
+`SheetVisibility` and `SheetVisibilityAt(index)` report whether a sheet is shown in the workbook's tab bar, read from the format's own encoding of it (XLSX's `state` attribute, XLSB's `BrtBundleSh.hsState`, XLS's `BoundSheet8.hsState`). It is reported, never enforced — a hidden sheet enumerates its rows like any other, so converters and exporters filter on it themselves:
+
+```csharp
+foreach (var sheet in reader.Sheets())
+{
+    if (sheet.Visibility != ExcelSheetVisibility.Visible)
+    {
+        continue; // skip hidden and veryHidden sheets
+    }
+    Console.WriteLine(sheet.Name);
+}
+```
+
+`ExcelSheetVisibility.VeryHidden` is the state Excel's own unhide dialog does not offer; both it and `Hidden` come back here. A sheet whose format says nothing about its state — or says something no producer agrees on — reads as `Visible`.
+
+CSV is exposed as a single, unnamed sheet (`SheetCount == 1`, `SheetName == ""`, always `Visible`). Pattern-match to the concrete type only for reader-specific internals beyond this surface.
 
 `OpenAsync` is the async counterpart. Both require a seekable stream (or a file path) so the signature can be read without consuming the input.
 

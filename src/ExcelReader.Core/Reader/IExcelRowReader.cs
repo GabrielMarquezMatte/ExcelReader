@@ -1,3 +1,4 @@
+using ExcelReader.Core.Enums;
 using ExcelReader.Core.ValueObjects;
 
 namespace ExcelReader.Core.Reader
@@ -54,6 +55,15 @@ namespace ExcelReader.Core.Reader
         /// <summary>Gets the name of the sheet at the given zero-based index, without changing the current sheet.</summary>
         /// <param name="index">The zero-based sheet index. Must be within <c>[0, SheetCount)</c>.</param>
         string SheetNameAt(int index);
+
+        /// <summary>Gets whether the currently selected sheet is shown in the workbook's tab bar.</summary>
+        /// <remarks>Reported, never enforced: a hidden sheet enumerates its rows like any other, so a caller
+        /// that wants to skip one — a converter, say — filters on this itself.</remarks>
+        ExcelSheetVisibility SheetVisibility { get; }
+
+        /// <summary>Gets the visibility of the sheet at the given zero-based index, without changing the current sheet.</summary>
+        /// <param name="index">The zero-based sheet index. Must be within <c>[0, SheetCount)</c>.</param>
+        ExcelSheetVisibility SheetVisibilityAt(int index);
 
         /// <summary>Attempts to select the sheet with the given name (case-insensitive) as the current sheet.</summary>
         /// <param name="name">The sheet name to look for.</param>

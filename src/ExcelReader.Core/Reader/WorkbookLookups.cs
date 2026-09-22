@@ -66,16 +66,15 @@ namespace ExcelReader.Core.Reader
             return (sharedOffsets[index], sharedOffsets[index + 1] - sharedOffsets[index], index);
         }
 
-        internal static ZipArchiveEntry GetWorksheetEntry(ZipArchive zip, (string Name, string Path)[] sheets, int current)
+        internal static ZipArchiveEntry GetWorksheetEntry(ZipArchive zip, string path)
         {
-            return zip.GetEntry(sheets[current].Path)
-                ?? throw new InvalidDataException($"Worksheet part not found: {sheets[current].Path}");
+            return zip.GetEntry(path)
+                ?? throw new InvalidDataException($"Worksheet part not found: {path}");
         }
 
         [SkipLocalsInit]
-        internal static ZipEntryRef GetWorksheetEntry(ZipMemoryIndex memZip, (string Name, string Path)[] sheets, int current)
+        internal static ZipEntryRef GetWorksheetEntry(ZipMemoryIndex memZip, string path)
         {
-            string path = sheets[current].Path;
             Span<byte> stackBuffer = stackalloc byte[256];
             ReadOnlySpan<byte> utf8Path = Encoding.UTF8.GetByteCount(path) <= stackBuffer.Length
                 ? stackBuffer[..Encoding.UTF8.GetBytes(path, stackBuffer)]

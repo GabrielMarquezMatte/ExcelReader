@@ -74,6 +74,7 @@ errors to stderr, so `convert` is safe to pipe.
 - Reads `.xlsx`, `.xlsb` (BIFF12), `.xls` (BIFF8), and `.csv`; writes `.xlsx`, `.xlsb`, `.xls`, and `.csv`.
 - `Excel.Open`/`OpenAsync` auto-detect XLSX/XLSB/XLS from the file signature. CSV has none, so pass `ExcelFileFormat.Csv` to open delimited text through the same entry point; `ExcelReaderOptions.Csv` carries the dialect, and `CsvReaderOptions.SniffDialect` infers it from the source.
 - Reads one sheet at a time (XLSX/XLSB/XLS); use `MoveToSheet(index)` or `TryMoveToSheet(name)` to switch sheets. CSV has no sheets.
+- `SheetVisibility`/`SheetVisibilityAt(index)` report whether a sheet is hidden (`Visible`, `Hidden`, `VeryHidden`). Hidden sheets still enumerate their rows — filter on the value if you want them skipped. The writers take the same value via `AddSheet(name, visibility)`, and reject a workbook whose sheets would all be hidden.
 - Missing cells in sparse rows are exposed as empty cells.
 - String conversion allocates only when you call `GetString()`.
 - The XLSX scanner accepts the SpreadsheetML shapes commonly emitted by non-Excel producers, including single-quoted attributes, comments in `sheetData`, and CDATA text runs.

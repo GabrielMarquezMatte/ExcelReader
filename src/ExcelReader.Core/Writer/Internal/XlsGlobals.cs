@@ -1,3 +1,5 @@
+using ExcelReader.Core.Enums;
+
 namespace ExcelReader.Core.Writer.Internal
 {
     internal static class XlsGlobals
@@ -11,7 +13,8 @@ namespace ExcelReader.Core.Writer.Internal
             return GeneralXf + abstractStyleIndex;
         }
 
-        internal static int[] Write(BiffBuffer buffer, ReadOnlySpan<string> sheetNames, bool date1904, StyleTable styles)
+        internal static int[] Write(BiffBuffer buffer, ReadOnlySpan<string> sheetNames,
+            ReadOnlySpan<ExcelSheetVisibility> sheetVisibilities, bool date1904, StyleTable styles)
         {
             BiffRecordWriter.WriteBof(buffer, BiffRecord.SubstreamGlobals);
             BiffRecordWriter.WriteInterfaceHdr(buffer, 1200);
@@ -56,7 +59,7 @@ namespace ExcelReader.Core.Writer.Internal
             for (int i = 0; i < sheetNames.Length; i++)
             {
                 offsetPositions[i] = buffer.Length + 4;
-                BiffRecordWriter.WriteBoundSheet(buffer, sheetOffset: 0, sheetNames[i]);
+                BiffRecordWriter.WriteBoundSheet(buffer, sheetOffset: 0, sheetNames[i], sheetVisibilities[i]);
             }
 
             BiffRecordWriter.WriteEof(buffer);
