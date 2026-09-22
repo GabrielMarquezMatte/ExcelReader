@@ -1,3 +1,5 @@
+using ExcelReader.Core.Enums;
+
 namespace ExcelReader.Core.Writer.Internal
 {
     internal static class WriterStateGuard
@@ -41,16 +43,33 @@ namespace ExcelReader.Core.Writer.Internal
 
         internal static void RequireCanAddSheet(
             WriterState state, object owner, string workbookTypeName, string name,
-            bool sheetActive, string sheetWriterTypeName)
+            bool sheetActive, string sheetWriterTypeName, ExcelSheetVisibility visibility = ExcelSheetVisibility.Visible)
         {
             ArgumentNullException.ThrowIfNull(name);
             ThrowIfEnded(state, owner);
             RequireStarted(state, workbookTypeName, "adding sheets");
             ValidateSheetName(name);
+            if (visibility is not (ExcelSheetVisibility.Visible or ExcelSheetVisibility.Hidden or ExcelSheetVisibility.VeryHidden))
+            {
+                throw new ArgumentOutOfRangeException(nameof(visibility), visibility, "Not a defined ExcelSheetVisibility value.");
+            }
             if (sheetActive)
             {
                 throw new InvalidOperationException(
                     $"The previous {sheetWriterTypeName} must be ended before adding a new sheet.");
+            }
+        }
+
+        /// <summary>
+        /// Guards against a workbook whose sheets are all hidden: the file formats allow it, but Excel
+        /// reports such a workbook as damaged, so producing one is a bug worth surfacing at write time.
+        /// </summary>
+        internal static void RequireVisibleSheet(bool anyVisible, string workbookTypeName)
+        {
+            if (!anyVisible)
+            {
+                throw new InvalidOperationException(
+                    $"{workbookTypeName} must contain at least one visible sheet; Excel rejects a workbook whose sheets are all hidden.");
             }
         }
 

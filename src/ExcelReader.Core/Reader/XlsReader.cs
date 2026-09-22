@@ -1,6 +1,7 @@
 using System.Buffers;
 using System.Diagnostics.CodeAnalysis;
 using System.Runtime.InteropServices;
+using ExcelReader.Core.Enums;
 using static ExcelReader.Core.Reader.Biff12;
 
 namespace ExcelReader.Core.Reader
@@ -10,7 +11,7 @@ namespace ExcelReader.Core.Reader
     {
         private readonly WorkbookStream _workbook;
         private readonly ExcelReaderOptions _options;
-        private readonly (string Name, int Offset)[] _sheets;
+        private readonly (string Name, int Offset, ExcelSheetVisibility Visibility)[] _sheets;
         private readonly bool[] _styleIsDate;
         private readonly bool _date1904;
         private byte[] _sharedFlat;
@@ -67,6 +68,16 @@ namespace ExcelReader.Core.Reader
         {
             WorkbookLookups.ValidateSheetIndex(index, _sheets.Length);
             return _sheets[index].Name;
+        }
+
+        /// <inheritdoc/>
+        public ExcelSheetVisibility SheetVisibility => _sheets[_current].Visibility;
+
+        /// <inheritdoc/>
+        public ExcelSheetVisibility SheetVisibilityAt(int index)
+        {
+            WorkbookLookups.ValidateSheetIndex(index, _sheets.Length);
+            return _sheets[index].Visibility;
         }
 
         /// <inheritdoc/>
@@ -167,13 +178,13 @@ namespace ExcelReader.Core.Reader
         private static void ParseWorkbookGlobals(
             BiffCursor cursor,
             ExcelReaderOptions options,
-            out (string Name, int Offset)[] sheets,
+            out (string Name, int Offset, ExcelSheetVisibility Visibility)[] sheets,
             out bool[] styleIsDate,
             out bool date1904,
             out byte[] sharedFlat,
             out int[] sharedOffsets)
         {
-            List<(string Name, int Offset)> sheetList = [];
+            List<(string Name, int Offset, ExcelSheetVisibility Visibility)> sheetList = [];
             Dictionary<int, bool> customFormats = new(capacity: 16);
             List<bool> styleFlags = [];
             date1904 = false;
@@ -240,7 +251,7 @@ namespace ExcelReader.Core.Reader
             styleIsDate = [.. styleFlags];
         }
 
-        private static bool TryParseBoundSheet(ReadOnlySpan<byte> data, out (string Name, int Offset) sheet)
+        private static bool TryParseBoundSheet(ReadOnlySpan<byte> data, out (string Name, int Offset, ExcelSheetVisibility Visibility) sheet)
         {
             sheet = default;
             if (data.Length < 8 || data[5] != 0
@@ -248,7 +259,13 @@ namespace ExcelReader.Core.Reader
             {
                 return false;
             }
-            sheet = (name, ReadI32(data, 0));
+            ExcelSheetVisibility visibility = (data[4] & 0x03) switch
+            {
+                1 => ExcelSheetVisibility.Hidden,
+                2 => ExcelSheetVisibility.VeryHidden,
+                _ => ExcelSheetVisibility.Visible,
+            };
+            sheet = (name, ReadI32(data, 0), visibility);
             return true;
         }
 

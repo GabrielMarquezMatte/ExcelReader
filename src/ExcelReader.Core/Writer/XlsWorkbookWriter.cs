@@ -1,4 +1,5 @@
 using System.Runtime.InteropServices;
+using ExcelReader.Core.Enums;
 using ExcelReader.Core.Writer.Internal;
 
 namespace ExcelReader.Core.Writer
@@ -66,10 +67,17 @@ namespace ExcelReader.Core.Writer
         /// <exception cref="InvalidOperationException">The previously added sheet has not been ended yet.</exception>
         public XlsSheetWriter AddSheet(string name)
         {
+            return AddSheet(name, ExcelSheetVisibility.Visible);
+        }
+
+        /// <inheritdoc/>
+        /// <exception cref="InvalidOperationException">The previously added sheet has not been ended yet.</exception>
+        public XlsSheetWriter AddSheet(string name, ExcelSheetVisibility visibility)
+        {
             WriterStateGuard.RequireCanAddSheet(
-                _state, this, nameof(XlsWorkbookWriter), name, _activeSheet is not null, nameof(XlsSheetWriter));
-#pragma warning disable IDISP003 
-            _activeSheet = new XlsSheetWriter(this, name, _date1904);
+                _state, this, nameof(XlsWorkbookWriter), name, _activeSheet is not null, nameof(XlsSheetWriter), visibility);
+#pragma warning disable IDISP003
+            _activeSheet = new XlsSheetWriter(this, name, _date1904, visibility);
 #pragma warning restore IDISP003
             return _activeSheet;
         }
@@ -99,12 +107,17 @@ namespace ExcelReader.Core.Writer
         {
             BiffBuffer globals = new(1024);
             string[] names = new string[_sheets.Count];
+            ExcelSheetVisibility[] visibilities = new ExcelSheetVisibility[_sheets.Count];
+            bool anyVisible = false;
             for (int i = 0; i < _sheets.Count; i++)
             {
                 names[i] = _sheets[i].Name;
+                visibilities[i] = _sheets[i].Visibility;
+                anyVisible |= visibilities[i] is ExcelSheetVisibility.Visible;
             }
+            WriterStateGuard.RequireVisibleSheet(anyVisible, nameof(XlsWorkbookWriter));
 
-            int[] offsetPositions = XlsGlobals.Write(globals, names, _date1904, _styles);
+            int[] offsetPositions = XlsGlobals.Write(globals, names, visibilities, _date1904, _styles);
             int offset = globals.Length;
             workbookSize = offset;
             for (int i = 0; i < _sheets.Count; i++)

@@ -1,3 +1,4 @@
+using ExcelReader.Core.Enums;
 using ExcelReader.Core.Reader;
 
 namespace ExcelReader.Core.Writer.Internal
@@ -176,11 +177,13 @@ namespace ExcelReader.Core.Writer.Internal
             buffer.EndRecord(len);
         }
 
-        internal static void WriteBoundSheet(BiffBuffer buffer, int sheetOffset, ReadOnlySpan<char> name)
+        internal static void WriteBoundSheet(BiffBuffer buffer, int sheetOffset, ReadOnlySpan<char> name,
+            ExcelSheetVisibility visibility = ExcelSheetVisibility.Visible)
         {
             int len = buffer.BeginRecord(BiffRecord.BoundSheet);
             buffer.WriteI32(sheetOffset);
-            buffer.WriteU16(0);
+            // grbit: hsState in the low byte, dt (0 = worksheet) in the high one.
+            buffer.WriteU16((ushort)visibility);
             BiffStringEncoder.WriteShort(buffer, name);
             buffer.EndRecord(len);
         }

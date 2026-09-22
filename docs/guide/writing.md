@@ -41,6 +41,18 @@ If your workbook repeats many strings and smaller files matter more than the ext
 await using var workbook = await XlsxWorkbookWriter.CreateAsync(stream, useSharedStrings: true);
 ```
 
+## Hidden sheets
+
+Every `IWorkbookWriter<TSheet>` takes an optional `ExcelSheetVisibility` alongside the sheet name, written to whatever the format uses for it — XLSX's `state` attribute, XLSB's `BrtBundleSh.hsState`, XLS's `BoundSheet8.hsState` — so it reads back through [`SheetVisibility`](reading.md#open-by-auto-detecting-the-format):
+
+```csharp
+await using var data = workbook.AddSheet("Data");                                 // visible
+await using var lookups = workbook.AddSheet("Lookups", ExcelSheetVisibility.Hidden);
+await using var audit = workbook.AddSheet("Audit", ExcelSheetVisibility.VeryHidden); // not in Excel's unhide dialog
+```
+
+A workbook whose sheets are *all* hidden is rejected when it is ended (`InvalidOperationException`): the formats allow it, but Excel reports such a file as damaged, so it is caught at write time rather than shipped to a user. CSV accepts the argument and ignores it — delimited text has no tab bar to hide from.
+
 ## Cell styles on write
 
 Every `IWorkbookWriter<TSheet>` supports column- and row-level styling: a number format (currency, date, percentage), bold, and italic. Register a `CellStyle` once with `AddStyle` and apply its returned index to a column (before the sheet is started) or to a whole row (when starting it):

@@ -1,3 +1,4 @@
+using ExcelReader.Core.Enums;
 using ExcelReader.Core.Writer.Internal;
 
 namespace ExcelReader.Core.Writer
@@ -8,7 +9,7 @@ namespace ExcelReader.Core.Writer
     /// </summary>
     /// <remarks>
     /// A CSV file is a single sheet, so the owning <see cref="CsvWorkbookWriter"/> exposes exactly one
-    /// sheet and rejects a second <see cref="CsvWorkbookWriter.AddSheet"/> call. The workbook owns the
+    /// sheet and rejects a second <see cref="CsvWorkbookWriter.AddSheet(string)"/> call. The workbook owns the
     /// <see cref="CsvWriter"/>; this sheet only borrows it.
     /// </remarks>
     public sealed class CsvSheetWriter : ISheetWriter<CsvRowWriter>
@@ -122,7 +123,7 @@ namespace ExcelReader.Core.Writer
 
     /// <summary>
     /// Writes a CSV file through the <see cref="IWorkbookWriter{TSheet}"/> contract. A CSV file holds
-    /// exactly one sheet, so only a single <see cref="AddSheet"/> call is supported.
+    /// exactly one sheet, so only a single <see cref="AddSheet(string)"/> call is supported.
     /// </summary>
     public sealed class CsvWorkbookWriter : IWorkbookWriter<CsvSheetWriter>
     {
@@ -178,7 +179,18 @@ namespace ExcelReader.Core.Writer
         /// <exception cref="InvalidOperationException">The workbook has not been started, or a sheet was already added; a CSV file holds only one.</exception>
         public CsvSheetWriter AddSheet(string name)
         {
-            WriterStateGuard.RequireCanAddSheet(_state, this, nameof(CsvWorkbookWriter), name, sheetActive: false, nameof(CsvSheetWriter));
+            return AddSheet(name, ExcelSheetVisibility.Visible);
+        }
+
+        /// <summary>
+        /// Validates <paramref name="visibility"/>, then ignores it: delimited text has no tab bar, so a
+        /// CSV file cannot record that a sheet is hidden.
+        /// </summary>
+        /// <inheritdoc cref="AddSheet(string)"/>
+        /// <exception cref="ArgumentOutOfRangeException"><paramref name="visibility"/> is not a defined value.</exception>
+        public CsvSheetWriter AddSheet(string name, ExcelSheetVisibility visibility)
+        {
+            WriterStateGuard.RequireCanAddSheet(_state, this, nameof(CsvWorkbookWriter), name, sheetActive: false, nameof(CsvSheetWriter), visibility);
             if (_sheetAdded)
             {
                 throw new InvalidOperationException("A CSV file holds a single sheet; only one AddSheet call is supported.");

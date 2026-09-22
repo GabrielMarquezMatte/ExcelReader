@@ -2,6 +2,7 @@ using System.Globalization;
 using System.IO.Compression;
 using System.Security;
 using System.Text;
+using ExcelReader.Core.Enums;
 using ExcelReader.Core.Writer.Internal;
 
 namespace ExcelReader.Core.Writer
@@ -18,7 +19,7 @@ namespace ExcelReader.Core.Writer
         private readonly bool _prefetchWrite;
         private readonly SharedStringTable? _sharedStrings;
         private readonly StyleTable _styles = new();
-        private readonly List<(string Name, int SheetId)> _sheets = [];
+        private readonly List<(string Name, int SheetId, ExcelSheetVisibility Visibility)> _sheets = [];
         private WriterState _state = WriterState.Created;
         private bool _sheetActive;
         private XlsxSheetWriter? _activeSheet;
@@ -113,17 +114,28 @@ namespace ExcelReader.Core.Writer
         /// <exception cref="InvalidOperationException">The workbook has not been started, or the previously added sheet has not been ended.</exception>
         public XlsxSheetWriter AddSheet(string name)
         {
+            return AddSheet(name, ExcelSheetVisibility.Visible);
+        }
+
+        /// <inheritdoc/>
+        /// <exception cref="ArgumentNullException"><paramref name="name"/> is <see langword="null"/>.</exception>
+        /// <exception cref="ArgumentException"><paramref name="name"/> is empty, longer than 31 characters, or contains one of <c>: \ / ? * [ ]</c>.</exception>
+        /// <exception cref="ArgumentOutOfRangeException"><paramref name="visibility"/> is not a defined value.</exception>
+        /// <exception cref="ObjectDisposedException">The workbook has already been ended.</exception>
+        /// <exception cref="InvalidOperationException">The workbook has not been started, or the previously added sheet has not been ended.</exception>
+        public XlsxSheetWriter AddSheet(string name, ExcelSheetVisibility visibility)
+        {
             WriterStateGuard.RequireCanAddSheet(
-                _state, this, nameof(XlsxWorkbookWriter), name, _sheetActive, nameof(XlsxSheetWriter));
+                _state, this, nameof(XlsxWorkbookWriter), name, _sheetActive, nameof(XlsxSheetWriter), visibility);
             _sheetActive = true;
             int sheetId = _sheets.Count + 1;
-            _activeSheet = new XlsxSheetWriter(this, _zip, name, sheetId, _compression, _prefetchWrite);
+            _activeSheet = new XlsxSheetWriter(this, _zip, name, sheetId, visibility, _compression, _prefetchWrite);
             return _activeSheet;
         }
 
-        internal void RegisterSheet(string name, int sheetId)
+        internal void RegisterSheet(string name, int sheetId, ExcelSheetVisibility visibility)
         {
-            _sheets.Add((name, sheetId));
+            _sheets.Add((name, sheetId, visibility));
         }
 
         internal void NotifySheetEnded()
@@ -402,16 +414,30 @@ namespace ExcelReader.Core.Writer
             await WriteEntryAsync("xl/sharedStrings.xml", bytes.Memory, ct).ConfigureAwait(false);
         }
 
+        private static string StateAttribute(ExcelSheetVisibility visibility)
+        {
+            return visibility switch
+            {
+                ExcelSheetVisibility.Hidden => " state=\"hidden\"",
+                ExcelSheetVisibility.VeryHidden => " state=\"veryHidden\"",
+                _ => "",
+            };
+        }
+
         private string BuildWorkbookXml()
         {
             StringBuilder sb = new();
             sb.Append("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>");
             sb.Append($"<workbook xmlns=\"{XlsxConstants.MainNs}\" xmlns:r=\"{XlsxConstants.RelationshipsNs}\">");
             sb.Append("<sheets>");
-            foreach ((string name, int sheetId) in _sheets)
+            bool anyVisible = false;
+            foreach ((string name, int sheetId, ExcelSheetVisibility visibility) in _sheets)
             {
-                sb.Append(CultureInfo.InvariantCulture, $"<sheet name=\"{EscapeAttribute(name)}\" sheetId=\"{sheetId}\" r:id=\"rId{sheetId + 1}\"/>");
+                anyVisible |= visibility is ExcelSheetVisibility.Visible;
+                sb.Append(CultureInfo.InvariantCulture,
+                    $"<sheet name=\"{EscapeAttribute(name)}\" sheetId=\"{sheetId}\"{StateAttribute(visibility)} r:id=\"rId{sheetId + 1}\"/>");
             }
+            WriterStateGuard.RequireVisibleSheet(anyVisible, nameof(XlsxWorkbookWriter));
             sb.Append("</sheets></workbook>");
             return sb.ToString();
         }
@@ -431,7 +457,7 @@ namespace ExcelReader.Core.Writer
             {
                 sb.Append($"<Relationship Id=\"rIdShared\" Type=\"{XlsxConstants.SharedStringsRelType}\" Target=\"sharedStrings.xml\"/>");
             }
-            foreach ((_, int sheetId) in _sheets)
+            foreach ((_, int sheetId, _) in _sheets)
             {
                 sb.Append(CultureInfo.InvariantCulture, $"<Relationship Id=\"rId{sheetId + 1}\" Type=\"{XlsxConstants.WorksheetRelType}\" Target=\"worksheets/sheet{sheetId}.xml\"/>");
             }
@@ -457,7 +483,7 @@ namespace ExcelReader.Core.Writer
             {
                 sb.Append($"<Override PartName=\"/xl/sharedStrings.xml\" ContentType=\"{XlsxConstants.SharedStringsContentType}\"/>");
             }
-            foreach ((_, int sheetId) in _sheets)
+            foreach ((_, int sheetId, _) in _sheets)
             {
                 sb.Append(CultureInfo.InvariantCulture, $"<Override PartName=\"/xl/worksheets/sheet{sheetId}.xml\" ContentType=\"{XlsxConstants.WorksheetContentType}\"/>");
             }

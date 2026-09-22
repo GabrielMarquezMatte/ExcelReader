@@ -3475,6 +3475,13 @@ namespace ExcelReader.Tests
                 return inner.SheetNameAt(index);
             }
 
+            public ExcelSheetVisibility SheetVisibility => inner.SheetVisibility;
+
+            public ExcelSheetVisibility SheetVisibilityAt(int index)
+            {
+                return inner.SheetVisibilityAt(index);
+            }
+
             public bool TryMoveToSheet(ReadOnlySpan<char> name)
             {
                 return inner.TryMoveToSheet(name);
