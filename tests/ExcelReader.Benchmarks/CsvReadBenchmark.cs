@@ -123,7 +123,7 @@ namespace ExcelReader.Benchmarks
             long acc = 0;
             while (reader.Read())
             {
-                acc += reader.GetString(0).Length;
+                acc += reader.GetFieldSpan(0).Length;
                 acc += reader.GetInt32(1);
                 acc += reader.GetDateTime(2).Ticks;
                 acc += (long)reader.GetDouble(3);

@@ -4,6 +4,8 @@ namespace ExcelReader.Core.ValueObjects
 {
     internal static class FastDouble
     {
+        private const int MaxExponentDigits = 3;
+
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static bool TryParse(ReadOnlySpan<byte> s, out double value)
         {
@@ -22,6 +24,7 @@ namespace ExcelReader.Core.ValueObjects
             ulong mantissa = 0;
             int digits = 0;
             int scale = 0;
+            int exponent = 0;
             bool sawDigit = false;
             bool sawDot = false;
 
@@ -39,7 +42,12 @@ namespace ExcelReader.Core.ValueObjects
                 }
                 if ((uint)(c - (byte)'0') > 9)
                 {
-                    return false;
+                    // Testing for the exponent here rather than per digit keeps it off the hot path.
+                    if (c is not ((byte)'e' or (byte)'E') || !TryExponent(s[(i + 1)..], out exponent))
+                    {
+                        return false;
+                    }
+                    break;
                 }
                 sawDigit = true;
                 bool leadingZero = mantissa == 0 && c == (byte)'0';
@@ -57,7 +65,15 @@ namespace ExcelReader.Core.ValueObjects
                     scale++;
                 }
             }
-            if (!sawDigit || scale > 22)
+            if (!sawDigit)
+            {
+                return false;
+            }
+
+            // A mantissa of at most 15 digits and a power of ten within 1e22 are both exact, so the
+            // single multiply or divide below is the only rounding. Anything wider is the BCL's.
+            scale -= exponent;
+            if (scale is < -22 or > 22)
             {
                 return false;
             }
@@ -67,7 +83,43 @@ namespace ExcelReader.Core.ValueObjects
             {
                 result /= Pow10(scale);
             }
+            else if (scale < 0)
+            {
+                result *= Pow10(-scale);
+            }
             value = neg ? -result : result;
+            return true;
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        private static bool TryExponent(ReadOnlySpan<byte> s, out int exponent)
+        {
+            exponent = 0;
+            if (s.IsEmpty)
+            {
+                return false;
+            }
+            int i = 0;
+            bool neg = s[0] == (byte)'-';
+            if (neg || s[0] == (byte)'+')
+            {
+                i = 1;
+            }
+            if (i >= s.Length || s.Length - i > MaxExponentDigits)
+            {
+                return false;
+            }
+            int value = 0;
+            for (; i < s.Length; i++)
+            {
+                uint d = (uint)(s[i] - (byte)'0');
+                if (d > 9)
+                {
+                    return false;
+                }
+                value = (value * 10) + (int)d;
+            }
+            exponent = neg ? -value : value;
             return true;
         }
 
