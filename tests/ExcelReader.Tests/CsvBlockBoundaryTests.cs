@@ -162,15 +162,15 @@ namespace ExcelReader.Tests
         }
 
         [Fact]
-        public void QuoteEqualToDelimiterReadsTheSameFromMemoryAndStream()
+        public void QuoteEqualToDelimiterIsRejectedByBothSourcesAlike()
         {
             var options = CsvReaderOptions.Default with { Delimiter = (byte)',', Quote = (byte)',' };
             byte[] bytes = Encoding.UTF8.GetBytes("a,,b,c\n,d,\ne");
-            using var fromMemory = Excel.FromCsv(bytes, options);
-            using var ms = new MemoryStream(bytes);
-            using var fromStream = Excel.FromCsv(ms, options: options);
 
-            Assert.Equal(ReadAll(fromStream), ReadAll(fromMemory));
+            Assert.Throws<ArgumentException>(() => Excel.FromCsv(bytes, options));
+
+            using var ms = new MemoryStream(bytes);
+            Assert.Throws<ArgumentException>(() => Excel.FromCsv(ms, options: options));
         }
     }
 }

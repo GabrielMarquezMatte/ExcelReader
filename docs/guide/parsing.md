@@ -72,7 +72,7 @@ await writer.WriteSheetAsync("Changes", changes);
 Notes:
 
 - `[ExcelSerializable]` requires the model — and every type it's nested inside, if any — to be `partial`; the generator emits into an additional part of the same declaration. A compile error (`EXR001`/`EXR002`) names exactly what to fix.
-- Supported property types match `ExcelParser<T>`'s: `string`, `bool`, `DateTime`, `DateOnly`, `TimeOnly`, `Guid`, every integral and floating type plus `decimal`, `enum`s, and `Nullable<T>` of each. Not supported: a `ref struct` model or a `ReadOnlySpan<byte>` property — those stay exclusive to `RefParser`'s reflection-based path (net9.0+); `ExcelMappedParser<T>`/`ExcelFluentParser<T>` have no AOT-clean entry for them.
+- Supported property types match `ExcelParser<T>`'s: `string`, `bool`, `DateTime`, `DateOnly`, `TimeOnly`, `Guid`, every integral and floating type plus `decimal`, `enum`s, and `Nullable<T>` of each — plus `ReadOnlySpan<byte>`, which binds zero-copy through `ExcelCellReaders.Utf8`. The model may be a `ref struct`: mark it `ref partial struct` and the generator emits `IExcelRowMap<T>` on it like any other shape, so `ExcelMappedParser<T>` and `ExcelFluentParser<T>` read it AOT-clean, as do the map-driven `ForEachCsvParallelAsync`/`AggregateCsvParallelAsync` overloads.
 - The generator requires a build via `dotnet build`/the .NET SDK. Visual Studio's or `MSBuild.exe`'s .NET Framework host can't load it, so a project built only through those tools won't see generated code — build via the SDK, or fall back to `ExcelParser<T>`/`WorkbookRecordWriter` for that build path.
 - `ExcelMappedParser<T>` builds one map per model and reuses it for every reader, including CSV — unlike `ExcelParser<T>`, which swaps in a text-based date reader specifically for CSV. A `[ExcelSerializable]` model reads `DateTime`/`DateOnly`/`TimeOnly` via `ExcelCellReaders.DateTimeAuto`/`DateOnlyAuto`/`TimeOnlyAuto`: an Excel serial number first, falling back to date/time text when the cell isn't numeric — so a CSV column round-trips through the library's own writer either way. The one edge case this can't distinguish: a CSV cell that's only digits (e.g. an Excel serial number typed as plain text) is always read as a serial number, never as date text.
 - The attribute-based reflection path keeps working unchanged; `[ExcelSerializable]` is an additive, opt-in alternative for the same model shape, not a replacement.
@@ -196,7 +196,7 @@ Return `false` to signal a parse failure (the property keeps its default). Empty
 
 ## Parse into a ref struct (zero-copy)
 
-`RefParser.ParseNamed<T>` (.NET 9+) targets a `ref struct` model instead of a class/struct — same attribute-driven column matching as `ExcelParser<T>` (`[ExcelColumn]`, `[ExcelRequired]`, `[ExcelConverter]`), but a `ReadOnlySpan<byte>` property binds directly to the cell's raw bytes instead of allocating a `string`:
+`ExcelParser<T>` takes a `ref struct` model just as it takes a class or a struct — same attribute-driven column matching (`[ExcelColumn]`, `[ExcelRequired]`, `[ExcelConverter]`), but a `ReadOnlySpan<byte>` property binds directly to the cell's raw bytes instead of allocating a `string`:
 
 ```csharp
 using System.Text;
@@ -211,18 +211,18 @@ public readonly ref struct ChangeRowRef
 
 using var reader = Excel.FromXlsxFile("changes.xlsx");
 
-foreach (ChangeRowRef item in RefParser.ParseNamed<ChangeRowRef>(reader))
+foreach (ChangeRowRef item in new ExcelParser<ChangeRowRef>().Parse(reader))
 {
     Console.WriteLine($"{Encoding.UTF8.GetString(item.File)}: +{item.LinesAdded}");
 }
 ```
 
-The sequence also supports `await foreach`, so a `ref struct` model can be parsed asynchronously — the rows are streamed via `MoveNextAsync` while the model stays a zero-copy `ref struct`:
+`ParseAsync` supports `await foreach`, so a `ref struct` model can be parsed asynchronously — the rows are streamed via `MoveNextAsync` while the model stays a zero-copy `ref struct`:
 
 ```csharp
 await using var reader = await Excel.FromXlsxFileAsync("changes.xlsx");
 
-await foreach (ChangeRowRef item in RefParser.ParseNamed<ChangeRowRef>(reader))
+await foreach (ChangeRowRef item in new ExcelParser<ChangeRowRef>().ParseAsync(reader))
 {
     Console.WriteLine($"{Encoding.UTF8.GetString(item.File)}: +{item.LinesAdded}");
 }
@@ -231,7 +231,7 @@ await foreach (ChangeRowRef item in RefParser.ParseNamed<ChangeRowRef>(reader))
 A few differences from `ExcelParser<T>`:
 
 - **Span fields alias the reader's row buffer** — valid only until the next row. Copy them out (e.g. `Encoding.UTF8.GetString(span)`) if you need to keep the value past the loop body. Under `await foreach`, the same rule means the model can't be held across an `await` in the loop body.
-- **`foreach` / `await foreach` only.** Consumption is pattern-based — the sequence cannot be surfaced through `IEnumerable<T>`, `IAsyncEnumerable<T>`, or LINQ, because a `ref struct` element can't be boxed through those interfaces (`IAsyncEnumerable<T>` in particular forbids a `ref struct` element type — CS9267). Iterate it directly.
-- **Not AOT/trim-safe**, same tradeoff as `ExcelParser<T>` (both reflect over `T`'s properties and compile setters at runtime).
-- A regular `struct`/`class` model works with `ParseNamed` too — only a genuine `ref struct` model gets the extra zero-copy span-property binding.
+- **The non-generic `IEnumerator.Current` throws.** `IEnumerable<T>` and `IAsyncEnumerable<T>` both accept a `ref struct` element type on net9.0+, so the sequence flows through them normally; only the legacy non-generic `IEnumerator.Current` cannot, because it would have to box. LINQ over a `ref struct` model is still out, since its operators do not carry the `allows ref struct` anti-constraint.
+- **Not AOT/trim-safe** on this path, since it reflects over `T`'s properties and compiles setters at runtime. For an AOT-clean zero-copy model, mark the `ref partial struct` `[ExcelSerializable]` and read it with `ExcelMappedParser<T>` — see [Generate the map at compile time](#generate-the-map-at-compile-time-aot-clean).
+- A regular `struct`/`class` model uses the same entry point — only a genuine `ref struct` model gets the extra zero-copy span-property binding.
 

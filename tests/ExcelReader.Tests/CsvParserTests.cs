@@ -358,7 +358,8 @@ namespace ExcelReader.Tests
             IEnumerator e = enumerable.GetEnumerator();
 
             Assert.True(e.MoveNext());
-            Assert.Equal("Alice", Assert.IsType<PersonRow>(e.Current).Name);
+            // The model may be a ref struct, so the non-generic Current cannot box it.
+            Assert.Throws<NotSupportedException>(() => e.Current);
         }
 
         [Fact]

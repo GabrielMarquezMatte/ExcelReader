@@ -101,8 +101,18 @@ namespace ExcelReader.Core.Reader
 
         internal CellDesc[] RawCells => _cells;
 
+        // Speculative, so it clamps to the limit instead of throwing on it; a row that then does not fit
+        // falls to the demand-driven path, where GrowCells raises ExcelLimitExceededException.
         internal void ReserveCells(int capacity)
         {
+            if (_maxCellBytes > 0)
+            {
+                int allowed = _maxCellBytes / Unsafe.SizeOf<CellDesc>();
+                if (capacity > allowed)
+                {
+                    capacity = allowed;
+                }
+            }
             if (capacity <= _cells.Length)
             {
                 return;

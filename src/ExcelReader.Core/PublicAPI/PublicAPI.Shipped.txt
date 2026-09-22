@@ -113,7 +113,6 @@ ExcelReader.Core.Parser.IExcelRowMap<T>.ConfigureExcelRowMap(ExcelReader.Core.Pa
 ExcelReader.Core.Parser.Internal.AsyncRowEnumerator<T, TReader, TRows>
 ExcelReader.Core.Parser.Internal.AsyncRowEnumerator<T, TReader, TRows>.AsyncRowEnumerator(TReader reader, System.Threading.CancellationToken ct) -> void
 ExcelReader.Core.Parser.Internal.AsyncRowEnumerator<T, TReader, TRows>.Current.get -> T
-ExcelReader.Core.Parser.Internal.AsyncRowEnumerator<T, TReader, TRows>.CurrentValue -> T
 ExcelReader.Core.Parser.Internal.AsyncRowEnumerator<T, TReader, TRows>.MoveNextAsync() -> System.Threading.Tasks.ValueTask<bool>
 ExcelReader.Core.Parser.Internal.AsyncRowEnumerator<T, TReader, TRows>.Rows -> TRows?
 ExcelReader.Core.Parser.Internal.CsvEnumerable<T>
@@ -125,24 +124,12 @@ ExcelReader.Core.Parser.Internal.ExcelEnumerable<T, TReader, TEnumerator>
 ExcelReader.Core.Parser.Internal.ExcelEnumerable<T, TReader, TEnumerator>.AsyncEnumerator
 ExcelReader.Core.Parser.Internal.ExcelEnumerable<T, TReader, TEnumerator>.Enumerator
 ExcelReader.Core.Parser.Internal.ExcelEnumerable<T>
-ExcelReader.Core.Parser.Internal.NamedRefRowEnumerable<TModel, TReader, TEnumerator>
-ExcelReader.Core.Parser.Internal.NamedRefRowEnumerable<TModel, TReader, TEnumerator>.GetAsyncEnumerator() -> ExcelReader.Core.Parser.Internal.NamedRefRowEnumerator<TModel, TEnumerator!>!
-ExcelReader.Core.Parser.Internal.NamedRefRowEnumerable<TModel, TReader, TEnumerator>.GetAsyncEnumeratorAsync(System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<ExcelReader.Core.Parser.Internal.NamedRefRowEnumerator<TModel, TEnumerator!>!>
-ExcelReader.Core.Parser.Internal.NamedRefRowEnumerable<TModel, TReader, TEnumerator>.GetEnumerator() -> ExcelReader.Core.Parser.Internal.NamedRefRowEnumerator<TModel, TEnumerator!>!
-ExcelReader.Core.Parser.Internal.NamedRefRowEnumerator<TModel, TEnumerator>
-ExcelReader.Core.Parser.Internal.NamedRefRowEnumerator<TModel, TEnumerator>.Current.get -> TModel
-ExcelReader.Core.Parser.Internal.NamedRefRowEnumerator<TModel, TEnumerator>.Dispose() -> void
-ExcelReader.Core.Parser.Internal.NamedRefRowEnumerator<TModel, TEnumerator>.DisposeAsync() -> System.Threading.Tasks.ValueTask
-ExcelReader.Core.Parser.Internal.NamedRefRowEnumerator<TModel, TEnumerator>.MoveNext() -> bool
-ExcelReader.Core.Parser.Internal.NamedRefRowEnumerator<TModel, TEnumerator>.MoveNextAsync() -> System.Threading.Tasks.ValueTask<bool>
 ExcelReader.Core.Parser.Internal.SyncRowEnumerator<T, TRows>
 ExcelReader.Core.Parser.Internal.SyncRowEnumerator<T, TRows>.Current.get -> T
-ExcelReader.Core.Parser.Internal.SyncRowEnumerator<T, TRows>.CurrentValue -> T
 ExcelReader.Core.Parser.Internal.SyncRowEnumerator<T, TRows>.Dispose() -> void
 ExcelReader.Core.Parser.Internal.SyncRowEnumerator<T, TRows>.MoveNext() -> bool
 ExcelReader.Core.Parser.Internal.SyncRowEnumerator<T, TRows>.Reset() -> void
 ExcelReader.Core.Parser.Internal.SyncRowEnumerator<T, TRows>.SyncRowEnumerator(TRows! rows) -> void
-ExcelReader.Core.Parser.RefParser
 ExcelReader.Core.Reader.CsvAggregation<TState>
 ExcelReader.Core.Reader.CsvAggregation<TState>.Accumulate.get -> ExcelReader.Core.Reader.CsvRowAction<TState>!
 ExcelReader.Core.Reader.CsvAggregation<TState>.Accumulate.init -> void
@@ -690,11 +677,6 @@ static ExcelReader.Core.Parser.ExcelCellReaders.Utf8(scoped in ExcelReader.Core.
 static ExcelReader.Core.Parser.ExcelFluentParser<T>.WithAttributeFallback(System.Action<ExcelReader.Core.Parser.ExcelRowMapBuilder<T>!>! configure, ExcelReader.Core.Parser.ExcelParserConfig? config = null) -> ExcelReader.Core.Parser.ExcelFluentParser<T>!
 static ExcelReader.Core.Parser.ExcelRowContext.operator !=(ExcelReader.Core.Parser.ExcelRowContext left, ExcelReader.Core.Parser.ExcelRowContext right) -> bool
 static ExcelReader.Core.Parser.ExcelRowContext.operator ==(ExcelReader.Core.Parser.ExcelRowContext left, ExcelReader.Core.Parser.ExcelRowContext right) -> bool
-static ExcelReader.Core.Parser.RefParser.ParseNamed<TModel>(ExcelReader.Core.Reader.CsvReader! reader, ExcelReader.Core.Parser.ExcelParserConfig? config = null) -> ExcelReader.Core.Parser.Internal.NamedRefRowEnumerable<TModel, ExcelReader.Core.Reader.CsvReader!, ExcelReader.Core.Reader.CsvReader.Enumerator!>!
-static ExcelReader.Core.Parser.RefParser.ParseNamed<TModel>(ExcelReader.Core.Reader.IExcelRowReader! reader, ExcelReader.Core.Parser.ExcelParserConfig? config = null) -> ExcelReader.Core.Parser.Internal.NamedRefRowEnumerable<TModel, ExcelReader.Core.Reader.IExcelRowReader!, ExcelReader.Core.Reader.IExcelRowEnumerator!>!
-static ExcelReader.Core.Parser.RefParser.ParseNamed<TModel>(ExcelReader.Core.Reader.XlsReader! reader, ExcelReader.Core.Parser.ExcelParserConfig? config = null) -> ExcelReader.Core.Parser.Internal.NamedRefRowEnumerable<TModel, ExcelReader.Core.Reader.XlsReader!, ExcelReader.Core.Reader.XlsReader.Enumerator!>!
-static ExcelReader.Core.Parser.RefParser.ParseNamed<TModel>(ExcelReader.Core.Reader.XlsbReader! reader, ExcelReader.Core.Parser.ExcelParserConfig? config = null) -> ExcelReader.Core.Parser.Internal.NamedRefRowEnumerable<TModel, ExcelReader.Core.Reader.XlsbReader!, ExcelReader.Core.Reader.XlsbReader.Enumerator!>!
-static ExcelReader.Core.Parser.RefParser.ParseNamed<TModel>(ExcelReader.Core.Reader.XlsxReader! reader, ExcelReader.Core.Parser.ExcelParserConfig? config = null) -> ExcelReader.Core.Parser.Internal.NamedRefRowEnumerable<TModel, ExcelReader.Core.Reader.XlsxReader!, ExcelReader.Core.Reader.XlsxReader.Enumerator!>!
 static ExcelReader.Core.Reader.CsvDialect.Default.get -> ExcelReader.Core.Reader.CsvDialect
 static ExcelReader.Core.Reader.CsvDialect.operator !=(ExcelReader.Core.Reader.CsvDialect left, ExcelReader.Core.Reader.CsvDialect right) -> bool
 static ExcelReader.Core.Reader.CsvDialect.operator ==(ExcelReader.Core.Reader.CsvDialect left, ExcelReader.Core.Reader.CsvDialect right) -> bool

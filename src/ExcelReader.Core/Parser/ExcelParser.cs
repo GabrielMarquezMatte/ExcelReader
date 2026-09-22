@@ -30,6 +30,7 @@ namespace ExcelReader.Core.Parser
     [RequiresUnreferencedCode("Typed parsing reflects over T's public properties, which trimming may remove.")]
     [RequiresDynamicCode("Typed parsing binds property setters at runtime (MethodInfo.CreateDelegate / MakeGenericMethod).")]
     public sealed class ExcelParser<T>
+        where T : allows ref struct
     {
         private readonly ExcelParserConfig _config;
 

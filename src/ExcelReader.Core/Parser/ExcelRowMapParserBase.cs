@@ -17,6 +17,7 @@ namespace ExcelReader.Core.Parser
     /// public sealed class cannot derive from an internal one.
     /// </remarks>
     public abstract class ExcelRowMapParserBase<T>
+        where T : allows ref struct
     {
         private readonly ExcelParserConfig _config;
         private readonly TypeMapInfo<T> _info;

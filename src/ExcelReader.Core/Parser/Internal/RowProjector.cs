@@ -3,6 +3,7 @@ using ExcelReader.Core.ValueObjects;
 namespace ExcelReader.Core.Parser.Internal
 {
     internal struct RowProjector<T>
+        where T : allows ref struct
     {
         private readonly TypeMapInfo<T> _typeInfo;
         private readonly StringComparer _comparer;
@@ -28,7 +29,7 @@ namespace ExcelReader.Core.Parser.Internal
             _seen = [];
         }
 
-        internal ProjectionStep Advance(in Row row, ref T model)
+        internal ProjectionStep Classify(in Row row)
         {
             if (_typeInfo.IsIndexBased)
             {
@@ -37,23 +38,24 @@ namespace ExcelReader.Core.Parser.Internal
                     BuildIndexColumnMap();
                 }
                 _rowNumber++;
-                model = _typeInfo.CreateInstance();
-                ParseCurrentRow(in row, ref model);
                 return ProjectionStep.Yield;
             }
             ProjectionStep step = ProjectionRules.ClassifyRow(ref _rowNumber, _headerRow, _bindings is not null);
-            if (step == ProjectionStep.BuildMap)
-            {
-                BuildColumnMap(in row);
-                return ProjectionStep.Skip;
-            }
-            if (step != ProjectionStep.Yield)
+            if (step != ProjectionStep.BuildMap)
             {
                 return step;
             }
-            model = _typeInfo.CreateInstance();
+            BuildColumnMap(in row);
+            return ProjectionStep.Skip;
+        }
+
+        // Row by value, not `in`: the model may alias the row's buffers, so an `in` to a caller local
+        // would fail ref-safety (CS8168) once T allows ref struct.
+        internal T Project(Row row)
+        {
+            T model = _typeInfo.CreateInstance();
             ParseCurrentRow(in row, ref model);
-            return ProjectionStep.Yield;
+            return model;
         }
 
         private void BuildColumnMap(in Row row)

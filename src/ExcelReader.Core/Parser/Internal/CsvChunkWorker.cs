@@ -188,12 +188,11 @@ namespace ExcelReader.Core.Parser.Internal
                     break;
                 }
 
-                T model = default!;
                 try
                 {
-                    if (projector.Advance(rows, ref model) == ProjectionStep.Yield)
+                    if (projector.Classify(rows) == ProjectionStep.Yield)
                     {
-                        models.Add(model);
+                        models.Add(projector.Project(rows));
                     }
                 }
                 catch (ExcelParseException ex)
