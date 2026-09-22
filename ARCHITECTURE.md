@@ -24,6 +24,12 @@ CSV has one extra layer: `CsvWriter` is the low-level RFC4180 writer (buffered r
 stream, no sheets/styles/shared-strings machinery); `CsvWorkbookWriter` adapts it to the shared
 `IWorkbookWriter<CsvSheetWriter>` contract, exposing exactly one sheet.
 
+All four open through `Excel.Open`/`OpenAsync`, which take an optional `ExcelFileFormat`. The three
+signed formats are detected from the file's first bytes; CSV carries no signature, so it is named
+rather than detected, and its dialect rides along in `ExcelReaderOptions.Csv`. That one options
+object is what the native ABI's `xl_open_options` maps onto, so `NativeApi.Open` dispatches formats
+rather than reimplementing them.
+
 On top of all four readers sits the typed-parsing layer (`src/ExcelReader.Core/Parser/`):
 `ExcelParser<T>` (reflection/attribute-driven). Its model may be a class, a struct or a `ref struct`;
 a `ref struct` model binds directly to `Cell.Value` spans — zero allocation for the container and,

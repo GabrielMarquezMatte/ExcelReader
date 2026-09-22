@@ -1,4 +1,5 @@
 using System.Text;
+using ExcelReader.Core.Enums;
 using ExcelReader.Core.Reader;
 
 namespace ExcelReader.Native
@@ -92,56 +93,24 @@ namespace ExcelReader.Native
 
         private static IExcelRowReader OpenReader(string path, int format, NativeOpenOptions options)
         {
-            if (format == NativeFormat.Csv)
-            {
-                return OpenCsvFile(path, options);
-            }
-
-            ExcelReaderOptions excelOptions = options.ToExcelReaderOptions();
-            return format switch
-            {
-                NativeFormat.Auto => Excel.Open(path, excelOptions),
-                NativeFormat.Xlsx => Excel.FromXlsxFile(path, excelOptions),
-                NativeFormat.Xlsb => Excel.FromXlsb(File.OpenRead(path), leaveOpen: false, excelOptions),
-                _ => Excel.FromXls(File.OpenRead(path), leaveOpen: false, excelOptions),
-            };
+            return Excel.Open(path, MapFormat(format), options.ToExcelReaderOptions());
         }
 
         private static IExcelRowReader OpenReader(byte[] data, int format, NativeOpenOptions options)
         {
-            if (format == NativeFormat.Csv)
-            {
-                return OpenCsvMemory(data, options);
-            }
+            return Excel.Open(data, MapFormat(format), options.ToExcelReaderOptions());
+        }
 
-            ExcelReaderOptions excelOptions = options.ToExcelReaderOptions();
+        private static ExcelFileFormat MapFormat(int format)
+        {
             return format switch
             {
-                NativeFormat.Auto => Excel.Open(data, excelOptions),
-                NativeFormat.Xlsx => Excel.FromXlsx(data, excelOptions),
-                NativeFormat.Xlsb => Excel.FromXlsb(new MemoryStream(data, writable: false), leaveOpen: false, excelOptions),
-                _ => Excel.FromXls(new MemoryStream(data, writable: false), leaveOpen: false, excelOptions),
+                NativeFormat.Xls => ExcelFileFormat.Xls,
+                NativeFormat.Xlsx => ExcelFileFormat.Xlsx,
+                NativeFormat.Xlsb => ExcelFileFormat.Xlsb,
+                NativeFormat.Csv => ExcelFileFormat.Csv,
+                _ => ExcelFileFormat.Unknown,
             };
-        }
-
-        private static CsvReader OpenCsvFile(string path, NativeOpenOptions options)
-        {
-            CsvReaderOptions csvOptions = options.ToCsvReaderOptions();
-            if (options.CsvSniffDialect)
-            {
-                csvOptions = csvOptions.WithDialect(Excel.SniffCsvDialectFromFile(path));
-            }
-            return Excel.FromCsv(File.OpenRead(path), leaveOpen: false, csvOptions);
-        }
-
-        private static CsvReader OpenCsvMemory(byte[] data, NativeOpenOptions options)
-        {
-            CsvReaderOptions csvOptions = options.ToCsvReaderOptions();
-            if (options.CsvSniffDialect)
-            {
-                csvOptions = csvOptions.WithDialect(Excel.SniffCsvDialect(data));
-            }
-            return Excel.FromCsv(new MemoryStream(data, writable: false), leaveOpen: false, csvOptions);
         }
 
         private static bool IsKnownFormat(int format)

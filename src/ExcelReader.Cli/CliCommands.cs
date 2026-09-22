@@ -27,13 +27,13 @@ namespace ExcelReader.Cli
 
         private static readonly string[] _validFormats = ["xlsx", "xlsb", "xls", "csv"];
 
-        internal static int Convert(string path, string? sheet, string? output, string? format, char delimiter, Stream stdout, TextWriter stderr, Action<int>? onProgress = null, string? password = null)
+        internal static int Convert(string path, string? sheet, string? output, string? format, char delimiter, Stream stdout, TextWriter stderr, Action<int>? onProgress = null, string? password = null, char? inputDelimiter = null)
         {
             return Execute(() =>
             {
                 string resolvedFormat = ResolveFormat(format, output);
                 ThrowIfOutputIsADirectory(output);
-                using IExcelRowReader reader = Open(path, sheet, password);
+                using IExcelRowReader reader = Open(path, sheet, password, inputDelimiter);
 
                 bool leaveOpen = output is null;
                 Stream target = leaveOpen
@@ -111,7 +111,7 @@ namespace ExcelReader.Cli
 
         private static void WriteCsv(IExcelRowReader reader, Stream target, bool leaveOpen, char delimiter, Action<int>? onProgress)
         {
-            using CsvWorkbookWriter workbook = CsvWorkbookWriter.Create(target, leaveOpen, new CsvWriterOptions { Delimiter = (byte)delimiter });
+            using CsvWorkbookWriter workbook = CsvWorkbookWriter.Create(target, leaveOpen, new CsvWriterOptions { Delimiter = AsciiByte(delimiter, "delimiter") });
             WriteRows<CsvWorkbookWriter, CsvSheetWriter, CsvRowWriter>(workbook, reader, onProgress);
         }
 
@@ -188,11 +188,11 @@ namespace ExcelReader.Cli
             workbook.End();
         }
 
-        internal static int Schema(string path, string? sheet, int headerRow, int sampleSize, TextWriter stdout, TextWriter stderr, string? password = null)
+        internal static int Schema(string path, string? sheet, int headerRow, int sampleSize, TextWriter stdout, TextWriter stderr, string? password = null, char? inputDelimiter = null)
         {
             return Execute(() =>
             {
-                using IExcelRowReader reader = Open(path, sheet, password);
+                using IExcelRowReader reader = Open(path, sheet, password, inputDelimiter);
 
                 foreach (ExcelColumnSchema column in Excel.InferSchema(reader, headerRow, sampleSize))
                 {
@@ -226,13 +226,27 @@ namespace ExcelReader.Cli
             }
         }
 
-        internal static IExcelRowReader Open(string path, string? sheet, string? password = null)
+        internal static byte AsciiByte(char value, string parameterName)
+        {
+            if (value > (char)127)
+            {
+                throw new ArgumentException($"--{parameterName} must be an ASCII character; got '{value}'.", parameterName);
+            }
+            return (byte)value;
+        }
+
+        internal static IExcelRowReader Open(string path, string? sheet, string? password = null, char? inputDelimiter = null)
         {
             bool isCsv = string.Equals(Path.GetExtension(path), ".csv", StringComparison.OrdinalIgnoreCase);
-            ExcelReaderOptions? options = password is null ? null : new ExcelReaderOptions { Password = password };
-            IExcelRowReader reader = isCsv
-                ? Excel.FromCsvFile(path)
-                : Excel.Open(path, options);
+            CsvReaderOptions csv = inputDelimiter is char delimiter
+                ? CsvReaderOptions.Default with { Delimiter = AsciiByte(delimiter, "input-delimiter") }
+                : CsvReaderOptions.Default with { SniffDialect = true };
+            ExcelReaderOptions options = new() { Csv = csv };
+            if (password is not null)
+            {
+                options = options with { Password = password };
+            }
+            IExcelRowReader reader = Excel.Open(path, isCsv ? ExcelFileFormat.Csv : ExcelFileFormat.Unknown, options);
 
             if (sheet is null)
             {

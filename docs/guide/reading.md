@@ -156,6 +156,12 @@ CSV is exposed as a single, unnamed sheet (`SheetCount == 1`, `SheetName == ""`)
 
 `OpenAsync` is the async counterpart. Both require a seekable stream (or a file path) so the signature can be read without consuming the input.
 
+Detection covers the signed formats only. To open a source whose format you already know — including CSV, which has no signature to detect — pass an `ExcelFileFormat` and let `ExcelReaderOptions.Csv` carry the dialect; see [CSV](csv.md#read-csv).
+
+```csharp
+using IExcelRowReader reader = Excel.Open("report.csv", ExcelFileFormat.Csv);
+```
+
 ## Read asynchronously
 
 Every reader supports `await foreach`. For XLSX files, the async reader buffers one row at a time and uses the same row parser as the sync reader, so sync and async reads stay behaviorally aligned while awaits happen only when more bytes are needed.
