@@ -294,7 +294,6 @@ namespace ExcelReader.Tests
             try
             {
                 Assert.True(nongeneric.MoveNext());
-                // The model may be a ref struct, so the non-generic Current cannot box it.
                 Assert.Throws<NotSupportedException>(() => nongeneric.Current);
             }
             finally

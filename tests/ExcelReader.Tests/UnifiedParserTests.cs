@@ -7,8 +7,6 @@ using ExcelReader.Core.ValueObjects;
 
 namespace ExcelReader.Tests
 {
-    // One ExcelParser<T> serves class, struct and ref struct models over the CSV path,
-    // synchronously and asynchronously.
     public partial class UnifiedParserTests
     {
         private static readonly byte[] Csv = "Name,Id,Value\nAda,36,1.5\nGrace,45,2.5\n"u8.ToArray();
@@ -181,8 +179,6 @@ namespace ExcelReader.Tests
             Assert.Equal(81, ids);
         }
 
-        // The one unavoidable casualty: IEnumerator.Current cannot box a ref struct, so the
-        // non-generic path now throws for every model kind.
         [Fact]
         public void NonGenericCurrentIsNoLongerSupported()
         {

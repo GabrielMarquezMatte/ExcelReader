@@ -342,8 +342,6 @@ namespace ExcelReader.Core.Reader
                 return SimpleRecordOutcome.Done;
             }
 
-            // Leftover escape bits of a field that runs past its block are carried into the next block as
-            // bit 0, so escapesInField (bits 0..end inclusive) still sees them.
             [MethodImpl(MethodImplOptions.NoInlining)]
             private int DrainFields(byte[] buf, ref int fieldStart)
             {
@@ -413,16 +411,12 @@ namespace ExcelReader.Core.Reader
                 return FinishDrain(n, first, start, result, ref fieldStart);
             }
 
-            // Every field end in a block becomes at most one cell, so checking the whole block up front is
-            // what lets DrainFields write cells without a per-field bounds or column-limit check.
             private bool BlockFits(int n, int first, ulong ends)
             {
                 int fields = BitOperations.PopCount(ends);
                 return n + fields <= _acc.RawCells.Length && n - first + fields <= ExcelLimits.MaxColumns;
             }
 
-            // A batch never ends on a partial record: it is dropped and re-parsed from its start next time,
-            // which needs a fresh scanner because the scanner's state is mid-record.
             private int FinishDrain(int n, int first, int start, int result, ref int fieldStart)
             {
                 if (_batchSize > 0 && result < 0)
@@ -432,7 +426,6 @@ namespace ExcelReader.Core.Reader
                     result = start;
                     _scannerValid = false;
                 }
-                // CSV adds exactly one cell per column, so a record's cell count is also its next column.
                 _acc.CommitAscending(n, n - first - 1);
                 _col = n - first;
                 fieldStart = start;
@@ -514,7 +507,6 @@ namespace ExcelReader.Core.Reader
                         written += content.Length;
                         break;
                     }
-                    // The scanner only reports an escaped field when every quote inside it is doubled.
                     content[..(quoteAt + 1)].CopyTo(dst[written..]);
                     written += quoteAt + 1;
                     content = content[(quoteAt + 2)..];

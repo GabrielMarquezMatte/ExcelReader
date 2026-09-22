@@ -26,8 +26,6 @@ namespace ExcelReader.Cli
             }
 
             // ponytail: progress is a carriage-returned line on stderr rather than a spinner widget. A
-            // failure mid-convert leaves the error appended to the last progress line; cosmetic, on a
-            // path that is about to exit non-zero anyway.
             int code = CliCommands.Convert(path, sheet, output, format, delimiter ?? ',', stdout, stderr, rowsWritten =>
                 Console.Error.Write($"\rConverting... {rowsWritten.ToString("N0", CultureInfo.InvariantCulture)} rows written"), password);
             Console.Error.WriteLine();

@@ -42,7 +42,6 @@ namespace ExcelReader.Core.ValueObjects
                 }
                 if ((uint)(c - (byte)'0') > 9)
                 {
-                    // Testing for the exponent here rather than per digit keeps it off the hot path.
                     if (c is not ((byte)'e' or (byte)'E') || !TryExponent(s[(i + 1)..], out exponent))
                     {
                         return false;
@@ -70,8 +69,6 @@ namespace ExcelReader.Core.ValueObjects
                 return false;
             }
 
-            // A mantissa of at most 15 digits and a power of ten within 1e22 are both exact, so the
-            // single multiply or divide below is the only rounding. Anything wider is the BCL's.
             scale -= exponent;
             if (scale is < -22 or > 22)
             {
