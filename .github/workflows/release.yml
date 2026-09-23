@@ -54,6 +54,8 @@ jobs:
           path: ./artifacts
           format: spdx-json
           output-file: ./artifacts/excelreader.spdx.json
+          # This job is read-only; the publish job attaches the SBOM once every test has passed.
+          upload-release-assets: false
 
       - name: Upload package artifacts
         uses: actions/upload-artifact@v7
@@ -254,8 +256,11 @@ jobs:
       - name: Upload to the GitHub Release
         uses: softprops/action-gh-release@v3
         with:
-          files: release-assets/*
+          files: |
+            release-assets/*
+            artifacts/*.spdx.json
           fail_on_unmatched_files: true
+          prerelease: ${{ contains(github.ref_name, '-') }}
 
   publish-pypi:
     name: Publish to PyPI
@@ -315,6 +320,8 @@ jobs:
   promote-public-api:
     name: Promote PublicAPI.Unshipped -> Shipped
     needs: publish
+    # A release candidate's API can still change, so only final releases promote it.
+    if: ${{ !contains(github.ref_name, '-') }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
