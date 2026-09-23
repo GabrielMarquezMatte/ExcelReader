@@ -400,7 +400,6 @@ namespace ExcelReader.Tests
                         await using (XlsxWorkbookWriter wb = XlsxWorkbookWriter.Create(writeStream, leaveOpen: true))
                         {
                             XlsxSheetWriter sheet = wb.AddSheet("S1");
-                            await sheet.StartAsync();
                             XlsxRowWriter header = await sheet.StartRowAsync();
                             await using (header.ConfigureAwait(false))
                             {

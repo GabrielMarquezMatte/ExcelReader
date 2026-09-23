@@ -57,7 +57,7 @@ namespace ExcelReader.Tests
             await using IExcelRowReader reader = await Excel.OpenAsync(ms, ct: TestContext.Current.CancellationToken);
 
             var rows = new List<MoneyRow>();
-            await foreach (MoneyRow row in ExcelParser.FromAttributes<MoneyRow>().ParseAsync(reader, TestContext.Current.CancellationToken))
+            await foreach (MoneyRow row in ExcelParser.FromAttributes<MoneyRow>().Parse(reader).WithCancellation(TestContext.Current.CancellationToken))
             {
                 rows.Add(row);
             }

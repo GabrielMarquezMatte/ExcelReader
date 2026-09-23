@@ -99,7 +99,7 @@ namespace ExcelReader.Benchmarks
             await using var ms = new MemoryStream(_workbook, writable: false);
             await using var reader = await Excel.FromXlsxAsync(ms);
             long acc = 0;
-            await foreach (Record rec in ExcelParser.FromAttributes<Record>().ParseAsync(reader))
+            await foreach (Record rec in ExcelParser.FromAttributes<Record>().Parse(reader))
             {
                 acc += Accumulate(rec);
             }
@@ -126,7 +126,7 @@ namespace ExcelReader.Benchmarks
             await using var ms = new MemoryStream(_xlsbWorkbook, writable: false);
             await using var reader = await Excel.FromXlsbAsync(ms);
             long acc = 0;
-            await foreach (Record rec in ExcelParser.FromAttributes<Record>().ParseAsync(reader))
+            await foreach (Record rec in ExcelParser.FromAttributes<Record>().Parse(reader))
             {
                 acc += Accumulate(rec);
             }

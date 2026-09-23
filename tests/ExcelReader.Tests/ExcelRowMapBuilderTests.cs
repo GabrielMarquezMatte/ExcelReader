@@ -117,7 +117,6 @@ namespace ExcelReader.Tests
             await using (XlsxWorkbookWriter wb = XlsxWorkbookWriter.Create(mappedStream, leaveOpen: true))
             {
                 XlsxSheetWriter sheet = wb.AddSheet("S1");
-                await sheet.StartAsync(ct);
                 var builder = new ExcelRecordMapBuilder<MapBuilderTestModel, XlsxRowWriter>();
                 MapBuilderTestModel.ConfigureExcelRecordMap(builder);
                 await WriteMappedRowAsync(sheet, builder, record, ct);

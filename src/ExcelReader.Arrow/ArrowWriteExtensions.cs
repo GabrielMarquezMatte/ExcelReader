@@ -94,7 +94,6 @@ namespace ExcelReader.Arrow
 
             TSheet sheet = workbook.AddSheet(sheetName);
             ApplyTemporalStyles<TSheet, TRow>(workbook, sheet, fields);
-            sheet.Start();
 
             if (writeHeader)
             {
@@ -128,7 +127,6 @@ namespace ExcelReader.Arrow
 
             TSheet sheet = workbook.AddSheet(sheetName);
             ApplyTemporalStyles<TSheet, TRow>(workbook, sheet, fields);
-            await sheet.StartAsync(ct).ConfigureAwait(false);
 
             if (writeHeader)
             {

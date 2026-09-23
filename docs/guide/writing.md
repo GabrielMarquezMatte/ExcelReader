@@ -13,7 +13,6 @@ await using var workbook = XlsxWorkbookWriter.Create(stream);
 
 await using (var sheet = workbook.AddSheet("Summary"))
 {
-    await sheet.StartAsync();
 
     await using (var row = await sheet.StartRowAsync())
     {
@@ -54,7 +53,7 @@ A workbook whose sheets are *all* hidden is rejected when it is ended (`InvalidO
 
 ## Cell styles on write
 
-Every `IWorkbookWriter<TSheet>` supports column- and row-level styling: a number format (currency, date, percentage), bold, and italic. Register a `CellStyle` once with `AddStyle` and apply its returned index to a column (before the sheet is started) or to a whole row (when starting it):
+Every `IWorkbookWriter<TSheet>` supports column- and row-level styling: a number format (currency, date, percentage), bold, and italic. Register a `CellStyle` once with `AddStyle` and apply its returned index to a column (before the first row) or to a whole row (when starting it):
 
 ```csharp
 using ExcelReader.Core.Writer;
@@ -65,9 +64,8 @@ int currency = workbook.AddStyle(new CellStyle { NumberFormat = "R$ #,##0.00" })
 int header = workbook.AddStyle(new CellStyle { Bold = true });
 
 await using var sheet = workbook.AddSheet("Summary");
-sheet.SetColumnStyle(columnIndex: 1, currency); // before StartAsync
+sheet.SetColumnStyle(columnIndex: 1, currency); // before the first row
 sheet.SetColumnWidth(columnIndex: 0, width: 20);
-await sheet.StartAsync();
 
 await using (var row = await sheet.StartRowAsync(header))
 {
@@ -99,7 +97,6 @@ await using var workbook = XlsbWorkbookWriter.Create(stream);
 
 await using (XlsbSheetWriter sheet = workbook.AddSheet("Summary"))
 {
-    await sheet.StartAsync();
 
     await using (XlsbRowWriter row = await sheet.StartRowAsync())
     {
@@ -126,7 +123,6 @@ await using var workbook = XlsWorkbookWriter.Create(stream);
 
 using (var sheet = workbook.AddSheet("Summary"))
 {
-    sheet.Start();
 
     using (var row = sheet.StartRow())
     {
@@ -195,7 +191,6 @@ compresses:
 ```csharp
 await using var wb = XlsxWorkbookWriter.Create(stream, leaveOpen: true, options: new XlsxWriterOptions { PrefetchWrite = true });
 XlsxSheetWriter sheet = wb.AddSheet("S1");
-await sheet.StartAsync();
 
 foreach (var record in records)
 {

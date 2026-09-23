@@ -33,7 +33,6 @@ namespace ExcelReader.Tests
                 await using (XlsxWorkbookWriter wb = XlsxWorkbookWriter.Create(ms, leaveOpen: true))
                 {
                     XlsxSheetWriter sheet = wb.AddSheet("Sheet1");
-                    await sheet.StartAsync(TestContext.Current.CancellationToken);
                     await using (XlsxRowWriter row = await sheet.StartRowAsync(TestContext.Current.CancellationToken))
                     {
                         row.Write(expected);

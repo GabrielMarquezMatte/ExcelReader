@@ -132,31 +132,27 @@ namespace ExcelReader.Core.Reader
             return GetEnumerator();
         }
 
-        /// <summary>Creates an enumerator for the current sheet that observes cancellation while iterating.</summary>
-        /// <remarks>This overload takes no default value for <paramref name="ct"/>: the parameterless <see cref="GetAsyncEnumerator()"/> above already covers the no-argument call, so a default here would only shadow it.</remarks>
-        /// <param name="ct">Token checked before enumeration starts and on each subsequent move.</param>
-        public Enumerator GetAsyncEnumerator(CancellationToken ct)
-        {
-            ct.ThrowIfCancellationRequested();
-            return new Enumerator(this, _sheets[_current].Offset, ct);
-        }
-
         IExcelRowEnumerator IExcelRowReader<IExcelRowEnumerator>.GetAsyncEnumerator()
         {
             return GetAsyncEnumerator();
         }
 
         /// <inheritdoc/>
+        /// <remarks>XlsReader is fully in-memory, so the enumerator opens synchronously; <paramref name="ct"/> is checked before enumeration starts and on each subsequent move.</remarks>
         public ValueTask<Enumerator> GetAsyncEnumeratorAsync(CancellationToken ct = default)
         {
-            return new ValueTask<Enumerator>(GetAsyncEnumerator(ct));
+            return new ValueTask<Enumerator>(OpenCancellable(ct));
         }
 
-        [SuppressMessage("Performance", "CA1849:Call async methods when in an async method",
-            Justification = "XlsReader is fully in-memory; opening the enumerator is synchronous, so there is no async open to await here.")]
         ValueTask<IExcelRowEnumerator> IExcelRowReader<IExcelRowEnumerator>.GetAsyncEnumeratorAsync(CancellationToken ct)
         {
-            return new ValueTask<IExcelRowEnumerator>(GetAsyncEnumerator(ct));
+            return new ValueTask<IExcelRowEnumerator>(OpenCancellable(ct));
+        }
+
+        private Enumerator OpenCancellable(CancellationToken ct)
+        {
+            ct.ThrowIfCancellationRequested();
+            return new Enumerator(this, _sheets[_current].Offset, ct);
         }
 
         /// <inheritdoc/>

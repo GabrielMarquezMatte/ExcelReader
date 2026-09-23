@@ -1,8 +1,9 @@
 using System.Collections;
 using System.Diagnostics.CodeAnalysis;
+using ExcelReader.Core.Parser.Internal;
 using ExcelReader.Core.Reader;
 
-namespace ExcelReader.Core.Parser.Internal
+namespace ExcelReader.Core.Parser
 {
     /// <summary>Base class supplying the shared row-advancement loop for a synchronous, format-specific row enumerator.</summary>
     /// <typeparam name="T">The row model type each derived enumerator yields.</typeparam>
@@ -24,14 +25,9 @@ namespace ExcelReader.Core.Parser.Internal
         where T : allows ref struct
         where TRows : class, IExcelRowEnumerator
     {
-        /// <summary>The underlying row cursor this enumerator advances.</summary>
-        [SuppressMessage("Design", "CA1051:Do not declare visible instance fields",
-            Justification = "Hot-path base class (MoveNext runs per row); a field avoids a property-call indirection in the tightest loop of the library.")]
-        protected readonly TRows Rows;
+        private protected readonly TRows Rows;
 
-        /// <summary>Initializes the base enumerator with the row cursor it will drive.</summary>
-        /// <param name="rows">The row enumerator to advance and project from.</param>
-        protected SyncRowEnumerator(TRows rows)
+        private protected SyncRowEnumerator(TRows rows)
         {
             Rows = rows;
         }

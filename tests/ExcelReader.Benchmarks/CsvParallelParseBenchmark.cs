@@ -1,5 +1,6 @@
 using System.Runtime.InteropServices;
 using BenchmarkDotNet.Attributes;
+using ExcelReader.Core.Parser;
 using ExcelReader.Core.Reader;
 
 namespace ExcelReader.Benchmarks
@@ -114,7 +115,7 @@ namespace ExcelReader.Benchmarks
         public async Task<long> ConversionHeavyAggregate()
         {
             CsvParallelOptions options = new() { DegreeOfParallelism = Dop, HeaderRow = 1 };
-            CsvModelMap<WideRowRef> map = CsvModelMap.FromAttributes<WideRowRef>();
+            ExcelParser<WideRowRef> map = ExcelParser.FromAttributes<WideRowRef>();
             var aggregation = await Excel.AggregateCsvParallelAsync<Aggregation, WideRowRef>(_wide, map, options);
             if (aggregation.Units == 0)
             {
@@ -127,7 +128,7 @@ namespace ExcelReader.Benchmarks
         public async Task<long> NarrowIntAggregate()
         {
             CsvParallelOptions options = new() { DegreeOfParallelism = Dop, HeaderRow = 1 };
-            CsvModelMap<NarrowRowStruct> map = CsvModelMap.FromAttributes<NarrowRowStruct>();
+            ExcelParser<NarrowRowStruct> map = ExcelParser.FromAttributes<NarrowRowStruct>();
             var aggregation = await Excel.AggregateCsvParallelAsync<AggregationNarrow, NarrowRowStruct>(_narrow, map, options);
             if (aggregation.Units == 0)
             {

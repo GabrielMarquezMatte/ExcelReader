@@ -66,7 +66,7 @@ namespace ExcelReader.Tests
             using CancellationTokenSource cts = new();
 
             await using XlsReader reader = await Excel.FromXlsAsync(ms, ct: outer);
-            await using XlsReader.Enumerator e = reader.GetAsyncEnumerator(cts.Token);
+            await using XlsReader.Enumerator e = await reader.GetAsyncEnumeratorAsync(cts.Token);
 
             Assert.True(await e.MoveNextAsync());
             cts.Cancel();
@@ -121,7 +121,6 @@ namespace ExcelReader.Tests
             await using (XlsbWorkbookWriter wb = XlsbWorkbookWriter.Create(ms, leaveOpen: true))
             {
                 XlsbSheetWriter sheet = wb.AddSheet("S1");
-                await sheet.StartAsync(ct);
                 for (int r = 0; r < 3; r++)
                 {
                     await using XlsbRowWriter row = await sheet.StartRowAsync(ct);

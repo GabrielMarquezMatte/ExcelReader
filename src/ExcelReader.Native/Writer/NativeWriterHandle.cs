@@ -85,7 +85,6 @@ namespace ExcelReader.Native.Writer
                 throw new InvalidOperationException("A sheet is already open; call xl_end_sheet before starting another.");
             }
             _sheet = _workbook.AddSheet(name);
-            _sheet.Start();
         }
 
         internal override void StartRow()

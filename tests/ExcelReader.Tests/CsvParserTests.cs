@@ -338,7 +338,7 @@ namespace ExcelReader.Tests
             using var reader = Excel.FromCsv(ms);
 
             var rows = new List<PersonRow>();
-            await foreach (PersonRow row in ExcelParser.FromAttributes<PersonRow>().ParseAsync(reader, TestContext.Current.CancellationToken))
+            await foreach (PersonRow row in ExcelParser.FromAttributes<PersonRow>().Parse(reader).WithCancellation(TestContext.Current.CancellationToken))
             {
                 rows.Add(row);
             }

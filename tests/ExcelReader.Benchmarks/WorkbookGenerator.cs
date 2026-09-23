@@ -112,7 +112,6 @@ namespace ExcelReader.Benchmarks
             await using (TWorkbook wb = create(ms))
             {
                 TSheet sheet = wb.AddSheet("S1");
-                await sheet.StartAsync();
                 for (int r = 1; r <= rows; r++)
                 {
                     double serial = 45292 + (r % 3650) + 0.25;

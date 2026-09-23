@@ -31,7 +31,7 @@ foreach (var item in parser.Parse(reader))
 
 Built-in property types: `string`, `bool`, `DateTime`, `DateOnly`, `Guid`, every integral and floating type plus `decimal`, and `enum`s (matched by member name or numeric value). Each also works as a `Nullable<T>`. Empty cells leave the property at its default; an unparseable cell is skipped (keeps the default) unless the column is required. `T` needs no parameterless-constructor constraint, so models with `required` members are supported.
 
-`Parse` and `ParseAsync` also accept the `IExcelRowReader` from `Excel.Open`, so you can parse without knowing the concrete format:
+`Parse` also accepts the `IExcelRowReader` from `Excel.Open`, so you can parse without knowing the concrete format:
 
 ```csharp
 using IExcelRowReader reader = Excel.Open("changes.xlsx"); // or .xlsb / .xls
@@ -217,12 +217,12 @@ foreach (ChangeRowRef item in ExcelParser.FromAttributes<ChangeRowRef>().Parse(r
 }
 ```
 
-`ParseAsync` supports `await foreach`, so a `ref struct` model can be parsed asynchronously — the rows are streamed via `MoveNextAsync` while the model stays a zero-copy `ref struct`:
+The result of `Parse` supports `await foreach` (add `.WithCancellation(ct)` to pass a token), so a `ref struct` model can be parsed asynchronously — the rows are streamed via `MoveNextAsync` while the model stays a zero-copy `ref struct`:
 
 ```csharp
 await using var reader = await Excel.FromXlsxFileAsync("changes.xlsx");
 
-await foreach (ChangeRowRef item in ExcelParser.FromAttributes<ChangeRowRef>().ParseAsync(reader))
+await foreach (ChangeRowRef item in ExcelParser.FromAttributes<ChangeRowRef>().Parse(reader))
 {
     Console.WriteLine($"{Encoding.UTF8.GetString(item.File)}: +{item.LinesAdded}");
 }

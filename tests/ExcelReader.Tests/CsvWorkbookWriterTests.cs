@@ -42,7 +42,6 @@ namespace ExcelReader.Tests
             await using (var wb = CsvWorkbookWriter.Create(ms, leaveOpen: true))
             {
                 CsvSheetWriter sheet = wb.AddSheet("Sheet1");
-                await sheet.StartAsync(TestContext.Current.CancellationToken);
                 await using (CsvRowWriter row = await sheet.StartRowAsync(TestContext.Current.CancellationToken))
                 {
                     row.Write("hello");

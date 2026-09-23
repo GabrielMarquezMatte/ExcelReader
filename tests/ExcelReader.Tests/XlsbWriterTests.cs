@@ -40,7 +40,6 @@ namespace ExcelReader.Tests
             await using var ms = await WriteAsync(async wb =>
             {
                 XlsbSheetWriter sheet = wb.AddSheet("Sheet1");
-                await sheet.StartAsync(TestContext.Current.CancellationToken);
                 await using (XlsbRowWriter header = await sheet.StartRowAsync(TestContext.Current.CancellationToken))
                 {
                     header.Write("Name");
@@ -73,7 +72,6 @@ namespace ExcelReader.Tests
             await using var ms = await WriteAsync(async wb =>
             {
                 XlsbSheetWriter sheet = wb.AddSheet("Sheet1");
-                await sheet.StartAsync(TestContext.Current.CancellationToken);
                 await using (XlsbRowWriter row = await sheet.StartRowAsync(TestContext.Current.CancellationToken))
                 {
                     row.Write("x");
@@ -91,7 +89,6 @@ namespace ExcelReader.Tests
             await using var ms = await WriteAsync(async wb =>
             {
                 XlsbSheetWriter sheet = wb.AddSheet("Sheet1");
-                await sheet.StartAsync(TestContext.Current.CancellationToken);
                 await using (XlsbRowWriter header = await sheet.StartRowAsync(TestContext.Current.CancellationToken))
                 {
                     header.Write("A");
@@ -121,7 +118,6 @@ namespace ExcelReader.Tests
             await using var ms = await WriteAsync(async wb =>
             {
                 XlsbSheetWriter sheet = wb.AddSheet("Sheet1");
-                await sheet.StartAsync(TestContext.Current.CancellationToken);
                 await using (XlsbRowWriter row = await sheet.StartRowAsync(TestContext.Current.CancellationToken))
                 {
                     row.Write(date);
@@ -143,7 +139,6 @@ namespace ExcelReader.Tests
             await using var ms = await WriteAsync(async wb =>
             {
                 XlsbSheetWriter sheet = wb.AddSheet("Numbers");
-                await sheet.StartAsync(TestContext.Current.CancellationToken);
                 await using (XlsbRowWriter row = await sheet.StartRowAsync(TestContext.Current.CancellationToken))
                 {
                     row.Write(123);
@@ -188,7 +183,6 @@ namespace ExcelReader.Tests
             await using var ms = await WriteAsync(async wb =>
             {
                 XlsbSheetWriter sheet = wb.AddSheet("MoreNumbers");
-                await sheet.StartAsync(TestContext.Current.CancellationToken);
                 await using (XlsbRowWriter row = await sheet.StartRowAsync(TestContext.Current.CancellationToken))
                 {
                     row.Write((bool?)true);
@@ -233,7 +227,6 @@ namespace ExcelReader.Tests
             await using var ms = await WriteAsync(async wb =>
             {
                 XlsbSheetWriter sheet = wb.AddSheet("Sheet1");
-                await sheet.StartAsync(TestContext.Current.CancellationToken);
                 await using (XlsbRowWriter row = await sheet.StartRowAsync(TestContext.Current.CancellationToken))
                 {
                     Assert.Throws<ArgumentOutOfRangeException>(() => row.Skip(-1));
@@ -267,7 +260,6 @@ namespace ExcelReader.Tests
             await using var ms = await WriteAsync(async wb =>
             {
                 XlsbSheetWriter sheet = wb.AddSheet("Sheet1");
-                await sheet.StartAsync(TestContext.Current.CancellationToken);
                 XlsbCell[] header =
                 [
                     XlsbCell.Create("Name"),
@@ -302,7 +294,6 @@ namespace ExcelReader.Tests
             await using var ms = await WriteAsync(async wb =>
             {
                 XlsbSheetWriter sheet = wb.AddSheet("Sheet1");
-                await sheet.StartAsync(TestContext.Current.CancellationToken);
                 XlsbCell[] header = [XlsbCell.Create("A"), XlsbCell.Empty, XlsbCell.Create("C")];
                 XlsbCell[] row = [XlsbCell.Create("aaa"), XlsbCell.Create((string?)null), XlsbCell.Create("ccc")];
                 sheet.WriteRow(header);
@@ -324,7 +315,6 @@ namespace ExcelReader.Tests
             await using var ms = await WriteAsync(async wb =>
             {
                 XlsbSheetWriter sheet = wb.AddSheet("Sheet1");
-                await sheet.StartAsync(TestContext.Current.CancellationToken);
                 XlsbCell[] row = [XlsbCell.Create(date)];
                 sheet.WriteRow(row);
                 await sheet.EndAsync(TestContext.Current.CancellationToken);
@@ -380,7 +370,6 @@ namespace ExcelReader.Tests
             using MemoryStream ms = new();
             await using XlsbWorkbookWriter wb = XlsbWorkbookWriter.Create(ms, leaveOpen: true);
             XlsbSheetWriter sheet = wb.AddSheet("Sheet1");
-            await sheet.StartAsync(ct);
             await using XlsbRowWriter row = await sheet.StartRowAsync(ct);
 
             Assert.Throws<ExcelLimitExceededException>(() => row.Skip(16_385));
@@ -393,7 +382,6 @@ namespace ExcelReader.Tests
             using MemoryStream ms = new();
             await using XlsbWorkbookWriter wb = XlsbWorkbookWriter.Create(ms, leaveOpen: true);
             XlsbSheetWriter sheet = wb.AddSheet("Sheet1");
-            await sheet.StartAsync(ct);
             await using XlsbRowWriter row = await sheet.StartRowAsync(ct);
 
             Assert.Throws<ArgumentException>(() => row.Write(new NonNumericFormattable()));
@@ -406,7 +394,6 @@ namespace ExcelReader.Tests
             using MemoryStream ms = new();
             await using XlsbWorkbookWriter wb = XlsbWorkbookWriter.Create(ms, leaveOpen: true);
             XlsbSheetWriter sheet = wb.AddSheet("Sheet1");
-            await sheet.StartAsync(ct);
             await using XlsbRowWriter row = await sheet.StartRowAsync(ct);
 
             ArgumentException ex = Assert.Throws<ArgumentException>(() => row.Write(new OverflowingFormattable()));
@@ -463,7 +450,6 @@ namespace ExcelReader.Tests
             await using MemoryStream ms = await WriteAsync(async wb =>
             {
                 XlsbSheetWriter sheet = wb.AddSheet("Sheet1");
-                await sheet.StartAsync(ct);
                 await using (XlsbRowWriter row = await sheet.StartRowAsync(ct))
                 {
                     row.Write(value);

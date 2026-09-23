@@ -215,7 +215,6 @@ namespace ExcelReader.Native
             {
                 TSheet sheet = workbook.AddSheet(sheetName);
                 ApplyTemporalStyles<TSheet, TRow>(workbook, sheet, table);
-                sheet.Start();
 
                 if (hasHeader)
                 {

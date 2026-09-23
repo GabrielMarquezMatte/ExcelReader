@@ -141,7 +141,6 @@ namespace ExcelReader.Cli
             where TRow : IRowWriter
         {
             using TSheet sheetWriter = workbook.AddSheet(reader.SheetName);
-            sheetWriter.Start();
 
             int rowCount = 0;
             using IExcelRowEnumerator rows = reader.GetEnumerator();

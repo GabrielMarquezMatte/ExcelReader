@@ -57,18 +57,18 @@ namespace ExcelReader.Core.Writer
 
         /// <inheritdoc/>
         /// <exception cref="ArgumentOutOfRangeException"><paramref name="columnIndex"/> is negative, or <paramref name="styleId"/> is negative or was never returned by <see cref="XlsbWorkbookWriter.AddStyle"/>.</exception>
-        /// <exception cref="InvalidOperationException">The sheet has already been started.</exception>
+        /// <exception cref="InvalidOperationException">The first row has already been started.</exception>
         public void SetColumnStyle(int columnIndex, int styleId)
         {
-            SheetColumnValidation.SetColumnStyle(ref _columnStyles, columnIndex, styleId, _owner.StyleCount, _state, this, nameof(StartAsync));
+            SheetColumnValidation.SetColumnStyle(ref _columnStyles, columnIndex, styleId, _owner.StyleCount, _state, this);
         }
 
         /// <inheritdoc/>
         /// <exception cref="ArgumentOutOfRangeException"><paramref name="columnIndex"/> or <paramref name="width"/> is negative.</exception>
-        /// <exception cref="InvalidOperationException">The sheet has already been started.</exception>
+        /// <exception cref="InvalidOperationException">The first row has already been started.</exception>
         public void SetColumnWidth(int columnIndex, double width)
         {
-            SheetColumnValidation.SetColumnWidth(ref _columnWidths, columnIndex, width, _state, this, nameof(StartAsync));
+            SheetColumnValidation.SetColumnWidth(ref _columnWidths, columnIndex, width, _state, this);
         }
 
         private int EffectiveStyle(int columnIndex)
@@ -80,8 +80,12 @@ namespace ExcelReader.Core.Writer
             return _columnStyles is not null && _columnStyles.TryGetValue(columnIndex, out int styleId) ? styleId : 0;
         }
 
-        private void StartCore()
+        private void EnsureStarted()
         {
+            if (_state != WriterState.Created)
+            {
+                return;
+            }
             _state = WriterState.Started;
             WriteRecord(Brt.BeginSheet);
             WriteWorksheetView();
@@ -89,27 +93,6 @@ namespace ExcelReader.Core.Writer
             WriteColInfos();
             WriteRecord(Brt.EndColInfos);
             WriteRecord(Brt.BeginSheetData);
-        }
-
-        /// <summary>
-        /// Synchronous counterpart to <see cref="StartAsync"/>, for native/unmanaged callers whose ABI
-        /// is synchronous.
-        /// </summary>
-        public void Start()
-        {
-            WriterStateGuard.ThrowIfEnded(_state, this);
-            WriterStateGuard.RequireCreated(_state, nameof(XlsbSheetWriter));
-            StartCore();
-        }
-
-        /// <inheritdoc/>
-        public ValueTask StartAsync(CancellationToken ct = default)
-        {
-            WriterStateGuard.ThrowIfEnded(_state, this);
-            WriterStateGuard.RequireCreated(_state, nameof(XlsbSheetWriter));
-            ct.ThrowIfCancellationRequested();
-            StartCore();
-            return ValueTask.CompletedTask;
         }
 
         private const double DefaultColumnWidth = 8.43;
@@ -211,8 +194,8 @@ namespace ExcelReader.Core.Writer
         public void End()
         {
             WriterStateGuard.ThrowIfEnded(_state, this);
-            WriterStateGuard.RequireStarted(_state, nameof(XlsbSheetWriter), "ending");
             WriterStateGuard.RequireNoActiveRowForEnd(_rowActive, nameof(XlsbRowWriter));
+            EnsureStarted();
             _state = WriterState.Ended;
             WriteRecord(Brt.EndSheetData);
             WriteSheetMetadata();
@@ -240,9 +223,9 @@ namespace ExcelReader.Core.Writer
         public async ValueTask EndAsync(CancellationToken ct = default)
         {
             WriterStateGuard.ThrowIfEnded(_state, this);
-            WriterStateGuard.RequireStarted(_state, nameof(XlsbSheetWriter), "ending");
             WriterStateGuard.RequireNoActiveRowForEnd(_rowActive, nameof(XlsbRowWriter));
             ct.ThrowIfCancellationRequested();
+            EnsureStarted();
             _state = WriterState.Ended;
             WriteRecord(Brt.EndSheetData);
             WriteSheetMetadata();
@@ -272,26 +255,18 @@ namespace ExcelReader.Core.Writer
         /// </summary>
         public void Dispose()
         {
-            if (_state == WriterState.Started)
+            if (_state != WriterState.Ended)
             {
                 End();
-            }
-            else if (_state == WriterState.Created)
-            {
-                ReleaseBuffers();
             }
         }
 
         /// <inheritdoc/>
         public async ValueTask DisposeAsync()
         {
-            if (_state == WriterState.Started)
+            if (_state != WriterState.Ended)
             {
                 await EndAsync().ConfigureAwait(false);
-            }
-            else if (_state == WriterState.Created)
-            {
-                ReleaseBuffers();
             }
         }
 
@@ -368,8 +343,8 @@ namespace ExcelReader.Core.Writer
         private void BeginRow(int styleId)
         {
             WriterStateGuard.ThrowIfEnded(_state, this);
-            WriterStateGuard.RequireStarted(_state, nameof(XlsbSheetWriter), "adding rows");
             WriterStateGuard.RequireNoActiveRowForStart(_rowActive, nameof(XlsbRowWriter));
+            EnsureStarted();
             if (_rowNumber >= ExcelLimits.MaxRows)
             {
                 ExcelLimits.ThrowRowLimit(_rowNumber + 1L);

@@ -383,7 +383,6 @@ namespace ExcelReader.Tests
             await using (XlsbWorkbookWriter wb = XlsbWorkbookWriter.Create(ms, leaveOpen: true))
             {
                 XlsbSheetWriter sheet = wb.AddSheet("S1");
-                await sheet.StartAsync();
                 for (int r = 0; r < 6000; r++)
                 {
                     await using XlsbRowWriter row = await sheet.StartRowAsync();

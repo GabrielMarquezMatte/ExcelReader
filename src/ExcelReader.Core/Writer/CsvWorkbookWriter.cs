@@ -22,20 +22,6 @@ namespace ExcelReader.Core.Writer
         }
 
         /// <summary>
-        /// Synchronous counterpart to <see cref="StartAsync"/>, for native/unmanaged callers whose ABI
-        /// is synchronous. CSV has no leading structure to write, so this is a no-op.
-        /// </summary>
-        public void Start()
-        {
-        }
-
-        /// <inheritdoc/>
-        public ValueTask StartAsync(CancellationToken ct = default)
-        {
-            return ValueTask.CompletedTask;
-        }
-
-        /// <summary>
         /// Synchronous counterpart to <see cref="StartRowAsync(CancellationToken)"/>, for native/unmanaged
         /// callers whose ABI is synchronous.
         /// </summary>

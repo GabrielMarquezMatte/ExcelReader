@@ -62,30 +62,26 @@ namespace ExcelReader.Core.Writer
 
         /// <inheritdoc/>
         /// <exception cref="ArgumentOutOfRangeException"><paramref name="columnIndex"/> is negative, or <paramref name="styleId"/> is negative or was never returned by <see cref="XlsxWorkbookWriter.AddStyle"/>.</exception>
-        /// <exception cref="InvalidOperationException">The sheet has already been started.</exception>
+        /// <exception cref="InvalidOperationException">The first row has already been started.</exception>
         public void SetColumnStyle(int columnIndex, int styleId)
         {
-            SheetColumnValidation.SetColumnStyle(ref _columnStyles, columnIndex, styleId, _owner.StyleCount, _state, this, nameof(StartAsync));
+            SheetColumnValidation.SetColumnStyle(ref _columnStyles, columnIndex, styleId, _owner.StyleCount, _state, this);
         }
 
         /// <inheritdoc/>
         /// <exception cref="ArgumentOutOfRangeException"><paramref name="columnIndex"/> or <paramref name="width"/> is negative.</exception>
-        /// <exception cref="InvalidOperationException">The sheet has already been started.</exception>
+        /// <exception cref="InvalidOperationException">The first row has already been started.</exception>
         public void SetColumnWidth(int columnIndex, double width)
         {
-            SheetColumnValidation.SetColumnWidth(ref _columnWidths, columnIndex, width, _state, this, nameof(StartAsync));
+            SheetColumnValidation.SetColumnWidth(ref _columnWidths, columnIndex, width, _state, this);
         }
 
-        /// <summary>
-        /// Synchronous counterpart to <see cref="StartAsync"/>, for native/unmanaged callers whose ABI
-        /// is synchronous.
-        /// </summary>
-        /// <exception cref="ObjectDisposedException">The sheet has already been ended.</exception>
-        /// <exception cref="InvalidOperationException">The sheet has already been started.</exception>
-        public void Start()
+        private void EnsureStarted()
         {
-            WriterStateGuard.ThrowIfEnded(_state, this);
-            WriterStateGuard.RequireCreated(_state, nameof(XlsxSheetWriter));
+            if (_state != WriterState.Created)
+            {
+                return;
+            }
             ZipArchiveEntry entry = _zip.CreateEntry($"xl/worksheets/sheet{SheetId}.xml", _compression);
             Stream stream = entry.Open();
             _stream = _offloadWrite ? new WriteOffloadStream(stream) : stream;
@@ -99,14 +95,14 @@ namespace ExcelReader.Core.Writer
             _owner.RegisterSheet(Name, SheetId, Visibility);
         }
 
-        /// <inheritdoc/>
-        /// <exception cref="ObjectDisposedException">The sheet has already been ended.</exception>
-        /// <exception cref="InvalidOperationException">The sheet has already been started.</exception>
-        public async ValueTask StartAsync(CancellationToken ct = default)
+        internal ValueTask EnsureStartedAsync(CancellationToken ct)
         {
             WriterStateGuard.ThrowIfEnded(_state, this);
-            WriterStateGuard.RequireCreated(_state, nameof(XlsxSheetWriter));
-            ct.ThrowIfCancellationRequested();
+            return _state == WriterState.Created ? StartCoreAsync(ct) : ValueTask.CompletedTask;
+        }
+
+        private async ValueTask StartCoreAsync(CancellationToken ct)
+        {
             ZipArchiveEntry entry = _zip.CreateEntry($"xl/worksheets/sheet{SheetId}.xml", _compression);
             Stream stream = await entry.OpenAsync(ct).ConfigureAwait(false);
             _stream = _offloadWrite ? new WriteOffloadStream(stream) : stream;
@@ -156,7 +152,7 @@ namespace ExcelReader.Core.Writer
 
         /// <inheritdoc/>
         /// <exception cref="ObjectDisposedException">The sheet has already been ended.</exception>
-        /// <exception cref="InvalidOperationException">The sheet has not been started, or the previous <see cref="XlsxRowWriter"/> has not been disposed.</exception>
+        /// <exception cref="InvalidOperationException">The previous <see cref="XlsxRowWriter"/> has not been disposed.</exception>
         /// <exception cref="ExcelLimitExceededException">The worksheet's 1,048,576-row limit has been reached.</exception>
         public ValueTask<XlsxRowWriter> StartRowAsync(CancellationToken ct = default)
         {
@@ -166,52 +162,62 @@ namespace ExcelReader.Core.Writer
         /// <inheritdoc/>
         /// <exception cref="ArgumentOutOfRangeException"><paramref name="styleId"/> is negative or was never returned by <see cref="XlsxWorkbookWriter.AddStyle"/>.</exception>
         /// <exception cref="ObjectDisposedException">The sheet has already been ended.</exception>
-        /// <exception cref="InvalidOperationException">The sheet has not been started, or the previous <see cref="XlsxRowWriter"/> has not been disposed.</exception>
+        /// <exception cref="InvalidOperationException">The previous <see cref="XlsxRowWriter"/> has not been disposed.</exception>
         /// <exception cref="ExcelLimitExceededException">The worksheet's 1,048,576-row limit has been reached.</exception>
         public ValueTask<XlsxRowWriter> StartRowAsync(int styleId, CancellationToken ct = default)
         {
             ArgumentOutOfRangeException.ThrowIfNegative(styleId);
             ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(styleId, _owner.StyleCount);
-            return ValueTask.FromResult(StartRow(styleId, ct));
+            ct.ThrowIfCancellationRequested();
+            if (_state == WriterState.Created)
+            {
+                return StartFirstRowAsync(styleId, ct);
+            }
+            return ValueTask.FromResult(StartRowCore(styleId));
+        }
+
+        private async ValueTask<XlsxRowWriter> StartFirstRowAsync(int styleId, CancellationToken ct)
+        {
+            await StartCoreAsync(ct).ConfigureAwait(false);
+            return StartRowCore(styleId);
         }
 
         /// <summary>
-        /// Starts a new row without the async/await machinery of <see cref="StartRowAsync(CancellationToken)"/>, for callers that never need to await mid-row.
+        /// Synchronous counterpart to <see cref="StartRowAsync(CancellationToken)"/>. Row buffering is
+        /// synchronous either way, so a caller that never awaits mid-row can skip the per-row
+        /// <see cref="ValueTask"/> machinery.
         /// </summary>
-        /// <remarks>
-        /// Safe because row buffering and the (rare) threshold flush (<c>BeginRow</c>, <c>EndBufferedRow</c>)
-        /// are already fully synchronous internally, so a caller that never needs to await mid-row (e.g.
-        /// <see cref="SheetWriterExtensions"/>'s <see cref="XlsxSheetWriter"/>-specific <c>WriteRecordsAsync</c>
-        /// overload) can skip the per-row <see cref="ValueTask"/>/async-disposable machinery entirely.
-        /// </remarks>
-        /// <param name="ct">A token checked before the row starts; the row buffering itself is fully synchronous.</param>
         /// <returns>The reusable <see cref="XlsxRowWriter"/> for the new row.</returns>
         /// <exception cref="ObjectDisposedException">The sheet has already been ended.</exception>
-        /// <exception cref="InvalidOperationException">The sheet has not been started, or the previous <see cref="XlsxRowWriter"/> has not been disposed.</exception>
+        /// <exception cref="InvalidOperationException">The previous <see cref="XlsxRowWriter"/> has not been disposed.</exception>
         /// <exception cref="ExcelLimitExceededException">The worksheet's 1,048,576-row limit has been reached.</exception>
-        public XlsxRowWriter StartRow(CancellationToken ct = default)
+        public XlsxRowWriter StartRow()
         {
-            return StartRow(styleId: 0, ct);
+            return StartRowCore(styleId: 0);
         }
 
-        private XlsxRowWriter StartRow(int styleId, CancellationToken ct)
-        {
-            int rowNumber = BeginRow(styleId, ct);
-            _rowWriter ??= new XlsxRowWriter(this, _rowBuffer);
-            _rowWriter.Reset(rowNumber, styleId);
-            return _rowWriter;
-        }
-
-        XlsxRowWriter ISheetWriter<XlsxRowWriter>.StartRow()
-        {
-            return StartRow(styleId: 0, default);
-        }
-
-        XlsxRowWriter ISheetWriter<XlsxRowWriter>.StartRow(int styleId)
+        /// <summary>Synchronous counterpart to <see cref="StartRowAsync(int, CancellationToken)"/>.</summary>
+        /// <param name="styleId">The style to apply to every cell of this row.</param>
+        /// <returns>The reusable <see cref="XlsxRowWriter"/> for the new row.</returns>
+        /// <exception cref="ArgumentOutOfRangeException"><paramref name="styleId"/> is negative or was never returned by <see cref="XlsxWorkbookWriter.AddStyle"/>.</exception>
+        /// <exception cref="ObjectDisposedException">The sheet has already been ended.</exception>
+        /// <exception cref="InvalidOperationException">The previous <see cref="XlsxRowWriter"/> has not been disposed.</exception>
+        /// <exception cref="ExcelLimitExceededException">The worksheet's 1,048,576-row limit has been reached.</exception>
+        public XlsxRowWriter StartRow(int styleId)
         {
             ArgumentOutOfRangeException.ThrowIfNegative(styleId);
             ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(styleId, _owner.StyleCount);
-            return StartRow(styleId, default(CancellationToken));
+            return StartRowCore(styleId);
+        }
+
+        private XlsxRowWriter StartRowCore(int styleId)
+        {
+            WriterStateGuard.ThrowIfEnded(_state, this);
+            EnsureStarted();
+            int rowNumber = BeginRow(styleId);
+            _rowWriter ??= new XlsxRowWriter(this, _rowBuffer);
+            _rowWriter.Reset(rowNumber, styleId);
+            return _rowWriter;
         }
 
         /// <summary>
@@ -219,12 +225,12 @@ namespace ExcelReader.Core.Writer
         /// synchronous.
         /// </summary>
         /// <exception cref="ObjectDisposedException">The sheet has already been ended.</exception>
-        /// <exception cref="InvalidOperationException">The sheet has not been started, or the active <see cref="XlsxRowWriter"/> has not been disposed.</exception>
+        /// <exception cref="InvalidOperationException">The active <see cref="XlsxRowWriter"/> has not been disposed.</exception>
         public void End()
         {
             WriterStateGuard.ThrowIfEnded(_state, this);
-            WriterStateGuard.RequireStarted(_state, nameof(XlsxSheetWriter), "ending");
             WriterStateGuard.RequireNoActiveRowForEnd(_rowActive, nameof(XlsxRowWriter));
+            EnsureStarted();
             _state = WriterState.Ended;
             _rowBuffer.Write("</sheetData></worksheet>"u8);
 #pragma warning disable CS8602 
@@ -239,13 +245,16 @@ namespace ExcelReader.Core.Writer
 
         /// <inheritdoc/>
         /// <exception cref="ObjectDisposedException">The sheet has already been ended.</exception>
-        /// <exception cref="InvalidOperationException">The sheet has not been started, or the active <see cref="XlsxRowWriter"/> has not been disposed.</exception>
+        /// <exception cref="InvalidOperationException">The active <see cref="XlsxRowWriter"/> has not been disposed.</exception>
         public async ValueTask EndAsync(CancellationToken ct = default)
         {
             WriterStateGuard.ThrowIfEnded(_state, this);
-            WriterStateGuard.RequireStarted(_state, nameof(XlsxSheetWriter), "ending");
             WriterStateGuard.RequireNoActiveRowForEnd(_rowActive, nameof(XlsxRowWriter));
             ct.ThrowIfCancellationRequested();
+            if (_state == WriterState.Created)
+            {
+                await StartCoreAsync(ct).ConfigureAwait(false);
+            }
             _state = WriterState.Ended;
             _rowBuffer.Write("</sheetData></worksheet>"u8);
 #pragma warning disable CS8602 
@@ -264,37 +273,24 @@ namespace ExcelReader.Core.Writer
         /// </summary>
         public void Dispose()
         {
-            if (_state == WriterState.Started)
+            if (_state != WriterState.Ended)
             {
                 End();
-            }
-            else if (_state == WriterState.Created)
-            {
-                _state = WriterState.Ended;
-                _rowBuffer.Dispose();
             }
         }
 
         /// <inheritdoc/>
         public async ValueTask DisposeAsync()
         {
-            if (_state == WriterState.Started)
+            if (_state != WriterState.Ended)
             {
                 await EndAsync().ConfigureAwait(false);
             }
-            else if (_state == WriterState.Created)
-            {
-                _state = WriterState.Ended;
-                _rowBuffer.Dispose();
-            }
         }
 
-        private int BeginRow(int styleId, CancellationToken ct)
+        private int BeginRow(int styleId)
         {
-            WriterStateGuard.ThrowIfEnded(_state, this);
-            WriterStateGuard.RequireStarted(_state, nameof(XlsxSheetWriter), "adding rows");
             WriterStateGuard.RequireNoActiveRowForStart(_rowActive, nameof(XlsxRowWriter));
-            ct.ThrowIfCancellationRequested();
             if (_rowNumber >= ExcelLimits.MaxRows)
             {
                 ExcelLimits.ThrowRowLimit(_rowNumber + 1L);

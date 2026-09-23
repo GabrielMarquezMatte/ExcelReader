@@ -178,7 +178,6 @@ namespace ExcelReader.Fuzz
             {
                 XlsxSheetWriter sheet = wb.AddSheet("S");
                 sheet.SetColumnWidth(0, 12);
-                await sheet.StartAsync();
                 await WriteSampleRowsAsync(sheet);
                 await sheet.EndAsync();
                 await wb.EndAsync();
@@ -193,7 +192,6 @@ namespace ExcelReader.Fuzz
             {
                 XlsbSheetWriter sheet = wb.AddSheet("S");
                 sheet.SetColumnWidth(0, 12);
-                await sheet.StartAsync();
                 await WriteSampleRowsAsync(sheet);
                 await sheet.EndAsync();
                 await wb.EndAsync();
@@ -207,7 +205,6 @@ namespace ExcelReader.Fuzz
             await using (XlsWorkbookWriter wb = XlsWorkbookWriter.Create(ms, leaveOpen: true))
             {
                 XlsSheetWriter sheet = wb.AddSheet("S");
-                await sheet.StartAsync();
                 await WriteSampleRowsAsync(sheet);
                 await sheet.EndAsync();
                 await wb.EndAsync();
@@ -223,7 +220,6 @@ namespace ExcelReader.Fuzz
                 foreach (string name in new[] { "First", "Second" })
                 {
                     XlsxSheetWriter sheet = wb.AddSheet(name);
-                    await sheet.StartAsync();
                     await WriteSampleRowsAsync(sheet);
                     await sheet.EndAsync();
                 }
@@ -240,7 +236,6 @@ namespace ExcelReader.Fuzz
                 foreach (string name in new[] { "First", "Second" })
                 {
                     XlsbSheetWriter sheet = wb.AddSheet(name);
-                    await sheet.StartAsync();
                     await WriteSampleRowsAsync(sheet);
                     await sheet.EndAsync();
                 }
@@ -255,7 +250,6 @@ namespace ExcelReader.Fuzz
             await using (XlsxWorkbookWriter wb = XlsxWorkbookWriter.Create(ms, leaveOpen: true))
             {
                 XlsxSheetWriter sheet = wb.AddSheet("S");
-                await sheet.StartAsync();
                 for (int i = 0; i < 32; i++)
                 {
                     await using XlsxRowWriter row = await sheet.StartRowAsync();
@@ -274,7 +268,6 @@ namespace ExcelReader.Fuzz
             await using (XlsxWorkbookWriter wb = XlsxWorkbookWriter.Create(ms, leaveOpen: true))
             {
                 XlsxSheetWriter sheet = wb.AddSheet("S");
-                await sheet.StartAsync();
                 await using (XlsxRowWriter row = await sheet.StartRowAsync())
                 {
                     row.Write(value: (string?)null);
@@ -294,7 +287,6 @@ namespace ExcelReader.Fuzz
             await using (XlsxWorkbookWriter wb = XlsxWorkbookWriter.Create(ms, leaveOpen: true))
             {
                 XlsxSheetWriter sheet = wb.AddSheet("S");
-                await sheet.StartAsync();
                 await sheet.EndAsync();
                 await wb.EndAsync();
             }

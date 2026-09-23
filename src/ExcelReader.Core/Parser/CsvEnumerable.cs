@@ -1,10 +1,11 @@
 using System.Collections;
 using System.Diagnostics.CodeAnalysis;
 using ExcelReader.Core.Enums;
+using ExcelReader.Core.Parser.Internal;
 using ExcelReader.Core.Reader;
 using ExcelReader.Core.ValueObjects;
 
-namespace ExcelReader.Core.Parser.Internal
+namespace ExcelReader.Core.Parser
 {
     /// <summary>Lazily projects CSV rows into <typeparamref name="T"/> instances by binding each property to a fixed field index, for both synchronous and asynchronous enumeration.</summary>
     /// <typeparam name="T">The row model type to bind each CSV row to.</typeparam>
@@ -37,12 +38,11 @@ namespace ExcelReader.Core.Parser.Internal
             _ownsReader = ownsReader;
         }
 
-        internal CsvEnumerable(CsvReader reader, ExcelParserConfig config, TypeMapInfo<T> explicitInfo, CancellationToken ct = default)
+        internal CsvEnumerable(CsvReader reader, ExcelParserConfig config, TypeMapInfo<T> explicitInfo)
         {
             _reader = reader;
             _config = config;
             _info = explicitInfo;
-            _ct = ct;
         }
 
         /// <inheritdoc cref="IEnumerable{T}.GetEnumerator"/>

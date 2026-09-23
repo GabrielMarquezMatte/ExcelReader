@@ -82,25 +82,13 @@ namespace ExcelReader.Core.Writer
 
     /// <summary>
     /// Writes one sheet's rows to the workbook. Obtained from <see cref="IWorkbookWriter{TSheet}.AddSheet(string)"/>;
-    /// a caller starts the sheet, writes rows in order via <see cref="StartRowAsync(CancellationToken)"/>, then ends the sheet.
+    /// a caller optionally sets column styles and widths, writes rows in order via <see cref="StartRowAsync(CancellationToken)"/>,
+    /// then ends the sheet. The sheet's leading structure is written when the first row starts, or at
+    /// <see cref="EndAsync"/> for a sheet with no rows.
     /// </summary>
     /// <typeparam name="TRow">The concrete <see cref="IRowWriter"/> this sheet produces.</typeparam>
     public interface ISheetWriter<TRow> : IDisposable, IAsyncDisposable
     {
-        /// <summary>
-        /// Synchronous counterpart to <see cref="StartAsync"/>: writes the sheet's leading structure and
-        /// moves it into the started state, without the async/await machinery, for native/unmanaged
-        /// callers whose ABI is synchronous. Must be called exactly once, before <see cref="StartRow()"/>.
-        /// </summary>
-        void Start();
-
-        /// <summary>
-        /// Writes the sheet's leading structure and moves it into the started state. Must be called
-        /// exactly once, before <see cref="StartRowAsync(CancellationToken)"/>.
-        /// </summary>
-        /// <param name="ct">A token to cancel the operation.</param>
-        ValueTask StartAsync(CancellationToken ct = default);
-
         /// <summary>
         /// Synchronous counterpart to <see cref="StartRowAsync(CancellationToken)"/>: begins the next
         /// row, without the async/await machinery, for native/unmanaged callers whose ABI is synchronous.
@@ -138,22 +126,22 @@ namespace ExcelReader.Core.Writer
 
         /// <summary>
         /// Applies <paramref name="styleId"/> to every cell of column <paramref name="columnIndex"/>
-        /// that does not carry its own row style. Must be called before <see cref="StartAsync"/>.
+        /// that does not carry its own row style. Must be called before the first row is started.
         /// </summary>
         /// <param name="columnIndex">The 0-based column index.</param>
         /// <param name="styleId">The style to apply, from <see cref="IWorkbookWriter{TSheet}.AddStyle"/>.</param>
         /// <exception cref="ArgumentOutOfRangeException"><paramref name="columnIndex"/> is negative, or <paramref name="styleId"/> is negative or was never returned by <see cref="IWorkbookWriter{TSheet}.AddStyle"/>.</exception>
-        /// <exception cref="InvalidOperationException">The sheet has already been started.</exception>
+        /// <exception cref="InvalidOperationException">The first row has already been started.</exception>
         void SetColumnStyle(int columnIndex, int styleId);
 
         /// <summary>
         /// Sets the display width, in characters, of column <paramref name="columnIndex"/>. Must be
-        /// called before <see cref="StartAsync"/>.
+        /// called before the first row is started.
         /// </summary>
         /// <param name="columnIndex">The 0-based column index.</param>
         /// <param name="width">The column width, in characters.</param>
         /// <exception cref="ArgumentOutOfRangeException"><paramref name="columnIndex"/> or <paramref name="width"/> is negative.</exception>
-        /// <exception cref="InvalidOperationException">The sheet has already been started.</exception>
+        /// <exception cref="InvalidOperationException">The first row has already been started.</exception>
         void SetColumnWidth(int columnIndex, double width);
 
         /// <summary>

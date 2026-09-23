@@ -332,7 +332,7 @@ namespace ExcelReader.Tests
             using var reader = Excel.FromXls(ms);
             var rows = new List<PersonRow>();
 
-            await foreach (PersonRow row in ExcelParser.FromAttributes<PersonRow>().ParseAsync(reader, TestContext.Current.CancellationToken))
+            await foreach (PersonRow row in ExcelParser.FromAttributes<PersonRow>().Parse(reader).WithCancellation(TestContext.Current.CancellationToken))
             {
                 rows.Add(row);
             }
@@ -349,7 +349,7 @@ namespace ExcelReader.Tests
             await using var reader = await Excel.FromXlsAsync(ms, ct: TestContext.Current.CancellationToken);
 
             List<PersonRow> rows = [];
-            await foreach (PersonRow row in ExcelParser.FromAttributes<PersonRow>().ParseAsync(reader, TestContext.Current.CancellationToken))
+            await foreach (PersonRow row in ExcelParser.FromAttributes<PersonRow>().Parse(reader).WithCancellation(TestContext.Current.CancellationToken))
             {
                 rows.Add(row);
             }
@@ -366,7 +366,7 @@ namespace ExcelReader.Tests
             using var reader = Excel.FromXls(ms);
 
             IAsyncEnumerator<PersonRow> e = ExcelParser.FromAttributes<PersonRow>()
-                .ParseAsync(reader, TestContext.Current.CancellationToken)
+                .Parse(reader)
                 .GetAsyncEnumerator(TestContext.Current.CancellationToken);
 
             Exception? ex = await Record.ExceptionAsync(async () =>
@@ -376,14 +376,14 @@ namespace ExcelReader.Tests
         }
 
         [Fact]
-        public void CancelledAsyncEnumeratorThrows()
+        public async Task CancelledAsyncEnumeratorThrows()
         {
             using var ms = XlsWorkbookBuilder.Build(sheets: [("S1", [["A"]])]);
             using var reader = Excel.FromXls(ms);
             using var cts = new CancellationTokenSource();
             cts.Cancel();
 
-            Assert.Throws<OperationCanceledException>(() => reader.GetAsyncEnumerator(cts.Token));
+            await Assert.ThrowsAsync<OperationCanceledException>(async () => await reader.GetAsyncEnumeratorAsync(cts.Token));
         }
 
         [Fact]
@@ -426,7 +426,7 @@ namespace ExcelReader.Tests
 
                 await using (var reader = await Excel.FromXlsFileAsync(path, ct: TestContext.Current.CancellationToken))
                 {
-                    await using var e = reader.GetAsyncEnumerator(TestContext.Current.CancellationToken);
+                    await using var e = await reader.GetAsyncEnumeratorAsync(TestContext.Current.CancellationToken);
                     Assert.True(await e.MoveNextAsync());
                     Assert.Equal("A", e.Current[0].GetString());
                 }
@@ -645,7 +645,6 @@ namespace ExcelReader.Tests
             await using (XlsWorkbookWriter wb = XlsWorkbookWriter.Create(ms, leaveOpen: true))
             {
                 XlsSheetWriter sheet = wb.AddSheet("S1");
-                sheet.Start();
                 using (XlsRowWriter row = sheet.StartRow())
                 {
                     row.Write(longCompressed);

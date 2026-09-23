@@ -9,22 +9,6 @@ namespace ExcelReader.Core.Writer.Internal
             ObjectDisposedException.ThrowIf(state == WriterState.Ended, writer);
         }
 
-        internal static void RequireCreated(WriterState state, string typeName)
-        {
-            if (state != WriterState.Created)
-            {
-                throw new InvalidOperationException($"{typeName} has already been started.");
-            }
-        }
-
-        internal static void RequireStarted(WriterState state, string typeName, string action)
-        {
-            if (state != WriterState.Started)
-            {
-                throw new InvalidOperationException($"{typeName} must be started before {action}.");
-            }
-        }
-
         internal static void RequireNoActiveRowForStart(bool rowActive, string rowWriterTypeName)
         {
             if (rowActive)

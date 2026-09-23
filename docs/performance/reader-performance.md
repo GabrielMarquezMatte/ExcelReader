@@ -389,8 +389,8 @@ confirmed in the disassembly — is that `TryParse` is a static method on a valu
 specializes and inlines the `Row` work into the delegate, and the interface call then carries only a
 span and a double instead of the whole `Row`.
 
-The shipped overloads repeat this comparison directly: `CsvModelMap.FromAttributes` and
-`CsvModelMap.Generated` bind the header once and call one column parser per column into a
+The shipped overloads repeat this comparison directly: `ExcelParser.FromAttributes` and
+`ExcelParser.Generated` bind the header once and call one column parser per column into a
 `ref struct` model, the same shape the prototype used. A scaled-down 1BRC sample
 (`station;temperature`, 413 stations, one decimal temperature, seeded), 5,000,000 rows, one thread,
 interleaved, two runs, identical checksums:
@@ -399,8 +399,8 @@ interleaved, two runs, identical checksums:
 |---|---|---|
 | `CsvAggregation`, `Row` | 45.4 ns, 44.6 ns | 1.00x |
 | record, static `TryParse` | 45.5 ns, 45.2 ns | 1.00–1.01x |
-| reflection `CsvModelMap.FromAttributes` | 65.9 ns, 66.4 ns | 1.45–1.49x |
-| generated `CsvModelMap.Generated` | 63.3 ns, 62.9 ns | 1.39–1.41x |
+| reflection `ExcelParser.FromAttributes` | 65.9 ns, 66.4 ns | 1.45–1.49x |
+| generated `ExcelParser.Generated` | 63.3 ns, 62.9 ns | 1.39–1.41x |
 
 Both mapped paths cost more than the record and `CsvAggregation` shapes, and the generated map is
 consistently a little cheaper than the reflected one — the same ordering the prototype found. The
