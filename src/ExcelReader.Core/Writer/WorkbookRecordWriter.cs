@@ -1,4 +1,5 @@
 using System.Diagnostics.CodeAnalysis;
+using System.Globalization;
 using System.Linq.Expressions;
 using System.Reflection;
 using ExcelReader.Core.Parser;
@@ -159,6 +160,15 @@ namespace ExcelReader.Core.Writer
             internal static readonly Action<TRow, T> Write = Build();
             private static Expression ToStringExpression(Expression value, Type pt)
             {
+                Type? underlying = Nullable.GetUnderlyingType(pt);
+                Type core = underlying ?? pt;
+                if (typeof(IFormattable).IsAssignableFrom(core))
+                {
+                    string helper = underlying is not null ? nameof(InvariantText.FormatNullable)
+                        : core.IsValueType ? nameof(InvariantText.FormatValue)
+                        : nameof(InvariantText.FormatReference);
+                    return Expression.Call(typeof(InvariantText).GetMethod(helper, BindingFlags.NonPublic | BindingFlags.Static)!.MakeGenericMethod(core), value);
+                }
                 MethodInfo toString = typeof(object).GetMethod(nameof(ToString), Type.EmptyTypes)!;
                 if (pt.IsValueType && Nullable.GetUnderlyingType(pt) is null)
                 {
@@ -232,7 +242,7 @@ namespace ExcelReader.Core.Writer
         private static readonly HashSet<Type> Numeric =
         [
             typeof(byte), typeof(sbyte), typeof(short), typeof(ushort), typeof(int), typeof(uint),
-            typeof(long), typeof(ulong), typeof(float), typeof(double), typeof(decimal),
+            typeof(long), typeof(ulong), typeof(float), typeof(double), typeof(decimal), typeof(Half),
         ];
 
         private static readonly MethodInfoSet M = Resolve();
@@ -283,6 +293,31 @@ namespace ExcelReader.Core.Writer
             if (underlying is not null && Numeric.Contains(underlying)) { return M.GenericN.MakeGenericMethod(underlying); }
             asString = true;
             return M.Str;
+        }
+    }
+
+    /// <summary>
+    /// Formats text-fallback columns with the invariant culture, which is what <see cref="ExcelParserConfig.Culture"/>
+    /// defaults to, so a column written on any machine parses back.
+    /// </summary>
+    internal static class InvariantText
+    {
+        internal static string FormatValue<TValue>(TValue value)
+            where TValue : struct, IFormattable
+        {
+            return value.ToString(typeof(TValue) == typeof(DateTimeOffset) ? "O" : null, CultureInfo.InvariantCulture);
+        }
+
+        internal static string? FormatNullable<TValue>(TValue? value)
+            where TValue : struct, IFormattable
+        {
+            return value.HasValue ? FormatValue(value.GetValueOrDefault()) : null;
+        }
+
+        internal static string? FormatReference<TValue>(TValue? value)
+            where TValue : class, IFormattable
+        {
+            return value?.ToString(null, CultureInfo.InvariantCulture);
         }
     }
 }

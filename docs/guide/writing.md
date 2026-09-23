@@ -173,7 +173,7 @@ Column behavior mirrors the parser attributes:
 - **`[ExcelIgnore]`** — exclude a property from both writing and parsing (for computed/transient members).
 - **`[ExcelConverter(typeof(MyConverter))]`** — if the converter also implements `IExcelCellWriter<T>`, it controls how the value is written, so a custom type round-trips through the same converter it reads with.
 
-`DateTime` and `DateOnly` are written as Excel date serials; `TimeOnly` as a time-of-day fraction. Numeric properties become number cells; any other type is written as its `ToString()` text. (`CreateCsv` follows the CSV rules instead — see [Write CSV](csv.md#write-csv) — writing `DateTime`/`DateOnly` as ISO text and `TimeOnly` as a time-of-day fraction, all still round-tripping through `ExcelParser<T>`.)
+`DateTime` and `DateOnly` are written as Excel date serials; `TimeOnly` as a time-of-day fraction. Numeric properties (including `Half`) become number cells; any other type is written as text formatted with the invariant culture — `DateTimeOffset` as ISO 8601 (`"O"`), enums by name — so the file parses back the same whatever the writing machine's culture. `Int128`/`UInt128` stay text because a number cell is a double and would drop their low digits. (`CreateCsv` follows the CSV rules instead — see [Write CSV](csv.md#write-csv) — writing `DateTime`/`DateOnly` as ISO text and `TimeOnly` as a time-of-day fraction, all still round-tripping through `ExcelParser<T>`.)
 
 For a model marked `[ExcelSerializable]`, use `MappedRecordWriter.Create*` instead — same behavior, but driven by the source-generated map instead of reflection, so it stays Native AOT/trim-safe. See [Generate typed maps at compile time](parsing.md#generate-typed-maps-at-compile-time-native-aot--trimming).
 
