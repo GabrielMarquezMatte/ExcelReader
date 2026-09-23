@@ -32,6 +32,7 @@ namespace ExcelReader.Core.Reader
         internal const int EndWsView = 138;
         internal const int BeginSheetData = 145;
         internal const int EndSheetData = 146;
+        internal const int WsDim = 148;
         internal const int Pane = 151;
         internal const int WbProp = 153;
         internal const int BundleSh = 156;

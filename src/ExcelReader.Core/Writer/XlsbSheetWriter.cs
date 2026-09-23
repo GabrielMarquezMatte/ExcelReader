@@ -28,6 +28,14 @@ namespace ExcelReader.Core.Writer
         private Dictionary<int, int>? _columnStyles;
         private Dictionary<int, double>? _columnWidths;
         private int _activeRowStyle;
+        private int _dimPayloadPos = -1;
+        private int _usedRowFirst = -1;
+        private int _usedRowLast = -1;
+        private int _usedColFirst = int.MaxValue;
+        private int _usedColLast = -1;
+        private int _rowHeaderPos;
+        private int _rowColFirst;
+        private int _rowColLast;
 
         internal XlsbSheetWriter(
             XlsbWorkbookWriter owner,
@@ -88,6 +96,9 @@ namespace ExcelReader.Core.Writer
             }
             _state = WriterState.Started;
             WriteRecord(Brt.BeginSheet);
+            Biff12RecordWriter.WriteFixedRecord(_records, Brt.WsDim, DimLength, out Span<byte> dim);
+            dim.Clear();
+            _dimPayloadPos = _records.Length - DimLength;
             WriteWorksheetView();
             WriteRecord(Brt.BeginColInfos);
             WriteColInfos();
@@ -96,6 +107,8 @@ namespace ExcelReader.Core.Writer
         }
 
         private const double DefaultColumnWidth = 8.43;
+
+        private const int DimLength = 16;
 
         private const int ColInfoUserSet = 0x0002;
 
@@ -179,12 +192,12 @@ namespace ExcelReader.Core.Writer
             {
                 WriteCell(i, values[i]);
             }
-            _rowActive = false;
+            FinishRow();
         }
 
         internal void NotifyRowEnded()
         {
-            _rowActive = false;
+            FinishRow();
         }
 
         /// <summary>
@@ -202,6 +215,7 @@ namespace ExcelReader.Core.Writer
             WriteRecord(Brt.EndSheet);
             if (_stream is null)
             {
+                PatchDimension(final: true);
                 WriteBufferedSheet();
             }
             else
@@ -232,6 +246,7 @@ namespace ExcelReader.Core.Writer
             WriteRecord(Brt.EndSheet);
             if (_stream is null)
             {
+                PatchDimension(final: true);
                 await WriteBufferedSheetAsync(ct).ConfigureAwait(false);
             }
             else
@@ -278,7 +293,7 @@ namespace ExcelReader.Core.Writer
 
         private void MaybeFlush()
         {
-            if (_records.Length >= SpillThreshold)
+            if (!_rowActive && _records.Length >= SpillThreshold)
             {
                 FlushRecords();
             }
@@ -301,6 +316,7 @@ namespace ExcelReader.Core.Writer
             {
                 return;
             }
+            PatchDimension(final: false);
             EnsureStream();
             if (_stream is WriteOffloadStream offload)
             {
@@ -351,22 +367,103 @@ namespace ExcelReader.Core.Writer
             }
             _rowNumber++;
             _activeRowStyle = styleId;
-            WriteRowHeader(_rowNumber);
+            _rowColFirst = int.MaxValue;
+            _rowColLast = -1;
+            _rowHeaderPos = _records.Length;
+            WriteRowHeader(_rowNumber, spanCount: 1);
             _rowActive = true;
         }
 
-        private void WriteRowHeader(int rowNumber)
+        private const int RowHeaderFixedLength = 17;
+        private const int ColumnBlockShift = 10;
+
+        private void WriteRowHeader(int rowNumber, int spanCount)
         {
-            const int Length = (6 * 4) + 1;
-            Biff12RecordWriter.WriteFixedRecord(_records, Brt.RowHdr, Length, out Span<byte> p);
+            Biff12RecordWriter.WriteFixedRecord(_records, Brt.RowHdr, RowHeaderFixedLength + (spanCount * 8), out Span<byte> p);
+            p.Clear();
             BinaryPrimitives.WriteUInt32LittleEndian(p, (uint)rowNumber);
-            BinaryPrimitives.WriteUInt32LittleEndian(p.Slice(4, 4), 0);
-            BinaryPrimitives.WriteUInt32LittleEndian(p.Slice(8, 4), 0);
-            BinaryPrimitives.WriteUInt32LittleEndian(p.Slice(12, 4), 1);
-            BinaryPrimitives.WriteUInt32LittleEndian(p.Slice(16, 4), 0);
-            BinaryPrimitives.WriteUInt32LittleEndian(p.Slice(20, 4), 16383);
-            p[24] = 0;
+            BinaryPrimitives.WriteUInt32LittleEndian(p.Slice(13, 4), (uint)spanCount);
+        }
+
+        private void FinishRow()
+        {
+            _rowActive = false;
+            if (_rowColLast >= 0)
+            {
+                WriteRowSpans();
+                if (_usedRowFirst < 0)
+                {
+                    _usedRowFirst = _rowNumber;
+                }
+                _usedRowLast = _rowNumber;
+                _usedColFirst = Math.Min(_usedColFirst, _rowColFirst);
+                _usedColLast = Math.Max(_usedColLast, _rowColLast);
+            }
             MaybeFlush();
+        }
+
+        /// <summary>
+        /// Patches the open row's header with the columns it actually used, one span per 1024-column
+        /// block as Excel writes them. The rare multi-block row grows the header in place.
+        /// </summary>
+        private void WriteRowSpans()
+        {
+            int firstBlock = _rowColFirst >> ColumnBlockShift;
+            int spanCount = (_rowColLast >> ColumnBlockShift) - firstBlock + 1;
+            if (spanCount > 1)
+            {
+                int cellsStart = _rowHeaderPos + 2 + RowHeaderFixedLength + 8;
+                int cellsLength = _records.Length - cellsStart;
+                Span<byte> cells = cellsLength <= 1024 ? stackalloc byte[cellsLength] : new byte[cellsLength];
+                _records.Slice(cellsStart, cellsLength).CopyTo(cells);
+                _records.Truncate(_rowHeaderPos);
+                WriteRowHeader(_rowNumber, spanCount);
+                _records.Write(cells);
+            }
+            int idAndSizeLength = spanCount > 13 ? 3 : 2;
+            Span<byte> spans = _records.Slice(_rowHeaderPos + idAndSizeLength + RowHeaderFixedLength, spanCount * 8);
+            for (int i = 0; i < spanCount; i++)
+            {
+                int blockStart = (firstBlock + i) << ColumnBlockShift;
+                int colMic = Math.Max(_rowColFirst, blockStart);
+                int colLast = Math.Min(_rowColLast, blockStart + (1 << ColumnBlockShift) - 1);
+                BinaryPrimitives.WriteUInt32LittleEndian(spans.Slice(i * 8, 4), (uint)colMic);
+                BinaryPrimitives.WriteUInt32LittleEndian(spans.Slice((i * 8) + 4, 4), (uint)colLast);
+            }
+        }
+
+        private void TrackColumn(int columnIndex)
+        {
+            if (columnIndex < _rowColFirst)
+            {
+                _rowColFirst = columnIndex;
+            }
+            if (columnIndex > _rowColLast)
+            {
+                _rowColLast = columnIndex;
+            }
+        }
+
+        /// <summary>
+        /// Fills in BrtWsDim before the sheet header leaves the buffer. A sheet that never spills gets its
+        /// exact used range at End; one that spills gets the first used row and the columns seen so far,
+        /// with the last row left open at the sheet maximum.
+        /// </summary>
+        private void PatchDimension(bool final)
+        {
+            if (_dimPayloadPos < 0)
+            {
+                return;
+            }
+            // ponytail: a spilled sheet's column range is what the rows before the first 64 KB flush used;
+            bool any = _usedRowLast >= 0;
+            int rowLast = final ? Math.Max(_usedRowLast, 0) : ExcelLimits.MaxRows - 1;
+            Span<byte> dim = _records.Slice(_dimPayloadPos, DimLength);
+            BinaryPrimitives.WriteUInt32LittleEndian(dim, (uint)(any ? _usedRowFirst : 0));
+            BinaryPrimitives.WriteUInt32LittleEndian(dim.Slice(4, 4), (uint)rowLast);
+            BinaryPrimitives.WriteUInt32LittleEndian(dim.Slice(8, 4), (uint)(any ? _usedColFirst : 0));
+            BinaryPrimitives.WriteUInt32LittleEndian(dim.Slice(12, 4), (uint)(any ? _usedColLast : 0));
+            _dimPayloadPos = -1;
         }
         private void WriteBlobRecord(int id, ReadOnlySpan<byte> blob)
         {
@@ -441,6 +538,7 @@ namespace ExcelReader.Core.Writer
         private void WriteTextCell(int columnIndex, ReadOnlySpan<char> value, string? owned)
         {
             ExcelLimits.ThrowIfCellTextTooLong(value.Length, nameof(value));
+            TrackColumn(columnIndex);
             int style = EffectiveStyle(columnIndex);
             if (_owner.UseSharedStrings)
             {
@@ -463,6 +561,7 @@ namespace ExcelReader.Core.Writer
         internal void WriteBoolCell(int columnIndex, bool value)
         {
             ValidateColumn(columnIndex);
+            TrackColumn(columnIndex);
             const int Length = CellHeaderLength + 1;
             Biff12RecordWriter.WriteFixedRecord(_records, Brt.CellBool, Length, out Span<byte> p);
             Biff12RecordWriter.WriteCellHeader(p, columnIndex, EffectiveStyle(columnIndex));
@@ -485,6 +584,7 @@ namespace ExcelReader.Core.Writer
         {
             ValidateColumn(columnIndex);
             CellValueGuards.ThrowIfNonFinite(value, nameof(value));
+            TrackColumn(columnIndex);
             if (TryEncodeRkInt(value, out uint rk))
             {
                 const int RkLength = CellHeaderLength + 4;

@@ -89,5 +89,12 @@ namespace ExcelReader.Benchmarks
             using var reader = ExcelDocument.OpenDataReader(_workbook, new ExcelReadOptions { HasHeaderRow = false });
             return AccumulateDataReader(reader);
         }
+
+        [Benchmark]
+        public long OfficeIMOXlsb()
+        {
+            using var reader = ExcelDocument.OpenDataReader(_xlsbWorkbook, new ExcelReadOptions { HasHeaderRow = false });
+            return AccumulateDataReader(reader);
+        }
     }
 }

@@ -25,7 +25,7 @@ Compares ExcelReader against established XLSX libraries on the same generated wo
 
 ExcelReader is ~3.3x faster than Sylvan for raw XLSX reads, allocating ~174x less, and ~3.6x faster for typed parsing. For XLSX writing, ExcelReader is ~1.3x faster than SpreadCheetah while allocating ~3.9x less memory.
 
-The suite also benchmarks OfficeIMO.Excel (`ReadBenchmark`, `ParseBenchmark`, `WriteBenchmark` and `XlsReadBenchmark`). Its numbers join these tables at the next run on the reference machine. OfficeIMO's typed parsing is hand-mapped from its `OpenDataReader`, because `RowsAs<T>` needs an `r` attribute on every row and cell, which the spec makes optional and ExcelReader's writer omits.
+The suite also benchmarks OfficeIMO.Excel (XLSX and XLSB reads in `ReadBenchmark`, plus `ParseBenchmark`, `WriteBenchmark` and `XlsReadBenchmark`). Its numbers join these tables at the next run on the reference machine. OfficeIMO's typed parsing is hand-mapped from its `OpenDataReader`, because `RowsAs<T>` needs an `r` attribute on every row and cell, which the spec makes optional and ExcelReader's writer omits.
 
 Reading a shared-strings XLSX workbook with typed parsing is ~22% faster than the inline-string sheet above (12.347 ms vs. 15.741 ms) and allocates ~41% less (2.30 MB vs. 3.87 MB) — each distinct string decodes once into the shared-string cache instead of once per cell occurrence.
 

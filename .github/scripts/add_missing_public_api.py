@@ -67,7 +67,6 @@ def main():
         print("No src/*/PublicAPI/PublicAPI.Unshipped.txt files found — nothing to track.")
         return 1
 
-    # --no-incremental: an up-to-date project skips compilation and so reports nothing.
     result = subprocess.run(
         [
             "dotnet", "build", "ExcelReader.slnx", "--configuration", "Release", "--nologo",

@@ -402,7 +402,6 @@ namespace ExcelReader.Generator
             {
                 return WriteKind.Direct;
             }
-            // Enums keep ToString(): their IFormattable overload ignores the provider and is obsolete.
             if (underlying.TypeKind != TypeKind.Enum && ImplementsFormattable(underlying))
             {
                 return WriteKind.InvariantText;
