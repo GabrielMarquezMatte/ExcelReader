@@ -198,7 +198,7 @@ Text arrives through `IRowWriter.WriteUtf8`, which the XLSX and CSV writers copy
 
 ### Ref struct typed parsing (zero-copy)
 
-A `ref struct` model (see [Parse into a ref struct](../guide/parsing.md#parse-into-a-ref-struct-zero-copy)) extends `ExcelParser<T>`'s reflection/attribute-driven column mapping to `ref struct` targets, binding a `ReadOnlySpan<byte>` property directly to the cell's raw bytes instead of allocating a `string`. Same generated XLSX workbook, same 50,000 rows, same four columns — only the target type and binding strategy change:
+A `ref struct` model (see [Parse into a ref struct](../guide/parsing.md#parse-into-a-ref-struct-zero-copy)) extends `ExcelParser.FromAttributes<T>`'s reflection/attribute-driven column mapping to `ref struct` targets, binding a `ReadOnlySpan<byte>` property directly to the cell's raw bytes instead of allocating a `string`. Same generated XLSX workbook, same 50,000 rows, same four columns — only the target type and binding strategy change:
 
 | Target | Mean | Allocated |
 |---|---:|---:|
@@ -206,11 +206,11 @@ A `ref struct` model (see [Parse into a ref struct](../guide/parsing.md#parse-in
 | `struct` (`ExcelParser<T>`) | 14.55 ms | 1.58 MB |
 | `ref struct` + span binding (`ExcelParser<T>`) | 14.18 ms | 11.63 KB |
 
-Parsing into a `ref struct` with a `ReadOnlySpan<byte>` text column removes essentially all per-row allocation — ~99.7% less than the `class` baseline — and is ~10% faster, since there's no per-row model allocation and no per-row `string` allocation for the text column. It is not AOT/trim-safe (reflection-based, same tradeoff as `ExcelParser<T>`). It can be consumed with `foreach` or `await foreach` but not through `IEnumerable<T>`/`IAsyncEnumerable<T>`/LINQ — a `ref struct` element can't be boxed through those interfaces.
+Parsing into a `ref struct` with a `ReadOnlySpan<byte>` text column removes essentially all per-row allocation — ~99.7% less than the `class` baseline — and is ~10% faster, since there's no per-row model allocation and no per-row `string` allocation for the text column. It is not AOT/trim-safe (reflection-based, same tradeoff as `ExcelParser.FromAttributes<T>`). It can be consumed with `foreach` or `await foreach` but not through `IEnumerable<T>`/`IAsyncEnumerable<T>`/LINQ — a `ref struct` element can't be boxed through those interfaces.
 
 ### Cold start
 
-First use of `ExcelParser<T>`/`RecordWriter` in a process pays a one-time reflection + `Expression.Compile` cost (16 launches, cold JIT, 200 rows):
+First use of `ExcelParser.FromAttributes<T>`/`RecordWriter` in a process pays a one-time reflection + `Expression.Compile` cost (16 launches, cold JIT, 200 rows):
 
 | Scenario | Mean | Allocated |
 |---|---:|---:|
@@ -219,15 +219,15 @@ First use of `ExcelParser<T>`/`RecordWriter` in a process pays a one-time reflec
 
 This cost is paid once per type per process and cached thereafter — irrelevant for long-running services, worth knowing for CLI tools or serverless cold starts.
 
-`ExcelFluentParser<T>`'s plain constructor has no reflection at all — `configure` only allocates delegates and a `PropertyMap<T>[]` — so it skips this cost. `WithAttributeFallback` still reflects for its attribute-driven half, so it pays close to the same cost as `ExcelParser<T>`:
+`ExcelParser.Build<T>` has no reflection at all — `configure` only allocates delegates and a `PropertyMap<T>[]` — so it skips this cost. `BuildWithAttributeFallback` still reflects for its attribute-driven half, so it pays close to the same cost as `FromAttributes`:
 
 | Scenario | Mean | Allocated |
 |---|---:|---:|
-| First typed parse (`ExcelParser<T>`) | 34.88 ms | 28.38 KB |
-| First fluent parse (`ExcelFluentParser<T>`, plain) | 28.73 ms | 31.18 KB |
-| First fluent parse (`WithAttributeFallback`) | 37.09 ms | 33.30 KB |
+| First typed parse (`ExcelParser.FromAttributes<T>`) | 34.88 ms | 28.38 KB |
+| First fluent parse (`ExcelParser.Build<T>`) | 28.73 ms | 31.18 KB |
+| First fluent parse (`BuildWithAttributeFallback`) | 37.09 ms | 33.30 KB |
 
-The plain fluent constructor is ~18% faster than the reflection-based parser here; `WithAttributeFallback` is slightly slower than reflection (~6%), since it runs the same `TypeMapper<T>.GetInfo()` path plus the fluent build on top.
+`Build` is ~18% faster than the reflection-based parser here; `BuildWithAttributeFallback` is slightly slower than reflection (~6%), since it runs the same `TypeMapper<T>.GetInfo()` path plus the fluent build on top.
 
 Run the benchmarks locally:
 

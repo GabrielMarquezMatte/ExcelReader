@@ -26,9 +26,8 @@ namespace ExcelReader.Benchmarks
         private static async Task<byte[]> BuildTypedLowLevelAsync(List<Record> records)
         {
             await using var ms = new MemoryStream();
-            await using (XlsxWorkbookWriter wb = await XlsxWorkbookWriter.CreateAsync(ms, leaveOpen: true))
+            await using (XlsxWorkbookWriter wb = XlsxWorkbookWriter.Create(ms, leaveOpen: true))
             {
-                await wb.StartAsync();
                 XlsxSheetWriter sheet = wb.AddSheet("S1");
                 await sheet.StartAsync();
                 await using (XlsxRowWriter header = await sheet.StartRowAsync())
@@ -58,7 +57,7 @@ namespace ExcelReader.Benchmarks
             using var ms = new MemoryStream(_workbook, writable: false);
             using var reader = Excel.FromXlsx(ms);
             long acc = 0;
-            foreach (Record rec in new ExcelParser<Record>().Parse(reader))
+            foreach (Record rec in ExcelParser.FromAttributes<Record>().Parse(reader))
             {
                 acc += rec.Id;
             }
@@ -69,7 +68,7 @@ namespace ExcelReader.Benchmarks
         public async Task<long> RecordWriteFirstUse()
         {
             await using var ms = new MemoryStream(64 * 1024);
-            await using (var writer = await RecordWriter.CreateXlsxAsync(ms, leaveOpen: true))
+            await using (var writer = RecordWriter.CreateXlsx(ms, leaveOpen: true))
             {
                 await writer.WriteSheetAsync("S1", _records);
             }
@@ -81,7 +80,7 @@ namespace ExcelReader.Benchmarks
         {
             using var ms = new MemoryStream(_workbook, writable: false);
             using var reader = Excel.FromXlsx(ms);
-            var parser = new ExcelFluentParser<Record>(static builder => builder
+            var parser = ExcelParser.Build<Record>(static builder => builder
                 .Factory(static () => new Record())
                 .Property(["Name"], ExcelCellReaders.String, static (ref r, v) => r.Name = v)
                 .Property(["Id"], ExcelCellReaders.Parsable, static (ref Record r, int v) => r.Id = v)
@@ -100,7 +99,7 @@ namespace ExcelReader.Benchmarks
         {
             using var ms = new MemoryStream(_workbook, writable: false);
             using var reader = Excel.FromXlsx(ms);
-            ExcelFluentParser<Record> parser = ExcelFluentParser<Record>.WithAttributeFallback(static builder => builder
+            ExcelParser<Record> parser = ExcelParser.BuildWithAttributeFallback<Record>(static builder => builder
                 .Property(["Id"], ExcelCellReaders.Parsable, static (ref Record r, int v) => r.Id = v));
             long acc = 0;
             foreach (Record rec in parser.Parse(reader))

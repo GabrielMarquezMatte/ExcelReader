@@ -938,7 +938,7 @@ namespace ExcelReader.Core.Reader
         /// This is a guess over a bounded sample, not a guarantee about the whole sheet — a column
         /// whose first <paramref name="sampleSize"/> rows are all integers is reported as
         /// <see cref="ExcelColumnType.Int64Column"/> even if row 10,000 holds text. Verify it fits
-        /// before trusting it, and feed the result into <see cref="Parser.ExcelFluentParser{T}"/> to
+        /// before trusting it, and feed the result into <see cref="Parser.ExcelParser.Build{T}"/> to
         /// build a real map.
         /// </remarks>
         /// <exception cref="ArgumentNullException"><paramref name="reader"/> is <see langword="null"/>.</exception>

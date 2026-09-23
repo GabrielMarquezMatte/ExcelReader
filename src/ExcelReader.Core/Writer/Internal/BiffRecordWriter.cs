@@ -182,7 +182,6 @@ namespace ExcelReader.Core.Writer.Internal
         {
             int len = buffer.BeginRecord(BiffRecord.BoundSheet);
             buffer.WriteI32(sheetOffset);
-            // grbit: hsState in the low byte, dt (0 = worksheet) in the high one.
             buffer.WriteU16((ushort)visibility);
             BiffStringEncoder.WriteShort(buffer, name);
             buffer.EndRecord(len);

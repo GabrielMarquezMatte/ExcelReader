@@ -33,12 +33,12 @@ namespace ExcelReader.Benchmarks
 
         public static Task<byte[]> BuildAsync(int rows)
         {
-            return BuildAsync<XlsxWorkbookWriter, XlsxSheetWriter, XlsxRowWriter>(rows, static ms => XlsxWorkbookWriter.CreateAsync(ms, leaveOpen: true));
+            return BuildAsync<XlsxWorkbookWriter, XlsxSheetWriter, XlsxRowWriter>(rows, static ms => XlsxWorkbookWriter.Create(ms, leaveOpen: true));
         }
 
         public static Task<byte[]> BuildXlsbAsync(int rows)
         {
-            return BuildAsync<XlsbWorkbookWriter, XlsbSheetWriter, XlsbRowWriter>(rows, static ms => XlsbWorkbookWriter.CreateAsync(ms, leaveOpen: true));
+            return BuildAsync<XlsbWorkbookWriter, XlsbSheetWriter, XlsbRowWriter>(rows, static ms => XlsbWorkbookWriter.Create(ms, leaveOpen: true));
         }
 
         public static List<Record> Records(int rows)
@@ -60,7 +60,7 @@ namespace ExcelReader.Benchmarks
         public static async Task<byte[]> BuildTypedAsync(int rows)
         {
             await using var ms = new MemoryStream();
-            await using (var writer = await RecordWriter.CreateXlsxAsync(ms, leaveOpen: true))
+            await using (var writer = RecordWriter.CreateXlsx(ms, leaveOpen: true))
             {
                 await writer.WriteSheetAsync("S1", Records(rows));
             }
@@ -70,7 +70,7 @@ namespace ExcelReader.Benchmarks
         public static async Task<byte[]> BuildTypedSharedStringsAsync(int rows)
         {
             await using var ms = new MemoryStream();
-            await using (var writer = await RecordWriter.CreateXlsxAsync(ms, leaveOpen: true, useSharedStrings: true))
+            await using (var writer = RecordWriter.CreateXlsx(ms, leaveOpen: true, options: new XlsxWriterOptions { UseSharedStrings = true }))
             {
                 await writer.WriteSheetAsync("S1", Records(rows));
             }
@@ -80,7 +80,7 @@ namespace ExcelReader.Benchmarks
         public static async Task<byte[]> BuildTypedXlsbAsync(int rows)
         {
             await using var ms = new MemoryStream();
-            await using (var writer = await RecordWriter.CreateXlsbAsync(ms, leaveOpen: true))
+            await using (var writer = RecordWriter.CreateXlsb(ms, leaveOpen: true))
             {
                 await writer.WriteSheetAsync("S1", Records(rows));
             }
@@ -103,15 +103,14 @@ namespace ExcelReader.Benchmarks
 
         private static async Task<byte[]> BuildAsync<TWorkbook, TSheet, TRow>(
             int rows,
-            Func<MemoryStream, ValueTask<TWorkbook>> create)
+            Func<MemoryStream, TWorkbook> create)
             where TWorkbook : IWorkbookWriter<TSheet>
             where TSheet : ISheetWriter<TRow>
             where TRow : IRowWriter
         {
             await using var ms = new MemoryStream();
-            await using (TWorkbook wb = await create(ms))
+            await using (TWorkbook wb = create(ms))
             {
-                await wb.StartAsync();
                 TSheet sheet = wb.AddSheet("S1");
                 await sheet.StartAsync();
                 for (int r = 1; r <= rows; r++)

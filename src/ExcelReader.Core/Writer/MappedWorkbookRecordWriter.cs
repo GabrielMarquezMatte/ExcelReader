@@ -1,5 +1,4 @@
 using System.Diagnostics.CodeAnalysis;
-using System.IO.Compression;
 
 namespace ExcelReader.Core.Writer
 {
@@ -22,10 +21,10 @@ namespace ExcelReader.Core.Writer
     {
 
         /// <summary>
-        /// Wraps an already-created, already-started workbook writer. Ownership of <paramref name="workbook"/>
+        /// Wraps an already-created workbook writer. Ownership of <paramref name="workbook"/>
         /// transfers to this instance, which disposes it when this instance is disposed.
         /// </summary>
-        /// <param name="workbook">The started workbook writer to wrap.</param>
+        /// <param name="workbook">The workbook writer to wrap.</param>
         public MappedWorkbookRecordWriter(IWorkbookWriter<TSheet> workbook)
             : base(workbook)
         {
@@ -87,77 +86,57 @@ namespace ExcelReader.Core.Writer
     }
 
     /// <summary>
-    /// Format-specific factories that create the underlying low-level workbook writer, start it, and wrap
-    /// it in a <see cref="MappedWorkbookRecordWriter{TSheet,TRow}"/> — the AOT-clean counterpart to
+    /// Format-specific factories that create the underlying low-level workbook writer and wrap it in a
+    /// <see cref="MappedWorkbookRecordWriter{TSheet,TRow}"/> — the AOT-clean counterpart to
     /// <see cref="RecordWriter"/>'s factories.
     /// </summary>
     public static class MappedRecordWriter
     {
-        /// <summary>Creates and starts a record writer that produces an XLSX workbook.</summary>
+        /// <summary>Creates a record writer that produces an XLSX workbook.</summary>
         /// <param name="stream">The destination stream; must support writing.</param>
         /// <param name="leaveOpen">If <see langword="true"/>, <paramref name="stream"/> is left open when the returned writer is disposed.</param>
-        /// <param name="compression">The ZIP compression level used for the XLSX package's entries.</param>
-        /// <param name="useSharedStrings">If <see langword="true"/>, text cells are deduplicated into the shared-strings table instead of written inline.</param>
-        /// <param name="prefetchWrite">If <see langword="true"/>, each sheet's deflate runs on a background thread instead of the calling thread (see <see cref="XlsxWorkbookWriter.CreateAsync"/>).</param>
-        /// <param name="ct">A token to cancel the operation.</param>
-        /// <returns>A started record writer ready to accept sheets.</returns>
-        public static async ValueTask<MappedWorkbookRecordWriter<XlsxSheetWriter, XlsxRowWriter>> CreateMappedXlsxAsync(
-            Stream stream, bool leaveOpen = false, CompressionLevel compression = CompressionLevel.Fastest,
-            bool useSharedStrings = false, bool prefetchWrite = false, CancellationToken ct = default)
+        /// <param name="options">Compression, shared-string and background-deflate settings. Defaults to <see cref="XlsxWriterOptions.Default"/>.</param>
+        /// <returns>A record writer ready to accept sheets.</returns>
+        public static MappedWorkbookRecordWriter<XlsxSheetWriter, XlsxRowWriter> CreateXlsx(
+            Stream stream, bool leaveOpen = false, XlsxWriterOptions? options = null)
         {
-            var workbook = await XlsxWorkbookWriter.CreateAsync(stream, leaveOpen, compression, useSharedStrings, prefetchWrite, ct).ConfigureAwait(false);
-            await workbook.StartAsync(ct).ConfigureAwait(false);
-            return new MappedWorkbookRecordWriter<XlsxSheetWriter, XlsxRowWriter>(workbook);
+            return new MappedWorkbookRecordWriter<XlsxSheetWriter, XlsxRowWriter>(XlsxWorkbookWriter.Create(stream, leaveOpen, options));
         }
 
-        /// <summary>Creates and starts a record writer that produces an XLSB workbook.</summary>
+        /// <summary>Creates a record writer that produces an XLSB workbook.</summary>
         /// <param name="stream">The destination stream; must support writing.</param>
         /// <param name="leaveOpen">If <see langword="true"/>, <paramref name="stream"/> is left open when the returned writer is disposed.</param>
-        /// <param name="date1904">If <see langword="true"/>, dates are serialized using the 1904 date system instead of the default 1900 system.</param>
-        /// <param name="compression">The ZIP compression level used for the XLSB package's entries.</param>
-        /// <param name="useSharedStrings">If <see langword="true"/>, text cells are deduplicated into the shared-strings table instead of written inline.</param>
-        /// <param name="prefetchWrite">If <see langword="true"/>, each sheet's deflate runs on a background thread instead of the calling thread (see <see cref="XlsbWorkbookWriter.CreateAsync"/>).</param>
-        /// <param name="ct">A token to cancel the operation.</param>
-        /// <returns>A started record writer ready to accept sheets.</returns>
-        public static async ValueTask<MappedWorkbookRecordWriter<XlsbSheetWriter, XlsbRowWriter>> CreateMappedXlsbAsync(
-            Stream stream, bool leaveOpen = false, bool date1904 = false,
-            CompressionLevel compression = CompressionLevel.Fastest, bool useSharedStrings = false,
-            bool prefetchWrite = false, CancellationToken ct = default)
+        /// <param name="options">Date system, compression, shared-string and background-deflate settings. Defaults to <see cref="XlsbWriterOptions.Default"/>.</param>
+        /// <returns>A record writer ready to accept sheets.</returns>
+        public static MappedWorkbookRecordWriter<XlsbSheetWriter, XlsbRowWriter> CreateXlsb(
+            Stream stream, bool leaveOpen = false, XlsbWriterOptions? options = null)
         {
-            var workbook = await XlsbWorkbookWriter.CreateAsync(stream, leaveOpen, date1904, compression, useSharedStrings, prefetchWrite, ct).ConfigureAwait(false);
-            await workbook.StartAsync(ct).ConfigureAwait(false);
-            return new MappedWorkbookRecordWriter<XlsbSheetWriter, XlsbRowWriter>(workbook);
+            return new MappedWorkbookRecordWriter<XlsbSheetWriter, XlsbRowWriter>(XlsbWorkbookWriter.Create(stream, leaveOpen, options));
         }
 
         /// <summary>
-        /// Creates and starts a record writer that produces a CSV file. Supports only a single sheet,
-        /// since a CSV file is inherently one sheet. The returned writer is still <see cref="IAsyncDisposable"/>.
+        /// Creates a record writer that produces a CSV file. Supports only a single sheet, since a CSV
+        /// file is inherently one sheet.
         /// </summary>
         /// <param name="stream">The destination stream; must support writing.</param>
         /// <param name="leaveOpen">If <see langword="true"/>, <paramref name="stream"/> is left open when the returned writer is disposed.</param>
         /// <param name="options">The delimiter/quote character to use; defaults to <see cref="CsvWriterOptions.Default"/> if <see langword="null"/>.</param>
-        /// <param name="ct">A token to cancel the operation.</param>
-        /// <returns>A started record writer ready to accept its single sheet.</returns>
-        public static async ValueTask<MappedWorkbookRecordWriter<CsvSheetWriter, CsvRowWriter>> CreateMappedCsvAsync(
-            Stream stream, bool leaveOpen = false, CsvWriterOptions? options = null, CancellationToken ct = default)
+        /// <returns>A record writer ready to accept its single sheet.</returns>
+        public static MappedWorkbookRecordWriter<CsvSheetWriter, CsvRowWriter> CreateCsv(
+            Stream stream, bool leaveOpen = false, CsvWriterOptions? options = null)
         {
-            var workbook = CsvWorkbookWriter.Create(stream, leaveOpen, options);
-            await workbook.StartAsync(ct).ConfigureAwait(false);
-            return new MappedWorkbookRecordWriter<CsvSheetWriter, CsvRowWriter>(workbook);
+            return new MappedWorkbookRecordWriter<CsvSheetWriter, CsvRowWriter>(CsvWorkbookWriter.Create(stream, leaveOpen, options));
         }
 
-        /// <summary>Creates and starts a record writer that produces a legacy XLS (BIFF8) workbook.</summary>
+        /// <summary>Creates a record writer that produces a legacy XLS (BIFF8) workbook.</summary>
         /// <param name="stream">The destination stream; must support writing.</param>
         /// <param name="leaveOpen">If <see langword="true"/>, <paramref name="stream"/> is left open when the returned writer is disposed.</param>
         /// <param name="date1904">If <see langword="true"/>, dates are serialized using the 1904 date system instead of the default 1900 system.</param>
-        /// <param name="ct">A token to cancel the operation.</param>
-        /// <returns>A started record writer ready to accept sheets.</returns>
-        public static async ValueTask<MappedWorkbookRecordWriter<XlsSheetWriter, XlsRowWriter>> CreateMappedXlsAsync(
-            Stream stream, bool leaveOpen = false, bool date1904 = false, CancellationToken ct = default)
+        /// <returns>A record writer ready to accept sheets.</returns>
+        public static MappedWorkbookRecordWriter<XlsSheetWriter, XlsRowWriter> CreateXls(
+            Stream stream, bool leaveOpen = false, bool date1904 = false)
         {
-            var workbook = XlsWorkbookWriter.Create(stream, leaveOpen, date1904);
-            await workbook.StartAsync(ct).ConfigureAwait(false);
-            return new MappedWorkbookRecordWriter<XlsSheetWriter, XlsRowWriter>(workbook);
+            return new MappedWorkbookRecordWriter<XlsSheetWriter, XlsRowWriter>(XlsWorkbookWriter.Create(stream, leaveOpen, date1904));
         }
     }
 }

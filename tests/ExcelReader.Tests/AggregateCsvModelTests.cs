@@ -74,7 +74,7 @@ namespace ExcelReader.Tests
         {
             using CsvReader reader = Excel.FromCsv(csv);
             var rows = new List<string>();
-            foreach (Person person in new ExcelParser<Person>(new ExcelParserConfig { HeaderRow = headerRow }).Parse(reader))
+            foreach (Person person in ExcelParser.FromAttributes<Person>(new ExcelParserConfig { HeaderRow = headerRow }).Parse(reader))
             {
                 rows.Add(Render(person));
             }
@@ -290,9 +290,8 @@ namespace ExcelReader.Tests
         {
             CancellationToken ct = TestContext.Current.CancellationToken;
             await using var stream = new MemoryStream();
-            await using (XlsxWorkbookWriter wb = await XlsxWorkbookWriter.CreateAsync(stream, leaveOpen: true, ct: ct))
+            await using (XlsxWorkbookWriter wb = XlsxWorkbookWriter.Create(stream, leaveOpen: true))
             {
-                await wb.StartAsync(ct);
                 XlsxSheetWriter sheet = wb.AddSheet("S1");
                 await sheet.StartAsync(ct);
                 var builder = new ExcelRecordMapBuilder<Person, XlsxRowWriter>();
@@ -327,7 +326,7 @@ namespace ExcelReader.Tests
         private static List<string> ReadPeople(XlsxReader reader)
         {
             var rows = new List<string>();
-            foreach (Person person in new ExcelParser<Person>().Parse(reader))
+            foreach (Person person in ExcelParser.FromAttributes<Person>().Parse(reader))
             {
                 rows.Add(Render(person));
             }

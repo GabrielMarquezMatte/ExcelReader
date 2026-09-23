@@ -67,7 +67,7 @@ namespace ExcelReader.Tests
         {
             await using var ms = await TypedWorkbook.BuildAsync(["Name"], ["Alice"]);
             await using var reader = await Excel.FromXlsxAsync(ms, ct: TestContext.Current.CancellationToken);
-            var result = new ExcelParser<PersonRow>().Parse(reader).ToList();
+            var result = ExcelParser.FromAttributes<PersonRow>().Parse(reader).ToList();
             Assert.Single(result);
             Assert.Equal("Alice", result[0].Name);
         }
@@ -77,7 +77,7 @@ namespace ExcelReader.Tests
         {
             await using var ms = await TypedWorkbook.BuildAsync(["Age"], [42]);
             await using var reader = await Excel.FromXlsxAsync(ms, ct: TestContext.Current.CancellationToken);
-            var result = new ExcelParser<PersonRow>().Parse(reader).ToList();
+            var result = ExcelParser.FromAttributes<PersonRow>().Parse(reader).ToList();
             Assert.Single(result);
             Assert.Equal(42, result[0].Age);
         }
@@ -87,7 +87,7 @@ namespace ExcelReader.Tests
         {
             await using var ms = await TypedWorkbook.BuildAsync(["Score"], [95.5]);
             await using var reader = await Excel.FromXlsxAsync(ms, ct: TestContext.Current.CancellationToken);
-            var result = new ExcelParser<PersonRow>().Parse(reader).ToList();
+            var result = ExcelParser.FromAttributes<PersonRow>().Parse(reader).ToList();
             Assert.Single(result);
             Assert.Equal(95.5, result[0].Score);
         }
@@ -97,7 +97,7 @@ namespace ExcelReader.Tests
         {
             await using var ms = await TypedWorkbook.BuildAsync(["Balance"], [12345.67m]);
             await using var reader = await Excel.FromXlsxAsync(ms, ct: TestContext.Current.CancellationToken);
-            var result = new ExcelParser<PersonRow>().Parse(reader).ToList();
+            var result = ExcelParser.FromAttributes<PersonRow>().Parse(reader).ToList();
             Assert.Single(result);
             Assert.Equal(12345.67m, result[0].Balance);
         }
@@ -107,7 +107,7 @@ namespace ExcelReader.Tests
         {
             await using var ms = await TypedWorkbook.BuildAsync(["Active"], [true]);
             await using var reader = await Excel.FromXlsxAsync(ms, ct: TestContext.Current.CancellationToken);
-            var result = new ExcelParser<PersonRow>().Parse(reader).ToList();
+            var result = ExcelParser.FromAttributes<PersonRow>().Parse(reader).ToList();
             Assert.Single(result);
             Assert.True(result[0].Active);
         }
@@ -117,7 +117,7 @@ namespace ExcelReader.Tests
         {
             await using var ms = await TypedWorkbook.BuildAsync(["Active"], [false]);
             await using var reader = await Excel.FromXlsxAsync(ms, ct: TestContext.Current.CancellationToken);
-            var result = new ExcelParser<PersonRow>().Parse(reader).ToList();
+            var result = ExcelParser.FromAttributes<PersonRow>().Parse(reader).ToList();
             Assert.Single(result);
             Assert.False(result[0].Active);
         }
@@ -129,7 +129,7 @@ namespace ExcelReader.Tests
                 ["Name", "Age", "Score", "Active", "Balance"],
                 ["Bob", 35, 88.25, true, 500.00m]);
             await using var reader = await Excel.FromXlsxAsync(ms, ct: TestContext.Current.CancellationToken);
-            var result = new ExcelParser<PersonRow>().Parse(reader).ToList();
+            var result = ExcelParser.FromAttributes<PersonRow>().Parse(reader).ToList();
             Assert.Single(result);
             Assert.Equal("Bob", result[0].Name);
             Assert.Equal(35, result[0].Age);
@@ -146,7 +146,7 @@ namespace ExcelReader.Tests
                 ["First Name", "Last Name", "Count"],
                 ["John", "Doe", 5]);
             await using var reader = await Excel.FromXlsxAsync(ms, ct: TestContext.Current.CancellationToken);
-            var result = new ExcelParser<AttributeRow>().Parse(reader).ToList();
+            var result = ExcelParser.FromAttributes<AttributeRow>().Parse(reader).ToList();
             Assert.Single(result);
             Assert.Equal("John", result[0].FirstName);
             Assert.Equal("Doe", result[0].LastName);
@@ -158,7 +158,7 @@ namespace ExcelReader.Tests
         {
             await using var ms = await TypedWorkbook.BuildAsync(["FirstName"], ["Jane"]);
             await using var reader = await Excel.FromXlsxAsync(ms, ct: TestContext.Current.CancellationToken);
-            var result = new ExcelParser<AttributeRow>().Parse(reader).ToList();
+            var result = ExcelParser.FromAttributes<AttributeRow>().Parse(reader).ToList();
             Assert.Single(result);
             Assert.Null(result[0].FirstName);
         }
@@ -168,7 +168,7 @@ namespace ExcelReader.Tests
         {
             await using var ms = await TypedWorkbook.BuildAsync(["Count"], [7]);
             await using var reader = await Excel.FromXlsxAsync(ms, ct: TestContext.Current.CancellationToken);
-            var result = new ExcelParser<AttributeRow>().Parse(reader).ToList();
+            var result = ExcelParser.FromAttributes<AttributeRow>().Parse(reader).ToList();
             Assert.Single(result);
             Assert.Equal(7, result[0].Count);
         }
@@ -178,7 +178,7 @@ namespace ExcelReader.Tests
         {
             await using var ms = await TypedWorkbook.BuildAsync(["Legacy Name"], ["Jane"]);
             await using var reader = await Excel.FromXlsxAsync(ms, ct: TestContext.Current.CancellationToken);
-            var result = new ExcelParser<MultiAttributeRow>().Parse(reader).ToList();
+            var result = ExcelParser.FromAttributes<MultiAttributeRow>().Parse(reader).ToList();
             Assert.Single(result);
             Assert.Equal("Jane", result[0].Name);
         }
@@ -190,7 +190,7 @@ namespace ExcelReader.Tests
                 ["Legacy Name", "Preferred Name"],
                 ["Old", "New"]);
             await using var reader = await Excel.FromXlsxAsync(ms, ct: TestContext.Current.CancellationToken);
-            var result = new ExcelParser<MultiAttributeRow>().Parse(reader).ToList();
+            var result = ExcelParser.FromAttributes<MultiAttributeRow>().Parse(reader).ToList();
             Assert.Single(result);
             Assert.Equal("New", result[0].Name);
         }
@@ -202,7 +202,7 @@ namespace ExcelReader.Tests
                 ["Preferred Name", "Legacy Name"],
                 ["New", "Old"]);
             await using var reader = await Excel.FromXlsxAsync(ms, ct: TestContext.Current.CancellationToken);
-            var result = new ExcelParser<MultiAttributeRow>().Parse(reader).ToList();
+            var result = ExcelParser.FromAttributes<MultiAttributeRow>().Parse(reader).ToList();
             Assert.Single(result);
             Assert.Equal("New", result[0].Name);
         }
@@ -213,7 +213,7 @@ namespace ExcelReader.Tests
         {
             await using var ms = await TypedWorkbook.BuildAsync(["name"], ["Alice"]);
             await using var reader = await Excel.FromXlsxAsync(ms, ct: TestContext.Current.CancellationToken);
-            var result = new ExcelParser<PersonRow>().Parse(reader).ToList();
+            var result = ExcelParser.FromAttributes<PersonRow>().Parse(reader).ToList();
             Assert.Single(result);
             Assert.Equal("Alice", result[0].Name);
         }
@@ -224,7 +224,7 @@ namespace ExcelReader.Tests
             await using var ms = await TypedWorkbook.BuildAsync(["name"], ["Alice"]);
             await using var reader = await Excel.FromXlsxAsync(ms, ct: TestContext.Current.CancellationToken);
             var config = new ExcelParserConfig { ColumnNameComparer = StringComparer.Ordinal };
-            var result = new ExcelParser<PersonRow>(config).Parse(reader).ToList();
+            var result = ExcelParser.FromAttributes<PersonRow>(config).Parse(reader).ToList();
             Assert.Single(result);
             Assert.Null(result[0].Name);
         }
@@ -235,7 +235,7 @@ namespace ExcelReader.Tests
             await using var ms = await TypedWorkbook.BuildAsync(["Name"], ["Alice"]);
             await using var reader = await Excel.FromXlsxAsync(ms, ct: TestContext.Current.CancellationToken);
             var config = new ExcelParserConfig { ColumnNameComparer = StringComparer.Ordinal };
-            var result = new ExcelParser<PersonRow>(config).Parse(reader).ToList();
+            var result = ExcelParser.FromAttributes<PersonRow>(config).Parse(reader).ToList();
             Assert.Single(result);
             Assert.Equal("Alice", result[0].Name);
         }
@@ -250,7 +250,7 @@ namespace ExcelReader.Tests
                 ["Alice"]);
             await using var reader = await Excel.FromXlsxAsync(ms, ct: TestContext.Current.CancellationToken);
             var config = new ExcelParserConfig { HeaderRow = 2 };
-            var result = new ExcelParser<PersonRow>(config).Parse(reader).ToList();
+            var result = ExcelParser.FromAttributes<PersonRow>(config).Parse(reader).ToList();
             Assert.Single(result);
             Assert.Equal("Alice", result[0].Name);
         }
@@ -265,7 +265,7 @@ namespace ExcelReader.Tests
                 ["Bob"]);
             await using var reader = await Excel.FromXlsxAsync(ms, ct: TestContext.Current.CancellationToken);
             var config = new ExcelParserConfig { HeaderRow = 3 };
-            var result = new ExcelParser<PersonRow>(config).Parse(reader).ToList();
+            var result = ExcelParser.FromAttributes<PersonRow>(config).Parse(reader).ToList();
             Assert.Single(result);
             Assert.Equal("Bob", result[0].Name);
         }
@@ -275,14 +275,14 @@ namespace ExcelReader.Tests
         public void ZeroHeaderRowThrows()
         {
             Assert.Throws<ArgumentOutOfRangeException>(() =>
-                new ExcelParser<PersonRow>(new ExcelParserConfig { HeaderRow = 0 }));
+                ExcelParser.FromAttributes<PersonRow>(new ExcelParserConfig { HeaderRow = 0 }));
         }
 
         [Fact]
         public void NegativeHeaderRowThrows()
         {
             Assert.Throws<ArgumentOutOfRangeException>(() =>
-                new ExcelParser<PersonRow>(new ExcelParserConfig { HeaderRow = -1 }));
+                ExcelParser.FromAttributes<PersonRow>(new ExcelParserConfig { HeaderRow = -1 }));
         }
 
 
@@ -293,7 +293,7 @@ namespace ExcelReader.Tests
                 ["Name", "UnknownColumn"],
                 ["Carol", "extra"]);
             await using var reader = await Excel.FromXlsxAsync(ms, ct: TestContext.Current.CancellationToken);
-            var result = new ExcelParser<PersonRow>().Parse(reader).ToList();
+            var result = ExcelParser.FromAttributes<PersonRow>().Parse(reader).ToList();
             Assert.Single(result);
             Assert.Equal("Carol", result[0].Name);
         }
@@ -303,7 +303,7 @@ namespace ExcelReader.Tests
         {
             await using var ms = await TypedWorkbook.BuildAsync(["Name"], ["Dave"]);
             await using var reader = await Excel.FromXlsxAsync(ms, ct: TestContext.Current.CancellationToken);
-            var result = new ExcelParser<PersonRow>().Parse(reader).ToList();
+            var result = ExcelParser.FromAttributes<PersonRow>().Parse(reader).ToList();
             Assert.Single(result);
             Assert.Equal("Dave", result[0].Name);
             Assert.Equal(0, result[0].Age);
@@ -319,7 +319,7 @@ namespace ExcelReader.Tests
                 ["Age", "Name"],
                 [25, "Eve"]);
             await using var reader = await Excel.FromXlsxAsync(ms, ct: TestContext.Current.CancellationToken);
-            var result = new ExcelParser<PersonRow>().Parse(reader).ToList();
+            var result = ExcelParser.FromAttributes<PersonRow>().Parse(reader).ToList();
             Assert.Single(result);
             Assert.Equal("Eve", result[0].Name);
             Assert.Equal(25, result[0].Age);
@@ -338,7 +338,7 @@ namespace ExcelReader.Tests
             }
             await using var ms = await TypedWorkbook.BuildAsync(rows);
             await using var reader = await Excel.FromXlsxAsync(ms, ct: TestContext.Current.CancellationToken);
-            var result = new ExcelParser<PersonRow>().Parse(reader).ToList();
+            var result = ExcelParser.FromAttributes<PersonRow>().Parse(reader).ToList();
             Assert.Equal(count, result.Count);
             for (int i = 0; i < count; i++)
             {
@@ -352,7 +352,7 @@ namespace ExcelReader.Tests
         {
             await using var ms = await TypedWorkbook.BuildAsync();
             await using var reader = await Excel.FromXlsxAsync(ms, ct: TestContext.Current.CancellationToken);
-            var result = new ExcelParser<PersonRow>().Parse(reader).ToList();
+            var result = ExcelParser.FromAttributes<PersonRow>().Parse(reader).ToList();
             Assert.Empty(result);
         }
 
@@ -361,7 +361,7 @@ namespace ExcelReader.Tests
         {
             await using var ms = await TypedWorkbook.BuildAsync(["Name"]);
             await using var reader = await Excel.FromXlsxAsync(ms, ct: TestContext.Current.CancellationToken);
-            var result = new ExcelParser<PersonRow>().Parse(reader).ToList();
+            var result = ExcelParser.FromAttributes<PersonRow>().Parse(reader).ToList();
             Assert.Empty(result);
         }
 
@@ -371,7 +371,7 @@ namespace ExcelReader.Tests
         {
             await using var ms = await TypedWorkbook.BuildAsync(["Quantity"], [99]);
             await using var reader = await Excel.FromXlsxAsync(ms, ct: TestContext.Current.CancellationToken);
-            var result = new ExcelParser<NullableRow>().Parse(reader).ToList();
+            var result = ExcelParser.FromAttributes<NullableRow>().Parse(reader).ToList();
             Assert.Single(result);
             Assert.Equal(99, result[0].Quantity);
         }
@@ -383,7 +383,7 @@ namespace ExcelReader.Tests
                 ["Quantity", "Rate"],
                 [new Gap(), 1.5]);
             await using var reader = await Excel.FromXlsxAsync(ms, ct: TestContext.Current.CancellationToken);
-            var result = new ExcelParser<NullableRow>().Parse(reader).ToList();
+            var result = ExcelParser.FromAttributes<NullableRow>().Parse(reader).ToList();
             Assert.Single(result);
             Assert.Null(result[0].Quantity);
             Assert.Equal(1.5, result[0].Rate);
@@ -394,7 +394,7 @@ namespace ExcelReader.Tests
         {
             await using var ms = await TypedWorkbook.BuildAsync(["Rate"], [3.14]);
             await using var reader = await Excel.FromXlsxAsync(ms, ct: TestContext.Current.CancellationToken);
-            var result = new ExcelParser<NullableRow>().Parse(reader).ToList();
+            var result = ExcelParser.FromAttributes<NullableRow>().Parse(reader).ToList();
             Assert.Single(result);
             Assert.Equal(3.14, result[0].Rate);
         }
@@ -404,7 +404,7 @@ namespace ExcelReader.Tests
         {
             await using var ms = await TypedWorkbook.BuildAsync(["EventDate"], [Jan1970]);
             await using var reader = await Excel.FromXlsxAsync(ms, ct: TestContext.Current.CancellationToken);
-            var result = new ExcelParser<NullableRow>().Parse(reader).ToList();
+            var result = ExcelParser.FromAttributes<NullableRow>().Parse(reader).ToList();
             Assert.Single(result);
             Assert.Equal(Jan1970, result[0].EventDate);
         }
@@ -416,7 +416,7 @@ namespace ExcelReader.Tests
                 ["EventDate", "Rate"],
                 [new Gap(), 5.0]);
             await using var reader = await Excel.FromXlsxAsync(ms, ct: TestContext.Current.CancellationToken);
-            var result = new ExcelParser<NullableRow>().Parse(reader).ToList();
+            var result = ExcelParser.FromAttributes<NullableRow>().Parse(reader).ToList();
             Assert.Single(result);
             Assert.Null(result[0].EventDate);
         }
@@ -430,7 +430,7 @@ namespace ExcelReader.Tests
                 [1.5, 2.5, "Point"],
                 [3.0, 4.0, "Vector"]);
             await using var reader = await Excel.FromXlsxAsync(ms, ct: TestContext.Current.CancellationToken);
-            var result = new ExcelParser<MeasurementRow>().Parse(reader).ToList();
+            var result = ExcelParser.FromAttributes<MeasurementRow>().Parse(reader).ToList();
             Assert.Equal(2, result.Count);
             Assert.Equal(1.5, result[0].X);
             Assert.Equal(2.5, result[0].Y);
@@ -448,7 +448,7 @@ namespace ExcelReader.Tests
                 [10.0],
                 [20.0]);
             await using var reader = await Excel.FromXlsxAsync(ms, ct: TestContext.Current.CancellationToken);
-            var result = new ExcelParser<MeasurementRow>().Parse(reader).ToList();
+            var result = ExcelParser.FromAttributes<MeasurementRow>().Parse(reader).ToList();
             Assert.Equal(2, result.Count);
             Assert.Equal(10.0, result[0].X);
             Assert.Equal(20.0, result[1].X);
@@ -459,7 +459,7 @@ namespace ExcelReader.Tests
         {
             await using var ms = await TypedWorkbook.BuildAsync(["X"], [1.5]);
             await using var reader = await Excel.FromXlsxAsync(ms, ct: TestContext.Current.CancellationToken);
-            var result = new ExcelParser<MeasurementRowWithCtor>().Parse(reader).ToList();
+            var result = ExcelParser.FromAttributes<MeasurementRowWithCtor>().Parse(reader).ToList();
             Assert.Single(result);
             Assert.Equal(1.5, result[0].X);
             Assert.Equal("ctor-default", result[0].Tag);
@@ -471,7 +471,7 @@ namespace ExcelReader.Tests
         {
             await using var ms = await TypedWorkbook.BuildAsync(["BirthDate"], [Jan1970]);
             await using var reader = await Excel.FromXlsxAsync(ms, ct: TestContext.Current.CancellationToken);
-            var result = new ExcelParser<PersonRow>().Parse(reader).ToList();
+            var result = ExcelParser.FromAttributes<PersonRow>().Parse(reader).ToList();
             Assert.Single(result);
             Assert.Equal(Jan1970, result[0].BirthDate);
         }
@@ -486,7 +486,7 @@ namespace ExcelReader.Tests
                 date1904: true);
             using var reader = Excel.FromXlsx(ms);
             Assert.True(reader.IsDate1904);
-            var result = new ExcelParser<PersonRow>().Parse(reader).ToList();
+            var result = ExcelParser.FromAttributes<PersonRow>().Parse(reader).ToList();
             Assert.Single(result);
             Assert.Equal(new DateTime(1904, 1, 1, 0, 0, 0, DateTimeKind.Unspecified), result[0].BirthDate);
         }
@@ -497,7 +497,7 @@ namespace ExcelReader.Tests
         {
             await using var ms = await TypedWorkbook.BuildAsync(["Age"], ["not-a-number"]);
             await using var reader = await Excel.FromXlsxAsync(ms, ct: TestContext.Current.CancellationToken);
-            var result = new ExcelParser<PersonRow>().Parse(reader).ToList();
+            var result = ExcelParser.FromAttributes<PersonRow>().Parse(reader).ToList();
             Assert.Single(result);
             Assert.Equal(0, result[0].Age);
         }
@@ -507,7 +507,7 @@ namespace ExcelReader.Tests
         {
             await using var ms = await TypedWorkbook.BuildAsync(["Age"], ["N/A"]);
             await using var reader = await Excel.FromXlsxAsync(ms, ct: TestContext.Current.CancellationToken);
-            var ex = Record.Exception(() => new ExcelParser<PersonRow>().Parse(reader).ToList());
+            var ex = Record.Exception(() => ExcelParser.FromAttributes<PersonRow>().Parse(reader).ToList());
             Assert.Null(ex);
         }
 
@@ -525,13 +525,13 @@ namespace ExcelReader.Tests
 
             await using (var reader = Excel.FromXlsx(ms))
             {
-                syncResult = [.. new ExcelParser<PersonRow>().Parse(reader)];
+                syncResult = [.. ExcelParser.FromAttributes<PersonRow>().Parse(reader)];
             }
 
             ms.Position = 0;
             await using (var reader = await Excel.FromXlsxAsync(ms, ct: TestContext.Current.CancellationToken))
             {
-                await foreach (var row in new ExcelParser<PersonRow>().ParseAsync(reader, TestContext.Current.CancellationToken))
+                await foreach (var row in ExcelParser.FromAttributes<PersonRow>().ParseAsync(reader, TestContext.Current.CancellationToken))
                 {
                     asyncResult.Add(row);
                 }
@@ -558,7 +558,7 @@ namespace ExcelReader.Tests
             await using var ms = await TypedWorkbook.BuildAsync(rows);
             await using var reader = await Excel.FromXlsxAsync(ms, ct: TestContext.Current.CancellationToken);
             var result = new List<PersonRow>();
-            await foreach (var row in new ExcelParser<PersonRow>().ParseAsync(reader, TestContext.Current.CancellationToken))
+            await foreach (var row in ExcelParser.FromAttributes<PersonRow>().ParseAsync(reader, TestContext.Current.CancellationToken))
             {
                 result.Add(row);
             }
@@ -578,7 +578,7 @@ namespace ExcelReader.Tests
                 """<row r="2"><c r="A2" t="inlineStr"><is><t>Alice</t></is></c></row>""",
                 sharedStrings: "<si><t>Name</t></si>");
             using var reader = Excel.FromXlsx(ms);
-            var result = new ExcelParser<PersonRow>().Parse(reader).ToList();
+            var result = ExcelParser.FromAttributes<PersonRow>().Parse(reader).ToList();
             Assert.Single(result);
             Assert.Equal("Alice", result[0].Name);
         }

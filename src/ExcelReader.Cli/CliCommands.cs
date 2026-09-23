@@ -123,7 +123,7 @@ namespace ExcelReader.Cli
 
         private static void WriteXlsb(IExcelRowReader reader, Stream target, bool leaveOpen, Action<int>? onProgress)
         {
-            using XlsbWorkbookWriter workbook = XlsbWorkbookWriter.Create(target, leaveOpen, date1904: reader.IsDate1904);
+            using XlsbWorkbookWriter workbook = XlsbWorkbookWriter.Create(target, leaveOpen, new XlsbWriterOptions { Date1904 = reader.IsDate1904 });
             WriteRows<XlsbWorkbookWriter, XlsbSheetWriter, XlsbRowWriter>(workbook, reader, onProgress);
         }
 
@@ -140,7 +140,6 @@ namespace ExcelReader.Cli
             where TSheet : ISheetWriter<TRow>
             where TRow : IRowWriter
         {
-            workbook.Start();
             using TSheet sheetWriter = workbook.AddSheet(reader.SheetName);
             sheetWriter.Start();
 

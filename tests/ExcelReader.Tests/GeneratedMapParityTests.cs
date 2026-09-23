@@ -151,8 +151,8 @@ namespace ExcelReader.Tests
             ];
             await using var ms = await TypedWorkbook.BuildAsync(header, row);
 
-            EveryTypeModel reflectionResult = await ParseFirstXlsxAsync(ms, static reader => new ExcelParser<EveryTypeModel>().Parse(reader));
-            EveryTypeModel generatedResult = await ParseFirstXlsxAsync(ms, static reader => new ExcelMappedParser<EveryTypeModel>().Parse(reader));
+            EveryTypeModel reflectionResult = await ParseFirstXlsxAsync(ms, static reader => ExcelParser.FromAttributes<EveryTypeModel>().Parse(reader));
+            EveryTypeModel generatedResult = await ParseFirstXlsxAsync(ms, static reader => ExcelParser.Generated<EveryTypeModel>().Parse(reader));
 
             Assert.Equal(reflectionResult.Name, generatedResult.Name);
             Assert.Equal(reflectionResult.Active, generatedResult.Active);
@@ -188,8 +188,8 @@ namespace ExcelReader.Tests
         {
             await using var ms = await TypedWorkbook.BuildAsync(["Name"], ["alice"]);
 
-            ConverterModel reflectionResult = await ParseFirstXlsxAsync(ms, static reader => new ExcelParser<ConverterModel>().Parse(reader));
-            ConverterModel generatedResult = await ParseFirstXlsxAsync(ms, static reader => new ExcelMappedParser<ConverterModel>().Parse(reader));
+            ConverterModel reflectionResult = await ParseFirstXlsxAsync(ms, static reader => ExcelParser.FromAttributes<ConverterModel>().Parse(reader));
+            ConverterModel generatedResult = await ParseFirstXlsxAsync(ms, static reader => ExcelParser.Generated<ConverterModel>().Parse(reader));
 
             Assert.Equal("ALICE", reflectionResult.Name);
             Assert.Equal("ALICE", generatedResult.Name);
@@ -200,8 +200,8 @@ namespace ExcelReader.Tests
         {
             await using var ms = await TypedWorkbook.BuildAsync(["Name"], ["Alice"]);
 
-            AliasModel reflectionResult = await ParseFirstXlsxAsync(ms, static reader => new ExcelParser<AliasModel>().Parse(reader));
-            AliasModel generatedResult = await ParseFirstXlsxAsync(ms, static reader => new ExcelMappedParser<AliasModel>().Parse(reader));
+            AliasModel reflectionResult = await ParseFirstXlsxAsync(ms, static reader => ExcelParser.FromAttributes<AliasModel>().Parse(reader));
+            AliasModel generatedResult = await ParseFirstXlsxAsync(ms, static reader => ExcelParser.Generated<AliasModel>().Parse(reader));
 
             Assert.Equal("Alice", reflectionResult.Name);
             Assert.Equal("Alice", generatedResult.Name);
@@ -212,8 +212,8 @@ namespace ExcelReader.Tests
         {
             await using var ms = await TypedWorkbook.BuildAsync(["Name", "Ignored"], ["Alice", "SHOULD_NOT_BIND"]);
 
-            IgnoreModel reflectionResult = await ParseFirstXlsxAsync(ms, static reader => new ExcelParser<IgnoreModel>().Parse(reader));
-            IgnoreModel generatedResult = await ParseFirstXlsxAsync(ms, static reader => new ExcelMappedParser<IgnoreModel>().Parse(reader));
+            IgnoreModel reflectionResult = await ParseFirstXlsxAsync(ms, static reader => ExcelParser.FromAttributes<IgnoreModel>().Parse(reader));
+            IgnoreModel generatedResult = await ParseFirstXlsxAsync(ms, static reader => ExcelParser.Generated<IgnoreModel>().Parse(reader));
 
             Assert.Equal("Alice", reflectionResult.Name);
             Assert.Equal("default", reflectionResult.Ignored);
@@ -226,8 +226,8 @@ namespace ExcelReader.Tests
         {
             await using var ms = await TypedWorkbook.BuildAsync(["Inherited", "Own"], ["BaseValue", 42]);
 
-            InheritedModel reflectionResult = await ParseFirstXlsxAsync(ms, static reader => new ExcelParser<InheritedModel>().Parse(reader));
-            InheritedModel generatedResult = await ParseFirstXlsxAsync(ms, static reader => new ExcelMappedParser<InheritedModel>().Parse(reader));
+            InheritedModel reflectionResult = await ParseFirstXlsxAsync(ms, static reader => ExcelParser.FromAttributes<InheritedModel>().Parse(reader));
+            InheritedModel generatedResult = await ParseFirstXlsxAsync(ms, static reader => ExcelParser.Generated<InheritedModel>().Parse(reader));
 
             Assert.Equal("BaseValue", reflectionResult.Inherited);
             Assert.Equal(42, reflectionResult.Own);
@@ -241,9 +241,9 @@ namespace ExcelReader.Tests
             await using var ms = await TypedWorkbook.BuildAsync(["Other"], ["x"]);
 
             ExcelParseException reflectionException = await Assert.ThrowsAsync<ExcelParseException>(
-                () => ParseFirstXlsxAsync(ms, static reader => new ExcelParser<RequiredModel>().Parse(reader)));
+                () => ParseFirstXlsxAsync(ms, static reader => ExcelParser.FromAttributes<RequiredModel>().Parse(reader)));
             ExcelParseException generatedException = await Assert.ThrowsAsync<ExcelParseException>(
-                () => ParseFirstXlsxAsync(ms, static reader => new ExcelMappedParser<RequiredModel>().Parse(reader)));
+                () => ParseFirstXlsxAsync(ms, static reader => ExcelParser.Generated<RequiredModel>().Parse(reader)));
 
             Assert.Contains("Name", reflectionException.ColumnName, StringComparison.Ordinal);
             Assert.Contains("Name", generatedException.ColumnName, StringComparison.Ordinal);
@@ -254,9 +254,8 @@ namespace ExcelReader.Tests
         {
             var value = SampleCrossFormatValue();
             await using var ms = new MemoryStream();
-            await using (XlsxWorkbookWriter wb = await XlsxWorkbookWriter.CreateAsync(ms, leaveOpen: true, ct: TestContext.Current.CancellationToken))
+            await using (XlsxWorkbookWriter wb = XlsxWorkbookWriter.Create(ms, leaveOpen: true))
             {
-                await wb.StartAsync(TestContext.Current.CancellationToken);
                 XlsxSheetWriter sheet = wb.AddSheet("S1");
                 await sheet.StartAsync(TestContext.Current.CancellationToken);
                 await using (XlsxRowWriter header = await sheet.StartRowAsync(TestContext.Current.CancellationToken))
@@ -271,10 +270,10 @@ namespace ExcelReader.Tests
             }
             ms.Position = 0;
             await using XlsxReader reflectionReader = await Excel.FromXlsxAsync(ms, ct: TestContext.Current.CancellationToken);
-            CrossFormatModel reflectionResult = new ExcelParser<CrossFormatModel>().Parse(reflectionReader).First();
+            CrossFormatModel reflectionResult = ExcelParser.FromAttributes<CrossFormatModel>().Parse(reflectionReader).First();
             ms.Position = 0;
             await using XlsxReader generatedReader = await Excel.FromXlsxAsync(ms, ct: TestContext.Current.CancellationToken);
-            CrossFormatModel generatedResult = new ExcelMappedParser<CrossFormatModel>().Parse(generatedReader).First();
+            CrossFormatModel generatedResult = ExcelParser.Generated<CrossFormatModel>().Parse(generatedReader).First();
 
             AssertCrossFormatEqual(reflectionResult, generatedResult);
         }
@@ -284,9 +283,8 @@ namespace ExcelReader.Tests
         {
             var value = SampleCrossFormatValue();
             await using var ms = new MemoryStream();
-            await using (XlsbWorkbookWriter wb = await XlsbWorkbookWriter.CreateAsync(ms, leaveOpen: true, ct: TestContext.Current.CancellationToken))
+            await using (XlsbWorkbookWriter wb = XlsbWorkbookWriter.Create(ms, leaveOpen: true))
             {
-                await wb.StartAsync(TestContext.Current.CancellationToken);
                 XlsbSheetWriter sheet = wb.AddSheet("S1");
                 await sheet.StartAsync(TestContext.Current.CancellationToken);
                 await using (XlsbRowWriter header = await sheet.StartRowAsync(TestContext.Current.CancellationToken))
@@ -301,10 +299,10 @@ namespace ExcelReader.Tests
             }
             ms.Position = 0;
             using XlsbReader reflectionReader = Excel.FromXlsb(ms);
-            CrossFormatModel reflectionResult = new ExcelParser<CrossFormatModel>().Parse(reflectionReader).First();
+            CrossFormatModel reflectionResult = ExcelParser.FromAttributes<CrossFormatModel>().Parse(reflectionReader).First();
             ms.Position = 0;
             using XlsbReader generatedReader = Excel.FromXlsb(ms);
-            CrossFormatModel generatedResult = new ExcelMappedParser<CrossFormatModel>().Parse(generatedReader).First();
+            CrossFormatModel generatedResult = ExcelParser.Generated<CrossFormatModel>().Parse(generatedReader).First();
 
             AssertCrossFormatEqual(reflectionResult, generatedResult);
         }
@@ -316,7 +314,6 @@ namespace ExcelReader.Tests
             await using var ms = new MemoryStream();
             await using (XlsWorkbookWriter wb = XlsWorkbookWriter.Create(ms, leaveOpen: true))
             {
-                await wb.StartAsync(TestContext.Current.CancellationToken);
                 XlsSheetWriter sheet = wb.AddSheet("S1");
                 await sheet.StartAsync(TestContext.Current.CancellationToken);
                 await using (XlsRowWriter header = await sheet.StartRowAsync(TestContext.Current.CancellationToken))
@@ -331,10 +328,10 @@ namespace ExcelReader.Tests
             }
             ms.Position = 0;
             using XlsReader reflectionReader = Excel.FromXls(ms);
-            CrossFormatModel reflectionResult = new ExcelParser<CrossFormatModel>().Parse(reflectionReader).First();
+            CrossFormatModel reflectionResult = ExcelParser.FromAttributes<CrossFormatModel>().Parse(reflectionReader).First();
             ms.Position = 0;
             using XlsReader generatedReader = Excel.FromXls(ms);
-            CrossFormatModel generatedResult = new ExcelMappedParser<CrossFormatModel>().Parse(generatedReader).First();
+            CrossFormatModel generatedResult = ExcelParser.Generated<CrossFormatModel>().Parse(generatedReader).First();
 
             AssertCrossFormatEqual(reflectionResult, generatedResult);
         }
@@ -345,7 +342,6 @@ namespace ExcelReader.Tests
             var value = SampleCrossFormatValue();
             await using var ms = new MemoryStream();
             CsvWorkbookWriter wb = CsvWorkbookWriter.Create(ms, leaveOpen: true);
-            await wb.StartAsync(TestContext.Current.CancellationToken);
             CsvSheetWriter sheet = wb.AddSheet("S1");
             await sheet.StartAsync(TestContext.Current.CancellationToken);
             await using (CsvRowWriter header = await sheet.StartRowAsync(TestContext.Current.CancellationToken))
@@ -360,10 +356,10 @@ namespace ExcelReader.Tests
 
             ms.Position = 0;
             CsvReader reflectionReader = Excel.FromCsv(ms);
-            CrossFormatModel reflectionResult = new ExcelParser<CrossFormatModel>().Parse(reflectionReader).First();
+            CrossFormatModel reflectionResult = ExcelParser.FromAttributes<CrossFormatModel>().Parse(reflectionReader).First();
             ms.Position = 0;
             CsvReader generatedReader = Excel.FromCsv(ms);
-            CrossFormatModel generatedResult = new ExcelMappedParser<CrossFormatModel>().Parse(generatedReader).First();
+            CrossFormatModel generatedResult = ExcelParser.Generated<CrossFormatModel>().Parse(generatedReader).First();
 
             AssertCrossFormatEqual(reflectionResult, generatedResult);
         }
@@ -454,12 +450,12 @@ namespace ExcelReader.Tests
             CrossFormatModel record = SampleCrossFormatValue();
 
             await using var reflectionMs = new MemoryStream();
-            await using (WorkbookRecordWriter<XlsxSheetWriter, XlsxRowWriter> writer = await RecordWriter.CreateXlsxAsync(reflectionMs, leaveOpen: true, ct: ct))
+            await using (WorkbookRecordWriter<XlsxSheetWriter, XlsxRowWriter> writer = RecordWriter.CreateXlsx(reflectionMs, leaveOpen: true))
             {
                 await writer.WriteSheetAsync("S1", new[] { record }, ct);
             }
             await using var generatedMs = new MemoryStream();
-            await using (MappedWorkbookRecordWriter<XlsxSheetWriter, XlsxRowWriter> writer = await MappedRecordWriter.CreateMappedXlsxAsync(generatedMs, leaveOpen: true, ct: ct))
+            await using (MappedWorkbookRecordWriter<XlsxSheetWriter, XlsxRowWriter> writer = MappedRecordWriter.CreateXlsx(generatedMs, leaveOpen: true))
             {
                 await writer.WriteSheetAsync("S1", new[] { record }, ct);
             }
@@ -491,12 +487,12 @@ namespace ExcelReader.Tests
             CrossFormatModel record = SampleCrossFormatValue();
 
             await using var reflectionMs = new MemoryStream();
-            await using (WorkbookRecordWriter<XlsbSheetWriter, XlsbRowWriter> writer = await RecordWriter.CreateXlsbAsync(reflectionMs, leaveOpen: true, ct: ct))
+            await using (WorkbookRecordWriter<XlsbSheetWriter, XlsbRowWriter> writer = RecordWriter.CreateXlsb(reflectionMs, leaveOpen: true))
             {
                 await writer.WriteSheetAsync("S1", new[] { record }, ct);
             }
             await using var generatedMs = new MemoryStream();
-            await using (MappedWorkbookRecordWriter<XlsbSheetWriter, XlsbRowWriter> writer = await MappedRecordWriter.CreateMappedXlsbAsync(generatedMs, leaveOpen: true, ct: ct))
+            await using (MappedWorkbookRecordWriter<XlsbSheetWriter, XlsbRowWriter> writer = MappedRecordWriter.CreateXlsb(generatedMs, leaveOpen: true))
             {
                 await writer.WriteSheetAsync("S1", new[] { record }, ct);
             }
@@ -528,12 +524,12 @@ namespace ExcelReader.Tests
             CrossFormatModel record = SampleCrossFormatValue();
 
             await using var reflectionMs = new MemoryStream();
-            await using (WorkbookRecordWriter<XlsSheetWriter, XlsRowWriter> writer = await RecordWriter.CreateXlsAsync(reflectionMs, leaveOpen: true, ct: ct))
+            await using (WorkbookRecordWriter<XlsSheetWriter, XlsRowWriter> writer = RecordWriter.CreateXls(reflectionMs, leaveOpen: true))
             {
                 await writer.WriteSheetAsync("S1", new[] { record }, ct);
             }
             await using var generatedMs = new MemoryStream();
-            await using (MappedWorkbookRecordWriter<XlsSheetWriter, XlsRowWriter> writer = await MappedRecordWriter.CreateMappedXlsAsync(generatedMs, leaveOpen: true, ct: ct))
+            await using (MappedWorkbookRecordWriter<XlsSheetWriter, XlsRowWriter> writer = MappedRecordWriter.CreateXls(generatedMs, leaveOpen: true))
             {
                 await writer.WriteSheetAsync("S1", new[] { record }, ct);
             }
@@ -565,12 +561,12 @@ namespace ExcelReader.Tests
             CrossFormatModel record = SampleCrossFormatValue();
 
             await using var reflectionMs = new MemoryStream();
-            await using (WorkbookRecordWriter<CsvSheetWriter, CsvRowWriter> writer = await RecordWriter.CreateCsvAsync(reflectionMs, leaveOpen: true, ct: ct))
+            await using (WorkbookRecordWriter<CsvSheetWriter, CsvRowWriter> writer = RecordWriter.CreateCsv(reflectionMs, leaveOpen: true))
             {
                 await writer.WriteSheetAsync("S1", new[] { record }, ct);
             }
             await using var generatedMs = new MemoryStream();
-            await using (MappedWorkbookRecordWriter<CsvSheetWriter, CsvRowWriter> writer = await MappedRecordWriter.CreateMappedCsvAsync(generatedMs, leaveOpen: true, ct: ct))
+            await using (MappedWorkbookRecordWriter<CsvSheetWriter, CsvRowWriter> writer = MappedRecordWriter.CreateCsv(generatedMs, leaveOpen: true))
             {
                 await writer.WriteSheetAsync("S1", new[] { record }, ct);
             }
@@ -602,12 +598,12 @@ namespace ExcelReader.Tests
             var record = new WriteOnlyTypeModel { Inherited = "BaseValue", Name = "Alice", Tag = new CustomTag("T1") };
 
             await using var reflectionMs = new MemoryStream();
-            await using (WorkbookRecordWriter<XlsxSheetWriter, XlsxRowWriter> writer = await RecordWriter.CreateXlsxAsync(reflectionMs, leaveOpen: true, ct: ct))
+            await using (WorkbookRecordWriter<XlsxSheetWriter, XlsxRowWriter> writer = RecordWriter.CreateXlsx(reflectionMs, leaveOpen: true))
             {
                 await writer.WriteSheetAsync("S1", new[] { record }, ct);
             }
             await using var generatedMs = new MemoryStream();
-            await using (MappedWorkbookRecordWriter<XlsxSheetWriter, XlsxRowWriter> writer = await MappedRecordWriter.CreateMappedXlsxAsync(generatedMs, leaveOpen: true, ct: ct))
+            await using (MappedWorkbookRecordWriter<XlsxSheetWriter, XlsxRowWriter> writer = MappedRecordWriter.CreateXlsx(generatedMs, leaveOpen: true))
             {
                 await writer.WriteSheetAsync("S1", new[] { record }, ct);
             }

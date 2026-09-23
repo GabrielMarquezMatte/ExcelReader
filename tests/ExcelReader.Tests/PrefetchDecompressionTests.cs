@@ -380,9 +380,8 @@ namespace ExcelReader.Tests
         private static async Task<byte[]> BuildLargeXlsbAsync()
         {
             MemoryStream ms = new();
-            await using (XlsbWorkbookWriter wb = await XlsbWorkbookWriter.CreateAsync(ms, leaveOpen: true))
+            await using (XlsbWorkbookWriter wb = XlsbWorkbookWriter.Create(ms, leaveOpen: true))
             {
-                await wb.StartAsync();
                 XlsbSheetWriter sheet = wb.AddSheet("S1");
                 await sheet.StartAsync();
                 for (int r = 0; r < 6000; r++)

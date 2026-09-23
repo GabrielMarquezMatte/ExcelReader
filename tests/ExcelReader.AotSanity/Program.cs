@@ -12,14 +12,14 @@ namespace ExcelReader.AotSanity
         {
             await using MemoryStream xlsx = await BuildSampleXlsxAsync();
             await using XlsxReader reader = await Excel.FromXlsxAsync(xlsx);
-            var rows = new ExcelMappedParser<AotModel>().Parse(reader).ToList();
+            var rows = ExcelParser.Generated<AotModel>().Parse(reader).ToList();
             if (rows.Count != 1 || !string.Equals(rows[0].Name, "Alice", StringComparison.Ordinal) || rows[0].Age != 30 || !rows[0].Active)
             {
                 Console.Error.WriteLine("Mapped XLSX parse produced an unexpected result.");
                 return 1;
             }
 
-            var generatedRows = new ExcelMappedParser<GeneratedAotModel>().Parse(reader).ToList();
+            var generatedRows = ExcelParser.Generated<GeneratedAotModel>().Parse(reader).ToList();
             if (generatedRows.Count != 1 || !string.Equals(generatedRows[0].Name, "Alice", StringComparison.Ordinal)
                 || generatedRows[0].Age != 30 || !generatedRows[0].Active)
             {
@@ -28,13 +28,13 @@ namespace ExcelReader.AotSanity
             }
 
             await using var writtenStream = new MemoryStream();
-            await using (var writer = await MappedRecordWriter.CreateMappedXlsxAsync(writtenStream, leaveOpen: true))
+            await using (var writer = MappedRecordWriter.CreateXlsx(writtenStream, leaveOpen: true))
             {
                 await writer.WriteSheetAsync("S1", [new GeneratedAotModel { Name = "Zoe", Age = 8, Active = true }]);
             }
             writtenStream.Position = 0;
             await using XlsxReader writtenReader = await Excel.FromXlsxAsync(writtenStream);
-            var writtenRows = new ExcelMappedParser<GeneratedAotModel>().Parse(writtenReader).ToList();
+            var writtenRows = ExcelParser.Generated<GeneratedAotModel>().Parse(writtenReader).ToList();
             if (writtenRows.Count != 1 || !string.Equals(writtenRows[0].Name, "Zoe", StringComparison.Ordinal) || writtenRows[0].Age != 8 || !writtenRows[0].Active)
             {
                 Console.Error.WriteLine("Source-generated XLSX write+read round trip produced an unexpected result.");
@@ -86,9 +86,8 @@ namespace ExcelReader.AotSanity
         private static async Task<MemoryStream> BuildSampleXlsxAsync()
         {
             var ms = new MemoryStream();
-            await using (XlsxWorkbookWriter wb = await XlsxWorkbookWriter.CreateAsync(ms, leaveOpen: true))
+            await using (XlsxWorkbookWriter wb = XlsxWorkbookWriter.Create(ms, leaveOpen: true))
             {
-                await wb.StartAsync();
                 XlsxSheetWriter sheet = wb.AddSheet("S1");
                 await sheet.StartAsync();
                 await using (XlsxRowWriter header = await sheet.StartRowAsync())

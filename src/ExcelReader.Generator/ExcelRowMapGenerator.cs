@@ -79,7 +79,7 @@ namespace ExcelReader.Generator
         private static readonly DiagnosticDescriptor GenericTypeNotSupportedDescriptor = new(
             "EXR007",
             "[ExcelSerializable] does not support generic types",
-            "Type '{0}' is generic; [ExcelSerializable] supports only non-generic types. Map it with ExcelFluentParser<T> or a hand-written IExcelRowMap<T> instead.",
+            "Type '{0}' is generic; [ExcelSerializable] supports only non-generic types. Map it with ExcelParser.Build or a hand-written IExcelRowMap<T> instead.",
             "ExcelReader.Generator",
             DiagnosticSeverity.Error,
             isEnabledByDefault: true);
@@ -87,7 +87,7 @@ namespace ExcelReader.Generator
         private static readonly DiagnosticDescriptor NoParameterlessConstructorDescriptor = new(
             "EXR008",
             "Type has no public parameterless constructor",
-            "Type '{0}' has no public parameterless constructor, so no row instance can be created for it; add one, or map it with ExcelFluentParser<T>",
+            "Type '{0}' has no public parameterless constructor, so no row instance can be created for it; add one, or map it with ExcelParser.Build",
             "ExcelReader.Generator",
             DiagnosticSeverity.Error,
             isEnabledByDefault: true);

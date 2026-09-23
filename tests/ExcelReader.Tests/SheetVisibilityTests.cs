@@ -164,7 +164,6 @@ namespace ExcelReader.Tests
             where TSheet : ISheetWriter<TRow>
             where TRow : IRowWriter
         {
-            workbook.Start();
             foreach ((string name, ExcelSheetVisibility visibility) in sheets)
             {
                 using TSheet sheet = workbook.AddSheet(name, visibility);
@@ -296,7 +295,6 @@ namespace ExcelReader.Tests
         {
             using var ms = new MemoryStream();
             using XlsxWorkbookWriter workbook = XlsxWorkbookWriter.Create(ms, leaveOpen: true);
-            workbook.Start();
 
             Assert.Throws<ArgumentOutOfRangeException>(() => workbook.AddSheet("S1", (ExcelSheetVisibility)9));
         }
@@ -307,7 +305,6 @@ namespace ExcelReader.Tests
             using var ms = new MemoryStream();
             using (CsvWorkbookWriter workbook = CsvWorkbookWriter.Create(ms, leaveOpen: true))
             {
-                workbook.Start();
                 using CsvSheetWriter sheet = workbook.AddSheet("Ignored", ExcelSheetVisibility.VeryHidden);
                 sheet.Start();
                 using (CsvRowWriter row = sheet.StartRow())
@@ -326,7 +323,6 @@ namespace ExcelReader.Tests
         {
             using var ms = new MemoryStream();
             using CsvWorkbookWriter workbook = CsvWorkbookWriter.Create(ms, leaveOpen: true);
-            workbook.Start();
 
             Assert.Throws<ArgumentOutOfRangeException>(() => workbook.AddSheet("S1", (ExcelSheetVisibility)9));
         }

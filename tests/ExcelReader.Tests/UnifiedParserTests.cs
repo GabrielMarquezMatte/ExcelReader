@@ -54,7 +54,7 @@ namespace ExcelReader.Tests
             using CsvReader reader = Excel.FromCsv(Csv);
             var names = new List<string?>();
             int ids = 0;
-            foreach (SaleClass sale in new ExcelParser<SaleClass>().Parse(reader))
+            foreach (SaleClass sale in ExcelParser.FromAttributes<SaleClass>().Parse(reader))
             {
                 names.Add(sale.Name);
                 ids += sale.Id;
@@ -69,7 +69,7 @@ namespace ExcelReader.Tests
             using CsvReader reader = Excel.FromCsv(Csv);
             double total = 0;
             int rows = 0;
-            foreach (SaleStruct sale in new ExcelParser<SaleStruct>().Parse(reader))
+            foreach (SaleStruct sale in ExcelParser.FromAttributes<SaleStruct>().Parse(reader))
             {
                 total += sale.Value;
                 rows++;
@@ -84,7 +84,7 @@ namespace ExcelReader.Tests
             using CsvReader reader = Excel.FromCsv(Csv);
             var names = new List<string>();
             int ids = 0;
-            foreach (SaleRef sale in new ExcelParser<SaleRef>().Parse(reader))
+            foreach (SaleRef sale in ExcelParser.FromAttributes<SaleRef>().Parse(reader))
             {
                 names.Add(Encoding.UTF8.GetString(sale.Name));
                 ids += sale.Id;
@@ -99,7 +99,7 @@ namespace ExcelReader.Tests
             await using CsvReader reader = Excel.FromCsv(Csv);
             var names = new List<string>();
             double total = 0;
-            await foreach (SaleRef sale in new ExcelParser<SaleRef>().ParseAsync(reader, TestContext.Current.CancellationToken))
+            await foreach (SaleRef sale in ExcelParser.FromAttributes<SaleRef>().ParseAsync(reader, TestContext.Current.CancellationToken))
             {
                 names.Add(Encoding.UTF8.GetString(sale.Name));
                 total += sale.Value;
@@ -112,7 +112,7 @@ namespace ExcelReader.Tests
         public void RefStructModelFlowsThroughIEnumerableOfT()
         {
             using CsvReader reader = Excel.FromCsv(Csv);
-            IEnumerable<SaleRef> sequence = new ExcelParser<SaleRef>().Parse(reader);
+            IEnumerable<SaleRef> sequence = ExcelParser.FromAttributes<SaleRef>().Parse(reader);
             int rows = 0;
             foreach (SaleRef sale in sequence)
             {
@@ -126,7 +126,7 @@ namespace ExcelReader.Tests
         public async Task RefStructModelFlowsThroughIAsyncEnumerableOfT()
         {
             await using CsvReader reader = Excel.FromCsv(Csv);
-            IAsyncEnumerable<SaleRef> sequence = new ExcelParser<SaleRef>().ParseAsync(reader, TestContext.Current.CancellationToken);
+            IAsyncEnumerable<SaleRef> sequence = ExcelParser.FromAttributes<SaleRef>().ParseAsync(reader, TestContext.Current.CancellationToken);
             int rows = 0;
             await foreach (SaleRef sale in sequence)
             {
@@ -142,7 +142,7 @@ namespace ExcelReader.Tests
             using CsvReader reader = Excel.FromCsv(Csv);
             var names = new List<string>();
             int ids = 0;
-            foreach (MappedSale sale in new ExcelMappedParser<MappedSale>().Parse(reader))
+            foreach (MappedSale sale in ExcelParser.Generated<MappedSale>().Parse(reader))
             {
                 names.Add(Encoding.UTF8.GetString(sale.Name));
                 ids += sale.Id;
@@ -155,7 +155,7 @@ namespace ExcelReader.Tests
         public void RefStructModelParsesThroughExcelFluentParser()
         {
             using CsvReader reader = Excel.FromCsv(Csv);
-            var parser = new ExcelFluentParser<FluentSale>(static builder => builder
+            var parser = ExcelParser.Build<FluentSale>(static builder => builder
                 .PropertyRaw(["Name"], static (ref FluentSale m, in Cell c, bool _, IFormatProvider _) =>
                 {
                     m.Name = c.Value;
@@ -183,7 +183,7 @@ namespace ExcelReader.Tests
         public void NonGenericCurrentIsNoLongerSupported()
         {
             using CsvReader reader = Excel.FromCsv(Csv);
-            CsvEnumerable<SaleClass>.Enumerator e = new ExcelParser<SaleClass>().Parse(reader).GetEnumerator();
+            CsvEnumerable<SaleClass>.Enumerator e = ExcelParser.FromAttributes<SaleClass>().Parse(reader).GetEnumerator();
             Assert.True(e.MoveNext());
             System.Collections.IEnumerator legacy = e;
             Assert.Throws<NotSupportedException>(() => legacy.Current);
