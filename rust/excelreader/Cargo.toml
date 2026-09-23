@@ -21,7 +21,7 @@ arrow = { version = "56", optional = true, default-features = false, features = 
 
 [dev-dependencies]
 trybuild = "1"
-criterion = "0.5"
+criterion = "0.8"
 calamine = { version = "0.36.1", features = ["chrono"] }
 rust_xlsxwriter = "0.99.1"
 
