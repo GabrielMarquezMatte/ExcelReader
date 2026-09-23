@@ -54,7 +54,7 @@ namespace ExcelReader.Benchmarks
             await using var ms = new MemoryStream(_csv, writable: false);
             await using var reader = Excel.FromCsv(ms);
             long acc = 0;
-            await foreach (CsvRecord rec in ExcelParser.FromAttributes<CsvRecord>().ParseAsync(reader))
+            await foreach (CsvRecord rec in ExcelParser.FromAttributes<CsvRecord>().Parse(reader))
             {
                 acc += Accumulate(rec);
             }

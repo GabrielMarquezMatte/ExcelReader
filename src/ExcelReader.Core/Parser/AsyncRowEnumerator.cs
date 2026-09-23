@@ -1,7 +1,8 @@
 using System.Diagnostics.CodeAnalysis;
+using ExcelReader.Core.Parser.Internal;
 using ExcelReader.Core.Reader;
 
-namespace ExcelReader.Core.Parser.Internal
+namespace ExcelReader.Core.Parser
 {
     /// <summary>Base class supplying the shared row-advancement loop for an asynchronous, format-specific row enumerator.</summary>
     /// <typeparam name="T">The row model type each derived enumerator yields.</typeparam>
@@ -23,15 +24,9 @@ namespace ExcelReader.Core.Parser.Internal
     {
         private readonly TReader _reader;
         private readonly CancellationToken _ct;
-        /// <summary>The underlying row cursor this enumerator advances, opened lazily on the first call to <see cref="MoveNextAsync"/>.</summary>
-        [SuppressMessage("Design", "CA1051:Do not declare visible instance fields",
-            Justification = "Hot-path base class (MoveNextAsync runs per row); a field avoids a property-call indirection in the tightest loop of the library.")]
-        protected TRows? Rows;
+        private protected TRows? Rows;
 
-        /// <summary>Initializes the base enumerator with the reader it will lazily open a row cursor from.</summary>
-        /// <param name="reader">The row reader used to open the row cursor on first advancement.</param>
-        /// <param name="ct">The cancellation token to use when opening the row cursor, if the caller does not supply one to <see cref="MoveNextAsync"/>.</param>
-        protected AsyncRowEnumerator(TReader reader, CancellationToken ct)
+        private protected AsyncRowEnumerator(TReader reader, CancellationToken ct)
         {
             _reader = reader;
             _ct = ct;

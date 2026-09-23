@@ -74,7 +74,6 @@ namespace ExcelReader.Tests
                     foreach (string name in (string[])["Data", "0"])
                     {
                         using XlsxSheetWriter sheet = workbook.AddSheet(name);
-                        sheet.Start();
                         sheet.End();
                     }
                     workbook.End();

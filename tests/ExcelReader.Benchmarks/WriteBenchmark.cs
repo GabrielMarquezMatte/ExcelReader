@@ -26,7 +26,6 @@ namespace ExcelReader.Benchmarks
             await using (XlsxWorkbookWriter wb = XlsxWorkbookWriter.Create(ms, leaveOpen: true))
             {
                 XlsxSheetWriter sheet = wb.AddSheet("S1");
-                await sheet.StartAsync();
                 using (XlsxRowWriter header = sheet.StartRow())
                 {
                     header.Write("Name");
@@ -56,7 +55,6 @@ namespace ExcelReader.Benchmarks
             await using (XlsxWorkbookWriter wb = XlsxWorkbookWriter.Create(ms, leaveOpen: true, options: new XlsxWriterOptions { UseSharedStrings = true }))
             {
                 XlsxSheetWriter sheet = wb.AddSheet("S1");
-                await sheet.StartAsync();
                 using (XlsxRowWriter header = sheet.StartRow())
                 {
                     header.Write("Name");
@@ -86,7 +84,6 @@ namespace ExcelReader.Benchmarks
             await using (XlsxWorkbookWriter wb = XlsxWorkbookWriter.Create(ms, leaveOpen: true, options: new XlsxWriterOptions { PrefetchWrite = true }))
             {
                 XlsxSheetWriter sheet = wb.AddSheet("S1");
-                await sheet.StartAsync();
                 using (XlsxRowWriter header = sheet.StartRow())
                 {
                     header.Write("Name");
@@ -116,7 +113,6 @@ namespace ExcelReader.Benchmarks
             await using (XlsbWorkbookWriter wb = XlsbWorkbookWriter.Create(ms, leaveOpen: true))
             {
                 XlsbSheetWriter sheet = wb.AddSheet("S1");
-                await sheet.StartAsync();
                 ReadOnlySpan<XlsbCell> header =
                 [
                     XlsbCell.Create("Name"),
@@ -139,7 +135,6 @@ namespace ExcelReader.Benchmarks
             await using (XlsbWorkbookWriter wb = XlsbWorkbookWriter.Create(ms, leaveOpen: true, options: new XlsbWriterOptions { UseSharedStrings = true }))
             {
                 XlsbSheetWriter sheet = wb.AddSheet("S1");
-                await sheet.StartAsync();
                 ReadOnlySpan<XlsbCell> header =
                 [
                     XlsbCell.Create("Name"),
@@ -162,7 +157,6 @@ namespace ExcelReader.Benchmarks
             await using (XlsbWorkbookWriter wb = XlsbWorkbookWriter.Create(ms, leaveOpen: true, options: new XlsbWriterOptions { PrefetchWrite = true }))
             {
                 XlsbSheetWriter sheet = wb.AddSheet("S1");
-                await sheet.StartAsync();
                 ReadOnlySpan<XlsbCell> header =
                 [
                     XlsbCell.Create("Name"),

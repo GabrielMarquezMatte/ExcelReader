@@ -531,7 +531,7 @@ namespace ExcelReader.Tests
             ms.Position = 0;
             await using (var reader = await Excel.FromXlsxAsync(ms, ct: TestContext.Current.CancellationToken))
             {
-                await foreach (var row in ExcelParser.FromAttributes<PersonRow>().ParseAsync(reader, TestContext.Current.CancellationToken))
+                await foreach (var row in ExcelParser.FromAttributes<PersonRow>().Parse(reader).WithCancellation(TestContext.Current.CancellationToken))
                 {
                     asyncResult.Add(row);
                 }
@@ -558,7 +558,7 @@ namespace ExcelReader.Tests
             await using var ms = await TypedWorkbook.BuildAsync(rows);
             await using var reader = await Excel.FromXlsxAsync(ms, ct: TestContext.Current.CancellationToken);
             var result = new List<PersonRow>();
-            await foreach (var row in ExcelParser.FromAttributes<PersonRow>().ParseAsync(reader, TestContext.Current.CancellationToken))
+            await foreach (var row in ExcelParser.FromAttributes<PersonRow>().Parse(reader).WithCancellation(TestContext.Current.CancellationToken))
             {
                 result.Add(row);
             }

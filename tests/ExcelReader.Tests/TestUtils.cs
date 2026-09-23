@@ -216,7 +216,6 @@ namespace ExcelReader.Tests
                 foreach ((string name, object?[][] rows) in sheets)
                 {
                     XlsxSheetWriter sheet = wb.AddSheet(name);
-                    await sheet.StartAsync();
                     foreach (object?[] row in rows)
                     {
                         await using XlsxRowWriter rw = await sheet.StartRowAsync();

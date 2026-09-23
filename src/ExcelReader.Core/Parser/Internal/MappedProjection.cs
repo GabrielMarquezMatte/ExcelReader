@@ -9,10 +9,10 @@ namespace ExcelReader.Core.Parser.Internal
         private const int StackallocLimit = 256;
 
         internal static CsvRowAction<TState> Bind(
-            CsvModelMap<TModel> map, Row header, int headerRow, bool sequential, CsvModelSink<TState, TModel> sink)
+            ExcelParser<TModel> parser, Row header, int headerRow, bool sequential, CsvModelSink<TState, TModel> sink)
         {
-            TypeMapInfo<TModel> info = map.Info;
-            ExcelParserConfig config = map.Config;
+            TypeMapInfo<TModel> info = parser.CsvInfo;
+            ExcelParserConfig config = parser.Config;
             ColumnBinding<TModel>[] bindings;
             int requireValueCount;
             if (info.IsIndexBased)

@@ -257,7 +257,6 @@ namespace ExcelReader.Tests
             await using (XlsxWorkbookWriter wb = XlsxWorkbookWriter.Create(ms, leaveOpen: true))
             {
                 XlsxSheetWriter sheet = wb.AddSheet("S1");
-                await sheet.StartAsync(TestContext.Current.CancellationToken);
                 await using (XlsxRowWriter header = await sheet.StartRowAsync(TestContext.Current.CancellationToken))
                 {
                     WriteCrossFormatHeaders(header);
@@ -286,7 +285,6 @@ namespace ExcelReader.Tests
             await using (XlsbWorkbookWriter wb = XlsbWorkbookWriter.Create(ms, leaveOpen: true))
             {
                 XlsbSheetWriter sheet = wb.AddSheet("S1");
-                await sheet.StartAsync(TestContext.Current.CancellationToken);
                 await using (XlsbRowWriter header = await sheet.StartRowAsync(TestContext.Current.CancellationToken))
                 {
                     WriteCrossFormatHeaders(header);
@@ -315,7 +313,6 @@ namespace ExcelReader.Tests
             await using (XlsWorkbookWriter wb = XlsWorkbookWriter.Create(ms, leaveOpen: true))
             {
                 XlsSheetWriter sheet = wb.AddSheet("S1");
-                await sheet.StartAsync(TestContext.Current.CancellationToken);
                 await using (XlsRowWriter header = await sheet.StartRowAsync(TestContext.Current.CancellationToken))
                 {
                     WriteCrossFormatHeaders(header);
@@ -343,7 +340,6 @@ namespace ExcelReader.Tests
             await using var ms = new MemoryStream();
             CsvWorkbookWriter wb = CsvWorkbookWriter.Create(ms, leaveOpen: true);
             CsvSheetWriter sheet = wb.AddSheet("S1");
-            await sheet.StartAsync(TestContext.Current.CancellationToken);
             await using (CsvRowWriter header = await sheet.StartRowAsync(TestContext.Current.CancellationToken))
             {
                 WriteCrossFormatHeaders(header);

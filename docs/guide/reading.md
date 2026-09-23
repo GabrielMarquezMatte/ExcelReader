@@ -55,7 +55,7 @@ public ref struct SaleRow
 long total = 0;
 await Excel.ForEachCsvParallelAsync(
     "big.csv",
-    CsvModelMap.FromAttributes<SaleRow>(),
+    ExcelParser.FromAttributes<SaleRow>(),
     row => Interlocked.Add(ref total, row.Units),
     new CsvParallelOptions { DegreeOfParallelism = 8, HeaderRow = 1 });
 ```

@@ -36,7 +36,7 @@ namespace ExcelReader.Tests
             await using var reader = await Excel.FromXlsbAsync(ms, ct: TestContext.Current.CancellationToken);
             var rows = new List<PersonRow>();
 
-            await foreach (var row in ExcelParser.FromAttributes<PersonRow>().ParseAsync(reader, TestContext.Current.CancellationToken))
+            await foreach (var row in ExcelParser.FromAttributes<PersonRow>().Parse(reader).WithCancellation(TestContext.Current.CancellationToken))
             {
                 rows.Add(row);
             }

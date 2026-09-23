@@ -4,6 +4,16 @@
 *REMOVED*ExcelReader.Core.Parser.ExcelMappedParser<T>
 *REMOVED*ExcelReader.Core.Parser.ExcelMappedParser<T>.ExcelMappedParser(ExcelReader.Core.Parser.ExcelParserConfig? config = null) -> void
 *REMOVED*ExcelReader.Core.Parser.ExcelParser<T>.ExcelParser(ExcelReader.Core.Parser.ExcelParserConfig? config = null) -> void
+*REMOVED*ExcelReader.Core.Parser.ExcelParser<T>.Parse(ExcelReader.Core.Reader.CsvReader! reader) -> ExcelReader.Core.Parser.Internal.CsvEnumerable<T>!
+*REMOVED*ExcelReader.Core.Parser.ExcelParser<T>.Parse(ExcelReader.Core.Reader.IExcelRowReader! reader) -> ExcelReader.Core.Parser.Internal.ExcelEnumerable<T, ExcelReader.Core.Reader.IExcelRowReader!, ExcelReader.Core.Reader.IExcelRowEnumerator!>!
+*REMOVED*ExcelReader.Core.Parser.ExcelParser<T>.Parse(ExcelReader.Core.Reader.XlsReader! reader) -> ExcelReader.Core.Parser.Internal.ExcelEnumerable<T, ExcelReader.Core.Reader.XlsReader!, ExcelReader.Core.Reader.XlsReader.Enumerator!>!
+*REMOVED*ExcelReader.Core.Parser.ExcelParser<T>.Parse(ExcelReader.Core.Reader.XlsbReader! reader) -> ExcelReader.Core.Parser.Internal.ExcelEnumerable<T, ExcelReader.Core.Reader.XlsbReader!, ExcelReader.Core.Reader.XlsbReader.Enumerator!>!
+*REMOVED*ExcelReader.Core.Parser.ExcelParser<T>.Parse(ExcelReader.Core.Reader.XlsxReader! reader) -> ExcelReader.Core.Parser.Internal.ExcelEnumerable<T>!
+*REMOVED*ExcelReader.Core.Parser.ExcelParser<T>.ParseAsync(ExcelReader.Core.Reader.CsvReader! reader, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> ExcelReader.Core.Parser.Internal.CsvEnumerable<T>!
+*REMOVED*ExcelReader.Core.Parser.ExcelParser<T>.ParseAsync(ExcelReader.Core.Reader.IExcelRowReader! reader, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> ExcelReader.Core.Parser.Internal.ExcelEnumerable<T, ExcelReader.Core.Reader.IExcelRowReader!, ExcelReader.Core.Reader.IExcelRowEnumerator!>!
+*REMOVED*ExcelReader.Core.Parser.ExcelParser<T>.ParseAsync(ExcelReader.Core.Reader.XlsReader! reader, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> ExcelReader.Core.Parser.Internal.ExcelEnumerable<T, ExcelReader.Core.Reader.XlsReader!, ExcelReader.Core.Reader.XlsReader.Enumerator!>!
+*REMOVED*ExcelReader.Core.Parser.ExcelParser<T>.ParseAsync(ExcelReader.Core.Reader.XlsbReader! reader, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> ExcelReader.Core.Parser.Internal.ExcelEnumerable<T, ExcelReader.Core.Reader.XlsbReader!, ExcelReader.Core.Reader.XlsbReader.Enumerator!>!
+*REMOVED*ExcelReader.Core.Parser.ExcelParser<T>.ParseAsync(ExcelReader.Core.Reader.XlsxReader! reader, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> ExcelReader.Core.Parser.Internal.ExcelEnumerable<T>!
 *REMOVED*ExcelReader.Core.Parser.ExcelRowMapParserBase<T>
 *REMOVED*ExcelReader.Core.Parser.ExcelRowMapParserBase<T>.Parse(ExcelReader.Core.Reader.CsvReader! reader) -> ExcelReader.Core.Parser.Internal.CsvEnumerable<T>!
 *REMOVED*ExcelReader.Core.Parser.ExcelRowMapParserBase<T>.Parse(ExcelReader.Core.Reader.IExcelRowReader! reader) -> ExcelReader.Core.Parser.Internal.ExcelEnumerable<T, ExcelReader.Core.Reader.IExcelRowReader!, ExcelReader.Core.Reader.IExcelRowEnumerator!>!
@@ -15,17 +25,62 @@
 *REMOVED*ExcelReader.Core.Parser.ExcelRowMapParserBase<T>.ParseAsync(ExcelReader.Core.Reader.XlsReader! reader, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> ExcelReader.Core.Parser.Internal.ExcelEnumerable<T, ExcelReader.Core.Reader.XlsReader!, ExcelReader.Core.Reader.XlsReader.Enumerator!>!
 *REMOVED*ExcelReader.Core.Parser.ExcelRowMapParserBase<T>.ParseAsync(ExcelReader.Core.Reader.XlsbReader! reader, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> ExcelReader.Core.Parser.Internal.ExcelEnumerable<T, ExcelReader.Core.Reader.XlsbReader!, ExcelReader.Core.Reader.XlsbReader.Enumerator!>!
 *REMOVED*ExcelReader.Core.Parser.ExcelRowMapParserBase<T>.ParseAsync(ExcelReader.Core.Reader.XlsxReader! reader, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> ExcelReader.Core.Parser.Internal.ExcelEnumerable<T>!
+*REMOVED*ExcelReader.Core.Parser.Internal.AsyncRowEnumerator<T, TReader, TRows>
+*REMOVED*ExcelReader.Core.Parser.Internal.AsyncRowEnumerator<T, TReader, TRows>.AsyncRowEnumerator(TReader reader, System.Threading.CancellationToken ct) -> void
+*REMOVED*ExcelReader.Core.Parser.Internal.AsyncRowEnumerator<T, TReader, TRows>.Current.get -> T
+*REMOVED*ExcelReader.Core.Parser.Internal.AsyncRowEnumerator<T, TReader, TRows>.MoveNextAsync() -> System.Threading.Tasks.ValueTask<bool>
+*REMOVED*ExcelReader.Core.Parser.Internal.AsyncRowEnumerator<T, TReader, TRows>.Rows -> TRows?
+*REMOVED*ExcelReader.Core.Parser.Internal.CsvEnumerable<T>
+*REMOVED*ExcelReader.Core.Parser.Internal.CsvEnumerable<T>.AsyncEnumerator
+*REMOVED*ExcelReader.Core.Parser.Internal.CsvEnumerable<T>.Enumerator
+*REMOVED*ExcelReader.Core.Parser.Internal.CsvEnumerable<T>.GetAsyncEnumerator(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> ExcelReader.Core.Parser.Internal.CsvEnumerable<T>.AsyncEnumerator!
+*REMOVED*ExcelReader.Core.Parser.Internal.CsvEnumerable<T>.GetEnumerator() -> ExcelReader.Core.Parser.Internal.CsvEnumerable<T>.Enumerator!
+*REMOVED*ExcelReader.Core.Parser.Internal.ExcelEnumerable<T, TReader, TEnumerator>
+*REMOVED*ExcelReader.Core.Parser.Internal.ExcelEnumerable<T, TReader, TEnumerator>.AsyncEnumerator
+*REMOVED*ExcelReader.Core.Parser.Internal.ExcelEnumerable<T, TReader, TEnumerator>.Enumerator
+*REMOVED*ExcelReader.Core.Parser.Internal.ExcelEnumerable<T>
+*REMOVED*ExcelReader.Core.Parser.Internal.SyncRowEnumerator<T, TRows>
+*REMOVED*ExcelReader.Core.Parser.Internal.SyncRowEnumerator<T, TRows>.Current.get -> T
+*REMOVED*ExcelReader.Core.Parser.Internal.SyncRowEnumerator<T, TRows>.Dispose() -> void
+*REMOVED*ExcelReader.Core.Parser.Internal.SyncRowEnumerator<T, TRows>.MoveNext() -> bool
+*REMOVED*ExcelReader.Core.Parser.Internal.SyncRowEnumerator<T, TRows>.Reset() -> void
+*REMOVED*ExcelReader.Core.Parser.Internal.SyncRowEnumerator<T, TRows>.SyncRowEnumerator(TRows! rows) -> void
+*REMOVED*ExcelReader.Core.Reader.CsvModelMap
+*REMOVED*ExcelReader.Core.Reader.CsvModelMap<TModel>
+*REMOVED*ExcelReader.Core.Reader.XlsReader.GetAsyncEnumerator(System.Threading.CancellationToken ct) -> ExcelReader.Core.Reader.XlsReader.Enumerator!
+*REMOVED*ExcelReader.Core.Writer.CsvSheetWriter.Start() -> void
+*REMOVED*ExcelReader.Core.Writer.CsvSheetWriter.StartAsync(System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
 *REMOVED*ExcelReader.Core.Writer.CsvWorkbookWriter.Start() -> void
 *REMOVED*ExcelReader.Core.Writer.CsvWorkbookWriter.StartAsync(System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+*REMOVED*ExcelReader.Core.Writer.ISheetWriter<TRow>.Start() -> void
+*REMOVED*ExcelReader.Core.Writer.ISheetWriter<TRow>.StartAsync(System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
 *REMOVED*ExcelReader.Core.Writer.IWorkbookWriter<TSheet>.Start() -> void
 *REMOVED*ExcelReader.Core.Writer.IWorkbookWriter<TSheet>.StartAsync(System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+*REMOVED*ExcelReader.Core.Writer.XlsSheetWriter.Start() -> void
+*REMOVED*ExcelReader.Core.Writer.XlsSheetWriter.StartAsync(System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
 *REMOVED*ExcelReader.Core.Writer.XlsWorkbookWriter.Start() -> void
 *REMOVED*ExcelReader.Core.Writer.XlsWorkbookWriter.StartAsync(System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+*REMOVED*ExcelReader.Core.Writer.XlsbSheetWriter.Start() -> void
+*REMOVED*ExcelReader.Core.Writer.XlsbSheetWriter.StartAsync(System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
 *REMOVED*ExcelReader.Core.Writer.XlsbWorkbookWriter.Start() -> void
 *REMOVED*ExcelReader.Core.Writer.XlsbWorkbookWriter.StartAsync(System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+*REMOVED*ExcelReader.Core.Writer.XlsxSheetWriter.Start() -> void
+*REMOVED*ExcelReader.Core.Writer.XlsxSheetWriter.StartAsync(System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+*REMOVED*ExcelReader.Core.Writer.XlsxSheetWriter.StartRow(System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> ExcelReader.Core.Writer.XlsxRowWriter!
 *REMOVED*ExcelReader.Core.Writer.XlsxWorkbookWriter.Start() -> void
 *REMOVED*ExcelReader.Core.Writer.XlsxWorkbookWriter.StartAsync(System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
+*REMOVED*override ExcelReader.Core.Parser.Internal.CsvEnumerable<T>.AsyncEnumerator.DisposeAsync() -> System.Threading.Tasks.ValueTask
+*REMOVED*readonly ExcelReader.Core.Parser.Internal.SyncRowEnumerator<T, TRows>.Rows -> TRows!
 *REMOVED*static ExcelReader.Core.Parser.ExcelFluentParser<T>.WithAttributeFallback(System.Action<ExcelReader.Core.Parser.ExcelRowMapBuilder<T>!>! configure, ExcelReader.Core.Parser.ExcelParserConfig? config = null) -> ExcelReader.Core.Parser.ExcelFluentParser<T>!
+*REMOVED*static ExcelReader.Core.Reader.CsvModelMap.Build<T>(System.Action<ExcelReader.Core.Parser.ExcelRowMapBuilder<T>!>! configure, ExcelReader.Core.Parser.ExcelParserConfig? config = null) -> ExcelReader.Core.Reader.CsvModelMap<T>!
+*REMOVED*static ExcelReader.Core.Reader.CsvModelMap.FromAttributes<T>(ExcelReader.Core.Parser.ExcelParserConfig? config = null) -> ExcelReader.Core.Reader.CsvModelMap<T>!
+*REMOVED*static ExcelReader.Core.Reader.CsvModelMap.Generated<T>(ExcelReader.Core.Parser.ExcelParserConfig? config = null) -> ExcelReader.Core.Reader.CsvModelMap<T>!
+*REMOVED*static ExcelReader.Core.Reader.Excel.AggregateCsvParallelAsync<TAccumulator, TModel>(System.IO.Stream! stream, ExcelReader.Core.Reader.CsvModelMap<TModel>! map, ExcelReader.Core.Reader.CsvParallelOptions? options = null, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<TAccumulator>!
+*REMOVED*static ExcelReader.Core.Reader.Excel.AggregateCsvParallelAsync<TAccumulator, TModel>(System.ReadOnlyMemory<byte> data, ExcelReader.Core.Reader.CsvModelMap<TModel>! map, ExcelReader.Core.Reader.CsvParallelOptions? options = null, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<TAccumulator>!
+*REMOVED*static ExcelReader.Core.Reader.Excel.AggregateCsvParallelAsync<TAccumulator, TModel>(string! path, ExcelReader.Core.Reader.CsvModelMap<TModel>! map, ExcelReader.Core.Reader.CsvParallelOptions? options = null, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<TAccumulator>!
+*REMOVED*static ExcelReader.Core.Reader.Excel.ForEachCsvParallelAsync<TModel>(System.IO.Stream! stream, ExcelReader.Core.Reader.CsvModelMap<TModel>! map, ExcelReader.Core.Reader.CsvRecordAction<TModel>! body, ExcelReader.Core.Reader.CsvParallelOptions? options = null, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
+*REMOVED*static ExcelReader.Core.Reader.Excel.ForEachCsvParallelAsync<TModel>(System.ReadOnlyMemory<byte> data, ExcelReader.Core.Reader.CsvModelMap<TModel>! map, ExcelReader.Core.Reader.CsvRecordAction<TModel>! body, ExcelReader.Core.Reader.CsvParallelOptions? options = null, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
+*REMOVED*static ExcelReader.Core.Reader.Excel.ForEachCsvParallelAsync<TModel>(string! path, ExcelReader.Core.Reader.CsvModelMap<TModel>! map, ExcelReader.Core.Reader.CsvRecordAction<TModel>! body, ExcelReader.Core.Reader.CsvParallelOptions? options = null, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
 *REMOVED*static ExcelReader.Core.Writer.MappedRecordWriter.CreateMappedCsvAsync(System.IO.Stream! stream, bool leaveOpen = false, ExcelReader.Core.Writer.CsvWriterOptions? options = null, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<ExcelReader.Core.Writer.MappedWorkbookRecordWriter<ExcelReader.Core.Writer.CsvSheetWriter!, ExcelReader.Core.Writer.CsvRowWriter!>!>
 *REMOVED*static ExcelReader.Core.Writer.MappedRecordWriter.CreateMappedXlsAsync(System.IO.Stream! stream, bool leaveOpen = false, bool date1904 = false, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<ExcelReader.Core.Writer.MappedWorkbookRecordWriter<ExcelReader.Core.Writer.XlsSheetWriter!, ExcelReader.Core.Writer.XlsRowWriter!>!>
 *REMOVED*static ExcelReader.Core.Writer.MappedRecordWriter.CreateMappedXlsbAsync(System.IO.Stream! stream, bool leaveOpen = false, bool date1904 = false, System.IO.Compression.CompressionLevel compression = System.IO.Compression.CompressionLevel.Fastest, bool useSharedStrings = false, bool prefetchWrite = false, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<ExcelReader.Core.Writer.MappedWorkbookRecordWriter<ExcelReader.Core.Writer.XlsbSheetWriter!, ExcelReader.Core.Writer.XlsbRowWriter!>!>
@@ -38,6 +93,9 @@
 *REMOVED*static ExcelReader.Core.Writer.XlsbWorkbookWriter.CreateAsync(System.IO.Stream! stream, bool leaveOpen = false, bool date1904 = false, System.IO.Compression.CompressionLevel compression = System.IO.Compression.CompressionLevel.Fastest, bool useSharedStrings = false, bool prefetchWrite = false, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<ExcelReader.Core.Writer.XlsbWorkbookWriter!>
 *REMOVED*static ExcelReader.Core.Writer.XlsxWorkbookWriter.Create(System.IO.Stream! stream, bool leaveOpen = false, System.IO.Compression.CompressionLevel compression = System.IO.Compression.CompressionLevel.Fastest, bool useSharedStrings = false, bool prefetchWrite = false) -> ExcelReader.Core.Writer.XlsxWorkbookWriter!
 *REMOVED*static ExcelReader.Core.Writer.XlsxWorkbookWriter.CreateAsync(System.IO.Stream! stream, bool leaveOpen = false, System.IO.Compression.CompressionLevel compression = System.IO.Compression.CompressionLevel.Fastest, bool useSharedStrings = false, bool prefetchWrite = false, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<ExcelReader.Core.Writer.XlsxWorkbookWriter!>
+*REMOVED*virtual ExcelReader.Core.Parser.Internal.AsyncRowEnumerator<T, TReader, TRows>.DisposeAsync() -> System.Threading.Tasks.ValueTask
+*REMOVED*~ExcelReader.Core.Parser.Internal.ExcelEnumerable<T, TReader, TEnumerator>.GetAsyncEnumerator(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> ExcelReader.Core.Parser.Internal.ExcelEnumerable<T, TReader, TEnumerator>.AsyncEnumerator!
+*REMOVED*~ExcelReader.Core.Parser.Internal.ExcelEnumerable<T, TReader, TEnumerator>.GetEnumerator() -> ExcelReader.Core.Parser.Internal.ExcelEnumerable<T, TReader, TEnumerator>.Enumerator!
 ExcelReader.Core.Enums.CsvNewLine
 ExcelReader.Core.Enums.CsvNewLine.CarriageReturnLineFeed = 0 -> ExcelReader.Core.Enums.CsvNewLine
 ExcelReader.Core.Enums.CsvNewLine.LineFeed = 1 -> ExcelReader.Core.Enums.CsvNewLine
@@ -46,7 +104,29 @@ ExcelReader.Core.Enums.ExcelSheetVisibility
 ExcelReader.Core.Enums.ExcelSheetVisibility.Hidden = 1 -> ExcelReader.Core.Enums.ExcelSheetVisibility
 ExcelReader.Core.Enums.ExcelSheetVisibility.VeryHidden = 2 -> ExcelReader.Core.Enums.ExcelSheetVisibility
 ExcelReader.Core.Enums.ExcelSheetVisibility.Visible = 0 -> ExcelReader.Core.Enums.ExcelSheetVisibility
+ExcelReader.Core.Parser.AsyncRowEnumerator<T, TReader, TRows>
+ExcelReader.Core.Parser.AsyncRowEnumerator<T, TReader, TRows>.Current.get -> T
+ExcelReader.Core.Parser.AsyncRowEnumerator<T, TReader, TRows>.MoveNextAsync() -> System.Threading.Tasks.ValueTask<bool>
+ExcelReader.Core.Parser.CsvEnumerable<T>
+ExcelReader.Core.Parser.CsvEnumerable<T>.AsyncEnumerator
+ExcelReader.Core.Parser.CsvEnumerable<T>.Enumerator
+ExcelReader.Core.Parser.CsvEnumerable<T>.GetAsyncEnumerator(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> ExcelReader.Core.Parser.CsvEnumerable<T>.AsyncEnumerator!
+ExcelReader.Core.Parser.CsvEnumerable<T>.GetEnumerator() -> ExcelReader.Core.Parser.CsvEnumerable<T>.Enumerator!
+ExcelReader.Core.Parser.ExcelEnumerable<T, TReader, TEnumerator>
+ExcelReader.Core.Parser.ExcelEnumerable<T, TReader, TEnumerator>.AsyncEnumerator
+ExcelReader.Core.Parser.ExcelEnumerable<T, TReader, TEnumerator>.Enumerator
+ExcelReader.Core.Parser.ExcelEnumerable<T>
 ExcelReader.Core.Parser.ExcelParser
+ExcelReader.Core.Parser.ExcelParser<T>.Parse(ExcelReader.Core.Reader.CsvReader! reader) -> ExcelReader.Core.Parser.CsvEnumerable<T>!
+ExcelReader.Core.Parser.ExcelParser<T>.Parse(ExcelReader.Core.Reader.IExcelRowReader! reader) -> ExcelReader.Core.Parser.ExcelEnumerable<T, ExcelReader.Core.Reader.IExcelRowReader!, ExcelReader.Core.Reader.IExcelRowEnumerator!>!
+ExcelReader.Core.Parser.ExcelParser<T>.Parse(ExcelReader.Core.Reader.XlsReader! reader) -> ExcelReader.Core.Parser.ExcelEnumerable<T, ExcelReader.Core.Reader.XlsReader!, ExcelReader.Core.Reader.XlsReader.Enumerator!>!
+ExcelReader.Core.Parser.ExcelParser<T>.Parse(ExcelReader.Core.Reader.XlsbReader! reader) -> ExcelReader.Core.Parser.ExcelEnumerable<T, ExcelReader.Core.Reader.XlsbReader!, ExcelReader.Core.Reader.XlsbReader.Enumerator!>!
+ExcelReader.Core.Parser.ExcelParser<T>.Parse(ExcelReader.Core.Reader.XlsxReader! reader) -> ExcelReader.Core.Parser.ExcelEnumerable<T>!
+ExcelReader.Core.Parser.SyncRowEnumerator<T, TRows>
+ExcelReader.Core.Parser.SyncRowEnumerator<T, TRows>.Current.get -> T
+ExcelReader.Core.Parser.SyncRowEnumerator<T, TRows>.Dispose() -> void
+ExcelReader.Core.Parser.SyncRowEnumerator<T, TRows>.MoveNext() -> bool
+ExcelReader.Core.Parser.SyncRowEnumerator<T, TRows>.Reset() -> void
 ExcelReader.Core.Reader.CsvReader.SheetVisibility.get -> ExcelReader.Core.Enums.ExcelSheetVisibility
 ExcelReader.Core.Reader.CsvReader.SheetVisibilityAt(int index) -> ExcelReader.Core.Enums.ExcelSheetVisibility
 ExcelReader.Core.Reader.CsvReaderOptions.SniffDialect.get -> bool
@@ -85,6 +165,8 @@ ExcelReader.Core.Writer.XlsbWriterOptions.PrefetchWrite.init -> void
 ExcelReader.Core.Writer.XlsbWriterOptions.UseSharedStrings.get -> bool
 ExcelReader.Core.Writer.XlsbWriterOptions.UseSharedStrings.init -> void
 ExcelReader.Core.Writer.XlsbWriterOptions.XlsbWriterOptions() -> void
+ExcelReader.Core.Writer.XlsxSheetWriter.StartRow() -> ExcelReader.Core.Writer.XlsxRowWriter!
+ExcelReader.Core.Writer.XlsxSheetWriter.StartRow(int styleId) -> ExcelReader.Core.Writer.XlsxRowWriter!
 ExcelReader.Core.Writer.XlsxWorkbookWriter.AddSheet(string! name, ExcelReader.Core.Enums.ExcelSheetVisibility visibility) -> ExcelReader.Core.Writer.XlsxSheetWriter!
 ExcelReader.Core.Writer.XlsxWriterOptions
 ExcelReader.Core.Writer.XlsxWriterOptions.<Clone>$() -> ExcelReader.Core.Writer.XlsxWriterOptions!
@@ -96,6 +178,7 @@ ExcelReader.Core.Writer.XlsxWriterOptions.PrefetchWrite.init -> void
 ExcelReader.Core.Writer.XlsxWriterOptions.UseSharedStrings.get -> bool
 ExcelReader.Core.Writer.XlsxWriterOptions.UseSharedStrings.init -> void
 ExcelReader.Core.Writer.XlsxWriterOptions.XlsxWriterOptions() -> void
+override ExcelReader.Core.Parser.CsvEnumerable<T>.AsyncEnumerator.DisposeAsync() -> System.Threading.Tasks.ValueTask
 override ExcelReader.Core.Writer.XlsbWriterOptions.Equals(object? obj) -> bool
 override ExcelReader.Core.Writer.XlsbWriterOptions.GetHashCode() -> int
 override ExcelReader.Core.Writer.XlsbWriterOptions.ToString() -> string!
@@ -106,6 +189,12 @@ static ExcelReader.Core.Parser.ExcelParser.Build<T>(System.Action<ExcelReader.Co
 static ExcelReader.Core.Parser.ExcelParser.BuildWithAttributeFallback<T>(System.Action<ExcelReader.Core.Parser.ExcelRowMapBuilder<T>!>! configure, ExcelReader.Core.Parser.ExcelParserConfig? config = null) -> ExcelReader.Core.Parser.ExcelParser<T>!
 static ExcelReader.Core.Parser.ExcelParser.FromAttributes<T>(ExcelReader.Core.Parser.ExcelParserConfig? config = null) -> ExcelReader.Core.Parser.ExcelParser<T>!
 static ExcelReader.Core.Parser.ExcelParser.Generated<T>(ExcelReader.Core.Parser.ExcelParserConfig? config = null) -> ExcelReader.Core.Parser.ExcelParser<T>!
+static ExcelReader.Core.Reader.Excel.AggregateCsvParallelAsync<TAccumulator, TModel>(System.IO.Stream! stream, ExcelReader.Core.Parser.ExcelParser<TModel>! parser, ExcelReader.Core.Reader.CsvParallelOptions? options = null, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<TAccumulator>!
+static ExcelReader.Core.Reader.Excel.AggregateCsvParallelAsync<TAccumulator, TModel>(System.ReadOnlyMemory<byte> data, ExcelReader.Core.Parser.ExcelParser<TModel>! parser, ExcelReader.Core.Reader.CsvParallelOptions? options = null, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<TAccumulator>!
+static ExcelReader.Core.Reader.Excel.AggregateCsvParallelAsync<TAccumulator, TModel>(string! path, ExcelReader.Core.Parser.ExcelParser<TModel>! parser, ExcelReader.Core.Reader.CsvParallelOptions? options = null, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<TAccumulator>!
+static ExcelReader.Core.Reader.Excel.ForEachCsvParallelAsync<TModel>(System.IO.Stream! stream, ExcelReader.Core.Parser.ExcelParser<TModel>! parser, ExcelReader.Core.Reader.CsvRecordAction<TModel>! body, ExcelReader.Core.Reader.CsvParallelOptions? options = null, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
+static ExcelReader.Core.Reader.Excel.ForEachCsvParallelAsync<TModel>(System.ReadOnlyMemory<byte> data, ExcelReader.Core.Parser.ExcelParser<TModel>! parser, ExcelReader.Core.Reader.CsvRecordAction<TModel>! body, ExcelReader.Core.Reader.CsvParallelOptions? options = null, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
+static ExcelReader.Core.Reader.Excel.ForEachCsvParallelAsync<TModel>(string! path, ExcelReader.Core.Parser.ExcelParser<TModel>! parser, ExcelReader.Core.Reader.CsvRecordAction<TModel>! body, ExcelReader.Core.Reader.CsvParallelOptions? options = null, System.Threading.CancellationToken ct = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
 static ExcelReader.Core.Reader.Excel.Open(System.IO.Stream! stream, ExcelReader.Core.Enums.ExcelFileFormat format, bool leaveOpen = true, ExcelReader.Core.Reader.ExcelReaderOptions? options = null) -> ExcelReader.Core.Reader.IExcelRowReader!
 static ExcelReader.Core.Reader.Excel.Open(System.ReadOnlyMemory<byte> data, ExcelReader.Core.Enums.ExcelFileFormat format, ExcelReader.Core.Reader.ExcelReaderOptions? options = null) -> ExcelReader.Core.Reader.IExcelRowReader!
 static ExcelReader.Core.Reader.Excel.Open(string! path, ExcelReader.Core.Enums.ExcelFileFormat format, ExcelReader.Core.Reader.ExcelReaderOptions? options = null) -> ExcelReader.Core.Reader.IExcelRowReader!
@@ -127,3 +216,6 @@ static ExcelReader.Core.Writer.XlsxWorkbookWriter.Create(System.IO.Stream! strea
 static ExcelReader.Core.Writer.XlsxWriterOptions.Default.get -> ExcelReader.Core.Writer.XlsxWriterOptions!
 static ExcelReader.Core.Writer.XlsxWriterOptions.operator !=(ExcelReader.Core.Writer.XlsxWriterOptions? left, ExcelReader.Core.Writer.XlsxWriterOptions? right) -> bool
 static ExcelReader.Core.Writer.XlsxWriterOptions.operator ==(ExcelReader.Core.Writer.XlsxWriterOptions? left, ExcelReader.Core.Writer.XlsxWriterOptions? right) -> bool
+virtual ExcelReader.Core.Parser.AsyncRowEnumerator<T, TReader, TRows>.DisposeAsync() -> System.Threading.Tasks.ValueTask
+~ExcelReader.Core.Parser.ExcelEnumerable<T, TReader, TEnumerator>.GetAsyncEnumerator(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> ExcelReader.Core.Parser.ExcelEnumerable<T, TReader, TEnumerator>.AsyncEnumerator!
+~ExcelReader.Core.Parser.ExcelEnumerable<T, TReader, TEnumerator>.GetEnumerator() -> ExcelReader.Core.Parser.ExcelEnumerable<T, TReader, TEnumerator>.Enumerator!

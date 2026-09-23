@@ -37,7 +37,6 @@ namespace ExcelReader.Core.Writer
             TSheet sheet = BeginSheet(sheetName);
             await using (sheet.ConfigureAwait(false))
             {
-                await sheet.StartAsync(ct).ConfigureAwait(false);
                 await WriteHeaderAsync(sheet, headers, ct).ConfigureAwait(false);
                 await sheet.WriteRecordsAsync(records, writeRow, ct).ConfigureAwait(false);
                 await sheet.EndAsync(ct).ConfigureAwait(false);
@@ -52,7 +51,6 @@ namespace ExcelReader.Core.Writer
             TSheet sheet = BeginSheet(sheetName);
             await using (sheet.ConfigureAwait(false))
             {
-                await sheet.StartAsync(ct).ConfigureAwait(false);
                 await WriteHeaderAsync(sheet, headers, ct).ConfigureAwait(false);
                 await sheet.WriteRecordsAsync(records, writeRow, ct).ConfigureAwait(false);
                 await sheet.EndAsync(ct).ConfigureAwait(false);

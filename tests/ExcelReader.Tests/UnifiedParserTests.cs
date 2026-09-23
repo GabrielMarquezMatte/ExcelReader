@@ -99,7 +99,7 @@ namespace ExcelReader.Tests
             await using CsvReader reader = Excel.FromCsv(Csv);
             var names = new List<string>();
             double total = 0;
-            await foreach (SaleRef sale in ExcelParser.FromAttributes<SaleRef>().ParseAsync(reader, TestContext.Current.CancellationToken))
+            await foreach (SaleRef sale in ExcelParser.FromAttributes<SaleRef>().Parse(reader).WithCancellation(TestContext.Current.CancellationToken))
             {
                 names.Add(Encoding.UTF8.GetString(sale.Name));
                 total += sale.Value;
@@ -126,9 +126,9 @@ namespace ExcelReader.Tests
         public async Task RefStructModelFlowsThroughIAsyncEnumerableOfT()
         {
             await using CsvReader reader = Excel.FromCsv(Csv);
-            IAsyncEnumerable<SaleRef> sequence = ExcelParser.FromAttributes<SaleRef>().ParseAsync(reader, TestContext.Current.CancellationToken);
+            IAsyncEnumerable<SaleRef> sequence = ExcelParser.FromAttributes<SaleRef>().Parse(reader);
             int rows = 0;
-            await foreach (SaleRef sale in sequence)
+            await foreach (SaleRef sale in sequence.WithCancellation(TestContext.Current.CancellationToken))
             {
                 rows++;
                 Assert.False(sale.Name.IsEmpty);

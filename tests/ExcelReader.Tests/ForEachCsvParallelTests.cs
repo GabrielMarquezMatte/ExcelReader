@@ -200,7 +200,7 @@ namespace ExcelReader.Tests
 
             await Excel.ForEachCsvParallelAsync(
                 csv.AsMemory(),
-                CsvModelMap.FromAttributes<Order>(),
+                ExcelParser.FromAttributes<Order>(),
                 order =>
                 {
                     Interlocked.Add(ref units, order.Units);
@@ -224,7 +224,7 @@ namespace ExcelReader.Tests
 
             await Excel.ForEachCsvParallelAsync(
                 csv.AsMemory(),
-                CsvModelMap.FromAttributes<Order>(),
+                ExcelParser.FromAttributes<Order>(),
                 order => Interlocked.Add(ref parallel, order.Units),
                 new CsvParallelOptions { DegreeOfParallelism = 8, HeaderRow = 1 },
                 TestContext.Current.CancellationToken);
@@ -232,7 +232,7 @@ namespace ExcelReader.Tests
             long sequential = 0;
             await Excel.ForEachCsvParallelAsync(
                 csv.AsMemory(),
-                CsvModelMap.FromAttributes<Order>(),
+                ExcelParser.FromAttributes<Order>(),
                 order => sequential += order.Units,
                 new CsvParallelOptions { DegreeOfParallelism = 1, HeaderRow = 1 },
                 TestContext.Current.CancellationToken);
@@ -249,7 +249,7 @@ namespace ExcelReader.Tests
             await Assert.ThrowsAsync<ArgumentException>(
                 () => Excel.ForEachCsvParallelAsync(
                     csv.AsMemory(),
-                    CsvModelMap.FromAttributes<Order>(),
+                    ExcelParser.FromAttributes<Order>(),
                     static _ => { },
                     new CsvParallelOptions { DegreeOfParallelism = 4, HeaderRow = 0 },
                     TestContext.Current.CancellationToken));
@@ -307,7 +307,7 @@ namespace ExcelReader.Tests
             return ParallelCsvProcessor.RunWithChunkSizeAsync(
                 csv.AsMemory(),
                 probe.Wrap(MappedCallback<Order>.Unbound),
-                MappedCallback<Order>.Binder(CsvModelMap.FromAttributes<Order>(), 1, body),
+                MappedCallback<Order>.Binder(ExcelParser.FromAttributes<Order>(), 1, body),
                 new CsvParallelOptions { DegreeOfParallelism = dop, HeaderRow = 1 },
                 chunkSize,
                 TestContext.Current.CancellationToken);

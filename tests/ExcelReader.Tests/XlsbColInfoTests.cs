@@ -16,7 +16,6 @@ namespace ExcelReader.Tests
             {
                 XlsbSheetWriter sheet = wb.AddSheet("Sheet1");
                 configure(sheet);
-                await sheet.StartAsync(TestContext.Current.CancellationToken);
                 await using (XlsbRowWriter row = await sheet.StartRowAsync(TestContext.Current.CancellationToken))
                 {
                     row.Write("value");

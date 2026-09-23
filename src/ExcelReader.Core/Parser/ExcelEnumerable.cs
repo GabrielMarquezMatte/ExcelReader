@@ -1,17 +1,18 @@
 using System.Collections;
 using System.Diagnostics.CodeAnalysis;
+using ExcelReader.Core.Parser.Internal;
 using ExcelReader.Core.Reader;
 using ExcelReader.Core.ValueObjects;
 
-namespace ExcelReader.Core.Parser.Internal
+namespace ExcelReader.Core.Parser
 {
     /// <summary>Lazily projects XLSX rows into <typeparamref name="T"/> instances, for both synchronous and asynchronous enumeration.</summary>
     /// <typeparam name="T">The row model type to bind each row to.</typeparam>
     public sealed class ExcelEnumerable<T> : ExcelEnumerable<T, XlsxReader, XlsxReader.Enumerator>
         where T : allows ref struct
     {
-        internal ExcelEnumerable(XlsxReader reader, ExcelParserConfig config, TypeMapInfo<T> explicitInfo, CancellationToken ct = default)
-            : base(reader, config, explicitInfo, ct)
+        internal ExcelEnumerable(XlsxReader reader, ExcelParserConfig config, TypeMapInfo<T> explicitInfo)
+            : base(reader, config, explicitInfo)
         {
         }
     }
@@ -29,15 +30,13 @@ namespace ExcelReader.Core.Parser.Internal
     {
         private readonly TReader _reader;
         private readonly ExcelParserConfig _config;
-        private readonly CancellationToken _ct;
         private readonly TypeMapInfo<T> _info;
 
-        internal ExcelEnumerable(TReader reader, ExcelParserConfig config, TypeMapInfo<T> explicitInfo, CancellationToken ct = default)
+        internal ExcelEnumerable(TReader reader, ExcelParserConfig config, TypeMapInfo<T> explicitInfo)
         {
             _reader = reader;
             _config = config;
             _info = explicitInfo;
-            _ct = ct;
         }
 
         /// <inheritdoc cref="IEnumerable{T}.GetEnumerator"/>
@@ -69,8 +68,7 @@ namespace ExcelReader.Core.Parser.Internal
             Justification = "T allows ref struct so a row model can be a class, a struct or a ref struct; constraining it would break that.")]
         public AsyncEnumerator GetAsyncEnumerator(CancellationToken cancellationToken = default)
         {
-            CancellationToken effective = cancellationToken.CanBeCanceled ? cancellationToken : _ct;
-            return new AsyncEnumerator(_reader, _info, _config.ColumnNameComparer, _config.HeaderNormalization, _config.HeaderRow, _config.Culture, _config.ThrowOnParseFailure, effective);
+            return new AsyncEnumerator(_reader, _info, _config.ColumnNameComparer, _config.HeaderNormalization, _config.HeaderRow, _config.Culture, _config.ThrowOnParseFailure, cancellationToken);
         }
 
         /// <summary>Enumerates rows synchronously, projecting each into a <typeparamref name="T"/> instance.</summary>

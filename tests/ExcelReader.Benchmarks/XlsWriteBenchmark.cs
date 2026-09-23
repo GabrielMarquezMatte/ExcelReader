@@ -24,7 +24,6 @@ namespace ExcelReader.Benchmarks
             await using (XlsWorkbookWriter wb = XlsWorkbookWriter.Create(ms, leaveOpen: true))
             {
                 XlsSheetWriter sheet = wb.AddSheet("S1");
-                sheet.Start();
                 using (XlsRowWriter header = sheet.StartRow())
                 {
                     header.Write("Name");
@@ -54,7 +53,6 @@ namespace ExcelReader.Benchmarks
             await using (XlsxWorkbookWriter wb = XlsxWorkbookWriter.Create(ms, leaveOpen: true))
             {
                 XlsxSheetWriter sheet = wb.AddSheet("S1");
-                await sheet.StartAsync();
                 using (XlsxRowWriter header = sheet.StartRow())
                 {
                     header.Write("Name");
