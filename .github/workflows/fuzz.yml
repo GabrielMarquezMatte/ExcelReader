@@ -35,7 +35,9 @@ jobs:
       - name: Setup .NET
         uses: actions/setup-dotnet@v6
         with:
-          dotnet-version: '10.0.x'
+          global-json-file: global.json
+          cache: true
+          cache-dependency-path: '**/*.csproj'
 
       - name: Install SharpFuzz CLI
         run: dotnet tool install --global SharpFuzz.CommandLine
@@ -115,7 +117,9 @@ jobs:
       - name: Setup .NET
         uses: actions/setup-dotnet@v6
         with:
-          dotnet-version: '10.0.x'
+          global-json-file: global.json
+          cache: true
+          cache-dependency-path: '**/*.csproj'
 
       - name: Build
         run: dotnet build tests/ExcelReader.Fuzz/ExcelReader.Fuzz.csproj -c Release

@@ -15,30 +15,28 @@ namespace ExcelReader.Cli
         }
 
         [Command("convert")]
-        public int Convert([Argument] string path, string? sheet = null, string? output = null, string? format = null, char? delimiter = null, string? password = null)
+        public int Convert([Argument] string path, string? sheet = null, string? output = null, string? format = null, char? delimiter = null, char? inputDelimiter = null, string? password = null)
         {
             using Stream stdout = Console.OpenStandardOutput();
             using TextWriter stderr = new ColorizingErrorWriter(Console.Error);
 
             if (Console.IsErrorRedirected)
             {
-                return CliCommands.Convert(path, sheet, output, format, delimiter ?? ',', stdout, stderr, onProgress: null, password);
+                return CliCommands.Convert(path, sheet, output, format, delimiter ?? ',', stdout, stderr, onProgress: null, password, inputDelimiter);
             }
 
             // ponytail: progress is a carriage-returned line on stderr rather than a spinner widget. A
-            // failure mid-convert leaves the error appended to the last progress line; cosmetic, on a
-            // path that is about to exit non-zero anyway.
             int code = CliCommands.Convert(path, sheet, output, format, delimiter ?? ',', stdout, stderr, rowsWritten =>
-                Console.Error.Write($"\rConverting... {rowsWritten.ToString("N0", CultureInfo.InvariantCulture)} rows written"), password);
+                Console.Error.Write($"\rConverting... {rowsWritten.ToString("N0", CultureInfo.InvariantCulture)} rows written"), password, inputDelimiter);
             Console.Error.WriteLine();
             return code;
         }
 
         [Command("schema")]
-        public int Schema([Argument] string path, string? sheet = null, int headerRow = 1, int sampleSize = 100, string? password = null)
+        public int Schema([Argument] string path, string? sheet = null, int headerRow = 1, int sampleSize = 100, char? inputDelimiter = null, string? password = null)
         {
             using TextWriter stderr = new ColorizingErrorWriter(Console.Error);
-            return CliCommands.Schema(path, sheet, headerRow, sampleSize, Console.Out, stderr, password);
+            return CliCommands.Schema(path, sheet, headerRow, sampleSize, Console.Out, stderr, password, inputDelimiter);
         }
     }
 }

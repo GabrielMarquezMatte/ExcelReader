@@ -22,6 +22,16 @@ namespace ExcelReader.Core.Parser.Internal
                 nameof(BuildNullableParsableCore),
                 BindingFlags.NonPublic | BindingFlags.Static)!;
 
+        private static readonly MethodInfo _buildSpanParsableMethod =
+            typeof(ColumnParserFactory).GetMethod(
+                nameof(BuildSpanParsableCore),
+                BindingFlags.NonPublic | BindingFlags.Static)!;
+
+        private static readonly MethodInfo _buildNullableSpanParsableMethod =
+            typeof(ColumnParserFactory).GetMethod(
+                nameof(BuildNullableSpanParsableCore),
+                BindingFlags.NonPublic | BindingFlags.Static)!;
+
         private static readonly MethodInfo _buildEnumMethod =
             typeof(ColumnParserFactory).GetMethod(
                 nameof(BuildEnumCore),
@@ -42,8 +52,13 @@ namespace ExcelReader.Core.Parser.Internal
             typeof(int), typeof(long), typeof(double), typeof(float), typeof(decimal),
             typeof(short), typeof(byte), typeof(uint), typeof(ulong), typeof(ushort),
             typeof(sbyte), typeof(char), typeof(Half), typeof(Int128), typeof(UInt128),
-            typeof(TimeSpan), typeof(DateTimeOffset),
             typeof(Guid),
+        ]);
+
+        // No IUtf8SpanParsable implementation, so these parse from the decoded text.
+        private static readonly FrozenSet<Type> _spanParsableTypes = FrozenSet.ToFrozenSet(
+        [
+            typeof(TimeSpan), typeof(DateTimeOffset),
         ]);
 
         [RequiresUnreferencedCode("Building a column parser reflects over the property's type and setter, which trimming may remove.")]
@@ -114,6 +129,12 @@ namespace ExcelReader.Core.Parser.Internal
                     .MakeGenericMethod(typeof(T), propType)
                     .Invoke(null, [prop]);
             }
+            if (_spanParsableTypes.Contains(propType))
+            {
+                return (ColumnParser<T>?)_buildSpanParsableMethod
+                    .MakeGenericMethod(typeof(T), propType)
+                    .Invoke(null, [prop]);
+            }
             if (!_parsableTypes.Contains(propType))
             {
                 return null;
@@ -147,6 +168,12 @@ namespace ExcelReader.Core.Parser.Internal
             if (innerType.IsEnum)
             {
                 return (ColumnParser<T>?)_buildNullableEnumMethod
+                    .MakeGenericMethod(typeof(T), innerType)
+                    .Invoke(null, [prop]);
+            }
+            if (_spanParsableTypes.Contains(innerType))
+            {
+                return (ColumnParser<T>?)_buildNullableSpanParsableMethod
                     .MakeGenericMethod(typeof(T), innerType)
                     .Invoke(null, [prop]);
             }
@@ -263,6 +290,22 @@ namespace ExcelReader.Core.Parser.Internal
         }
 #pragma warning restore S1172
 
+        [SkipLocalsInit]
+        internal static bool TryParseSpanParsable<TValue>(in Cell cell, IFormatProvider provider, [MaybeNullWhen(false)] out TValue value)
+            where TValue : ISpanParsable<TValue>
+        {
+            Span<char> stack = stackalloc char[Utf8Text.StackChars];
+            ReadOnlySpan<char> chars = Utf8Text.Decode(cell.Value, stack, out char[]? rented);
+            try
+            {
+                return TValue.TryParse(chars, provider, out value);
+            }
+            finally
+            {
+                Utf8Text.Release(rented);
+            }
+        }
+
         internal static bool TryParseEnum<TEnum>(in Cell cell, out TEnum value)
             where TEnum : struct, Enum
         {
@@ -374,6 +417,37 @@ namespace ExcelReader.Core.Parser.Internal
             };
         }
 
+        private static ColumnParser<T> BuildSpanParsableCore<T, TProp>(PropertyInfo prop)
+            where TProp : ISpanParsable<TProp>
+            where T : allows ref struct
+        {
+            RefAction<T, TProp> setter = CompileSetter<T, TProp>(prop);
+            return (ref model, in cell, _, provider) =>
+            {
+                if (!TryParseSpanParsable<TProp>(in cell, provider, out var value))
+                {
+                    return false;
+                }
+                setter(ref model, value);
+                return true;
+            };
+        }
+
+        private static ColumnParser<T> BuildNullableSpanParsableCore<T, TProp>(PropertyInfo prop)
+            where TProp : struct, ISpanParsable<TProp>
+            where T : allows ref struct
+        {
+            RefAction<T, TProp?> setter = CompileSetter<T, TProp?>(prop);
+            return (ref model, in cell, _, provider) =>
+            {
+                if (!TryParseSpanParsable(in cell, provider, out TProp parsed))
+                {
+                    return false;
+                }
+                setter(ref model, parsed);
+                return true;
+            };
+        }
 
         private static class EnumCache<TEnum>
             where TEnum : struct, Enum

@@ -195,7 +195,7 @@ namespace ExcelReader.Tests
             using var reader = Excel.FromXls(ms);
 
             Assert.True(reader.IsDate1904);
-            var result = new ExcelParser<PersonRow>().Parse(reader).ToList();
+            var result = ExcelParser.FromAttributes<PersonRow>().Parse(reader).ToList();
             Assert.Single(result);
             Assert.Equal(date, result[0].BirthDate);
         }
@@ -271,7 +271,7 @@ namespace ExcelReader.Tests
                 sheets: [("S1", [["Name", "Age", "Active"], ["Ana", 31, false]])]);
             using var reader = Excel.FromXls(ms);
 
-            var result = new ExcelParser<PersonRow>().Parse(reader).ToList();
+            var result = ExcelParser.FromAttributes<PersonRow>().Parse(reader).ToList();
             Assert.Single(result);
             Assert.Equal("Ana", result[0].Name);
             Assert.Equal(31, result[0].Age);
@@ -283,7 +283,7 @@ namespace ExcelReader.Tests
         {
             using var ms = XlsWorkbookBuilder.Build(sheets: [("S1", [["Name"], ["Lua"]])]);
             using var reader = Excel.FromXls(ms);
-            var enumerable = new ExcelParser<PersonRow>().Parse(reader);
+            var enumerable = ExcelParser.FromAttributes<PersonRow>().Parse(reader);
 
             using IEnumerator<PersonRow> generic = ((IEnumerable<PersonRow>)enumerable).GetEnumerator();
             Assert.True(generic.MoveNext());
@@ -294,7 +294,7 @@ namespace ExcelReader.Tests
             try
             {
                 Assert.True(nongeneric.MoveNext());
-                Assert.IsType<PersonRow>(nongeneric.Current);
+                Assert.Throws<NotSupportedException>(() => nongeneric.Current);
             }
             finally
             {
@@ -307,7 +307,7 @@ namespace ExcelReader.Tests
         {
             using var ms = XlsWorkbookBuilder.Build(sheets: [("S1", [["skip"], ["Name"], ["Sol"]])]);
             using var reader = Excel.FromXls(ms);
-            var parser = new ExcelParser<PersonRow>(new ExcelParserConfig { HeaderRow = 2 });
+            var parser = ExcelParser.FromAttributes<PersonRow>(new ExcelParserConfig { HeaderRow = 2 });
 
             var result = parser.Parse(reader).ToList();
             Assert.Single(result);
@@ -320,7 +320,7 @@ namespace ExcelReader.Tests
             using var ms = XlsWorkbookBuilder.Build(sheets: [("S1", [["Unknown"], ["value"]])]);
             using var reader = Excel.FromXls(ms);
 
-            var result = new ExcelParser<PersonRow>().Parse(reader).ToList();
+            var result = ExcelParser.FromAttributes<PersonRow>().Parse(reader).ToList();
             Assert.Single(result);
             Assert.Null(result[0].Name);
         }
@@ -332,7 +332,7 @@ namespace ExcelReader.Tests
             using var reader = Excel.FromXls(ms);
             var rows = new List<PersonRow>();
 
-            await foreach (PersonRow row in new ExcelParser<PersonRow>().ParseAsync(reader, TestContext.Current.CancellationToken))
+            await foreach (PersonRow row in ExcelParser.FromAttributes<PersonRow>().Parse(reader).WithCancellation(TestContext.Current.CancellationToken))
             {
                 rows.Add(row);
             }
@@ -349,7 +349,7 @@ namespace ExcelReader.Tests
             await using var reader = await Excel.FromXlsAsync(ms, ct: TestContext.Current.CancellationToken);
 
             List<PersonRow> rows = [];
-            await foreach (PersonRow row in new ExcelParser<PersonRow>().ParseAsync(reader, TestContext.Current.CancellationToken))
+            await foreach (PersonRow row in ExcelParser.FromAttributes<PersonRow>().Parse(reader).WithCancellation(TestContext.Current.CancellationToken))
             {
                 rows.Add(row);
             }
@@ -365,8 +365,8 @@ namespace ExcelReader.Tests
             using var ms = XlsWorkbookBuilder.Build(sheets: [("S1", [["Name"], ["Noop"]])]);
             using var reader = Excel.FromXls(ms);
 
-            IAsyncEnumerator<PersonRow> e = new ExcelParser<PersonRow>()
-                .ParseAsync(reader, TestContext.Current.CancellationToken)
+            IAsyncEnumerator<PersonRow> e = ExcelParser.FromAttributes<PersonRow>()
+                .Parse(reader)
                 .GetAsyncEnumerator(TestContext.Current.CancellationToken);
 
             Exception? ex = await Record.ExceptionAsync(async () =>
@@ -644,9 +644,7 @@ namespace ExcelReader.Tests
             var ms = new MemoryStream();
             await using (XlsWorkbookWriter wb = XlsWorkbookWriter.Create(ms, leaveOpen: true))
             {
-                wb.Start();
                 XlsSheetWriter sheet = wb.AddSheet("S1");
-                sheet.Start();
                 using (XlsRowWriter row = sheet.StartRow())
                 {
                     row.Write(longCompressed);

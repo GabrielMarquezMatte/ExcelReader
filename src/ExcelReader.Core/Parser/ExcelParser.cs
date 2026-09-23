@@ -5,45 +5,34 @@ using ExcelReader.Core.Reader;
 namespace ExcelReader.Core.Parser
 {
     /// <summary>
-    /// Parses rows from an Excel or CSV reader into instances of <typeparamref name="T"/> by matching
-    /// header columns to properties decorated with <c>[ExcelColumn]</c>/<c>[ExcelRequired]</c>/<c>[ExcelConverter]</c>.
+    /// Parses rows from an Excel or CSV reader into instances of <typeparamref name="T"/>. Create one with
+    /// <see cref="ExcelParser"/>: <see cref="ExcelParser.FromAttributes{T}"/> reflects over
+    /// <c>[ExcelColumn]</c>/<c>[ExcelRequired]</c>/<c>[ExcelConverter]</c> attributes,
+    /// <see cref="ExcelParser.Generated{T}"/> uses the <c>[ExcelSerializable]</c> source-generated map, and
+    /// <see cref="ExcelParser.Build{T}"/> takes a map configured at runtime.
     /// </summary>
-    /// <typeparam name="T">The model type to bind each row to.</typeparam>
-    /// <remarks>
-    /// Reflects over <typeparamref name="T"/>'s properties (<c>GetProperties</c>) and binds each
-    /// per-property setter via <c>MethodInfo.CreateDelegate</c>, dispatched per property type through
-    /// <c>MakeGenericMethod</c> — needs runtime code generation and keeps <typeparamref name="T"/>'s
-    /// members, so it's not compatible with Native AOT, and trimming can remove the properties it binds
-    /// to. The raw <c>Excel.From*</c> readers use no reflection and stay AOT/trim-safe; only this typed
-    /// layer does not — <see cref="ExcelMappedParser{T}"/> is the AOT-clean alternative, driven by a
-    /// source-generated or hand-written <see cref="IExcelRowMap{T}"/> instead of reflection.
-    /// <para>
-    /// Column binding runs through <c>ref TModel</c> end to end (<c>ColumnParser&lt;T&gt;</c>,
-    /// <c>RefAction&lt;T,TProperty&gt;</c> — see <c>Internal/Delegates.cs</c>), and <c>Row</c>/<c>RowCell</c>
-    /// are ref structs, so a <c>struct T</c> consumed via a direct <c>foreach</c> (not LINQ over
-    /// <c>IEnumerable&lt;object&gt;</c> or anything else that boxes) skips the per-row model allocation a
-    /// class <typeparamref name="T"/> requires. <typeparamref name="T"/>'s own reference-typed fields
-    /// (e.g. a string column) still allocate regardless of <typeparamref name="T"/>'s kind — struct
-    /// <typeparamref name="T"/> only removes the container.
-    /// </para>
-    /// </remarks>
-    [RequiresUnreferencedCode("Typed parsing reflects over T's public properties, which trimming may remove.")]
-    [RequiresDynamicCode("Typed parsing binds property setters at runtime (MethodInfo.CreateDelegate / MakeGenericMethod).")]
+    /// <typeparam name="T">
+    /// The model type to bind each row to. May be a <see langword="ref struct"/>, including one with a
+    /// <c>ReadOnlySpan&lt;byte&gt;</c> property. A <c>struct T</c> consumed via a direct <c>foreach</c>
+    /// skips the per-row model allocation a class <typeparamref name="T"/> requires.
+    /// </typeparam>
     public sealed class ExcelParser<T>
+        where T : allows ref struct
     {
         private readonly ExcelParserConfig _config;
+        private readonly Func<TypeMapInfo<T>> _info;
+        private readonly Func<TypeMapInfo<T>> _csvInfo;
 
-        /// <summary>Creates a parser configured with the given options, or with defaults if none are supplied.</summary>
-        /// <param name="config">The options controlling header matching, culture, and parse-failure behavior. Defaults to a new <see cref="ExcelParserConfig"/> when <see langword="null"/>.</param>
-        /// <exception cref="ArgumentOutOfRangeException"><paramref name="config"/> has <see cref="ExcelParserConfig.HeaderRow"/> less than 1.</exception>
-        public ExcelParser(ExcelParserConfig? config = null)
+        internal ExcelParser(ExcelParserConfig config, Func<TypeMapInfo<T>> info, Func<TypeMapInfo<T>> csvInfo)
         {
-            if (config is not null && config.HeaderRow < 1)
-            {
-                throw new ArgumentOutOfRangeException(nameof(config), config.HeaderRow, "HeaderRow must be at least 1.");
-            }
-            _config = config ?? new ExcelParserConfig();
+            _config = config;
+            _info = info;
+            _csvInfo = csvInfo;
         }
+
+        internal ExcelParserConfig Config => _config;
+
+        internal TypeMapInfo<T> CsvInfo => _csvInfo();
 
         /// <summary>Parses the rows of an XLSX reader into <typeparamref name="T"/> instances, lazily as the result is enumerated.</summary>
         /// <param name="reader">The XLSX reader to pull rows from.</param>
@@ -52,7 +41,7 @@ namespace ExcelReader.Core.Parser
         public ExcelEnumerable<T> Parse(XlsxReader reader)
         {
             ArgumentNullException.ThrowIfNull(reader);
-            return new ExcelEnumerable<T>(reader, _config);
+            return new ExcelEnumerable<T>(reader, _config, _info());
         }
 
         /// <summary>Parses the rows of an XLS reader into <typeparamref name="T"/> instances, lazily as the result is enumerated.</summary>
@@ -62,7 +51,7 @@ namespace ExcelReader.Core.Parser
         public ExcelEnumerable<T, XlsReader, XlsReader.Enumerator> Parse(XlsReader reader)
         {
             ArgumentNullException.ThrowIfNull(reader);
-            return new ExcelEnumerable<T, XlsReader, XlsReader.Enumerator>(reader, _config);
+            return new ExcelEnumerable<T, XlsReader, XlsReader.Enumerator>(reader, _config, _info());
         }
 
         /// <summary>Parses the rows of an XLSB reader into <typeparamref name="T"/> instances, lazily as the result is enumerated.</summary>
@@ -72,7 +61,7 @@ namespace ExcelReader.Core.Parser
         public ExcelEnumerable<T, XlsbReader, XlsbReader.Enumerator> Parse(XlsbReader reader)
         {
             ArgumentNullException.ThrowIfNull(reader);
-            return new ExcelEnumerable<T, XlsbReader, XlsbReader.Enumerator>(reader, _config);
+            return new ExcelEnumerable<T, XlsbReader, XlsbReader.Enumerator>(reader, _config, _info());
         }
 
         /// <summary>Parses the rows of a format-agnostic reader (e.g. one returned by <c>Excel.Open</c>) into <typeparamref name="T"/> instances, lazily as the result is enumerated. Lets callers avoid pattern-matching the concrete reader type; dispatches through the interface enumerator.</summary>
@@ -82,7 +71,7 @@ namespace ExcelReader.Core.Parser
         public ExcelEnumerable<T, IExcelRowReader, IExcelRowEnumerator> Parse(IExcelRowReader reader)
         {
             ArgumentNullException.ThrowIfNull(reader);
-            return new ExcelEnumerable<T, IExcelRowReader, IExcelRowEnumerator>(reader, _config);
+            return new ExcelEnumerable<T, IExcelRowReader, IExcelRowEnumerator>(reader, _config, _info());
         }
 
         /// <summary>Parses the rows of a CSV reader into <typeparamref name="T"/> instances, lazily as the result is enumerated.</summary>
@@ -90,71 +79,131 @@ namespace ExcelReader.Core.Parser
         /// <returns>An enumerable that yields one <typeparamref name="T"/> per data row.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="reader"/> is <see langword="null"/>.</exception>
         /// <remarks>
-        /// Uses a specialized enumerable (dense field binding, single-pass projection, native text date
-        /// parsing) rather than the generic <see cref="ExcelEnumerable{T}"/>, since CSV rows have no
-        /// gaps, styles, or serial dates. Prefer this concrete overload over <see cref="Parse(IExcelRowReader)"/>
-        /// for CSV — holding the reader as <see cref="IExcelRowReader"/> instead routes through the
-        /// generic path (serial-date semantics).
+        /// Uses a specialized enumerable (dense field binding, single-pass projection) rather than the
+        /// generic <see cref="ExcelEnumerable{T}"/>, since CSV rows have no gaps or styles. Prefer this
+        /// concrete overload over <see cref="Parse(IExcelRowReader)"/> for CSV — holding the reader as
+        /// <see cref="IExcelRowReader"/> instead routes through the generic path.
         /// </remarks>
         public CsvEnumerable<T> Parse(CsvReader reader)
         {
             ArgumentNullException.ThrowIfNull(reader);
-            return new CsvEnumerable<T>(reader, _config);
+            return new CsvEnumerable<T>(reader, _config, _csvInfo());
+        }
+    }
+
+    /// <summary>Creates <see cref="ExcelParser{T}"/> instances.</summary>
+    public static class ExcelParser
+    {
+        /// <summary>
+        /// Creates a parser that binds header columns to <typeparamref name="T"/>'s properties decorated with
+        /// <c>[ExcelColumn]</c>/<c>[ExcelRequired]</c>/<c>[ExcelConverter]</c>, found by reflection.
+        /// </summary>
+        /// <remarks>
+        /// Not compatible with Native AOT, and trimming can remove the properties it binds to. Use
+        /// <see cref="Generated{T}"/> or <see cref="Build{T}"/> instead where that matters. CSV readers get
+        /// a separate map with text-based date parsing.
+        /// </remarks>
+        /// <typeparam name="T">The model type.</typeparam>
+        /// <param name="config">Header matching, culture and parse-failure options. Defaults to a new <see cref="ExcelParserConfig"/>.</param>
+        /// <returns>The parser.</returns>
+        /// <exception cref="ArgumentOutOfRangeException"><paramref name="config"/> has <see cref="ExcelParserConfig.HeaderRow"/> less than 1.</exception>
+        [RequiresUnreferencedCode("Typed parsing reflects over T's public properties, which trimming may remove.")]
+        [RequiresDynamicCode("Typed parsing binds property setters at runtime (MethodInfo.CreateDelegate / MakeGenericMethod).")]
+        public static ExcelParser<T> FromAttributes<T>(ExcelParserConfig? config = null)
+            where T : allows ref struct
+        {
+            return new ExcelParser<T>(ValidateConfig(config), TypeMapper<T>.GetInfo, TypeMapper<T>.GetCsvInfo);
         }
 
-        /// <summary>Parses the rows of an XLSX reader into <typeparamref name="T"/> instances for asynchronous enumeration.</summary>
-        /// <param name="reader">The XLSX reader to pull rows from.</param>
-        /// <param name="ct">A token to cancel the enumeration.</param>
-        /// <returns>An enumerable that lazily parses and yields one <typeparamref name="T"/> per data row as it is asynchronously enumerated.</returns>
-        /// <exception cref="ArgumentNullException"><paramref name="reader"/> is <see langword="null"/>.</exception>
-        public ExcelEnumerable<T> ParseAsync(XlsxReader reader, CancellationToken ct = default)
+        /// <summary>Creates a parser from the map the <c>[ExcelSerializable]</c> source generator emitted for <typeparamref name="T"/>. Trimming and AOT safe.</summary>
+        /// <remarks>
+        /// The map is built once and reused for every reader, CSV included. The generator binds
+        /// <see cref="DateTime"/>/<see cref="DateOnly"/>/<see cref="TimeOnly"/> properties with the
+        /// <c>*Auto</c> readers in <see cref="ExcelCellReaders"/> — serial number first, text as a fallback.
+        /// </remarks>
+        /// <typeparam name="T">The model type; must implement <see cref="IExcelRowMap{T}"/>.</typeparam>
+        /// <param name="config">Header matching, culture and parse-failure options. Defaults to a new <see cref="ExcelParserConfig"/>.</param>
+        /// <returns>The parser.</returns>
+        /// <exception cref="ArgumentOutOfRangeException"><paramref name="config"/> has <see cref="ExcelParserConfig.HeaderRow"/> less than 1.</exception>
+        public static ExcelParser<T> Generated<T>(ExcelParserConfig? config = null)
+            where T : IExcelRowMap<T>, allows ref struct
         {
-            ArgumentNullException.ThrowIfNull(reader);
-            return new ExcelEnumerable<T>(reader, _config, ct);
+            ExcelParserConfig effective = ValidateConfig(config);
+            var builder = new ExcelRowMapBuilder<T>();
+            T.ConfigureExcelRowMap(builder);
+            return Fixed(effective, builder.Build());
         }
 
-        /// <summary>Parses the rows of an XLS reader into <typeparamref name="T"/> instances for asynchronous enumeration.</summary>
-        /// <param name="reader">The XLS reader to pull rows from.</param>
-        /// <param name="ct">A token to cancel the enumeration.</param>
-        /// <returns>An enumerable that lazily parses and yields one <typeparamref name="T"/> per data row as it is asynchronously enumerated.</returns>
-        /// <exception cref="ArgumentNullException"><paramref name="reader"/> is <see langword="null"/>.</exception>
-        public ExcelEnumerable<T, XlsReader, XlsReader.Enumerator> ParseAsync(XlsReader reader, CancellationToken ct = default)
+        /// <summary>Creates a parser whose map comes entirely from <paramref name="configure"/>. Trimming and AOT safe.</summary>
+        /// <remarks>
+        /// For when the mapping is a runtime decision — loaded from config, chosen by a user, or different
+        /// per input file. Each call builds its own map, so two parsers configured differently for the same
+        /// <typeparamref name="T"/> coexist.
+        /// </remarks>
+        /// <typeparam name="T">The model type.</typeparam>
+        /// <param name="configure">Configures the row map by calling <see cref="ExcelRowMapBuilder{T}.Property{TValue}"/> and its siblings.</param>
+        /// <param name="config">Header matching, culture and parse-failure options. Defaults to a new <see cref="ExcelParserConfig"/>.</param>
+        /// <returns>The parser.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="configure"/> is <see langword="null"/>.</exception>
+        /// <exception cref="ArgumentOutOfRangeException"><paramref name="config"/> has <see cref="ExcelParserConfig.HeaderRow"/> less than 1.</exception>
+        public static ExcelParser<T> Build<T>(Action<ExcelRowMapBuilder<T>> configure, ExcelParserConfig? config = null)
+            where T : allows ref struct
         {
-            ArgumentNullException.ThrowIfNull(reader);
-            return new ExcelEnumerable<T, XlsReader, XlsReader.Enumerator>(reader, _config, ct);
+            ArgumentNullException.ThrowIfNull(configure);
+            ExcelParserConfig effective = ValidateConfig(config);
+            var builder = new ExcelRowMapBuilder<T>();
+            configure(builder);
+            return Fixed(effective, builder.Build());
         }
 
-        /// <summary>Parses the rows of an XLSB reader into <typeparamref name="T"/> instances for asynchronous enumeration.</summary>
-        /// <param name="reader">The XLSB reader to pull rows from.</param>
-        /// <param name="ct">A token to cancel the enumeration.</param>
-        /// <returns>An enumerable that lazily parses and yields one <typeparamref name="T"/> per data row as it is asynchronously enumerated.</returns>
-        /// <exception cref="ArgumentNullException"><paramref name="reader"/> is <see langword="null"/>.</exception>
-        public ExcelEnumerable<T, XlsbReader, XlsbReader.Enumerator> ParseAsync(XlsbReader reader, CancellationToken ct = default)
+        /// <summary>
+        /// Creates a parser whose map merges <paramref name="configure"/>'s bindings with attribute-driven
+        /// ones reflected from <typeparamref name="T"/>: a builder binding fully replaces every
+        /// attribute-driven property that shares one of its header names, and every other property keeps
+        /// its attribute-driven behavior.
+        /// </summary>
+        /// <remarks>
+        /// The match is by header name, not by property identity — the builder only receives a setter
+        /// lambda. To override property <c>P</c>, configure the builder with one of the header names
+        /// <c>P</c>'s <c>[ExcelColumn]</c> attributes already use. Configuring a <em>different</em> header
+        /// name for <c>P</c> overrides nothing: both bindings survive and <c>P</c> is assigned twice per row.
+        /// Mark such a property <c>[ExcelIgnore]</c> instead.
+        /// </remarks>
+        /// <typeparam name="T">The model type.</typeparam>
+        /// <param name="configure">Configures the properties that should override their attribute-driven binding.</param>
+        /// <param name="config">Header matching, culture and parse-failure options. Defaults to a new <see cref="ExcelParserConfig"/>.</param>
+        /// <returns>The parser.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="configure"/> is <see langword="null"/>.</exception>
+        /// <exception cref="ArgumentOutOfRangeException"><paramref name="config"/> has <see cref="ExcelParserConfig.HeaderRow"/> less than 1.</exception>
+        /// <exception cref="InvalidOperationException"><paramref name="configure"/> calls <see cref="ExcelRowMapBuilder{T}.PropertyAt{TValue}"/>: an index-based map has no header row to match attribute-driven properties against.</exception>
+        [RequiresUnreferencedCode("BuildWithAttributeFallback reflects over T's public properties for the attribute-driven fallback, which trimming may remove.")]
+        [RequiresDynamicCode("BuildWithAttributeFallback binds attribute-driven property setters at runtime (MethodInfo.CreateDelegate / MakeGenericMethod).")]
+        public static ExcelParser<T> BuildWithAttributeFallback<T>(Action<ExcelRowMapBuilder<T>> configure, ExcelParserConfig? config = null)
+            where T : allows ref struct
         {
-            ArgumentNullException.ThrowIfNull(reader);
-            return new ExcelEnumerable<T, XlsbReader, XlsbReader.Enumerator>(reader, _config, ct);
+            ArgumentNullException.ThrowIfNull(configure);
+            ExcelParserConfig effective = ValidateConfig(config);
+            var builder = new ExcelRowMapBuilder<T>();
+            configure(builder);
+            TypeMapInfo<T> fluent = builder.Build(requireFactory: false);
+            TypeMapInfo<T> merged = TypeMapInfo<T>.MergeFluentOverAttributes(
+                fluent, TypeMapper<T>.GetInfo(), effective.ColumnNameComparer, effective.HeaderNormalization);
+            return Fixed(effective, merged);
         }
 
-        /// <summary>Parses the rows of a format-agnostic reader (e.g. one returned by <c>Excel.Open</c>) into <typeparamref name="T"/> instances for asynchronous enumeration.</summary>
-        /// <param name="reader">The reader to pull rows from.</param>
-        /// <param name="ct">A token to cancel the enumeration.</param>
-        /// <returns>An enumerable that lazily parses and yields one <typeparamref name="T"/> per data row as it is asynchronously enumerated.</returns>
-        /// <exception cref="ArgumentNullException"><paramref name="reader"/> is <see langword="null"/>.</exception>
-        public ExcelEnumerable<T, IExcelRowReader, IExcelRowEnumerator> ParseAsync(IExcelRowReader reader, CancellationToken ct = default)
+        private static ExcelParser<T> Fixed<T>(ExcelParserConfig config, TypeMapInfo<T> info)
+            where T : allows ref struct
         {
-            ArgumentNullException.ThrowIfNull(reader);
-            return new ExcelEnumerable<T, IExcelRowReader, IExcelRowEnumerator>(reader, _config, ct);
+            return new ExcelParser<T>(config, () => info, () => info);
         }
 
-        /// <summary>Parses the rows of a CSV reader into <typeparamref name="T"/> instances for asynchronous enumeration.</summary>
-        /// <param name="reader">The CSV reader to pull rows from.</param>
-        /// <param name="ct">A token to cancel the enumeration.</param>
-        /// <returns>An enumerable that lazily parses and yields one <typeparamref name="T"/> per data row as it is asynchronously enumerated.</returns>
-        /// <exception cref="ArgumentNullException"><paramref name="reader"/> is <see langword="null"/>.</exception>
-        public CsvEnumerable<T> ParseAsync(CsvReader reader, CancellationToken ct = default)
+        private static ExcelParserConfig ValidateConfig(ExcelParserConfig? config)
         {
-            ArgumentNullException.ThrowIfNull(reader);
-            return new CsvEnumerable<T>(reader, _config, ct);
+            if (config is not null && config.HeaderRow < 1)
+            {
+                throw new ArgumentOutOfRangeException(nameof(config), config.HeaderRow, "HeaderRow must be at least 1.");
+            }
+            return config ?? new ExcelParserConfig();
         }
     }
 }

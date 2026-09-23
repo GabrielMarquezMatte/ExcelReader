@@ -211,13 +211,11 @@ namespace ExcelReader.Tests
             params (string Name, object?[][] Rows)[] sheets)
         {
             var ms = new MemoryStream();
-            await using (XlsxWorkbookWriter wb = await XlsxWorkbookWriter.CreateAsync(ms, leaveOpen: true))
+            await using (XlsxWorkbookWriter wb = XlsxWorkbookWriter.Create(ms, leaveOpen: true))
             {
-                await wb.StartAsync();
                 foreach ((string name, object?[][] rows) in sheets)
                 {
                     XlsxSheetWriter sheet = wb.AddSheet(name);
-                    await sheet.StartAsync();
                     foreach (object?[] row in rows)
                     {
                         await using XlsxRowWriter rw = await sheet.StartRowAsync();

@@ -393,15 +393,13 @@ namespace ExcelReader.Tests
                     // ExcelRecordMapBuilder<T>.Headers()/WriteRow(), which are internal to
                     // ExcelReader.Core — this synthetic assembly has no InternalsVisibleTo grant for
                     // them. The read side below still exercises the real generated
-                    // IExcelRowMap<Model>/ExcelMappedParser<Model> path end to end.
+                    // IExcelRowMap<Model>/ExcelParser<Model> path end to end.
                     public static async Task<string[]> RunAsync()
                     {
                         var writeStream = new MemoryStream();
-                        await using (XlsxWorkbookWriter wb = await XlsxWorkbookWriter.CreateAsync(writeStream, leaveOpen: true))
+                        await using (XlsxWorkbookWriter wb = XlsxWorkbookWriter.Create(writeStream, leaveOpen: true))
                         {
-                            await wb.StartAsync();
                             XlsxSheetWriter sheet = wb.AddSheet("S1");
-                            await sheet.StartAsync();
                             XlsxRowWriter header = await sheet.StartRowAsync();
                             await using (header.ConfigureAwait(false))
                             {
@@ -431,7 +429,7 @@ namespace ExcelReader.Tests
                         writeStream.Position = 0;
                         await using XlsxReader reader = await Excel.FromXlsxAsync(writeStream);
                         var results = new List<Model>();
-                        foreach (Model m in new ExcelMappedParser<Model>().Parse(reader))
+                        foreach (Model m in ExcelParser.Generated<Model>().Parse(reader))
                         {
                             results.Add(m);
                         }

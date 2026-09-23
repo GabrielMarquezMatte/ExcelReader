@@ -19,7 +19,7 @@ namespace ExcelReader.Tests
         {
             using var reader = Excel.FromCsv(csv);
             var list = new List<string>();
-            foreach (Row row in new ExcelParser<Row>().Parse(reader))
+            foreach (Row row in ExcelParser.FromAttributes<Row>().Parse(reader))
             {
                 list.Add(Render(row));
             }

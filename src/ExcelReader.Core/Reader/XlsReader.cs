@@ -1,6 +1,7 @@
 using System.Buffers;
 using System.Diagnostics.CodeAnalysis;
 using System.Runtime.InteropServices;
+using ExcelReader.Core.Enums;
 using static ExcelReader.Core.Reader.Biff12;
 
 namespace ExcelReader.Core.Reader
@@ -10,7 +11,7 @@ namespace ExcelReader.Core.Reader
     {
         private readonly WorkbookStream _workbook;
         private readonly ExcelReaderOptions _options;
-        private readonly (string Name, int Offset)[] _sheets;
+        private readonly (string Name, int Offset, ExcelSheetVisibility Visibility)[] _sheets;
         private readonly bool[] _styleIsDate;
         private readonly bool _date1904;
         private byte[] _sharedFlat;
@@ -70,6 +71,16 @@ namespace ExcelReader.Core.Reader
         }
 
         /// <inheritdoc/>
+        public ExcelSheetVisibility SheetVisibility => _sheets[_current].Visibility;
+
+        /// <inheritdoc/>
+        public ExcelSheetVisibility SheetVisibilityAt(int index)
+        {
+            WorkbookLookups.ValidateSheetIndex(index, _sheets.Length);
+            return _sheets[index].Visibility;
+        }
+
+        /// <inheritdoc/>
         public bool IsDate1904 => _date1904;
 
         internal ReadOnlySpan<byte> SharedSpan => _sharedFlat;
@@ -116,36 +127,16 @@ namespace ExcelReader.Core.Reader
         }
 
         /// <inheritdoc/>
-        public Enumerator GetAsyncEnumerator()
-        {
-            return GetEnumerator();
-        }
-
-        /// <summary>Creates an enumerator for the current sheet that observes cancellation while iterating.</summary>
-        /// <remarks>This overload takes no default value for <paramref name="ct"/>: the parameterless <see cref="GetAsyncEnumerator()"/> above already covers the no-argument call, so a default here would only shadow it.</remarks>
-        /// <param name="ct">Token checked before enumeration starts and on each subsequent move.</param>
-        public Enumerator GetAsyncEnumerator(CancellationToken ct)
+        /// <remarks>XlsReader is fully in-memory, so nothing is deferred; <paramref name="ct"/> is checked here and on each move.</remarks>
+        public Enumerator GetAsyncEnumerator(CancellationToken ct = default)
         {
             ct.ThrowIfCancellationRequested();
             return new Enumerator(this, _sheets[_current].Offset, ct);
         }
 
-        IExcelRowEnumerator IExcelRowReader<IExcelRowEnumerator>.GetAsyncEnumerator()
+        IExcelRowEnumerator IExcelRowReader<IExcelRowEnumerator>.GetAsyncEnumerator(CancellationToken ct)
         {
-            return GetAsyncEnumerator();
-        }
-
-        /// <inheritdoc/>
-        public ValueTask<Enumerator> GetAsyncEnumeratorAsync(CancellationToken ct = default)
-        {
-            return new ValueTask<Enumerator>(GetAsyncEnumerator(ct));
-        }
-
-        [SuppressMessage("Performance", "CA1849:Call async methods when in an async method",
-            Justification = "XlsReader is fully in-memory; opening the enumerator is synchronous, so there is no async open to await here.")]
-        ValueTask<IExcelRowEnumerator> IExcelRowReader<IExcelRowEnumerator>.GetAsyncEnumeratorAsync(CancellationToken ct)
-        {
-            return new ValueTask<IExcelRowEnumerator>(GetAsyncEnumerator(ct));
+            return GetAsyncEnumerator(ct);
         }
 
         /// <inheritdoc/>
@@ -167,13 +158,13 @@ namespace ExcelReader.Core.Reader
         private static void ParseWorkbookGlobals(
             BiffCursor cursor,
             ExcelReaderOptions options,
-            out (string Name, int Offset)[] sheets,
+            out (string Name, int Offset, ExcelSheetVisibility Visibility)[] sheets,
             out bool[] styleIsDate,
             out bool date1904,
             out byte[] sharedFlat,
             out int[] sharedOffsets)
         {
-            List<(string Name, int Offset)> sheetList = [];
+            List<(string Name, int Offset, ExcelSheetVisibility Visibility)> sheetList = [];
             Dictionary<int, bool> customFormats = new(capacity: 16);
             List<bool> styleFlags = [];
             date1904 = false;
@@ -240,7 +231,7 @@ namespace ExcelReader.Core.Reader
             styleIsDate = [.. styleFlags];
         }
 
-        private static bool TryParseBoundSheet(ReadOnlySpan<byte> data, out (string Name, int Offset) sheet)
+        private static bool TryParseBoundSheet(ReadOnlySpan<byte> data, out (string Name, int Offset, ExcelSheetVisibility Visibility) sheet)
         {
             sheet = default;
             if (data.Length < 8 || data[5] != 0
@@ -248,7 +239,13 @@ namespace ExcelReader.Core.Reader
             {
                 return false;
             }
-            sheet = (name, ReadI32(data, 0));
+            ExcelSheetVisibility visibility = (data[4] & 0x03) switch
+            {
+                1 => ExcelSheetVisibility.Hidden,
+                2 => ExcelSheetVisibility.VeryHidden,
+                _ => ExcelSheetVisibility.Visible,
+            };
+            sheet = (name, ReadI32(data, 0), visibility);
             return true;
         }
 

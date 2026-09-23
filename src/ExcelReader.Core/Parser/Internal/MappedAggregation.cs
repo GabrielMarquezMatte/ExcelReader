@@ -21,10 +21,10 @@ namespace ExcelReader.Core.Parser.Internal
             },
         };
 
-        internal static CsvAccumulateFactory<TAccumulator> Binder(CsvModelMap<TModel> map, int headerRow)
+        internal static CsvAccumulateFactory<TAccumulator> Binder(ExcelParser<TModel> parser, int headerRow)
         {
             return (Row header, bool sequential) =>
-                MappedProjection<TAccumulator, TModel>.Bind(map, header, headerRow, sequential, Sink);
+                MappedProjection<TAccumulator, TModel>.Bind(parser, header, headerRow, sequential, Sink);
         }
     }
 }

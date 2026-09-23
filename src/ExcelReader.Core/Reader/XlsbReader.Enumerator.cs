@@ -1,4 +1,5 @@
 using System.Diagnostics.CodeAnalysis;
+using System.IO.Compression;
 using System.Runtime.CompilerServices;
 using System.Text;
 using ExcelReader.Core.Enums;
@@ -24,6 +25,7 @@ namespace ExcelReader.Core.Reader
             private readonly bool[] _styleIsDate;
             private readonly int[] _sharedOffsets;
             private readonly Utf8StringCache? _contentCache;
+            private readonly ZipArchiveEntry? _entry;
             private bool _ended;
             private bool _pendingRowHdr;
 
@@ -34,6 +36,26 @@ namespace ExcelReader.Core.Reader
                 _styleIsDate = reader._styleIsDate;
                 _sharedOffsets = reader._sharedOffsets;
                 _contentCache = reader._options.InternStrings ? new Utf8StringCache() : null;
+            }
+
+            internal Enumerator(XlsbReader reader, ZipArchiveEntry entry, CancellationToken ct)
+                : base(reader._options.MaxCellBytes, nameof(ExcelReaderOptions.MaxCellBytes), WorkbookLookups.InitialBufferCapacity(entry.Length), ct)
+            {
+                _reader = reader;
+                _styleIsDate = reader._styleIsDate;
+                _sharedOffsets = reader._sharedOffsets;
+                _contentCache = reader._options.InternStrings ? new Utf8StringCache() : null;
+                _entry = entry;
+            }
+
+            private protected override Stream OpenSource()
+            {
+                return WorkbookLookups.OpenEntryStream(_entry!, _reader._decompressedBytes, _reader._options);
+            }
+
+            private protected override async ValueTask<Stream> OpenSourceAsync()
+            {
+                return await WorkbookLookups.OpenEntryStreamAsync(_entry!, _reader._decompressedBytes, _reader._options, _ct).ConfigureAwait(false);
             }
 
             /// <inheritdoc/>

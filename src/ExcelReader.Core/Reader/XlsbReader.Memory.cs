@@ -1,4 +1,5 @@
 using System.Diagnostics.CodeAnalysis;
+using ExcelReader.Core.Enums;
 
 namespace ExcelReader.Core.Reader
 {
@@ -20,7 +21,7 @@ namespace ExcelReader.Core.Reader
             DecompressedByteCounter decompressedBytes = new(effectiveOptions.MaxTotalDecompressedBytes);
             using ZipPart wbPart = memZip.OpenPartOrDefault("xl/workbook.bin"u8, decompressedBytes);
             using ZipPart relsPart = memZip.OpenPartOrDefault("xl/_rels/workbook.bin.rels"u8, decompressedBytes);
-            (string Name, string Path)[] sheets = XlsbWorkbook.ParseSheets(wbPart.Memory.Span, relsPart.Memory.Span);
+            (string Name, string Path, ExcelSheetVisibility Visibility)[] sheets = XlsbWorkbook.ParseSheets(wbPart.Memory.Span, relsPart.Memory.Span);
             if (sheets.Length == 0)
             {
                 throw new InvalidDataException("The workbook contains no sheets.");
@@ -47,7 +48,7 @@ namespace ExcelReader.Core.Reader
 
         private Enumerator GetEnumeratorFromMemory()
         {
-            ZipEntryRef entry = WorkbookLookups.GetWorksheetEntry(_memZip!, _sheets!, _current);
+            ZipEntryRef entry = WorkbookLookups.GetWorksheetEntry(_memZip!, _sheets![_current].Path);
             return new Enumerator(this, _memZip!.OpenEntryStream(entry, _decompressedBytes, _options), entry.UncompressedSize);
         }
     }

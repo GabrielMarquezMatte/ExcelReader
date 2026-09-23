@@ -1,9 +1,15 @@
+using ExcelReader.Core.Enums;
+
 namespace ExcelReader.Core.Reader
 {
     /// <summary>One sheet's position and name, as yielded by <see cref="ExcelRowReaderExtensions.Sheets"/>.</summary>
     /// <param name="Index">The sheet's zero-based index.</param>
     /// <param name="Name">The sheet's name.</param>
-    public readonly record struct ExcelSheet(int Index, string Name);
+    public readonly record struct ExcelSheet(int Index, string Name)
+    {
+        /// <summary>Gets whether the sheet is shown in the workbook's tab bar.</summary>
+        public ExcelSheetVisibility Visibility { get; init; }
+    }
 
     /// <summary>Convenience methods layered on <see cref="IExcelRowReader"/>.</summary>
     public static class ExcelRowReaderExtensions
@@ -16,6 +22,10 @@ namespace ExcelReader.Core.Reader
         /// Selecting a sheet moves the reader's one shared cursor (see <see cref="IExcelRowReader"/>'s
         /// thread-safety remarks), so read that sheet's rows inside the loop body before the next
         /// iteration moves on to the following sheet.
+        /// <para>
+        /// Hidden sheets are yielded like any other, carrying their <see cref="ExcelSheet.Visibility"/>;
+        /// filter on it to skip them.
+        /// </para>
         /// </remarks>
         /// <param name="reader">The workbook reader to walk.</param>
         public static IEnumerable<ExcelSheet> Sheets(this IExcelRowReader reader)
@@ -29,7 +39,7 @@ namespace ExcelReader.Core.Reader
             for (int i = 0; i < reader.SheetCount; i++)
             {
                 reader.MoveToSheet(i);
-                yield return new ExcelSheet(i, reader.SheetName);
+                yield return new ExcelSheet(i, reader.SheetName) { Visibility = reader.SheetVisibility };
             }
         }
     }

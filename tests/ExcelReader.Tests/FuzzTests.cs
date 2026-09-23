@@ -180,11 +180,9 @@ namespace ExcelReader.Tests
         {
             CancellationToken ct = TestContext.Current.CancellationToken;
             MemoryStream ms = new();
-            await using (XlsbWorkbookWriter wb = await XlsbWorkbookWriter.CreateAsync(ms, leaveOpen: true, ct: ct))
+            await using (XlsbWorkbookWriter wb = XlsbWorkbookWriter.Create(ms, leaveOpen: true))
             {
-                await wb.StartAsync(ct);
                 XlsbSheetWriter sheet = wb.AddSheet("Sheet1");
-                await sheet.StartAsync(ct);
                 await using (XlsbRowWriter row = await sheet.StartRowAsync(ct))
                 {
                     row.Write("hello");

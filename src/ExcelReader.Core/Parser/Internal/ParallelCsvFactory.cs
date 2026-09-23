@@ -16,7 +16,7 @@ namespace ExcelReader.Core.Parser.Internal
         internal static IAsyncEnumerable<T> Create<T>(
             string path, int degreeOfParallelism, CsvReaderOptions? readerOptions, ExcelParserConfig? config, CancellationToken ct)
         {
-            CsvReaderOptions options = readerOptions ?? CsvReaderOptions.Default;
+            CsvReaderOptions options = CsvDialectResolver.Resolve(path, readerOptions ?? CsvReaderOptions.Default);
             ExcelParserConfig parserConfig = config ?? new ExcelParserConfig();
             int dop = Normalize(degreeOfParallelism);
 
@@ -35,7 +35,7 @@ namespace ExcelReader.Core.Parser.Internal
         internal static IAsyncEnumerable<T> Create<T>(
             ReadOnlyMemory<byte> data, int degreeOfParallelism, CsvReaderOptions? readerOptions, ExcelParserConfig? config, CancellationToken ct)
         {
-            CsvReaderOptions options = readerOptions ?? CsvReaderOptions.Default;
+            CsvReaderOptions options = CsvDialectResolver.Resolve(data, readerOptions ?? CsvReaderOptions.Default);
             ExcelParserConfig parserConfig = config ?? new ExcelParserConfig();
             int dop = Normalize(degreeOfParallelism);
 
@@ -53,7 +53,7 @@ namespace ExcelReader.Core.Parser.Internal
         internal static IAsyncEnumerable<T> Create<T>(
             Stream stream, int degreeOfParallelism, CsvReaderOptions? readerOptions, ExcelParserConfig? config, CancellationToken ct)
         {
-            CsvReaderOptions options = readerOptions ?? CsvReaderOptions.Default;
+            CsvReaderOptions options = CsvDialectResolver.Resolve(stream, readerOptions ?? CsvReaderOptions.Default);
             ExcelParserConfig parserConfig = config ?? new ExcelParserConfig();
             int dop = Normalize(degreeOfParallelism);
 
@@ -70,7 +70,7 @@ namespace ExcelReader.Core.Parser.Internal
         internal static IAsyncEnumerable<T> CreateWithChunkSize<T>(
             ReadOnlyMemory<byte> data, int degreeOfParallelism, int chunkSize, CsvReaderOptions? readerOptions, ExcelParserConfig? config, CancellationToken ct)
         {
-            CsvReaderOptions options = readerOptions ?? CsvReaderOptions.Default;
+            CsvReaderOptions options = CsvDialectResolver.Resolve(data, readerOptions ?? CsvReaderOptions.Default);
             ExcelParserConfig parserConfig = config ?? new ExcelParserConfig();
             return Build<T>(new CsvChunkSource(data), options, parserConfig, Normalize(degreeOfParallelism), chunkSize, ownedHandle: null, ct);
         }

@@ -11,8 +11,7 @@ namespace ExcelReader.Tests
         private static async Task<MemoryStream> WriteXlsxAsync(Func<XlsxWorkbookWriter, Task> build)
         {
             var ms = new MemoryStream();
-            await using var wb = await XlsxWorkbookWriter.CreateAsync(ms, leaveOpen: true, ct: TestContext.Current.CancellationToken);
-            await wb.StartAsync(TestContext.Current.CancellationToken);
+            await using var wb = XlsxWorkbookWriter.Create(ms, leaveOpen: true);
             await build(wb);
             await wb.EndAsync(TestContext.Current.CancellationToken);
             ms.Position = 0;
@@ -31,7 +30,7 @@ namespace ExcelReader.Tests
         public async Task AddStyleReturnsZeroForDefaultStyle()
         {
             var ms = new MemoryStream();
-            await using var wb = await XlsxWorkbookWriter.CreateAsync(ms, leaveOpen: true, ct: TestContext.Current.CancellationToken);
+            await using var wb = XlsxWorkbookWriter.Create(ms, leaveOpen: true);
             Assert.Equal(0, wb.AddStyle(default));
         }
 
@@ -39,7 +38,7 @@ namespace ExcelReader.Tests
         public async Task AddStyleDeduplicatesEquivalentStyles()
         {
             var ms = new MemoryStream();
-            await using var wb = await XlsxWorkbookWriter.CreateAsync(ms, leaveOpen: true, ct: TestContext.Current.CancellationToken);
+            await using var wb = XlsxWorkbookWriter.Create(ms, leaveOpen: true);
             var style = new CellStyle { NumberFormat = "0.00", Bold = true };
             int first = wb.AddStyle(style);
             int second = wb.AddStyle(new CellStyle { NumberFormat = "0.00", Bold = true });
@@ -55,7 +54,6 @@ namespace ExcelReader.Tests
             {
                 wb.AddStyle(new CellStyle { NumberFormat = "R$ #,##0.00" });
                 XlsxSheetWriter sheet = wb.AddSheet("Sheet1");
-                await sheet.StartAsync(TestContext.Current.CancellationToken);
                 await sheet.EndAsync(TestContext.Current.CancellationToken);
             });
             string styles = ReadZipEntryText(ms, "xl/styles.xml");
@@ -69,7 +67,6 @@ namespace ExcelReader.Tests
             await using MemoryStream ms = await WriteXlsxAsync(async wb =>
             {
                 XlsxSheetWriter sheet = wb.AddSheet("Sheet1");
-                await sheet.StartAsync(TestContext.Current.CancellationToken);
                 await using (XlsxRowWriter row = await sheet.StartRowAsync(TestContext.Current.CancellationToken))
                 {
                     row.Write(date);
@@ -87,11 +84,9 @@ namespace ExcelReader.Tests
         {
             var date = new DateTime(2024, 5, 6, 0, 0, 0, DateTimeKind.Unspecified);
             var ms = new MemoryStream();
-            await using (var wb = await XlsbWorkbookWriter.CreateAsync(ms, leaveOpen: true, ct: TestContext.Current.CancellationToken))
+            await using (var wb = XlsbWorkbookWriter.Create(ms, leaveOpen: true))
             {
-                await wb.StartAsync(TestContext.Current.CancellationToken);
                 XlsbSheetWriter sheet = wb.AddSheet("Sheet1");
-                await sheet.StartAsync(TestContext.Current.CancellationToken);
                 await using (XlsbRowWriter row = await sheet.StartRowAsync(TestContext.Current.CancellationToken))
                 {
                     row.Write(date);
@@ -113,9 +108,7 @@ namespace ExcelReader.Tests
             var ms = new MemoryStream();
             await using (var wb = XlsWorkbookWriter.Create(ms, leaveOpen: true))
             {
-                wb.Start();
                 XlsSheetWriter sheet = wb.AddSheet("Sheet1");
-                sheet.Start();
                 using (var row = sheet.StartRow())
                 {
                     row.Write(date);
@@ -131,49 +124,44 @@ namespace ExcelReader.Tests
         }
 
         [Fact]
-        public async Task ColumnStyleAfterSheetStartThrowsXlsx()
+        public async Task ColumnStyleAfterFirstRowThrowsXlsx()
         {
             await using var ms = new MemoryStream();
-            await using var wb = await XlsxWorkbookWriter.CreateAsync(ms, leaveOpen: true, ct: TestContext.Current.CancellationToken);
-            await wb.StartAsync(TestContext.Current.CancellationToken);
+            await using var wb = XlsxWorkbookWriter.Create(ms, leaveOpen: true);
             XlsxSheetWriter sheet = wb.AddSheet("Sheet1");
-            await sheet.StartAsync(TestContext.Current.CancellationToken);
+            sheet.StartRow().Dispose();
             Assert.Throws<InvalidOperationException>(() => sheet.SetColumnStyle(0, 1));
             Assert.Throws<InvalidOperationException>(() => sheet.SetColumnWidth(0, 12));
         }
 
         [Fact]
-        public async Task ColumnStyleAfterSheetStartThrowsXlsb()
+        public async Task ColumnStyleAfterFirstRowThrowsXlsb()
         {
             await using var ms = new MemoryStream();
-            await using var wb = await XlsbWorkbookWriter.CreateAsync(ms, leaveOpen: true, ct: TestContext.Current.CancellationToken);
-            await wb.StartAsync(TestContext.Current.CancellationToken);
+            await using var wb = XlsbWorkbookWriter.Create(ms, leaveOpen: true);
             XlsbSheetWriter sheet = wb.AddSheet("Sheet1");
-            await sheet.StartAsync(TestContext.Current.CancellationToken);
+            sheet.StartRow().Dispose();
             Assert.Throws<InvalidOperationException>(() => sheet.SetColumnStyle(0, 1));
             Assert.Throws<InvalidOperationException>(() => sheet.SetColumnWidth(0, 12));
         }
 
         [Fact]
-        public async Task ColumnStyleAfterSheetStartThrowsXls()
+        public async Task ColumnStyleAfterFirstRowThrowsXls()
         {
             await using var ms = new MemoryStream();
             await using var wb = XlsWorkbookWriter.Create(ms, leaveOpen: true);
-            wb.Start();
             XlsSheetWriter sheet = wb.AddSheet("Sheet1");
-            sheet.Start();
+            sheet.StartRow().Dispose();
             Assert.Throws<InvalidOperationException>(() => sheet.SetColumnStyle(0, 1));
             Assert.Throws<InvalidOperationException>(() => sheet.SetColumnWidth(0, 12));
         }
 
         [Fact]
-        public async Task ColumnStyleAfterSheetStartIsNoOpForCsv()
+        public async Task ColumnStyleBeforeFirstRowIsNoOpForCsv()
         {
             await using var ms = new MemoryStream();
             CsvWorkbookWriter wb = CsvWorkbookWriter.Create(ms, leaveOpen: true);
-            await wb.StartAsync(TestContext.Current.CancellationToken);
             CsvSheetWriter sheet = wb.AddSheet("Sheet1");
-            await sheet.StartAsync(TestContext.Current.CancellationToken);
             sheet.SetColumnStyle(0, 1);
             sheet.SetColumnWidth(0, 12);
             await using (CsvRowWriter row = await sheet.StartRowAsync(TestContext.Current.CancellationToken))
@@ -192,7 +180,6 @@ namespace ExcelReader.Tests
                 int styleId = wb.AddStyle(new CellStyle { NumberFormat = "0.00" });
                 XlsxSheetWriter sheet = wb.AddSheet("Sheet1");
                 sheet.SetColumnStyle(0, styleId);
-                await sheet.StartAsync(TestContext.Current.CancellationToken);
                 await using (XlsxRowWriter row = await sheet.StartRowAsync(TestContext.Current.CancellationToken))
                 {
                     row.Write(42);
@@ -210,13 +197,11 @@ namespace ExcelReader.Tests
         {
             var ms = new MemoryStream();
             int styleId;
-            await using (var wb = await XlsbWorkbookWriter.CreateAsync(ms, leaveOpen: true, ct: TestContext.Current.CancellationToken))
+            await using (var wb = XlsbWorkbookWriter.Create(ms, leaveOpen: true))
             {
                 styleId = wb.AddStyle(new CellStyle { NumberFormat = "0.00" });
-                await wb.StartAsync(TestContext.Current.CancellationToken);
                 XlsbSheetWriter sheet = wb.AddSheet("Sheet1");
                 sheet.SetColumnStyle(0, styleId);
-                await sheet.StartAsync(TestContext.Current.CancellationToken);
                 await using (XlsbRowWriter row = await sheet.StartRowAsync(TestContext.Current.CancellationToken))
                 {
                     row.Write(42);
@@ -239,10 +224,8 @@ namespace ExcelReader.Tests
             await using (var wb = XlsWorkbookWriter.Create(ms, leaveOpen: true))
             {
                 styleId = wb.AddStyle(new CellStyle { NumberFormat = "0.00" });
-                wb.Start();
                 XlsSheetWriter sheet = wb.AddSheet("Sheet1");
                 sheet.SetColumnStyle(0, styleId);
-                sheet.Start();
                 using (var row = sheet.StartRow())
                 {
                     row.Write(42);
@@ -264,7 +247,6 @@ namespace ExcelReader.Tests
             CsvWorkbookWriter wb = CsvWorkbookWriter.Create(ms, leaveOpen: true);
             int styleId = wb.AddStyle(new CellStyle { NumberFormat = "0.00" });
             Assert.Equal(0, styleId);
-            await wb.StartAsync(TestContext.Current.CancellationToken);
             CsvSheetWriter sheet = wb.AddSheet("Sheet1");
             sheet.SetColumnStyle(0, 1);
             await using (CsvRowWriter row = await sheet.StartRowAsync(TestContext.Current.CancellationToken))
@@ -282,7 +264,6 @@ namespace ExcelReader.Tests
             {
                 int styleId = wb.AddStyle(new CellStyle { Bold = true });
                 XlsxSheetWriter sheet = wb.AddSheet("Sheet1");
-                await sheet.StartAsync(TestContext.Current.CancellationToken);
                 await using (XlsxRowWriter row = await sheet.StartRowAsync(styleId, TestContext.Current.CancellationToken))
                 {
                     row.Write("Header");
@@ -300,12 +281,10 @@ namespace ExcelReader.Tests
         {
             var ms = new MemoryStream();
             int styleId;
-            await using (var wb = await XlsbWorkbookWriter.CreateAsync(ms, leaveOpen: true, ct: TestContext.Current.CancellationToken))
+            await using (var wb = XlsbWorkbookWriter.Create(ms, leaveOpen: true))
             {
                 styleId = wb.AddStyle(new CellStyle { Bold = true });
-                await wb.StartAsync(TestContext.Current.CancellationToken);
                 XlsbSheetWriter sheet = wb.AddSheet("Sheet1");
-                await sheet.StartAsync(TestContext.Current.CancellationToken);
                 await using (XlsbRowWriter row = await sheet.StartRowAsync(styleId, TestContext.Current.CancellationToken))
                 {
                     row.Write("Header");
@@ -328,9 +307,7 @@ namespace ExcelReader.Tests
             await using (var wb = XlsWorkbookWriter.Create(ms, leaveOpen: true))
             {
                 styleId = wb.AddStyle(new CellStyle { Bold = true });
-                wb.Start();
                 XlsSheetWriter sheet = wb.AddSheet("Sheet1");
-                sheet.Start();
                 using (var row = sheet.StartRow(styleId))
                 {
                     row.Write("Header");
@@ -351,7 +328,6 @@ namespace ExcelReader.Tests
             await using var ms = new MemoryStream();
             CsvWorkbookWriter wb = CsvWorkbookWriter.Create(ms, leaveOpen: true);
             int styleId = wb.AddStyle(new CellStyle { Bold = true });
-            await wb.StartAsync(TestContext.Current.CancellationToken);
             CsvSheetWriter sheet = wb.AddSheet("Sheet1");
             await using (CsvRowWriter row = await sheet.StartRowAsync(styleId, TestContext.Current.CancellationToken))
             {
@@ -368,7 +344,6 @@ namespace ExcelReader.Tests
             {
                 wb.AddStyle(new CellStyle { NumberFormat = "R$ #,##0.00" });
                 XlsxSheetWriter sheet = wb.AddSheet("Sheet1");
-                await sheet.StartAsync(TestContext.Current.CancellationToken);
                 await sheet.EndAsync(TestContext.Current.CancellationToken);
             });
             string styles = ReadZipEntryText(ms, "xl/styles.xml");
@@ -393,8 +368,7 @@ namespace ExcelReader.Tests
         public async Task InvalidStyleArgumentsThrowXlsx()
         {
             await using var ms = new MemoryStream();
-            await using var wb = await XlsxWorkbookWriter.CreateAsync(ms, leaveOpen: true, ct: TestContext.Current.CancellationToken);
-            await wb.StartAsync(TestContext.Current.CancellationToken);
+            await using var wb = XlsxWorkbookWriter.Create(ms, leaveOpen: true);
             XlsxSheetWriter sheet = wb.AddSheet("Sheet1");
 
             Assert.Throws<ArgumentOutOfRangeException>(() => sheet.SetColumnStyle(-1, 0));
@@ -403,7 +377,6 @@ namespace ExcelReader.Tests
             Assert.Throws<ArgumentOutOfRangeException>(() => sheet.SetColumnWidth(-1, 12));
             Assert.Throws<ArgumentOutOfRangeException>(() => sheet.SetColumnWidth(0, -1));
 
-            await sheet.StartAsync(TestContext.Current.CancellationToken);
             await Assert.ThrowsAsync<ArgumentOutOfRangeException>(async () => await sheet.StartRowAsync(-1, TestContext.Current.CancellationToken));
             await Assert.ThrowsAsync<ArgumentOutOfRangeException>(async () => await sheet.StartRowAsync(1000, TestContext.Current.CancellationToken));
         }
@@ -412,8 +385,7 @@ namespace ExcelReader.Tests
         public async Task InvalidStyleArgumentsThrowXlsb()
         {
             await using var ms = new MemoryStream();
-            await using var wb = await XlsbWorkbookWriter.CreateAsync(ms, leaveOpen: true, ct: TestContext.Current.CancellationToken);
-            await wb.StartAsync(TestContext.Current.CancellationToken);
+            await using var wb = XlsbWorkbookWriter.Create(ms, leaveOpen: true);
             XlsbSheetWriter sheet = wb.AddSheet("Sheet1");
 
             Assert.Throws<ArgumentOutOfRangeException>(() => sheet.SetColumnStyle(-1, 0));
@@ -422,7 +394,6 @@ namespace ExcelReader.Tests
             Assert.Throws<ArgumentOutOfRangeException>(() => sheet.SetColumnWidth(-1, 12));
             Assert.Throws<ArgumentOutOfRangeException>(() => sheet.SetColumnWidth(0, -1));
 
-            await sheet.StartAsync(TestContext.Current.CancellationToken);
             await Assert.ThrowsAsync<ArgumentOutOfRangeException>(async () => await sheet.StartRowAsync(-1, TestContext.Current.CancellationToken));
             await Assert.ThrowsAsync<ArgumentOutOfRangeException>(async () => await sheet.StartRowAsync(1000, TestContext.Current.CancellationToken));
         }
@@ -432,7 +403,6 @@ namespace ExcelReader.Tests
         {
             await using var ms = new MemoryStream();
             await using var wb = XlsWorkbookWriter.Create(ms, leaveOpen: true);
-            wb.Start();
             XlsSheetWriter sheet = wb.AddSheet("Sheet1");
 
             Assert.Throws<ArgumentOutOfRangeException>(() => sheet.SetColumnStyle(-1, 0));
@@ -441,7 +411,6 @@ namespace ExcelReader.Tests
             Assert.Throws<ArgumentOutOfRangeException>(() => sheet.SetColumnWidth(-1, 12));
             Assert.Throws<ArgumentOutOfRangeException>(() => sheet.SetColumnWidth(0, -1));
 
-            sheet.Start();
             Assert.Throws<ArgumentOutOfRangeException>(() => sheet.StartRow(-1));
             Assert.Throws<ArgumentOutOfRangeException>(() => sheet.StartRow(1000));
         }
@@ -451,7 +420,6 @@ namespace ExcelReader.Tests
         {
             await using var ms = new MemoryStream();
             CsvWorkbookWriter wb = CsvWorkbookWriter.Create(ms, leaveOpen: true);
-            await wb.StartAsync(TestContext.Current.CancellationToken);
             CsvSheetWriter sheet = wb.AddSheet("Sheet1");
 
             Assert.Throws<ArgumentOutOfRangeException>(() => sheet.SetColumnStyle(-1, 0));
@@ -459,7 +427,6 @@ namespace ExcelReader.Tests
             Assert.Throws<ArgumentOutOfRangeException>(() => sheet.SetColumnWidth(-1, 12));
             Assert.Throws<ArgumentOutOfRangeException>(() => sheet.SetColumnWidth(0, -1));
 
-            await sheet.StartAsync(TestContext.Current.CancellationToken);
             await Assert.ThrowsAsync<ArgumentOutOfRangeException>(async () => await sheet.StartRowAsync(-1, TestContext.Current.CancellationToken));
             await using (CsvRowWriter row = await sheet.StartRowAsync(1000, TestContext.Current.CancellationToken))
             {

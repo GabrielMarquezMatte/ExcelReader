@@ -32,14 +32,21 @@ def load_baseline(path: str | None) -> tuple[str | None, dict[str, float]]:
     return newest.get("commit", {}).get("id"), measurements
 
 
-def load_results(directory: str) -> dict[str, float]:
-    """Every benchmark this run measured. FullName matches the baseline's `name` verbatim."""
+def load_results(directory: str) -> tuple[dict[str, float], list[str]]:
+    """(measured means, benchmarks that ran but produced no measurement). FullName matches the
+    baseline's `name` verbatim. BenchmarkDotNet writes null Statistics when the benchmark process
+    crashed or threw."""
     results: dict[str, float] = {}
+    failed: list[str] = []
     for path in sorted(glob.glob(os.path.join(directory, "*-report-full.json"))):
         with open(path, encoding="utf-8") as handle:
             for bench in json.load(handle).get("Benchmarks", []):
-                results[bench["FullName"]] = bench["Statistics"]["Mean"]
-    return results
+                statistics = bench.get("Statistics")
+                if statistics is None:
+                    failed.append(bench["FullName"])
+                else:
+                    results[bench["FullName"]] = statistics["Mean"]
+    return results, failed
 
 
 def humanize(nanoseconds: float) -> str:
@@ -49,8 +56,12 @@ def humanize(nanoseconds: float) -> str:
     return f"{nanoseconds:.0f} ns"
 
 
-def render(baseline_sha, baseline, results, threshold) -> str:
+def render(baseline_sha, baseline, results, threshold, failed=()) -> str:
     lines = ["## Benchmark Results", ""]
+    if failed:
+        lines += ["### Failed to run", "", "These produced no measurement; check the job log for the crash or exception.", ""]
+        lines += [f"- `{name}`" for name in failed]
+        lines.append("")
     if not baseline:
         lines += [
             "_No published baseline was found, so these are absolute numbers only. They come from a "
@@ -111,7 +122,8 @@ def main() -> None:
     args = parser.parse_args()
 
     baseline_sha, baseline = load_baseline(args.baseline)
-    print(render(baseline_sha, baseline, load_results(args.results), args.threshold))
+    results, failed = load_results(args.results)
+    print(render(baseline_sha, baseline, results, args.threshold, failed))
 
 
 if __name__ == "__main__":

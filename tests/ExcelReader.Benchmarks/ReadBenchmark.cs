@@ -38,7 +38,7 @@ namespace ExcelReader.Benchmarks
         {
             await using var ms = new MemoryStream(_workbook, writable: false);
             await using var reader = await Excel.FromXlsxAsync(ms);
-            await using var e = await reader.GetAsyncEnumeratorAsync();
+            await using var e = reader.GetAsyncEnumerator();
             long acc = 0;
             while (await e.MoveNextAsync()) { acc += AccumulateRow(e.Current); }
             return acc;
@@ -59,7 +59,7 @@ namespace ExcelReader.Benchmarks
         {
             await using var ms = new MemoryStream(_xlsbWorkbook, writable: false);
             await using var reader = await Excel.FromXlsbAsync(ms);
-            await using var e = await reader.GetAsyncEnumeratorAsync();
+            await using var e = reader.GetAsyncEnumerator();
             long acc = 0;
             while (await e.MoveNextAsync()) { acc += AccumulateRow(e.Current); }
             return acc;

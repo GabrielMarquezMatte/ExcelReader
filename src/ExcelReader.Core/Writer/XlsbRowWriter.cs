@@ -208,6 +208,10 @@ namespace ExcelReader.Core.Writer
             {
                 return Unsafe.As<T, sbyte>(ref value);
             }
+            if (typeof(T) == typeof(Half))
+            {
+                return (double)Unsafe.As<T, Half>(ref value);
+            }
             if (value is IConvertible convertible)
             {
                 double converted = convertible.ToDouble(CultureInfo.InvariantCulture);

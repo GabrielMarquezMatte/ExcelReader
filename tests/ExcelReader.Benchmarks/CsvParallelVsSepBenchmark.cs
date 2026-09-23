@@ -126,14 +126,14 @@ namespace ExcelReader.Benchmarks
                 long seqAcc = 0;
                 if (Corpus == ParallelCorpus.NarrowInt)
                 {
-                    ExcelParser<NarrowRow> parser = new();
+                    ExcelParser<NarrowRow> parser = ExcelParser.FromAttributes<NarrowRow>();
                     foreach (NarrowRow row in parser.Parse(reader))
                     {
                         seqAcc += row.A;
                     }
                     return seqAcc;
                 }
-                ExcelParser<WideRow> wideParser = new();
+                ExcelParser<WideRow> wideParser = ExcelParser.FromAttributes<WideRow>();
                 foreach (WideRow row in wideParser.Parse(reader))
                 {
                     seqAcc += row.Units;

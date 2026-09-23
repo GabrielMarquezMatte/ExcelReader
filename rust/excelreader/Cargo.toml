@@ -1,6 +1,6 @@
 [package]
 name = "excelreader"
-version = "0.0.0"
+version.workspace = true
 edition = "2021"
 license = "MIT"
 description = "Read and write Excel/CSV workbooks via ExcelReader's native ABI (schema-driven typed parse and write)."
@@ -15,7 +15,7 @@ chrono = ["dep:chrono"]
 arrow = ["dep:arrow"]
 
 [dependencies]
-excelreader-derive = { path = "../excelreader-derive", version = "0.0.0" }
+excelreader-derive = { workspace = true }
 chrono = { version = "0.4", optional = true, default-features = false, features = ["std"] }
 arrow = { version = "56", optional = true, default-features = false, features = ["ffi"] }
 

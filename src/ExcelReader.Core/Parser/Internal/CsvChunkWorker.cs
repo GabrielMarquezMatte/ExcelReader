@@ -188,12 +188,11 @@ namespace ExcelReader.Core.Parser.Internal
                     break;
                 }
 
-                T model = default!;
                 try
                 {
-                    if (projector.Advance(rows, ref model) == ProjectionStep.Yield)
+                    if (projector.Classify(rows) == ProjectionStep.Yield)
                     {
-                        models.Add(model);
+                        models.Add(projector.Project(rows));
                     }
                 }
                 catch (ExcelParseException ex)
@@ -214,8 +213,6 @@ namespace ExcelReader.Core.Parser.Internal
                 return long.MaxValue;
             }
 
-            // FindRecordStart always scans past a terminator, so without this a chunk already aligned to a
-            // record would overshoot by a whole record and force the merge loop to re-parse it.
             if (chunk.Start > 0 && AlreadyAtRecordStart(source, chunk.Start))
             {
                 return chunk.Start;
@@ -264,7 +261,6 @@ namespace ExcelReader.Core.Parser.Internal
         private static bool AlreadyAtRecordStart(CsvChunkSource source, long start)
         {
             Span<byte> pair = stackalloc byte[2];
-            // A short read leaves the answer unknown; scanning forward is still correct, only wasteful.
             return source.ReadWindow(start - 1, pair) == pair.Length && CsvBoundaryResolver.StartsRecord(pair);
         }
     }

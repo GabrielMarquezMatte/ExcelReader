@@ -15,6 +15,8 @@
          those APIs, not a PublicAPI.txt entry, so it stays suppressed. -->
     <NoWarn>$(NoWarn);CA1062;RS0026;CA1819;CA1515;MA0048</NoWarn>
     <AccelerateBuildsInVisualStudio>true</AccelerateBuildsInVisualStudio>
+    <NuGetAuditMode>all</NuGetAuditMode>
+    <NuGetAuditLevel>high</NuGetAuditLevel>
   </PropertyGroup>
   <!-- AnalysisMode=All already turns on every NetAnalyzers rule; Meziantou adds the async/culture
        rules it doesn't cover. PublicApiAnalyzers is referenced directly for RS0016/RS0026/RS0037 —

@@ -19,7 +19,7 @@ foreach (var row in reader)
 }
 
 // Typed parsing works exactly like the Excel readers:
-foreach (var item in new ExcelParser<ChangeRow>().Parse(reader))
+foreach (var item in ExcelParser.FromAttributes<ChangeRow>().Parse(reader))
 {
     Console.WriteLine($"{item.File}: +{item.LinesAdded}");
 }
@@ -34,7 +34,19 @@ using var reader = Excel.FromCsvFile("relatorio.csv", options);
 
 Every CSV cell is text (`CellType.ExcelString`, or `CellType.Empty` for a blank field); at the reader level there is no binary numeric or date representation, so `Cell.TryGetDateTime`/`IsDate1904` (always `false` for CSV) do not apply. The typed parser, however, is CSV-specialized: `ExcelParser<T>.Parse(CsvReader)` parses `DateTime`/`DateOnly` columns directly from the cell text (ISO or culture format, honoring `Culture` — e.g. pt-BR `02/07/2026`), so no `[ExcelConverter]` is needed for dates. All the usual attributes work unchanged (`[ExcelColumn]` aliases, `[ExcelRequired]`, `[ExcelConverter]`), and a converter still takes precedence over the built-in date parsing. (Holding the reader as `IExcelRowReader` instead routes through the generic Excel pipeline, where dates use serial-number semantics — prefer the concrete `Parse(CsvReader)` overload for CSV.)
 
-`Excel.Open`/`OpenAsync` do **not** auto-detect CSV — plain text has no magic-byte signature to sniff, so open CSV explicitly via `Excel.FromCsv*`.
+`Excel.Open`/`OpenAsync` do **not** auto-detect CSV — plain text has no magic-byte signature to sniff. Name the format instead: every `Open`/`OpenAsync` overload takes an optional `ExcelFileFormat`, and `ExcelReaderOptions.Csv` carries the dialect, so a caller that decides the format from an extension or a content-type header configures both families through one options object:
+
+```csharp
+ExcelFileFormat format = Path.GetExtension(path) is ".csv" ? ExcelFileFormat.Csv : ExcelFileFormat.Unknown;
+
+using IExcelRowReader reader = Excel.Open(path, format, new ExcelReaderOptions
+{
+    Password = secret,                                                  // used by the Excel formats
+    Csv = CsvReaderOptions.Default with { SniffDialect = true },        // used by the CSV format
+});
+```
+
+`ExcelFileFormat.Unknown` keeps the signature-based detection the no-format overloads do; `EncryptedOoxml` is a detection result rather than something to open, so passing it throws `ArgumentOutOfRangeException`.
 
 ## Sniff a CSV dialect
 
@@ -48,6 +60,14 @@ using var reader = Excel.FromCsvFile("export.csv", CsvReaderOptions.Default.With
 ```
 
 `Excel.SniffCsvDialect` mirrors the other CSV factories' shape: overloads for a seekable `Stream` and a `ReadOnlyMemory<byte>`, plus `SniffCsvDialectFromFile`, and async siblings for the stream/file overloads. The `Stream` overloads require a seekable source — they read a bounded sample and restore the stream's position — so a non-seekable stream throws `ArgumentException`; buffer it first, or pass the bytes as `ReadOnlyMemory<byte>` instead. Pass `CsvSnifferOptions` to change the candidate delimiters/quotes (and their priority order) or the number of sample lines considered.
+
+`CsvReaderOptions.SniffDialect` does the sample-then-apply above for you, at the entry point that owns the source — the `Excel.FromCsv*` factories, `Excel.Open` with `ExcelFileFormat.Csv`, and the parallel CSV entry points:
+
+```csharp
+using var reader = Excel.FromCsvFile("export.csv", CsvReaderOptions.Default with { SniffDialect = true });
+```
+
+An explicitly set `Encoding` survives sniffing unless the source carries a byte-order mark naming a different one — a sniffed encoding only ever comes from a BOM, so it never silently overrides a caller who knows their file is Windows-1252.
 
 ## Write CSV
 
@@ -74,7 +94,21 @@ using (CsvRowWriter row = writer.StartRow())
 }
 ```
 
-Fields are quoted only when they contain the delimiter, quote character, `\r`, or `\n`; embedded quotes are doubled. `bool` writes as lowercase `true`/`false` and `DateTime`/`DateOnly` as round-trip ISO 8601 (`"O"`); `TimeOnly` as a time-of-day fraction — all matching what `ExcelParser<T>.Parse(CsvReader)` expects, so a file written by `CsvWriter` parses back without configuration. `Skip(count)` writes empty fields to keep column positions aligned (CSV has no sparse-cell concept). Pass `CsvWriterOptions` to change the delimiter/quote byte, mirroring `CsvReaderOptions`.
+Fields are quoted only when they contain the delimiter, quote character, `\r`, or `\n`; embedded quotes are doubled. `bool` writes as lowercase `true`/`false` and `DateTime`/`DateOnly` as round-trip ISO 8601 (`"O"`); `TimeOnly` as a time-of-day fraction — all matching what `ExcelParser<T>.Parse(CsvReader)` expects, so a file written by `CsvWriter` parses back without configuration. `Skip(count)` writes empty fields to keep column positions aligned (CSV has no sparse-cell concept).
 
-To dump a collection of typed records instead of writing cells by hand, use `RecordWriter.CreateCsvAsync(stream)` — the same [record-writing API](writing.md#write-typed-records) as the Excel formats, restricted to a single sheet.
+`CsvWriterOptions` mirrors `CsvReaderOptions` property for property, so a file written with one set of settings reads back with the matching set:
+
+```csharp
+using var writer = CsvWriter.Create(stream, leaveOpen: false, new CsvWriterOptions
+{
+    Delimiter = (byte)';',
+    Encoding = Encoding.Latin1,          // fields are formatted as UTF-8, then transcoded on the way out
+    WriteByteOrderMark = true,           // what makes Excel open a UTF-8 file as UTF-8
+    NewLine = CsvNewLine.LineFeed,       // default is CRLF, as RFC 4180 specifies
+});
+```
+
+Fields containing `\r` or `\n` are quoted whichever `NewLine` is chosen, so the terminator never changes how the file reads back.
+
+To dump a collection of typed records instead of writing cells by hand, use `RecordWriter.CreateCsv(stream)` — the same [record-writing API](writing.md#write-typed-records) as the Excel formats, restricted to a single sheet.
 

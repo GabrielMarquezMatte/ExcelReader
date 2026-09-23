@@ -70,7 +70,7 @@ namespace ExcelReader.Core.Parser.Internal
             if (fluent.IsIndexBased)
             {
                 throw new InvalidOperationException(
-                    "WithAttributeFallback cannot merge a PropertyAt (index-based) map with attribute-driven properties: an index-based map has no header row to match attributes against. Use the ExcelFluentParser<T> constructor instead.");
+                    "BuildWithAttributeFallback cannot merge a PropertyAt (index-based) map with attribute-driven properties: an index-based map has no header row to match attributes against. Use ExcelParser.Build instead.");
             }
             var configuredNames = new HashSet<string>(comparer);
             foreach (PropertyMap<T> property in fluent._properties)

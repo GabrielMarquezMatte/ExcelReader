@@ -55,7 +55,7 @@ public ref struct SaleRow
 long total = 0;
 await Excel.ForEachCsvParallelAsync(
     "big.csv",
-    CsvModelMap.FromAttributes<SaleRow>(),
+    ExcelParser.FromAttributes<SaleRow>(),
     row => Interlocked.Add(ref total, row.Units),
     new CsvParallelOptions { DegreeOfParallelism = 8, HeaderRow = 1 });
 ```
@@ -152,9 +152,30 @@ foreach (var sheet in reader.Sheets())
 }
 ```
 
-CSV is exposed as a single, unnamed sheet (`SheetCount == 1`, `SheetName == ""`). Pattern-match to the concrete type only for reader-specific internals beyond this surface.
+`SheetVisibility` and `SheetVisibilityAt(index)` report whether a sheet is shown in the workbook's tab bar, read from the format's own encoding of it (XLSX's `state` attribute, XLSB's `BrtBundleSh.hsState`, XLS's `BoundSheet8.hsState`). It is reported, never enforced — a hidden sheet enumerates its rows like any other, so converters and exporters filter on it themselves:
+
+```csharp
+foreach (var sheet in reader.Sheets())
+{
+    if (sheet.Visibility != ExcelSheetVisibility.Visible)
+    {
+        continue; // skip hidden and veryHidden sheets
+    }
+    Console.WriteLine(sheet.Name);
+}
+```
+
+`ExcelSheetVisibility.VeryHidden` is the state Excel's own unhide dialog does not offer; both it and `Hidden` come back here. A sheet whose format says nothing about its state — or says something no producer agrees on — reads as `Visible`.
+
+CSV is exposed as a single, unnamed sheet (`SheetCount == 1`, `SheetName == ""`, always `Visible`). Pattern-match to the concrete type only for reader-specific internals beyond this surface.
 
 `OpenAsync` is the async counterpart. Both require a seekable stream (or a file path) so the signature can be read without consuming the input.
+
+Detection covers the signed formats only. To open a source whose format you already know — including CSV, which has no signature to detect — pass an `ExcelFileFormat` and let `ExcelReaderOptions.Csv` carry the dialect; see [CSV](csv.md#read-csv).
+
+```csharp
+using IExcelRowReader reader = Excel.Open("report.csv", ExcelFileFormat.Csv);
+```
 
 ## Read asynchronously
 
@@ -171,13 +192,13 @@ await foreach (var row in reader)
 }
 ```
 
-`await foreach` binds to the reader's `GetAsyncEnumerator()` by pattern — the sheet is opened synchronously and only each row advance is awaited. Because `Row` and `Cell` are `ref struct` types, the current row cannot be held across an `await` inside the loop body: read its cells (or copy the values out) before awaiting anything else.
+`await foreach` binds to the reader's `GetAsyncEnumerator(CancellationToken ct = default)` by pattern. The call itself does no I/O: opening the sheet part (and, for XLSX, loading shared strings) happens asynchronously on the first `MoveNextAsync`. Because `Row` and `Cell` are `ref struct` types, the current row cannot be held across an `await` inside the loop body: read its cells (or copy the values out) before awaiting anything else.
 
-When you need the sheet *opened* asynchronously too (e.g. the first read touches the network), or you need to `await` while a row is in scope, drive the enumerator manually via `GetAsyncEnumeratorAsync`, which awaits the open and threads the cancellation token:
+`await foreach` does not accept `.WithCancellation(ct)`: `Row` being a `ref struct` rules out `IAsyncEnumerable<Row>`, so the loop binds to the pattern rather than the interface. To pass a token, or to `await` while a row is in scope, drive the enumerator manually:
 
 ```csharp
 await using var reader = await Excel.FromXlsxFileAsync("report.xlsx", cancellationToken);
-await using var rows = await reader.GetAsyncEnumeratorAsync(cancellationToken);
+await using var rows = reader.GetAsyncEnumerator(cancellationToken);
 
 while (await rows.MoveNextAsync())
 {
@@ -186,7 +207,7 @@ while (await rows.MoveNextAsync())
 }
 ```
 
-`await foreach` does not accept `.WithCancellation(ct)`: `Row` being a `ref struct` rules out `IAsyncEnumerable<Row>`, so the loop binds to the pattern rather than the interface. Pass the token at open time (as above), or use the manual `GetAsyncEnumeratorAsync(ct)` loop.
+Errors from opening the sheet, such as cancellation or a corrupt part, surface from that first `MoveNextAsync`, not from `GetAsyncEnumerator`.
 
 ## Prefetch decompression (XLSX/XLSB)
 

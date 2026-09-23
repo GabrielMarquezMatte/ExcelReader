@@ -39,6 +39,21 @@ namespace ExcelReader.Core.Reader
         /// </summary>
         public bool InternStrings { get; init; }
 
+        /// <summary>
+        /// Gets a value indicating whether the source's dialect is inferred from a sample of its leading
+        /// bytes at open time, replacing <see cref="Delimiter"/> and <see cref="Quote"/> with what
+        /// <see cref="CsvSniffer"/> reports. Defaults to <see langword="false"/>.
+        /// </summary>
+        /// <remarks>
+        /// Applied by the entry points that own the source — <see cref="Excel.FromCsvFile"/> and the other
+        /// <c>Excel.FromCsv*</c> factories, <see cref="Excel.Open(string,Enums.ExcelFileFormat,ExcelReaderOptions?)"/>
+        /// with <see cref="Enums.ExcelFileFormat.Csv"/>, and the parallel CSV entry points — since the sample
+        /// has to be read before the reader starts. An explicitly set <see cref="Encoding"/> is kept unless the
+        /// source carries a byte-order mark naming a different one. Sniffing a stream reads a sample and
+        /// restores the position, so it requires a seekable stream.
+        /// </remarks>
+        public bool SniffDialect { get; init; }
+
         /// <summary>Gets the default options instance, used whenever a <see cref="CsvReader"/> is opened without explicit options.</summary>
         public static CsvReaderOptions Default { get; } = new();
 

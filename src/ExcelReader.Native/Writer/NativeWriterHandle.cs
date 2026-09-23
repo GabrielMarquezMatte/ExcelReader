@@ -48,10 +48,10 @@ namespace ExcelReader.Native.Writer
             {
                 case NativeFormat.Xlsx:
                     return new NativeWriterHandle<XlsxSheetWriter, XlsxRowWriter>(
-                        XlsxWorkbookWriter.Create(stream, useSharedStrings: sharedStrings));
+                        XlsxWorkbookWriter.Create(stream, options: new XlsxWriterOptions { UseSharedStrings = sharedStrings }));
                 case NativeFormat.Xlsb:
                     return new NativeWriterHandle<XlsbSheetWriter, XlsbRowWriter>(
-                        XlsbWorkbookWriter.Create(stream, date1904: date1904, useSharedStrings: sharedStrings));
+                        XlsbWorkbookWriter.Create(stream, options: new XlsbWriterOptions { Date1904 = date1904, UseSharedStrings = sharedStrings }));
                 case NativeFormat.Xls:
                     return new NativeWriterHandle<XlsSheetWriter, XlsRowWriter>(
                         XlsWorkbookWriter.Create(stream, date1904: date1904));
@@ -76,7 +76,6 @@ namespace ExcelReader.Native.Writer
         internal NativeWriterHandle(IWorkbookWriter<TSheet> workbook)
         {
             _workbook = workbook;
-            _workbook.Start();
         }
 
         internal override void StartSheet(string name)
@@ -86,7 +85,6 @@ namespace ExcelReader.Native.Writer
                 throw new InvalidOperationException("A sheet is already open; call xl_end_sheet before starting another.");
             }
             _sheet = _workbook.AddSheet(name);
-            _sheet.Start();
         }
 
         internal override void StartRow()

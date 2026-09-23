@@ -15,7 +15,6 @@ namespace ExcelReader.Tests
             var ms = new MemoryStream();
             await using (var wb = XlsWorkbookWriter.Create(ms, leaveOpen: true, date1904: date1904))
             {
-                wb.Start();
                 build(wb);
                 await wb.EndAsync(ct);
             }
@@ -30,7 +29,6 @@ namespace ExcelReader.Tests
             byte[] bytes = await WriteAsync(wb =>
             {
                 var s = wb.AddSheet("Plan1");
-                s.Start();
                 using (var r = s.StartRow())
                 {
                     r.Write("João");
@@ -65,7 +63,6 @@ namespace ExcelReader.Tests
             byte[] bytes = await WriteAsync(wb =>
             {
                 var s = wb.AddSheet("Numbers");
-                s.Start();
                 using (var r = s.StartRow())
                 {
                     r.Write(123);
@@ -111,7 +108,6 @@ namespace ExcelReader.Tests
             byte[] bytes = await WriteAsync(wb =>
             {
                 var s = wb.AddSheet("MoreNumbers");
-                s.Start();
                 using (var r = s.StartRow())
                 {
                     r.Write((bool?)true);
@@ -157,7 +153,6 @@ namespace ExcelReader.Tests
             byte[] bytes = await WriteAsync(wb =>
             {
                 var s = wb.AddSheet("S1");
-                s.Start();
                 using (var r = s.StartRow())
                 {
                     r.Write("A");
@@ -184,12 +179,10 @@ namespace ExcelReader.Tests
             byte[] bytes = await WriteAsync(wb =>
             {
                 var first = wb.AddSheet("First");
-                first.Start();
                 using (var r = first.StartRow()) { r.Write("one"); }
                 first.End();
 
                 var second = wb.AddSheet("Ωmega");
-                second.Start();
                 using (var r = second.StartRow()) { r.Write("two"); }
                 second.End();
             }, ct: ct);
@@ -213,7 +206,6 @@ namespace ExcelReader.Tests
             byte[] bytes = await WriteAsync(wb =>
             {
                 var s = wb.AddSheet("Big");
-                s.Start();
                 for (int i = 0; i < rows; i++)
                 {
                     using var r = s.StartRow();
@@ -248,7 +240,6 @@ namespace ExcelReader.Tests
             byte[] bytes = await WriteAsync(wb =>
             {
                 var s = wb.AddSheet("S1");
-                s.Start();
                 using (var r = s.StartRow()) { r.Write(date); }
                 s.End();
             }, date1904: true, ct: ct);
@@ -266,9 +257,7 @@ namespace ExcelReader.Tests
         {
             var ms = new MemoryStream();
             await using var wb = XlsWorkbookWriter.Create(ms, leaveOpen: true);
-            wb.Start();
             var s = wb.AddSheet("S1");
-            s.Start();
             using var r = s.StartRow();
             r.Skip(256);
             Assert.Throws<InvalidOperationException>(() => r.Write("x"));
@@ -279,9 +268,7 @@ namespace ExcelReader.Tests
         {
             var ms = new MemoryStream();
             await using var wb = XlsWorkbookWriter.Create(ms, leaveOpen: true);
-            wb.Start();
             var s = wb.AddSheet("S1");
-            s.Start();
             using var r = s.StartRow();
             Assert.Throws<InvalidOperationException>(() => r.Skip(257));
         }
@@ -291,9 +278,7 @@ namespace ExcelReader.Tests
         {
             var ms = new MemoryStream();
             await using var wb = XlsWorkbookWriter.Create(ms, leaveOpen: true);
-            wb.Start();
             var s = wb.AddSheet("S1");
-            s.Start();
             using var r = s.StartRow();
             Assert.Throws<ArgumentException>(() => r.Write(new NonNumericFormattable()));
         }
@@ -303,7 +288,6 @@ namespace ExcelReader.Tests
         {
             var ms = new MemoryStream();
             await using var wb = XlsWorkbookWriter.Create(ms, leaveOpen: true);
-            wb.Start();
             Assert.Throws<ArgumentException>(() => wb.AddSheet(new string('x', 32)));
         }
 
@@ -312,7 +296,6 @@ namespace ExcelReader.Tests
         {
             var ms = new MemoryStream();
             await using var wb = XlsWorkbookWriter.Create(ms, leaveOpen: true);
-            wb.Start();
 
             Assert.Throws<ArgumentException>(() => wb.AddSheet(string.Empty));
         }
@@ -322,7 +305,6 @@ namespace ExcelReader.Tests
         {
             var ms = new MemoryStream();
             await using var wb = XlsWorkbookWriter.Create(ms, leaveOpen: true);
-            wb.Start();
 
             Assert.Throws<ArgumentException>(() => wb.AddSheet("Bad[Name"));
         }
@@ -332,9 +314,7 @@ namespace ExcelReader.Tests
         {
             var ms = new MemoryStream();
             await using var wb = XlsWorkbookWriter.Create(ms, leaveOpen: true);
-            wb.Start();
             XlsSheetWriter sheet = wb.AddSheet("S1");
-            sheet.Start();
             using XlsRowWriter row = sheet.StartRow();
 
             Assert.Throws<ArgumentOutOfRangeException>(() => row.Skip(-1));
@@ -345,7 +325,6 @@ namespace ExcelReader.Tests
         {
             var ms = new MemoryStream();
             await using var wb = XlsWorkbookWriter.Create(ms, leaveOpen: true);
-            wb.Start();
             await Assert.ThrowsAsync<InvalidOperationException>(async () => await wb.EndAsync(TestContext.Current.CancellationToken));
         }
 
@@ -358,7 +337,6 @@ namespace ExcelReader.Tests
             byte[] bytes = await WriteAsync(wb =>
             {
                 var s = wb.AddSheet("Big");
-                s.Start();
                 for (int i = 0; i < rows; i++)
                 {
                     using var r = s.StartRow();
@@ -398,7 +376,6 @@ namespace ExcelReader.Tests
             byte[] bytes = await WriteAsync(wb =>
             {
                 var s = wb.AddSheet("S");
-                s.Start();
                 for (int i = 0; i < rows; i++)
                 {
                     using var r = s.StartRow();
@@ -428,9 +405,7 @@ namespace ExcelReader.Tests
         {
             var ms = new MemoryStream();
             await using var wb = XlsWorkbookWriter.Create(ms, leaveOpen: true);
-            wb.Start();
             var sheet = wb.AddSheet("S");
-            sheet.Start();
             var row = sheet.StartRow();
 
             Assert.Throws<InvalidOperationException>(sheet.End);

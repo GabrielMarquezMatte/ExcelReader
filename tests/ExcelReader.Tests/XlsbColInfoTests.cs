@@ -12,12 +12,10 @@ namespace ExcelReader.Tests
         private static async Task<byte[]> WriteSheetBinAsync(Action<XlsbSheetWriter> configure)
         {
             MemoryStream ms = new();
-            await using (var wb = await XlsbWorkbookWriter.CreateAsync(ms, leaveOpen: true, ct: TestContext.Current.CancellationToken))
+            await using (var wb = XlsbWorkbookWriter.Create(ms, leaveOpen: true))
             {
-                await wb.StartAsync(TestContext.Current.CancellationToken);
                 XlsbSheetWriter sheet = wb.AddSheet("Sheet1");
                 configure(sheet);
-                await sheet.StartAsync(TestContext.Current.CancellationToken);
                 await using (XlsbRowWriter row = await sheet.StartRowAsync(TestContext.Current.CancellationToken))
                 {
                     row.Write("value");

@@ -53,8 +53,26 @@ namespace ExcelReader.Tests
         [Theory]
         [InlineData("1e5")]
         [InlineData("1E5")]
+        [InlineData("1e+5")]
         [InlineData("1e-5")]
+        [InlineData("1e0")]
         [InlineData("1.5e10")]
+        [InlineData("0.5e1")]
+        [InlineData("9.99E2")]
+        [InlineData("-2.25E-7")]
+        [InlineData("6.022e23")]
+        [InlineData("-1.6e-19")]
+        [InlineData("1e22")]
+        [InlineData("1e-22")]
+        [InlineData("-0e5")]
+        public void AcceptsAndMatchesScientificNotation(string text)
+        {
+            AssertMatchesDoubleTryParse(text);
+            byte[] utf8 = Encoding.ASCII.GetBytes(text);
+            Assert.True(FastDouble.TryParse(utf8, out _), $"Expected FastDouble to accept \"{text}\".");
+        }
+
+        [Theory]
         [InlineData("12345678901234567")]
         [InlineData("9999999999999999999999999")]
         [InlineData("")]
@@ -69,6 +87,19 @@ namespace ExcelReader.Tests
         [InlineData("--5")]
         [InlineData("NaN")]
         [InlineData("Infinity")]
+        [InlineData("1e")]
+        [InlineData("1e+")]
+        [InlineData("1e-")]
+        [InlineData("e5")]
+        [InlineData("1ee5")]
+        [InlineData("1e+-5")]
+        [InlineData("1e5.5")]
+        [InlineData("1e1000")]
+        [InlineData("1e23")]
+        [InlineData("1e309")]
+        [InlineData("1e-400")]
+        [InlineData("5E-324")]
+        [InlineData("1.7976931348623157E+308")]
         public void RejectsUnsupportedForms(string text)
         {
             byte[] utf8 = Encoding.ASCII.GetBytes(text);

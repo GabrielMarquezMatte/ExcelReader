@@ -30,7 +30,7 @@ namespace ExcelReader.Core.Parser
         /// Reads a cell as an Excel date/time serial number, falling back to date/time text when the
         /// cell isn't numeric. Used where a single map has to work for both a serial-number source
         /// (XLSX/XLSB/XLS) and CSV (which has no serial date form and writes ISO text instead) — see
-        /// <see cref="ExcelMappedParser{T}"/>, which builds one map for every
+        /// <see cref="ExcelParser.Generated{T}"/>, which builds one map for every
         /// reader. The cost: a CSV cell that is only digits (e.g. an Excel serial typed as plain text)
         /// is read as a serial number, not as date text — there is no way to tell those two apart from
         /// the cell alone.
@@ -90,6 +90,17 @@ namespace ExcelReader.Core.Parser
             where TValue : IUtf8SpanParsable<TValue>
         {
             return cell.TryParse(provider, out value);
+        }
+
+        /// <summary>
+        /// Reads a cell by decoding its text and calling <see cref="ISpanParsable{TSelf}.TryParse(ReadOnlySpan{char}, IFormatProvider?, out TSelf)"/>,
+        /// for types such as <see cref="TimeSpan"/> and <see cref="DateTimeOffset"/> that have no UTF-8 parser.
+        /// </summary>
+        /// <typeparam name="TValue">The value type to parse.</typeparam>
+        public static bool SpanParsable<TValue>(in Cell cell, bool isDate1904, IFormatProvider provider, [MaybeNullWhen(false)] out TValue value)
+            where TValue : ISpanParsable<TValue>
+        {
+            return ColumnParserFactory.TryParseSpanParsable(in cell, provider, out value);
         }
 
         /// <summary>Reads a cell's raw UTF-8 bytes without allocating. The span aliases the reader's buffer and is valid only until the reader advances.</summary>

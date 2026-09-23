@@ -3,9 +3,11 @@
 
 `dotnet format analyzers --diagnostics RS0016` does NOT do this: that code fix edits an
 AdditionalFile (the .txt), not a .cs document, and dotnet-format's CLI fixer only applies
-fixes that land in source documents. So this replicates it: build with the warning-as-error
-gate relaxed, parse RS0016's message (locale-agnostic: it always quotes the symbol right
-after the diagnostic id), and append to that project's Unshipped.txt.
+fixes that land in source documents. So this replicates it: rebuild the solution with the
+warning-as-error gate relaxed, parse RS0016's message (locale-agnostic: it always quotes the
+symbol right after the diagnostic id), and append it to the Unshipped.txt of the project named
+in the diagnostic's trailing `[...csproj]` — not the project that was built, since building one
+project also compiles (and reports for) everything it references.
 
 Run this locally whenever `dotnet build` fails on RS0016 for a member you meant to add.
 """
@@ -17,7 +19,7 @@ import subprocess
 import sys
 
 HEADER = "#nullable enable"
-RS0016_RE = re.compile(r"RS0016[^']*'([^']+)'")
+RS0016_RE = re.compile(r"RS0016[^']*'([^']+)'.*\[([^\]]+\.csproj)\]\s*$")
 
 
 def discover_tracked_projects():
@@ -26,6 +28,23 @@ def discover_tracked_projects():
         os.path.dirname(os.path.dirname(p.replace("\\", "/")))
         for p in glob.glob("src/*/PublicAPI/PublicAPI.Unshipped.txt")
     )
+
+
+def _key(path):
+    return os.path.normcase(os.path.abspath(path))
+
+
+def route_missing_symbols(build_output, projects):
+    """Maps each tracked project dir to the RS0016 symbols its own compilation reported."""
+    by_csproj = {_key(glob.glob(f"{p}/*.csproj")[0]): p for p in projects}
+    found = {}
+    for line in build_output.splitlines():
+        m = RS0016_RE.search(line)
+        if m:
+            project_dir = by_csproj.get(_key(m.group(2)))
+            if project_dir is not None:
+                found.setdefault(project_dir, set()).add(m.group(1))
+    return found
 
 
 def read_entries(path):
@@ -48,32 +67,24 @@ def main():
         print("No src/*/PublicAPI/PublicAPI.Unshipped.txt files found — nothing to track.")
         return 1
 
-    added_any = False
-    for project_dir in projects:
-        csproj = glob.glob(f"{project_dir}/*.csproj")[0]
-        result = subprocess.run(
-            [
-                "dotnet", "build", csproj, "--configuration", "Release", "--nologo",
-                "-p:TreatWarningsAsErrors=false", "-p:CodeAnalysisTreatWarningsAsErrors=false",
-            ],
-            capture_output=True, text=True, check=False,
-        )
-        symbols = set()
-        for line in result.stdout.splitlines():
-            m = RS0016_RE.search(line)
-            if m:
-                symbols.add(m.group(1))
-        if not symbols:
-            continue
-
+    # --no-incremental: an up-to-date project skips compilation and so reports nothing.
+    result = subprocess.run(
+        [
+            "dotnet", "build", "ExcelReader.slnx", "--configuration", "Release", "--nologo",
+            "--no-incremental",
+            "-p:TreatWarningsAsErrors=false", "-p:CodeAnalysisTreatWarningsAsErrors=false",
+        ],
+        capture_output=True, text=True, encoding="utf-8", errors="replace", check=False,
+    )
+    found = route_missing_symbols(result.stdout, projects)
+    for project_dir, symbols in sorted(found.items()):
         path = f"{project_dir}/PublicAPI/PublicAPI.Unshipped.txt"
         write_entries(path, read_entries(path) | symbols)
         print(f"{path}: added {len(symbols)} entries.")
-        added_any = True
 
-    if not added_any:
+    if not found:
         print("Nothing missing — build already passes RS0016 clean.")
-    return 0 if added_any else 1
+    return 0 if found else 1
 
 
 if __name__ == "__main__":

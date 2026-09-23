@@ -1,6 +1,7 @@
 using System.Buffers.Text;
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
+using System.IO.Compression;
 using System.Runtime.CompilerServices;
 using ExcelReader.Core.Enums;
 using ExcelReader.Core.ValueObjects;
@@ -18,8 +19,9 @@ namespace ExcelReader.Core.Reader
             [SuppressMessage("Usage", "CA2213:Disposable fields should be disposed", Justification = "Borrowed, not owned.")]
             private readonly XlsxReader _reader;
             private readonly bool[] _styleIsDate;
-            private readonly int[] _sharedOffsets;
+            private int[] _sharedOffsets;
             private readonly Utf8StringCache? _contentCache;
+            private readonly ZipArchiveEntry? _entry;
             private int _nextCol;
 
             private NsTokens? _ns;
@@ -36,6 +38,30 @@ namespace ExcelReader.Core.Reader
                 _styleIsDate = reader._styleIsDate;
                 _sharedOffsets = reader._sharedOffsets;
                 _contentCache = reader._options.InternStrings ? new Utf8StringCache() : null;
+            }
+
+            internal Enumerator(XlsxReader reader, ZipArchiveEntry entry, CancellationToken ct)
+                : base(reader._options.MaxCellBytes, nameof(ExcelReaderOptions.MaxCellBytes), WorkbookLookups.InitialBufferCapacity(entry.Length), ct)
+            {
+                _reader = reader;
+                _styleIsDate = reader._styleIsDate;
+                _sharedOffsets = reader._sharedOffsets;
+                _contentCache = reader._options.InternStrings ? new Utf8StringCache() : null;
+                _entry = entry;
+            }
+
+            private protected override Stream OpenSource()
+            {
+                _reader.EnsureSharedLoaded();
+                _sharedOffsets = _reader._sharedOffsets;
+                return WorkbookLookups.OpenEntryStream(_entry!, _reader._decompressedBytes, _reader._options);
+            }
+
+            private protected override async ValueTask<Stream> OpenSourceAsync()
+            {
+                await _reader.EnsureSharedLoadedAsync(_ct).ConfigureAwait(false);
+                _sharedOffsets = _reader._sharedOffsets;
+                return await WorkbookLookups.OpenEntryStreamAsync(_entry!, _reader._decompressedBytes, _reader._options, _ct).ConfigureAwait(false);
             }
 
             /// <inheritdoc/>
