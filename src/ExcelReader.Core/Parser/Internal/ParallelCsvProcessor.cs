@@ -93,7 +93,7 @@ namespace ExcelReader.Core.Parser.Internal
         {
             await using (reader.ConfigureAwait(false))
             {
-                CsvReader.Enumerator rows = await reader.GetAsyncEnumeratorAsync(ct).ConfigureAwait(false);
+                CsvReader.Enumerator rows = reader.GetAsyncEnumerator(ct);
                 await using (rows.ConfigureAwait(false))
                 {
                     TState state = aggregation.Seed();
@@ -292,7 +292,7 @@ namespace ExcelReader.Core.Parser.Internal
             CsvReader csv = source.OpenReader(reader);
             await using (csv.ConfigureAwait(false))
             {
-                CsvReader.Enumerator rows = await csv.GetAsyncEnumeratorAsync(ct).ConfigureAwait(false);
+                CsvReader.Enumerator rows = csv.GetAsyncEnumerator(ct);
                 await using (rows.ConfigureAwait(false))
                 {
                     for (int i = 0; i <= records; i++)

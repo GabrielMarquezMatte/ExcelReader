@@ -36,6 +36,19 @@ namespace ExcelReader.Tests
         }
 
         [Fact]
+        public async Task SheetRejectsRowsAndEndAfterEnd()
+        {
+            using var ms = new MemoryStream();
+            await using var wb = CsvWorkbookWriter.Create(ms, leaveOpen: true);
+            CsvSheetWriter sheet = wb.AddSheet("Sheet1");
+            sheet.End();
+
+            Assert.Throws<ObjectDisposedException>(() => sheet.StartRow());
+            await Assert.ThrowsAsync<ObjectDisposedException>(async () => await sheet.StartRowAsync(TestContext.Current.CancellationToken));
+            Assert.Throws<ObjectDisposedException>(sheet.End);
+        }
+
+        [Fact]
         public async Task NormalWriteRoundTripsThroughWorkbookRecordWriter()
         {
             using var ms = new MemoryStream();

@@ -376,14 +376,14 @@ namespace ExcelReader.Tests
         }
 
         [Fact]
-        public async Task CancelledAsyncEnumeratorThrows()
+        public void CancelledAsyncEnumeratorThrows()
         {
             using var ms = XlsWorkbookBuilder.Build(sheets: [("S1", [["A"]])]);
             using var reader = Excel.FromXls(ms);
             using var cts = new CancellationTokenSource();
             cts.Cancel();
 
-            await Assert.ThrowsAsync<OperationCanceledException>(async () => await reader.GetAsyncEnumeratorAsync(cts.Token));
+            Assert.Throws<OperationCanceledException>(() => reader.GetAsyncEnumerator(cts.Token));
         }
 
         [Fact]
@@ -426,7 +426,7 @@ namespace ExcelReader.Tests
 
                 await using (var reader = await Excel.FromXlsFileAsync(path, ct: TestContext.Current.CancellationToken))
                 {
-                    await using var e = await reader.GetAsyncEnumeratorAsync(TestContext.Current.CancellationToken);
+                    await using var e = reader.GetAsyncEnumerator(TestContext.Current.CancellationToken);
                     Assert.True(await e.MoveNextAsync());
                     Assert.Equal("A", e.Current[0].GetString());
                 }

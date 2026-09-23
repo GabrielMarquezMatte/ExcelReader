@@ -19,11 +19,9 @@ namespace ExcelReader.Core.Reader
         TEnumerator GetEnumerator();
 
         /// <summary>Gets an enumerator that reads the current sheet's rows asynchronously from the start.</summary>
-        TEnumerator GetAsyncEnumerator();
-
-        /// <summary>Asynchronously creates an enumerator that reads the current sheet's rows from the start, performing any setup that requires I/O before the first row is fetched.</summary>
-        /// <param name="ct">A token to cancel the setup operation.</param>
-        ValueTask<TEnumerator> GetAsyncEnumeratorAsync(CancellationToken ct = default);
+        /// <remarks>Setup that needs I/O, such as opening the sheet part or loading shared strings, runs on the first <see cref="IExcelRowEnumerator.MoveNextAsync"/>, so this call does not block.</remarks>
+        /// <param name="ct">A token observed by that deferred setup and by every <see cref="IExcelRowEnumerator.MoveNextAsync"/> call.</param>
+        TEnumerator GetAsyncEnumerator(CancellationToken ct = default);
     }
 
     /// <summary>

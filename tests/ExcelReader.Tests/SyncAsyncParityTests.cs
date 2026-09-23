@@ -56,7 +56,7 @@ namespace ExcelReader.Tests
         {
             await using MemoryStream stream = new(workbook, writable: false);
             await using IExcelRowReader reader = await open(stream, ct);
-            await using IExcelRowEnumerator e = await reader.GetAsyncEnumeratorAsync(ct);
+            await using IExcelRowEnumerator e = reader.GetAsyncEnumerator(ct);
             List<CellSnapshot> cells = [];
             int rowIndex = 0;
             while (await e.MoveNextAsync())

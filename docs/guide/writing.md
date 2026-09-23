@@ -13,7 +13,6 @@ await using var workbook = XlsxWorkbookWriter.Create(stream);
 
 await using (var sheet = workbook.AddSheet("Summary"))
 {
-
     await using (var row = await sheet.StartRowAsync())
     {
         row.Write("Name");
@@ -81,7 +80,7 @@ await using (var row = await sheet.StartRowAsync())
 await workbook.EndAsync();
 ```
 
-`AddStyle` deduplicates by value: registering the same `CellStyle` twice returns the same index, and index 0 is always the general/default style. `SetColumnStyle`/`SetColumnWidth` must be called before `StartAsync` — the column layout (XLSX `<cols>`, XLSB `BrtColInfo`, XLS `COLINFO`) has to be written ahead of the row data. A row's style (from `StartRowAsync(int, CancellationToken)`) takes precedence over its column's style for any cell in that row. CSV has no cell concept of style: every style member is a documented no-op there.
+`AddStyle` deduplicates by value: registering the same `CellStyle` twice returns the same index, and index 0 is always the general/default style. `SetColumnStyle`/`SetColumnWidth` must be called before the sheet's first `StartRow`/`StartRowAsync` (calling them later throws `InvalidOperationException`) — the column layout (XLSX `<cols>`, XLSB `BrtColInfo`, XLS `COLINFO`) has to be written ahead of the row data. A row's style (from `StartRowAsync(int, CancellationToken)`) takes precedence over its column's style for any cell in that row. CSV has no cell concept of style: every style member is a documented no-op there.
 
 Cell-level styling (one specific cell rather than a whole column or row) is out of scope. Bold/italic render only in XLSX today; XLSB and XLS apply the number format but keep the default font, since their font records are opaque binary blobs this library isn't confident hand-editing without a verified field map.
 
@@ -97,7 +96,6 @@ await using var workbook = XlsbWorkbookWriter.Create(stream);
 
 await using (XlsbSheetWriter sheet = workbook.AddSheet("Summary"))
 {
-
     await using (XlsbRowWriter row = await sheet.StartRowAsync())
     {
         row.Write("Name");
@@ -123,7 +121,6 @@ await using var workbook = XlsWorkbookWriter.Create(stream);
 
 using (var sheet = workbook.AddSheet("Summary"))
 {
-
     using (var row = sheet.StartRow())
     {
         row.Write("Name");

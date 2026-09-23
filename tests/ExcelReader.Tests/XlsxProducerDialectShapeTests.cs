@@ -153,7 +153,7 @@ namespace ExcelReader.Tests
             await using XlsxReader reader = await Excel.FromXlsxAsync(
                 workbook,
                 ct: TestContext.Current.CancellationToken);
-            await using XlsxReader.Enumerator rows = await reader.GetAsyncEnumeratorAsync(TestContext.Current.CancellationToken);
+            await using XlsxReader.Enumerator rows = reader.GetAsyncEnumerator(TestContext.Current.CancellationToken);
 
             Assert.True(rows.MoveNext());
             foreach (ExpectedCell expected in fixture.Expected)
