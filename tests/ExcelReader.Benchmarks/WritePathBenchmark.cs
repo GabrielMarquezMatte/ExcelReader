@@ -80,7 +80,6 @@ namespace ExcelReader.Benchmarks
             _output.SetLength(0);
             using (XlsxWorkbookWriter workbook = XlsxWorkbookWriter.Create(_output, leaveOpen: true))
             {
-                workbook.Start();
                 using XlsxSheetWriter sheet = workbook.AddSheet("S");
                 sheet.Start();
                 for (long r = 0; r < Rows; r++)
@@ -103,7 +102,6 @@ namespace ExcelReader.Benchmarks
             _output.SetLength(0);
             using (CsvWorkbookWriter workbook = CsvWorkbookWriter.Create(_output, leaveOpen: true))
             {
-                workbook.Start();
                 using CsvSheetWriter sheet = workbook.AddSheet("S");
                 sheet.Start();
                 for (long r = 0; r < Rows; r++)
@@ -138,7 +136,6 @@ namespace ExcelReader.Benchmarks
             using (XlsxWorkbookWriter workbook = XlsxWorkbookWriter.Create(_output, leaveOpen: true))
             {
                 int style = workbook.AddStyle(new CellStyle { Bold = true });
-                workbook.Start();
                 using XlsxSheetWriter sheet = workbook.AddSheet("S");
                 sheet.Start();
                 ISheetWriter<XlsxRowWriter> rows = sheet;

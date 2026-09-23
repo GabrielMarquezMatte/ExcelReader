@@ -223,7 +223,7 @@ namespace ExcelReader.Fuzz
         {
             using CsvReader reader = Excel.FromCsv(bytes, CsvLimits);
             var rows = new List<string>();
-            foreach (FuzzRow row in new ExcelParser<FuzzRow>().Parse(reader))
+            foreach (FuzzRow row in ExcelParser.FromAttributes<FuzzRow>().Parse(reader))
             {
                 rows.Add(Render(row));
             }

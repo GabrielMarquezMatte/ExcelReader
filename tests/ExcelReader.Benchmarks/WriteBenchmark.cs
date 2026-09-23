@@ -23,9 +23,8 @@ namespace ExcelReader.Benchmarks
         public async Task<long> ExcelReaderWriter()
         {
             await using var ms = new MemoryStream(4 * 1024 * 1024);
-            await using (XlsxWorkbookWriter wb = await XlsxWorkbookWriter.CreateAsync(ms, leaveOpen: true))
+            await using (XlsxWorkbookWriter wb = XlsxWorkbookWriter.Create(ms, leaveOpen: true))
             {
-                await wb.StartAsync();
                 XlsxSheetWriter sheet = wb.AddSheet("S1");
                 await sheet.StartAsync();
                 using (XlsxRowWriter header = sheet.StartRow())
@@ -54,9 +53,8 @@ namespace ExcelReader.Benchmarks
         public async Task<long> ExcelReaderWriterSharedStrings()
         {
             await using var ms = new MemoryStream(4 * 1024 * 1024);
-            await using (XlsxWorkbookWriter wb = await XlsxWorkbookWriter.CreateAsync(ms, leaveOpen: true, useSharedStrings: true))
+            await using (XlsxWorkbookWriter wb = XlsxWorkbookWriter.Create(ms, leaveOpen: true, options: new XlsxWriterOptions { UseSharedStrings = true }))
             {
-                await wb.StartAsync();
                 XlsxSheetWriter sheet = wb.AddSheet("S1");
                 await sheet.StartAsync();
                 using (XlsxRowWriter header = sheet.StartRow())
@@ -85,9 +83,8 @@ namespace ExcelReader.Benchmarks
         public async Task<long> ExcelReaderWriterPrefetch()
         {
             await using var ms = new MemoryStream(4 * 1024 * 1024);
-            await using (XlsxWorkbookWriter wb = await XlsxWorkbookWriter.CreateAsync(ms, leaveOpen: true, prefetchWrite: true))
+            await using (XlsxWorkbookWriter wb = XlsxWorkbookWriter.Create(ms, leaveOpen: true, options: new XlsxWriterOptions { PrefetchWrite = true }))
             {
-                await wb.StartAsync();
                 XlsxSheetWriter sheet = wb.AddSheet("S1");
                 await sheet.StartAsync();
                 using (XlsxRowWriter header = sheet.StartRow())
@@ -116,9 +113,8 @@ namespace ExcelReader.Benchmarks
         public async Task<long> ExcelReaderXlsbWriter()
         {
             await using var ms = new MemoryStream(4 * 1024 * 1024);
-            await using (XlsbWorkbookWriter wb = await XlsbWorkbookWriter.CreateAsync(ms, leaveOpen: true))
+            await using (XlsbWorkbookWriter wb = XlsbWorkbookWriter.Create(ms, leaveOpen: true))
             {
-                await wb.StartAsync();
                 XlsbSheetWriter sheet = wb.AddSheet("S1");
                 await sheet.StartAsync();
                 ReadOnlySpan<XlsbCell> header =
@@ -140,9 +136,8 @@ namespace ExcelReader.Benchmarks
         public async Task<long> ExcelReaderXlsbWriterSharedStrings()
         {
             await using var ms = new MemoryStream(4 * 1024 * 1024);
-            await using (XlsbWorkbookWriter wb = await XlsbWorkbookWriter.CreateAsync(ms, leaveOpen: true, useSharedStrings: true))
+            await using (XlsbWorkbookWriter wb = XlsbWorkbookWriter.Create(ms, leaveOpen: true, options: new XlsbWriterOptions { UseSharedStrings = true }))
             {
-                await wb.StartAsync();
                 XlsbSheetWriter sheet = wb.AddSheet("S1");
                 await sheet.StartAsync();
                 ReadOnlySpan<XlsbCell> header =
@@ -164,9 +159,8 @@ namespace ExcelReader.Benchmarks
         public async Task<long> ExcelReaderXlsbWriterPrefetch()
         {
             await using var ms = new MemoryStream(4 * 1024 * 1024);
-            await using (XlsbWorkbookWriter wb = await XlsbWorkbookWriter.CreateAsync(ms, leaveOpen: true, prefetchWrite: true))
+            await using (XlsbWorkbookWriter wb = XlsbWorkbookWriter.Create(ms, leaveOpen: true, options: new XlsbWriterOptions { PrefetchWrite = true }))
             {
-                await wb.StartAsync();
                 XlsbSheetWriter sheet = wb.AddSheet("S1");
                 await sheet.StartAsync();
                 ReadOnlySpan<XlsbCell> header =

@@ -19,7 +19,7 @@ foreach (var row in reader)
 }
 
 // Typed parsing works exactly like the Excel readers:
-foreach (var item in new ExcelParser<ChangeRow>().Parse(reader))
+foreach (var item in ExcelParser.FromAttributes<ChangeRow>().Parse(reader))
 {
     Console.WriteLine($"{item.File}: +{item.LinesAdded}");
 }
@@ -110,5 +110,5 @@ using var writer = CsvWriter.Create(stream, leaveOpen: false, new CsvWriterOptio
 
 Fields containing `\r` or `\n` are quoted whichever `NewLine` is chosen, so the terminator never changes how the file reads back.
 
-To dump a collection of typed records instead of writing cells by hand, use `RecordWriter.CreateCsvAsync(stream)` — the same [record-writing API](writing.md#write-typed-records) as the Excel formats, restricted to a single sheet.
+To dump a collection of typed records instead of writing cells by hand, use `RecordWriter.CreateCsv(stream)` — the same [record-writing API](writing.md#write-typed-records) as the Excel formats, restricted to a single sheet.
 

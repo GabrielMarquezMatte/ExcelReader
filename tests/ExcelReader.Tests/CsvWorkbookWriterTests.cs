@@ -5,20 +5,10 @@ namespace ExcelReader.Tests
     public class CsvWorkbookWriterTests
     {
         [Fact]
-        public async Task AddSheetBeforeStartThrows()
-        {
-            using var ms = new MemoryStream();
-            await using var wb = CsvWorkbookWriter.Create(ms, leaveOpen: true);
-
-            Assert.Throws<InvalidOperationException>(() => wb.AddSheet("Sheet1"));
-        }
-
-        [Fact]
         public async Task AddSheetWithNullNameThrows()
         {
             using var ms = new MemoryStream();
             await using var wb = CsvWorkbookWriter.Create(ms, leaveOpen: true);
-            await wb.StartAsync(TestContext.Current.CancellationToken);
 
             Assert.Throws<ArgumentNullException>(() => wb.AddSheet(null!));
         }
@@ -28,7 +18,6 @@ namespace ExcelReader.Tests
         {
             using var ms = new MemoryStream();
             await using var wb = CsvWorkbookWriter.Create(ms, leaveOpen: true);
-            await wb.StartAsync(TestContext.Current.CancellationToken);
             wb.AddSheet("Sheet1");
 
             Assert.Throws<InvalidOperationException>(() => wb.AddSheet("Sheet2"));
@@ -39,7 +28,6 @@ namespace ExcelReader.Tests
         {
             using var ms = new MemoryStream();
             await using var wb = CsvWorkbookWriter.Create(ms, leaveOpen: true);
-            await wb.StartAsync(TestContext.Current.CancellationToken);
             CsvSheetWriter sheet = wb.AddSheet("Sheet1");
             await sheet.EndAsync(TestContext.Current.CancellationToken);
             await wb.EndAsync(TestContext.Current.CancellationToken);
@@ -48,33 +36,11 @@ namespace ExcelReader.Tests
         }
 
         [Fact]
-        public async Task EndBeforeStartThrows()
-        {
-            using var ms = new MemoryStream();
-            await using var wb = CsvWorkbookWriter.Create(ms, leaveOpen: true);
-
-            await Assert.ThrowsAsync<InvalidOperationException>(
-                () => wb.EndAsync(TestContext.Current.CancellationToken).AsTask());
-        }
-
-        [Fact]
-        public async Task StartTwiceThrows()
-        {
-            using var ms = new MemoryStream();
-            await using var wb = CsvWorkbookWriter.Create(ms, leaveOpen: true);
-            await wb.StartAsync(TestContext.Current.CancellationToken);
-
-            await Assert.ThrowsAsync<InvalidOperationException>(
-                () => wb.StartAsync(TestContext.Current.CancellationToken).AsTask());
-        }
-
-        [Fact]
         public async Task NormalWriteRoundTripsThroughWorkbookRecordWriter()
         {
             using var ms = new MemoryStream();
             await using (var wb = CsvWorkbookWriter.Create(ms, leaveOpen: true))
             {
-                await wb.StartAsync(TestContext.Current.CancellationToken);
                 CsvSheetWriter sheet = wb.AddSheet("Sheet1");
                 await sheet.StartAsync(TestContext.Current.CancellationToken);
                 await using (CsvRowWriter row = await sheet.StartRowAsync(TestContext.Current.CancellationToken))

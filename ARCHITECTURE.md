@@ -31,7 +31,8 @@ object is what the native ABI's `xl_open_options` maps onto, so `NativeApi.Open`
 rather than reimplementing them.
 
 On top of all four readers sits the typed-parsing layer (`src/ExcelReader.Core/Parser/`):
-`ExcelParser<T>` (reflection/attribute-driven). Its model may be a class, a struct or a `ref struct`;
+`ExcelParser<T>`, built by `ExcelParser.FromAttributes` (reflection), `ExcelParser.Generated` (the
+source-generated map) or `ExcelParser.Build` (a runtime-configured map). Its model may be a class, a struct or a `ref struct`;
 a `ref struct` model binds directly to `Cell.Value` spans — zero allocation for the container and,
 for span-typed columns, for the values too. It consumes `Row`/`Cell` from any reader uniformly.
 

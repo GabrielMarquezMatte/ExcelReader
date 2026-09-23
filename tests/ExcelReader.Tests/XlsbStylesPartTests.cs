@@ -10,9 +10,8 @@ namespace ExcelReader.Tests
         private static async Task<byte[]> WriteStylesBinAsync(Action<XlsbWorkbookWriter>? configure = null)
         {
             MemoryStream ms = new();
-            await using (var wb = await XlsbWorkbookWriter.CreateAsync(ms, leaveOpen: true, ct: TestContext.Current.CancellationToken))
+            await using (var wb = XlsbWorkbookWriter.Create(ms, leaveOpen: true))
             {
-                await wb.StartAsync(TestContext.Current.CancellationToken);
                 configure?.Invoke(wb);
                 XlsbSheetWriter sheet = wb.AddSheet("Sheet1");
                 await sheet.StartAsync(TestContext.Current.CancellationToken);

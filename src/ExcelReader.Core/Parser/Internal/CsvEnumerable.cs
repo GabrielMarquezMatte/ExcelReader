@@ -28,13 +28,6 @@ namespace ExcelReader.Core.Parser.Internal
 
         [RequiresUnreferencedCode("Typed parsing reflects over T's public properties, which trimming may remove.")]
         [RequiresDynamicCode("Typed parsing binds property setters at runtime (MethodInfo.CreateDelegate / MakeGenericMethod).")]
-        internal CsvEnumerable(CsvReader reader, ExcelParserConfig config, CancellationToken ct = default)
-            : this(reader, config, ownsReader: false, ct)
-        {
-        }
-
-        [RequiresUnreferencedCode("Typed parsing reflects over T's public properties, which trimming may remove.")]
-        [RequiresDynamicCode("Typed parsing binds property setters at runtime (MethodInfo.CreateDelegate / MakeGenericMethod).")]
         internal CsvEnumerable(CsvReader reader, ExcelParserConfig config, bool ownsReader, CancellationToken ct)
         {
             _reader = reader;

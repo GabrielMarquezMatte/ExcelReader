@@ -56,7 +56,7 @@ namespace ExcelReader.Tests
                 [1, "Alice", "hi"]);
             await using var reader = await Excel.FromXlsxAsync(ms, ct: TestContext.Current.CancellationToken);
 
-            Row row = new ExcelParser<Row>().Parse(reader).Single();
+            Row row = ExcelParser.FromAttributes<Row>().Parse(reader).Single();
 
             Assert.Equal(1, row.Id);
             Assert.Equal("Alice", row.Name);
@@ -69,7 +69,7 @@ namespace ExcelReader.Tests
             await using var ms = await TypedWorkbook.BuildAsync(["Id", "FullName"], [2, "Bob"]);
             await using var reader = await Excel.FromXlsxAsync(ms, ct: TestContext.Current.CancellationToken);
 
-            Row row = new ExcelParser<Row>().Parse(reader).Single();
+            Row row = ExcelParser.FromAttributes<Row>().Parse(reader).Single();
 
             Assert.Equal(2, row.Id);
             Assert.Equal("Bob", row.Name);
@@ -83,7 +83,7 @@ namespace ExcelReader.Tests
             await using var reader = await Excel.FromXlsxAsync(ms, ct: TestContext.Current.CancellationToken);
 
             ExcelParseException ex = Assert.Throws<ExcelParseException>(
-                () => new ExcelParser<Row>().Parse(reader).ToList());
+                () => ExcelParser.FromAttributes<Row>().Parse(reader).ToList());
 
             Assert.Contains("Id", ex.Message, StringComparison.Ordinal);
             Assert.Contains("FullName", ex.Message, StringComparison.Ordinal);
@@ -95,7 +95,7 @@ namespace ExcelReader.Tests
             await using var ms = await TypedWorkbook.BuildAsync(["Id", "FullName"], [3, "Carol"]);
             await using var reader = await Excel.FromXlsxAsync(ms, ct: TestContext.Current.CancellationToken);
 
-            Row row = new ExcelParser<Row>().Parse(reader).Single();
+            Row row = ExcelParser.FromAttributes<Row>().Parse(reader).Single();
 
             Assert.Equal("Carol", row.Name);
         }
@@ -107,7 +107,7 @@ namespace ExcelReader.Tests
                 ("S1", [["Code"], ["A1"], [null]]));
             await using var reader = await Excel.FromXlsxAsync(ms, ct: TestContext.Current.CancellationToken);
 
-            var enumerator = new ExcelParser<ValueRow>().Parse(reader).GetEnumerator();
+            var enumerator = ExcelParser.FromAttributes<ValueRow>().Parse(reader).GetEnumerator();
             Assert.True(enumerator.MoveNext());
             Assert.Equal("A1", enumerator.Current.Code);
 
@@ -124,7 +124,7 @@ namespace ExcelReader.Tests
             await using var reader = await Excel.FromXlsxAsync(ms, ct: TestContext.Current.CancellationToken);
 
             ExcelParseException ex = Assert.Throws<ExcelParseException>(
-                () => new ExcelParser<Row>().Parse(reader).ToList());
+                () => ExcelParser.FromAttributes<Row>().Parse(reader).ToList());
             Assert.Contains("Id", ex.Message, StringComparison.Ordinal);
         }
 
@@ -136,7 +136,7 @@ namespace ExcelReader.Tests
             var config = new ExcelParserConfig { ThrowOnParseFailure = true };
 
             ExcelParseException ex = Assert.Throws<ExcelParseException>(
-                () => new ExcelParser<Row>(config).Parse(reader).ToList());
+                () => ExcelParser.FromAttributes<Row>(config).Parse(reader).ToList());
             Assert.Equal("Id", ex.ColumnName);
             Assert.Equal("oops", ex.RawValue);
         }
@@ -149,7 +149,7 @@ namespace ExcelReader.Tests
             await using var reader = await Excel.FromXlsxAsync(ms, ct: TestContext.Current.CancellationToken);
 
             ExcelParseException ex = Assert.Throws<ExcelParseException>(
-                () => new ExcelParser<TwoColRow>().Parse(reader).ToList());
+                () => ExcelParser.FromAttributes<TwoColRow>().Parse(reader).ToList());
             Assert.Contains("Code", ex.Message, StringComparison.Ordinal);
         }
 
@@ -160,7 +160,7 @@ namespace ExcelReader.Tests
                 ("S1", [["Code"], ["A1"], [null]]));
             await using var reader = await Excel.FromXlsxAsync(ms, ct: TestContext.Current.CancellationToken);
 
-            List<PresenceOnlyRow> rows = [.. new ExcelParser<PresenceOnlyRow>().Parse(reader)];
+            List<PresenceOnlyRow> rows = [.. ExcelParser.FromAttributes<PresenceOnlyRow>().Parse(reader)];
 
             Assert.Equal(2, rows.Count);
             Assert.Equal("A1", rows[0].Code);
@@ -174,7 +174,7 @@ namespace ExcelReader.Tests
             await using var reader = await Excel.FromXlsxAsync(ms, ct: TestContext.Current.CancellationToken);
 
             InvalidOperationException ex = Assert.Throws<InvalidOperationException>(
-                () => new ExcelParser<UnsupportedRequiredRow>().Parse(reader).ToList());
+                () => ExcelParser.FromAttributes<UnsupportedRequiredRow>().Parse(reader).ToList());
 
             Assert.Contains("ExcelRequired", ex.Message, StringComparison.Ordinal);
         }

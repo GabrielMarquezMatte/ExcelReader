@@ -42,12 +42,11 @@ namespace ExcelReader.Core.Writer.Internal
         }
 
         internal static void RequireCanAddSheet(
-            WriterState state, object owner, string workbookTypeName, string name,
+            bool ended, object owner, string name,
             bool sheetActive, string sheetWriterTypeName, ExcelSheetVisibility visibility = ExcelSheetVisibility.Visible)
         {
             ArgumentNullException.ThrowIfNull(name);
-            ThrowIfEnded(state, owner);
-            RequireStarted(state, workbookTypeName, "adding sheets");
+            ObjectDisposedException.ThrowIf(ended, owner);
             ValidateSheetName(name);
             if (visibility is not (ExcelSheetVisibility.Visible or ExcelSheetVisibility.Hidden or ExcelSheetVisibility.VeryHidden))
             {

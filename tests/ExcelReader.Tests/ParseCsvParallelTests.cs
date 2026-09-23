@@ -38,7 +38,7 @@ namespace ExcelReader.Tests
         {
             byte[] csv = BuildCsv(20_000);
             using var reader = Excel.FromCsv(csv);
-            List<Row> expected = [.. new ExcelParser<Row>().Parse(reader)];
+            List<Row> expected = [.. ExcelParser.FromAttributes<Row>().Parse(reader)];
 
             List<Row> actual = await DrainAsync(Excel.ParseCsvParallelAsync<Row>(csv.AsMemory(), options: new CsvParallelOptions { DegreeOfParallelism = 4 }, ct: TestContext.Current.CancellationToken));
 
@@ -59,7 +59,7 @@ namespace ExcelReader.Tests
             try
             {
                 using var reader = Excel.FromCsvFile(path);
-                List<Row> expected = [.. new ExcelParser<Row>().Parse(reader)];
+                List<Row> expected = [.. ExcelParser.FromAttributes<Row>().Parse(reader)];
 
                 List<Row> actual = await DrainAsync(Excel.ParseCsvParallelAsync<Row>(path, options: new CsvParallelOptions { DegreeOfParallelism = 8 }, ct: TestContext.Current.CancellationToken));
 

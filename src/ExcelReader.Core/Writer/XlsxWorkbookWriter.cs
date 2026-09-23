@@ -20,20 +20,20 @@ namespace ExcelReader.Core.Writer
         private readonly SharedStringTable? _sharedStrings;
         private readonly StyleTable _styles = new();
         private readonly List<(string Name, int SheetId, ExcelSheetVisibility Visibility)> _sheets = [];
-        private WriterState _state = WriterState.Created;
+        private bool _ended;
         private bool _sheetActive;
         private XlsxSheetWriter? _activeSheet;
         private bool _disposed;
 
-        private XlsxWorkbookWriter(ZipArchive zip, Stream stream, bool leaveOpen, bool useSharedStrings, CompressionLevel compression, bool prefetchWrite)
+        private XlsxWorkbookWriter(ZipArchive zip, Stream stream, bool leaveOpen, XlsxWriterOptions options)
         {
             _zip = zip;
             _stream = stream;
             _leaveOpen = leaveOpen;
-            UseSharedStrings = useSharedStrings;
-            _compression = compression;
-            _prefetchWrite = prefetchWrite;
-            _sharedStrings = useSharedStrings ? new SharedStringTable() : null;
+            UseSharedStrings = options.UseSharedStrings;
+            _compression = options.Compression;
+            _prefetchWrite = options.PrefetchWrite;
+            _sharedStrings = options.UseSharedStrings ? new SharedStringTable() : null;
         }
 
         /// <summary>
@@ -41,77 +41,20 @@ namespace ExcelReader.Core.Writer
         /// </summary>
         /// <param name="stream">The destination stream; the returned writer takes ownership of the ZIP archive built on top of it.</param>
         /// <param name="leaveOpen">When <see langword="true"/>, <paramref name="stream"/> is left open after the workbook is disposed.</param>
-        /// <param name="compression">The compression level applied to each ZIP entry.</param>
-        /// <param name="useSharedStrings">When <see langword="true"/>, string cells are deduplicated into a shared string table instead of being inlined.</param>
-        /// <param name="prefetchWrite">
-        /// When <see langword="true"/>, each sheet's deflate runs on a background thread instead of the
-        /// calling thread, overlapping compression with row serialization. Defaults to <see langword="false"/>.
-        /// Intended for single-file batch writing, where overlapping deflate with row-building shortens
-        /// one write's wall-clock time — not for concurrent server workloads, where the extra background
-        /// thread per sheet competes with work already saturating the CPU (mirrors
-        /// <see cref="Reader.ExcelReaderOptions.PrefetchDecompression"/>'s own tradeoff on the read side).
-        /// </param>
-        /// <param name="ct">A token to cancel the operation before the archive is created.</param>
+        /// <param name="options">Compression, shared-string and background-deflate settings. Defaults to <see cref="XlsxWriterOptions.Default"/>.</param>
         /// <exception cref="ArgumentNullException"><paramref name="stream"/> is <see langword="null"/>.</exception>
-        public static ValueTask<XlsxWorkbookWriter> CreateAsync(
-            Stream stream, bool leaveOpen = false,
-            CompressionLevel compression = CompressionLevel.Fastest,
-            bool useSharedStrings = false,
-            bool prefetchWrite = false,
-            CancellationToken ct = default)
-        {
-            ArgumentNullException.ThrowIfNull(stream);
-            ct.ThrowIfCancellationRequested();
-            ZipArchive zip = new(stream, ZipArchiveMode.Create, leaveOpen: true);
-            return ValueTask.FromResult(new XlsxWorkbookWriter(zip, stream, leaveOpen, useSharedStrings, compression, prefetchWrite));
-        }
-
-        /// <summary>
-        /// Synchronous counterpart to <see cref="CreateAsync"/>, for native/unmanaged callers whose ABI
-        /// is synchronous. Parameters mirror <see cref="CreateAsync"/> exactly, minus <c>ct</c>.
-        /// </summary>
-        public static XlsxWorkbookWriter Create(
-            Stream stream, bool leaveOpen = false,
-            CompressionLevel compression = CompressionLevel.Fastest,
-            bool useSharedStrings = false,
-            bool prefetchWrite = false)
+        public static XlsxWorkbookWriter Create(Stream stream, bool leaveOpen = false, XlsxWriterOptions? options = null)
         {
             ArgumentNullException.ThrowIfNull(stream);
             ZipArchive zip = new(stream, ZipArchiveMode.Create, leaveOpen: true);
-            return new XlsxWorkbookWriter(zip, stream, leaveOpen, useSharedStrings, compression, prefetchWrite);
-        }
-
-        /// <summary>
-        /// Synchronous counterpart to <see cref="StartAsync"/>, for native/unmanaged callers whose ABI
-        /// is synchronous.
-        /// </summary>
-        /// <exception cref="ObjectDisposedException">The workbook has already been ended.</exception>
-        /// <exception cref="InvalidOperationException">The workbook has already been started.</exception>
-        public void Start()
-        {
-            WriterStateGuard.ThrowIfEnded(_state, this);
-            WriterStateGuard.RequireCreated(_state, nameof(XlsxWorkbookWriter));
-            _state = WriterState.Started;
-            WriteRootRels();
-        }
-
-        /// <inheritdoc/>
-        /// <exception cref="ObjectDisposedException">The workbook has already been ended.</exception>
-        /// <exception cref="InvalidOperationException">The workbook has already been started.</exception>
-        public ValueTask StartAsync(CancellationToken ct = default)
-        {
-            WriterStateGuard.ThrowIfEnded(_state, this);
-            WriterStateGuard.RequireCreated(_state, nameof(XlsxWorkbookWriter));
-            ct.ThrowIfCancellationRequested();
-            _state = WriterState.Started;
-            return WriteRootRelsAsync(ct);
+            return new XlsxWorkbookWriter(zip, stream, leaveOpen, options ?? XlsxWriterOptions.Default);
         }
 
         /// <inheritdoc/>
         /// <exception cref="ArgumentNullException"><paramref name="name"/> is <see langword="null"/>.</exception>
         /// <exception cref="ArgumentException"><paramref name="name"/> is empty, longer than 31 characters, or contains one of <c>: \ / ? * [ ]</c>.</exception>
         /// <exception cref="ObjectDisposedException">The workbook has already been ended.</exception>
-        /// <exception cref="InvalidOperationException">The workbook has not been started, or the previously added sheet has not been ended.</exception>
+        /// <exception cref="InvalidOperationException">The previously added sheet has not been ended.</exception>
         public XlsxSheetWriter AddSheet(string name)
         {
             return AddSheet(name, ExcelSheetVisibility.Visible);
@@ -122,11 +65,11 @@ namespace ExcelReader.Core.Writer
         /// <exception cref="ArgumentException"><paramref name="name"/> is empty, longer than 31 characters, or contains one of <c>: \ / ? * [ ]</c>.</exception>
         /// <exception cref="ArgumentOutOfRangeException"><paramref name="visibility"/> is not a defined value.</exception>
         /// <exception cref="ObjectDisposedException">The workbook has already been ended.</exception>
-        /// <exception cref="InvalidOperationException">The workbook has not been started, or the previously added sheet has not been ended.</exception>
+        /// <exception cref="InvalidOperationException">The previously added sheet has not been ended.</exception>
         public XlsxSheetWriter AddSheet(string name, ExcelSheetVisibility visibility)
         {
             WriterStateGuard.RequireCanAddSheet(
-                _state, this, nameof(XlsxWorkbookWriter), name, _sheetActive, nameof(XlsxSheetWriter), visibility);
+                _ended, this, name, _sheetActive, nameof(XlsxSheetWriter), visibility);
             _sheetActive = true;
             int sheetId = _sheets.Count + 1;
             _activeSheet = new XlsxSheetWriter(this, _zip, name, sheetId, visibility, _compression, _prefetchWrite);
@@ -169,20 +112,20 @@ namespace ExcelReader.Core.Writer
         /// synchronous.
         /// </summary>
         /// <exception cref="ObjectDisposedException">The workbook has already been ended.</exception>
-        /// <exception cref="InvalidOperationException">The workbook has not been started, or no sheet has been added yet.</exception>
+        /// <exception cref="InvalidOperationException">No sheet has been added yet.</exception>
         public void End()
         {
-            WriterStateGuard.ThrowIfEnded(_state, this);
-            WriterStateGuard.RequireStarted(_state, nameof(XlsxWorkbookWriter), "ending");
+            ObjectDisposedException.ThrowIf(_ended, this);
             if (_sheets.Count == 0)
             {
                 throw new InvalidOperationException("An XLSX workbook must contain at least one sheet.");
             }
-            _state = WriterState.Ended;
+            _ended = true;
             if (_activeSheet is not null)
             {
                 _activeSheet.Dispose();
             }
+            WriteEntry("_rels/.rels", BuildRootRelsXml());
             WriteEntry("xl/styles.xml", BuildStylesXml());
             if (_sharedStrings is not null)
             {
@@ -197,21 +140,21 @@ namespace ExcelReader.Core.Writer
 
         /// <inheritdoc/>
         /// <exception cref="ObjectDisposedException">The workbook has already been ended.</exception>
-        /// <exception cref="InvalidOperationException">The workbook has not been started, or no sheet has been added yet.</exception>
+        /// <exception cref="InvalidOperationException">No sheet has been added yet.</exception>
         public async ValueTask EndAsync(CancellationToken ct = default)
         {
-            WriterStateGuard.ThrowIfEnded(_state, this);
-            WriterStateGuard.RequireStarted(_state, nameof(XlsxWorkbookWriter), "ending");
+            ObjectDisposedException.ThrowIf(_ended, this);
             ct.ThrowIfCancellationRequested();
             if (_sheets.Count == 0)
             {
                 throw new InvalidOperationException("An XLSX workbook must contain at least one sheet.");
             }
-            _state = WriterState.Ended;
+            _ended = true;
             if (_activeSheet is not null)
             {
                 await _activeSheet.DisposeAsync().ConfigureAwait(false);
             }
+            await WriteEntryAsync("_rels/.rels", BuildRootRelsXml(), ct).ConfigureAwait(false);
             await WriteStylesAsync(ct).ConfigureAwait(false);
             if (_sharedStrings is not null)
             {
@@ -249,21 +192,17 @@ namespace ExcelReader.Core.Writer
                 return;
             }
             _disposed = true;
-            if (_state == WriterState.Started)
+            if (!_ended)
             {
                 if (_sheets.Count == 0)
                 {
-                    _state = WriterState.Ended;
+                    _ended = true;
                     _zip.Dispose();
                 }
                 else
                 {
                     End();
                 }
-            }
-            else if (_state == WriterState.Created)
-            {
-                _zip.Dispose();
             }
             if (!_leaveOpen)
             {
@@ -279,21 +218,17 @@ namespace ExcelReader.Core.Writer
                 return;
             }
             _disposed = true;
-            if (_state == WriterState.Started)
+            if (!_ended)
             {
                 if (_sheets.Count == 0)
                 {
-                    _state = WriterState.Ended;
+                    _ended = true;
                     await _zip.DisposeAsync().ConfigureAwait(false);
                 }
                 else
                 {
                     await EndAsync().ConfigureAwait(false);
                 }
-            }
-            else if (_state == WriterState.Created)
-            {
-                await _zip.DisposeAsync().ConfigureAwait(false);
             }
             if (!_leaveOpen)
             {
@@ -307,16 +242,6 @@ namespace ExcelReader.Core.Writer
                 $"<Relationships xmlns=\"{XlsxConstants.PackageRelationshipsNs}\">" +
                 $"<Relationship Id=\"rId1\" Type=\"{XlsxConstants.WorkbookRelType}\" Target=\"xl/workbook.xml\"/>" +
                 "</Relationships>";
-        }
-
-        private void WriteRootRels()
-        {
-            WriteEntry("_rels/.rels", BuildRootRelsXml());
-        }
-
-        private ValueTask WriteRootRelsAsync(CancellationToken ct)
-        {
-            return WriteEntryAsync("_rels/.rels", BuildRootRelsXml(), ct);
         }
 
         private ValueTask WriteStylesAsync(CancellationToken ct)

@@ -44,7 +44,7 @@ namespace ExcelReader.Tests
         {
             using CsvReader sequentialReader = Excel.FromCsv(csv);
             ExcelParseException expected = Assert.Throws<ExcelParseException>(
-                () => new ExcelParser<TRow>(config).Parse(sequentialReader).ToList());
+                () => ExcelParser.FromAttributes<TRow>(config).Parse(sequentialReader).ToList());
 
             ExcelParseException actual = await Assert.ThrowsAsync<ExcelParseException>(async () =>
             {

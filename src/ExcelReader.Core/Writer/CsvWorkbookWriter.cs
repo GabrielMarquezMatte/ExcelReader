@@ -128,7 +128,7 @@ namespace ExcelReader.Core.Writer
     public sealed class CsvWorkbookWriter : IWorkbookWriter<CsvSheetWriter>
     {
         private readonly CsvWriter _writer;
-        private WriterState _state = WriterState.Created;
+        private bool _ended;
         private bool _sheetAdded;
 
         private CsvWorkbookWriter(CsvWriter writer)
@@ -147,36 +147,11 @@ namespace ExcelReader.Core.Writer
             return new CsvWorkbookWriter(CsvWriter.Create(stream, leaveOpen, options));
         }
 
-        /// <summary>
-        /// Synchronous counterpart to <see cref="StartAsync"/>, for native/unmanaged callers whose ABI
-        /// is synchronous.
-        /// </summary>
-        /// <exception cref="ObjectDisposedException">The workbook has already been ended.</exception>
-        /// <exception cref="InvalidOperationException">The workbook has already been started.</exception>
-        public void Start()
-        {
-            WriterStateGuard.ThrowIfEnded(_state, this);
-            WriterStateGuard.RequireCreated(_state, nameof(CsvWorkbookWriter));
-            _state = WriterState.Started;
-        }
-
-        /// <inheritdoc/>
-        /// <exception cref="ObjectDisposedException">The workbook has already been ended.</exception>
-        /// <exception cref="InvalidOperationException">The workbook has already been started.</exception>
-        public ValueTask StartAsync(CancellationToken ct = default)
-        {
-            WriterStateGuard.ThrowIfEnded(_state, this);
-            WriterStateGuard.RequireCreated(_state, nameof(CsvWorkbookWriter));
-            ct.ThrowIfCancellationRequested();
-            _state = WriterState.Started;
-            return ValueTask.CompletedTask;
-        }
-
         /// <inheritdoc/>
         /// <exception cref="ArgumentNullException"><paramref name="name"/> is <see langword="null"/>.</exception>
         /// <exception cref="ArgumentException"><paramref name="name"/> is empty, longer than 31 characters, or contains one of <c>: \ / ? * [ ]</c>.</exception>
         /// <exception cref="ObjectDisposedException">The workbook has already been ended.</exception>
-        /// <exception cref="InvalidOperationException">The workbook has not been started, or a sheet was already added; a CSV file holds only one.</exception>
+        /// <exception cref="InvalidOperationException">A sheet was already added; a CSV file holds only one.</exception>
         public CsvSheetWriter AddSheet(string name)
         {
             return AddSheet(name, ExcelSheetVisibility.Visible);
@@ -190,7 +165,7 @@ namespace ExcelReader.Core.Writer
         /// <exception cref="ArgumentOutOfRangeException"><paramref name="visibility"/> is not a defined value.</exception>
         public CsvSheetWriter AddSheet(string name, ExcelSheetVisibility visibility)
         {
-            WriterStateGuard.RequireCanAddSheet(_state, this, nameof(CsvWorkbookWriter), name, sheetActive: false, nameof(CsvSheetWriter), visibility);
+            WriterStateGuard.RequireCanAddSheet(_ended, this, name, sheetActive: false, nameof(CsvSheetWriter), visibility);
             if (_sheetAdded)
             {
                 throw new InvalidOperationException("A CSV file holds a single sheet; only one AddSheet call is supported.");
@@ -204,24 +179,20 @@ namespace ExcelReader.Core.Writer
         /// synchronous.
         /// </summary>
         /// <exception cref="ObjectDisposedException">The workbook has already been ended.</exception>
-        /// <exception cref="InvalidOperationException">The workbook has not been started.</exception>
         public void End()
         {
-            WriterStateGuard.ThrowIfEnded(_state, this);
-            WriterStateGuard.RequireStarted(_state, nameof(CsvWorkbookWriter), "ending");
-            _state = WriterState.Ended;
+            ObjectDisposedException.ThrowIf(_ended, this);
+            _ended = true;
             _writer.Flush();
         }
 
         /// <inheritdoc/>
         /// <exception cref="ObjectDisposedException">The workbook has already been ended.</exception>
-        /// <exception cref="InvalidOperationException">The workbook has not been started.</exception>
         public ValueTask EndAsync(CancellationToken ct = default)
         {
-            WriterStateGuard.ThrowIfEnded(_state, this);
-            WriterStateGuard.RequireStarted(_state, nameof(CsvWorkbookWriter), "ending");
+            ObjectDisposedException.ThrowIf(_ended, this);
             ct.ThrowIfCancellationRequested();
-            _state = WriterState.Ended;
+            _ended = true;
             return _writer.FlushAsync(ct);
         }
 
@@ -253,14 +224,14 @@ namespace ExcelReader.Core.Writer
         /// </summary>
         public void Dispose()
         {
-            _state = WriterState.Ended;
+            _ended = true;
             _writer.Dispose();
         }
 
         /// <inheritdoc/>
         public ValueTask DisposeAsync()
         {
-            _state = WriterState.Ended;
+            _ended = true;
             return _writer.DisposeAsync();
         }
     }

@@ -7,8 +7,8 @@ namespace ExcelReader.Core.Writer
     /// <summary>
     /// Writes a whole workbook (XLSX, XLSB, XLS or CSV) to a destination stream, one sheet at a time.
     /// Implementations open the underlying stream/archive on construction, so a caller only needs to
-    /// call <see cref="StartAsync"/>, add sheets with <see cref="AddSheet(string)"/>, and dispose the workbook
-    /// (or call <see cref="EndAsync"/> then dispose) when finished.
+    /// add sheets with <see cref="AddSheet(string)"/> and dispose the workbook (or call
+    /// <see cref="EndAsync"/> then dispose) when finished.
     /// </summary>
     /// <typeparam name="TSheet">The concrete <see cref="ISheetWriter{TRow}"/> this workbook produces.</typeparam>
     /// <remarks>
@@ -19,20 +19,6 @@ namespace ExcelReader.Core.Writer
     /// </remarks>
     public interface IWorkbookWriter<out TSheet> : IDisposable, IAsyncDisposable
     {
-        /// <summary>
-        /// Synchronous counterpart to <see cref="StartAsync"/>: writes the workbook's leading structure
-        /// and moves the writer into the started state, without the async/await machinery, for native/
-        /// unmanaged callers whose ABI is synchronous. Must be called exactly once, before <see cref="AddSheet(string)"/>.
-        /// </summary>
-        void Start();
-
-        /// <summary>
-        /// Writes the workbook's leading structure (e.g. archive/package headers) and moves the writer
-        /// into the started state. Must be called exactly once, before <see cref="AddSheet(string)"/>.
-        /// </summary>
-        /// <param name="ct">A token to cancel the operation.</param>
-        ValueTask StartAsync(CancellationToken ct = default);
-
         /// <summary>
         /// Begins a new sheet named <paramref name="name"/> and returns its writer. Only one sheet may be
         /// open (started and not yet ended) at a time; the previous sheet's writer must be ended and

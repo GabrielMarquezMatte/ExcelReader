@@ -118,9 +118,8 @@ namespace ExcelReader.Tests
         private static async Task<byte[]> BuildSmallXlsbAsync(CancellationToken ct)
         {
             MemoryStream ms = new();
-            await using (XlsbWorkbookWriter wb = await XlsbWorkbookWriter.CreateAsync(ms, leaveOpen: true, ct: ct))
+            await using (XlsbWorkbookWriter wb = XlsbWorkbookWriter.Create(ms, leaveOpen: true))
             {
-                await wb.StartAsync(ct);
                 XlsbSheetWriter sheet = wb.AddSheet("S1");
                 await sheet.StartAsync(ct);
                 for (int r = 0; r < 3; r++)

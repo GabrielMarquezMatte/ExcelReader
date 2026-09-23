@@ -359,9 +359,8 @@ namespace ExcelReader.Tests
         private static async Task<MemoryStream> WriteXlsxAsync(Func<XlsxWorkbookWriter, Task> build)
         {
             var ms = new MemoryStream();
-            await using (XlsxWorkbookWriter writer = await XlsxWorkbookWriter.CreateAsync(ms, leaveOpen: true, ct: TestContext.Current.CancellationToken))
+            await using (XlsxWorkbookWriter writer = XlsxWorkbookWriter.Create(ms, leaveOpen: true))
             {
-                await writer.StartAsync(TestContext.Current.CancellationToken);
                 await build(writer);
                 await writer.EndAsync(TestContext.Current.CancellationToken);
             }
@@ -372,9 +371,8 @@ namespace ExcelReader.Tests
         private static async Task<MemoryStream> WriteXlsbAsync(Func<XlsbWorkbookWriter, Task> build)
         {
             var ms = new MemoryStream();
-            await using (XlsbWorkbookWriter writer = await XlsbWorkbookWriter.CreateAsync(ms, leaveOpen: true, ct: TestContext.Current.CancellationToken))
+            await using (XlsbWorkbookWriter writer = XlsbWorkbookWriter.Create(ms, leaveOpen: true))
             {
-                await writer.StartAsync(TestContext.Current.CancellationToken);
                 await build(writer);
                 await writer.EndAsync(TestContext.Current.CancellationToken);
             }
@@ -387,7 +385,6 @@ namespace ExcelReader.Tests
             var ms = new MemoryStream();
             await using (XlsWorkbookWriter writer = XlsWorkbookWriter.Create(ms, leaveOpen: true))
             {
-                writer.Start();
                 build(writer);
                 await writer.EndAsync(TestContext.Current.CancellationToken);
             }

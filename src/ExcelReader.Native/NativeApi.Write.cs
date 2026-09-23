@@ -190,11 +190,11 @@ namespace ExcelReader.Native
             {
                 case NativeFormat.Xlsx:
                     WriteWorkbook<XlsxSheetWriter, XlsxRowWriter>(
-                        XlsxWorkbookWriter.Create(stream, useSharedStrings: sharedStrings), specs, table, sheetName, hasHeader);
+                        XlsxWorkbookWriter.Create(stream, options: new XlsxWriterOptions { UseSharedStrings = sharedStrings }), specs, table, sheetName, hasHeader);
                     return;
                 case NativeFormat.Xlsb:
                     WriteWorkbook<XlsbSheetWriter, XlsbRowWriter>(
-                        XlsbWorkbookWriter.Create(stream, date1904: date1904, useSharedStrings: sharedStrings), specs, table, sheetName, hasHeader);
+                        XlsbWorkbookWriter.Create(stream, options: new XlsbWriterOptions { Date1904 = date1904, UseSharedStrings = sharedStrings }), specs, table, sheetName, hasHeader);
                     return;
                 case NativeFormat.Xls:
                     WriteWorkbook<XlsSheetWriter, XlsRowWriter>(
@@ -213,7 +213,6 @@ namespace ExcelReader.Native
         {
             try
             {
-                workbook.Start();
                 TSheet sheet = workbook.AddSheet(sheetName);
                 ApplyTemporalStyles<TSheet, TRow>(workbook, sheet, table);
                 sheet.Start();

@@ -9,9 +9,8 @@ typed records, and prefetch compression. See [csv.md](csv.md) for CSV output.
 using ExcelReader.Core.Writer;
 
 await using var stream = File.Create("out.xlsx");
-await using var workbook = await XlsxWorkbookWriter.CreateAsync(stream);
+await using var workbook = XlsxWorkbookWriter.Create(stream);
 
-await workbook.StartAsync();
 await using (var sheet = workbook.AddSheet("Summary"))
 {
     await sheet.StartAsync();
@@ -38,7 +37,7 @@ By default, the XLSX writer emits inline strings to keep memory usage flat while
 If your workbook repeats many strings and smaller files matter more than the extra lookup table, opt in to shared strings:
 
 ```csharp
-await using var workbook = await XlsxWorkbookWriter.CreateAsync(stream, useSharedStrings: true);
+await using var workbook = XlsxWorkbookWriter.Create(stream, options: new XlsxWriterOptions { UseSharedStrings = true });
 ```
 
 ## Hidden sheets
@@ -60,8 +59,7 @@ Every `IWorkbookWriter<TSheet>` supports column- and row-level styling: a number
 ```csharp
 using ExcelReader.Core.Writer;
 
-await using var workbook = await XlsxWorkbookWriter.CreateAsync(stream);
-await workbook.StartAsync();
+await using var workbook = XlsxWorkbookWriter.Create(stream);
 
 int currency = workbook.AddStyle(new CellStyle { NumberFormat = "R$ #,##0.00" });
 int header = workbook.AddStyle(new CellStyle { Bold = true });
@@ -97,9 +95,8 @@ Use `Excel.FromXlsbFile`, `Excel.FromXlsb`, `Excel.FromXlsbFileAsync`, or `Excel
 using ExcelReader.Core.Writer;
 
 await using var stream = File.Create("out.xlsb");
-await using var workbook = await XlsbWorkbookWriter.CreateAsync(stream);
+await using var workbook = XlsbWorkbookWriter.Create(stream);
 
-await workbook.StartAsync();
 await using (XlsbSheetWriter sheet = workbook.AddSheet("Summary"))
 {
     await sheet.StartAsync();
@@ -115,7 +112,7 @@ await using (XlsbSheetWriter sheet = workbook.AddSheet("Summary"))
 await workbook.EndAsync();
 ```
 
-The XLSB writer also defaults to inline string cells. Pass `useSharedStrings: true` to deduplicate repeated text into `sharedStrings.bin`.
+The XLSB writer also defaults to inline string cells. Set `XlsbWriterOptions.UseSharedStrings` to deduplicate repeated text into `sharedStrings.bin`.
 
 ## Write XLS workbooks (BIFF8)
 
@@ -127,7 +124,6 @@ using ExcelReader.Core.Writer;
 await using var stream = File.Create("out.xls");
 await using var workbook = XlsWorkbookWriter.Create(stream);
 
-workbook.Start();
 using (var sheet = workbook.AddSheet("Summary"))
 {
     sheet.Start();
@@ -172,11 +168,11 @@ var sales = new[]
 };
 
 await using var stream = File.Create("sales.xlsx");
-await using var writer = await RecordWriter.CreateXlsxAsync(stream);   // or CreateXlsbAsync / CreateXlsAsync / CreateCsvAsync
+await using var writer = RecordWriter.CreateXlsx(stream);   // or CreateXlsb / CreateXls / CreateCsv
 await writer.WriteSheetAsync("Sales", sales);
 ```
 
-Each `WriteSheetAsync` call targets a new sheet (a duplicate name throws), so one workbook can hold sheets of different record types. `RecordWriter.CreateCsvAsync` is the exception: a CSV file is a single sheet, so a second `WriteSheetAsync` throws (the sheet name is ignored). An `IAsyncEnumerable<T>` overload streams records that are produced asynchronously. The written file round-trips straight back through `ExcelParser<T>` because the headers are the property names.
+Each `WriteSheetAsync` call targets a new sheet (a duplicate name throws), so one workbook can hold sheets of different record types. `RecordWriter.CreateCsv` is the exception: a CSV file is a single sheet, so a second `WriteSheetAsync` throws (the sheet name is ignored). An `IAsyncEnumerable<T>` overload streams records that are produced asynchronously. The written file round-trips straight back through `ExcelParser<T>` because the headers are the property names.
 
 Column behavior mirrors the parser attributes:
 
@@ -184,21 +180,20 @@ Column behavior mirrors the parser attributes:
 - **`[ExcelIgnore]`** — exclude a property from both writing and parsing (for computed/transient members).
 - **`[ExcelConverter(typeof(MyConverter))]`** — if the converter also implements `IExcelCellWriter<T>`, it controls how the value is written, so a custom type round-trips through the same converter it reads with.
 
-`DateTime` and `DateOnly` are written as Excel date serials; `TimeOnly` as a time-of-day fraction. Numeric properties become number cells; any other type is written as its `ToString()` text. (`CreateCsvAsync` follows the CSV rules instead — see [Write CSV](csv.md#write-csv) — writing `DateTime`/`DateOnly` as ISO text and `TimeOnly` as a time-of-day fraction, all still round-tripping through `ExcelParser<T>`.)
+`DateTime` and `DateOnly` are written as Excel date serials; `TimeOnly` as a time-of-day fraction. Numeric properties become number cells; any other type is written as its `ToString()` text. (`CreateCsv` follows the CSV rules instead — see [Write CSV](csv.md#write-csv) — writing `DateTime`/`DateOnly` as ISO text and `TimeOnly` as a time-of-day fraction, all still round-tripping through `ExcelParser<T>`.)
 
-For a model marked `[ExcelSerializable]`, use `MappedRecordWriter.CreateMapped*Async` instead — same behavior, but driven by the source-generated map instead of reflection, so it stays Native AOT/trim-safe. See [Generate typed maps at compile time](parsing.md#generate-typed-maps-at-compile-time-native-aot--trimming).
+For a model marked `[ExcelSerializable]`, use `MappedRecordWriter.Create*` instead — same behavior, but driven by the source-generated map instead of reflection, so it stays Native AOT/trim-safe. See [Generate typed maps at compile time](parsing.md#generate-typed-maps-at-compile-time-native-aot--trimming).
 
 ## Prefetch compression (XLSX/XLSB writing)
 
 The write-side mirror of [Prefetch decompression](reading.md#prefetch-decompression-xlsxxlsb). XLSX and XLSB
 are ZIP-backed, so every row a writer serializes has to be deflated before it reaches the stream,
-and by default that happens on the calling thread. Pass `prefetchWrite: true` to move the deflate
+and by default that happens on the calling thread. Set `PrefetchWrite` on the writer options to move the deflate
 onto a background thread, so the caller keeps building the next batch of rows while the previous one
 compresses:
 
 ```csharp
-await using var wb = await XlsxWorkbookWriter.CreateAsync(stream, leaveOpen: true, prefetchWrite: true);
-await wb.StartAsync();
+await using var wb = XlsxWorkbookWriter.Create(stream, leaveOpen: true, options: new XlsxWriterOptions { PrefetchWrite = true });
 XlsxSheetWriter sheet = wb.AddSheet("S1");
 await sheet.StartAsync();
 
@@ -212,13 +207,13 @@ foreach (var record in records)
 await sheet.EndAsync();
 ```
 
-The same parameter is on `XlsbWorkbookWriter.CreateAsync`, `RecordWriter.CreateXlsxAsync`/
-`CreateXlsbAsync`, and their `MappedRecordWriter` counterparts. XLS and CSV are uncompressed, so
+`XlsbWriterOptions` has the same property, and `RecordWriter.CreateXlsx`/`CreateXlsb` and their
+`MappedRecordWriter` counterparts take the same options. XLS and CSV are uncompressed, so
 they have nothing to overlap and do not offer it.
 
 Writing a 50,000-row workbook (`WriteBenchmark`, both figures from one run):
 
-| Workload | Default | `prefetchWrite: true` | Gain |
+| Workload | Default | `PrefetchWrite = true` | Gain |
 |---|---:|---:|---:|
 | XLSX | 12.261 ms | 7.731 ms | 37% |
 | XLSB | 7.515 ms | 5.668 ms | 25% |

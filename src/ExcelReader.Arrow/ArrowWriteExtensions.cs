@@ -92,7 +92,6 @@ namespace ExcelReader.Arrow
             ArgumentNullException.ThrowIfNull(batch);
             IReadOnlyList<Field> fields = batch.Schema.FieldsList;
 
-            workbook.Start();
             TSheet sheet = workbook.AddSheet(sheetName);
             ApplyTemporalStyles<TSheet, TRow>(workbook, sheet, fields);
             sheet.Start();
@@ -127,7 +126,6 @@ namespace ExcelReader.Arrow
             ArgumentNullException.ThrowIfNull(batch);
             IReadOnlyList<Field> fields = batch.Schema.FieldsList;
 
-            await workbook.StartAsync(ct).ConfigureAwait(false);
             TSheet sheet = workbook.AddSheet(sheetName);
             ApplyTemporalStyles<TSheet, TRow>(workbook, sheet, fields);
             await sheet.StartAsync(ct).ConfigureAwait(false);

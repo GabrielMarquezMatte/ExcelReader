@@ -63,11 +63,11 @@ namespace ExcelReader.Tests
                 ["Alice", 30, SampleBirthDate, true, "Beta"]);
 
             await using XlsxReader mappedReader = await Excel.FromXlsxAsync(ms, leaveOpen: true, ct: TestContext.Current.CancellationToken);
-            List<MapBuilderTestModel> mapped = new ExcelMappedParser<MapBuilderTestModel>().Parse(mappedReader).ToList();
+            List<MapBuilderTestModel> mapped = ExcelParser.Generated<MapBuilderTestModel>().Parse(mappedReader).ToList();
 
             ms.Position = 0;
             await using XlsxReader reflectionReader = await Excel.FromXlsxAsync(ms, ct: TestContext.Current.CancellationToken);
-            List<ReflectionTestModel> reflected = new ExcelParser<ReflectionTestModel>().Parse(reflectionReader).ToList();
+            List<ReflectionTestModel> reflected = ExcelParser.FromAttributes<ReflectionTestModel>().Parse(reflectionReader).ToList();
 
             Assert.Single(mapped);
             Assert.Single(reflected);
@@ -95,7 +95,7 @@ namespace ExcelReader.Tests
             await using MemoryStream reflectedStream = await TypedWorkbook.BuildAsync(["Name"], ["Alice"]);
             await using XlsxReader reflectedReader = await Excel.FromXlsxAsync(reflectedStream, ct: TestContext.Current.CancellationToken);
             ExcelParseException reflectedEx = Assert.Throws<ExcelParseException>(
-                () => new ExcelParser<RequiredAgeRow>().Parse(reflectedReader).ToList());
+                () => ExcelParser.FromAttributes<RequiredAgeRow>().Parse(reflectedReader).ToList());
 
             Assert.Equal(reflectedEx.Message, mappedEx.Message);
         }
@@ -114,9 +114,8 @@ namespace ExcelReader.Tests
 
             CancellationToken ct = TestContext.Current.CancellationToken;
             await using var mappedStream = new MemoryStream();
-            await using (XlsxWorkbookWriter wb = await XlsxWorkbookWriter.CreateAsync(mappedStream, leaveOpen: true, ct: ct))
+            await using (XlsxWorkbookWriter wb = XlsxWorkbookWriter.Create(mappedStream, leaveOpen: true))
             {
-                await wb.StartAsync(ct);
                 XlsxSheetWriter sheet = wb.AddSheet("S1");
                 await sheet.StartAsync(ct);
                 var builder = new ExcelRecordMapBuilder<MapBuilderTestModel, XlsxRowWriter>();
@@ -128,7 +127,7 @@ namespace ExcelReader.Tests
 
             await using var reflectedStream = new MemoryStream();
             await using (WorkbookRecordWriter<XlsxSheetWriter, XlsxRowWriter> writer =
-                await RecordWriter.CreateXlsxAsync(reflectedStream, leaveOpen: true, ct: ct))
+                RecordWriter.CreateXlsx(reflectedStream, leaveOpen: true))
             {
                 await writer.WriteSheetAsync("S1", [record], ct);
             }
@@ -137,8 +136,8 @@ namespace ExcelReader.Tests
             reflectedStream.Position = 0;
             await using XlsxReader mappedReader = await Excel.FromXlsxAsync(mappedStream, ct: TestContext.Current.CancellationToken);
             await using XlsxReader reflectedReader = await Excel.FromXlsxAsync(reflectedStream, ct: TestContext.Current.CancellationToken);
-            List<ReflectionTestModel> mapped = new ExcelParser<ReflectionTestModel>().Parse(mappedReader).ToList();
-            List<ReflectionTestModel> reflected = new ExcelParser<ReflectionTestModel>().Parse(reflectedReader).ToList();
+            List<ReflectionTestModel> mapped = ExcelParser.FromAttributes<ReflectionTestModel>().Parse(mappedReader).ToList();
+            List<ReflectionTestModel> reflected = ExcelParser.FromAttributes<ReflectionTestModel>().Parse(reflectedReader).ToList();
 
             Assert.Single(mapped);
             Assert.Single(reflected);
@@ -173,14 +172,14 @@ namespace ExcelReader.Tests
             var record = new MapBuilderTestModel { Name = "Carol", Age = 21, BirthDate = SampleBirthDate, Active = true, Kind = MapBuilderKind.Beta };
 
             await using var stream = new MemoryStream();
-            await using (var writer = await MappedRecordWriter.CreateMappedXlsxAsync(stream, leaveOpen: true, ct: ct))
+            await using (var writer = MappedRecordWriter.CreateXlsx(stream, leaveOpen: true))
             {
                 await writer.WriteSheetAsync("S1", [record], ct);
             }
 
             stream.Position = 0;
             await using XlsxReader reader = await Excel.FromXlsxAsync(stream, ct: ct);
-            List<MapBuilderTestModel> results = new ExcelMappedParser<MapBuilderTestModel>().Parse(reader).ToList();
+            List<MapBuilderTestModel> results = ExcelParser.Generated<MapBuilderTestModel>().Parse(reader).ToList();
 
             Assert.Single(results);
             AssertMatches(record, results[0]);
@@ -193,14 +192,14 @@ namespace ExcelReader.Tests
             var record = new MapBuilderTestModel { Name = "Dave", Age = 55, BirthDate = SampleBirthDate, Active = false, Kind = MapBuilderKind.Alpha };
 
             await using var stream = new MemoryStream();
-            await using (var writer = await MappedRecordWriter.CreateMappedXlsbAsync(stream, leaveOpen: true, ct: ct))
+            await using (var writer = MappedRecordWriter.CreateXlsb(stream, leaveOpen: true))
             {
                 await writer.WriteSheetAsync("S1", [record], ct);
             }
 
             stream.Position = 0;
             await using XlsbReader reader = await Excel.FromXlsbAsync(stream, leaveOpen: false, ct: ct);
-            List<MapBuilderTestModel> results = new ExcelMappedParser<MapBuilderTestModel>().Parse(reader).ToList();
+            List<MapBuilderTestModel> results = ExcelParser.Generated<MapBuilderTestModel>().Parse(reader).ToList();
 
             Assert.Single(results);
             AssertMatches(record, results[0]);
@@ -213,14 +212,14 @@ namespace ExcelReader.Tests
             var record = new MapBuilderTestModel { Name = "Erin", Age = 33, BirthDate = SampleBirthDate, Active = true, Kind = MapBuilderKind.Alpha };
 
             await using var stream = new MemoryStream();
-            await using (var writer = await MappedRecordWriter.CreateMappedXlsAsync(stream, leaveOpen: true, ct: ct))
+            await using (var writer = MappedRecordWriter.CreateXls(stream, leaveOpen: true))
             {
                 await writer.WriteSheetAsync("S1", [record], ct);
             }
 
             stream.Position = 0;
             await using XlsReader reader = Excel.FromXls(stream, leaveOpen: false);
-            List<MapBuilderTestModel> results = new ExcelMappedParser<MapBuilderTestModel>().Parse(reader).ToList();
+            List<MapBuilderTestModel> results = ExcelParser.Generated<MapBuilderTestModel>().Parse(reader).ToList();
 
             Assert.Single(results);
             AssertMatches(record, results[0]);
@@ -233,14 +232,14 @@ namespace ExcelReader.Tests
             var record = new MapBuilderTestModel { Name = "Frank", Age = 19, BirthDate = SampleBirthDate, Active = false, Kind = MapBuilderKind.Beta };
 
             await using var stream = new MemoryStream();
-            await using (var writer = await MappedRecordWriter.CreateMappedCsvAsync(stream, leaveOpen: true, ct: ct))
+            await using (var writer = MappedRecordWriter.CreateCsv(stream, leaveOpen: true))
             {
                 await writer.WriteSheetAsync("S1", [record], ct);
             }
 
             stream.Position = 0;
             await using CsvReader reader = Excel.FromCsv(stream, leaveOpen: false);
-            List<MapBuilderTestModel> results = new ExcelMappedParser<MapBuilderTestModel>().Parse(reader).ToList();
+            List<MapBuilderTestModel> results = ExcelParser.Generated<MapBuilderTestModel>().Parse(reader).ToList();
 
             Assert.Single(results);
             Assert.Equal(record.Name, results[0].Name);
@@ -272,21 +271,21 @@ namespace ExcelReader.Tests
             var record = new ConfigureCountingModel { Name = "Grace" };
 
             await using var xlsxStream = new MemoryStream();
-            await using (var xlsx = await MappedRecordWriter.CreateMappedXlsxAsync(xlsxStream, leaveOpen: true, ct: ct))
+            await using (var xlsx = MappedRecordWriter.CreateXlsx(xlsxStream, leaveOpen: true))
             {
                 await xlsx.WriteSheetAsync("S1", [record], ct);
             }
             Assert.Equal(1, ConfigureCountingModel.Configurations);
 
             await using var secondXlsxStream = new MemoryStream();
-            await using (var again = await MappedRecordWriter.CreateMappedXlsxAsync(secondXlsxStream, leaveOpen: true, ct: ct))
+            await using (var again = MappedRecordWriter.CreateXlsx(secondXlsxStream, leaveOpen: true))
             {
                 await again.WriteSheetAsync("S1", [record], ct);
             }
             Assert.Equal(1, ConfigureCountingModel.Configurations);
 
             await using var csvStream = new MemoryStream();
-            await using (var csv = await MappedRecordWriter.CreateMappedCsvAsync(csvStream, leaveOpen: true, ct: ct))
+            await using (var csv = MappedRecordWriter.CreateCsv(csvStream, leaveOpen: true))
             {
                 await csv.WriteSheetAsync("S1", [record], ct);
             }

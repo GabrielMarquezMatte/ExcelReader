@@ -71,7 +71,6 @@ namespace ExcelReader.Tests
                 using (FileStream file = File.Create(path))
                 using (XlsxWorkbookWriter workbook = XlsxWorkbookWriter.Create(file, leaveOpen: true))
                 {
-                    workbook.Start();
                     foreach (string name in (string[])["Data", "0"])
                     {
                         using XlsxSheetWriter sheet = workbook.AddSheet(name);

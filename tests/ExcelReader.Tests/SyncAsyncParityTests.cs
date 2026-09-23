@@ -201,8 +201,7 @@ namespace ExcelReader.Tests
         private static async ValueTask<byte[]> BuildMixedXlsbAsync(CancellationToken ct)
         {
             MemoryStream ms = new();
-            await using XlsbWorkbookWriter wb = await XlsbWorkbookWriter.CreateAsync(ms, leaveOpen: true, ct: ct);
-            await wb.StartAsync(ct);
+            await using XlsbWorkbookWriter wb = XlsbWorkbookWriter.Create(ms, leaveOpen: true);
             XlsbSheetWriter sheet = wb.AddSheet("S1");
             await sheet.StartAsync(ct);
 

@@ -20,87 +20,32 @@ namespace ExcelReader.Core.Writer
         private readonly SharedStringTable? _sharedStrings;
         private readonly StyleTable _styles = new();
         private readonly List<XlsbSheetWriter> _sheets = [];
-        private WriterState _state = WriterState.Created;
+        private bool _ended;
         private XlsbSheetWriter? _activeSheet;
         private bool _disposed;
 
-        private XlsbWorkbookWriter(ZipArchive zip, Stream stream, bool leaveOpen, bool date1904, bool useSharedStrings, CompressionLevel compression, bool prefetchWrite)
+        private XlsbWorkbookWriter(ZipArchive zip, Stream stream, bool leaveOpen, XlsbWriterOptions options)
         {
             _zip = zip;
             _stream = stream;
             _leaveOpen = leaveOpen;
-            _date1904 = date1904;
-            UseSharedStrings = useSharedStrings;
-            _compression = compression;
-            _prefetchWrite = prefetchWrite;
-            _sharedStrings = useSharedStrings ? new SharedStringTable() : null;
+            _date1904 = options.Date1904;
+            UseSharedStrings = options.UseSharedStrings;
+            _compression = options.Compression;
+            _prefetchWrite = options.PrefetchWrite;
+            _sharedStrings = options.UseSharedStrings ? new SharedStringTable() : null;
         }
 
-        /// <summary>Creates a writer that will produce an .xlsb archive on <paramref name="stream"/> once started.</summary>
+        /// <summary>Creates a writer that produces an .xlsb archive on <paramref name="stream"/>.</summary>
         /// <param name="stream">The destination stream; must be writable.</param>
         /// <param name="leaveOpen">If <see langword="true"/>, <paramref name="stream"/> is not disposed when the writer is disposed.</param>
-        /// <param name="date1904">Whether the workbook uses the 1904 date system instead of the default 1900 system.</param>
-        /// <param name="compression">The zip compression level to use for every part written.</param>
-        /// <param name="useSharedStrings">Whether string cells are deduplicated through a shared string table instead of written inline.</param>
-        /// <param name="prefetchWrite">
-        /// When <see langword="true"/>, each sheet's deflate runs on a background thread instead of the
-        /// calling thread, overlapping compression with row serialization. Defaults to <see langword="false"/>.
-        /// Mirrors <see cref="ExcelReaderOptions.PrefetchDecompression"/>'s tradeoff on the read
-        /// side: worth it for single-file batch writing, not for a concurrent server workload already
-        /// saturating the CPU.
-        /// </param>
-        /// <param name="ct">A token to cancel creation before any I/O has started.</param>
-        public static ValueTask<XlsbWorkbookWriter> CreateAsync(
-            Stream stream,
-            bool leaveOpen = false,
-            bool date1904 = false,
-            CompressionLevel compression = CompressionLevel.Fastest,
-            bool useSharedStrings = false,
-            bool prefetchWrite = false,
-            CancellationToken ct = default)
-        {
-            ArgumentNullException.ThrowIfNull(stream);
-            ct.ThrowIfCancellationRequested();
-            ZipArchive zip = new(stream, ZipArchiveMode.Create, leaveOpen: true);
-            return ValueTask.FromResult(new XlsbWorkbookWriter(zip, stream, leaveOpen, date1904, useSharedStrings, compression, prefetchWrite));
-        }
-
-        /// <summary>
-        /// Synchronous counterpart to <see cref="CreateAsync"/>, for native/unmanaged callers whose ABI
-        /// is synchronous. Parameters mirror <see cref="CreateAsync"/> exactly, minus <c>ct</c>.
-        /// </summary>
-        public static XlsbWorkbookWriter Create(
-            Stream stream,
-            bool leaveOpen = false,
-            bool date1904 = false,
-            CompressionLevel compression = CompressionLevel.Fastest,
-            bool useSharedStrings = false,
-            bool prefetchWrite = false)
+        /// <param name="options">Date system, compression, shared-string and background-deflate settings. Defaults to <see cref="XlsbWriterOptions.Default"/>.</param>
+        /// <exception cref="ArgumentNullException"><paramref name="stream"/> is <see langword="null"/>.</exception>
+        public static XlsbWorkbookWriter Create(Stream stream, bool leaveOpen = false, XlsbWriterOptions? options = null)
         {
             ArgumentNullException.ThrowIfNull(stream);
             ZipArchive zip = new(stream, ZipArchiveMode.Create, leaveOpen: true);
-            return new XlsbWorkbookWriter(zip, stream, leaveOpen, date1904, useSharedStrings, compression, prefetchWrite);
-        }
-
-        /// <summary>
-        /// Synchronous counterpart to <see cref="StartAsync"/>, for native/unmanaged callers whose ABI
-        /// is synchronous.
-        /// </summary>
-        public void Start()
-        {
-            WriterStateGuard.ThrowIfEnded(_state, this);
-            WriterStateGuard.RequireCreated(_state, nameof(XlsbWorkbookWriter));
-            _state = WriterState.Started;
-        }
-
-        /// <inheritdoc/>
-        public ValueTask StartAsync(CancellationToken ct = default)
-        {
-            WriterStateGuard.ThrowIfEnded(_state, this);
-            WriterStateGuard.RequireCreated(_state, nameof(XlsbWorkbookWriter));
-            ct.ThrowIfCancellationRequested();
-            _state = WriterState.Started;
-            return ValueTask.CompletedTask;
+            return new XlsbWorkbookWriter(zip, stream, leaveOpen, options ?? XlsbWriterOptions.Default);
         }
 
         /// <inheritdoc/>
@@ -113,7 +58,7 @@ namespace ExcelReader.Core.Writer
         public XlsbSheetWriter AddSheet(string name, ExcelSheetVisibility visibility)
         {
             WriterStateGuard.RequireCanAddSheet(
-                _state, this, nameof(XlsbWorkbookWriter), name, _activeSheet is not null, nameof(XlsbSheetWriter), visibility);
+                _ended, this, name, _activeSheet is not null, nameof(XlsbSheetWriter), visibility);
             int sheetId = _sheets.Count + 1;
             _activeSheet = new XlsbSheetWriter(this, _zip, name, sheetId, visibility, _date1904, _compression, _prefetchWrite);
             return _activeSheet;
@@ -155,14 +100,13 @@ namespace ExcelReader.Core.Writer
         /// </summary>
         public void End()
         {
-            WriterStateGuard.ThrowIfEnded(_state, this);
-            WriterStateGuard.RequireStarted(_state, nameof(XlsbWorkbookWriter), "ending");
+            ObjectDisposedException.ThrowIf(_ended, this);
             _activeSheet?.Dispose();
             if (_sheets.Count == 0)
             {
                 throw new InvalidOperationException("A workbook must contain at least one sheet.");
             }
-            _state = WriterState.Ended;
+            _ended = true;
 
             WriteRootRels();
             WriteWorkbook();
@@ -177,8 +121,7 @@ namespace ExcelReader.Core.Writer
         /// <inheritdoc/>
         public async ValueTask EndAsync(CancellationToken ct = default)
         {
-            WriterStateGuard.ThrowIfEnded(_state, this);
-            WriterStateGuard.RequireStarted(_state, nameof(XlsbWorkbookWriter), "ending");
+            ObjectDisposedException.ThrowIf(_ended, this);
             ct.ThrowIfCancellationRequested();
             if (_activeSheet is not null)
             {
@@ -188,7 +131,7 @@ namespace ExcelReader.Core.Writer
             {
                 throw new InvalidOperationException("A workbook must contain at least one sheet.");
             }
-            _state = WriterState.Ended;
+            _ended = true;
 
             await WriteRootRelsAsync(ct).ConfigureAwait(false);
             await WriteWorkbookAsync(ct).ConfigureAwait(false);
@@ -226,21 +169,17 @@ namespace ExcelReader.Core.Writer
                 return;
             }
             _disposed = true;
-            if (_state == WriterState.Started)
+            if (!_ended)
             {
                 if (_sheets.Count == 0 && _activeSheet is null)
                 {
-                    _state = WriterState.Ended;
+                    _ended = true;
                     _zip.Dispose();
                 }
                 else
                 {
                     End();
                 }
-            }
-            else if (_state == WriterState.Created)
-            {
-                _zip.Dispose();
             }
             if (!_leaveOpen)
             {
@@ -256,21 +195,17 @@ namespace ExcelReader.Core.Writer
                 return;
             }
             _disposed = true;
-            if (_state == WriterState.Started)
+            if (!_ended)
             {
                 if (_sheets.Count == 0 && _activeSheet is null)
                 {
-                    _state = WriterState.Ended;
+                    _ended = true;
                     await _zip.DisposeAsync().ConfigureAwait(false);
                 }
                 else
                 {
                     await EndAsync().ConfigureAwait(false);
                 }
-            }
-            else if (_state == WriterState.Created)
-            {
-                await _zip.DisposeAsync().ConfigureAwait(false);
             }
             if (!_leaveOpen)
             {
