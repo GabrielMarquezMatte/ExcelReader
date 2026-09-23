@@ -127,32 +127,16 @@ namespace ExcelReader.Core.Reader
         }
 
         /// <inheritdoc/>
-        public Enumerator GetAsyncEnumerator()
-        {
-            return GetEnumerator();
-        }
-
-        IExcelRowEnumerator IExcelRowReader<IExcelRowEnumerator>.GetAsyncEnumerator()
-        {
-            return GetAsyncEnumerator();
-        }
-
-        /// <inheritdoc/>
-        /// <remarks>XlsReader is fully in-memory, so the enumerator opens synchronously; <paramref name="ct"/> is checked before enumeration starts and on each subsequent move.</remarks>
-        public ValueTask<Enumerator> GetAsyncEnumeratorAsync(CancellationToken ct = default)
-        {
-            return new ValueTask<Enumerator>(OpenCancellable(ct));
-        }
-
-        ValueTask<IExcelRowEnumerator> IExcelRowReader<IExcelRowEnumerator>.GetAsyncEnumeratorAsync(CancellationToken ct)
-        {
-            return new ValueTask<IExcelRowEnumerator>(OpenCancellable(ct));
-        }
-
-        private Enumerator OpenCancellable(CancellationToken ct)
+        /// <remarks>XlsReader is fully in-memory, so nothing is deferred; <paramref name="ct"/> is checked here and on each move.</remarks>
+        public Enumerator GetAsyncEnumerator(CancellationToken ct = default)
         {
             ct.ThrowIfCancellationRequested();
             return new Enumerator(this, _sheets[_current].Offset, ct);
+        }
+
+        IExcelRowEnumerator IExcelRowReader<IExcelRowEnumerator>.GetAsyncEnumerator(CancellationToken ct)
+        {
+            return GetAsyncEnumerator(ct);
         }
 
         /// <inheritdoc/>

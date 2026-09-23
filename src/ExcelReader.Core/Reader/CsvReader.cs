@@ -149,32 +149,21 @@ namespace ExcelReader.Core.Reader
         }
 
         /// <summary>Gets an enumerator that reads records asynchronously from the start of the source.</summary>
-        public Enumerator GetAsyncEnumerator()
-        {
-            return GetEnumerator();
-        }
-
-        IExcelRowEnumerator IExcelRowReader<IExcelRowEnumerator>.GetAsyncEnumerator()
-        {
-            return GetAsyncEnumerator();
-        }
-
-        /// <summary>Asynchronously creates an enumerator that reads records from the start of the source.</summary>
-        /// <param name="ct">A token to cancel the setup operation.</param>
-        public ValueTask<Enumerator> GetAsyncEnumeratorAsync(CancellationToken ct = default)
+        /// <param name="ct">A token observed by every <c>MoveNextAsync</c> call.</param>
+        public Enumerator GetAsyncEnumerator(CancellationToken ct = default)
         {
             ct.ThrowIfCancellationRequested();
             ResetToStart();
             if (_stream is null)
             {
-                return new ValueTask<Enumerator>(new Enumerator(_memory, _options, ct));
+                return new Enumerator(_memory, _options, ct);
             }
-            return new ValueTask<Enumerator>(new Enumerator(_stream, _options, ct));
+            return new Enumerator(_stream, _options, ct);
         }
 
-        async ValueTask<IExcelRowEnumerator> IExcelRowReader<IExcelRowEnumerator>.GetAsyncEnumeratorAsync(CancellationToken ct)
+        IExcelRowEnumerator IExcelRowReader<IExcelRowEnumerator>.GetAsyncEnumerator(CancellationToken ct)
         {
-            return await GetAsyncEnumeratorAsync(ct).ConfigureAwait(false);
+            return GetAsyncEnumerator(ct);
         }
 
         private void ResetToStart()

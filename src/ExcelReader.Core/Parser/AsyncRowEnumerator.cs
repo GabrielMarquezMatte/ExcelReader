@@ -10,8 +10,7 @@ namespace ExcelReader.Core.Parser
     /// <typeparam name="TRows">The concrete row enumerator type this instance drives.</typeparam>
     /// <remarks>
     /// Mirrors <see cref="SyncRowEnumerator{T, TRows}"/>, plus lazy <typeparamref name="TRows"/>
-    /// acquisition (the reader's <c>GetAsyncEnumeratorAsync</c> may itself need to await) and a
-    /// sync-completion fast path: <c>MoveNextAsync</c> returns an already-completed <c>ValueTask</c>
+    /// acquisition on the first <c>MoveNextAsync</c> and a sync-completion fast path: <c>MoveNextAsync</c> returns an already-completed <c>ValueTask</c>
     /// whenever the row-enumerator call and the projection both resolve synchronously (the common
     /// case), only falling to an awaiting continuation on a genuine buffer miss — this avoids paying
     /// for a second state machine on top of the row-enumerator's own (e.g.
@@ -44,10 +43,7 @@ namespace ExcelReader.Core.Parser
         /// <inheritdoc/>
         public ValueTask<bool> MoveNextAsync()
         {
-            if (Rows is null)
-            {
-                return AdvanceAsync();
-            }
+            Rows ??= _reader.GetAsyncEnumerator(_ct);
             while (true)
             {
                 ValueTask<bool> moveTask = Rows.MoveNextAsync();
@@ -88,12 +84,6 @@ namespace ExcelReader.Core.Parser
                 case ProjectionStep.Stop:
                     return false;
             }
-            return await MoveNextAsync().ConfigureAwait(false);
-        }
-
-        private async ValueTask<bool> AdvanceAsync()
-        {
-            Rows = await _reader.GetAsyncEnumeratorAsync(_ct).ConfigureAwait(false);
             return await MoveNextAsync().ConfigureAwait(false);
         }
 

@@ -32,7 +32,7 @@ namespace ExcelReader.Tests
         private static async Task<List<string[]>> ReadAllAsync(CsvReader reader)
         {
             var rows = new List<string[]>();
-            await using CsvReader.Enumerator e = await reader.GetAsyncEnumeratorAsync(TestContext.Current.CancellationToken);
+            await using CsvReader.Enumerator e = reader.GetAsyncEnumerator(TestContext.Current.CancellationToken);
             while (await e.MoveNextAsync())
             {
                 rows.Add(ToArray(e));
@@ -767,13 +767,13 @@ namespace ExcelReader.Tests
         }
 
         [Fact]
-        public async Task ExplicitInterfaceGetAsyncEnumeratorAsyncWorks()
+        public async Task ExplicitInterfaceGetAsyncEnumeratorWorks()
         {
             using var ms = Csv("a,b\n");
             using var reader = Excel.FromCsv(ms);
             IExcelRowReader ier = reader;
 
-            await using IExcelRowEnumerator e = await ier.GetAsyncEnumeratorAsync(TestContext.Current.CancellationToken);
+            await using IExcelRowEnumerator e = ier.GetAsyncEnumerator(TestContext.Current.CancellationToken);
 
             Assert.True(await e.MoveNextAsync());
         }
@@ -800,7 +800,7 @@ namespace ExcelReader.Tests
             byte[] csv = "ab,cd\r\nef,gh\nij,kl"u8.ToArray();
             using var ms = new MemoryStream(csv, writable: false);
             await using var reader = await Excel.FromCsvAsync(ms, ct: TestContext.Current.CancellationToken);
-            await using CsvReader.Enumerator rows = await reader.GetAsyncEnumeratorAsync(TestContext.Current.CancellationToken);
+            await using CsvReader.Enumerator rows = reader.GetAsyncEnumerator(TestContext.Current.CancellationToken);
 
             var starts = new List<long>();
             while (await rows.MoveNextAsync())

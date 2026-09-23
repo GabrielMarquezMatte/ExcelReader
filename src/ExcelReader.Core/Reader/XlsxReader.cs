@@ -183,41 +183,19 @@ namespace ExcelReader.Core.Reader
         }
 
         /// <inheritdoc/>
-        public Enumerator GetAsyncEnumerator()
-        {
-            return GetEnumerator();
-        }
-
-        IExcelRowEnumerator IExcelRowReader<IExcelRowEnumerator>.GetAsyncEnumerator()
-        {
-            return GetAsyncEnumerator();
-        }
-
-        /// <summary>
-        /// Streaming async enumerator over the current sheet. Use with a manual loop — <c>Current</c>
-        /// is a ref struct (<c>Row</c>), so <c>await foreach</c> cannot bind it:
-        /// <code>
-        /// await using var e = await reader.GetAsyncEnumeratorAsync(ct);
-        /// while (await e.MoveNextAsync()) { var row = e.Current; /* ... */ }
-        /// </code>
-        /// </summary>
-        public async ValueTask<Enumerator> GetAsyncEnumeratorAsync(CancellationToken ct = default)
+        public Enumerator GetAsyncEnumerator(CancellationToken ct = default)
         {
             if (_memZip is not null)
             {
                 EnsureSharedLoadedFromMemory();
                 return GetEnumeratorFromMemory();
             }
-            await EnsureSharedLoadedAsync(ct).ConfigureAwait(false);
-            var entry = WorkbookLookups.GetWorksheetEntry(_zip!, _sheets[_current].Path);
-            LimitedReadStream sheet = await WorkbookLookups
-                .OpenEntryStreamAsync(entry, _decompressedBytes, _options, ct).ConfigureAwait(false);
-            return new Enumerator(this, sheet, entry.Length, ct);
+            return new Enumerator(this, WorkbookLookups.GetWorksheetEntry(_zip!, _sheets[_current].Path), ct);
         }
 
-        async ValueTask<IExcelRowEnumerator> IExcelRowReader<IExcelRowEnumerator>.GetAsyncEnumeratorAsync(CancellationToken ct)
+        IExcelRowEnumerator IExcelRowReader<IExcelRowEnumerator>.GetAsyncEnumerator(CancellationToken ct)
         {
-            return await GetAsyncEnumeratorAsync(ct).ConfigureAwait(false);
+            return GetAsyncEnumerator(ct);
         }
 
         internal ReadOnlySpan<byte> SharedSpan => _sharedFlat;

@@ -15,6 +15,7 @@ namespace ExcelReader.Core.Writer
     public sealed class CsvSheetWriter : ISheetWriter<CsvRowWriter>
     {
         private readonly CsvWriter _writer;
+        private bool _ended;
 
         internal CsvSheetWriter(CsvWriter writer)
         {
@@ -25,8 +26,10 @@ namespace ExcelReader.Core.Writer
         /// Synchronous counterpart to <see cref="StartRowAsync(CancellationToken)"/>, for native/unmanaged
         /// callers whose ABI is synchronous.
         /// </summary>
+        /// <exception cref="ObjectDisposedException">The sheet has already been ended.</exception>
         public CsvRowWriter StartRow()
         {
+            ObjectDisposedException.ThrowIf(_ended, this);
             return _writer.StartRow();
         }
 
@@ -46,7 +49,7 @@ namespace ExcelReader.Core.Writer
         public ValueTask<CsvRowWriter> StartRowAsync(CancellationToken ct = default)
         {
             ct.ThrowIfCancellationRequested();
-            return new ValueTask<CsvRowWriter>(_writer.StartRow());
+            return new ValueTask<CsvRowWriter>(StartRow());
         }
 
         /// <summary>Validates <paramref name="styleId"/> is not negative, then no-ops: CSV has no cell styles.</summary>
@@ -80,29 +83,37 @@ namespace ExcelReader.Core.Writer
         /// Synchronous counterpart to <see cref="EndAsync"/>, for native/unmanaged callers whose ABI is
         /// synchronous.
         /// </summary>
+        /// <exception cref="ObjectDisposedException">The sheet has already been ended.</exception>
         public void End()
         {
+            ObjectDisposedException.ThrowIf(_ended, this);
+            _ended = true;
             _writer.Flush();
         }
 
         /// <inheritdoc/>
+        /// <exception cref="ObjectDisposedException">The sheet has already been ended.</exception>
         public ValueTask EndAsync(CancellationToken ct = default)
         {
+            ObjectDisposedException.ThrowIf(_ended, this);
+            _ended = true;
             return _writer.FlushAsync(ct);
         }
 
         /// <summary>
         /// Synchronous counterpart to <see cref="DisposeAsync"/>, for native/unmanaged callers whose ABI
-        /// is synchronous. The workbook owns the <see cref="CsvWriter"/>'s lifetime; nothing to release
-        /// here.
+        /// is synchronous. The workbook owns the <see cref="CsvWriter"/>'s lifetime, so this only
+        /// marks the sheet ended.
         /// </summary>
         public void Dispose()
         {
+            _ended = true;
         }
 
         /// <inheritdoc/>
         public ValueTask DisposeAsync()
         {
+            _ended = true;
             return ValueTask.CompletedTask;
         }
     }

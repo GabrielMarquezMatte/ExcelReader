@@ -88,7 +88,7 @@ namespace ExcelReader.Tests
             {
                 await using MemoryStream stream = new(bytes, writable: false);
                 await using IExcelRowReader reader = await fixture.OpenAsync(stream, options, ct);
-                await using IExcelRowEnumerator e = await reader.GetAsyncEnumeratorAsync(ct);
+                await using IExcelRowEnumerator e = reader.GetAsyncEnumerator(ct);
                 Assert.True(await e.MoveNextAsync());
             }, ct);
 
@@ -153,7 +153,7 @@ namespace ExcelReader.Tests
             await using XlsxReader reader = await Excel.FromXlsxAsync(stream, options: options, ct: ct);
             Exception ex = await Assert.ThrowsAsync<InvalidDataException>(async () =>
             {
-                await using XlsxReader.Enumerator e = await reader.GetAsyncEnumeratorAsync(ct);
+                await using XlsxReader.Enumerator e = reader.GetAsyncEnumerator(ct);
                 await DrainRowsAsync(e);
             });
             return ex.GetType();
@@ -219,7 +219,7 @@ namespace ExcelReader.Tests
             await using XlsxReader reader = await Excel.FromXlsxAsync(ms, options: options, ct: ct);
             ExcelLimitExceededException ex = await Assert.ThrowsAsync<ExcelLimitExceededException>(async () =>
             {
-                await using XlsxReader.Enumerator e = await reader.GetAsyncEnumeratorAsync(ct);
+                await using XlsxReader.Enumerator e = reader.GetAsyncEnumerator(ct);
                 await DrainRowsAsync(e);
             });
             Assert.Equal(nameof(ExcelReaderOptions.MaxTotalDecompressedBytes), ex.LimitName);
@@ -238,8 +238,9 @@ namespace ExcelReader.Tests
             await using MemoryStream stream = new(bytes, writable: false);
             await using XlsxReader reader = await Excel.FromXlsxAsync(stream, options: options, ct: openCt);
 
-            await Assert.ThrowsAnyAsync<OperationCanceledException>(async () =>
-                await reader.GetAsyncEnumeratorAsync(cts.Token));
+            await using XlsxReader.Enumerator e = reader.GetAsyncEnumerator(cts.Token);
+
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await e.MoveNextAsync());
         }
 
         [Fact]
@@ -252,7 +253,7 @@ namespace ExcelReader.Tests
 
             await using MemoryStream stream = new(bytes, writable: false);
             await using XlsxReader reader = await Excel.FromXlsxAsync(stream, options: options, ct: openCt);
-            await using XlsxReader.Enumerator e = await reader.GetAsyncEnumeratorAsync(cts.Token);
+            await using XlsxReader.Enumerator e = reader.GetAsyncEnumerator(cts.Token);
 
             Assert.True(await e.MoveNextAsync());
             cts.Cancel();
@@ -327,7 +328,7 @@ namespace ExcelReader.Tests
         {
             await using MemoryStream stream = new(bytes, writable: false);
             await using IExcelRowReader reader = await open(stream, options, ct);
-            await using IExcelRowEnumerator e = await reader.GetAsyncEnumeratorAsync(ct);
+            await using IExcelRowEnumerator e = reader.GetAsyncEnumerator(ct);
             List<CellSnapshot> cells = [];
             int rowIndex = 0;
             while (await e.MoveNextAsync())
