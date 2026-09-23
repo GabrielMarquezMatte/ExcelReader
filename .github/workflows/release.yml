@@ -6,15 +6,14 @@ on:
 
 permissions:
   contents: read
-  id-token: write
 
+# Nothing is published until every build and test job has passed.
 jobs:
-  publish:
-    name: Pack & Publish to NuGet
+  build:
+    name: Build, test & pack (.NET)
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
-      id-token: write
+    outputs:
+      version: ${{ steps.version.outputs.value }}
 
     steps:
       - name: Checkout
@@ -25,15 +24,9 @@ jobs:
       - name: Setup .NET
         uses: actions/setup-dotnet@v6
         with:
-          dotnet-version: '10.0.x'
-
-      - name: Cache NuGet packages
-        uses: actions/cache@v6
-        with:
-          path: ~/.nuget/packages
-          key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj', '**/Directory.Build.props') }}
-          restore-keys: |
-            ${{ runner.os }}-nuget-
+          global-json-file: global.json
+          cache: true
+          cache-dependency-path: '**/*.csproj'
 
       - name: Derive version from tag
         id: version
@@ -49,28 +42,11 @@ jobs:
         run: dotnet test --project tests/ExcelReader.Tests/ExcelReader.Tests.csproj --configuration Release --no-build
 
       - name: Pack
-        run: >-
-          dotnet pack src/ExcelReader.Core/ExcelReader.Core.csproj
-          --configuration Release
-          --no-restore
-          -p:Version=${{ steps.version.outputs.value }}
-          --output ./artifacts
-
-      - name: Pack CLI
-        run: >-
-          dotnet pack src/ExcelReader.Cli/ExcelReader.Cli.csproj
-          --configuration Release
-          --no-restore
-          -p:Version=${{ steps.version.outputs.value }}
-          --output ./artifacts
-
-      - name: Pack Arrow
-        run: >-
-          dotnet pack src/ExcelReader.Arrow/ExcelReader.Arrow.csproj
-          --configuration Release
-          --no-restore
-          -p:Version=${{ steps.version.outputs.value }}
-          --output ./artifacts
+        run: |
+          for project in ExcelReader.Core ExcelReader.Cli ExcelReader.Arrow; do
+            dotnet pack "src/$project/$project.csproj" --configuration Release --no-restore \
+              -p:Version=${{ steps.version.outputs.value }} --output ./artifacts
+          done
 
       - name: Generate SBOM
         uses: anchore/sbom-action@v0
@@ -78,34 +54,19 @@ jobs:
           path: ./artifacts
           format: spdx-json
           output-file: ./artifacts/excelreader.spdx.json
-
-      - name: NuGet login (Trusted Publishing / OIDC)
-        uses: NuGet/login@v1
-        id: nuget-login
-        with:
-          user: ${{ vars.NUGET_USER }}
-
-      - name: Push to NuGet
-        run: >-
-          dotnet nuget push "./artifacts/*.nupkg"
-          --api-key "${{ steps.nuget-login.outputs.NUGET_API_KEY }}"
-          --source https://api.nuget.org/v3/index.json
-          --skip-duplicate
+          # This job is read-only; the publish job attaches the SBOM once every test has passed.
+          upload-release-assets: false
 
       - name: Upload package artifacts
-        if: always()
         uses: actions/upload-artifact@v7
         with:
           name: nuget-packages
           path: ./artifacts/*
-          if-no-files-found: warn
+          if-no-files-found: error
 
-  publish-native-assets:
-    name: Publish native binary (${{ matrix.os }})
-    needs: publish
+  native:
+    name: Build native library (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
-    permissions:
-      contents: write
     strategy:
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
@@ -118,13 +79,14 @@ jobs:
         uses: actions/setup-dotnet@v6
         with:
           global-json-file: global.json
+          cache: true
+          cache-dependency-path: '**/*.csproj'
 
       - name: Build the native library
         shell: bash
         run: python python/scripts/build_native.py
 
       - name: Rename asset for this platform
-        id: asset
         shell: bash
         run: |
           case "${{ runner.os }}" in
@@ -133,22 +95,27 @@ jobs:
             *)       src=ExcelReader.Native.so;   os=linux; ext=so ;;
           esac
           arch=$([ "$(uname -m 2>/dev/null || echo x64)" = "arm64" ] && echo arm64 || echo x64)
-          name="excelreader-native-${os}-${arch}.${ext}"
-          cp "python/src/excelreader/_lib/${src}" "${name}"
-          echo "name=${name}" >> "$GITHUB_OUTPUT"
+          mkdir -p release-assets
+          cp "python/src/excelreader/_lib/${src}" "release-assets/excelreader-native-${os}-${arch}.${ext}"
 
-      - name: Upload to the GitHub Release
-        uses: softprops/action-gh-release@v3
+      - name: Upload release asset
+        uses: actions/upload-artifact@v7
         with:
-          files: ${{ steps.asset.outputs.name }}
-          fail_on_unmatched_files: true
+          name: release-native-${{ matrix.os }}
+          path: release-assets/*
+          if-no-files-found: error
 
-  publish-cli:
-    name: Publish excelreader CLI (${{ matrix.os }})
-    needs: publish
+      - name: Upload library for the Python wheel
+        uses: actions/upload-artifact@v7
+        with:
+          name: python-lib-${{ matrix.os }}
+          path: python/src/excelreader/_lib/*
+          if-no-files-found: error
+
+  cli:
+    name: Build excelreader CLI (${{ matrix.os }})
+    needs: build
     runs-on: ${{ matrix.os }}
-    permissions:
-      contents: write
     strategy:
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
@@ -161,11 +128,8 @@ jobs:
         uses: actions/setup-dotnet@v6
         with:
           global-json-file: global.json
-
-      - name: Derive version from tag
-        id: version
-        shell: bash
-        run: echo "value=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+          cache: true
+          cache-dependency-path: '**/*.csproj'
 
       - name: Determine RID
         id: rid
@@ -187,72 +151,29 @@ jobs:
           -r ${{ steps.rid.outputs.value }}
           -p:PublishAot=true
           -p:PackAsTool=false
-          -p:Version=${{ steps.version.outputs.value }}
+          -p:Version=${{ needs.build.outputs.version }}
           --output ./cli-publish
 
       - name: Rename asset for this platform
-        id: asset
         shell: bash
         run: |
           case "${{ runner.os }}" in
             Windows) src=ExcelReader.Cli.exe; ext=.exe ;;
             *)       src=ExcelReader.Cli;     ext= ;;
           esac
-          name="excelreader-${{ steps.rid.outputs.value }}${ext}"
-          cp "./cli-publish/${src}" "${name}"
-          echo "name=${name}" >> "$GITHUB_OUTPUT"
+          mkdir -p release-assets
+          cp "./cli-publish/${src}" "release-assets/excelreader-${{ steps.rid.outputs.value }}${ext}"
 
-      - name: Upload to the GitHub Release
-        uses: softprops/action-gh-release@v3
+      - name: Upload release asset
+        uses: actions/upload-artifact@v7
         with:
-          files: ${{ steps.asset.outputs.name }}
-          fail_on_unmatched_files: true
+          name: release-cli-${{ matrix.os }}
+          path: release-assets/*
+          if-no-files-found: error
 
-  publish-rust:
-    name: Publish Rust crates
-    needs: publish-native-assets
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v7
-
-      - name: Derive version from tag
-        id: version
-        run: echo "value=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
-
-      - name: Set crate versions
-        run: |
-          sed -i "s/^version = \".*\"/version = \"${{ steps.version.outputs.value }}\"/" rust/excelreader-derive/Cargo.toml
-          sed -i "s/^version = \".*\"/version = \"${{ steps.version.outputs.value }}\"/" rust/excelreader/Cargo.toml
-          sed -i "s/^excelreader-derive = { path = \"\.\.\/excelreader-derive\", version = \".*\" }/excelreader-derive = { path = \"..\/excelreader-derive\", version = \"${{ steps.version.outputs.value }}\" }/" rust/excelreader/Cargo.toml
-          grep -q "^version = \"${{ steps.version.outputs.value }}\"" rust/excelreader-derive/Cargo.toml || { echo "::error::failed to set version in rust/excelreader-derive/Cargo.toml"; exit 1; }
-          grep -q "^version = \"${{ steps.version.outputs.value }}\"" rust/excelreader/Cargo.toml || { echo "::error::failed to set version in rust/excelreader/Cargo.toml"; exit 1; }
-          grep -q "excelreader-derive = { path = \"../excelreader-derive\", version = \"${{ steps.version.outputs.value }}\" }" rust/excelreader/Cargo.toml || { echo "::error::failed to set excelreader-derive dependency version in rust/excelreader/Cargo.toml"; exit 1; }
-
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Publish excelreader-derive to crates.io
-        working-directory: rust/excelreader-derive
-        env:
-          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
-        run: cargo publish --allow-dirty
-
-      - name: Wait for excelreader-derive to become available
-        run: sleep 30
-
-      - name: Publish excelreader to crates.io
-        working-directory: rust/excelreader
-        env:
-          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
-        run: cargo publish --allow-dirty
-
-  publish-python:
+  python:
     name: Build Python wheel (${{ matrix.os }})
-    needs: publish
+    needs: [build, native]
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
@@ -262,29 +183,22 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
 
-      - name: Setup .NET
-        uses: actions/setup-dotnet@v6
-        with:
-          global-json-file: global.json
-
       - name: Setup Python
         uses: actions/setup-python@v7
         with:
           python-version: '3.12'
 
-      - name: Derive version from tag
-        id: version
-        shell: bash
-        run: echo "value=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+      - name: Download the native library
+        uses: actions/download-artifact@v8
+        with:
+          name: python-lib-${{ matrix.os }}
+          path: python/src/excelreader/_lib
 
       - name: Set package version
         shell: bash
         run: |
-          sed -i.bak "s/^version = \".*\"/version = \"${{ steps.version.outputs.value }}\"/" python/pyproject.toml
+          sed -i.bak "s/^version = \".*\"/version = \"${{ needs.build.outputs.version }}\"/" python/pyproject.toml
           rm -f python/pyproject.toml.bak
-
-      - name: Build the native library
-        run: python python/scripts/build_native.py
 
       - name: Install test dependencies
         run: pip install -e "python[dev]"
@@ -304,32 +218,59 @@ jobs:
           path: dist/*.whl
           if-no-files-found: error
 
+  publish:
+    name: Publish to NuGet & GitHub Release
+    needs: [build, native, cli, python]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
+
+    steps:
+      - name: Download NuGet packages
+        uses: actions/download-artifact@v8
+        with:
+          name: nuget-packages
+          path: artifacts
+
+      - name: Download release assets
+        uses: actions/download-artifact@v8
+        with:
+          pattern: release-*
+          path: release-assets
+          merge-multiple: true
+
+      - name: NuGet login (Trusted Publishing / OIDC)
+        uses: NuGet/login@v1
+        id: nuget-login
+        with:
+          user: ${{ vars.NUGET_USER }}
+
+      - name: Push to NuGet
+        run: >-
+          dotnet nuget push "./artifacts/*.nupkg"
+          --api-key "${{ steps.nuget-login.outputs.NUGET_API_KEY }}"
+          --source https://api.nuget.org/v3/index.json
+          --skip-duplicate
+
+      - name: Upload to the GitHub Release
+        uses: softprops/action-gh-release@v3
+        with:
+          files: |
+            release-assets/*
+            artifacts/*.spdx.json
+          fail_on_unmatched_files: true
+          prerelease: ${{ contains(github.ref_name, '-') }}
+
   publish-pypi:
     name: Publish to PyPI
-    needs: publish-python
+    needs: publish
     runs-on: ubuntu-latest
     permissions:
       contents: read
       id-token: write
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v7
-
-      - name: Setup Python
-        uses: actions/setup-python@v7
-        with:
-          python-version: '3.12'
-
-      - name: Derive version from tag
-        id: version
-        run: echo "value=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
-
-      - name: Set package version
-        run: |
-          sed -i.bak "s/^version = \".*\"/version = \"${{ steps.version.outputs.value }}\"/" python/pyproject.toml
-          rm -f python/pyproject.toml.bak
-
       - name: Download wheel artifacts
         uses: actions/download-artifact@v8
         with:
@@ -337,16 +278,50 @@ jobs:
           path: dist/
           merge-multiple: true
 
-
       - name: Publish to PyPI (Trusted Publishing)
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
           packages-dir: dist/
           skip-existing: true
 
+  publish-rust:
+    name: Publish Rust crates
+    # build.rs downloads the native library from the GitHub Release, so the assets must be up first.
+    needs: [build, publish]
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set crate versions
+        env:
+          VERSION: ${{ needs.build.outputs.version }}
+        run: |
+          sed -i -E "s/^version = \".*\"/version = \"${VERSION}\"/; s/(excelreader-derive = \{[^}]*version = )\"[^\"]*\"/\1\"${VERSION}\"/" rust/Cargo.toml
+          grep -q "^version = \"${VERSION}\"" rust/Cargo.toml || { echo "::error::failed to set the workspace version in rust/Cargo.toml"; exit 1; }
+          grep -q "excelreader-derive = {.*version = \"${VERSION}\"" rust/Cargo.toml || { echo "::error::failed to set the excelreader-derive dependency version in rust/Cargo.toml"; exit 1; }
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Publish excelreader-derive to crates.io
+        working-directory: rust/excelreader-derive
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+        run: cargo publish --allow-dirty
+
+      - name: Publish excelreader to crates.io
+        working-directory: rust/excelreader
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+        run: cargo publish --allow-dirty
+
   promote-public-api:
     name: Promote PublicAPI.Unshipped -> Shipped
     needs: publish
+    # A release candidate's API can still change, so only final releases promote it.
+    if: ${{ !contains(github.ref_name, '-') }}
     runs-on: ubuntu-latest
     permissions:
       contents: write

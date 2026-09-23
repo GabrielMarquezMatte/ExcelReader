@@ -27,7 +27,7 @@ namespace ExcelReader.Tests
         private const int EndOfChain = unchecked((int)0xFFFFFFFE);
         private const int FreeSector = unchecked((int)0xFFFFFFFF);
 
-        internal static MemoryStream Build(bool date1904 = false, string? customDateFormat = null, params (string Name, object?[][] Rows)[] sheets)
+        internal static MemoryStream Build(bool date1904 = false, string? customDateFormat = null, byte[]? sheetStates = null, params (string Name, object?[][] Rows)[] sheets)
         {
             List<string> sharedStrings = [];
             Dictionary<string, int> sharedIndexes = new(StringComparer.Ordinal);
@@ -37,7 +37,7 @@ namespace ExcelReader.Tests
                 sheetStreams[i] = BuildSheet(sheets[i].Rows, sharedStrings, sharedIndexes, date1904);
             }
 
-            byte[] globals = BuildGlobals(sheets, sheetStreams, sharedStrings, date1904, customDateFormat);
+            byte[] globals = BuildGlobals(sheets, sheetStreams, sharedStrings, date1904, customDateFormat, sheetStates);
             using MemoryStream workbook = new();
             workbook.Write(globals);
             foreach (byte[] sheet in sheetStreams)
@@ -196,7 +196,8 @@ namespace ExcelReader.Tests
             byte[][] sheetStreams,
             List<string> sharedStrings,
             bool date1904,
-            string? customDateFormat)
+            string? customDateFormat,
+            byte[]? sheetStates)
         {
             int globalsLength = 4 + 16;
             byte[]? format = customDateFormat is null ? null : Format(165, customDateFormat);
@@ -241,7 +242,7 @@ namespace ExcelReader.Tests
             int offset = globalsLength;
             for (int i = 0; i < sheets.Length; i++)
             {
-                WriteRecord(globals, 0x0085, BoundSheet(offset, sheets[i].Name));
+                WriteRecord(globals, 0x0085, BoundSheet(offset, sheets[i].Name, sheetStates is null ? (byte)0 : sheetStates[i]));
                 offset += sheetStreams[i].Length;
             }
             WriteRecord(globals, 0x000A, []);
@@ -368,9 +369,9 @@ namespace ExcelReader.Tests
             WriteRecord(sheet, 0x0203, [.. U16(row), .. U16(col), .. U16(xf), .. Double(value)]);
         }
 
-        private static byte[] BoundSheet(int offset, string name)
+        private static byte[] BoundSheet(int offset, string name, byte hsState = 0)
         {
-            return [.. I32(offset), 0, 0, .. BiffShortString(name)];
+            return [.. I32(offset), hsState, 0, .. BiffShortString(name)];
         }
 
         private static byte[] Xf(int format)

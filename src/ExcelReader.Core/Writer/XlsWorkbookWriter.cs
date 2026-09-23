@@ -1,4 +1,5 @@
 using System.Runtime.InteropServices;
+using ExcelReader.Core.Enums;
 using ExcelReader.Core.Writer.Internal;
 
 namespace ExcelReader.Core.Writer
@@ -20,7 +21,7 @@ namespace ExcelReader.Core.Writer
         private readonly bool _date1904;
         private readonly StyleTable _styles = new();
         private readonly List<XlsSheetWriter> _sheets = [];
-        private WriterState _state = WriterState.Created;
+        private bool _ended;
         private XlsSheetWriter? _activeSheet;
         private bool _disposed;
 
@@ -43,33 +44,21 @@ namespace ExcelReader.Core.Writer
             return new XlsWorkbookWriter(stream, leaveOpen, date1904);
         }
 
-        /// <summary>
-        /// Marks the workbook as started so that sheets can be added.
-        /// </summary>
-        public void Start()
-        {
-            WriterStateGuard.ThrowIfEnded(_state, this);
-            WriterStateGuard.RequireCreated(_state, nameof(XlsWorkbookWriter));
-            _state = WriterState.Started;
-        }
-
-        /// <inheritdoc/>
-        /// <remarks>XLS assembles the OLE container synchronously in <see cref="EndAsync"/>; this just wraps <see cref="Start"/>.</remarks>
-        public ValueTask StartAsync(CancellationToken ct = default)
-        {
-            ct.ThrowIfCancellationRequested();
-            Start();
-            return ValueTask.CompletedTask;
-        }
-
         /// <inheritdoc/>
         /// <exception cref="InvalidOperationException">The previously added sheet has not been ended yet.</exception>
         public XlsSheetWriter AddSheet(string name)
         {
+            return AddSheet(name, ExcelSheetVisibility.Visible);
+        }
+
+        /// <inheritdoc/>
+        /// <exception cref="InvalidOperationException">The previously added sheet has not been ended yet.</exception>
+        public XlsSheetWriter AddSheet(string name, ExcelSheetVisibility visibility)
+        {
             WriterStateGuard.RequireCanAddSheet(
-                _state, this, nameof(XlsWorkbookWriter), name, _activeSheet is not null, nameof(XlsSheetWriter));
-#pragma warning disable IDISP003 
-            _activeSheet = new XlsSheetWriter(this, name, _date1904);
+                _ended, this, name, _activeSheet is not null, nameof(XlsSheetWriter), visibility);
+#pragma warning disable IDISP003
+            _activeSheet = new XlsSheetWriter(this, name, _date1904, visibility);
 #pragma warning restore IDISP003
             return _activeSheet;
         }
@@ -99,12 +88,17 @@ namespace ExcelReader.Core.Writer
         {
             BiffBuffer globals = new(1024);
             string[] names = new string[_sheets.Count];
+            ExcelSheetVisibility[] visibilities = new ExcelSheetVisibility[_sheets.Count];
+            bool anyVisible = false;
             for (int i = 0; i < _sheets.Count; i++)
             {
                 names[i] = _sheets[i].Name;
+                visibilities[i] = _sheets[i].Visibility;
+                anyVisible |= visibilities[i] is ExcelSheetVisibility.Visible;
             }
+            WriterStateGuard.RequireVisibleSheet(anyVisible, nameof(XlsWorkbookWriter));
 
-            int[] offsetPositions = XlsGlobals.Write(globals, names, _date1904, _styles);
+            int[] offsetPositions = XlsGlobals.Write(globals, names, visibilities, _date1904, _styles);
             int offset = globals.Length;
             workbookSize = offset;
             for (int i = 0; i < _sheets.Count; i++)
@@ -123,9 +117,8 @@ namespace ExcelReader.Core.Writer
         /// <exception cref="InvalidOperationException">No sheet was ever added to the workbook.</exception>
         public void End()
         {
-            WriterStateGuard.ThrowIfEnded(_state, this);
-            WriterStateGuard.RequireStarted(_state, nameof(XlsWorkbookWriter), "ending");
-            _state = WriterState.Ended;
+            ObjectDisposedException.ThrowIf(_ended, this);
+            _ended = true;
             _activeSheet?.Dispose();
             if (_sheets.Count == 0)
             {
@@ -169,10 +162,9 @@ namespace ExcelReader.Core.Writer
         /// <exception cref="InvalidOperationException">No sheet was ever added to the workbook.</exception>
         public async ValueTask EndAsync(CancellationToken ct = default)
         {
-            WriterStateGuard.ThrowIfEnded(_state, this);
-            WriterStateGuard.RequireStarted(_state, nameof(XlsWorkbookWriter), "ending");
+            ObjectDisposedException.ThrowIf(_ended, this);
             ct.ThrowIfCancellationRequested();
-            _state = WriterState.Ended;
+            _ended = true;
             if (_activeSheet is not null)
             {
                 await _activeSheet.DisposeAsync().ConfigureAwait(false);
@@ -242,7 +234,7 @@ namespace ExcelReader.Core.Writer
                 return;
             }
             _disposed = true;
-            if (_state == WriterState.Started)
+            if (!_ended)
             {
                 if (_sheets.Count > 0)
                 {
@@ -250,7 +242,7 @@ namespace ExcelReader.Core.Writer
                 }
                 else
                 {
-                    _state = WriterState.Ended;
+                    _ended = true;
                 }
             }
             if (!_leaveOpen)
@@ -267,7 +259,7 @@ namespace ExcelReader.Core.Writer
                 return;
             }
             _disposed = true;
-            if (_state == WriterState.Started)
+            if (!_ended)
             {
                 if (_sheets.Count > 0)
                 {
@@ -275,7 +267,7 @@ namespace ExcelReader.Core.Writer
                 }
                 else
                 {
-                    _state = WriterState.Ended;
+                    _ended = true;
                 }
             }
             if (!_leaveOpen)

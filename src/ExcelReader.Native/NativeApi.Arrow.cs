@@ -219,7 +219,6 @@ namespace ExcelReader.Native
             }
         }
 
-        // Takes ownership of the column's buffers and clears them, so FreeTable leaves them to the Arrow release.
         private static ArrowArray BuildChildArray(int type, NativeColumn* column)
         {
             int bufferCount = type == NativeColumnType.String ? 3 : 2;

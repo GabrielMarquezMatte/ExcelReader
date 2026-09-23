@@ -1,10 +1,11 @@
 using System.Collections;
 using System.Diagnostics.CodeAnalysis;
 using ExcelReader.Core.Enums;
+using ExcelReader.Core.Parser.Internal;
 using ExcelReader.Core.Reader;
 using ExcelReader.Core.ValueObjects;
 
-namespace ExcelReader.Core.Parser.Internal
+namespace ExcelReader.Core.Parser
 {
     /// <summary>Lazily projects CSV rows into <typeparamref name="T"/> instances by binding each property to a fixed field index, for both synchronous and asynchronous enumeration.</summary>
     /// <typeparam name="T">The row model type to bind each CSV row to.</typeparam>
@@ -18,19 +19,13 @@ namespace ExcelReader.Core.Parser.Internal
     [SuppressMessage("Design", "CA1034:Nested types should not be visible",
         Justification = "Public nested Enumerator/AsyncEnumerator are the standard foreach/await-foreach pattern.")]
     public sealed class CsvEnumerable<T> : IEnumerable<T>, IAsyncEnumerable<T>
+        where T : allows ref struct
     {
         private readonly CsvReader _reader;
         private readonly ExcelParserConfig _config;
         private readonly CancellationToken _ct;
         private readonly TypeMapInfo<T> _info;
         private readonly bool _ownsReader;
-
-        [RequiresUnreferencedCode("Typed parsing reflects over T's public properties, which trimming may remove.")]
-        [RequiresDynamicCode("Typed parsing binds property setters at runtime (MethodInfo.CreateDelegate / MakeGenericMethod).")]
-        internal CsvEnumerable(CsvReader reader, ExcelParserConfig config, CancellationToken ct = default)
-            : this(reader, config, ownsReader: false, ct)
-        {
-        }
 
         [RequiresUnreferencedCode("Typed parsing reflects over T's public properties, which trimming may remove.")]
         [RequiresDynamicCode("Typed parsing binds property setters at runtime (MethodInfo.CreateDelegate / MakeGenericMethod).")]
@@ -43,12 +38,11 @@ namespace ExcelReader.Core.Parser.Internal
             _ownsReader = ownsReader;
         }
 
-        internal CsvEnumerable(CsvReader reader, ExcelParserConfig config, TypeMapInfo<T> explicitInfo, CancellationToken ct = default)
+        internal CsvEnumerable(CsvReader reader, ExcelParserConfig config, TypeMapInfo<T> explicitInfo)
         {
             _reader = reader;
             _config = config;
             _info = explicitInfo;
-            _ct = ct;
         }
 
         /// <inheritdoc cref="IEnumerable{T}.GetEnumerator"/>
@@ -98,9 +92,14 @@ namespace ExcelReader.Core.Parser.Internal
                 _projector = new CsvRowProjector<T>(typeInfo, comparer, normalization, headerRow, provider, throwOnParseFailure);
             }
 
-            private protected override ProjectionStep Project()
+            private protected override ProjectionStep Classify()
             {
-                return _projector.Advance(Rows, ref CurrentValue);
+                return _projector.Classify(Rows);
+            }
+
+            private protected override T Project()
+            {
+                return _projector.Project(Rows);
             }
         }
 
@@ -136,14 +135,20 @@ namespace ExcelReader.Core.Parser.Internal
                 }
             }
 
-            private protected override ProjectionStep Project()
+            private protected override ProjectionStep Classify()
             {
-                return _projector.Advance(Rows!, ref CurrentValue);
+                return _projector.Classify(Rows!);
+            }
+
+            private protected override T Project()
+            {
+                return _projector.Project(Rows!);
             }
         }
     }
 
     internal sealed class CsvBoundColumnMap<T>
+        where T : allows ref struct
     {
         internal CsvBoundColumnMap(
             ColumnParser<T>[] fieldParsers,
@@ -167,6 +172,7 @@ namespace ExcelReader.Core.Parser.Internal
     }
 
     internal struct CsvRowProjector<T>
+        where T : allows ref struct
     {
         private readonly TypeMapInfo<T> _typeInfo;
         private readonly StringComparer _comparer;
@@ -208,18 +214,17 @@ namespace ExcelReader.Core.Parser.Internal
             _rowNumber = 0;
         }
 
-        internal ProjectionStep Advance(CsvReader.Enumerator rows, ref T model)
+        private static bool IsBlank(CsvReader.Enumerator rows)
+        {
+            return rows.FieldCount == 1 && rows.FieldAt(0).Type == CellType.Empty;
+        }
+
+        internal ProjectionStep Classify(CsvReader.Enumerator rows)
         {
             if (_headerRow < 0)
             {
                 _rowNumber++;
-                if (rows.FieldCount == 1 && rows.FieldAt(0).Type == CellType.Empty)
-                {
-                    return ProjectionStep.Skip;
-                }
-                model = _typeInfo.CreateInstance();
-                ParseCurrentRow(rows, ref model);
-                return ProjectionStep.Yield;
+                return IsBlank(rows) ? ProjectionStep.Skip : ProjectionStep.Yield;
             }
             if (_typeInfo.IsIndexBased)
             {
@@ -228,24 +233,12 @@ namespace ExcelReader.Core.Parser.Internal
                     BuildIndexColumnMap();
                 }
                 _rowNumber++;
-                if (rows.FieldCount == 1 && rows.FieldAt(0).Type == CellType.Empty)
-                {
-                    return ProjectionStep.Skip;
-                }
-                model = _typeInfo.CreateInstance();
-                ParseCurrentRow(rows, ref model);
-                return ProjectionStep.Yield;
+                return IsBlank(rows) ? ProjectionStep.Skip : ProjectionStep.Yield;
             }
             if (_fieldParsers is not null && _rowNumber >= _headerRow)
             {
                 _rowNumber++;
-                if (rows.FieldCount == 1 && rows.FieldAt(0).Type == CellType.Empty)
-                {
-                    return ProjectionStep.Skip;
-                }
-                model = _typeInfo.CreateInstance();
-                ParseCurrentRow(rows, ref model);
-                return ProjectionStep.Yield;
+                return IsBlank(rows) ? ProjectionStep.Skip : ProjectionStep.Yield;
             }
             ProjectionStep step = ProjectionRules.ClassifyRow(ref _rowNumber, _headerRow, _fieldParsers is not null);
             if (step == ProjectionStep.BuildMap)
@@ -257,13 +250,14 @@ namespace ExcelReader.Core.Parser.Internal
             {
                 return step;
             }
-            if (rows.FieldCount == 1 && rows.FieldAt(0).Type == CellType.Empty)
-            {
-                return ProjectionStep.Skip;
-            }
-            model = _typeInfo.CreateInstance();
+            return IsBlank(rows) ? ProjectionStep.Skip : ProjectionStep.Yield;
+        }
+
+        internal readonly T Project(CsvReader.Enumerator rows)
+        {
+            T model = _typeInfo.CreateInstance();
             ParseCurrentRow(rows, ref model);
-            return ProjectionStep.Yield;
+            return model;
         }
 
         private void BuildColumnMap(CsvReader.Enumerator rows)

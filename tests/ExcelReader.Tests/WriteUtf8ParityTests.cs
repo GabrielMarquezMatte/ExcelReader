@@ -55,11 +55,9 @@ namespace ExcelReader.Tests
         private static string XlsxSheetXml(byte[] utf8, bool useUtf8, bool sharedStrings)
         {
             using MemoryStream stream = new();
-            using (XlsxWorkbookWriter workbook = XlsxWorkbookWriter.Create(stream, leaveOpen: true, useSharedStrings: sharedStrings))
+            using (XlsxWorkbookWriter workbook = XlsxWorkbookWriter.Create(stream, leaveOpen: true, options: new XlsxWriterOptions { UseSharedStrings = sharedStrings }))
             {
-                workbook.Start();
                 using XlsxSheetWriter sheet = workbook.AddSheet("S");
-                sheet.Start();
                 using (XlsxRowWriter row = sheet.StartRow())
                 {
                     Write(row, utf8, useUtf8);
@@ -89,9 +87,7 @@ namespace ExcelReader.Tests
             using MemoryStream stream = new();
             using (CsvWorkbookWriter workbook = CsvWorkbookWriter.Create(stream, leaveOpen: true))
             {
-                workbook.Start();
                 using CsvSheetWriter sheet = workbook.AddSheet("S");
-                sheet.Start();
                 using (CsvRowWriter row = sheet.StartRow())
                 {
                     Write(row, utf8, useUtf8);

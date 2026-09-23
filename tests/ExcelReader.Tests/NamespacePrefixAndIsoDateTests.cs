@@ -88,7 +88,7 @@ namespace ExcelReader.Tests
                 """<x:row r="1"><x:c r="A1"><x:v>7</x:v></x:c><x:c r="B1" t="s"><x:v>0</x:v></x:c></x:row>""",
                 sharedStrings: "<x:si><x:t>async</x:t></x:si>");
             await using XlsxReader reader = await Excel.FromXlsxAsync(ms, ct: TestContext.Current.CancellationToken);
-            await using XlsxReader.Enumerator e = await reader.GetAsyncEnumeratorAsync(TestContext.Current.CancellationToken);
+            await using XlsxReader.Enumerator e = reader.GetAsyncEnumerator(TestContext.Current.CancellationToken);
 
             Assert.True(await e.MoveNextAsync());
             Assert.Equal("7", e.Current[0].GetString());
@@ -184,7 +184,7 @@ namespace ExcelReader.Tests
             await using MemoryStream ms = WorkbookBuilder.Build(
                 """<row r="1"><c r="A1" t="d"><v>2026-01-02T00:00:00</v></c></row>""");
             await using XlsxReader reader = await Excel.FromXlsxAsync(ms, ct: TestContext.Current.CancellationToken);
-            await using XlsxReader.Enumerator e = await reader.GetAsyncEnumeratorAsync(TestContext.Current.CancellationToken);
+            await using XlsxReader.Enumerator e = reader.GetAsyncEnumerator(TestContext.Current.CancellationToken);
 
             Assert.True(await e.MoveNextAsync());
             Assert.Equal(CellType.Date, e.Current[0].Type);

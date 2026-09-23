@@ -1,5 +1,6 @@
 using System.Buffers;
 using System.IO.Compression;
+using ExcelReader.Core.Enums;
 
 namespace ExcelReader.Core.Reader
 {
@@ -12,7 +13,7 @@ namespace ExcelReader.Core.Reader
         private readonly ZipMemoryIndex? _memZip;
         private readonly ExcelReaderOptions _options;
         private readonly DecompressedByteCounter _decompressedBytes;
-        private readonly (string Name, string Path)[] _sheets;
+        private readonly (string Name, string Path, ExcelSheetVisibility Visibility)[] _sheets;
         private readonly bool[] _styleIsDate;
         private int _current;
 
@@ -59,7 +60,7 @@ namespace ExcelReader.Core.Reader
         }
 
         private XlsxReader(Stream stream, bool leaveOpen, ZipArchive zip,
-            (string Name, string Path)[] sheets, bool[] styleIsDate, bool date1904,
+            (string Name, string Path, ExcelSheetVisibility Visibility)[] sheets, bool[] styleIsDate, bool date1904,
             ExcelReaderOptions options, DecompressedByteCounter decompressedBytes)
         {
             _stream = stream;
@@ -73,7 +74,7 @@ namespace ExcelReader.Core.Reader
         }
 
         private XlsxReader(ZipMemoryIndex memZip,
-            (string Name, string Path)[] sheets, bool[] styleIsDate, bool date1904,
+            (string Name, string Path, ExcelSheetVisibility Visibility)[] sheets, bool[] styleIsDate, bool date1904,
             ExcelReaderOptions options, DecompressedByteCounter decompressedBytes)
         {
             _leaveOpen = true;
@@ -130,6 +131,14 @@ namespace ExcelReader.Core.Reader
             return _sheets[index].Name;
         }
         /// <inheritdoc/>
+        public ExcelSheetVisibility SheetVisibility => _sheets[_current].Visibility;
+        /// <inheritdoc/>
+        public ExcelSheetVisibility SheetVisibilityAt(int index)
+        {
+            WorkbookLookups.ValidateSheetIndex(index, _sheets.Length);
+            return _sheets[index].Visibility;
+        }
+        /// <inheritdoc/>
         public bool IsDate1904 { get; }
 
         internal bool IsDateStyle(int style)
@@ -164,7 +173,7 @@ namespace ExcelReader.Core.Reader
                 return GetEnumeratorFromMemory();
             }
             EnsureSharedLoaded();
-            var entry = WorkbookLookups.GetWorksheetEntry(_zip!, _sheets, _current);
+            var entry = WorkbookLookups.GetWorksheetEntry(_zip!, _sheets[_current].Path);
             return new Enumerator(this, WorkbookLookups.OpenEntryStream(entry, _decompressedBytes, _options), entry.Length);
         }
 
@@ -174,41 +183,19 @@ namespace ExcelReader.Core.Reader
         }
 
         /// <inheritdoc/>
-        public Enumerator GetAsyncEnumerator()
-        {
-            return GetEnumerator();
-        }
-
-        IExcelRowEnumerator IExcelRowReader<IExcelRowEnumerator>.GetAsyncEnumerator()
-        {
-            return GetAsyncEnumerator();
-        }
-
-        /// <summary>
-        /// Streaming async enumerator over the current sheet. Use with a manual loop — <c>Current</c>
-        /// is a ref struct (<c>Row</c>), so <c>await foreach</c> cannot bind it:
-        /// <code>
-        /// await using var e = await reader.GetAsyncEnumeratorAsync(ct);
-        /// while (await e.MoveNextAsync()) { var row = e.Current; /* ... */ }
-        /// </code>
-        /// </summary>
-        public async ValueTask<Enumerator> GetAsyncEnumeratorAsync(CancellationToken ct = default)
+        public Enumerator GetAsyncEnumerator(CancellationToken ct = default)
         {
             if (_memZip is not null)
             {
                 EnsureSharedLoadedFromMemory();
                 return GetEnumeratorFromMemory();
             }
-            await EnsureSharedLoadedAsync(ct).ConfigureAwait(false);
-            var entry = WorkbookLookups.GetWorksheetEntry(_zip!, _sheets, _current);
-            LimitedReadStream sheet = await WorkbookLookups
-                .OpenEntryStreamAsync(entry, _decompressedBytes, _options, ct).ConfigureAwait(false);
-            return new Enumerator(this, sheet, entry.Length, ct);
+            return new Enumerator(this, WorkbookLookups.GetWorksheetEntry(_zip!, _sheets[_current].Path), ct);
         }
 
-        async ValueTask<IExcelRowEnumerator> IExcelRowReader<IExcelRowEnumerator>.GetAsyncEnumeratorAsync(CancellationToken ct)
+        IExcelRowEnumerator IExcelRowReader<IExcelRowEnumerator>.GetAsyncEnumerator(CancellationToken ct)
         {
-            return await GetAsyncEnumeratorAsync(ct).ConfigureAwait(false);
+            return GetAsyncEnumerator(ct);
         }
 
         internal ReadOnlySpan<byte> SharedSpan => _sharedFlat;

@@ -1,5 +1,6 @@
 using System.Buffers;
 using System.Text;
+using ExcelReader.Core.Enums;
 using ExcelReader.Core.Reader;
 using B = ExcelReader.Tests.Biff12Build;
 
@@ -7,7 +8,6 @@ namespace ExcelReader.Tests
 {
     public class XlsbPartsTests
     {
-        // --- Biff12 field decoders ---
 
         [Fact]
         public void WideStringDecodes()
@@ -73,8 +73,8 @@ namespace ExcelReader.Tests
             var sheets = XlsbWorkbook.ParseSheets(workbook, rels);
 
             Assert.Equal(2, sheets.Length);
-            Assert.Equal(("Plan1", "xl/worksheets/sheet1.bin"), sheets[0]);
-            Assert.Equal(("Plan2", "xl/worksheets/sheet2.bin"), sheets[1]);
+            Assert.Equal(("Plan1", "xl/worksheets/sheet1.bin", ExcelSheetVisibility.Visible), sheets[0]);
+            Assert.Equal(("Plan2", "xl/worksheets/sheet2.bin", ExcelSheetVisibility.Visible), sheets[1]);
         }
 
         [Fact]

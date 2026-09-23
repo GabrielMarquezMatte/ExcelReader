@@ -153,7 +153,7 @@ namespace ExcelReader.Tests
             await using XlsxReader reader = await Excel.FromXlsxAsync(
                 workbook,
                 ct: TestContext.Current.CancellationToken);
-            await using XlsxReader.Enumerator rows = await reader.GetAsyncEnumeratorAsync(TestContext.Current.CancellationToken);
+            await using XlsxReader.Enumerator rows = reader.GetAsyncEnumerator(TestContext.Current.CancellationToken);
 
             Assert.True(rows.MoveNext());
             foreach (ExpectedCell expected in fixture.Expected)
@@ -170,7 +170,6 @@ namespace ExcelReader.Tests
             await using MemoryStream workbook = await WriteXlsxAsync(async wb =>
             {
                 XlsxSheetWriter first = wb.AddSheet("Sales & Ops");
-                await first.StartAsync(TestContext.Current.CancellationToken);
                 await using (XlsxRowWriter row = await first.StartRowAsync(TestContext.Current.CancellationToken))
                 {
                     row.Write("<North>");
@@ -180,7 +179,6 @@ namespace ExcelReader.Tests
                 await first.EndAsync(TestContext.Current.CancellationToken);
 
                 XlsxSheetWriter second = wb.AddSheet("Dates");
-                await second.StartAsync(TestContext.Current.CancellationToken);
                 await using (XlsxRowWriter row = await second.StartRowAsync(TestContext.Current.CancellationToken))
                 {
                     row.Write(new DateTime(2024, 5, 6, 0, 0, 0, DateTimeKind.Unspecified));
@@ -247,7 +245,6 @@ namespace ExcelReader.Tests
             await using MemoryStream workbook = await WriteXlsbAsync(async wb =>
             {
                 XlsbSheetWriter sheet = wb.AddSheet("BinaryData");
-                await sheet.StartAsync(TestContext.Current.CancellationToken);
                 await using (XlsbRowWriter row = await sheet.StartRowAsync(TestContext.Current.CancellationToken))
                 {
                     row.Write("value");
@@ -297,7 +294,6 @@ namespace ExcelReader.Tests
             byte[] bytes = await WriteXlsAsync(wb =>
             {
                 XlsSheetWriter sheet = wb.AddSheet("Legacy");
-                sheet.Start();
                 using (XlsRowWriter row = sheet.StartRow())
                 {
                     row.Write("value");
@@ -359,9 +355,8 @@ namespace ExcelReader.Tests
         private static async Task<MemoryStream> WriteXlsxAsync(Func<XlsxWorkbookWriter, Task> build)
         {
             var ms = new MemoryStream();
-            await using (XlsxWorkbookWriter writer = await XlsxWorkbookWriter.CreateAsync(ms, leaveOpen: true, ct: TestContext.Current.CancellationToken))
+            await using (XlsxWorkbookWriter writer = XlsxWorkbookWriter.Create(ms, leaveOpen: true))
             {
-                await writer.StartAsync(TestContext.Current.CancellationToken);
                 await build(writer);
                 await writer.EndAsync(TestContext.Current.CancellationToken);
             }
@@ -372,9 +367,8 @@ namespace ExcelReader.Tests
         private static async Task<MemoryStream> WriteXlsbAsync(Func<XlsbWorkbookWriter, Task> build)
         {
             var ms = new MemoryStream();
-            await using (XlsbWorkbookWriter writer = await XlsbWorkbookWriter.CreateAsync(ms, leaveOpen: true, ct: TestContext.Current.CancellationToken))
+            await using (XlsbWorkbookWriter writer = XlsbWorkbookWriter.Create(ms, leaveOpen: true))
             {
-                await writer.StartAsync(TestContext.Current.CancellationToken);
                 await build(writer);
                 await writer.EndAsync(TestContext.Current.CancellationToken);
             }
@@ -387,7 +381,6 @@ namespace ExcelReader.Tests
             var ms = new MemoryStream();
             await using (XlsWorkbookWriter writer = XlsWorkbookWriter.Create(ms, leaveOpen: true))
             {
-                writer.Start();
                 build(writer);
                 await writer.EndAsync(TestContext.Current.CancellationToken);
             }

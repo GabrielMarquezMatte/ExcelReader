@@ -43,7 +43,7 @@ namespace ExcelReader.Tests
                 $$"""<row r="1"><c r="A1"><v>10</v></c><c r="C1"><v>30</v></c></row><row r="2"><c r="A2" t="inlineStr"><is><t>{{big}}</t></is></c></row>""");
 
             await using var reader = await Excel.FromXlsxAsync(ms, ct: TestContext.Current.CancellationToken);
-            await using var enumerator = await reader.GetAsyncEnumeratorAsync(TestContext.Current.CancellationToken);
+            await using var enumerator = reader.GetAsyncEnumerator(TestContext.Current.CancellationToken);
             int r = 0;
             while (await enumerator.MoveNextAsync())
             {
@@ -152,7 +152,7 @@ namespace ExcelReader.Tests
             var ct = TestContext.Current.CancellationToken;
             string path = Path.Combine(AppContext.BaseDirectory, "data", "sample.xlsx");
             await using var reader = await Excel.FromXlsxFileAsync(path, ct: ct);
-            await using var e = await reader.GetAsyncEnumeratorAsync(ct);
+            await using var e = reader.GetAsyncEnumerator(ct);
 
             int r = 0;
             while (await e.MoveNextAsync())
@@ -185,7 +185,7 @@ namespace ExcelReader.Tests
                 styles: styles);
 
             await using var reader = await Excel.FromXlsxAsync(ms, ct: ct);
-            await using var e = await reader.GetAsyncEnumeratorAsync(ct);
+            await using var e = reader.GetAsyncEnumerator(ct);
 
             Assert.True(await e.MoveNextAsync());
             Assert.Equal(CellType.Date, e.Current[0].Type);

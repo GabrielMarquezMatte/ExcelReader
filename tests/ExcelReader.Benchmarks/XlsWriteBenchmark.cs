@@ -23,9 +23,7 @@ namespace ExcelReader.Benchmarks
             await using var ms = new MemoryStream(16 * 1024 * 1024);
             await using (XlsWorkbookWriter wb = XlsWorkbookWriter.Create(ms, leaveOpen: true))
             {
-                wb.Start();
                 XlsSheetWriter sheet = wb.AddSheet("S1");
-                sheet.Start();
                 using (XlsRowWriter header = sheet.StartRow())
                 {
                     header.Write("Name");
@@ -52,11 +50,9 @@ namespace ExcelReader.Benchmarks
         public async Task<long> XlsxWriter()
         {
             await using var ms = new MemoryStream(4 * 1024 * 1024);
-            await using (XlsxWorkbookWriter wb = await XlsxWorkbookWriter.CreateAsync(ms, leaveOpen: true))
+            await using (XlsxWorkbookWriter wb = XlsxWorkbookWriter.Create(ms, leaveOpen: true))
             {
-                await wb.StartAsync();
                 XlsxSheetWriter sheet = wb.AddSheet("S1");
-                await sheet.StartAsync();
                 using (XlsxRowWriter header = sheet.StartRow())
                 {
                     header.Write("Name");

@@ -38,7 +38,7 @@ namespace ExcelReader.Tests
             await using MemoryStream ms = WorkbookBuilder.Build(
                 """<row r="1"><c r="A1"><v>1</v></c></row><!-- a > b --><row r="2"><c r="A2"><v>2</v></c></row>""");
             await using XlsxReader reader = await Excel.FromXlsxAsync(ms, ct: TestContext.Current.CancellationToken);
-            await using XlsxReader.Enumerator e = await reader.GetAsyncEnumeratorAsync(TestContext.Current.CancellationToken);
+            await using XlsxReader.Enumerator e = reader.GetAsyncEnumerator(TestContext.Current.CancellationToken);
 
             Assert.True(await e.MoveNextAsync());
             Assert.Equal("1", e.Current[0].GetString());

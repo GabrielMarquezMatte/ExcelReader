@@ -30,11 +30,9 @@ namespace ExcelReader.Tests
             {
                 string expected = $"value-{i}";
                 using MemoryStream ms = new();
-                await using (XlsxWorkbookWriter wb = await XlsxWorkbookWriter.CreateAsync(ms, leaveOpen: true, ct: TestContext.Current.CancellationToken))
+                await using (XlsxWorkbookWriter wb = XlsxWorkbookWriter.Create(ms, leaveOpen: true))
                 {
-                    await wb.StartAsync(TestContext.Current.CancellationToken);
                     XlsxSheetWriter sheet = wb.AddSheet("Sheet1");
-                    await sheet.StartAsync(TestContext.Current.CancellationToken);
                     await using (XlsxRowWriter row = await sheet.StartRowAsync(TestContext.Current.CancellationToken))
                     {
                         row.Write(expected);

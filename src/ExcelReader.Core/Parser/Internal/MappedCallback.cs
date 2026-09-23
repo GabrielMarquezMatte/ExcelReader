@@ -13,11 +13,11 @@ namespace ExcelReader.Core.Parser.Internal
             Combine = static (left, _) => left,
         };
 
-        internal static CsvAccumulateFactory<byte> Binder(CsvModelMap<TModel> map, int headerRow, CsvRecordAction<TModel> body)
+        internal static CsvAccumulateFactory<byte> Binder(ExcelParser<TModel> parser, int headerRow, CsvRecordAction<TModel> body)
         {
             CsvModelSink<byte, TModel> sink = (ref byte _, TModel model) => body(model);
             return (Row header, bool sequential) =>
-                MappedProjection<byte, TModel>.Bind(map, header, headerRow, sequential, sink);
+                MappedProjection<byte, TModel>.Bind(parser, header, headerRow, sequential, sink);
         }
     }
 }

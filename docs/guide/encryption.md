@@ -65,7 +65,7 @@ using ExcelReader.Core.Reader;
 using ExcelReader.Core.Writer;
 
 using var plain = new MemoryStream();
-await using (var workbook = await XlsxWorkbookWriter.CreateAsync(plain, leaveOpen: true))
+await using (var workbook = XlsxWorkbookWriter.Create(plain, leaveOpen: true))
 {
     // write sheets and rows as usual
 }

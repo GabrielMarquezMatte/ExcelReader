@@ -69,14 +69,8 @@ jobs:
         uses: actions/setup-dotnet@v6
         with:
           global-json-file: global.json
-
-      - name: Cache NuGet packages
-        uses: actions/cache@v6
-        with:
-          path: ~/.nuget/packages
-          key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj', '**/Directory.Build.props') }}
-          restore-keys: |
-            ${{ runner.os }}-nuget-
+          cache: true
+          cache-dependency-path: '**/*.csproj'
 
       - name: Build the native library
         shell: bash
@@ -228,9 +222,6 @@ jobs:
         with:
           fetch-depth: 0
 
-      # No symlink workaround here on purpose: git on Windows checks cpp/include/xl out as a text
-      # file by default, which is exactly what a consumer's FetchContent clone gets, so the build
-      # has to cope with it (cpp/CMakeLists.txt copies the headers into the build tree).
 
       - name: Download native library
         uses: actions/download-artifact@v8

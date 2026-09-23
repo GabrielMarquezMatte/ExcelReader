@@ -1,4 +1,5 @@
 using System.Text;
+using ExcelReader.Core.Enums;
 
 namespace ExcelReader.Core.Reader
 {
@@ -101,6 +102,19 @@ namespace ExcelReader.Core.Reader
             return "";
         }
 
+        /// <summary>Gets the sheet's visibility. Always <see cref="ExcelSheetVisibility.Visible"/>: delimited text has no tab bar to hide from.</summary>
+        public ExcelSheetVisibility SheetVisibility => ExcelSheetVisibility.Visible;
+
+        /// <summary>Gets the visibility of the sheet at <paramref name="index"/>. Always <see cref="ExcelSheetVisibility.Visible"/>.</summary>
+        /// <param name="index">The zero-based sheet index. Must be 0.</param>
+        /// <exception cref="ArgumentOutOfRangeException"><paramref name="index"/> is not 0.</exception>
+        public ExcelSheetVisibility SheetVisibilityAt(int index)
+        {
+            ArgumentOutOfRangeException.ThrowIfNegative(index);
+            ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(index, SheetCount);
+            return ExcelSheetVisibility.Visible;
+        }
+
         /// <summary>Checks whether <paramref name="name"/> matches the (empty) CSV sheet name, case-insensitively.</summary>
         /// <param name="name">The sheet name to look for.</param>
         /// <returns><see langword="true"/> if <paramref name="name"/> is empty; otherwise <see langword="false"/>.</returns>
@@ -135,32 +149,21 @@ namespace ExcelReader.Core.Reader
         }
 
         /// <summary>Gets an enumerator that reads records asynchronously from the start of the source.</summary>
-        public Enumerator GetAsyncEnumerator()
-        {
-            return GetEnumerator();
-        }
-
-        IExcelRowEnumerator IExcelRowReader<IExcelRowEnumerator>.GetAsyncEnumerator()
-        {
-            return GetAsyncEnumerator();
-        }
-
-        /// <summary>Asynchronously creates an enumerator that reads records from the start of the source.</summary>
-        /// <param name="ct">A token to cancel the setup operation.</param>
-        public ValueTask<Enumerator> GetAsyncEnumeratorAsync(CancellationToken ct = default)
+        /// <param name="ct">A token observed by every <c>MoveNextAsync</c> call.</param>
+        public Enumerator GetAsyncEnumerator(CancellationToken ct = default)
         {
             ct.ThrowIfCancellationRequested();
             ResetToStart();
             if (_stream is null)
             {
-                return new ValueTask<Enumerator>(new Enumerator(_memory, _options, ct));
+                return new Enumerator(_memory, _options, ct);
             }
-            return new ValueTask<Enumerator>(new Enumerator(_stream, _options, ct));
+            return new Enumerator(_stream, _options, ct);
         }
 
-        async ValueTask<IExcelRowEnumerator> IExcelRowReader<IExcelRowEnumerator>.GetAsyncEnumeratorAsync(CancellationToken ct)
+        IExcelRowEnumerator IExcelRowReader<IExcelRowEnumerator>.GetAsyncEnumerator(CancellationToken ct)
         {
-            return await GetAsyncEnumeratorAsync(ct).ConfigureAwait(false);
+            return GetAsyncEnumerator(ct);
         }
 
         private void ResetToStart()

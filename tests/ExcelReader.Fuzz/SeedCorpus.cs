@@ -174,12 +174,10 @@ namespace ExcelReader.Fuzz
         private static async Task<byte[]> XlsxAsync()
         {
             using var ms = new MemoryStream();
-            await using (XlsxWorkbookWriter wb = await XlsxWorkbookWriter.CreateAsync(ms, leaveOpen: true))
+            await using (XlsxWorkbookWriter wb = XlsxWorkbookWriter.Create(ms, leaveOpen: true))
             {
-                await wb.StartAsync();
                 XlsxSheetWriter sheet = wb.AddSheet("S");
                 sheet.SetColumnWidth(0, 12);
-                await sheet.StartAsync();
                 await WriteSampleRowsAsync(sheet);
                 await sheet.EndAsync();
                 await wb.EndAsync();
@@ -190,12 +188,10 @@ namespace ExcelReader.Fuzz
         private static async Task<byte[]> XlsbAsync()
         {
             using var ms = new MemoryStream();
-            await using (XlsbWorkbookWriter wb = await XlsbWorkbookWriter.CreateAsync(ms, leaveOpen: true))
+            await using (XlsbWorkbookWriter wb = XlsbWorkbookWriter.Create(ms, leaveOpen: true))
             {
-                await wb.StartAsync();
                 XlsbSheetWriter sheet = wb.AddSheet("S");
                 sheet.SetColumnWidth(0, 12);
-                await sheet.StartAsync();
                 await WriteSampleRowsAsync(sheet);
                 await sheet.EndAsync();
                 await wb.EndAsync();
@@ -208,9 +204,7 @@ namespace ExcelReader.Fuzz
             using var ms = new MemoryStream();
             await using (XlsWorkbookWriter wb = XlsWorkbookWriter.Create(ms, leaveOpen: true))
             {
-                await wb.StartAsync();
                 XlsSheetWriter sheet = wb.AddSheet("S");
-                await sheet.StartAsync();
                 await WriteSampleRowsAsync(sheet);
                 await sheet.EndAsync();
                 await wb.EndAsync();
@@ -221,13 +215,11 @@ namespace ExcelReader.Fuzz
         private static async Task<byte[]> MultiSheetAsync()
         {
             using var ms = new MemoryStream();
-            await using (XlsxWorkbookWriter wb = await XlsxWorkbookWriter.CreateAsync(ms, leaveOpen: true))
+            await using (XlsxWorkbookWriter wb = XlsxWorkbookWriter.Create(ms, leaveOpen: true))
             {
-                await wb.StartAsync();
                 foreach (string name in new[] { "First", "Second" })
                 {
                     XlsxSheetWriter sheet = wb.AddSheet(name);
-                    await sheet.StartAsync();
                     await WriteSampleRowsAsync(sheet);
                     await sheet.EndAsync();
                 }
@@ -239,13 +231,11 @@ namespace ExcelReader.Fuzz
         private static async Task<byte[]> MultiSheetXlsbAsync()
         {
             using var ms = new MemoryStream();
-            await using (XlsbWorkbookWriter wb = await XlsbWorkbookWriter.CreateAsync(ms, leaveOpen: true))
+            await using (XlsbWorkbookWriter wb = XlsbWorkbookWriter.Create(ms, leaveOpen: true))
             {
-                await wb.StartAsync();
                 foreach (string name in new[] { "First", "Second" })
                 {
                     XlsbSheetWriter sheet = wb.AddSheet(name);
-                    await sheet.StartAsync();
                     await WriteSampleRowsAsync(sheet);
                     await sheet.EndAsync();
                 }
@@ -257,11 +247,9 @@ namespace ExcelReader.Fuzz
         private static async Task<byte[]> SharedStringsAsync()
         {
             using var ms = new MemoryStream();
-            await using (XlsxWorkbookWriter wb = await XlsxWorkbookWriter.CreateAsync(ms, leaveOpen: true))
+            await using (XlsxWorkbookWriter wb = XlsxWorkbookWriter.Create(ms, leaveOpen: true))
             {
-                await wb.StartAsync();
                 XlsxSheetWriter sheet = wb.AddSheet("S");
-                await sheet.StartAsync();
                 for (int i = 0; i < 32; i++)
                 {
                     await using XlsxRowWriter row = await sheet.StartRowAsync();
@@ -277,11 +265,9 @@ namespace ExcelReader.Fuzz
         private static async Task<byte[]> BlanksAsync()
         {
             using var ms = new MemoryStream();
-            await using (XlsxWorkbookWriter wb = await XlsxWorkbookWriter.CreateAsync(ms, leaveOpen: true))
+            await using (XlsxWorkbookWriter wb = XlsxWorkbookWriter.Create(ms, leaveOpen: true))
             {
-                await wb.StartAsync();
                 XlsxSheetWriter sheet = wb.AddSheet("S");
-                await sheet.StartAsync();
                 await using (XlsxRowWriter row = await sheet.StartRowAsync())
                 {
                     row.Write(value: (string?)null);
@@ -298,11 +284,9 @@ namespace ExcelReader.Fuzz
         private static async Task<byte[]> EmptySheetAsync()
         {
             using var ms = new MemoryStream();
-            await using (XlsxWorkbookWriter wb = await XlsxWorkbookWriter.CreateAsync(ms, leaveOpen: true))
+            await using (XlsxWorkbookWriter wb = XlsxWorkbookWriter.Create(ms, leaveOpen: true))
             {
-                await wb.StartAsync();
                 XlsxSheetWriter sheet = wb.AddSheet("S");
-                await sheet.StartAsync();
                 await sheet.EndAsync();
                 await wb.EndAsync();
             }

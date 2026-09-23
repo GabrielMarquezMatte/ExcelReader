@@ -56,7 +56,7 @@ namespace ExcelReader.Tests
         {
             await using MemoryStream stream = new(workbook, writable: false);
             await using IExcelRowReader reader = await open(stream, ct);
-            await using IExcelRowEnumerator e = await reader.GetAsyncEnumeratorAsync(ct);
+            await using IExcelRowEnumerator e = reader.GetAsyncEnumerator(ct);
             List<CellSnapshot> cells = [];
             int rowIndex = 0;
             while (await e.MoveNextAsync())
@@ -201,10 +201,8 @@ namespace ExcelReader.Tests
         private static async ValueTask<byte[]> BuildMixedXlsbAsync(CancellationToken ct)
         {
             MemoryStream ms = new();
-            await using XlsbWorkbookWriter wb = await XlsbWorkbookWriter.CreateAsync(ms, leaveOpen: true, ct: ct);
-            await wb.StartAsync(ct);
+            await using XlsbWorkbookWriter wb = XlsbWorkbookWriter.Create(ms, leaveOpen: true);
             XlsbSheetWriter sheet = wb.AddSheet("S1");
-            await sheet.StartAsync(ct);
 
             await using (XlsbRowWriter row = await sheet.StartRowAsync(ct))
             {

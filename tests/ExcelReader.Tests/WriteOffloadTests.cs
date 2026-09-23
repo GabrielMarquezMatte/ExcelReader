@@ -57,14 +57,12 @@ namespace ExcelReader.Tests
         {
             CancellationToken ct = TestContext.Current.CancellationToken;
             using MemoryStream ms = new();
-            await using (XlsxWorkbookWriter wb = await XlsxWorkbookWriter.CreateAsync(ms, leaveOpen: true, prefetchWrite: true, ct: ct))
+            await using (XlsxWorkbookWriter wb = XlsxWorkbookWriter.Create(ms, leaveOpen: true, options: new XlsxWriterOptions { PrefetchWrite = true }))
             {
-                await wb.StartAsync(ct);
                 XlsxSheetWriter sheet = wb.AddSheet("S1");
-                await sheet.StartAsync(ct);
                 for (int r = 0; r < Rows; r++)
                 {
-                    using XlsxRowWriter row = sheet.StartRow(ct);
+                    using XlsxRowWriter row = sheet.StartRow();
                     row.Write(r);
                     row.Write($"row {r} text");
                 }
@@ -89,11 +87,9 @@ namespace ExcelReader.Tests
         {
             CancellationToken ct = TestContext.Current.CancellationToken;
             using MemoryStream ms = new();
-            await using (XlsbWorkbookWriter wb = await XlsbWorkbookWriter.CreateAsync(ms, leaveOpen: true, prefetchWrite: true, ct: ct))
+            await using (XlsbWorkbookWriter wb = XlsbWorkbookWriter.Create(ms, leaveOpen: true, options: new XlsbWriterOptions { PrefetchWrite = true }))
             {
-                await wb.StartAsync(ct);
                 XlsbSheetWriter sheet = wb.AddSheet("S1");
-                await sheet.StartAsync(ct);
                 for (int r = 0; r < 5; r++)
                 {
                     await using XlsbRowWriter row = await sheet.StartRowAsync(ct);
@@ -278,14 +274,12 @@ namespace ExcelReader.Tests
         private static async Task<byte[]> BuildXlsxAsync(bool prefetchWrite, CancellationToken ct)
         {
             MemoryStream ms = new();
-            await using (XlsxWorkbookWriter wb = await XlsxWorkbookWriter.CreateAsync(ms, leaveOpen: true, prefetchWrite: prefetchWrite, ct: ct))
+            await using (XlsxWorkbookWriter wb = XlsxWorkbookWriter.Create(ms, leaveOpen: true, options: new XlsxWriterOptions { PrefetchWrite = prefetchWrite }))
             {
-                await wb.StartAsync(ct);
                 XlsxSheetWriter sheet = wb.AddSheet("S1");
-                await sheet.StartAsync(ct);
                 for (int r = 0; r < Rows; r++)
                 {
-                    await using XlsxRowWriter row = sheet.StartRow(ct);
+                    await using XlsxRowWriter row = sheet.StartRow();
                     row.Write(r);
                     row.Write($"row {r} text");
                 }
@@ -297,11 +291,9 @@ namespace ExcelReader.Tests
         private static async Task<byte[]> BuildXlsbAsync(bool prefetchWrite, CancellationToken ct)
         {
             MemoryStream ms = new();
-            await using (XlsbWorkbookWriter wb = await XlsbWorkbookWriter.CreateAsync(ms, leaveOpen: true, prefetchWrite: prefetchWrite, ct: ct))
+            await using (XlsbWorkbookWriter wb = XlsbWorkbookWriter.Create(ms, leaveOpen: true, options: new XlsbWriterOptions { PrefetchWrite = prefetchWrite }))
             {
-                await wb.StartAsync(ct);
                 XlsbSheetWriter sheet = wb.AddSheet("S1");
-                await sheet.StartAsync(ct);
                 for (int r = 0; r < Rows; r++)
                 {
                     await using XlsbRowWriter row = await sheet.StartRowAsync(ct);

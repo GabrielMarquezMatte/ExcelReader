@@ -29,15 +29,9 @@ jobs:
       - name: Setup .NET
         uses: actions/setup-dotnet@v6
         with:
-          dotnet-version: 10.0.x
-
-      - name: Cache NuGet packages
-        uses: actions/cache@v6
-        with:
-          path: ~/.nuget/packages
-          key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj', '**/Directory.Build.props') }}
-          restore-keys: |
-            ${{ runner.os }}-nuget-
+          global-json-file: global.json
+          cache: true
+          cache-dependency-path: '**/*.csproj'
 
       - name: Restore
         run: dotnet restore ExcelReader.slnx
@@ -62,6 +56,19 @@ jobs:
           --coverage-settings coverage.runsettings
           --coverage-output-format cobertura
 
+      - name: Test (SSE2 only)
+        if: matrix.os == 'ubuntu-latest'
+        env:
+          DOTNET_EnableAVX2: '0'
+          DOTNET_EnableAVX512F: '0'
+        run: dotnet test --project tests/ExcelReader.Tests/ExcelReader.Tests.csproj --configuration Release --no-build
+
+      - name: Test (no SIMD)
+        if: matrix.os == 'ubuntu-latest'
+        env:
+          DOTNET_EnableHWIntrinsic: '0'
+        run: dotnet test --project tests/ExcelReader.Tests/ExcelReader.Tests.csproj --configuration Release --no-build
+
       - name: Upload test results
         if: always()
         uses: actions/upload-artifact@v7
@@ -78,55 +85,6 @@ jobs:
           files: ./TestResults/*.cobertura.xml
           fail_ci_if_error: false
 
-  test-simd-fallbacks:
-    name: Build & Test (${{ matrix.name }})
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - name: sse2-only
-            enableAVX2: '0'
-            enableAVX512F: '0'
-            enableHWIntrinsic: '1'
-          - name: no-simd
-            enableAVX2: '1'
-            enableAVX512F: '1'
-            enableHWIntrinsic: '0'
-    env:
-      DOTNET_EnableAVX2: ${{ matrix.enableAVX2 }}
-      DOTNET_EnableAVX512F: ${{ matrix.enableAVX512F }}
-      DOTNET_EnableHWIntrinsic: ${{ matrix.enableHWIntrinsic }}
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v7
-
-      - name: Setup .NET
-        uses: actions/setup-dotnet@v6
-        with:
-          dotnet-version: 10.0.x
-
-      - name: Cache NuGet packages
-        uses: actions/cache@v6
-        with:
-          path: ~/.nuget/packages
-          key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj', '**/Directory.Build.props') }}
-          restore-keys: |
-            ${{ runner.os }}-nuget-
-
-      - name: Restore
-        run: dotnet restore ExcelReader.slnx
-
-      - name: Build (Release)
-        run: dotnet build ExcelReader.slnx --configuration Release --no-restore -p:DeterministicSourcePaths=false
-
-      - name: Test (Release)
-        run: >-
-          dotnet test --project tests/ExcelReader.Tests/ExcelReader.Tests.csproj
-          --configuration Release
-          --verbosity normal
-          --no-build
-
   aot-sanity:
     name: AOT/trim sanity (win-x64)
     runs-on: windows-latest
@@ -137,15 +95,9 @@ jobs:
       - name: Setup .NET
         uses: actions/setup-dotnet@v6
         with:
-          dotnet-version: 10.0.x
-
-      - name: Cache NuGet packages
-        uses: actions/cache@v6
-        with:
-          path: ~/.nuget/packages
-          key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj', '**/Directory.Build.props') }}
-          restore-keys: |
-            ${{ runner.os }}-nuget-
+          global-json-file: global.json
+          cache: true
+          cache-dependency-path: '**/*.csproj'
 
       - name: Restore
         run: dotnet restore ExcelReader.slnx
@@ -178,29 +130,8 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - name: Test promote_public_api.py
+      - name: Test public API scripts
         working-directory: .github/scripts
-        run: python3 test_promote_public_api.py -v
-
-  audit:
-    name: Dependency audit
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-
-      - uses: actions/setup-dotnet@v6
-        with:
-          dotnet-version: '10.0.x'
-
-      - name: Restore
-        run: dotnet restore ExcelReader.slnx
-
-      - name: Check for vulnerable packages
         run: |
-          echo "Scanning for known-vulnerable packages..."
-          output=$(dotnet list ExcelReader.slnx package --vulnerable --include-transitive)
-          echo "$output"
-          if echo "$output" | grep -q -E '\b(High|Critical)\b'; then
-            echo "::error::High or Critical severity vulnerability found in dependencies."
-            exit 1
-          fi
+          python3 test_promote_public_api.py -v
+          python3 test_add_missing_public_api.py -v

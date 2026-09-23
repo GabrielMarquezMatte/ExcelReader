@@ -94,7 +94,7 @@ namespace ExcelReader.Native
 
         internal CsvReaderOptions ToCsvReaderOptions()
         {
-            CsvReaderOptions options = CsvReaderOptions.Default;
+            CsvReaderOptions options = CsvSniffDialect ? CsvReaderOptions.Default with { SniffDialect = true } : CsvReaderOptions.Default;
             if (CsvDelimiter is byte delimiter)
             {
                 options = options with { Delimiter = delimiter };
@@ -149,7 +149,7 @@ namespace ExcelReader.Native
             {
                 options = options with { Password = Password };
             }
-            return options;
+            return options with { Csv = ToCsvReaderOptions() };
         }
 
         internal static bool TryDecode(NativeOpenOptionsRaw raw, out NativeOpenOptions options, out string? error)

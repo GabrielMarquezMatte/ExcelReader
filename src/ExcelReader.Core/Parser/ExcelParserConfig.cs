@@ -3,8 +3,8 @@ using System.Globalization;
 namespace ExcelReader.Core.Parser
 {
     /// <summary>
-    /// Options controlling how <see cref="ExcelParser{T}"/> and <c>RefParser</c> locate the header
-    /// row, match header text to bound properties, and handle cells that fail to parse.
+    /// Options controlling how <see cref="ExcelParser{T}"/> locates the header row, matches header
+    /// text to bound properties, and handles cells that fail to parse.
     /// </summary>
     public sealed class ExcelParserConfig
     {

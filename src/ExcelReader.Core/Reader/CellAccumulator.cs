@@ -101,6 +101,26 @@ namespace ExcelReader.Core.Reader
 
         internal CellDesc[] RawCells => _cells;
 
+        internal void ReserveCells(int capacity)
+        {
+            if (_maxCellBytes > 0)
+            {
+                int allowed = _maxCellBytes / Unsafe.SizeOf<CellDesc>();
+                if (capacity > allowed)
+                {
+                    capacity = allowed;
+                }
+            }
+            if (capacity <= _cells.Length)
+            {
+                return;
+            }
+            CellDesc[] bigger = ArrayPool<CellDesc>.Shared.Rent(capacity);
+            Array.Copy(_cells, bigger, Count);
+            ArrayPool<CellDesc>.Shared.Return(_cells);
+            _cells = bigger;
+        }
+
         internal void CommitAscending(int count, int lastCol)
         {
             Count = count;

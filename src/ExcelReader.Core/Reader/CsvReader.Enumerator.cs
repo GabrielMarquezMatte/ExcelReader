@@ -1,6 +1,7 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Numerics;
 using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 using ExcelReader.Core.Enums;
 using ExcelReader.Core.ValueObjects;
 
@@ -17,7 +18,7 @@ namespace ExcelReader.Core.Reader
     {
         Done,
         NeedMore,
-        Quoted,
+        Generic,
     }
 
     public sealed partial class CsvReader
@@ -36,8 +37,10 @@ namespace ExcelReader.Core.Reader
         {
             private const byte Cr = (byte)'\r';
             private const byte Lf = (byte)'\n';
-            private const int ChunkExhausted = -1;
+            private const int BufferExhausted = -1;
             private const int NeedsGeneric = -2;
+            private const int BatchRecords = 128;
+            private const int BatchCells = 256;
 
             private readonly byte _delimiter;
             private readonly byte _quote;
@@ -49,8 +52,16 @@ namespace ExcelReader.Core.Reader
 
             private long _recordStart;
 
-            private CsvControlScanner _scanner;
+            private CsvStructuralScanner _scanner;
             private bool _scannerValid;
+            private readonly bool _scannerSupported;
+
+            private readonly int[] _batchCellEnds = new int[BatchRecords];
+            private readonly int[] _batchRecordStarts = new int[BatchRecords];
+            private int _batchSize;
+            private int _batchNext;
+            private int _firstCell;
+            private int _cellCount;
 
             private readonly Utf8StringCache? _contentCache;
 
@@ -69,7 +80,8 @@ namespace ExcelReader.Core.Reader
                 _quote = options.Quote;
                 _stripBom = options.DetectEncodingFromByteOrderMark;
                 _contentCache = options.InternStrings ? new Utf8StringCache() : null;
-                _scanner = new CsvControlScanner(_delimiter, _quote);
+                _scanner = new CsvStructuralScanner(_delimiter, _quote);
+                _scannerSupported = CsvStructuralScanner.Supports(_delimiter, _quote);
             }
 
             internal Enumerator(ReadOnlyMemory<byte> content, CsvReaderOptions options, CancellationToken ct = default)
@@ -79,26 +91,40 @@ namespace ExcelReader.Core.Reader
                 _quote = options.Quote;
                 _stripBom = options.DetectEncodingFromByteOrderMark;
                 _contentCache = options.InternStrings ? new Utf8StringCache() : null;
-                _scanner = new CsvControlScanner(_delimiter, _quote);
+                _scanner = new CsvStructuralScanner(_delimiter, _quote);
+                _scannerSupported = CsvStructuralScanner.Supports(_delimiter, _quote);
             }
 
             /// <inheritdoc/>
-            public Row Current => new(_acc.CellSpan, _buf.AsSpan(0, _len), _acc.ValueSpan, rowBuffer: default, sharedStringCache: null, contentCache: _contentCache);
+            public Row Current => new(RecordCells, _buf.AsSpan(0, _len), _acc.ValueSpan, rowBuffer: default, sharedStringCache: null, contentCache: _contentCache);
 
             internal long CurrentRecordStart => _recordStart;
 
-            internal int FieldCount => _acc.Count;
+            internal int FieldCount => _cellCount;
+
+            private ReadOnlySpan<CellDesc> RecordCells
+            {
+                get
+                {
+                    return _acc.RawCells.AsSpan(_firstCell, _cellCount);
+                }
+            }
 
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
             internal Cell FieldAt(int index)
             {
-                ref readonly CellDesc d = ref _acc.CellSpan[index];
+                ref readonly CellDesc d = ref RecordCells[index];
                 return d.ToCell(_buf.AsSpan(0, _len), _acc.ValueSpan, rowBuffer: default, sharedStringCache: null, contentCache: _contentCache);
             }
 
             /// <inheritdoc/>
             public bool MoveNext()
             {
+                if (_batchNext < _batchSize)
+                {
+                    DeliverBatched();
+                    return true;
+                }
                 if (!_bomChecked || _pos >= _len)
                 {
                     EnsureBomStripped();
@@ -125,6 +151,11 @@ namespace ExcelReader.Core.Reader
             /// <inheritdoc/>
             public ValueTask<bool> MoveNextAsync()
             {
+                if (_batchNext < _batchSize)
+                {
+                    DeliverBatched();
+                    return new ValueTask<bool>(true);
+                }
                 if (!_bomChecked || _pos >= _len)
                 {
                     return MoveNextSlowAsync();
@@ -191,19 +222,28 @@ namespace ExcelReader.Core.Reader
             {
                 _acc.Reset();
                 _col = 0;
+                _batchSize = 0;
+                _batchNext = 0;
+            }
+
+            private void DeliverBatched()
+            {
+                int record = _batchNext++;
+                _firstCell = record == 0 ? 0 : _firstCell + _cellCount;
+                _cellCount = _batchCellEnds[record] - _firstCell;
+                _recordStart = _io.BaseOffset + _batchRecordStarts[record];
             }
 
             // ponytail: restart-on-refill re-scans the partial record after every Fill — fine while
             private bool TryParseRecordFromBuffer()
             {
                 int len = _len;
-                byte delim = _delimiter;
-                byte quote = _quote;
                 int recordStart = _pos;
 
-                SimpleRecordOutcome simple = TryParseSimpleRecord(len, recordStart, out int quotedFieldStart);
+                SimpleRecordOutcome simple = TryParseSimpleRecord(len, recordStart, out int genericFieldStart);
                 if (simple == SimpleRecordOutcome.Done)
                 {
+                    DeliverBatched();
                     return true;
                 }
                 _scannerValid = false;
@@ -212,9 +252,21 @@ namespace ExcelReader.Core.Reader
                     _pos = recordStart;
                     return false;
                 }
+                _firstCell = 0;
+                if (!TryParseGenericRest(len, genericFieldStart))
+                {
+                    return false;
+                }
+                _cellCount = _acc.Count;
+                return true;
+            }
 
+            [MethodImpl(MethodImplOptions.NoInlining)]
+            private bool TryParseGenericRest(int len, int pos)
+            {
+                byte delim = _delimiter;
+                byte quote = _quote;
                 ReadOnlySpan<byte> buf = _buf.AsSpan(0, len);
-                int pos = quotedFieldStart;
                 FieldState f = default;
 
                 while (true)
@@ -247,144 +299,220 @@ namespace ExcelReader.Core.Reader
                 }
             }
 
-            private SimpleRecordOutcome TryParseSimpleRecord(int len, int pos, out int quotedFieldStart)
+            private SimpleRecordOutcome TryParseSimpleRecord(int len, int pos, out int genericFieldStart)
             {
-                quotedFieldStart = pos;
-                if (_scannerValid)
+                genericFieldStart = pos;
+                if (!_scannerSupported)
                 {
-                    _scanner.Continue(_buf, len);
+                    return SimpleRecordOutcome.Generic;
                 }
-                else
+                if (!_scannerValid)
                 {
                     _scanner.Reset(_buf, len, pos);
                     _scannerValid = true;
                 }
-                byte[] buf = _buf;
+                _acc.ReserveCells(BatchCells);
                 int fieldStart = pos;
-                while (true)
+                _batchRecordStarts[0] = pos;
+                int recordEnd = DrainFields(_buf, ref fieldStart);
+                genericFieldStart = fieldStart;
+                if (recordEnd >= 0)
                 {
-                    int recordEnd = DrainFields(buf, ref fieldStart);
-                    if (recordEnd >= 0)
-                    {
-                        _pos = recordEnd;
-                        return SimpleRecordOutcome.Done;
-                    }
-                    int stop = _scanner.Next();
-                    if (stop < 0)
-                    {
-                        if (!_eof)
-                        {
-                            return SimpleRecordOutcome.NeedMore;
-                        }
-                        AddField(fieldStart, len - fieldStart);
-                        _pos = len;
-                        return SimpleRecordOutcome.Done;
-                    }
-                    byte b = buf[stop];
-                    if (b == _quote)
-                    {
-                        quotedFieldStart = fieldStart;
-                        return SimpleRecordOutcome.Quoted;
-                    }
-                    if (b == _delimiter)
-                    {
-                        AddField(fieldStart, stop - fieldStart);
-                        fieldStart = stop + 1;
-                        continue;
-                    }
-                    if (b == Cr && stop + 1 >= len && !_eof)
-                    {
-                        return SimpleRecordOutcome.NeedMore;
-                    }
-                    AddField(fieldStart, stop - fieldStart);
-                    bool isCrLf = b == Cr && stop + 1 < len && buf[stop + 1] == Lf;
-                    if (isCrLf)
-                    {
-                        _scanner.SkipByte(stop + 1);
-                    }
-                    _pos = stop + (isCrLf ? 2 : 1);
+                    _pos = recordEnd;
                     return SimpleRecordOutcome.Done;
                 }
-            }
-
-            private void AddField(int start, int length)
-            {
-                _acc.Add(_col++, start, length, length == 0 ? CellType.Empty : CellType.ExcelString,
-                         style: 0, CellValueSource.RowValues);
+                if (recordEnd == NeedsGeneric)
+                {
+                    return SimpleRecordOutcome.Generic;
+                }
+                if (!_eof)
+                {
+                    return SimpleRecordOutcome.NeedMore;
+                }
+                if (_scanner.EndsInsideQuotes)
+                {
+                    return SimpleRecordOutcome.Generic;
+                }
+                CellDesc last = DescribeField(_buf, fieldStart, len - fieldStart, _scanner.Escapes != 0, _col);
+                _acc.Add(_col++, last.Start, last.Length, last.Type, style: 0, last.Source);
+                _batchCellEnds[0] = _acc.Count;
+                _batchRecordStarts[0] = pos;
+                _batchSize = 1;
+                _pos = len;
+                return SimpleRecordOutcome.Done;
             }
 
             [MethodImpl(MethodImplOptions.NoInlining)]
             private int DrainFields(byte[] buf, ref int fieldStart)
             {
-                if (!_scanner.TryTakeMask(out uint mask, out int chunkStart))
-                {
-                    return NeedsGeneric;
-                }
-                CellAccumulator acc = _acc;
-                CellDesc[] cells = acc.RawCells;
-                byte delimiter = _delimiter;
-                int n = acc.Count;
-                int c = _col;
+                ref CellDesc cells = ref MemoryMarshal.GetArrayDataReference(_acc.RawCells);
+                int n = _acc.Count;
+                int first = n;
                 int start = fieldStart;
-                int recordEnd = ChunkExhausted;
+                ulong ends = 0;
+                ulong escapes = 0;
+                int blockStart = 0;
+                int result;
                 while (true)
                 {
-                    if (mask == 0)
+                    if (ends == 0)
                     {
-                        if (_scanner.TryTakeMask(out mask, out chunkStart))
+                        ulong carried = escapes != 0 ? 1UL : 0UL;
+                        if (!_scanner.TryTakeBlock())
                         {
-                            continue;
+                            result = _scanner.Blocked ? NeedsGeneric : BufferExhausted;
+                            break;
                         }
-                        recordEnd = NeedsGeneric;
-                        break;
+                        ends = _scanner.Ends;
+                        escapes = _scanner.Escapes | carried;
+                        blockStart = _scanner.BlockStart;
+                        if (!BlockFits(n, first, ends))
+                        {
+                            result = NeedsGeneric;
+                            break;
+                        }
+                        continue;
                     }
-                    int stop = chunkStart + BitOperations.TrailingZeroCount(mask);
-                    byte b = buf[stop];
-                    uint rest = mask & (mask - 1);
-                    if (b == delimiter)
+                    int bit = BitOperations.TrailingZeroCount(ends);
+                    int stop = blockStart + bit;
+                    bool isRecordEnd = buf[stop] != _delimiter;
+                    if (isRecordEnd && IsCrAwaitingLf(buf, stop))
                     {
-                        recordEnd = ChunkExhausted;
-                    }
-                    else if (b == Lf)
-                    {
-                        recordEnd = stop + 1;
-                    }
-                    else if (b == Cr && rest != 0 && chunkStart + BitOperations.TrailingZeroCount(rest) == stop + 1 && buf[stop + 1] == Lf)
-                    {
-                        recordEnd = stop + 2;
-                        rest &= rest - 1;
-                    }
-                    else
-                    {
-                        recordEnd = NeedsGeneric;
-                    }
-                    if (recordEnd == NeedsGeneric || (uint)n >= (uint)cells.Length || (uint)c >= ExcelLimits.MaxColumns)
-                    {
-                        recordEnd = NeedsGeneric;
+                        result = BufferExhausted;
                         break;
                     }
                     int length = stop - start;
-                    cells[n++] = new CellDesc
+                    if (length != 0 && buf[start] == _quote)
                     {
-                        Column = c++,
-                        Start = start,
-                        Length = length,
-                        Type = length == 0 ? CellType.Empty : CellType.ExcelString,
-                        Source = CellValueSource.RowValues,
-                        SharedIndex = -1,
-                    };
+                        ulong escapesInField = escapes & ((2UL << bit) - 1);
+                        escapes ^= escapesInField;
+                        Unsafe.Add(ref cells, n) = DescribeQuotedField(buf, start, length, escapesInField != 0, n - first);
+                    }
+                    else
+                    {
+                        Unsafe.Add(ref cells, n) = TextField(n - first, start, length, CellValueSource.RowValues);
+                    }
+                    n++;
+                    ends &= ends - 1;
                     start = stop + 1;
-                    mask = rest;
-                    if (recordEnd >= 0)
+                    if (isRecordEnd)
                     {
-                        break;
+                        start = SkipLfAfterCr(buf, stop);
+                        int recordCells = n - first;
+                        first = n;
+                        if (AddBatchedRecord(n, recordCells, start))
+                        {
+                            result = start;
+                            break;
+                        }
                     }
                 }
-                acc.CommitAscending(n, c - 1);
-                _col = c;
+                _scanner.PutBack(ends, escapes);
+                return FinishDrain(n, first, start, result, ref fieldStart);
+            }
+
+            private bool BlockFits(int n, int first, ulong ends)
+            {
+                int fields = BitOperations.PopCount(ends);
+                return n + fields <= _acc.RawCells.Length && n - first + fields <= ExcelLimits.MaxColumns;
+            }
+
+            private int FinishDrain(int n, int first, int start, int result, ref int fieldStart)
+            {
+                if (_batchSize > 0 && result < 0)
+                {
+                    n = first;
+                    start = _batchRecordStarts[_batchSize];
+                    result = start;
+                    _scannerValid = false;
+                }
+                _acc.CommitAscending(n, n - first - 1);
+                _col = n - first;
                 fieldStart = start;
-                _scanner.PutBack(mask, chunkStart);
-                return recordEnd;
+                return result;
+            }
+
+            private bool AddBatchedRecord(int cellEnd, int recordCells, int nextRecordStart)
+            {
+                int record = _batchSize++;
+                _batchCellEnds[record] = cellEnd;
+                if (_batchSize == BatchRecords || cellEnd + recordCells > BatchCells)
+                {
+                    return true;
+                }
+                _batchRecordStarts[_batchSize] = nextRecordStart;
+                return false;
+            }
+
+            private bool IsCrAwaitingLf(byte[] buf, int recordTerminator)
+            {
+                return buf[recordTerminator] == Cr && recordTerminator + 1 >= _len && !_eof;
+            }
+
+            private int SkipLfAfterCr(byte[] buf, int recordTerminator)
+            {
+                int next = recordTerminator + 1;
+                if (buf[recordTerminator] == Cr && next < _len && buf[next] == Lf)
+                {
+                    return next + 1;
+                }
+                return next;
+            }
+
+            private CellDesc DescribeField(byte[] buf, int start, int length, bool escaped, int col)
+            {
+                if (length != 0 && buf[start] == _quote)
+                {
+                    return DescribeQuotedField(buf, start, length, escaped, col);
+                }
+                return TextField(col, start, length, CellValueSource.RowValues);
+            }
+
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            private CellDesc DescribeQuotedField(byte[] buf, int start, int length, bool escaped, int col)
+            {
+                if (escaped)
+                {
+                    return EscapedField(buf.AsSpan(start + 1, length - 2), col);
+                }
+                return TextField(col, start + 1, length - 2, CellValueSource.RowValues);
+            }
+
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            private static CellDesc TextField(int col, int start, int length, CellValueSource source)
+            {
+                return new CellDesc
+                {
+                    Column = col,
+                    Start = start,
+                    Length = length,
+                    Type = length == 0 ? CellType.Empty : CellType.ExcelString,
+                    Source = source,
+                    SharedIndex = -1,
+                };
+            }
+
+            [MethodImpl(MethodImplOptions.NoInlining)]
+            private CellDesc EscapedField(ReadOnlySpan<byte> content, int col)
+            {
+                int valueStart = _acc.ValueLength;
+                Span<byte> dst = _acc.ReserveValueSpan(content.Length);
+                int written = 0;
+                while (true)
+                {
+                    int quoteAt = content.IndexOf(_quote);
+                    if (quoteAt < 0)
+                    {
+                        content.CopyTo(dst[written..]);
+                        written += content.Length;
+                        break;
+                    }
+                    content[..(quoteAt + 1)].CopyTo(dst[written..]);
+                    written += quoteAt + 1;
+                    content = content[(quoteAt + 2)..];
+                }
+                _acc.Advance(written);
+                return TextField(col, valueStart, written, CellValueSource.Shared);
             }
 
             private bool TryParseQuotedContent(ReadOnlySpan<byte> buf, int len, byte quote, ref int pos, ref FieldState f)

@@ -62,7 +62,7 @@ namespace ExcelReader.Benchmarks
         {
             await using var ms = new MemoryStream(_csv, writable: false);
             await using var reader = Excel.FromCsv(ms);
-            await using var e = await reader.GetAsyncEnumeratorAsync();
+            await using var e = reader.GetAsyncEnumerator();
             long acc = 0;
             while (await e.MoveNextAsync())
             {
@@ -123,7 +123,7 @@ namespace ExcelReader.Benchmarks
             long acc = 0;
             while (reader.Read())
             {
-                acc += reader.GetString(0).Length;
+                acc += reader.GetFieldSpan(0).Length;
                 acc += reader.GetInt32(1);
                 acc += reader.GetDateTime(2).Ticks;
                 acc += (long)reader.GetDouble(3);

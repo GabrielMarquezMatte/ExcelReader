@@ -48,13 +48,13 @@ namespace ExcelReader.Benchmarks
         public static Task<byte[]> BuildXlsxAsync(int rows)
         {
             return BuildAsync<XlsxWorkbookWriter, XlsxSheetWriter, XlsxRowWriter>(
-                rows, static ms => XlsxWorkbookWriter.CreateAsync(ms, leaveOpen: true, useSharedStrings: true));
+                rows, static ms => XlsxWorkbookWriter.Create(ms, leaveOpen: true, options: new XlsxWriterOptions { UseSharedStrings = true }));
         }
 
         public static Task<byte[]> BuildXlsbAsync(int rows)
         {
             return BuildAsync<XlsbWorkbookWriter, XlsbSheetWriter, XlsbRowWriter>(
-                rows, static ms => XlsbWorkbookWriter.CreateAsync(ms, leaveOpen: true, useSharedStrings: true));
+                rows, static ms => XlsbWorkbookWriter.Create(ms, leaveOpen: true, options: new XlsbWriterOptions { UseSharedStrings = true }));
         }
 
         public static async Task<byte[]> BuildXlsAsync(int rows)
@@ -62,9 +62,7 @@ namespace ExcelReader.Benchmarks
             await using MemoryStream ms = new();
             await using (XlsWorkbookWriter wb = XlsWorkbookWriter.Create(ms, leaveOpen: true))
             {
-                wb.Start();
                 XlsSheetWriter sheet = wb.AddSheet("S1");
-                sheet.Start();
                 using (XlsRowWriter header = sheet.StartRow())
                 {
                     WriteHeader(header);
@@ -109,17 +107,15 @@ namespace ExcelReader.Benchmarks
 
         private static async Task<byte[]> BuildAsync<TWorkbook, TSheet, TRow>(
             int rows,
-            Func<MemoryStream, ValueTask<TWorkbook>> create)
+            Func<MemoryStream, TWorkbook> create)
             where TWorkbook : IWorkbookWriter<TSheet>
             where TSheet : ISheetWriter<TRow>
             where TRow : IRowWriter
         {
             await using var ms = new MemoryStream();
-            await using (TWorkbook wb = await create(ms))
+            await using (TWorkbook wb = create(ms))
             {
-                await wb.StartAsync();
                 TSheet sheet = wb.AddSheet("S1");
-                await sheet.StartAsync();
                 await using (TRow header = await sheet.StartRowAsync())
                 {
                     WriteHeader(header);

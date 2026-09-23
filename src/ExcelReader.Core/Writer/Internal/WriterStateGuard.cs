@@ -1,3 +1,5 @@
+using ExcelReader.Core.Enums;
+
 namespace ExcelReader.Core.Writer.Internal
 {
     internal static class WriterStateGuard
@@ -5,22 +7,6 @@ namespace ExcelReader.Core.Writer.Internal
         internal static void ThrowIfEnded(WriterState state, object writer)
         {
             ObjectDisposedException.ThrowIf(state == WriterState.Ended, writer);
-        }
-
-        internal static void RequireCreated(WriterState state, string typeName)
-        {
-            if (state != WriterState.Created)
-            {
-                throw new InvalidOperationException($"{typeName} has already been started.");
-            }
-        }
-
-        internal static void RequireStarted(WriterState state, string typeName, string action)
-        {
-            if (state != WriterState.Started)
-            {
-                throw new InvalidOperationException($"{typeName} must be started before {action}.");
-            }
         }
 
         internal static void RequireNoActiveRowForStart(bool rowActive, string rowWriterTypeName)
@@ -40,17 +26,33 @@ namespace ExcelReader.Core.Writer.Internal
         }
 
         internal static void RequireCanAddSheet(
-            WriterState state, object owner, string workbookTypeName, string name,
-            bool sheetActive, string sheetWriterTypeName)
+            bool ended, object owner, string name,
+            bool sheetActive, string sheetWriterTypeName, ExcelSheetVisibility visibility = ExcelSheetVisibility.Visible)
         {
             ArgumentNullException.ThrowIfNull(name);
-            ThrowIfEnded(state, owner);
-            RequireStarted(state, workbookTypeName, "adding sheets");
+            ObjectDisposedException.ThrowIf(ended, owner);
             ValidateSheetName(name);
+            if (visibility is not (ExcelSheetVisibility.Visible or ExcelSheetVisibility.Hidden or ExcelSheetVisibility.VeryHidden))
+            {
+                throw new ArgumentOutOfRangeException(nameof(visibility), visibility, "Not a defined ExcelSheetVisibility value.");
+            }
             if (sheetActive)
             {
                 throw new InvalidOperationException(
                     $"The previous {sheetWriterTypeName} must be ended before adding a new sheet.");
+            }
+        }
+
+        /// <summary>
+        /// Guards against a workbook whose sheets are all hidden: the file formats allow it, but Excel
+        /// reports such a workbook as damaged, so producing one is a bug worth surfacing at write time.
+        /// </summary>
+        internal static void RequireVisibleSheet(bool anyVisible, string workbookTypeName)
+        {
+            if (!anyVisible)
+            {
+                throw new InvalidOperationException(
+                    $"{workbookTypeName} must contain at least one visible sheet; Excel rejects a workbook whose sheets are all hidden.");
             }
         }
 

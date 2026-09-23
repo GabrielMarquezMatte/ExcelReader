@@ -79,7 +79,7 @@ namespace ExcelReader.Generator
         private static readonly DiagnosticDescriptor GenericTypeNotSupportedDescriptor = new(
             "EXR007",
             "[ExcelSerializable] does not support generic types",
-            "Type '{0}' is generic; [ExcelSerializable] supports only non-generic types. Map it with ExcelFluentParser<T> or a hand-written IExcelRowMap<T> instead.",
+            "Type '{0}' is generic; [ExcelSerializable] supports only non-generic types. Map it with ExcelParser.Build or a hand-written IExcelRowMap<T> instead.",
             "ExcelReader.Generator",
             DiagnosticSeverity.Error,
             isEnabledByDefault: true);
@@ -87,7 +87,7 @@ namespace ExcelReader.Generator
         private static readonly DiagnosticDescriptor NoParameterlessConstructorDescriptor = new(
             "EXR008",
             "Type has no public parameterless constructor",
-            "Type '{0}' has no public parameterless constructor, so no row instance can be created for it; add one, or map it with ExcelFluentParser<T>",
+            "Type '{0}' has no public parameterless constructor, so no row instance can be created for it; add one, or map it with ExcelParser.Build",
             "ExcelReader.Generator",
             DiagnosticSeverity.Error,
             isEnabledByDefault: true);
@@ -107,6 +107,7 @@ namespace ExcelReader.Generator
             None,
             Direct,
             ToStringFallback,
+            InvariantText,
             Utf8Text,
         }
 
@@ -326,7 +327,7 @@ namespace ExcelReader.Generator
                 if (canGet && writeKind != WriteKind.None)
                 {
                     bool needsNullConditional = isNullable || !underlying.IsValueType;
-                    string valueExpr = WriteValueExpression(writeKind, needsNullConditional, member);
+                    string valueExpr = WriteValueExpression(writeKind, needsNullConditional, member, underlying);
                     writeEmit = $"            .Column(\"{names[0].Replace("\"", "\\\"")}\", static (row, m) => row.Write({valueExpr}))";
                 }
             }
@@ -348,7 +349,7 @@ namespace ExcelReader.Generator
             return isNullable ? ReadKind.Nullable : ReadKind.Value;
         }
 
-        private static string WriteValueExpression(WriteKind kind, bool needsNullConditional, string propertyName)
+        private static string WriteValueExpression(WriteKind kind, bool needsNullConditional, string propertyName, ITypeSymbol underlying)
         {
             if (kind == WriteKind.Utf8Text)
             {
@@ -358,7 +359,35 @@ namespace ExcelReader.Generator
             {
                 return $"m.{propertyName}";
             }
+            if (kind == WriteKind.InvariantText)
+            {
+                string args = (IsSystemType(underlying, "DateTimeOffset") ? "\"O\"" : "null") + ", global::System.Globalization.CultureInfo.InvariantCulture";
+                if (HasPublicFormattableToString(underlying))
+                {
+                    return needsNullConditional ? $"m.{propertyName}?.ToString({args})" : $"m.{propertyName}.ToString({args})";
+                }
+                if (!underlying.IsValueType)
+                {
+                    return $"((global::System.IFormattable?)m.{propertyName})?.ToString({args})";
+                }
+                return needsNullConditional
+                    ? $"(m.{propertyName} is {{ }} v ? ((global::System.IFormattable)v).ToString({args}) : null)"
+                    : $"((global::System.IFormattable)m.{propertyName}).ToString({args})";
+            }
             return needsNullConditional ? $"m.{propertyName}?.ToString()" : $"m.{propertyName}.ToString()";
+        }
+
+        private static bool ImplementsFormattable(ITypeSymbol type)
+        {
+            return type.AllInterfaces.Any(static i => string.Equals(i.ToDisplayString(), "System.IFormattable", StringComparison.Ordinal));
+        }
+
+        private static bool HasPublicFormattableToString(ITypeSymbol type)
+        {
+            return type.GetMembers("ToString").OfType<IMethodSymbol>().Any(static m =>
+                m is { DeclaredAccessibility: Accessibility.Public, IsStatic: false, Parameters.Length: 2 }
+                && m.Parameters[0].Type.SpecialType == SpecialType.System_String
+                && string.Equals(m.Parameters[1].Type.ToDisplayString(), "System.IFormatProvider", StringComparison.Ordinal));
         }
 
         private static WriteKind GetWriteKind(ITypeSymbol underlying)
@@ -369,9 +398,14 @@ namespace ExcelReader.Generator
             }
             if (underlying.SpecialType is SpecialType.System_String or SpecialType.System_Boolean
                 || IsSystemType(underlying, "DateTime") || IsSystemType(underlying, "DateOnly") || IsSystemType(underlying, "TimeOnly")
-                || NumericWriteSpecialTypes.Contains(underlying.SpecialType))
+                || IsSystemType(underlying, "Half") || NumericWriteSpecialTypes.Contains(underlying.SpecialType))
             {
                 return WriteKind.Direct;
+            }
+            // Enums keep ToString(): their IFormattable overload ignores the provider and is obsolete.
+            if (underlying.TypeKind != TypeKind.Enum && ImplementsFormattable(underlying))
+            {
+                return WriteKind.InvariantText;
             }
             return WriteKind.ToStringFallback;
         }
@@ -411,10 +445,15 @@ namespace ExcelReader.Generator
             {
                 return (string.Empty, "global::System.Guid", true);
             }
-            if (IsUtf8SpanParsable(underlying))
+            if (IsSelfParsable(underlying, "IUtf8SpanParsable"))
             {
                 string t = underlying.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
                 return ($"global::ExcelReader.Core.Parser.ExcelCellReaders.Parsable<{t}>", t, false);
+            }
+            if (IsSelfParsable(underlying, "ISpanParsable"))
+            {
+                string t = underlying.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+                return ($"global::ExcelReader.Core.Parser.ExcelCellReaders.SpanParsable<{t}>", t, false);
             }
             return null;
         }
@@ -444,10 +483,10 @@ namespace ExcelReader.Generator
                 && string.Equals(named.Name, name, StringComparison.Ordinal);
         }
 
-        private static bool IsUtf8SpanParsable(ITypeSymbol type)
+        private static bool IsSelfParsable(ITypeSymbol type, string interfaceName)
         {
             return type.AllInterfaces.Any(i =>
-                string.Equals(i.OriginalDefinition.Name, "IUtf8SpanParsable", StringComparison.Ordinal)
+                string.Equals(i.OriginalDefinition.Name, interfaceName, StringComparison.Ordinal)
                 && string.Equals(i.OriginalDefinition.ContainingNamespace?.ToDisplayString(), "System", StringComparison.Ordinal)
                 && i.TypeArguments.Length == 1
                 && SymbolEqualityComparer.Default.Equals(i.TypeArguments[0], type));

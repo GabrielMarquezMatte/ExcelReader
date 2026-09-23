@@ -108,7 +108,7 @@ namespace ExcelReader.Tests
                 ["R$ 1.234,56", "12.5%", "INV-1"]);
             await using var reader = await Excel.FromXlsxAsync(ms, ct: TestContext.Current.CancellationToken);
 
-            InvoiceRow row = new ExcelParser<InvoiceRow>().Parse(reader).Single();
+            InvoiceRow row = ExcelParser.FromAttributes<InvoiceRow>().Parse(reader).Single();
 
             Assert.Equal(1234.56m, row.Total);
             Assert.Equal(0.125, row.Tax.Fraction, precision: 10);
@@ -123,7 +123,7 @@ namespace ExcelReader.Tests
                 ["garbage", "nope", "INV-2"]);
             await using var reader = await Excel.FromXlsxAsync(ms, ct: TestContext.Current.CancellationToken);
 
-            InvoiceRow row = new ExcelParser<InvoiceRow>().Parse(reader).Single();
+            InvoiceRow row = ExcelParser.FromAttributes<InvoiceRow>().Parse(reader).Single();
 
             Assert.Equal(0m, row.Total);
             Assert.Equal(default, row.Tax);
@@ -137,7 +137,7 @@ namespace ExcelReader.Tests
                 ("S1", [["Tax"], ["33%"], ["bad"], [null]]));
             await using var reader = await Excel.FromXlsxAsync(ms, ct: TestContext.Current.CancellationToken);
 
-            List<NullableRow> rows = [.. new ExcelParser<NullableRow>().Parse(reader)];
+            List<NullableRow> rows = [.. ExcelParser.FromAttributes<NullableRow>().Parse(reader)];
 
             Assert.Equal(3, rows.Count);
             Assert.Equal(0.33, rows[0].Tax!.Value.Fraction, precision: 10);
@@ -157,7 +157,7 @@ namespace ExcelReader.Tests
             using var reader = Excel.FromXlsx(ms);
             Assert.True(reader.IsDate1904);
 
-            DatedRow row = new ExcelParser<DatedRow>().Parse(reader).Single();
+            DatedRow row = ExcelParser.FromAttributes<DatedRow>().Parse(reader).Single();
 
             Assert.Equal(1904, row.Year);
         }
@@ -169,7 +169,7 @@ namespace ExcelReader.Tests
             await using var reader = await Excel.FromXlsxAsync(ms, ct: TestContext.Current.CancellationToken);
 
             InvalidOperationException ex = Assert.Throws<InvalidOperationException>(
-                () => new ExcelParser<BadRow>().Parse(reader).ToList());
+                () => ExcelParser.FromAttributes<BadRow>().Parse(reader).ToList());
             Assert.Contains("IExcelCellConverter", ex.Message, StringComparison.Ordinal);
         }
     }

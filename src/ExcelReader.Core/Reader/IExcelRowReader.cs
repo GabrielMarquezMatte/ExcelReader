@@ -1,3 +1,4 @@
+using ExcelReader.Core.Enums;
 using ExcelReader.Core.ValueObjects;
 
 namespace ExcelReader.Core.Reader
@@ -18,11 +19,9 @@ namespace ExcelReader.Core.Reader
         TEnumerator GetEnumerator();
 
         /// <summary>Gets an enumerator that reads the current sheet's rows asynchronously from the start.</summary>
-        TEnumerator GetAsyncEnumerator();
-
-        /// <summary>Asynchronously creates an enumerator that reads the current sheet's rows from the start, performing any setup that requires I/O before the first row is fetched.</summary>
-        /// <param name="ct">A token to cancel the setup operation.</param>
-        ValueTask<TEnumerator> GetAsyncEnumeratorAsync(CancellationToken ct = default);
+        /// <remarks>Setup that needs I/O, such as opening the sheet part or loading shared strings, runs on the first <see cref="IExcelRowEnumerator.MoveNextAsync"/>, so this call does not block.</remarks>
+        /// <param name="ct">A token observed by that deferred setup and by every <see cref="IExcelRowEnumerator.MoveNextAsync"/> call.</param>
+        TEnumerator GetAsyncEnumerator(CancellationToken ct = default);
     }
 
     /// <summary>
@@ -54,6 +53,15 @@ namespace ExcelReader.Core.Reader
         /// <summary>Gets the name of the sheet at the given zero-based index, without changing the current sheet.</summary>
         /// <param name="index">The zero-based sheet index. Must be within <c>[0, SheetCount)</c>.</param>
         string SheetNameAt(int index);
+
+        /// <summary>Gets whether the currently selected sheet is shown in the workbook's tab bar.</summary>
+        /// <remarks>Reported, never enforced: a hidden sheet enumerates its rows like any other, so a caller
+        /// that wants to skip one — a converter, say — filters on this itself.</remarks>
+        ExcelSheetVisibility SheetVisibility { get; }
+
+        /// <summary>Gets the visibility of the sheet at the given zero-based index, without changing the current sheet.</summary>
+        /// <param name="index">The zero-based sheet index. Must be within <c>[0, SheetCount)</c>.</param>
+        ExcelSheetVisibility SheetVisibilityAt(int index);
 
         /// <summary>Attempts to select the sheet with the given name (case-insensitive) as the current sheet.</summary>
         /// <param name="name">The sheet name to look for.</param>

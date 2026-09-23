@@ -137,7 +137,7 @@ namespace ExcelReader.Tests
             CancellationToken ct = TestContext.Current.CancellationToken;
             await using MemoryStream ms = WorkbookBuilder.Build(fixture.Rows, fixture.SharedStrings);
             await using XlsxReader reader = await Excel.FromXlsxAsync(ms, ct: ct);
-            await using XlsxReader.Enumerator rows = await reader.GetAsyncEnumeratorAsync(ct);
+            await using XlsxReader.Enumerator rows = reader.GetAsyncEnumerator(ct);
 
             Assert.NotEmpty(fixture.Expected);
             await AssertExpectedAsync(rows, fixture.Expected);

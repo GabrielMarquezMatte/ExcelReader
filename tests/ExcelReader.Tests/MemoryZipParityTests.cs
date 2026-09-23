@@ -53,9 +53,10 @@ namespace ExcelReader.Tests
             CancellationToken ct = TestContext.Current.CancellationToken;
             byte[] bytes = fixture.Build();
             using IExcelRowReader reader = fixture.OpenMemory(bytes, ExcelReaderOptions.Default);
-            ValueTask<IExcelRowEnumerator> task = reader.GetAsyncEnumeratorAsync(ct);
+            await using IExcelRowEnumerator e = reader.GetAsyncEnumerator(ct);
+            ValueTask<bool> task = e.MoveNextAsync();
             Assert.True(task.IsCompleted);
-            await using IExcelRowEnumerator e = await task;
+            Assert.True(await task);
         }
 
 
@@ -332,7 +333,7 @@ namespace ExcelReader.Tests
             byte[] bytes, Func<byte[], ExcelReaderOptions, IExcelRowReader> open, CancellationToken ct)
         {
             using IExcelRowReader reader = open(bytes, ExcelReaderOptions.Default);
-            await using IExcelRowEnumerator e = await reader.GetAsyncEnumeratorAsync(ct);
+            await using IExcelRowEnumerator e = reader.GetAsyncEnumerator(ct);
             List<CellSnapshot> cells = [];
             int rowIndex = 0;
             while (await e.MoveNextAsync())
@@ -383,11 +384,9 @@ namespace ExcelReader.Tests
         private static async Task<byte[]> BuildXlsbAsync(CancellationToken ct)
         {
             MemoryStream ms = new();
-            await using (XlsbWorkbookWriter wb = await XlsbWorkbookWriter.CreateAsync(ms, leaveOpen: true, ct: ct))
+            await using (XlsbWorkbookWriter wb = XlsbWorkbookWriter.Create(ms, leaveOpen: true))
             {
-                await wb.StartAsync(ct);
                 XlsbSheetWriter sheet = wb.AddSheet("Sheet1");
-                await sheet.StartAsync(ct);
                 await using (XlsbRowWriter row = await sheet.StartRowAsync(ct))
                 {
                     row.Write("hello");

@@ -44,7 +44,7 @@ namespace ExcelReader.Tests
             await using var ms = await TypedWorkbook.BuildAsync(["Name", "Amount"], ["Alice", 12.5]);
             using IExcelRowReader reader = Excel.Open(ms);
 
-            MoneyRow row = new ExcelParser<MoneyRow>().Parse(reader).Single();
+            MoneyRow row = ExcelParser.FromAttributes<MoneyRow>().Parse(reader).Single();
 
             Assert.Equal("Alice", row.Name);
             Assert.Equal(12.5m, row.Amount);
@@ -57,7 +57,7 @@ namespace ExcelReader.Tests
             await using IExcelRowReader reader = await Excel.OpenAsync(ms, ct: TestContext.Current.CancellationToken);
 
             var rows = new List<MoneyRow>();
-            await foreach (MoneyRow row in new ExcelParser<MoneyRow>().ParseAsync(reader, TestContext.Current.CancellationToken))
+            await foreach (MoneyRow row in ExcelParser.FromAttributes<MoneyRow>().Parse(reader).WithCancellation(TestContext.Current.CancellationToken))
             {
                 rows.Add(row);
             }
@@ -75,7 +75,7 @@ namespace ExcelReader.Tests
             await using var reader = await Excel.FromXlsxAsync(ms, ct: TestContext.Current.CancellationToken);
             var config = new ExcelParserConfig { Culture = CultureInfo.GetCultureInfo("pt-BR") };
 
-            MoneyRow row = new ExcelParser<MoneyRow>(config).Parse(reader).Single();
+            MoneyRow row = ExcelParser.FromAttributes<MoneyRow>(config).Parse(reader).Single();
 
             Assert.Equal(1234.56m, row.Amount);
         }
@@ -86,7 +86,7 @@ namespace ExcelReader.Tests
             await using var ms = await TypedWorkbook.BuildAsync(["Name", "Amount"], ["Conta", "1.234,56"]);
             await using var reader = await Excel.FromXlsxAsync(ms, ct: TestContext.Current.CancellationToken);
 
-            MoneyRow row = new ExcelParser<MoneyRow>().Parse(reader).Single();
+            MoneyRow row = ExcelParser.FromAttributes<MoneyRow>().Parse(reader).Single();
 
             Assert.Equal(0m, row.Amount);
         }
@@ -100,7 +100,7 @@ namespace ExcelReader.Tests
             var config = new ExcelParserConfig { ThrowOnParseFailure = true };
 
             ExcelParseException ex = Assert.Throws<ExcelParseException>(
-                () => new ExcelParser<MoneyRow>(config).Parse(reader).ToList());
+                () => ExcelParser.FromAttributes<MoneyRow>(config).Parse(reader).ToList());
             Assert.Equal("Amount", ex.ColumnName);
             Assert.Equal("not-a-number", ex.RawValue);
         }
@@ -111,7 +111,7 @@ namespace ExcelReader.Tests
             await using var ms = await TypedWorkbook.BuildAsync(["Name", "Amount"], ["Conta", "not-a-number"]);
             await using var reader = await Excel.FromXlsxAsync(ms, ct: TestContext.Current.CancellationToken);
 
-            MoneyRow row = new ExcelParser<MoneyRow>().Parse(reader).Single();
+            MoneyRow row = ExcelParser.FromAttributes<MoneyRow>().Parse(reader).Single();
 
             Assert.Equal(0m, row.Amount);
         }
@@ -127,7 +127,7 @@ namespace ExcelReader.Tests
                 ["Active", 2, id.ToString(), optId.ToString()]);
             await using var reader = await Excel.FromXlsxAsync(ms, ct: TestContext.Current.CancellationToken);
 
-            TypedRow row = new ExcelParser<TypedRow>().Parse(reader).Single();
+            TypedRow row = ExcelParser.FromAttributes<TypedRow>().Parse(reader).Single();
 
             Assert.Equal(Status.Active, row.Status);
             Assert.Equal(Status.Closed, row.OptionalStatus);
@@ -143,7 +143,7 @@ namespace ExcelReader.Tests
                 ["active", "garbage"]);
             await using var reader = await Excel.FromXlsxAsync(ms, ct: TestContext.Current.CancellationToken);
 
-            TypedRow row = new ExcelParser<TypedRow>().Parse(reader).Single();
+            TypedRow row = ExcelParser.FromAttributes<TypedRow>().Parse(reader).Single();
 
             Assert.Equal(Status.Active, row.Status);
             Assert.Null(row.OptionalStatus);
@@ -157,7 +157,7 @@ namespace ExcelReader.Tests
                 ["2", "1"]);
             await using var reader = await Excel.FromXlsxAsync(ms, ct: TestContext.Current.CancellationToken);
 
-            TypedRow row = new ExcelParser<TypedRow>().Parse(reader).Single();
+            TypedRow row = ExcelParser.FromAttributes<TypedRow>().Parse(reader).Single();
 
             Assert.Equal(Status.Closed, row.Status);
             Assert.Equal(Status.Active, row.OptionalStatus);
@@ -171,7 +171,7 @@ namespace ExcelReader.Tests
                 ["not-a-guid", "also-bad"]);
             await using var reader = await Excel.FromXlsxAsync(ms, ct: TestContext.Current.CancellationToken);
 
-            TypedRow row = new ExcelParser<TypedRow>().Parse(reader).Single();
+            TypedRow row = ExcelParser.FromAttributes<TypedRow>().Parse(reader).Single();
 
             Assert.Equal(Guid.Empty, row.Id);
             Assert.Null(row.OptionalId);
@@ -186,7 +186,7 @@ namespace ExcelReader.Tests
                 [3_000_000_000.5d]);
             await using var reader = await Excel.FromXlsxAsync(ms, ct: TestContext.Current.CancellationToken);
 
-            LargeEnumRow[] rows = new ExcelParser<LargeEnumRow>().Parse(reader).ToArray();
+            LargeEnumRow[] rows = ExcelParser.FromAttributes<LargeEnumRow>().Parse(reader).ToArray();
 
             Assert.Equal(LargeStatus.High, rows[0].Status);
             Assert.Null(rows[1].Status);

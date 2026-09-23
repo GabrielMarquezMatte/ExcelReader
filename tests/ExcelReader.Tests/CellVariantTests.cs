@@ -62,7 +62,7 @@ namespace ExcelReader.Tests
         {
             await using var ms = await TypedWorkbook.BuildAsync();
             await using var reader = await Excel.FromXlsxAsync(ms, ct: TestContext.Current.CancellationToken);
-            await using var enumerator = await reader.GetAsyncEnumeratorAsync(TestContext.Current.CancellationToken);
+            await using var enumerator = reader.GetAsyncEnumerator(TestContext.Current.CancellationToken);
             int count = 0;
             while (await enumerator.MoveNextAsync())
             {

@@ -1,19 +1,21 @@
 using System.Buffers;
 using System.IO.Compression;
+using System.Text;
+using ExcelReader.Core.Enums;
 
 namespace ExcelReader.Core.Reader
 {
     public sealed partial class XlsxReader
     {
         // --- workbook / shared-strings loading (one-time, small except sharedStrings) ---
-        private static (string Name, string Path)[] ParseSheets(ReadOnlySpan<byte> wbBytes, ReadOnlySpan<byte> relsBytes)
+        private static (string Name, string Path, ExcelSheetVisibility Visibility)[] ParseSheets(ReadOnlySpan<byte> wbBytes, ReadOnlySpan<byte> relsBytes)
         {
             if (wbBytes.IsEmpty)
             {
                 return [];
             }
             Dictionary<string, string> rels = XlsxXml.ParseRelationships(relsBytes);
-            var sheets = new List<(string, string)>();
+            var sheets = new List<(string, string, ExcelSheetVisibility)>();
             ReadOnlySpan<byte> prefix = XlsxXml.DetectElementPrefix(wbBytes);
             ReadOnlySpan<byte> sheetTag = "<sheet "u8;
             if (!prefix.IsEmpty)
@@ -26,10 +28,19 @@ namespace ExcelReader.Core.Reader
                 if (rels.TryGetValue(rid, out var target))
                 {
                     var name = XlsxXml.DecodeToString(XlsxXml.Attr(tag, " name="u8));
-                    sheets.Add((name, XlsxXml.NormalizePart(target)));
+                    sheets.Add((name, XlsxXml.NormalizePart(target), ParseVisibility(XlsxXml.Attr(tag, " state="u8))));
                 }
             }
             return [.. sheets];
+        }
+
+        private static ExcelSheetVisibility ParseVisibility(ReadOnlySpan<byte> state)
+        {
+            if (Ascii.EqualsIgnoreCase(state, "hidden"u8))
+            {
+                return ExcelSheetVisibility.Hidden;
+            }
+            return Ascii.EqualsIgnoreCase(state, "veryHidden"u8) ? ExcelSheetVisibility.VeryHidden : ExcelSheetVisibility.Visible;
         }
 
         private static bool ParseDate1904(ReadOnlySpan<byte> src)

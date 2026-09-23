@@ -3475,6 +3475,13 @@ namespace ExcelReader.Tests
                 return inner.SheetNameAt(index);
             }
 
+            public ExcelSheetVisibility SheetVisibility => inner.SheetVisibility;
+
+            public ExcelSheetVisibility SheetVisibilityAt(int index)
+            {
+                return inner.SheetVisibilityAt(index);
+            }
+
             public bool TryMoveToSheet(ReadOnlySpan<char> name)
             {
                 return inner.TryMoveToSheet(name);
@@ -3490,14 +3497,9 @@ namespace ExcelReader.Tests
                 return new FailAfterNRowsEnumerator(inner.GetEnumerator(), failAfter);
             }
 
-            public IExcelRowEnumerator GetAsyncEnumerator()
+            public IExcelRowEnumerator GetAsyncEnumerator(CancellationToken ct = default)
             {
-                return new FailAfterNRowsEnumerator(inner.GetAsyncEnumerator(), failAfter);
-            }
-
-            public ValueTask<IExcelRowEnumerator> GetAsyncEnumeratorAsync(CancellationToken ct = default)
-            {
-                return new(new FailAfterNRowsEnumerator(inner.GetAsyncEnumerator(), failAfter));
+                return new FailAfterNRowsEnumerator(inner.GetAsyncEnumerator(ct), failAfter);
             }
 
             public void Dispose()

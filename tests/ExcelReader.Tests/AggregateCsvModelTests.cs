@@ -74,7 +74,7 @@ namespace ExcelReader.Tests
         {
             using CsvReader reader = Excel.FromCsv(csv);
             var rows = new List<string>();
-            foreach (Person person in RefParser.ParseNamed<Person>(reader, new ExcelParserConfig { HeaderRow = headerRow }))
+            foreach (Person person in ExcelParser.FromAttributes<Person>(new ExcelParserConfig { HeaderRow = headerRow }).Parse(reader))
             {
                 rows.Add(Render(person));
             }
@@ -83,13 +83,13 @@ namespace ExcelReader.Tests
 
         [System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "Test")]
         [System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessage("AOT", "IL3050", Justification = "Test")]
-        private static CsvModelMap<Person>[] EveryMap()
+        private static ExcelParser<Person>[] EveryMap()
         {
             return
             [
-                CsvModelMap.Generated<Person>(),
-                CsvModelMap.FromAttributes<Person>(),
-                CsvModelMap.Build<Person>(static b => b
+                ExcelParser.Generated<Person>(),
+                ExcelParser.FromAttributes<Person>(),
+                ExcelParser.Build<Person>(static b => b
                     .PropertyRaw(["Name"], static (ref Person m, in Cell c, bool d, IFormatProvider pr) =>
                     {
                         m.Name = c.Value;
@@ -100,7 +100,7 @@ namespace ExcelReader.Tests
             ];
         }
 
-        private static Task<PeopleLog> Chunked(byte[] csv, CsvModelMap<Person> map, int dop, int chunkSize, int headerRow)
+        private static Task<PeopleLog> Chunked(byte[] csv, ExcelParser<Person> map, int dop, int chunkSize, int headerRow)
         {
             return ParallelCsvProcessor.RunWithChunkSizeAsync(
                 csv.AsMemory(),
@@ -111,7 +111,7 @@ namespace ExcelReader.Tests
                 TestContext.Current.CancellationToken);
         }
 
-        private static Task<PeopleLog> Chunked(byte[] csv, CsvModelMap<IdOnly> map, int dop, int chunkSize, int headerRow)
+        private static Task<PeopleLog> Chunked(byte[] csv, ExcelParser<IdOnly> map, int dop, int chunkSize, int headerRow)
         {
             return ParallelCsvProcessor.RunWithChunkSizeAsync(
                 csv.AsMemory(),
@@ -145,7 +145,7 @@ namespace ExcelReader.Tests
                 byte[] csv = PeopleCsv(rows: 40, headerRow);
                 List<string> expected = Sequential(csv, headerRow);
                 Assert.Equal(40, expected.Count);
-                foreach (CsvModelMap<Person> map in EveryMap())
+                foreach (ExcelParser<Person> map in EveryMap())
                 {
                     foreach (int dop in new[] { 2, 3, 4, 8 })
                     {
@@ -165,7 +165,7 @@ namespace ExcelReader.Tests
             List<string> expected = Sequential(csv, headerRow: 1);
             var options = new CsvParallelOptions { DegreeOfParallelism = 4, HeaderRow = 1 };
             CancellationToken ct = TestContext.Current.CancellationToken;
-            CsvModelMap<Person> map = CsvModelMap.Generated<Person>();
+            ExcelParser<Person> map = ExcelParser.Generated<Person>();
             string path = Path.Combine(Path.GetTempPath(), $"exr-model-{Guid.NewGuid():N}.csv");
             await File.WriteAllBytesAsync(path, csv, ct);
             try
@@ -189,7 +189,7 @@ namespace ExcelReader.Tests
         public async Task BindsReorderedAndAliasedColumns()
         {
             byte[] csv = "Note,Identifier,Name\nn1,1,ada\nn2,2,bob\n"u8.ToArray();
-            CsvModelMap<Person> map = CsvModelMap.Build<Person>(static b => b
+            ExcelParser<Person> map = ExcelParser.Build<Person>(static b => b
                 .PropertyRaw(["Name"], static (ref Person m, in Cell c, bool d, IFormatProvider pr) =>
                 {
                     m.Name = c.Value;
@@ -208,7 +208,7 @@ namespace ExcelReader.Tests
         {
             byte[] csv = "Name,Note\nada,n1\n"u8.ToArray();
             await Assert.ThrowsAsync<ExcelParseException>(() => Excel.AggregateCsvParallelAsync<PeopleLog, Person>(
-                csv, CsvModelMap.Generated<Person>(), new CsvParallelOptions { HeaderRow = 1 }, TestContext.Current.CancellationToken));
+                csv, ExcelParser.Generated<Person>(), new CsvParallelOptions { HeaderRow = 1 }, TestContext.Current.CancellationToken));
         }
 
         [Fact]
@@ -217,12 +217,12 @@ namespace ExcelReader.Tests
             byte[] csv = "ada,1\nbob,2\n"u8.ToArray();
             CancellationToken ct = TestContext.Current.CancellationToken;
             await Assert.ThrowsAsync<ArgumentException>(() => Excel.AggregateCsvParallelAsync<PeopleLog, Person>(
-                csv, CsvModelMap.Generated<Person>(), new CsvParallelOptions { HeaderRow = 0 }, ct));
+                csv, ExcelParser.Generated<Person>(), new CsvParallelOptions { HeaderRow = 0 }, ct));
 
             await Assert.ThrowsAsync<ArgumentNullException>(() => Excel.AggregateCsvParallelAsync<PeopleLog, Person>(
-                csv, (CsvModelMap<Person>)null!, new CsvParallelOptions { HeaderRow = 1 }, ct));
+                csv, (ExcelParser<Person>)null!, new CsvParallelOptions { HeaderRow = 1 }, ct));
 
-            CsvModelMap<IdOnly> byIndex = CsvModelMap.Build<IdOnly>(static b => b.PropertyAt(1, ExcelCellReaders.Parsable, static (ref IdOnly m, int v) => m.Id = v));
+            ExcelParser<IdOnly> byIndex = ExcelParser.Build<IdOnly>(static b => b.PropertyAt(1, ExcelCellReaders.Parsable, static (ref IdOnly m, int v) => m.Id = v));
             PeopleLog log = await Excel.AggregateCsvParallelAsync<PeopleLog, IdOnly>(csv, byIndex, new CsvParallelOptions { HeaderRow = 0 }, ct);
             Assert.Equal(["1", "2"], log.Rows);
         }
@@ -230,7 +230,7 @@ namespace ExcelReader.Tests
         [Fact]
         public async Task AnIndexMapRunsThroughThePartitionedPathForBothHeaderRowSettings()
         {
-            CsvModelMap<IdOnly> byIndex = CsvModelMap.Build<IdOnly>(static b => b.PropertyAt(1, ExcelCellReaders.Parsable, static (ref IdOnly m, int v) => m.Id = v));
+            ExcelParser<IdOnly> byIndex = ExcelParser.Build<IdOnly>(static b => b.PropertyAt(1, ExcelCellReaders.Parsable, static (ref IdOnly m, int v) => m.Id = v));
             foreach (int headerRow in new[] { 0, 1 })
             {
                 byte[] csv = IndexCsv(rows: 200, headerRow);
@@ -247,7 +247,7 @@ namespace ExcelReader.Tests
         {
             byte[] csv = "Name,Id,Note\nada,1,n\n\nbob,2,m\n"u8.ToArray();
             PeopleLog log = await Excel.AggregateCsvParallelAsync<PeopleLog, Person>(
-                csv, CsvModelMap.Generated<Person>(), new CsvParallelOptions { HeaderRow = 1 }, TestContext.Current.CancellationToken);
+                csv, ExcelParser.Generated<Person>(), new CsvParallelOptions { HeaderRow = 1 }, TestContext.Current.CancellationToken);
             Assert.Equal(["ada|1|n", "bob|2|m"], log.Rows);
         }
 
@@ -255,7 +255,7 @@ namespace ExcelReader.Tests
         public async Task ReportsTheExactRowSequentiallyAndZeroWhenPartitioned()
         {
             byte[] csv = "Name,Id,Note\nada,1,n\nbob,2,n\ncid,oops,n\ndan,4,n\n"u8.ToArray();
-            CsvModelMap<Person> map = CsvModelMap.Generated<Person>(new ExcelParserConfig { ThrowOnParseFailure = true });
+            ExcelParser<Person> map = ExcelParser.Generated<Person>(new ExcelParserConfig { ThrowOnParseFailure = true });
 
             ExcelParseException sequential = await Assert.ThrowsAsync<ExcelParseException>(() => Excel.AggregateCsvParallelAsync<PeopleLog, Person>(
                 csv, map, new CsvParallelOptions { DegreeOfParallelism = 1, HeaderRow = 1 }, TestContext.Current.CancellationToken));
@@ -269,7 +269,7 @@ namespace ExcelReader.Tests
         public async Task DiscardsParseFailuresFromAMisguessedPartition()
         {
             byte[] csv = "Name,Id,Note\nok,1,\"one\nBOOM,notint,x\"\nok,2,two\nok,3,\"three\nBOOM,bad,y\"\nok,4,four\n"u8.ToArray();
-            CsvModelMap<Person> map = CsvModelMap.Generated<Person>(new ExcelParserConfig { ThrowOnParseFailure = true });
+            ExcelParser<Person> map = ExcelParser.Generated<Person>(new ExcelParserConfig { ThrowOnParseFailure = true });
             List<string> expected = Sequential(csv, headerRow: 1);
             for (int chunkSize = 1; chunkSize <= csv.Length; chunkSize++)
             {
@@ -282,7 +282,7 @@ namespace ExcelReader.Tests
         {
             byte[] csv = PeopleCsv(rows: 50_000);
             List<string> expected = Sequential(csv, headerRow: 1);
-            Assert.Equal(expected, (await Chunked(csv, CsvModelMap.Generated<Person>(), dop: 8, chunkSize: 2048, headerRow: 1)).Rows);
+            Assert.Equal(expected, (await Chunked(csv, ExcelParser.Generated<Person>(), dop: 8, chunkSize: 2048, headerRow: 1)).Rows);
         }
 
         [Fact]
@@ -290,11 +290,9 @@ namespace ExcelReader.Tests
         {
             CancellationToken ct = TestContext.Current.CancellationToken;
             await using var stream = new MemoryStream();
-            await using (XlsxWorkbookWriter wb = await XlsxWorkbookWriter.CreateAsync(stream, leaveOpen: true, ct: ct))
+            await using (XlsxWorkbookWriter wb = XlsxWorkbookWriter.Create(stream, leaveOpen: true))
             {
-                await wb.StartAsync(ct);
                 XlsxSheetWriter sheet = wb.AddSheet("S1");
-                await sheet.StartAsync(ct);
                 var builder = new ExcelRecordMapBuilder<Person, XlsxRowWriter>();
                 Person.ConfigureExcelRecordMap(builder);
                 XlsxRowWriter header = await sheet.StartRowAsync(ct);
@@ -327,7 +325,7 @@ namespace ExcelReader.Tests
         private static List<string> ReadPeople(XlsxReader reader)
         {
             var rows = new List<string>();
-            foreach (Person person in RefParser.ParseNamed<Person>(reader))
+            foreach (Person person in ExcelParser.FromAttributes<Person>().Parse(reader))
             {
                 rows.Add(Render(person));
             }
@@ -378,7 +376,7 @@ namespace ExcelReader.Tests
             }
             byte[] csv = Encoding.UTF8.GetBytes($"{header}\n{row}\n{row}\n");
 
-            CsvModelMap<WideRow> map = CsvModelMap.Build<WideRow>(b =>
+            ExcelParser<WideRow> map = ExcelParser.Build<WideRow>(b =>
             {
                 for (int index = 0; index < columns - 1; index++)
                 {

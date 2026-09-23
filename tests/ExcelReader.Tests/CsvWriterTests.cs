@@ -364,14 +364,14 @@ namespace ExcelReader.Tests
 
             var ms = new MemoryStream();
             var ct = TestContext.Current.CancellationToken;
-            await using (var writer = await RecordWriter.CreateCsvAsync(ms, leaveOpen: true, ct: TestContext.Current.CancellationToken))
+            await using (var writer = RecordWriter.CreateCsv(ms, leaveOpen: true))
             {
                 await writer.WriteSheetAsync("People", people, ct);
             }
             ms.Position = 0;
 
             using var reader = Excel.FromCsv(ms);
-            var parsed = new ExcelParser<CsvPerson>().Parse(reader).ToList();
+            var parsed = ExcelParser.FromAttributes<CsvPerson>().Parse(reader).ToList();
 
             Assert.Equal(2, parsed.Count);
             Assert.Equal("has, comma", parsed[0].Name);
@@ -387,7 +387,7 @@ namespace ExcelReader.Tests
         {
             var ms = new MemoryStream();
             var ct = TestContext.Current.CancellationToken;
-            await using var writer = await RecordWriter.CreateCsvAsync(ms, leaveOpen: true, ct: TestContext.Current.CancellationToken);
+            await using var writer = RecordWriter.CreateCsv(ms, leaveOpen: true);
             await writer.WriteSheetAsync("One", Array.Empty<CsvPerson>(), ct);
 
             await Assert.ThrowsAsync<InvalidOperationException>(

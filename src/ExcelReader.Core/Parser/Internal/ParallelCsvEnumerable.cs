@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Diagnostics.CodeAnalysis;
 using ExcelReader.Core.Reader;
 using Microsoft.Win32.SafeHandles;
@@ -51,7 +52,7 @@ namespace ExcelReader.Core.Parser.Internal
 
             int ring = inFlight + 1;
 
-            var lists = new ListPool<T>(ring);
+            var lists = new ConcurrentBag<List<T>>();
             MergeState state = StartWorkers(slots, lists, ring, ct);
             Task allWorkers = Task.WhenAll(state.Workers);
             long rowsEmitted = 0;
@@ -74,7 +75,7 @@ namespace ExcelReader.Core.Parser.Internal
                     }
 
                     models.Clear();
-                    lists.Return(models);
+                    lists.Add(models);
 
                     confirmedNextStart = AdvanceOrThrow(result, rowsEmitted);
                     if (confirmedNextStart >= long.MaxValue)
@@ -105,7 +106,7 @@ namespace ExcelReader.Core.Parser.Internal
             TaskCompletionSource<bool>[] Ready,
             Task[] Workers);
 
-        private MergeState StartWorkers(SemaphoreSlim slots, ListPool<T> lists, int ring, CancellationToken ct)
+        private MergeState StartWorkers(SemaphoreSlim slots, ConcurrentBag<List<T>> lists, int ring, CancellationToken ct)
         {
             var results = new CsvChunkResult<T>?[ring];
             var ready = new TaskCompletionSource<bool>[ring];
@@ -157,7 +158,7 @@ namespace ExcelReader.Core.Parser.Internal
             CsvChunkResult<T>?[] results,
             TaskCompletionSource<bool>[] ready,
             SemaphoreSlim slots,
-            ListPool<T> lists,
+            ConcurrentBag<List<T>> lists,
             int ring,
             CancellationToken ct)
         {
@@ -176,7 +177,7 @@ namespace ExcelReader.Core.Parser.Internal
                     claimed = chunk.Index;
                     long? confirmed = chunk.Index == 0 ? _firstDataRecordOffset : null;
                     CsvChunkResult<T> result = await CsvChunkWorker.ParseAsync(
-                        _source, chunk, confirmed, _map, _info, _readerOptions, _config, lists.Rent(), ct).ConfigureAwait(false);
+                        _source, chunk, confirmed, _map, _info, _readerOptions, _config, lists.TryTake(out List<T>? pooled) ? pooled : [], ct).ConfigureAwait(false);
                     results[chunk.Index % ring] = result;
                     ready[chunk.Index % ring].TrySetResult(true);
                 }

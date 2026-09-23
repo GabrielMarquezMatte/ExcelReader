@@ -8,7 +8,7 @@ namespace ExcelReader.Core.Reader
     /// </summary>
     /// <remarks>
     /// This is a guess over a bounded sample, not a guarantee about the whole sheet — verify it fits
-    /// before trusting it. Feed it into <see cref="Parser.ExcelFluentParser{T}"/> to build a real map.
+    /// before trusting it. Feed it into <see cref="Parser.ExcelParser.Build{T}"/> to build a real map.
     /// </remarks>
     public readonly record struct ExcelColumnSchema
     {
