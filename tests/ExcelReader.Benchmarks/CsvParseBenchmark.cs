@@ -99,19 +99,5 @@ namespace ExcelReader.Benchmarks
             }
             return acc;
         }
-
-        [Benchmark]
-        public long CsvHelperLib()
-        {
-            using var ms = new MemoryStream(_csv, writable: false);
-            using var tr = new StreamReader(ms);
-            using var csv = new CsvHelper.CsvReader(tr, CultureInfo.InvariantCulture);
-            long acc = 0;
-            foreach (CsvRecord rec in csv.GetRecords<CsvRecord>())
-            {
-                acc += Accumulate(rec);
-            }
-            return acc;
-        }
     }
 }

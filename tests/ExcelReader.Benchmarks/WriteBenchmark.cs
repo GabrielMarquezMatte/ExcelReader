@@ -1,6 +1,6 @@
 using BenchmarkDotNet.Attributes;
 using ExcelReader.Core.Writer;
-using MiniExcelLibs;
+using OfficeIMO.Excel;
 using SpreadCheetah;
 
 namespace ExcelReader.Benchmarks
@@ -173,10 +173,16 @@ namespace ExcelReader.Benchmarks
         }
 
         [Benchmark]
-        public async Task<long> MiniExcel()
+        public long OfficeIMO()
         {
-            await using var ms = new MemoryStream(4 * 1024 * 1024);
-            await ms.SaveAsAsync(_records, excelType: ExcelType.XLSX).ConfigureAwait(false);
+            using var ms = new MemoryStream(4 * 1024 * 1024);
+            ExcelDocument.WriteRows(ms, _records, ["Name", "Id", "Date", "Value"], static (row, rec) =>
+            {
+                row.Write(rec.Name);
+                row.Write(rec.Id);
+                row.Write(rec.Date);
+                row.Write(rec.Value);
+            });
             return ms.Length;
         }
 

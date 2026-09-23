@@ -13,17 +13,19 @@ Benchmarks were run with BenchmarkDotNet v0.15.8 on Windows 10 (22H2), AMD Ryzen
 
 Compares ExcelReader against established XLSX libraries on the same generated workbook shape.
 
-| Scenario | ExcelReader | MiniExcel | Sylvan | SpreadCheetah |
-|---|---:|---:|---:|---:|
-| Cell-by-cell read | 11.233 ms, 11.13 KB | 158.500 ms, 267.38 MB | 37.160 ms, 1.89 MB | - |
-| Cell-by-cell read async | 11.879 ms, 13.27 KB | - | - | - |
-| Typed row parsing | 15.741 ms, 3.87 MB | 167.768 ms, 256.15 MB | 56.143 ms, 10.47 MB | - |
-| Typed row parsing async | 15.352 ms, 3.88 MB | - | 60.307 ms, 10.48 MB | - |
-| Typed row parsing, shared strings | 12.347 ms, 2.30 MB | - | - | - |
-| Workbook writing | 12.261 ms, 4.02 MB | 287.048 ms, 84.89 MB | - | 15.548 ms, 15.84 MB |
-| Workbook writing, shared strings | 11.890 ms, 4.06 MB | - | - | - |
+| Scenario | ExcelReader | Sylvan | SpreadCheetah |
+|---|---:|---:|---:|
+| Cell-by-cell read | 11.233 ms, 11.13 KB | 37.160 ms, 1.89 MB | - |
+| Cell-by-cell read async | 11.879 ms, 13.27 KB | - | - |
+| Typed row parsing | 15.741 ms, 3.87 MB | 56.143 ms, 10.47 MB | - |
+| Typed row parsing async | 15.352 ms, 3.88 MB | 60.307 ms, 10.48 MB | - |
+| Typed row parsing, shared strings | 12.347 ms, 2.30 MB | - | - |
+| Workbook writing | 12.261 ms, 4.02 MB | - | 15.548 ms, 15.84 MB |
+| Workbook writing, shared strings | 11.890 ms, 4.06 MB | - | - |
 
-ExcelReader is ~14.1x faster than MiniExcel and ~3.3x faster than Sylvan for raw XLSX reads, allocating ~24,593x and ~174x less respectively. For typed parsing, it is ~10.7x faster than MiniExcel and ~3.6x faster than Sylvan. For XLSX writing, ExcelReader is ~1.3x faster than SpreadCheetah while allocating ~3.9x less memory, and ~23x faster than MiniExcel while allocating ~21x less.
+ExcelReader is ~3.3x faster than Sylvan for raw XLSX reads, allocating ~174x less, and ~3.6x faster for typed parsing. For XLSX writing, ExcelReader is ~1.3x faster than SpreadCheetah while allocating ~3.9x less memory.
+
+The suite also benchmarks OfficeIMO.Excel (`ReadBenchmark`, `ParseBenchmark`, `WriteBenchmark` and `XlsReadBenchmark`). Its numbers join these tables at the next run on the reference machine. OfficeIMO's typed parsing is hand-mapped from its `OpenDataReader`, because `RowsAs<T>` needs an `r` attribute on every row and cell, which the spec makes optional and ExcelReader's writer omits.
 
 Reading a shared-strings XLSX workbook with typed parsing is ~22% faster than the inline-string sheet above (12.347 ms vs. 15.741 ms) and allocates ~41% less (2.30 MB vs. 3.87 MB) — each distinct string decodes once into the shared-string cache instead of once per cell occurrence.
 
@@ -52,15 +54,15 @@ ExcelReader is ~1.6x faster than Sylvan for generated XLS reads while allocating
 
 ### CSV
 
-| Scenario | ExcelReader | Sep | Sylvan.Data.Csv | CsvHelper |
-|---|---:|---:|---:|---:|
-| Cell-by-cell read | 3.428 ms, 368 B | 7.697 ms, 3.93 KB | 4.463 ms, 1.61 MB | 23.805 ms, 14.38 MB |
-| Cell-by-cell read async | 3.657 ms, 440 B | - | - | - |
-| Typed row parsing | 5.860 ms, 3.86 MB | 8.641 ms, 3.87 MB | 12.113 ms, 10.95 MB | 22.996 ms, 14.41 MB |
-| Typed row parsing async | 5.503 ms, 3.86 MB | - | - | - |
-| Row writing | 4.624 ms, 4.00 MB | 7.075 ms, 4.01 MB | 7.066 ms, 4.04 MB | 14.181 ms, 13.79 MB |
+| Scenario | ExcelReader | Sep | Sylvan.Data.Csv |
+|---|---:|---:|---:|
+| Cell-by-cell read | 3.428 ms, 368 B | 7.697 ms, 3.93 KB | 4.463 ms, 1.61 MB |
+| Cell-by-cell read async | 3.657 ms, 440 B | - | - |
+| Typed row parsing | 5.860 ms, 3.86 MB | 8.641 ms, 3.87 MB | 12.113 ms, 10.95 MB |
+| Typed row parsing async | 5.503 ms, 3.86 MB | - | - |
+| Row writing | 4.624 ms, 4.00 MB | 7.075 ms, 4.01 MB | 7.066 ms, 4.04 MB |
 
-For raw CSV reads, ExcelReader is ~2.2x faster than Sep while allocating ~11x less, ~1.3x faster than Sylvan.Data.Csv while allocating ~4,589x less (1.61 MB vs 368 B), and ~6.9x faster than CsvHelper while allocating ~40,960x less. For typed CSV parsing (the more common case — building actual records), ExcelReader is ~1.5x faster than Sep, ~2.1x faster than Sylvan.Data.Csv, and ~3.9x faster than CsvHelper, with the lowest allocation of the group. For CSV writing, ExcelReader is ~1.5x faster than both Sep and Sylvan.Data.Csv, which are tied, and ~3.1x faster than CsvHelper; the ~4 MB shown across the first three is primarily the benchmark's pre-sized destination `MemoryStream`, not per-row writer state.
+For raw CSV reads, ExcelReader is ~2.2x faster than Sep while allocating ~11x less, and ~1.3x faster than Sylvan.Data.Csv while allocating ~4,589x less (1.61 MB vs 368 B). For typed CSV parsing (the more common case — building actual records), ExcelReader is ~1.5x faster than Sep and ~2.1x faster than Sylvan.Data.Csv, with the lowest allocation of the group. For CSV writing, ExcelReader is ~1.5x faster than both Sep and Sylvan.Data.Csv, which are tied; the ~4 MB shown across all three is primarily the benchmark's pre-sized destination `MemoryStream`, not per-row writer state.
 
 ### Parallel CSV
 

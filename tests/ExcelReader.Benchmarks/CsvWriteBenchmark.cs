@@ -80,17 +80,5 @@ namespace ExcelReader.Benchmarks
             }
             return ms.Length;
         }
-
-        [Benchmark]
-        public long CsvHelperLib()
-        {
-            using var ms = new MemoryStream(4 * 1024 * 1024);
-            using (var sw = new StreamWriter(ms, leaveOpen: true))
-            using (var csv = new CsvHelper.CsvWriter(sw, CultureInfo.InvariantCulture))
-            {
-                csv.WriteRecords(_records);
-            }
-            return ms.Length;
-        }
     }
 }

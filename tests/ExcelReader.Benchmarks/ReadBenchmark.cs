@@ -1,7 +1,7 @@
 using BenchmarkDotNet.Attributes;
 using ExcelReader.Core.Reader;
 using ExcelReader.Core.ValueObjects;
-using MiniExcelLibs;
+using OfficeIMO.Excel;
 using Sylvan.Data.Excel;
 using static ExcelReader.Benchmarks.BenchmarkAccumulators;
 
@@ -76,32 +76,18 @@ namespace ExcelReader.Benchmarks
         }
 
         [Benchmark]
-        public long MiniExcel()
-        {
-            using var ms = new MemoryStream(_workbook, writable: false);
-            long acc = 0;
-            foreach (var row in ms.Query(useHeaderRow: false, excelType: ExcelType.XLSX))
-            {
-                var r = (IDictionary<string, object?>)row;
-                foreach (var val in r.Values)
-                {
-                    switch (val)
-                    {
-                        case string s: acc += s.Length; break;
-                        case double d: acc += (long)d; break;
-                        case DateTime dt: acc += dt.Ticks; break;
-                    }
-                }
-            }
-            return acc;
-        }
-
-        [Benchmark]
         public long Sylvan()
         {
             using var ms = new MemoryStream(_workbook, writable: false);
             using var reader = global::Sylvan.Data.Excel.ExcelDataReader.Create(ms, ExcelWorkbookType.ExcelXml, new ExcelDataReaderOptions());
             return AccumulateSylvanExcel(reader);
+        }
+
+        [Benchmark]
+        public long OfficeIMO()
+        {
+            using var reader = ExcelDocument.OpenDataReader(_workbook, new ExcelReadOptions { HasHeaderRow = false });
+            return AccumulateDataReader(reader);
         }
     }
 }

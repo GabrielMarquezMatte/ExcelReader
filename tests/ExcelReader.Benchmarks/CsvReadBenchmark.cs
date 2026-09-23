@@ -130,23 +130,5 @@ namespace ExcelReader.Benchmarks
             }
             return acc;
         }
-
-        [Benchmark]
-        public long CsvHelperLib()
-        {
-            using var ms = new MemoryStream(_csv, writable: false);
-            using var tr = new StreamReader(ms);
-            var config = new CsvHelper.Configuration.CsvConfiguration(CultureInfo.InvariantCulture) { HasHeaderRecord = false };
-            using var csv = new CsvHelper.CsvReader(tr, config);
-            long acc = 0;
-            while (csv.Read())
-            {
-                acc += csv.GetField(0)!.Length;
-                acc += csv.GetField<int>(1);
-                acc += csv.GetField<DateTime>(2).Ticks;
-                acc += (long)csv.GetField<double>(3);
-            }
-            return acc;
-        }
     }
 }

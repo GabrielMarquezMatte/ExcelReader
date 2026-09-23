@@ -1,7 +1,7 @@
 using BenchmarkDotNet.Attributes;
 using ExcelReader.Core.Parser;
 using ExcelReader.Core.Reader;
-using MiniExcelLibs;
+using OfficeIMO.Excel;
 using Sylvan.Data;
 using Sylvan.Data.Excel;
 
@@ -134,13 +134,20 @@ namespace ExcelReader.Benchmarks
         }
 
         [Benchmark]
-        public long MiniExcel()
+        public long OfficeIMO()
         {
-            using var ms = new MemoryStream(_workbook, writable: false);
+            // Hand-mapped: OfficeIMO's RowsAs<T> needs an r attribute on every <row> and <c>, which the spec makes optional and our writer omits.
+            using var reader = ExcelDocument.OpenDataReader(_workbook, new ExcelReadOptions { HasHeaderRow = true });
             long acc = 0;
-            foreach (Record rec in ms.Query<Record>(excelType: ExcelType.XLSX))
+            while (reader.Read())
             {
-                acc += Accumulate(rec);
+                acc += Accumulate(new Record
+                {
+                    Name = reader.GetString(0),
+                    Id = reader.GetInt32(1),
+                    Date = reader.GetDateTime(2),
+                    Value = reader.GetDouble(3),
+                });
             }
             return acc;
         }

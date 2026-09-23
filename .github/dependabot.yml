@@ -17,8 +17,7 @@ updates:
       benchmarks:
         patterns:
           - "BenchmarkDotNet"
-          - "CsvHelper"
-          - "MiniExcel"
+          - "OfficeIMO.*"
           - "Sep"
           - "SpreadCheetah"
           - "Sylvan.*"
