@@ -62,7 +62,6 @@ namespace ExcelReader.Tests
             return ms.ToArray();
         }
 
-        // ZipArchive reads its central directory synchronously even under CreateAsync, so sync reads are allowed until the reader is open.
         private sealed class SyncGuardStream(byte[] bytes) : Stream
         {
             private readonly MemoryStream _inner = new(bytes, writable: false);

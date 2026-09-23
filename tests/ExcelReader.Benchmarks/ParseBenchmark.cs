@@ -136,7 +136,6 @@ namespace ExcelReader.Benchmarks
         [Benchmark]
         public long OfficeIMO()
         {
-            // Hand-mapped: OfficeIMO's RowsAs<T> needs an r attribute on every <row> and <c>, which the spec makes optional and our writer omits.
             using var reader = ExcelDocument.OpenDataReader(_workbook, new ExcelReadOptions { HasHeaderRow = true });
             long acc = 0;
             while (reader.Read())

@@ -55,7 +55,6 @@ namespace ExcelReader.Core.Parser.Internal
             typeof(Guid),
         ]);
 
-        // No IUtf8SpanParsable implementation, so these parse from the decoded text.
         private static readonly FrozenSet<Type> _spanParsableTypes = FrozenSet.ToFrozenSet(
         [
             typeof(TimeSpan), typeof(DateTimeOffset),

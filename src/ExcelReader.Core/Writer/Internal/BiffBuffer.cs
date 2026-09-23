@@ -114,6 +114,16 @@ namespace ExcelReader.Core.Writer.Internal
             Length += byteCount;
         }
 
+        internal Span<byte> Slice(int position, int length)
+        {
+            return _buffer.AsSpan(position, length);
+        }
+
+        internal void Truncate(int length)
+        {
+            Length = length;
+        }
+
         internal int BeginRecord(int id)
         {
             WriteU16(id);

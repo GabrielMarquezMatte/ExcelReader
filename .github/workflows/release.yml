@@ -7,7 +7,6 @@ on:
 permissions:
   contents: read
 
-# Nothing is published until every build and test job has passed.
 jobs:
   build:
     name: Build, test & pack (.NET)
@@ -54,7 +53,6 @@ jobs:
           path: ./artifacts
           format: spdx-json
           output-file: ./artifacts/excelreader.spdx.json
-          # This job is read-only; the publish job attaches the SBOM once every test has passed.
           upload-release-assets: false
 
       - name: Upload package artifacts
@@ -286,7 +284,6 @@ jobs:
 
   publish-rust:
     name: Publish Rust crates
-    # build.rs downloads the native library from the GitHub Release, so the assets must be up first.
     needs: [build, publish]
     runs-on: ubuntu-latest
 
@@ -320,7 +317,6 @@ jobs:
   promote-public-api:
     name: Promote PublicAPI.Unshipped -> Shipped
     needs: publish
-    # A release candidate's API can still change, so only final releases promote it.
     if: ${{ !contains(github.ref_name, '-') }}
     runs-on: ubuntu-latest
     permissions:
