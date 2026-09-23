@@ -200,6 +200,7 @@ override ExcelReader.Core.Writer.XlsbWriterOptions.ToString() -> string!
 override ExcelReader.Core.Writer.XlsxWriterOptions.Equals(object? obj) -> bool
 override ExcelReader.Core.Writer.XlsxWriterOptions.GetHashCode() -> int
 override ExcelReader.Core.Writer.XlsxWriterOptions.ToString() -> string!
+static ExcelReader.Core.Parser.ExcelCellReaders.SpanParsable<TValue>(in ExcelReader.Core.ValueObjects.Cell cell, bool isDate1904, System.IFormatProvider! provider, out TValue value) -> bool
 static ExcelReader.Core.Parser.ExcelParser.Build<T>(System.Action<ExcelReader.Core.Parser.ExcelRowMapBuilder<T>!>! configure, ExcelReader.Core.Parser.ExcelParserConfig? config = null) -> ExcelReader.Core.Parser.ExcelParser<T>!
 static ExcelReader.Core.Parser.ExcelParser.BuildWithAttributeFallback<T>(System.Action<ExcelReader.Core.Parser.ExcelRowMapBuilder<T>!>! configure, ExcelReader.Core.Parser.ExcelParserConfig? config = null) -> ExcelReader.Core.Parser.ExcelParser<T>!
 static ExcelReader.Core.Parser.ExcelParser.FromAttributes<T>(ExcelReader.Core.Parser.ExcelParserConfig? config = null) -> ExcelReader.Core.Parser.ExcelParser<T>!
