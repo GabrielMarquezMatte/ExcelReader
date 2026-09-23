@@ -1,3 +1,4 @@
+using System.Data;
 using ExcelReader.Core.Enums;
 using ExcelReader.Core.ValueObjects;
 using Sylvan.Data.Excel;
@@ -76,6 +77,24 @@ namespace ExcelReader.Benchmarks
                 }
             }
             while (reader.NextResult());
+            return acc;
+        }
+
+        internal static long AccumulateDataReader(IDataReader reader)
+        {
+            long acc = 0;
+            while (reader.Read())
+            {
+                for (int i = 0; i < reader.FieldCount; i++)
+                {
+                    switch (reader.GetValue(i))
+                    {
+                        case string s: acc += s.Length; break;
+                        case double d: acc += (long)d; break;
+                        case DateTime dt: acc += dt.Ticks; break;
+                    }
+                }
+            }
             return acc;
         }
     }

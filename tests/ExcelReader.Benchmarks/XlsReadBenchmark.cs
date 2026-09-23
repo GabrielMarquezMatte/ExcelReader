@@ -51,6 +51,13 @@ namespace ExcelReader.Benchmarks
             using var reader = global::Sylvan.Data.Excel.ExcelDataReader.Create(ms, ExcelWorkbookType.Excel, new ExcelDataReaderOptions());
             return AccumulateSylvanExcel(reader);
         }
+
+        [Benchmark]
+        public long OfficeIMO()
+        {
+            using var reader = global::OfficeIMO.Excel.ExcelDocument.OpenDataReader(_workbook, new global::OfficeIMO.Excel.ExcelReadOptions { HasHeaderRow = false });
+            return AccumulateDataReader(reader);
+        }
     }
 
     internal static class XlsBenchmarkWorkbookGenerator
