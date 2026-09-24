@@ -1,3 +1,4 @@
+using System.Buffers;
 using System.Diagnostics.CodeAnalysis;
 using System.Numerics;
 using System.Runtime.CompilerServices;
@@ -55,8 +56,8 @@ namespace ExcelReader.Core.Reader.Csv
             private bool _scannerValid;
             private readonly bool _scannerSupported;
 
-            private readonly int[] _batchCellEnds = new int[BatchRecords];
-            private readonly int[] _batchRecordStarts = new int[BatchRecords];
+            private int[] _batchCellEnds = ArrayPool<int>.Shared.Rent(BatchRecords);
+            private int[] _batchRecordStarts = ArrayPool<int>.Shared.Rent(BatchRecords);
             private int _batchSize;
             private int _batchNext;
             private int _firstCell;
@@ -114,6 +115,18 @@ namespace ExcelReader.Core.Reader.Csv
             {
                 ref readonly CellDesc d = ref RecordCells[index];
                 return d.ToCell(_buf.AsSpan(0, _len), _acc.ValueSpan, rowBuffer: default, sharedStringCache: null, contentCache: _contentCache);
+            }
+
+            private protected override void ReturnBuffers()
+            {
+                base.ReturnBuffers();
+                if (_batchCellEnds.Length > 0)
+                {
+                    ArrayPool<int>.Shared.Return(_batchCellEnds);
+                    ArrayPool<int>.Shared.Return(_batchRecordStarts);
+                    _batchCellEnds = [];
+                    _batchRecordStarts = [];
+                }
             }
 
             /// <inheritdoc/>

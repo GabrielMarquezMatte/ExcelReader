@@ -149,7 +149,7 @@ namespace ExcelReader.Core.Reader
             await _io.EnsureAsync(_source, count, _ct).ConfigureAwait(false);
         }
 
-        private protected void ReturnBuffers()
+        private protected virtual void ReturnBuffers()
         {
             _io.Return();
             _acc.Return();
