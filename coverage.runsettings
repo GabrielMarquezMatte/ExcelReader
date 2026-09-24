@@ -10,8 +10,8 @@
                 <!-- Source generator output. Counting it measures the generators' templates, not
                      this repo's code: ConsoleAppFramework alone contributes ~660 permanently
                      uncovered lines, which is most of what drags ExcelReader.Cli's number down.
-                     The separator class matters - a bare `obj` substring also matches
-                     ValueObjects/. -->
+                     The separator class matters - a bare `obj` substring would also match
+                     any path segment merely containing "obj". -->
                 <Source>.*[\/]obj[\/].*</Source>
                 <!-- The C ABI entry points. Managed code cannot call an [UnmanagedCallersOnly]
                      method, so the .NET suite structurally cannot reach them; they are exercised by

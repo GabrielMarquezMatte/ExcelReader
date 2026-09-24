@@ -3,7 +3,9 @@ using System.Buffers.Binary;
 using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
 using ExcelReader.Core.Reader;
-using static ExcelReader.Core.Reader.Biff12;
+using ExcelReader.Core.Reader.Internal;
+using ExcelReader.Core.Reader.Xls;
+using static ExcelReader.Core.Reader.Xlsb.Biff12;
 
 namespace ExcelReader.Core.Crypto
 {

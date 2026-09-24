@@ -1,7 +1,10 @@
-using System.Text;
 using Apache.Arrow;
 using Apache.Arrow.Types;
 using ExcelReader.Core.Writer;
+using ExcelReader.Core.Writer.Csv;
+using ExcelReader.Core.Writer.Xls;
+using ExcelReader.Core.Writer.Xlsb;
+using ExcelReader.Core.Writer.Xlsx;
 
 namespace ExcelReader.Arrow
 {

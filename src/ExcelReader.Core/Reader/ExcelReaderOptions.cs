@@ -1,3 +1,5 @@
+using ExcelReader.Core.Reader.Csv;
+
 namespace ExcelReader.Core.Reader
 {
     /// <summary>
@@ -34,9 +36,9 @@ namespace ExcelReader.Core.Reader
         /// <summary>
         /// Gets a value indicating whether inline/formula-string text cells (cells not served by the
         /// workbook's shared-string table) are deduplicated through a small content-keyed cache when
-        /// materialized via <see cref="ValueObjects.Cell.GetString"/>. Defaults to <see langword="false"/>.
+        /// materialized via <see cref="Cell.GetString"/>. Defaults to <see langword="false"/>.
         /// Has no effect on shared-string cells, which already dedup through the shared-string table's
-        /// own index-keyed cache, nor on the zero-copy <see cref="ValueObjects.Cell.Value"/> span path —
+        /// own index-keyed cache, nor on the zero-copy <see cref="Cell.Value"/> span path —
         /// only <c>GetString()</c> consults this cache. Worth enabling only when inline/formula-string
         /// cells are known to repeat; for mostly-unique text the per-call hashing cost has no dedup
         /// benefit to offset it (see <see cref="CsvReaderOptions.InternStrings"/> for measurements
@@ -73,10 +75,10 @@ namespace ExcelReader.Core.Reader
         public int MaxPasswordSpinCount { get; init; } = 100_000;
 
         /// <summary>Gets the delimited-text settings used when a source is opened as
-        /// <see cref="Enums.ExcelFileFormat.Csv"/>. Defaults to <see langword="null"/>, meaning
+        /// <see cref="ExcelFileFormat.Csv"/>. Defaults to <see langword="null"/>, meaning
         /// <see cref="CsvReaderOptions.Default"/>.</summary>
         /// <remarks>Lets one options object carry both format families, so a caller that does not know
-        /// which one it will get — <see cref="Excel.Open(string,Enums.ExcelFileFormat,ExcelReaderOptions?)"/>,
+        /// which one it will get — <see cref="Excel.Open(string,ExcelFileFormat,ExcelReaderOptions?)"/>,
         /// or the <c>xl_open_options</c> struct the native ABI passes through — configures both in one
         /// place. The other properties on this record cover the Excel formats only and are ignored on the
         /// CSV path, as this one is on every other path.</remarks>

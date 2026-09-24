@@ -1,10 +1,9 @@
+using System.Globalization;
 using Apache.Arrow;
 using Apache.Arrow.Types;
-using ExcelReader.Core.Enums;
 using ExcelReader.Core.Parser;
 using ExcelReader.Core.Reader;
-using ExcelReader.Core.ValueObjects;
-using System.Globalization;
+using ExcelReader.Core.Reader.Schema;
 
 namespace ExcelReader.Arrow
 {

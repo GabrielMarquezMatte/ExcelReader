@@ -46,6 +46,7 @@ foreach (var item in ExcelParser.FromAttributes<ChangeRow>().Parse(reader)) { /*
 using ExcelReader.Core.Parser;
 using ExcelReader.Core.Reader;
 using ExcelReader.Core.Writer;
+using ExcelReader.Core.Writer.Xlsx;
 
 [ExcelSerializable]                       // the model must be declared partial
 public partial class ChangeRow
@@ -177,7 +178,7 @@ For types the built-in parsers do not handle — money strings, custom formats, 
 ```csharp
 using System.Globalization;
 using ExcelReader.Core.Parser;
-using ExcelReader.Core.ValueObjects;
+using ExcelReader.Core.Reader;
 
 public sealed class BrlMoneyConverter : IExcelCellConverter<decimal>
 {

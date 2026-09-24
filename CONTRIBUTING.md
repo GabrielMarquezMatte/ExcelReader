@@ -28,7 +28,7 @@ rewrites — see [ARCHITECTURE.md](ARCHITECTURE.md) for the shape of the codebas
 
   Untrusted-input paths (the CFB/OLE, BIFF8, BIFF12, and ZIP parsers) get extra scrutiny — new
   parsing code should have a corresponding limit/fuzz-safety test in
-  `tests/ExcelReader.Tests/ReaderLimitTests.cs` or `FuzzTests.cs` where relevant. Read
+  `tests/ExcelReader.Tests/Reader/ReaderLimitTests.cs` or `tests/ExcelReader.Tests/FuzzTests.cs` where relevant. Read
   [STYLEGUIDE.md § Untrusted Input](STYLEGUIDE.md#untrusted-input) before touching a parser: every
   length, offset, and size read from the file must be bounded before it drives an allocation.
 

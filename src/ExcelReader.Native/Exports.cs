@@ -1,7 +1,10 @@
-using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System.Runtime.InteropServices;
 using System.Text;
+using ExcelReader.Native.Arrow;
+using ExcelReader.Native.Csv;
+using ExcelReader.Native.Reading;
+using ExcelReader.Native.Typed;
 using ExcelReader.Native.Writer;
 
 namespace ExcelReader.Native
@@ -17,7 +20,7 @@ namespace ExcelReader.Native
                 return NativeStatus.InvalidArgument;
             }
 
-            int status = NativeApi.OpenFile(new ReadOnlySpan<byte>(path, pathLength), format, out NativeHandle? handle);
+            int status = ReadApi.OpenFile(new ReadOnlySpan<byte>(path, pathLength), format, out NativeHandle? handle);
             return RegisterOpened(status, handle, outHandle);
         }
 
@@ -33,7 +36,7 @@ namespace ExcelReader.Native
             {
                 return NativeStatus.InvalidArgument;
             }
-            int status = NativeApi.OpenFileEx(new ReadOnlySpan<byte>(path, pathLength), format, rawOptions, out NativeHandle? handle);
+            int status = ReadApi.OpenFileEx(new ReadOnlySpan<byte>(path, pathLength), format, rawOptions, out NativeHandle? handle);
             return RegisterOpened(status, handle, outHandle);
         }
 
@@ -45,7 +48,7 @@ namespace ExcelReader.Native
                 return NativeStatus.InvalidArgument;
             }
 
-            int status = NativeApi.OpenMemory(new ReadOnlySpan<byte>(data, dataLength), format, out NativeHandle? handle);
+            int status = ReadApi.OpenMemory(new ReadOnlySpan<byte>(data, dataLength), format, out NativeHandle? handle);
             return RegisterOpened(status, handle, outHandle);
         }
 
@@ -61,7 +64,7 @@ namespace ExcelReader.Native
             {
                 return NativeStatus.InvalidArgument;
             }
-            int status = NativeApi.OpenMemoryEx(new ReadOnlySpan<byte>(data, dataLength), format, rawOptions, out NativeHandle? handle);
+            int status = ReadApi.OpenMemoryEx(new ReadOnlySpan<byte>(data, dataLength), format, rawOptions, out NativeHandle? handle);
             return RegisterOpened(status, handle, outHandle);
         }
 
@@ -78,7 +81,7 @@ namespace ExcelReader.Native
                 return NativeStatus.InvalidHandle;
             }
 
-            return NativeApi.Close(target);
+            return ReadApi.Close(target);
         }
 
         [UnmanagedCallersOnly(EntryPoint = "xl_sheet_count")]
@@ -89,7 +92,7 @@ namespace ExcelReader.Native
                 return NativeStatus.InvalidArgument;
             }
 
-            int status = NativeApi.SheetCount(Resolve(handle), out int count);
+            int status = ReadApi.SheetCount(Resolve(handle), out int count);
             *outCount = count;
             return status;
         }
@@ -102,7 +105,7 @@ namespace ExcelReader.Native
                 return NativeStatus.InvalidArgument;
             }
 
-            int status = NativeApi.SheetName(Resolve(handle), new Span<byte>(buffer, capacity), out int length);
+            int status = ReadApi.SheetName(Resolve(handle), new Span<byte>(buffer, capacity), out int length);
             *outLength = length;
             return status;
         }
@@ -115,7 +118,7 @@ namespace ExcelReader.Native
                 return NativeStatus.InvalidArgument;
             }
 
-            int status = NativeApi.SheetNameAt(Resolve(handle), index, new Span<byte>(buffer, capacity), out int length);
+            int status = ReadApi.SheetNameAt(Resolve(handle), index, new Span<byte>(buffer, capacity), out int length);
             *outLength = length;
             return status;
         }
@@ -123,7 +126,7 @@ namespace ExcelReader.Native
         [UnmanagedCallersOnly(EntryPoint = "xl_move_to_sheet")]
         public static int MoveToSheet(nint handle, int index)
         {
-            return NativeApi.MoveToSheet(Resolve(handle), index);
+            return ReadApi.MoveToSheet(Resolve(handle), index);
         }
 
         [UnmanagedCallersOnly(EntryPoint = "xl_is_date1904")]
@@ -134,7 +137,7 @@ namespace ExcelReader.Native
                 return NativeStatus.InvalidArgument;
             }
 
-            int status = NativeApi.IsDate1904(Resolve(handle), out int flag);
+            int status = ReadApi.IsDate1904(Resolve(handle), out int flag);
             *outFlag = flag;
             return status;
         }
@@ -147,7 +150,7 @@ namespace ExcelReader.Native
                 return NativeStatus.InvalidArgument;
             }
 
-            int status = NativeApi.NextRow(Resolve(handle), new Span<byte>(buffer, capacity), out int written);
+            int status = ReadApi.NextRow(Resolve(handle), new Span<byte>(buffer, capacity), out int written);
             *outWritten = written;
             return status;
         }
@@ -160,7 +163,7 @@ namespace ExcelReader.Native
                 return NativeStatus.InvalidArgument;
             }
 
-            int status = NativeApi.ReadAllBlob(Resolve(handle), new Span<byte>(buffer, capacity), out int written);
+            int status = ReadApi.ReadAllBlob(Resolve(handle), new Span<byte>(buffer, capacity), out int written);
             *outWritten = written;
             return status;
         }
@@ -173,7 +176,7 @@ namespace ExcelReader.Native
                 return NativeStatus.InvalidArgument;
             }
 
-            int status = NativeApi.ReadAllDecoded(Resolve(handle), out NativeRows rows);
+            int status = ReadApi.ReadAllDecoded(Resolve(handle), out NativeRows rows);
             *outRows = rows;
             return status;
         }
@@ -187,7 +190,7 @@ namespace ExcelReader.Native
             }
             try
             {
-                NativeApi.FreeRows(ref *rows);
+                ReadApi.FreeRows(ref *rows);
             }
             catch (Exception exception)
             {
@@ -198,7 +201,7 @@ namespace ExcelReader.Native
         [UnmanagedCallersOnly(EntryPoint = "xl_parse_typed")]
         public static int ParseTyped(nint handle, NativeColumnSpecRaw* specs, int specCount, int headerRow, NativeTable* outTable)
         {
-            if (specs is null || outTable is null || !NativeApi.IsValidSpecCount(specCount))
+            if (specs is null || outTable is null || !TypedApi.IsValidSpecCount(specCount))
             {
                 return NativeStatus.InvalidArgument;
             }
@@ -211,7 +214,7 @@ namespace ExcelReader.Native
                     return NativeStatus.InvalidArgument;
                 }
 
-                int status = NativeApi.ParseTyped(Resolve(handle), decoded, headerRow, out NativeTable table);
+                int status = TypedApi.ParseTyped(Resolve(handle), decoded, headerRow, out NativeTable table);
                 *outTable = table;
                 return status;
             }
@@ -232,7 +235,7 @@ namespace ExcelReader.Native
             }
             try
             {
-                NativeApi.FreeTable(ref *table);
+                TypedApi.FreeTable(ref *table);
             }
             catch (Exception exception)
             {
@@ -249,7 +252,7 @@ namespace ExcelReader.Native
                 return NativeStatus.InvalidArgument;
             }
             *outReader = 0;
-            if (specs is null || !NativeApi.IsValidSpecCount(specCount))
+            if (specs is null || !TypedApi.IsValidSpecCount(specCount))
             {
                 return NativeStatus.InvalidArgument;
             }
@@ -261,7 +264,7 @@ namespace ExcelReader.Native
                     return NativeStatus.InvalidArgument;
                 }
 
-                int status = NativeApi.OpenTypedReader(Resolve(handle), decoded, headerRow, maxRows, out nint reader);
+                int status = TypedApi.OpenTypedReader(Resolve(handle), decoded, headerRow, maxRows, out nint reader);
                 *outReader = reader;
                 return status;
             }
@@ -284,7 +287,7 @@ namespace ExcelReader.Native
 
             try
             {
-                int status = NativeApi.NextTypedBatch(reader, out NativeTable table);
+                int status = TypedApi.NextTypedBatch(reader, out NativeTable table);
                 *outTable = table;
                 return status;
             }
@@ -301,7 +304,7 @@ namespace ExcelReader.Native
         {
             try
             {
-                NativeApi.CloseTypedReader(reader);
+                TypedApi.CloseTypedReader(reader);
             }
             catch (Exception exception)
             {
@@ -313,7 +316,7 @@ namespace ExcelReader.Native
         public static int WriteTyped(byte* path, int pathLength, int format, NativeColumnSpecRaw* specs, NativeTable* table, NativeWriteOptionsRaw* options)
         {
             if (path is null || pathLength <= 0 || specs is null || table is null
-                || !NativeApi.IsValidSpecCount(table->ColumnCount))
+                || !TypedApi.IsValidSpecCount(table->ColumnCount))
             {
                 return NativeStatus.InvalidArgument;
             }
@@ -328,7 +331,7 @@ namespace ExcelReader.Native
                 {
                     return NativeStatus.InvalidArgument;
                 }
-                return NativeApi.WriteTyped(new ReadOnlySpan<byte>(path, pathLength), format, decoded, *table, decodedOptions);
+                return WriteApi.WriteTyped(new ReadOnlySpan<byte>(path, pathLength), format, decoded, *table, decodedOptions);
             }
             catch (Exception exception)
             {
@@ -340,7 +343,7 @@ namespace ExcelReader.Native
         [UnmanagedCallersOnly(EntryPoint = "xl_write_typed_to_memory")]
         public static int WriteTypedToMemory(int format, NativeColumnSpecRaw* specs, NativeTable* table, NativeWriteOptionsRaw* options, NativeBuffer* outBuffer)
         {
-            if (specs is null || table is null || outBuffer is null || !NativeApi.IsValidSpecCount(table->ColumnCount))
+            if (specs is null || table is null || outBuffer is null || !TypedApi.IsValidSpecCount(table->ColumnCount))
             {
                 return NativeStatus.InvalidArgument;
             }
@@ -356,7 +359,7 @@ namespace ExcelReader.Native
                 {
                     return NativeStatus.InvalidArgument;
                 }
-                int status = NativeApi.WriteTypedToMemory(format, decoded, *table, decodedOptions, out byte[]? bytes);
+                int status = WriteApi.WriteTypedToMemory(format, decoded, *table, decodedOptions, out byte[]? bytes);
                 PublishBuffer(bytes, outBuffer);
                 return status;
             }
@@ -421,7 +424,7 @@ namespace ExcelReader.Native
             string? sheetName = null;
             if (raw.SheetName is not null)
             {
-                if (!NativeApi.IsValidNameLength(raw.SheetNameLen))
+                if (!TypedApi.IsValidNameLength(raw.SheetNameLen))
                 {
                     NativeApi.SetLastError($"xl_write_options.sheet_name_len is out of range; got {raw.SheetNameLen}.");
                     return false;
@@ -444,7 +447,7 @@ namespace ExcelReader.Native
                 return NativeStatus.InvalidArgument;
             }
 
-            int status = NativeApi.InferSchema(Resolve(handle), headerRow, sampleSize, out NativeInferredSchema schema);
+            int status = ReadApi.InferSchema(Resolve(handle), headerRow, sampleSize, out NativeInferredSchema schema);
             *outSchema = schema;
             return status;
         }
@@ -458,7 +461,7 @@ namespace ExcelReader.Native
             }
             try
             {
-                NativeApi.FreeSchema(ref *schema);
+                ReadApi.FreeSchema(ref *schema);
             }
             catch (Exception exception)
             {
@@ -469,7 +472,7 @@ namespace ExcelReader.Native
         [UnmanagedCallersOnly(EntryPoint = "xl_parse_arrow")]
         public static int ParseArrow(nint handle, NativeColumnSpecRaw* specs, int specCount, int headerRow, ArrowArray* outArray, ArrowSchema* outSchema)
         {
-            if (specs is null || outArray is null || outSchema is null || !NativeApi.IsValidSpecCount(specCount))
+            if (specs is null || outArray is null || outSchema is null || !TypedApi.IsValidSpecCount(specCount))
             {
                 return NativeStatus.InvalidArgument;
             }
@@ -483,7 +486,7 @@ namespace ExcelReader.Native
                     return NativeStatus.InvalidArgument;
                 }
 
-                int status = NativeApi.ParseArrow(Resolve(handle), decoded, headerRow, out ArrowArray array, out ArrowSchema schema);
+                int status = ArrowApi.ParseArrow(Resolve(handle), decoded, headerRow, out ArrowArray array, out ArrowSchema schema);
                 *outArray = array;
                 *outSchema = schema;
                 return status;
@@ -506,7 +509,7 @@ namespace ExcelReader.Native
                 return NativeStatus.InvalidArgument;
             }
             *outStream = default;
-            if (specs is null || !NativeApi.IsValidSpecCount(specCount))
+            if (specs is null || !TypedApi.IsValidSpecCount(specCount))
             {
                 return NativeStatus.InvalidArgument;
             }
@@ -518,7 +521,7 @@ namespace ExcelReader.Native
                     return NativeStatus.InvalidArgument;
                 }
 
-                int status = NativeApi.OpenArrowStream(Resolve(handle), decoded, headerRow, maxRows,
+                int status = ArrowApi.OpenArrowStream(Resolve(handle), decoded, headerRow, maxRows,
                     out ArrowArrayStream stream);
                 *outStream = stream;
                 return status;
@@ -581,7 +584,7 @@ namespace ExcelReader.Native
             for (int i = 0; i < specCount; i++)
             {
                 NativeColumnSpecRaw raw = specs[i];
-                if (!NativeApi.IsValidNameCount(raw.NameCount))
+                if (!TypedApi.IsValidNameCount(raw.NameCount))
                 {
                     decoded = [];
                     return false;
@@ -594,7 +597,7 @@ namespace ExcelReader.Native
                 string[] names = new string[raw.NameCount];
                 for (int n = 0; n < raw.NameCount; n++)
                 {
-                    if (!NativeApi.IsValidNameLength(raw.NameLens[n]))
+                    if (!TypedApi.IsValidNameLength(raw.NameLens[n]))
                     {
                         decoded = [];
                         return false;
@@ -621,7 +624,7 @@ namespace ExcelReader.Native
             }
             try
             {
-                NativeApi.ReleaseArrowSchema((IntPtr)schema);
+                ArrowApi.ReleaseArrowSchema((IntPtr)schema);
             }
             catch (Exception exception)
             {
@@ -638,7 +641,7 @@ namespace ExcelReader.Native
             }
             try
             {
-                NativeApi.ReleaseArrowArray((IntPtr)array);
+                ArrowApi.ReleaseArrowArray((IntPtr)array);
             }
             catch (Exception exception)
             {
@@ -649,28 +652,28 @@ namespace ExcelReader.Native
         [UnmanagedCallersOnly]
         internal static int ArrowStreamGetSchema(ArrowArrayStream* stream, ArrowSchema* outSchema)
         {
-            try { return NativeApi.ArrowStreamGetSchemaCore(stream, outSchema); }
+            try { return ArrowApi.ArrowStreamGetSchemaCore(stream, outSchema); }
             catch { return 5; }
         }
 
         [UnmanagedCallersOnly]
         internal static int ArrowStreamGetNext(ArrowArrayStream* stream, ArrowArray* outArray)
         {
-            try { return NativeApi.ArrowStreamGetNextCore(stream, outArray); }
+            try { return ArrowApi.ArrowStreamGetNextCore(stream, outArray); }
             catch { return 5; }
         }
 
         [UnmanagedCallersOnly]
         internal static IntPtr ArrowStreamGetLastError(ArrowArrayStream* stream)
         {
-            try { return NativeApi.ArrowStreamGetLastErrorCore(stream); }
+            try { return ArrowApi.ArrowStreamGetLastErrorCore(stream); }
             catch { return IntPtr.Zero; }
         }
 
         [UnmanagedCallersOnly]
         internal static void ArrowStreamRelease(ArrowArrayStream* stream)
         {
-            try { NativeApi.ArrowStreamReleaseCore(stream); }
+            try { ArrowApi.ArrowStreamReleaseCore(stream); }
             catch { }
         }
 
@@ -686,7 +689,7 @@ namespace ExcelReader.Native
             {
                 return NativeStatus.InvalidArgument;
             }
-            int status = NativeApi.OpenWriteHandle(new ReadOnlySpan<byte>(path, pathLength), format, decodedOptions, out NativeWriterHandle? handle);
+            int status = WriteApi.OpenWriteHandle(new ReadOnlySpan<byte>(path, pathLength), format, decodedOptions, out NativeWriterHandle? handle);
             if (handle is not null)
             {
                 *outHandle = NativeHandleTable.Register(handle);
@@ -706,7 +709,7 @@ namespace ExcelReader.Native
             {
                 return NativeStatus.InvalidArgument;
             }
-            int status = NativeApi.OpenWriteHandleToMemory(format, decodedOptions, out NativeWriterHandle? handle);
+            int status = WriteApi.OpenWriteHandleToMemory(format, decodedOptions, out NativeWriterHandle? handle);
             if (handle is not null)
             {
                 *outHandle = NativeHandleTable.Register(handle);
@@ -723,7 +726,7 @@ namespace ExcelReader.Native
             }
             *outBuffer = default;
             NativeWriterHandle? writerHandle = NativeHandleTable.Resolve<NativeWriterHandle>(handle);
-            int status = NativeApi.GetWriteHandleBytes(writerHandle, out byte[]? bytes);
+            int status = WriteApi.GetWriteHandleBytes(writerHandle, out byte[]? bytes);
             PublishBuffer(bytes, outBuffer);
             return status;
         }
@@ -731,7 +734,7 @@ namespace ExcelReader.Native
         [UnmanagedCallersOnly(EntryPoint = "xl_start_sheet")]
         public static int StartSheet(nint handle, byte* name, int nameLength)
         {
-            if (name is null || !NativeApi.IsValidNameLength(nameLength))
+            if (name is null || !TypedApi.IsValidNameLength(nameLength))
             {
                 NativeApi.SetLastError($"xl_start_sheet's name_len is out of range; got {nameLength}.");
                 return NativeStatus.InvalidArgument;
@@ -762,7 +765,7 @@ namespace ExcelReader.Native
         [UnmanagedCallersOnly(EntryPoint = "xl_write_string")]
         public static int WriteString(nint handle, byte* value, int valueLength)
         {
-            if (value is not null && !NativeApi.IsValidNameLength(valueLength))
+            if (value is not null && !TypedApi.IsValidNameLength(valueLength))
             {
                 NativeApi.SetLastError($"xl_write_string's value_len is out of range; got {valueLength}.");
                 return NativeStatus.InvalidArgument;
@@ -849,7 +852,7 @@ namespace ExcelReader.Native
             {
                 return NativeStatus.InvalidHandle;
             }
-            return NativeApi.CloseWriteHandle(target);
+            return WriteApi.CloseWriteHandle(target);
         }
 
         private static int RunWriterOp(nint handle, Action<NativeWriterHandle> operation)
@@ -892,7 +895,7 @@ namespace ExcelReader.Native
             }
 
             NativeCsvParallelOptionsRaw? rawOptions = options is null ? null : *options;
-            int status = NativeApi.AggregateCsvFile(
+            int status = CsvAggregateApi.AggregateCsvFile(
                 new ReadOnlySpan<byte>(path, pathLength), *aggregation, rawOptions, out nint result);
             if (status == NativeStatus.Ok)
             {
@@ -917,7 +920,7 @@ namespace ExcelReader.Native
             }
 
             NativeCsvParallelOptionsRaw? rawOptions = options is null ? null : *options;
-            int status = NativeApi.AggregateCsvMemory(
+            int status = CsvAggregateApi.AggregateCsvMemory(
                 data, dataLength, *aggregation, rawOptions, out nint result);
             if (status == NativeStatus.Ok)
             {

@@ -162,7 +162,7 @@ There was no other efficient path. `TryParse<T>` is constrained to `IUtf8SpanPar
 `CsvWriter` could not be read back by its own `CsvReader`; a test asserted that limitation rather
 than the round-trip its name promised.
 
-`FastDate` (`src/ExcelReader.Core/ValueObjects/FastDate.cs`) now parses ISO-8601 straight from UTF-8:
+`FastDate` (`src/ExcelReader.Core/Reader/Internal/FastDate.cs`) now parses ISO-8601 straight from UTF-8:
 `yyyy-MM-dd`, optionally `T` or a space, a time, and up to seven fractional digits. A trailing zone
 designator is rejected rather than guessed at.
 

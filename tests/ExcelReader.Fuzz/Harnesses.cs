@@ -1,9 +1,12 @@
 using System.Globalization;
 using System.Text;
 using ExcelReader.Core.Parser;
-using ExcelReader.Core.Parser.Internal;
+using ExcelReader.Core.Parser.ParallelCsv;
 using ExcelReader.Core.Reader;
-using ExcelReader.Core.ValueObjects;
+using ExcelReader.Core.Reader.Csv;
+using ExcelReader.Core.Reader.Xls;
+using ExcelReader.Core.Reader.Xlsb;
+using ExcelReader.Core.Reader.Xlsx;
 
 namespace ExcelReader.Fuzz
 {

@@ -1,0 +1,4 @@
+[*.cs]
+# Folders group benchmarks by feature, but the namespace stays ExcelReader.Benchmarks: BenchmarkDotNet
+# full names key the published Pages history, the PR baselines and benchmark-groups.json filters.
+dotnet_style_namespace_match_folder = false

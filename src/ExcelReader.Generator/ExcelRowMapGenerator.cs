@@ -606,7 +606,7 @@ namespace ExcelReader.Generator
 
         private static void EmitPropertyRaw(StringBuilder sb, string qualifiedType, string namesLiteral, string propertyName, string req, string tryReadExpr)
         {
-            sb.AppendLine($"            .PropertyRaw([{namesLiteral}], static (ref {qualifiedType} m, in global::ExcelReader.Core.ValueObjects.Cell c, bool d, global::System.IFormatProvider pr) =>");
+            sb.AppendLine($"            .PropertyRaw([{namesLiteral}], static (ref {qualifiedType} m, in global::ExcelReader.Core.Reader.Cell c, bool d, global::System.IFormatProvider pr) =>");
             sb.AppendLine("            {");
             sb.AppendLine($"                if (!{tryReadExpr}) {{ return false; }}");
             sb.AppendLine($"                m.{propertyName} = v;");

@@ -1,0 +1,56 @@
+using ExcelReader.Core.Reader.Internal;
+
+namespace ExcelReader.Core.Reader
+{
+    /// <summary>
+    /// Enumerates the populated cells of a <see cref="Row"/>, in ascending column order, skipping gaps.
+    /// Supports <c>foreach</c> via the duck-typed enumerator pattern (ref structs cannot implement
+    /// <see cref="IEnumerator{T}"/>).
+    /// </summary>
+    public ref struct RowCellEnumerator
+    {
+        private readonly ReadOnlySpan<CellDesc> _cells;
+        private readonly ReadOnlySpan<byte> _rowValues;
+        private readonly ReadOnlySpan<byte> _shared;
+        private readonly ReadOnlySpan<byte> _rowBuffer;
+        private readonly string?[]? _sharedStringCache;
+        private readonly Utf8StringCache? _contentCache;
+        private int _index;
+        internal RowCellEnumerator(ReadOnlySpan<CellDesc> cells, ReadOnlySpan<byte> rowValues, ReadOnlySpan<byte> shared,
+            ReadOnlySpan<byte> rowBuffer = default, string?[]? sharedStringCache = null, Utf8StringCache? contentCache = null)
+        {
+            _cells = cells;
+            _rowValues = rowValues;
+            _shared = shared;
+            _rowBuffer = rowBuffer;
+            _sharedStringCache = sharedStringCache;
+            _contentCache = contentCache;
+            _index = -1;
+        }
+        /// <summary>Returns this enumerator, enabling <c>foreach</c> over a <see cref="Row"/>'s cells.</summary>
+        public readonly RowCellEnumerator GetEnumerator()
+        {
+            return this;
+        }
+        /// <summary>The cell at the enumerator's current position.</summary>
+        public readonly RowCell Current
+        {
+            get
+            {
+                ref readonly var d = ref _cells[_index];
+                return new RowCell(d.Column, d.ToCell(_rowValues, _shared, _rowBuffer, _sharedStringCache, _contentCache));
+            }
+        }
+        /// <summary>Advances to the next populated cell; returns false when enumeration is exhausted.</summary>
+        public bool MoveNext()
+        {
+            int next = _index + 1;
+            if (next >= _cells.Length)
+            {
+                return false;
+            }
+            _index = next;
+            return true;
+        }
+    }
+}

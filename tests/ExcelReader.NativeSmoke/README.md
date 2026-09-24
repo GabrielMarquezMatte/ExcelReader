@@ -8,7 +8,7 @@ Two layers, both in `smoke.c`:
 1. `_STATIC_ASSERT`s on every ABI struct's `sizeof`/`offsetof`, catching a header layout change on
    whatever compiler builds this file.
 2. Runtime assertions driving every export against `RealExcel.xlsb`, catching a mismatch between the
-   header and the actual C# implementation (`Exports.cs`/`NativeApi*.cs`) — a layout mismatch there
+   header and the actual C# implementation (`Exports.cs` and the `*Api` classes) — a layout mismatch there
    produces garbage values, and these assertions fail on the values.
 
 See `smoke.c`'s top comment for why the library is loaded dynamically (`LoadLibrary`/`dlopen`)

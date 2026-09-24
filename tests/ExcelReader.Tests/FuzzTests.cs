@@ -1,7 +1,8 @@
 using System.Globalization;
 using System.IO.Compression;
 using ExcelReader.Core.Reader;
-using ExcelReader.Core.Writer;
+using ExcelReader.Core.Writer.Xlsb;
+using ExcelReader.Tests.Reader.Xls;
 
 namespace ExcelReader.Tests
 {

@@ -1,0 +1,416 @@
+using System.Globalization;
+using ExcelReader.Core.Reader;
+using ExcelReader.Core.Writer.Xls;
+
+namespace ExcelReader.Tests.Writer.Xls
+{
+    public class XlsWriterTests
+    {
+        private static readonly CultureInfo Inv = CultureInfo.InvariantCulture;
+
+        private static async Task<byte[]> WriteAsync(
+            Action<XlsWorkbookWriter> build, bool date1904 = false, CancellationToken ct = default)
+        {
+            var ms = new MemoryStream();
+            await using (var wb = XlsWorkbookWriter.Create(ms, leaveOpen: true, date1904: date1904))
+            {
+                build(wb);
+                await wb.EndAsync(ct);
+            }
+            return ms.ToArray();
+        }
+
+        [Fact]
+        public async Task RoundTripsAllCellTypes()
+        {
+            CancellationToken ct = TestContext.Current.CancellationToken;
+            var date = new DateTime(2024, 5, 6, 0, 0, 0, DateTimeKind.Unspecified);
+            byte[] bytes = await WriteAsync(wb =>
+            {
+                var s = wb.AddSheet("Plan1");
+                using (var r = s.StartRow())
+                {
+                    r.Write("João");
+                    r.Write(42);
+                    r.Write(3.5);
+                    r.Write(true);
+                    r.Write(date);
+                }
+                s.End();
+            }, ct: ct);
+
+            using var reader = Excel.FromXls(new MemoryStream(bytes));
+            using var e = reader.GetEnumerator();
+            Assert.True(e.MoveNext());
+            Assert.Equal("João", e.Current[0].GetString());
+            Assert.True(e.Current[1].TryParse(Inv, out int age));
+            Assert.Equal(42, age);
+            Assert.True(e.Current[2].TryParse(Inv, out double price));
+            Assert.Equal(3.5, price);
+            Assert.Equal(CellType.Boolean, e.Current[3].Type);
+            Assert.Equal("1", e.Current[3].GetString());
+            Assert.Equal(CellType.Date, e.Current[4].Type);
+            Assert.True(e.Current[4].TryGetDateTime(out DateTime parsed));
+            Assert.Equal(date, parsed);
+            Assert.False(e.MoveNext());
+        }
+
+        [Fact]
+        public async Task NumericOverloadsRoundTrip()
+        {
+            CancellationToken ct = TestContext.Current.CancellationToken;
+            byte[] bytes = await WriteAsync(wb =>
+            {
+                var s = wb.AddSheet("Numbers");
+                using (var r = s.StartRow())
+                {
+                    r.Write(123);
+                    r.Write(1234567890123L);
+                    r.Write(1.5f);
+                    r.Write(2.75d);
+                    r.Write(12.5m);
+                    r.Write((int?)null);
+                    r.Write((long?)7L);
+                    r.Write((double?)null);
+                    r.Write((decimal?)8.25m);
+                }
+                s.End();
+            }, ct: ct);
+
+            using var reader = Excel.FromXls(new MemoryStream(bytes));
+            using var e = reader.GetEnumerator();
+            Assert.True(e.MoveNext());
+            Assert.True(e.Current[0].TryParse(Inv, out int intValue));
+            Assert.Equal(123, intValue);
+            Assert.True(e.Current[1].TryParse(Inv, out long longValue));
+            Assert.Equal(1234567890123L, longValue);
+            Assert.True(e.Current[2].TryParse(Inv, out double floatValue));
+            Assert.Equal(1.5, floatValue);
+            Assert.True(e.Current[3].TryParse(Inv, out double doubleValue));
+            Assert.Equal(2.75, doubleValue);
+            Assert.True(e.Current[4].TryParse(Inv, out decimal decimalValue));
+            Assert.Equal(12.5m, decimalValue);
+            Assert.Equal(CellType.Empty, e.Current[5].Type);
+            Assert.True(e.Current[6].TryParse(Inv, out long nullableLong));
+            Assert.Equal(7L, nullableLong);
+            Assert.Equal(CellType.Empty, e.Current[7].Type);
+            Assert.True(e.Current[8].TryParse(Inv, out decimal nullableDecimal));
+            Assert.Equal(8.25m, nullableDecimal);
+            Assert.False(e.MoveNext());
+        }
+
+        [Fact]
+        public async Task NullableAndGenericOverloadsRoundTrip()
+        {
+            CancellationToken ct = TestContext.Current.CancellationToken;
+            DateTime date = new(2026, 6, 27, 0, 0, 0, DateTimeKind.Unspecified);
+            byte[] bytes = await WriteAsync(wb =>
+            {
+                var s = wb.AddSheet("MoreNumbers");
+                using (var r = s.StartRow())
+                {
+                    r.Write((bool?)true);
+                    r.Write((bool?)null);
+                    r.Write((DateTime?)date);
+                    r.Write((DateTime?)null);
+                    r.Write((float?)1.25f);
+                    r.Write((float?)null);
+                    r.Write<short>(6);
+                    r.Write((short?)7);
+                    r.Write<short>(null);
+                    r.Skip(0);
+                    r.Write<byte>(8);
+                }
+                s.End();
+            }, ct: ct);
+
+            using var reader = Excel.FromXls(new MemoryStream(bytes));
+            using var e = reader.GetEnumerator();
+            Assert.True(e.MoveNext());
+            Assert.Equal(CellType.Boolean, e.Current[0].Type);
+            Assert.Equal(CellType.Empty, e.Current[1].Type);
+            Assert.True(e.Current[2].TryGetDateTime(out DateTime parsed));
+            Assert.Equal(date, parsed);
+            Assert.Equal(CellType.Empty, e.Current[3].Type);
+            Assert.True(e.Current[4].TryParse(Inv, out double nullableFloat));
+            Assert.Equal(1.25, nullableFloat);
+            Assert.Equal(CellType.Empty, e.Current[5].Type);
+            Assert.True(e.Current[6].TryParse(Inv, out short genericShort));
+            Assert.Equal(6, genericShort);
+            Assert.True(e.Current[7].TryParse(Inv, out short nullableShort));
+            Assert.Equal(7, nullableShort);
+            Assert.Equal(CellType.Empty, e.Current[8].Type);
+            Assert.True(e.Current[9].TryParse(Inv, out byte genericByte));
+            Assert.Equal(8, genericByte);
+            Assert.False(e.MoveNext());
+        }
+
+        [Fact]
+        public async Task NullsAndSkipLeaveCellsEmpty()
+        {
+            CancellationToken ct = TestContext.Current.CancellationToken;
+            byte[] bytes = await WriteAsync(wb =>
+            {
+                var s = wb.AddSheet("S1");
+                using (var r = s.StartRow())
+                {
+                    r.Write("A");
+                    r.Write((string?)null);
+                    r.Skip();
+                    r.Write("D");
+                }
+                s.End();
+            }, ct: ct);
+
+            using var reader = Excel.FromXls(new MemoryStream(bytes));
+            using var e = reader.GetEnumerator();
+            Assert.True(e.MoveNext());
+            Assert.Equal("A", e.Current[0].GetString());
+            Assert.Equal(CellType.Empty, e.Current[1].Type);
+            Assert.Equal(CellType.Empty, e.Current[2].Type);
+            Assert.Equal("D", e.Current[3].GetString());
+        }
+
+        [Fact]
+        public async Task WritesMultipleSheetsWithCorrectOffsets()
+        {
+            CancellationToken ct = TestContext.Current.CancellationToken;
+            byte[] bytes = await WriteAsync(wb =>
+            {
+                var first = wb.AddSheet("First");
+                using (var r = first.StartRow()) { r.Write("one"); }
+                first.End();
+
+                var second = wb.AddSheet("Ωmega");
+                using (var r = second.StartRow()) { r.Write("two"); }
+                second.End();
+            }, ct: ct);
+
+            using var reader = Excel.FromXls(new MemoryStream(bytes));
+            Assert.Equal(2, reader.SheetCount);
+
+            reader.MoveToSheet(0);
+            Assert.Equal("First", reader.SheetName);
+            using (var e = reader.GetEnumerator()) { Assert.True(e.MoveNext()); Assert.Equal("one", e.Current[0].GetString()); }
+
+            Assert.True(reader.TryMoveToSheet("Ωmega"));
+            using (var e = reader.GetEnumerator()) { Assert.True(e.MoveNext()); Assert.Equal("two", e.Current[0].GetString()); }
+        }
+
+        [Fact]
+        public async Task ManyRowsRoundTripWithExactCount()
+        {
+            CancellationToken ct = TestContext.Current.CancellationToken;
+            const int rows = 1000;
+            byte[] bytes = await WriteAsync(wb =>
+            {
+                var s = wb.AddSheet("Big");
+                for (int i = 0; i < rows; i++)
+                {
+                    using var r = s.StartRow();
+                    r.Write($"r{i}");
+                    r.Write(i);
+                    r.Write(i * 0.25);
+                }
+                s.End();
+            }, ct: ct);
+
+            Assert.True(bytes.Length > 512 * 4, "workbook should span several OLE sectors");
+            using var reader = Excel.FromXls(new MemoryStream(bytes));
+            using var e = reader.GetEnumerator();
+            int read = 0;
+            while (e.MoveNext())
+            {
+                Assert.Equal($"r{read}", e.Current[0].GetString());
+                Assert.True(e.Current[1].TryParse(Inv, out int n));
+                Assert.Equal(read, n);
+                Assert.True(e.Current[2].TryParse(Inv, out double d));
+                Assert.Equal(read * 0.25, d);
+                read++;
+            }
+            Assert.Equal(rows, read);
+        }
+
+        [Fact]
+        public async Task Date1904RoundTrips()
+        {
+            CancellationToken ct = TestContext.Current.CancellationToken;
+            var date = new DateTime(1990, 7, 15, 0, 0, 0, DateTimeKind.Unspecified);
+            byte[] bytes = await WriteAsync(wb =>
+            {
+                var s = wb.AddSheet("S1");
+                using (var r = s.StartRow()) { r.Write(date); }
+                s.End();
+            }, date1904: true, ct: ct);
+
+            using var reader = Excel.FromXls(new MemoryStream(bytes));
+            Assert.True(reader.IsDate1904);
+            using var e = reader.GetEnumerator();
+            Assert.True(e.MoveNext());
+            Assert.True(e.Current[0].TryGetDateTime(reader.IsDate1904, out DateTime parsed));
+            Assert.Equal(date, parsed);
+        }
+
+        [Fact]
+        public async Task ColumnBeyondLimitThrows()
+        {
+            var ms = new MemoryStream();
+            await using var wb = XlsWorkbookWriter.Create(ms, leaveOpen: true);
+            var s = wb.AddSheet("S1");
+            using var r = s.StartRow();
+            r.Skip(256);
+            Assert.Throws<InvalidOperationException>(() => r.Write("x"));
+        }
+
+        [Fact]
+        public async Task SkipBeyondColumnLimitThrows()
+        {
+            var ms = new MemoryStream();
+            await using var wb = XlsWorkbookWriter.Create(ms, leaveOpen: true);
+            var s = wb.AddSheet("S1");
+            using var r = s.StartRow();
+            Assert.Throws<InvalidOperationException>(() => r.Skip(257));
+        }
+
+        [Fact]
+        public async Task WriteNonNumericFormattableThrowsArgumentException()
+        {
+            var ms = new MemoryStream();
+            await using var wb = XlsWorkbookWriter.Create(ms, leaveOpen: true);
+            var s = wb.AddSheet("S1");
+            using var r = s.StartRow();
+            Assert.Throws<ArgumentException>(() => r.Write(new NonNumericFormattable()));
+        }
+
+        [Fact]
+        public async Task SheetNameTooLongThrows()
+        {
+            var ms = new MemoryStream();
+            await using var wb = XlsWorkbookWriter.Create(ms, leaveOpen: true);
+            Assert.Throws<ArgumentException>(() => wb.AddSheet(new string('x', 32)));
+        }
+
+        [Fact]
+        public async Task EmptySheetNameThrows()
+        {
+            var ms = new MemoryStream();
+            await using var wb = XlsWorkbookWriter.Create(ms, leaveOpen: true);
+
+            Assert.Throws<ArgumentException>(() => wb.AddSheet(string.Empty));
+        }
+
+        [Fact]
+        public async Task InvalidSheetCharacterThrows()
+        {
+            var ms = new MemoryStream();
+            await using var wb = XlsWorkbookWriter.Create(ms, leaveOpen: true);
+
+            Assert.Throws<ArgumentException>(() => wb.AddSheet("Bad[Name"));
+        }
+
+        [Fact]
+        public async Task NegativeSkipThrows()
+        {
+            var ms = new MemoryStream();
+            await using var wb = XlsWorkbookWriter.Create(ms, leaveOpen: true);
+            XlsSheetWriter sheet = wb.AddSheet("S1");
+            using XlsRowWriter row = sheet.StartRow();
+
+            Assert.Throws<ArgumentOutOfRangeException>(() => row.Skip(-1));
+        }
+
+        [Fact]
+        public async Task EmptyWorkbookThrows()
+        {
+            var ms = new MemoryStream();
+            await using var wb = XlsWorkbookWriter.Create(ms, leaveOpen: true);
+            await Assert.ThrowsAsync<InvalidOperationException>(async () => await wb.EndAsync(TestContext.Current.CancellationToken));
+        }
+
+        [Fact]
+        public async Task LargeWorkbookForcesDifatSectors()
+        {
+            CancellationToken ct = TestContext.Current.CancellationToken;
+            const int rows = 64000;
+            const int cols = 8;
+            byte[] bytes = await WriteAsync(wb =>
+            {
+                var s = wb.AddSheet("Big");
+                for (int i = 0; i < rows; i++)
+                {
+                    using var r = s.StartRow();
+                    r.Write(i);
+                    for (int c = 1; c < cols; c++)
+                    {
+                        r.Write(i + (c * 0.5));
+                    }
+                }
+                s.End();
+            }, ct: ct);
+
+            Assert.True(bytes.Length > 7 * 1024 * 1024, "workbook must exceed the DIFAT threshold");
+
+            using var reader = Excel.FromXls(new MemoryStream(bytes));
+            using var e = reader.GetEnumerator();
+            int read = 0;
+            while (e.MoveNext())
+            {
+                if (read is 0 or (rows - 1))
+                {
+                    Assert.True(e.Current[0].TryParse(Inv, out int first));
+                    Assert.Equal(read, first);
+                    Assert.True(e.Current[cols - 1].TryParse(Inv, out double last));
+                    Assert.Equal(read + ((cols - 1) * 0.5), last);
+                }
+                read++;
+            }
+            Assert.Equal(rows, read);
+        }
+
+        [Fact]
+        public async Task RowOverflowAutoSplitsIntoNewSheet()
+        {
+            CancellationToken ct = TestContext.Current.CancellationToken;
+            const int rows = 65537;
+            byte[] bytes = await WriteAsync(wb =>
+            {
+                var s = wb.AddSheet("S");
+                for (int i = 0; i < rows; i++)
+                {
+                    using var r = s.StartRow();
+                    r.Write(i);
+                }
+                s.End();
+            }, ct: ct);
+
+            using var reader = Excel.FromXls(new MemoryStream(bytes));
+            Assert.Equal(2, reader.SheetCount);
+
+            int totalRows = 0;
+            for (int sheet = 0; sheet < reader.SheetCount; sheet++)
+            {
+                reader.MoveToSheet(sheet);
+                using var e = reader.GetEnumerator();
+                while (e.MoveNext())
+                {
+                    totalRows++;
+                }
+            }
+            Assert.Equal(rows, totalRows);
+        }
+
+        [Fact]
+        public async Task EndThrowsWhenLastRowStillActive()
+        {
+            var ms = new MemoryStream();
+            await using var wb = XlsWorkbookWriter.Create(ms, leaveOpen: true);
+            var sheet = wb.AddSheet("S");
+            var row = sheet.StartRow();
+
+            Assert.Throws<InvalidOperationException>(sheet.End);
+
+            row.Dispose();
+            sheet.End();
+        }
+    }
+}

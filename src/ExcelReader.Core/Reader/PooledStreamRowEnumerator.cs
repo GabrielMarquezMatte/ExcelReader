@@ -1,6 +1,6 @@
 using System.ComponentModel;
 using System.Diagnostics;
-using System.Diagnostics.CodeAnalysis;
+using ExcelReader.Core.Reader.Internal;
 
 namespace ExcelReader.Core.Reader
 {

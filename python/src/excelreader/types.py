@@ -1,4 +1,4 @@
-"""Value types crossing the FFI boundary. Mirrors ExcelReader.Core.Enums.CellType."""
+"""Value types crossing the FFI boundary. Mirrors ExcelReader.Core.Reader.CellType."""
 
 from __future__ import annotations
 

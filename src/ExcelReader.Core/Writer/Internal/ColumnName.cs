@@ -1,4 +1,4 @@
-using ExcelReader.Core.Reader;
+using ExcelReader.Core.Reader.Internal;
 
 namespace ExcelReader.Core.Writer.Internal
 {

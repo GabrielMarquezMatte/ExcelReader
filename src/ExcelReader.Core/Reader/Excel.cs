@@ -3,9 +3,14 @@ using System.Diagnostics.CodeAnalysis;
 using System.IO.Compression;
 using System.Runtime.CompilerServices;
 using ExcelReader.Core.Crypto;
-using ExcelReader.Core.Enums;
 using ExcelReader.Core.Parser;
-using ExcelReader.Core.Parser.Internal;
+using ExcelReader.Core.Parser.ParallelCsv;
+using ExcelReader.Core.Reader.Csv;
+using ExcelReader.Core.Reader.Schema;
+using ExcelReader.Core.Reader.Xls;
+using ExcelReader.Core.Reader.Xlsb;
+using ExcelReader.Core.Reader.Xlsx;
+using ExcelReader.Core.Reader.Zip;
 
 namespace ExcelReader.Core.Reader
 {

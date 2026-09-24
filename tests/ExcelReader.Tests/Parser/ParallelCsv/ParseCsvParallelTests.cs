@@ -1,0 +1,215 @@
+using System.Globalization;
+using System.Text;
+using ExcelReader.Core.Parser;
+using ExcelReader.Core.Reader;
+using ExcelReader.Core.Reader.Csv;
+
+namespace ExcelReader.Tests.Parser.ParallelCsv
+{
+    public class ParseCsvParallelTests
+    {
+        private sealed class Row
+        {
+            public string? Name { get; set; }
+            public int Age { get; set; }
+        }
+
+        private static byte[] BuildCsv(int rows)
+        {
+            var sb = new StringBuilder("Name,Age\n");
+            for (int i = 0; i < rows; i++)
+            {
+                sb.Append(CultureInfo.InvariantCulture, $"name{i:D5},{i}\n");
+            }
+            return Encoding.UTF8.GetBytes(sb.ToString());
+        }
+
+        private static async Task<List<Row>> DrainAsync(IAsyncEnumerable<Row> source)
+        {
+            var list = new List<Row>();
+            await foreach (Row row in source)
+            {
+                list.Add(row);
+            }
+            return list;
+        }
+
+        [Fact]
+        public async Task MemoryOverloadMatchesTheSequentialParser()
+        {
+            byte[] csv = BuildCsv(20_000);
+            using var reader = Excel.FromCsv(csv);
+            List<Row> expected = [.. ExcelParser.FromAttributes<Row>().Parse(reader)];
+
+            List<Row> actual = await DrainAsync(Excel.ParseCsvParallelAsync(csv.AsMemory(), ExcelParser.FromAttributes<Row>(), options: new CsvParallelOptions { DegreeOfParallelism = 4 }, ct: TestContext.Current.CancellationToken));
+
+            Assert.Equal(expected.Count, actual.Count);
+            for (int i = 0; i < expected.Count; i++)
+            {
+                Assert.Equal(expected[i].Name, actual[i].Name);
+                Assert.Equal(expected[i].Age, actual[i].Age);
+            }
+        }
+
+        [Fact]
+        public async Task FileOverloadMatchesTheSequentialParser()
+        {
+            byte[] csv = BuildCsv(20_000);
+            string path = Path.Combine(Path.GetTempPath(), $"exr-{Guid.NewGuid():N}.csv");
+            await File.WriteAllBytesAsync(path, csv, TestContext.Current.CancellationToken);
+            try
+            {
+                using var reader = Excel.FromCsvFile(path);
+                List<Row> expected = [.. ExcelParser.FromAttributes<Row>().Parse(reader)];
+
+                List<Row> actual = await DrainAsync(Excel.ParseCsvParallelAsync(path, ExcelParser.FromAttributes<Row>(), options: new CsvParallelOptions { DegreeOfParallelism = 8 }, ct: TestContext.Current.CancellationToken));
+
+                Assert.Equal(expected.Count, actual.Count);
+                Assert.Equal(expected[^1].Name, actual[^1].Name);
+                Assert.Equal(expected[0].Age, actual[0].Age);
+            }
+            finally
+            {
+                File.Delete(path);
+            }
+        }
+
+        [Fact]
+        public async Task ATinySourceStillProducesTheRightRowsThroughTheSequentialFallback()
+        {
+            byte[] csv = BuildCsv(3);
+
+            List<Row> actual = await DrainAsync(Excel.ParseCsvParallelAsync(csv.AsMemory(), ExcelParser.FromAttributes<Row>(), options: new CsvParallelOptions { DegreeOfParallelism = 8 }, ct: TestContext.Current.CancellationToken));
+
+            Assert.Equal(3, actual.Count);
+            Assert.Equal("name00000", actual[0].Name);
+            Assert.Equal(2, actual[2].Age);
+        }
+
+        [Fact]
+        public async Task ANonUtf8EncodingFallsBackAndStillDecodesCorrectly()
+        {
+            Encoding latin1 = Encoding.Latin1;
+            byte[] csv = latin1.GetBytes("Name,Age\nJosé,30\nRenée,41\n");
+            var options = new CsvReaderOptions { Encoding = latin1 };
+
+            List<Row> actual = await DrainAsync(
+                Excel.ParseCsvParallelAsync(csv.AsMemory(), ExcelParser.FromAttributes<Row>(), options: new CsvParallelOptions { DegreeOfParallelism = 8, Reader = options }, ct: TestContext.Current.CancellationToken));
+
+            Assert.Equal(2, actual.Count);
+            Assert.Equal("José", actual[0].Name);
+            Assert.Equal("Renée", actual[1].Name);
+        }
+
+        [Fact]
+        public async Task ADegreeOfOneIsTheSequentialPath()
+        {
+            byte[] csv = BuildCsv(5_000);
+
+            List<Row> actual = await DrainAsync(Excel.ParseCsvParallelAsync(csv.AsMemory(), ExcelParser.FromAttributes<Row>(), options: new CsvParallelOptions { DegreeOfParallelism = 1 }, ct: TestContext.Current.CancellationToken));
+
+            Assert.Equal(5_000, actual.Count);
+            Assert.Equal(4_999, actual[^1].Age);
+        }
+
+        [Fact]
+        public void ANegativeDegreeOfParallelismThrows()
+        {
+            byte[] csv = BuildCsv(10);
+
+            Assert.Throws<ArgumentOutOfRangeException>(
+                () => Excel.ParseCsvParallelAsync(csv.AsMemory(), ExcelParser.FromAttributes<Row>(), options: new CsvParallelOptions { DegreeOfParallelism = -1 }, ct: TestContext.Current.CancellationToken));
+        }
+
+        [Fact]
+        public void AHeaderRowOnTheParallelOptionsThrowsBecauseTypedParsingReadsItFromTheParserConfig()
+        {
+            byte[] csv = BuildCsv(10);
+
+            ArgumentException exception = Assert.Throws<ArgumentException>(
+                () => Excel.ParseCsvParallelAsync(csv.AsMemory(), ExcelParser.FromAttributes<Row>(), options: new CsvParallelOptions { HeaderRow = 2 }, ct: TestContext.Current.CancellationToken));
+            Assert.Contains(nameof(ExcelParserConfig.HeaderRow), exception.Message, StringComparison.Ordinal);
+        }
+
+        [Fact]
+        public async Task AMemoryStreamWithAnExposedBufferIsUnwrappedAndParallelized()
+        {
+            byte[] csv = BuildCsv(20_000);
+            using var ms = new MemoryStream(csv, 0, csv.Length, writable: false, publiclyVisible: true);
+
+            List<Row> actual = await DrainAsync(Excel.ParseCsvParallelAsync(ms, ExcelParser.FromAttributes<Row>(), options: new CsvParallelOptions { DegreeOfParallelism = 4 }, ct: TestContext.Current.CancellationToken));
+
+            Assert.Equal(20_000, actual.Count);
+            Assert.Equal("name00000", actual[0].Name);
+            Assert.Equal(19_999, actual[^1].Age);
+        }
+
+        [Fact]
+        public async Task AMemoryStreamWithoutAnExposedBufferStillProducesTheRightRows()
+        {
+            byte[] csv = BuildCsv(20_000);
+            using var ms = new MemoryStream(csv, 0, csv.Length, writable: false, publiclyVisible: false);
+
+            List<Row> actual = await DrainAsync(Excel.ParseCsvParallelAsync(ms, ExcelParser.FromAttributes<Row>(), options: new CsvParallelOptions { DegreeOfParallelism = 4 }, ct: TestContext.Current.CancellationToken));
+
+            Assert.Equal(20_000, actual.Count);
+            Assert.Equal(19_999, actual[^1].Age);
+        }
+
+        [Fact]
+        public async Task AFileStreamIsUnwrappedToItsHandleAndParallelized()
+        {
+            byte[] csv = BuildCsv(20_000);
+            string path = Path.Combine(Path.GetTempPath(), $"exr-{Guid.NewGuid():N}.csv");
+            await File.WriteAllBytesAsync(path, csv, TestContext.Current.CancellationToken);
+            try
+            {
+                await using var fs = new FileStream(path, FileMode.Open, FileAccess.Read);
+
+                List<Row> actual = await DrainAsync(Excel.ParseCsvParallelAsync(fs, ExcelParser.FromAttributes<Row>(), options: new CsvParallelOptions { DegreeOfParallelism = 8 }, ct: TestContext.Current.CancellationToken));
+
+                Assert.Equal(20_000, actual.Count);
+                Assert.Equal(19_999, actual[^1].Age);
+                Assert.False(fs.SafeFileHandle.IsClosed);
+            }
+            finally
+            {
+                File.Delete(path);
+            }
+        }
+
+        [Fact]
+        public async Task AnUnwrappableStreamFallsBackWithoutThrowing()
+        {
+            byte[] csv = BuildCsv(20_000);
+            string path = Path.Combine(Path.GetTempPath(), $"exr-{Guid.NewGuid():N}.csv");
+            await File.WriteAllBytesAsync(path, csv, TestContext.Current.CancellationToken);
+            try
+            {
+                await using var fs = new FileStream(path, FileMode.Open, FileAccess.Read);
+                await using var buffered = new BufferedStream(fs);
+
+                List<Row> actual = await DrainAsync(Excel.ParseCsvParallelAsync(buffered, ExcelParser.FromAttributes<Row>(), options: new CsvParallelOptions { DegreeOfParallelism = 8 }, ct: TestContext.Current.CancellationToken));
+
+                Assert.Equal(20_000, actual.Count);
+                Assert.Equal(19_999, actual[^1].Age);
+            }
+            finally
+            {
+                File.Delete(path);
+            }
+        }
+
+        [Fact]
+        public async Task ANonSeekableStreamFallsBackWithoutThrowing()
+        {
+            byte[] csv = BuildCsv(20_000);
+            await using var pipe = new NonSeekableStream(csv);
+
+            List<Row> actual = await DrainAsync(Excel.ParseCsvParallelAsync(pipe, ExcelParser.FromAttributes<Row>(), options: new CsvParallelOptions { DegreeOfParallelism = 8 }, ct: TestContext.Current.CancellationToken));
+
+            Assert.Equal(20_000, actual.Count);
+            Assert.Equal(19_999, actual[^1].Age);
+        }
+    }
+}
