@@ -82,10 +82,11 @@ namespace ExcelReader.Core.Writer.Xlsx
             _sheets.Add((name, sheetId, visibility));
         }
 
-        internal void NotifySheetEnded()
+        internal void NotifySheetEnded(bool faulted)
         {
             _sheetActive = false;
             _activeSheet = null;
+            _ended |= faulted;
         }
 
         internal bool UseSharedStrings { get; }
@@ -205,12 +206,17 @@ namespace ExcelReader.Core.Writer.Xlsx
                     }
                 }
             }
-            finally
+            catch
             {
                 if (!_leaveOpen)
                 {
-                    _stream.Dispose();
+                    FailureCleanup.Dispose(_stream);
                 }
+                throw;
+            }
+            if (!_leaveOpen)
+            {
+                _stream.Dispose();
             }
         }
 
@@ -237,12 +243,17 @@ namespace ExcelReader.Core.Writer.Xlsx
                     }
                 }
             }
-            finally
+            catch
             {
                 if (!_leaveOpen)
                 {
-                    await _stream.DisposeAsync().ConfigureAwait(false);
+                    await FailureCleanup.DisposeAsync(_stream).ConfigureAwait(false);
                 }
+                throw;
+            }
+            if (!_leaveOpen)
+            {
+                await _stream.DisposeAsync().ConfigureAwait(false);
             }
         }
 

@@ -21,6 +21,8 @@ namespace ExcelReader.Core.Writer.Internal
 
         internal int Length { get; private set; }
 
+        internal bool IsReleased => _buffer.Length == 0;
+
         internal ReadOnlySpan<byte> Span => _buffer.AsSpan(0, Length);
 
         internal ReadOnlyMemory<byte> Memory => _buffer.AsMemory(0, Length);
