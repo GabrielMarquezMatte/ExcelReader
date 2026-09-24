@@ -24,6 +24,7 @@ namespace ExcelReader.Core.Writer.Xls
         private bool _ended;
         private XlsSheetWriter? _activeSheet;
         private readonly HashSet<string> _sheetNames = new(StringComparer.OrdinalIgnoreCase);
+        private bool _faulted;
         private bool _disposed;
 
         private XlsWorkbookWriter(Stream stream, bool leaveOpen, bool date1904)
@@ -120,6 +121,29 @@ namespace ExcelReader.Core.Writer.Xls
             }
         }
 
+        private void ReleaseStream()
+        {
+            if (_leaveOpen)
+            {
+                return;
+            }
+            if (_faulted)
+            {
+                FailureCleanup.Dispose(_stream);
+                return;
+            }
+            _stream.Dispose();
+        }
+
+        private ValueTask ReleaseStreamAsync()
+        {
+            if (_leaveOpen)
+            {
+                return ValueTask.CompletedTask;
+            }
+            return _faulted ? FailureCleanup.DisposeAsync(_stream) : _stream.DisposeAsync();
+        }
+
         private void ReleaseSheetBuffers()
         {
             foreach (ref readonly var sheet in CollectionsMarshal.AsSpan(_sheets))
@@ -165,6 +189,11 @@ namespace ExcelReader.Core.Writer.Xls
                     }
                 });
             }
+            catch
+            {
+                _faulted = true;
+                throw;
+            }
             finally
             {
                 ReleaseSheetBuffers();
@@ -208,6 +237,11 @@ namespace ExcelReader.Core.Writer.Xls
                         await dest.WriteAsync(frame.Memory, canc).ConfigureAwait(false);
                     }
                 }, ct).ConfigureAwait(false);
+            }
+            catch
+            {
+                _faulted = true;
+                throw;
             }
             finally
             {
@@ -258,16 +292,11 @@ namespace ExcelReader.Core.Writer.Xls
             }
             catch
             {
-                if (!_leaveOpen)
-                {
-                    FailureCleanup.Dispose(_stream);
-                }
+                _faulted = true;
+                ReleaseStream();
                 throw;
             }
-            if (!_leaveOpen)
-            {
-                _stream.Dispose();
-            }
+            ReleaseStream();
         }
 
         /// <inheritdoc/>
@@ -294,16 +323,11 @@ namespace ExcelReader.Core.Writer.Xls
             }
             catch
             {
-                if (!_leaveOpen)
-                {
-                    await FailureCleanup.DisposeAsync(_stream).ConfigureAwait(false);
-                }
+                _faulted = true;
+                await ReleaseStreamAsync().ConfigureAwait(false);
                 throw;
             }
-            if (!_leaveOpen)
-            {
-                await _stream.DisposeAsync().ConfigureAwait(false);
-            }
+            await ReleaseStreamAsync().ConfigureAwait(false);
         }
     }
 }

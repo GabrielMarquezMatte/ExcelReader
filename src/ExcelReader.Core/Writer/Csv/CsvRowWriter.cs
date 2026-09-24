@@ -222,15 +222,21 @@ namespace ExcelReader.Core.Writer.Csv
             where T : IUtf8SpanFormattable
         {
             byte[] rented = ArrayPool<byte>.Shared.Rent(StackFieldBytes * 4);
-            int written;
-            while (!value.TryFormat(rented, out written, format, CultureInfo.InvariantCulture))
+            try
             {
-                int larger = rented.Length * 2;
-                ArrayPool<byte>.Shared.Return(rented);
-                rented = ArrayPool<byte>.Shared.Rent(larger);
+                int written;
+                while (!value.TryFormat(rented, out written, format, CultureInfo.InvariantCulture))
+                {
+                    byte[] larger = ArrayPool<byte>.Shared.Rent(rented.Length * 2);
+                    ArrayPool<byte>.Shared.Return(rented);
+                    rented = larger;
+                }
+                WriteFieldBytes(rented.AsSpan(0, written));
             }
-            WriteFieldBytes(rented.AsSpan(0, written));
-            ArrayPool<byte>.Shared.Return(rented);
+            finally
+            {
+                ArrayPool<byte>.Shared.Return(rented);
+            }
         }
 
         private void WriteFieldBytes(ReadOnlySpan<byte> value)

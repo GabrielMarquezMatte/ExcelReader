@@ -1,10 +1,12 @@
 using System.Buffers;
+using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.IO.Compression;
 using System.Text;
 using ExcelReader.Core.Reader;
+using ExcelReader.Core.Writer.Internal;
 using ExcelReader.Core.Writer.Xlsx;
 
 namespace ExcelReader.Tests
@@ -154,22 +156,36 @@ namespace ExcelReader.Tests
         {
         }
 
-        internal bool Disposed { get; private set; }
+        internal bool Disposed => DisposeCount > 0;
+
+        internal int DisposeCount { get; private set; }
+
+        internal int AsyncWriteCount { get; private set; }
 
         internal Action? OnWrite { get; set; }
 
+        internal Action? OnFlush { get; set; }
+
         internal Action? OnDispose { get; set; }
 
+        internal static Action FailOnce(Exception failure)
+        {
+            bool failed = false;
+            return () =>
+            {
+                if (!failed)
+                {
+                    failed = true;
+                    throw failure;
+                }
+            };
+        }
+
+        // Every span/async write on a derived MemoryStream funnels into this overload.
         public override void Write(byte[] buffer, int offset, int count)
         {
             OnWrite?.Invoke();
             base.Write(buffer, offset, count);
-        }
-
-        public override void Write(ReadOnlySpan<byte> buffer)
-        {
-            OnWrite?.Invoke();
-            base.Write(buffer);
         }
 
         public override void WriteByte(byte value)
@@ -178,11 +194,69 @@ namespace ExcelReader.Tests
             base.WriteByte(value);
         }
 
+        public override ValueTask WriteAsync(ReadOnlyMemory<byte> buffer, CancellationToken cancellationToken = default)
+        {
+            AsyncWriteCount++;
+            return base.WriteAsync(buffer, cancellationToken);
+        }
+
+        public override void Flush()
+        {
+            OnFlush?.Invoke();
+            base.Flush();
+        }
+
         protected override void Dispose(bool disposing)
         {
-            Disposed = true;
+            DisposeCount++;
             base.Dispose(disposing);
             OnDispose?.Invoke();
+        }
+    }
+
+    internal sealed class CountingPool : ArrayPool<byte>, IDisposable
+    {
+        private readonly ConcurrentDictionary<byte[], byte> _outstanding = new();
+        private int _rents;
+        private int _invalidReturns;
+
+        private CountingPool()
+        {
+        }
+
+        internal static CountingPool Install()
+        {
+            var pool = new CountingPool();
+            BiffBuffer.OverridePool(pool);
+            return pool;
+        }
+
+        public override byte[] Rent(int minimumLength)
+        {
+            byte[] array = new byte[Math.Max(minimumLength, 1)];
+            _outstanding[array] = 0;
+            Interlocked.Increment(ref _rents);
+            return array;
+        }
+
+        public override void Return(byte[] array, bool clearArray = false)
+        {
+            if (!_outstanding.TryRemove(array, out _))
+            {
+                Interlocked.Increment(ref _invalidReturns);
+            }
+        }
+
+        internal void AssertEveryBufferReturnedOnce()
+        {
+            Assert.True(Volatile.Read(ref _rents) > 0, "The scenario never rented a pooled buffer.");
+            Assert.Equal(0, Volatile.Read(ref _invalidReturns));
+            Assert.Empty(_outstanding);
+        }
+
+        public void Dispose()
+        {
+            BiffBuffer.OverridePool(null);
         }
     }
 
