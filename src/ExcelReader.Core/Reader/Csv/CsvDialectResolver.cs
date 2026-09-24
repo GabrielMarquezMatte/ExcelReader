@@ -8,30 +8,30 @@ namespace ExcelReader.Core.Reader.Csv
     {
         internal static CsvReaderOptions Resolve(string path, CsvReaderOptions options)
         {
-            return options.SniffDialect ? Applied(options, Excel.SniffCsvDialectFromFile(path)) : options;
+            return options.SniffDialect ? Applied(options, CsvSniffer.DetectFile(path)) : options;
         }
 
         internal static CsvReaderOptions Resolve(Stream stream, CsvReaderOptions options)
         {
-            return options.SniffDialect ? Applied(options, Excel.SniffCsvDialect(stream)) : options;
+            return options.SniffDialect ? Applied(options, CsvSniffer.Detect(stream)) : options;
         }
 
         internal static CsvReaderOptions Resolve(ReadOnlyMemory<byte> data, CsvReaderOptions options)
         {
-            return options.SniffDialect ? Applied(options, Excel.SniffCsvDialect(data)) : options;
+            return options.SniffDialect ? Applied(options, CsvSniffer.Detect(data.Span)) : options;
         }
 
         internal static async ValueTask<CsvReaderOptions> ResolveAsync(string path, CsvReaderOptions options, CancellationToken ct)
         {
             return options.SniffDialect
-                ? Applied(options, await Excel.SniffCsvDialectFromFileAsync(path, null, ct).ConfigureAwait(false))
+                ? Applied(options, await CsvSniffer.DetectFileAsync(path, null, ct).ConfigureAwait(false))
                 : options;
         }
 
         internal static async ValueTask<CsvReaderOptions> ResolveAsync(Stream stream, CsvReaderOptions options, CancellationToken ct)
         {
             return options.SniffDialect
-                ? Applied(options, await Excel.SniffCsvDialectAsync(stream, null, ct).ConfigureAwait(false))
+                ? Applied(options, await CsvSniffer.DetectAsync(stream, null, ct).ConfigureAwait(false))
                 : options;
         }
 

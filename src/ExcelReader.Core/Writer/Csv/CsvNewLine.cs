@@ -1,7 +1,7 @@
 namespace ExcelReader.Core.Writer.Csv
 {
     /// <summary>
-    /// The byte sequence a <see cref="Writer.Csv.CsvWriter"/> writes after each record.
+    /// The byte sequence a <see cref="CsvWorkbookWriter"/> writes after each record.
     /// </summary>
     public enum CsvNewLine
     {

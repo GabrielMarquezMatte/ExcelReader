@@ -13,7 +13,7 @@ namespace ExcelReader.Core.Writer.Csv
     /// Delimiter/Quote mirror <c>CsvReaderOptions</c> so a written file needs no reader configuration
     /// to round-trip.
     /// </remarks>
-    public sealed class CsvWriter : IDisposable, IAsyncDisposable
+    internal sealed class CsvWriter : IDisposable, IAsyncDisposable
     {
         // ponytail: same 64 KB flush threshold as the XLSX XlsxSheetWriter — bounds memory on huge
         private const int FlushThreshold = 64 * 1024;

@@ -23,7 +23,8 @@ namespace ExcelReader.Benchmarks
         public long ExcelReaderWriter()
         {
             using var ms = new MemoryStream(4 * 1024 * 1024);
-            using (CsvWriter writer = CsvWriter.Create(ms, leaveOpen: true))
+            using (CsvWorkbookWriter workbook = CsvWorkbookWriter.Create(ms, leaveOpen: true))
+            using (CsvSheetWriter writer = workbook.AddSheet("S1"))
             {
                 using (CsvRowWriter header = writer.StartRow())
                 {

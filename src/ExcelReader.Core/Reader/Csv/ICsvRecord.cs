@@ -2,7 +2,7 @@ namespace ExcelReader.Core.Reader.Csv
 {
     /// <summary>
     /// A typed CSV record that parses itself from a <see cref="Row"/>, for
-    /// <see cref="Excel.AggregateCsvParallelAsync{TAccumulator, TRecord}(ReadOnlyMemory{byte}, CsvParallelOptions?, CancellationToken)"/>.
+    /// <see cref="CsvParallel.AggregateAsync{TAccumulator, TRecord}(ReadOnlyMemory{byte}, CsvParallelOptions?, CancellationToken)"/>.
     /// </summary>
     /// <typeparam name="TSelf">The implementing type. May be a <see langword="ref struct"/> holding spans taken from the row.</typeparam>
     public interface ICsvRecord<TSelf>

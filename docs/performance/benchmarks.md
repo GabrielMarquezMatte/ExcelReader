@@ -66,7 +66,7 @@ For raw CSV reads, ExcelReader is ~2.2x faster than Sep while allocating ~11x le
 
 ### Parallel CSV
 
-`Excel.ParseCsvParallelAsync<T>` and `Excel.AggregateCsvParallelAsync` on generated files (8,000,000 rows of three ints for the narrow corpus, 4,300,000 rows of two strings, a date, two decimals and an int for the conversion-heavy one), by `degreeOfParallelism`. The machine has 8 physical / 16 logical cores.
+`CsvParallel.ParseAsync<T>` and `CsvParallel.AggregateAsync` on generated files (8,000,000 rows of three ints for the narrow corpus, 4,300,000 rows of two strings, a date, two decimals and an int for the conversion-heavy one), by `degreeOfParallelism`. The machine has 8 physical / 16 logical cores.
 
 | Dop | Conversion-heavy, typed | Narrow ints, typed | Conversion-heavy, `ref struct` aggregate |
 |---:|---:|---:|---:|
