@@ -117,14 +117,11 @@ namespace ExcelReader.Core.Writer.Xlsx
         public void End()
         {
             ObjectDisposedException.ThrowIf(_ended, this);
+            _ended = true;
+            _activeSheet?.Dispose();
             if (_sheets.Count == 0)
             {
                 throw new InvalidOperationException("An XLSX workbook must contain at least one sheet.");
-            }
-            _ended = true;
-            if (_activeSheet is not null)
-            {
-                _activeSheet.Dispose();
             }
             WriteEntry("_rels/.rels", BuildRootRelsXml());
             WriteEntry("xl/styles.xml", BuildStylesXml());
@@ -146,14 +143,14 @@ namespace ExcelReader.Core.Writer.Xlsx
         {
             ObjectDisposedException.ThrowIf(_ended, this);
             ct.ThrowIfCancellationRequested();
-            if (_sheets.Count == 0)
-            {
-                throw new InvalidOperationException("An XLSX workbook must contain at least one sheet.");
-            }
             _ended = true;
             if (_activeSheet is not null)
             {
                 await _activeSheet.DisposeAsync().ConfigureAwait(false);
+            }
+            if (_sheets.Count == 0)
+            {
+                throw new InvalidOperationException("An XLSX workbook must contain at least one sheet.");
             }
             await WriteEntryAsync("_rels/.rels", BuildRootRelsXml(), ct).ConfigureAwait(false);
             await WriteStylesAsync(ct).ConfigureAwait(false);
@@ -193,21 +190,27 @@ namespace ExcelReader.Core.Writer.Xlsx
                 return;
             }
             _disposed = true;
-            if (!_ended)
+            try
             {
-                if (_sheets.Count == 0)
+                if (!_ended)
                 {
-                    _ended = true;
-                    _zip.Dispose();
-                }
-                else
-                {
-                    End();
+                    if (_sheets.Count == 0 && _activeSheet is null)
+                    {
+                        _ended = true;
+                        _zip.Dispose();
+                    }
+                    else
+                    {
+                        End();
+                    }
                 }
             }
-            if (!_leaveOpen)
+            finally
             {
-                _stream.Dispose();
+                if (!_leaveOpen)
+                {
+                    _stream.Dispose();
+                }
             }
         }
 
@@ -219,21 +222,27 @@ namespace ExcelReader.Core.Writer.Xlsx
                 return;
             }
             _disposed = true;
-            if (!_ended)
+            try
             {
-                if (_sheets.Count == 0)
+                if (!_ended)
                 {
-                    _ended = true;
-                    await _zip.DisposeAsync().ConfigureAwait(false);
-                }
-                else
-                {
-                    await EndAsync().ConfigureAwait(false);
+                    if (_sheets.Count == 0 && _activeSheet is null)
+                    {
+                        _ended = true;
+                        await _zip.DisposeAsync().ConfigureAwait(false);
+                    }
+                    else
+                    {
+                        await EndAsync().ConfigureAwait(false);
+                    }
                 }
             }
-            if (!_leaveOpen)
+            finally
             {
-                await _stream.DisposeAsync().ConfigureAwait(false);
+                if (!_leaveOpen)
+                {
+                    await _stream.DisposeAsync().ConfigureAwait(false);
+                }
             }
         }
 

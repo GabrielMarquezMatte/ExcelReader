@@ -122,6 +122,8 @@ This rule exists to keep diffs readable and the line count honest. A one-liner e
 
 Count every non-blank, non-comment line inside the function body (opening and closing brace included). If a function exceeds 70 lines, split it. Nested `ref struct` types with their own methods count each method separately.
 
+70 is the review target. The build enforces a looser backstop through MA0051 (90 lines / 50 statements, see `.editorconfig`), so a method between 71 and 90 lines compiles but still fails review.
+
 Do not game the limit by collapsing logic onto single lines. The limit exists to keep methods focused, not to reward line-golf. A method that packs three operations on one line to stay under 70 is worse than one that splits them across 71 readable lines.
 
 Common splits:

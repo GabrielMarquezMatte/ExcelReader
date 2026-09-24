@@ -236,20 +236,26 @@ namespace ExcelReader.Core.Writer.Xls
                 return;
             }
             _disposed = true;
-            if (!_ended)
+            try
             {
-                if (_sheets.Count > 0)
+                if (!_ended)
                 {
-                    End();
-                }
-                else
-                {
-                    _ended = true;
+                    if (_sheets.Count > 0 || _activeSheet is not null)
+                    {
+                        End();
+                    }
+                    else
+                    {
+                        _ended = true;
+                    }
                 }
             }
-            if (!_leaveOpen)
+            finally
             {
-                _stream.Dispose();
+                if (!_leaveOpen)
+                {
+                    _stream.Dispose();
+                }
             }
         }
 
@@ -261,20 +267,26 @@ namespace ExcelReader.Core.Writer.Xls
                 return;
             }
             _disposed = true;
-            if (!_ended)
+            try
             {
-                if (_sheets.Count > 0)
+                if (!_ended)
                 {
-                    await EndAsync().ConfigureAwait(false);
-                }
-                else
-                {
-                    _ended = true;
+                    if (_sheets.Count > 0 || _activeSheet is not null)
+                    {
+                        await EndAsync().ConfigureAwait(false);
+                    }
+                    else
+                    {
+                        _ended = true;
+                    }
                 }
             }
-            if (!_leaveOpen)
+            finally
             {
-                await _stream.DisposeAsync().ConfigureAwait(false);
+                if (!_leaveOpen)
+                {
+                    await _stream.DisposeAsync().ConfigureAwait(false);
+                }
             }
         }
     }

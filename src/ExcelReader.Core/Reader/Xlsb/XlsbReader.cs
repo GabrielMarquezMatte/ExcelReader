@@ -40,7 +40,7 @@ namespace ExcelReader.Core.Reader.Xlsb
         }
 
         internal XlsbReader(Stream stream, bool leaveOpen, ExcelReaderOptions? options = null)
-            : this(stream, leaveOpen, new ZipArchive(stream, ZipArchiveMode.Read, leaveOpen: true), options)
+            : this(stream, leaveOpen, ZipReaderOpen.Open(stream, leaveOpen), options)
         {
         }
 

@@ -99,8 +99,13 @@ namespace ExcelReader.Tests
             get => _inner.Position; set => throw new NotSupportedException();
         }
 
+        internal bool Disposed { get; private set; }
+
+        internal Action? OnRead { get; set; }
+
         public override int Read(byte[] buffer, int offset, int count)
         {
+            OnRead?.Invoke();
             return _inner.Read(buffer, offset, count);
         }
 
@@ -131,6 +136,7 @@ namespace ExcelReader.Tests
         {
             if (disposing)
             {
+                Disposed = true;
                 _inner.Dispose();
             }
             base.Dispose(disposing);
@@ -139,12 +145,36 @@ namespace ExcelReader.Tests
 
     internal sealed class TrackingStream : MemoryStream
     {
+        internal TrackingStream()
+        {
+        }
+
         internal TrackingStream(byte[] bytes)
             : base(bytes)
         {
         }
 
         internal bool Disposed { get; private set; }
+
+        internal Action? OnWrite { get; set; }
+
+        public override void Write(byte[] buffer, int offset, int count)
+        {
+            OnWrite?.Invoke();
+            base.Write(buffer, offset, count);
+        }
+
+        public override void Write(ReadOnlySpan<byte> buffer)
+        {
+            OnWrite?.Invoke();
+            base.Write(buffer);
+        }
+
+        public override void WriteByte(byte value)
+        {
+            OnWrite?.Invoke();
+            base.WriteByte(value);
+        }
 
         protected override void Dispose(bool disposing)
         {
