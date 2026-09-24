@@ -219,18 +219,18 @@ namespace ExcelReader.Tests.Parser.ParallelCsv
             await File.WriteAllBytesAsync(path, csv, ct);
             try
             {
-                Assert.Equal(expected, await Excel.AggregateCsvParallelAsync(csv.AsMemory(), Collecting, options, ct));
-                Assert.Equal(expected, (await Excel.AggregateCsvParallelAsync<RowLog, RowText>(csv.AsMemory(), options, ct)).Rows);
-                Assert.Equal(expected, await Excel.AggregateCsvParallelAsync(path, Collecting, options, ct));
-                Assert.Equal(expected, (await Excel.AggregateCsvParallelAsync<RowLog, RowText>(path, options, ct)).Rows);
+                Assert.Equal(expected, await CsvParallel.AggregateAsync(csv.AsMemory(), Collecting, options, ct));
+                Assert.Equal(expected, (await CsvParallel.AggregateAsync<RowLog, RowText>(csv.AsMemory(), options, ct)).Rows);
+                Assert.Equal(expected, await CsvParallel.AggregateAsync(path, Collecting, options, ct));
+                Assert.Equal(expected, (await CsvParallel.AggregateAsync<RowLog, RowText>(path, options, ct)).Rows);
 
                 await using (var file = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, 4096, useAsync: true))
                 {
-                    Assert.Equal(expected, await Excel.AggregateCsvParallelAsync(file, Collecting, options, ct));
+                    Assert.Equal(expected, await CsvParallel.AggregateAsync(file, Collecting, options, ct));
                 }
                 await using (var file = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, 4096, useAsync: true))
                 {
-                    Assert.Equal(expected, (await Excel.AggregateCsvParallelAsync<RowLog, RowText>(file, options, ct)).Rows);
+                    Assert.Equal(expected, (await CsvParallel.AggregateAsync<RowLog, RowText>(file, options, ct)).Rows);
                 }
             }
             finally
@@ -247,20 +247,20 @@ namespace ExcelReader.Tests.Parser.ParallelCsv
             CancellationToken ct = TestContext.Current.CancellationToken;
 
             var sequential = new CsvParallelOptions { DegreeOfParallelism = 1, HeaderRow = 1 };
-            Assert.Equal(expected, await Excel.AggregateCsvParallelAsync(csv.AsMemory(), Collecting, sequential, ct));
+            Assert.Equal(expected, await CsvParallel.AggregateAsync(csv.AsMemory(), Collecting, sequential, ct));
 
             using var unpartitionable = new BufferedStream(new MemoryStream(csv, writable: false));
-            Assert.Equal(expected, (await Excel.AggregateCsvParallelAsync<RowLog, RowText>(unpartitionable, new CsvParallelOptions { HeaderRow = 1 }, ct)).Rows);
+            Assert.Equal(expected, (await CsvParallel.AggregateAsync<RowLog, RowText>(unpartitionable, new CsvParallelOptions { HeaderRow = 1 }, ct)).Rows);
         }
 
         [Fact]
         public async Task RejectsInvalidOptionsAndAggregations()
         {
             byte[] csv = "a\n"u8.ToArray();
-            await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() => Excel.AggregateCsvParallelAsync<RowLog, RowText>(csv, new CsvParallelOptions { DegreeOfParallelism = -1 }, TestContext.Current.CancellationToken));
-            await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() => Excel.AggregateCsvParallelAsync<RowLog, RowText>(csv, new CsvParallelOptions { HeaderRow = -1 }, TestContext.Current.CancellationToken));
-            await Assert.ThrowsAsync<ArgumentNullException>(() => Excel.AggregateCsvParallelAsync(csv, (CsvAggregation<int>)null!, null, TestContext.Current.CancellationToken));
-            await Assert.ThrowsAsync<ArgumentNullException>(() => Excel.AggregateCsvParallelAsync(csv, new CsvAggregation<int> { Seed = null!, Accumulate = static (ref int s, Row r) => s++, Combine = static (a, b) => a + b }, null, TestContext.Current.CancellationToken));
+            await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() => CsvParallel.AggregateAsync<RowLog, RowText>(csv, new CsvParallelOptions { DegreeOfParallelism = -1 }, TestContext.Current.CancellationToken));
+            await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() => CsvParallel.AggregateAsync<RowLog, RowText>(csv, new CsvParallelOptions { HeaderRow = -1 }, TestContext.Current.CancellationToken));
+            await Assert.ThrowsAsync<ArgumentNullException>(() => CsvParallel.AggregateAsync(csv, (CsvAggregation<int>)null!, null, TestContext.Current.CancellationToken));
+            await Assert.ThrowsAsync<ArgumentNullException>(() => CsvParallel.AggregateAsync(csv, new CsvAggregation<int> { Seed = null!, Accumulate = static (ref int s, Row r) => s++, Combine = static (a, b) => a + b }, null, TestContext.Current.CancellationToken));
         }
 
         [Fact]
@@ -271,7 +271,7 @@ namespace ExcelReader.Tests.Parser.ParallelCsv
             await cts.CancelAsync();
 
             await Assert.ThrowsAnyAsync<OperationCanceledException>(
-                () => Excel.AggregateCsvParallelAsync<RowLog, RowText>(csv, new CsvParallelOptions { DegreeOfParallelism = 4 }, cts.Token));
+                () => CsvParallel.AggregateAsync<RowLog, RowText>(csv, new CsvParallelOptions { DegreeOfParallelism = 4 }, cts.Token));
         }
 
         [Fact]

@@ -29,7 +29,7 @@ foreach (var row in reader)
 ### Parallel CSV parsing (opt-in)
 
 ```csharp
-await foreach (var row in Excel.ParseCsvParallelAsync("big.csv", ExcelParser.FromAttributes<SalesRow>(), new CsvParallelOptions { DegreeOfParallelism = 8 }))
+await foreach (var row in CsvParallel.ParseAsync("big.csv", ExcelParser.FromAttributes<SalesRow>(), new CsvParallelOptions { DegreeOfParallelism = 8 }))
 {
     Total += row.Revenue;
 }
@@ -40,7 +40,7 @@ threads; whatever your loop body does per row does not — if that dominates, ra
 not help. Sources that cannot be partitioned (non-seekable streams, non-UTF-8 encodings, small files)
 fall back to sequential parsing with the same results.
 
-For a fold or a per-row side effect, `ForEachCsvParallelAsync` accepts a `ref struct` row type, so text
+For a fold or a per-row side effect, `CsvParallel.ForEachAsync` accepts a `ref struct` row type, so text
 columns stay as `ReadOnlySpan<byte>` and the per-row model allocation disappears entirely — a class
 model still costs one instance per row:
 
@@ -52,14 +52,14 @@ public ref struct SaleRow
 }
 
 long total = 0;
-await Excel.ForEachCsvParallelAsync(
+await CsvParallel.ForEachAsync(
     "big.csv",
     ExcelParser.FromAttributes<SaleRow>(),
     row => Interlocked.Add(ref total, row.Units),
     new CsvParallelOptions { DegreeOfParallelism = 8, HeaderRow = 1 });
 ```
 
-Unlike `ParseCsvParallelAsync`, the callback runs on the worker threads, so records arrive in no
+Unlike `CsvParallel.ParseAsync`, the callback runs on the worker threads, so records arrive in no
 particular order and the callback must be safe to call from several threads at once. Spans are valid
 only for the duration of the call.
 
@@ -69,11 +69,11 @@ delivered a whole partition's worth of records — 1 MiB to 64 MiB of them, not 
 On a source with quoted fields those records may also be misparsed, carrying values that appear nowhere
 in the file, and an exception the callback threw during a discarded pass is discarded with it. A start
 is only guessed wrongly inside a quoted field, so a source in which the quote character never appears
-delivers every record exactly once; for that guarantee on any source, use `AggregateCsvParallelAsync`,
+delivers every record exactly once; for that guarantee on any source, use `CsvParallel.AggregateAsync`,
 where the discarded partition's accumulator is thrown away.
 
 See the [parallel CSV benchmarks](../performance/benchmarks.md#parallel-csv) for what this buys. Those figures are
-`AggregateCsvParallelAsync`'s, measured over the same projection path this shares: at dop 16 it is
+`CsvParallel.AggregateAsync`'s, measured over the same projection path this shares: at dop 16 it is
 ~2.0x faster than the typed path while allocating ~446x less, with zero garbage collections.
 
 Properties need setters. A get-only property is skipped during binding and silently receives nothing.

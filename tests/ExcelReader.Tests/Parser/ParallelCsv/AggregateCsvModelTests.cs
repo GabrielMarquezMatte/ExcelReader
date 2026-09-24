@@ -172,14 +172,14 @@ namespace ExcelReader.Tests.Parser.ParallelCsv
             await File.WriteAllBytesAsync(path, csv, ct);
             try
             {
-                Assert.Equal(expected, (await Excel.AggregateCsvParallelAsync<PeopleLog, Person>(csv.AsMemory(), map, options, ct)).Rows);
-                Assert.Equal(expected, (await Excel.AggregateCsvParallelAsync<PeopleLog, Person>(path, map, options, ct)).Rows);
+                Assert.Equal(expected, (await CsvParallel.AggregateAsync<PeopleLog, Person>(csv.AsMemory(), map, options, ct)).Rows);
+                Assert.Equal(expected, (await CsvParallel.AggregateAsync<PeopleLog, Person>(path, map, options, ct)).Rows);
                 await using (var file = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, 4096, useAsync: true))
                 {
-                    Assert.Equal(expected, (await Excel.AggregateCsvParallelAsync<PeopleLog, Person>(file, map, options, ct)).Rows);
+                    Assert.Equal(expected, (await CsvParallel.AggregateAsync<PeopleLog, Person>(file, map, options, ct)).Rows);
                 }
                 using var unseekable = new BufferedStream(new MemoryStream(csv, writable: false));
-                Assert.Equal(expected, (await Excel.AggregateCsvParallelAsync<PeopleLog, Person>(unseekable, map, options, ct)).Rows);
+                Assert.Equal(expected, (await CsvParallel.AggregateAsync<PeopleLog, Person>(unseekable, map, options, ct)).Rows);
             }
             finally
             {
@@ -200,7 +200,7 @@ namespace ExcelReader.Tests.Parser.ParallelCsv
                 .Property(["Identifier", "Id"], ExcelCellReaders.Parsable, static (ref Person m, int v) => m.Id = v)
                 .Property(["Note"], ExcelCellReaders.String, static (ref Person m, string v) => m.Note = v));
 
-            PeopleLog log = await Excel.AggregateCsvParallelAsync<PeopleLog, Person>(csv, map, new CsvParallelOptions { HeaderRow = 1 }, TestContext.Current.CancellationToken);
+            PeopleLog log = await CsvParallel.AggregateAsync<PeopleLog, Person>(csv, map, new CsvParallelOptions { HeaderRow = 1 }, TestContext.Current.CancellationToken);
 
             Assert.Equal(["ada|1|n1", "bob|2|n2"], log.Rows);
         }
@@ -209,7 +209,7 @@ namespace ExcelReader.Tests.Parser.ParallelCsv
         public async Task AMissingRequiredColumnThrows()
         {
             byte[] csv = "Name,Note\nada,n1\n"u8.ToArray();
-            await Assert.ThrowsAsync<ExcelParseException>(() => Excel.AggregateCsvParallelAsync<PeopleLog, Person>(
+            await Assert.ThrowsAsync<ExcelParseException>(() => CsvParallel.AggregateAsync<PeopleLog, Person>(
                 csv, ExcelParser.Generated<Person>(), new CsvParallelOptions { HeaderRow = 1 }, TestContext.Current.CancellationToken));
         }
 
@@ -218,14 +218,14 @@ namespace ExcelReader.Tests.Parser.ParallelCsv
         {
             byte[] csv = "ada,1\nbob,2\n"u8.ToArray();
             CancellationToken ct = TestContext.Current.CancellationToken;
-            await Assert.ThrowsAsync<ArgumentException>(() => Excel.AggregateCsvParallelAsync<PeopleLog, Person>(
+            await Assert.ThrowsAsync<ArgumentException>(() => CsvParallel.AggregateAsync<PeopleLog, Person>(
                 csv, ExcelParser.Generated<Person>(), new CsvParallelOptions { HeaderRow = 0 }, ct));
 
-            await Assert.ThrowsAsync<ArgumentNullException>(() => Excel.AggregateCsvParallelAsync<PeopleLog, Person>(
+            await Assert.ThrowsAsync<ArgumentNullException>(() => CsvParallel.AggregateAsync<PeopleLog, Person>(
                 csv, (ExcelParser<Person>)null!, new CsvParallelOptions { HeaderRow = 1 }, ct));
 
             ExcelParser<IdOnly> byIndex = ExcelParser.Build<IdOnly>(static b => b.PropertyAt(1, ExcelCellReaders.Parsable, static (ref IdOnly m, int v) => m.Id = v));
-            PeopleLog log = await Excel.AggregateCsvParallelAsync<PeopleLog, IdOnly>(csv, byIndex, new CsvParallelOptions { HeaderRow = 0 }, ct);
+            PeopleLog log = await CsvParallel.AggregateAsync<PeopleLog, IdOnly>(csv, byIndex, new CsvParallelOptions { HeaderRow = 0 }, ct);
             Assert.Equal(["1", "2"], log.Rows);
         }
 
@@ -248,7 +248,7 @@ namespace ExcelReader.Tests.Parser.ParallelCsv
         public async Task SkipsEmptyRecords()
         {
             byte[] csv = "Name,Id,Note\nada,1,n\n\nbob,2,m\n"u8.ToArray();
-            PeopleLog log = await Excel.AggregateCsvParallelAsync<PeopleLog, Person>(
+            PeopleLog log = await CsvParallel.AggregateAsync<PeopleLog, Person>(
                 csv, ExcelParser.Generated<Person>(), new CsvParallelOptions { HeaderRow = 1 }, TestContext.Current.CancellationToken);
             Assert.Equal(["ada|1|n", "bob|2|m"], log.Rows);
         }
@@ -259,7 +259,7 @@ namespace ExcelReader.Tests.Parser.ParallelCsv
             byte[] csv = "Name,Id,Note\nada,1,n\nbob,2,n\ncid,oops,n\ndan,4,n\n"u8.ToArray();
             ExcelParser<Person> map = ExcelParser.Generated<Person>(new ExcelParserConfig { ThrowOnParseFailure = true });
 
-            ExcelParseException sequential = await Assert.ThrowsAsync<ExcelParseException>(() => Excel.AggregateCsvParallelAsync<PeopleLog, Person>(
+            ExcelParseException sequential = await Assert.ThrowsAsync<ExcelParseException>(() => CsvParallel.AggregateAsync<PeopleLog, Person>(
                 csv, map, new CsvParallelOptions { DegreeOfParallelism = 1, HeaderRow = 1 }, TestContext.Current.CancellationToken));
             Assert.Equal(4, sequential.Row);
 
@@ -387,7 +387,7 @@ namespace ExcelReader.Tests.Parser.ParallelCsv
                 b.Property([$"c{columns - 1}"], ExcelCellReaders.Parsable, static (ref WideRow m, int v) => m.Last = v, isRequired: true, requireValue: true);
             });
 
-            WideLog log = await Excel.AggregateCsvParallelAsync<WideLog, WideRow>(
+            WideLog log = await CsvParallel.AggregateAsync<WideLog, WideRow>(
                 csv, map, new CsvParallelOptions { HeaderRow = 1 }, TestContext.Current.CancellationToken);
 
             Assert.Equal([7, 7], log.Values);

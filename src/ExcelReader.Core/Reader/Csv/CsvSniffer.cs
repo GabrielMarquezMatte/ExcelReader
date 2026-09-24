@@ -1,3 +1,4 @@
+using System.Buffers;
 using System.Runtime.InteropServices;
 using System.Text;
 
@@ -15,22 +16,106 @@ namespace ExcelReader.Core.Reader.Csv
         private static ReadOnlySpan<byte> Utf16LeBom => [0xFF, 0xFE];
         private static ReadOnlySpan<byte> Utf16BeBom => [0xFE, 0xFF];
 
-        /// <summary>Infers the dialect of a sample taken from the start of a delimited-text source, using <see cref="CsvSnifferOptions.Default"/>.</summary>
-        /// <param name="sample">A sample of bytes from the start of the source.</param>
-        /// <returns>The inferred dialect, or <see cref="CsvDialect.Default"/> when the sample does not allow a delimiter to be determined.</returns>
-        public static CsvDialect Detect(ReadOnlySpan<byte> sample)
+        private const int SampleBytes = 64 * 1024;
+
+        /// <summary>Reads a sample from the start of a seekable stream and infers its CSV dialect. The stream's position is restored before returning.</summary>
+        /// <param name="stream">A seekable stream containing delimited-text data.</param>
+        /// <param name="options">Candidate delimiters/quotes and the sample-line cap; <see cref="CsvSnifferOptions.Default"/> when <see langword="null"/>.</param>
+        /// <exception cref="ArgumentNullException"><paramref name="stream"/> is <see langword="null"/>.</exception>
+        /// <exception cref="ArgumentException"><paramref name="stream"/> does not support seeking.</exception>
+        public static CsvDialect Detect(Stream stream, CsvSnifferOptions? options = null)
         {
-            return Detect(sample, CsvSnifferOptions.Default);
+            ArgumentNullException.ThrowIfNull(stream);
+            RequireSeekableForSniff(stream);
+            long start = stream.Position;
+            byte[] buffer = ArrayPool<byte>.Shared.Rent(SampleBytes);
+            try
+            {
+                int read = stream.ReadAtLeast(buffer, SampleBytes, throwOnEndOfStream: false);
+                stream.Position = start;
+                return Detect(buffer.AsSpan(0, read), options ?? CsvSnifferOptions.Default);
+            }
+            finally
+            {
+                ArrayPool<byte>.Shared.Return(buffer);
+            }
+        }
+
+        /// <summary>Reads a sample from the start of a file and infers its CSV dialect.</summary>
+        /// <param name="path">The path to the delimited-text file.</param>
+        /// <param name="options">Candidate delimiters/quotes and the sample-line cap; <see cref="CsvSnifferOptions.Default"/> when <see langword="null"/>.</param>
+        /// <exception cref="ArgumentNullException"><paramref name="path"/> is <see langword="null"/>.</exception>
+        public static CsvDialect DetectFile(string path, CsvSnifferOptions? options = null)
+        {
+            ArgumentNullException.ThrowIfNull(path);
+            using FileStream stream = File.OpenRead(path);
+            return Detect(stream, options);
+        }
+
+        /// <summary>Asynchronously reads a sample from the start of a seekable stream and infers its CSV dialect. The stream's position is restored before returning.</summary>
+        /// <param name="stream">A seekable stream containing delimited-text data.</param>
+        /// <param name="options">Candidate delimiters/quotes and the sample-line cap; <see cref="CsvSnifferOptions.Default"/> when <see langword="null"/>.</param>
+        /// <param name="ct">A token to cancel the read.</param>
+        /// <exception cref="ArgumentNullException"><paramref name="stream"/> is <see langword="null"/>.</exception>
+        /// <exception cref="ArgumentException"><paramref name="stream"/> does not support seeking.</exception>
+        public static async ValueTask<CsvDialect> DetectAsync(Stream stream, CsvSnifferOptions? options = null, CancellationToken ct = default)
+        {
+            ArgumentNullException.ThrowIfNull(stream);
+            RequireSeekableForSniff(stream);
+            long start = stream.Position;
+            byte[] buffer = ArrayPool<byte>.Shared.Rent(SampleBytes);
+            try
+            {
+                int read = await stream.ReadAtLeastAsync(buffer, SampleBytes, throwOnEndOfStream: false, ct).ConfigureAwait(false);
+                stream.Position = start;
+                return Detect(buffer.AsSpan(0, read), options ?? CsvSnifferOptions.Default);
+            }
+            finally
+            {
+                ArrayPool<byte>.Shared.Return(buffer);
+            }
+        }
+
+        /// <summary>Asynchronously reads a sample from the start of a file and infers its CSV dialect.</summary>
+        /// <param name="path">The path to the delimited-text file.</param>
+        /// <param name="options">Candidate delimiters/quotes and the sample-line cap; <see cref="CsvSnifferOptions.Default"/> when <see langword="null"/>.</param>
+        /// <param name="ct">A token to cancel the read.</param>
+        /// <exception cref="ArgumentNullException"><paramref name="path"/> is <see langword="null"/>.</exception>
+        public static async ValueTask<CsvDialect> DetectFileAsync(string path, CsvSnifferOptions? options = null, CancellationToken ct = default)
+        {
+            ArgumentNullException.ThrowIfNull(path);
+            FileStream stream = Excel.OpenAsyncFile(path);
+            try
+            {
+                return await DetectAsync(stream, options, ct).ConfigureAwait(false);
+            }
+            finally
+            {
+                await stream.DisposeAsync().ConfigureAwait(false);
+            }
+        }
+
+        private static void RequireSeekableForSniff(Stream stream)
+        {
+            if (!stream.CanSeek)
+            {
+                throw new ArgumentException(
+                    "Detect requires a seekable stream so a sample can be read and the position restored. Read a sample yourself and pass it as a span for a non-seekable source.",
+                    nameof(stream));
+            }
         }
 
         /// <summary>Infers the dialect of a sample taken from the start of a delimited-text source.</summary>
-        /// <param name="sample">A sample of bytes from the start of the source.</param>
-        /// <param name="options">Candidate delimiters/quotes and the sample-line cap.</param>
+        /// <param name="sample">A sample of bytes from the start of the source; only its first 64 KiB are examined.</param>
+        /// <param name="options">Candidate delimiters/quotes and the sample-line cap; <see cref="CsvSnifferOptions.Default"/> when <see langword="null"/>.</param>
         /// <returns>The inferred dialect, or <see cref="CsvDialect.Default"/> when the sample does not allow a delimiter to be determined.</returns>
-        /// <exception cref="ArgumentNullException"><paramref name="options"/> is <see langword="null"/>.</exception>
-        public static CsvDialect Detect(ReadOnlySpan<byte> sample, CsvSnifferOptions options)
+        public static CsvDialect Detect(ReadOnlySpan<byte> sample, CsvSnifferOptions? options = null)
         {
-            ArgumentNullException.ThrowIfNull(options);
+            options ??= CsvSnifferOptions.Default;
+            if (sample.Length > SampleBytes)
+            {
+                sample = sample[..SampleBytes];
+            }
             (Encoding? encoding, bool hasBom, int bomLength) = DetectBom(sample);
             byte[] body = sample[bomLength..].ToArray();
             byte[] delimiters = options.CandidateDelimiters;

@@ -5,8 +5,6 @@ using ExcelReader.Core.Parser;
 using ExcelReader.Core.Parser.Internal;
 using ExcelReader.Core.Reader;
 using ExcelReader.Core.Reader.Schema;
-using ExcelReader.Native.Arrow;
-using ExcelReader.Native.Csv;
 
 namespace ExcelReader.Native.Typed
 {

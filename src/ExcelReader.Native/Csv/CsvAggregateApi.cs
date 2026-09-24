@@ -75,7 +75,7 @@ namespace ExcelReader.Native.Csv
             CsvAggregateContext context = new(aggregation);
             return Run(
                 context,
-                Task.Run(() => Excel.AggregateCsvParallelAsync(path, Build(context), options, CancellationToken.None)),
+                Task.Run(() => CsvParallel.AggregateAsync(path, Build(context), options, CancellationToken.None)),
                 out result);
         }
 
@@ -95,7 +95,7 @@ namespace ExcelReader.Native.Csv
             CsvAggregateContext context = new(aggregation);
             return Run(
                 context,
-                Task.Run(() => Excel.AggregateCsvParallelAsync(manager.Memory, Build(context), options, CancellationToken.None)),
+                Task.Run(() => CsvParallel.AggregateAsync(manager.Memory, Build(context), options, CancellationToken.None)),
                 out result);
         }
 

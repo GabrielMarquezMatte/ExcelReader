@@ -17,7 +17,7 @@
                      method, so the .NET suite structurally cannot reach them; they are exercised by
                      the C, C++, Rust and Python jobs in native-bindings.yml, whose coverage does not
                      land in this report. -->
-                <Source>.*[\/]ExcelReader\.Native[\/]Exports\.cs</Source>
+                <Source>.*[\/]ExcelReader\.Native[\/]Exports(\.\w+)?\.cs</Source>
               </Exclude>
             </Sources>
             <Functions>

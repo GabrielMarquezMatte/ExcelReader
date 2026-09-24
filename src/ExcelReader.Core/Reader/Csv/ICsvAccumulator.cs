@@ -1,7 +1,7 @@
 namespace ExcelReader.Core.Reader.Csv
 {
     /// <summary>
-    /// Folds typed CSV records read by <c>Excel.AggregateCsvParallelAsync</c> into a result. Each partition
+    /// Folds typed CSV records read by <c>CsvParallel.AggregateAsync</c> into a result. Each partition
     /// of the source gets its own instance.
     /// </summary>
     /// <typeparam name="TSelf">The implementing type.</typeparam>

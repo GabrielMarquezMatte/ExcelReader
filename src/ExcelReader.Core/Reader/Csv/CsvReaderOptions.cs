@@ -58,7 +58,7 @@ namespace ExcelReader.Core.Reader.Csv
         public static CsvReaderOptions Default { get; } = new();
 
         /// <summary>Returns a copy of these options with the delimiter, quote, and encoding of the given dialect.</summary>
-        /// <param name="dialect">The dialect to apply, typically produced by <see cref="CsvSniffer.Detect(ReadOnlySpan{byte})"/>.</param>
+        /// <param name="dialect">The dialect to apply, typically produced by <see cref="CsvSniffer.Detect(ReadOnlySpan{byte}, CsvSnifferOptions?)"/>.</param>
         public CsvReaderOptions WithDialect(CsvDialect dialect)
         {
             return this with

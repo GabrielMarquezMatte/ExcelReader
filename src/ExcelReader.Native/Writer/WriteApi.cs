@@ -5,9 +5,7 @@ using ExcelReader.Core.Writer.Csv;
 using ExcelReader.Core.Writer.Xls;
 using ExcelReader.Core.Writer.Xlsb;
 using ExcelReader.Core.Writer.Xlsx;
-using ExcelReader.Native.Arrow;
 using ExcelReader.Native.Typed;
-using ExcelReader.Native.Writer;
 
 namespace ExcelReader.Native.Writer
 {

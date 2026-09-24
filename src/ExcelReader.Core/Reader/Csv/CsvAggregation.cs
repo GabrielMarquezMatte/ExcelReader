@@ -2,7 +2,7 @@ namespace ExcelReader.Core.Reader.Csv
 {
     /// <summary>
     /// A fold over CSV records expressed as three functions, for
-    /// <see cref="Excel.AggregateCsvParallelAsync{TState}(ReadOnlyMemory{byte}, CsvAggregation{TState}, CsvParallelOptions?, CancellationToken)"/>.
+    /// <see cref="CsvParallel.AggregateAsync{TState}(ReadOnlyMemory{byte}, CsvAggregation{TState}, CsvParallelOptions?, CancellationToken)"/>.
     /// Carries the same contract as <see cref="ICsvAccumulator{TSelf, TModel}"/>, without requiring a type.
     /// </summary>
     /// <typeparam name="TState">The accumulator type. Each partition of the source owns one instance.</typeparam>

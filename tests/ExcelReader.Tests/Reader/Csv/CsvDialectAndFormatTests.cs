@@ -180,7 +180,7 @@ namespace ExcelReader.Tests.Reader.Csv
                 };
 
                 var rows = new List<Person>();
-                await foreach (Person person in Excel.ParseCsvParallelAsync(path, ExcelParser.FromAttributes<Person>(), options, ct: TestContext.Current.CancellationToken))
+                await foreach (Person person in CsvParallel.ParseAsync(path, ExcelParser.FromAttributes<Person>(), options, ct: TestContext.Current.CancellationToken))
                 {
                     rows.Add(person);
                 }

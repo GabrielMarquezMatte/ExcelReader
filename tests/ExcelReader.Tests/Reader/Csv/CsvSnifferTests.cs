@@ -168,7 +168,7 @@ namespace ExcelReader.Tests.Reader.Csv
         public void NonSeekableStreamThrowsArgumentException()
         {
             using var stream = new NonSeekableStream(RepeatedRows("a,b,c\n", 6));
-            Assert.Throws<ArgumentException>(() => Excel.SniffCsvDialect(stream));
+            Assert.Throws<ArgumentException>(() => CsvSniffer.Detect(stream));
         }
 
         [Fact]

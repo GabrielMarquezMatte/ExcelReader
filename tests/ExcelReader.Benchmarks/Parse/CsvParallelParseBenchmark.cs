@@ -1,7 +1,6 @@
 using System.Runtime.InteropServices;
 using BenchmarkDotNet.Attributes;
 using ExcelReader.Core.Parser;
-using ExcelReader.Core.Reader;
 using ExcelReader.Core.Reader.Csv;
 
 namespace ExcelReader.Benchmarks
@@ -66,7 +65,7 @@ namespace ExcelReader.Benchmarks
         public async Task<long> ConversionHeavy()
         {
             long n = 0;
-            await foreach (WideRow row in Excel.ParseCsvParallelAsync(_wide, ExcelParser.FromAttributes<WideRow>(), new CsvParallelOptions { DegreeOfParallelism = Dop }))
+            await foreach (WideRow row in CsvParallel.ParseAsync(_wide, ExcelParser.FromAttributes<WideRow>(), new CsvParallelOptions { DegreeOfParallelism = Dop }))
             {
                 n += row.Units;
             }
@@ -77,7 +76,7 @@ namespace ExcelReader.Benchmarks
         public async Task<long> NarrowInt()
         {
             long n = 0;
-            await foreach (NarrowRow row in Excel.ParseCsvParallelAsync(_narrow, ExcelParser.FromAttributes<NarrowRow>(), new CsvParallelOptions { DegreeOfParallelism = Dop }))
+            await foreach (NarrowRow row in CsvParallel.ParseAsync(_narrow, ExcelParser.FromAttributes<NarrowRow>(), new CsvParallelOptions { DegreeOfParallelism = Dop }))
             {
                 n += row.A;
             }
@@ -117,7 +116,7 @@ namespace ExcelReader.Benchmarks
         {
             CsvParallelOptions options = new() { DegreeOfParallelism = Dop, HeaderRow = 1 };
             ExcelParser<WideRowRef> map = ExcelParser.FromAttributes<WideRowRef>();
-            var aggregation = await Excel.AggregateCsvParallelAsync<Aggregation, WideRowRef>(_wide, map, options);
+            var aggregation = await CsvParallel.AggregateAsync<Aggregation, WideRowRef>(_wide, map, options);
             if (aggregation.Units == 0)
             {
                 throw new InvalidOperationException("WideRowRef bound no columns; the aggregate benchmark is measuring nothing.");
@@ -130,7 +129,7 @@ namespace ExcelReader.Benchmarks
         {
             CsvParallelOptions options = new() { DegreeOfParallelism = Dop, HeaderRow = 1 };
             ExcelParser<NarrowRowStruct> map = ExcelParser.FromAttributes<NarrowRowStruct>();
-            var aggregation = await Excel.AggregateCsvParallelAsync<AggregationNarrow, NarrowRowStruct>(_narrow, map, options);
+            var aggregation = await CsvParallel.AggregateAsync<AggregationNarrow, NarrowRowStruct>(_narrow, map, options);
             if (aggregation.Units == 0)
             {
                 throw new InvalidOperationException("NarrowRowStruct bound no columns; the aggregate benchmark is measuring nothing.");

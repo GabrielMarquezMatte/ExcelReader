@@ -56,11 +56,11 @@ using IExcelRowReader reader = Excel.Open(path, format, new ExcelReaderOptions
 using ExcelReader.Core.Reader;
 using ExcelReader.Core.Reader.Csv;
 
-CsvDialect dialect = Excel.SniffCsvDialectFromFile("export.csv");
+CsvDialect dialect = CsvSniffer.DetectFile("export.csv");
 using var reader = Excel.FromCsvFile("export.csv", CsvReaderOptions.Default.WithDialect(dialect));
 ```
 
-`Excel.SniffCsvDialect` mirrors the other CSV factories' shape: overloads for a seekable `Stream` and a `ReadOnlyMemory<byte>`, plus `SniffCsvDialectFromFile`, and async siblings for the stream/file overloads. The `Stream` overloads require a seekable source — they read a bounded sample and restore the stream's position — so a non-seekable stream throws `ArgumentException`; buffer it first, or pass the bytes as `ReadOnlyMemory<byte>` instead. Pass `CsvSnifferOptions` to change the candidate delimiters/quotes (and their priority order) or the number of sample lines considered.
+`CsvSniffer.Detect` takes a span of bytes or a seekable `Stream`, `DetectFile` takes a path, and `DetectAsync`/`DetectFileAsync` are the async siblings; only the first 64 KiB are examined. The `Stream` overloads require a seekable source — they read a bounded sample and restore the stream's position — so a non-seekable stream throws `ArgumentException`; buffer it first, or pass the bytes as a span instead. Pass `CsvSnifferOptions` to change the candidate delimiters/quotes (and their priority order) or the number of sample lines considered.
 
 `CsvReaderOptions.SniffDialect` does the sample-then-apply above for you, at the entry point that owns the source — the `Excel.FromCsv*` factories, `Excel.Open` with `ExcelFileFormat.Csv`, and the parallel CSV entry points:
 
@@ -72,14 +72,15 @@ An explicitly set `Encoding` survives sniffing unless the source carries a byte-
 
 ## Write CSV
 
-`CsvWriter` emits RFC 4180 CSV: no sheets, styles, or shared strings, so rows stream straight to the output.
+`CsvWorkbookWriter` emits RFC 4180 CSV: no styles or shared strings, so rows stream straight to the output. A CSV file is a single sheet, so `AddSheet` is called once (the name is ignored).
 
 ```csharp
 using ExcelReader.Core.Writer;
 using ExcelReader.Core.Writer.Csv;
 
 using var stream = File.Create("out.csv");
-using var writer = CsvWriter.Create(stream);
+using var workbook = CsvWorkbookWriter.Create(stream);
+using var writer = workbook.AddSheet("Sheet1");
 
 using (CsvRowWriter row = writer.StartRow())
 {
@@ -96,12 +97,12 @@ using (CsvRowWriter row = writer.StartRow())
 }
 ```
 
-Fields are quoted only when they contain the delimiter, quote character, `\r`, or `\n`; embedded quotes are doubled. `bool` writes as lowercase `true`/`false` and `DateTime`/`DateOnly` as round-trip ISO 8601 (`"O"`); `TimeOnly` as a time-of-day fraction — all matching what `ExcelParser<T>.Parse(CsvReader)` expects, so a file written by `CsvWriter` parses back without configuration. `Skip(count)` writes empty fields to keep column positions aligned (CSV has no sparse-cell concept).
+Fields are quoted only when they contain the delimiter, quote character, `\r`, or `\n`; embedded quotes are doubled. `bool` writes as lowercase `true`/`false` and `DateTime`/`DateOnly` as round-trip ISO 8601 (`"O"`); `TimeOnly` as a time-of-day fraction — all matching what `ExcelParser<T>.Parse(CsvReader)` expects, so a file written by `CsvWorkbookWriter` parses back without configuration. `Skip(count)` writes empty fields to keep column positions aligned (CSV has no sparse-cell concept).
 
 `CsvWriterOptions` mirrors `CsvReaderOptions` property for property, so a file written with one set of settings reads back with the matching set:
 
 ```csharp
-using var writer = CsvWriter.Create(stream, leaveOpen: false, new CsvWriterOptions
+using var workbook = CsvWorkbookWriter.Create(stream, leaveOpen: false, new CsvWriterOptions
 {
     Delimiter = (byte)';',
     Encoding = Encoding.Latin1,          // fields are formatted as UTF-8, then transcoded on the way out

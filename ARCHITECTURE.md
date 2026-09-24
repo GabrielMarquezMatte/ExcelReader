@@ -38,7 +38,7 @@ for span-typed columns, for the values too. It consumes `Row`/`Cell` from any re
 
 ## Parallel CSV parsing
 
-`Excel.ParseCsvParallelAsync<T>` (`src/ExcelReader.Core/Parser/ParallelCsv/ParallelCsv*.cs`) is an opt-in
+`CsvParallel.ParseAsync<T>` (`src/ExcelReader.Core/Parser/ParallelCsv/ParallelCsv*.cs`) is an opt-in
 alternate path over the same typed-parsing machinery, for sources large enough that partitioning
 pays for itself. `ParallelCsvFactory` decides eligibility — a seekable, UTF-8, large-enough source —
 and falls back to the ordinary sequential `ExcelParser<T>` otherwise, so callers get identical output
@@ -85,8 +85,8 @@ Still unresolved, and untested by any of the above: whether true unordered emiss
 differently. The ordered merge is the safer default and the only mode either public overload can
 reach, so it stays absent a specific reason to revisit.
 
-`Excel.ForEachCsvParallelAsync` exposes the same partitioning to a per-row callback rather than an
-accumulator type. It accepts a `ref struct` row, which the enumerating `ParseCsvParallelAsync` cannot —
+`CsvParallel.ForEachAsync` exposes the same partitioning to a per-row callback rather than an
+accumulator type. It accepts a `ref struct` row, which the enumerating `CsvParallel.ParseAsync` cannot —
 not because of the interface (`IAsyncEnumerable<T>`'s `T` is declared `allows ref struct` on net9.0+),
 but because a row holding spans into a worker's buffer cannot cross to the consumer thread at all.
 

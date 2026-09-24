@@ -39,10 +39,10 @@ may get worse, not only better.
 | File | Role |
 |---|---|
 | `NativeApi.cs`, `Reading/`, `Typed/`, `Arrow/`, `Csv/`, `Writer/` | Internal span-based implementation (`ReadApi`, `TypedApi`, `ArrowApi`, `CsvAggregateApi`, `WriteApi`). This is what the tests drive. |
-| `Exports.cs` | `[UnmanagedCallersOnly]` pointer wrappers. Keep logic out of here — it is untestable from managed code. |
+| `Exports*.cs` | `[UnmanagedCallersOnly]` pointer wrappers, one partial per feature. Keep logic out of here — it is untestable from managed code. |
 | `NativeHandleTable.cs` | Maps the opaque handle ids callers see onto `NativeHandle` instances. Ids are never reissued after `xl_close`, so a stale handle stays invalid permanently. |
 | `Reading/RowBlob.cs` | Row serialization. |
-| `include/excelreader.h` | Hand-written C header; keep in sync with `Exports.cs`. |
+| `include/excelreader.h` | Hand-written C header; keep in sync with `Exports*.cs`. |
 
 Reading exports: `xl_open_file`, `xl_open_file_ex`, `xl_open_memory`, `xl_open_memory_ex`, `xl_close`,
 `xl_sheet_count`, `xl_sheet_name`, `xl_sheet_name_at`, `xl_move_to_sheet`, `xl_is_date1904`,
