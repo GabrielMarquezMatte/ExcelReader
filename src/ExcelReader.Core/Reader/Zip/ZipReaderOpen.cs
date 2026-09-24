@@ -5,6 +5,22 @@ namespace ExcelReader.Core.Reader.Zip
 {
     internal static class ZipReaderOpen
     {
+        internal static ZipArchive Open(Stream stream, bool leaveOpen)
+        {
+            try
+            {
+                return new ZipArchive(stream, ZipArchiveMode.Read, leaveOpen: true);
+            }
+            catch
+            {
+                if (!leaveOpen)
+                {
+                    stream.Dispose();
+                }
+                throw;
+            }
+        }
+
         internal static async ValueTask<TResult> OpenAsync<TResult>(
             Stream stream, bool leaveOpen, ExcelReaderOptions options, Func<ZipArchive, ValueTask<TResult>> parseBody, CancellationToken ct = default)
         {

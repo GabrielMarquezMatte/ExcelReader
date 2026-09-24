@@ -199,8 +199,16 @@ namespace ExcelReader.Core.Reader
         /// <param name="options">Delimiter, quote, encoding, and size-limit settings; <see cref="CsvReaderOptions.Default"/> when <see langword="null"/>.</param>
         public static CsvReader FromCsvFile(string path, CsvReaderOptions? options = null)
         {
-            CsvReaderOptions effective = CsvDialectResolver.Resolve(path, options ?? CsvReaderOptions.Default);
-            return new CsvReader(File.OpenRead(path), leaveOpen: false, effective);
+            FileStream stream = File.OpenRead(path);
+            try
+            {
+                return new CsvReader(stream, leaveOpen: false, CsvDialectResolver.Resolve(stream, options ?? CsvReaderOptions.Default));
+            }
+            catch
+            {
+                stream.Dispose();
+                throw;
+            }
         }
 
         /// <summary>Opens a CSV (or other delimited-text) source from an existing stream.</summary>
@@ -229,9 +237,17 @@ namespace ExcelReader.Core.Reader
         /// <param name="ct">A token to cancel the open operation.</param>
         public static async ValueTask<CsvReader> FromCsvFileAsync(string path, CsvReaderOptions? options = null, CancellationToken ct = default)
         {
-            CsvReaderOptions effective = await CsvDialectResolver.ResolveAsync(path, options ?? CsvReaderOptions.Default, ct).ConfigureAwait(false);
             FileStream stream = OpenAsyncFile(path);
-            return await CsvReader.CreateAsync(stream, leaveOpen: false, effective, ct).ConfigureAwait(false);
+            try
+            {
+                CsvReaderOptions effective = await CsvDialectResolver.ResolveAsync(stream, options ?? CsvReaderOptions.Default, ct).ConfigureAwait(false);
+                return await CsvReader.CreateAsync(stream, leaveOpen: false, effective, ct).ConfigureAwait(false);
+            }
+            catch
+            {
+                await stream.DisposeAsync().ConfigureAwait(false);
+                throw;
+            }
         }
 
         /// <summary>Asynchronously opens a CSV (or other delimited-text) source from an existing stream.</summary>
