@@ -63,14 +63,16 @@ Unlike `CsvParallel.ParseAsync`, the callback runs on the worker threads, so rec
 particular order and the callback must be safe to call from several threads at once. Spans are valid
 only for the duration of the call.
 
-The callback may also be invoked more than once for the same record. A partition whose start offset was
-guessed wrongly is read again from the confirmed offset, and the discarded pass may already have
-delivered a whole partition's worth of records — 1 MiB to 64 MiB of them, not just a few near the seam.
+Delivery is at least once, not exactly once: the callback may be invoked more than once for the same
+record. A partition whose start offset was guessed wrongly is read again from the confirmed offset, and
+the discarded pass may already have delivered a whole partition's worth of records — 1 MiB to 64 MiB of them, not just a few near the seam.
 On a source with quoted fields those records may also be misparsed, carrying values that appear nowhere
 in the file, and an exception the callback threw during a discarded pass is discarded with it. A start
 is only guessed wrongly inside a quoted field, so a source in which the quote character never appears
 delivers every record exactly once; for that guarantee on any source, use `CsvParallel.AggregateAsync`,
-where the discarded partition's accumulator is thrown away.
+where the discarded partition's accumulator is thrown away, and apply side effects once it returns.
+A callback that writes to a database or sends messages must be idempotent and must also tolerate
+records that do not exist — deduplicating on a key does not filter those out.
 
 See the [parallel CSV benchmarks](../performance/benchmarks.md#parallel-csv) for what this buys. Those figures are
 `CsvParallel.AggregateAsync`'s, measured over the same projection path this shares: at dop 16 it is

@@ -63,7 +63,7 @@ namespace ExcelReader.Generator
         private static readonly DiagnosticDescriptor DuplicateHeaderDescriptor = new(
             "EXR006",
             "Two properties bind the same header name",
-            "Header name '{0}' is bound by more than one property of '{1}'; only the first one encountered will ever match",
+            "Header name '{0}' is bound by more than one property of '{1}' under the default case-insensitive, trimmed header matching; parsing with that matching throws InvalidOperationException",
             "ExcelReader.Generator",
             DiagnosticSeverity.Warning,
             isEnabledByDefault: true);
@@ -88,6 +88,14 @@ namespace ExcelReader.Generator
             "EXR008",
             "Type has no public parameterless constructor",
             "Type '{0}' has no public parameterless constructor, so no row instance can be created for it; add one, or map it with ExcelParser.Build",
+            "ExcelReader.Generator",
+            DiagnosticSeverity.Error,
+            isEnabledByDefault: true);
+
+        private static readonly DiagnosticDescriptor RequiredWithNoSetterDescriptor = new(
+            "EXR009",
+            "[ExcelRequired] property has no public setter",
+            "Property '{0}.{1}' is marked [ExcelRequired] but has no public set or init accessor, so it can never be read; add one, or remove [ExcelRequired]",
             "ExcelReader.Generator",
             DiagnosticSeverity.Error,
             isEnabledByDefault: true);
@@ -169,7 +177,7 @@ namespace ExcelReader.Generator
 
             IPropertySymbol[] candidateProperties = [.. CollectMappableProperties(symbol)];
 
-            var boundHeaders = new HashSet<string>(StringComparer.Ordinal);
+            var headerOwners = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             var plans = new List<PropertyPlan>(candidateProperties.Length);
             bool hadPropertyError = false;
             foreach (IPropertySymbol property in candidateProperties)
@@ -177,9 +185,17 @@ namespace ExcelReader.Generator
                 PropertyPlan plan = BuildPlan(diagnostics, symbol, property, ref hadPropertyError);
                 if (plan.Read.Kind != ReadKind.None)
                 {
-                    foreach (string name in plan.HeaderNames.Where(n => !boundHeaders.Add(n)))
+                    foreach (string name in plan.HeaderNames)
                     {
-                        diagnostics.Add(DiagnosticInfo.Create(DuplicateHeaderDescriptor, symbol.Locations.FirstOrDefault(), name, symbol.Name));
+                        string key = name.Trim();
+                        if (!headerOwners.TryGetValue(key, out string? owner))
+                        {
+                            headerOwners.Add(key, property.Name);
+                        }
+                        else if (!string.Equals(owner, property.Name, StringComparison.Ordinal))
+                        {
+                            diagnostics.Add(DiagnosticInfo.Create(DuplicateHeaderDescriptor, symbol.Locations.FirstOrDefault(), name, symbol.Name));
+                        }
                     }
                 }
                 if (plan.Read.Kind != ReadKind.None || plan.WriteEmit is not null)
@@ -272,9 +288,15 @@ namespace ExcelReader.Generator
             bool requireValue = isRequired && !allowEmpty;
 
             string member = Identifier(property.Name);
-            bool canSet = property.SetMethod is { DeclaredAccessibility: Accessibility.Public, IsInitOnly: false };
+            bool canSet = property.SetMethod is { DeclaredAccessibility: Accessibility.Public };
             bool canGet = property.GetMethod is { DeclaredAccessibility: Accessibility.Public };
             string qualifiedProperty = property.Type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+            if (isRequired && !canSet)
+            {
+                diagnostics.Add(DiagnosticInfo.Create(
+                    RequiredWithNoSetterDescriptor, property.Locations.FirstOrDefault(), owner.Name, property.Name));
+                hadPropertyError = true;
+            }
 
             AttributeData? converterAttr = property.GetAttributes()
                 .FirstOrDefault(a => string.Equals(a.AttributeClass?.ToDisplayString(), ConverterAttribute, StringComparison.Ordinal));
@@ -305,7 +327,7 @@ namespace ExcelReader.Generator
                 }
                 if (implementsWriter && canGet)
                 {
-                    writeEmit = $"            .Column(\"{names[0].Replace("\"", "\\\"")}\", static (row, m) => {fieldName}.Write(row, m.{member}))";
+                    writeEmit = $"            .Column({Literal(names[0])}, static (row, m) => {fieldName}.Write(row, m.{member}))";
                 }
             }
             else
@@ -316,7 +338,7 @@ namespace ExcelReader.Generator
                 {
                     read = new ReadPlan(SelectReadKind(b.IsGuid, isNullable), b.Reader, b.ValueType);
                 }
-                else if (isRequired)
+                else if (isRequired && canSet)
                 {
                     diagnostics.Add(DiagnosticInfo.Create(
                         RequiredWithNoParserDescriptor, property.Locations.FirstOrDefault(), owner.Name, property.Name, qualifiedProperty));
@@ -328,11 +350,33 @@ namespace ExcelReader.Generator
                 {
                     bool needsNullConditional = isNullable || !underlying.IsValueType;
                     string valueExpr = WriteValueExpression(writeKind, needsNullConditional, member, underlying);
-                    writeEmit = $"            .Column(\"{names[0].Replace("\"", "\\\"")}\", static (row, m) => row.Write({valueExpr}))";
+                    writeEmit = $"            .Column({Literal(names[0])}, static (row, m) => row.Write({valueExpr}))";
                 }
             }
 
-            return new PropertyPlan(member, names, read, isRequired, requireValue, writeEmit, converterFieldDecl);
+            (string assign, string? initAccessorDecl) = read.Kind == ReadKind.None
+                ? ($"m.{member} = v", null)
+                : PlanAssignment(property, member, qualifiedProperty);
+            return new PropertyPlan(names, read, isRequired, requireValue, writeEmit, converterFieldDecl, assign, initAccessorDecl);
+        }
+
+        private static (string Assign, string? InitAccessorDecl) PlanAssignment(IPropertySymbol property, string member, string qualifiedProperty)
+        {
+            if (property.SetMethod is not { IsInitOnly: true } init)
+            {
+                return ($"m.{member} = v", null);
+            }
+            // Init accessors can't be called outside an object initializer; UnsafeAccessor binds the same setter reflection's GetSetMethod() does.
+            string accessor = $"__ExcelInit_{property.Name}";
+            string byRef = init.ContainingType.IsValueType ? "ref " : "";
+            string target = init.ContainingType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+            string decl = $"    [global::System.Runtime.CompilerServices.UnsafeAccessor(global::System.Runtime.CompilerServices.UnsafeAccessorKind.Method, Name = {Literal(init.MetadataName)})] private static extern void {accessor}({byRef}{target} target, {qualifiedProperty} value);";
+            return ($"{accessor}({byRef}m, v)", decl);
+        }
+
+        private static string Literal(string value)
+        {
+            return SymbolDisplay.FormatLiteral(value, quote: true);
         }
 
         private static string Identifier(string name)
@@ -540,7 +584,7 @@ namespace ExcelReader.Generator
             sb.AppendLine($"{PartialDeclaration(symbol)} {Identifier(symbol.Name)} : global::ExcelReader.Core.Parser.IExcelRowMap<{qualifiedType}>, global::ExcelReader.Core.Writer.IExcelRecordMap<{qualifiedType}>");
             sb.AppendLine("{");
 
-            foreach (string? decl in properties.Select(static p => p.ConverterFieldDecl).Where(static d => d is not null))
+            foreach (string? decl in properties.SelectMany(static p => new[] { p.ConverterFieldDecl, p.InitAccessorDecl }).Where(static d => d is not null))
             {
                 sb.AppendLine(decl);
             }
@@ -579,7 +623,7 @@ namespace ExcelReader.Generator
 
         private static void EmitReadFragment(StringBuilder sb, string qualifiedType, PropertyPlan p)
         {
-            string namesLiteral = string.Join(", ", p.HeaderNames.Select(static n => $"\"{n.Replace("\"", "\\\"")}\""));
+            string namesLiteral = string.Join(", ", p.HeaderNames.Select(Literal));
             string req = $"isRequired: {Bool(p.IsRequired)}, requireValue: {Bool(p.RequireValue)}";
             switch (p.Read.Kind)
             {
@@ -587,16 +631,16 @@ namespace ExcelReader.Generator
                     return;
                 case ReadKind.Value:
                 case ReadKind.Nullable:
-                    EmitPropertyRaw(sb, qualifiedType, namesLiteral, p.PropertyName, req,
+                    EmitPropertyRaw(sb, qualifiedType, namesLiteral, p.Assign, req,
                         $"{p.Read.Reader}(in c, d, pr, out {p.Read.ValueType} v)");
                     return;
                 case ReadKind.Converted:
-                    EmitPropertyRaw(sb, qualifiedType, namesLiteral, p.PropertyName, req,
+                    EmitPropertyRaw(sb, qualifiedType, namesLiteral, p.Assign, req,
                         $"{p.Read.Reader}.TryConvert(in c, d, pr, out {p.Read.ValueType} v)");
                     return;
                 case ReadKind.GuidValue:
                 case ReadKind.GuidNullable:
-                    EmitPropertyRaw(sb, qualifiedType, namesLiteral, p.PropertyName, req,
+                    EmitPropertyRaw(sb, qualifiedType, namesLiteral, p.Assign, req,
                         "global::ExcelReader.Core.Parser.ExcelCellReaders.Parsable<global::System.Guid>(in c, d, pr, out global::System.Guid v)");
                     return;
                 default:
@@ -604,12 +648,12 @@ namespace ExcelReader.Generator
             }
         }
 
-        private static void EmitPropertyRaw(StringBuilder sb, string qualifiedType, string namesLiteral, string propertyName, string req, string tryReadExpr)
+        private static void EmitPropertyRaw(StringBuilder sb, string qualifiedType, string namesLiteral, string assign, string req, string tryReadExpr)
         {
             sb.AppendLine($"            .PropertyRaw([{namesLiteral}], static (ref {qualifiedType} m, in global::ExcelReader.Core.Reader.Cell c, bool d, global::System.IFormatProvider pr) =>");
             sb.AppendLine("            {");
             sb.AppendLine($"                if (!{tryReadExpr}) {{ return false; }}");
-            sb.AppendLine($"                m.{propertyName} = v;");
+            sb.AppendLine($"                {assign};");
             sb.AppendLine("                return true;");
             sb.AppendLine($"            }}, {req})");
         }
@@ -656,24 +700,26 @@ namespace ExcelReader.Generator
 
         private readonly struct PropertyPlan
         {
-            internal PropertyPlan(string propertyName, string[] headerNames, ReadPlan read, bool isRequired, bool requireValue, string? writeEmit, string? converterFieldDecl)
+            internal PropertyPlan(string[] headerNames, ReadPlan read, bool isRequired, bool requireValue, string? writeEmit, string? converterFieldDecl, string assign, string? initAccessorDecl)
             {
-                PropertyName = propertyName;
                 HeaderNames = headerNames;
                 Read = read;
                 IsRequired = isRequired;
                 RequireValue = requireValue;
                 WriteEmit = writeEmit;
                 ConverterFieldDecl = converterFieldDecl;
+                Assign = assign;
+                InitAccessorDecl = initAccessorDecl;
             }
 
-            internal string PropertyName { get; }
             internal string[] HeaderNames { get; }
             internal ReadPlan Read { get; }
             internal bool IsRequired { get; }
             internal bool RequireValue { get; }
             internal string? WriteEmit { get; }
             internal string? ConverterFieldDecl { get; }
+            internal string Assign { get; }
+            internal string? InitAccessorDecl { get; }
         }
 
         private readonly struct GeneratedResult : IEquatable<GeneratedResult>
