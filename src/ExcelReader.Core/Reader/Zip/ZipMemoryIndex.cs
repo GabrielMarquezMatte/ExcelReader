@@ -195,15 +195,15 @@ namespace ExcelReader.Core.Reader.Zip
 
         private ReadOnlyMemory<byte> ResolveCompressedSlice(in ZipEntryRef entry)
         {
+            long dataOffset = ResolveDataOffset(entry);
+            long fileLength = _file.Length;
+            if (dataOffset < 0 || dataOffset > fileLength || entry.CompressedSize < 0 || entry.CompressedSize > fileLength - dataOffset)
+            {
+                throw new InvalidDataException("The ZIP entry data runs past the end of the file.");
+            }
             if (entry.CompressedSize > Array.MaxLength)
             {
                 throw new ExcelLimitExceededException("ArrayMaxLength", Array.MaxLength, entry.CompressedSize);
-            }
-            long dataOffset = ResolveDataOffset(entry);
-            ReadOnlySpan<byte> fileSpan = _file.Span;
-            if (dataOffset < 0 || dataOffset + entry.CompressedSize > fileSpan.Length)
-            {
-                throw new InvalidDataException("The ZIP entry data runs past the end of the file.");
             }
             return _file.Slice((int)dataOffset, (int)entry.CompressedSize);
         }
@@ -274,6 +274,10 @@ namespace ExcelReader.Core.Reader.Zip
                 return (cdOffset, cdSize, declaredCount);
             }
             zip64EocdOffset = BinaryPrimitives.ReadInt64LittleEndian(locator[8..]);
+            if (zip64EocdOffset < 0)
+            {
+                throw new InvalidDataException("The ZIP64 end of central directory record is out of range.");
+            }
             return (cdOffset, cdSize, declaredCount);
         }
 
@@ -296,12 +300,13 @@ namespace ExcelReader.Core.Reader.Zip
 
         private static int WalkCentralDirectory(ReadOnlySpan<byte> span, long cdOffset, long cdSize, ref ZipEntryRef[] entries, ExcelReaderOptions options)
         {
+            // Create has checked cdOffset <= span.Length - cdSize, so end <= span.Length and cannot overflow.
             long end = cdOffset + cdSize;
             long pos = cdOffset;
             int count = 0;
             while (pos < end)
             {
-                if (pos + CentralDirectoryFixedSize > span.Length)
+                if (end - pos < CentralDirectoryFixedSize)
                 {
                     throw new InvalidDataException("The ZIP central directory is truncated.");
                 }
@@ -317,11 +322,12 @@ namespace ExcelReader.Core.Reader.Zip
                 }
 
                 long nameStart = pos + CentralDirectoryFixedSize;
-                long recordEnd = nameStart + fields.NameLength + fields.ExtraLength + fields.CommentLength;
-                if (recordEnd > span.Length || recordEnd > end)
+                int variableLength = fields.NameLength + fields.ExtraLength + fields.CommentLength;
+                if (variableLength > end - nameStart)
                 {
                     throw new InvalidDataException("The ZIP central directory is truncated.");
                 }
+                long recordEnd = nameStart + variableLength;
 
                 (long compressed, long uncompressed, long localOffset) = ResolveZip64Sizes(
                     span, (int)(nameStart + fields.NameLength), fields.ExtraLength, fields);
@@ -381,7 +387,7 @@ namespace ExcelReader.Core.Reader.Zip
             {
                 return (fields.CompressedSize, fields.UncompressedSize, fields.LocalHeaderOffset);
             }
-            if (extraStart + extraLength > span.Length)
+            if (extraLength > span.Length - extraStart)
             {
                 throw new InvalidDataException("The ZIP extra field is truncated.");
             }
@@ -446,7 +452,7 @@ namespace ExcelReader.Core.Reader.Zip
         {
             ReadOnlySpan<byte> fileSpan = _file.Span;
             long headerOffset = entry.LocalHeaderOffset;
-            if (headerOffset < 0 || headerOffset + LocalHeaderFixedSize > fileSpan.Length)
+            if (headerOffset < 0 || headerOffset > fileSpan.Length - LocalHeaderFixedSize)
             {
                 throw new InvalidDataException("The ZIP local file header is out of range.");
             }
@@ -458,7 +464,7 @@ namespace ExcelReader.Core.Reader.Zip
             ushort nameLength = BinaryPrimitives.ReadUInt16LittleEndian(header[26..]);
             ushort extraLength = BinaryPrimitives.ReadUInt16LittleEndian(header[28..]);
             long nameStart = headerOffset + LocalHeaderFixedSize;
-            if (nameStart + nameLength > fileSpan.Length)
+            if (nameLength > fileSpan.Length - nameStart)
             {
                 throw new InvalidDataException("The ZIP local file header name runs past the end of the file.");
             }

@@ -24,7 +24,7 @@ namespace ExcelReader.Core.Reader.Xlsx
         private string?[]? _sharedStringCache;
 
         internal XlsxReader(Stream stream, bool leaveOpen, ExcelReaderOptions? options = null)
-            : this(stream, leaveOpen, new ZipArchive(stream, ZipArchiveMode.Read, leaveOpen: true), options)
+            : this(stream, leaveOpen, ZipReaderOpen.Open(stream, leaveOpen), options)
         {
         }
 

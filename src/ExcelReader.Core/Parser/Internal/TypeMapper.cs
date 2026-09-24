@@ -47,16 +47,21 @@ namespace ExcelReader.Core.Parser.Internal
 
             foreach (PropertyInfo prop in properties)
             {
-                if (prop.GetSetMethod() is null)
-                {
-                    continue;
-                }
                 if (Attribute.IsDefined(prop, typeof(ExcelIgnoreAttribute)))
                 {
                     continue;
                 }
                 ExcelRequiredAttribute? requiredAttr = prop.GetCustomAttribute<ExcelRequiredAttribute>();
                 bool isRequired = requiredAttr is not null;
+                if (prop.GetSetMethod() is null)
+                {
+                    if (isRequired)
+                    {
+                        throw new InvalidOperationException(
+                            $"Property '{typeof(T).Name}.{prop.Name}' is marked [ExcelRequired] but has no public set or init accessor, so it can never be read. Add one, or remove [ExcelRequired].");
+                    }
+                    continue;
+                }
                 bool requireValue = isRequired && !requiredAttr!.AllowEmpty;
                 ExcelConverterAttribute? converterAttr = prop.GetCustomAttribute<ExcelConverterAttribute>();
                 ColumnParser<T>? parser = converterAttr is not null

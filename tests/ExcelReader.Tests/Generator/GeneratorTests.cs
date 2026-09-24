@@ -608,17 +608,29 @@ namespace ExcelReader.Tests.Generator
         }
 
         [Fact]
-        public void InitOnlyPropertyIsNotMappedForRead()
+        public void InitOnlyPropertyIsMappedForReadAndWrite()
         {
             const string source = """
                 using ExcelReader.Core.Parser;
 
                 namespace GeneratorTests.InitOnly
                 {
+                    public class Base
+                    {
+                        public string Inherited { get; init; } = "";
+                    }
+
                     [ExcelSerializable]
-                    public partial class Model
+                    public partial class Model : Base
                     {
                         public string Name { get; init; } = "";
+                        public string @class { get; init; } = "";
+                    }
+
+                    [ExcelSerializable]
+                    public readonly ref partial struct RefModel
+                    {
+                        public System.ReadOnlySpan<byte> Name { get; init; }
                     }
                 }
                 """;
@@ -626,8 +638,193 @@ namespace ExcelReader.Tests.Generator
             Assert.Empty(diagnostics);
             EmitResult emit = result.Emit();
             Assert.True(emit.Success, string.Join(Environment.NewLine, emit.Diagnostics.Select(static d => d.ToString())));
-            Assert.DoesNotContain(".PropertyRaw([\"Name\"]", generated, StringComparison.Ordinal);
+            Assert.Contains(".PropertyRaw([\"Name\"]", generated, StringComparison.Ordinal);
+            Assert.Contains(".PropertyRaw([\"class\"]", generated, StringComparison.Ordinal);
+            Assert.Contains(".PropertyRaw([\"Inherited\"]", generated, StringComparison.Ordinal);
             Assert.Contains(".Column(\"Name\"", generated, StringComparison.Ordinal);
+        }
+
+        [Fact]
+        public void RequiredPropertyWithoutPublicSetterReportsEXR009()
+        {
+            const string source = """
+                using ExcelReader.Core.Parser;
+
+                namespace GeneratorTests.RequiredNoSetter
+                {
+                    [ExcelSerializable]
+                    public partial class Model
+                    {
+                        [ExcelRequired]
+                        public string GetOnly { get; } = "";
+                        [ExcelRequired]
+                        public string PrivateSet { get; private set; } = "";
+                        [ExcelRequired]
+                        public string InitOnly { get; init; } = "";
+                    }
+                }
+                """;
+            (_, ImmutableArray<Diagnostic> diagnostics) = RunGenerator(source);
+            Assert.Equal(2, diagnostics.Length);
+            Assert.All(diagnostics, static d => Assert.Equal("EXR009", d.Id));
+            Assert.All(diagnostics, static d => Assert.Equal(DiagnosticSeverity.Error, d.Severity));
+        }
+
+        [Fact]
+        public void CaseOrTrimEquivalentHeadersOnDifferentPropertiesReportEXR006()
+        {
+            const string source = """
+                using ExcelReader.Core.Parser;
+
+                namespace GeneratorTests.CaseCollision
+                {
+                    [ExcelSerializable]
+                    public partial class Model
+                    {
+                        public string Name { get; set; } = "";
+                        public string name { get; set; } = "";
+                        [ExcelColumn(" Code")]
+                        public string First { get; set; } = "";
+                        [ExcelColumn("Code")]
+                        public string Second { get; set; } = "";
+                    }
+                }
+                """;
+            (_, ImmutableArray<Diagnostic> diagnostics) = RunGenerator(source);
+            Assert.Equal(2, diagnostics.Length);
+            Assert.All(diagnostics, static d => Assert.Equal("EXR006", d.Id));
+        }
+
+        private const string CollisionRuntimeSource = """
+            #nullable enable
+            using System;
+            using System.Collections.Generic;
+            using System.IO;
+            using System.Threading.Tasks;
+            using ExcelReader.Core.Parser;
+            using ExcelReader.Core.Reader;
+            using ExcelReader.Core.Reader.Xlsx;
+            using ExcelReader.Core.Writer.Xlsx;
+
+            namespace GeneratorTests.CollisionRuntime
+            {
+                [ExcelSerializable]
+                public partial class CaseModel
+                {
+                    [ExcelColumn("Name")]
+                    public string Upper { get; set; } = "";
+                    [ExcelColumn("name")]
+                    public string Lower { get; set; } = "";
+                }
+
+                [ExcelSerializable]
+                public partial class AliasModel
+                {
+                    [ExcelColumn("Id")]
+                    [ExcelColumn("Key")]
+                    public string Id { get; set; } = "";
+                    [ExcelColumn("key")]
+                    public string Other { get; set; } = "";
+                }
+
+                public static class TestRunner
+                {
+                    private static async Task<MemoryStream> BuildAsync(string[] header, string[] row)
+                    {
+                        var ms = new MemoryStream();
+                        await using (XlsxWorkbookWriter wb = XlsxWorkbookWriter.Create(ms, leaveOpen: true))
+                        {
+                            XlsxSheetWriter sheet = wb.AddSheet("S1");
+                            foreach (string[] cells in new[] { header, row })
+                            {
+                                XlsxRowWriter writer = await sheet.StartRowAsync();
+                                await using (writer.ConfigureAwait(false))
+                                {
+                                    foreach (string cell in cells)
+                                    {
+                                        writer.Write(cell);
+                                    }
+                                }
+                            }
+                            await sheet.EndAsync();
+                            await wb.EndAsync();
+                        }
+                        ms.Position = 0;
+                        return ms;
+                    }
+
+                    private static async Task<string> ParseAsync<T>(ExcelParserConfig? config, string[] header, string[] row, Func<T, string> describe)
+                        where T : IExcelRowMap<T>
+                    {
+                        using MemoryStream ms = await BuildAsync(header, row);
+                        await using XlsxReader reader = await Excel.FromXlsxAsync(ms);
+                        try
+                        {
+                            var results = new List<string>();
+                            foreach (T model in ExcelParser.Generated<T>(config).Parse(reader))
+                            {
+                                results.Add(describe(model));
+                            }
+                            return string.Join("|", results);
+                        }
+                        catch (InvalidOperationException)
+                        {
+                            return "throw";
+                        }
+                    }
+
+                    public static async Task<string[]> RunAsync()
+                    {
+                        var ordinal = new ExcelParserConfig { ColumnNameComparer = StringComparer.Ordinal };
+                        return new[]
+                        {
+                            await ParseAsync<CaseModel>(null, new[] { "Name" }, new[] { "A" }, static m => m.Upper + "," + m.Lower),
+                            await ParseAsync<CaseModel>(ordinal, new[] { "Name", "name" }, new[] { "A", "b" }, static m => m.Upper + "," + m.Lower),
+                            await ParseAsync<AliasModel>(null, new[] { "Id" }, new[] { "1" }, static m => m.Id + "," + m.Other),
+                            await ParseAsync<AliasModel>(ordinal, new[] { "Key", "key" }, new[] { "1", "2" }, static m => m.Id + "," + m.Other),
+                        };
+                    }
+                }
+            }
+            """;
+
+        [Fact]
+        public async Task GeneratedMapThrowsOnHeaderCollisionOnlyWhenTheComparerTreatsHeadersAsEqual()
+        {
+            (ImmutableCompilationResult result, ImmutableArray<Diagnostic> diagnostics) = RunGenerator(CollisionRuntimeSource);
+            Assert.Equal(2, diagnostics.Length);
+            Assert.All(diagnostics, static d => Assert.Equal("EXR006", d.Id));
+            (EmitResult Emit, byte[] AssemblyBytes) emitted = result.EmitToBytes();
+            Assert.True(emitted.Emit.Success, string.Join(Environment.NewLine, emitted.Emit.Diagnostics.Select(static d => d.ToString())));
+
+            Type runnerType = Assembly.Load(emitted.AssemblyBytes).GetType("GeneratorTests.CollisionRuntime.TestRunner")!;
+            string[] values = await (Task<string[]>)runnerType.GetMethod("RunAsync")!.Invoke(null, null)!;
+
+            Assert.Equal(["throw", "A,b", "throw", "1,2"], values);
+        }
+
+        [Fact]
+        public void DuplicateAliasesOnOnePropertyReportNothing()
+        {
+            const string source = """
+                using ExcelReader.Core.Parser;
+
+                namespace GeneratorTests.SamePropertyAliases
+                {
+                    [ExcelSerializable]
+                    public partial class Model
+                    {
+                        [ExcelColumn("Name")]
+                        [ExcelColumn("name")]
+                        [ExcelColumn("Name")]
+                        public string Name { get; set; } = "";
+                    }
+                }
+                """;
+            (ImmutableCompilationResult result, ImmutableArray<Diagnostic> diagnostics) = RunGenerator(source);
+            Assert.Empty(diagnostics);
+            EmitResult emit = result.Emit();
+            Assert.True(emit.Success, string.Join(Environment.NewLine, emit.Diagnostics.Select(static d => d.ToString())));
         }
 
         [Fact]

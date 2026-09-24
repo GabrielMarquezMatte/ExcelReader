@@ -34,6 +34,11 @@ namespace ExcelReader.Core.Reader.Csv
         /// path: each partition keeps its own dedup cache, so hit rates fall and memory multiplies. Results
         /// are unaffected.
         /// </para>
+        /// <para>
+        /// Each row is yielded exactly once. A partition read from a wrongly guessed start is discarded before
+        /// any of its rows are yielded, but its cells have already passed through the parser's converters and
+        /// property setters, which must therefore be free of side effects.
+        /// </para>
         /// </remarks>
         public static IAsyncEnumerable<T> ParseAsync<T>(
             string path,
@@ -56,7 +61,7 @@ namespace ExcelReader.Core.Reader.Csv
         /// <param name="parser">How columns bind to <typeparamref name="T"/>; created with <see cref="ExcelParser"/>. Its <see cref="ExcelParserConfig.HeaderRow"/> locates the header.</param>
         /// <param name="options">Parallelism and dialect options. Defaults to <see cref="CsvParallelOptions.Default"/>. <see cref="CsvParallelOptions.HeaderRow"/> does not apply here and must be left at <c>0</c>.</param>
         /// <param name="ct">A token to cancel enumeration.</param>
-        /// <remarks>Carries the same fallback and <see cref="CsvReaderOptions.InternStrings"/> caveats as the path-based overload.</remarks>
+        /// <remarks>Carries the same fallback, <see cref="CsvReaderOptions.InternStrings"/> and exactly-once caveats as the path-based overload.</remarks>
         public static IAsyncEnumerable<T> ParseAsync<T>(
             ReadOnlyMemory<byte> data,
             ExcelParser<T> parser,
@@ -91,7 +96,7 @@ namespace ExcelReader.Core.Reader.Csv
         /// flushes that stream's internal buffer and disables its subsequent buffering optimizations. The
         /// stream's position is not moved. Prefer the path-based overload where a path is available.
         /// </para>
-        /// <para>Carries the same <see cref="CsvReaderOptions.InternStrings"/> caveat as the other overloads.</para>
+        /// <para>Carries the same <see cref="CsvReaderOptions.InternStrings"/> and exactly-once caveats as the other overloads.</para>
         /// </remarks>
         public static IAsyncEnumerable<T> ParseAsync<T>(
             Stream stream,
@@ -119,7 +124,9 @@ namespace ExcelReader.Core.Reader.Csv
         /// <remarks>
         /// <para>
         /// Partitions start at guessed record boundaries; one whose guess landed inside a quoted field
-        /// spanning lines is read again into a new accumulator, as <see cref="ICsvAccumulator{TSelf, TModel}"/> describes.
+        /// spanning lines is read again into a new accumulator. The result holds every record exactly once,
+        /// but <see cref="ICsvRecord{TSelf}.TryParse"/> and <see cref="ICsvAccumulator{TSelf, TModel}.Add"/>
+        /// may already have run for the discarded pass's records, as <see cref="ICsvAccumulator{TSelf, TModel}"/> describes.
         /// </para>
         /// <para>
         /// Falls back to one sequential pass, with a single accumulator and no call to
@@ -203,18 +210,21 @@ namespace ExcelReader.Core.Reader.Csv
         /// several at once; the caller owns any synchronization. Records arrive in no particular order.
         /// </para>
         /// <para>
-        /// <paramref name="body"/> may be invoked more than once for the same record. A partition whose start
-        /// was guessed wrongly is read again from the confirmed offset, and the discarded speculative pass may
-        /// already have delivered a whole partition's worth of records — 1 MiB to 64 MiB of them, not just a
-        /// few near the seam. Those records may also be misparsed: a wrong start shifts every field boundary,
-        /// so a quoted field holding a delimiter can split into values that appear nowhere in the source. An
-        /// exception <paramref name="body"/> throws during a discarded pass is discarded with it.
+        /// Delivery is at least once, not exactly once: <paramref name="body"/> may be invoked more than once
+        /// for the same record. A partition whose start was guessed wrongly is read again from the confirmed
+        /// offset, and the discarded speculative pass may already have delivered a whole partition's worth of
+        /// records — 1 MiB to 64 MiB of them, not just a few near the seam. Those records may also be misparsed:
+        /// a wrong start shifts every field boundary, so a quoted field holding a delimiter can split into values
+        /// that appear nowhere in the source. An exception <paramref name="body"/> throws during a discarded
+        /// pass is discarded with it.
         /// </para>
         /// <para>
-        /// A start is only guessed wrongly when it falls inside a quoted field, so a source in which the quote
-        /// character never appears delivers every record exactly once. For that guarantee on any source, use
+        /// A <paramref name="body"/> with side effects must therefore be idempotent, and must also tolerate
+        /// records that do not exist; deduplicating on a key does not filter those out. A start is only guessed
+        /// wrongly when it falls inside a quoted field, so a source in which the quote character never appears
+        /// delivers every record exactly once. For that guarantee on any source, use
         /// <see cref="AggregateAsync{TAccumulator, TRecord}(string, CsvParallelOptions?, CancellationToken)"/>,
-        /// where the discarded partition's accumulator is thrown away.
+        /// where the discarded partition's accumulator is thrown away, and apply the side effects once it returns.
         /// </para>
         /// <para>
         /// A <see cref="ReadOnlySpan{T}"/> column points into a pooled buffer the worker reuses once

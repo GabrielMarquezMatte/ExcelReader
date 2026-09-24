@@ -52,7 +52,9 @@ namespace ExcelReader.Core.Writer
         /// Finalizes the workbook, writing any trailing structure (e.g. the workbook manifest/index)
         /// so the destination stream contains a complete, readable file. No further sheets may be added
         /// afterward. Idempotent with disposal: disposing an already-ended workbook is a no-op beyond
-        /// releasing resources.
+        /// releasing resources. A call that fails part-way still ends the workbook: it cannot be retried,
+        /// and disposing it only releases the stream. A token already canceled on entry leaves the
+        /// workbook untouched.
         /// </summary>
         /// <param name="ct">A token to cancel the operation.</param>
         ValueTask EndAsync(CancellationToken ct = default);

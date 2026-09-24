@@ -17,7 +17,7 @@
 //!
 //! Machine: state the CPU, OS and toolchain version alongside any number published from this file.
 
-use criterion::{black_box, criterion_group, criterion_main, Criterion};
+use criterion::{criterion_group, criterion_main, Criterion};
 use excelreader::workbook::{parse_sheet, ExcelMapper, Workbook};
 use excelreader::writer::{write_columns, write_sheet, Column, OwnedColumn};
 use excelreader::{Date, XL_FORMAT_XLSX};
@@ -78,7 +78,7 @@ fn benchmark_write(criterion: &mut Criterion) {
         let path = output_path("columns.xlsx");
         let target = path.to_str().expect("temp path must be UTF-8");
         b.iter(|| {
-            write_columns(target, XL_FORMAT_XLSX, black_box(&borrowed), None)
+            write_columns(target, XL_FORMAT_XLSX, std::hint::black_box(&borrowed), None)
                 .expect("write_columns must succeed");
         });
         std::fs::remove_file(&path).ok();
@@ -88,7 +88,7 @@ fn benchmark_write(criterion: &mut Criterion) {
         let path = output_path("sheet.xlsx");
         let target = path.to_str().expect("temp path must be UTF-8");
         b.iter(|| {
-            write_sheet(target, XL_FORMAT_XLSX, black_box(&rows), None)
+            write_sheet(target, XL_FORMAT_XLSX, std::hint::black_box(&rows), None)
                 .expect("write_sheet must succeed");
         });
         std::fs::remove_file(&path).ok();
@@ -99,7 +99,7 @@ fn benchmark_write(criterion: &mut Criterion) {
         b.iter(|| {
             let mut workbook = rust_xlsxwriter::Workbook::new();
             let sheet = workbook.add_worksheet();
-            for (index, row) in black_box(&rows).iter().enumerate() {
+            for (index, row) in std::hint::black_box(&rows).iter().enumerate() {
                 let r = (index + 1) as u32;
                 sheet.write_string(r, 0, &row.region).unwrap();
                 sheet.write_string(r, 1, &row.country).unwrap();

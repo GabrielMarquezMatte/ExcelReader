@@ -24,6 +24,7 @@ namespace ExcelReader.Core.Writer.Xls
         private bool _ended;
         private XlsSheetWriter? _activeSheet;
         private readonly HashSet<string> _sheetNames = new(StringComparer.OrdinalIgnoreCase);
+        private bool _faulted;
         private bool _disposed;
 
         private XlsWorkbookWriter(Stream stream, bool leaveOpen, bool date1904)
@@ -88,7 +89,6 @@ namespace ExcelReader.Core.Writer.Xls
 
         private BiffBuffer BuildGlobals(out int workbookSize)
         {
-            BiffBuffer globals = new(1024);
             string[] names = new string[_sheets.Count];
             ExcelSheetVisibility[] visibilities = new ExcelSheetVisibility[_sheets.Count];
             bool anyVisible = false;
@@ -100,16 +100,56 @@ namespace ExcelReader.Core.Writer.Xls
             }
             WriterStateGuard.RequireVisibleSheet(anyVisible, nameof(XlsWorkbookWriter));
 
-            int[] offsetPositions = XlsGlobals.Write(globals, names, visibilities, _date1904, _styles);
-            int offset = globals.Length;
-            workbookSize = offset;
-            for (int i = 0; i < _sheets.Count; i++)
+            BiffBuffer globals = new(1024);
+            try
             {
-                globals.PatchI32(offsetPositions[i], offset);
-                offset += _sheets[i].SubstreamLength;
-                workbookSize += _sheets[i].SubstreamLength;
+                int[] offsetPositions = XlsGlobals.Write(globals, names, visibilities, _date1904, _styles);
+                int offset = globals.Length;
+                workbookSize = offset;
+                for (int i = 0; i < _sheets.Count; i++)
+                {
+                    globals.PatchI32(offsetPositions[i], offset);
+                    offset += _sheets[i].SubstreamLength;
+                    workbookSize += _sheets[i].SubstreamLength;
+                }
+                return globals;
             }
-            return globals;
+            catch
+            {
+                globals.Dispose();
+                throw;
+            }
+        }
+
+        private void ReleaseStream()
+        {
+            if (_leaveOpen)
+            {
+                return;
+            }
+            if (_faulted)
+            {
+                FailureCleanup.Dispose(_stream);
+                return;
+            }
+            _stream.Dispose();
+        }
+
+        private ValueTask ReleaseStreamAsync()
+        {
+            if (_leaveOpen)
+            {
+                return ValueTask.CompletedTask;
+            }
+            return _faulted ? FailureCleanup.DisposeAsync(_stream) : _stream.DisposeAsync();
+        }
+
+        private void ReleaseSheetBuffers()
+        {
+            foreach (ref readonly var sheet in CollectionsMarshal.AsSpan(_sheets))
+            {
+                sheet.ReleaseBuffer();
+            }
         }
 
         /// <summary>
@@ -121,16 +161,16 @@ namespace ExcelReader.Core.Writer.Xls
         {
             ObjectDisposedException.ThrowIf(_ended, this);
             _ended = true;
-            _activeSheet?.Dispose();
-            if (_sheets.Count == 0)
-            {
-                throw new InvalidOperationException("A workbook must contain at least one sheet.");
-            }
-
-            BiffBuffer globals = BuildGlobals(out int workbookSize);
-            BiffBuffer frame = new(64);
             try
             {
+                _activeSheet?.Dispose();
+                if (_sheets.Count == 0)
+                {
+                    throw new InvalidOperationException("A workbook must contain at least one sheet.");
+                }
+
+                using BiffBuffer globals = BuildGlobals(out int workbookSize);
+                using BiffBuffer frame = new(64);
                 OleCompoundWriter.Write(_stream, workbookSize, dest =>
                 {
                     dest.Write(globals.Span);
@@ -149,14 +189,14 @@ namespace ExcelReader.Core.Writer.Xls
                     }
                 });
             }
+            catch
+            {
+                _faulted = true;
+                throw;
+            }
             finally
             {
-                globals.Dispose();
-                frame.Dispose();
-                foreach (ref readonly var sheet in CollectionsMarshal.AsSpan(_sheets))
-                {
-                    sheet.ReleaseBuffer();
-                }
+                ReleaseSheetBuffers();
             }
         }
 
@@ -167,19 +207,19 @@ namespace ExcelReader.Core.Writer.Xls
             ObjectDisposedException.ThrowIf(_ended, this);
             ct.ThrowIfCancellationRequested();
             _ended = true;
-            if (_activeSheet is not null)
-            {
-                await _activeSheet.DisposeAsync().ConfigureAwait(false);
-            }
-            if (_sheets.Count == 0)
-            {
-                throw new InvalidOperationException("A workbook must contain at least one sheet.");
-            }
-
-            BiffBuffer globals = BuildGlobals(out int workbookSize);
-            BiffBuffer frame = new(64);
             try
             {
+                if (_activeSheet is not null)
+                {
+                    await _activeSheet.DisposeAsync().ConfigureAwait(false);
+                }
+                if (_sheets.Count == 0)
+                {
+                    throw new InvalidOperationException("A workbook must contain at least one sheet.");
+                }
+
+                using BiffBuffer globals = BuildGlobals(out int workbookSize);
+                using BiffBuffer frame = new(64);
                 await OleCompoundWriter.WriteAsync(_stream, workbookSize, async (dest, canc) =>
                 {
                     await dest.WriteAsync(globals.Memory, canc).ConfigureAwait(false);
@@ -198,14 +238,14 @@ namespace ExcelReader.Core.Writer.Xls
                     }
                 }, ct).ConfigureAwait(false);
             }
+            catch
+            {
+                _faulted = true;
+                throw;
+            }
             finally
             {
-                globals.Dispose();
-                frame.Dispose();
-                foreach (ref readonly var sheet in CollectionsMarshal.AsSpan(_sheets))
-                {
-                    sheet.ReleaseBuffer();
-                }
+                ReleaseSheetBuffers();
             }
         }
 
@@ -236,21 +276,27 @@ namespace ExcelReader.Core.Writer.Xls
                 return;
             }
             _disposed = true;
-            if (!_ended)
+            try
             {
-                if (_sheets.Count > 0)
+                if (!_ended)
                 {
-                    End();
-                }
-                else
-                {
-                    _ended = true;
+                    if (_sheets.Count > 0 || _activeSheet is not null)
+                    {
+                        End();
+                    }
+                    else
+                    {
+                        _ended = true;
+                    }
                 }
             }
-            if (!_leaveOpen)
+            catch
             {
-                _stream.Dispose();
+                _faulted = true;
+                ReleaseStream();
+                throw;
             }
+            ReleaseStream();
         }
 
         /// <inheritdoc/>
@@ -261,21 +307,27 @@ namespace ExcelReader.Core.Writer.Xls
                 return;
             }
             _disposed = true;
-            if (!_ended)
+            try
             {
-                if (_sheets.Count > 0)
+                if (!_ended)
                 {
-                    await EndAsync().ConfigureAwait(false);
-                }
-                else
-                {
-                    _ended = true;
+                    if (_sheets.Count > 0 || _activeSheet is not null)
+                    {
+                        await EndAsync().ConfigureAwait(false);
+                    }
+                    else
+                    {
+                        _ended = true;
+                    }
                 }
             }
-            if (!_leaveOpen)
+            catch
             {
-                await _stream.DisposeAsync().ConfigureAwait(false);
+                _faulted = true;
+                await ReleaseStreamAsync().ConfigureAwait(false);
+                throw;
             }
+            await ReleaseStreamAsync().ConfigureAwait(false);
         }
     }
 }
