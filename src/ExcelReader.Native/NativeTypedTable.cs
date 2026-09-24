@@ -48,10 +48,15 @@ namespace ExcelReader.Native
     }
 
     [StructLayout(LayoutKind.Sequential)]
-    internal struct NativeTable
+    internal unsafe struct NativeTable
     {
         public int ColumnCount;
         public long RowCount;
         public IntPtr Columns;
+
+        internal readonly NativeColumn ColumnAt(int index)
+        {
+            return ((NativeColumn*)Columns)[index];
+        }
     }
 }

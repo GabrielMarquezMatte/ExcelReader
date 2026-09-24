@@ -3,6 +3,7 @@ using BenchmarkDotNet.Engines;
 using ExcelReader.Core.Parser;
 using ExcelReader.Core.Reader;
 using ExcelReader.Core.Writer;
+using ExcelReader.Core.Writer.Xlsx;
 
 namespace ExcelReader.Benchmarks
 {

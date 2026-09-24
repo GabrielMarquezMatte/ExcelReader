@@ -54,6 +54,7 @@ using IExcelRowReader reader = Excel.Open(path, format, new ExcelReaderOptions
 
 ```csharp
 using ExcelReader.Core.Reader;
+using ExcelReader.Core.Reader.Csv;
 
 CsvDialect dialect = Excel.SniffCsvDialectFromFile("export.csv");
 using var reader = Excel.FromCsvFile("export.csv", CsvReaderOptions.Default.WithDialect(dialect));
@@ -75,6 +76,7 @@ An explicitly set `Encoding` survives sniffing unless the source carries a byte-
 
 ```csharp
 using ExcelReader.Core.Writer;
+using ExcelReader.Core.Writer.Csv;
 
 using var stream = File.Create("out.csv");
 using var writer = CsvWriter.Create(stream);

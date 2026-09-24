@@ -1,8 +1,8 @@
 using System.Buffers;
 using System.Buffers.Binary;
-using System.Diagnostics.CodeAnalysis;
 using System.Security.Cryptography;
 using ExcelReader.Core.Reader;
+using ExcelReader.Core.Reader.Internal;
 
 namespace ExcelReader.Core.Crypto
 {

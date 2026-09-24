@@ -1,0 +1,214 @@
+using System.Buffers;
+using System.Text;
+using ExcelReader.Core;
+using ExcelReader.Core.Reader;
+using ExcelReader.Core.Reader.Xlsb;
+using B = ExcelReader.Tests.Reader.Xlsb.Biff12Build;
+
+namespace ExcelReader.Tests.Reader.Xlsb
+{
+    public class XlsbPartsTests
+    {
+
+        [Fact]
+        public void WideStringDecodes()
+        {
+            byte[] data = B.WideString("abc");
+            Assert.True(Biff12.TryReadWideString(data, 0, out var chars, out int consumed));
+            Assert.Equal("abc", chars.ToString());
+            Assert.Equal(4 + 6, consumed);
+        }
+
+        [Fact]
+        public void NullWideStringIsEmptyAndConsumesFourBytes()
+        {
+            byte[] data = B.NullWideString();
+            Assert.True(Biff12.TryReadWideString(data, 0, out var chars, out int consumed));
+            Assert.True(chars.IsEmpty);
+            Assert.Equal(4, consumed);
+        }
+
+        [Fact]
+        public void TruncatedWideStringReturnsFalse()
+        {
+            byte[] data = [.. B.U32(5), 1, 2, 3, 4];
+            Assert.False(Biff12.TryReadWideString(data, 0, out _, out _));
+        }
+
+        [Theory]
+        [InlineData(402u, 100.0)]
+        [InlineData(0x3FF80000u, 1.5)]
+        public void RkDecodesIntAndDouble(uint rk, double expected)
+        {
+            Assert.Equal(expected, Biff12.Rk(rk));
+        }
+
+        [Fact]
+        public void RkAppliesDivideByHundred()
+        {
+            const uint rk = (12345u << 2) | 0x03;
+            Assert.Equal(123.45, Biff12.Rk(rk));
+        }
+
+
+        private static byte[] WorkbookBin(uint wbPropFlags)
+        {
+            return
+            [
+                .. B.Record(Brt_WbProp, [.. B.U32(wbPropFlags), .. B.U32(0), .. B.WideString("")]),
+                .. B.Record(Brt_BundleSh, [.. B.U32(0), .. B.U32(0), .. B.WideString("rId1"), .. B.WideString("Plan1")]),
+                .. B.Record(Brt_BundleSh, [.. B.U32(0), .. B.U32(0), .. B.WideString("rId2"), .. B.WideString("Plan2")]),
+            ];
+        }
+
+        private const int Brt_WbProp = 153;
+        private const int Brt_BundleSh = 156;
+
+        [Fact]
+        public void ParsesSheetsWithRelTargets()
+        {
+            byte[] workbook = WorkbookBin(0);
+            byte[] rels = Encoding.UTF8.GetBytes(
+                """<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.bin"/><Relationship Id="rId2" Target="/xl/worksheets/sheet2.bin"/></Relationships>""");
+
+            var sheets = XlsbWorkbook.ParseSheets(workbook, rels);
+
+            Assert.Equal(2, sheets.Length);
+            Assert.Equal(("Plan1", "xl/worksheets/sheet1.bin", ExcelSheetVisibility.Visible), sheets[0]);
+            Assert.Equal(("Plan2", "xl/worksheets/sheet2.bin", ExcelSheetVisibility.Visible), sheets[1]);
+        }
+
+        [Fact]
+        public void ParsesDate1904Flag()
+        {
+            Assert.True(XlsbWorkbook.ParseDate1904(WorkbookBin(0x01)));
+            Assert.False(XlsbWorkbook.ParseDate1904(WorkbookBin(0x00)));
+            Assert.False(XlsbWorkbook.ParseDate1904([]));
+        }
+
+
+        [Fact]
+        public void StyleDateFlagsCoverBuiltinCustomAndCellXfsScope()
+        {
+            const int beginCellStyleXfs = 626;
+            const int endCellStyleXfs = 627;
+            byte[] styles =
+            [
+                .. B.Record(Brt.Fmt, [.. B.U16(176), .. B.WideString("yyyy-mm-dd")]),
+                .. B.Record(Brt.Fmt, [.. B.U16(177), .. B.WideString("0.00")]),
+                .. B.Record(beginCellStyleXfs),
+                .. B.Record(Brt.Xf, B.Xf(14)),
+                .. B.Record(endCellStyleXfs),
+                .. B.Record(Brt.BeginCellXFs),
+                .. B.Record(Brt.Xf, B.Xf(0)),
+                .. B.Record(Brt.Xf, B.Xf(14)),
+                .. B.Record(Brt.Xf, B.Xf(176)),
+                .. B.Record(Brt.Xf, B.Xf(177)),
+                .. B.Record(Brt.EndCellXFs),
+            ];
+
+            bool[] flags = XlsbStyles.ParseStyleDateFlags(styles);
+
+            Assert.Equal([false, true, true, false], flags);
+        }
+
+
+        [Fact]
+        public void SharedStringsDecodeToFlatUtf8()
+        {
+            byte[] shared =
+            [
+                .. B.Record(Brt.SSTItem, [0, .. B.WideString("Alice")]),
+                .. B.Record(Brt.SSTItem, [0, .. B.WideString("Café")]),
+                .. B.Record(Brt.SSTItem, [0, .. B.WideString("Ω")]),
+            ];
+
+            var (flat, offsets) = XlsbSharedStrings.Parse(shared);
+
+            Assert.Equal(4, offsets.Length);
+            Assert.Equal("Alice", At(flat, offsets, 0));
+            Assert.Equal("Café", At(flat, offsets, 1));
+            Assert.Equal("Ω", At(flat, offsets, 2));
+        }
+
+        [Fact]
+        public void StreamingSharedStringsMatchInMemoryDecoder()
+        {
+            byte[] shared = SharedStringsWithManyItems();
+            var expected = XlsbSharedStrings.Parse(shared);
+
+            byte[] flat = [];
+            try
+            {
+                using var stream = new MemoryStream(shared);
+                (flat, int[] offsets) = XlsbSharedStrings.ParseStreaming(stream, shared.Length, ExcelReaderOptions.Default);
+
+                Assert.Equal(expected.Offsets, offsets);
+                Assert.True(expected.Flat.AsSpan().SequenceEqual(flat.AsSpan(0, offsets[^1])));
+            }
+            finally
+            {
+                if (flat.Length != 0)
+                {
+                    ArrayPool<byte>.Shared.Return(flat);
+                }
+            }
+        }
+
+        [Fact]
+        public async Task AsyncStreamingSharedStringsMatchInMemoryDecoder()
+        {
+            byte[] shared = SharedStringsWithManyItems();
+            var expected = XlsbSharedStrings.Parse(shared);
+
+            byte[] flat = [];
+            try
+            {
+                await using var stream = new MemoryStream(shared);
+                (flat, int[] offsets) = await XlsbSharedStrings.ParseStreamingAsync(
+                    stream, shared.Length, ExcelReaderOptions.Default, TestContext.Current.CancellationToken);
+
+                Assert.Equal(expected.Offsets, offsets);
+                Assert.True(expected.Flat.AsSpan().SequenceEqual(flat.AsSpan(0, offsets[^1])));
+            }
+            finally
+            {
+                if (flat.Length != 0)
+                {
+                    ArrayPool<byte>.Shared.Return(flat);
+                }
+            }
+        }
+
+        [Fact]
+        public void StreamingSharedStringsEnforcesDecodedByteLimit()
+        {
+            byte[] shared = B.Record(Brt.SSTItem, [0, .. B.WideString("limit")]);
+            using var stream = new MemoryStream(shared);
+
+            ExcelLimitExceededException ex = Assert.Throws<ExcelLimitExceededException>(() =>
+                XlsbSharedStrings.ParseStreaming(stream, shared.Length,
+                    new ExcelReaderOptions { MaxSharedStringBytes = 4 }));
+
+            Assert.Equal(nameof(ExcelReaderOptions.MaxSharedStringBytes), ex.LimitName);
+            Assert.Equal(5, ex.Actual);
+        }
+
+        private static byte[] SharedStringsWithManyItems()
+        {
+            var bytes = new List<byte>();
+            bytes.AddRange(B.Record(Brt.BeginSst, [.. B.U32(700), .. B.U32(700)]));
+            for (int i = 0; i < 700; i++)
+            {
+                bytes.AddRange(B.Record(Brt.SSTItem, [0, .. B.WideString($"shared string {i:D4} — café")]));
+            }
+            bytes.AddRange(B.Record(Brt.EndSst));
+            return [.. bytes];
+        }
+
+        private static string At(byte[] flat, int[] offsets, int index)
+        {
+            return Encoding.UTF8.GetString(flat.AsSpan(offsets[index], offsets[index + 1] - offsets[index]));
+        }
+    }
+}

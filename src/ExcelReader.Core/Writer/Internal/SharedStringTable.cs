@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Runtime.InteropServices;
-using ExcelReader.Core.Reader;
+using ExcelReader.Core.Reader.Xlsb;
+using ExcelReader.Core.Writer.Xlsb;
 
 namespace ExcelReader.Core.Writer.Internal
 {

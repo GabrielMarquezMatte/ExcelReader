@@ -1,5 +1,3 @@
-using ExcelReader.Core.Enums;
-
 namespace ExcelReader.Core.Writer.Internal
 {
     internal static class WriterStateGuard

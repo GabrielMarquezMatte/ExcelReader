@@ -2,6 +2,9 @@ using System.Globalization;
 using System.Text;
 using ExcelReader.Core.Reader;
 using ExcelReader.Core.Writer;
+using ExcelReader.Core.Writer.Xls;
+using ExcelReader.Core.Writer.Xlsb;
+using ExcelReader.Core.Writer.Xlsx;
 
 namespace ExcelReader.Fuzz
 {

@@ -1,6 +1,6 @@
 using System.Diagnostics.CodeAnalysis;
 using ExcelReader.Core.Parser.Internal;
-using ExcelReader.Core.ValueObjects;
+using ExcelReader.Core.Reader;
 
 namespace ExcelReader.Core.Parser
 {

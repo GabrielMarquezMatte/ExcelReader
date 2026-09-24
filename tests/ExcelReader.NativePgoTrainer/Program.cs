@@ -1,4 +1,6 @@
 using ExcelReader.Native;
+using ExcelReader.Native.Reading;
+using ExcelReader.Native.Typed;
 
 namespace ExcelReader.NativePgoTrainer
 {
@@ -43,14 +45,14 @@ namespace ExcelReader.NativePgoTrainer
                 byte[] bytes = File.ReadAllBytes(Path.Combine(data, file));
                 for (int i = 0; i < Iterations; i++)
                 {
-                    if (NativeApi.OpenMemory(bytes, format, out NativeHandle? handle) != NativeStatus.Ok)
+                    if (ReadApi.OpenMemory(bytes, format, out NativeHandle? handle) != NativeStatus.Ok)
                     {
                         Console.Error.WriteLine($"{file}: open failed.");
                         return 1;
                     }
-                    int status = NativeApi.ParseTyped(handle, Specs, headerRow: 1, out NativeTable table);
-                    NativeApi.FreeTable(ref table);
-                    NativeApi.Close(handle);
+                    int status = TypedApi.ParseTyped(handle, Specs, headerRow: 1, out NativeTable table);
+                    TypedApi.FreeTable(ref table);
+                    ReadApi.Close(handle);
                     if (status != NativeStatus.Ok)
                     {
                         Console.Error.WriteLine($"{file}: parse failed with status {status}.");

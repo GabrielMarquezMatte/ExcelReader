@@ -4,7 +4,7 @@ using System.Globalization;
 using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.Unicode;
-using ExcelReader.Core.Reader;
+using ExcelReader.Core.Reader.Internal;
 
 namespace ExcelReader.Core.Writer.Internal
 {

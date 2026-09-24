@@ -7,6 +7,7 @@ typed records, and prefetch compression. See [csv.md](csv.md) for CSV output.
 
 ```csharp
 using ExcelReader.Core.Writer;
+using ExcelReader.Core.Writer.Xlsx;
 
 await using var stream = File.Create("out.xlsx");
 await using var workbook = XlsxWorkbookWriter.Create(stream);
@@ -43,6 +44,8 @@ await using var workbook = XlsxWorkbookWriter.Create(stream, options: new XlsxWr
 Every `IWorkbookWriter<TSheet>` takes an optional `ExcelSheetVisibility` alongside the sheet name, written to whatever the format uses for it — XLSX's `state` attribute, XLSB's `BrtBundleSh.hsState`, XLS's `BoundSheet8.hsState` — so it reads back through [`SheetVisibility`](reading.md#open-by-auto-detecting-the-format):
 
 ```csharp
+using ExcelReader.Core; // ExcelSheetVisibility, shared by the readers and writers
+
 await using var data = workbook.AddSheet("Data");                                 // visible
 await using var lookups = workbook.AddSheet("Lookups", ExcelSheetVisibility.Hidden);
 await using var audit = workbook.AddSheet("Audit", ExcelSheetVisibility.VeryHidden); // not in Excel's unhide dialog
@@ -56,6 +59,7 @@ Every `IWorkbookWriter<TSheet>` supports column- and row-level styling: a number
 
 ```csharp
 using ExcelReader.Core.Writer;
+using ExcelReader.Core.Writer.Xlsx;
 
 await using var workbook = XlsxWorkbookWriter.Create(stream);
 
@@ -90,6 +94,7 @@ Use `Excel.FromXlsbFile`, `Excel.FromXlsb`, `Excel.FromXlsbFileAsync`, or `Excel
 
 ```csharp
 using ExcelReader.Core.Writer;
+using ExcelReader.Core.Writer.Xlsb;
 
 await using var stream = File.Create("out.xlsb");
 await using var workbook = XlsbWorkbookWriter.Create(stream);
@@ -115,6 +120,7 @@ The XLSB writer also defaults to inline string cells. Set `XlsbWriterOptions.Use
 
 ```csharp
 using ExcelReader.Core.Writer;
+using ExcelReader.Core.Writer.Xls;
 
 await using var stream = File.Create("out.xls");
 await using var workbook = XlsWorkbookWriter.Create(stream);
@@ -145,6 +151,7 @@ The low-level writers above give you cell-by-cell control. When you just want to
 
 ```csharp
 using ExcelReader.Core.Writer;
+using ExcelReader.Core.Writer.Xlsx;
 
 public sealed class Sale
 {

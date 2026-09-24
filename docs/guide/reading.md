@@ -6,7 +6,6 @@ See also [parsing.md](parsing.md) for binding rows to types, and [csv.md](csv.md
 ## Read rows
 
 ```csharp
-using ExcelReader.Core.Enums;
 using ExcelReader.Core.Reader;
 
 using var reader = Excel.FromXlsxFile("report.xlsx");
@@ -87,6 +86,7 @@ dotnet add package ExcelReader.Arrow
 
 ```csharp
 using ExcelReader.Arrow;
+using ExcelReader.Core.Reader;
 
 using var reader = Excel.FromXlsxFile("report.xlsx");
 Apache.Arrow.RecordBatch batch = reader.ToArrowRecordBatch();
@@ -99,6 +99,7 @@ Apache.Arrow.RecordBatch batch = reader.ToArrowRecordBatch();
 ```csharp
 using ExcelReader.Arrow;
 using ExcelReader.Core.Writer;
+using ExcelReader.Core.Writer.Xlsx;
 
 using XlsxWorkbookWriter workbook = XlsxWorkbookWriter.Create(File.Create("report.xlsx"));
 workbook.WriteRecordBatch(batch); // adds the sheet, writes the header + every row, ends the workbook
@@ -155,6 +156,8 @@ foreach (var sheet in reader.Sheets())
 `SheetVisibility` and `SheetVisibilityAt(index)` report whether a sheet is shown in the workbook's tab bar, read from the format's own encoding of it (XLSX's `state` attribute, XLSB's `BrtBundleSh.hsState`, XLS's `BoundSheet8.hsState`). It is reported, never enforced — a hidden sheet enumerates its rows like any other, so converters and exporters filter on it themselves:
 
 ```csharp
+using ExcelReader.Core; // ExcelSheetVisibility, shared by the readers and writers
+
 foreach (var sheet in reader.Sheets())
 {
     if (sheet.Visibility != ExcelSheetVisibility.Visible)

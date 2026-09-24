@@ -1,4 +1,8 @@
 using ExcelReader.Core.Writer;
+using ExcelReader.Core.Writer.Csv;
+using ExcelReader.Core.Writer.Xls;
+using ExcelReader.Core.Writer.Xlsb;
+using ExcelReader.Core.Writer.Xlsx;
 
 namespace ExcelReader.Native.Writer
 {
@@ -122,7 +126,7 @@ namespace ExcelReader.Native.Writer
 
         internal override void WriteDate(int daysSinceEpoch)
         {
-            Row().Write(DateOnly.FromDayNumber(NativeApi.WriteUnixEpochDayNumber + daysSinceEpoch));
+            Row().Write(DateOnly.FromDayNumber(WriteApi.WriteUnixEpochDayNumber + daysSinceEpoch));
         }
 
         internal override void WriteTime(long microsecondsSinceMidnight)
@@ -137,7 +141,7 @@ namespace ExcelReader.Native.Writer
 
         internal override void WriteNull(int type)
         {
-            NativeApi.WriteNullCell(Row(), type);
+            WriteApi.WriteNullCell(Row(), type);
         }
 
         private TRow Row()

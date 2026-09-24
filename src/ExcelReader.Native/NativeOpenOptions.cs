@@ -1,6 +1,7 @@
 using System.Numerics;
 using System.Runtime.InteropServices;
 using ExcelReader.Core.Reader;
+using ExcelReader.Core.Reader.Csv;
 
 namespace ExcelReader.Native
 {

@@ -1,5 +1,5 @@
-using ExcelReader.Core.Enums;
-using ExcelReader.Core.ValueObjects;
+using ExcelReader.Core.Reader;
+
 
 namespace ExcelReader.Core.Parser.Internal
 {
