@@ -44,6 +44,7 @@ namespace ExcelReader.Core.Writer.Xlsx
         internal int SheetId { get; }
         internal ExcelSheetVisibility Visibility { get; }
         internal bool UseSharedStrings => _owner.UseSharedStrings;
+        internal bool ResourcesReleased => _stream is null && _rowBuffer.IsReleased;
 
         internal int GetSharedStringIndex(string value)
         {
@@ -82,14 +83,22 @@ namespace ExcelReader.Core.Writer.Xlsx
             {
                 return;
             }
-            ZipArchiveEntry entry = _zip.CreateEntry($"xl/worksheets/sheet{SheetId}.xml", _compression);
-            Stream stream = entry.Open();
-            _stream = _offloadWrite ? new WriteOffloadStream(stream) : stream;
-            _rowBuffer.Reset();
-            _rowBuffer.WriteUtf8(
-                "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>" +
-                $"<worksheet xmlns=\"{XlsxConstants.MainNs}\">{BuildColsXml()}<sheetData>");
-            _stream.Write(_rowBuffer.Span);
+            try
+            {
+                ZipArchiveEntry entry = _zip.CreateEntry($"xl/worksheets/sheet{SheetId}.xml", _compression);
+                Stream stream = entry.Open();
+                _stream = _offloadWrite ? new WriteOffloadStream(stream) : stream;
+                _rowBuffer.Reset();
+                _rowBuffer.WriteUtf8(
+                    "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>" +
+                    $"<worksheet xmlns=\"{XlsxConstants.MainNs}\">{BuildColsXml()}<sheetData>");
+                _stream.Write(_rowBuffer.Span);
+            }
+            catch
+            {
+                Fault();
+                throw;
+            }
             _rowBuffer.Reset();
             _state = WriterState.Started;
             _owner.RegisterSheet(Name, SheetId, Visibility);
@@ -103,14 +112,22 @@ namespace ExcelReader.Core.Writer.Xlsx
 
         private async ValueTask StartCoreAsync(CancellationToken ct)
         {
-            ZipArchiveEntry entry = _zip.CreateEntry($"xl/worksheets/sheet{SheetId}.xml", _compression);
-            Stream stream = await entry.OpenAsync(ct).ConfigureAwait(false);
-            _stream = _offloadWrite ? new WriteOffloadStream(stream) : stream;
-            _rowBuffer.Reset();
-            _rowBuffer.WriteUtf8(
-                "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>" +
-                $"<worksheet xmlns=\"{XlsxConstants.MainNs}\">{BuildColsXml()}<sheetData>");
-            await _stream.WriteAsync(_rowBuffer.Memory, ct).ConfigureAwait(false);
+            try
+            {
+                ZipArchiveEntry entry = _zip.CreateEntry($"xl/worksheets/sheet{SheetId}.xml", _compression);
+                Stream stream = await entry.OpenAsync(ct).ConfigureAwait(false);
+                _stream = _offloadWrite ? new WriteOffloadStream(stream) : stream;
+                _rowBuffer.Reset();
+                _rowBuffer.WriteUtf8(
+                    "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>" +
+                    $"<worksheet xmlns=\"{XlsxConstants.MainNs}\">{BuildColsXml()}<sheetData>");
+                await _stream.WriteAsync(_rowBuffer.Memory, ct).ConfigureAwait(false);
+            }
+            catch
+            {
+                await FaultAsync().ConfigureAwait(false);
+                throw;
+            }
             _rowBuffer.Reset();
             _state = WriterState.Started;
             _owner.RegisterSheet(Name, SheetId, Visibility);
@@ -230,17 +247,52 @@ namespace ExcelReader.Core.Writer.Xlsx
         {
             WriterStateGuard.ThrowIfEnded(_state, this);
             WriterStateGuard.RequireNoActiveRowForEnd(_rowActive, nameof(XlsxRowWriter));
-            EnsureStarted();
+            try
+            {
+                EnsureStarted();
+                _rowBuffer.Write("</sheetData></worksheet>"u8);
+#pragma warning disable CS8602
+                _stream.Write(_rowBuffer.Span);
+                _stream.Flush();
+                _stream.Dispose();
+#pragma warning restore CS8602
+            }
+            catch
+            {
+                Fault();
+                throw;
+            }
+            Release(faulted: false);
+        }
+
+        // Ended is only ever set by Release, after cleanup, so an already-ended sheet has nothing left
+        // to release: a fault raised inside a nested step (start, flush) is handled exactly once.
+        private void Fault()
+        {
+            if (_state == WriterState.Ended)
+            {
+                return;
+            }
+            FailureCleanup.Dispose(_stream);
+            Release(faulted: true);
+        }
+
+        private async ValueTask FaultAsync()
+        {
+            if (_state == WriterState.Ended)
+            {
+                return;
+            }
+            await FailureCleanup.DisposeAsync(_stream).ConfigureAwait(false);
+            Release(faulted: true);
+        }
+
+        private void Release(bool faulted)
+        {
             _state = WriterState.Ended;
-            _rowBuffer.Write("</sheetData></worksheet>"u8);
-#pragma warning disable CS8602 
-            _stream.Write(_rowBuffer.Span);
-            _stream.Flush();
-            _stream.Dispose();
-#pragma warning restore CS8602 
             _stream = null;
             _rowBuffer.Dispose();
-            _owner.NotifySheetEnded();
+            _owner.NotifySheetEnded(faulted);
         }
 
         /// <inheritdoc/>
@@ -251,20 +303,25 @@ namespace ExcelReader.Core.Writer.Xlsx
             WriterStateGuard.ThrowIfEnded(_state, this);
             WriterStateGuard.RequireNoActiveRowForEnd(_rowActive, nameof(XlsxRowWriter));
             ct.ThrowIfCancellationRequested();
-            if (_state == WriterState.Created)
+            try
             {
-                await StartCoreAsync(ct).ConfigureAwait(false);
+                if (_state == WriterState.Created)
+                {
+                    await StartCoreAsync(ct).ConfigureAwait(false);
+                }
+                _rowBuffer.Write("</sheetData></worksheet>"u8);
+#pragma warning disable CS8602
+                await _stream.WriteAsync(_rowBuffer.Memory, ct).ConfigureAwait(false);
+#pragma warning restore CS8602
+                await _stream.FlushAsync(ct).ConfigureAwait(false);
+                await _stream.DisposeAsync().ConfigureAwait(false);
             }
-            _state = WriterState.Ended;
-            _rowBuffer.Write("</sheetData></worksheet>"u8);
-#pragma warning disable CS8602 
-            await _stream.WriteAsync(_rowBuffer.Memory, ct).ConfigureAwait(false);
-#pragma warning restore CS8602 
-            await _stream.FlushAsync(ct).ConfigureAwait(false);
-            await _stream.DisposeAsync().ConfigureAwait(false);
-            _stream = null;
-            _rowBuffer.Dispose();
-            _owner.NotifySheetEnded();
+            catch
+            {
+                await FaultAsync().ConfigureAwait(false);
+                throw;
+            }
+            Release(faulted: false);
         }
 
         /// <summary>
@@ -314,50 +371,60 @@ namespace ExcelReader.Core.Writer.Xlsx
         internal void EndBufferedRow()
         {
             _rowBuffer.Write("</row>"u8);
+            _rowActive = false;
             if (_rowBuffer.Length >= FlushThreshold)
             {
                 FlushRowBuffer();
             }
-            _rowActive = false;
         }
 
         private void FlushRowBuffer()
         {
-            if (_stream is WriteOffloadStream offload)
+            try
             {
-                byte[] detached = _rowBuffer.Detach(out int length);
-                offload.EnqueueOwned(detached, length);
-                return;
+                if (_stream is WriteOffloadStream offload)
+                {
+                    byte[] detached = _rowBuffer.Detach(out int length);
+                    offload.EnqueueOwned(detached, length);
+                    return;
+                }
+                _stream!.Write(_rowBuffer.Span);
+                _rowBuffer.Reset();
             }
-            _stream!.Write(_rowBuffer.Span);
-            _rowBuffer.Reset();
+            catch
+            {
+                Fault();
+                throw;
+            }
         }
 
         internal ValueTask EndBufferedRowAsync(CancellationToken ct = default)
         {
             _rowBuffer.Write("</row>"u8);
-            if (_rowBuffer.Length >= FlushThreshold)
-            {
-                return FlushRowBufferAsync(ct);
-            }
             _rowActive = false;
-            return ValueTask.CompletedTask;
+            return _rowBuffer.Length >= FlushThreshold ? FlushRowBufferAsync(ct) : ValueTask.CompletedTask;
         }
 
         private async ValueTask FlushRowBufferAsync(CancellationToken ct)
         {
-            if (_stream is WriteOffloadStream offload)
+            try
             {
-                byte[] detached = _rowBuffer.Detach(out int length);
-                await offload.EnqueueOwnedAsync(detached, length, ct).ConfigureAwait(false);
-                _rowActive = false;
-                return;
+                if (_stream is WriteOffloadStream offload)
+                {
+                    byte[] detached = _rowBuffer.Detach(out int length);
+                    await offload.EnqueueOwnedAsync(detached, length, ct).ConfigureAwait(false);
+                    return;
+                }
+#pragma warning disable CS8602
+                await _stream.WriteAsync(_rowBuffer.Memory, ct).ConfigureAwait(false);
+#pragma warning restore CS8602
+                _rowBuffer.Reset();
             }
-#pragma warning disable CS8602 
-            await _stream.WriteAsync(_rowBuffer.Memory, ct).ConfigureAwait(false);
-#pragma warning restore CS8602 
-            _rowBuffer.Reset();
-            _rowActive = false;
+            catch
+            {
+                await FaultAsync().ConfigureAwait(false);
+                throw;
+            }
         }
     }
 }

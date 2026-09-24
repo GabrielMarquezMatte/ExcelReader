@@ -11,7 +11,8 @@ namespace ExcelReader.Core.Reader.Csv
     /// <see cref="Add"/> runs concurrently across instances on worker threads, and must mutate only the
     /// instance it is called on. A partition that started at a misguessed record boundary is read again
     /// into a new instance and the first one is discarded, so an instance may see records that are later
-    /// thrown away — including records whose parse or <see cref="Add"/> threw.
+    /// thrown away — including records whose parse or <see cref="Add"/> threw, and records misparsed from
+    /// the wrong start that appear nowhere in the source. A side effect outside the instance is not undone.
     /// </para>
     /// <para>
     /// <see cref="Merge"/> runs on a single thread, left to right in source order, folding each later

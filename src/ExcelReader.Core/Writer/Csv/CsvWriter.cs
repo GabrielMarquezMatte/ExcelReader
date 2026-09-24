@@ -28,6 +28,7 @@ namespace ExcelReader.Core.Writer.Csv
         private readonly BiffBuffer _buffer = new(4096);
         private CsvRowWriter? _rowWriter;
         private bool _rowActive;
+        private bool _faulted;
         private bool _disposed;
 
         private CsvWriter(Stream stream, bool leaveOpen, CsvWriterOptions options)
@@ -100,7 +101,7 @@ namespace ExcelReader.Core.Writer.Csv
         /// <exception cref="InvalidOperationException">The previous row's <see cref="CsvRowWriter"/> has not been disposed yet.</exception>
         public CsvRowWriter StartRow()
         {
-            ObjectDisposedException.ThrowIf(_disposed, this);
+            ObjectDisposedException.ThrowIf(_disposed || _faulted, this);
             if (_rowActive)
             {
                 throw new InvalidOperationException("The previous CsvRowWriter must be disposed before starting a new row.");
@@ -122,8 +123,15 @@ namespace ExcelReader.Core.Writer.Csv
             _rowActive = false;
             if (_buffer.Length >= FlushThreshold)
             {
-                _stream.Write(_buffer.Span);
-                _buffer.Reset();
+                try
+                {
+                    FlushCore();
+                }
+                catch
+                {
+                    Fault();
+                    throw;
+                }
             }
         }
 
@@ -131,11 +139,20 @@ namespace ExcelReader.Core.Writer.Csv
         {
             WriteNewLine();
             _rowActive = false;
-            if (_buffer.Length >= FlushThreshold)
+            return _buffer.Length >= FlushThreshold ? FlushBufferOrFaultAsync(ct) : ValueTask.CompletedTask;
+        }
+
+        private async ValueTask FlushBufferOrFaultAsync(CancellationToken ct)
+        {
+            try
             {
-                return FlushBufferAsync(ct);
+                await FlushBufferAsync(ct).ConfigureAwait(false);
             }
-            return ValueTask.CompletedTask;
+            catch
+            {
+                Fault();
+                throw;
+            }
         }
 
         private async ValueTask FlushBufferAsync(CancellationToken ct)
@@ -147,27 +164,43 @@ namespace ExcelReader.Core.Writer.Csv
         /// <summary>
         /// Writes any buffered rows to the underlying stream and flushes it.
         /// </summary>
-        /// <exception cref="ObjectDisposedException">The writer has already been disposed.</exception>
+        /// <exception cref="ObjectDisposedException">The writer has already been disposed, or an earlier write failed.</exception>
         public void Flush()
         {
-            ObjectDisposedException.ThrowIf(_disposed, this);
-            FlushCore();
-            _stream.Flush();
+            ObjectDisposedException.ThrowIf(_disposed || _faulted, this);
+            try
+            {
+                FlushCore();
+                _stream.Flush();
+            }
+            catch
+            {
+                Fault();
+                throw;
+            }
         }
 
         /// <summary>
         /// Writes any buffered rows to the underlying stream and flushes it asynchronously.
         /// </summary>
-        /// <exception cref="ObjectDisposedException">The writer has already been disposed.</exception>
+        /// <exception cref="ObjectDisposedException">The writer has already been disposed, or an earlier write failed.</exception>
         public async ValueTask FlushAsync(CancellationToken ct = default)
         {
-            ObjectDisposedException.ThrowIf(_disposed, this);
+            ObjectDisposedException.ThrowIf(_disposed || _faulted, this);
             ct.ThrowIfCancellationRequested();
-            if (_buffer.Length > 0)
+            try
             {
-                await FlushBufferAsync(ct).ConfigureAwait(false);
+                if (_buffer.Length > 0)
+                {
+                    await FlushBufferAsync(ct).ConfigureAwait(false);
+                }
+                await _stream.FlushAsync(ct).ConfigureAwait(false);
             }
-            await _stream.FlushAsync(ct).ConfigureAwait(false);
+            catch
+            {
+                Fault();
+                throw;
+            }
         }
 
         private void FlushCore()
@@ -177,6 +210,41 @@ namespace ExcelReader.Core.Writer.Csv
                 _stream.Write(_buffer.Span);
                 _buffer.Reset();
             }
+        }
+
+        // A failed write leaves an unknown prefix of the buffer in the stream, so writing it again could
+        // silently corrupt the output: the writer becomes terminal and only Dispose remains meaningful.
+        private void Fault()
+        {
+            if (_faulted)
+            {
+                return;
+            }
+            _faulted = true;
+            _buffer.Dispose();
+        }
+
+        private void ReleaseStream()
+        {
+            if (_leaveOpen)
+            {
+                return;
+            }
+            if (_faulted)
+            {
+                FailureCleanup.Dispose(_stream);
+                return;
+            }
+            _stream.Dispose();
+        }
+
+        private ValueTask ReleaseStreamAsync()
+        {
+            if (_leaveOpen)
+            {
+                return ValueTask.CompletedTask;
+            }
+            return _faulted ? FailureCleanup.DisposeAsync(_stream) : _stream.DisposeAsync();
         }
 
         private void TerminateOpenRow()
@@ -199,13 +267,22 @@ namespace ExcelReader.Core.Writer.Csv
                 return;
             }
             _disposed = true;
-            TerminateOpenRow();
-            FlushCore();
-            _buffer.Dispose();
-            if (!_leaveOpen)
+            try
             {
-                _stream.Dispose();
+                if (!_faulted)
+                {
+                    TerminateOpenRow();
+                    FlushCore();
+                }
             }
+            catch
+            {
+                Fault();
+                ReleaseStream();
+                throw;
+            }
+            _buffer.Dispose();
+            ReleaseStream();
         }
 
         /// <summary>
@@ -219,16 +296,25 @@ namespace ExcelReader.Core.Writer.Csv
                 return;
             }
             _disposed = true;
-            TerminateOpenRow();
-            if (_buffer.Length > 0)
+            try
             {
-                await _stream.WriteAsync(_buffer.Memory).ConfigureAwait(false);
+                if (!_faulted)
+                {
+                    TerminateOpenRow();
+                    if (_buffer.Length > 0)
+                    {
+                        await _stream.WriteAsync(_buffer.Memory).ConfigureAwait(false);
+                    }
+                }
+            }
+            catch
+            {
+                Fault();
+                await ReleaseStreamAsync().ConfigureAwait(false);
+                throw;
             }
             _buffer.Dispose();
-            if (!_leaveOpen)
-            {
-                await _stream.DisposeAsync().ConfigureAwait(false);
-            }
+            await ReleaseStreamAsync().ConfigureAwait(false);
         }
     }
 }

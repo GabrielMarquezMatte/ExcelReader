@@ -1,4 +1,3 @@
-using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Text;
 
@@ -9,9 +8,8 @@ namespace ExcelReader.Native
         [ThreadStatic]
         private static string? _lastError;
 
-        // ponytail: the handle for a thread that errors once and never calls again leaks for the
         [ThreadStatic]
-        private static GCHandle _lastErrorHandle;
+        private static byte[]? _lastErrorUtf8;
         [ThreadStatic]
         private static int _lastErrorUtf8Length;
 
@@ -19,17 +17,11 @@ namespace ExcelReader.Native
         {
             _lastError = message;
             int required = Encoding.UTF8.GetByteCount(message);
-            byte[]? current = _lastErrorHandle.IsAllocated ? Unsafe.As<byte[]>(_lastErrorHandle.Target) : null;
-            if (current is null || current.Length < required)
+            if (_lastErrorUtf8 is null || _lastErrorUtf8.Length < required)
             {
-                if (_lastErrorHandle.IsAllocated)
-                {
-                    _lastErrorHandle.Free();
-                }
-                current = new byte[Math.Max(required, 256)];
-                _lastErrorHandle = GCHandle.Alloc(current, GCHandleType.Pinned);
+                _lastErrorUtf8 = GC.AllocateUninitializedArray<byte>(Math.Max(required, 256), pinned: true);
             }
-            _lastErrorUtf8Length = Encoding.UTF8.GetBytes(message, current);
+            _lastErrorUtf8Length = Encoding.UTF8.GetBytes(message, _lastErrorUtf8);
         }
 
         internal static void ClearLastError()
@@ -66,12 +58,12 @@ namespace ExcelReader.Native
         internal static nint LastErrorPtr(out int length)
         {
             length = _lastErrorUtf8Length;
-            if (length == 0 || !_lastErrorHandle.IsAllocated)
+            if (length == 0 || _lastErrorUtf8 is null)
             {
                 return IntPtr.Zero;
             }
 
-            return _lastErrorHandle.AddrOfPinnedObject();
+            return Marshal.UnsafeAddrOfPinnedArrayElement(_lastErrorUtf8, 0);
         }
     }
 }

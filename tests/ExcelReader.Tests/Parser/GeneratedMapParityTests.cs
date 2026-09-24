@@ -1,4 +1,5 @@
 using ExcelReader.Core.Parser;
+using ExcelReader.Core.Parser.Internal;
 using ExcelReader.Core.Reader;
 using ExcelReader.Core.Reader.Csv;
 using ExcelReader.Core.Reader.Xls;
@@ -134,6 +135,167 @@ namespace ExcelReader.Tests.Parser
             public TimeOnly Clock { get; set; }
             public Guid Id { get; set; }
             public int? OptionalAge { get; set; }
+        }
+
+        public class InitBaseRow
+        {
+            public string BaseInit { get; init; } = "";
+        }
+
+        [ExcelSerializable]
+        public partial class SetterShapesModel : InitBaseRow
+        {
+            public string Settable { get; set; } = "";
+            public string InitOnly { get; init; } = "";
+            public int? NullableInit { get; init; }
+            [ExcelConverter(typeof(UpperCaseConverter))]
+            public string ConvertedInit { get; init; } = "";
+            public string GetOnly { get; } = "default";
+            public string PrivateSet { get; private set; } = "default";
+            private string Hidden { get; set; } = "default";
+            public string HiddenValue => Hidden;
+        }
+
+#pragma warning disable CA1815
+        [ExcelSerializable]
+        public partial struct InitStructModel
+        {
+            public string Name { get; init; }
+            public int Age { get; init; }
+        }
+#pragma warning restore CA1815
+
+        [ExcelSerializable]
+        public partial record InitRecordModel
+        {
+            public string Name { get; init; } = "";
+        }
+
+        [ExcelSerializable]
+        public readonly ref partial struct InitRefStructModel
+        {
+            public ReadOnlySpan<byte> Name { get; init; }
+            public int Age { get; init; }
+        }
+
+        [ExcelSerializable]
+        public partial class EscapedHeaderModel
+        {
+            [ExcelColumn("say \"hi\"")]
+            public string Quote { get; set; } = "";
+            [ExcelColumn(@"C:\temp\new")]
+            public string Backslash { get; set; } = "";
+            [ExcelColumn("a\tb")]
+            public string Tab { get; set; } = "";
+            [ExcelColumn("a\rb")]
+            public string CarriageReturn { get; set; } = "";
+            [ExcelColumn("a\nb")]
+            public string LineFeed { get; set; } = "";
+            [ExcelColumn("")]
+            public string Empty { get; set; } = "";
+            [ExcelColumn("Ação ✓ 😀 日本")]
+            public string Unicode { get; set; } = "";
+            [ExcelColumn("nul\0 bel\a esc\u001B del\u007F nel\u0085 ls\u2028 ps\u2029 bom\uFEFF")]
+            public string Control { get; set; } = "";
+            [ExcelColumn("primary {0} $\"")]
+            [ExcelColumn("alias\\n \"x\"\r\n")]
+            public string Aliased { get; set; } = "";
+        }
+
+        private static readonly string[] EscapedHeaders =
+        [
+            "say \"hi\"", @"C:\temp\new", "a\tb", "a\rb", "a\nb", "",
+            "Ação ✓ 😀 日本", "nul\0 bel\a esc\u001B del\u007F nel\u0085 ls\u2028 ps\u2029 bom\uFEFF", "primary {0} $\"",
+        ];
+
+        [Fact]
+        public async Task GeneratedMapMatchesReflectionForEverySetterShape()
+        {
+            await using var ms = await TypedWorkbook.BuildAsync(
+                ["BaseInit", "Settable", "InitOnly", "NullableInit", "ConvertedInit", "GetOnly", "PrivateSet", "Hidden"],
+                ["base", "set", "init", 7, "conv", "x", "y", "z"]);
+
+            SetterShapesModel reflectionResult = await ParseFirstXlsxAsync(ms, static reader => ExcelParser.FromAttributes<SetterShapesModel>().Parse(reader));
+            SetterShapesModel generatedResult = await ParseFirstXlsxAsync(ms, static reader => ExcelParser.Generated<SetterShapesModel>().Parse(reader));
+
+            foreach (SetterShapesModel result in new[] { reflectionResult, generatedResult })
+            {
+                Assert.Equal("base", result.BaseInit);
+                Assert.Equal("set", result.Settable);
+                Assert.Equal("init", result.InitOnly);
+                Assert.Equal(7, result.NullableInit);
+                Assert.Equal("CONV", result.ConvertedInit);
+                Assert.Equal("default", result.GetOnly);
+                Assert.Equal("default", result.PrivateSet);
+                Assert.Equal("default", result.HiddenValue);
+            }
+        }
+
+        [Fact]
+        public async Task GeneratedMapMatchesReflectionForInitOnlyStructAndRecord()
+        {
+            await using var ms = await TypedWorkbook.BuildAsync(["Name", "Age"], ["Alice", 30]);
+
+            InitStructModel reflectionStruct = await ParseFirstXlsxAsync(ms, static reader => ExcelParser.FromAttributes<InitStructModel>().Parse(reader));
+            InitStructModel generatedStruct = await ParseFirstXlsxAsync(ms, static reader => ExcelParser.Generated<InitStructModel>().Parse(reader));
+            InitRecordModel reflectionRecord = await ParseFirstXlsxAsync(ms, static reader => ExcelParser.FromAttributes<InitRecordModel>().Parse(reader));
+            InitRecordModel generatedRecord = await ParseFirstXlsxAsync(ms, static reader => ExcelParser.Generated<InitRecordModel>().Parse(reader));
+
+            Assert.Equal(new InitStructModel { Name = "Alice", Age = 30 }, reflectionStruct);
+            Assert.Equal(reflectionStruct, generatedStruct);
+            Assert.Equal("Alice", reflectionRecord.Name);
+            Assert.Equal(reflectionRecord, generatedRecord);
+        }
+
+        [Fact]
+        public async Task GeneratedMapMatchesReflectionForInitOnlyRefStruct()
+        {
+            await using var ms = await TypedWorkbook.BuildAsync(["Name", "Age"], ["Alice", 30]);
+
+            using var reflectionReader = Excel.FromXlsx(ms, leaveOpen: true);
+            var reflectionEnum = ExcelParser.FromAttributes<InitRefStructModel>().Parse(reflectionReader).GetEnumerator();
+            Assert.True(reflectionEnum.MoveNext());
+            InitRefStructModel reflectionRow = reflectionEnum.Current;
+            (string Name, int Age) reflectionResult = (System.Text.Encoding.UTF8.GetString(reflectionRow.Name), reflectionRow.Age);
+
+            ms.Position = 0;
+            using var generatedReader = Excel.FromXlsx(ms, leaveOpen: true);
+            var generatedEnum = ExcelParser.Generated<InitRefStructModel>().Parse(generatedReader).GetEnumerator();
+            Assert.True(generatedEnum.MoveNext());
+            InitRefStructModel generatedRow = generatedEnum.Current;
+            (string Name, int Age) generatedResult = (System.Text.Encoding.UTF8.GetString(generatedRow.Name), generatedRow.Age);
+
+            Assert.Equal(("Alice", 30), reflectionResult);
+            Assert.Equal(reflectionResult, generatedResult);
+        }
+
+        [Fact]
+        public void GeneratedReadMapKeepsEscapedHeaderTextExact()
+        {
+            var builder = new ExcelRowMapBuilder<EscapedHeaderModel>();
+            EscapedHeaderModel.ConfigureExcelRowMap(builder);
+            TypeMapInfo<EscapedHeaderModel> generated = builder.Build();
+            TypeMapInfo<EscapedHeaderModel> reflection = TypeMapper<EscapedHeaderModel>.GetInfo();
+
+            Assert.Equal(reflection.PropertyCount, generated.PropertyCount);
+            foreach (string header in (string[])[.. EscapedHeaders, "alias\\n \"x\"\r\n"])
+            {
+                Assert.True(generated.TryFindHeader(header, StringComparer.Ordinal, HeaderNormalization.None, out var generatedMatch), header);
+                Assert.True(reflection.TryFindHeader(header, StringComparer.Ordinal, HeaderNormalization.None, out var reflectionMatch), header);
+                Assert.Equal(reflectionMatch.AliasIndex, generatedMatch.AliasIndex);
+                Assert.Equal(reflection.DisplayName(reflectionMatch.PropertyIndex), generated.DisplayName(generatedMatch.PropertyIndex));
+            }
+            Assert.Equal(EscapedHeaders, Enumerable.Range(0, generated.PropertyCount).Select(generated.DisplayName), StringComparer.Ordinal);
+        }
+
+        [Fact]
+        public void GeneratedRecordMapKeepsEscapedHeaderTextExact()
+        {
+            string[] generated = ExcelRecordLayout.Generated<EscapedHeaderModel>().Columns<CsvRowWriter>().Headers;
+            string[] reflection = ExcelRecordLayout.FromAttributes<EscapedHeaderModel>().Columns<CsvRowWriter>().Headers;
+
+            Assert.Equal(EscapedHeaders, generated);
+            Assert.Equal(reflection, generated);
         }
 
         [Fact]

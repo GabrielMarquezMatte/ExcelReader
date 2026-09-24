@@ -75,10 +75,10 @@ namespace ExcelReader.Core.Writer.Internal
 
         internal void EnqueueOwned(byte[] buffer, int length)
         {
-            ThrowIfFaulted();
-            if (length == 0)
+            if (length == 0 || _consumerException is not null)
             {
                 BiffBuffer.ReturnDetached(buffer);
+                ThrowIfFaulted();
                 return;
             }
             EnqueueSync((buffer, length, Owned: true));
@@ -94,7 +94,7 @@ namespace ExcelReader.Core.Writer.Internal
                     writeTask.AsTask().GetAwaiter().GetResult();
                 }
             }
-            catch (ChannelClosedException)
+            catch
             {
                 ReturnBuffer(item.Buffer, item.Owned);
                 ThrowIfFaulted();
@@ -131,7 +131,7 @@ namespace ExcelReader.Core.Writer.Internal
             {
                 await _channel.Writer.WriteAsync((rented, buffer.Length, Owned: false), cancellationToken).ConfigureAwait(false);
             }
-            catch (ChannelClosedException)
+            catch
             {
                 ArrayPool<byte>.Shared.Return(rented);
                 ThrowIfFaulted();
@@ -142,17 +142,17 @@ namespace ExcelReader.Core.Writer.Internal
 
         internal async ValueTask EnqueueOwnedAsync(byte[] buffer, int length, CancellationToken cancellationToken = default)
         {
-            ThrowIfFaulted();
-            if (length == 0)
+            if (length == 0 || _consumerException is not null)
             {
                 BiffBuffer.ReturnDetached(buffer);
+                ThrowIfFaulted();
                 return;
             }
             try
             {
                 await _channel.Writer.WriteAsync((buffer, length, Owned: true), cancellationToken).ConfigureAwait(false);
             }
-            catch (ChannelClosedException)
+            catch
             {
                 BiffBuffer.ReturnDetached(buffer);
                 ThrowIfFaulted();
@@ -210,6 +210,10 @@ namespace ExcelReader.Core.Writer.Internal
             {
                 _consumerException = ExceptionDispatchInfo.Capture(ex);
                 _channel.Writer.TryComplete();
+                while (_channel.Reader.TryRead(out (byte[] Buffer, int Length, bool Owned) queued))
+                {
+                    ReturnBuffer(queued.Buffer, queued.Owned);
+                }
             }
         }
 
@@ -220,7 +224,11 @@ namespace ExcelReader.Core.Writer.Internal
                 _disposed = true;
                 CompleteWriterOnce();
                 _consumer.GetAwaiter().GetResult();
-                ThrowIfFaulted();
+                if (_consumerException is not null)
+                {
+                    FailureCleanup.Dispose(_inner);
+                    _consumerException.Throw();
+                }
                 _inner.Dispose();
             }
             base.Dispose(disposing);
@@ -236,7 +244,11 @@ namespace ExcelReader.Core.Writer.Internal
             _disposed = true;
             CompleteWriterOnce();
             await _consumer.ConfigureAwait(false);
-            ThrowIfFaulted();
+            if (_consumerException is not null)
+            {
+                await FailureCleanup.DisposeAsync(_inner).ConfigureAwait(false);
+                _consumerException.Throw();
+            }
             await _inner.DisposeAsync().ConfigureAwait(false);
             await base.DisposeAsync().ConfigureAwait(false);
         }

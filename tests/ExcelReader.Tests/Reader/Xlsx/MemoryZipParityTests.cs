@@ -7,6 +7,7 @@ using ExcelReader.Core.Reader.Xls;
 using ExcelReader.Core.Reader.Xlsb;
 using ExcelReader.Core.Reader.Xlsx;
 using ExcelReader.Core.Writer.Xlsb;
+using ExcelReader.Core.Writer.Xlsx;
 using ExcelReader.Tests.Reader.Xls;
 
 namespace ExcelReader.Tests.Reader.Xlsx
@@ -232,6 +233,63 @@ namespace ExcelReader.Tests.Reader.Xlsx
             });
         }
 
+
+        [Theory]
+        [InlineData(true)]
+        [InlineData(false)]
+        public void CorruptedStoredEntryReadsTheSameOnStreamAndMemoryPaths(bool xlsx)
+        {
+            byte[] clean = BuildStoredWorkbook(xlsx);
+            byte[] corrupted = (byte[])clean.Clone();
+            byte[] needle = xlsx ? "hello"u8.ToArray() : Encoding.Unicode.GetBytes("hello");
+            int at = corrupted.AsSpan().IndexOf(needle);
+            Assert.True(at >= 0);
+            corrupted[at] = (byte)'j';
+            Func<Stream, ExcelReaderOptions, IExcelRowReader> openStream = xlsx ? OpenXlsxStream : OpenXlsbStream;
+            Func<byte[], ExcelReaderOptions, IExcelRowReader> openMemory = xlsx ? OpenXlsxMemory : OpenXlsbMemory;
+
+            string streamed = Outcome(() => ReadViaStream(corrupted, openStream));
+            string memory = Outcome(() => ReadViaMemory(corrupted, openMemory));
+
+            Assert.Equal(streamed, memory);
+            Assert.NotEqual(Outcome(() => ReadViaStream(clean, openStream)), streamed, StringComparer.Ordinal);
+        }
+
+        private static byte[] BuildStoredWorkbook(bool xlsx)
+        {
+            using MemoryStream ms = new();
+            if (xlsx)
+            {
+                using XlsxWorkbookWriter wb = XlsxWorkbookWriter.Create(ms, leaveOpen: true, new XlsxWriterOptions { Compression = CompressionLevel.NoCompression });
+                using XlsxSheetWriter sheet = wb.AddSheet("S1");
+                using (XlsxRowWriter row = sheet.StartRow())
+                {
+                    row.Write("hello");
+                }
+            }
+            else
+            {
+                using XlsbWorkbookWriter wb = XlsbWorkbookWriter.Create(ms, leaveOpen: true, new XlsbWriterOptions { Compression = CompressionLevel.NoCompression });
+                using XlsbSheetWriter sheet = wb.AddSheet("S1");
+                using (XlsbRowWriter row = sheet.StartRow())
+                {
+                    row.Write("hello");
+                }
+            }
+            return ms.ToArray();
+        }
+
+        private static string Outcome(Func<List<CellSnapshot>> read)
+        {
+            try
+            {
+                return string.Join(Environment.NewLine, read());
+            }
+            catch (InvalidDataException ex)
+            {
+                return ex.GetType().Name;
+            }
+        }
 
         [Fact]
         public void MutatedZipBytesNeverCrashExcelOpenMemory()

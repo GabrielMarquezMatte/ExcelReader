@@ -92,9 +92,9 @@ but because a row holding spans into a worker's buffer cannot cross to the consu
 
 That constraint also settles what an ordered `ref struct` enumerator would cost. Since a worker cannot
 convert a row it must hand onward, conversion would run on the consumer thread — and conversion is the
-floor here: the `ref struct` aggregate path, which shares this projection code, costs 834.4 ms
-single-threaded on the conversion-heavy corpus, against 283.9 ms for the typed path at dop 16. Such an
-API would be ~2.9x slower than what already ships while adding nothing over the
+floor here: the `ref struct` aggregate path, which shares this projection code, costs 833.8 ms
+single-threaded on the conversion-heavy corpus, against 272.5 ms for the typed path at dop 8. Such an
+API would be ~3.1x slower than what already ships while adding nothing over the
 sequential `ref struct` parse, so it was not built. Ordered delivery at full speed needs workers to
 convert into a per-chunk arena of packed fields that the consumer rehydrates; that remains unbuilt.
 

@@ -12,9 +12,11 @@ namespace ExcelReader.Core.Reader.Xls
 
         internal static WorkbookStream OpenWorkbook(Stream stream, bool leaveOpen, ExcelReaderOptions? options = null)
         {
-            (Stream source, bool ownsSource) = EnsureSeekable(stream, leaveOpen);
+            Stream source = stream;
+            bool ownsSource = !leaveOpen;
             try
             {
+                (source, ownsSource) = EnsureSeekable(stream, leaveOpen);
                 return BuildWorkbook(source, ownsSource, options ?? ExcelReaderOptions.Default);
             }
             catch
@@ -35,9 +37,12 @@ namespace ExcelReader.Core.Reader.Xls
 
         internal static async ValueTask<WorkbookStream> OpenWorkbookAsync(Stream stream, bool leaveOpen, ExcelReaderOptions? options, CancellationToken ct)
         {
-            (Stream source, bool ownsSource) = await EnsureSeekableAsync(stream, leaveOpen, ct).ConfigureAwait(false);
+            Stream source = stream;
+            bool ownsSource = !leaveOpen;
             try
             {
+                ct.ThrowIfCancellationRequested();
+                (source, ownsSource) = await EnsureSeekableAsync(stream, leaveOpen, ct).ConfigureAwait(false);
                 return BuildWorkbook(source, ownsSource, options ?? ExcelReaderOptions.Default);
             }
             catch

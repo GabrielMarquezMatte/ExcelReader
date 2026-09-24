@@ -486,5 +486,29 @@ namespace ExcelReader.Tests.Parser.ParallelCsv
                 Assert.Contains(expected, seen);
             }
         }
+
+        [Fact]
+        public async Task ForEachRecord_Chunked_QuotedNewlines_InvokesBodyTwiceForSomeRecords()
+        {
+            const int rows = 4000;
+            var sb = new StringBuilder();
+            sb.Append("Name,Units\n");
+            for (int i = 1; i <= rows; i++)
+            {
+                sb.Append(CultureInfo.InvariantCulture, $"\"x\ny\",{i}\n");
+            }
+            byte[] csv = Encoding.UTF8.GetBytes(sb.ToString());
+            var probe = new ChunkProbe();
+            var calls = new ConcurrentDictionary<int, int>();
+
+            await ChunkedRecord(csv, sale => calls.AddOrUpdate(sale.Units, 1, static (_, n) => n + 1), probe, dop: 4, chunkSize: 2048);
+
+            Assert.True(probe.Chunks > 1, $"expected the source to partition, parsed {probe.Chunks} chunk(s)");
+            for (int i = 1; i <= rows; i++)
+            {
+                Assert.True(calls.TryGetValue(i, out int n) && n >= 1, $"record {i} was never delivered");
+            }
+            Assert.Contains(calls, pair => pair.Key is >= 1 and <= rows && pair.Value > 1);
+        }
     }
 }

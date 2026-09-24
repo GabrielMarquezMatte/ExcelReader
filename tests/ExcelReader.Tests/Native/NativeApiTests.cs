@@ -210,32 +210,63 @@ namespace ExcelReader.Tests.Native
         [Fact]
         public void LastErrorPtr_Should_Be_Thread_Local()
         {
-            nint[] pointers = new nint[2];
-            int[] lengths = new int[2];
+            string?[] seen = new string?[2];
+            using var firstSet = new ManualResetEventSlim();
 
             var first = new Thread(() =>
             {
                 NativeApi.SetLastError("thread-one");
-                pointers[0] = NativeApi.LastErrorPtr(out lengths[0]);
+                firstSet.Set();
+                SpinWait.SpinUntil(() => Volatile.Read(ref seen[1]) is not null, TimeSpan.FromSeconds(10));
+                seen[0] = ReadLastErrorPtr();
             });
             var second = new Thread(() =>
             {
+                firstSet.Wait();
                 NativeApi.SetLastError("thread-two-error");
-                pointers[1] = NativeApi.LastErrorPtr(out lengths[1]);
+                seen[1] = ReadLastErrorPtr();
             });
 
             first.Start();
-            first.Join();
             second.Start();
+            first.Join();
             second.Join();
 
-            byte[] firstBytes = new byte[lengths[0]];
-            Marshal.Copy(pointers[0], firstBytes, 0, lengths[0]);
-            byte[] secondBytes = new byte[lengths[1]];
-            Marshal.Copy(pointers[1], secondBytes, 0, lengths[1]);
+            Assert.Equal("thread-one", seen[0]);
+            Assert.Equal("thread-two-error", seen[1]);
+        }
 
-            Assert.Equal("thread-one", Encoding.UTF8.GetString(firstBytes));
-            Assert.Equal("thread-two-error", Encoding.UTF8.GetString(secondBytes));
+        [Fact]
+        public void LastError_Should_Not_Keep_Memory_Pinned_After_Its_Thread_Exits()
+        {
+            const int threads = 64;
+            long before = PinnedObjectsAfterFullCollection();
+
+            for (int i = 0; i < threads; i++)
+            {
+                var thread = new Thread(static () => NativeApi.SetLastError("boom"));
+                thread.Start();
+                thread.Join();
+            }
+
+            long leaked = PinnedObjectsAfterFullCollection() - before;
+            Assert.True(leaked < threads / 2, $"{leaked} pinned objects outlived the {threads} threads that set an error.");
+        }
+
+        private static string ReadLastErrorPtr()
+        {
+            nint pointer = NativeApi.LastErrorPtr(out int length);
+            byte[] bytes = new byte[length];
+            Marshal.Copy(pointer, bytes, 0, length);
+            return Encoding.UTF8.GetString(bytes);
+        }
+
+        private static long PinnedObjectsAfterFullCollection()
+        {
+            GC.Collect(2, GCCollectionMode.Forced, blocking: true);
+            GC.WaitForPendingFinalizers();
+            GC.Collect(2, GCCollectionMode.Forced, blocking: true);
+            return GC.GetGCMemoryInfo(GCKind.FullBlocking).PinnedObjectsCount;
         }
 
         [Fact]

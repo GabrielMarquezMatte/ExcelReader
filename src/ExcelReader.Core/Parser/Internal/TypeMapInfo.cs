@@ -113,9 +113,17 @@ namespace ExcelReader.Core.Parser.Internal
                 PropertyMap<T> property = properties[propertyIndex];
                 for (int aliasIndex = 0; aliasIndex < property.Names.Length; aliasIndex++)
                 {
-                    lookup.TryAdd(
-                        normalization.Apply(property.Names[aliasIndex]),
-                        new(propertyIndex, aliasIndex, property.Parser));
+                    string name = normalization.Apply(property.Names[aliasIndex]);
+                    if (!lookup.TryGetValue(name, out HeaderMatch<T> existing))
+                    {
+                        lookup.Add(name, new(propertyIndex, aliasIndex, property.Parser));
+                    }
+                    else if (existing.PropertyIndex != propertyIndex)
+                    {
+                        string[] existingNames = properties[existing.PropertyIndex].Names;
+                        throw new InvalidOperationException(
+                            $"Ambiguous header binding on {typeof(T)}: '{existingNames[existing.AliasIndex]}' (property bound as '{existingNames[0]}') and '{property.Names[aliasIndex]}' (property bound as '{property.Names[0]}') match the same header under the configured ColumnNameComparer and HeaderNormalization. Give each property distinct header names.");
+                    }
                 }
             }
             return lookup;

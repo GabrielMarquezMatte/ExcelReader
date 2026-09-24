@@ -21,13 +21,6 @@ namespace ExcelReader.Core.Reader.Csv
             return options.SniffDialect ? Applied(options, CsvSniffer.Detect(data.Span)) : options;
         }
 
-        internal static async ValueTask<CsvReaderOptions> ResolveAsync(string path, CsvReaderOptions options, CancellationToken ct)
-        {
-            return options.SniffDialect
-                ? Applied(options, await CsvSniffer.DetectFileAsync(path, null, ct).ConfigureAwait(false))
-                : options;
-        }
-
         internal static async ValueTask<CsvReaderOptions> ResolveAsync(Stream stream, CsvReaderOptions options, CancellationToken ct)
         {
             return options.SniffDialect
