@@ -70,6 +70,128 @@ namespace ExcelReader.Tests.Writer
             Assert.Null(await Record.ExceptionAsync(() => workbook.DisposeAsync().AsTask()));
         }
 
+        public static TheoryData<string, bool, bool, bool> ArchiveEndFailures
+        {
+            get
+            {
+                TheoryData<string, bool, bool, bool> data = [];
+                foreach (string format in (string[])["xlsx", "xlsb"])
+                {
+                    foreach (bool async in (bool[])[false, true])
+                    {
+                        foreach (bool leaveOpen in (bool[])[false, true])
+                        {
+                            data.Add(format, async, leaveOpen, false);
+                            data.Add(format, async, leaveOpen, true);
+                        }
+                    }
+                }
+                return data;
+            }
+        }
+
+        private static int EndOfCentralDirectoryCount(TrackingStream stream)
+        {
+            ReadOnlySpan<byte> signature = [0x50, 0x4B, 0x05, 0x06];
+            ReadOnlySpan<byte> bytes = stream.ToArray();
+            int count = 0;
+            for (int at = bytes.IndexOf(signature); at >= 0; at = bytes.IndexOf(signature))
+            {
+                count++;
+                bytes = bytes[(at + signature.Length)..];
+            }
+            return count;
+        }
+
+        private static async Task DisposeWorkbook(IWorkbookWriter<IDisposable> workbook, bool async)
+        {
+            if (async)
+            {
+                await workbook.DisposeAsync();
+                return;
+            }
+            workbook.Dispose();
+        }
+
+        [Theory]
+        [MemberData(nameof(ArchiveEndFailures))]
+        public async Task Should_CloseTheArchiveExactlyOnce_When_EndFailsPartWay(string format, bool async, bool leaveOpen, bool ioFailure)
+        {
+            CancellationToken ct = TestContext.Current.CancellationToken;
+            using var pool = CountingPool.Install();
+            var stream = new TrackingStream();
+            IWorkbookWriter<IDisposable> workbook = CreateWithEndedSheet(
+                format, stream, leaveOpen, ioFailure ? ExcelSheetVisibility.Visible : ExcelSheetVisibility.Hidden);
+            if (ioFailure)
+            {
+                stream.OnWrite = TrackingStream.FailOnce(new IOException("disk full"));
+            }
+
+            Exception? failure = async
+                ? await Record.ExceptionAsync(() => workbook.EndAsync(ct).AsTask())
+                : Record.Exception(workbook.End);
+
+            Assert.IsType(ioFailure ? typeof(IOException) : typeof(InvalidOperationException), failure);
+            Assert.Equal(1, EndOfCentralDirectoryCount(stream));
+            Assert.Throws<ObjectDisposedException>(workbook.End);
+            Assert.Throws<ObjectDisposedException>(() => workbook.AddSheet("S2"));
+
+            await DisposeWorkbook(workbook, async);
+            await DisposeWorkbook(workbook, async);
+
+            Assert.Equal(1, EndOfCentralDirectoryCount(stream));
+            Assert.Equal(leaveOpen ? 0 : 1, stream.DisposeCount);
+            pool.AssertEveryBufferReturnedOnce();
+        }
+
+        [Theory]
+        [MemberData(nameof(FormatsAndOwnership))]
+        public async Task Should_ReleaseEverythingOnce_When_EndSucceeds(string format, bool leaveOpen)
+        {
+            CancellationToken ct = TestContext.Current.CancellationToken;
+            using var pool = CountingPool.Install();
+            var stream = new TrackingStream();
+            IWorkbookWriter<IDisposable> workbook = CreateWithEndedSheet(format, stream, leaveOpen);
+
+            await workbook.EndAsync(ct);
+            await workbook.DisposeAsync();
+            workbook.Dispose();
+
+            if (!string.Equals(format, "xls", StringComparison.Ordinal))
+            {
+                Assert.Equal(1, EndOfCentralDirectoryCount(stream));
+            }
+            using IExcelRowReader reader = Excel.Open(stream.ToArray().AsMemory());
+            Assert.Equal("S1", reader.SheetNameAt(0));
+            Assert.Equal(leaveOpen ? 0 : 1, stream.DisposeCount);
+            pool.AssertEveryBufferReturnedOnce();
+        }
+
+        [Theory]
+        [InlineData(false, false)]
+        [InlineData(false, true)]
+        [InlineData(true, false)]
+        [InlineData(true, true)]
+        public async Task Should_ReleaseEverythingOnce_When_XlsEndFails(bool async, bool leaveOpen)
+        {
+            CancellationToken ct = TestContext.Current.CancellationToken;
+            using var pool = CountingPool.Install();
+            var stream = new TrackingStream();
+            IWorkbookWriter<IDisposable> workbook = CreateWithEndedSheet("xls", stream, leaveOpen);
+            FailWrites(stream);
+
+            Exception? failure = async
+                ? await Record.ExceptionAsync(() => workbook.EndAsync(ct).AsTask())
+                : Record.Exception(workbook.End);
+
+            Assert.IsType<IOException>(failure);
+            Assert.Throws<ObjectDisposedException>(workbook.End);
+            await DisposeWorkbook(workbook, async);
+            await DisposeWorkbook(workbook, async);
+            Assert.Equal(leaveOpen ? 0 : 1, stream.DisposeCount);
+            pool.AssertEveryBufferReturnedOnce();
+        }
+
         [Theory]
         [InlineData("xlsx", false)]
         [InlineData("xlsx", true)]

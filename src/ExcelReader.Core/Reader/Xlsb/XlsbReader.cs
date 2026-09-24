@@ -265,15 +265,15 @@ namespace ExcelReader.Core.Reader.Xlsb
             {
                 return;
             }
+            if (_pooledSharedFlat)
+            {
+                ArrayPool<byte>.Shared.Return(_sharedFlat);
+            }
             _memZip?.Dispose();
             _zip?.Dispose();
             if (!_leaveOpen)
             {
                 _stream?.Dispose();
-            }
-            if (_pooledSharedFlat)
-            {
-                ArrayPool<byte>.Shared.Return(_sharedFlat);
             }
         }
 
@@ -284,6 +284,10 @@ namespace ExcelReader.Core.Reader.Xlsb
             {
                 return;
             }
+            if (_pooledSharedFlat)
+            {
+                ArrayPool<byte>.Shared.Return(_sharedFlat);
+            }
             _memZip?.Dispose();
             if (_zip is not null)
             {
@@ -292,10 +296,6 @@ namespace ExcelReader.Core.Reader.Xlsb
             if (!_leaveOpen && _stream is not null)
             {
                 await _stream.DisposeAsync().ConfigureAwait(false);
-            }
-            if (_pooledSharedFlat)
-            {
-                ArrayPool<byte>.Shared.Return(_sharedFlat);
             }
         }
 

@@ -10,7 +10,16 @@ namespace ExcelReader.Core.Writer.Internal
     internal sealed class BiffBuffer : IDisposable
     {
         // ponytail: 32 MB cap; sheets past that fall back to plain allocs (same as Shared did).
-        private static readonly ArrayPool<byte> Pool = ArrayPool<byte>.Create(32 * 1024 * 1024, 16);
+        private static readonly ArrayPool<byte> DefaultPool = ArrayPool<byte>.Create(32 * 1024 * 1024, 16);
+        private static readonly AsyncLocal<ArrayPool<byte>?> PoolOverride = new();
+
+        private static ArrayPool<byte> Pool => PoolOverride.Value ?? DefaultPool;
+
+        // Test seam: lets a test count every rent/return made on its own async flow.
+        internal static void OverridePool(ArrayPool<byte>? pool)
+        {
+            PoolOverride.Value = pool;
+        }
 
         private byte[] _buffer;
 
@@ -154,10 +163,16 @@ namespace ExcelReader.Core.Writer.Internal
         private void Ensure(int extra)
         {
             int needed = Length + extra;
-            if (needed <= _buffer.Length)
+            if (needed > _buffer.Length)
             {
-                return;
+                Grow(needed);
             }
+        }
+
+        // Kept out of line so the inlined Ensure on every Write stays a single compare.
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        private void Grow(int needed)
+        {
             byte[] bigger = Pool.Rent(Math.Max(_buffer.Length * 2, needed));
             _buffer.AsSpan(0, Length).CopyTo(bigger);
             Pool.Return(_buffer);

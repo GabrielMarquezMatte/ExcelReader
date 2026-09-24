@@ -23,6 +23,8 @@ namespace ExcelReader.Core.Writer.Xlsx
         private bool _sheetActive;
         private XlsxSheetWriter? _activeSheet;
         private readonly HashSet<string> _sheetNames = new(StringComparer.OrdinalIgnoreCase);
+        private bool _faulted;
+        private bool _zipClosed;
         private bool _disposed;
 
         private XlsxWorkbookWriter(ZipArchive zip, Stream stream, bool leaveOpen, XlsxWriterOptions options)
@@ -86,7 +88,11 @@ namespace ExcelReader.Core.Writer.Xlsx
         {
             _sheetActive = false;
             _activeSheet = null;
-            _ended |= faulted;
+            if (faulted)
+            {
+                _ended = true;
+                _faulted = true;
+            }
         }
 
         internal bool UseSharedStrings { get; }
@@ -119,22 +125,30 @@ namespace ExcelReader.Core.Writer.Xlsx
         {
             ObjectDisposedException.ThrowIf(_ended, this);
             _ended = true;
-            _activeSheet?.Dispose();
-            if (_sheets.Count == 0)
+            try
             {
-                throw new InvalidOperationException("An XLSX workbook must contain at least one sheet.");
+                _activeSheet?.Dispose();
+                if (_sheets.Count == 0)
+                {
+                    throw new InvalidOperationException("An XLSX workbook must contain at least one sheet.");
+                }
+                WriteEntry("_rels/.rels", BuildRootRelsXml());
+                WriteEntry("xl/styles.xml", BuildStylesXml());
+                if (_sharedStrings is not null)
+                {
+                    using var bytes = _sharedStrings.ToXlsxBytes();
+                    WriteEntry("xl/sharedStrings.xml", bytes.Memory.Span);
+                }
+                WriteEntry("xl/workbook.xml", BuildWorkbookXml());
+                WriteEntry("xl/_rels/workbook.xml.rels", BuildWorkbookRelsXml());
+                WriteEntry("[Content_Types].xml", BuildContentTypesXml());
+                CloseZip();
             }
-            WriteEntry("_rels/.rels", BuildRootRelsXml());
-            WriteEntry("xl/styles.xml", BuildStylesXml());
-            if (_sharedStrings is not null)
+            catch
             {
-                using var bytes = _sharedStrings.ToXlsxBytes();
-                WriteEntry("xl/sharedStrings.xml", bytes.Memory.Span);
+                AbandonZip();
+                throw;
             }
-            WriteEntry("xl/workbook.xml", BuildWorkbookXml());
-            WriteEntry("xl/_rels/workbook.xml.rels", BuildWorkbookRelsXml());
-            WriteEntry("[Content_Types].xml", BuildContentTypesXml());
-            _zip.Dispose();
         }
 
         /// <inheritdoc/>
@@ -145,24 +159,88 @@ namespace ExcelReader.Core.Writer.Xlsx
             ObjectDisposedException.ThrowIf(_ended, this);
             ct.ThrowIfCancellationRequested();
             _ended = true;
-            if (_activeSheet is not null)
+            try
             {
-                await _activeSheet.DisposeAsync().ConfigureAwait(false);
+                if (_activeSheet is not null)
+                {
+                    await _activeSheet.DisposeAsync().ConfigureAwait(false);
+                }
+                if (_sheets.Count == 0)
+                {
+                    throw new InvalidOperationException("An XLSX workbook must contain at least one sheet.");
+                }
+                await WriteEntryAsync("_rels/.rels", BuildRootRelsXml(), ct).ConfigureAwait(false);
+                await WriteStylesAsync(ct).ConfigureAwait(false);
+                if (_sharedStrings is not null)
+                {
+                    await WriteSharedStringsAsync(ct).ConfigureAwait(false);
+                }
+                await WriteWorkbookAsync(ct).ConfigureAwait(false);
+                await WriteWorkbookRelsAsync(ct).ConfigureAwait(false);
+                await WriteContentTypesAsync(ct).ConfigureAwait(false);
+                await CloseZipAsync().ConfigureAwait(false);
             }
-            if (_sheets.Count == 0)
+            catch
             {
-                throw new InvalidOperationException("An XLSX workbook must contain at least one sheet.");
+                await AbandonZipAsync().ConfigureAwait(false);
+                throw;
             }
-            await WriteEntryAsync("_rels/.rels", BuildRootRelsXml(), ct).ConfigureAwait(false);
-            await WriteStylesAsync(ct).ConfigureAwait(false);
-            if (_sharedStrings is not null)
+        }
+
+        private void CloseZip()
+        {
+            _zipClosed = true;
+            _zip.Dispose();
+        }
+
+        private ValueTask CloseZipAsync()
+        {
+            _zipClosed = true;
+            return _zip.DisposeAsync();
+        }
+
+        private void AbandonZip()
+        {
+            _faulted = true;
+            if (!_zipClosed)
             {
-                await WriteSharedStringsAsync(ct).ConfigureAwait(false);
+                _zipClosed = true;
+                FailureCleanup.Dispose(_zip);
             }
-            await WriteWorkbookAsync(ct).ConfigureAwait(false);
-            await WriteWorkbookRelsAsync(ct).ConfigureAwait(false);
-            await WriteContentTypesAsync(ct).ConfigureAwait(false);
-            await _zip.DisposeAsync().ConfigureAwait(false);
+        }
+
+        private ValueTask AbandonZipAsync()
+        {
+            _faulted = true;
+            if (_zipClosed)
+            {
+                return ValueTask.CompletedTask;
+            }
+            _zipClosed = true;
+            return FailureCleanup.DisposeAsync(_zip);
+        }
+
+        private void ReleaseStream()
+        {
+            if (_leaveOpen)
+            {
+                return;
+            }
+            if (_faulted)
+            {
+                FailureCleanup.Dispose(_stream);
+                return;
+            }
+            _stream.Dispose();
+        }
+
+        private ValueTask ReleaseStreamAsync()
+        {
+            if (_leaveOpen)
+            {
+                return ValueTask.CompletedTask;
+            }
+            return _faulted ? FailureCleanup.DisposeAsync(_stream) : _stream.DisposeAsync();
         }
 
         /// <summary>
@@ -198,26 +276,25 @@ namespace ExcelReader.Core.Writer.Xlsx
                     if (_sheets.Count == 0 && _activeSheet is null)
                     {
                         _ended = true;
-                        _zip.Dispose();
+                        CloseZip();
                     }
                     else
                     {
                         End();
                     }
                 }
+                else if (!_zipClosed)
+                {
+                    AbandonZip();
+                }
             }
             catch
             {
-                if (!_leaveOpen)
-                {
-                    FailureCleanup.Dispose(_stream);
-                }
+                _faulted = true;
+                ReleaseStream();
                 throw;
             }
-            if (!_leaveOpen)
-            {
-                _stream.Dispose();
-            }
+            ReleaseStream();
         }
 
         /// <inheritdoc/>
@@ -235,26 +312,25 @@ namespace ExcelReader.Core.Writer.Xlsx
                     if (_sheets.Count == 0 && _activeSheet is null)
                     {
                         _ended = true;
-                        await _zip.DisposeAsync().ConfigureAwait(false);
+                        await CloseZipAsync().ConfigureAwait(false);
                     }
                     else
                     {
                         await EndAsync().ConfigureAwait(false);
                     }
                 }
+                else if (!_zipClosed)
+                {
+                    await AbandonZipAsync().ConfigureAwait(false);
+                }
             }
             catch
             {
-                if (!_leaveOpen)
-                {
-                    await FailureCleanup.DisposeAsync(_stream).ConfigureAwait(false);
-                }
+                _faulted = true;
+                await ReleaseStreamAsync().ConfigureAwait(false);
                 throw;
             }
-            if (!_leaveOpen)
-            {
-                await _stream.DisposeAsync().ConfigureAwait(false);
-            }
+            await ReleaseStreamAsync().ConfigureAwait(false);
         }
 
         private static string BuildRootRelsXml()
