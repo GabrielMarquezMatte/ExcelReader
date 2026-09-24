@@ -251,6 +251,7 @@ namespace ExcelReader.Tests.Generator
         {
             const string source = """
                 using ExcelReader.Core.Parser;
+                using ExcelReader.Core.Reader;
                 using ExcelReader.Core.Writer;
 
                 namespace GeneratorTests.GoodConverter
@@ -366,7 +367,9 @@ namespace ExcelReader.Tests.Generator
             using System.Threading.Tasks;
             using ExcelReader.Core.Parser;
             using ExcelReader.Core.Reader;
+            using ExcelReader.Core.Reader.Xlsx;
             using ExcelReader.Core.Writer;
+            using ExcelReader.Core.Writer.Xlsx;
 
             namespace GeneratorTests.RoundTrip
             {
