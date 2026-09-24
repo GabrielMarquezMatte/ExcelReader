@@ -1,9 +1,12 @@
 using System.Globalization;
 using System.Text;
 using ExcelReader.Core.Parser;
-using ExcelReader.Core.Parser.Internal;
+using ExcelReader.Core.Parser.ParallelCsv;
 using ExcelReader.Core.Reader;
-using ExcelReader.Core.ValueObjects;
+using ExcelReader.Core.Reader.Csv;
+using ExcelReader.Core.Reader.Xls;
+using ExcelReader.Core.Reader.Xlsb;
+using ExcelReader.Core.Reader.Xlsx;
 
 namespace ExcelReader.Fuzz
 {
@@ -233,8 +236,8 @@ namespace ExcelReader.Fuzz
         private static List<string> ParseParallel(byte[] bytes, int chunkSize)
         {
             var rows = new List<string>();
-            IAsyncEnumerable<FuzzRow> source = ParallelCsvFactory.CreateWithChunkSize<FuzzRow>(
-                bytes.AsMemory(), degreeOfParallelism: 4, chunkSize, CsvLimits, config: null, CancellationToken.None);
+            IAsyncEnumerable<FuzzRow> source = ParallelCsvFactory.CreateWithChunkSize(
+                bytes.AsMemory(), degreeOfParallelism: 4, chunkSize, CsvLimits, ExcelParser.FromAttributes<FuzzRow>(), CancellationToken.None);
             IAsyncEnumerator<FuzzRow> e = source.GetAsyncEnumerator(CancellationToken.None);
             try
             {

@@ -1,4 +1,5 @@
 using System.Diagnostics.CodeAnalysis;
+using ExcelReader.Core.Writer.Xlsx;
 
 namespace ExcelReader.Core.Writer
 {
@@ -12,6 +13,66 @@ namespace ExcelReader.Core.Writer
     /// </remarks>
     public static class SheetWriterExtensions
     {
+        /// <summary>
+        /// Writes a header row followed by one row per item in <paramref name="records"/>, the columns
+        /// coming from <paramref name="layout"/>. Headers match the names <c>ExcelParser&lt;T&gt;</c> looks
+        /// for, so the sheet parses straight back. The sheet stays open; dispose it to end it.
+        /// </summary>
+        /// <typeparam name="T">The record type being written.</typeparam>
+        /// <typeparam name="TRow">The concrete row writer type.</typeparam>
+        /// <param name="sheet">The sheet to write to; no row may have been started on it yet.</param>
+        /// <param name="records">The records to write, one row each, in enumeration order.</param>
+        /// <param name="layout">The columns to write, from <see cref="ExcelRecordLayout"/>.</param>
+        /// <param name="ct">A token to cancel the operation between rows.</param>
+        public static async ValueTask WriteRecordsAsync<T, TRow>(this ISheetWriter<TRow> sheet, IEnumerable<T> records,
+                                                                 ExcelRecordLayout<T> layout,
+                                                                 CancellationToken ct = default)
+                                                                 where TRow : IRowWriter
+        {
+            ArgumentNullException.ThrowIfNull(sheet);
+            ArgumentNullException.ThrowIfNull(records);
+            ArgumentNullException.ThrowIfNull(layout);
+            (string[] headers, Action<TRow, T> writeRow) = layout.Columns<TRow>();
+            await WriteHeaderAsync(sheet, headers, ct).ConfigureAwait(false);
+            await sheet.WriteRecordsAsync(records, writeRow, ct).ConfigureAwait(false);
+        }
+
+        /// <summary>
+        /// Writes a header row followed by one row per item produced by <paramref name="records"/>, the
+        /// columns coming from <paramref name="layout"/>. The sheet stays open; dispose it to end it.
+        /// </summary>
+        /// <typeparam name="T">The record type being written.</typeparam>
+        /// <typeparam name="TRow">The concrete row writer type.</typeparam>
+        /// <param name="sheet">The sheet to write to; no row may have been started on it yet.</param>
+        /// <param name="records">The records to write, one row each, in enumeration order.</param>
+        /// <param name="layout">The columns to write, from <see cref="ExcelRecordLayout"/>.</param>
+        /// <param name="ct">A token to cancel the operation between rows, and passed to the source enumerable.</param>
+        public static async ValueTask WriteRecordsAsync<T, TRow>(this ISheetWriter<TRow> sheet,
+                                                                 IAsyncEnumerable<T> records, ExcelRecordLayout<T> layout,
+                                                                 CancellationToken ct = default)
+                                                                 where TRow : IRowWriter
+        {
+            ArgumentNullException.ThrowIfNull(sheet);
+            ArgumentNullException.ThrowIfNull(records);
+            ArgumentNullException.ThrowIfNull(layout);
+            (string[] headers, Action<TRow, T> writeRow) = layout.Columns<TRow>();
+            await WriteHeaderAsync(sheet, headers, ct).ConfigureAwait(false);
+            await sheet.WriteRecordsAsync(records, writeRow, ct).ConfigureAwait(false);
+        }
+
+        private static async ValueTask WriteHeaderAsync<TRow>(ISheetWriter<TRow> sheet, string[] headers, CancellationToken ct)
+            where TRow : IRowWriter
+        {
+            TRow row = await sheet.StartRowAsync(ct).ConfigureAwait(false);
+            await using (row.ConfigureAwait(false))
+            {
+                foreach (string header in headers)
+                {
+                    row.Write(header);
+                }
+            }
+        }
+
         /// <summary>
         /// Writes one row per item in <paramref name="records"/>, calling <paramref name="writeRow"/>
         /// for each to populate that row's cells.

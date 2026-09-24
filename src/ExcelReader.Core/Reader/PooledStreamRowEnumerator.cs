@@ -1,10 +1,12 @@
+using System.ComponentModel;
 using System.Diagnostics;
-using System.Diagnostics.CodeAnalysis;
+using ExcelReader.Core.Reader.Internal;
 
 namespace ExcelReader.Core.Reader
 {
     /// <summary>Base class holding the pooled buffer and refill plumbing shared by every concrete format's row enumerator.</summary>
     /// <remarks><c>MoveNext</c>/<c>MoveNextAsync</c> stay concrete in each derived format; this base only owns the per-buffer operations and pooled row storage.</remarks>
+    [EditorBrowsable(EditorBrowsableState.Never)]
     public abstract class PooledStreamRowEnumerator
     {
         private protected Stream? _source;

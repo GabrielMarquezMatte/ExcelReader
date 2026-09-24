@@ -17,13 +17,13 @@ arrow = ["dep:arrow"]
 [dependencies]
 excelreader-derive = { workspace = true }
 chrono = { version = "0.4", optional = true, default-features = false, features = ["std"] }
-arrow = { version = "56", optional = true, default-features = false, features = ["ffi"] }
+arrow = { version = "60", optional = true, default-features = false, features = ["ffi"] }
 
 [dev-dependencies]
 trybuild = "1"
 criterion = "0.5"
 calamine = { version = "0.36.1", features = ["chrono"] }
-rust_xlsxwriter = "0.98.2"
+rust_xlsxwriter = "0.99.1"
 
 [[bench]]
 name = "parse_bench"

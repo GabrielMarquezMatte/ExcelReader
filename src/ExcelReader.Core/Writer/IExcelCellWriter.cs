@@ -2,9 +2,9 @@ namespace ExcelReader.Core.Writer
 {
     /// <summary>
     /// Writes a value of type <typeparamref name="T"/> as a cell of a row, for use with the
-    /// <c>[ExcelConverter]</c> attribute on a property that <see cref="WorkbookRecordWriter{TSheet,TRow}"/> writes.
+    /// <c>[ExcelConverter]</c> attribute on a property that <see cref="ExcelRecordLayout.FromAttributes{T}"/> writes.
     /// Implement this alongside <c>IExcelCellConverter&lt;T&gt;</c> on the same converter type to round-trip
-    /// a custom type through both writing (via <see cref="WorkbookRecordWriter{TSheet,TRow}"/>) and reading
+    /// a custom type through both writing (via <see cref="ExcelRecordLayout.FromAttributes{T}"/>) and reading
     /// (via <c>ExcelParser&lt;T&gt;</c>). A single instance is shared across every row and thread, so
     /// implementations must be stateless and thread-safe.
     /// </summary>

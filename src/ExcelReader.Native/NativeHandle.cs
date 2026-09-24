@@ -1,4 +1,5 @@
 using ExcelReader.Core.Reader;
+using ExcelReader.Native.Typed;
 
 namespace ExcelReader.Native
 {
@@ -28,7 +29,7 @@ namespace ExcelReader.Native
 
         internal bool AllRowsPending { get; set; }
 
-        internal NativeApi.TypedParseSession? LiveSession { get; set; }
+        internal TypedApi.TypedParseSession? LiveSession { get; set; }
 
         internal void FaultLiveSession(string cause)
         {
@@ -37,7 +38,7 @@ namespace ExcelReader.Native
                 "Finish or close the read before using the workbook for anything else.");
         }
 
-        internal void ReleaseLiveSession(NativeApi.TypedParseSession session)
+        internal void ReleaseLiveSession(TypedApi.TypedParseSession session)
         {
             if (ReferenceEquals(LiveSession, session))
             {

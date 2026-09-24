@@ -1,5 +1,3 @@
-using ExcelReader.Core.Enums;
-
 namespace ExcelReader.Core.Reader
 {
     /// <summary>One sheet's position and name, as yielded by <see cref="ExcelRowReaderExtensions.Sheets"/>.</summary>

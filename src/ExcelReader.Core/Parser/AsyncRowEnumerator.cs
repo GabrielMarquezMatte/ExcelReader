@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using System.Diagnostics.CodeAnalysis;
 using ExcelReader.Core.Parser.Internal;
 using ExcelReader.Core.Reader;
@@ -16,6 +17,7 @@ namespace ExcelReader.Core.Parser
     /// for a second state machine on top of the row-enumerator's own (e.g.
     /// <c>XlsxReader.Enumerator.MoveNextAsync</c> / <c>CsvReader.Enumerator.MoveNextAsync</c>).
     /// </remarks>
+    [EditorBrowsable(EditorBrowsableState.Never)]
     public abstract class AsyncRowEnumerator<T, TReader, TRows> : IAsyncEnumerator<T>
         where T : allows ref struct
         where TReader : IExcelRowReader<TRows>

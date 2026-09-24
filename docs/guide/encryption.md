@@ -63,6 +63,7 @@ SHA-512, 100,000 spin iterations, with a `dataIntegrity` HMAC.
 ```csharp
 using ExcelReader.Core.Reader;
 using ExcelReader.Core.Writer;
+using ExcelReader.Core.Writer.Xlsx;
 
 using var plain = new MemoryStream();
 await using (var workbook = XlsxWorkbookWriter.Create(plain, leaveOpen: true))

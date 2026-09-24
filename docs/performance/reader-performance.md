@@ -162,7 +162,7 @@ There was no other efficient path. `TryParse<T>` is constrained to `IUtf8SpanPar
 `CsvWriter` could not be read back by its own `CsvReader`; a test asserted that limitation rather
 than the round-trip its name promised.
 
-`FastDate` (`src/ExcelReader.Core/ValueObjects/FastDate.cs`) now parses ISO-8601 straight from UTF-8:
+`FastDate` (`src/ExcelReader.Core/Reader/Internal/FastDate.cs`) now parses ISO-8601 straight from UTF-8:
 `yyyy-MM-dd`, optionally `T` or a space, a time, and up to seven fractional digits. A trailing zone
 designator is rejected rather than guessed at.
 
@@ -287,8 +287,8 @@ five rounds, three separate processes, all three within a few percent of each ot
 | hand-written parser, partitioned by newline | 7.1 ns | 2,600 | ~7 s |
 | ExcelReader rows, 1 thread | 60.0 ns | 305 | ~60 s |
 | ExcelReader rows, partitioned by the caller | 11.2 ns | 1,630 | ~11 s |
-| `Excel.AggregateCsvParallelAsync`, dop 1 | 66.2 ns | 275 | ~66 s |
-| `Excel.AggregateCsvParallelAsync`, dop 12 | 11.4 ns | 1,600 | ~11 s |
+| `CsvParallel.AggregateAsync`, dop 1 | 66.2 ns | 275 | ~66 s |
+| `CsvParallel.AggregateAsync`, dop 12 | 11.4 ns | 1,600 | ~11 s |
 
 The corpus is a rebuild, not the original bytes: 183 MB at 19.2 bytes per row against the first
 run's 222 MB at 22, because the station names are synthetic and shorter. **What makes the two tables
@@ -299,7 +299,7 @@ baseline standing still, the reader's movement is the library's, not the corpus'
 |---|---|---|---|
 | ExcelReader rows, 1 thread | 81.3 ns | 60.0 ns | 1.36x |
 | ExcelReader rows, partitioned | 18.7 ns | 11.2 ns | 1.67x |
-| the library's own parallel path | 241.7 ns (`ParseCsvParallelAsync<T>`) | 11.4 ns (`AggregateCsvParallelAsync`) | — |
+| the library's own parallel path | 241.7 ns (`CsvParallel.ParseAsync<T>`) | 11.4 ns (`CsvParallel.AggregateAsync`) | — |
 
 The hand-written baseline is deliberately naive (`IndexOf` for the separator, a digit loop, FNV over
 the key bytes) and is not a leaderboard entry; the winning entries add SWAR temperature parsing,
@@ -312,10 +312,10 @@ the library against a plain specialized parser on the same machine, not against 
   1.38x holds partitioned, 11.2 ns against 7.1.
 - Partitioning converts: 5.4x on 12 mixed threads for raw rows, 5.8x for the aggregation API, 6.1x
   for the hand-written parser.
-- **`AggregateCsvParallelAsync` is now at parity with hand-partitioning** — 11.4 ns against 11.2 for
+- **`CsvParallel.AggregateAsync` is now at parity with hand-partitioning** — 11.4 ns against 11.2 for
   a caller that splits the buffer itself. The earlier reading, that the library's own parallel path
   ran 13x slower than the caller-partitioned raw path, was measured against
-  `ParseCsvParallelAsync<T>`, which allocates a model object and a string per row. The aggregation
+  `CsvParallel.ParseAsync<T>`, which allocates a model object and a string per row. The aggregation
   overload does not, and closes the gap. Its cost over the plain single-threaded reader is 1.10x
   (66.2 ns against 60.0), which is the delegate plus partition bookkeeping.
 - So the missing public API for partitioned raw rows costs nothing on an aggregation workload.
@@ -330,7 +330,7 @@ interleaved, 5,000,000 rows, identical checksums:
 | delegate `(ref TState state, Row row)` | 68.3 ns | 1.09x |
 | struct implementing a static-abstract processor interface, constrained generic | 76.8 ns | 1.23x |
 
-That measurement chose the engine behind `Excel.AggregateCsvParallelAsync`: a
+That measurement chose the engine behind `CsvParallel.AggregateAsync`: a
 `CsvRowAction<TState>(ref TState state, Row row)` delegate, one accumulator per partition, and a
 combine folded left to right in file order. It reuses the typed path's speculative partitioning.
 The public surface has two shapes over that one engine: an `ICsvAccumulator<TSelf>` type
@@ -350,7 +350,7 @@ first table, so compare within this table only):
 |---|---|
 | caller-partitioned raw rows, inline loop | 25.7 ns, 25.0 ns |
 | three loose delegates (the first version of this API) | 31.5 ns, 28.5 ns |
-| `ParseCsvParallelAsync<T>` | 209.5 ns |
+| `CsvParallel.ParseAsync<T>` | 209.5 ns |
 
 About 1.15x the hand-partitioned loop — the delegate plus partition bookkeeping — and **7x faster
 than the typed parallel path**. Unlike the hand-partitioned loop, it is correct for quoted fields
@@ -362,8 +362,8 @@ checksums:
 | | 12 threads | 1 thread |
 |---|---|---|
 | caller-partitioned raw rows, inline loop | 24.1 ns, 26.0 ns | — |
-| `AggregateCsvParallelAsync(data, CsvAggregation<T>)` | 26.9 ns, 29.0 ns | 84.2 ns, 75.3 ns |
-| `AggregateCsvParallelAsync<TAccumulator>(data)` | 34.4 ns, 37.5 ns | 117.6 ns, 95.1 ns |
+| `CsvParallel.AggregateAsync(data, CsvAggregation<T>)` | 26.9 ns, 29.0 ns | 84.2 ns, 75.3 ns |
+| `CsvParallel.AggregateAsync<TAccumulator>(data)` | 34.4 ns, 37.5 ns | 117.6 ns, 95.1 ns |
 
 The accumulator overload costs **~1.3x the aggregation overload** — more than the 1.15–1.23x a
 direct interface call measured, because it goes through the same delegate engine and so pays the
@@ -473,7 +473,7 @@ the field. Inside the reader those spans always point into a pooled buffer with 
 
 ### Parallel CSV converts — 3.46x, and it already ships
 
-`Excel.ParseCsvParallelAsync<T>` partitions by byte range with `CsvBoundaryResolver` confirming row
+`CsvParallel.ParseAsync<T>` partitions by byte range with `CsvBoundaryResolver` confirming row
 starts. Typed models, allocating, own interleave:
 
 | | |

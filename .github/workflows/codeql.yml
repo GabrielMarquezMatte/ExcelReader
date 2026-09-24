@@ -5,6 +5,7 @@ on:
     branches: [ master, develop ]
   pull_request:
     branches: [ master, develop ]
+    types: [ opened, synchronize, reopened, ready_for_review ]
   schedule:
     - cron: '0 6 * * 1'
 
@@ -19,6 +20,7 @@ permissions:
 jobs:
   changes:
     name: Detect changed languages
+    if: github.event.pull_request.draft != true
     runs-on: ubuntu-latest
     outputs:
       languages: ${{ steps.languages.outputs.value }}

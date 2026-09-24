@@ -1,8 +1,9 @@
 using System.Collections;
+using System.ComponentModel;
 using System.Diagnostics.CodeAnalysis;
 using ExcelReader.Core.Parser.Internal;
 using ExcelReader.Core.Reader;
-using ExcelReader.Core.ValueObjects;
+using ExcelReader.Core.Reader.Xlsx;
 
 namespace ExcelReader.Core.Parser
 {
@@ -21,6 +22,7 @@ namespace ExcelReader.Core.Parser
     /// <typeparam name="T">The row model type to bind each row to.</typeparam>
     /// <typeparam name="TReader">The concrete row reader type this instance pulls rows from.</typeparam>
     /// <typeparam name="TEnumerator">The concrete row enumerator type <typeparamref name="TReader"/> produces.</typeparam>
+    [EditorBrowsable(EditorBrowsableState.Never)]
     [SuppressMessage("Design", "CA1034:Nested types should not be visible",
         Justification = "Public nested Enumerator/AsyncEnumerator are the standard foreach/await-foreach pattern.")]
     public class ExcelEnumerable<T, TReader, TEnumerator> : IEnumerable<T>, IAsyncEnumerable<T>
@@ -72,6 +74,7 @@ namespace ExcelReader.Core.Parser
         }
 
         /// <summary>Enumerates rows synchronously, projecting each into a <typeparamref name="T"/> instance.</summary>
+        [EditorBrowsable(EditorBrowsableState.Never)]
         public sealed class Enumerator : SyncRowEnumerator<T, TEnumerator>
         {
             private RowProjector<T> _projector;
@@ -103,6 +106,7 @@ namespace ExcelReader.Core.Parser
         }
 
         /// <summary>Enumerates rows asynchronously, projecting each into a <typeparamref name="T"/> instance.</summary>
+        [EditorBrowsable(EditorBrowsableState.Never)]
         public sealed class AsyncEnumerator : AsyncRowEnumerator<T, TReader, TEnumerator>
         {
             private RowProjector<T> _projector;

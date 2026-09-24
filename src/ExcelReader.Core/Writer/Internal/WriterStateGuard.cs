@@ -1,5 +1,3 @@
-using ExcelReader.Core.Enums;
-
 namespace ExcelReader.Core.Writer.Internal
 {
     internal static class WriterStateGuard
@@ -40,6 +38,14 @@ namespace ExcelReader.Core.Writer.Internal
             {
                 throw new InvalidOperationException(
                     $"The previous {sheetWriterTypeName} must be ended before adding a new sheet.");
+            }
+        }
+
+        internal static void ClaimSheetName(HashSet<string> names, string name)
+        {
+            if (!names.Add(name))
+            {
+                throw new InvalidOperationException($"A sheet named '{name}' already exists in this workbook.");
             }
         }
 

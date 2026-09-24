@@ -7,23 +7,25 @@ Throwaway numbers go stale; these are regenerated from the benchmark suite in
 
 Benchmarks were run with BenchmarkDotNet v0.15.8 on Windows 10 (22H2), AMD Ryzen 7 5700X, .NET 10.0.11 (SDK 10.0.400). Generated-data benchmarks use 50,000 rows, except the string-heavy reads, which use 65,536. Raw results: [GitHub Pages benchmark dashboard](https://gabrielmarquezmatte.github.io/ExcelReader/dev/bench/) — `tests/ExcelReader.Benchmarks/BenchmarkDotNet.Artifacts/` is `.gitignore`-excluded and never actually reaches GitHub, so a link to it 404s for every reader.
 
-**Benchmark methodology.** In every table below, the **"Cell-by-cell read"** rows (including the CSV table's, and the per-format rows in "Real data reads" / "String-heavy reads") read ExcelReader's `cell.Value` — a zero-copy `ReadOnlySpan<byte>`, no decode or allocation — against each competitor's own idiomatic read call. For Sylvan, that's the ADO.NET-style `GetString(i)`, which is forced to materialize a UTF-16 `string`; Sylvan's API has no zero-copy accessor, so it cannot avoid that cost. These rows are therefore not matched work: part of the reported gap is "we parse faster" and part is "we skipped an allocation you were never offered a way to skip." Each affected benchmark class also has a `*_Materialized` sibling (calling `cell.GetString()`, the same UTF-16 materialization Sylvan pays) so the matched-work number is measurable — see `tests/ExcelReader.Benchmarks/BenchmarkAccumulators.cs`. **Those results are published under [Matched-work reads](#matched-work-reads-_materialized), and reading them is the honest way to judge the comparison:** treat the cell-by-cell ratios in the tables below as an upper bound, not a like-for-like number. The **"Typed row parsing"** / **"Typed record writing"** rows are unaffected — both sides already materialize real objects/strings there, so those comparisons are matched work as published.
+**Benchmark methodology.** In every table below, the **"Cell-by-cell read"** rows (including the CSV table's, and the per-format rows in "Real data reads" / "String-heavy reads") read ExcelReader's `cell.Value` — a zero-copy `ReadOnlySpan<byte>`, no decode or allocation — against each competitor's own idiomatic read call. For Sylvan, that's the ADO.NET-style `GetString(i)`, which is forced to materialize a UTF-16 `string`; Sylvan's API has no zero-copy accessor, so it cannot avoid that cost. These rows are therefore not matched work: part of the reported gap is "we parse faster" and part is "we skipped an allocation you were never offered a way to skip." Each affected benchmark class also has a `*_Materialized` sibling (calling `cell.GetString()`, the same UTF-16 materialization Sylvan pays) so the matched-work number is measurable — see `tests/ExcelReader.Benchmarks/Shared/BenchmarkAccumulators.cs`. **Those results are published under [Matched-work reads](#matched-work-reads-_materialized), and reading them is the honest way to judge the comparison:** treat the cell-by-cell ratios in the tables below as an upper bound, not a like-for-like number. The **"Typed row parsing"** / **"Typed record writing"** rows are unaffected — both sides already materialize real objects/strings there, so those comparisons are matched work as published.
 
 ### XLSX
 
 Compares ExcelReader against established XLSX libraries on the same generated workbook shape.
 
-| Scenario | ExcelReader | MiniExcel | Sylvan | SpreadCheetah |
-|---|---:|---:|---:|---:|
-| Cell-by-cell read | 11.233 ms, 11.13 KB | 158.500 ms, 267.38 MB | 37.160 ms, 1.89 MB | - |
-| Cell-by-cell read async | 11.879 ms, 13.27 KB | - | - | - |
-| Typed row parsing | 15.741 ms, 3.87 MB | 167.768 ms, 256.15 MB | 56.143 ms, 10.47 MB | - |
-| Typed row parsing async | 15.352 ms, 3.88 MB | - | 60.307 ms, 10.48 MB | - |
-| Typed row parsing, shared strings | 12.347 ms, 2.30 MB | - | - | - |
-| Workbook writing | 12.261 ms, 4.02 MB | 287.048 ms, 84.89 MB | - | 15.548 ms, 15.84 MB |
-| Workbook writing, shared strings | 11.890 ms, 4.06 MB | - | - | - |
+| Scenario | ExcelReader | Sylvan | SpreadCheetah |
+|---|---:|---:|---:|
+| Cell-by-cell read | 11.233 ms, 11.13 KB | 37.160 ms, 1.89 MB | - |
+| Cell-by-cell read async | 11.879 ms, 13.27 KB | - | - |
+| Typed row parsing | 15.741 ms, 3.87 MB | 56.143 ms, 10.47 MB | - |
+| Typed row parsing async | 15.352 ms, 3.88 MB | 60.307 ms, 10.48 MB | - |
+| Typed row parsing, shared strings | 12.347 ms, 2.30 MB | - | - |
+| Workbook writing | 12.261 ms, 4.02 MB | - | 15.548 ms, 15.84 MB |
+| Workbook writing, shared strings | 11.890 ms, 4.06 MB | - | - |
 
-ExcelReader is ~14.1x faster than MiniExcel and ~3.3x faster than Sylvan for raw XLSX reads, allocating ~24,593x and ~174x less respectively. For typed parsing, it is ~10.7x faster than MiniExcel and ~3.6x faster than Sylvan. For XLSX writing, ExcelReader is ~1.3x faster than SpreadCheetah while allocating ~3.9x less memory, and ~23x faster than MiniExcel while allocating ~21x less.
+ExcelReader is ~3.3x faster than Sylvan for raw XLSX reads, allocating ~174x less, and ~3.6x faster for typed parsing. For XLSX writing, ExcelReader is ~1.3x faster than SpreadCheetah while allocating ~3.9x less memory.
+
+The suite also benchmarks OfficeIMO.Excel (XLSX and XLSB reads in `ReadBenchmark`, plus `ParseBenchmark`, `WriteBenchmark` and `XlsReadBenchmark`). Its numbers join these tables at the next run on the reference machine. OfficeIMO's typed parsing is hand-mapped from its `OpenDataReader`, because `RowsAs<T>` needs an `r` attribute on every row and cell, which the spec makes optional and ExcelReader's writer omits.
 
 Reading a shared-strings XLSX workbook with typed parsing is ~22% faster than the inline-string sheet above (12.347 ms vs. 15.741 ms) and allocates ~41% less (2.30 MB vs. 3.87 MB) — each distinct string decodes once into the shared-string cache instead of once per cell occurrence.
 
@@ -52,19 +54,19 @@ ExcelReader is ~1.6x faster than Sylvan for generated XLS reads while allocating
 
 ### CSV
 
-| Scenario | ExcelReader | Sep | Sylvan.Data.Csv | CsvHelper |
-|---|---:|---:|---:|---:|
-| Cell-by-cell read | 3.428 ms, 368 B | 7.697 ms, 3.93 KB | 4.463 ms, 1.61 MB | 23.805 ms, 14.38 MB |
-| Cell-by-cell read async | 3.657 ms, 440 B | - | - | - |
-| Typed row parsing | 5.860 ms, 3.86 MB | 8.641 ms, 3.87 MB | 12.113 ms, 10.95 MB | 22.996 ms, 14.41 MB |
-| Typed row parsing async | 5.503 ms, 3.86 MB | - | - | - |
-| Row writing | 4.624 ms, 4.00 MB | 7.075 ms, 4.01 MB | 7.066 ms, 4.04 MB | 14.181 ms, 13.79 MB |
+| Scenario | ExcelReader | Sep | Sylvan.Data.Csv |
+|---|---:|---:|---:|
+| Cell-by-cell read | 3.428 ms, 368 B | 7.697 ms, 3.93 KB | 4.463 ms, 1.61 MB |
+| Cell-by-cell read async | 3.657 ms, 440 B | - | - |
+| Typed row parsing | 5.860 ms, 3.86 MB | 8.641 ms, 3.87 MB | 12.113 ms, 10.95 MB |
+| Typed row parsing async | 5.503 ms, 3.86 MB | - | - |
+| Row writing | 4.624 ms, 4.00 MB | 7.075 ms, 4.01 MB | 7.066 ms, 4.04 MB |
 
-For raw CSV reads, ExcelReader is ~2.2x faster than Sep while allocating ~11x less, ~1.3x faster than Sylvan.Data.Csv while allocating ~4,589x less (1.61 MB vs 368 B), and ~6.9x faster than CsvHelper while allocating ~40,960x less. For typed CSV parsing (the more common case — building actual records), ExcelReader is ~1.5x faster than Sep, ~2.1x faster than Sylvan.Data.Csv, and ~3.9x faster than CsvHelper, with the lowest allocation of the group. For CSV writing, ExcelReader is ~1.5x faster than both Sep and Sylvan.Data.Csv, which are tied, and ~3.1x faster than CsvHelper; the ~4 MB shown across the first three is primarily the benchmark's pre-sized destination `MemoryStream`, not per-row writer state.
+For raw CSV reads, ExcelReader is ~2.2x faster than Sep while allocating ~11x less, and ~1.3x faster than Sylvan.Data.Csv while allocating ~4,589x less (1.61 MB vs 368 B). For typed CSV parsing (the more common case — building actual records), ExcelReader is ~1.5x faster than Sep and ~2.1x faster than Sylvan.Data.Csv, with the lowest allocation of the group. For CSV writing, ExcelReader is ~1.5x faster than both Sep and Sylvan.Data.Csv, which are tied; the ~4 MB shown across all three is primarily the benchmark's pre-sized destination `MemoryStream`, not per-row writer state.
 
 ### Parallel CSV
 
-`Excel.ParseCsvParallelAsync<T>` and `Excel.AggregateCsvParallelAsync` on generated files (8,000,000 rows of three ints for the narrow corpus, 4,300,000 rows of two strings, a date, two decimals and an int for the conversion-heavy one), by `degreeOfParallelism`. The machine has 8 physical / 16 logical cores.
+`CsvParallel.ParseAsync<T>` and `CsvParallel.AggregateAsync` on generated files (8,000,000 rows of three ints for the narrow corpus, 4,300,000 rows of two strings, a date, two decimals and an int for the conversion-heavy one), by `degreeOfParallelism`. The machine has 8 physical / 16 logical cores.
 
 | Dop | Conversion-heavy, typed | Narrow ints, typed | Conversion-heavy, `ref struct` aggregate |
 |---:|---:|---:|---:|
@@ -172,7 +174,7 @@ The takeaway is not that one column beats the other: it is that ExcelReader's he
 
 ### Typed record writing
 
-`WorkbookRecordWriter`/`RecordWriter` (the header-plus-one-row-per-object API — see [Write typed records](../guide/writing.md#write-typed-records)) across all four formats, same 50,000-record source:
+`WriteRecordsAsync` with `ExcelRecordLayout` (the header-plus-one-row-per-object API — see [Write typed records](../guide/writing.md#write-typed-records)) across all four formats, same 50,000-record source:
 
 | Format | Mean | Allocated |
 |---|---:|---:|
@@ -210,7 +212,7 @@ Parsing into a `ref struct` with a `ReadOnlySpan<byte>` text column removes esse
 
 ### Cold start
 
-First use of `ExcelParser.FromAttributes<T>`/`RecordWriter` in a process pays a one-time reflection + `Expression.Compile` cost (16 launches, cold JIT, 200 rows):
+First use of `ExcelParser.FromAttributes<T>`/`ExcelRecordLayout.FromAttributes<T>` in a process pays a one-time reflection + `Expression.Compile` cost (16 launches, cold JIT, 200 rows):
 
 | Scenario | Mean | Allocated |
 |---|---:|---:|

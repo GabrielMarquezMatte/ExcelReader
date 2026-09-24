@@ -7,6 +7,7 @@ typed records, and prefetch compression. See [csv.md](csv.md) for CSV output.
 
 ```csharp
 using ExcelReader.Core.Writer;
+using ExcelReader.Core.Writer.Xlsx;
 
 await using var stream = File.Create("out.xlsx");
 await using var workbook = XlsxWorkbookWriter.Create(stream);
@@ -43,6 +44,8 @@ await using var workbook = XlsxWorkbookWriter.Create(stream, options: new XlsxWr
 Every `IWorkbookWriter<TSheet>` takes an optional `ExcelSheetVisibility` alongside the sheet name, written to whatever the format uses for it — XLSX's `state` attribute, XLSB's `BrtBundleSh.hsState`, XLS's `BoundSheet8.hsState` — so it reads back through [`SheetVisibility`](reading.md#open-by-auto-detecting-the-format):
 
 ```csharp
+using ExcelReader.Core; // ExcelSheetVisibility, shared by the readers and writers
+
 await using var data = workbook.AddSheet("Data");                                 // visible
 await using var lookups = workbook.AddSheet("Lookups", ExcelSheetVisibility.Hidden);
 await using var audit = workbook.AddSheet("Audit", ExcelSheetVisibility.VeryHidden); // not in Excel's unhide dialog
@@ -56,6 +59,7 @@ Every `IWorkbookWriter<TSheet>` supports column- and row-level styling: a number
 
 ```csharp
 using ExcelReader.Core.Writer;
+using ExcelReader.Core.Writer.Xlsx;
 
 await using var workbook = XlsxWorkbookWriter.Create(stream);
 
@@ -90,6 +94,7 @@ Use `Excel.FromXlsbFile`, `Excel.FromXlsb`, `Excel.FromXlsbFileAsync`, or `Excel
 
 ```csharp
 using ExcelReader.Core.Writer;
+using ExcelReader.Core.Writer.Xlsb;
 
 await using var stream = File.Create("out.xlsb");
 await using var workbook = XlsbWorkbookWriter.Create(stream);
@@ -115,6 +120,7 @@ The XLSB writer also defaults to inline string cells. Set `XlsbWriterOptions.Use
 
 ```csharp
 using ExcelReader.Core.Writer;
+using ExcelReader.Core.Writer.Xls;
 
 await using var stream = File.Create("out.xls");
 await using var workbook = XlsWorkbookWriter.Create(stream);
@@ -141,10 +147,11 @@ await workbook.EndAsync();
 
 ## Write typed records
 
-The low-level writers above give you cell-by-cell control. When you just want to dump a collection of objects to a sheet, `WorkbookRecordWriter` writes a header row followed by one row per record, mapping each public readable property to a column. It is generic over the low-level interfaces, so the same API targets XLSX, XLSB, XLS, and CSV — pick the format with a `RecordWriter.Create*` factory.
+The low-level writers above give you cell-by-cell control. When you just want to dump a collection of objects to a sheet, `sheet.WriteRecordsAsync(records, layout)` writes a header row followed by one row per record, with the columns coming from an `ExcelRecordLayout<T>`. `ExcelRecordLayout.FromAttributes<T>()` maps each public readable property to a column by reflection. It is an extension on `ISheetWriter<TRow>`, so the same call works on a sheet from any of the writers above — XLSX, XLSB, XLS, and CSV.
 
 ```csharp
 using ExcelReader.Core.Writer;
+using ExcelReader.Core.Writer.Xlsx;
 
 public sealed class Sale
 {
@@ -161,11 +168,14 @@ var sales = new[]
 };
 
 await using var stream = File.Create("sales.xlsx");
-await using var writer = RecordWriter.CreateXlsx(stream);   // or CreateXlsb / CreateXls / CreateCsv
-await writer.WriteSheetAsync("Sales", sales);
+await using var workbook = XlsxWorkbookWriter.Create(stream);   // or XlsbWorkbookWriter / XlsWorkbookWriter / CsvWorkbookWriter
+await using (var sheet = workbook.AddSheet("Sales"))
+{
+    await sheet.WriteRecordsAsync(sales, ExcelRecordLayout.FromAttributes<Sale>());
+}
 ```
 
-Each `WriteSheetAsync` call targets a new sheet (a duplicate name throws), so one workbook can hold sheets of different record types. `RecordWriter.CreateCsv` is the exception: a CSV file is a single sheet, so a second `WriteSheetAsync` throws (the sheet name is ignored). An `IAsyncEnumerable<T>` overload streams records that are produced asynchronously. The written file round-trips straight back through `ExcelParser<T>` because the headers are the property names.
+Disposing the sheet ends it; add the next sheet after that (a duplicate name throws, ignoring case), so one workbook can hold sheets of different record types. The sheet stays open after `WriteRecordsAsync`, so you can append more rows before disposing it. `CsvWorkbookWriter` is the exception: a CSV file is a single sheet, so a second `AddSheet` throws (the sheet name is ignored). An `IAsyncEnumerable<T>` overload streams records that are produced asynchronously. The written file round-trips straight back through `ExcelParser<T>` because the headers are the property names.
 
 Column behavior mirrors the parser attributes:
 
@@ -173,9 +183,9 @@ Column behavior mirrors the parser attributes:
 - **`[ExcelIgnore]`** — exclude a property from both writing and parsing (for computed/transient members).
 - **`[ExcelConverter(typeof(MyConverter))]`** — if the converter also implements `IExcelCellWriter<T>`, it controls how the value is written, so a custom type round-trips through the same converter it reads with.
 
-`DateTime` and `DateOnly` are written as Excel date serials; `TimeOnly` as a time-of-day fraction. Numeric properties (including `Half`) become number cells; any other type is written as text formatted with the invariant culture — `DateTimeOffset` as ISO 8601 (`"O"`), enums by name — so the file parses back the same whatever the writing machine's culture. `Int128`/`UInt128` stay text because a number cell is a double and would drop their low digits. (`CreateCsv` follows the CSV rules instead — see [Write CSV](csv.md#write-csv) — writing `DateTime`/`DateOnly` as ISO text and `TimeOnly` as a time-of-day fraction, all still round-tripping through `ExcelParser<T>`.)
+`DateTime` and `DateOnly` are written as Excel date serials; `TimeOnly` as a time-of-day fraction. Numeric properties (including `Half`) become number cells; any other type is written as text formatted with the invariant culture — `DateTimeOffset` as ISO 8601 (`"O"`), enums by name — so the file parses back the same whatever the writing machine's culture. `Int128`/`UInt128` stay text because a number cell is a double and would drop their low digits. (`CsvWorkbookWriter` follows the CSV rules instead — see [Write CSV](csv.md#write-csv) — writing `DateTime`/`DateOnly` as ISO text and `TimeOnly` as a time-of-day fraction, all still round-tripping through `ExcelParser<T>`.)
 
-For a model marked `[ExcelSerializable]`, use `MappedRecordWriter.Create*` instead — same behavior, but driven by the source-generated map instead of reflection, so it stays Native AOT/trim-safe. See [Generate typed maps at compile time](parsing.md#generate-typed-maps-at-compile-time-native-aot--trimming).
+For a model marked `[ExcelSerializable]`, pass `ExcelRecordLayout.Generated<T>()` instead — same behavior, but driven by the source-generated map instead of reflection, so it stays Native AOT/trim-safe. See [Generate typed maps at compile time](parsing.md#generate-typed-maps-at-compile-time-native-aot--trimming).
 
 ## Prefetch compression (XLSX/XLSB writing)
 
@@ -199,8 +209,7 @@ foreach (var record in records)
 await sheet.EndAsync();
 ```
 
-`XlsbWriterOptions` has the same property, and `RecordWriter.CreateXlsx`/`CreateXlsb` and their
-`MappedRecordWriter` counterparts take the same options. XLS and CSV are uncompressed, so
+`XlsbWriterOptions` has the same property. XLS and CSV are uncompressed, so
 they have nothing to overlap and do not offer it.
 
 Writing a 50,000-row workbook (`WriteBenchmark`, both figures from one run):

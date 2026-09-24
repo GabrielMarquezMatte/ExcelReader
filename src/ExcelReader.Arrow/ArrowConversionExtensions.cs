@@ -1,7 +1,6 @@
 using Apache.Arrow;
-using ExcelReader.Core.Enums;
 using ExcelReader.Core.Reader;
-using ExcelReader.Core.ValueObjects;
+using ExcelReader.Core.Reader.Schema;
 
 namespace ExcelReader.Arrow
 {

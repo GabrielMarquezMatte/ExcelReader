@@ -3,9 +3,8 @@ using System.Data.Common;
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Runtime.CompilerServices;
-using ExcelReader.Core.Enums;
 using ExcelReader.Core.Parser;
-using ExcelReader.Core.ValueObjects;
+using ExcelReader.Core.Reader.Schema;
 
 namespace ExcelReader.Core.Reader
 {

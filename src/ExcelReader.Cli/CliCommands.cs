@@ -1,10 +1,13 @@
 using System.Diagnostics;
 using System.Globalization;
-using System.Linq;
-using ExcelReader.Core.Enums;
 using ExcelReader.Core.Reader;
-using ExcelReader.Core.ValueObjects;
+using ExcelReader.Core.Reader.Csv;
+using ExcelReader.Core.Reader.Schema;
 using ExcelReader.Core.Writer;
+using ExcelReader.Core.Writer.Csv;
+using ExcelReader.Core.Writer.Xls;
+using ExcelReader.Core.Writer.Xlsb;
+using ExcelReader.Core.Writer.Xlsx;
 
 namespace ExcelReader.Cli
 {
