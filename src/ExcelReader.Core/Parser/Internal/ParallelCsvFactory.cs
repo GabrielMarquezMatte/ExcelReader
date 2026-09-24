@@ -9,70 +9,58 @@ namespace ExcelReader.Core.Parser.Internal
     {
         private const long MinParallelBytes = 4 * 64 * 1024;
 
-        [RequiresUnreferencedCode("Typed parsing reflects over T's public properties, which trimming may remove.")]
-        [RequiresDynamicCode("Typed parsing binds property setters at runtime (MethodInfo.CreateDelegate / MakeGenericMethod).")]
         [SuppressMessage("Performance", "CA1849:Call async methods when in an async method",
             Justification = "This factory is synchronous by design (see the VSTHRD200 suppression above); opening the file here, once, before any enumeration starts, is deliberate rather than a blocking call inside an async method.")]
         internal static IAsyncEnumerable<T> Create<T>(
-            string path, int degreeOfParallelism, CsvReaderOptions? readerOptions, ExcelParserConfig? config, CancellationToken ct)
+            string path, int degreeOfParallelism, CsvReaderOptions? readerOptions, ExcelParser<T> parser, CancellationToken ct)
         {
             CsvReaderOptions options = CsvDialectResolver.Resolve(path, readerOptions ?? CsvReaderOptions.Default);
-            ExcelParserConfig parserConfig = config ?? new ExcelParserConfig();
             int dop = Normalize(degreeOfParallelism);
 
             var info = new FileInfo(path);
             if (!CanPartition(dop, info.Length, options))
             {
-                return Sequential<T>(Excel.FromCsvFile(path, options), parserConfig, ct);
+                return Sequential(Excel.FromCsvFile(path, options), parser, ct);
             }
 
             SafeFileHandle handle = File.OpenHandle(path, FileMode.Open, FileAccess.Read, FileShare.Read, FileOptions.Asynchronous | FileOptions.RandomAccess);
-            return Build<T>(new CsvChunkSource(handle, info.Length), options, parserConfig, dop, chunkSizeOverride: 0, ownedHandle: handle, ct);
+            return Build(new CsvChunkSource(handle, info.Length), options, parser, dop, chunkSizeOverride: 0, ownedHandle: handle, ct);
         }
 
-        [RequiresUnreferencedCode("Typed parsing reflects over T's public properties, which trimming may remove.")]
-        [RequiresDynamicCode("Typed parsing binds property setters at runtime (MethodInfo.CreateDelegate / MakeGenericMethod).")]
         internal static IAsyncEnumerable<T> Create<T>(
-            ReadOnlyMemory<byte> data, int degreeOfParallelism, CsvReaderOptions? readerOptions, ExcelParserConfig? config, CancellationToken ct)
+            ReadOnlyMemory<byte> data, int degreeOfParallelism, CsvReaderOptions? readerOptions, ExcelParser<T> parser, CancellationToken ct)
         {
             CsvReaderOptions options = CsvDialectResolver.Resolve(data, readerOptions ?? CsvReaderOptions.Default);
-            ExcelParserConfig parserConfig = config ?? new ExcelParserConfig();
             int dop = Normalize(degreeOfParallelism);
 
             if (!CanPartition(dop, data.Length, options))
             {
-                return Sequential<T>(Excel.FromCsv(data, options), parserConfig, ct);
+                return Sequential(Excel.FromCsv(data, options), parser, ct);
             }
-            return Build<T>(new CsvChunkSource(data), options, parserConfig, dop, chunkSizeOverride: 0, ownedHandle: null, ct);
+            return Build(new CsvChunkSource(data), options, parser, dop, chunkSizeOverride: 0, ownedHandle: null, ct);
         }
 
-        [RequiresUnreferencedCode("Typed parsing reflects over T's public properties, which trimming may remove.")]
-        [RequiresDynamicCode("Typed parsing binds property setters at runtime (MethodInfo.CreateDelegate / MakeGenericMethod).")]
         [SuppressMessage("Performance", "CA1849:Call async methods when in an async method",
             Justification = "This factory is synchronous by design (see the VSTHRD200 suppression above); wrapping the caller-owned stream here, once, before any enumeration starts, is deliberate rather than a blocking call inside an async method.")]
         internal static IAsyncEnumerable<T> Create<T>(
-            Stream stream, int degreeOfParallelism, CsvReaderOptions? readerOptions, ExcelParserConfig? config, CancellationToken ct)
+            Stream stream, int degreeOfParallelism, CsvReaderOptions? readerOptions, ExcelParser<T> parser, CancellationToken ct)
         {
             CsvReaderOptions options = CsvDialectResolver.Resolve(stream, readerOptions ?? CsvReaderOptions.Default);
-            ExcelParserConfig parserConfig = config ?? new ExcelParserConfig();
             int dop = Normalize(degreeOfParallelism);
 
             if (!CsvSourceResolver.TryResolve(stream, out CsvChunkSource source)
                 || !CanPartition(dop, source.Length, options))
             {
-                return Sequential<T>(Excel.FromCsv(stream, leaveOpen: true, options), parserConfig, ct);
+                return Sequential(Excel.FromCsv(stream, leaveOpen: true, options), parser, ct);
             }
-            return Build<T>(source, options, parserConfig, dop, chunkSizeOverride: 0, ownedHandle: null, ct);
+            return Build(source, options, parser, dop, chunkSizeOverride: 0, ownedHandle: null, ct);
         }
 
-        [RequiresUnreferencedCode("Typed parsing reflects over T's public properties, which trimming may remove.")]
-        [RequiresDynamicCode("Typed parsing binds property setters at runtime (MethodInfo.CreateDelegate / MakeGenericMethod).")]
         internal static IAsyncEnumerable<T> CreateWithChunkSize<T>(
-            ReadOnlyMemory<byte> data, int degreeOfParallelism, int chunkSize, CsvReaderOptions? readerOptions, ExcelParserConfig? config, CancellationToken ct)
+            ReadOnlyMemory<byte> data, int degreeOfParallelism, int chunkSize, CsvReaderOptions? readerOptions, ExcelParser<T> parser, CancellationToken ct)
         {
             CsvReaderOptions options = CsvDialectResolver.Resolve(data, readerOptions ?? CsvReaderOptions.Default);
-            ExcelParserConfig parserConfig = config ?? new ExcelParserConfig();
-            return Build<T>(new CsvChunkSource(data), options, parserConfig, Normalize(degreeOfParallelism), chunkSize, ownedHandle: null, ct);
+            return Build(new CsvChunkSource(data), options, parser, Normalize(degreeOfParallelism), chunkSize, ownedHandle: null, ct);
         }
 
         internal static int Normalize(int degreeOfParallelism)
@@ -89,23 +77,22 @@ namespace ExcelReader.Core.Parser.Internal
             return options.Encoding is null || options.Encoding.CodePage == Encoding.UTF8.CodePage;
         }
 
-        [RequiresUnreferencedCode("Typed parsing reflects over T's public properties, which trimming may remove.")]
-        [RequiresDynamicCode("Typed parsing binds property setters at runtime (MethodInfo.CreateDelegate / MakeGenericMethod).")]
         private static IAsyncEnumerable<T> Build<T>(
             CsvChunkSource source,
             CsvReaderOptions options,
-            ExcelParserConfig config,
+            ExcelParser<T> parser,
             int dop,
             int chunkSizeOverride,
             SafeFileHandle? ownedHandle,
             CancellationToken ct)
         {
-            TypeMapInfo<T> info = TypeMapper<T>.GetCsvInfo();
+            ExcelParserConfig config = parser.Config;
+            TypeMapInfo<T> info = parser.CsvInfo;
             CsvBoundColumnMap<T> map;
             long dataStart;
             using (CsvReader headerReader = source.OpenReader(options))
             {
-                map = CsvHeaderBinder.Bind<T>(headerReader, config, info, out dataStart);
+                map = CsvHeaderBinder.Bind(headerReader, config, info, out dataStart);
             }
 
             if (dataStart >= source.Length)
@@ -118,18 +105,16 @@ namespace ExcelReader.Core.Parser.Internal
             if (plan.Count <= 1)
             {
                 ownedHandle?.Dispose();
-                return Sequential<T>(source.OpenReader(options), config, ct);
+                return Sequential(source.OpenReader(options), parser, ct);
             }
 
             return new ParallelCsvEnumerable<T>(source, plan, dataStart, map, info, options, config, dop, ownedHandle);
         }
 
-        [RequiresUnreferencedCode("Typed parsing reflects over T's public properties, which trimming may remove.")]
-        [RequiresDynamicCode("Typed parsing binds property setters at runtime (MethodInfo.CreateDelegate / MakeGenericMethod).")]
         private static CsvEnumerable<T> Sequential<T>(
-            CsvReader reader, ExcelParserConfig config, CancellationToken ct)
+            CsvReader reader, ExcelParser<T> parser, CancellationToken ct)
         {
-            return new CsvEnumerable<T>(reader, config, ownsReader: true, ct);
+            return new CsvEnumerable<T>(reader, parser.Config, parser.CsvInfo, ownsReader: true, ct);
         }
 
         private static async IAsyncEnumerable<T> Empty<T>()

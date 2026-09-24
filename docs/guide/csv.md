@@ -110,5 +110,5 @@ using var writer = CsvWriter.Create(stream, leaveOpen: false, new CsvWriterOptio
 
 Fields containing `\r` or `\n` are quoted whichever `NewLine` is chosen, so the terminator never changes how the file reads back.
 
-To dump a collection of typed records instead of writing cells by hand, use `RecordWriter.CreateCsv(stream)` — the same [record-writing API](writing.md#write-typed-records) as the Excel formats, restricted to a single sheet.
+To dump a collection of typed records instead of writing cells by hand, call `WriteRecordsAsync` on the sheet from `CsvWorkbookWriter.Create(stream)` — the same [record-writing API](writing.md#write-typed-records) as the Excel formats, restricted to a single sheet.
 

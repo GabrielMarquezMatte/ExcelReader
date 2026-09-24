@@ -30,7 +30,7 @@ foreach (var row in reader)
 ### Parallel CSV parsing (opt-in)
 
 ```csharp
-await foreach (var row in Excel.ParseCsvParallelAsync<SalesRow>("big.csv", new CsvParallelOptions { DegreeOfParallelism = 8 }))
+await foreach (var row in Excel.ParseCsvParallelAsync("big.csv", ExcelParser.FromAttributes<SalesRow>(), new CsvParallelOptions { DegreeOfParallelism = 8 }))
 {
     Total += row.Revenue;
 }

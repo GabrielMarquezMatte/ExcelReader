@@ -154,21 +154,33 @@ namespace ExcelReader.Tests
             switch (format)
             {
                 case RecordFormat.Xlsx:
-                    await using (var w = RecordWriter.CreateXlsx(ms, leaveOpen: true))
+                    await using (var w = XlsxWorkbookWriter.Create(ms, leaveOpen: true))
                     {
-                        await body((n, r) => w.WriteSheetAsync(n, r, ct)).ConfigureAwait(true);
+                        await body(async (n, r) =>
+                        {
+                            await using var sheet = w.AddSheet(n);
+                            await sheet.WriteRecordsAsync(r, ExcelRecordLayout.FromAttributes<T>(), ct).ConfigureAwait(true);
+                        }).ConfigureAwait(true);
                     }
                     break;
                 case RecordFormat.Xlsb:
-                    await using (var w = RecordWriter.CreateXlsb(ms, leaveOpen: true))
+                    await using (var w = XlsbWorkbookWriter.Create(ms, leaveOpen: true))
                     {
-                        await body((n, r) => w.WriteSheetAsync(n, r, ct)).ConfigureAwait(true);
+                        await body(async (n, r) =>
+                        {
+                            await using var sheet = w.AddSheet(n);
+                            await sheet.WriteRecordsAsync(r, ExcelRecordLayout.FromAttributes<T>(), ct).ConfigureAwait(true);
+                        }).ConfigureAwait(true);
                     }
                     break;
                 default:
-                    await using (var w = RecordWriter.CreateXls(ms, leaveOpen: true))
+                    await using (var w = XlsWorkbookWriter.Create(ms, leaveOpen: true))
                     {
-                        await body((n, r) => w.WriteSheetAsync(n, r, ct)).ConfigureAwait(true);
+                        await body(async (n, r) =>
+                        {
+                            await using var sheet = w.AddSheet(n);
+                            await sheet.WriteRecordsAsync(r, ExcelRecordLayout.FromAttributes<T>(), ct).ConfigureAwait(true);
+                        }).ConfigureAwait(true);
                     }
                     break;
             }
@@ -224,9 +236,12 @@ namespace ExcelReader.Tests
         public async Task RecordWriterWritesHeaderOnlyForEmptyRecords()
         {
             var ms = new MemoryStream();
-            await using (var writer = RecordWriter.CreateXlsx(ms, leaveOpen: true))
+            await using (var writer = XlsxWorkbookWriter.Create(ms, leaveOpen: true))
             {
-                await writer.WriteSheetAsync("Sheet1", Array.Empty<StringRow>(), TestContext.Current.CancellationToken).ConfigureAwait(true);
+                await using (var sheet = writer.AddSheet("Sheet1"))
+                {
+                    await sheet.WriteRecordsAsync(Array.Empty<StringRow>(), ExcelRecordLayout.FromAttributes<StringRow>(), TestContext.Current.CancellationToken).ConfigureAwait(true);
+                }
             }
             ms.Position = 0;
 
@@ -271,9 +286,12 @@ namespace ExcelReader.Tests
             var rows = new[] { new IgnoreRow { Name = "Alice", Computed = 999 } };
 
             var ms = new MemoryStream();
-            await using (var writer = RecordWriter.CreateXlsx(ms, leaveOpen: true))
+            await using (var writer = XlsxWorkbookWriter.Create(ms, leaveOpen: true))
             {
-                await writer.WriteSheetAsync("Sheet1", rows, TestContext.Current.CancellationToken).ConfigureAwait(true);
+                await using (var sheet = writer.AddSheet("Sheet1"))
+                {
+                    await sheet.WriteRecordsAsync(rows, ExcelRecordLayout.FromAttributes<IgnoreRow>(), TestContext.Current.CancellationToken).ConfigureAwait(true);
+                }
             }
             ms.Position = 0;
 
@@ -319,10 +337,16 @@ namespace ExcelReader.Tests
             var names = new[] { new StringRow { Name = "Alice" }, new StringRow { Name = "Bob" } };
 
             var ms = new MemoryStream();
-            await using (var writer = RecordWriter.CreateXlsx(ms, leaveOpen: true))
+            await using (var writer = XlsxWorkbookWriter.Create(ms, leaveOpen: true))
             {
-                await writer.WriteSheetAsync("People", people, TestContext.Current.CancellationToken).ConfigureAwait(true);
-                await writer.WriteSheetAsync("Names", names, TestContext.Current.CancellationToken).ConfigureAwait(true);
+                await using (var sheet = writer.AddSheet("People"))
+                {
+                    await sheet.WriteRecordsAsync(people, ExcelRecordLayout.FromAttributes<PrimitivesRow>(), TestContext.Current.CancellationToken).ConfigureAwait(true);
+                }
+                await using (var sheet = writer.AddSheet("Names"))
+                {
+                    await sheet.WriteRecordsAsync(names, ExcelRecordLayout.FromAttributes<StringRow>(), TestContext.Current.CancellationToken).ConfigureAwait(true);
+                }
             }
             ms.Position = 0;
 
@@ -345,9 +369,12 @@ namespace ExcelReader.Tests
             var names = new[] { new AliasedRow { Name = "Alice" }, new AliasedRow { Name = "Bob" } };
 
             var ms = new MemoryStream();
-            await using (var writer = RecordWriter.CreateXlsx(ms, leaveOpen: true))
+            await using (var writer = XlsxWorkbookWriter.Create(ms, leaveOpen: true))
             {
-                await writer.WriteSheetAsync("Sheet1", ToAsync(names), TestContext.Current.CancellationToken).ConfigureAwait(true);
+                await using (var sheet = writer.AddSheet("Sheet1"))
+                {
+                    await sheet.WriteRecordsAsync(ToAsync(names), ExcelRecordLayout.FromAttributes<AliasedRow>(), TestContext.Current.CancellationToken).ConfigureAwait(true);
+                }
             }
             ms.Position = 0;
 
@@ -366,9 +393,12 @@ namespace ExcelReader.Tests
             };
 
             var ms = new MemoryStream();
-            await using (var writer = RecordWriter.CreateXlsx(ms, leaveOpen: true))
+            await using (var writer = XlsxWorkbookWriter.Create(ms, leaveOpen: true))
             {
-                await writer.WriteSheetAsync("Sheet1", rows, TestContext.Current.CancellationToken).ConfigureAwait(true);
+                await using (var sheet = writer.AddSheet("Sheet1"))
+                {
+                    await sheet.WriteRecordsAsync(rows, ExcelRecordLayout.FromAttributes<NullableRow>(), TestContext.Current.CancellationToken).ConfigureAwait(true);
+                }
             }
             ms.Position = 0;
 
@@ -382,13 +412,18 @@ namespace ExcelReader.Tests
         }
 
         [Fact]
-        public async Task RecordWriterRejectsDuplicateSheetName()
+        public async Task WorkbookRejectsDuplicateSheetNameIgnoringCase()
         {
             var ms = new MemoryStream();
-            await using var writer = RecordWriter.CreateXlsx(ms, leaveOpen: true);
-            await writer.WriteSheetAsync("Sheet1", new[] { new StringRow { Name = "Alice" } }, TestContext.Current.CancellationToken).ConfigureAwait(true);
+            await using var writer = XlsxWorkbookWriter.Create(ms, leaveOpen: true);
+            await using (var sheet = writer.AddSheet("Sheet1"))
+            {
+                await sheet.WriteRecordsAsync(new[] { new StringRow { Name = "Alice" } }, ExcelRecordLayout.FromAttributes<StringRow>(), TestContext.Current.CancellationToken).ConfigureAwait(true);
+            }
             await Assert.ThrowsAsync<InvalidOperationException>(async () =>
-                await writer.WriteSheetAsync("Sheet1", new[] { new StringRow { Name = "Bob" } }, TestContext.Current.CancellationToken).ConfigureAwait(true)).ConfigureAwait(true);
+            {
+                await using var duplicate = writer.AddSheet("SHEET1");
+            }).ConfigureAwait(true);
         }
 
         [Fact]

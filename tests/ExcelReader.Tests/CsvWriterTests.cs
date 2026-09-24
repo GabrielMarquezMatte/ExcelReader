@@ -364,9 +364,12 @@ namespace ExcelReader.Tests
 
             var ms = new MemoryStream();
             var ct = TestContext.Current.CancellationToken;
-            await using (var writer = RecordWriter.CreateCsv(ms, leaveOpen: true))
+            await using (var writer = CsvWorkbookWriter.Create(ms, leaveOpen: true))
             {
-                await writer.WriteSheetAsync("People", people, ct);
+                await using (var sheet = writer.AddSheet("People"))
+                {
+                    await sheet.WriteRecordsAsync(people, ExcelRecordLayout.FromAttributes<CsvPerson>(), ct);
+                }
             }
             ms.Position = 0;
 
@@ -387,11 +390,14 @@ namespace ExcelReader.Tests
         {
             var ms = new MemoryStream();
             var ct = TestContext.Current.CancellationToken;
-            await using var writer = RecordWriter.CreateCsv(ms, leaveOpen: true);
-            await writer.WriteSheetAsync("One", Array.Empty<CsvPerson>(), ct);
+            await using var writer = CsvWorkbookWriter.Create(ms, leaveOpen: true);
+            await using (var sheet = writer.AddSheet("One"))
+            {
+                await sheet.WriteRecordsAsync(Array.Empty<CsvPerson>(), ExcelRecordLayout.FromAttributes<CsvPerson>(), ct);
+            }
 
             await Assert.ThrowsAsync<InvalidOperationException>(
-                async () => await writer.WriteSheetAsync("Two", Array.Empty<CsvPerson>(), ct));
+                async () => { await using var second = writer.AddSheet("Two"); });
         }
 
         [Fact]

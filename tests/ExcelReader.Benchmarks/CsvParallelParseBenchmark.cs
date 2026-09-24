@@ -65,7 +65,7 @@ namespace ExcelReader.Benchmarks
         public async Task<long> ConversionHeavy()
         {
             long n = 0;
-            await foreach (WideRow row in Excel.ParseCsvParallelAsync<WideRow>(_wide, new CsvParallelOptions { DegreeOfParallelism = Dop }))
+            await foreach (WideRow row in Excel.ParseCsvParallelAsync(_wide, ExcelParser.FromAttributes<WideRow>(), new CsvParallelOptions { DegreeOfParallelism = Dop }))
             {
                 n += row.Units;
             }
@@ -76,7 +76,7 @@ namespace ExcelReader.Benchmarks
         public async Task<long> NarrowInt()
         {
             long n = 0;
-            await foreach (NarrowRow row in Excel.ParseCsvParallelAsync<NarrowRow>(_narrow, new CsvParallelOptions { DegreeOfParallelism = Dop }))
+            await foreach (NarrowRow row in Excel.ParseCsvParallelAsync(_narrow, ExcelParser.FromAttributes<NarrowRow>(), new CsvParallelOptions { DegreeOfParallelism = Dop }))
             {
                 n += row.A;
             }

@@ -17,7 +17,7 @@ namespace ExcelReader.Tests
         private static async Task<CsvChunkResult<Row>> ParseAsync(byte[] csv, long start, long end, long? confirmedStart = null)
         {
             using var headerReader = Excel.FromCsv(csv);
-            CsvBoundColumnMap<Row> map = CsvHeaderBinder.Bind<Row>(
+            CsvBoundColumnMap<Row> map = CsvHeaderBinder.Bind(
                 headerReader, new ExcelParserConfig(), TypeMapper<Row>.GetCsvInfo(), out _);
 
             var source = new CsvChunkSource(csv.AsMemory());
@@ -118,7 +118,7 @@ namespace ExcelReader.Tests
             try
             {
                 using var headerReader = Excel.FromCsv(csv);
-                CsvBoundColumnMap<Row> map = CsvHeaderBinder.Bind<Row>(
+                CsvBoundColumnMap<Row> map = CsvHeaderBinder.Bind(
                     headerReader, new ExcelParserConfig(), TypeMapper<Row>.GetCsvInfo(), out _);
 
                 using SafeFileHandle handle = File.OpenHandle(path, FileMode.Open, FileAccess.Read, FileShare.Read);

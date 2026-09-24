@@ -19,7 +19,7 @@ namespace ExcelReader.Tests
             byte[] csv = "Name,Age\r\nAda,36\nGrace,45\n"u8.ToArray();
             using var reader = Excel.FromCsv(csv);
 
-            CsvBoundColumnMap<Person> map = CsvHeaderBinder.Bind<Person>(
+            CsvBoundColumnMap<Person> map = CsvHeaderBinder.Bind(
                 reader,
                 new ExcelParserConfig(),
                 TypeMapper<Person>.GetCsvInfo(),
@@ -38,7 +38,7 @@ namespace ExcelReader.Tests
         {
             byte[] all = "Name,Age\nAda,36\nGrace,45\n"u8.ToArray();
             using var headerReader = Excel.FromCsv(all);
-            CsvBoundColumnMap<Person> map = CsvHeaderBinder.Bind<Person>(
+            CsvBoundColumnMap<Person> map = CsvHeaderBinder.Bind(
                 headerReader,
                 new ExcelParserConfig(),
                 TypeMapper<Person>.GetCsvInfo(),
@@ -73,7 +73,7 @@ namespace ExcelReader.Tests
         {
             byte[] all = "Name,Age\nAda,36\nGrace,45\n"u8.ToArray();
             using var headerReader = Excel.FromCsv(all);
-            CsvBoundColumnMap<Person> map = CsvHeaderBinder.Bind<Person>(
+            CsvBoundColumnMap<Person> map = CsvHeaderBinder.Bind(
                 headerReader,
                 new ExcelParserConfig(),
                 TypeMapper<Person>.GetCsvInfo(),

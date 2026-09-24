@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text;
 using ExcelReader.Cli;
 using ExcelReader.Core.Enums;
+using ExcelReader.Core.Parser;
 using ExcelReader.Core.Reader;
 using ExcelReader.Core.ValueObjects;
 
@@ -180,7 +181,7 @@ namespace ExcelReader.Tests
                 };
 
                 var rows = new List<Person>();
-                await foreach (Person person in Excel.ParseCsvParallelAsync<Person>(path, options, ct: TestContext.Current.CancellationToken))
+                await foreach (Person person in Excel.ParseCsvParallelAsync(path, ExcelParser.FromAttributes<Person>(), options, ct: TestContext.Current.CancellationToken))
                 {
                     rows.Add(person);
                 }

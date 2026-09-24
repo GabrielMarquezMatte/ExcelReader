@@ -40,7 +40,7 @@ namespace ExcelReader.Tests
             using var reader = Excel.FromCsv(csv);
             List<Row> expected = [.. ExcelParser.FromAttributes<Row>().Parse(reader)];
 
-            List<Row> actual = await DrainAsync(Excel.ParseCsvParallelAsync<Row>(csv.AsMemory(), options: new CsvParallelOptions { DegreeOfParallelism = 4 }, ct: TestContext.Current.CancellationToken));
+            List<Row> actual = await DrainAsync(Excel.ParseCsvParallelAsync(csv.AsMemory(), ExcelParser.FromAttributes<Row>(), options: new CsvParallelOptions { DegreeOfParallelism = 4 }, ct: TestContext.Current.CancellationToken));
 
             Assert.Equal(expected.Count, actual.Count);
             for (int i = 0; i < expected.Count; i++)
@@ -61,7 +61,7 @@ namespace ExcelReader.Tests
                 using var reader = Excel.FromCsvFile(path);
                 List<Row> expected = [.. ExcelParser.FromAttributes<Row>().Parse(reader)];
 
-                List<Row> actual = await DrainAsync(Excel.ParseCsvParallelAsync<Row>(path, options: new CsvParallelOptions { DegreeOfParallelism = 8 }, ct: TestContext.Current.CancellationToken));
+                List<Row> actual = await DrainAsync(Excel.ParseCsvParallelAsync(path, ExcelParser.FromAttributes<Row>(), options: new CsvParallelOptions { DegreeOfParallelism = 8 }, ct: TestContext.Current.CancellationToken));
 
                 Assert.Equal(expected.Count, actual.Count);
                 Assert.Equal(expected[^1].Name, actual[^1].Name);
@@ -78,7 +78,7 @@ namespace ExcelReader.Tests
         {
             byte[] csv = BuildCsv(3);
 
-            List<Row> actual = await DrainAsync(Excel.ParseCsvParallelAsync<Row>(csv.AsMemory(), options: new CsvParallelOptions { DegreeOfParallelism = 8 }, ct: TestContext.Current.CancellationToken));
+            List<Row> actual = await DrainAsync(Excel.ParseCsvParallelAsync(csv.AsMemory(), ExcelParser.FromAttributes<Row>(), options: new CsvParallelOptions { DegreeOfParallelism = 8 }, ct: TestContext.Current.CancellationToken));
 
             Assert.Equal(3, actual.Count);
             Assert.Equal("name00000", actual[0].Name);
@@ -93,7 +93,7 @@ namespace ExcelReader.Tests
             var options = new CsvReaderOptions { Encoding = latin1 };
 
             List<Row> actual = await DrainAsync(
-                Excel.ParseCsvParallelAsync<Row>(csv.AsMemory(), options: new CsvParallelOptions { DegreeOfParallelism = 8, Reader = options }, ct: TestContext.Current.CancellationToken));
+                Excel.ParseCsvParallelAsync(csv.AsMemory(), ExcelParser.FromAttributes<Row>(), options: new CsvParallelOptions { DegreeOfParallelism = 8, Reader = options }, ct: TestContext.Current.CancellationToken));
 
             Assert.Equal(2, actual.Count);
             Assert.Equal("José", actual[0].Name);
@@ -105,7 +105,7 @@ namespace ExcelReader.Tests
         {
             byte[] csv = BuildCsv(5_000);
 
-            List<Row> actual = await DrainAsync(Excel.ParseCsvParallelAsync<Row>(csv.AsMemory(), options: new CsvParallelOptions { DegreeOfParallelism = 1 }, ct: TestContext.Current.CancellationToken));
+            List<Row> actual = await DrainAsync(Excel.ParseCsvParallelAsync(csv.AsMemory(), ExcelParser.FromAttributes<Row>(), options: new CsvParallelOptions { DegreeOfParallelism = 1 }, ct: TestContext.Current.CancellationToken));
 
             Assert.Equal(5_000, actual.Count);
             Assert.Equal(4_999, actual[^1].Age);
@@ -117,7 +117,7 @@ namespace ExcelReader.Tests
             byte[] csv = BuildCsv(10);
 
             Assert.Throws<ArgumentOutOfRangeException>(
-                () => Excel.ParseCsvParallelAsync<Row>(csv.AsMemory(), options: new CsvParallelOptions { DegreeOfParallelism = -1 }, ct: TestContext.Current.CancellationToken));
+                () => Excel.ParseCsvParallelAsync(csv.AsMemory(), ExcelParser.FromAttributes<Row>(), options: new CsvParallelOptions { DegreeOfParallelism = -1 }, ct: TestContext.Current.CancellationToken));
         }
 
         [Fact]
@@ -126,7 +126,7 @@ namespace ExcelReader.Tests
             byte[] csv = BuildCsv(10);
 
             ArgumentException exception = Assert.Throws<ArgumentException>(
-                () => Excel.ParseCsvParallelAsync<Row>(csv.AsMemory(), options: new CsvParallelOptions { HeaderRow = 2 }, ct: TestContext.Current.CancellationToken));
+                () => Excel.ParseCsvParallelAsync(csv.AsMemory(), ExcelParser.FromAttributes<Row>(), options: new CsvParallelOptions { HeaderRow = 2 }, ct: TestContext.Current.CancellationToken));
             Assert.Contains(nameof(ExcelParserConfig.HeaderRow), exception.Message, StringComparison.Ordinal);
         }
 
@@ -136,7 +136,7 @@ namespace ExcelReader.Tests
             byte[] csv = BuildCsv(20_000);
             using var ms = new MemoryStream(csv, 0, csv.Length, writable: false, publiclyVisible: true);
 
-            List<Row> actual = await DrainAsync(Excel.ParseCsvParallelAsync<Row>(ms, options: new CsvParallelOptions { DegreeOfParallelism = 4 }, ct: TestContext.Current.CancellationToken));
+            List<Row> actual = await DrainAsync(Excel.ParseCsvParallelAsync(ms, ExcelParser.FromAttributes<Row>(), options: new CsvParallelOptions { DegreeOfParallelism = 4 }, ct: TestContext.Current.CancellationToken));
 
             Assert.Equal(20_000, actual.Count);
             Assert.Equal("name00000", actual[0].Name);
@@ -149,7 +149,7 @@ namespace ExcelReader.Tests
             byte[] csv = BuildCsv(20_000);
             using var ms = new MemoryStream(csv, 0, csv.Length, writable: false, publiclyVisible: false);
 
-            List<Row> actual = await DrainAsync(Excel.ParseCsvParallelAsync<Row>(ms, options: new CsvParallelOptions { DegreeOfParallelism = 4 }, ct: TestContext.Current.CancellationToken));
+            List<Row> actual = await DrainAsync(Excel.ParseCsvParallelAsync(ms, ExcelParser.FromAttributes<Row>(), options: new CsvParallelOptions { DegreeOfParallelism = 4 }, ct: TestContext.Current.CancellationToken));
 
             Assert.Equal(20_000, actual.Count);
             Assert.Equal(19_999, actual[^1].Age);
@@ -165,7 +165,7 @@ namespace ExcelReader.Tests
             {
                 await using var fs = new FileStream(path, FileMode.Open, FileAccess.Read);
 
-                List<Row> actual = await DrainAsync(Excel.ParseCsvParallelAsync<Row>(fs, options: new CsvParallelOptions { DegreeOfParallelism = 8 }, ct: TestContext.Current.CancellationToken));
+                List<Row> actual = await DrainAsync(Excel.ParseCsvParallelAsync(fs, ExcelParser.FromAttributes<Row>(), options: new CsvParallelOptions { DegreeOfParallelism = 8 }, ct: TestContext.Current.CancellationToken));
 
                 Assert.Equal(20_000, actual.Count);
                 Assert.Equal(19_999, actual[^1].Age);
@@ -188,7 +188,7 @@ namespace ExcelReader.Tests
                 await using var fs = new FileStream(path, FileMode.Open, FileAccess.Read);
                 await using var buffered = new BufferedStream(fs);
 
-                List<Row> actual = await DrainAsync(Excel.ParseCsvParallelAsync<Row>(buffered, options: new CsvParallelOptions { DegreeOfParallelism = 8 }, ct: TestContext.Current.CancellationToken));
+                List<Row> actual = await DrainAsync(Excel.ParseCsvParallelAsync(buffered, ExcelParser.FromAttributes<Row>(), options: new CsvParallelOptions { DegreeOfParallelism = 8 }, ct: TestContext.Current.CancellationToken));
 
                 Assert.Equal(20_000, actual.Count);
                 Assert.Equal(19_999, actual[^1].Age);
@@ -205,7 +205,7 @@ namespace ExcelReader.Tests
             byte[] csv = BuildCsv(20_000);
             await using var pipe = new NonSeekableStream(csv);
 
-            List<Row> actual = await DrainAsync(Excel.ParseCsvParallelAsync<Row>(pipe, options: new CsvParallelOptions { DegreeOfParallelism = 8 }, ct: TestContext.Current.CancellationToken));
+            List<Row> actual = await DrainAsync(Excel.ParseCsvParallelAsync(pipe, ExcelParser.FromAttributes<Row>(), options: new CsvParallelOptions { DegreeOfParallelism = 8 }, ct: TestContext.Current.CancellationToken));
 
             Assert.Equal(20_000, actual.Count);
             Assert.Equal(19_999, actual[^1].Age);

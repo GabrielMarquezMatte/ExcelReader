@@ -93,38 +93,22 @@ namespace ExcelReader.Tests
         private static async Task WriteAsync(Stream stream, ExcelFileFormat format, bool generated, TextFallbackModel record, CancellationToken ct)
         {
             TextFallbackModel[] records = [record];
-            if (generated)
-            {
-                switch (format)
-                {
-                    case ExcelFileFormat.Xlsx:
-                        await using (var w = MappedRecordWriter.CreateXlsx(stream, leaveOpen: true)) { await w.WriteSheetAsync("S1", records, ct); }
-                        break;
-                    case ExcelFileFormat.Xlsb:
-                        await using (var w = MappedRecordWriter.CreateXlsb(stream, leaveOpen: true)) { await w.WriteSheetAsync("S1", records, ct); }
-                        break;
-                    case ExcelFileFormat.Xls:
-                        await using (var w = MappedRecordWriter.CreateXls(stream, leaveOpen: true)) { await w.WriteSheetAsync("S1", records, ct); }
-                        break;
-                    default:
-                        await using (var w = MappedRecordWriter.CreateCsv(stream, leaveOpen: true)) { await w.WriteSheetAsync("S1", records, ct); }
-                        break;
-                }
-                return;
-            }
+            ExcelRecordLayout<TextFallbackModel> layout = generated
+                ? ExcelRecordLayout.Generated<TextFallbackModel>()
+                : ExcelRecordLayout.FromAttributes<TextFallbackModel>();
             switch (format)
             {
                 case ExcelFileFormat.Xlsx:
-                    await using (var w = RecordWriter.CreateXlsx(stream, leaveOpen: true)) { await w.WriteSheetAsync("S1", records, ct); }
+                    await using (var w = XlsxWorkbookWriter.Create(stream, leaveOpen: true)) await using (var s = w.AddSheet("S1")) { await s.WriteRecordsAsync(records, layout, ct); }
                     break;
                 case ExcelFileFormat.Xlsb:
-                    await using (var w = RecordWriter.CreateXlsb(stream, leaveOpen: true)) { await w.WriteSheetAsync("S1", records, ct); }
+                    await using (var w = XlsbWorkbookWriter.Create(stream, leaveOpen: true)) await using (var s = w.AddSheet("S1")) { await s.WriteRecordsAsync(records, layout, ct); }
                     break;
                 case ExcelFileFormat.Xls:
-                    await using (var w = RecordWriter.CreateXls(stream, leaveOpen: true)) { await w.WriteSheetAsync("S1", records, ct); }
+                    await using (var w = XlsWorkbookWriter.Create(stream, leaveOpen: true)) await using (var s = w.AddSheet("S1")) { await s.WriteRecordsAsync(records, layout, ct); }
                     break;
                 default:
-                    await using (var w = RecordWriter.CreateCsv(stream, leaveOpen: true)) { await w.WriteSheetAsync("S1", records, ct); }
+                    await using (var w = CsvWorkbookWriter.Create(stream, leaveOpen: true)) await using (var s = w.AddSheet("S1")) { await s.WriteRecordsAsync(records, layout, ct); }
                     break;
             }
         }

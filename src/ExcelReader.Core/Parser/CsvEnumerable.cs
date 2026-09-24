@@ -1,4 +1,5 @@
 using System.Collections;
+using System.ComponentModel;
 using System.Diagnostics.CodeAnalysis;
 using ExcelReader.Core.Enums;
 using ExcelReader.Core.Parser.Internal;
@@ -27,13 +28,11 @@ namespace ExcelReader.Core.Parser
         private readonly TypeMapInfo<T> _info;
         private readonly bool _ownsReader;
 
-        [RequiresUnreferencedCode("Typed parsing reflects over T's public properties, which trimming may remove.")]
-        [RequiresDynamicCode("Typed parsing binds property setters at runtime (MethodInfo.CreateDelegate / MakeGenericMethod).")]
-        internal CsvEnumerable(CsvReader reader, ExcelParserConfig config, bool ownsReader, CancellationToken ct)
+        internal CsvEnumerable(CsvReader reader, ExcelParserConfig config, TypeMapInfo<T> info, bool ownsReader, CancellationToken ct)
         {
             _reader = reader;
             _config = config;
-            _info = TypeMapper<T>.GetCsvInfo();
+            _info = info;
             _ct = ct;
             _ownsReader = ownsReader;
         }
@@ -75,6 +74,7 @@ namespace ExcelReader.Core.Parser
         }
 
         /// <summary>Enumerates CSV rows synchronously, projecting each into a <typeparamref name="T"/> instance by fixed field index.</summary>
+        [EditorBrowsable(EditorBrowsableState.Never)]
         public sealed class Enumerator : SyncRowEnumerator<T, CsvReader.Enumerator>
         {
             private CsvRowProjector<T> _projector;
@@ -104,6 +104,7 @@ namespace ExcelReader.Core.Parser
         }
 
         /// <summary>Enumerates CSV rows asynchronously, projecting each into a <typeparamref name="T"/> instance by fixed field index.</summary>
+        [EditorBrowsable(EditorBrowsableState.Never)]
         public sealed class AsyncEnumerator : AsyncRowEnumerator<T, CsvReader, CsvReader.Enumerator>
         {
             private CsvRowProjector<T> _projector;

@@ -30,7 +30,7 @@ namespace ExcelReader.Tests
         private static ParallelCsvEnumerable<TRow> Build<TRow>(byte[] csv, int dop, int chunkSizeOverride, ExcelParserConfig config)
         {
             using var headerReader = Excel.FromCsv(csv);
-            CsvBoundColumnMap<TRow> map = CsvHeaderBinder.Bind<TRow>(
+            CsvBoundColumnMap<TRow> map = CsvHeaderBinder.Bind(
                 headerReader, config, TypeMapper<TRow>.GetCsvInfo(), out long dataStart);
 
             var source = new CsvChunkSource(csv.AsMemory());

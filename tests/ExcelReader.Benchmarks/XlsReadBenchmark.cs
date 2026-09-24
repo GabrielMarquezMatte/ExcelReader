@@ -55,7 +55,7 @@ namespace ExcelReader.Benchmarks
         [Benchmark]
         public long OfficeIMO()
         {
-            using var reader = global::OfficeIMO.Excel.ExcelDocument.OpenDataReader(_workbook, new global::OfficeIMO.Excel.ExcelReadOptions { HasHeaderRow = false });
+            using var reader = global::OfficeIMO.Excel.ExcelDocument.OpenDataReader(_workbook, new OfficeIMO.Excel.ExcelReadOptions { HasHeaderRow = false });
             return AccumulateDataReader(reader);
         }
     }

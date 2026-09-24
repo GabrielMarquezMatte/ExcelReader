@@ -291,7 +291,7 @@ namespace ExcelReader.Tests
             }
         }
 
-        private static Task<byte> ChunkedRecord(byte[] csv, CsvRecordAction<Sale> body, ChunkProbe probe, int dop, int chunkSize)
+        private static Task<byte> ChunkedRecord(byte[] csv, Action<Sale> body, ChunkProbe probe, int dop, int chunkSize)
         {
             return ParallelCsvProcessor.RunWithChunkSizeAsync(
                 csv.AsMemory(),
@@ -302,7 +302,7 @@ namespace ExcelReader.Tests
                 TestContext.Current.CancellationToken);
         }
 
-        private static Task<byte> ChunkedMapped(byte[] csv, CsvRecordAction<Order> body, ChunkProbe probe, int dop, int chunkSize)
+        private static Task<byte> ChunkedMapped(byte[] csv, Action<Order> body, ChunkProbe probe, int dop, int chunkSize)
         {
             return ParallelCsvProcessor.RunWithChunkSizeAsync(
                 csv.AsMemory(),

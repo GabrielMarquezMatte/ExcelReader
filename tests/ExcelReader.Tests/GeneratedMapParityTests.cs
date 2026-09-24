@@ -446,14 +446,20 @@ namespace ExcelReader.Tests
             CrossFormatModel record = SampleCrossFormatValue();
 
             await using var reflectionMs = new MemoryStream();
-            await using (WorkbookRecordWriter<XlsxSheetWriter, XlsxRowWriter> writer = RecordWriter.CreateXlsx(reflectionMs, leaveOpen: true))
+            await using (XlsxWorkbookWriter writer = XlsxWorkbookWriter.Create(reflectionMs, leaveOpen: true))
             {
-                await writer.WriteSheetAsync("S1", new[] { record }, ct);
+                await using (var sheet = writer.AddSheet("S1"))
+                {
+                    await sheet.WriteRecordsAsync(new[] { record }, ExcelRecordLayout.FromAttributes<CrossFormatModel>(), ct);
+                }
             }
             await using var generatedMs = new MemoryStream();
-            await using (MappedWorkbookRecordWriter<XlsxSheetWriter, XlsxRowWriter> writer = MappedRecordWriter.CreateXlsx(generatedMs, leaveOpen: true))
+            await using (XlsxWorkbookWriter writer = XlsxWorkbookWriter.Create(generatedMs, leaveOpen: true))
             {
-                await writer.WriteSheetAsync("S1", new[] { record }, ct);
+                await using (var sheet = writer.AddSheet("S1"))
+                {
+                    await sheet.WriteRecordsAsync(new[] { record }, ExcelRecordLayout.Generated<CrossFormatModel>(), ct);
+                }
             }
 
             reflectionMs.Position = 0;
@@ -483,14 +489,20 @@ namespace ExcelReader.Tests
             CrossFormatModel record = SampleCrossFormatValue();
 
             await using var reflectionMs = new MemoryStream();
-            await using (WorkbookRecordWriter<XlsbSheetWriter, XlsbRowWriter> writer = RecordWriter.CreateXlsb(reflectionMs, leaveOpen: true))
+            await using (XlsbWorkbookWriter writer = XlsbWorkbookWriter.Create(reflectionMs, leaveOpen: true))
             {
-                await writer.WriteSheetAsync("S1", new[] { record }, ct);
+                await using (var sheet = writer.AddSheet("S1"))
+                {
+                    await sheet.WriteRecordsAsync(new[] { record }, ExcelRecordLayout.FromAttributes<CrossFormatModel>(), ct);
+                }
             }
             await using var generatedMs = new MemoryStream();
-            await using (MappedWorkbookRecordWriter<XlsbSheetWriter, XlsbRowWriter> writer = MappedRecordWriter.CreateXlsb(generatedMs, leaveOpen: true))
+            await using (XlsbWorkbookWriter writer = XlsbWorkbookWriter.Create(generatedMs, leaveOpen: true))
             {
-                await writer.WriteSheetAsync("S1", new[] { record }, ct);
+                await using (var sheet = writer.AddSheet("S1"))
+                {
+                    await sheet.WriteRecordsAsync(new[] { record }, ExcelRecordLayout.Generated<CrossFormatModel>(), ct);
+                }
             }
 
             reflectionMs.Position = 0;
@@ -520,14 +532,20 @@ namespace ExcelReader.Tests
             CrossFormatModel record = SampleCrossFormatValue();
 
             await using var reflectionMs = new MemoryStream();
-            await using (WorkbookRecordWriter<XlsSheetWriter, XlsRowWriter> writer = RecordWriter.CreateXls(reflectionMs, leaveOpen: true))
+            await using (XlsWorkbookWriter writer = XlsWorkbookWriter.Create(reflectionMs, leaveOpen: true))
             {
-                await writer.WriteSheetAsync("S1", new[] { record }, ct);
+                await using (var sheet = writer.AddSheet("S1"))
+                {
+                    await sheet.WriteRecordsAsync(new[] { record }, ExcelRecordLayout.FromAttributes<CrossFormatModel>(), ct);
+                }
             }
             await using var generatedMs = new MemoryStream();
-            await using (MappedWorkbookRecordWriter<XlsSheetWriter, XlsRowWriter> writer = MappedRecordWriter.CreateXls(generatedMs, leaveOpen: true))
+            await using (XlsWorkbookWriter writer = XlsWorkbookWriter.Create(generatedMs, leaveOpen: true))
             {
-                await writer.WriteSheetAsync("S1", new[] { record }, ct);
+                await using (var sheet = writer.AddSheet("S1"))
+                {
+                    await sheet.WriteRecordsAsync(new[] { record }, ExcelRecordLayout.Generated<CrossFormatModel>(), ct);
+                }
             }
 
             reflectionMs.Position = 0;
@@ -557,14 +575,20 @@ namespace ExcelReader.Tests
             CrossFormatModel record = SampleCrossFormatValue();
 
             await using var reflectionMs = new MemoryStream();
-            await using (WorkbookRecordWriter<CsvSheetWriter, CsvRowWriter> writer = RecordWriter.CreateCsv(reflectionMs, leaveOpen: true))
+            await using (CsvWorkbookWriter writer = CsvWorkbookWriter.Create(reflectionMs, leaveOpen: true))
             {
-                await writer.WriteSheetAsync("S1", new[] { record }, ct);
+                await using (var sheet = writer.AddSheet("S1"))
+                {
+                    await sheet.WriteRecordsAsync(new[] { record }, ExcelRecordLayout.FromAttributes<CrossFormatModel>(), ct);
+                }
             }
             await using var generatedMs = new MemoryStream();
-            await using (MappedWorkbookRecordWriter<CsvSheetWriter, CsvRowWriter> writer = MappedRecordWriter.CreateCsv(generatedMs, leaveOpen: true))
+            await using (CsvWorkbookWriter writer = CsvWorkbookWriter.Create(generatedMs, leaveOpen: true))
             {
-                await writer.WriteSheetAsync("S1", new[] { record }, ct);
+                await using (var sheet = writer.AddSheet("S1"))
+                {
+                    await sheet.WriteRecordsAsync(new[] { record }, ExcelRecordLayout.Generated<CrossFormatModel>(), ct);
+                }
             }
 
             reflectionMs.Position = 0;
@@ -594,14 +618,20 @@ namespace ExcelReader.Tests
             var record = new WriteOnlyTypeModel { Inherited = "BaseValue", Name = "Alice", Tag = new CustomTag("T1") };
 
             await using var reflectionMs = new MemoryStream();
-            await using (WorkbookRecordWriter<XlsxSheetWriter, XlsxRowWriter> writer = RecordWriter.CreateXlsx(reflectionMs, leaveOpen: true))
+            await using (XlsxWorkbookWriter writer = XlsxWorkbookWriter.Create(reflectionMs, leaveOpen: true))
             {
-                await writer.WriteSheetAsync("S1", new[] { record }, ct);
+                await using (var sheet = writer.AddSheet("S1"))
+                {
+                    await sheet.WriteRecordsAsync(new[] { record }, ExcelRecordLayout.FromAttributes<WriteOnlyTypeModel>(), ct);
+                }
             }
             await using var generatedMs = new MemoryStream();
-            await using (MappedWorkbookRecordWriter<XlsxSheetWriter, XlsxRowWriter> writer = MappedRecordWriter.CreateXlsx(generatedMs, leaveOpen: true))
+            await using (XlsxWorkbookWriter writer = XlsxWorkbookWriter.Create(generatedMs, leaveOpen: true))
             {
-                await writer.WriteSheetAsync("S1", new[] { record }, ct);
+                await using (var sheet = writer.AddSheet("S1"))
+                {
+                    await sheet.WriteRecordsAsync(new[] { record }, ExcelRecordLayout.Generated<WriteOnlyTypeModel>(), ct);
+                }
             }
 
             reflectionMs.Position = 0;

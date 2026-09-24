@@ -24,7 +24,7 @@ namespace ExcelReader.Core.Writer
         /// open (started and not yet ended) at a time; the previous sheet's writer must be ended and
         /// disposed before starting the next one.
         /// </summary>
-        /// <param name="name">The sheet's name, shown to Excel; must be unique within the workbook and
+        /// <param name="name">The sheet's name, shown to Excel; must be unique (ignoring case) within the workbook and
         /// meet Excel's sheet-name restrictions (1-31 characters, no <c>: \ / ? * [ ]</c>).</param>
         /// <returns>The writer for the new sheet.</returns>
         TSheet AddSheet(string name);
@@ -33,7 +33,7 @@ namespace ExcelReader.Core.Writer
         /// Begins a new sheet named <paramref name="name"/> with the given tab-bar visibility, and returns
         /// its writer. Same contract as <see cref="AddSheet(string)"/> otherwise.
         /// </summary>
-        /// <param name="name">The sheet's name, shown to Excel; must be unique within the workbook and
+        /// <param name="name">The sheet's name, shown to Excel; must be unique (ignoring case) within the workbook and
         /// meet Excel's sheet-name restrictions (1-31 characters, no <c>: \ / ? * [ ]</c>).</param>
         /// <param name="visibility">Whether the sheet is shown in the workbook's tab bar. A workbook whose
         /// sheets are all hidden is rejected when it is ended, since Excel reports such a file as damaged.</param>

@@ -29,8 +29,8 @@ namespace ExcelReader.Tests
         private static async Task<List<string>> ParallelAsync(byte[] csv, int dop, int chunkSize)
         {
             var list = new List<string>();
-            await foreach (Row row in ParallelCsvFactory.CreateWithChunkSize<Row>(
-                csv.AsMemory(), dop, chunkSize, null, null, CancellationToken.None))
+            await foreach (Row row in ParallelCsvFactory.CreateWithChunkSize(
+                csv.AsMemory(), dop, chunkSize, null, ExcelParser.FromAttributes<Row>(), CancellationToken.None))
             {
                 list.Add(Render(row));
             }
