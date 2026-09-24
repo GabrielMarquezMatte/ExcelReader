@@ -53,7 +53,7 @@ namespace ExcelReader.Core.Parser.Internal
 
         // Kept out of line so the caller's foreach tier-1 compile can't inline the whole projection and spill its hot loop.
         [MethodImpl(MethodImplOptions.NoInlining)]
-        internal T Project(Row row)
+        internal readonly T Project(Row row)
         {
             T model = _typeInfo.CreateInstance();
             ParseCurrentRow(in row, ref model);
