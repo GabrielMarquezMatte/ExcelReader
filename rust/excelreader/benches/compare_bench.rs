@@ -1,6 +1,6 @@
 
 use calamine::{open_workbook_auto, Data, Reader};
-use criterion::{black_box, criterion_group, criterion_main, Criterion};
+use criterion::{criterion_group, criterion_main, Criterion};
 use excelreader::workbook::{parse_sheet, ExcelMapper, Workbook};
 use excelreader::Date;
 
@@ -90,7 +90,7 @@ fn bench_excelreader(c: &mut Criterion, group: &str, path: String, format: i32) 
                 for row in table.iter() {
                     acc += accumulate_full_row(&row);
                 }
-                black_box(acc);
+                std::hint::black_box(acc);
             },
             criterion::BatchSize::SmallInput,
         );
@@ -104,8 +104,8 @@ fn bench_excelreader_parse_only(c: &mut Criterion, group: &str, path: String, fo
             |mut workbook| {
                 let table =
                     parse_sheet::<FullRow>(&mut workbook, 1).expect("parse_sheet must succeed");
-                black_box(table.len());
-                black_box(table);
+                std::hint::black_box(table.len());
+                std::hint::black_box(table);
             },
             criterion::BatchSize::SmallInput,
         );
@@ -126,7 +126,7 @@ fn bench_calamine(c: &mut Criterion, group: &str, path: String) {
                     accumulate_data_cell(&mut acc, cell);
                 }
             }
-            black_box(acc);
+            std::hint::black_box(acc);
         });
     });
 }
