@@ -41,7 +41,7 @@
   <!-- Binary parsers (BIFF12 framing, etc.) are internal but warrant isolated unit tests. -->
   <ItemGroup>
     <InternalsVisibleTo Include="ExcelReader.Tests" />
-    <!-- NativeApi.Schema.cs / NativeApi.Typed.cs drive SchemaInference directly, so the C ABI and
+    <!-- Reading/ReadApi.Schema.cs / Typed/TypedApi.cs drive SchemaInference directly, so the C ABI and
          Excel.InferSchema answer identically by construction rather than by two parallel copies. -->
     <InternalsVisibleTo Include="ExcelReader.Native" />
     <!-- The CsvParallel fuzz target drives ParallelCsvFactory.CreateWithChunkSize<T> directly (the

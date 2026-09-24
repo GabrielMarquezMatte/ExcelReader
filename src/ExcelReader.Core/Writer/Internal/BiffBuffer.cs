@@ -3,6 +3,7 @@ using System.Buffers.Binary;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Text;
+using ExcelReader.Core.Writer.Xls;
 
 namespace ExcelReader.Core.Writer.Internal
 {
@@ -112,6 +113,16 @@ namespace ExcelReader.Core.Writer.Internal
             Ensure(byteCount);
             MemoryMarshal.AsBytes(chars).CopyTo(_buffer.AsSpan(Length, byteCount));
             Length += byteCount;
+        }
+
+        internal Span<byte> Slice(int position, int length)
+        {
+            return _buffer.AsSpan(position, length);
+        }
+
+        internal void Truncate(int length)
+        {
+            Length = length;
         }
 
         internal int BeginRecord(int id)

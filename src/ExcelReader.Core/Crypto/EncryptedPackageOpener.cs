@@ -3,6 +3,7 @@ using System.Buffers.Binary;
 using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using ExcelReader.Core.Reader;
+using ExcelReader.Core.Reader.Internal;
 
 namespace ExcelReader.Core.Crypto
 {

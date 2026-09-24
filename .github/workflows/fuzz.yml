@@ -3,6 +3,7 @@ name: Fuzz
 on:
   pull_request:
     branches: [master, develop]
+    types: [opened, synchronize, reopened, ready_for_review]
   schedule:
     - cron: '0 3 * * *'
   workflow_dispatch:
@@ -20,6 +21,31 @@ permissions:
   contents: read
 
 jobs:
+  changes:
+    name: Detect changed paths
+    if: github.event.pull_request.draft != true
+    runs-on: ubuntu-latest
+    outputs:
+      harness: ${{ github.event_name != 'pull_request' || steps.filter.outputs.harness == 'true' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Filter
+        id: filter
+        if: github.event_name == 'pull_request'
+        uses: dorny/paths-filter@v4
+        with:
+          filters: |
+            harness:
+              - 'src/ExcelReader.Core/**'
+              - 'tests/ExcelReader.Fuzz/**'
+              - 'tests/ExcelReader.Tests/data/**'
+              - 'RealExcel.*'
+              - 'Directory.Build.props'
+              - 'global.json'
+              - '.github/workflows/fuzz.yml'
+
   libfuzzer:
     name: libFuzzer (${{ matrix.target }})
     if: github.event_name != 'pull_request'
@@ -109,12 +135,21 @@ jobs:
 
   check:
     name: Harness smoke check
+    needs: changes
     runs-on: ubuntu-latest
+    env:
+      RUN: ${{ needs.changes.outputs.harness }}
     steps:
+      - name: Nothing to check
+        if: env.RUN != 'true'
+        run: echo "Neither ExcelReader.Core nor the fuzz harness changed; skipping."
+
       - name: Checkout
+        if: env.RUN == 'true'
         uses: actions/checkout@v7
 
       - name: Setup .NET
+        if: env.RUN == 'true'
         uses: actions/setup-dotnet@v6
         with:
           global-json-file: global.json
@@ -122,9 +157,11 @@ jobs:
           cache-dependency-path: '**/*.csproj'
 
       - name: Build
+        if: env.RUN == 'true'
         run: dotnet build tests/ExcelReader.Fuzz/ExcelReader.Fuzz.csproj -c Release
 
       - name: Generate corpus
+        if: env.RUN == 'true'
         run: |
           mkdir -p corpus/real
           dotnet run --project tests/ExcelReader.Fuzz -c Release --no-build -- seeds corpus
@@ -133,4 +170,5 @@ jobs:
           cp tests/ExcelReader.Fuzz/corpus/* corpus/real/ 2>/dev/null || true
 
       - name: Run every target over mutated corpus
+        if: env.RUN == 'true'
         run: dotnet run --project tests/ExcelReader.Fuzz -c Release --no-build -- check corpus 200 1

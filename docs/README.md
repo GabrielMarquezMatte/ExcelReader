@@ -41,7 +41,7 @@ invariant) without restating the evidence for it.
 - [`performance/reader-performance.md`](performance/reader-performance.md) — where read time goes in
   each format, the ceiling on each, and the optimizations measured and rejected.
 - [`performance/benchmarks.md`](performance/benchmarks.md) — throughput and allocation against
-  CsvHelper, Sep, Sylvan, MiniExcel and SpreadCheetah.
+  Sep, Sylvan, OfficeIMO and SpreadCheetah.
 - [`guide/`](guide/) — usage documentation: [reading](guide/reading.md),
   [parsing](guide/parsing.md), [writing](guide/writing.md), [csv](guide/csv.md),
   [encryption](guide/encryption.md).

@@ -4,9 +4,8 @@ using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.IO.Compression;
 using System.Text;
-using ExcelReader.Core.Enums;
 using ExcelReader.Core.Reader;
-using ExcelReader.Core.Writer;
+using ExcelReader.Core.Writer.Xlsx;
 
 namespace ExcelReader.Tests
 {

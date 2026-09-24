@@ -40,7 +40,7 @@ foreach (Row row in reader)
 - [Writing workbooks](docs/guide/writing.md) — XLSX, XLSB (BIFF12) and XLS (BIFF8) writers, cell styles, typed records, and prefetch compression.
 - [CSV](docs/guide/csv.md) — reading, dialect sniffing, parallel parsing, and writing delimited text.
 - [Encrypted workbooks](docs/guide/encryption.md) — opening password-protected packages and encrypting written ones.
-- [Benchmarks](docs/performance/benchmarks.md) — throughput and allocation against CsvHelper, Sep, Sylvan, MiniExcel and SpreadCheetah. [Live results](https://gabrielmarquezmatte.github.io/ExcelReader/dev/bench/).
+- [Benchmarks](docs/performance/benchmarks.md) — throughput and allocation against Sep, Sylvan, OfficeIMO and SpreadCheetah. [Live results](https://gabrielmarquezmatte.github.io/ExcelReader/dev/bench/).
 
 ## Command line
 

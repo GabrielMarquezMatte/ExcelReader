@@ -1,6 +1,10 @@
 using System.Diagnostics.CodeAnalysis;
 using ExcelReader.Core.Parser.Internal;
 using ExcelReader.Core.Reader;
+using ExcelReader.Core.Reader.Csv;
+using ExcelReader.Core.Reader.Xls;
+using ExcelReader.Core.Reader.Xlsb;
+using ExcelReader.Core.Reader.Xlsx;
 
 namespace ExcelReader.Core.Parser
 {

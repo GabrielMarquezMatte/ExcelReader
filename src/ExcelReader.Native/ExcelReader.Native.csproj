@@ -53,9 +53,9 @@
     <MibcFile Include="pgo\excelreader.mibc" />
   </ItemGroup>
 
-  <!-- The span-based NativeApi is the tested surface; [UnmanagedCallersOnly] exports cannot be
+  <!-- The span-based *Api classes are the tested surface; [UnmanagedCallersOnly] exports cannot be
        invoked from managed code, so the tests drive the layer underneath them. The benchmarks are
-       here for the same reason: measuring xl_parse_typed means calling NativeApi.ParseTyped. -->
+       here for the same reason: measuring xl_parse_typed means calling TypedApi.ParseTyped. -->
   <ItemGroup>
     <InternalsVisibleTo Include="ExcelReader.Tests" />
     <InternalsVisibleTo Include="ExcelReader.Benchmarks" />

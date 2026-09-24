@@ -1,0 +1,412 @@
+using System.Globalization;
+using System.Runtime.InteropServices;
+using System.Text;
+using ExcelReader.Native;
+using ExcelReader.Native.Arrow;
+
+namespace ExcelReader.Tests.Native
+{
+    public sealed class ArrowStreamTests
+    {
+        private static readonly string XlsxFixture = Path.Combine(AppContext.BaseDirectory, "data", "sample.xlsx");
+
+        private static NativeColumnSpec[] Specs()
+        {
+            return [new() { Index = 0, Type = NativeColumnType.String, Nullable = true }];
+        }
+
+        private static ArrowArrayStream Open(long maxRows, out NativeHandle live)
+        {
+            Assert.Equal(NativeStatus.Ok, NativeApiTests.OpenPath(XlsxFixture, NativeFormat.Auto, out NativeHandle? handle));
+            live = handle!;
+            Assert.Equal(NativeStatus.Ok,
+                ArrowApi.OpenArrowStream(live, Specs(), headerRow: 0, maxRows, out ArrowArrayStream stream));
+            return stream;
+        }
+
+        [Fact]
+        public void GetNext_Should_Signal_End_Of_Stream_With_Zero_And_A_Null_Release()
+        {
+            ArrowArrayStream stream = Open(maxRows: 1, out NativeHandle live);
+            using (live)
+            {
+                try
+                {
+                    int batches = 0;
+                    while (true)
+                    {
+                        Assert.Equal(0, InvokeGetNext(ref stream, out ArrowArray array));
+                        if (array.Release == IntPtr.Zero)
+                        {
+                            break;
+                        }
+                        batches++;
+                        ReleaseArray(ref array);
+                    }
+                    Assert.True(batches > 1, "a batch size of 1 must produce more than one batch");
+                }
+                finally
+                {
+                    InvokeRelease(ref stream);
+                }
+            }
+        }
+
+        private readonly record struct SchemaShape(string? Format, string? Name, long Flags);
+
+        private static List<SchemaShape> DescribeChildren(ArrowSchema schema)
+        {
+            List<SchemaShape> children = [];
+            for (long i = 0; i < schema.NChildren; i++)
+            {
+                ArrowSchema child = Marshal.PtrToStructure<ArrowSchema>(
+                    Marshal.ReadIntPtr(schema.Children, (int)(i * IntPtr.Size)));
+                children.Add(new SchemaShape(
+                    Marshal.PtrToStringUTF8(child.Format),
+                    Marshal.PtrToStringUTF8(child.Name),
+                    child.Flags));
+            }
+            return children;
+        }
+
+        [Fact]
+        public void GetSchema_Should_Return_The_Same_Shape_Every_Time()
+        {
+            ArrowArrayStream stream = Open(maxRows: 1, out NativeHandle live);
+            using (live)
+            {
+                try
+                {
+                    Assert.Equal(0, InvokeGetSchema(ref stream, out ArrowSchema first));
+
+                    Assert.Equal(0, InvokeGetNext(ref stream, out ArrowArray batch));
+                    Assert.NotEqual(IntPtr.Zero, batch.Release);
+                    ReleaseArray(ref batch);
+
+                    Assert.Equal(0, InvokeGetSchema(ref stream, out ArrowSchema second));
+
+                    List<SchemaShape> firstChildren = DescribeChildren(first);
+                    Assert.Equal(firstChildren, DescribeChildren(second));
+                    Assert.Equal("+s", Marshal.PtrToStringUTF8(first.Format));
+                    Assert.Equal(Marshal.PtrToStringUTF8(first.Format), Marshal.PtrToStringUTF8(second.Format));
+
+                    Assert.Equal([new SchemaShape("u", "0", ArrowFlags.Nullable)], firstChildren);
+
+                    ReleaseSchema(ref first);
+                    ReleaseSchema(ref second);
+                }
+                finally
+                {
+                    InvokeRelease(ref stream);
+                }
+            }
+        }
+
+        [Fact]
+        public void Release_Should_Be_Safe_Mid_Stream_And_Idempotent()
+        {
+            ArrowArrayStream stream = Open(maxRows: 1, out NativeHandle live);
+            using (live)
+            {
+                Assert.Equal(0, InvokeGetNext(ref stream, out ArrowArray array));
+                Assert.NotEqual(IntPtr.Zero, array.Release);
+                ReleaseArray(ref array);
+
+                InvokeRelease(ref stream);
+                Assert.Equal(IntPtr.Zero, stream.Release);
+                InvokeRelease(ref stream);
+
+                Assert.Equal(NativeStatus.Ok,
+                    ArrowApi.OpenArrowStream(live, Specs(), headerRow: 0, maxRows: 1, out ArrowArrayStream reopened));
+                Assert.Equal(0, InvokeGetNext(ref reopened, out ArrowArray fromReopened));
+                Assert.NotEqual(IntPtr.Zero, fromReopened.Release);
+                ReleaseArray(ref fromReopened);
+                InvokeRelease(ref reopened);
+            }
+        }
+
+        private const int TallRowCount = 43;
+
+        private readonly record struct TallRow(bool Active, bool QtyValid, long Qty);
+
+        private static string WriteTallFixture()
+        {
+            string path = Path.Combine(Path.GetTempPath(), $"excelreader-arrowstream-{Guid.NewGuid():N}.csv");
+            StringBuilder csv = new("active,qty\n");
+            for (int i = 0; i < TallRowCount; i++)
+            {
+                string active = i % 3 == 0 ? "true" : "false";
+                string qty = i % 5 == 0 ? string.Empty : (i * 3).ToString(CultureInfo.InvariantCulture);
+                csv.Append(CultureInfo.InvariantCulture, $"{active},{qty}\n");
+            }
+            File.WriteAllText(path, csv.ToString());
+            return path;
+        }
+
+        private static NativeColumnSpec[] TallSpecs()
+        {
+            return
+            [
+                new() { Names = ["active"], Type = NativeColumnType.Bool },
+                new() { Names = ["qty"], Type = NativeColumnType.Int64, Nullable = true },
+            ];
+        }
+
+        private static List<TallRow> ReadTallThroughStream(string path, long maxRows, out int batchCount)
+        {
+            Assert.Equal(NativeStatus.Ok, NativeApiTests.OpenPath(path, NativeFormat.Csv, out NativeHandle? handle));
+            using NativeHandle live = handle!;
+            Assert.Equal(NativeStatus.Ok,
+                ArrowApi.OpenArrowStream(live, TallSpecs(), headerRow: 1, maxRows, out ArrowArrayStream stream));
+
+            List<TallRow> rows = [];
+            batchCount = 0;
+            try
+            {
+                while (true)
+                {
+                    Assert.Equal(0, InvokeGetNext(ref stream, out ArrowArray array));
+                    if (array.Release == IntPtr.Zero)
+                    {
+                        break;
+                    }
+                    batchCount++;
+                    try
+                    {
+                        rows.AddRange(DecodeTallBatch(array));
+                    }
+                    finally
+                    {
+                        ReleaseArray(ref array);
+                    }
+                }
+            }
+            finally
+            {
+                InvokeRelease(ref stream);
+            }
+            return rows;
+        }
+
+        private static List<TallRow> DecodeTallBatch(ArrowArray array)
+        {
+            Assert.Equal(2, array.NChildren);
+            ArrowArray active = ChildAt(array, 0);
+            ArrowArray qty = ChildAt(array, 1);
+            int rowCount = (int)array.Length;
+
+            bool[] flags = DecodeBits(BufferAt(active, 1), rowCount, whenAbsent: false);
+            bool[] valid = DecodeBits(BufferAt(qty, 0), rowCount, whenAbsent: true);
+            long[] quantities = new long[rowCount];
+            Marshal.Copy(BufferAt(qty, 1), quantities, 0, rowCount);
+
+            Assert.Equal(valid.Count(v => !v), qty.NullCount);
+            Assert.Equal(0, active.NullCount);
+            Assert.Equal(0, array.NullCount);
+
+            List<TallRow> decoded = [];
+            for (int i = 0; i < rowCount; i++)
+            {
+                decoded.Add(new TallRow(flags[i], valid[i], quantities[i]));
+            }
+            return decoded;
+        }
+
+        private static void AssertMatchesFixtureRules(List<TallRow> rows)
+        {
+            Assert.Equal(TallRowCount, rows.Count);
+            for (int i = 0; i < rows.Count; i++)
+            {
+                Assert.Equal(i % 3 == 0, rows[i].Active);
+                Assert.Equal(i % 5 != 0, rows[i].QtyValid);
+                if (rows[i].QtyValid)
+                {
+                    Assert.Equal(i * 3, rows[i].Qty);
+                }
+            }
+        }
+
+        private static ArrowArray ChildAt(ArrowArray array, int index)
+        {
+            return Marshal.PtrToStructure<ArrowArray>(Marshal.ReadIntPtr(array.Children, index * IntPtr.Size));
+        }
+
+        private static IntPtr BufferAt(ArrowArray array, int index)
+        {
+            return Marshal.ReadIntPtr(array.Buffers, index * IntPtr.Size);
+        }
+
+        private static bool[] DecodeBits(IntPtr bits, int rowCount, bool whenAbsent)
+        {
+            bool[] result = new bool[rowCount];
+            if (bits == IntPtr.Zero)
+            {
+                Array.Fill(result, whenAbsent);
+                return result;
+            }
+            byte[] bitmap = new byte[(rowCount + 7) / 8];
+            Marshal.Copy(bits, bitmap, 0, bitmap.Length);
+            for (int i = 0; i < rowCount; i++)
+            {
+                result[i] = (bitmap[i >> 3] & (1 << (i & 7))) != 0;
+            }
+            return result;
+        }
+
+        [Theory]
+        [InlineData(3)]
+        [InlineData(7)]
+        [InlineData(9)]
+        public void GetNext_Should_Match_The_Unbounded_Batch_Across_Bit_Packing_Boundaries(long maxRows)
+        {
+            string path = WriteTallFixture();
+            try
+            {
+                List<TallRow> whole = ReadTallThroughStream(path, 0, out int wholeBatches);
+                List<TallRow> batched = ReadTallThroughStream(path, maxRows, out int batches);
+
+                Assert.Equal(1, wholeBatches);
+                Assert.Contains(whole, row => row.Active);
+                Assert.Contains(whole, row => !row.Active);
+                Assert.Contains(whole, row => row.QtyValid);
+                Assert.Contains(whole, row => !row.QtyValid);
+
+                AssertMatchesFixtureRules(batched);
+                AssertMatchesFixtureRules(whole);
+                Assert.Equal(whole, batched);
+                long expectedBatches = (whole.Count + maxRows - 1) / maxRows;
+                Assert.Equal(expectedBatches, batches);
+            }
+            finally
+            {
+                File.Delete(path);
+            }
+        }
+
+        [Fact]
+        public void OpenArrowStream_Should_Reject_A_Negative_Batch_Size_And_Zero_The_Stream()
+        {
+            Assert.Equal(NativeStatus.Ok, NativeApiTests.OpenPath(XlsxFixture, NativeFormat.Auto, out NativeHandle? handle));
+            using NativeHandle live = handle!;
+
+            int status = ArrowApi.OpenArrowStream(live, Specs(), headerRow: 0, maxRows: -1, out ArrowArrayStream stream);
+
+            Assert.Equal(NativeStatus.InvalidArgument, status);
+            Assert.Equal(IntPtr.Zero, stream.Release);
+            Assert.Equal(IntPtr.Zero, stream.GetNext);
+            Assert.Equal(IntPtr.Zero, stream.PrivateData);
+        }
+
+        private static string WriteUnconvertibleFixture()
+        {
+            string path = Path.Combine(Path.GetTempPath(), $"excelreader-arrowstream-{Guid.NewGuid():N}.csv");
+            File.WriteAllText(path, "qty\n1\n2\nnot-a-number\n4\n");
+            return path;
+        }
+
+        [Fact]
+        public void GetNext_Should_Latch_A_Conversion_Failure_With_A_Message()
+        {
+            string path = WriteUnconvertibleFixture();
+            try
+            {
+                Assert.Equal(NativeStatus.Ok, NativeApiTests.OpenPath(path, NativeFormat.Csv, out NativeHandle? handle));
+                using NativeHandle live = handle!;
+                NativeColumnSpec[] specs = [new() { Names = ["qty"], Type = NativeColumnType.Int64 }];
+                Assert.Equal(NativeStatus.Ok,
+                    ArrowApi.OpenArrowStream(live, specs, headerRow: 1, maxRows: 2, out ArrowArrayStream stream));
+                try
+                {
+                    Assert.Equal(0, InvokeGetNext(ref stream, out ArrowArray good));
+                    Assert.Equal(2, good.Length);
+                    ReleaseArray(ref good);
+
+                    Assert.NotEqual(0, InvokeGetNext(ref stream, out ArrowArray bad));
+                    Assert.Equal(IntPtr.Zero, bad.Release);
+                    string? latched = Marshal.PtrToStringUTF8(InvokeGetLastError(ref stream));
+                    Assert.False(string.IsNullOrEmpty(latched));
+                    Assert.Contains("failed to convert", latched, StringComparison.Ordinal);
+
+                    Assert.NotEqual(0, InvokeGetNext(ref stream, out ArrowArray again));
+                    Assert.Equal(IntPtr.Zero, again.Release);
+                    Assert.Equal(latched, Marshal.PtrToStringUTF8(InvokeGetLastError(ref stream)));
+                }
+                finally
+                {
+                    InvokeRelease(ref stream);
+                }
+            }
+            finally
+            {
+                File.Delete(path);
+            }
+        }
+
+        [Fact]
+        public void GetNext_Should_Fail_Cleanly_After_The_Workbook_Is_Closed()
+        {
+            ArrowArrayStream stream = Open(maxRows: 1, out NativeHandle live);
+            try
+            {
+                Assert.Equal(0, InvokeGetNext(ref stream, out ArrowArray first));
+                Assert.NotEqual(IntPtr.Zero, first.Release);
+                ReleaseArray(ref first);
+
+                live.Dispose();
+
+                Assert.NotEqual(0, InvokeGetNext(ref stream, out ArrowArray after));
+                Assert.Equal(IntPtr.Zero, after.Release);
+                string? latched = Marshal.PtrToStringUTF8(InvokeGetLastError(ref stream));
+                Assert.False(string.IsNullOrEmpty(latched));
+
+                Assert.NotEqual(0, InvokeGetNext(ref stream, out ArrowArray again));
+                Assert.Equal(IntPtr.Zero, again.Release);
+                Assert.Equal(latched, Marshal.PtrToStringUTF8(InvokeGetLastError(ref stream)));
+            }
+            finally
+            {
+                InvokeRelease(ref stream);
+            }
+        }
+
+        private delegate int GetNextFn(ref ArrowArrayStream stream, out ArrowArray array);
+        private delegate int GetSchemaFn(ref ArrowArrayStream stream, out ArrowSchema schema);
+        private delegate IntPtr GetLastErrorFn(ref ArrowArrayStream stream);
+        private delegate void ReleaseStreamFn(ref ArrowArrayStream stream);
+        private delegate void ReleaseArrayFn(ref ArrowArray array);
+        private delegate void ReleaseSchemaFn(ref ArrowSchema schema);
+
+        private static int InvokeGetNext(ref ArrowArrayStream stream, out ArrowArray array)
+        {
+            return Marshal.GetDelegateForFunctionPointer<GetNextFn>(stream.GetNext)(ref stream, out array);
+        }
+
+        private static int InvokeGetSchema(ref ArrowArrayStream stream, out ArrowSchema schema)
+        {
+            return Marshal.GetDelegateForFunctionPointer<GetSchemaFn>(stream.GetSchema)(ref stream, out schema);
+        }
+
+        private static IntPtr InvokeGetLastError(ref ArrowArrayStream stream)
+        {
+            return Marshal.GetDelegateForFunctionPointer<GetLastErrorFn>(stream.GetLastError)(ref stream);
+        }
+
+        private static void InvokeRelease(ref ArrowArrayStream stream)
+        {
+            if (stream.Release != IntPtr.Zero)
+            {
+                Marshal.GetDelegateForFunctionPointer<ReleaseStreamFn>(stream.Release)(ref stream);
+            }
+        }
+
+        private static void ReleaseArray(ref ArrowArray array)
+        {
+            Marshal.GetDelegateForFunctionPointer<ReleaseArrayFn>(array.Release)(ref array);
+        }
+
+        private static void ReleaseSchema(ref ArrowSchema schema)
+        {
+            Marshal.GetDelegateForFunctionPointer<ReleaseSchemaFn>(schema.Release)(ref schema);
+        }
+    }
+}

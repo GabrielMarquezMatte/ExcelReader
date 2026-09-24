@@ -2,7 +2,7 @@ using System.Buffers;
 using System.Buffers.Binary;
 using System.Security.Cryptography;
 using ExcelReader.Core.Reader;
-using ExcelReader.Core.Writer.Internal;
+using ExcelReader.Core.Writer.Xls;
 
 namespace ExcelReader.Core.Crypto
 {

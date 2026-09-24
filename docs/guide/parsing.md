@@ -40,12 +40,13 @@ foreach (var item in ExcelParser.FromAttributes<ChangeRow>().Parse(reader)) { /*
 
 ## Generate typed maps at compile time (Native AOT / trimming)
 
-`ExcelParser.FromAttributes<T>` and `WorkbookRecordWriter<TSheet,TRow>` reflect over `T` (`GetProperties`, `MakeGenericMethod`), which trimming can break and Native AOT cannot run at all. The raw `Excel.From*` readers already use no reflection; mark a model `[ExcelSerializable]` to get the same guarantee for the typed layer — a source generator emits a compile-time map from the model's own `[ExcelColumn]`/`[ExcelRequired]`/`[ExcelConverter]`/`[ExcelIgnore]` attributes, and `ExcelParser.Generated<T>`/`MappedRecordWriter` read and write through that map instead of reflection:
+`ExcelParser.FromAttributes<T>` and `ExcelRecordLayout.FromAttributes<T>` reflect over `T` (`GetProperties`, `MakeGenericMethod`), which trimming can break and Native AOT cannot run at all. The raw `Excel.From*` readers already use no reflection; mark a model `[ExcelSerializable]` to get the same guarantee for the typed layer — a source generator emits a compile-time map from the model's own `[ExcelColumn]`/`[ExcelRequired]`/`[ExcelConverter]`/`[ExcelIgnore]` attributes, and `ExcelParser.Generated<T>`/`ExcelRecordLayout.Generated<T>` read and write through that map instead of reflection:
 
 ```csharp
 using ExcelReader.Core.Parser;
 using ExcelReader.Core.Reader;
 using ExcelReader.Core.Writer;
+using ExcelReader.Core.Writer.Xlsx;
 
 [ExcelSerializable]                       // the model must be declared partial
 public partial class ChangeRow
@@ -65,15 +66,18 @@ foreach (var item in ExcelParser.Generated<ChangeRow>().Parse(reader))
 
 var changes = new[] { new ChangeRow { File = "README.md", LinesAdded = 12 } };
 await using var stream = File.Create("changes.xlsx");
-await using var writer = MappedRecordWriter.CreateXlsx(stream);   // or CreateXlsb / CreateXls / CreateCsv
-await writer.WriteSheetAsync("Changes", changes);
+await using var workbook = XlsxWorkbookWriter.Create(stream);   // or XlsbWorkbookWriter / XlsWorkbookWriter / CsvWorkbookWriter
+await using (var sheet = workbook.AddSheet("Changes"))
+{
+    await sheet.WriteRecordsAsync(changes, ExcelRecordLayout.Generated<ChangeRow>());
+}
 ```
 
 Notes:
 
 - `[ExcelSerializable]` requires the model — and every type it's nested inside, if any — to be `partial`; the generator emits into an additional part of the same declaration. A compile error (`EXR001`/`EXR002`) names exactly what to fix.
-- Supported property types match `ExcelParser.FromAttributes<T>`'s: `string`, `bool`, `DateTime`, `DateOnly`, `TimeOnly`, `TimeSpan`, `DateTimeOffset`, `Guid`, `char`, every integral and floating type plus `decimal`, `enum`s, and `Nullable<T>` of each — plus `ReadOnlySpan<byte>`, which binds zero-copy through `ExcelCellReaders.Utf8`. The model may be a `ref struct`: mark it `ref partial struct` and the generator emits `IExcelRowMap<T>` on it like any other shape, so `ExcelParser.Generated<T>` and `ExcelParser.Build<T>` read it AOT-clean, as do the map-driven `ForEachCsvParallelAsync`/`AggregateCsvParallelAsync` overloads.
-- The generator requires a build via `dotnet build`/the .NET SDK. Visual Studio's or `MSBuild.exe`'s .NET Framework host can't load it, so a project built only through those tools won't see generated code — build via the SDK, or fall back to `ExcelParser.FromAttributes<T>`/`WorkbookRecordWriter` for that build path.
+- Supported property types match `ExcelParser.FromAttributes<T>`'s: `string`, `bool`, `DateTime`, `DateOnly`, `TimeOnly`, `TimeSpan`, `DateTimeOffset`, `Guid`, `char`, every integral and floating type plus `decimal`, `enum`s, and `Nullable<T>` of each — plus `ReadOnlySpan<byte>`, which binds zero-copy through `ExcelCellReaders.Utf8`. The model may be a `ref struct`: mark it `ref partial struct` and the generator emits `IExcelRowMap<T>` on it like any other shape, so `ExcelParser.Generated<T>` and `ExcelParser.Build<T>` read it AOT-clean, as do the map-driven `CsvParallel.ForEachAsync`/`CsvParallel.AggregateAsync` overloads.
+- The generator requires a build via `dotnet build`/the .NET SDK. Visual Studio's or `MSBuild.exe`'s .NET Framework host can't load it, so a project built only through those tools won't see generated code — build via the SDK, or fall back to `ExcelParser.FromAttributes<T>`/`ExcelRecordLayout.FromAttributes<T>` for that build path.
 - `ExcelParser.Generated<T>` builds one map per model and reuses it for every reader, including CSV — unlike `ExcelParser.FromAttributes<T>`, which swaps in a text-based date reader specifically for CSV. A `[ExcelSerializable]` model reads `DateTime`/`DateOnly`/`TimeOnly` via `ExcelCellReaders.DateTimeAuto`/`DateOnlyAuto`/`TimeOnlyAuto`: an Excel serial number first, falling back to date/time text when the cell isn't numeric — so a CSV column round-trips through the library's own writer either way. The one edge case this can't distinguish: a CSV cell that's only digits (e.g. an Excel serial number typed as plain text) is always read as a serial number, never as date text.
 - The attribute-based reflection path keeps working unchanged; `[ExcelSerializable]` is an additive, opt-in alternative for the same model shape, not a replacement.
 
@@ -174,7 +178,7 @@ For types the built-in parsers do not handle — money strings, custom formats, 
 ```csharp
 using System.Globalization;
 using ExcelReader.Core.Parser;
-using ExcelReader.Core.ValueObjects;
+using ExcelReader.Core.Reader;
 
 public sealed class BrlMoneyConverter : IExcelCellConverter<decimal>
 {

@@ -1,0 +1,478 @@
+using System.Diagnostics.CodeAnalysis;
+using System.Text;
+using ExcelReader.Core.Writer;
+using ExcelReader.Core.Writer.Csv;
+using ExcelReader.Core.Writer.Xls;
+using ExcelReader.Core.Writer.Xlsb;
+using ExcelReader.Core.Writer.Xlsx;
+using ExcelReader.Native.Typed;
+
+namespace ExcelReader.Native.Writer
+{
+    internal static unsafe partial class WriteApi
+    {
+        private const int BuiltinDateStyleId = 1;
+
+        internal static readonly int WriteUnixEpochDayNumber = new DateOnly(1970, 1, 1).DayNumber;
+
+        internal static int WriteTyped(ReadOnlySpan<byte> path, int format, NativeColumnSpec[] specs, NativeTable table, NativeWriteOptions options)
+        {
+            if (path.IsEmpty)
+            {
+                NativeApi.SetLastError("xl_write_typed needs a non-empty path.");
+                return NativeStatus.InvalidArgument;
+            }
+            if (!IsWritableFormat(format))
+            {
+                NativeApi.SetLastError($"xl_write_typed needs an explicit format (XLS/XLSX/XLSB/CSV); got format {format}.");
+                return NativeStatus.InvalidArgument;
+            }
+            if (!TryValidateWriteTable(specs, table, out bool hasHeader, out string? validationError))
+            {
+                NativeApi.SetLastError(validationError);
+                return NativeStatus.InvalidArgument;
+            }
+
+            NativeApi.ClearLastError();
+            try
+            {
+                string filePath = Encoding.UTF8.GetString(path);
+                string sheetName = options.SheetName ?? "Sheet1";
+                using FileStream stream = new(filePath, FileMode.Create, FileAccess.Write, FileShare.None);
+                WriteToStream(stream, format, specs, table, options, sheetName, hasHeader);
+                return NativeStatus.Ok;
+            }
+            catch (Exception exception)
+            {
+                NativeApi.SetLastError(exception.Message);
+                return NativeStatus.Error;
+            }
+        }
+
+        internal static int WriteTypedToMemory(int format, NativeColumnSpec[] specs, NativeTable table, NativeWriteOptions options, out byte[]? bytes)
+        {
+            bytes = null;
+            if (!IsWritableFormat(format))
+            {
+                NativeApi.SetLastError($"xl_write_typed_to_memory needs an explicit format (XLS/XLSX/XLSB/CSV); got format {format}.");
+                return NativeStatus.InvalidArgument;
+            }
+            if (!TryValidateWriteTable(specs, table, out bool hasHeader, out string? validationError))
+            {
+                NativeApi.SetLastError(validationError);
+                return NativeStatus.InvalidArgument;
+            }
+
+            NativeApi.ClearLastError();
+            try
+            {
+                string sheetName = options.SheetName ?? "Sheet1";
+                using MemoryStream stream = new();
+                WriteToStream(stream, format, specs, table, options, sheetName, hasHeader);
+                bytes = stream.ToArray();
+                return NativeStatus.Ok;
+            }
+            catch (Exception exception)
+            {
+                NativeApi.SetLastError(exception.Message);
+                return NativeStatus.Error;
+            }
+        }
+
+        internal static int OpenWriteHandle(ReadOnlySpan<byte> path, int format, NativeWriteOptions options, out NativeWriterHandle? handle)
+        {
+            handle = null;
+            if (path.IsEmpty)
+            {
+                NativeApi.SetLastError("xl_open_write_handle needs a non-empty path.");
+                return NativeStatus.InvalidArgument;
+            }
+            if (!IsWritableFormat(format))
+            {
+                NativeApi.SetLastError($"xl_open_write_handle needs an explicit format (XLS/XLSX/XLSB/CSV); got format {format}.");
+                return NativeStatus.InvalidArgument;
+            }
+            NativeApi.ClearLastError();
+            string filePath = Encoding.UTF8.GetString(path);
+            FileStream stream = new(filePath, FileMode.Create, FileAccess.Write, FileShare.None);
+            try
+            {
+                handle = NativeWriterHandle.Create(stream, format, options);
+                return NativeStatus.Ok;
+            }
+            catch (Exception exception)
+            {
+                stream.Dispose();
+                NativeApi.SetLastError(exception.Message);
+                return NativeStatus.Error;
+            }
+        }
+
+        internal static int OpenWriteHandleToMemory(int format, NativeWriteOptions options, out NativeWriterHandle? handle)
+        {
+            handle = null;
+            if (!IsWritableFormat(format))
+            {
+                NativeApi.SetLastError($"xl_open_write_handle_to_memory needs an explicit format (XLS/XLSX/XLSB/CSV); got format {format}.");
+                return NativeStatus.InvalidArgument;
+            }
+            NativeApi.ClearLastError();
+            MemoryStream stream = new();
+            try
+            {
+                handle = NativeWriterHandle.Create(stream, format, options);
+                handle.MemoryBuffer = stream;
+                return NativeStatus.Ok;
+            }
+            catch (Exception exception)
+            {
+                stream.Dispose();
+                NativeApi.SetLastError(exception.Message);
+                return NativeStatus.Error;
+            }
+        }
+
+        internal static int CloseWriteHandle(NativeWriterHandle? handle)
+        {
+            if (handle is null)
+            {
+                return NativeStatus.InvalidHandle;
+            }
+            try
+            {
+                handle.Close();
+                NativeApi.ClearLastError();
+                return NativeStatus.Ok;
+            }
+            catch (Exception exception)
+            {
+                NativeApi.SetLastError(exception.Message);
+                return NativeStatus.Error;
+            }
+            finally
+            {
+                handle.Dispose();
+            }
+        }
+
+        internal static int GetWriteHandleBytes(NativeWriterHandle? handle, out byte[]? bytes)
+        {
+            bytes = null;
+            if (handle is null)
+            {
+                return NativeStatus.InvalidHandle;
+            }
+            if (handle.MemoryBuffer is null)
+            {
+                NativeApi.SetLastError("xl_write_handle_bytes needs a handle opened by xl_open_write_handle_to_memory.");
+                return NativeStatus.InvalidArgument;
+            }
+            try
+            {
+                handle.Close();
+                bytes = handle.MemoryBuffer.ToArray();
+                NativeApi.ClearLastError();
+                return NativeStatus.Ok;
+            }
+            catch (Exception exception)
+            {
+                NativeApi.SetLastError(exception.Message);
+                return NativeStatus.Error;
+            }
+        }
+
+        private static bool IsWritableFormat(int format)
+        {
+            return format is NativeFormat.Xls or NativeFormat.Xlsx or NativeFormat.Xlsb or NativeFormat.Csv;
+        }
+
+        private static void WriteToStream(Stream stream, int format, NativeColumnSpec[] specs, NativeTable table, NativeWriteOptions options, string sheetName, bool hasHeader)
+        {
+            bool date1904 = options.Date1904 ?? false;
+            bool sharedStrings = options.UseSharedStrings ?? false;
+            switch (format)
+            {
+                case NativeFormat.Xlsx:
+                    WriteWorkbook<XlsxSheetWriter, XlsxRowWriter>(
+                        XlsxWorkbookWriter.Create(stream, options: new XlsxWriterOptions { UseSharedStrings = sharedStrings }), specs, table, sheetName, hasHeader);
+                    return;
+                case NativeFormat.Xlsb:
+                    WriteWorkbook<XlsbSheetWriter, XlsbRowWriter>(
+                        XlsbWorkbookWriter.Create(stream, options: new XlsbWriterOptions { Date1904 = date1904, UseSharedStrings = sharedStrings }), specs, table, sheetName, hasHeader);
+                    return;
+                case NativeFormat.Xls:
+                    WriteWorkbook<XlsSheetWriter, XlsRowWriter>(
+                        XlsWorkbookWriter.Create(stream, date1904: date1904), specs, table, sheetName, hasHeader);
+                    return;
+                default:
+                    WriteWorkbook<CsvSheetWriter, CsvRowWriter>(
+                        CsvWorkbookWriter.Create(stream, options: options.ToCsvWriterOptions()), specs, table, sheetName, hasHeader);
+                    return;
+            }
+        }
+
+        private static void WriteWorkbook<TSheet, TRow>(IWorkbookWriter<TSheet> workbook, NativeColumnSpec[] specs, NativeTable table, string sheetName, bool hasHeader)
+            where TSheet : ISheetWriter<TRow>
+            where TRow : IRowWriter
+        {
+            try
+            {
+                TSheet sheet = workbook.AddSheet(sheetName);
+                ApplyTemporalStyles<TSheet, TRow>(workbook, sheet, table);
+
+                if (hasHeader)
+                {
+                    WriteHeaderRow<TSheet, TRow>(sheet, specs);
+                }
+                for (long row = 0; row < table.RowCount; row++)
+                {
+                    WriteDataRow<TSheet, TRow>(sheet, table, row);
+                }
+
+                sheet.End();
+                sheet.Dispose();
+                workbook.End();
+            }
+            finally
+            {
+                workbook.Dispose();
+            }
+        }
+
+        private static void ApplyTemporalStyles<TSheet, TRow>(IWorkbookWriter<TSheet> workbook, TSheet sheet, NativeTable table)
+            where TSheet : ISheetWriter<TRow>
+            where TRow : IRowWriter
+        {
+            int timeStyle = -1;
+            int timestampStyle = -1;
+            for (int index = 0; index < table.ColumnCount; index++)
+            {
+                switch (table.ColumnAt(index).Type)
+                {
+                    case NativeColumnType.Date:
+                        sheet.SetColumnStyle(index, BuiltinDateStyleId);
+                        break;
+                    case NativeColumnType.Time:
+                        timeStyle = timeStyle < 0 ? workbook.AddStyle(new CellStyle { NumberFormat = "hh:mm:ss" }) : timeStyle;
+                        sheet.SetColumnStyle(index, timeStyle);
+                        break;
+                    case NativeColumnType.Timestamp:
+                        timestampStyle = timestampStyle < 0 ? workbook.AddStyle(new CellStyle { NumberFormat = "yyyy-mm-dd hh:mm:ss" }) : timestampStyle;
+                        sheet.SetColumnStyle(index, timestampStyle);
+                        break;
+                    default:
+                        break;
+                }
+            }
+        }
+
+        private static void WriteHeaderRow<TSheet, TRow>(TSheet sheet, NativeColumnSpec[] specs)
+            where TSheet : ISheetWriter<TRow>
+            where TRow : IRowWriter
+        {
+            using TRow row = sheet.StartRow();
+            foreach (NativeColumnSpec spec in specs)
+            {
+                row.Write(spec.Names[0]);
+            }
+        }
+
+        private static void WriteDataRow<TSheet, TRow>(TSheet sheet, NativeTable table, long rowIndex)
+            where TSheet : ISheetWriter<TRow>
+            where TRow : IRowWriter
+        {
+            using TRow row = sheet.StartRow();
+            for (int index = 0; index < table.ColumnCount; index++)
+            {
+                WriteCell(row, table.ColumnAt(index), rowIndex);
+            }
+        }
+
+        internal static void WriteCell(IRowWriter row, NativeColumn column, long rowIndex)
+        {
+            if (!IsValidAt(column, rowIndex))
+            {
+                WriteNullCell(row, column.Type);
+                return;
+            }
+            switch (column.Type)
+            {
+                case NativeColumnType.String:
+                    int* offsets = (int*)column.Values;
+                    int start = offsets[rowIndex];
+                    int length = offsets[rowIndex + 1] - start;
+                    row.WriteUtf8(new ReadOnlySpan<byte>((byte*)column.Data + start, length));
+                    return;
+                case NativeColumnType.Int64:
+                    row.Write(((long*)column.Values)[rowIndex]);
+                    return;
+                case NativeColumnType.Float64:
+                    row.Write(((double*)column.Values)[rowIndex]);
+                    return;
+                case NativeColumnType.Bool:
+                    row.Write(((byte*)column.Values)[rowIndex] != 0);
+                    return;
+                case NativeColumnType.Date:
+                    row.Write(DateOnly.FromDayNumber(WriteUnixEpochDayNumber + ((int*)column.Values)[rowIndex]));
+                    return;
+                case NativeColumnType.Time:
+                    {
+                        long* values = (long*)column.Values;
+                        row.Write(new TimeOnly(checked(values[rowIndex] * TimeSpan.TicksPerMicrosecond)));
+                        return;
+                    }
+                default:
+                    {
+                        long* values = (long*)column.Values;
+                        row.Write(DateTime.UnixEpoch.AddTicks(checked(values[rowIndex] * TimeSpan.TicksPerMicrosecond)));
+                        return;
+                    }
+            }
+        }
+
+        internal static void WriteNullCell(IRowWriter row, int type)
+        {
+            switch (type)
+            {
+                case NativeColumnType.String:
+                    row.Write((string?)null);
+                    return;
+                case NativeColumnType.Int64:
+                    row.Write((long?)null);
+                    return;
+                case NativeColumnType.Float64:
+                    row.Write((double?)null);
+                    return;
+                case NativeColumnType.Bool:
+                    row.Write((bool?)null);
+                    return;
+                case NativeColumnType.Date:
+                    row.Write((DateOnly?)null);
+                    return;
+                case NativeColumnType.Time:
+                    row.Write((TimeOnly?)null);
+                    return;
+                default:
+                    row.Write((DateTime?)null);
+                    return;
+            }
+        }
+
+        private static bool IsValidAt(NativeColumn column, long rowIndex)
+        {
+            if (column.Validity == IntPtr.Zero)
+            {
+                return true;
+            }
+            byte* bitmap = (byte*)column.Validity;
+            return (bitmap[rowIndex >> 3] & (1 << (int)(rowIndex & 7))) != 0;
+        }
+
+        internal static bool TryValidateWriteTable(NativeColumnSpec[] specs, NativeTable table, out bool hasHeader, [NotNullWhen(false)] out string? error)
+        {
+            hasHeader = false;
+            error = null;
+            if (specs.Length == 0 || !TypedApi.IsValidSpecCount(table.ColumnCount))
+            {
+                error = $"xl_write_typed needs 1..{NativeLimits.MaxColumnSpecs} columns; got {table.ColumnCount}.";
+                return false;
+            }
+            if (specs.Length != table.ColumnCount)
+            {
+                error = $"xl_write_typed got {specs.Length} spec(s) for {table.ColumnCount} column(s).";
+                return false;
+            }
+            if (table.RowCount < 0 || table.Columns == IntPtr.Zero)
+            {
+                error = $"xl_write_typed needs a non-negative row_count and a non-NULL columns pointer; got {table.RowCount}.";
+                return false;
+            }
+
+            hasHeader = specs[0].Names.Length > 0;
+            for (int index = 0; index < table.ColumnCount; index++)
+            {
+                int nameCount = specs[index].Names.Length;
+                if ((nameCount > 0) != hasHeader)
+                {
+                    error = "every column spec must have a name, or none may — xl_write_typed cannot write a partial header row.";
+                    return false;
+                }
+                if (nameCount > 1)
+                {
+                    error = $"column {index} is a write spec and must have exactly one name; got {nameCount}.";
+                    return false;
+                }
+                if (!TryValidateWriteColumn(specs[index], table.ColumnAt(index), index, table.RowCount, out error))
+                {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        private static bool TryValidateWriteColumn(NativeColumnSpec spec, NativeColumn column, int index, long rowCount, [NotNullWhen(false)] out string? error)
+        {
+            error = null;
+            if (column.Type is < NativeColumnType.String or > NativeColumnType.Timestamp)
+            {
+                error = $"column {index} has unknown type {column.Type}.";
+                return false;
+            }
+            if (spec.Type != column.Type)
+            {
+                error = $"column {index} has type {column.Type} but its spec says {spec.Type}.";
+                return false;
+            }
+            if (column.Length != rowCount)
+            {
+                error = $"column {index} has length {column.Length}, but the table's row_count is {rowCount}.";
+                return false;
+            }
+            if (rowCount > 0 && column.Values == IntPtr.Zero)
+            {
+                error = $"column {index} has {rowCount} row(s) but a NULL values pointer.";
+                return false;
+            }
+            if (column.Type != NativeColumnType.String)
+            {
+                return true;
+            }
+            return TryValidateStringOffsets(column, index, rowCount, out error);
+        }
+
+        private static bool TryValidateStringOffsets(NativeColumn column, int index, long rowCount, [NotNullWhen(false)] out string? error)
+        {
+            error = null;
+            if (column.DataLen < 0 || (column.DataLen > 0 && column.Data == IntPtr.Zero))
+            {
+                error = $"column {index} has data_len {column.DataLen} but a NULL data pointer.";
+                return false;
+            }
+            if (rowCount == 0)
+            {
+                return true;
+            }
+
+            int* offsets = (int*)column.Values;
+            if (offsets[0] != 0)
+            {
+                error = $"column {index}: the first string offset must be 0, got {offsets[0]}.";
+                return false;
+            }
+            for (long row = 0; row < rowCount; row++)
+            {
+                if (offsets[row + 1] < offsets[row])
+                {
+                    error = $"column {index}: string offset {row + 1} ({offsets[row + 1]}) is before offset {row} ({offsets[row]}).";
+                    return false;
+                }
+            }
+            if (offsets[rowCount] != column.DataLen)
+            {
+                error = $"column {index}: the last string offset is {offsets[rowCount]}, but data_len is {column.DataLen}.";
+                return false;
+            }
+            return true;
+        }
+    }
+}
