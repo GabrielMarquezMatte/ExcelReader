@@ -311,6 +311,283 @@ namespace ExcelReader.Tests.Reader.Xlsx
             Assert.Contains("negative", ex.Message, StringComparison.OrdinalIgnoreCase);
         }
 
+        private static readonly byte[] Zip64Payload = Encoding.UTF8.GetBytes("zip64 stored payload");
+
+        [Fact]
+        public void ValidZip64ArchiveOpensTheStoredEntry()
+        {
+            Zip64Layout zip = BuildStoredZip64(Zip64Payload);
+
+            using ZipMemoryIndex index = ZipMemoryIndex.Create(zip.Bytes, ExcelReaderOptions.Default);
+            Assert.True(index.TryGetEntry("a.txt"u8, out ZipEntryRef entry));
+            Assert.Equal(0, entry.LocalHeaderOffset);
+            Assert.Equal(Zip64Payload.Length, entry.CompressedSize);
+            Assert.Equal(Zip64Payload.Length, entry.UncompressedSize);
+            using ZipPart part = index.OpenPart(entry, new DecompressedByteCounter(0));
+            Assert.Equal(Zip64Payload, part.Memory.ToArray());
+
+            using var ms = new MemoryStream(zip.Bytes);
+            using var bcl = new ZipArchive(ms, ZipArchiveMode.Read);
+            using Stream bclStream = bcl.GetEntry("a.txt")!.Open();
+            using var copy = new MemoryStream();
+            bclStream.CopyTo(copy);
+            Assert.Equal(Zip64Payload, copy.ToArray());
+        }
+
+        [Theory]
+        [InlineData(long.MaxValue)]
+        [InlineData(long.MaxValue - 29)]
+        [InlineData(long.MaxValue - 30)]
+        [InlineData((long)int.MaxValue + 1)]
+        [InlineData(int.MaxValue)]
+        public void HugeZip64LocalHeaderOffsetThrowsInvalidDataOnOpen(long localOffset)
+        {
+            Zip64Layout zip = BuildStoredZip64(Zip64Payload, localOffset: localOffset);
+
+            using ZipMemoryIndex index = ZipMemoryIndex.Create(zip.Bytes, ExcelReaderOptions.Default);
+            Assert.True(index.TryGetEntry("a.txt"u8, out ZipEntryRef entry));
+            Assert.Equal(localOffset, entry.LocalHeaderOffset);
+            InvalidDataException ex = Assert.Throws<InvalidDataException>(
+                () => index.OpenPart(entry, new DecompressedByteCounter(0)));
+            Assert.Contains("local file header", ex.Message, StringComparison.OrdinalIgnoreCase);
+        }
+
+        [Fact]
+        public void LocalHeaderOffsetJustInsideTheFileEndThrowsInvalidDataOnOpen()
+        {
+            Zip64Layout probe = BuildStoredZip64(Zip64Payload);
+            Zip64Layout zip = BuildStoredZip64(Zip64Payload, localOffset: probe.Bytes.Length - 29);
+
+            using ZipMemoryIndex index = ZipMemoryIndex.Create(zip.Bytes, ExcelReaderOptions.Default);
+            Assert.True(index.TryGetEntry("a.txt"u8, out ZipEntryRef entry));
+            InvalidDataException ex = Assert.Throws<InvalidDataException>(
+                () => index.OpenPart(entry, new DecompressedByteCounter(0)));
+            Assert.Contains("out of range", ex.Message, StringComparison.OrdinalIgnoreCase);
+        }
+
+        [Theory]
+        [InlineData(long.MaxValue)]
+        [InlineData(long.MaxValue - 50)]
+        [InlineData((long)int.MaxValue + 1)]
+        [InlineData(int.MaxValue)]
+        public void HugeZip64CompressedSizeThrowsInvalidDataOnOpen(long compressedSize)
+        {
+            Zip64Layout zip = BuildStoredZip64(Zip64Payload, compressedSize: compressedSize);
+
+            using ZipMemoryIndex index = ZipMemoryIndex.Create(zip.Bytes, ExcelReaderOptions.Default);
+            Assert.True(index.TryGetEntry("a.txt"u8, out ZipEntryRef entry));
+            Assert.Equal(compressedSize, entry.CompressedSize);
+            InvalidDataException ex = Assert.Throws<InvalidDataException>(
+                () => index.OpenPart(entry, new DecompressedByteCounter(0)));
+            Assert.Contains("past the end", ex.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Throws<InvalidDataException>(
+                () => index.OpenEntryStream(entry, new DecompressedByteCounter(0), ExcelReaderOptions.Default));
+        }
+
+        [Fact]
+        public void CompressedSizeEndingExactlyAtTheFileEndIsAcceptedAndOneMoreIsRejected()
+        {
+            Zip64Layout probe = BuildStoredZip64(Zip64Payload);
+            long exact = probe.Bytes.Length - probe.DataOffset;
+
+            Zip64Layout fits = BuildStoredZip64(Zip64Payload, compressedSize: exact);
+            using (ZipMemoryIndex index = ZipMemoryIndex.Create(fits.Bytes, ExcelReaderOptions.Default))
+            {
+                Assert.True(index.TryGetEntry("a.txt"u8, out ZipEntryRef entry));
+                using ZipPart part = index.OpenPart(entry, new DecompressedByteCounter(0));
+                Assert.Equal(exact, part.Memory.Length);
+            }
+
+            Zip64Layout overruns = BuildStoredZip64(Zip64Payload, compressedSize: exact + 1);
+            using (ZipMemoryIndex index = ZipMemoryIndex.Create(overruns.Bytes, ExcelReaderOptions.Default))
+            {
+                Assert.True(index.TryGetEntry("a.txt"u8, out ZipEntryRef entry));
+                Assert.Throws<InvalidDataException>(() => index.OpenPart(entry, new DecompressedByteCounter(0)));
+            }
+        }
+
+        [Theory]
+        [InlineData(0x8000000000000000UL)]
+        [InlineData(ulong.MaxValue)]
+        public void Zip64LocalHeaderOffsetAboveLongMaxIsRejectedAsNegative(ulong localOffset)
+        {
+            Zip64Layout zip = BuildStoredZip64(Zip64Payload, localOffset: unchecked((long)localOffset));
+
+            InvalidDataException ex = Assert.Throws<InvalidDataException>(
+                () => ZipMemoryIndex.Create(zip.Bytes, ExcelReaderOptions.Default));
+            Assert.Contains("negative", ex.Message, StringComparison.OrdinalIgnoreCase);
+        }
+
+        [Theory]
+        [InlineData(0x8000000000000000UL)]
+        [InlineData(ulong.MaxValue)]
+        public void Zip64LocatorOffsetAboveLongMaxIsRejectedNotIgnored(ulong zip64EocdOffset)
+        {
+            Zip64Layout zip = BuildStoredZip64(Zip64Payload);
+            BinaryPrimitives.WriteUInt64LittleEndian(zip.Bytes.AsSpan(zip.LocatorOffset + 8), zip64EocdOffset);
+
+            InvalidDataException ex = Assert.Throws<InvalidDataException>(
+                () => ZipMemoryIndex.Create(zip.Bytes, ExcelReaderOptions.Default));
+            Assert.Contains("ZIP64", ex.Message, StringComparison.Ordinal);
+        }
+
+        [Theory]
+        [InlineData(long.MaxValue, 1UL)]
+        [InlineData(long.MaxValue, (ulong)long.MaxValue)]
+        [InlineData(1L, (ulong)long.MaxValue)]
+        [InlineData(0L, ulong.MaxValue)]
+        [InlineData(-1L, 0UL)]
+        [InlineData(long.MinValue, 100UL)]
+        [InlineData(0L, 0x8000000000000000UL)]
+        public void Zip64CentralDirectoryBoundsThatWouldOverflowAreRejected(long cdOffset, ulong cdSize)
+        {
+            Zip64Layout zip = BuildStoredZip64(Zip64Payload);
+            BinaryPrimitives.WriteUInt64LittleEndian(zip.Bytes.AsSpan(zip.Zip64EocdOffset + 40), cdSize);
+            BinaryPrimitives.WriteInt64LittleEndian(zip.Bytes.AsSpan(zip.Zip64EocdOffset + 48), cdOffset);
+
+            InvalidDataException ex = Assert.Throws<InvalidDataException>(
+                () => ZipMemoryIndex.Create(zip.Bytes, ExcelReaderOptions.Default));
+            Assert.Contains("central directory", ex.Message, StringComparison.OrdinalIgnoreCase);
+        }
+
+        [Fact]
+        public void Zip64CentralDirectorySizeOneByteLongerThanItsRecordsIsRejected()
+        {
+            Zip64Layout zip = BuildStoredZip64(Zip64Payload);
+            long cdOffset = BinaryPrimitives.ReadInt64LittleEndian(zip.Bytes.AsSpan(zip.Zip64EocdOffset + 48));
+            long cdSize = BinaryPrimitives.ReadInt64LittleEndian(zip.Bytes.AsSpan(zip.Zip64EocdOffset + 40));
+            Assert.Equal(zip.Zip64EocdOffset, cdOffset + cdSize);
+
+            BinaryPrimitives.WriteInt64LittleEndian(zip.Bytes.AsSpan(zip.Zip64EocdOffset + 40), cdSize + 1);
+            Assert.Throws<InvalidDataException>(() => ZipMemoryIndex.Create(zip.Bytes, ExcelReaderOptions.Default));
+        }
+
+        [Theory]
+        [InlineData(28, (ushort)10)]
+        [InlineData(30, (ushort)0xFFFF)]
+        [InlineData(32, (ushort)1)]
+        [InlineData(32, (ushort)0xFFFF)]
+        public void CentralDirectoryVariableFieldsRunningPastTheDirectoryEndAreRejected(int fieldOffset, ushort value)
+        {
+            byte[] zipBytes = BuildZipWithOneEntry("hello.txt", Zip64Payload, CompressionLevel.NoCompression);
+            PatchCentralDirectoryUInt16(zipBytes, "hello.txt", fieldOffset, value);
+
+            InvalidDataException ex = Assert.Throws<InvalidDataException>(
+                () => ZipMemoryIndex.Create(zipBytes, ExcelReaderOptions.Default));
+            Assert.Contains("truncated", ex.Message, StringComparison.OrdinalIgnoreCase);
+        }
+
+        [Theory]
+        [InlineData(1u)]
+        [InlineData(45u)]
+        public void CentralDirectorySizeShorterThanItsFixedRecordIsRejected(uint cdSize)
+        {
+            byte[] zipBytes = BuildZipWithOneEntry("hello.txt", Zip64Payload, CompressionLevel.NoCompression);
+            int eocd = zipBytes.Length - 22;
+            uint cdOffset = BinaryPrimitives.ReadUInt32LittleEndian(zipBytes.AsSpan(eocd + 16));
+            WriteEocd(zipBytes, eocd, declaredCount: 1, cdSize: cdSize, cdOffset: cdOffset);
+
+            InvalidDataException ex = Assert.Throws<InvalidDataException>(
+                () => ZipMemoryIndex.Create(zipBytes, ExcelReaderOptions.Default));
+            Assert.Contains("truncated", ex.Message, StringComparison.OrdinalIgnoreCase);
+        }
+
+        [Fact]
+        public void LocalExtraLengthPushingDataPastTheFileEndThrowsInvalidDataOnOpen()
+        {
+            byte[] zipBytes = BuildZipWithOneEntry("hello.txt", Zip64Payload, CompressionLevel.NoCompression);
+            BinaryPrimitives.WriteUInt16LittleEndian(zipBytes.AsSpan(28), 0xFFFF);
+
+            using ZipMemoryIndex index = ZipMemoryIndex.Create(zipBytes, ExcelReaderOptions.Default);
+            Assert.True(index.TryGetEntry("hello.txt"u8, out ZipEntryRef entry));
+            InvalidDataException ex = Assert.Throws<InvalidDataException>(
+                () => index.OpenPart(entry, new DecompressedByteCounter(0)));
+            Assert.Contains("past the end", ex.Message, StringComparison.OrdinalIgnoreCase);
+        }
+
+        private readonly record struct Zip64Layout(byte[] Bytes, int DataOffset, int Zip64EocdOffset, int LocatorOffset);
+
+        private static Zip64Layout BuildStoredZip64(byte[] payload, long? localOffset = null, long? compressedSize = null)
+        {
+            byte[] name = "a.txt"u8.ToArray();
+            uint crc = Crc32(payload);
+            int localExtraLength = 4 + 16;
+            int cdExtraLength = 4 + 24;
+            int dataOffset = 30 + name.Length + localExtraLength;
+            int cdOffset = dataOffset + payload.Length;
+            int cdSize = CentralDirectoryFixedSize + name.Length + cdExtraLength;
+            int zip64EocdOffset = cdOffset + cdSize;
+            int locatorOffset = zip64EocdOffset + 56;
+            byte[] bytes = new byte[locatorOffset + 20 + 22];
+            Span<byte> s = bytes;
+
+            BinaryPrimitives.WriteInt32LittleEndian(s, 0x04034b50);
+            BinaryPrimitives.WriteUInt16LittleEndian(s[4..], 45);
+            BinaryPrimitives.WriteUInt32LittleEndian(s[14..], crc);
+            BinaryPrimitives.WriteUInt32LittleEndian(s[18..], Zip64SentinelU32);
+            BinaryPrimitives.WriteUInt32LittleEndian(s[22..], Zip64SentinelU32);
+            BinaryPrimitives.WriteUInt16LittleEndian(s[26..], (ushort)name.Length);
+            BinaryPrimitives.WriteUInt16LittleEndian(s[28..], (ushort)localExtraLength);
+            name.CopyTo(s[30..]);
+            WriteZip64Extra(s[(30 + name.Length)..], payload.Length, payload.Length);
+            payload.CopyTo(s[dataOffset..]);
+
+            Span<byte> cd = s[cdOffset..];
+            BinaryPrimitives.WriteInt32LittleEndian(cd, 0x02014b50);
+            BinaryPrimitives.WriteUInt16LittleEndian(cd[4..], 45);
+            BinaryPrimitives.WriteUInt16LittleEndian(cd[6..], 45);
+            BinaryPrimitives.WriteUInt32LittleEndian(cd[16..], crc);
+            BinaryPrimitives.WriteUInt32LittleEndian(cd[20..], Zip64SentinelU32);
+            BinaryPrimitives.WriteUInt32LittleEndian(cd[24..], Zip64SentinelU32);
+            BinaryPrimitives.WriteUInt16LittleEndian(cd[28..], (ushort)name.Length);
+            BinaryPrimitives.WriteUInt16LittleEndian(cd[30..], (ushort)cdExtraLength);
+            BinaryPrimitives.WriteUInt32LittleEndian(cd[42..], Zip64SentinelU32);
+            name.CopyTo(cd[CentralDirectoryFixedSize..]);
+            WriteZip64Extra(cd[(CentralDirectoryFixedSize + name.Length)..],
+                payload.Length, compressedSize ?? payload.Length, localOffset ?? 0);
+
+            Span<byte> z64 = s[zip64EocdOffset..];
+            BinaryPrimitives.WriteInt32LittleEndian(z64, 0x06064b50);
+            BinaryPrimitives.WriteInt64LittleEndian(z64[4..], 44);
+            BinaryPrimitives.WriteUInt16LittleEndian(z64[12..], 45);
+            BinaryPrimitives.WriteUInt16LittleEndian(z64[14..], 45);
+            BinaryPrimitives.WriteInt64LittleEndian(z64[24..], 1);
+            BinaryPrimitives.WriteInt64LittleEndian(z64[32..], 1);
+            BinaryPrimitives.WriteInt64LittleEndian(z64[40..], cdSize);
+            BinaryPrimitives.WriteInt64LittleEndian(z64[48..], cdOffset);
+
+            WriteZip64Locator(bytes, locatorOffset, zip64EocdOffset);
+            BinaryPrimitives.WriteUInt32LittleEndian(s[(locatorOffset + 16)..], 1);
+            int eocd = locatorOffset + 20;
+            WriteEocd(bytes, eocd, declaredCount: 0xFFFF, cdSize: Zip64SentinelU32, cdOffset: Zip64SentinelU32);
+            BinaryPrimitives.WriteUInt16LittleEndian(s[(eocd + 8)..], 0xFFFF);
+            return new Zip64Layout(bytes, dataOffset, zip64EocdOffset, locatorOffset);
+        }
+
+        private static void WriteZip64Extra(Span<byte> destination, params ReadOnlySpan<long> values)
+        {
+            BinaryPrimitives.WriteUInt16LittleEndian(destination, 0x0001);
+            BinaryPrimitives.WriteUInt16LittleEndian(destination[2..], (ushort)(values.Length * 8));
+            for (int i = 0; i < values.Length; i++)
+            {
+                BinaryPrimitives.WriteInt64LittleEndian(destination[(4 + (i * 8))..], values[i]);
+            }
+        }
+
+        private static uint Crc32(ReadOnlySpan<byte> data)
+        {
+            uint crc = 0xFFFFFFFFu;
+            foreach (byte b in data)
+            {
+                crc ^= b;
+                for (int k = 0; k < 8; k++)
+                {
+                    crc = (crc & 1) != 0 ? (crc >> 1) ^ 0xEDB88320u : crc >> 1;
+                }
+            }
+            return ~crc;
+        }
+
         [Fact]
         public void ZipEntryBytesReadThrowsInvalidDataWhenEntryUnderDelivers()
         {

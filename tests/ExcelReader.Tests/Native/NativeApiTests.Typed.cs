@@ -493,6 +493,115 @@ namespace ExcelReader.Tests.Native
             }
         }
 
+        [Theory]
+        [InlineData(1)]
+        [InlineData(2)]
+        [InlineData(3)]
+        [InlineData(4)]
+        [InlineData(5)]
+        public void ParseTyped_Should_Free_Every_Block_Exactly_Once_When_An_Allocation_Fails(int failAt)
+        {
+            BlockTracker tracker = new(failAt);
+            int status = ParseTypedWithTracker(tracker, out NativeTable table);
+
+            Assert.Equal(NativeStatus.Error, status);
+            Assert.Equal(IntPtr.Zero, table.Columns);
+            Assert.Equal(failAt, tracker.Allocations);
+            Assert.Equal(failAt - 1, tracker.Frees);
+            Assert.Equal(0, tracker.Live);
+            Assert.Equal(0, tracker.UnknownFrees);
+        }
+
+        [Fact]
+        public void FreeTable_Should_Free_Every_Block_Of_A_Built_Table_Exactly_Once()
+        {
+            BlockTracker tracker = new(failAt: 0);
+            Assert.Equal(NativeStatus.Ok, ParseTypedWithTracker(tracker, out NativeTable table));
+            Assert.Equal(5, tracker.Allocations);
+            Assert.Equal(0, tracker.Frees);
+
+            TypedApi.FreeOverride = tracker.Free;
+            try
+            {
+                TypedApi.FreeTable(ref table);
+                TypedApi.FreeTable(ref table);
+            }
+            finally
+            {
+                TypedApi.FreeOverride = null;
+            }
+
+            Assert.Equal(5, tracker.Frees);
+            Assert.Equal(0, tracker.Live);
+            Assert.Equal(0, tracker.UnknownFrees);
+        }
+
+        private static int ParseTypedWithTracker(BlockTracker tracker, out NativeTable table)
+        {
+            string path = Path.Combine(Path.GetTempPath(), $"excelreader-native-{Guid.NewGuid():N}.csv");
+            File.WriteAllText(path, "qty,name\n5,a\nnotanumber,b\n");
+            try
+            {
+                Assert.Equal(NativeStatus.Ok, OpenPath(path, NativeFormat.Csv, out NativeHandle? handle));
+                NativeColumnSpec[] specs =
+                [
+                    new() { Names = ["qty"], Type = NativeColumnType.Int64, Nullable = true },
+                    new() { Names = ["name"], Type = NativeColumnType.String },
+                ];
+                TypedApi.AllocOverride = tracker.Alloc;
+                TypedApi.FreeOverride = tracker.Free;
+                try
+                {
+                    return TypedApi.ParseTyped(handle, specs, headerRow: 1, out table);
+                }
+                finally
+                {
+                    TypedApi.AllocOverride = null;
+                    TypedApi.FreeOverride = null;
+                    ReadApi.Close(handle);
+                }
+            }
+            finally
+            {
+                File.Delete(path);
+            }
+        }
+
+        private sealed class BlockTracker(int failAt)
+        {
+            private readonly HashSet<IntPtr> _live = [];
+
+            internal int Allocations { get; private set; }
+
+            internal int Frees { get; private set; }
+
+            internal int UnknownFrees { get; private set; }
+
+            internal int Live => _live.Count;
+
+            internal IntPtr Alloc(int byteLength)
+            {
+                if (++Allocations == failAt)
+                {
+                    throw new InvalidOperationException("injected allocation failure");
+                }
+                IntPtr block = Marshal.AllocHGlobal(byteLength);
+                _live.Add(block);
+                return block;
+            }
+
+            internal void Free(IntPtr block)
+            {
+                if (!_live.Remove(block))
+                {
+                    UnknownFrees++;
+                    return;
+                }
+                Frees++;
+                Marshal.FreeHGlobal(block);
+            }
+        }
+
         [Fact]
         public void FreeTable_Should_Be_Idempotent_On_A_Zeroed_Table()
         {

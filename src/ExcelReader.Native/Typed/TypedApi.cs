@@ -83,22 +83,42 @@ namespace ExcelReader.Native.Typed
 
             for (int index = 0; index < table.ColumnCount; index++)
             {
-                NativeColumn column = table.ColumnAt(index);
-                if (column.Values != IntPtr.Zero)
-                {
-                    Marshal.FreeHGlobal(column.Values);
-                }
-                if (column.Validity != IntPtr.Zero)
-                {
-                    Marshal.FreeHGlobal(column.Validity);
-                }
-                if (column.Data != IntPtr.Zero)
-                {
-                    Marshal.FreeHGlobal(column.Data);
-                }
+                FreeColumn(table.ColumnAt(index));
             }
-            Marshal.FreeHGlobal(table.Columns);
+            FreeBlock(table.Columns);
             table = default;
+        }
+
+        private static void FreeColumn(in NativeColumn column)
+        {
+            FreeBlock(column.Values);
+            FreeBlock(column.Validity);
+            FreeBlock(column.Data);
+        }
+
+        [ThreadStatic]
+        internal static Func<int, IntPtr>? AllocOverride;
+
+        [ThreadStatic]
+        internal static Action<IntPtr>? FreeOverride;
+
+        private static IntPtr AllocBlock(int byteLength)
+        {
+            return AllocOverride is { } alloc ? alloc(byteLength) : Marshal.AllocHGlobal(byteLength);
+        }
+
+        private static void FreeBlock(IntPtr block)
+        {
+            if (block == IntPtr.Zero)
+            {
+                return;
+            }
+            if (FreeOverride is { } free)
+            {
+                free(block);
+                return;
+            }
+            Marshal.FreeHGlobal(block);
         }
 
         internal static bool IsValidSpecCount(int specCount)
@@ -225,7 +245,7 @@ namespace ExcelReader.Native.Typed
         {
             int columnCount = builders.Length;
             long rowCount = columnCount > 0 ? builders[0].RowCount : 0;
-            IntPtr columnsBlock = Marshal.AllocHGlobal(checked(columnCount * sizeof(NativeColumn)));
+            IntPtr columnsBlock = AllocBlock(checked(columnCount * sizeof(NativeColumn)));
             NativeColumn* columns = (NativeColumn*)columnsBlock;
             int built = 0;
             try
@@ -244,12 +264,11 @@ namespace ExcelReader.Native.Typed
             return new NativeTable { ColumnCount = columnCount, RowCount = rowCount, Columns = columnsBlock };
         }
 
-        private static IntPtr CopyToNativeBlock<T>(ChunkedBuffer<T> source) where T : unmanaged
+        private static void CopyToNativeBlock<T>(ChunkedBuffer<T> source, out IntPtr block) where T : unmanaged
         {
             int byteLength = source.ByteLength;
-            IntPtr block = Marshal.AllocHGlobal(Math.Max(byteLength, 1));
+            block = AllocBlock(Math.Max(byteLength, 1));
             source.CopyTo(new Span<byte>((void*)block, byteLength));
-            return block;
         }
 
         internal static IntPtr PackBitsLsbFirst(ReadOnlySpan<byte> flags)
@@ -412,41 +431,40 @@ namespace ExcelReader.Native.Typed
 
             internal NativeColumn Build()
             {
-                IntPtr validity = IntPtr.Zero;
-                if (_anyNull)
-                {
-                    validity = CopyToNativeBlock(_validity);
-                }
-                return type switch
-                {
-                    NativeColumnType.String => BuildStringColumn(validity),
-                    NativeColumnType.Bool => BuildFixedWidthColumn(_bools, validity),
-                    NativeColumnType.Float64 => BuildFixedWidthColumn(_doubles, validity),
-                    NativeColumnType.Date => BuildFixedWidthColumn(_ints, validity),
-                    _ => BuildFixedWidthColumn(_longs, validity),
-                };
-            }
-
-            private NativeColumn BuildFixedWidthColumn<T>(ChunkedBuffer<T> values, IntPtr validity) where T : unmanaged
-            {
-                IntPtr block = CopyToNativeBlock(values);
-                return new NativeColumn { Type = type, Length = RowCount, Values = block, Validity = validity, Data = IntPtr.Zero, DataLen = 0 };
-            }
-
-            private NativeColumn BuildStringColumn(IntPtr validity)
-            {
-                IntPtr offsets = CopyToNativeBlock(_stringOffsets);
-                IntPtr data;
+                NativeColumn column = new() { Type = type, Length = RowCount };
                 try
                 {
-                    data = CopyToNativeBlock(_stringData);
+                    if (_anyNull)
+                    {
+                        CopyToNativeBlock(_validity, out column.Validity);
+                    }
+                    switch (type)
+                    {
+                        case NativeColumnType.String:
+                            CopyToNativeBlock(_stringOffsets, out column.Values);
+                            CopyToNativeBlock(_stringData, out column.Data);
+                            column.DataLen = _stringData.ByteLength;
+                            break;
+                        case NativeColumnType.Bool:
+                            CopyToNativeBlock(_bools, out column.Values);
+                            break;
+                        case NativeColumnType.Float64:
+                            CopyToNativeBlock(_doubles, out column.Values);
+                            break;
+                        case NativeColumnType.Date:
+                            CopyToNativeBlock(_ints, out column.Values);
+                            break;
+                        default:
+                            CopyToNativeBlock(_longs, out column.Values);
+                            break;
+                    }
                 }
                 catch
                 {
-                    Marshal.FreeHGlobal(offsets);
+                    FreeColumn(in column);
                     throw;
                 }
-                return new NativeColumn { Type = type, Length = RowCount, Values = offsets, Validity = validity, Data = data, DataLen = _stringData.ByteLength };
+                return column;
             }
         }
     }

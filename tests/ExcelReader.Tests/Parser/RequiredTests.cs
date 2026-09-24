@@ -178,5 +178,32 @@ namespace ExcelReader.Tests.Parser
 
             Assert.Contains("ExcelRequired", ex.Message, StringComparison.Ordinal);
         }
+
+        private sealed class RequiredGetOnlyRow
+        {
+            [ExcelRequired]
+            public string Code { get; } = "";
+        }
+
+        private sealed class RequiredPrivateSetRow
+        {
+            [ExcelRequired]
+            public string Code { get; private set; } = "";
+        }
+
+        [Fact]
+        public async Task RequiredPropertyWithNoPublicSetterThrows()
+        {
+            await using var ms = await TypedWorkbook.BuildAsync(["Code"], ["v"]);
+            await using var reader = await Excel.FromXlsxAsync(ms, ct: TestContext.Current.CancellationToken);
+
+            InvalidOperationException getOnly = Assert.Throws<InvalidOperationException>(
+                () => ExcelParser.FromAttributes<RequiredGetOnlyRow>().Parse(reader).ToList());
+            InvalidOperationException privateSet = Assert.Throws<InvalidOperationException>(
+                () => ExcelParser.FromAttributes<RequiredPrivateSetRow>().Parse(reader).ToList());
+
+            Assert.Contains("RequiredGetOnlyRow.Code", getOnly.Message, StringComparison.Ordinal);
+            Assert.Contains("RequiredPrivateSetRow.Code", privateSet.Message, StringComparison.Ordinal);
+        }
     }
 }
