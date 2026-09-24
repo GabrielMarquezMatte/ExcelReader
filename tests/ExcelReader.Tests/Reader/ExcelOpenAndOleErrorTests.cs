@@ -8,7 +8,6 @@ namespace ExcelReader.Tests.Reader
 {
     public class ExcelOpenAndOleErrorTests
     {
-        // --- Excel.Open format detection ---
 
         [Fact]
         public void OpenDetectsXlsxFromStream()

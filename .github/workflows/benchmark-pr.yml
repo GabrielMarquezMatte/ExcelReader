@@ -3,10 +3,10 @@ name: Benchmarks -> PR Comment
 on:
   pull_request:
     branches: [master, develop]
-    types: [opened, synchronize, reopened]
+    types: [opened, synchronize, reopened, ready_for_review, labeled]
 
 concurrency:
-  group: benchmark-pr-${{ github.event.pull_request.number }}
+  group: benchmark-pr-${{ github.event.pull_request.number }}${{ github.event.action == 'labeled' && github.event.label.name != 'run-benchmarks' && format('-{0}', github.run_id) || '' }}
   cancel-in-progress: true
 
 permissions:
@@ -16,9 +16,13 @@ permissions:
 jobs:
   changes:
     name: Detect changed paths
+    if: >-
+      github.event.pull_request.draft != true &&
+      (github.event.action != 'labeled' || github.event.label.name == 'run-benchmarks')
     runs-on: ubuntu-latest
     outputs:
       benchmarks: ${{ steps.filter.outputs.benchmarks }}
+      run: ${{ steps.filter.outputs.benchmarks == 'true' && (github.base_ref == 'master' || contains(github.event.pull_request.labels.*.name, 'run-benchmarks')) }}
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -37,6 +41,8 @@ jobs:
 
   groups:
     name: Load benchmark groups
+    needs: changes
+    if: needs.changes.outputs.run == 'true'
     runs-on: ubuntu-latest
     outputs:
       matrix: ${{ steps.load.outputs.matrix }}
@@ -69,7 +75,7 @@ jobs:
     name: Run (${{ matrix.group.name }})
     runs-on: ubuntu-latest
     needs: [changes, groups]
-    if: needs.changes.outputs.benchmarks == 'true'
+    if: needs.changes.outputs.run == 'true'
     strategy:
       fail-fast: false
       matrix:
@@ -114,7 +120,7 @@ jobs:
   comment:
     name: Post PR Comment
     needs: [changes, benchmark]
-    if: always() && needs.changes.outputs.benchmarks == 'true' && needs.benchmark.result != 'cancelled'
+    if: always() && needs.changes.outputs.run == 'true' && needs.benchmark.result != 'cancelled'
     runs-on: ubuntu-latest
 
     steps:

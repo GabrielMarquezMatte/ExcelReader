@@ -8,7 +8,6 @@ namespace ExcelReader.Core.Reader.Xlsx
 {
     public sealed partial class XlsxReader
     {
-        // --- workbook / shared-strings loading (one-time, small except sharedStrings) ---
         private static (string Name, string Path, ExcelSheetVisibility Visibility)[] ParseSheets(ReadOnlySpan<byte> wbBytes, ReadOnlySpan<byte> relsBytes)
         {
             if (wbBytes.IsEmpty)
