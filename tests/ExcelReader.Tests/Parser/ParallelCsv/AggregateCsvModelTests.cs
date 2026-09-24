@@ -339,8 +339,8 @@ namespace ExcelReader.Tests.Parser.ParallelCsv
             public int Last { get; set; }
 
             public override bool Equals(object? obj) => obj is WideRow row && Equals(row);
-            public bool Equals(WideRow other) => Last == other.Last;
-            public override int GetHashCode() => Last.GetHashCode();
+            public readonly bool Equals(WideRow other) => Last == other.Last;
+            public override readonly int GetHashCode() => Last.GetHashCode();
             public static bool operator ==(WideRow left, WideRow right) => left.Equals(right);
             public static bool operator !=(WideRow left, WideRow right) => !left.Equals(right);
         }
