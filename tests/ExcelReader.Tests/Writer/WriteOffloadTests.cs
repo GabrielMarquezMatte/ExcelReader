@@ -188,6 +188,30 @@ namespace ExcelReader.Tests.Writer
             Assert.Throws<TimeoutException>(stream.Dispose);
         }
 
+        [Theory]
+        [InlineData(false, false)]
+        [InlineData(false, true)]
+        [InlineData(true, false)]
+        [InlineData(true, true)]
+        public async Task AConsumerFailureStillDisposesTheInnerStreamAndWinsOverItsCleanupError(bool async, bool failDispose)
+        {
+            var inner = new ThrowingStream(failDispose);
+            var stream = new WriteOffloadStream(inner);
+            stream.Write("boom"u8);
+
+            if (async)
+            {
+                await Assert.ThrowsAsync<TimeoutException>(() => stream.DisposeAsync().AsTask());
+            }
+            else
+            {
+                Assert.Throws<TimeoutException>(stream.Dispose);
+            }
+
+            Assert.True(inner.Disposed);
+            Assert.Null(await Record.ExceptionAsync(() => stream.DisposeAsync().AsTask()));
+        }
+
         [Fact]
         public async Task EveryEnqueuePathReportsAClosedChannelAfterFlush()
         {
@@ -228,8 +252,20 @@ namespace ExcelReader.Tests.Writer
             return buffer.Detach(out length);
         }
 
-        private sealed class ThrowingStream : Stream
+        private sealed class ThrowingStream(bool failDispose = false) : Stream
         {
+            internal bool Disposed { get; private set; }
+
+            protected override void Dispose(bool disposing)
+            {
+                Disposed = true;
+                base.Dispose(disposing);
+                if (failDispose)
+                {
+                    throw new IOException("cleanup failed too");
+                }
+            }
+
             public override bool CanRead => false;
 
             public override bool CanSeek => false;

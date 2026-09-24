@@ -57,6 +57,8 @@ namespace ExcelReader.Core.Writer.Xls
         internal int ColCount => _maxCol + 1;
         internal ReadOnlyMemory<byte> CellsMemory => _cells.Memory;
         internal ReadOnlyMemory<byte> ColInfoMemory => _colInfos.Memory;
+        internal bool ResourcesReleased => _cells.IsReleased && _colInfos.IsReleased;
+        private bool HasActiveRow => _rowActive || (_continuation?.HasActiveRow ?? false);
 
         [SuppressMessage("Usage", "CA2213:Disposable fields should be disposed",
             Justification = "Outlives Dispose; XlsWorkbookWriter releases it via ReleaseBuffer after writing the bytes in EndAsync, same as _cells.")]
@@ -236,7 +238,7 @@ namespace ExcelReader.Core.Writer.Xls
         public void End()
         {
             WriterStateGuard.ThrowIfEnded(_state, this);
-            WriterStateGuard.RequireNoActiveRowForEnd(_rowActive, nameof(XlsRowWriter));
+            WriterStateGuard.RequireNoActiveRowForEnd(HasActiveRow, nameof(XlsRowWriter));
             EnsureStarted();
             _state = WriterState.Ended;
             _continuation?.End();

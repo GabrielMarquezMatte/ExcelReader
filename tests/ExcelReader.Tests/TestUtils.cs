@@ -158,6 +158,8 @@ namespace ExcelReader.Tests
 
         internal Action? OnWrite { get; set; }
 
+        internal Action? OnDispose { get; set; }
+
         public override void Write(byte[] buffer, int offset, int count)
         {
             OnWrite?.Invoke();
@@ -180,6 +182,7 @@ namespace ExcelReader.Tests
         {
             Disposed = true;
             base.Dispose(disposing);
+            OnDispose?.Invoke();
         }
     }
 

@@ -71,6 +71,32 @@ namespace ExcelReader.Tests.Writer
         }
 
         [Theory]
+        [InlineData("xlsx", false)]
+        [InlineData("xlsx", true)]
+        [InlineData("xlsb", false)]
+        [InlineData("xlsb", true)]
+        [InlineData("xls", false)]
+        [InlineData("xls", true)]
+        public async Task Should_ReportTheFinalizationFailure_When_ClosingTheOwnedStreamAlsoFails(string format, bool async)
+        {
+            var stream = new TrackingStream();
+            IWorkbookWriter<IDisposable> workbook = CreateWithEndedSheet(format, stream, leaveOpen: false);
+            FailWrites(stream);
+            stream.OnDispose = static () => throw new InvalidOperationException("close failed");
+
+            if (async)
+            {
+                await Assert.ThrowsAsync<IOException>(() => workbook.DisposeAsync().AsTask());
+            }
+            else
+            {
+                Assert.Throws<IOException>(workbook.Dispose);
+            }
+
+            Assert.True(stream.Disposed);
+        }
+
+        [Theory]
         [MemberData(nameof(FormatsAndOwnership))]
         public void Should_ReleaseOwnedStream_When_DisposeRejectsAnAllHiddenWorkbook(string format, bool leaveOpen)
         {

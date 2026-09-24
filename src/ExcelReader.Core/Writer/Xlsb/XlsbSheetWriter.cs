@@ -62,6 +62,7 @@ namespace ExcelReader.Core.Writer.Xlsb
         internal ExcelSheetVisibility Visibility { get; }
         internal BiffBuffer Payload { get; } = new(256);
         internal bool UseSharedStrings => _owner.UseSharedStrings;
+        internal bool ResourcesReleased => _stream is null && _buffersDisposed;
 
         /// <inheritdoc/>
         /// <exception cref="ArgumentOutOfRangeException"><paramref name="columnIndex"/> is negative, or <paramref name="styleId"/> is negative or was never returned by <see cref="XlsbWorkbookWriter.AddStyle"/>.</exception>
@@ -208,29 +209,29 @@ namespace ExcelReader.Core.Writer.Xlsb
         {
             WriterStateGuard.ThrowIfEnded(_state, this);
             WriterStateGuard.RequireNoActiveRowForEnd(_rowActive, nameof(XlsbRowWriter));
-            EnsureStarted();
-            _state = WriterState.Ended;
-            WriteRecord(Brt.EndSheetData);
-            WriteSheetMetadata();
-            WriteRecord(Brt.EndSheet);
-            if (_stream is null)
+            try
             {
-                PatchDimension(final: true);
-                WriteBufferedSheet();
+                EnsureStarted();
+                WriteRecord(Brt.EndSheetData);
+                WriteSheetMetadata();
+                WriteRecord(Brt.EndSheet);
+                if (_stream is null)
+                {
+                    PatchDimension(final: true);
+                    WriteBufferedSheet();
+                }
+                else
+                {
+                    FlushRecords();
+                    _stream.Dispose();
+                }
             }
-            else
+            catch
             {
-                FlushRecords();
-                _stream.Dispose();
-                _stream = null;
+                Fault();
+                throw;
             }
-            ReleaseBuffers();
-            if (!_registered)
-            {
-                _owner.RegisterSheet(this);
-                _registered = true;
-            }
-            _owner.NotifySheetEnded();
+            Release(faulted: false);
         }
 
         /// <inheritdoc/>
@@ -239,29 +240,49 @@ namespace ExcelReader.Core.Writer.Xlsb
             WriterStateGuard.ThrowIfEnded(_state, this);
             WriterStateGuard.RequireNoActiveRowForEnd(_rowActive, nameof(XlsbRowWriter));
             ct.ThrowIfCancellationRequested();
-            EnsureStarted();
+            try
+            {
+                EnsureStarted();
+                WriteRecord(Brt.EndSheetData);
+                WriteSheetMetadata();
+                WriteRecord(Brt.EndSheet);
+                if (_stream is null)
+                {
+                    PatchDimension(final: true);
+                    await WriteBufferedSheetAsync(ct).ConfigureAwait(false);
+                }
+                else
+                {
+                    FlushRecords();
+                    await _stream.DisposeAsync().ConfigureAwait(false);
+                }
+            }
+            catch
+            {
+                await FailureCleanup.DisposeAsync(_stream).ConfigureAwait(false);
+                Release(faulted: true);
+                throw;
+            }
+            Release(faulted: false);
+        }
+
+        private void Fault()
+        {
+            FailureCleanup.Dispose(_stream);
+            Release(faulted: true);
+        }
+
+        private void Release(bool faulted)
+        {
             _state = WriterState.Ended;
-            WriteRecord(Brt.EndSheetData);
-            WriteSheetMetadata();
-            WriteRecord(Brt.EndSheet);
-            if (_stream is null)
-            {
-                PatchDimension(final: true);
-                await WriteBufferedSheetAsync(ct).ConfigureAwait(false);
-            }
-            else
-            {
-                FlushRecords();
-                await _stream.DisposeAsync().ConfigureAwait(false);
-                _stream = null;
-            }
+            _stream = null;
             ReleaseBuffers();
-            if (!_registered)
+            if (!faulted && !_registered)
             {
                 _owner.RegisterSheet(this);
                 _registered = true;
             }
-            _owner.NotifySheetEnded();
+            _owner.NotifySheetEnded(faulted);
         }
 
         /// <summary>
@@ -317,15 +338,23 @@ namespace ExcelReader.Core.Writer.Xlsb
                 return;
             }
             PatchDimension(final: false);
-            EnsureStream();
-            if (_stream is WriteOffloadStream offload)
+            try
             {
-                byte[] detached = _records.Detach(out int length);
-                offload.EnqueueOwned(detached, length);
-                return;
+                EnsureStream();
+                if (_stream is WriteOffloadStream offload)
+                {
+                    byte[] detached = _records.Detach(out int length);
+                    offload.EnqueueOwned(detached, length);
+                    return;
+                }
+                _stream!.Write(_records.Span);
+                _records.Reset();
             }
-            _stream!.Write(_records.Span);
-            _records.Reset();
+            catch
+            {
+                Fault();
+                throw;
+            }
         }
 
         private void WriteBufferedSheet()
