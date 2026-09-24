@@ -74,7 +74,7 @@ where the discarded partition's accumulator is thrown away.
 
 See the [parallel CSV benchmarks](../performance/benchmarks.md#parallel-csv) for what this buys. Those figures are
 `CsvParallel.AggregateAsync`'s, measured over the same projection path this shares: at dop 16 it is
-~2.0x faster than the typed path while allocating ~446x less, with zero garbage collections.
+~2.7x faster than the typed path while allocating ~394x less, with zero garbage collections.
 
 Properties need setters. A get-only property is skipped during binding and silently receives nothing.
 
@@ -235,16 +235,16 @@ Measured across both read benchmarks (see [Real data reads](../performance/bench
 
 | Workload | Default | `PrefetchDecompression = true` | Gain |
 |---|---:|---:|---:|
-| XLSX, real data | 64.7 ms | 43.3 ms | 33% |
-| XLSM, real data | 69.1 ms | 43.8 ms | 37% |
-| XLSB, real data | 30.6 ms | 17.9 ms | 41% |
-| XLSX, string-heavy | 57.1 ms | 37.2 ms | 35% |
-| XLSB, string-heavy | 40.2 ms | 26.0 ms | 35% |
+| XLSX, real data | 64.3 ms | 42.9 ms | 33% |
+| XLSM, real data | 65.0 ms | 42.6 ms | 35% |
+| XLSB, real data | 28.9 ms | 15.4 ms | 47% |
+| XLSX, string-heavy | 57.3 ms | 34.8 ms | 39% |
+| XLSB, string-heavy | 39.5 ms | 25.8 ms | 35% |
 
 The gain tracks how much of a read is decompression rather than parsing, so it is largest
 on XLSB with numeric data (where inflate dominates). Allocations rise from the producer task and the
-pooled decompression buffers — on the real-data corpus, roughly 35 KB to 126 KB for XLSX
-and 25 KB to 71 KB for XLSB — and neither path triggers a garbage collection.
+pooled decompression buffers — on the real-data corpus, roughly 18 KB to 38 KB for XLSX
+and 19 KB to 30 KB for XLSB — and neither path triggers a garbage collection.
 
 Do **not** enable it for concurrent server workloads: a caller already reading many files
 in parallel is CPU-saturated, and an extra background thread per read only doubles thread
