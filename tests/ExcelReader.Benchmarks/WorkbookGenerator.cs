@@ -60,9 +60,12 @@ namespace ExcelReader.Benchmarks
         public static async Task<byte[]> BuildTypedAsync(int rows)
         {
             await using var ms = new MemoryStream();
-            await using (var writer = RecordWriter.CreateXlsx(ms, leaveOpen: true))
+            await using (var writer = XlsxWorkbookWriter.Create(ms, leaveOpen: true))
             {
-                await writer.WriteSheetAsync("S1", Records(rows));
+                await using (var sheet = writer.AddSheet("S1"))
+                {
+                    await sheet.WriteRecordsAsync(Records(rows), ExcelRecordLayout.FromAttributes<Record>());
+                }
             }
             return ms.ToArray();
         }
@@ -70,9 +73,12 @@ namespace ExcelReader.Benchmarks
         public static async Task<byte[]> BuildTypedSharedStringsAsync(int rows)
         {
             await using var ms = new MemoryStream();
-            await using (var writer = RecordWriter.CreateXlsx(ms, leaveOpen: true, options: new XlsxWriterOptions { UseSharedStrings = true }))
+            await using (var writer = XlsxWorkbookWriter.Create(ms, leaveOpen: true, options: new XlsxWriterOptions { UseSharedStrings = true }))
             {
-                await writer.WriteSheetAsync("S1", Records(rows));
+                await using (var sheet = writer.AddSheet("S1"))
+                {
+                    await sheet.WriteRecordsAsync(Records(rows), ExcelRecordLayout.FromAttributes<Record>());
+                }
             }
             return ms.ToArray();
         }
@@ -80,9 +86,12 @@ namespace ExcelReader.Benchmarks
         public static async Task<byte[]> BuildTypedXlsbAsync(int rows)
         {
             await using var ms = new MemoryStream();
-            await using (var writer = RecordWriter.CreateXlsb(ms, leaveOpen: true))
+            await using (var writer = XlsbWorkbookWriter.Create(ms, leaveOpen: true))
             {
-                await writer.WriteSheetAsync("S1", Records(rows));
+                await using (var sheet = writer.AddSheet("S1"))
+                {
+                    await sheet.WriteRecordsAsync(Records(rows), ExcelRecordLayout.FromAttributes<Record>());
+                }
             }
             return ms.ToArray();
         }

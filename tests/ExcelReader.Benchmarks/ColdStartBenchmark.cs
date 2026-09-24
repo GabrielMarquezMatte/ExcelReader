@@ -67,9 +67,12 @@ namespace ExcelReader.Benchmarks
         public async Task<long> RecordWriteFirstUse()
         {
             await using var ms = new MemoryStream(64 * 1024);
-            await using (var writer = RecordWriter.CreateXlsx(ms, leaveOpen: true))
+            await using (var writer = XlsxWorkbookWriter.Create(ms, leaveOpen: true))
             {
-                await writer.WriteSheetAsync("S1", _records);
+                await using (var sheet = writer.AddSheet("S1"))
+                {
+                    await sheet.WriteRecordsAsync(_records, ExcelRecordLayout.FromAttributes<Record>());
+                }
             }
             return ms.Length;
         }

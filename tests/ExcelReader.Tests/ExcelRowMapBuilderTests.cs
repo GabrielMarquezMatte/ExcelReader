@@ -125,10 +125,13 @@ namespace ExcelReader.Tests
             }
 
             await using var reflectedStream = new MemoryStream();
-            await using (WorkbookRecordWriter<XlsxSheetWriter, XlsxRowWriter> writer =
-                RecordWriter.CreateXlsx(reflectedStream, leaveOpen: true))
+            await using (XlsxWorkbookWriter writer =
+                XlsxWorkbookWriter.Create(reflectedStream, leaveOpen: true))
             {
-                await writer.WriteSheetAsync("S1", [record], ct);
+                await using (var sheet = writer.AddSheet("S1"))
+                {
+                    await sheet.WriteRecordsAsync([record], ExcelRecordLayout.FromAttributes<MapBuilderTestModel>(), ct);
+                }
             }
 
             mappedStream.Position = 0;
@@ -165,15 +168,18 @@ namespace ExcelReader.Tests
         }
 
         [Fact]
-        public async Task MappedRecordWriterRoundTripsThroughXlsx()
+        public async Task GeneratedLayoutRoundTripsThroughXlsx()
         {
             CancellationToken ct = TestContext.Current.CancellationToken;
             var record = new MapBuilderTestModel { Name = "Carol", Age = 21, BirthDate = SampleBirthDate, Active = true, Kind = MapBuilderKind.Beta };
 
             await using var stream = new MemoryStream();
-            await using (var writer = MappedRecordWriter.CreateXlsx(stream, leaveOpen: true))
+            await using (var writer = XlsxWorkbookWriter.Create(stream, leaveOpen: true))
             {
-                await writer.WriteSheetAsync("S1", [record], ct);
+                await using (var sheet = writer.AddSheet("S1"))
+                {
+                    await sheet.WriteRecordsAsync([record], ExcelRecordLayout.Generated<MapBuilderTestModel>(), ct);
+                }
             }
 
             stream.Position = 0;
@@ -185,15 +191,18 @@ namespace ExcelReader.Tests
         }
 
         [Fact]
-        public async Task MappedRecordWriterRoundTripsThroughXlsb()
+        public async Task GeneratedLayoutRoundTripsThroughXlsb()
         {
             CancellationToken ct = TestContext.Current.CancellationToken;
             var record = new MapBuilderTestModel { Name = "Dave", Age = 55, BirthDate = SampleBirthDate, Active = false, Kind = MapBuilderKind.Alpha };
 
             await using var stream = new MemoryStream();
-            await using (var writer = MappedRecordWriter.CreateXlsb(stream, leaveOpen: true))
+            await using (var writer = XlsbWorkbookWriter.Create(stream, leaveOpen: true))
             {
-                await writer.WriteSheetAsync("S1", [record], ct);
+                await using (var sheet = writer.AddSheet("S1"))
+                {
+                    await sheet.WriteRecordsAsync([record], ExcelRecordLayout.Generated<MapBuilderTestModel>(), ct);
+                }
             }
 
             stream.Position = 0;
@@ -205,15 +214,18 @@ namespace ExcelReader.Tests
         }
 
         [Fact]
-        public async Task MappedRecordWriterRoundTripsThroughXls()
+        public async Task GeneratedLayoutRoundTripsThroughXls()
         {
             CancellationToken ct = TestContext.Current.CancellationToken;
             var record = new MapBuilderTestModel { Name = "Erin", Age = 33, BirthDate = SampleBirthDate, Active = true, Kind = MapBuilderKind.Alpha };
 
             await using var stream = new MemoryStream();
-            await using (var writer = MappedRecordWriter.CreateXls(stream, leaveOpen: true))
+            await using (var writer = XlsWorkbookWriter.Create(stream, leaveOpen: true))
             {
-                await writer.WriteSheetAsync("S1", [record], ct);
+                await using (var sheet = writer.AddSheet("S1"))
+                {
+                    await sheet.WriteRecordsAsync([record], ExcelRecordLayout.Generated<MapBuilderTestModel>(), ct);
+                }
             }
 
             stream.Position = 0;
@@ -225,15 +237,18 @@ namespace ExcelReader.Tests
         }
 
         [Fact]
-        public async Task MappedRecordWriterRoundTripsThroughCsv()
+        public async Task GeneratedLayoutRoundTripsThroughCsv()
         {
             CancellationToken ct = TestContext.Current.CancellationToken;
             var record = new MapBuilderTestModel { Name = "Frank", Age = 19, BirthDate = SampleBirthDate, Active = false, Kind = MapBuilderKind.Beta };
 
             await using var stream = new MemoryStream();
-            await using (var writer = MappedRecordWriter.CreateCsv(stream, leaveOpen: true))
+            await using (var writer = CsvWorkbookWriter.Create(stream, leaveOpen: true))
             {
-                await writer.WriteSheetAsync("S1", [record], ct);
+                await using (var sheet = writer.AddSheet("S1"))
+                {
+                    await sheet.WriteRecordsAsync([record], ExcelRecordLayout.Generated<MapBuilderTestModel>(), ct);
+                }
             }
 
             stream.Position = 0;
@@ -270,23 +285,32 @@ namespace ExcelReader.Tests
             var record = new ConfigureCountingModel { Name = "Grace" };
 
             await using var xlsxStream = new MemoryStream();
-            await using (var xlsx = MappedRecordWriter.CreateXlsx(xlsxStream, leaveOpen: true))
+            await using (var xlsx = XlsxWorkbookWriter.Create(xlsxStream, leaveOpen: true))
             {
-                await xlsx.WriteSheetAsync("S1", [record], ct);
+                await using (var sheet = xlsx.AddSheet("S1"))
+                {
+                    await sheet.WriteRecordsAsync([record], ExcelRecordLayout.Generated<ConfigureCountingModel>(), ct);
+                }
             }
             Assert.Equal(1, ConfigureCountingModel.Configurations);
 
             await using var secondXlsxStream = new MemoryStream();
-            await using (var again = MappedRecordWriter.CreateXlsx(secondXlsxStream, leaveOpen: true))
+            await using (var again = XlsxWorkbookWriter.Create(secondXlsxStream, leaveOpen: true))
             {
-                await again.WriteSheetAsync("S1", [record], ct);
+                await using (var sheet = again.AddSheet("S1"))
+                {
+                    await sheet.WriteRecordsAsync([record], ExcelRecordLayout.Generated<ConfigureCountingModel>(), ct);
+                }
             }
             Assert.Equal(1, ConfigureCountingModel.Configurations);
 
             await using var csvStream = new MemoryStream();
-            await using (var csv = MappedRecordWriter.CreateCsv(csvStream, leaveOpen: true))
+            await using (var csv = CsvWorkbookWriter.Create(csvStream, leaveOpen: true))
             {
-                await csv.WriteSheetAsync("S1", [record], ct);
+                await using (var sheet = csv.AddSheet("S1"))
+                {
+                    await sheet.WriteRecordsAsync([record], ExcelRecordLayout.Generated<ConfigureCountingModel>(), ct);
+                }
             }
             Assert.Equal(2, ConfigureCountingModel.Configurations);
         }

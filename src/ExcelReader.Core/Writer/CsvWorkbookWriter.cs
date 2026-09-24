@@ -5,7 +5,7 @@ namespace ExcelReader.Core.Writer
 {
     /// <summary>
     /// The single sheet of a CSV "workbook". Adapts the flat <see cref="CsvWriter"/> to the
-    /// <see cref="ISheetWriter{TRow}"/> contract that <see cref="WorkbookRecordWriter{TSheet,TRow}"/> drives.
+    /// <see cref="ISheetWriter{TRow}"/> contract that record writing drives.
     /// </summary>
     /// <remarks>
     /// A CSV file is a single sheet, so the owning <see cref="CsvWorkbookWriter"/> exposes exactly one

@@ -233,8 +233,8 @@ namespace ExcelReader.Fuzz
         private static List<string> ParseParallel(byte[] bytes, int chunkSize)
         {
             var rows = new List<string>();
-            IAsyncEnumerable<FuzzRow> source = ParallelCsvFactory.CreateWithChunkSize<FuzzRow>(
-                bytes.AsMemory(), degreeOfParallelism: 4, chunkSize, CsvLimits, config: null, CancellationToken.None);
+            IAsyncEnumerable<FuzzRow> source = ParallelCsvFactory.CreateWithChunkSize(
+                bytes.AsMemory(), degreeOfParallelism: 4, chunkSize, CsvLimits, ExcelParser.FromAttributes<FuzzRow>(), CancellationToken.None);
             IAsyncEnumerator<FuzzRow> e = source.GetAsyncEnumerator(CancellationToken.None);
             try
             {

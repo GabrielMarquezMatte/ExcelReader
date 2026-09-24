@@ -28,9 +28,11 @@ namespace ExcelReader.AotSanity
             }
 
             await using var writtenStream = new MemoryStream();
-            await using (var writer = MappedRecordWriter.CreateXlsx(writtenStream, leaveOpen: true))
+            await using (var writer = XlsxWorkbookWriter.Create(writtenStream, leaveOpen: true))
+            await using (var sheet = writer.AddSheet("S1"))
             {
-                await writer.WriteSheetAsync("S1", [new GeneratedAotModel { Name = "Zoe", Age = 8, Active = true }]);
+                await sheet.WriteRecordsAsync([new GeneratedAotModel { Name = "Zoe", Age = 8, Active = true }],
+                                              ExcelRecordLayout.Generated<GeneratedAotModel>());
             }
             writtenStream.Position = 0;
             await using XlsxReader writtenReader = await Excel.FromXlsxAsync(writtenStream);

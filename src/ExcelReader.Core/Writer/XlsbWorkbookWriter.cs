@@ -22,6 +22,7 @@ namespace ExcelReader.Core.Writer
         private readonly List<XlsbSheetWriter> _sheets = [];
         private bool _ended;
         private XlsbSheetWriter? _activeSheet;
+        private readonly HashSet<string> _sheetNames = new(StringComparer.OrdinalIgnoreCase);
         private bool _disposed;
 
         private XlsbWorkbookWriter(ZipArchive zip, Stream stream, bool leaveOpen, XlsbWriterOptions options)
@@ -59,6 +60,7 @@ namespace ExcelReader.Core.Writer
         {
             WriterStateGuard.RequireCanAddSheet(
                 _ended, this, name, _activeSheet is not null, nameof(XlsbSheetWriter), visibility);
+            WriterStateGuard.ClaimSheetName(_sheetNames, name);
             int sheetId = _sheets.Count + 1;
             _activeSheet = new XlsbSheetWriter(this, _zip, name, sheetId, visibility, _date1904, _compression, _prefetchWrite);
             return _activeSheet;

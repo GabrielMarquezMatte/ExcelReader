@@ -43,6 +43,14 @@ namespace ExcelReader.Core.Writer.Internal
             }
         }
 
+        internal static void ClaimSheetName(HashSet<string> names, string name)
+        {
+            if (!names.Add(name))
+            {
+                throw new InvalidOperationException($"A sheet named '{name}' already exists in this workbook.");
+            }
+        }
+
         /// <summary>
         /// Guards against a workbook whose sheets are all hidden: the file formats allow it, but Excel
         /// reports such a workbook as damaged, so producing one is a bug worth surfacing at write time.

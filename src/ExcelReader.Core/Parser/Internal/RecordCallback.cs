@@ -6,7 +6,7 @@ namespace ExcelReader.Core.Parser.Internal
     internal static class RecordCallback<TRecord>
         where TRecord : ICsvRecord<TRecord>, allows ref struct
     {
-        internal static CsvAggregation<byte> For(CsvRecordAction<TRecord> body)
+        internal static CsvAggregation<byte> For(Action<TRecord> body)
         {
             return new CsvAggregation<byte>
             {

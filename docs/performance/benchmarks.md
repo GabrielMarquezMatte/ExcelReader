@@ -174,7 +174,7 @@ The takeaway is not that one column beats the other: it is that ExcelReader's he
 
 ### Typed record writing
 
-`WorkbookRecordWriter`/`RecordWriter` (the header-plus-one-row-per-object API — see [Write typed records](../guide/writing.md#write-typed-records)) across all four formats, same 50,000-record source:
+`WriteRecordsAsync` with `ExcelRecordLayout` (the header-plus-one-row-per-object API — see [Write typed records](../guide/writing.md#write-typed-records)) across all four formats, same 50,000-record source:
 
 | Format | Mean | Allocated |
 |---|---:|---:|
@@ -212,7 +212,7 @@ Parsing into a `ref struct` with a `ReadOnlySpan<byte>` text column removes esse
 
 ### Cold start
 
-First use of `ExcelParser.FromAttributes<T>`/`RecordWriter` in a process pays a one-time reflection + `Expression.Compile` cost (16 launches, cold JIT, 200 rows):
+First use of `ExcelParser.FromAttributes<T>`/`ExcelRecordLayout.FromAttributes<T>` in a process pays a one-time reflection + `Expression.Compile` cost (16 launches, cold JIT, 200 rows):
 
 | Scenario | Mean | Allocated |
 |---|---:|---:|

@@ -166,40 +166,52 @@ namespace ExcelReader.Tests
                 .Property(["Age"], ExcelCellReaders.Parsable, static (ref AttributedModel m, int v) => m.Age = v);
 
             await using var xlsxStream = new MemoryStream();
-            await using (WorkbookRecordWriter<XlsxSheetWriter, XlsxRowWriter> writer = RecordWriter.CreateXlsx(xlsxStream, leaveOpen: true))
+            await using (XlsxWorkbookWriter writer = XlsxWorkbookWriter.Create(xlsxStream, leaveOpen: true))
             {
-                await writer.WriteSheetAsync("S1", [record], ct);
+                await using (var sheet = writer.AddSheet("S1"))
+                {
+                    await sheet.WriteRecordsAsync([record], ExcelRecordLayout.FromAttributes<AttributedModel>(), ct);
+                }
             }
             xlsxStream.Position = 0;
             await using XlsxReader xlsxReader = await Excel.FromXlsxAsync(xlsxStream, ct: ct);
-            AssertMatches(record, ExcelParser.Build<AttributedModel>(configure).Parse(xlsxReader).Single());
+            AssertMatches(record, ExcelParser.Build(configure).Parse(xlsxReader).Single());
 
             await using var xlsbStream = new MemoryStream();
-            await using (WorkbookRecordWriter<XlsbSheetWriter, XlsbRowWriter> writer = RecordWriter.CreateXlsb(xlsbStream, leaveOpen: true))
+            await using (XlsbWorkbookWriter writer = XlsbWorkbookWriter.Create(xlsbStream, leaveOpen: true))
             {
-                await writer.WriteSheetAsync("S1", [record], ct);
+                await using (var sheet = writer.AddSheet("S1"))
+                {
+                    await sheet.WriteRecordsAsync([record], ExcelRecordLayout.FromAttributes<AttributedModel>(), ct);
+                }
             }
             xlsbStream.Position = 0;
             await using XlsbReader xlsbReader = await Excel.FromXlsbAsync(xlsbStream, leaveOpen: false, ct: ct);
-            AssertMatches(record, ExcelParser.Build<AttributedModel>(configure).Parse(xlsbReader).Single());
+            AssertMatches(record, ExcelParser.Build(configure).Parse(xlsbReader).Single());
 
             await using var xlsStream = new MemoryStream();
-            await using (WorkbookRecordWriter<XlsSheetWriter, XlsRowWriter> writer = RecordWriter.CreateXls(xlsStream, leaveOpen: true))
+            await using (XlsWorkbookWriter writer = XlsWorkbookWriter.Create(xlsStream, leaveOpen: true))
             {
-                await writer.WriteSheetAsync("S1", [record], ct);
+                await using (var sheet = writer.AddSheet("S1"))
+                {
+                    await sheet.WriteRecordsAsync([record], ExcelRecordLayout.FromAttributes<AttributedModel>(), ct);
+                }
             }
             xlsStream.Position = 0;
             using XlsReader xlsReader = Excel.FromXls(xlsStream, leaveOpen: false);
-            AssertMatches(record, ExcelParser.Build<AttributedModel>(configure).Parse(xlsReader).Single());
+            AssertMatches(record, ExcelParser.Build(configure).Parse(xlsReader).Single());
 
             await using var csvStream = new MemoryStream();
-            await using (WorkbookRecordWriter<CsvSheetWriter, CsvRowWriter> writer = RecordWriter.CreateCsv(csvStream, leaveOpen: true))
+            await using (CsvWorkbookWriter writer = CsvWorkbookWriter.Create(csvStream, leaveOpen: true))
             {
-                await writer.WriteSheetAsync("S1", [record], ct);
+                await using (var sheet = writer.AddSheet("S1"))
+                {
+                    await sheet.WriteRecordsAsync([record], ExcelRecordLayout.FromAttributes<AttributedModel>(), ct);
+                }
             }
             csvStream.Position = 0;
             using CsvReader csvReader = Excel.FromCsv(csvStream, leaveOpen: false);
-            AssertMatches(record, ExcelParser.Build<AttributedModel>(configure).Parse(csvReader).Single());
+            AssertMatches(record, ExcelParser.Build(configure).Parse(csvReader).Single());
         }
 
         [Fact]

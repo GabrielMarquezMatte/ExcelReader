@@ -56,7 +56,7 @@ namespace ExcelReader.Core.Reader
         /// <remarks>The HMAC covers the whole encrypted package, so verifying it on the streaming path
         /// requires a full pass over the file before the first row — making time-to-first-row proportional
         /// to file size, which defeats the point of a streaming reader. The in-memory path
-        /// (<see cref="Excel.FromXlsx(System.ReadOnlyMemory{byte},ExcelReaderOptions?)"/>) has already decrypted
+        /// (<see cref="Excel.FromXlsx(ReadOnlyMemory{byte},ExcelReaderOptions?)"/>) has already decrypted
         /// everything, so it always verifies regardless of this setting. With verification off, targeted
         /// ciphertext tampering is not detected, though corrupt ciphertext still fails loudly downstream
         /// when the decrypted bytes fail ZIP and XML parsing. Standard encryption has no HMAC field, so

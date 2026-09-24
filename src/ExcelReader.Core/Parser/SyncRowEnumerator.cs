@@ -1,4 +1,5 @@
 using System.Collections;
+using System.ComponentModel;
 using System.Diagnostics.CodeAnalysis;
 using ExcelReader.Core.Parser.Internal;
 using ExcelReader.Core.Reader;
@@ -19,6 +20,7 @@ namespace ExcelReader.Core.Parser
     /// accessible than its derived type). Mirrored by <see cref="AsyncRowEnumerator{T, TReader, TRows}"/>
     /// for the async side.
     /// </remarks>
+    [EditorBrowsable(EditorBrowsableState.Never)]
     [SuppressMessage("Design", "CA1063:Implement IDisposable correctly",
         Justification = "No unmanaged resources and no finalizer; every derived Enumerator is sealed and adds no disposal logic, so the full Dispose(bool) pattern buys nothing here.")]
     public abstract class SyncRowEnumerator<T, TRows> : IEnumerator<T>

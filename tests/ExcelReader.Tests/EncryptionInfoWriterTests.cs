@@ -56,7 +56,7 @@ namespace ExcelReader.Tests
         {
             byte[] info = BuildSample(out _, out _, out _, out _);
 
-            Assert.Equal<byte[]>([0x04, 0x00, 0x04, 0x00, 0x40, 0x00, 0x00, 0x00], info[..8]);
+            Assert.Equal([0x04, 0x00, 0x04, 0x00, 0x40, 0x00, 0x00, 0x00], info[..8]);
             Assert.StartsWith(
                 "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\r\n<encryption ",
                 Encoding.UTF8.GetString(info, 8, info.Length - 8),

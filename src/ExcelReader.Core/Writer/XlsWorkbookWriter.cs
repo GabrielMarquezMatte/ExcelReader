@@ -23,6 +23,7 @@ namespace ExcelReader.Core.Writer
         private readonly List<XlsSheetWriter> _sheets = [];
         private bool _ended;
         private XlsSheetWriter? _activeSheet;
+        private readonly HashSet<string> _sheetNames = new(StringComparer.OrdinalIgnoreCase);
         private bool _disposed;
 
         private XlsWorkbookWriter(Stream stream, bool leaveOpen, bool date1904)
@@ -57,6 +58,7 @@ namespace ExcelReader.Core.Writer
         {
             WriterStateGuard.RequireCanAddSheet(
                 _ended, this, name, _activeSheet is not null, nameof(XlsSheetWriter), visibility);
+            WriterStateGuard.ClaimSheetName(_sheetNames, name);
 #pragma warning disable IDISP003
             _activeSheet = new XlsSheetWriter(this, name, _date1904, visibility);
 #pragma warning restore IDISP003

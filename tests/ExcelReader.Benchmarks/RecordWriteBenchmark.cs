@@ -29,9 +29,12 @@ namespace ExcelReader.Benchmarks
         public async Task<long> Xlsx()
         {
             await using var ms = new MemoryStream(4 * 1024 * 1024);
-            await using (var writer = RecordWriter.CreateXlsx(ms, leaveOpen: true))
+            await using (var writer = XlsxWorkbookWriter.Create(ms, leaveOpen: true))
             {
-                await writer.WriteSheetAsync("S1", _records);
+                await using (var sheet = writer.AddSheet("S1"))
+                {
+                    await sheet.WriteRecordsAsync(_records, ExcelRecordLayout.FromAttributes<Record>());
+                }
             }
             return ms.Length;
         }
@@ -40,9 +43,12 @@ namespace ExcelReader.Benchmarks
         public async Task<long> Xlsb()
         {
             await using var ms = new MemoryStream(4 * 1024 * 1024);
-            await using (var writer = RecordWriter.CreateXlsb(ms, leaveOpen: true))
+            await using (var writer = XlsbWorkbookWriter.Create(ms, leaveOpen: true))
             {
-                await writer.WriteSheetAsync("S1", _records);
+                await using (var sheet = writer.AddSheet("S1"))
+                {
+                    await sheet.WriteRecordsAsync(_records, ExcelRecordLayout.FromAttributes<Record>());
+                }
             }
             return ms.Length;
         }
@@ -51,9 +57,12 @@ namespace ExcelReader.Benchmarks
         public async Task<long> Xls()
         {
             await using var ms = new MemoryStream(4 * 1024 * 1024);
-            await using (var writer = RecordWriter.CreateXls(ms, leaveOpen: true))
+            await using (var writer = XlsWorkbookWriter.Create(ms, leaveOpen: true))
             {
-                await writer.WriteSheetAsync("S1", _records);
+                await using (var sheet = writer.AddSheet("S1"))
+                {
+                    await sheet.WriteRecordsAsync(_records, ExcelRecordLayout.FromAttributes<Record>());
+                }
             }
             return ms.Length;
         }
@@ -62,9 +71,12 @@ namespace ExcelReader.Benchmarks
         public async Task<long> Csv()
         {
             await using var ms = new MemoryStream(4 * 1024 * 1024);
-            await using (var writer = RecordWriter.CreateCsv(ms, leaveOpen: true))
+            await using (var writer = CsvWorkbookWriter.Create(ms, leaveOpen: true))
             {
-                await writer.WriteSheetAsync("S1", _records);
+                await using (var sheet = writer.AddSheet("S1"))
+                {
+                    await sheet.WriteRecordsAsync(_records, ExcelRecordLayout.FromAttributes<Record>());
+                }
             }
             return ms.Length;
         }
@@ -73,9 +85,12 @@ namespace ExcelReader.Benchmarks
         public async Task<long> XlsxMapped()
         {
             await using var ms = new MemoryStream(4 * 1024 * 1024);
-            await using (var writer = MappedRecordWriter.CreateXlsx(ms, leaveOpen: true))
+            await using (var writer = XlsxWorkbookWriter.Create(ms, leaveOpen: true))
             {
-                await writer.WriteSheetAsync("S1", _mapped);
+                await using (var sheet = writer.AddSheet("S1"))
+                {
+                    await sheet.WriteRecordsAsync(_mapped, ExcelRecordLayout.Generated<MappedRecord>());
+                }
             }
             return ms.Length;
         }
@@ -84,9 +99,12 @@ namespace ExcelReader.Benchmarks
         public async Task<long> XlsbMapped()
         {
             await using var ms = new MemoryStream(4 * 1024 * 1024);
-            await using (var writer = MappedRecordWriter.CreateXlsb(ms, leaveOpen: true))
+            await using (var writer = XlsbWorkbookWriter.Create(ms, leaveOpen: true))
             {
-                await writer.WriteSheetAsync("S1", _mapped);
+                await using (var sheet = writer.AddSheet("S1"))
+                {
+                    await sheet.WriteRecordsAsync(_mapped, ExcelRecordLayout.Generated<MappedRecord>());
+                }
             }
             return ms.Length;
         }
@@ -95,9 +113,12 @@ namespace ExcelReader.Benchmarks
         public async Task<long> CsvMapped()
         {
             await using var ms = new MemoryStream(4 * 1024 * 1024);
-            await using (var writer = MappedRecordWriter.CreateCsv(ms, leaveOpen: true))
+            await using (var writer = CsvWorkbookWriter.Create(ms, leaveOpen: true))
             {
-                await writer.WriteSheetAsync("S1", _mapped);
+                await using (var sheet = writer.AddSheet("S1"))
+                {
+                    await sheet.WriteRecordsAsync(_mapped, ExcelRecordLayout.Generated<MappedRecord>());
+                }
             }
             return ms.Length;
         }

@@ -218,8 +218,8 @@ namespace ExcelReader.Tests
                 while (sourceRows.MoveNext())
                 {
                     Assert.True(writtenRows.MoveNext(), $"written file ran out of rows at row {rowCount}");
-                    ExcelReader.Core.ValueObjects.Row sourceRow = sourceRows.Current;
-                    ExcelReader.Core.ValueObjects.Row writtenRow = writtenRows.Current;
+                    Core.ValueObjects.Row sourceRow = sourceRows.Current;
+                    Core.ValueObjects.Row writtenRow = writtenRows.Current;
                     Assert.Equal(sourceRow.ColumnCount, writtenRow.ColumnCount);
                     for (int column = 0; column < sourceRow.ColumnCount; column++)
                     {

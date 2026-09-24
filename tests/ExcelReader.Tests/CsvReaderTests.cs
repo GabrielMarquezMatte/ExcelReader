@@ -814,7 +814,7 @@ namespace ExcelReader.Tests
         [Fact]
         public void CurrentRecordStartStaysCorrectWhenRecordsSpanBufferRefills()
         {
-            var sb = new System.Text.StringBuilder();
+            var sb = new StringBuilder();
             var expected = new List<long>();
             long offset = 0;
             for (int i = 0; i < 4000; i++)

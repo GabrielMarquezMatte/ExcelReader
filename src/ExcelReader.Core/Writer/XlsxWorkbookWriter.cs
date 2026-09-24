@@ -23,6 +23,7 @@ namespace ExcelReader.Core.Writer
         private bool _ended;
         private bool _sheetActive;
         private XlsxSheetWriter? _activeSheet;
+        private readonly HashSet<string> _sheetNames = new(StringComparer.OrdinalIgnoreCase);
         private bool _disposed;
 
         private XlsxWorkbookWriter(ZipArchive zip, Stream stream, bool leaveOpen, XlsxWriterOptions options)
@@ -54,7 +55,7 @@ namespace ExcelReader.Core.Writer
         /// <exception cref="ArgumentNullException"><paramref name="name"/> is <see langword="null"/>.</exception>
         /// <exception cref="ArgumentException"><paramref name="name"/> is empty, longer than 31 characters, or contains one of <c>: \ / ? * [ ]</c>.</exception>
         /// <exception cref="ObjectDisposedException">The workbook has already been ended.</exception>
-        /// <exception cref="InvalidOperationException">The previously added sheet has not been ended.</exception>
+        /// <exception cref="InvalidOperationException">The previously added sheet has not been ended, or a sheet named <paramref name="name"/> already exists.</exception>
         public XlsxSheetWriter AddSheet(string name)
         {
             return AddSheet(name, ExcelSheetVisibility.Visible);
@@ -65,11 +66,12 @@ namespace ExcelReader.Core.Writer
         /// <exception cref="ArgumentException"><paramref name="name"/> is empty, longer than 31 characters, or contains one of <c>: \ / ? * [ ]</c>.</exception>
         /// <exception cref="ArgumentOutOfRangeException"><paramref name="visibility"/> is not a defined value.</exception>
         /// <exception cref="ObjectDisposedException">The workbook has already been ended.</exception>
-        /// <exception cref="InvalidOperationException">The previously added sheet has not been ended.</exception>
+        /// <exception cref="InvalidOperationException">The previously added sheet has not been ended, or a sheet named <paramref name="name"/> already exists.</exception>
         public XlsxSheetWriter AddSheet(string name, ExcelSheetVisibility visibility)
         {
             WriterStateGuard.RequireCanAddSheet(
                 _ended, this, name, _sheetActive, nameof(XlsxSheetWriter), visibility);
+            WriterStateGuard.ClaimSheetName(_sheetNames, name);
             _sheetActive = true;
             int sheetId = _sheets.Count + 1;
             _activeSheet = new XlsxSheetWriter(this, _zip, name, sheetId, visibility, _compression, _prefetchWrite);
