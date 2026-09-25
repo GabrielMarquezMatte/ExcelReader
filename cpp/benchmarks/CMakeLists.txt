@@ -253,7 +253,7 @@ set(ZLIB_VERSION_STRING "1.3.1")
         set_target_properties(duckdb PROPERTIES IMPORTED_IMPLIB "${_duckdb_dir}/${_duckdb_implib_file}")
     endif()
 
-    set(EXCELREADER_XLSX_FIXTURE_PATH
+    set(EXCELREADER_LARGE_XLSX_FIXTURE_PATH
         "${CMAKE_CURRENT_SOURCE_DIR}/../../tests/ExcelReader.Benchmarks/Data/65K_Records_Data.xlsx"
         CACHE FILEPATH "Path to the 65K-row xlsx fixture the excelreader-vs-xlnt benchmark reads")
 
@@ -261,7 +261,7 @@ set(ZLIB_VERSION_STRING "1.3.1")
     target_link_libraries(excelreader_cpp_compare_benchmarks PRIVATE
         xl::excelreader benchmark::benchmark_main xlnt xlsxio_read duckdb)
     target_compile_definitions(excelreader_cpp_compare_benchmarks PRIVATE
-        EXCELREADER_XLSX_FIXTURE_PATH="${EXCELREADER_XLSX_FIXTURE_PATH}")
+        EXCELREADER_XLSX_FIXTURE_PATH="${EXCELREADER_LARGE_XLSX_FIXTURE_PATH}")
 
     # Kept a separate executable from the read comparison rather than a second .cpp in the same
     # one: both files define their own FullRow plus an xl::ExcelMapper specialization for it, and
@@ -276,14 +276,14 @@ set(ZLIB_VERSION_STRING "1.3.1")
     target_link_libraries(excelreader_cpp_write_compare_benchmarks PRIVATE
         xl::excelreader benchmark::benchmark_main xlnt xlsxio_write duckdb)
     target_compile_definitions(excelreader_cpp_write_compare_benchmarks PRIVATE
-        EXCELREADER_XLSX_FIXTURE_PATH="${EXCELREADER_XLSX_FIXTURE_PATH}"
+        EXCELREADER_XLSX_FIXTURE_PATH="${EXCELREADER_LARGE_XLSX_FIXTURE_PATH}"
         EXCELREADER_BENCH_XLSXIO)
 
     add_executable(excelreader_cpp_write_compare_lxw_benchmarks benchmark_write_compare.cpp)
     target_link_libraries(excelreader_cpp_write_compare_lxw_benchmarks PRIVATE
         xl::excelreader benchmark::benchmark_main xlsxwriter duckdb)
     target_compile_definitions(excelreader_cpp_write_compare_lxw_benchmarks PRIVATE
-        EXCELREADER_XLSX_FIXTURE_PATH="${EXCELREADER_XLSX_FIXTURE_PATH}"
+        EXCELREADER_XLSX_FIXTURE_PATH="${EXCELREADER_LARGE_XLSX_FIXTURE_PATH}"
         EXCELREADER_BENCH_LIBXLSXWRITER)
 
     if(WIN32)
@@ -298,4 +298,67 @@ set(ZLIB_VERSION_STRING "1.3.1")
                     "$<TARGET_FILE_DIR:${_compare_target}>")
         endforeach()
     endif()
+endif()
+
+# --- CSV comparison against zsv (https://github.com/liquidaty/zsv). Its own opt-in flag and
+# executable: zsv relies on GCC vector extensions (`__attribute__((vector_size))`) that MSVC does not
+# compile, so this needs GCC or Clang - on Windows, MinGW-w64 such as MSYS2 UCRT64 - while the
+# comparison above links DuckDB's prebuilt C++ API, which only links under MSVC.
+option(EXCELREADER_BUILD_BENCHMARKS_ZSV "Build the excelreader-vs-zsv CSV comparison benchmark (GCC or Clang only)" OFF)
+if(EXCELREADER_BUILD_BENCHMARKS_ZSV)
+    if(MSVC)
+        message(FATAL_ERROR "EXCELREADER_BUILD_BENCHMARKS_ZSV needs GCC or Clang: zsv uses GCC vector "
+            "extensions MSVC cannot compile. On Windows, configure with MinGW-w64 (e.g. MSYS2 UCRT64).")
+    endif()
+    enable_language(C)
+
+    # zsv builds through ./configure + make; its library is the single translation unit src/zsv.c,
+    # so it is compiled directly here instead.
+    if(POLICY CMP0169)
+        cmake_policy(SET CMP0169 OLD)
+    endif()
+    set(_zsv_version "1.4.3")
+    FetchContent_Declare(
+        zsv
+        GIT_REPOSITORY https://github.com/liquidaty/zsv.git
+        GIT_TAG v${_zsv_version}
+    )
+    FetchContent_Populate(zsv)
+
+    # zsv's Makefile generates include/zsv.h from zsv.h.in; this is the same substitution with
+    # ZSV_EXTRAS off.
+    file(READ "${zsv_SOURCE_DIR}/include/zsv.h.in" _zsv_header)
+    string(REPLACE "__ZSV_EXTRAS__DEFINE__" "" _zsv_header "${_zsv_header}")
+    file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/zsv-include/zsv.h" "${_zsv_header}")
+
+    add_library(zsv STATIC "${zsv_SOURCE_DIR}/src/zsv.c")
+    target_include_directories(zsv PUBLIC "${CMAKE_CURRENT_BINARY_DIR}/zsv-include" "${zsv_SOURCE_DIR}/include")
+    set_target_properties(zsv PROPERTIES C_STANDARD 11 C_EXTENSIONS ON)
+    target_compile_definitions(zsv PRIVATE NO_UTF8_CHECK ZSV_VERSION="${_zsv_version}" _GNU_SOURCE
+        $<$<BOOL:${WIN32}>:__USE_MINGW_ANSI_STDIO>)
+    target_compile_options(zsv PRIVATE -fsigned-char)
+    # The ISA zsv's configure picks on a capable host. -mavx2 bakes AVX2 in as a hard requirement,
+    # acceptable for a benchmark binary that runs where it is built.
+    if(CMAKE_SYSTEM_PROCESSOR MATCHES "^(arm64|aarch64|ARM64)$")
+        target_compile_definitions(zsv PRIVATE ZSV_HAVE_NEON)
+    else()
+        target_compile_options(zsv PRIVATE -mavx2)
+    endif()
+
+    set(EXCELREADER_CSV_FIXTURE_PATH
+        "${CMAKE_CURRENT_SOURCE_DIR}/../../tests/ExcelReader.Benchmarks/Data/65K_Records_Data.csv"
+        CACHE FILEPATH "Path to the 65K-row CSV fixture the excelreader-vs-zsv benchmark reads")
+
+    add_executable(excelreader_cpp_csv_compare_benchmarks benchmark_csv_compare.cpp)
+    target_link_libraries(excelreader_cpp_csv_compare_benchmarks PRIVATE
+        xl::excelreader benchmark::benchmark_main zsv)
+    target_compile_definitions(excelreader_cpp_csv_compare_benchmarks PRIVATE
+        EXCELREADER_CSV_FIXTURE_PATH="${EXCELREADER_CSV_FIXTURE_PATH}")
+    # Otherwise the exe loads whichever libstdc++-6.dll comes first on PATH, and another MinGW's
+    # (Strawberry Perl ships one) crashes it at startup.
+    if(MINGW)
+        target_link_options(excelreader_cpp_csv_compare_benchmarks PRIVATE -static)
+    endif()
+
+    excelreader_copy_native_library(excelreader_cpp_csv_compare_benchmarks)
 endif()

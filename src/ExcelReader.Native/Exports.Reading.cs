@@ -148,6 +148,19 @@ namespace ExcelReader.Native
             return status;
         }
 
+        [UnmanagedCallersOnly(EntryPoint = "xl_next_row_view")]
+        public static int NextRowView(nint handle, NativeRow* outRow)
+        {
+            if (outRow is null)
+            {
+                return NativeStatus.InvalidArgument;
+            }
+
+            int status = ReadApi.NextRowView(Resolve(handle), out NativeRow row);
+            *outRow = row;
+            return status;
+        }
+
         [UnmanagedCallersOnly(EntryPoint = "xl_read_all_blob")]
         public static int ReadAllBlob(nint handle, byte* buffer, int capacity, int* outWritten)
         {

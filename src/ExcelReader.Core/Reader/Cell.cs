@@ -1,9 +1,9 @@
-using System.Buffers.Text;
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Runtime.CompilerServices;
 using System.Text;
 using ExcelReader.Core.Reader.Internal;
+using ExcelReader.Core.Writer.Internal;
 
 namespace ExcelReader.Core.Reader
 {
@@ -85,12 +85,14 @@ namespace ExcelReader.Core.Reader
         /// when available instead of round-tripping through text.
         /// </summary>
         /// <param name="provider">
-        /// The format provider used for text parsing and for deciding whether '.' is the decimal separator.
+        /// The format provider used for text parsing and for deciding whether '.' is the decimal separator;
+        /// null means <see cref="CultureInfo.InvariantCulture"/>, the culture XLSX and XLSB store numbers in.
         /// </param>
         /// <param name="result">The parsed value, when this method returns true.</param>
         [SkipLocalsInit]
         public bool TryParse<T>(IFormatProvider? provider, [MaybeNullWhen(false)] out T result) where T : IUtf8SpanParsable<T>
         {
+            provider ??= CultureInfo.InvariantCulture;
             if (!_hasNumber)
             {
                 if (typeof(T) == typeof(double) && UsesDotDecimalSeparator(provider) && FastDouble.TryParse(Value, out double fast))
@@ -133,13 +135,13 @@ namespace ExcelReader.Core.Reader
                 return true;
             }
             Span<byte> buffer = stackalloc byte[32];
-            return Utf8Formatter.TryFormat(_number, buffer, out int written)
-                ? T.TryParse(buffer[..written], provider, out result)
+            return CellFormatter.TryFormatDouble(_number, buffer, out int written)
+                ? T.TryParse(buffer[..written], CultureInfo.InvariantCulture, out result)
                 : T.TryParse(Value, provider, out result);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static bool TryParseAsciiDigits<T>(ReadOnlySpan<byte> utf8, IFormatProvider? provider, [MaybeNullWhen(false)] out T result)
+        private static bool TryParseAsciiDigits<T>(ReadOnlySpan<byte> utf8, IFormatProvider provider, [MaybeNullWhen(false)] out T result)
             where T : IUtf8SpanParsable<T>
         {
             result = default;
@@ -263,10 +265,9 @@ namespace ExcelReader.Core.Reader
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static bool UsesDotDecimalSeparator(IFormatProvider? provider)
+        private static bool UsesDotDecimalSeparator(IFormatProvider provider)
         {
-            return provider is null
-                || ReferenceEquals(provider, CultureInfo.InvariantCulture)
+            return ReferenceEquals(provider, CultureInfo.InvariantCulture)
                 || string.Equals(NumberFormatInfo.GetInstance(provider).NumberDecimalSeparator, ".", StringComparison.Ordinal);
         }
 
@@ -322,7 +323,7 @@ namespace ExcelReader.Core.Reader
         {
             if (_hasNumber && Value.IsEmpty)
             {
-                return Utf8Formatter.TryFormat(_number, destination, out bytesWritten);
+                return CellFormatter.TryFormatDouble(_number, destination, out bytesWritten);
             }
             if (Value.TryCopyTo(destination))
             {
@@ -347,7 +348,7 @@ namespace ExcelReader.Core.Reader
             if (_hasNumber && Value.IsEmpty)
             {
                 Span<byte> buffer = stackalloc byte[32];
-                return Utf8Formatter.TryFormat(_number, buffer, out int written)
+                return CellFormatter.TryFormatDouble(_number, buffer, out int written)
                     ? Encoding.UTF8.GetString(buffer[..written])
                     : string.Empty;
             }

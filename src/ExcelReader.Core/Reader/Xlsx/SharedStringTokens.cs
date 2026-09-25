@@ -9,11 +9,13 @@ namespace ExcelReader.Core.Reader.Xlsx
         internal readonly byte[] TClose;
         internal readonly byte[] RPhOpen;
         internal readonly byte[] RPhClose;
+        internal readonly bool Unprefixed;
 
         internal SharedStringTokens(ReadOnlySpan<byte> prefix)
         {
             if (prefix.IsEmpty)
             {
+                Unprefixed = true;
                 SstTag = "<sst"u8.ToArray();
                 SiTag = "<si"u8.ToArray();
                 SiClose = "</si>"u8.ToArray();

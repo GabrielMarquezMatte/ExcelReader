@@ -76,7 +76,7 @@ records that do not exist — deduplicating on a key does not filter those out.
 
 See the [parallel CSV benchmarks](../performance/benchmarks.md#parallel-csv) for what this buys. Those figures are
 `CsvParallel.AggregateAsync`'s, measured over the same projection path this shares: at dop 16 it is
-~2.7x faster than the typed path while allocating ~394x less, with zero garbage collections.
+~2.3x faster than the typed path while allocating ~410x less, with zero garbage collections.
 
 Properties need setters. A get-only property is skipped during binding and silently receives nothing.
 
@@ -94,7 +94,7 @@ using var reader = Excel.FromXlsxFile("report.xlsx");
 Apache.Arrow.RecordBatch batch = reader.ToArrowRecordBatch();
 ```
 
-`schema` defaults to `Excel.InferSchema`'s guess; pass an explicit `ExcelColumnSchema[]` to skip inference. The whole sheet is materialized into one `RecordBatch` — there is no chunked/streaming variant yet.
+`schema` defaults to `Excel.InferSchema`'s guess; pass an explicit `ExcelColumnSchema[]` to skip inference. The whole sheet is materialized into one `RecordBatch` — there is no chunked/streaming variant yet. Inference costs ~13% more time than an explicit schema on the same file. See [Arrow conversion](../performance/benchmarks.md#arrow-conversion) in the benchmarks.
 
 `WriteRecordBatch`/`WriteRecordBatchAsync` are the write-side mirror — one call from a `RecordBatch` to a sheet, for XLSX, XLSB, XLS, and CSV:
 
@@ -237,16 +237,16 @@ Measured across both read benchmarks (see [Real data reads](../performance/bench
 
 | Workload | Default | `PrefetchDecompression = true` | Gain |
 |---|---:|---:|---:|
-| XLSX, real data | 64.3 ms | 42.9 ms | 33% |
-| XLSM, real data | 65.0 ms | 42.6 ms | 35% |
-| XLSB, real data | 28.9 ms | 15.4 ms | 47% |
-| XLSX, string-heavy | 57.3 ms | 34.8 ms | 39% |
-| XLSB, string-heavy | 39.5 ms | 25.8 ms | 35% |
+| XLSX, real data | 54.1 ms | 31.8 ms | 41% |
+| XLSM, real data | 54.0 ms | 31.3 ms | 42% |
+| XLSB, real data | 28.9 ms | 16.5 ms | 43% |
+| XLSX, string-heavy | 42.2 ms | 28.2 ms | 33% |
+| XLSB, string-heavy | 39.4 ms | 25.6 ms | 35% |
 
 The gain tracks how much of a read is decompression rather than parsing, so it is largest
 on XLSB with numeric data (where inflate dominates). Allocations rise from the producer task and the
-pooled decompression buffers — on the real-data corpus, roughly 18 KB to 38 KB for XLSX
-and 19 KB to 30 KB for XLSB — and neither path triggers a garbage collection.
+pooled decompression buffers — on the real-data corpus, roughly 18 KB to 37 KB for XLSX
+and 19 KB to 29 KB for XLSB — and neither path triggers a garbage collection.
 
 Do **not** enable it for concurrent server workloads: a caller already reading many files
 in parallel is CPU-saturated, and an extra background thread per read only doubles thread
@@ -271,4 +271,6 @@ table.Load(data);
 ```
 
 The header row (1-based, default 1) fixes the column shape; pass `headerRow: 0` for a header-less sheet, whose columns come back named `Column0`, `Column1`, ... sized from the first data row. There is no schema-inference pass — `GetFieldType`/`GetValue`/the typed getters read the *current* row's own cell type, so a consumer building its schema from the first row (like `DataTable.Load`) locks in that row's types for the whole load. `NextResult()` always returns `false`; combine with `Sheets()` to build one `ExcelDataReader` per sheet instead of chaining result sets.
+
+The bridge costs ~1.4–1.5x over iterating rows directly, and `GetBytes` stays within ~10% of the direct read. See [ADO.NET bridge](../performance/benchmarks.md#adonet-bridge-idatareader) in the benchmarks.
 
