@@ -5,9 +5,9 @@ using ExcelReader.Native.Typed;
 namespace ExcelReader.NativePgoTrainer
 {
     /// <summary>
-    /// Runs xl_parse_typed's managed implementation over the 65K benchmark fixtures, so a dotnet-trace of
-    /// this process yields the static PGO profile NativeAOT compiles ExcelReader.Native with. See
-    /// "Static PGO profile" in src/ExcelReader.Native/README.md.
+    /// Runs the managed implementations of xl_parse_typed, xl_next_row and xl_next_row_view over the 65K
+    /// benchmark fixtures, so a dotnet-trace of this process yields the static PGO profile NativeAOT compiles
+    /// ExcelReader.Native with. See "Static PGO profile" in src/ExcelReader.Native/README.md.
     /// </summary>
     internal static class Program
     {
@@ -40,22 +40,36 @@ namespace ExcelReader.NativePgoTrainer
                 ("65K_Records_Data.xlsb", NativeFormat.Xlsb),
                 ("65K_Records_Data.csv", NativeFormat.Csv),
             ];
+            byte[] rowBuffer = new byte[1 << 16];
             foreach ((string file, int format) in fixtures)
             {
                 byte[] bytes = File.ReadAllBytes(Path.Combine(data, file));
                 for (int i = 0; i < Iterations; i++)
                 {
-                    if (ReadApi.OpenMemory(bytes, format, out NativeHandle? handle) != NativeStatus.Ok)
+                    int status = ReadApi.OpenMemory(bytes, format, out NativeHandle? handle);
+                    if (status == NativeStatus.Ok)
                     {
-                        Console.Error.WriteLine($"{file}: open failed.");
-                        return 1;
+                        status = TypedApi.ParseTyped(handle, Specs, headerRow: 1, out NativeTable table);
+                        TypedApi.FreeTable(ref table);
+                        ReadApi.Close(handle);
                     }
-                    int status = TypedApi.ParseTyped(handle, Specs, headerRow: 1, out NativeTable table);
-                    TypedApi.FreeTable(ref table);
-                    ReadApi.Close(handle);
-                    if (status != NativeStatus.Ok)
+                    if (status == NativeStatus.Ok && (status = ReadApi.OpenMemory(bytes, format, out handle)) == NativeStatus.Ok)
                     {
-                        Console.Error.WriteLine($"{file}: parse failed with status {status}.");
+                        while ((status = ReadApi.NextRow(handle, rowBuffer, out _)) == NativeStatus.Ok)
+                        {
+                        }
+                        ReadApi.Close(handle);
+                    }
+                    if (status == NativeStatus.Eof && (status = ReadApi.OpenMemory(bytes, format, out handle)) == NativeStatus.Ok)
+                    {
+                        while ((status = ReadApi.NextRowView(handle, out _)) == NativeStatus.Ok)
+                        {
+                        }
+                        ReadApi.Close(handle);
+                    }
+                    if (status != NativeStatus.Eof)
+                    {
+                        Console.Error.WriteLine($"{file}: failed with status {status}.");
                         return 1;
                     }
                 }

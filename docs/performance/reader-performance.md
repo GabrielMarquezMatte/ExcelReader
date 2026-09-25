@@ -10,7 +10,7 @@ uses `StringHeavyWorkbookGenerator`'s 65,536-row fixture instead.
 describes discarding an earlier parallel-CSV measurement over, so nothing here should be compared
 against a published number by absolute milliseconds — only ratios measured within one run are
 meaningful, and anything destined for `benchmarks.md` has to be re-run on the documented machine.
-The exception is "Second round" below, which was measured on the Ryzen.
+The exceptions are "Second round" and "Third round" below, which were measured on the Ryzen.
 
 The harness was a throwaway console app, not committed. Every table below comes from a single
 interleaved round-robin run, where each variant runs once per round so thermal drift hits all of
@@ -116,6 +116,9 @@ Within the stages: the SST stage is inflate-bound (18.6 inflate vs 15.8 parse), 
 shared-string parser gains nothing. The sheet stage is parse-bound with **8.9 ms above its inflate
 floor** — the one place in this document where ordinary parser work still converts 1:1. That 8.9 ms
 has not been decomposed.
+
+On the Ryzen the SST stage was not inflate-bound: its parse cost as much as its inflate. "Third
+round" below decomposes both stages there and removes most of the SST parse.
 
 ## CSV — the parser is at the floor; the cost is in the value layer
 
@@ -471,6 +474,9 @@ load, and the value column averages 5.9 bytes, so the fast path would have to re
 the field. Inside the reader those spans always point into a pooled buffer with slack, but
 `FastDouble` would then depend on an invariant nothing enforces. Not built, for 2 ns.
 
+This corpus had no values above 15 digits, so it never measured the path `FastDouble` rejected. The
+real-data corpus is full of them; "Third round" below covers what they cost and the fix.
+
 ### Parallel CSV converts — 3.46x, and it already ships
 
 `CsvParallel.ParseAsync<T>` partitions by byte range with `CsvBoundaryResolver` confirming row
@@ -530,8 +536,8 @@ bounded by it, this is the single most important negative result here.
 
 ### Lazy number parsing — a trade, not a win
 
-`EmitScalarValueFast` runs `FastDouble.TryParse` on every number cell at emit time whether or not the
-consumer asks for the value. Guarding both call sites (temporarily) to defer it:
+`EmitScalarValueFast` runs `FastDouble.TryParseLossless` on every number cell at emit time whether or
+not the consumer asks for the value. Guarding both call sites (temporarily) to defer it:
 
 | | eager | lazy | |
 |---|---|---|---|
@@ -859,14 +865,134 @@ The per-column delegates and binding loop cost ~0.05 ms over a whole-row parse. 
 API's shape, one model per row delivered to the caller, plus the empty-cell checks any correct mapper
 needs. A generator rewrite would recover ~1–5%. Not built.
 
+### Third round (2026-09-25, Ryzen 7 5700X)
+
+This round covered two things: string-heavy XLSX first, then the 17-digit doubles that fill the
+real-data corpus. The iterations ran in the A/B console harness: one executable built against each
+`ExcelReader.Core.dll`, alternated three times. The before/after tables are BenchmarkDotNet
+`--job Medium`, comparing the previous commit (9cc3be4) against the result. Full suite at 2391/2391
+afterwards.
+
+#### String-heavy XLSX: the shared-string parse was half the prologue
+
+`XlsxSharedStringHotPathBenchmark` splits the read into stages. Its stored variants re-zip the same
+workbook without compression, so each stored row minus its compressed twin is that stage's inflate.
+
+| stage | before | after | |
+|---|---|---|---|
+| whole read | 54.16 ms | 42.04 ms | 1.29x |
+| whole read, prefetch | 34.27 ms | 28.31 ms | 1.21x |
+| shared-string table (open + first row) | 23.07 ms | 13.63 ms | 1.69x |
+| whole read, stored | 32.32 ms | 19.97 ms | 1.62x |
+| shared-string table, stored | 11.53 ms | 3.10 ms | 3.72x |
+
+Before, the table cost ~11.5 ms of inflate and ~11.5 ms of parse, so it was not inflate-bound on
+this machine. `ParseSharedBody` located every `<si>` with a sequence of token searches, even though
+nearly every entry has the plain shape `<si><t>text</t></si>`. Allocation did not change in any row.
+
+Three changes landed, each with parity tests in `XlsxXmlDialectTests`:
+
+- **Plain shared strings** (c22b90e). The fast path matches `<si><t>`, runs one
+  `IndexOfAny('<', '&')`, requires `</t></si>` right after and copies the text. Anything else —
+  entities, `xml:space`, rich runs, `rPh`, CDATA, `<t/>` — takes the existing path. In the harness
+  the table went from 24.2 to 14.2 ms and the whole read from 55.4 to 45.3 ms.
+- **The shared index parsed together with the cell close** (4f7e620). One digit loop that must end at
+  `</v></c>`, instead of an `IndexOf('<')` followed by `Utf8Parser.TryParse` per cell. In the harness,
+  prefetch went from 35.7 to 33.4 ms and the stored sheet stage dropped 7.6%. Over the 524,288 indices
+  in isolation, the digit loop costs 1.36 ms against 2.37 ms for `Utf8Parser`. A standalone
+  parser swap with no fused close check did not show that gain end to end.
+- **The canonical `<c>` attribute scanner inlined** (1902511). The Tier1 disassembly showed its
+  out-parameters (tag end, column, style, kind) going through the stack on every cell. In
+  the harness this took prefetch 7.6%, the real-data read 5%, typed parsing 7% and real-data typed
+  parsing 4% faster.
+
+Measured and not kept:
+
+| attempt | result |
+|---|---|
+| hoist the `</row` check into a `NoInlining` helper to free registers | 1–2% slower |
+| `NoInlining` on `ParseCellSpan` | 5–8% slower |
+| `AggressiveInlining` on the shared-index emitter | neutral |
+| split the cell parser into hot and cold halves | JIT 3% faster, NativeAOT 0.6% slower |
+| a smaller second `CellDesc` | ceiling 1.3 ms: removing `CellAccumulator.Add` entirely (measurement-only build) saves that much of the ~15.6 ms sheet parse |
+| faster `WorkbookLookups.SharedAt` | ceiling 0.5 ms, measured the same way; the cost is the memory access |
+| zero-copy `PrefetchStream` handoff | ceiling ≤2.1 ms (prefetched sheet stage against stored); the copy itself is ~0.3 ms with a hot cache |
+
+What remains of the 42 ms default read is ~22 ms of inflate (~10.5 ms for the table, ~11.5 ms for
+the sheet) and ~17 ms of worksheet scan, with no isolable hotspot left in it. Only
+`PrefetchDecompression` reduces the inflate share, by overlapping it with the parse.
+
+#### 17-digit doubles: Eisel-Lemire
+
+8.4% of the real-data corpus's numeric cells (49,799 of 589,815) have 17 significant digits, such as
+`35.840000000000003`, the form Excel writes for many computed values. `FastDouble`
+stopped at 15 digits, so each of those fell through to `double.TryParse`, at ~106 ns against ~36 ns
+now.
+
+c0fe107 accepts up to 19 digits. When the mantissa is ≤ 2⁵³ and the power of ten is within ±22, it
+keeps the exact multiply/divide. Otherwise it runs a port of fast_float's `compute_float`, using
+128-bit truncated powers of five for 10⁻⁶⁴–10⁶⁴. Values outside that table, subnormals and overflow
+still go to `double.TryParse`.
+
+Correctness gate: ~16M inputs compared bit for bit against `double.Parse`, with zero mismatches.
+The inputs were the corpus values, random bit patterns formatted as `R`, `G17` and `E18`, Excel-like
+magnitudes, random decimals, the edge cases, and 300,000 strings within one unit in the 19th digit of
+an exact halfway point between two doubles. `FastDoubleTests` keeps a 200,000-value random round
+trip and the 17–19 digit cases.
+
+**The first version lost precision.** It also parsed the long values at emit time, which set
+`HasNumber`, and then `TryParse<long>` and `TryParse<decimal>` converted from the double:
+`long.MaxValue` became 2⁶³ and failed, and `35.840000000000003m` became `35.84m`.
+`CellVariantTests.TryParseLongSucceeds` caught it. XLSX emit now stops at 15 digits
+(`FastDouble.TryParseLossless`), where the double keeps every digit the text had; the 19-digit parser
+serves `TryGetDouble` and `TryParse<double>`. The emit-time version was faster (1.11x on the real-data
+read against 1.07x), and recovering those ~3 ms needs a separate "approximate double" flag on `Cell`.
+
+A/B harness, medians of three alternated rounds:
+
+| | before | after | |
+|---|---|---|---|
+| real-data XLSX, cell-by-cell | 58.3 ms | 54.4 ms | 1.07x |
+| same, stored | 36.1 ms | 32.5 ms | 1.11x |
+| real-data XLSX, typed parse | 69.6 ms | 65.8 ms | 1.06x |
+| `xl_parse_typed` over the ABI, JIT | 71.5 ms | 68.2 ms | 1.05x |
+
+The same investigation found a culture bug. `Cell.TryParse<T>(provider: null)` treated null as the
+invariant culture in the fast path but as the current culture in the fallback, so under pt-BR the
+fallback read `35.840000000000003` as 3.58e16. Before Eisel-Lemire every 17-digit cell took that
+fallback. The fallback that re-parses a stored double's formatted text used the caller's provider on
+text that is always invariant, so a pt-BR `TryParse<Half>` read 3.5 as 35. Since b8bcafa, null means
+the invariant culture everywhere, and that re-parse is always invariant. `CellNullProviderTests`
+runs under pt-BR.
+
+#### NativeAOT, again
+
+After this round, `xl_parse_typed` over the real-data XLSX file costs 74.1 ms under the JIT and
+84.0 ms under NativeAOT; XLSB is at parity (41.4 against 42.3 ms). The JIT with
+`DOTNET_TieredPGO=0` lands at 84.7 ms, so the gap is still dynamic PGO. Turning off guarded
+devirtualization changes nothing. The static profile does not recover it. The `.mibc` reaches ILC
+(`--mibc` is in the response file) and holds edge counts for `ParseRowInWindow`, yet removing it or
+regenerating it from this tree moves XLSX by ≤0.5% (85.1 against 85.4 ms). `IlcInstructionSet=x86-64-v3`
+is worth ~1%.
+
+A trap for whoever regenerates the profile: the ILC publish is incremental and ignores a changed
+`.mibc`, producing a byte-identical library. Delete `src/ExcelReader.Native/obj/Release/net10.0/<rid>/native`
+before publishing.
+
+The C++ binding's full XLSX read moved from 93.2 to ~85.4 ms with no native change, from the
+XLSX changes above.
+
 ## Known open items
 
-- The 8.9 ms of sheet parse above the inflate floor in the string-heavy corpus has not been
-  decomposed. It is the largest unexamined block.
-- `PrefetchStream` costs ~2.7 ms of handoff overhead, which is one full copy of the payload from the
-  producer's pooled chunk into the consumer's buffer. Removing it means replacing the `Stream` seam
-  with a buffer-exchange protocol — and that seam is where the decompressed-byte limit counters sit,
-  so it is a trust boundary, not just a copy.
+- NativeAOT XLSX is ~13% behind the JIT, and the static profile does not close it (see "NativeAOT,
+  again"). Next step: diff the JIT's Tier1 code for `ParseRowInWindow` against ILC's output.
+- 17-digit numbers are parsed twice in XLSX: emit rejects them to keep the text exact, and the
+  consumer parses them again. A `Cell` flag for an approximate double would save ~3 ms per
+  real-data read, at the cost of a wider `Cell`.
+- `PrefetchStream` handoff: ~2.7 ms on the i7, ≤2.1 ms on the Ryzen string-heavy sheet, of which
+  the copy itself is ~0.3 ms. Removing it means replacing the `Stream` seam with a buffer-exchange
+  protocol — and that seam is where the decompressed-byte limit counters sit, so it is a trust
+  boundary, not just a copy.
 - **Needs re-measuring.** This reading predates `CsvStructuralScanner` (de49a45, 2026-09-22), which
   moved the enumerator off `CsvControlScanner` and made `Reset` per buffer rather than per record,
   so the write barrier named below is likely already gone. The 1BRC re-run above found 1.36x on
