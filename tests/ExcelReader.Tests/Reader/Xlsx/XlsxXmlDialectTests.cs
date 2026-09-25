@@ -40,6 +40,26 @@ namespace ExcelReader.Tests.Reader.Xlsx
             Assert.Equal(7, cell.StyleIndex);
         }
 
+        [Theory]
+        [InlineData("1", "second")]
+        [InlineData("0001", "second")]
+        [InlineData("+1", "second")]
+        [InlineData("0", "first")]
+        [InlineData("2", "")]
+        [InlineData("4294967297", "")]
+        public void SharedStringIndexFormsResolveLikeTheGenericParser(string index, string expected)
+        {
+            using MemoryStream ms = WorkbookBuilder.Build(
+                $"""<row r="1"><c r="A1" t="s"><v>{index}</v></c><c r="B1"><v>7</v></c></row>""",
+                sharedStrings: "<si><t>first</t></si><si><t>second</t></si>");
+            using XlsxReader reader = Excel.FromXlsx(ms);
+            using XlsxReader.Enumerator e = reader.GetEnumerator();
+
+            Assert.True(e.MoveNext());
+            Assert.Equal(expected, e.Current[0].GetString());
+            Assert.Equal("7", e.Current[1].GetString());
+        }
+
         [Fact]
         public void CommentContainingGreaterThanInsideSheetDataIsSkipped()
         {
