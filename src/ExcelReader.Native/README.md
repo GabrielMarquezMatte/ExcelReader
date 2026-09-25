@@ -18,11 +18,16 @@ NativeAOT has no tiered JIT, so it never gets the dynamic PGO a JIT-hosted proce
 the library up to 1.26x on typed parses. `pgo/excelreader.mibc` is a static profile recorded from a
 JIT run and fed to ILC through the `MibcFile` item in the project file. It only guides optimization:
 a stale profile is never incorrect, it just stops helping, so regenerate it after changing a hot
-read path.
+read path. ILC matches methods by full name, so renaming or moving a type (a namespace change, for
+example) silently drops its profile. That happened after the namespace refactor and cost xl_parse_typed
+8-13%. To check that a method still gets its profile, publish with
+`<IlcArg Include="--codegenopt:JitDisasm=ParseRowInWindow" />` and
+`<IlcArg Include="--codegenopt:JitStdOutFile=disasm.txt" />` (after deleting `obj/.../native`) and
+look for `; No PGO data` in the listing header.
 
-`tests/ExcelReader.NativePgoTrainer` runs `xl_parse_typed`'s implementation over the 65K benchmark
-fixtures in XLSX, XLSB and CSV. Record it and convert the trace (needs `dotnet-trace` and
-`dotnet-pgo`):
+`tests/ExcelReader.NativePgoTrainer` runs the implementations of `xl_parse_typed`, `xl_next_row` and
+`xl_next_row_view` over the 65K benchmark fixtures in XLSX, XLSB and CSV. Record it and convert the
+trace (needs `dotnet-trace` and `dotnet-pgo`):
 
     dotnet build tests/ExcelReader.NativePgoTrainer -c Release
     DOTNET_TieredPGO=1 DOTNET_ReadyToRun=0 DOTNET_TC_QuickJitForLoops=1 \
@@ -31,7 +36,8 @@ fixtures in XLSX, XLSB and CSV. Record it and convert the trace (needs `dotnet-t
     dotnet-pgo create-mibc -t pgo.nettrace --exclude-methods 'Xlsb|Biff12' -o src/ExcelReader.Native/pgo/excelreader.mibc
 
 The XLSB methods are excluded on purpose: with their profile the XLSB parse got 3% slower, and
-without it 1.12x faster. Measure every format before and after replacing the profile. Some formats
+without it 1.12x faster. Re-measured with the regenerated profile: including them makes XLSB typed
+parsing ~16% slower. Measure every format before and after replacing the profile. Some formats
 may get worse, not only better.
 
 ## Layout
