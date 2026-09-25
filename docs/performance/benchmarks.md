@@ -332,17 +332,17 @@ zero-copy advantage the other can't take:
 
 | Comparison | Format | ExcelReader | Competitor | Ratio |
 |---|---|---:|---:|---:|
-| vs. [calamine](https://github.com/tafia/calamine) (Rust) | XLSX | 104.9 ms | 279.2 ms | ~2.7x faster |
-| vs. calamine (Rust) | XLSB | 60.7 ms | 85.5 ms | ~1.4x faster |
-| vs. [DuckDB](https://github.com/duckdb/duckdb) `read_xlsx` (C++) | XLSX | 93.2 ms | 414.2 ms | ~4.4x faster |
-| vs. [xlsxio](https://github.com/brechtsanders/xlsxio) (C) | XLSX | 93.2 ms | 501.5 ms | ~5.4x faster |
-| vs. [xlnt](https://github.com/tfussell/xlnt) (C++) | XLSX | 93.2 ms | 2,396.4 ms | ~26x faster |
-| vs. [zsv](https://github.com/liquidaty/zsv) `fast` engine (C) | CSV | 34.2 ms | 22.4 ms | ~1.5x **slower** |
+| vs. [calamine](https://github.com/tafia/calamine) (Rust) | XLSX | 85.8 ms | 272.0 ms | ~3.2x faster |
+| vs. calamine (Rust) | XLSB | 53.0 ms | 86.8 ms | ~1.6x faster |
+| vs. [DuckDB](https://github.com/duckdb/duckdb) `read_xlsx` (C++) | XLSX | 73.7 ms | 433.6 ms | ~5.9x faster |
+| vs. [xlsxio](https://github.com/brechtsanders/xlsxio) (C) | XLSX | 73.7 ms | 505.0 ms | ~6.9x faster |
+| vs. [xlnt](https://github.com/tfussell/xlnt) (C++) | XLSX | 73.7 ms | 2,494.2 ms | ~34x faster |
+| vs. [zsv](https://github.com/liquidaty/zsv) `fast` engine (C) | CSV | 30.4 ms | 22.7 ms | ~1.3x **slower** |
 
 Writing the same 14 columns × 65,535 rows from row-shaped data, the C++ suite measures
-`write_sheet` at 101.3–110.2 ms against DuckDB's 827–830 ms (~7.5–8.2x), libxlsxwriter's 1,248 ms (~12x),
-xlsxio's 2,416 ms (~22x) and xlnt's 5,491 ms (~50x). The Rust suite measures 52.0 ms against
-rust_xlsxwriter's 322.8 ms (~6.2x) over 7 columns. Caveats for both are in the binding READMEs.
+`write_sheet` at 97.8–100.1 ms against DuckDB's 833–870 ms (~8.5–8.7x), libxlsxwriter's 1,184 ms (~12x),
+xlsxio's 2,454 ms (~25x) and xlnt's 5,641 ms (~56x). The Rust suite measures 53.3 ms against
+rust_xlsxwriter's 326.9 ms (~6.1x) over 7 columns. Caveats for both are in the binding READMEs.
 
 DuckDB, xlsxio and xlnt do not read `.xlsb`, so those comparisons are XLSX-only. calamine is a fast,
 well-optimized reader in its own right — the gap there is real but not the order of magnitude seen

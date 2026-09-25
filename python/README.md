@@ -394,48 +394,48 @@ Competitors: polars 1.44.1 (with fastexcel 0.21.0), pandas 3.0.5 (with openpyxl 
 
 | API | Median | What it produces |
 |---|---:|---|
-| `to_record_batch_reader()` | 38.1 ms | Arrow record batches, streamed |
-| `to_arrow()` | 38.6 ms | the same parse, handed to pyarrow zero-copy |
-| `parse_typed()` | 41.3 ms | typed columnar buffers, converted natively |
-| `iter_parse_typed()` | 41.5 ms | the same typed buffers, in batches |
-| `to_polars()` | 41.3 ms | typed columnar DataFrame, schema inferred |
-| `polars.read_excel()` | 122.7 ms | typed columnar DataFrame, types inferred |
-| `read_all_columnar()` | 452.1 ms | raw columnar cells, no per-cell Python objects |
-| `rows()` | 1,087.9 ms | one `Cell` object per cell, streamed per row |
-| `read_all()` | 1,623.8 ms | one `Cell` object per cell, all at once |
+| `to_record_batch_reader()` | 35.8 ms | Arrow record batches, streamed |
+| `to_arrow()` | 36.1 ms | the same parse, handed to pyarrow zero-copy |
+| `parse_typed()` | 39.5 ms | typed columnar buffers, converted natively |
+| `iter_parse_typed()` | 38.4 ms | the same typed buffers, in batches |
+| `to_polars()` | 38.7 ms | typed columnar DataFrame, schema inferred |
+| `polars.read_excel()` | 124.3 ms | typed columnar DataFrame, types inferred |
+| `read_all_columnar()` | 471.7 ms | raw columnar cells, no per-cell Python objects |
+| `rows()` | 1,086.9 ms | one `Cell` object per cell, streamed per row |
+| `read_all()` | 1,656.5 ms | one `Cell` object per cell, all at once |
 
 The batched readers cost the same as their whole-sheet counterparts and lower the peak memory:
-`to_record_batch_reader(batch_size=10000)` peaks at 20.2 MiB against 24.7 MiB for one whole-sheet
+`to_record_batch_reader(batch_size=10000)` peaks at 20.2 MiB against 24.8 MiB for one whole-sheet
 record batch on this file.
 
 Only the `to_polars()` / `polars.read_excel()` pair is a like-for-like comparison, and even that one
 is loose: both produce a typed columnar DataFrame with inferred types, but the inference rules are
 not identical. The rows above it produce different things and are listed to show what each API
-costs, not to rank them — `read_all()` is ~39x slower than `parse_typed()` because it materializes
+costs, not to rank them — `read_all()` is ~42x slower than `parse_typed()` because it materializes
 917,504 Python objects, which is the price of that shape, not a slow parser.
 
 ### Writing
 
 | API | Median | Output |
 |---|---:|---|
-| `write_workbook()` → csv | 36.1 ms | 8.2 MB |
-| `write_workbook()` → xls | 43.5 ms | 17.7 MB |
-| `write_workbook()` → xlsb | 71.5 ms | 5.1 MB |
-| `write_workbook()` → xlsx | 93.4 ms | 5.1 MB |
-| `write_polars()` → xlsx | 491.4 ms | 5.1 MB |
-| `write_pandas()` → xlsx | 498.8 ms | 5.1 MB |
-| `polars.DataFrame.write_excel()` | 4,625.5 ms | 5.6 MB |
-| `pandas.DataFrame.to_excel()` | 7,049.1 ms | 5.5 MB |
+| `write_workbook()` → csv | 35.7 ms | 8.2 MB |
+| `write_workbook()` → xls | 43.9 ms | 17.7 MB |
+| `write_workbook()` → xlsb | 71.9 ms | 5.1 MB |
+| `write_workbook()` → xlsx | 90.2 ms | 5.1 MB |
+| `write_polars()` → xlsx | 470.2 ms | 5.1 MB |
+| `write_pandas()` → xlsx | 468.5 ms | 5.1 MB |
+| `polars.DataFrame.write_excel()` | 4,707.2 ms | 5.6 MB |
+| `pandas.DataFrame.to_excel()` | 7,274.0 ms | 5.5 MB |
 
 The two DataFrame comparisons are matched work — same DataFrame in, xlsx out both times:
-`write_polars()` is ~9.4x faster than polars' own `write_excel()`, and `write_pandas()` ~14.1x
+`write_polars()` is ~10.0x faster than polars' own `write_excel()`, and `write_pandas()` ~15.5x
 faster than `to_excel()`. Both of ours pay a conversion the raw path does not: the DataFrame goes
 through Arrow and then a Python list before reaching the native columns, which is most of the gap
-between the 491 ms row and the 93 ms one. Handing `write_workbook()` buffers that are already
+between the 470 ms row and the 90 ms one. Handing `write_workbook()` buffers that are already
 columnar — what `parse_typed()` returns — skips all of it.
 
-`write_workbook(xlsx)` at 93.4 ms lands within ~3 ms of the C++ binding's
-`xl::write_columns` on the same 14 columns (90.5 ms), which is the expected result: both are thin wrappers
+`write_workbook(xlsx)` at 90.2 ms lands within ~5 ms of the C++ binding's
+`xl::write_columns` on the same 14 columns (85.1–85.9 ms), which is the expected result: both are thin wrappers
 over the same `xl_write_typed` call, and neither adds work per cell.
 
 `xls` being both the largest file and faster than xlsb and xlsx is not a paradox — BIFF8 writes
