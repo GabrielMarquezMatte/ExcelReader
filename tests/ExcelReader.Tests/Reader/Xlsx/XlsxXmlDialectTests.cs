@@ -18,6 +18,28 @@ namespace ExcelReader.Tests.Reader.Xlsx
             Assert.Equal("single quoted", e.Current[2].GetString());
         }
 
+        [Theory]
+        [InlineData("""<c r="AB1" s="7" t="s"><v>0</v></c>""")]
+        [InlineData("""<c t="s" s="7" r="AB1"><v>0</v></c>""")]
+        [InlineData("""<c r="AB1"  s="7" t="s"><v>0</v></c>""")]
+        [InlineData("""<c r="AB1" s='7' t="s"><v>0</v></c>""")]
+        [InlineData("""<c r="AB1" s="7" t="s" vm="1"><v>0</v></c>""")]
+        [InlineData("""<c r="AB1" s="7" t="s" ><v>0</v></c>""")]
+        [InlineData("""<c r="AA1"/><c s="7" t="s"><v>0</v></c>""")]
+        public void CellTagAttributeLayoutsResolveTheSameCell(string cells)
+        {
+            using MemoryStream ms = WorkbookBuilder.Build(
+                $"""<row r="1">{cells}</row>""",
+                sharedStrings: "<si><t>hit</t></si>");
+            using XlsxReader reader = Excel.FromXlsx(ms);
+            using XlsxReader.Enumerator e = reader.GetEnumerator();
+
+            Assert.True(e.MoveNext());
+            Cell cell = e.Current[27];
+            Assert.Equal("hit", cell.GetString());
+            Assert.Equal(7, cell.StyleIndex);
+        }
+
         [Fact]
         public void CommentContainingGreaterThanInsideSheetDataIsSkipped()
         {
