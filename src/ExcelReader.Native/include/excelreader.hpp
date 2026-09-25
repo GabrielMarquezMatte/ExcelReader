@@ -425,40 +425,6 @@ namespace xl
         std::string_view value{};
     };
 
-    namespace detail
-    {
-        inline std::optional<std::pair<CellView, size_t>> decode_cell(std::span<const uint8_t> blob, size_t offset)
-        {
-            const auto read_i32 = [&](size_t at) -> std::optional<int32_t> {
-                if (at + 4 > blob.size())
-                {
-                    return std::nullopt;
-                }
-                int32_t value = 0;
-                std::memcpy(&value, blob.data() + at, sizeof(value));
-                return value;
-            };
-
-            const auto column = read_i32(offset);
-            const auto type = read_i32(offset + 4);
-            const auto length = read_i32(offset + 8);
-            if (!column || !type || !length || *length < 0)
-            {
-                return std::nullopt;
-            }
-            const size_t start = offset + 12;
-            const size_t end = start + static_cast<size_t>(*length);
-            if (end > blob.size())
-            {
-                return std::nullopt;
-            }
-            CellView cell{*column, static_cast<CellType>(*type),
-                          std::string_view(reinterpret_cast<const char *>(blob.data() + start),
-                                           static_cast<size_t>(*length))};
-            return std::make_pair(cell, end);
-        }
-    }
-
     class RowView
     {
     public:
@@ -495,7 +461,14 @@ namespace xl
             using difference_type = ptrdiff_t;
 
             iterator() = default;
-            iterator(const RowView *row, size_t index) : row_(row), index_(index) { load(); }
+            iterator(const RowView *row, size_t index) : row_(row), index_(index)
+            {
+                if (row_ != nullptr)
+                {
+                    next_ = row_->payload_.data();
+                }
+                load();
+            }
 
             CellView operator*() const { return current_; }
             iterator &operator++()
@@ -524,19 +497,29 @@ namespace xl
                     current_ = (*row_)[index_];
                     return;
                 }
-                auto decoded = detail::decode_cell(row_->payload_, offset_);
-                if (!decoded)
+                // Blob cell: int32 column, int32 type, int32 length, then the value bytes.
+                const uint8_t *end = row_->payload_.data() + row_->payload_.size();
+                int32_t header[3];
+                if (static_cast<size_t>(end - next_) < sizeof(header))
                 {
-                    index_ = row_->count_;   
+                    index_ = row_->count_;
                     return;
                 }
-                current_ = decoded->first;
-                offset_ = decoded->second;
+                std::memcpy(header, next_, sizeof(header));
+                const uint8_t *value = next_ + sizeof(header);
+                if (header[2] < 0 || static_cast<size_t>(end - value) < static_cast<size_t>(header[2]))
+                {
+                    index_ = row_->count_;
+                    return;
+                }
+                current_ = CellView{header[0], static_cast<CellType>(header[1]),
+                                    std::string_view(reinterpret_cast<const char *>(value), static_cast<size_t>(header[2]))};
+                next_ = value + header[2];
             }
 
             const RowView *row_{};
             size_t index_{};
-            size_t offset_{};
+            const uint8_t *next_{};
             CellView current_{};
         };
 

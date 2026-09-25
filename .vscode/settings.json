@@ -7,9 +7,10 @@
         "EXCELREADER_NATIVE_LIB": "${workspaceFolder}/src/ExcelReader.Native/bin/Release/net10.0/win-x64/native/ExcelReader.Native.dll"
     },
     "cmake.configureArgs": [
-        "-DEXCELREADER_BUILD_BENCHMARKS=OFF",
+        "-DEXCELREADER_BUILD_BENCHMARKS=ON",
         "-DEXCELREADER_BUILD_BENCHMARKS_COMPARE=OFF",
         "-DEXCELREADER_BUILD_TESTS=ON",
+        "-DEXCELREADER_BUILD_BENCHMARKS_ZSV=ON",
         "-DCMAKE_POLICY_VERSION_MINIMUM=3.5"
     ],
     "rust-analyzer.server.extraEnv": {

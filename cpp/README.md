@@ -350,6 +350,58 @@ Add `-DEXCELREADER_BUILD_BENCHMARKS_COMPARE=ON -DCMAKE_POLICY_VERSION_MINIMUM=3.
 `CMakeLists.txt` predates CMake's minimum-version floor) and build/run
 `excelreader_cpp_compare_benchmarks` for the xlnt/xlsxio comparison.
 
+### CSV against zsv
+
+`excelreader_cpp_csv_compare_benchmarks` (`-DEXCELREADER_BUILD_BENCHMARKS_ZSV=ON`) reads
+`65K_Records_Data.csv` (8.2 MB, 65,535 rows × 14 columns, CRLF, UTF-8 BOM) against
+[zsv](https://github.com/liquidaty/zsv) v1.4.3, a SIMD CSV parser in C, with both of its engines:
+the default (`compat`) and the branchless SIMD one (`fast`, `scan_engine = 3`). zsv uses GCC vector
+extensions MSVC cannot compile, so this target needs GCC or Clang, and it is its own executable
+because the DuckDB comparison above only links under MSVC.
+
+Two workloads:
+
+- **Typed:** `parse_sheet<FullRow>` against zsv plus the same conversions done by hand (`std::string`
+  for text, ISO dates, `std::from_chars` for the integers and doubles), one owned `FullRow` per row.
+  All three produce the same checksum.
+- **Cells:** every cell's bytes counted. ExcelReader goes through `RowCursor` (`xl_next_row`), zsv
+  through its row handler. zsv's checksum is 3 bytes higher because it keeps the BOM in the first
+  header cell.
+
+Measured on the same machine as above, GCC 16.2.0 (MSYS2 UCRT64, `-O3 -mavx2` for zsv), Release,
+`--benchmark_repetitions=10` (means shown):
+
+| Workload | ExcelReader | zsv `compat` | zsv `fast` |
+|---|---:|---:|---:|
+| Typed, 14 columns into `FullRow` | 34.2 ms | 24.3 ms | 22.4 ms |
+| Cells, byte count | 14.3 ms | 5.8 ms | 3.5 ms |
+
+**zsv is faster on both.** Typed, it is ~1.4x (`compat`) and ~1.5x (`fast`) faster than ExcelReader.
+Counting cells, it is ~2.5x and ~4.1x faster.
+
+The cells gap is the C ABI, not the CSV parser. `xl_next_row` serializes every row into a caller
+buffer with a 12-byte header per cell, one call per row, and that alone costs ~13 ms here (calling it
+without reading any cell). The managed reader reads the same file in ~5 ms under BenchmarkDotNet
+(`RealDataReadBenchmark.Csv_ExcelReader`), but that is a different harness and runtime, so it is
+context rather than a like-for-like number.
+
+The cells row was 30.5 ms before `xl::RowView`'s iterator was rewritten to walk the blob with a
+pointer instead of decoding each cell through `std::optional` helpers; the rows are from separate
+10-repetition runs (typed CVs 3–5%, cells CVs ≤3%). A first run had CVs up to 20% and was discarded.
+
+Run locally, on Windows from an MSYS2 UCRT64 shell with `gcc` and `ninja`:
+
+```bash
+cmake -S cpp -B build-zsv -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_POLICY_DEFAULT_CMP0168=NEW \
+  -DEXCELREADER_BUILD_BENCHMARKS=ON -DEXCELREADER_BUILD_BENCHMARKS_ZSV=ON
+cmake --build build-zsv --target excelreader_cpp_csv_compare_benchmarks
+./build-zsv/benchmarks/excelreader_cpp_csv_compare_benchmarks --benchmark_repetitions=10 --benchmark_report_aggregates_only=true
+```
+
+The MinGW Makefiles generator failed here inside FetchContent's sub-build. Configuring with Ninja and
+`CMAKE_POLICY_DEFAULT_CMP0168=NEW` worked. Under MinGW the executable links its runtime statically,
+so it does not pick up another toolchain's `libstdc++-6.dll` from `PATH`.
+
 ### Writing
 
 `excelreader_cpp_write_benchmarks` (same `-DEXCELREADER_BUILD_BENCHMARKS=ON` flag) measures the two
