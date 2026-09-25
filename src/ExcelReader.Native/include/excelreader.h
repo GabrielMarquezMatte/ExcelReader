@@ -100,6 +100,10 @@ int32_t xl_is_date1904(xl_workbook* handle, int32_t* out_flag);
 
 int32_t xl_next_row(xl_workbook* handle, uint8_t* buffer, int32_t capacity, int32_t* out_written);
 
+/* out_row points into memory the handle owns: overwritten by the next xl_next_row_view, released by
+   xl_close. Values are NUL-terminated. Do not pass it to xl_free_rows. */
+int32_t xl_next_row_view(xl_workbook* handle, xl_row* out_row);
+
 int32_t xl_read_all_blob(xl_workbook* handle, uint8_t* buffer, int32_t capacity, int32_t* out_written);
 
 typedef struct xl_rows {

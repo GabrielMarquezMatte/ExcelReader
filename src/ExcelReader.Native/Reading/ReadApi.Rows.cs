@@ -80,6 +80,42 @@ namespace ExcelReader.Native.Reading
             }
         }
 
+        internal static int NextRowView(NativeHandle? handle, out NativeRow row)
+        {
+            row = default;
+            if (handle is null)
+            {
+                return NativeStatus.InvalidHandle;
+            }
+
+            NativeApi.ClearLastError();
+            try
+            {
+                handle.View ??= new RowViewBuffer();
+                if (handle.HasPending)
+                {
+                    handle.HasPending = false;
+                    row = handle.View.Fill(handle.Scratch.AsSpan(0, handle.PendingLength));
+                    return NativeStatus.Ok;
+                }
+
+                handle.FaultLiveSession("xl_next_row_view");
+                handle.Rows ??= handle.Reader.GetEnumerator();
+                if (!handle.Rows.MoveNext())
+                {
+                    return NativeStatus.Eof;
+                }
+                row = handle.View.Fill(handle.Rows.Current);
+                return NativeStatus.Ok;
+            }
+            catch (Exception exception)
+            {
+                NativeApi.SetLastError(exception.Message);
+                row = default;
+                return NativeStatus.Error;
+            }
+        }
+
         private static int DecodePendingRow(NativeHandle handle, out NativeRow row)
         {
             row = default;
