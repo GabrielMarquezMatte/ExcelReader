@@ -61,6 +61,31 @@ namespace ExcelReader.Tests.Reader.Xlsx
         }
 
         [Fact]
+        public void PlainAndMarkedUpSharedStringsInterleaveCorrectly()
+        {
+            string[] expected = ["plain", "a & b", " padded ", "rich text", "", "", "base", "cdata &amp;", "last"];
+            using MemoryStream ms = WorkbookBuilder.Build(
+                "<row r=\"1\">" + string.Concat(expected.Select((_, i) => $"<c t=\"s\"><v>{i}</v></c>")) + "</row>",
+                sharedStrings: "<si><t>plain</t></si>"
+                    + "<si><t>a &amp; b</t></si>"
+                    + "<si><t xml:space=\"preserve\"> padded </t></si>"
+                    + "<si><r><t>rich</t></r><r><t> text</t></r></si>"
+                    + "<si><t></t></si>"
+                    + "<si><t/></si>"
+                    + "<si><t>base</t><rPh sb=\"0\" eb=\"1\"><t>ruby</t></rPh></si>"
+                    + "<si><t><![CDATA[cdata &amp;]]></t></si>"
+                    + "<si><t>last</t></si>");
+            using XlsxReader reader = Excel.FromXlsx(ms);
+            using XlsxReader.Enumerator e = reader.GetEnumerator();
+
+            Assert.True(e.MoveNext());
+            for (int i = 0; i < expected.Length; i++)
+            {
+                Assert.Equal(expected[i], e.Current[i].GetString());
+            }
+        }
+
+        [Fact]
         public void CommentContainingGreaterThanInsideSheetDataIsSkipped()
         {
             using MemoryStream ms = WorkbookBuilder.Build(
