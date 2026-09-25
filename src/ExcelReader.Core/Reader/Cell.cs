@@ -1,9 +1,9 @@
-using System.Buffers.Text;
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Runtime.CompilerServices;
 using System.Text;
 using ExcelReader.Core.Reader.Internal;
+using ExcelReader.Core.Writer.Internal;
 
 namespace ExcelReader.Core.Reader
 {
@@ -133,7 +133,7 @@ namespace ExcelReader.Core.Reader
                 return true;
             }
             Span<byte> buffer = stackalloc byte[32];
-            return Utf8Formatter.TryFormat(_number, buffer, out int written)
+            return CellFormatter.TryFormatDouble(_number, buffer, out int written)
                 ? T.TryParse(buffer[..written], provider, out result)
                 : T.TryParse(Value, provider, out result);
         }
@@ -322,7 +322,7 @@ namespace ExcelReader.Core.Reader
         {
             if (_hasNumber && Value.IsEmpty)
             {
-                return Utf8Formatter.TryFormat(_number, destination, out bytesWritten);
+                return CellFormatter.TryFormatDouble(_number, destination, out bytesWritten);
             }
             if (Value.TryCopyTo(destination))
             {
@@ -347,7 +347,7 @@ namespace ExcelReader.Core.Reader
             if (_hasNumber && Value.IsEmpty)
             {
                 Span<byte> buffer = stackalloc byte[32];
-                return Utf8Formatter.TryFormat(_number, buffer, out int written)
+                return CellFormatter.TryFormatDouble(_number, buffer, out int written)
                     ? Encoding.UTF8.GetString(buffer[..written])
                     : string.Empty;
             }
