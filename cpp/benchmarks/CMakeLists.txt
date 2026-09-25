@@ -253,7 +253,7 @@ set(ZLIB_VERSION_STRING "1.3.1")
         set_target_properties(duckdb PROPERTIES IMPORTED_IMPLIB "${_duckdb_dir}/${_duckdb_implib_file}")
     endif()
 
-    set(EXCELREADER_XLSX_FIXTURE_PATH
+    set(EXCELREADER_LARGE_XLSX_FIXTURE_PATH
         "${CMAKE_CURRENT_SOURCE_DIR}/../../tests/ExcelReader.Benchmarks/Data/65K_Records_Data.xlsx"
         CACHE FILEPATH "Path to the 65K-row xlsx fixture the excelreader-vs-xlnt benchmark reads")
 
@@ -261,7 +261,7 @@ set(ZLIB_VERSION_STRING "1.3.1")
     target_link_libraries(excelreader_cpp_compare_benchmarks PRIVATE
         xl::excelreader benchmark::benchmark_main xlnt xlsxio_read duckdb)
     target_compile_definitions(excelreader_cpp_compare_benchmarks PRIVATE
-        EXCELREADER_XLSX_FIXTURE_PATH="${EXCELREADER_XLSX_FIXTURE_PATH}")
+        EXCELREADER_XLSX_FIXTURE_PATH="${EXCELREADER_LARGE_XLSX_FIXTURE_PATH}")
 
     # Kept a separate executable from the read comparison rather than a second .cpp in the same
     # one: both files define their own FullRow plus an xl::ExcelMapper specialization for it, and
@@ -276,14 +276,14 @@ set(ZLIB_VERSION_STRING "1.3.1")
     target_link_libraries(excelreader_cpp_write_compare_benchmarks PRIVATE
         xl::excelreader benchmark::benchmark_main xlnt xlsxio_write duckdb)
     target_compile_definitions(excelreader_cpp_write_compare_benchmarks PRIVATE
-        EXCELREADER_XLSX_FIXTURE_PATH="${EXCELREADER_XLSX_FIXTURE_PATH}"
+        EXCELREADER_XLSX_FIXTURE_PATH="${EXCELREADER_LARGE_XLSX_FIXTURE_PATH}"
         EXCELREADER_BENCH_XLSXIO)
 
     add_executable(excelreader_cpp_write_compare_lxw_benchmarks benchmark_write_compare.cpp)
     target_link_libraries(excelreader_cpp_write_compare_lxw_benchmarks PRIVATE
         xl::excelreader benchmark::benchmark_main xlsxwriter duckdb)
     target_compile_definitions(excelreader_cpp_write_compare_lxw_benchmarks PRIVATE
-        EXCELREADER_XLSX_FIXTURE_PATH="${EXCELREADER_XLSX_FIXTURE_PATH}"
+        EXCELREADER_XLSX_FIXTURE_PATH="${EXCELREADER_LARGE_XLSX_FIXTURE_PATH}"
         EXCELREADER_BENCH_LIBXLSXWRITER)
 
     if(WIN32)
