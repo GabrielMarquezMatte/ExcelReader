@@ -788,7 +788,7 @@ namespace ExcelReader.Core.Reader.Xlsx
                 }
                 AppendRaw(v);
                 double number = 0;
-                bool hasNumber = kind == Kind.Number && FastDouble.TryParse(v, out number);
+                bool hasNumber = kind == Kind.Number && FastDouble.TryParseLossless(v, out number);
                 _acc.Add(col, vStart, _acc.ValueLength - vStart, cellType, style, CellValueSource.RowValues,
                     number: number, hasNumber: hasNumber);
             }
@@ -808,7 +808,7 @@ namespace ExcelReader.Core.Reader.Xlsx
                     _ => WorkbookLookups.IsDateStyle(_styleIsDate, style) ? CellType.Date : CellType.Number,
                 };
                 double number = 0;
-                bool hasNumber = kind == Kind.Number && FastDouble.TryParse(v, out number);
+                bool hasNumber = kind == Kind.Number && FastDouble.TryParseLossless(v, out number);
                 _acc.Add(col, valueStart, v.Length, cellType, style, CellValueSource.RowBuffer,
                     number: number, hasNumber: hasNumber);
             }
