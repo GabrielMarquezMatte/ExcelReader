@@ -1,4 +1,5 @@
 using System.Buffers.Binary;
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using ExcelReader.Core.Reader;
 
@@ -62,8 +63,7 @@ namespace ExcelReader.Native.Reading
             _values[valueOffset + length] = 0;
             if (count == _cellCapacity)
             {
-                _cellCapacity = Math.Max(64, _cellCapacity * 2);
-                _cells = (NativeRowCell*)NativeMemory.Realloc(_cells, (nuint)(_cellCapacity * sizeof(NativeRowCell)));
+                GrowCells();
             }
             // Offsets until the row is complete: growing _values moves it, so pointers are fixed up in Finish.
             _cells[count++] = new NativeRowCell { Column = column, Type = type, ValueLength = length, Value = valueOffset };
@@ -80,12 +80,25 @@ namespace ExcelReader.Native.Reading
 
         private void EnsureValues(int required)
         {
-            if (required <= _valueCapacity)
+            if (required > _valueCapacity)
             {
-                return;
+                GrowValues(required);
             }
+        }
+
+        // Out of line: without PGO the JIT/ILC inlines the Realloc P/Invoke and pays its frame setup on every row.
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        private void GrowValues(int required)
+        {
             _valueCapacity = Math.Max(Math.Max(4096, _valueCapacity * 2), required);
             _values = (byte*)NativeMemory.Realloc(_values, (nuint)_valueCapacity);
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        private void GrowCells()
+        {
+            _cellCapacity = Math.Max(64, _cellCapacity * 2);
+            _cells = (NativeRowCell*)NativeMemory.Realloc(_cells, (nuint)(_cellCapacity * sizeof(NativeRowCell)));
         }
 
         public void Dispose()
