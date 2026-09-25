@@ -379,6 +379,14 @@ namespace ExcelReader.Core.Reader.Xlsx
                 if (buf.AsSpan(p, Math.Min(3, len - p)).StartsWith("<v>"u8))
                 {
                     int valueStart = p + 3;
+                    if (kind == Kind.Shared)
+                    {
+                        int end = TryEmitSharedIndex(buf, len, valueStart, col, style);
+                        if (end >= 0)
+                        {
+                            return end;
+                        }
+                    }
                     int lt = IndexOfBounded(buf, len, valueStart, (byte)'<');
                     if (lt >= 0 && buf.AsSpan(lt, Math.Min(8, len - lt)).StartsWith("</v></c>"u8))
                     {
@@ -411,6 +419,24 @@ namespace ExcelReader.Core.Reader.Xlsx
                 }
                 EmitCell(kind, buf.AsSpan(p, cEnd - p), col, style);
                 return cEnd + cClose.Length;
+            }
+
+            private int TryEmitSharedIndex(byte[] buf, int len, int valueStart, int col, int style)
+            {
+                int i = valueStart;
+                int index = 0;
+                while (i < len && (uint)(buf[i] - '0') <= 9)
+                {
+                    index = (index * 10) + (buf[i] - '0');
+                    i++;
+                }
+                if (i - valueStart is 0 or > 9 || !buf.AsSpan(i, Math.Min(8, len - i)).StartsWith("</v></c>"u8))
+                {
+                    return -1;
+                }
+                var (start, length, sharedIndex) = WorkbookLookups.SharedAt(_sharedOffsets, index);
+                _acc.Add(col, start, length, CellType.ExcelString, style, CellValueSource.Shared, sharedIndex: sharedIndex);
+                return i + 8;
             }
 
             private int TryEmitPlainInline(byte[] buf, int len, int p, int col, int style)
