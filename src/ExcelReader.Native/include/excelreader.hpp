@@ -535,56 +535,32 @@ namespace xl
     class RowCursor
     {
     public:
-        explicit RowCursor(xl_workbook *handle) : handle_(handle), buffer_(kInitialRowBuffer) {}
+        explicit RowCursor(xl_workbook *handle) : handle_(handle) {}
 
         RowCursor(const RowCursor &) = delete;
         RowCursor &operator=(const RowCursor &) = delete;
         RowCursor(RowCursor &&) noexcept = default;
         RowCursor &operator=(RowCursor &&) noexcept = default;
 
+        /// The returned view points into memory the workbook owns and is valid until the next
+        /// next_row() on this workbook or until the workbook closes.
         std::expected<RowView, Error> next_row()
         {
-            while (true)
+            xl_row row{};
+            const int32_t status = xl_next_row_view(handle_, &row);
+            if (status != XL_OK)
             {
-                int32_t written = 0;
-                const auto capacity = static_cast<int32_t>(buffer_.size());
-                const int32_t status = xl_next_row(handle_, buffer_.data(), capacity, &written);
-
-                if (status == XL_OK)
-                {
-                    const size_t length = written > 0 ? static_cast<size_t>(written) : 0;
-                    if (length < 4)
-                    {
-                        return std::unexpected(detail::make_error(XL_ERROR));
-                    }
-                    int32_t count = 0;
-                    std::memcpy(&count, buffer_.data(), sizeof(count));
-                    if (count < 0)
-                    {
-                        return std::unexpected(detail::make_error(XL_ERROR));
-                    }
-                    return RowView(std::span<const uint8_t>(buffer_.data() + 4, length - 4),
-                                   static_cast<size_t>(count));
-                }
-                if (status == XL_BUFFER_TOO_SMALL)
-                {
-                    const size_t needed = written > 0 ? static_cast<size_t>(written) : buffer_.size() * 2;
-                    if (needed <= buffer_.size())
-                    {
-                        return std::unexpected(detail::make_error(XL_ERROR));
-                    }
-                    buffer_.resize(needed);
-                    continue;
-                }
-                return std::unexpected(detail::make_error(status));   
+                return std::unexpected(detail::make_error(status));
             }
+            if (row.cell_count < 0)
+            {
+                return std::unexpected(detail::make_error(XL_ERROR));
+            }
+            return RowView(row.cells, static_cast<size_t>(row.cell_count));
         }
 
     private:
-        static constexpr size_t kInitialRowBuffer = 64 * 1024;
-
         xl_workbook *handle_{};
-        std::vector<uint8_t> buffer_;
     };
 
     class DecodedRows

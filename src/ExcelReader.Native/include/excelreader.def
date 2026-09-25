@@ -11,6 +11,7 @@ EXPORTS
     xl_move_to_sheet
     xl_is_date1904
     xl_next_row
+    xl_next_row_view
     xl_read_all_decoded
     xl_read_all_blob
     xl_free_rows
