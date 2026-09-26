@@ -282,11 +282,36 @@ namespace ExcelReader.Core.Reader
         /// <exception cref="ArgumentOutOfRangeException"><paramref name="headerRow"/> is negative, or
         /// <paramref name="sampleSize"/> is not positive.</exception>
         /// <exception cref="ArgumentException">The sheet has fewer rows than <paramref name="headerRow"/>.</exception>
-        public static ExcelColumnSchema[] InferSchema(IExcelRowReader reader, int headerRow = 1, int sampleSize = 100)
+        public static ExcelColumnSchema[] InferSchema(IExcelRowReader reader, int headerRow, int sampleSize)
+        {
+            return InferSchema(reader, headerRow, sampleSize, parseText: false);
+        }
+
+        /// <summary>
+        /// Guesses a column schema by sampling the reader's rows, as
+        /// <see cref="InferSchema(IExcelRowReader, int, int)"/> does, and can also type cells that hold text.
+        /// </summary>
+        /// <param name="reader">The reader to sample. Its enumeration is not disturbed.</param>
+        /// <param name="headerRow">1-based row number to take column names from; 0 means "no header",
+        /// so every returned schema is addressable only by <see cref="ExcelColumnSchema.Index"/>.</param>
+        /// <param name="sampleSize">How many rows after the header to inspect.</param>
+        /// <param name="parseText">When <see langword="true"/>, a text cell (every CSV field, or a number
+        /// stored as text) counts as an integer, a decimal, <c>true</c>/<c>false</c>, or an ISO-8601 date or
+        /// date-time when its text has exactly that shape. Numbers with a leading zero (<c>00123</c>), padded
+        /// or culture-formatted numbers, and non-ISO dates stay text. A column only gets a non-text type when
+        /// every sampled value converts to it.</param>
+        /// <returns>One <see cref="ExcelColumnSchema"/> per column, in column order.</returns>
+        /// <remarks>Still a guess over a bounded sample: a value past the sample can still fail to convert.
+        /// See <see cref="InferSchema(IExcelRowReader, int, int)"/>.</remarks>
+        /// <exception cref="ArgumentNullException"><paramref name="reader"/> is <see langword="null"/>.</exception>
+        /// <exception cref="ArgumentOutOfRangeException"><paramref name="headerRow"/> is negative, or
+        /// <paramref name="sampleSize"/> is not positive.</exception>
+        /// <exception cref="ArgumentException">The sheet has fewer rows than <paramref name="headerRow"/>.</exception>
+        public static ExcelColumnSchema[] InferSchema(IExcelRowReader reader, int headerRow = 1, int sampleSize = 100, bool parseText = false)
         {
             ArgumentNullException.ThrowIfNull(reader);
             using IExcelRowEnumerator rows = reader.GetEnumerator();
-            return SchemaInference.Infer(rows, reader.IsDate1904, headerRow, sampleSize);
+            return SchemaInference.Infer(rows, reader.IsDate1904, headerRow, sampleSize, parseText);
         }
 
         private static ReadOnlySpan<byte> ZipSignature => [0x50, 0x4B, 0x03, 0x04];

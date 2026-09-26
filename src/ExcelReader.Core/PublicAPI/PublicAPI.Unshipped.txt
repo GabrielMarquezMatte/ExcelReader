@@ -1,1 +1,4 @@
 #nullable enable
+*REMOVED*static ExcelReader.Core.Reader.Excel.InferSchema(ExcelReader.Core.Reader.IExcelRowReader! reader, int headerRow = 1, int sampleSize = 100) -> ExcelReader.Core.Reader.Schema.ExcelColumnSchema[]!
+static ExcelReader.Core.Reader.Excel.InferSchema(ExcelReader.Core.Reader.IExcelRowReader! reader, int headerRow, int sampleSize) -> ExcelReader.Core.Reader.Schema.ExcelColumnSchema[]!
+static ExcelReader.Core.Reader.Excel.InferSchema(ExcelReader.Core.Reader.IExcelRowReader! reader, int headerRow = 1, int sampleSize = 100, bool parseText = false) -> ExcelReader.Core.Reader.Schema.ExcelColumnSchema[]!
