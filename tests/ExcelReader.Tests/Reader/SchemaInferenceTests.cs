@@ -50,6 +50,39 @@ namespace ExcelReader.Tests.Reader
             return Array.ConvertAll(schema, column => column.Type);
         }
 
+        private static string FixtureCsv()
+        {
+            string path = Path.Combine(AppContext.BaseDirectory, "data", "65K_Records_Data.csv");
+            if (!File.Exists(path))
+            {
+                path = Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..",
+                    "ExcelReader.Benchmarks", "Data", "65K_Records_Data.csv");
+            }
+            Assert.True(File.Exists(path), $"CSV fixture not found at {path}");
+            return path;
+        }
+
+        [Fact]
+        public void InferSchema_Should_Type_The_Fixture_Csv_When_Parsing_Text()
+        {
+            using CsvReader reader = Excel.FromCsvFile(FixtureCsv());
+
+            ExcelColumnSchema[] schema = Excel.InferSchema(reader, parseText: true);
+
+            ExcelColumnType s = ExcelColumnType.StringColumn, d = ExcelColumnType.DateColumn,
+                i = ExcelColumnType.Int64Column, f = ExcelColumnType.Float64Column;
+            Assert.Equal([s, s, s, s, s, d, i, d, i, f, f, f, f, f], TypesOf(schema));
+            Assert.Equal("Order ID", schema[6].Name);
+        }
+
+        [Fact]
+        public void InferSchema_Should_Keep_The_Fixture_Csv_As_Strings_By_Default()
+        {
+            using CsvReader reader = Excel.FromCsvFile(FixtureCsv());
+
+            Assert.All(Excel.InferSchema(reader), column => Assert.Equal(ExcelColumnType.StringColumn, column.Type));
+        }
+
         [Fact]
         public void ParseText_Should_Infer_Integers_And_Decimals_But_Not_Codes()
         {
