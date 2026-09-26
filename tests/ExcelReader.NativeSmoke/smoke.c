@@ -135,6 +135,7 @@ typedef int32_t (*xl_parse_typed_fn)(xl_workbook*, const xl_column_spec*, int32_
 typedef int32_t (*xl_parse_typed_ex_fn)(xl_workbook*, const xl_column_spec*, int32_t, int32_t, int32_t, xl_table*);
 typedef void (*xl_free_table_fn)(xl_table*);
 typedef int32_t (*xl_infer_schema_fn)(xl_workbook*, int32_t, int32_t, xl_inferred_schema*);
+typedef int32_t (*xl_infer_schema_ex_fn)(xl_workbook*, int32_t, int32_t, int32_t, xl_inferred_schema*);
 typedef void (*xl_free_schema_fn)(xl_inferred_schema*);
 typedef const uint8_t* (*xl_last_error_ptr_fn)(int32_t*);
 typedef int32_t (*xl_parse_arrow_fn)(xl_workbook*, const xl_column_spec*, int32_t, int32_t, struct ArrowArray*, struct ArrowSchema*);
@@ -164,6 +165,7 @@ typedef struct
     xl_parse_typed_ex_fn parse_typed_ex;
     xl_free_table_fn free_table;
     xl_infer_schema_fn infer_schema;
+    xl_infer_schema_ex_fn infer_schema_ex;
     xl_free_schema_fn free_schema;
     xl_last_error_ptr_fn last_error_ptr;
     xl_parse_arrow_fn parse_arrow;
@@ -200,6 +202,7 @@ static int bind_all(xl_lib_handle lib, api_t* api)
     BIND(parse_typed_ex, xl_parse_typed_ex_fn, "xl_parse_typed_ex");
     BIND(free_table, xl_free_table_fn, "xl_free_table");
     BIND(infer_schema, xl_infer_schema_fn, "xl_infer_schema");
+    BIND(infer_schema_ex, xl_infer_schema_ex_fn, "xl_infer_schema_ex");
     BIND(free_schema, xl_free_schema_fn, "xl_free_schema");
     BIND(last_error_ptr, xl_last_error_ptr_fn, "xl_last_error_ptr");
     BIND(parse_arrow, xl_parse_arrow_fn, "xl_parse_arrow");
@@ -693,6 +696,49 @@ static int test_infer_schema_rejects_bad_arguments(const api_t* api, const char*
     return 0;
 }
 
+static int test_infer_schema_parse_text(const api_t* api)
+{
+    const char* csv_path = "smoke_infer_text.csv";
+    FILE* csv = fopen(csv_path, "wb");
+    CHECK(csv != NULL, "cannot write the infer-schema CSV fixture");
+    fputs("n,ratio,flag,day\n1,0.5,true,2024-01-02\n2,1.5,false,2024-01-03\n", csv);
+    fclose(csv);
+
+    xl_workbook* handle = NULL;
+    int32_t status = api->open_file((const uint8_t*)csv_path, (int32_t)strlen(csv_path), XL_FORMAT_CSV, &handle);
+    int32_t typed = XL_ERROR;
+    int32_t rejected = XL_OK;
+    int32_t types[4] = {-1, -1, -1, -1};
+    int32_t column_count = 0;
+    if (status == XL_OK)
+    {
+        xl_inferred_schema schema;
+        memset(&schema, 0, sizeof(schema));
+        typed = api->infer_schema_ex(handle, 1, 100, XL_INFER_PARSE_TEXT, &schema);
+        if (typed == XL_OK)
+        {
+            column_count = schema.column_count;
+            for (int32_t i = 0; i < schema.column_count && i < 4; i++)
+            {
+                types[i] = schema.columns[i].type;
+            }
+            api->free_schema(&schema);
+        }
+        memset(&schema, 0, sizeof(schema));
+        rejected = api->infer_schema_ex(handle, 1, 100, 2, &schema);
+        api->close_(handle);
+    }
+    remove(csv_path);
+
+    CHECK(status == XL_OK, "xl_open_file must open the infer-schema CSV");
+    CHECK(typed == XL_OK, "xl_infer_schema_ex must succeed with XL_INFER_PARSE_TEXT");
+    CHECK(column_count == 4, "the infer-schema CSV has 4 columns");
+    CHECK(types[0] == XL_T_I64 && types[1] == XL_T_F64 && types[2] == XL_T_BOOL && types[3] == XL_T_DATE,
+          "xl_infer_schema_ex must type the CSV's columns as I64, F64, BOOL, DATE");
+    CHECK(rejected == XL_INVALID_ARGUMENT, "xl_infer_schema_ex must reject an unknown flag bit");
+    return 0;
+}
+
 static int test_double_close_is_rejected(const api_t* api, const char* fixture)
 {
     xl_workbook* handle = NULL;
@@ -1168,6 +1214,7 @@ int main(int argc, char** argv)
     failures += test_parse_typed_ex_csv(&api);
     failures += test_infer_schema(&api, fixture_path);
     failures += test_infer_schema_rejects_bad_arguments(&api, fixture_path);
+    failures += test_infer_schema_parse_text(&api);
     failures += test_double_close_is_rejected(&api, fixture_path);
     failures += test_write_typed(&api);
     failures += test_csv_aggregate_file(lib);
