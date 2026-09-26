@@ -34,50 +34,42 @@ namespace ExcelReader.Core.Reader.Internal
                 i = 1;
             }
 
+            // Integer digits, then fraction digits, each in its own tight loop: one loop over both paid a
+            // mispredicted branch at the dot and on every digit's dot/leading-zero checks.
             ulong mantissa = 0;
-            int digits = 0;
-            int scale = 0;
-            int exponent = 0;
-            bool sawDigit = false;
-            bool sawDot = false;
-
+            int integerStart = i;
             for (; i < s.Length; i++)
             {
-                byte c = s[i];
-                if (c == (byte)'.')
+                uint d = (uint)(s[i] - (byte)'0');
+                if (d > 9)
                 {
-                    if (sawDot)
-                    {
-                        return false;
-                    }
-                    sawDot = true;
-                    continue;
-                }
-                if ((uint)(c - (byte)'0') > 9)
-                {
-                    if (c is not ((byte)'e' or (byte)'E') || !TryExponent(s[(i + 1)..], out exponent))
-                    {
-                        return false;
-                    }
                     break;
                 }
-                sawDigit = true;
-                bool leadingZero = mantissa == 0 && c == (byte)'0';
-                if (!leadingZero)
-                {
-                    digits++;
-                    if (digits > maxDigits)
-                    {
-                        return false;
-                    }
-                }
-                mantissa = (mantissa * 10) + (ulong)(c - (byte)'0');
-                if (sawDot)
-                {
-                    scale++;
-                }
+                mantissa = (mantissa * 10) + d;
             }
-            if (!sawDigit)
+            int integerDigits = i - integerStart;
+            int scale = 0;
+            if (i < s.Length && s[i] == (byte)'.')
+            {
+                int fractionStart = ++i;
+                for (; i < s.Length; i++)
+                {
+                    uint d = (uint)(s[i] - (byte)'0');
+                    if (d > 9)
+                    {
+                        break;
+                    }
+                    mantissa = (mantissa * 10) + d;
+                }
+                scale = i - fractionStart;
+            }
+            int allDigits = integerDigits + scale;
+            if (allDigits == 0 || (allDigits > maxDigits && SignificantDigits(s[integerStart..i]) > maxDigits))
+            {
+                return false;
+            }
+            int exponent = 0;
+            if (i < s.Length && (s[i] is not ((byte)'e' or (byte)'E') || !TryExponent(s[(i + 1)..], out exponent)))
             {
                 return false;
             }
@@ -163,6 +155,21 @@ namespace ExcelReader.Core.Reader.Internal
             return true;
         }
 
+        // Leading zeros add nothing to the mantissa, so they neither overflow it nor count toward the limit.
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        private static int SignificantDigits(ReadOnlySpan<byte> number)
+        {
+            int digits = 0;
+            foreach (byte c in number)
+            {
+                if (c != (byte)'.' && (digits > 0 || c != (byte)'0'))
+                {
+                    digits++;
+                }
+            }
+            return digits;
+        }
+
         [MethodImpl(MethodImplOptions.NoInlining)]
         private static bool TryExponent(ReadOnlySpan<byte> s, out int exponent)
         {
@@ -197,33 +204,14 @@ namespace ExcelReader.Core.Reader.Internal
 
         private static double Pow10(int scale)
         {
-            return scale switch
-            {
-                0 => 1e0,
-                1 => 1e1,
-                2 => 1e2,
-                3 => 1e3,
-                4 => 1e4,
-                5 => 1e5,
-                6 => 1e6,
-                7 => 1e7,
-                8 => 1e8,
-                9 => 1e9,
-                10 => 1e10,
-                11 => 1e11,
-                12 => 1e12,
-                13 => 1e13,
-                14 => 1e14,
-                15 => 1e15,
-                16 => 1e16,
-                17 => 1e17,
-                18 => 1e18,
-                19 => 1e19,
-                20 => 1e20,
-                21 => 1e21,
-                _ => 1e22,
-            };
+            return PowersOfTen[scale];
         }
+
+        private static ReadOnlySpan<double> PowersOfTen =>
+        [
+            1e0, 1e1, 1e2, 1e3, 1e4, 1e5, 1e6, 1e7, 1e8, 1e9, 1e10, 1e11,
+            1e12, 1e13, 1e14, 1e15, 1e16, 1e17, 1e18, 1e19, 1e20, 1e21, 1e22,
+        ];
 
         // ponytail: fast_float's 128-bit truncated 5^q table cut to q in [-64, 64]; widen to its full
         // [-342, 308] if inputs outside that range ever show up often enough to matter.
