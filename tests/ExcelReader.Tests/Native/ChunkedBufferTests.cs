@@ -87,6 +87,42 @@ namespace ExcelReader.Tests.Native
             buffer.CopyTo(Span<byte>.Empty);
         }
 
+        [Fact]
+        public void AppendFrom_Should_Concatenate_Two_Multi_Chunk_Buffers_In_Order()
+        {
+            ChunkedBuffer<int> left = new();
+            ChunkedBuffer<int> right = new();
+            for (int i = 0; i < Count; i++)
+            {
+                left.Add(i);
+                right.Add(Count + i);
+            }
+
+            left.AppendFrom(right);
+
+            Assert.Equal(2 * Count, left.Count);
+            Assert.Equal(Count, right.Count);
+            int[] copied = Flatten(left);
+            for (int i = 0; i < 2 * Count; i++)
+            {
+                Assert.Equal(i, copied[i]);
+            }
+        }
+
+        [Fact]
+        public void AppendFrom_Should_Accept_An_Empty_Buffer_On_Either_Side()
+        {
+            ChunkedBuffer<int> empty = new();
+            ChunkedBuffer<int> filled = new();
+            filled.Add(7);
+
+            filled.AppendFrom(empty);
+            empty.AppendFrom(filled);
+
+            Assert.Equal([7], Flatten(filled));
+            Assert.Equal([7], Flatten(empty));
+        }
+
         private static T[] Flatten<T>(ChunkedBuffer<T> buffer) where T : unmanaged
         {
             byte[] bytes = new byte[buffer.ByteLength];
