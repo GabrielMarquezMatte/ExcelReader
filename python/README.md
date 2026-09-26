@@ -156,10 +156,10 @@ file instead of streaming it in batches.
 
 | File | `parallelism=1` | `parallelism=0` | Speed-up |
 |---|---:|---:|---:|
-| `65K_Records_Data.csv` (8 MB, 65,535 rows) | 21.3 ms | 8.1 ms | 2.6x |
-| the same rows ×20 (160 MB, 1.3M rows) | 427.3 ms | 174.8 ms | 2.4x |
+| `65K_Records_Data.csv` (8 MB, 65,535 rows) | 20.7 ms | 6.9 ms | 3.0x |
+| the same rows ×20 (160 MB, 1.3M rows) | 432.2 ms | 125.2 ms | 3.5x |
 
-Peak working set on the 160 MB file went from 917 MB to 1,265 MB (both include the file's bytes and the
+Peak working set on the 160 MB file went from 916 MB to 955 MB (both include the file's bytes and the
 handle's copy of them).
 
 #### Guessing a schema
