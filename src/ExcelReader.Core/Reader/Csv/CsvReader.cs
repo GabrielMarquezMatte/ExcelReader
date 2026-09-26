@@ -18,6 +18,7 @@ namespace ExcelReader.Core.Reader.Csv
         private readonly ReadOnlyMemory<byte> _memory;
         private readonly long _startPosition = -1;
         private bool _enumeratedOnce;
+        private SafeFileHandle? _chunkHandle;
 
         internal CsvReader(Stream stream, bool leaveOpen, CsvReaderOptions? options = null)
         {
@@ -67,12 +68,32 @@ namespace ExcelReader.Core.Reader.Csv
             }
             if (_stream is FileStream file && _startPosition >= 0)
             {
-                SafeFileHandle handle = file.SafeFileHandle;
+                SafeFileHandle handle = ChunkHandle(file);
                 source = new CsvChunkSource(handle, RandomAccess.GetLength(handle), _startPosition);
                 return true;
             }
             source = default;
             return false;
+        }
+
+        // A synchronous Windows handle serializes every read on its file object; parallel chunks need an overlapped one.
+        // ponytail: reopens by path, safe because Excel's file opens deny write/delete sharing; switch to
+        // ReOpenFile if a caller-supplied FileStream that allows delete ever reaches this.
+        private SafeFileHandle ChunkHandle(FileStream file)
+        {
+            if (!OperatingSystem.IsWindows())
+            {
+                return file.SafeFileHandle;
+            }
+            try
+            {
+                return _chunkHandle ??= File.OpenHandle(file.Name, FileMode.Open, FileAccess.Read, FileShare.Read,
+                    FileOptions.Asynchronous | FileOptions.RandomAccess);
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+            {
+                return file.SafeFileHandle;
+            }
         }
 
         private static ReadOnlyMemory<byte> Transcode(ReadOnlyMemory<byte> data, Encoding? encoding)
@@ -215,6 +236,7 @@ namespace ExcelReader.Core.Reader.Csv
         /// <inheritdoc/>
         public void Dispose()
         {
+            _chunkHandle?.Dispose();
             if (!_leaveOpen && _stream is not null)
             {
                 _stream.Dispose();
@@ -224,6 +246,7 @@ namespace ExcelReader.Core.Reader.Csv
         /// <inheritdoc/>
         public ValueTask DisposeAsync()
         {
+            _chunkHandle?.Dispose();
             if (_leaveOpen || _stream is null)
             {
                 return ValueTask.CompletedTask;
