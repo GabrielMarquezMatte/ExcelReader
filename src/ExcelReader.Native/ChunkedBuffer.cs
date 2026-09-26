@@ -42,16 +42,6 @@ namespace ExcelReader.Native
             }
         }
 
-        internal void AppendFrom(ChunkedBuffer<T> other)
-        {
-            for (int index = 0; index < other._chunks.Count; index++)
-            {
-                T[] chunk = other._chunks[index];
-                int length = index == other._chunks.Count - 1 ? other._used : chunk.Length;
-                AddRange(chunk.AsSpan(0, length));
-            }
-        }
-
         internal void CopyTo(Span<byte> destination)
         {
             int offset = 0;

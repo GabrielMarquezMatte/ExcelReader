@@ -126,6 +126,69 @@ namespace ExcelReader.Tests.Native
         }
 
         [Fact]
+        public void ParseTypedTable_Should_Merge_Validity_From_Partitions_With_And_Without_Nulls()
+        {
+            StringBuilder text = new("head,tail,none\n");
+            for (int i = 0; i < 60_000; i++)
+            {
+                string head = i < 777 && i % 3 == 0 ? "" : i.ToString(CultureInfo.InvariantCulture);
+                string tail = i > 59_000 && i % 5 == 0 ? "" : i.ToString(CultureInfo.InvariantCulture);
+                text.Append(CultureInfo.InvariantCulture, $"{head},{tail},{i}\n");
+            }
+            NativeColumnSpec[] specs =
+            [
+                new() { Names = ["head"], Type = NativeColumnType.Int64, Nullable = true },
+                new() { Names = ["tail"], Type = NativeColumnType.Int64, Nullable = true },
+                new() { Names = ["none"], Type = NativeColumnType.Int64, Nullable = true },
+            ];
+            AssertParallelMatchesSequential(Encoding.UTF8.GetBytes(text.ToString()), specs, headerRow: 1, expectedRows: 60_000);
+        }
+
+        [Theory]
+        [InlineData(1)]
+        [InlineData(2)]
+        [InlineData(3)]
+        [InlineData(4)]
+        [InlineData(5)]
+        public void ParseTypedTable_Should_Free_Every_Block_Exactly_Once_When_A_Parallel_Build_Allocation_Fails(int failAt)
+        {
+            StringBuilder text = new("qty,name\n");
+            for (int i = 0; i < 40_000; i++)
+            {
+                text.Append(i % 10 == 0 ? "" : i.ToString(CultureInfo.InvariantCulture)).Append(",n").Append(i).Append('\n');
+            }
+            NativeColumnSpec[] specs =
+            [
+                new() { Names = ["qty"], Type = NativeColumnType.Int64, Nullable = true },
+                new() { Names = ["name"], Type = NativeColumnType.String },
+            ];
+            BlockTracker tracker = new(failAt);
+            Assert.Equal(NativeStatus.Ok, ReadApi.OpenMemory(Encoding.UTF8.GetBytes(text.ToString()), NativeFormat.Csv, out NativeHandle? handle));
+            int status;
+            NativeTable table;
+            TypedApi.AllocOverride = tracker.Alloc;
+            TypedApi.FreeOverride = tracker.Free;
+            try
+            {
+                status = TypedApi.ParseTypedTable(handle, specs, headerRow: 1, 4, "test", out table, SmallChunk);
+            }
+            finally
+            {
+                TypedApi.AllocOverride = null;
+                TypedApi.FreeOverride = null;
+                ReadApi.Close(handle);
+            }
+
+            Assert.True(TypedApi.LastParseRanInParallel);
+            Assert.Equal(NativeStatus.Error, status);
+            Assert.Equal(IntPtr.Zero, table.Columns);
+            Assert.Equal(failAt, tracker.Allocations);
+            Assert.Equal(failAt - 1, tracker.Frees);
+            Assert.Equal(0, tracker.Live);
+            Assert.Equal(0, tracker.UnknownFrees);
+        }
+
+        [Fact]
         public void ParseTypedTable_Should_Use_The_Dialect_The_Handle_Was_Opened_With()
         {
             byte[] csv = Encoding.UTF8.GetBytes(MixedCsv(MixedRows, delimiter: ';'));
