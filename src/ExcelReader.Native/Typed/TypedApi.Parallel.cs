@@ -1,3 +1,4 @@
+using System.Runtime.InteropServices;
 using ExcelReader.Core.Parser.ParallelCsv;
 using ExcelReader.Core.Reader;
 using ExcelReader.Core.Reader.Csv;
@@ -71,7 +72,7 @@ namespace ExcelReader.Native.Typed
                     NativeApi.SetLastError(DescribeFailedColumn(specs, merged.FailedColumn));
                     return NativeStatus.Error;
                 }
-                table = BuildTable(merged.Builders);
+                table = BuildTable(CollectionsMarshal.AsSpan(merged.Parts));
                 return NativeStatus.Ok;
             }
             catch (Exception exception)
@@ -92,21 +93,28 @@ namespace ExcelReader.Native.Typed
             return builders;
         }
 
-        private sealed class PartitionTable(NativeColumnSpec[] specs)
+        private sealed class PartitionTable
         {
-            internal ColumnBuilder[] Builders { get; } = NewBuilders(specs);
+            private readonly ColumnBuilder[] _builders;
+
+            internal PartitionTable(NativeColumnSpec[] specs)
+            {
+                _builders = NewBuilders(specs);
+                Parts = [_builders];
+            }
+
+            internal List<ColumnBuilder[]> Parts { get; }
 
             internal int FailedColumn { get; private set; } = -1;
 
             internal void Append(in Row row, int[] columnIndices, bool isDate1904)
             {
-                if (FailedColumn < 0 && !TryAppendRow(Builders, row, columnIndices, isDate1904, out int failed))
+                if (FailedColumn < 0 && !TryAppendRow(_builders, row, columnIndices, isDate1904, out int failed))
                 {
                     FailedColumn = failed;
                 }
             }
 
-            // ponytail: merge copies each partition's column data once more before BuildTable copies it to native memory; move chunks instead (needs per-chunk used lengths) if the copy shows up in a profile.
             internal static PartitionTable Combine(PartitionTable left, PartitionTable right)
             {
                 if (left.FailedColumn >= 0)
@@ -117,10 +125,7 @@ namespace ExcelReader.Native.Typed
                 {
                     return right;
                 }
-                for (int i = 0; i < left.Builders.Length; i++)
-                {
-                    left.Builders[i].AppendFrom(right.Builders[i]);
-                }
+                left.Parts.AddRange(right.Parts);
                 return left;
             }
         }
