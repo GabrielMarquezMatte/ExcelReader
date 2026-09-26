@@ -46,7 +46,8 @@ namespace ExcelReader.Native.Typed
             try
             {
                 int[] columnIndices = new int[specs.Length];
-                using (IExcelRowEnumerator rows = handle.Reader.GetEnumerator())
+                using (CsvReader headerReader = source.OpenReader(reader))
+                using (IExcelRowEnumerator rows = ((IExcelRowReader)headerReader).GetEnumerator())
                 {
                     if (!TryResolveColumns(rows, specs, headerRow, columnIndices, out string? resolveError))
                     {
