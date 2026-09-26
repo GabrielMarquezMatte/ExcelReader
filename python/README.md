@@ -143,6 +143,25 @@ Finish the batches, or call `.close()` on the generator, before starting another
 Being a generator, `iter_parse_typed()` opens nothing until the first iteration, so a bad
 `batch_size` or a rejected second reader is only raised there, not at the call.
 
+#### Reading a large CSV on several threads
+
+`parse_typed()`, `to_arrow()`, `to_record_batch()` and `to_polars()` take `parallelism`: `1` (the
+default) reads on one thread, `0` uses every core, `n` up to n threads. Only CSV is split. Any other
+format, or a CSV under 256 KiB, is read on one thread with the same result. The table is identical
+either way. Every partition's columns are held until they are merged, so the peak memory is higher
+than a sequential read of the same file. `to_polars()` with `parallelism` other than 1 parses the whole
+file instead of streaming it in batches.
+
+`xl_parse_typed_ex` on a Ryzen 7 5700X (8 cores, 16 threads), 14 typed columns, file read from memory:
+
+| File | `parallelism=1` | `parallelism=0` | Speed-up |
+|---|---:|---:|---:|
+| `65K_Records_Data.csv` (8 MB, 65,535 rows) | 21.3 ms | 8.1 ms | 2.6x |
+| the same rows ×20 (160 MB, 1.3M rows) | 427.3 ms | 174.8 ms | 2.4x |
+
+Peak working set on the 160 MB file went from 917 MB to 1,265 MB (both include the file's bytes and the
+handle's copy of them).
+
 #### Guessing a schema
 
 Writing the `ColumnSpec` list by hand means already knowing every column's name and type. When you
