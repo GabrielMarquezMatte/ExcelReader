@@ -48,6 +48,27 @@ namespace ExcelReader.Tests.Parser.ParallelCsv
         }
 
         [Fact]
+        public void TryGetChunkSource_Should_Read_A_File_Through_Its_Own_Overlapped_Handle_On_Windows()
+        {
+            string path = Path.Combine(Path.GetTempPath(), $"excelreader-chunk-{Guid.NewGuid():N}.csv");
+            File.WriteAllBytes(path, Numbered(10));
+            try
+            {
+                CsvChunkSource source;
+                using (CsvReader reader = Excel.FromCsvFile(path))
+                {
+                    Assert.True(reader.TryGetChunkSource(out source));
+                    Assert.Equal(OperatingSystem.IsWindows(), source.Handle!.IsAsync);
+                }
+                Assert.Equal(OperatingSystem.IsWindows(), source.Handle.IsClosed);
+            }
+            finally
+            {
+                File.Delete(path);
+            }
+        }
+
+        [Fact]
         public void TryGetChunkSource_Should_Refuse_A_Stream_That_Is_Not_A_File()
         {
             using CsvReader reader = Excel.FromCsv(new MemoryStream(Numbered(10)), leaveOpen: false);
