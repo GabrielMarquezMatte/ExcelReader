@@ -7,12 +7,24 @@ namespace ExcelReader.Native.Reading
 {
     internal static unsafe partial class ReadApi
     {
+        internal const int InferParseText = 1;
+
         internal static int InferSchema(NativeHandle? handle, int headerRow, int sampleSize, out NativeInferredSchema schema)
+        {
+            return InferSchema(handle, headerRow, sampleSize, 0, out schema);
+        }
+
+        internal static int InferSchema(NativeHandle? handle, int headerRow, int sampleSize, int flags, out NativeInferredSchema schema)
         {
             schema = default;
             if (handle is null)
             {
                 return NativeStatus.InvalidHandle;
+            }
+            if ((flags & ~InferParseText) != 0)
+            {
+                NativeApi.SetLastError($"flags has unknown bits: 0x{flags:X}.");
+                return NativeStatus.InvalidArgument;
             }
             if (headerRow < 0)
             {
@@ -31,7 +43,7 @@ namespace ExcelReader.Native.Reading
             {
                 handle.FaultLiveSession("xl_infer_schema");
                 rows = handle.Reader.GetEnumerator();
-                schema = BuildSchema(SchemaInference.Infer(rows, handle.Reader.IsDate1904, headerRow, sampleSize));
+                schema = BuildSchema(SchemaInference.Infer(rows, handle.Reader.IsDate1904, headerRow, sampleSize, (flags & InferParseText) != 0));
                 return NativeStatus.Ok;
             }
             catch (ArgumentException exception)
