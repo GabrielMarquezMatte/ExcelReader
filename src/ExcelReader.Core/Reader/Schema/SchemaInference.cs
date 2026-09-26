@@ -175,8 +175,13 @@ namespace ExcelReader.Core.Reader.Schema
             {
                 ReadOnlySpan<byte> text = cell.Value;
                 bool canonical = HasCanonicalIntegerPart(text, out bool allDigits);
-                if (canonical && allDigits && ExcelCellReaders.Parsable<long>(in cell, isDate1904, CultureInfo.InvariantCulture, out _))
+                if (canonical && allDigits)
                 {
+                    // An integer past long stays text: as a double it would silently lose digits.
+                    if (!ExcelCellReaders.Parsable<long>(in cell, isDate1904, CultureInfo.InvariantCulture, out _))
+                    {
+                        return false;
+                    }
                     SawNumber = true;
                     SawNonBinaryNumber |= !IsBinaryDigit(text);
                     return true;

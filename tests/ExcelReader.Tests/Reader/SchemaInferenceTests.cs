@@ -129,6 +129,14 @@ namespace ExcelReader.Tests.Reader
         }
 
         [Fact]
+        public void ParseText_Should_Keep_A_Column_With_An_Integer_Past_Long_As_Text()
+        {
+            ExcelColumnSchema[] schema = InferFromCsv("Id\n1\n9223372036854775808\n", parseText: true);
+
+            Assert.Equal(ExcelColumnType.StringColumn, schema[0].Type);
+        }
+
+        [Fact]
         public void ParseText_Should_Mark_Nullable_Columns_And_Type_Them_From_Their_Values()
         {
             ExcelColumnSchema[] schema = InferFromCsv("Qty,Name\n1,a\n,b\n3,c\n", parseText: true);
