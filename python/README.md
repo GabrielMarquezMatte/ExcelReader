@@ -173,12 +173,20 @@ with open_workbook("sales.xlsb") as workbook:
     table = workbook.parse_typed(schema)
 ```
 
-Each column's type comes from the `CellType` Excel already stored for its sampled cells — not text
-sniffing — so it costs nothing beyond the sample and is exact for XLSX/XLSB/XLS. A column with a real
+By default each column's type comes from the `CellType` Excel already stored for its sampled cells,
+so it costs nothing beyond the sample and is exact for XLSX/XLSB/XLS. A column with a real
 mix of kinds, only formula/error results, or nothing sampled falls back to `ColumnType.STRING`;
 `nullable` is set when any sampled row left the column empty. CSV cells carry no such type tag, so
-every CSV column is guessed `ColumnType.STRING` — inspect the result (or just try parsing) before
-trusting it, especially past the sample.
+by default every CSV column is guessed `ColumnType.STRING`. Pass `parse_text=True` to type text cells
+from their exact shape instead: integers, decimals, `true`/`false` and ISO dates or date-times. Codes
+with a leading zero (`00123`), padded or comma-decimal numbers and non-ISO dates stay strings. It is
+still a guess over the sample, so a value further down can fail to convert:
+
+```python
+with open_workbook("sales.csv") as workbook:
+    schema = workbook.infer_schema(parse_text=True)
+    table = workbook.parse_typed(schema, parallelism=0)
+```
 
 ### Writing
 

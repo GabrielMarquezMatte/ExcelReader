@@ -709,3 +709,20 @@ def test_to_polars_in_parallel_matches_the_streamed_frame():
 def test_parse_typed_rejects_a_negative_parallelism(typed_csv):
     with open_workbook(typed_csv) as workbook, pytest.raises(ExcelReaderError):
         workbook.parse_typed(_TYPED_SCHEMA, parallelism=-1)
+
+
+def test_infer_schema_parse_text_types_a_csv():
+    with open_workbook(_FIXTURE_CSV) as workbook:
+        schema = workbook.infer_schema(parse_text=True)
+        table = workbook.parse_typed(schema)
+
+    T = ColumnType
+    assert [spec.type for spec in schema] == [T.STRING] * 5 + [T.DATE, T.I64, T.DATE, T.I64] + [T.F64] * 5
+    assert table.row_count == 65_535
+
+
+def test_infer_schema_without_parse_text_keeps_csv_columns_as_strings():
+    with open_workbook(_FIXTURE_CSV) as workbook:
+        schema = workbook.infer_schema()
+
+    assert {spec.type for spec in schema} == {ColumnType.STRING}

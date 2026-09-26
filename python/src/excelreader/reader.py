@@ -369,14 +369,19 @@ class Workbook:
         reader = self.to_record_batch_reader(schema, header_row=header_row, batch_size=batch_size)
         return polars.from_arrow(reader, rechunk=False)
 
-    def infer_schema(self, header_row: int = 1, sample_size: int = 100) -> list[ColumnSpec]:
+    def infer_schema(self, header_row: int = 1, sample_size: int = 100, parse_text: bool = False) -> list[ColumnSpec]:
         """Guesses a `parse_typed()`/`to_arrow()` schema by sampling this sheet's cells.
 
         Reads `header_row` for column names (0 means no header — every returned spec resolves by
         `index` instead) and up to `sample_size` rows after it, guessing each column's type from
-        Excel's own per-cell type tag — no text sniffing. A column with a real mix of kinds, only
+        Excel's own per-cell type tag. A column with a real mix of kinds, only
         formula/error results, or nothing sampled falls back to `ColumnType.STRING`; `nullable` is set
         when any sampled row left the column empty.
+
+        `parse_text=True` also types cells that hold text — every CSV field, or numbers stored as text:
+        integers, decimals, `true`/`false` and ISO dates or date-times, when the text has exactly that
+        shape. Codes with a leading zero (`00123`), padded or comma-decimal numbers and non-ISO dates
+        stay `ColumnType.STRING`.
 
         This is a guess over a sample, not a guarantee — a column that looks like `ColumnType.I64` in
         the sample can still hold a fractional value further down the sheet, which `parse_typed()`
@@ -385,7 +390,8 @@ class Workbook:
         """
         handle = self._require_handle()
         schema = _native.NativeInferredSchema()
-        _check(self._lib.xl_infer_schema(handle, header_row, sample_size, ctypes.byref(schema)))
+        flags = _native.XL_INFER_PARSE_TEXT if parse_text else 0
+        _check(self._lib.xl_infer_schema_ex(handle, header_row, sample_size, flags, ctypes.byref(schema)))
         try:
             return _decode_inferred_schema(schema)
         finally:
