@@ -133,6 +133,14 @@ namespace ExcelReader.Tests.Native
         }
 
         [Fact]
+        public void ParseTypedTable_Should_Keep_The_Bom_When_The_Handle_Does_Not_Detect_It()
+        {
+            byte[] csv = Encoding.UTF8.GetBytes(MixedCsv(MixedRows, bom: true));
+            NativeColumnSpec[] specs = [new() { Index = 0, Type = NativeColumnType.String }];
+            AssertParallelMatchesSequential(csv, specs, headerRow: 0, MixedRows + 1, new NativeOpenOptions { CsvDetectByteOrderMark = false });
+        }
+
+        [Fact]
         public void ParseTypedTable_Should_Honor_A_Header_Row_Below_The_First_Line()
         {
             byte[] csv = Encoding.UTF8.GetBytes("exported 2026-09-25\n" + MixedCsv(MixedRows));
@@ -253,8 +261,11 @@ namespace ExcelReader.Tests.Native
             try
             {
                 byte[] blob = new byte[1 << 16];
-                Assert.Equal(NativeStatus.Ok, ReadApi.NextRow(handle, blob, out _));
-                Assert.Equal(NativeStatus.Ok, ReadApi.NextRow(handle, blob, out _));
+                const int advanced = 5_000;
+                for (int i = 0; i < advanced; i++)
+                {
+                    Assert.Equal(NativeStatus.Ok, ReadApi.NextRow(handle, blob, out _));
+                }
 
                 Assert.Equal(NativeStatus.Ok, TypedApi.ParseTypedTable(handle, MixedSpecs, headerRow: 1, 4, "test", out NativeTable actual, SmallChunk));
                 try
@@ -268,7 +279,16 @@ namespace ExcelReader.Tests.Native
                 }
 
                 Assert.Equal(NativeStatus.Ok, ReadApi.NextRow(handle, blob, out int written));
-                Assert.Equal("item1", DecodeRow(blob.AsSpan(0, written))[0].Value);
+                Assert.Equal("item4999", DecodeRow(blob.AsSpan(0, written))[0].Value);
+                int remaining = 1;
+                string last = "";
+                while (ReadApi.NextRow(handle, blob, out written) == NativeStatus.Ok)
+                {
+                    remaining++;
+                    last = DecodeRow(blob.AsSpan(0, written))[0].Value;
+                }
+                Assert.Equal(MixedRows + 1 - advanced, remaining);
+                Assert.Equal("item19999", last);
             }
             finally
             {
