@@ -132,6 +132,7 @@ typedef int32_t (*xl_read_all_blob_fn)(xl_workbook*, uint8_t*, int32_t, int32_t*
 typedef int32_t (*xl_read_all_decoded_fn)(xl_workbook*, xl_rows*);
 typedef void (*xl_free_rows_fn)(xl_rows*);
 typedef int32_t (*xl_parse_typed_fn)(xl_workbook*, const xl_column_spec*, int32_t, int32_t, xl_table*);
+typedef int32_t (*xl_parse_typed_ex_fn)(xl_workbook*, const xl_column_spec*, int32_t, int32_t, int32_t, xl_table*);
 typedef void (*xl_free_table_fn)(xl_table*);
 typedef int32_t (*xl_infer_schema_fn)(xl_workbook*, int32_t, int32_t, xl_inferred_schema*);
 typedef void (*xl_free_schema_fn)(xl_inferred_schema*);
@@ -160,6 +161,7 @@ typedef struct
     xl_read_all_decoded_fn read_all_decoded;
     xl_free_rows_fn free_rows;
     xl_parse_typed_fn parse_typed;
+    xl_parse_typed_ex_fn parse_typed_ex;
     xl_free_table_fn free_table;
     xl_infer_schema_fn infer_schema;
     xl_free_schema_fn free_schema;
@@ -195,6 +197,7 @@ static int bind_all(xl_lib_handle lib, api_t* api)
     BIND(read_all_decoded, xl_read_all_decoded_fn, "xl_read_all_decoded");
     BIND(free_rows, xl_free_rows_fn, "xl_free_rows");
     BIND(parse_typed, xl_parse_typed_fn, "xl_parse_typed");
+    BIND(parse_typed_ex, xl_parse_typed_ex_fn, "xl_parse_typed_ex");
     BIND(free_table, xl_free_table_fn, "xl_free_table");
     BIND(infer_schema, xl_infer_schema_fn, "xl_infer_schema");
     BIND(free_schema, xl_free_schema_fn, "xl_free_schema");
@@ -1010,6 +1013,72 @@ static int test_csv_aggregate_file(xl_lib_handle lib)
     return status;
 }
 
+static int test_parse_typed_ex(const api_t* api, const char* fixture)
+{
+    xl_workbook* handle = NULL;
+    CHECK(open_fixture(api, fixture, &handle) == XL_OK, "xl_open_file must succeed");
+
+    xl_column_spec specs[3];
+    const uint8_t* name_ptrs[3];
+    int32_t name_lens[3];
+    build_specs(specs, name_ptrs, name_lens);
+
+    xl_table table;
+    memset(&table, 0, sizeof(table));
+    CHECK(api->parse_typed_ex(handle, specs, 3, 1, 0, NULL) == XL_INVALID_ARGUMENT,
+          "xl_parse_typed_ex must reject a NULL out_table");
+    CHECK(api->parse_typed_ex(handle, specs, 3, 1, -1, &table) == XL_INVALID_ARGUMENT,
+          "xl_parse_typed_ex must reject a negative degree_of_parallelism");
+    CHECK(api->parse_typed_ex(handle, specs, 3, 1, 0, &table) == XL_OK,
+          "xl_parse_typed_ex must read a non-CSV workbook sequentially");
+    CHECK(table.row_count == 100, "xl_parse_typed_ex must return all 100 data rows");
+    api->free_table(&table);
+
+    CHECK(api->close_(handle) == XL_OK, "xl_close must succeed");
+    return 0;
+}
+
+static int test_parse_typed_ex_csv(const api_t* api)
+{
+    const char* csv_path = "smoke_parallel_typed.csv";
+    CHECK(write_csv_fixture(csv_path, SMOKE_CSV_ROW_COUNT) == 0, "cannot write the parallel typed fixture");
+
+    xl_workbook* handle = NULL;
+    int32_t status = api->open_file((const uint8_t*)csv_path, (int32_t)strlen(csv_path), XL_FORMAT_CSV, &handle);
+    int64_t rows = -1;
+    int64_t total = 0;
+    if (status == XL_OK)
+    {
+        xl_column_spec spec;
+        const uint8_t* name_ptr;
+        int32_t name_len;
+        memset(&spec, 0, sizeof(spec));
+        set_spec_name1(&spec, &name_ptr, &name_len, "amount");
+        spec.type = XL_T_I64;
+
+        xl_table table;
+        memset(&table, 0, sizeof(table));
+        status = api->parse_typed_ex(handle, &spec, 1, 1, 0, &table);
+        if (status == XL_OK)
+        {
+            rows = table.row_count;
+            const int64_t* values = (const int64_t*)table.columns[0].values;
+            for (int64_t i = 0; i < rows; i++)
+            {
+                total += values[i];
+            }
+            api->free_table(&table);
+        }
+        api->close_(handle);
+    }
+    remove(csv_path);
+
+    CHECK(status == XL_OK, "xl_parse_typed_ex must parse a CSV handle");
+    CHECK(rows == SMOKE_CSV_ROW_COUNT, "xl_parse_typed_ex must return every CSV data row");
+    CHECK(total == SMOKE_CSV_EXPECTED_TOTAL, "xl_parse_typed_ex must return every CSV value exactly once");
+    return 0;
+}
+
 static int smoke_csv_aggregate_quoted(xl_lib_handle lib, const char* csv_path, int32_t records)
 {
     xl_csv_aggregate_file_fn aggregate =
@@ -1095,6 +1164,8 @@ int main(int argc, char** argv)
     failures += test_parse_rejects_hostile_counts(&api, fixture_path);
     failures += test_parse_typed_and_cursor_independence(&api, fixture_path);
     failures += test_parse_arrow(&api, fixture_path);
+    failures += test_parse_typed_ex(&api, fixture_path);
+    failures += test_parse_typed_ex_csv(&api);
     failures += test_infer_schema(&api, fixture_path);
     failures += test_infer_schema_rejects_bad_arguments(&api, fixture_path);
     failures += test_double_close_is_rejected(&api, fixture_path);

@@ -37,6 +37,38 @@ namespace ExcelReader.Native
             }
         }
 
+        [UnmanagedCallersOnly(EntryPoint = "xl_parse_arrow_ex")]
+        public static int ParseArrowEx(nint handle, NativeColumnSpecRaw* specs, int specCount, int headerRow, int degreeOfParallelism,
+            ArrowArray* outArray, ArrowSchema* outSchema)
+        {
+            if (specs is null || outArray is null || outSchema is null || !TypedApi.IsValidSpecCount(specCount))
+            {
+                return NativeStatus.InvalidArgument;
+            }
+
+            try
+            {
+                if (!TryDecodeColumnSpecs(specs, specCount, out NativeColumnSpec[] decoded))
+                {
+                    *outArray = default;
+                    *outSchema = default;
+                    return NativeStatus.InvalidArgument;
+                }
+
+                int status = ArrowApi.ParseArrow(Resolve(handle), decoded, headerRow, degreeOfParallelism, out ArrowArray array, out ArrowSchema schema);
+                *outArray = array;
+                *outSchema = schema;
+                return status;
+            }
+            catch (Exception exception)
+            {
+                NativeApi.SetLastError(exception.Message);
+                *outArray = default;
+                *outSchema = default;
+                return NativeStatus.Error;
+            }
+        }
+
         [UnmanagedCallersOnly(EntryPoint = "xl_parse_arrow_stream")]
         public static int ParseArrowStream(nint handle, NativeColumnSpecRaw* specs, int specCount, int headerRow,
             long maxRows, ArrowArrayStream* outStream)

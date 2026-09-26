@@ -150,6 +150,13 @@ typedef struct xl_table {
 int32_t xl_parse_typed(xl_workbook* handle, const xl_column_spec* specs, int32_t spec_count,
                        int32_t header_row, xl_table* out_table);
 
+/* xl_parse_typed with a thread count. degree_of_parallelism: 0 = processor count, 1 = sequential,
+   n = up to n threads; negative is XL_INVALID_ARGUMENT. Only a CSV handle is read in parallel. Any
+   other format, a CSV too small to split, or a CSV opened with a non-UTF-8 encoding is read
+   sequentially. The table equals xl_parse_typed's in every case. */
+int32_t xl_parse_typed_ex(xl_workbook* handle, const xl_column_spec* specs, int32_t spec_count,
+                          int32_t header_row, int32_t degree_of_parallelism, xl_table* out_table);
+
 void xl_free_table(xl_table* table);
 
 

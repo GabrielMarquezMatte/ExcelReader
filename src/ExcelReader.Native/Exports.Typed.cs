@@ -33,6 +33,34 @@ namespace ExcelReader.Native
             }
         }
 
+        [UnmanagedCallersOnly(EntryPoint = "xl_parse_typed_ex")]
+        public static int ParseTypedEx(nint handle, NativeColumnSpecRaw* specs, int specCount, int headerRow, int degreeOfParallelism, NativeTable* outTable)
+        {
+            if (specs is null || outTable is null || !TypedApi.IsValidSpecCount(specCount))
+            {
+                return NativeStatus.InvalidArgument;
+            }
+
+            try
+            {
+                if (!TryDecodeColumnSpecs(specs, specCount, out NativeColumnSpec[] decoded))
+                {
+                    *outTable = default;
+                    return NativeStatus.InvalidArgument;
+                }
+
+                int status = TypedApi.ParseTypedTable(Resolve(handle), decoded, headerRow, degreeOfParallelism, "xl_parse_typed_ex", out NativeTable table);
+                *outTable = table;
+                return status;
+            }
+            catch (Exception exception)
+            {
+                NativeApi.SetLastError(exception.Message);
+                *outTable = default;
+                return NativeStatus.Error;
+            }
+        }
+
         [UnmanagedCallersOnly(EntryPoint = "xl_free_table")]
         public static void FreeTable(NativeTable* table)
         {

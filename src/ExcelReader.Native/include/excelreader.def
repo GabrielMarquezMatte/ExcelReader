@@ -16,11 +16,13 @@ EXPORTS
     xl_read_all_blob
     xl_free_rows
     xl_parse_typed
+    xl_parse_typed_ex
     xl_free_table
     xl_typed_reader_open
     xl_typed_reader_next
     xl_typed_reader_close
     xl_parse_arrow
+    xl_parse_arrow_ex
     xl_parse_arrow_stream
     xl_write_typed
     xl_write_typed_to_memory
