@@ -54,8 +54,8 @@ may get worse, not only better.
 Reading exports: `xl_open_file`, `xl_open_file_ex`, `xl_open_memory`, `xl_open_memory_ex`, `xl_close`,
 `xl_sheet_count`, `xl_sheet_name`, `xl_sheet_name_at`, `xl_move_to_sheet`, `xl_is_date1904`,
 `xl_next_row`, `xl_next_row_view`, `xl_read_all_blob`, `xl_read_all_decoded`, `xl_free_rows`,
-`xl_parse_typed`, `xl_free_table`, `xl_infer_schema`, `xl_free_schema`, `xl_last_error`,
-`xl_last_error_ptr`, `xl_parse_arrow`.
+`xl_parse_typed`, `xl_parse_typed_ex`, `xl_free_table`, `xl_infer_schema`, `xl_free_schema`,
+`xl_last_error`, `xl_last_error_ptr`, `xl_parse_arrow`, `xl_parse_arrow_ex`.
 
 Writing has two layers. The one-shot export, `xl_write_typed` (plus its in-memory twin
 `xl_write_typed_to_memory`), takes a whole `xl_table` and writes it in a single call; it takes an
