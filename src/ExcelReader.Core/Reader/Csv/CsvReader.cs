@@ -1,5 +1,7 @@
 using System.Text;
+using ExcelReader.Core.Parser.ParallelCsv;
 using ExcelReader.Core.Reader.Xls;
+using Microsoft.Win32.SafeHandles;
 
 namespace ExcelReader.Core.Reader.Csv
 {
@@ -46,6 +48,31 @@ namespace ExcelReader.Core.Reader.Csv
             _stream = null;
             _leaveOpen = true;
             _memory = Transcode(data, _options.Encoding);
+        }
+
+        internal CsvReaderOptions Options
+        {
+            get
+            {
+                return _options;
+            }
+        }
+
+        internal bool TryGetChunkSource(out CsvChunkSource source)
+        {
+            if (_stream is null)
+            {
+                source = new CsvChunkSource(_memory);
+                return true;
+            }
+            if (_stream is FileStream file && _startPosition >= 0)
+            {
+                SafeFileHandle handle = file.SafeFileHandle;
+                source = new CsvChunkSource(handle, RandomAccess.GetLength(handle), _startPosition);
+                return true;
+            }
+            source = default;
+            return false;
         }
 
         private static ReadOnlyMemory<byte> Transcode(ReadOnlyMemory<byte> data, Encoding? encoding)

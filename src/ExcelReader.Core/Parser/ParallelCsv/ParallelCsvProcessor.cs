@@ -70,6 +70,13 @@ namespace ExcelReader.Core.Parser.ParallelCsv
             return PartitionedAsync(new CsvChunkSource(data), aggregation, factory, options, dop, chunkSize, ct);
         }
 
+        internal static Task<TState> RunPartitionedAsync<TState>(
+            CsvChunkSource source, CsvAggregation<TState> aggregation, CsvParallelOptions options, int chunkSizeOverride, CancellationToken ct)
+        {
+            int dop = ParallelCsvFactory.Normalize(options.DegreeOfParallelism);
+            return PartitionedAsync(source, aggregation, null, options, dop, chunkSizeOverride, ct);
+        }
+
         private static CsvParallelOptions WithResolvedDialect(CsvParallelOptions options, CsvReaderOptions reader)
         {
             if (ReferenceEquals(reader, options.Reader))
