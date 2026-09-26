@@ -32,6 +32,7 @@ XL_FORMAT_XLS = 1
 XL_FORMAT_XLSX = 2
 XL_FORMAT_XLSB = 3
 XL_FORMAT_CSV = 4
+XL_INFER_PARSE_TEXT = 1
 FORMATS = {
     "auto": XL_FORMAT_AUTO,
     "xls": XL_FORMAT_XLS,
@@ -436,6 +437,8 @@ def _bind(lib: ctypes.CDLL) -> ctypes.CDLL:
     lib.xl_free_table.restype = None
     lib.xl_infer_schema.argtypes = [p_void, c_int, c_int, ctypes.POINTER(NativeInferredSchema)]
     lib.xl_infer_schema.restype = c_int
+    lib.xl_infer_schema_ex.argtypes = [p_void, c_int, c_int, c_int, ctypes.POINTER(NativeInferredSchema)]
+    lib.xl_infer_schema_ex.restype = c_int
     lib.xl_free_schema.argtypes = [ctypes.POINTER(NativeInferredSchema)]
     lib.xl_free_schema.restype = None
     lib.xl_parse_arrow.argtypes = [p_void, ctypes.POINTER(NativeColumnSpec), c_int, c_int, ctypes.POINTER(ArrowArray), ctypes.POINTER(ArrowSchema)]
