@@ -12,9 +12,13 @@ namespace ExcelReader.Native.Typed
     {
         internal static int ParseTyped(NativeHandle? handle, NativeColumnSpec[] specs, int headerRow, out NativeTable table)
         {
+            return ParseTypedTable(handle, specs, headerRow, 1, "xl_parse_typed", out table);
+        }
+
+        private static int ParseSequential(NativeHandle? handle, NativeColumnSpec[] specs, int headerRow, string cause, out NativeTable table)
+        {
             table = default;
-            int status = TypedParseSession.OpenTransient(handle, specs, headerRow, "xl_parse_typed",
-                out TypedParseSession? session);
+            int status = TypedParseSession.OpenTransient(handle, specs, headerRow, cause, out TypedParseSession? session);
             if (status != NativeStatus.Ok)
             {
                 return status;
@@ -42,12 +46,7 @@ namespace ExcelReader.Native.Typed
 
         internal static NativeTable BuildEmptyTable(NativeColumnSpec[] specs)
         {
-            ColumnBuilder[] builders = new ColumnBuilder[specs.Length];
-            for (int i = 0; i < specs.Length; i++)
-            {
-                builders[i] = new ColumnBuilder(specs[i].Type, specs[i].Nullable);
-            }
-            return BuildTable(builders);
+            return BuildTable(NewBuilders(specs));
         }
 
         private static string DescribeFailedColumn(NativeColumnSpec[] specs, int failedColumn)
@@ -427,6 +426,36 @@ namespace ExcelReader.Native.Typed
                     _validity.Last |= (byte)(1 << (_rowCount & 7));
                 }
                 _rowCount++;
+            }
+
+            internal void AppendFrom(ColumnBuilder other)
+            {
+                _longs.AppendFrom(other._longs);
+                _ints.AppendFrom(other._ints);
+                _doubles.AppendFrom(other._doubles);
+                _bools.AppendFrom(other._bools);
+                if (type == NativeColumnType.String)
+                {
+                    int[] offsets = new int[other._stringOffsets.Count];
+                    other._stringOffsets.CopyTo(MemoryMarshal.AsBytes(offsets.AsSpan()));
+                    int baseOffset = _stringData.Count;
+                    for (int i = 1; i < offsets.Length; i++)
+                    {
+                        _stringOffsets.Add(offsets[i] + baseOffset);
+                    }
+                    _stringData.AppendFrom(other._stringData);
+                }
+                if (!_anyNull && !other._anyNull)
+                {
+                    _rowCount += other._rowCount;
+                    return;
+                }
+                byte[] bits = new byte[other._validity.Count];
+                other._validity.CopyTo(bits);
+                for (int row = 0; row < other._rowCount; row++)
+                {
+                    RecordValidity(!other._anyNull || (bits[row >> 3] & (1 << (row & 7))) != 0);
+                }
             }
 
             internal NativeColumn Build()
