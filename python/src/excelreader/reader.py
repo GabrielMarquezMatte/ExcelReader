@@ -172,7 +172,7 @@ class Workbook:
         )
         return _decode_columnar(raw, written)
 
-    def parse_typed(self, schema: Sequence[ColumnSpec], header_row: int = 1) -> TypedTable:
+    def parse_typed(self, schema: Sequence[ColumnSpec], header_row: int = 1, parallelism: int = 1) -> TypedTable:
         """Reads the whole current sheet into typed columns, converting values on the native side.
 
         By far the fastest path in this library: unlike every other read method, no cell is ever
@@ -183,11 +183,16 @@ class Workbook:
         `header_row` is a 1-based row number whose values name the columns (that row is skipped and
         never yielded as data); 0 means the sheet has no header, in which case every spec must
         resolve by `index`.
+
+        `parallelism` is the thread count for a CSV: 1 (the default) reads on one thread, 0 uses every
+        core, n up to n threads. Any other format, or a CSV too small to split, is read on one thread.
+        The table is identical either way; a parallel read holds every partition's columns until they
+        are merged, so its peak memory is higher.
         """
         handle = self._require_handle()
         specs = _build_specs(schema)
         table = _native.NativeTable()
-        _check(self._lib.xl_parse_typed(handle, specs, len(specs), header_row, ctypes.byref(table)))
+        _check(self._lib.xl_parse_typed_ex(handle, specs, len(specs), header_row, parallelism, ctypes.byref(table)))
         try:
             return _decode_table(schema, table)
         finally:
@@ -228,12 +233,13 @@ class Workbook:
         finally:
             self._lib.xl_typed_reader_close(reader)
 
-    def to_arrow(self, schema: Sequence[ColumnSpec], header_row: int = 1) -> object:
+    def to_arrow(self, schema: Sequence[ColumnSpec], header_row: int = 1, parallelism: int = 1) -> object:
         """The same read as `parse_typed()`, handed to pyarrow as one `StructArray`, zero-copy.
 
         Requires pyarrow. The returned array owns the native buffers through the Arrow C Data
         Interface's release callback, so it stays valid after this workbook is closed. Wrap it with
-        `pyarrow.RecordBatch.from_struct_array()` for a column-named batch.
+        `pyarrow.RecordBatch.from_struct_array()` for a column-named batch. `parallelism` works as in
+        `parse_typed()`.
         """
         try:
             import pyarrow
@@ -247,15 +253,15 @@ class Workbook:
         specs = _build_specs(schema)
         array = _native.ArrowArray()
         arrow_schema = _native.ArrowSchema()
-        _check(self._lib.xl_parse_arrow(handle, specs, len(specs), header_row, ctypes.byref(array), ctypes.byref(arrow_schema)))
+        _check(self._lib.xl_parse_arrow_ex(handle, specs, len(specs), header_row, parallelism, ctypes.byref(array), ctypes.byref(arrow_schema)))
         return pyarrow.Array._import_from_c(ctypes.addressof(array), ctypes.addressof(arrow_schema))
 
-    def to_record_batch(self, schema: Sequence[ColumnSpec], header_row: int = 1) -> object:
+    def to_record_batch(self, schema: Sequence[ColumnSpec], header_row: int = 1, parallelism: int = 1) -> object:
         """Same read as `to_arrow()`, wrapped as a column-named `pyarrow.RecordBatch`.
 
         Requires pyarrow — see `to_arrow()`.
         """
-        array = self.to_arrow(schema, header_row=header_row)
+        array = self.to_arrow(schema, header_row=header_row, parallelism=parallelism)
         import pyarrow
 
         return pyarrow.RecordBatch.from_struct_array(array)
@@ -342,12 +348,13 @@ class Workbook:
         return reader.read_all().to_pandas(self_destruct=True, split_blocks=True)
 
     def to_polars(
-        self, schema: Sequence[ColumnSpec], header_row: int = 1, batch_size: int = 10000
+        self, schema: Sequence[ColumnSpec], header_row: int = 1, batch_size: int = 10000, parallelism: int = 1
     ) -> object:
         """Same read as `to_arrow()`, materialized as a `polars.DataFrame`, zero-copy.
 
         Streams internally — polars consumes the reader a batch at a time, so unlike `to_pandas()`
-        the whole sheet is never resident as Arrow buffers. Requires pyarrow and polars.
+        the whole sheet is never resident as Arrow buffers. Requires pyarrow and polars. With
+        `parallelism` other than 1 the sheet is parsed whole, as in `parse_typed()`, instead of streamed.
         """
         try:
             import polars
@@ -357,6 +364,8 @@ class Workbook:
                 "to_arrow()/to_record_batch(), which return the same data with no polars dependency."
             ) from None
 
+        if parallelism != 1:
+            return polars.from_arrow(self.to_record_batch(schema, header_row=header_row, parallelism=parallelism))
         reader = self.to_record_batch_reader(schema, header_row=header_row, batch_size=batch_size)
         return polars.from_arrow(reader, rechunk=False)
 

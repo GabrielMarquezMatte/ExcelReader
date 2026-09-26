@@ -440,6 +440,10 @@ def _bind(lib: ctypes.CDLL) -> ctypes.CDLL:
     lib.xl_free_schema.restype = None
     lib.xl_parse_arrow.argtypes = [p_void, ctypes.POINTER(NativeColumnSpec), c_int, c_int, ctypes.POINTER(ArrowArray), ctypes.POINTER(ArrowSchema)]
     lib.xl_parse_arrow.restype = c_int
+    lib.xl_parse_typed_ex.argtypes = [p_void, ctypes.POINTER(NativeColumnSpec), c_int, c_int, c_int, ctypes.POINTER(NativeTable)]
+    lib.xl_parse_typed_ex.restype = c_int
+    lib.xl_parse_arrow_ex.argtypes = [p_void, ctypes.POINTER(NativeColumnSpec), c_int, c_int, c_int, ctypes.POINTER(ArrowArray), ctypes.POINTER(ArrowSchema)]
+    lib.xl_parse_arrow_ex.restype = c_int
     lib.xl_typed_reader_open.argtypes = [
         p_void, ctypes.POINTER(NativeColumnSpec), c_int, c_int, ctypes.c_int64, pp_void,
     ]
