@@ -297,8 +297,8 @@ namespace ExcelReader.Core.Reader
         /// <param name="sampleSize">How many rows after the header to inspect.</param>
         /// <param name="parseText">When <see langword="true"/>, a text cell (every CSV field, or a number
         /// stored as text) counts as an integer, a decimal, <c>true</c>/<c>false</c>, or an ISO-8601 date or
-        /// date-time when its text has exactly that shape. Numbers with a leading zero (<c>00123</c>), padded
-        /// or culture-formatted numbers, and non-ISO dates stay text. A column only gets a non-text type when
+        /// date-time when its text has exactly that shape. Numbers with a leading zero (<c>00123</c>), scientific
+        /// notation (<c>12E4</c>), padded or culture-formatted numbers, and non-ISO dates stay text. A column only gets a non-text type when
         /// every sampled value converts to it.</param>
         /// <returns>One <see cref="ExcelColumnSchema"/> per column, in column order.</returns>
         /// <remarks>Still a guess over a bounded sample: a value past the sample can still fail to convert.

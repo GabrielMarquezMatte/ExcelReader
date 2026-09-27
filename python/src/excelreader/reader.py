@@ -380,8 +380,8 @@ class Workbook:
 
         `parse_text=True` also types cells that hold text — every CSV field, or numbers stored as text:
         integers, decimals, `true`/`false` and ISO dates or date-times, when the text has exactly that
-        shape. Codes with a leading zero (`00123`), padded or comma-decimal numbers and non-ISO dates
-        stay `ColumnType.STRING`.
+        shape. Codes with a leading zero (`00123`), scientific notation (`12E4`), padded or comma-decimal
+        numbers and non-ISO dates stay `ColumnType.STRING`.
 
         This is a guess over a sample, not a guarantee — a column that looks like `ColumnType.I64` in
         the sample can still hold a fractional value further down the sheet, which `parse_typed()`

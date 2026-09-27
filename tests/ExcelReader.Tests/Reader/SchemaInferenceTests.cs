@@ -129,6 +129,14 @@ namespace ExcelReader.Tests.Reader
         }
 
         [Fact]
+        public void ParseText_Should_Keep_Scientific_Notation_As_Text()
+        {
+            ExcelColumnSchema[] schema = InferFromCsv("Part,Tiny\n12E4,1e-05\n1E5,2.5e-3\n", parseText: true);
+
+            Assert.All(schema, column => Assert.Equal(ExcelColumnType.StringColumn, column.Type));
+        }
+
+        [Fact]
         public void ParseText_Should_Keep_A_Column_With_An_Integer_Past_Long_As_Text()
         {
             ExcelColumnSchema[] schema = InferFromCsv("Id\n1\n9223372036854775808\n", parseText: true);

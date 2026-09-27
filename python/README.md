@@ -179,7 +179,8 @@ mix of kinds, only formula/error results, or nothing sampled falls back to `Colu
 `nullable` is set when any sampled row left the column empty. CSV cells carry no such type tag, so
 by default every CSV column is guessed `ColumnType.STRING`. Pass `parse_text=True` to type text cells
 from their exact shape instead: integers, decimals, `true`/`false` and ISO dates or date-times. Codes
-with a leading zero (`00123`), padded or comma-decimal numbers and non-ISO dates stay strings. It is
+with a leading zero (`00123`), scientific notation (`12E4`), padded or comma-decimal numbers and
+non-ISO dates stay strings. It is
 still a guess over the sample, so a value further down can fail to convert:
 
 ```python
