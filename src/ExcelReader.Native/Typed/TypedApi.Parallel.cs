@@ -24,8 +24,9 @@ namespace ExcelReader.Native.Typed
                 NativeApi.SetLastError($"degree_of_parallelism must be 0 (processor count) or positive; got {degreeOfParallelism}.");
                 return NativeStatus.InvalidArgument;
             }
-            if (handle.Reader is CsvReader csv && csv.TryGetChunkSource(out CsvChunkSource source)
-                && ParallelCsvFactory.CanPartition(ParallelCsvFactory.Normalize(degreeOfParallelism), source.Length, csv.Options))
+            int dop = ParallelCsvFactory.Normalize(degreeOfParallelism);
+            if (dop > 1 && handle.Reader is CsvReader csv && csv.TryGetChunkSource(out CsvChunkSource source)
+                && ParallelCsvFactory.CanPartition(dop, source.Length, csv.Options))
             {
                 LastParseRanInParallel = true;
                 return ParseCsvInParallel(handle, source, csv.Options, specs, headerRow, degreeOfParallelism, cause, chunkSizeOverride, out table);
