@@ -1,6 +1,7 @@
 using System.Buffers;
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
+using System.Runtime.CompilerServices;
 using System.Runtime.ExceptionServices;
 using System.Runtime.InteropServices;
 using ExcelReader.Core.Parser;
@@ -383,9 +384,9 @@ namespace ExcelReader.Native.Typed
                 return type switch
                 {
                     NativeColumnType.String => AppendString(in cell),
-                    NativeColumnType.Int64 => Append(_longs, ExcelCellReaders.Parsable(in cell, isDate1904, CultureInfo.InvariantCulture, out long i64), i64),
-                    NativeColumnType.Float64 => Append(_doubles, ExcelCellReaders.Parsable(in cell, isDate1904, CultureInfo.InvariantCulture, out double f64), f64),
-                    NativeColumnType.Bool => Append(_bools, ColumnParserFactory.ReadBool(in cell, isDate1904, CultureInfo.InvariantCulture, out bool flag), (byte)(flag ? 1 : 0)),
+                    NativeColumnType.Int64 => AppendInt64(in cell, isDate1904),
+                    NativeColumnType.Float64 => AppendFloat64(in cell, isDate1904),
+                    NativeColumnType.Bool => AppendBool(in cell, isDate1904),
                     NativeColumnType.Date => AppendDate(in cell, isDate1904),
                     NativeColumnType.Time => AppendTime(in cell, isDate1904),
                     _ => AppendTimestamp(in cell, isDate1904),
@@ -418,6 +419,26 @@ namespace ExcelReader.Native.Typed
                 return true;
             }
 
+            // Each numeric type gets its own method so AppendFrom stays a small dispatcher: with the
+            // inlined double parser in it, every cell of every type paid its prologue.
+            [MethodImpl(MethodImplOptions.NoInlining)]
+            private bool AppendInt64(in Cell cell, bool isDate1904)
+            {
+                return Append(_longs, ExcelCellReaders.Parsable(in cell, isDate1904, CultureInfo.InvariantCulture, out long value), value);
+            }
+
+            [MethodImpl(MethodImplOptions.NoInlining)]
+            private bool AppendFloat64(in Cell cell, bool isDate1904)
+            {
+                return Append(_doubles, ExcelCellReaders.Parsable(in cell, isDate1904, CultureInfo.InvariantCulture, out double value), value);
+            }
+
+            [MethodImpl(MethodImplOptions.NoInlining)]
+            private bool AppendBool(in Cell cell, bool isDate1904)
+            {
+                return Append(_bools, ColumnParserFactory.ReadBool(in cell, isDate1904, CultureInfo.InvariantCulture, out bool flag), (byte)(flag ? 1 : 0));
+            }
+
             private static readonly int UnixEpochDayNumber = new DateOnly(1970, 1, 1).DayNumber;
 
             private bool AppendDate(in Cell cell, bool isDate1904)
@@ -441,6 +462,7 @@ namespace ExcelReader.Native.Typed
                 return Append(_longs, ok, (value - DateTime.UnixEpoch).Ticks / 10);
             }
 
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
             private bool Append<T>(ChunkedBuffer<T> target, bool converted, T value) where T : unmanaged
             {
                 if (!converted && !nullable)
@@ -457,15 +479,22 @@ namespace ExcelReader.Native.Typed
             /// ships no bitmap, so writing one bit per cell up to then is wasted work. The first null
             /// backfills every earlier row as valid.
             /// </summary>
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
             private void RecordValidity(bool valid)
+            {
+                if (!_anyNull && valid)
+                {
+                    _rowCount++;
+                    return;
+                }
+                RecordValiditySlow(valid);
+            }
+
+            [MethodImpl(MethodImplOptions.NoInlining)]
+            private void RecordValiditySlow(bool valid)
             {
                 if (!_anyNull)
                 {
-                    if (valid)
-                    {
-                        _rowCount++;
-                        return;
-                    }
                     _anyNull = true;
                     for (int i = 0; i < _rowCount >> 3; i++)
                     {
