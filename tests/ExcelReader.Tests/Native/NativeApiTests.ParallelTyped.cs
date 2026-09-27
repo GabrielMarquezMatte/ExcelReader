@@ -395,7 +395,7 @@ namespace ExcelReader.Tests.Native
             Assert.Equal(NativeStatus.Ok, ReadApi.OpenMemory(csv, NativeFormat.Csv, out NativeHandle? handle));
             try
             {
-                Assert.Equal(NativeStatus.Ok, ArrowApi.ParseArrow(handle, MixedSpecs, headerRow: 1, 0, out ArrowArray array, out ArrowSchema schema));
+                Assert.Equal(NativeStatus.Ok, ArrowApi.ParseArrow(handle, MixedSpecs, headerRow: 1, 0, "test", out ArrowArray array, out ArrowSchema schema));
                 try
                 {
                     Assert.Equal(MixedRows, array.Length);
