@@ -570,6 +570,7 @@ namespace ExcelReader.Tests.Native
         private sealed class BlockTracker(int failAt)
         {
             private readonly HashSet<IntPtr> _live = [];
+            private readonly Lock _gate = new();
 
             internal int Allocations { get; private set; }
 
@@ -581,24 +582,30 @@ namespace ExcelReader.Tests.Native
 
             internal IntPtr Alloc(int byteLength)
             {
-                if (++Allocations == failAt)
+                lock (_gate)
                 {
-                    throw new InvalidOperationException("injected allocation failure");
+                    if (++Allocations == failAt)
+                    {
+                        throw new InvalidOperationException("injected allocation failure");
+                    }
+                    IntPtr block = Marshal.AllocHGlobal(byteLength);
+                    _live.Add(block);
+                    return block;
                 }
-                IntPtr block = Marshal.AllocHGlobal(byteLength);
-                _live.Add(block);
-                return block;
             }
 
             internal void Free(IntPtr block)
             {
-                if (!_live.Remove(block))
+                lock (_gate)
                 {
-                    UnknownFrees++;
-                    return;
+                    if (!_live.Remove(block))
+                    {
+                        UnknownFrees++;
+                        return;
+                    }
+                    Frees++;
+                    Marshal.FreeHGlobal(block);
                 }
-                Frees++;
-                Marshal.FreeHGlobal(block);
             }
         }
 

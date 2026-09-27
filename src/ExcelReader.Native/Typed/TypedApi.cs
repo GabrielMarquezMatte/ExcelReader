@@ -1,5 +1,7 @@
+using System.Buffers;
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
+using System.Runtime.ExceptionServices;
 using System.Runtime.InteropServices;
 using ExcelReader.Core.Parser;
 using ExcelReader.Core.Parser.Internal;
@@ -95,11 +97,33 @@ namespace ExcelReader.Native.Typed
             FreeBlock(column.Data);
         }
 
-        [ThreadStatic]
-        internal static Func<int, IntPtr>? AllocOverride;
+        // AsyncLocal, not ThreadStatic: a test's hooks must follow a parallel build onto pool threads.
+        private static readonly AsyncLocal<Func<int, IntPtr>?> AllocOverrideLocal = new();
+        private static readonly AsyncLocal<Action<IntPtr>?> FreeOverrideLocal = new();
 
-        [ThreadStatic]
-        internal static Action<IntPtr>? FreeOverride;
+        internal static Func<int, IntPtr>? AllocOverride
+        {
+            get
+            {
+                return AllocOverrideLocal.Value;
+            }
+            set
+            {
+                AllocOverrideLocal.Value = value;
+            }
+        }
+
+        internal static Action<IntPtr>? FreeOverride
+        {
+            get
+            {
+                return FreeOverrideLocal.Value;
+            }
+            set
+            {
+                FreeOverrideLocal.Value = value;
+            }
+        }
 
         private static IntPtr AllocBlock(int byteLength)
         {
@@ -242,10 +266,10 @@ namespace ExcelReader.Native.Typed
 
         private static NativeTable BuildTable(ColumnBuilder[] builders)
         {
-            return BuildTable([builders]);
+            return BuildTable([builders], 1);
         }
 
-        private static NativeTable BuildTable(ReadOnlySpan<ColumnBuilder[]> parts)
+        private static NativeTable BuildTable(ColumnBuilder[][] parts, int degreeOfParallelism)
         {
             int columnCount = parts[0].Length;
             long rowCount = 0;
@@ -257,27 +281,44 @@ namespace ExcelReader.Native.Typed
                 }
             }
             IntPtr columnsBlock = AllocBlock(checked(columnCount * sizeof(NativeColumn)));
-            NativeColumn* columns = (NativeColumn*)columnsBlock;
-            ColumnBuilder[] column = new ColumnBuilder[parts.Length];
-            int built = 0;
+            new Span<NativeColumn>((void*)columnsBlock, columnCount).Clear();
+            NativeTable table = new() { ColumnCount = columnCount, RowCount = rowCount, Columns = columnsBlock };
             try
             {
-                for (; built < columnCount; built++)
+                if (degreeOfParallelism == 1)
                 {
-                    for (int p = 0; p < parts.Length; p++)
+                    for (int c = 0; c < columnCount; c++)
                     {
-                        column[p] = parts[p][built];
+                        ((NativeColumn*)columnsBlock)[c] = BuildColumn(parts, c);
                     }
-                    columns[built] = ColumnBuilder.Build(column);
                 }
+                else
+                {
+                    Parallel.For(0, columnCount, new ParallelOptions { MaxDegreeOfParallelism = degreeOfParallelism },
+                        c => ((NativeColumn*)columnsBlock)[c] = BuildColumn(parts, c));
+                }
+            }
+            catch (AggregateException exception) when (exception.InnerExceptions.Count == 1)
+            {
+                FreeTable(ref table);
+                ExceptionDispatchInfo.Throw(exception.InnerExceptions[0]);
             }
             catch
             {
-                NativeTable partial = new() { ColumnCount = built, RowCount = rowCount, Columns = columnsBlock };
-                FreeTable(ref partial);
+                FreeTable(ref table);
                 throw;
             }
-            return new NativeTable { ColumnCount = columnCount, RowCount = rowCount, Columns = columnsBlock };
+            return table;
+        }
+
+        private static NativeColumn BuildColumn(ColumnBuilder[][] parts, int index)
+        {
+            ColumnBuilder[] column = new ColumnBuilder[parts.Length];
+            for (int p = 0; p < parts.Length; p++)
+            {
+                column[p] = parts[p][index];
+            }
+            return ColumnBuilder.Build(column);
         }
 
         internal static IntPtr PackBitsLsbFirst(ReadOnlySpan<byte> flags)
@@ -563,22 +604,30 @@ namespace ExcelReader.Native.Typed
 
             private static void OrBits(Span<byte> bits, long at, ChunkedBuffer<byte> validity)
             {
-                byte[] source = new byte[validity.Count];
-                validity.CopyTo(source);
                 int first = (int)(at >> 3);
                 int shift = (int)(at & 7);
                 if (shift == 0)
                 {
-                    source.CopyTo(bits[first..]);
+                    validity.CopyTo(bits[first..]);
                     return;
                 }
-                for (int i = 0; i < source.Length; i++)
+                int count = validity.Count;
+                byte[] source = ArrayPool<byte>.Shared.Rent(count);
+                try
                 {
-                    bits[first + i] |= (byte)(source[i] << shift);
-                    if (first + i + 1 < bits.Length)
+                    validity.CopyTo(source);
+                    for (int i = 0; i < count; i++)
                     {
-                        bits[first + i + 1] |= (byte)(source[i] >> (8 - shift));
+                        bits[first + i] |= (byte)(source[i] << shift);
+                        if (first + i + 1 < bits.Length)
+                        {
+                            bits[first + i + 1] |= (byte)(source[i] >> (8 - shift));
+                        }
                     }
+                }
+                finally
+                {
+                    ArrayPool<byte>.Shared.Return(source);
                 }
             }
 

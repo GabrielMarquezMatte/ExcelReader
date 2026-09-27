@@ -1,4 +1,3 @@
-using System.Runtime.InteropServices;
 using ExcelReader.Core.Parser.ParallelCsv;
 using ExcelReader.Core.Reader;
 using ExcelReader.Core.Reader.Csv;
@@ -73,7 +72,7 @@ namespace ExcelReader.Native.Typed
                     NativeApi.SetLastError(DescribeFailedColumn(specs, merged.FailedColumn));
                     return NativeStatus.Error;
                 }
-                table = BuildTable(CollectionsMarshal.AsSpan(merged.Parts));
+                table = BuildTable([.. merged.Parts], ParallelCsvFactory.Normalize(degreeOfParallelism));
                 return NativeStatus.Ok;
             }
             catch (Exception exception)
