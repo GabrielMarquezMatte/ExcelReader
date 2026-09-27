@@ -10,15 +10,15 @@ namespace ExcelReader.Native.Arrow
     {
         internal static int ParseArrow(NativeHandle? handle, NativeColumnSpec[] specs, int headerRow, out ArrowArray array, out ArrowSchema schema)
         {
-            return ParseArrow(handle, specs, headerRow, 1, out array, out schema);
+            return ParseArrow(handle, specs, headerRow, 1, "xl_parse_arrow", out array, out schema);
         }
 
         internal static int ParseArrow(NativeHandle? handle, NativeColumnSpec[] specs, int headerRow, int degreeOfParallelism,
-            out ArrowArray array, out ArrowSchema schema)
+            string cause, out ArrowArray array, out ArrowSchema schema)
         {
             array = default;
             schema = default;
-            int status = TypedApi.ParseTypedTable(handle, specs, headerRow, degreeOfParallelism, "xl_parse_arrow", out NativeTable table);
+            int status = TypedApi.ParseTypedTable(handle, specs, headerRow, degreeOfParallelism, cause, out NativeTable table);
             if (status != NativeStatus.Ok)
             {
                 return status;
