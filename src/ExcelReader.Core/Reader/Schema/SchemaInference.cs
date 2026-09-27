@@ -186,7 +186,8 @@ namespace ExcelReader.Core.Reader.Schema
                     SawNonBinaryNumber |= !IsBinaryDigit(text);
                     return true;
                 }
-                if (canonical && FastDouble.TryParse(text, out _))
+                // Scientific notation stays text: part codes like 12E4 would silently become 120000.
+                if (canonical && !text.ContainsAny((byte)'e', (byte)'E') && FastDouble.TryParse(text, out _))
                 {
                     SawNumber = true;
                     SawNonIntegralNumber = true;

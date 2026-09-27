@@ -215,7 +215,7 @@ int32_t xl_infer_schema(xl_workbook* handle, int32_t header_row, int32_t sample_
 
 /* xl_infer_schema with flags. XL_INFER_PARSE_TEXT also types cells that hold text (a CSV's fields,
    numbers stored as text): integers, decimals, true/false and ISO dates or date-times, when the text
-   has exactly that shape. Leading-zero codes such as 00123 stay text. flags == 0 behaves exactly like
+   has exactly that shape. Leading-zero codes such as 00123 and scientific notation such as 12E4 stay text. flags == 0 behaves exactly like
    xl_infer_schema. Any unknown bit is XL_INVALID_ARGUMENT. Free the result with xl_free_schema. */
 int32_t xl_infer_schema_ex(xl_workbook* handle, int32_t header_row, int32_t sample_size,
                            int32_t flags, xl_inferred_schema* out_schema);
