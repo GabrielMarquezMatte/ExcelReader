@@ -182,8 +182,9 @@ namespace ExcelReader.Tests.Native
             Assert.True(TypedApi.LastParseRanInParallel);
             Assert.Equal(NativeStatus.Error, status);
             Assert.Equal(IntPtr.Zero, table.Columns);
-            Assert.Equal(failAt, tracker.Allocations);
-            Assert.Equal(failAt - 1, tracker.Frees);
+            // Columns build concurrently, so another column can still allocate after the injected failure.
+            Assert.True(tracker.Allocations >= failAt);
+            Assert.Equal(tracker.Allocations - 1, tracker.Frees);
             Assert.Equal(0, tracker.Live);
             Assert.Equal(0, tracker.UnknownFrees);
         }
