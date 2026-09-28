@@ -32,6 +32,7 @@ XL_FORMAT_XLS = 1
 XL_FORMAT_XLSX = 2
 XL_FORMAT_XLSB = 3
 XL_FORMAT_CSV = 4
+XL_INFER_PARSE_TEXT = 1
 FORMATS = {
     "auto": XL_FORMAT_AUTO,
     "xls": XL_FORMAT_XLS,
@@ -436,10 +437,16 @@ def _bind(lib: ctypes.CDLL) -> ctypes.CDLL:
     lib.xl_free_table.restype = None
     lib.xl_infer_schema.argtypes = [p_void, c_int, c_int, ctypes.POINTER(NativeInferredSchema)]
     lib.xl_infer_schema.restype = c_int
+    lib.xl_infer_schema_ex.argtypes = [p_void, c_int, c_int, c_int, ctypes.POINTER(NativeInferredSchema)]
+    lib.xl_infer_schema_ex.restype = c_int
     lib.xl_free_schema.argtypes = [ctypes.POINTER(NativeInferredSchema)]
     lib.xl_free_schema.restype = None
     lib.xl_parse_arrow.argtypes = [p_void, ctypes.POINTER(NativeColumnSpec), c_int, c_int, ctypes.POINTER(ArrowArray), ctypes.POINTER(ArrowSchema)]
     lib.xl_parse_arrow.restype = c_int
+    lib.xl_parse_typed_ex.argtypes = [p_void, ctypes.POINTER(NativeColumnSpec), c_int, c_int, c_int, ctypes.POINTER(NativeTable)]
+    lib.xl_parse_typed_ex.restype = c_int
+    lib.xl_parse_arrow_ex.argtypes = [p_void, ctypes.POINTER(NativeColumnSpec), c_int, c_int, c_int, ctypes.POINTER(ArrowArray), ctypes.POINTER(ArrowSchema)]
+    lib.xl_parse_arrow_ex.restype = c_int
     lib.xl_typed_reader_open.argtypes = [
         p_void, ctypes.POINTER(NativeColumnSpec), c_int, c_int, ctypes.c_int64, pp_void,
     ]
@@ -465,6 +472,8 @@ def _bind(lib: ctypes.CDLL) -> ctypes.CDLL:
     lib.xl_write_typed_to_memory.restype = ctypes.c_int32
     lib.xl_encrypt_package.argtypes = [p_bytes, c_int, p_bytes, c_int, p_bytes, c_int]
     lib.xl_encrypt_package.restype = c_int
+    lib.xl_encrypt_package_to_memory.argtypes = [p_bytes, c_int, p_bytes, c_int, ctypes.POINTER(NativeBuffer)]
+    lib.xl_encrypt_package_to_memory.restype = c_int
     lib.xl_abi_version.argtypes = []
     lib.xl_abi_version.restype = c_int
 

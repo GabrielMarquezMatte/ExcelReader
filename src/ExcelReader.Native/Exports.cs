@@ -24,6 +24,31 @@ namespace ExcelReader.Native
                 new ReadOnlySpan<byte>(password, passwordLength));
         }
 
+        [UnmanagedCallersOnly(EntryPoint = "xl_encrypt_package_to_memory")]
+        public static int EncryptPackageToMemory(byte* package, int packageLength, byte* password, int passwordLength, NativeBuffer* outBuffer)
+        {
+            if (package is null || packageLength <= 0 || password is null || passwordLength <= 0 || outBuffer is null)
+            {
+                return NativeStatus.InvalidArgument;
+            }
+            *outBuffer = default;
+
+            try
+            {
+                int status = NativeApi.EncryptPackageToMemory(
+                    new ReadOnlySpan<byte>(package, packageLength),
+                    new ReadOnlySpan<byte>(password, passwordLength),
+                    out byte[]? encrypted);
+                PublishBuffer(encrypted, outBuffer);
+                return status;
+            }
+            catch (Exception exception)
+            {
+                NativeApi.SetLastError(exception.Message);
+                return NativeStatus.Error;
+            }
+        }
+
         [UnmanagedCallersOnly(EntryPoint = "xl_free_buffer")]
         public static void FreeBuffer(NativeBuffer* buffer)
         {

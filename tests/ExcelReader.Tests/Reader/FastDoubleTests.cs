@@ -149,6 +149,39 @@ namespace ExcelReader.Tests.Reader
         }
 
         [Fact]
+        [SuppressMessage("Security", "CA5394:Do not use insecure randomness",
+            Justification = "Needs a reproducible seeded PRNG for deterministic test content, not cryptographic randomness.")]
+        public void AcceptsShortDecimalsBitExactly()
+        {
+            var rng = new Random(54321);
+            StringBuilder text = new();
+            for (int i = 0; i < 200_000; i++)
+            {
+                text.Clear();
+                if (rng.Next(4) == 0)
+                {
+                    text.Append('-');
+                }
+                text.Append('0', rng.Next(3));
+                for (int d = rng.Next(1, 10); d > 0; d--)
+                {
+                    text.Append((char)('0' + rng.Next(10)));
+                }
+                if (rng.Next(3) != 0)
+                {
+                    text.Append('.');
+                    for (int d = rng.Next(7); d > 0; d--)
+                    {
+                        text.Append((char)('0' + rng.Next(10)));
+                    }
+                }
+                string value = text.ToString();
+                Assert.True(FastDouble.TryParse(Encoding.ASCII.GetBytes(value), out double actual), $"Expected FastDouble to accept \"{value}\".");
+                Assert.Equal(BitConverter.DoubleToInt64Bits(double.Parse(value, CultureInfo.InvariantCulture)), BitConverter.DoubleToInt64Bits(actual));
+            }
+        }
+
+        [Fact]
         public void NegativeZeroMatchesSignBit()
         {
             Assert.True(FastDouble.TryParse("-0"u8, out double d));

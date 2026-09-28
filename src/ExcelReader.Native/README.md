@@ -54,8 +54,8 @@ may get worse, not only better.
 Reading exports: `xl_open_file`, `xl_open_file_ex`, `xl_open_memory`, `xl_open_memory_ex`, `xl_close`,
 `xl_sheet_count`, `xl_sheet_name`, `xl_sheet_name_at`, `xl_move_to_sheet`, `xl_is_date1904`,
 `xl_next_row`, `xl_next_row_view`, `xl_read_all_blob`, `xl_read_all_decoded`, `xl_free_rows`,
-`xl_parse_typed`, `xl_free_table`, `xl_infer_schema`, `xl_free_schema`, `xl_last_error`,
-`xl_last_error_ptr`, `xl_parse_arrow`.
+`xl_parse_typed`, `xl_parse_typed_ex`, `xl_free_table`, `xl_infer_schema`, `xl_infer_schema_ex`, `xl_free_schema`,
+`xl_last_error`, `xl_last_error_ptr`, `xl_parse_arrow`, `xl_parse_arrow_ex`.
 
 Writing has two layers. The one-shot export, `xl_write_typed` (plus its in-memory twin
 `xl_write_typed_to_memory`), takes a whole `xl_table` and writes it in a single call; it takes an
@@ -130,3 +130,8 @@ of `xl_open_options`, so a caller built against the old, smaller struct passes t
 `XL_INVALID_ARGUMENT` instead of the library reading two garbage fields past the end of the caller's
 allocation. Check `xl_abi_version()` against `XL_ABI_VERSION` (see above) and rebuild against the
 current header rather than only relying on the `struct_size` check to catch it.
+
+To produce one, `xl_encrypt_package` wraps a finished XLSX/XLSB file in the encrypted container, and
+`xl_encrypt_package_to_memory` does the same over bytes, so a package written with
+`xl_write_typed_to_memory` is encrypted without its plaintext ever reaching disk. Release the result
+with `xl_free_buffer`.

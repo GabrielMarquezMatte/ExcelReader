@@ -8,6 +8,18 @@ namespace ExcelReader.Native
         [UnmanagedCallersOnly(EntryPoint = "xl_parse_typed")]
         public static int ParseTyped(nint handle, NativeColumnSpecRaw* specs, int specCount, int headerRow, NativeTable* outTable)
         {
+            return ParseTypedTable(handle, specs, specCount, headerRow, 1, "xl_parse_typed", outTable);
+        }
+
+        [UnmanagedCallersOnly(EntryPoint = "xl_parse_typed_ex")]
+        public static int ParseTypedEx(nint handle, NativeColumnSpecRaw* specs, int specCount, int headerRow, int degreeOfParallelism, NativeTable* outTable)
+        {
+            return ParseTypedTable(handle, specs, specCount, headerRow, degreeOfParallelism, "xl_parse_typed_ex", outTable);
+        }
+
+        private static int ParseTypedTable(nint handle, NativeColumnSpecRaw* specs, int specCount, int headerRow, int degreeOfParallelism,
+            string cause, NativeTable* outTable)
+        {
             if (specs is null || outTable is null || !TypedApi.IsValidSpecCount(specCount))
             {
                 return NativeStatus.InvalidArgument;
@@ -21,7 +33,7 @@ namespace ExcelReader.Native
                     return NativeStatus.InvalidArgument;
                 }
 
-                int status = TypedApi.ParseTyped(Resolve(handle), decoded, headerRow, out NativeTable table);
+                int status = TypedApi.ParseTypedTable(Resolve(handle), decoded, headerRow, degreeOfParallelism, cause, out NativeTable table);
                 *outTable = table;
                 return status;
             }

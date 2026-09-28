@@ -143,6 +143,25 @@ Finish the batches, or call `.close()` on the generator, before starting another
 Being a generator, `iter_parse_typed()` opens nothing until the first iteration, so a bad
 `batch_size` or a rejected second reader is only raised there, not at the call.
 
+#### Reading a large CSV on several threads
+
+`parse_typed()`, `to_arrow()`, `to_record_batch()` and `to_polars()` take `parallelism`: `1` (the
+default) reads on one thread, `0` uses every core, `n` up to n threads. Only CSV is split. Any other
+format, or a CSV under 256 KiB, is read on one thread with the same result. The table is identical
+either way. Every partition's columns are held until they are merged, so the peak memory is higher
+than a sequential read of the same file. `to_polars()` with `parallelism` other than 1 parses the whole
+file instead of streaming it in batches.
+
+`xl_parse_typed_ex` on a Ryzen 7 5700X (8 cores, 16 threads), 14 typed columns, file read from memory:
+
+| File | `parallelism=1` | `parallelism=0` | Speed-up |
+|---|---:|---:|---:|
+| `65K_Records_Data.csv` (8 MB, 65,535 rows) | 21.4 ms | 5.8 ms | 3.7x |
+| the same rows ×20 (160 MB, 1.3M rows) | 425.9 ms | 117.5 ms | 3.6x |
+
+Peak working set on the 160 MB file, above the interpreter's own, went from 470 MiB to 503 MiB (both
+include the file's bytes and the handle's copy of them).
+
 #### Guessing a schema
 
 Writing the `ColumnSpec` list by hand means already knowing every column's name and type. When you
@@ -154,12 +173,21 @@ with open_workbook("sales.xlsb") as workbook:
     table = workbook.parse_typed(schema)
 ```
 
-Each column's type comes from the `CellType` Excel already stored for its sampled cells — not text
-sniffing — so it costs nothing beyond the sample and is exact for XLSX/XLSB/XLS. A column with a real
+By default each column's type comes from the `CellType` Excel already stored for its sampled cells,
+so it costs nothing beyond the sample and is exact for XLSX/XLSB/XLS. A column with a real
 mix of kinds, only formula/error results, or nothing sampled falls back to `ColumnType.STRING`;
 `nullable` is set when any sampled row left the column empty. CSV cells carry no such type tag, so
-every CSV column is guessed `ColumnType.STRING` — inspect the result (or just try parsing) before
-trusting it, especially past the sample.
+by default every CSV column is guessed `ColumnType.STRING`. Pass `parse_text=True` to type text cells
+from their exact shape instead: integers, decimals, `true`/`false` and ISO dates or date-times. Codes
+with a leading zero (`00123`), scientific notation (`12E4`), padded or comma-decimal numbers and
+non-ISO dates stay strings. It is
+still a guess over the sample, so a value further down can fail to convert:
+
+```python
+with open_workbook("sales.csv") as workbook:
+    schema = workbook.infer_schema(parse_text=True)
+    table = workbook.parse_typed(schema, parallelism=0)
+```
 
 ### Writing
 
@@ -245,7 +273,15 @@ with open_writer_to_memory("xlsx") as writer:
     payload = writer.bytes()
 ```
 
-`write_workbook_to_bytes()` is the same idea for the columnar `write_workbook()` path.
+`write_workbook_to_bytes()` is the same idea for the columnar `write_workbook()` path, and
+`write_arrow_to_bytes()`, `write_pandas_to_bytes()` and `write_polars_to_bytes()` for the frame
+writers. With no path to infer it from, each takes an explicit `format`:
+
+```python
+from excelreader import write_pandas_to_bytes
+
+payload = write_pandas_to_bytes(df, format="xlsx")
+```
 
 ### Arrow
 
@@ -380,6 +416,15 @@ encrypt_package("plain.xlsx", "secret.xlsx", "hunter2")
 `package_path` is read twice (it is not disposed or removed), so it must already be a finished file.
 Encryption parameters are fixed at Excel's own defaults — there are no options — and only XLSX/XLSB
 packages can be encrypted, matching what `open_workbook`/`open_bytes` can decrypt.
+
+`encrypt_package_bytes()` does the same over bytes, so the plaintext package never has to be written
+to disk:
+
+```python
+from excelreader import encrypt_package_bytes, write_workbook_to_bytes
+
+secret = encrypt_package_bytes(write_workbook_to_bytes(table, types, format="xlsx"), "hunter2")
+```
 
 ## Benchmarks
 

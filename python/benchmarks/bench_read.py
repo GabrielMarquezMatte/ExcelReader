@@ -1,11 +1,13 @@
 """Benchmark ExcelReader's Python bindings against polars.
 
-Usage:  python python/benchmarks/bench_read.py [path] [--n N]
+Usage:  python python/benchmarks/bench_read.py [path] [--n N] [--csv CSV]
 
 `path` defaults to tests/ExcelReader.Benchmarks/Data/65K_Records_Data.xlsb, resolved relative to
 the repository root. Reports min and median over N iterations (default 10) for every available
-read path. A variant that reads zero rows or zero cells is a harness bug, not a result — this
-script asserts against that instead of silently publishing a zero.
+read path, then a CSV comparison (`--csv`, default the fixture's .csv twin) of parse_typed() and
+to_polars() at parallelism 1 and 0 against polars.read_csv and pandas.read_csv. A variant that reads
+zero rows or zero cells is a harness bug, not a result — this script asserts against that instead of
+silently publishing a zero.
 
 NOTE: read_all()/rows() build one Cell tuple per cell; polars.read_excel returns a typed columnar
 DataFrame with type inference. That is not matched work (see STYLEGUIDE.md "Tests and
@@ -18,6 +20,7 @@ from __future__ import annotations
 
 import argparse
 import ctypes
+import functools
 import statistics
 import subprocess
 import sys
@@ -26,6 +29,7 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_PATH = REPO_ROOT / "tests" / "ExcelReader.Benchmarks" / "Data" / "65K_Records_Data.xlsb"
+DEFAULT_CSV = DEFAULT_PATH.with_suffix(".csv")
 
 sys.path.insert(0, str(REPO_ROOT / "python" / "src"))
 
@@ -204,6 +208,76 @@ def bench_polars(path: Path) -> tuple[int, int]:
     return df.shape[0], df.shape[0] * df.shape[1]
 
 
+_CSV_DATES = ["Order Date", "Ship Date"]
+
+
+def bench_csv_parse_typed(path: Path, parallelism: int) -> tuple[int, int]:
+    with excelreader.open_workbook(path, format="csv") as workbook:
+        table = workbook.parse_typed(_FIXTURE_SCHEMA, parallelism=parallelism)
+    return table.row_count, table.row_count * len(table.columns)
+
+
+def bench_csv_to_polars(path: Path, parallelism: int) -> tuple[int, int]:
+    with excelreader.open_workbook(path, format="csv") as workbook:
+        df = workbook.to_polars(_FIXTURE_SCHEMA, parallelism=parallelism)
+    return df.shape[0], df.shape[0] * df.shape[1]
+
+
+def bench_csv_polars(path: Path) -> tuple[int, int]:
+    import polars as pl
+
+    df = pl.read_csv(path, try_parse_dates=True)
+    return df.shape[0], df.shape[0] * df.shape[1]
+
+
+def bench_csv_pandas(path: Path, engine: str) -> tuple[int, int]:
+    import pandas as pd
+
+    df = pd.read_csv(path, engine=engine, parse_dates=_CSV_DATES, date_format="%Y-%m-%d")
+    return df.shape[0], df.shape[0] * df.shape[1]
+
+
+def _bench_csv(path: Path, n: int) -> None:
+    """CSV into a typed frame: excelreader against a fixed schema, pandas/polars inferring types and
+    parsing the two ISO date columns — the closest matched work the three offer."""
+    print(f"csv: {path}")
+    print()
+    for parallelism in (1, 0):
+        print(f"excelreader.parse_typed(parallelism={parallelism}):")
+        _time_and_assert(f"  csv parse_typed p={parallelism}", functools.partial(bench_csv_parse_typed, parallelism=parallelism), path, n)
+        print()
+    try:
+        import polars  # noqa: F401
+    except ImportError:
+        print("polars not installed — skipping to_polars() and polars.read_csv")
+        print()
+    else:
+        for parallelism in (1, 0):
+            print(f"excelreader.to_polars(parallelism={parallelism}):")
+            _time_and_assert(f"  csv to_polars p={parallelism}", functools.partial(bench_csv_to_polars, parallelism=parallelism), path, n)
+            print()
+        print("polars.read_csv(try_parse_dates=True) [multithreaded, infers types]:")
+        _time_and_assert("  csv polars", bench_csv_polars, path, n)
+        print()
+    try:
+        import pandas  # noqa: F401
+    except ImportError:
+        print("pandas not installed — skipping pandas.read_csv")
+        print()
+        return
+    engines = ["c"]
+    try:
+        import pyarrow  # noqa: F401
+    except ImportError:
+        pass
+    else:
+        engines.append("pyarrow")
+    for engine in engines:
+        print(f"pandas.read_csv(engine={engine!r}, parse_dates=...) [infers types]:")
+        _time_and_assert(f"  csv pandas {engine}", functools.partial(bench_csv_pandas, engine=engine), path, n)
+        print()
+
+
 def _time_and_assert(label: str, func, path: Path, n: int) -> None:
     row_count = 0
     cell_count = 0
@@ -223,6 +297,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("path", nargs="?", type=Path, default=DEFAULT_PATH)
     parser.add_argument("--n", type=int, default=10)
+    parser.add_argument("--csv", type=Path, default=DEFAULT_CSV, help="CSV for the excelreader/pandas/polars CSV comparison")
     parser.add_argument("--peak-leg", choices=sorted(_PEAK_LEGS), help=argparse.SUPPRESS)
     args = parser.parse_args()
 
@@ -290,6 +365,12 @@ def main() -> int:
     except ImportError:
         print("polars not installed — skipping polars.read_excel comparison")
         return 0
+
+    if args.csv.exists():
+        _bench_csv(args.csv, args.n)
+    else:
+        print(f"csv comparison skipped — not found: {args.csv}")
+        print()
 
     print("excelreader.to_polars() [typed columnar DataFrame with schema inference]:")
     _time_and_assert("  to_polars", bench_to_polars, args.path, args.n)

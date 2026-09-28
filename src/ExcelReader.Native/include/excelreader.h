@@ -150,6 +150,13 @@ typedef struct xl_table {
 int32_t xl_parse_typed(xl_workbook* handle, const xl_column_spec* specs, int32_t spec_count,
                        int32_t header_row, xl_table* out_table);
 
+/* xl_parse_typed with a thread count. degree_of_parallelism: 0 = processor count, 1 = sequential,
+   n = up to n threads; negative is XL_INVALID_ARGUMENT. Only a CSV handle is read in parallel. Any
+   other format, a CSV too small to split, or a CSV opened with a non-UTF-8 encoding is read
+   sequentially. The table equals xl_parse_typed's in every case. */
+int32_t xl_parse_typed_ex(xl_workbook* handle, const xl_column_spec* specs, int32_t spec_count,
+                          int32_t header_row, int32_t degree_of_parallelism, xl_table* out_table);
+
 void xl_free_table(xl_table* table);
 
 
@@ -197,12 +204,27 @@ int32_t xl_encrypt_package(const uint8_t* package_path, int32_t package_path_len
                            const uint8_t* destination_path, int32_t destination_path_len,
                            const uint8_t* password, int32_t password_len);
 
+/* xl_encrypt_package over bytes: the plaintext package never touches disk. Release out_buffer with
+   xl_free_buffer. */
+int32_t xl_encrypt_package_to_memory(const uint8_t* package, int32_t package_len,
+                                     const uint8_t* password, int32_t password_len,
+                                     xl_buffer* out_buffer);
+
 typedef struct xl_inferred_schema {
     xl_column_spec* columns;
     int32_t column_count;
 } xl_inferred_schema;
 
 int32_t xl_infer_schema(xl_workbook* handle, int32_t header_row, int32_t sample_size, xl_inferred_schema* out_schema);
+
+#define XL_INFER_PARSE_TEXT 1
+
+/* xl_infer_schema with flags. XL_INFER_PARSE_TEXT also types cells that hold text (a CSV's fields,
+   numbers stored as text): integers, decimals, true/false and ISO dates or date-times, when the text
+   has exactly that shape. Leading-zero codes such as 00123 and scientific notation such as 12E4 stay text. flags == 0 behaves exactly like
+   xl_infer_schema. Any unknown bit is XL_INVALID_ARGUMENT. Free the result with xl_free_schema. */
+int32_t xl_infer_schema_ex(xl_workbook* handle, int32_t header_row, int32_t sample_size,
+                           int32_t flags, xl_inferred_schema* out_schema);
 
 void xl_free_schema(xl_inferred_schema* schema);
 

@@ -217,6 +217,19 @@ namespace ExcelReader.Native
             return status;
         }
 
+        [UnmanagedCallersOnly(EntryPoint = "xl_infer_schema_ex")]
+        public static int InferSchemaEx(nint handle, int headerRow, int sampleSize, int flags, NativeInferredSchema* outSchema)
+        {
+            if (outSchema is null)
+            {
+                return NativeStatus.InvalidArgument;
+            }
+
+            int status = ReadApi.InferSchema(Resolve(handle), headerRow, sampleSize, flags, out NativeInferredSchema schema);
+            *outSchema = schema;
+            return status;
+        }
+
         [UnmanagedCallersOnly(EntryPoint = "xl_free_schema")]
         public static void FreeSchema(NativeInferredSchema* schema)
         {
