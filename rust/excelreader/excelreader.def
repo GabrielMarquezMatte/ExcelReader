@@ -28,6 +28,7 @@ EXPORTS
     xl_write_typed_to_memory
     xl_free_buffer
     xl_encrypt_package
+    xl_encrypt_package_to_memory
     xl_infer_schema
     xl_infer_schema_ex
     xl_free_schema
