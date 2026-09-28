@@ -204,6 +204,12 @@ int32_t xl_encrypt_package(const uint8_t* package_path, int32_t package_path_len
                            const uint8_t* destination_path, int32_t destination_path_len,
                            const uint8_t* password, int32_t password_len);
 
+/* xl_encrypt_package over bytes: the plaintext package never touches disk. Release out_buffer with
+   xl_free_buffer. */
+int32_t xl_encrypt_package_to_memory(const uint8_t* package, int32_t package_len,
+                                     const uint8_t* password, int32_t password_len,
+                                     xl_buffer* out_buffer);
+
 typedef struct xl_inferred_schema {
     xl_column_spec* columns;
     int32_t column_count;

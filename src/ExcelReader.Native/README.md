@@ -130,3 +130,8 @@ of `xl_open_options`, so a caller built against the old, smaller struct passes t
 `XL_INVALID_ARGUMENT` instead of the library reading two garbage fields past the end of the caller's
 allocation. Check `xl_abi_version()` against `XL_ABI_VERSION` (see above) and rebuild against the
 current header rather than only relying on the `struct_size` check to catch it.
+
+To produce one, `xl_encrypt_package` wraps a finished XLSX/XLSB file in the encrypted container, and
+`xl_encrypt_package_to_memory` does the same over bytes, so a package written with
+`xl_write_typed_to_memory` is encrypted without its plaintext ever reaching disk. Release the result
+with `xl_free_buffer`.
