@@ -273,7 +273,15 @@ with open_writer_to_memory("xlsx") as writer:
     payload = writer.bytes()
 ```
 
-`write_workbook_to_bytes()` is the same idea for the columnar `write_workbook()` path.
+`write_workbook_to_bytes()` is the same idea for the columnar `write_workbook()` path, and
+`write_arrow_to_bytes()`, `write_pandas_to_bytes()` and `write_polars_to_bytes()` for the frame
+writers. With no path to infer it from, each takes an explicit `format`:
+
+```python
+from excelreader import write_pandas_to_bytes
+
+payload = write_pandas_to_bytes(df, format="xlsx")
+```
 
 ### Arrow
 
@@ -408,6 +416,15 @@ encrypt_package("plain.xlsx", "secret.xlsx", "hunter2")
 `package_path` is read twice (it is not disposed or removed), so it must already be a finished file.
 Encryption parameters are fixed at Excel's own defaults — there are no options — and only XLSX/XLSB
 packages can be encrypted, matching what `open_workbook`/`open_bytes` can decrypt.
+
+`encrypt_package_bytes()` does the same over bytes, so the plaintext package never has to be written
+to disk:
+
+```python
+from excelreader import encrypt_package_bytes, write_workbook_to_bytes
+
+secret = encrypt_package_bytes(write_workbook_to_bytes(table, types, format="xlsx"), "hunter2")
+```
 
 ## Benchmarks
 
