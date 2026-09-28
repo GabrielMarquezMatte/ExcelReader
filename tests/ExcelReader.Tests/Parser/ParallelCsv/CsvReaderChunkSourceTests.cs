@@ -60,7 +60,8 @@ namespace ExcelReader.Tests.Parser.ParallelCsv
                     Assert.True(reader.TryGetChunkSource(out source));
                     Assert.Equal(OperatingSystem.IsWindows(), source.Handle!.IsAsync);
                 }
-                Assert.Equal(OperatingSystem.IsWindows(), source.Handle.IsClosed);
+                // Windows closes the reader's own overlapped handle; elsewhere it is the stream's, closed with the stream.
+                Assert.True(source.Handle.IsClosed);
             }
             finally
             {
