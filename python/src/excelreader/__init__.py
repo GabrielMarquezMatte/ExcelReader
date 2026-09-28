@@ -17,9 +17,13 @@ from excelreader.types import (
 )
 from excelreader.writer import (
     encrypt_package,
+    encrypt_package_bytes,
     write_arrow,
+    write_arrow_to_bytes,
     write_pandas,
+    write_pandas_to_bytes,
     write_polars,
+    write_polars_to_bytes,
     write_workbook,
     write_workbook_to_bytes,
 )
@@ -42,13 +46,17 @@ __all__ = [
     "WriteOptions",
     "decode_cell",
     "encrypt_package",
+    "encrypt_package_bytes",
     "open_bytes",
     "open_workbook",
     "open_writer",
     "open_writer_to_memory",
     "write_arrow",
+    "write_arrow_to_bytes",
     "write_pandas",
+    "write_pandas_to_bytes",
     "write_polars",
+    "write_polars_to_bytes",
     "write_workbook",
     "write_workbook_to_bytes",
 ]

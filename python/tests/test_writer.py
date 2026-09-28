@@ -6,11 +6,17 @@ from excelreader import (
     PasswordIncorrectError,
     WriteOptions,
     encrypt_package,
+    encrypt_package_bytes,
+    open_bytes,
     open_workbook,
     write_arrow,
+    write_arrow_to_bytes,
     write_pandas,
+    write_pandas_to_bytes,
     write_polars,
+    write_polars_to_bytes,
     write_workbook,
+    write_workbook_to_bytes,
 )
 
 _SCHEMA = [
@@ -219,3 +225,52 @@ def test_encrypt_package_rejects_an_empty_password(source_csv, tmp_path):
 
     with pytest.raises(ExcelReaderError):
         encrypt_package(plain, tmp_path / "encrypted.xlsx", "")
+
+
+def _parse_bytes(payload, format, password=None):
+    with open_bytes(payload, format=format, password=password) as workbook:
+        return workbook.parse_typed(_SCHEMA)
+
+
+@pytest.mark.parametrize(
+    ("writer", "frame_module"),
+    [(write_arrow_to_bytes, None), (write_pandas_to_bytes, "pandas"), (write_polars_to_bytes, "polars")],
+)
+def test_frame_writers_to_bytes_round_trip(writer, frame_module):
+    pa = pytest.importorskip("pyarrow")
+    data = {"name": ["widget", "gadget"], "qty": [3, 7]}
+    if frame_module is None:
+        frame = pa.RecordBatch.from_pydict(data)
+    else:
+        frame = pytest.importorskip(frame_module).DataFrame(data)
+
+    result = _parse_bytes(writer(frame, format="xlsx", options=WriteOptions(sheet_name="Vendas")), "xlsx")
+
+    assert list(result.columns[0]) == ["widget", "gadget"]
+    assert list(result.columns[1]) == [3, 7]
+
+
+def test_encrypt_package_bytes_round_trips_without_touching_disk(source_csv):
+    with open_workbook(source_csv) as workbook:
+        table = workbook.parse_typed(_SCHEMA)
+
+    encrypted = encrypt_package_bytes(write_workbook_to_bytes(table, _TYPES, format="xlsx"), "hunter2")
+    result = _parse_bytes(encrypted, "xlsx", password="hunter2")
+
+    assert list(result.columns[0]) == ["widget", "gadget"]
+    assert list(result.columns[1]) == [3, 7]
+    with pytest.raises(PasswordIncorrectError):
+        open_bytes(encrypted, format="xlsx", password="wrong")
+
+
+def test_encrypt_package_bytes_rejects_bytes_that_are_not_a_package():
+    with pytest.raises(ExcelReaderError):
+        encrypt_package_bytes(b"not a zip", "hunter2")
+
+
+def test_encrypt_package_bytes_rejects_an_empty_password(source_csv):
+    with open_workbook(source_csv) as workbook:
+        table = workbook.parse_typed(_SCHEMA)
+
+    with pytest.raises(ExcelReaderError):
+        encrypt_package_bytes(write_workbook_to_bytes(table, _TYPES, format="xlsx"), "")
