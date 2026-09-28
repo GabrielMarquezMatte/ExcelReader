@@ -472,6 +472,8 @@ def _bind(lib: ctypes.CDLL) -> ctypes.CDLL:
     lib.xl_write_typed_to_memory.restype = ctypes.c_int32
     lib.xl_encrypt_package.argtypes = [p_bytes, c_int, p_bytes, c_int, p_bytes, c_int]
     lib.xl_encrypt_package.restype = c_int
+    lib.xl_encrypt_package_to_memory.argtypes = [p_bytes, c_int, p_bytes, c_int, ctypes.POINTER(NativeBuffer)]
+    lib.xl_encrypt_package_to_memory.restype = c_int
     lib.xl_abi_version.argtypes = []
     lib.xl_abi_version.restype = c_int
 
