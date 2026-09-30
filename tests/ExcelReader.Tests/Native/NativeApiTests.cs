@@ -369,6 +369,54 @@ namespace ExcelReader.Tests.Native
         }
 
         [Fact]
+        public void EncryptPackageToMemory_Should_Produce_Bytes_Openable_With_The_Same_Password()
+        {
+            string plainPath = EncryptedFixtures.PlainPath("agile-aes256-sha512.xlsx");
+
+            int status = NativeApi.EncryptPackageToMemory(
+                File.ReadAllBytes(plainPath), Encoding.UTF8.GetBytes(EncryptedFixtures.Password), out byte[]? encrypted);
+
+            Assert.Equal(NativeStatus.Ok, status);
+            Assert.NotNull(encrypted);
+            using IExcelRowReader plain = Excel.Open(plainPath);
+            using IExcelRowReader roundTripped = Excel.Open(
+                encrypted, new ExcelReaderOptions { Password = EncryptedFixtures.Password });
+            using IExcelRowEnumerator plainRows = plain.GetEnumerator();
+            using IExcelRowEnumerator roundTrippedRows = roundTripped.GetEnumerator();
+            Assert.True(plainRows.MoveNext());
+            Assert.True(roundTrippedRows.MoveNext());
+            Assert.Equal(plainRows.Current[0].GetString(), roundTrippedRows.Current[0].GetString());
+        }
+
+        [Fact]
+        public void EncryptPackageToMemory_Should_Fail_When_The_Input_Is_Not_A_Package()
+        {
+            int status = NativeApi.EncryptPackageToMemory("not a zip"u8, Encoding.UTF8.GetBytes(EncryptedFixtures.Password), out byte[]? encrypted);
+
+            Assert.Equal(NativeStatus.Error, status);
+            Assert.Null(encrypted);
+            Assert.NotEmpty(NativeApi.LastErrorText());
+        }
+
+        [Fact]
+        public void EncryptPackageToMemory_Should_Fail_When_The_Password_Is_Empty()
+        {
+            int status = NativeApi.EncryptPackageToMemory(
+                File.ReadAllBytes(EncryptedFixtures.PlainPath("agile-aes256-sha512.xlsx")), ReadOnlySpan<byte>.Empty, out _);
+
+            Assert.Equal(NativeStatus.Error, status);
+        }
+
+        [Fact]
+        public void EncryptPackageToMemory_Should_Reject_A_Password_Past_The_Length_Ceiling()
+        {
+            int status = NativeApi.EncryptPackageToMemory(
+                File.ReadAllBytes(EncryptedFixtures.PlainPath("agile-aes256-sha512.xlsx")), new byte[4097], out _);
+
+            Assert.Equal(NativeStatus.InvalidArgument, status);
+        }
+
+        [Fact]
         public void Should_Report_The_Abi_Version_Declared_In_The_C_Header()
         {
             DirectoryInfo? dir = new(AppContext.BaseDirectory);

@@ -148,6 +148,19 @@ namespace ExcelReader.Native
             return status;
         }
 
+        [UnmanagedCallersOnly(EntryPoint = "xl_next_row_view")]
+        public static int NextRowView(nint handle, NativeRow* outRow)
+        {
+            if (outRow is null)
+            {
+                return NativeStatus.InvalidArgument;
+            }
+
+            int status = ReadApi.NextRowView(Resolve(handle), out NativeRow row);
+            *outRow = row;
+            return status;
+        }
+
         [UnmanagedCallersOnly(EntryPoint = "xl_read_all_blob")]
         public static int ReadAllBlob(nint handle, byte* buffer, int capacity, int* outWritten)
         {
@@ -200,6 +213,19 @@ namespace ExcelReader.Native
             }
 
             int status = ReadApi.InferSchema(Resolve(handle), headerRow, sampleSize, out NativeInferredSchema schema);
+            *outSchema = schema;
+            return status;
+        }
+
+        [UnmanagedCallersOnly(EntryPoint = "xl_infer_schema_ex")]
+        public static int InferSchemaEx(nint handle, int headerRow, int sampleSize, int flags, NativeInferredSchema* outSchema)
+        {
+            if (outSchema is null)
+            {
+                return NativeStatus.InvalidArgument;
+            }
+
+            int status = ReadApi.InferSchema(Resolve(handle), headerRow, sampleSize, flags, out NativeInferredSchema schema);
             *outSchema = schema;
             return status;
         }

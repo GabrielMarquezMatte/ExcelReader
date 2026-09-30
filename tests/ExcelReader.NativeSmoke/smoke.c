@@ -127,12 +127,15 @@ typedef int32_t (*xl_sheet_name_fn)(xl_workbook*, uint8_t*, int32_t, int32_t*);
 typedef int32_t (*xl_sheet_name_at_fn)(xl_workbook*, int32_t, uint8_t*, int32_t, int32_t*);
 typedef int32_t (*xl_is_date1904_fn)(xl_workbook*, int32_t*);
 typedef int32_t (*xl_next_row_fn)(xl_workbook*, uint8_t*, int32_t, int32_t*);
+typedef int32_t (*xl_next_row_view_fn)(xl_workbook*, xl_row*);
 typedef int32_t (*xl_read_all_blob_fn)(xl_workbook*, uint8_t*, int32_t, int32_t*);
 typedef int32_t (*xl_read_all_decoded_fn)(xl_workbook*, xl_rows*);
 typedef void (*xl_free_rows_fn)(xl_rows*);
 typedef int32_t (*xl_parse_typed_fn)(xl_workbook*, const xl_column_spec*, int32_t, int32_t, xl_table*);
+typedef int32_t (*xl_parse_typed_ex_fn)(xl_workbook*, const xl_column_spec*, int32_t, int32_t, int32_t, xl_table*);
 typedef void (*xl_free_table_fn)(xl_table*);
 typedef int32_t (*xl_infer_schema_fn)(xl_workbook*, int32_t, int32_t, xl_inferred_schema*);
+typedef int32_t (*xl_infer_schema_ex_fn)(xl_workbook*, int32_t, int32_t, int32_t, xl_inferred_schema*);
 typedef void (*xl_free_schema_fn)(xl_inferred_schema*);
 typedef const uint8_t* (*xl_last_error_ptr_fn)(int32_t*);
 typedef int32_t (*xl_parse_arrow_fn)(xl_workbook*, const xl_column_spec*, int32_t, int32_t, struct ArrowArray*, struct ArrowSchema*);
@@ -154,12 +157,15 @@ typedef struct
     xl_sheet_name_at_fn sheet_name_at;
     xl_is_date1904_fn is_date1904;
     xl_next_row_fn next_row;
+    xl_next_row_view_fn next_row_view;
     xl_read_all_blob_fn read_all_blob;
     xl_read_all_decoded_fn read_all_decoded;
     xl_free_rows_fn free_rows;
     xl_parse_typed_fn parse_typed;
+    xl_parse_typed_ex_fn parse_typed_ex;
     xl_free_table_fn free_table;
     xl_infer_schema_fn infer_schema;
+    xl_infer_schema_ex_fn infer_schema_ex;
     xl_free_schema_fn free_schema;
     xl_last_error_ptr_fn last_error_ptr;
     xl_parse_arrow_fn parse_arrow;
@@ -188,12 +194,15 @@ static int bind_all(xl_lib_handle lib, api_t* api)
     BIND(sheet_name_at, xl_sheet_name_at_fn, "xl_sheet_name_at");
     BIND(is_date1904, xl_is_date1904_fn, "xl_is_date1904");
     BIND(next_row, xl_next_row_fn, "xl_next_row");
+    BIND(next_row_view, xl_next_row_view_fn, "xl_next_row_view");
     BIND(read_all_blob, xl_read_all_blob_fn, "xl_read_all_blob");
     BIND(read_all_decoded, xl_read_all_decoded_fn, "xl_read_all_decoded");
     BIND(free_rows, xl_free_rows_fn, "xl_free_rows");
     BIND(parse_typed, xl_parse_typed_fn, "xl_parse_typed");
+    BIND(parse_typed_ex, xl_parse_typed_ex_fn, "xl_parse_typed_ex");
     BIND(free_table, xl_free_table_fn, "xl_free_table");
     BIND(infer_schema, xl_infer_schema_fn, "xl_infer_schema");
+    BIND(infer_schema_ex, xl_infer_schema_ex_fn, "xl_infer_schema_ex");
     BIND(free_schema, xl_free_schema_fn, "xl_free_schema");
     BIND(last_error_ptr, xl_last_error_ptr_fn, "xl_last_error_ptr");
     BIND(parse_arrow, xl_parse_arrow_fn, "xl_parse_arrow");
@@ -321,6 +330,37 @@ static int test_next_row_blob_and_growth(const api_t* api, const char* fixture)
         row_count++;
     }
     CHECK(row_count == 101, "RealExcel.xlsb has 101 rows (1 header + 100 data)");
+
+    CHECK(api->close_(handle) == XL_OK, "xl_close must succeed");
+    return 0;
+}
+
+static int test_next_row_view(const api_t* api, const char* fixture)
+{
+    xl_workbook* handle = NULL;
+    CHECK(open_fixture(api, fixture, &handle) == XL_OK, "xl_open_file must succeed");
+
+    CHECK(api->next_row_view(handle, NULL) == XL_INVALID_ARGUMENT, "xl_next_row_view must reject a NULL out_row");
+
+    xl_row row = {0};
+    CHECK(api->next_row_view(handle, &row) == XL_OK, "xl_next_row_view must return the header row");
+    CHECK(row.cell_count == 18 && row.cells != NULL, "RealExcel.xlsb's header row has 18 columns");
+    CHECK(row.cells[0].column == 0 && row.cells[0].type == XL_CELL_STRING, "the first header cell is a string in column 0");
+    CHECK(row.cells[0].value_len == 7 && memcmp(row.cells[0].value, "Coluna1", 7) == 0, "first header cell must read Coluna1");
+    CHECK(row.cells[0].value[7] == 0, "xl_next_row_view values are NUL-terminated");
+
+    int row_count = 1;
+    for (;;)
+    {
+        int32_t status = api->next_row_view(handle, &row);
+        if (status == XL_EOF)
+        {
+            break;
+        }
+        CHECK(status == XL_OK, "xl_next_row_view must succeed for every remaining row of this fixture");
+        row_count++;
+    }
+    CHECK(row_count == 101, "xl_next_row_view must see all 101 rows");
 
     CHECK(api->close_(handle) == XL_OK, "xl_close must succeed");
     return 0;
@@ -656,6 +696,49 @@ static int test_infer_schema_rejects_bad_arguments(const api_t* api, const char*
     return 0;
 }
 
+static int test_infer_schema_parse_text(const api_t* api)
+{
+    const char* csv_path = "smoke_infer_text.csv";
+    FILE* csv = fopen(csv_path, "wb");
+    CHECK(csv != NULL, "cannot write the infer-schema CSV fixture");
+    fputs("n,ratio,flag,day\n1,0.5,true,2024-01-02\n2,1.5,false,2024-01-03\n", csv);
+    fclose(csv);
+
+    xl_workbook* handle = NULL;
+    int32_t status = api->open_file((const uint8_t*)csv_path, (int32_t)strlen(csv_path), XL_FORMAT_CSV, &handle);
+    int32_t typed = XL_ERROR;
+    int32_t rejected = XL_OK;
+    int32_t types[4] = {-1, -1, -1, -1};
+    int32_t column_count = 0;
+    if (status == XL_OK)
+    {
+        xl_inferred_schema schema;
+        memset(&schema, 0, sizeof(schema));
+        typed = api->infer_schema_ex(handle, 1, 100, XL_INFER_PARSE_TEXT, &schema);
+        if (typed == XL_OK)
+        {
+            column_count = schema.column_count;
+            for (int32_t i = 0; i < schema.column_count && i < 4; i++)
+            {
+                types[i] = schema.columns[i].type;
+            }
+            api->free_schema(&schema);
+        }
+        memset(&schema, 0, sizeof(schema));
+        rejected = api->infer_schema_ex(handle, 1, 100, 2, &schema);
+        api->close_(handle);
+    }
+    remove(csv_path);
+
+    CHECK(status == XL_OK, "xl_open_file must open the infer-schema CSV");
+    CHECK(typed == XL_OK, "xl_infer_schema_ex must succeed with XL_INFER_PARSE_TEXT");
+    CHECK(column_count == 4, "the infer-schema CSV has 4 columns");
+    CHECK(types[0] == XL_T_I64 && types[1] == XL_T_F64 && types[2] == XL_T_BOOL && types[3] == XL_T_DATE,
+          "xl_infer_schema_ex must type the CSV's columns as I64, F64, BOOL, DATE");
+    CHECK(rejected == XL_INVALID_ARGUMENT, "xl_infer_schema_ex must reject an unknown flag bit");
+    return 0;
+}
+
 static int test_double_close_is_rejected(const api_t* api, const char* fixture)
 {
     xl_workbook* handle = NULL;
@@ -976,6 +1059,72 @@ static int test_csv_aggregate_file(xl_lib_handle lib)
     return status;
 }
 
+static int test_parse_typed_ex(const api_t* api, const char* fixture)
+{
+    xl_workbook* handle = NULL;
+    CHECK(open_fixture(api, fixture, &handle) == XL_OK, "xl_open_file must succeed");
+
+    xl_column_spec specs[3];
+    const uint8_t* name_ptrs[3];
+    int32_t name_lens[3];
+    build_specs(specs, name_ptrs, name_lens);
+
+    xl_table table;
+    memset(&table, 0, sizeof(table));
+    CHECK(api->parse_typed_ex(handle, specs, 3, 1, 0, NULL) == XL_INVALID_ARGUMENT,
+          "xl_parse_typed_ex must reject a NULL out_table");
+    CHECK(api->parse_typed_ex(handle, specs, 3, 1, -1, &table) == XL_INVALID_ARGUMENT,
+          "xl_parse_typed_ex must reject a negative degree_of_parallelism");
+    CHECK(api->parse_typed_ex(handle, specs, 3, 1, 0, &table) == XL_OK,
+          "xl_parse_typed_ex must read a non-CSV workbook sequentially");
+    CHECK(table.row_count == 100, "xl_parse_typed_ex must return all 100 data rows");
+    api->free_table(&table);
+
+    CHECK(api->close_(handle) == XL_OK, "xl_close must succeed");
+    return 0;
+}
+
+static int test_parse_typed_ex_csv(const api_t* api)
+{
+    const char* csv_path = "smoke_parallel_typed.csv";
+    CHECK(write_csv_fixture(csv_path, SMOKE_CSV_ROW_COUNT) == 0, "cannot write the parallel typed fixture");
+
+    xl_workbook* handle = NULL;
+    int32_t status = api->open_file((const uint8_t*)csv_path, (int32_t)strlen(csv_path), XL_FORMAT_CSV, &handle);
+    int64_t rows = -1;
+    int64_t total = 0;
+    if (status == XL_OK)
+    {
+        xl_column_spec spec;
+        const uint8_t* name_ptr;
+        int32_t name_len;
+        memset(&spec, 0, sizeof(spec));
+        set_spec_name1(&spec, &name_ptr, &name_len, "amount");
+        spec.type = XL_T_I64;
+
+        xl_table table;
+        memset(&table, 0, sizeof(table));
+        status = api->parse_typed_ex(handle, &spec, 1, 1, 0, &table);
+        if (status == XL_OK)
+        {
+            rows = table.row_count;
+            const int64_t* values = (const int64_t*)table.columns[0].values;
+            for (int64_t i = 0; i < rows; i++)
+            {
+                total += values[i];
+            }
+            api->free_table(&table);
+        }
+        api->close_(handle);
+    }
+    remove(csv_path);
+
+    CHECK(status == XL_OK, "xl_parse_typed_ex must parse a CSV handle");
+    CHECK(rows == SMOKE_CSV_ROW_COUNT, "xl_parse_typed_ex must return every CSV data row");
+    CHECK(total == SMOKE_CSV_EXPECTED_TOTAL, "xl_parse_typed_ex must return every CSV value exactly once");
+    return 0;
+}
+
 static int smoke_csv_aggregate_quoted(xl_lib_handle lib, const char* csv_path, int32_t records)
 {
     xl_csv_aggregate_file_fn aggregate =
@@ -1055,13 +1204,17 @@ int main(int argc, char** argv)
     failures += test_open_missing_file_reports_an_error(&api);
     failures += test_sheets_and_flags(&api, fixture_path);
     failures += test_next_row_blob_and_growth(&api, fixture_path);
+    failures += test_next_row_view(&api, fixture_path);
     failures += test_read_all_blob_and_decoded(&api, fixture_path);
     failures += test_open_file_ex(&api, fixture_path);
     failures += test_parse_rejects_hostile_counts(&api, fixture_path);
     failures += test_parse_typed_and_cursor_independence(&api, fixture_path);
     failures += test_parse_arrow(&api, fixture_path);
+    failures += test_parse_typed_ex(&api, fixture_path);
+    failures += test_parse_typed_ex_csv(&api);
     failures += test_infer_schema(&api, fixture_path);
     failures += test_infer_schema_rejects_bad_arguments(&api, fixture_path);
+    failures += test_infer_schema_parse_text(&api);
     failures += test_double_close_is_rejected(&api, fixture_path);
     failures += test_write_typed(&api);
     failures += test_csv_aggregate_file(lib);

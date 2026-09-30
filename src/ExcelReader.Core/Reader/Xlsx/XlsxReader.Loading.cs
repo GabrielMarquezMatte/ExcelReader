@@ -174,6 +174,13 @@ namespace ExcelReader.Core.Reader.Xlsx
                     break;
                 }
                 io.Pos = si;
+                int plainEnd = TryAppendPlainShared(io, tok, ref flat);
+                if (plainEnd >= 0)
+                {
+                    AddSharedOffset(ref offsets, ref offsetCount, flat);
+                    io.Pos = plainEnd;
+                    continue;
+                }
                 (int open, int close) = EnsureSiBuffered(io, stream, tok.SiClose);
                 if (open < 0)
                 {
@@ -219,6 +226,13 @@ namespace ExcelReader.Core.Reader.Xlsx
                     break;
                 }
                 io.Pos = si;
+                int plainEnd = TryAppendPlainShared(io, tok, ref flat);
+                if (plainEnd >= 0)
+                {
+                    AddSharedOffset(ref offsets, ref offsetCount, flat);
+                    io.Pos = plainEnd;
+                    continue;
+                }
                 (int open, int close) = await EnsureSiBufferedAsync(io, stream, tok.SiClose, ct).ConfigureAwait(false);
                 if (open < 0)
                 {
@@ -233,6 +247,25 @@ namespace ExcelReader.Core.Reader.Xlsx
                 Array.Resize(ref offsets, offsetCount);
             }
             return offsets;
+        }
+
+        private int TryAppendPlainShared(BufferedStreamCursor io, SharedStringTokens tok, ref int flat)
+        {
+            ReadOnlySpan<byte> window = io.Buf.AsSpan(io.Pos, io.Len - io.Pos);
+            if (!tok.Unprefixed || !window.StartsWith("<si><t>"u8))
+            {
+                return -1;
+            }
+            ReadOnlySpan<byte> text = window[7..];
+            int rel = text.IndexOfAny((byte)'<', (byte)'&');
+            if (rel < 0 || !text[rel..].StartsWith("</t></si>"u8))
+            {
+                return -1;
+            }
+            EnsureSharedFlat(flat + rel, flat);
+            text[..rel].CopyTo(_sharedFlat.AsSpan(flat));
+            flat += rel;
+            return io.Pos + 7 + rel + 9;
         }
 
         private int AppendSharedEntry(BufferedStreamCursor io, SharedStringTokens tok, int open, int close, int flat, out int nextPos)

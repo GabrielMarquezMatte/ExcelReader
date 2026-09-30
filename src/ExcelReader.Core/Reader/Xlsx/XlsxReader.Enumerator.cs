@@ -4,6 +4,7 @@ using System.Globalization;
 using System.IO.Compression;
 using System.Runtime.CompilerServices;
 using ExcelReader.Core.Reader.Internal;
+using ExcelReader.Core.Writer.Internal;
 
 namespace ExcelReader.Core.Reader.Xlsx
 {
@@ -355,13 +356,22 @@ namespace ExcelReader.Core.Reader.Xlsx
 
             private int ParseCellSpan(byte[] buf, int len, int p)
             {
-                int gt = IndexOfBounded(buf, len, p, (byte)'>');
-                if (gt < 0)
+                if (!TryScanCanonicalCellTag(buf, len, p, out int gt, out int col, out int style, out Kind kind))
                 {
-                    return len;
+                    gt = IndexOfBounded(buf, len, p, (byte)'>');
+                    if (gt < 0)
+                    {
+                        return len;
+                    }
+                    ScanCellTagGeneric(buf.AsSpan(p, gt - p + 1), out col, out style, out kind);
                 }
-                var header = ReadCellOpenTagSpan(buf, ref p, gt);
-                if (header.SelfClose)
+                if (col < 0)
+                {
+                    col = _nextCol;
+                }
+                _nextCol = col + 1;
+                p = gt + 1;
+                if (buf[gt - 1] == (byte)'/')
                 {
                     return p;
                 }
@@ -369,19 +379,35 @@ namespace ExcelReader.Core.Reader.Xlsx
                 if (buf.AsSpan(p, Math.Min(3, len - p)).StartsWith("<v>"u8))
                 {
                     int valueStart = p + 3;
+                    if (kind == Kind.Shared)
+                    {
+                        int end = TryEmitSharedIndex(buf, len, valueStart, col, style);
+                        if (end >= 0)
+                        {
+                            return end;
+                        }
+                    }
                     int lt = IndexOfBounded(buf, len, valueStart, (byte)'<');
                     if (lt >= 0 && buf.AsSpan(lt, Math.Min(8, len - lt)).StartsWith("</v></c>"u8))
                     {
                         ReadOnlySpan<byte> value = buf.AsSpan(valueStart, lt - valueStart);
-                        if (header.Kind == Kind.Shared)
+                        if (kind == Kind.Shared)
                         {
-                            EmitShared(value, header.Col, header.Style);
+                            EmitShared(value, col, style);
                         }
                         else
                         {
-                            EmitScalarValueFast(header.Kind, value, valueStart, header.Col, header.Style);
+                            EmitScalarValueFast(kind, value, valueStart, col, style);
                         }
                         return lt + 8;
+                    }
+                }
+                else if (kind == Kind.Inline)
+                {
+                    int end = TryEmitPlainInline(buf, len, p, col, style);
+                    if (end >= 0)
+                    {
+                        return end;
                     }
                 }
 
@@ -391,8 +417,47 @@ namespace ExcelReader.Core.Reader.Xlsx
                 {
                     return len;
                 }
-                EmitCell(header.Kind, buf.AsSpan(p, cEnd - p), header.Col, header.Style);
+                EmitCell(kind, buf.AsSpan(p, cEnd - p), col, style);
                 return cEnd + cClose.Length;
+            }
+
+            private int TryEmitSharedIndex(byte[] buf, int len, int valueStart, int col, int style)
+            {
+                int i = valueStart;
+                int index = 0;
+                while (i < len && (uint)(buf[i] - '0') <= 9)
+                {
+                    index = (index * 10) + (buf[i] - '0');
+                    i++;
+                }
+                if (i - valueStart is 0 or > 9 || !buf.AsSpan(i, Math.Min(8, len - i)).StartsWith("</v></c>"u8))
+                {
+                    return -1;
+                }
+                var (start, length, sharedIndex) = WorkbookLookups.SharedAt(_sharedOffsets, index);
+                _acc.Add(col, start, length, CellType.ExcelString, style, CellValueSource.Shared, sharedIndex: sharedIndex);
+                return i + 8;
+            }
+
+            private int TryEmitPlainInline(byte[] buf, int len, int p, int col, int style)
+            {
+                if (!buf.AsSpan(p, Math.Min(7, len - p)).StartsWith("<is><t>"u8))
+                {
+                    return -1;
+                }
+                int textStart = p + 7;
+                int rel = buf.AsSpan(textStart, len - textStart).IndexOfAny((byte)'<', (byte)'&');
+                if (rel < 0)
+                {
+                    return -1;
+                }
+                int lt = textStart + rel;
+                if (!buf.AsSpan(lt, Math.Min(13, len - lt)).StartsWith("</t></is></c>"u8))
+                {
+                    return -1;
+                }
+                _acc.Add(col, textStart, rel, CellType.ExcelString, style, CellValueSource.RowBuffer);
+                return lt + 13;
             }
 
             private enum HeadKind { End, Row, Skip }
@@ -459,27 +524,6 @@ namespace ExcelReader.Core.Reader.Xlsx
                 return cellHead.StartsWith("<c"u8) && (cellHead.Length < 3 || IsBoundary(cellHead[2]));
             }
 
-            private readonly record struct CellHeader(int Col, int Style, Kind Kind, bool SelfClose);
-
-            [MethodImpl(MethodImplOptions.AggressiveInlining)]
-            private CellHeader ReadCellOpenTagSpan(byte[] buf, ref int p, int gt)
-            {
-                var open = buf.AsSpan(p, gt - p + 1);
-                ScanCellAttributes(open, out var rRef, out var sVal, out var tVal);
-
-                int col = XlsxXml.ColumnIndex(rRef);
-                if (col < 0)
-                {
-                    col = _nextCol;
-                }
-                _nextCol = col + 1;
-                int style = XlsxXml.ParseIntOr(sVal, 0);
-                var kind = ClassifyKind(tVal);
-                bool selfClose = buf[gt - 1] == '/';
-                p = gt + 1;
-                return new CellHeader(col, style, kind, selfClose);
-            }
-
             private ValueTask<bool> BeginRowAsync()
             {
                 int rel = _buf.AsSpan(_pos, _len - _pos).IndexOf((byte)'>');
@@ -516,7 +560,99 @@ namespace ExcelReader.Core.Reader.Xlsx
                 return true;
             }
 
+            // Accepts only ` r="A1"`, ` s="12"`, ` t="s"` (any order, one space, double quotes); anything else goes generic.
+            // Inlined so col/style/kind/gt stay in registers instead of five out-params through the stack per cell.
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
+            private static bool TryScanCanonicalCellTag(byte[] buf, int len, int i, out int gt, out int col, out int style, out Kind kind)
+            {
+                gt = -1;
+                col = -1;
+                style = 0;
+                kind = Kind.Number;
+                i += 2;
+                while (true)
+                {
+                    if (len - i < 6)
+                    {
+                        return false;
+                    }
+                    byte b = buf[i];
+                    if (b == (byte)'>')
+                    {
+                        gt = i;
+                        return true;
+                    }
+                    if (b == (byte)'/')
+                    {
+                        gt = i + 1;
+                        return buf[gt] == (byte)'>';
+                    }
+                    if (b != (byte)' ' || buf[i + 2] != (byte)'=' || buf[i + 3] != (byte)'"')
+                    {
+                        return false;
+                    }
+                    byte name = buf[i + 1];
+                    i += 4;
+                    int valueStart = i;
+                    switch (name)
+                    {
+                        case (byte)'r':
+                            int letters = 0;
+                            while (i < len && (uint)(buf[i] - 'A') <= 25)
+                            {
+                                letters = (letters * 26) + (buf[i] - 'A' + 1);
+                                i++;
+                            }
+                            if (i - valueStart is 0 or > 3)
+                            {
+                                return false;
+                            }
+                            col = letters - 1;
+                            while (i < len && (uint)(buf[i] - '0') <= 9)
+                            {
+                                i++;
+                            }
+                            break;
+                        case (byte)'s':
+                            int value = 0;
+                            while (i < len && (uint)(buf[i] - '0') <= 9)
+                            {
+                                value = (value * 10) + (buf[i] - '0');
+                                i++;
+                            }
+                            if (i - valueStart is 0 or > 9)
+                            {
+                                return false;
+                            }
+                            style = value;
+                            break;
+                        case (byte)'t':
+                            while (i < len && buf[i] != (byte)'"')
+                            {
+                                i++;
+                            }
+                            kind = ClassifyKind(buf.AsSpan(valueStart, i - valueStart));
+                            break;
+                        default:
+                            return false;
+                    }
+                    if (i >= len || buf[i] != (byte)'"')
+                    {
+                        return false;
+                    }
+                    i++;
+                }
+            }
+
+            [MethodImpl(MethodImplOptions.NoInlining)]
+            private static void ScanCellTagGeneric(ReadOnlySpan<byte> open, out int col, out int style, out Kind kind)
+            {
+                ScanCellAttributes(open, out var rRef, out var sVal, out var tVal);
+                col = XlsxXml.ColumnIndex(rRef);
+                style = XlsxXml.ParseIntOr(sVal, 0);
+                kind = ClassifyKind(tVal);
+            }
+
             private static void ScanCellAttributes(
                 ReadOnlySpan<byte> open,
                 out ReadOnlySpan<byte> rRef,
@@ -652,7 +788,7 @@ namespace ExcelReader.Core.Reader.Xlsx
                 }
                 AppendRaw(v);
                 double number = 0;
-                bool hasNumber = kind == Kind.Number && FastDouble.TryParse(v, out number);
+                bool hasNumber = kind == Kind.Number && FastDouble.TryParseLossless(v, out number);
                 _acc.Add(col, vStart, _acc.ValueLength - vStart, cellType, style, CellValueSource.RowValues,
                     number: number, hasNumber: hasNumber);
             }
@@ -672,7 +808,7 @@ namespace ExcelReader.Core.Reader.Xlsx
                     _ => WorkbookLookups.IsDateStyle(_styleIsDate, style) ? CellType.Date : CellType.Number,
                 };
                 double number = 0;
-                bool hasNumber = kind == Kind.Number && FastDouble.TryParse(v, out number);
+                bool hasNumber = kind == Kind.Number && FastDouble.TryParseLossless(v, out number);
                 _acc.Add(col, valueStart, v.Length, cellType, style, CellValueSource.RowBuffer,
                     number: number, hasNumber: hasNumber);
             }
@@ -685,7 +821,7 @@ namespace ExcelReader.Core.Reader.Xlsx
                     double serial = dt.ToOADate();
                     int start = _acc.ValueLength;
                     Span<byte> dst = _acc.ReserveValueSpan(32);
-                    Utf8Formatter.TryFormat(serial, dst, out int written);
+                    CellFormatter.TryFormatDouble(serial, dst, out int written);
                     _acc.Advance(written);
                     _acc.Add(col, start, written, CellType.Date, style, CellValueSource.RowValues, number: serial, hasNumber: true);
                     return;

@@ -708,3 +708,55 @@ def test_to_pandas_splits_blocks_per_column(batched_csv):
     with open_workbook(batched_csv) as workbook:
         frame = workbook.to_pandas(schema, batch_size=8)
     assert frame._mgr.nblocks == 3
+
+
+_FIXTURE_CSV = Path(__file__).resolve().parents[2] / "tests" / "ExcelReader.Benchmarks" / "Data" / "65K_Records_Data.csv"
+
+_FIXTURE_SCHEMA = [
+    ColumnSpec(ColumnType.STRING, name="Region"),
+    ColumnSpec(ColumnType.I64, name="Order ID"),
+    ColumnSpec(ColumnType.DATE, name="Order Date"),
+    ColumnSpec(ColumnType.F64, name="Total Profit"),
+]
+
+
+def test_parse_typed_in_parallel_matches_the_sequential_table():
+    with open_workbook(_FIXTURE_CSV) as workbook:
+        sequential = workbook.parse_typed(_FIXTURE_SCHEMA)
+        parallel = workbook.parse_typed(_FIXTURE_SCHEMA, parallelism=0)
+
+    assert parallel.row_count == sequential.row_count == 65_535
+    for expected, actual in zip(sequential.columns, parallel.columns):
+        assert list(actual) == list(expected)
+    assert parallel.validity == sequential.validity
+
+
+def test_to_polars_in_parallel_matches_the_streamed_frame():
+    pytest.importorskip("polars")
+    with open_workbook(_FIXTURE_CSV) as workbook:
+        streamed = workbook.to_polars(_FIXTURE_SCHEMA)
+        parallel = workbook.to_polars(_FIXTURE_SCHEMA, parallelism=0)
+
+    assert parallel.equals(streamed)
+
+
+def test_parse_typed_rejects_a_negative_parallelism(typed_csv):
+    with open_workbook(typed_csv) as workbook, pytest.raises(ExcelReaderError):
+        workbook.parse_typed(_TYPED_SCHEMA, parallelism=-1)
+
+
+def test_infer_schema_parse_text_types_a_csv():
+    with open_workbook(_FIXTURE_CSV) as workbook:
+        schema = workbook.infer_schema(parse_text=True)
+        table = workbook.parse_typed(schema)
+
+    T = ColumnType
+    assert [spec.type for spec in schema] == [T.STRING] * 5 + [T.DATE, T.I64, T.DATE, T.I64] + [T.F64] * 5
+    assert table.row_count == 65_535
+
+
+def test_infer_schema_without_parse_text_keeps_csv_columns_as_strings():
+    with open_workbook(_FIXTURE_CSV) as workbook:
+        schema = workbook.infer_schema()
+
+    assert {spec.type for spec in schema} == {ColumnType.STRING}

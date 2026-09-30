@@ -1,5 +1,8 @@
+using System.Buffers;
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
+using System.Runtime.CompilerServices;
+using System.Runtime.ExceptionServices;
 using System.Runtime.InteropServices;
 using ExcelReader.Core.Parser;
 using ExcelReader.Core.Parser.Internal;
@@ -12,9 +15,13 @@ namespace ExcelReader.Native.Typed
     {
         internal static int ParseTyped(NativeHandle? handle, NativeColumnSpec[] specs, int headerRow, out NativeTable table)
         {
+            return ParseTypedTable(handle, specs, headerRow, 1, "xl_parse_typed", out table);
+        }
+
+        private static int ParseSequential(NativeHandle? handle, NativeColumnSpec[] specs, int headerRow, string cause, out NativeTable table)
+        {
             table = default;
-            int status = TypedParseSession.OpenTransient(handle, specs, headerRow, "xl_parse_typed",
-                out TypedParseSession? session);
+            int status = TypedParseSession.OpenTransient(handle, specs, headerRow, cause, out TypedParseSession? session);
             if (status != NativeStatus.Ok)
             {
                 return status;
@@ -42,12 +49,7 @@ namespace ExcelReader.Native.Typed
 
         internal static NativeTable BuildEmptyTable(NativeColumnSpec[] specs)
         {
-            ColumnBuilder[] builders = new ColumnBuilder[specs.Length];
-            for (int i = 0; i < specs.Length; i++)
-            {
-                builders[i] = new ColumnBuilder(specs[i].Type, specs[i].Nullable);
-            }
-            return BuildTable(builders);
+            return BuildTable(NewBuilders(specs));
         }
 
         private static string DescribeFailedColumn(NativeColumnSpec[] specs, int failedColumn)
@@ -96,11 +98,33 @@ namespace ExcelReader.Native.Typed
             FreeBlock(column.Data);
         }
 
-        [ThreadStatic]
-        internal static Func<int, IntPtr>? AllocOverride;
+        // AsyncLocal, not ThreadStatic: a test's hooks must follow a parallel build onto pool threads.
+        private static readonly AsyncLocal<Func<int, IntPtr>?> AllocOverrideLocal = new();
+        private static readonly AsyncLocal<Action<IntPtr>?> FreeOverrideLocal = new();
 
-        [ThreadStatic]
-        internal static Action<IntPtr>? FreeOverride;
+        internal static Func<int, IntPtr>? AllocOverride
+        {
+            get
+            {
+                return AllocOverrideLocal.Value;
+            }
+            set
+            {
+                AllocOverrideLocal.Value = value;
+            }
+        }
+
+        internal static Action<IntPtr>? FreeOverride
+        {
+            get
+            {
+                return FreeOverrideLocal.Value;
+            }
+            set
+            {
+                FreeOverrideLocal.Value = value;
+            }
+        }
 
         private static IntPtr AllocBlock(int byteLength)
         {
@@ -243,32 +267,59 @@ namespace ExcelReader.Native.Typed
 
         private static NativeTable BuildTable(ColumnBuilder[] builders)
         {
-            int columnCount = builders.Length;
-            long rowCount = columnCount > 0 ? builders[0].RowCount : 0;
+            return BuildTable([builders], 1);
+        }
+
+        private static NativeTable BuildTable(ColumnBuilder[][] parts, int degreeOfParallelism)
+        {
+            int columnCount = parts[0].Length;
+            long rowCount = 0;
+            if (columnCount > 0)
+            {
+                foreach (ColumnBuilder[] part in parts)
+                {
+                    rowCount += part[0].RowCount;
+                }
+            }
             IntPtr columnsBlock = AllocBlock(checked(columnCount * sizeof(NativeColumn)));
-            NativeColumn* columns = (NativeColumn*)columnsBlock;
-            int built = 0;
+            new Span<NativeColumn>((void*)columnsBlock, columnCount).Clear();
+            NativeTable table = new() { ColumnCount = columnCount, RowCount = rowCount, Columns = columnsBlock };
             try
             {
-                for (; built < columnCount; built++)
+                if (degreeOfParallelism == 1)
                 {
-                    columns[built] = builders[built].Build();
+                    for (int c = 0; c < columnCount; c++)
+                    {
+                        ((NativeColumn*)columnsBlock)[c] = BuildColumn(parts, c);
+                    }
                 }
+                else
+                {
+                    Parallel.For(0, columnCount, new ParallelOptions { MaxDegreeOfParallelism = degreeOfParallelism },
+                        c => ((NativeColumn*)columnsBlock)[c] = BuildColumn(parts, c));
+                }
+            }
+            catch (AggregateException exception) when (exception.InnerExceptions.Count == 1)
+            {
+                FreeTable(ref table);
+                ExceptionDispatchInfo.Throw(exception.InnerExceptions[0]);
             }
             catch
             {
-                NativeTable partial = new() { ColumnCount = built, RowCount = rowCount, Columns = columnsBlock };
-                FreeTable(ref partial);
+                FreeTable(ref table);
                 throw;
             }
-            return new NativeTable { ColumnCount = columnCount, RowCount = rowCount, Columns = columnsBlock };
+            return table;
         }
 
-        private static void CopyToNativeBlock<T>(ChunkedBuffer<T> source, out IntPtr block) where T : unmanaged
+        private static NativeColumn BuildColumn(ColumnBuilder[][] parts, int index)
         {
-            int byteLength = source.ByteLength;
-            block = AllocBlock(Math.Max(byteLength, 1));
-            source.CopyTo(new Span<byte>((void*)block, byteLength));
+            ColumnBuilder[] column = new ColumnBuilder[parts.Length];
+            for (int p = 0; p < parts.Length; p++)
+            {
+                column[p] = parts[p][index];
+            }
+            return ColumnBuilder.Build(column);
         }
 
         internal static IntPtr PackBitsLsbFirst(ReadOnlySpan<byte> flags)
@@ -320,14 +371,22 @@ namespace ExcelReader.Native.Typed
                 }
             }
 
+            private int Type
+            {
+                get
+                {
+                    return type;
+                }
+            }
+
             internal bool AppendFrom(in Cell cell, bool isDate1904)
             {
                 return type switch
                 {
                     NativeColumnType.String => AppendString(in cell),
-                    NativeColumnType.Int64 => Append(_longs, ExcelCellReaders.Parsable(in cell, isDate1904, CultureInfo.InvariantCulture, out long i64), i64),
-                    NativeColumnType.Float64 => Append(_doubles, ExcelCellReaders.Parsable(in cell, isDate1904, CultureInfo.InvariantCulture, out double f64), f64),
-                    NativeColumnType.Bool => Append(_bools, ColumnParserFactory.ReadBool(in cell, isDate1904, CultureInfo.InvariantCulture, out bool flag), (byte)(flag ? 1 : 0)),
+                    NativeColumnType.Int64 => AppendInt64(in cell, isDate1904),
+                    NativeColumnType.Float64 => AppendFloat64(in cell, isDate1904),
+                    NativeColumnType.Bool => AppendBool(in cell, isDate1904),
                     NativeColumnType.Date => AppendDate(in cell, isDate1904),
                     NativeColumnType.Time => AppendTime(in cell, isDate1904),
                     _ => AppendTimestamp(in cell, isDate1904),
@@ -360,6 +419,26 @@ namespace ExcelReader.Native.Typed
                 return true;
             }
 
+            // Each numeric type gets its own method so AppendFrom stays a small dispatcher: with the
+            // inlined double parser in it, every cell of every type paid its prologue.
+            [MethodImpl(MethodImplOptions.NoInlining)]
+            private bool AppendInt64(in Cell cell, bool isDate1904)
+            {
+                return Append(_longs, ExcelCellReaders.Parsable(in cell, isDate1904, CultureInfo.InvariantCulture, out long value), value);
+            }
+
+            [MethodImpl(MethodImplOptions.NoInlining)]
+            private bool AppendFloat64(in Cell cell, bool isDate1904)
+            {
+                return Append(_doubles, ExcelCellReaders.Parsable(in cell, isDate1904, CultureInfo.InvariantCulture, out double value), value);
+            }
+
+            [MethodImpl(MethodImplOptions.NoInlining)]
+            private bool AppendBool(in Cell cell, bool isDate1904)
+            {
+                return Append(_bools, ColumnParserFactory.ReadBool(in cell, isDate1904, CultureInfo.InvariantCulture, out bool flag), (byte)(flag ? 1 : 0));
+            }
+
             private static readonly int UnixEpochDayNumber = new DateOnly(1970, 1, 1).DayNumber;
 
             private bool AppendDate(in Cell cell, bool isDate1904)
@@ -383,6 +462,7 @@ namespace ExcelReader.Native.Typed
                 return Append(_longs, ok, (value - DateTime.UnixEpoch).Ticks / 10);
             }
 
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
             private bool Append<T>(ChunkedBuffer<T> target, bool converted, T value) where T : unmanaged
             {
                 if (!converted && !nullable)
@@ -399,15 +479,22 @@ namespace ExcelReader.Native.Typed
             /// ships no bitmap, so writing one bit per cell up to then is wasted work. The first null
             /// backfills every earlier row as valid.
             /// </summary>
+            [MethodImpl(MethodImplOptions.AggressiveInlining)]
             private void RecordValidity(bool valid)
+            {
+                if (!_anyNull && valid)
+                {
+                    _rowCount++;
+                    return;
+                }
+                RecordValiditySlow(valid);
+            }
+
+            [MethodImpl(MethodImplOptions.NoInlining)]
+            private void RecordValiditySlow(bool valid)
             {
                 if (!_anyNull)
                 {
-                    if (valid)
-                    {
-                        _rowCount++;
-                        return;
-                    }
                     _anyNull = true;
                     for (int i = 0; i < _rowCount >> 3; i++)
                     {
@@ -429,33 +516,41 @@ namespace ExcelReader.Native.Typed
                 _rowCount++;
             }
 
-            internal NativeColumn Build()
+            internal static NativeColumn Build(ReadOnlySpan<ColumnBuilder> parts)
             {
-                NativeColumn column = new() { Type = type, Length = RowCount };
+                int type = parts[0].Type;
+                long rows = 0;
+                bool anyNull = false;
+                foreach (ColumnBuilder part in parts)
+                {
+                    rows += part._rowCount;
+                    anyNull |= part._anyNull;
+                }
+                NativeColumn column = new() { Type = type, Length = rows };
                 try
                 {
-                    if (_anyNull)
+                    if (anyNull)
                     {
-                        CopyToNativeBlock(_validity, out column.Validity);
+                        column.Validity = ConcatValidity(parts, rows);
                     }
                     switch (type)
                     {
                         case NativeColumnType.String:
-                            CopyToNativeBlock(_stringOffsets, out column.Values);
-                            CopyToNativeBlock(_stringData, out column.Data);
-                            column.DataLen = _stringData.ByteLength;
+                            column.Values = ConcatStringOffsets(parts);
+                            column.Data = Concat(parts, static part => part._stringData, out int dataLength);
+                            column.DataLen = dataLength;
                             break;
                         case NativeColumnType.Bool:
-                            CopyToNativeBlock(_bools, out column.Values);
+                            column.Values = Concat(parts, static part => part._bools, out _);
                             break;
                         case NativeColumnType.Float64:
-                            CopyToNativeBlock(_doubles, out column.Values);
+                            column.Values = Concat(parts, static part => part._doubles, out _);
                             break;
                         case NativeColumnType.Date:
-                            CopyToNativeBlock(_ints, out column.Values);
+                            column.Values = Concat(parts, static part => part._ints, out _);
                             break;
                         default:
-                            CopyToNativeBlock(_longs, out column.Values);
+                            column.Values = Concat(parts, static part => part._longs, out _);
                             break;
                     }
                 }
@@ -465,6 +560,119 @@ namespace ExcelReader.Native.Typed
                     throw;
                 }
                 return column;
+            }
+
+            private static IntPtr Concat<T>(ReadOnlySpan<ColumnBuilder> parts, Func<ColumnBuilder, ChunkedBuffer<T>> select, out int byteLength)
+                where T : unmanaged
+            {
+                byteLength = 0;
+                foreach (ColumnBuilder part in parts)
+                {
+                    byteLength = checked(byteLength + select(part).ByteLength);
+                }
+                IntPtr block = AllocBlock(Math.Max(byteLength, 1));
+                int offset = 0;
+                foreach (ColumnBuilder part in parts)
+                {
+                    ChunkedBuffer<T> buffer = select(part);
+                    buffer.CopyTo(new Span<byte>((byte*)block + offset, buffer.ByteLength));
+                    offset += buffer.ByteLength;
+                }
+                return block;
+            }
+
+            private static IntPtr ConcatStringOffsets(ReadOnlySpan<ColumnBuilder> parts)
+            {
+                int count = 1;
+                foreach (ColumnBuilder part in parts)
+                {
+                    count = checked(count + part._stringOffsets.Count - 1);
+                }
+                IntPtr block = AllocBlock(checked(count * sizeof(int)));
+                Span<int> offsets = new((void*)block, count);
+                offsets[0] = 0;
+                int at = 0;
+                foreach (ColumnBuilder part in parts)
+                {
+                    int baseOffset = offsets[at];
+                    Span<int> slot = offsets.Slice(at, part._stringOffsets.Count);
+                    part._stringOffsets.CopyTo(MemoryMarshal.AsBytes(slot));
+                    if (baseOffset != 0)
+                    {
+                        foreach (ref int offset in slot)
+                        {
+                            offset += baseOffset;
+                        }
+                    }
+                    at += slot.Length - 1;
+                }
+                return block;
+            }
+
+            private static IntPtr ConcatValidity(ReadOnlySpan<ColumnBuilder> parts, long rows)
+            {
+                int byteLength = checked((int)((rows + 7) / 8));
+                IntPtr block = AllocBlock(Math.Max(byteLength, 1));
+                Span<byte> bits = new((void*)block, byteLength);
+                bits.Clear();
+                long at = 0;
+                foreach (ColumnBuilder part in parts)
+                {
+                    if (part._anyNull)
+                    {
+                        OrBits(bits, at, part._validity);
+                    }
+                    else
+                    {
+                        SetBits(bits, at, part._rowCount);
+                    }
+                    at += part._rowCount;
+                }
+                return block;
+            }
+
+            private static void OrBits(Span<byte> bits, long at, ChunkedBuffer<byte> validity)
+            {
+                int first = (int)(at >> 3);
+                int shift = (int)(at & 7);
+                if (shift == 0)
+                {
+                    validity.CopyTo(bits[first..]);
+                    return;
+                }
+                int count = validity.Count;
+                byte[] source = ArrayPool<byte>.Shared.Rent(count);
+                try
+                {
+                    validity.CopyTo(source);
+                    for (int i = 0; i < count; i++)
+                    {
+                        bits[first + i] |= (byte)(source[i] << shift);
+                        if (first + i + 1 < bits.Length)
+                        {
+                            bits[first + i + 1] |= (byte)(source[i] >> (8 - shift));
+                        }
+                    }
+                }
+                finally
+                {
+                    ArrayPool<byte>.Shared.Return(source);
+                }
+            }
+
+            private static void SetBits(Span<byte> bits, long start, int count)
+            {
+                long end = start + count;
+                for (; start < end && (start & 7) != 0; start++)
+                {
+                    bits[(int)(start >> 3)] |= (byte)(1 << (int)(start & 7));
+                }
+                int fullBytes = (int)((end - start) >> 3);
+                bits.Slice((int)(start >> 3), fullBytes).Fill(0xFF);
+                for (start += (long)fullBytes << 3; start < end; start++)
+                {
+                    bits[(int)(start >> 3)] |= (byte)(1 << (int)(start & 7));
+                }
             }
         }
     }

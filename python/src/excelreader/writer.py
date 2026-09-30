@@ -285,10 +285,8 @@ def _column_from_pylist(values: list[Any], column_type: ColumnType, row_count: i
     return data_array, (bytes(validity) if has_null else None)
 
 
-def write_arrow(path: str | Path, batch: Any, **kwargs: Any) -> None:
-    """Writes a `pyarrow.RecordBatch` (or `Table`) to `path`.
-
-    Converts through Python lists rather than borrowing Arrow's buffers directly: Arrow's null
+def _table_from_arrow(batch: Any) -> tuple[TypedTable, list[ColumnType]]:
+    """Converts through Python lists rather than borrowing Arrow's buffers directly: Arrow's null
     representation, offset conventions and chunking are the producer's choice, and reproducing all of
     them faithfully is exactly the parser this package deliberately does not have. The conversion is
     one pass and keeps the native side reading only layouts it produced itself.
@@ -313,19 +311,45 @@ def write_arrow(path: str | Path, batch: Any, **kwargs: Any) -> None:
         columns=columns,
         validity=validity,
     )
+    return table, types
+
+
+def _arrow_from_pandas(df: Any) -> Any:
+    import pyarrow
+
+    return pyarrow.Table.from_pandas(df, preserve_index=False)
+
+
+def write_arrow(path: str | Path, batch: Any, **kwargs: Any) -> None:
+    """Writes a `pyarrow.RecordBatch` (or `Table`) to `path`. Requires pyarrow."""
+    table, types = _table_from_arrow(batch)
     write_workbook(path, table, types, **kwargs)
+
+
+def write_arrow_to_bytes(batch: Any, *, format: str, options: WriteOptions | None = None) -> bytes:
+    """The in-memory twin of `write_arrow()`. `format` is required, as in `write_workbook_to_bytes()`."""
+    table, types = _table_from_arrow(batch)
+    return write_workbook_to_bytes(table, types, format=format, options=options)
 
 
 def write_pandas(path: str | Path, df: Any, **kwargs: Any) -> None:
     """Writes a `pandas.DataFrame` to `path`. Requires pyarrow and pandas."""
-    import pyarrow
+    write_arrow(path, _arrow_from_pandas(df), **kwargs)
 
-    write_arrow(path, pyarrow.Table.from_pandas(df, preserve_index=False), **kwargs)
+
+def write_pandas_to_bytes(df: Any, *, format: str, options: WriteOptions | None = None) -> bytes:
+    """The in-memory twin of `write_pandas()`. Requires pyarrow and pandas."""
+    return write_arrow_to_bytes(_arrow_from_pandas(df), format=format, options=options)
 
 
 def write_polars(path: str | Path, df: Any, **kwargs: Any) -> None:
     """Writes a `polars.DataFrame` to `path`. Requires pyarrow and polars."""
     write_arrow(path, df.to_arrow(), **kwargs)
+
+
+def write_polars_to_bytes(df: Any, *, format: str, options: WriteOptions | None = None) -> bytes:
+    """The in-memory twin of `write_polars()`. Requires pyarrow and polars."""
+    return write_arrow_to_bytes(df.to_arrow(), format=format, options=options)
 
 
 def encrypt_package(package_path: str | Path, destination_path: str | Path, password: str) -> None:
@@ -345,3 +369,22 @@ def encrypt_package(package_path: str | Path, destination_path: str | Path, pass
             password_encoded, len(password_encoded),
         )
     )
+
+
+def encrypt_package_bytes(package: bytes, password: str) -> bytes:
+    """The in-memory twin of `encrypt_package()`: takes a finished XLSX/XLSB package's bytes (from
+    `write_workbook_to_bytes()` or a `*_to_bytes` writer) and returns the encrypted workbook's bytes,
+    so the plaintext never has to be written to disk.
+    """
+    password_encoded = password.encode("utf-8")
+    buffer = _native.NativeBuffer()
+    lib = _native.load_library()
+    _check(
+        lib.xl_encrypt_package_to_memory(
+            package, len(package), password_encoded, len(password_encoded), ctypes.byref(buffer)
+        )
+    )
+    try:
+        return ctypes.string_at(buffer.data, buffer.len)
+    finally:
+        lib.xl_free_buffer(ctypes.byref(buffer))
