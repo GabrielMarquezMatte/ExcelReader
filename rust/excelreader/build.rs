@@ -163,13 +163,16 @@ fn generate_windows_implib(
 
     if target_env == "msvc" {
         let lib_exe = "lib.exe";
-        let status = Command::new(lib_exe)
+        let target = env::var("TARGET").unwrap();
+        let mut command =
+            cc::windows_registry::find(&target, lib_exe).unwrap_or_else(|| Command::new(lib_exe));
+        let status = command
             .arg(format!("/def:{}", generated_def.display()))
             .arg(format!("/out:{}", implib.display()))
             .arg(format!("/machine:{arch}"))
             .status()
             .unwrap_or_else(|e| {
-                panic!("failed to invoke {lib_exe} (run from a VS developer prompt): {e}")
+                panic!("failed to invoke {lib_exe} (install the MSVC build tools): {e}")
             });
         assert!(status.success(), "{lib_exe} /def failed");
     } else {

@@ -13,6 +13,7 @@ if TYPE_CHECKING:
     from typing_extensions import Self
 
 from excelreader import _native
+from excelreader.arrow_stream import ArrowStream
 from excelreader.types import (
     Cell,
     CellType,
@@ -297,6 +298,25 @@ class Workbook:
         )
         return pyarrow.RecordBatchReader._import_from_c(ctypes.addressof(stream))
 
+    def to_arrow_stream(
+        self, schema: Sequence[ColumnSpec], header_row: int = 1, batch_size: int = 10000
+    ) -> ArrowStream:
+        """The same read as `to_record_batch_reader()`, as a single-use Arrow PyCapsule stream.
+
+        Needs no third-party package to create; pass it to any consumer of `__arrow_c_stream__`
+        (`polars.DataFrame(stream)`, `pyarrow.RecordBatchReader.from_stream(stream)`, ...). It
+        borrows this workbook's row cursor under the same rules as `iter_parse_typed()`.
+        """
+        handle = self._require_handle()
+        specs = _build_specs(schema)
+        stream = _native.ArrowArrayStream()
+        _check(
+            self._lib.xl_parse_arrow_stream(
+                handle, specs, len(specs), header_row, batch_size, ctypes.byref(stream)
+            )
+        )
+        return ArrowStream(stream, self)
+
     def iter_pandas(
         self, schema: Sequence[ColumnSpec], header_row: int = 1, batch_size: int = 10000
     ) -> Iterator[object]:
@@ -352,22 +372,23 @@ class Workbook:
     ) -> object:
         """Same read as `to_arrow()`, materialized as a `polars.DataFrame`, zero-copy.
 
-        Streams internally — polars consumes the reader a batch at a time, so unlike `to_pandas()`
-        the whole sheet is never resident as Arrow buffers. Requires pyarrow and polars. With
-        `parallelism` other than 1 the sheet is parsed whole, as in `parse_typed()`, instead of streamed.
+        Streams internally through `to_arrow_stream()` — polars consumes the stream a batch at a
+        time, so unlike `to_pandas()` the whole sheet is never resident as Arrow buffers. Requires
+        polars only, not pyarrow. With `parallelism` other than 1 the sheet is parsed whole, as in
+        `parse_typed()`, instead of streamed, and that path does require pyarrow.
         """
         try:
             import polars
         except ImportError:
             raise ImportError(
                 "to_polars() requires polars — install it with `pip install polars`, or use "
-                "to_arrow()/to_record_batch(), which return the same data with no polars dependency."
+                "to_arrow_stream(), which returns the same data with no polars dependency."
             ) from None
 
         if parallelism != 1:
             return polars.from_arrow(self.to_record_batch(schema, header_row=header_row, parallelism=parallelism))
-        reader = self.to_record_batch_reader(schema, header_row=header_row, batch_size=batch_size)
-        return polars.from_arrow(reader, rechunk=False)
+        stream = self.to_arrow_stream(schema, header_row=header_row, batch_size=batch_size)
+        return polars.DataFrame(stream)
 
     def infer_schema(self, header_row: int = 1, sample_size: int = 100, parse_text: bool = False) -> list[ColumnSpec]:
         """Guesses a `parse_typed()`/`to_arrow()` schema by sampling this sheet's cells.
