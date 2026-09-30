@@ -1,0 +1,2 @@
+[env]
+EXCELREADER_NATIVE_LIB_DIR = { value = "../python/src/excelreader/_lib", relative = true }
