@@ -16,5 +16,6 @@
     "rust-analyzer.server.extraEnv": {
         "EXCELREADER_NATIVE_LIB_DIR": "${workspaceFolder}/python/src/excelreader/_lib"
     },
-    "dotnet.unitTests.runSettingsPath": "${workspaceFolder}/coverage.runsettings"
+    "dotnet.unitTests.runSettingsPath": "${workspaceFolder}/coverage.runsettings",
+    "python-envs.defaultEnvManager": "ms-python.python:system"
 }

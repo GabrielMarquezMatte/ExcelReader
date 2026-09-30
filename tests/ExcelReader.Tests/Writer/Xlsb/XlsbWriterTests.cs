@@ -467,20 +467,52 @@ namespace ExcelReader.Tests.Writer.Xlsb
             return (cells, readBack);
         }
 
-        private static (int Id, int PayloadLength)[] ReadNumericCellRecords(MemoryStream workbook)
+        [Theory]
+        [InlineData(0d, 0x00)]
+        [InlineData(1d, 0x00)]
+        [InlineData(-1d, 0x00)]
+        [InlineData(45_000d, 0x00)]
+        [InlineData(524_289d, 0x02)]
+        [InlineData(536_870_911d, 0x02)]
+        public async Task IntegralRkCellUsesTheFloatFormWheneverItIsExactLikeExcel(double value, int expectedFlags)
+        {
+            CancellationToken ct = TestContext.Current.CancellationToken;
+            await using MemoryStream ms = await WriteAsync(async wb =>
+            {
+                XlsbSheetWriter sheet = wb.AddSheet("Sheet1");
+                await using (XlsbRowWriter row = await sheet.StartRowAsync(ct))
+                {
+                    row.Write(value);
+                }
+                await sheet.EndAsync(ct);
+            });
+
+            var records = new Biff12RecordReader(ReadSheetBin(ms));
+            int flags = -1;
+            while (records.TryReadRecord(out int id, out ReadOnlySpan<byte> payload))
+            {
+                if (id == Brt.CellRk)
+                {
+                    flags = payload[8] & 0x03;
+                }
+            }
+            Assert.Equal(expectedFlags, flags);
+        }
+
+        private static byte[] ReadSheetBin(MemoryStream workbook)
         {
             workbook.Position = 0;
-            byte[] sheetBin;
-            using (var zip = new ZipArchive(workbook, ZipArchiveMode.Read, leaveOpen: true))
-            {
-                using Stream entry = zip.GetEntry("xl/worksheets/sheet1.bin")!.Open();
-                using var copy = new MemoryStream();
-                entry.CopyTo(copy);
-                sheetBin = copy.ToArray();
-            }
+            using var zip = new ZipArchive(workbook, ZipArchiveMode.Read, leaveOpen: true);
+            using Stream entry = zip.GetEntry("xl/worksheets/sheet1.bin")!.Open();
+            using var copy = new MemoryStream();
+            entry.CopyTo(copy);
+            return copy.ToArray();
+        }
 
+        private static (int Id, int PayloadLength)[] ReadNumericCellRecords(MemoryStream workbook)
+        {
             var cells = new List<(int Id, int PayloadLength)>();
-            var records = new Biff12RecordReader(sheetBin);
+            var records = new Biff12RecordReader(ReadSheetBin(workbook));
             while (records.TryReadRecord(out int id, out ReadOnlySpan<byte> payload))
             {
                 if (id is Brt.CellRk or Brt.CellReal)

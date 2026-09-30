@@ -629,7 +629,7 @@ namespace ExcelReader.Core.Writer.Xlsb
             ValidateColumn(columnIndex);
             CellValueGuards.ThrowIfNonFinite(value, nameof(value));
             TrackColumn(columnIndex);
-            if (TryEncodeRkInt(value, out uint rk))
+            if (TryEncodeRk(value, out uint rk))
             {
                 const int RkLength = CellHeaderLength + 4;
                 Biff12RecordWriter.WriteFixedRecord(_records, Brt.CellRk, RkLength, out Span<byte> rkPayload);
@@ -645,7 +645,7 @@ namespace ExcelReader.Core.Writer.Xlsb
             MaybeFlush();
         }
 
-        private static bool TryEncodeRkInt(double value, out uint rk)
+        private static bool TryEncodeRk(double value, out uint rk)
         {
             rk = 0;
             if (value != Math.Truncate(value) || value < RkIntMin || value > RkIntMax
@@ -653,7 +653,9 @@ namespace ExcelReader.Core.Writer.Xlsb
             {
                 return false;
             }
-            rk = ((uint)(int)value << 2) | 0x02;
+            // Excel writes an integer as the float form whenever it is exact; calamine ignores a date style on the int form.
+            ulong bits = BitConverter.DoubleToUInt64Bits(value);
+            rk = (bits & 0x3_FFFF_FFFFUL) == 0 ? (uint)(bits >> 32) : ((uint)(int)value << 2) | 0x02;
             return true;
         }
 
