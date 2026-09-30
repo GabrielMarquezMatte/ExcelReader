@@ -143,6 +143,25 @@ Finish the batches, or call `.close()` on the generator, before starting another
 Being a generator, `iter_parse_typed()` opens nothing until the first iteration, so a bad
 `batch_size` or a rejected second reader is only raised there, not at the call.
 
+#### Reading a large CSV on several threads
+
+`parse_typed()`, `to_arrow()`, `to_record_batch()` and `to_polars()` take `parallelism`: `1` (the
+default) reads on one thread, `0` uses every core, `n` up to n threads. Only CSV is split. Any other
+format, or a CSV under 256 KiB, is read on one thread with the same result. The table is identical
+either way. Every partition's columns are held until they are merged, so the peak memory is higher
+than a sequential read of the same file. `to_polars()` with `parallelism` other than 1 parses the whole
+file instead of streaming it in batches.
+
+`xl_parse_typed_ex` on a Ryzen 7 5700X (8 cores, 16 threads), 14 typed columns, file read from memory:
+
+| File | `parallelism=1` | `parallelism=0` | Speed-up |
+|---|---:|---:|---:|
+| `65K_Records_Data.csv` (8 MB, 65,535 rows) | 21.4 ms | 5.8 ms | 3.7x |
+| the same rows ×20 (160 MB, 1.3M rows) | 425.9 ms | 117.5 ms | 3.6x |
+
+Peak working set on the 160 MB file, above the interpreter's own, went from 470 MiB to 503 MiB (both
+include the file's bytes and the handle's copy of them).
+
 #### Guessing a schema
 
 Writing the `ColumnSpec` list by hand means already knowing every column's name and type. When you
@@ -154,12 +173,21 @@ with open_workbook("sales.xlsb") as workbook:
     table = workbook.parse_typed(schema)
 ```
 
-Each column's type comes from the `CellType` Excel already stored for its sampled cells — not text
-sniffing — so it costs nothing beyond the sample and is exact for XLSX/XLSB/XLS. A column with a real
+By default each column's type comes from the `CellType` Excel already stored for its sampled cells,
+so it costs nothing beyond the sample and is exact for XLSX/XLSB/XLS. A column with a real
 mix of kinds, only formula/error results, or nothing sampled falls back to `ColumnType.STRING`;
 `nullable` is set when any sampled row left the column empty. CSV cells carry no such type tag, so
-every CSV column is guessed `ColumnType.STRING` — inspect the result (or just try parsing) before
-trusting it, especially past the sample.
+by default every CSV column is guessed `ColumnType.STRING`. Pass `parse_text=True` to type text cells
+from their exact shape instead: integers, decimals, `true`/`false` and ISO dates or date-times. Codes
+with a leading zero (`00123`), scientific notation (`12E4`), padded or comma-decimal numbers and
+non-ISO dates stay strings. It is
+still a guess over the sample, so a value further down can fail to convert:
+
+```python
+with open_workbook("sales.csv") as workbook:
+    schema = workbook.infer_schema(parse_text=True)
+    table = workbook.parse_typed(schema, parallelism=0)
+```
 
 ### Writing
 
@@ -245,7 +273,15 @@ with open_writer_to_memory("xlsx") as writer:
     payload = writer.bytes()
 ```
 
-`write_workbook_to_bytes()` is the same idea for the columnar `write_workbook()` path.
+`write_workbook_to_bytes()` is the same idea for the columnar `write_workbook()` path, and
+`write_arrow_to_bytes()`, `write_pandas_to_bytes()` and `write_polars_to_bytes()` for the frame
+writers. With no path to infer it from, each takes an explicit `format`:
+
+```python
+from excelreader import write_pandas_to_bytes
+
+payload = write_pandas_to_bytes(df, format="xlsx")
+```
 
 ### Arrow
 
@@ -381,57 +417,74 @@ encrypt_package("plain.xlsx", "secret.xlsx", "hunter2")
 Encryption parameters are fixed at Excel's own defaults — there are no options — and only XLSX/XLSB
 packages can be encrypted, matching what `open_workbook`/`open_bytes` can decrypt.
 
+`encrypt_package_bytes()` does the same over bytes, so the plaintext package never has to be written
+to disk:
+
+```python
+from excelreader import encrypt_package_bytes, write_workbook_to_bytes
+
+secret = encrypt_package_bytes(write_workbook_to_bytes(table, types, format="xlsx"), "hunter2")
+```
+
 ## Benchmarks
 
 `benchmarks/bench_read.py` and `benchmarks/bench_write.py` over
 `tests/ExcelReader.Benchmarks/Data/65K_Records_Data.xlsb` (65,535 data rows, 14 columns), the same
 fixture the .NET, C++ and Rust suites use. Measured on Windows 10 (22H2), 16 logical CPUs
-@ 3.39 GHz, CPython 3.14.5, 10 runs each (medians shown; `min` is in the scripts' own output).
+@ 3.39 GHz, CPython 3.14.4, 10 runs each (medians shown; `min` is in the scripts' own output).
+Competitors: polars 1.44.1 (with fastexcel 0.21.0), pandas 3.0.5 (with openpyxl 3.1.5), xlsxwriter
+3.2.9.
 
 ### Reading
 
 | API | Median | What it produces |
 |---|---:|---|
-| `parse_typed()` | 54.1 ms | typed columnar buffers, converted natively |
-| `to_arrow()` | 54.3 ms | the same parse, handed to pyarrow zero-copy |
-| `to_polars()` | 56.1 ms | typed columnar DataFrame, schema inferred |
-| `polars.read_excel()` | 137.7 ms | typed columnar DataFrame, types inferred |
-| `read_all_columnar()` | 508.5 ms | raw columnar cells, no per-cell Python objects |
-| `rows()` | 1,054.6 ms | one `Cell` object per cell, streamed per row |
-| `read_all()` | 1,616.3 ms | one `Cell` object per cell, all at once |
+| `to_record_batch_reader()` | 35.8 ms | Arrow record batches, streamed |
+| `to_arrow()` | 36.1 ms | the same parse, handed to pyarrow zero-copy |
+| `parse_typed()` | 39.5 ms | typed columnar buffers, converted natively |
+| `iter_parse_typed()` | 38.4 ms | the same typed buffers, in batches |
+| `to_polars()` | 38.7 ms | typed columnar DataFrame, schema inferred |
+| `polars.read_excel()` | 124.3 ms | typed columnar DataFrame, types inferred |
+| `read_all_columnar()` | 471.7 ms | raw columnar cells, no per-cell Python objects |
+| `rows()` | 1,086.9 ms | one `Cell` object per cell, streamed per row |
+| `read_all()` | 1,656.5 ms | one `Cell` object per cell, all at once |
+
+The batched readers cost the same as their whole-sheet counterparts and lower the peak memory:
+`to_record_batch_reader(batch_size=10000)` peaks at 20.2 MiB against 24.8 MiB for one whole-sheet
+record batch on this file.
 
 Only the `to_polars()` / `polars.read_excel()` pair is a like-for-like comparison, and even that one
 is loose: both produce a typed columnar DataFrame with inferred types, but the inference rules are
 not identical. The rows above it produce different things and are listed to show what each API
-costs, not to rank them — `read_all()` is 30x slower than `parse_typed()` because it materializes
+costs, not to rank them — `read_all()` is ~42x slower than `parse_typed()` because it materializes
 917,504 Python objects, which is the price of that shape, not a slow parser.
 
 ### Writing
 
 | API | Median | Output |
 |---|---:|---|
-| `write_workbook()` → xls | 45.6 ms | 17.7 MB |
-| `write_workbook()` → csv | 64.2 ms | 8.2 MB |
-| `write_workbook()` → xlsb | 74.1 ms | 5.2 MB |
-| `write_workbook()` → xlsx | 129.3 ms | 5.1 MB |
-| `write_polars()` → xlsx | 507.5 ms | 5.1 MB |
-| `write_pandas()` → xlsx | 514.6 ms | 5.1 MB |
-| `polars.DataFrame.write_excel()` | 4,487.8 ms | 5.6 MB |
-| `pandas.DataFrame.to_excel()` | 6,972.0 ms | 5.5 MB |
+| `write_workbook()` → csv | 35.7 ms | 8.2 MB |
+| `write_workbook()` → xls | 43.9 ms | 17.7 MB |
+| `write_workbook()` → xlsb | 71.9 ms | 5.1 MB |
+| `write_workbook()` → xlsx | 90.2 ms | 5.1 MB |
+| `write_polars()` → xlsx | 470.2 ms | 5.1 MB |
+| `write_pandas()` → xlsx | 468.5 ms | 5.1 MB |
+| `polars.DataFrame.write_excel()` | 4,707.2 ms | 5.6 MB |
+| `pandas.DataFrame.to_excel()` | 7,274.0 ms | 5.5 MB |
 
 The two DataFrame comparisons are matched work — same DataFrame in, xlsx out both times:
-`write_polars()` is ~8.8x faster than polars' own `write_excel()`, and `write_pandas()` ~13.5x
+`write_polars()` is ~10.0x faster than polars' own `write_excel()`, and `write_pandas()` ~15.5x
 faster than `to_excel()`. Both of ours pay a conversion the raw path does not: the DataFrame goes
 through Arrow and then a Python list before reaching the native columns, which is most of the gap
-between the 507 ms row and the 129 ms one. Handing `write_workbook()` buffers that are already
+between the 470 ms row and the 90 ms one. Handing `write_workbook()` buffers that are already
 columnar — what `parse_typed()` returns — skips all of it.
 
-`write_workbook(xlsx)` at 129.3 ms lands within a couple of milliseconds of the C++ binding's
-`xl::write_columns` on the same 14 columns, which is the expected result: both are thin wrappers
+`write_workbook(xlsx)` at 90.2 ms lands within ~5 ms of the C++ binding's
+`xl::write_columns` on the same 14 columns (85.1–85.9 ms), which is the expected result: both are thin wrappers
 over the same `xl_write_typed` call, and neither adds work per cell.
 
-`xls` being the fastest and largest is not a paradox — BIFF8 writes fixed-width records with no
-compression, so it trades 3.5x the bytes for less work per cell.
+`xls` being both the largest file and faster than xlsb and xlsx is not a paradox — BIFF8 writes
+fixed-width records with no compression, so it trades 3.5x the bytes for less work per cell.
 
 ## Notes
 

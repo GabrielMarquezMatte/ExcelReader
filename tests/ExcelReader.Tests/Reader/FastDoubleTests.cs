@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Text;
 using ExcelReader.Core.Reader.Internal;
@@ -73,7 +74,7 @@ namespace ExcelReader.Tests.Reader
         }
 
         [Theory]
-        [InlineData("12345678901234567")]
+        [InlineData("12345678901234567890")]
         [InlineData("9999999999999999999999999")]
         [InlineData("")]
         [InlineData("-")]
@@ -95,7 +96,7 @@ namespace ExcelReader.Tests.Reader
         [InlineData("1e+-5")]
         [InlineData("1e5.5")]
         [InlineData("1e1000")]
-        [InlineData("1e23")]
+        [InlineData("1e65")]
         [InlineData("1e309")]
         [InlineData("1e-400")]
         [InlineData("5E-324")]
@@ -105,6 +106,79 @@ namespace ExcelReader.Tests.Reader
             byte[] utf8 = Encoding.ASCII.GetBytes(text);
             Assert.False(FastDouble.TryParse(utf8, out _), $"Expected FastDouble to reject \"{text}\".");
             AssertMatchesDoubleTryParse(text);
+        }
+
+        [Theory]
+        [InlineData("12345678901234567")]
+        [InlineData("1234567890123456789")]
+        [InlineData("9007199254740993")]
+        [InlineData("35.840000000000003")]
+        [InlineData("0.30000000000000004")]
+        [InlineData("45123.416666666664")]
+        [InlineData("1.0000000000000002")]
+        [InlineData("0.99999999999999989")]
+        [InlineData("-7.2057594037927933e16")]
+        [InlineData("1e23")]
+        [InlineData("1.2345678901234567E-40")]
+        [InlineData("8.9884656743115795E+64")]
+        public void AcceptsSeventeenToNineteenDigitMantissas(string text)
+        {
+            byte[] utf8 = Encoding.ASCII.GetBytes(text);
+            Assert.True(FastDouble.TryParse(utf8, out double actual), $"Expected FastDouble to accept \"{text}\".");
+            Assert.Equal(BitConverter.DoubleToInt64Bits(double.Parse(text, CultureInfo.InvariantCulture)), BitConverter.DoubleToInt64Bits(actual));
+        }
+
+        [Fact]
+        [SuppressMessage("Security", "CA5394:Do not use insecure randomness",
+            Justification = "Needs a reproducible seeded PRNG for deterministic test content, not cryptographic randomness.")]
+        public void RoundTripsRandomDoublesBitExactly()
+        {
+            var rng = new Random(12345);
+            int accepted = 0;
+            for (int i = 0; i < 200_000; i++)
+            {
+                double value = (rng.NextDouble() - 0.5) * Math.Pow(10, rng.Next(-40, 40));
+                string text = value.ToString(i % 2 == 0 ? "R" : "G17", CultureInfo.InvariantCulture);
+                if (FastDouble.TryParse(Encoding.ASCII.GetBytes(text), out double actual))
+                {
+                    accepted++;
+                    Assert.Equal(BitConverter.DoubleToInt64Bits(value), BitConverter.DoubleToInt64Bits(actual));
+                }
+            }
+            Assert.True(accepted > 150_000, $"Only {accepted.ToString(CultureInfo.InvariantCulture)} of 200000 took the fast path.");
+        }
+
+        [Fact]
+        [SuppressMessage("Security", "CA5394:Do not use insecure randomness",
+            Justification = "Needs a reproducible seeded PRNG for deterministic test content, not cryptographic randomness.")]
+        public void AcceptsShortDecimalsBitExactly()
+        {
+            var rng = new Random(54321);
+            StringBuilder text = new();
+            for (int i = 0; i < 200_000; i++)
+            {
+                text.Clear();
+                if (rng.Next(4) == 0)
+                {
+                    text.Append('-');
+                }
+                text.Append('0', rng.Next(3));
+                for (int d = rng.Next(1, 10); d > 0; d--)
+                {
+                    text.Append((char)('0' + rng.Next(10)));
+                }
+                if (rng.Next(3) != 0)
+                {
+                    text.Append('.');
+                    for (int d = rng.Next(7); d > 0; d--)
+                    {
+                        text.Append((char)('0' + rng.Next(10)));
+                    }
+                }
+                string value = text.ToString();
+                Assert.True(FastDouble.TryParse(Encoding.ASCII.GetBytes(value), out double actual), $"Expected FastDouble to accept \"{value}\".");
+                Assert.Equal(BitConverter.DoubleToInt64Bits(double.Parse(value, CultureInfo.InvariantCulture)), BitConverter.DoubleToInt64Bits(actual));
+            }
         }
 
         [Fact]

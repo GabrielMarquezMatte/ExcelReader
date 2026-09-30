@@ -32,6 +32,8 @@ namespace ExcelReader.Core.Parser.ParallelCsv
 
         internal bool IsMemory => _handle is null;
 
+        internal SafeFileHandle? Handle => _handle;
+
         internal Stream OpenAt(long offset)
         {
             return new RangedFileStream(_handle!, _startOffset + offset);

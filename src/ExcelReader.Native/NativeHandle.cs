@@ -1,4 +1,5 @@
 using ExcelReader.Core.Reader;
+using ExcelReader.Native.Reading;
 using ExcelReader.Native.Typed;
 
 namespace ExcelReader.Native
@@ -20,6 +21,8 @@ namespace ExcelReader.Native
         internal int PendingLength { get; set; }
 
         internal bool HasPending { get; set; }
+
+        internal RowViewBuffer? View { get; set; }
 
         internal ChunkedBuffer<byte>? AllRowsScratch { get; set; }
 
@@ -62,6 +65,7 @@ namespace ExcelReader.Native
         {
             FaultLiveSession("xl_close");
             ResetRows();
+            View?.Dispose();
             Reader.Dispose();
         }
     }

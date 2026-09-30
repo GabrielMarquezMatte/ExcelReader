@@ -318,20 +318,23 @@ through a layout that may have changed.
 ## Benchmarks
 
 Criterion suite in `benches/`. Measured on Windows 10 (22H2), 16 logical CPUs @ 3.39 GHz,
-rustc 1.97.1 (Release), Criterion 0.5, 100 samples per benchmark (medians shown). `write_bench`
+rustc 1.97.1 (Release), Criterion 0.8, 100 samples per benchmark (medians shown). `write_bench`
 takes 20 samples instead — each of its iterations writes a whole 65,535-row file.
 
 `benches/parse_bench.rs` - `open`/`parse_sheet`/`infer_schema`, same methodology as the C++ suite:
 
 | Benchmark | RealExcel.xlsb (100 rows) | 65K_Records_Data.xlsb (65,535 rows) |
 |---|---:|---:|
-| `open` | 81.4 µs | 96.5 µs |
-| `parse_sheet` (2 or 6 bound columns) | 77.8 µs | 37.2 ms |
-| `infer_schema` (sample 100 / 1,000 rows) | 143.9 µs | 1.15 ms |
+| `open` | 83.4 µs | 96.2 µs |
+| `parse_sheet` (2 or 6 bound columns) | 60.0 µs | 29.1 ms |
+| typed chunks of 1,000 / 10,000 rows | - | 29.0 ms / 27.7 ms |
+| `infer_schema` (sample 100 / 1,000 rows) | 89.9 µs | 628.4 µs |
 
-`open` stays nearly flat across the 655x row-count jump (+19%) - XLSB's header carries its
+`open` stays nearly flat across the 655x row-count jump (+15%) - XLSB's header carries its
 dimensions/index, so opening costs metadata, not row data. `parse_sheet` scales linearly with
-rows × columns; `infer_schema` scales with its sample size, not the file's total row count.
+rows × columns. Reading the same sheet in typed chunks costs no more than one whole-sheet
+`parse_sheet`, while holding only one chunk at a time. `infer_schema` scales with its sample size,
+not the file's total row count.
 
 `benches/compare_bench.rs` compares against [calamine](https://github.com/tafia/calamine) reading
 `65K_Records_Data.{xlsx,xlsb}` in full (all 14 columns, 65,535 rows). Both sides decode every cell
@@ -340,10 +343,10 @@ zero-copy advantage the other can't take:
 
 | Format | ExcelReader (`parse_sheet::<FullRow>`) | calamine (`worksheet_range` + `Data` match) |
 |---|---:|---:|
-| XLSX | 108.5 ms | 279.7 ms |
-| XLSB | 66.6 ms | 91.9 ms |
+| XLSX | 85.8 ms | 272.0 ms |
+| XLSB | 53.0 ms | 86.8 ms |
 
-ExcelReader is ~2.6x faster than calamine for XLSX and ~1.4x faster for XLSB on this workload -
+ExcelReader is ~3.2x faster than calamine for XLSX and ~1.6x faster for XLSB on this workload -
 calamine is a fast, well-optimized reader in its own right, so the gap is real but not the order
 of magnitude seen against slower libraries.
 
@@ -353,12 +356,12 @@ rows to `.xlsx`, all three starting from the same in-memory `Vec<Row>`:
 
 | Benchmark | Median |
 |---|---:|
-| `columns` (`write_columns`, pre-transposed) | 46.4 ms |
-| `sheet` (`write_sheet`, from `Vec<Row>`) | 52.4 ms |
-| `rust_xlsxwriter` (cell-at-a-time) | 322.8 ms |
+| `columns` (`write_columns`, pre-transposed) | 47.3 ms |
+| `sheet` (`write_sheet`, from `Vec<Row>`) | 53.3 ms |
+| `rust_xlsxwriter` (cell-at-a-time) | 326.9 ms |
 
 `sheet` is the matched-work number — it starts from the same shape `rust_xlsxwriter` is handed and
-pays the row-to-column transpose itself — and is ~6.2x faster. `columns` is a ceiling no
+pays the row-to-column transpose itself — and is ~6.1x faster. `columns` is a ceiling no
 cell-at-a-time API can reach, since it is handed buffers that are already columnar; read it only
 against `sheet`, as the cost of having row-shaped data in the first place. That cost turns out to be
 about 13%: not free, but a minority of the cost of producing the file.
