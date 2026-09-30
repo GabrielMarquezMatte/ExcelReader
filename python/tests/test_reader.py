@@ -413,7 +413,6 @@ def test_to_pandas_returns_a_dataframe_matching_parse_typed(typed_csv):
 
 
 def test_to_polars_returns_a_dataframe_matching_parse_typed(typed_csv):
-    pytest.importorskip("pyarrow")
     pl = pytest.importorskip("polars")
 
     with open_workbook(typed_csv) as workbook:
@@ -426,7 +425,6 @@ def test_to_polars_returns_a_dataframe_matching_parse_typed(typed_csv):
 
 
 def test_to_polars_raises_for_an_unknown_column_name(typed_csv):
-    pytest.importorskip("pyarrow")
     pytest.importorskip("polars")
 
     with open_workbook(typed_csv) as workbook, pytest.raises(ExcelReaderError):
@@ -598,6 +596,43 @@ def test_to_record_batch_reader_rejects_a_negative_batch_size(batched_csv):
             workbook.to_record_batch_reader(_BATCH_SCHEMA, batch_size=-1)
 
 
+def test_arrow_stream_builds_a_polars_dataframe_in_batches(batched_csv):
+    pl = pytest.importorskip("polars")
+    with open_workbook(batched_csv) as workbook:
+        df = pl.DataFrame(workbook.to_arrow_stream(_BATCH_SCHEMA, batch_size=8))
+
+    assert df.columns == ["name", "qty"]
+    assert df["qty"].to_list() == list(range(50))
+
+
+def test_arrow_stream_is_single_use(batched_csv):
+    with open_workbook(batched_csv) as workbook:
+        stream = workbook.to_arrow_stream(_BATCH_SCHEMA)
+        stream.__arrow_c_stream__()
+        with pytest.raises(ExcelReaderError):
+            stream.__arrow_c_stream__()
+
+
+def test_an_unconsumed_arrow_stream_releases_the_read(batched_csv):
+    with open_workbook(batched_csv) as workbook:
+        workbook.to_arrow_stream(_BATCH_SCHEMA, batch_size=4)
+        gc.collect()
+        assert next(workbook.iter_parse_typed(_BATCH_SCHEMA, batch_size=4)).row_count == 4
+
+
+def test_a_dropped_capsule_releases_the_read(batched_csv):
+    with open_workbook(batched_csv) as workbook:
+        workbook.to_arrow_stream(_BATCH_SCHEMA, batch_size=4).__arrow_c_stream__()
+        gc.collect()
+        assert next(workbook.iter_parse_typed(_BATCH_SCHEMA, batch_size=4)).row_count == 4
+
+
+def test_arrow_stream_rejects_a_negative_batch_size(batched_csv):
+    with open_workbook(batched_csv) as workbook:
+        with pytest.raises(ExcelReaderError):
+            workbook.to_arrow_stream(_BATCH_SCHEMA, batch_size=-1)
+
+
 def test_a_stream_is_rejected_while_a_reader_is_live(batched_csv):
     pytest.importorskip("pyarrow")
     with open_workbook(batched_csv) as workbook:
@@ -649,7 +684,6 @@ def test_iter_polars_yields_one_frame_per_batch(batched_csv):
 
 
 def test_to_polars_stays_chunked(batched_csv):
-    pytest.importorskip("pyarrow")
     polars = pytest.importorskip("polars")
     with open_workbook(batched_csv) as workbook:
         frame = workbook.to_polars(_BATCH_SCHEMA, batch_size=8)
