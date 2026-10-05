@@ -42,10 +42,12 @@ namespace ExcelReader.Tests.Reader.Xlsb
         }
 
         [Fact]
-        public void EmptyRowIsSkipped()
+        public void EmptyRowIsYielded()
         {
             byte[] sheet = [.. B.Record(Brt.RowHdr), .. B.Record(Brt.EndSheetData)];
             using var e = Open(BlankReader(), sheet);
+            Assert.True(e.MoveNext());
+            Assert.Equal(0, e.Current.ColumnCount);
             Assert.False(e.MoveNext());
         }
 
@@ -60,6 +62,8 @@ namespace ExcelReader.Tests.Reader.Xlsb
                 .. B.Record(Brt.CellBool, B.CellBool(0, 0, true)),
             ];
             using var e = Open(BlankReader(), sheet);
+            Assert.True(e.MoveNext());
+            Assert.Equal(0, e.Current.ColumnCount);
             Assert.False(e.MoveNext());
         }
 
@@ -236,7 +240,7 @@ namespace ExcelReader.Tests.Reader.Xlsb
         }
 
         [Fact]
-        public void EmptyRowsBetweenDataRowsAreSkipped()
+        public void EmptyRowsBetweenDataRowsAreYielded()
         {
             byte[] sheet =
             [
@@ -250,6 +254,9 @@ namespace ExcelReader.Tests.Reader.Xlsb
 
             Assert.True(e.MoveNext());
             Assert.Equal("1", e.Current[0].GetString());
+
+            Assert.True(e.MoveNext());
+            Assert.Equal(0, e.Current.ColumnCount);
 
             Assert.True(e.MoveNext());
             Assert.Equal("0", e.Current[0].GetString());

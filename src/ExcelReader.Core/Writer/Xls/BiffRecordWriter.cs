@@ -218,6 +218,13 @@ namespace ExcelReader.Core.Writer.Xls
             buffer.EndRecord(len);
         }
 
+        internal static void WriteBlank(BiffBuffer buffer, int row, int col, int xf)
+        {
+            int len = buffer.BeginRecord(BiffRecord.Blank);
+            WriteCellHeader(buffer, row, col, xf);
+            buffer.EndRecord(len);
+        }
+
         internal static void WriteNumber(BiffBuffer buffer, int row, int col, int xf, double value)
         {
             CellValueGuards.ThrowIfNonFinite(value, nameof(value));

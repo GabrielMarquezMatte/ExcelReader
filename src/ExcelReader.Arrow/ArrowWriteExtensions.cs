@@ -1,3 +1,4 @@
+using System.Globalization;
 using Apache.Arrow;
 using Apache.Arrow.Types;
 using ExcelReader.Core.Writer;
@@ -24,13 +25,14 @@ namespace ExcelReader.Arrow
         /// </summary>
         /// <param name="workbook">A freshly created, not-yet-started workbook writer.</param>
         /// <param name="batch">
-        /// The batch to write. Only the seven Arrow types <see cref="ArrowConversionExtensions.ToArrowRecordBatch"/>
-        /// produces (string, int64, double, boolean, date32, time64, timestamp) are supported.
+        /// The batch to write. Supported Arrow types: string, large string, string view, every integer
+        /// width (signed and unsigned), half float, float, double, decimal128, decimal256, boolean,
+        /// date32, date64, time32, time64, timestamp and null.
         /// </param>
         /// <param name="sheetName">The sheet's name.</param>
         /// <param name="writeHeader">Whether to write a header row of column names first.</param>
         /// <exception cref="ArgumentNullException"><paramref name="workbook"/> or <paramref name="batch"/> is <see langword="null"/>.</exception>
-        /// <exception cref="NotSupportedException">A column's Arrow type is not one of the seven supported types.</exception>
+        /// <exception cref="NotSupportedException">A column's Arrow type is not one of the supported types.</exception>
         public static void WriteRecordBatch(this XlsxWorkbookWriter workbook, RecordBatch batch, string sheetName = "Sheet1", bool writeHeader = true)
         {
             WriteRecordBatchCore<XlsxSheetWriter, XlsxRowWriter>(workbook, batch, sheetName, writeHeader);
@@ -38,7 +40,7 @@ namespace ExcelReader.Arrow
 
         /// <summary>Same as <see cref="WriteRecordBatch(XlsxWorkbookWriter, RecordBatch, string, bool)"/>, for an XLSB workbook.</summary>
         /// <exception cref="ArgumentNullException"><paramref name="workbook"/> or <paramref name="batch"/> is <see langword="null"/>.</exception>
-        /// <exception cref="NotSupportedException">A column's Arrow type is not one of the seven supported types.</exception>
+        /// <exception cref="NotSupportedException">A column's Arrow type is not one of the supported types.</exception>
         public static void WriteRecordBatch(this XlsbWorkbookWriter workbook, RecordBatch batch, string sheetName = "Sheet1", bool writeHeader = true)
         {
             WriteRecordBatchCore<XlsbSheetWriter, XlsbRowWriter>(workbook, batch, sheetName, writeHeader);
@@ -46,7 +48,7 @@ namespace ExcelReader.Arrow
 
         /// <summary>Same as <see cref="WriteRecordBatch(XlsxWorkbookWriter, RecordBatch, string, bool)"/>, for a legacy XLS workbook.</summary>
         /// <exception cref="ArgumentNullException"><paramref name="workbook"/> or <paramref name="batch"/> is <see langword="null"/>.</exception>
-        /// <exception cref="NotSupportedException">A column's Arrow type is not one of the seven supported types.</exception>
+        /// <exception cref="NotSupportedException">A column's Arrow type is not one of the supported types.</exception>
         public static void WriteRecordBatch(this XlsWorkbookWriter workbook, RecordBatch batch, string sheetName = "Sheet1", bool writeHeader = true)
         {
             WriteRecordBatchCore<XlsSheetWriter, XlsRowWriter>(workbook, batch, sheetName, writeHeader);
@@ -57,7 +59,7 @@ namespace ExcelReader.Arrow
         /// in a single call.
         /// </summary>
         /// <exception cref="ArgumentNullException"><paramref name="workbook"/> or <paramref name="batch"/> is <see langword="null"/>.</exception>
-        /// <exception cref="NotSupportedException">A column's Arrow type is not one of the seven supported types.</exception>
+        /// <exception cref="NotSupportedException">A column's Arrow type is not one of the supported types.</exception>
         public static void WriteRecordBatch(this CsvWorkbookWriter workbook, RecordBatch batch, bool writeHeader = true)
         {
             WriteRecordBatchCore<CsvSheetWriter, CsvRowWriter>(workbook, batch, sheetName: "Sheet1", writeHeader);
@@ -166,8 +168,10 @@ namespace ExcelReader.Arrow
                 switch (fields[i].DataType.TypeId)
                 {
                     case ArrowTypeId.Date32:
+                    case ArrowTypeId.Date64:
                         sheet.SetColumnStyle(i, BuiltinDateStyleId);
                         break;
+                    case ArrowTypeId.Time32:
                     case ArrowTypeId.Time64:
                         timeStyle = timeStyle < 0 ? workbook.AddStyle(new CellStyle { NumberFormat = "hh:mm:ss" }) : timeStyle;
                         sheet.SetColumnStyle(i, timeStyle);
@@ -187,13 +191,55 @@ namespace ExcelReader.Arrow
             switch (typeId)
             {
                 case ArrowTypeId.String:
-                    var strings = (StringArray)array;
-                    if (strings.IsNull(index))
-                    {
-                        row.Write((string?)null);
-                        return;
-                    }
-                    row.WriteUtf8(strings.GetBytes(index));
+                    WriteText(row, ((StringArray)array).GetBytes(index, out bool isNull), isNull);
+                    return;
+                case ArrowTypeId.LargeString:
+                    WriteText(row, ((LargeStringArray)array).GetBytes(index, out bool isLargeNull), isLargeNull);
+                    return;
+                case ArrowTypeId.StringView:
+                    WriteText(row, ((StringViewArray)array).GetBytes(index, out bool isViewNull), isViewNull);
+                    return;
+                case ArrowTypeId.Null:
+                    row.Write((string?)null);
+                    return;
+                case ArrowTypeId.Int8:
+                    row.Write(((Int8Array)array).GetValue(index));
+                    return;
+                case ArrowTypeId.Int16:
+                    row.Write(((Int16Array)array).GetValue(index));
+                    return;
+                case ArrowTypeId.Int32:
+                    row.Write(((Int32Array)array).GetValue(index));
+                    return;
+                case ArrowTypeId.UInt8:
+                    row.Write(((UInt8Array)array).GetValue(index));
+                    return;
+                case ArrowTypeId.UInt16:
+                    row.Write(((UInt16Array)array).GetValue(index));
+                    return;
+                case ArrowTypeId.UInt32:
+                    row.Write(((UInt32Array)array).GetValue(index));
+                    return;
+                case ArrowTypeId.UInt64:
+                    row.Write(((UInt64Array)array).GetValue(index));
+                    return;
+                case ArrowTypeId.HalfFloat:
+                    row.Write(ToShortestDouble(((HalfFloatArray)array).GetValue(index)));
+                    return;
+                case ArrowTypeId.Float:
+                    row.Write(ToShortestDouble(((FloatArray)array).GetValue(index)));
+                    return;
+                case ArrowTypeId.Decimal128:
+                    row.Write(((Decimal128Array)array).GetValue(index));
+                    return;
+                case ArrowTypeId.Decimal256:
+                    row.Write(((Decimal256Array)array).GetValue(index));
+                    return;
+                case ArrowTypeId.Date64:
+                    row.Write(((Date64Array)array).GetDateOnly(index));
+                    return;
+                case ArrowTypeId.Time32:
+                    row.Write(((Time32Array)array).GetTime(index));
                     return;
                 case ArrowTypeId.Int64:
                     row.Write(((Int64Array)array).GetValue(index));
@@ -216,6 +262,32 @@ namespace ExcelReader.Arrow
                 default:
                     throw new NotSupportedException($"Arrow type {typeId} is not supported for writing.");
             }
+        }
+
+        /// <summary>
+        /// Widens through the value's shortest decimal text, so <c>0.1f</c> lands as <c>0.1</c> in every
+        /// format instead of the binary writers storing <c>0.10000000149011612</c>.
+        /// </summary>
+        private static double? ToShortestDouble<T>(T? value)
+            where T : struct, IUtf8SpanFormattable
+        {
+            if (value is not T narrow)
+            {
+                return null;
+            }
+            Span<byte> text = stackalloc byte[32];
+            narrow.TryFormat(text, out int written, default, CultureInfo.InvariantCulture);
+            return double.Parse(text[..written], NumberStyles.Float, CultureInfo.InvariantCulture);
+        }
+
+        private static void WriteText(IRowWriter row, ReadOnlySpan<byte> utf8, bool isNull)
+        {
+            if (isNull)
+            {
+                row.Write((string?)null);
+                return;
+            }
+            row.WriteUtf8(utf8);
         }
     }
 }
