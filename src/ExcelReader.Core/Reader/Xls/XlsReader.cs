@@ -428,6 +428,7 @@ namespace ExcelReader.Core.Reader.Xls
             internal const int MulRk = 0x00BD;
             internal const int BoolErr = 0x0205;
             internal const int Formula = 0x0006;
+            internal const int Row = 0x0208;
             internal const int Blank = 0x0201;
             internal const int MulBlank = 0x00BE;
             internal const int StringRec = 0x0207;

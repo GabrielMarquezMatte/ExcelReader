@@ -76,36 +76,25 @@ namespace ExcelReader.Core.Reader.Xlsb
                 {
                     return new ValueTask<bool>(false);
                 }
-                while (true)
+                ResetRow();
+                if (!_pendingRowHdr)
                 {
-                    ResetRow();
-                    if (!_pendingRowHdr)
-                    {
-                        int seek = SeekRowHdrFromBuffer();
-                        if (seek == 0)
-                        {
-                            return new ValueTask<bool>(false);
-                        }
-                        if (seek == 2)
-                        {
-                            return MoveNextRowAsync(seekDone: false);
-                        }
-                    }
-                    _pendingRowHdr = false;
-                    int collect = CollectCellsFromBuffer();
-                    if (collect == 2)
-                    {
-                        return MoveNextRowAsync(seekDone: true);
-                    }
-                    if (_acc.Count > 0)
-                    {
-                        return new ValueTask<bool>(true);
-                    }
-                    if (!_pendingRowHdr)
+                    int seek = SeekRowHdrFromBuffer();
+                    if (seek == 0)
                     {
                         return new ValueTask<bool>(false);
                     }
+                    if (seek == 2)
+                    {
+                        return MoveNextRowAsync(seekDone: false);
+                    }
                 }
+                _pendingRowHdr = false;
+                if (CollectCellsFromBuffer() == 2)
+                {
+                    return MoveNextRowAsync(seekDone: true);
+                }
+                return new ValueTask<bool>(true);
             }
 
             private async ValueTask<bool> MoveNextRowAsync(bool seekDone)
@@ -116,24 +105,7 @@ namespace ExcelReader.Core.Reader.Xlsb
                 }
                 _pendingRowHdr = false;
                 await CollectCellsAsync().ConfigureAwait(false);
-                while (true)
-                {
-                    if (_acc.Count > 0)
-                    {
-                        return true;
-                    }
-                    if (!_pendingRowHdr)
-                    {
-                        return false;
-                    }
-                    ResetRow();
-                    if (!await SeekRowHdrAsync().ConfigureAwait(false))
-                    {
-                        return false;
-                    }
-                    _pendingRowHdr = false;
-                    await CollectCellsAsync().ConfigureAwait(false);
-                }
+                return true;
             }
 
             private bool MoveNextCore()
@@ -142,24 +114,14 @@ namespace ExcelReader.Core.Reader.Xlsb
                 {
                     return false;
                 }
-                while (true)
+                ResetRow();
+                if (!_pendingRowHdr && !SkipToRowHdr())
                 {
-                    ResetRow();
-                    if (!_pendingRowHdr && !SkipToRowHdr())
-                    {
-                        return false;
-                    }
-                    _pendingRowHdr = false;
-                    CollectCells();
-                    if (_acc.Count > 0)
-                    {
-                        return true;
-                    }
-                    if (!_pendingRowHdr)
-                    {
-                        return false;
-                    }
+                    return false;
                 }
+                _pendingRowHdr = false;
+                CollectCells();
+                return true;
             }
 
             private bool SkipToRowHdr()

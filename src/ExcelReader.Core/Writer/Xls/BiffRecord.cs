@@ -27,6 +27,7 @@ namespace ExcelReader.Core.Writer.Xls
         internal const int BookBool = 0x00DA;
         internal const int Dimension = 0x0200;
         internal const int Window2 = 0x023E;
+        internal const int Blank = 0x0201;
         internal const int Number = 0x0203;
         internal const int Label = 0x0204;
         internal const int BoolErr = 0x0205;

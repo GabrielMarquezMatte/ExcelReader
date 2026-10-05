@@ -3,6 +3,7 @@ using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Runtime.Intrinsics;
 using System.Runtime.Intrinsics.X86;
+using ArmAes = System.Runtime.Intrinsics.Arm.Aes;
 
 namespace ExcelReader.Core.Reader.Csv
 {
@@ -258,14 +259,22 @@ namespace ExcelReader.Core.Reader.Csv
             _blocked = true;
         }
 
-        // ponytail: CLMUL on x86 only; ARM takes the shift ladder, add Aes.PolynomialMultiplyWideningLower if ARM throughput matters.
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static ulong PrefixXor(ulong bits)
+        internal static ulong PrefixXor(ulong bits)
         {
             if (Pclmulqdq.IsSupported)
             {
                 return Pclmulqdq.CarrylessMultiply(Vector128.CreateScalar(bits), Vector128<ulong>.AllBitsSet, 0).ToScalar();
             }
+            if (ArmAes.IsSupported)
+            {
+                return ArmAes.PolynomialMultiplyWideningLower(Vector64.CreateScalar(bits), Vector64<ulong>.AllBitsSet).ToScalar();
+            }
+            return PrefixXorSoftware(bits);
+        }
+
+        internal static ulong PrefixXorSoftware(ulong bits)
+        {
             bits ^= bits << 1;
             bits ^= bits << 2;
             bits ^= bits << 4;

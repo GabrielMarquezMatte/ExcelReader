@@ -31,6 +31,7 @@ namespace ExcelReader.Core.Writer.Xls
         private int _rowNumber = -1;
         private WriterState _state = WriterState.Created;
         private bool _rowActive;
+        private bool _rowHasCells;
         private Dictionary<int, int>? _columnStyles;
         private Dictionary<int, double>? _columnWidths;
         private int _activeRowStyle;
@@ -158,13 +159,20 @@ namespace ExcelReader.Core.Writer.Xls
             }
             _activeRowStyle = styleId;
             _rowActive = true;
+            _rowHasCells = false;
             _rowWriter ??= new XlsRowWriter(this, _rowNumber);
             _rowWriter.Reset(_rowNumber);
             return _rowWriter;
         }
 
+        /// <summary>A row left without cells gets one blank cell, since BIFF8 has no other trace of it for a reader to find.</summary>
         internal void NotifyRowEnded()
         {
+            if (_rowActive && !_rowHasCells)
+            {
+                BiffRecordWriter.WriteBlank(_cells, _rowNumber, 0, XlsGlobals.GeneralXf);
+                Track(_rowNumber, 0);
+            }
             _rowActive = false;
         }
 
@@ -209,6 +217,7 @@ namespace ExcelReader.Core.Writer.Xls
 
         private void Track(int row, int col)
         {
+            _rowHasCells = true;
             if (row > _maxRow) { _maxRow = row; }
             if (col > _maxCol) { _maxCol = col; }
         }

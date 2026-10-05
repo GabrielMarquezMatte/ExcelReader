@@ -107,7 +107,7 @@ using XlsxWorkbookWriter workbook = XlsxWorkbookWriter.Create(File.Create("repor
 workbook.WriteRecordBatch(batch); // adds the sheet, writes the header + every row, ends the workbook
 ```
 
-Supports the same seven Arrow types `ToArrowRecordBatch` produces (string, int64, double, boolean, date32, time64, timestamp); any other type throws `NotSupportedException`. Pass `writeHeader: false` to skip the header row, or a `sheetName` (XLSX/XLSB/XLS only — CSV has no sheet name) to rename it from the `"Sheet1"` default.
+Supports string, large string, string view, every integer width (signed and unsigned), half float, float, double, decimal128, decimal256, boolean, date32, date64, time32, time64, timestamp and null columns; any other type (binary, nested, dictionary) throws `NotSupportedException`. Pass `writeHeader: false` to skip the header row, or a `sheetName` (XLSX/XLSB/XLS only — CSV has no sheet name) to rename it from the `"Sheet1"` default.
 
 ## Open by auto-detecting the format
 
