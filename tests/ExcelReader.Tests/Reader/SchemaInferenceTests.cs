@@ -316,7 +316,7 @@ namespace ExcelReader.Tests.Reader
         [Fact]
         public void Should_Throw_When_ReaderIsNull()
         {
-            Assert.Throws<ArgumentNullException>(() => Excel.InferSchema(null!));
+            Assert.Throws<ArgumentNullException>(() => Excel.InferSchema((IExcelRowReader)null!));
         }
     }
 }

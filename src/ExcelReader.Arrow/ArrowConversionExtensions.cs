@@ -30,17 +30,34 @@ namespace ExcelReader.Arrow
         {
             ArgumentNullException.ThrowIfNull(reader);
             ExcelColumnSchema[] resolvedSchema = schema ?? Excel.InferSchema(reader, headerRow);
+            using IExcelRowEnumerator rows = reader.GetEnumerator();
+            return Build(rows, reader.IsDate1904, resolvedSchema, headerRow);
+        }
 
+        /// <summary>Converts one sheet into an Arrow <see cref="RecordBatch"/>.</summary>
+        /// <param name="sheet">The sheet to convert.</param>
+        /// <param name="schema">The column schema to use; inferred from the sheet with <see cref="Excel.InferSchema(IExcelSheet, int, int, bool)"/> when <see langword="null"/>.</param>
+        /// <param name="headerRow">1-based row number holding the column names.</param>
+        /// <returns>A record batch with one column per schema entry and one row per data row.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="sheet"/> is <see langword="null"/>.</exception>
+        public static RecordBatch ToArrowRecordBatch(this IExcelSheet sheet, ExcelColumnSchema[]? schema = null, int headerRow = 1)
+        {
+            ArgumentNullException.ThrowIfNull(sheet);
+            schema ??= Excel.InferSchema(sheet, headerRow);
+            using IExcelRowEnumerator rows = sheet.GetEnumerator();
+            return Build(rows, sheet.IsDate1904, schema, headerRow);
+        }
+
+        private static RecordBatch Build(IExcelRowEnumerator rows, bool isDate1904, ExcelColumnSchema[] resolvedSchema, int headerRow)
+        {
             ColumnAppender[] appenders = new ColumnAppender[resolvedSchema.Length];
             for (int i = 0; i < resolvedSchema.Length; i++)
             {
                 appenders[i] = ColumnAppender.Create(resolvedSchema[i]);
             }
 
-            using IExcelRowEnumerator rows = reader.GetEnumerator();
             SkipHeaderRow(rows, headerRow);
 
-            bool isDate1904 = reader.IsDate1904;
             int rowCount = 0;
             while (rows.MoveNext())
             {

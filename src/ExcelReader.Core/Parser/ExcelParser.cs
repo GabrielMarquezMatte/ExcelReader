@@ -91,7 +91,54 @@ namespace ExcelReader.Core.Parser
         public CsvEnumerable<T> Parse(CsvReader reader)
         {
             ArgumentNullException.ThrowIfNull(reader);
-            return new CsvEnumerable<T>(reader, _config, _csvInfo());
+            return new CsvEnumerable<T>(reader.Sheets[0], _config, _csvInfo());
+        }
+
+        /// <summary>Parses the rows of an XLSX sheet into <typeparamref name="T"/> instances, lazily as the result is enumerated.</summary>
+        /// <param name="sheet">The sheet to pull rows from. Each enumeration of the result starts a new read of it.</param>
+        /// <returns>An enumerable that yields one <typeparamref name="T"/> per data row.</returns>
+        public ExcelEnumerable<T, XlsxSheet, XlsxWorkbook.Enumerator> Parse(XlsxSheet sheet)
+        {
+            return new ExcelEnumerable<T, XlsxSheet, XlsxWorkbook.Enumerator>(sheet, _config, _info());
+        }
+
+        /// <summary>Parses the rows of an XLS sheet into <typeparamref name="T"/> instances, lazily as the result is enumerated.</summary>
+        /// <param name="sheet">The sheet to pull rows from. Each enumeration of the result starts a new read of it.</param>
+        /// <returns>An enumerable that yields one <typeparamref name="T"/> per data row.</returns>
+        public ExcelEnumerable<T, XlsSheet, XlsWorkbook.Enumerator> Parse(XlsSheet sheet)
+        {
+            return new ExcelEnumerable<T, XlsSheet, XlsWorkbook.Enumerator>(sheet, _config, _info());
+        }
+
+        /// <summary>Parses the rows of an XLSB sheet into <typeparamref name="T"/> instances, lazily as the result is enumerated.</summary>
+        /// <param name="sheet">The sheet to pull rows from. Each enumeration of the result starts a new read of it.</param>
+        /// <returns>An enumerable that yields one <typeparamref name="T"/> per data row.</returns>
+        public ExcelEnumerable<T, XlsbSheet, XlsbWorkbook.Enumerator> Parse(XlsbSheet sheet)
+        {
+            return new ExcelEnumerable<T, XlsbSheet, XlsbWorkbook.Enumerator>(sheet, _config, _info());
+        }
+
+        /// <summary>Parses the rows of a format-agnostic sheet (one obtained from <see cref="IExcelWorkbook"/>) into <typeparamref name="T"/> instances, lazily as the result is enumerated.</summary>
+        /// <param name="sheet">The sheet to pull rows from. Each enumeration of the result starts a new read of it.</param>
+        /// <returns>An enumerable that yields one <typeparamref name="T"/> per data row.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="sheet"/> is <see langword="null"/>.</exception>
+        public ExcelEnumerable<T, IExcelSheet, IExcelRowEnumerator> Parse(IExcelSheet sheet)
+        {
+            ArgumentNullException.ThrowIfNull(sheet);
+            return new ExcelEnumerable<T, IExcelSheet, IExcelRowEnumerator>(sheet, _config, _info());
+        }
+
+        /// <summary>Parses the records of a CSV sheet into <typeparamref name="T"/> instances, lazily as the result is enumerated.</summary>
+        /// <param name="sheet">The CSV sheet to pull records from.</param>
+        /// <returns>An enumerable that yields one <typeparamref name="T"/> per data row.</returns>
+        /// <remarks>
+        /// Uses a specialized enumerable (dense field binding, single-pass projection), since CSV rows have
+        /// no gaps or styles. Prefer this overload over <see cref="Parse(IExcelSheet)"/> for CSV: a sheet
+        /// held as <see cref="IExcelSheet"/> goes through the generic path.
+        /// </remarks>
+        public CsvEnumerable<T> Parse(CsvSheet sheet)
+        {
+            return new CsvEnumerable<T>(sheet, _config, _csvInfo());
         }
     }
 

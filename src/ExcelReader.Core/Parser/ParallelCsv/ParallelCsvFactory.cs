@@ -116,7 +116,7 @@ namespace ExcelReader.Core.Parser.ParallelCsv
         private static CsvEnumerable<T> Sequential<T>(
             CsvReader reader, ExcelParser<T> parser, CancellationToken ct)
         {
-            return new CsvEnumerable<T>(reader, parser.Config, parser.CsvInfo, ownsReader: true, ct);
+            return new CsvEnumerable<T>(reader.Sheets[0], parser.Config, parser.CsvInfo, ownedReader: reader, ct);
         }
 
         private static async IAsyncEnumerable<T> Empty<T>()
