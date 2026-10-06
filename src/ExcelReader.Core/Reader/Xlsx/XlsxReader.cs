@@ -179,7 +179,13 @@ namespace ExcelReader.Core.Reader.Xlsx
 
         internal ReadOnlySpan<byte> SharedSpan => _sharedFlat;
 
-        internal string?[] SharedStringCache => _sharedStringCache ??= WorkbookLookups.CreateSharedStringCache(_sharedOffsets);
+        internal string?[] SharedStringCache => Volatile.Read(ref _sharedStringCache) ?? CreateSharedStringCache();
+
+        private string?[] CreateSharedStringCache()
+        {
+            string?[] created = WorkbookLookups.CreateSharedStringCache(_sharedOffsets);
+            return Interlocked.CompareExchange(ref _sharedStringCache, created, null) ?? created;
+        }
 
         /// <inheritdoc/>
         public void Dispose()
