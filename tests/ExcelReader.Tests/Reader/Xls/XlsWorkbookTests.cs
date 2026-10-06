@@ -1,6 +1,7 @@
 using System.Collections;
 using ExcelReader.Core.Parser;
 using ExcelReader.Core.Reader;
+using ExcelReader.Core.Reader.Xls;
 using ExcelReader.Core.Writer.Xls;
 
 namespace ExcelReader.Tests.Reader.Xls
@@ -24,7 +25,7 @@ namespace ExcelReader.Tests.Reader.Xls
                 sheets: [("S1", [["Name", "Age", "Active", "Err", "Formula"], ["João", 42, true, new XlsError(0x07), new XlsFormula(12.5)]])]);
             using var reader = Excel.FromXls(ms);
 
-            using var e = reader.GetEnumerator();
+            using var e = reader.FirstSheet.GetEnumerator();
             Assert.True(e.MoveNext());
             RowAssert(e.Current, ["Name", "Age", "Active", "Err", "Formula"]);
             Assert.True(e.MoveNext());
@@ -56,7 +57,7 @@ namespace ExcelReader.Tests.Reader.Xls
                 ]);
             using var reader = Excel.FromXls(ms);
 
-            using var e = reader.GetEnumerator();
+            using var e = reader.FirstSheet.GetEnumerator();
             Assert.True(e.MoveNext());
             var row = e.Current;
             Assert.Equal("Unicode Ω", row[0].GetString());
@@ -88,7 +89,7 @@ namespace ExcelReader.Tests.Reader.Xls
             using var ms = XlsWorkbookBuilder.Build(sheets: [("S1", [wide])]);
             using var reader = Excel.FromXls(ms);
 
-            using var e = reader.GetEnumerator();
+            using var e = reader.FirstSheet.GetEnumerator();
             Assert.True(e.MoveNext());
             var row = e.Current;
             Assert.Equal(45, row.ColumnCount);
@@ -107,7 +108,7 @@ namespace ExcelReader.Tests.Reader.Xls
             using var ms = XlsWorkbookBuilder.Build(sheets: [("S1", [[new XlsAt(2, "C"), new XlsAt(0, "A"), new XlsAt(1, "B")]])]);
             using var reader = Excel.FromXls(ms);
 
-            using var e = reader.GetEnumerator();
+            using var e = reader.FirstSheet.GetEnumerator();
             Assert.True(e.MoveNext());
             Assert.Equal("A", e.Current[0].GetString());
             Assert.Equal("B", e.Current[1].GetString());
@@ -125,7 +126,7 @@ namespace ExcelReader.Tests.Reader.Xls
             ]])]);
             using var reader = Excel.FromXls(ms);
 
-            using var e = reader.GetEnumerator();
+            using var e = reader.FirstSheet.GetEnumerator();
             Assert.True(e.MoveNext());
             var row = e.Current;
             Assert.True(row[0].TryGetDouble(out double v0));
@@ -148,14 +149,12 @@ namespace ExcelReader.Tests.Reader.Xls
             using var reader = Excel.FromXls(ms);
 
             Assert.Equal(2, reader.SheetCount);
-            Assert.True(reader.TryMoveToSheet("second"));
-            Assert.Equal("Second", reader.SheetName);
-            reader.MoveToSheet(0);
-            Assert.Equal("First", reader.SheetName);
-            reader.MoveToSheet(1);
-            Assert.Equal("Second", reader.SheetName);
+            Assert.True(reader.TryGetSheet("second", out XlsSheet second));
+            Assert.Equal("Second", second.Name);
+            Assert.Equal("First", reader.Sheets[0].Name);
+            Assert.Equal("Second", reader.Sheets[1].Name);
 
-            using var e = reader.GetEnumerator();
+            using var e = reader.Sheets[1].GetEnumerator();
             Assert.True(e.MoveNext());
             Assert.Equal("Header", e.Current[0].GetString());
             Assert.True(e.MoveNext());
@@ -169,7 +168,7 @@ namespace ExcelReader.Tests.Reader.Xls
             using var ms = XlsWorkbookBuilder.Build(sheets: [("S1", [[new XlsSharedString(text)]])]);
             using var reader = Excel.FromXls(ms);
 
-            using var e = reader.GetEnumerator();
+            using var e = reader.FirstSheet.GetEnumerator();
             Assert.True(e.MoveNext());
             Assert.Equal(text, e.Current[0].GetString());
         }
@@ -180,8 +179,8 @@ namespace ExcelReader.Tests.Reader.Xls
             using var ms = XlsWorkbookBuilder.Build(sheets: [("Ωmega", [["A"]])]);
             using var reader = Excel.FromXls(ms);
 
-            Assert.Equal("Ωmega", reader.SheetName);
-            Assert.True(reader.TryMoveToSheet("ωmega"));
+            Assert.Equal("Ωmega", reader.Sheets[0].Name);
+            Assert.True(reader.TryGetSheet("ωmega", out _));
         }
 
         [Fact]
@@ -194,7 +193,7 @@ namespace ExcelReader.Tests.Reader.Xls
             using var reader = Excel.FromXls(ms);
 
             Assert.True(reader.IsDate1904);
-            var result = ExcelParser.FromAttributes<PersonRow>().Parse(reader).ToList();
+            var result = ExcelParser.FromAttributes<PersonRow>().Parse(reader.FirstSheet).ToList();
             Assert.Single(result);
             Assert.Equal(date, result[0].BirthDate);
         }
@@ -208,7 +207,7 @@ namespace ExcelReader.Tests.Reader.Xls
                 sheets: [("S1", [["BirthDate"], [new XlsDate(date)]])]);
             using var reader = Excel.FromXls(ms);
 
-            using var e = reader.GetEnumerator();
+            using var e = reader.FirstSheet.GetEnumerator();
             Assert.True(e.MoveNext());
             Assert.True(e.MoveNext());
             Assert.Equal(CellType.Date, e.Current[0].Type);
@@ -224,7 +223,7 @@ namespace ExcelReader.Tests.Reader.Xls
                 sheets: [("S1", [["BirthDate"], [new XlsDate(new DateTime(2024, 5, 6, 0, 0, 0, DateTimeKind.Unspecified))]])]);
             using var reader = Excel.FromXls(ms);
 
-            using var e = reader.GetEnumerator();
+            using var e = reader.FirstSheet.GetEnumerator();
             Assert.True(e.MoveNext());
             Assert.True(e.MoveNext());
             Assert.Equal(CellType.Number, e.Current[0].Type);
@@ -243,7 +242,7 @@ namespace ExcelReader.Tests.Reader.Xls
                 sheets: [("S1", [["BirthDate"], [new XlsDate(new DateTime(2024, 5, 6, 0, 0, 0, DateTimeKind.Unspecified))]])]);
             using var reader = Excel.FromXls(ms);
 
-            using var e = reader.GetEnumerator();
+            using var e = reader.FirstSheet.GetEnumerator();
             Assert.True(e.MoveNext());
             Assert.True(e.MoveNext());
             Assert.Equal(CellType.Number, e.Current[0].Type);
@@ -257,7 +256,7 @@ namespace ExcelReader.Tests.Reader.Xls
                 sheets: [("S1", [["BirthDate"], [new XlsDate(new DateTime(2024, 5, 6, 0, 0, 0, DateTimeKind.Unspecified))]])]);
             using var reader = Excel.FromXls(ms);
 
-            using var e = reader.GetEnumerator();
+            using var e = reader.FirstSheet.GetEnumerator();
             Assert.True(e.MoveNext());
             Assert.True(e.MoveNext());
             Assert.Equal(CellType.Date, e.Current[0].Type);
@@ -270,7 +269,7 @@ namespace ExcelReader.Tests.Reader.Xls
                 sheets: [("S1", [["Name", "Age", "Active"], ["Ana", 31, false]])]);
             using var reader = Excel.FromXls(ms);
 
-            var result = ExcelParser.FromAttributes<PersonRow>().Parse(reader).ToList();
+            var result = ExcelParser.FromAttributes<PersonRow>().Parse(reader.FirstSheet).ToList();
             Assert.Single(result);
             Assert.Equal("Ana", result[0].Name);
             Assert.Equal(31, result[0].Age);
@@ -282,7 +281,7 @@ namespace ExcelReader.Tests.Reader.Xls
         {
             using var ms = XlsWorkbookBuilder.Build(sheets: [("S1", [["Name"], ["Lua"]])]);
             using var reader = Excel.FromXls(ms);
-            var enumerable = ExcelParser.FromAttributes<PersonRow>().Parse(reader);
+            var enumerable = ExcelParser.FromAttributes<PersonRow>().Parse(reader.FirstSheet);
 
             using IEnumerator<PersonRow> generic = ((IEnumerable<PersonRow>)enumerable).GetEnumerator();
             Assert.True(generic.MoveNext());
@@ -308,7 +307,7 @@ namespace ExcelReader.Tests.Reader.Xls
             using var reader = Excel.FromXls(ms);
             var parser = ExcelParser.FromAttributes<PersonRow>(new ExcelParserConfig { HeaderRow = 2 });
 
-            var result = parser.Parse(reader).ToList();
+            var result = parser.Parse(reader.FirstSheet).ToList();
             Assert.Single(result);
             Assert.Equal("Sol", result[0].Name);
         }
@@ -319,7 +318,7 @@ namespace ExcelReader.Tests.Reader.Xls
             using var ms = XlsWorkbookBuilder.Build(sheets: [("S1", [["Unknown"], ["value"]])]);
             using var reader = Excel.FromXls(ms);
 
-            var result = ExcelParser.FromAttributes<PersonRow>().Parse(reader).ToList();
+            var result = ExcelParser.FromAttributes<PersonRow>().Parse(reader.FirstSheet).ToList();
             Assert.Single(result);
             Assert.Null(result[0].Name);
         }
@@ -331,7 +330,7 @@ namespace ExcelReader.Tests.Reader.Xls
             using var reader = Excel.FromXls(ms);
             var rows = new List<PersonRow>();
 
-            await foreach (PersonRow row in ExcelParser.FromAttributes<PersonRow>().Parse(reader).WithCancellation(TestContext.Current.CancellationToken))
+            await foreach (PersonRow row in ExcelParser.FromAttributes<PersonRow>().Parse(reader.FirstSheet).WithCancellation(TestContext.Current.CancellationToken))
             {
                 rows.Add(row);
             }
@@ -348,7 +347,7 @@ namespace ExcelReader.Tests.Reader.Xls
             await using var reader = await Excel.FromXlsAsync(ms, ct: TestContext.Current.CancellationToken);
 
             List<PersonRow> rows = [];
-            await foreach (PersonRow row in ExcelParser.FromAttributes<PersonRow>().Parse(reader).WithCancellation(TestContext.Current.CancellationToken))
+            await foreach (PersonRow row in ExcelParser.FromAttributes<PersonRow>().Parse(reader.FirstSheet).WithCancellation(TestContext.Current.CancellationToken))
             {
                 rows.Add(row);
             }
@@ -365,7 +364,7 @@ namespace ExcelReader.Tests.Reader.Xls
             using var reader = Excel.FromXls(ms);
 
             IAsyncEnumerator<PersonRow> e = ExcelParser.FromAttributes<PersonRow>()
-                .Parse(reader)
+                .Parse(reader.FirstSheet)
                 .GetAsyncEnumerator(TestContext.Current.CancellationToken);
 
             Exception? ex = await Record.ExceptionAsync(async () =>
@@ -382,7 +381,7 @@ namespace ExcelReader.Tests.Reader.Xls
             using var cts = new CancellationTokenSource();
             cts.Cancel();
 
-            Assert.Throws<OperationCanceledException>(() => reader.GetAsyncEnumerator(cts.Token));
+            Assert.Throws<OperationCanceledException>(() => reader.FirstSheet.GetAsyncEnumerator(cts.Token));
         }
 
         [Fact]
@@ -392,7 +391,7 @@ namespace ExcelReader.Tests.Reader.Xls
                 sheets: [("S1", [[new XlsSharedString("Repeat"), new XlsSharedString("Repeat")]])]);
             using var reader = Excel.FromXls(ms);
 
-            using var e = reader.GetEnumerator();
+            using var e = reader.FirstSheet.GetEnumerator();
             Assert.True(e.MoveNext());
             Assert.Same(e.Current[0].GetString(), e.Current[1].GetString());
         }
@@ -403,7 +402,7 @@ namespace ExcelReader.Tests.Reader.Xls
             using var ms = XlsWorkbookBuilder.Build(sheets: [("S1", [[new XlsSharedIndex(99)]])]);
             using var reader = Excel.FromXls(ms);
 
-            using var e = reader.GetEnumerator();
+            using var e = reader.FirstSheet.GetEnumerator();
             Assert.True(e.MoveNext());
             Assert.Equal(string.Empty, e.Current[0].GetString());
         }
@@ -418,14 +417,14 @@ namespace ExcelReader.Tests.Reader.Xls
 
                 using (var reader = Excel.FromXlsFile(path))
                 {
-                    using var e = reader.GetEnumerator();
+                    using var e = reader.FirstSheet.GetEnumerator();
                     Assert.True(e.MoveNext());
                     Assert.Equal("A", e.Current[0].GetString());
                 }
 
                 await using (var reader = await Excel.FromXlsFileAsync(path, ct: TestContext.Current.CancellationToken))
                 {
-                    await using var e = reader.GetAsyncEnumerator(TestContext.Current.CancellationToken);
+                    await using var e = reader.FirstSheet.GetAsyncEnumerator(TestContext.Current.CancellationToken);
                     Assert.True(await e.MoveNextAsync());
                     Assert.Equal("A", e.Current[0].GetString());
                 }
@@ -445,9 +444,9 @@ namespace ExcelReader.Tests.Reader.Xls
             using var ms = XlsWorkbookBuilder.Build(sheets: [("S1", [["A"]])]);
             using var reader = Excel.FromXls(ms);
 
-            Assert.False(reader.TryMoveToSheet("Missing"));
-            Assert.Throws<ArgumentOutOfRangeException>(() => reader.MoveToSheet(-1));
-            Assert.Throws<ArgumentOutOfRangeException>(() => reader.MoveToSheet(1));
+            Assert.False(reader.TryGetSheet("Missing", out _));
+            Assert.Throws<ArgumentOutOfRangeException>(() => reader.Sheets[-1]);
+            Assert.Throws<ArgumentOutOfRangeException>(() => reader.Sheets[1]);
         }
 
         [Fact]
@@ -496,7 +495,7 @@ namespace ExcelReader.Tests.Reader.Xls
         {
             using var ms = XlsWorkbookBuilder.BuildBadSheetBof();
             using var reader = Excel.FromXls(ms);
-            using var e = reader.GetEnumerator();
+            using var e = reader.FirstSheet.GetEnumerator();
 
             Assert.Throws<NotSupportedException>(() => e.MoveNext());
         }
@@ -514,7 +513,7 @@ namespace ExcelReader.Tests.Reader.Xls
                 (0x0006, XlsWorkbookBuilder.RawRowOnly(0)),
                 (0x0204, XlsWorkbookBuilder.RawLabel(0, 0, "A")));
             using var reader = Excel.FromXls(ms);
-            using var e = reader.GetEnumerator();
+            using var e = reader.FirstSheet.GetEnumerator();
 
             Assert.True(e.MoveNext());
             Assert.Equal("A", e.Current[0].GetString());
@@ -536,7 +535,7 @@ namespace ExcelReader.Tests.Reader.Xls
             Assert.True(ms.Length > SectorSize * 4, "workbook should span several OLE sectors");
             using var reader = Excel.FromXls(ms);
 
-            using var e = reader.GetEnumerator();
+            using var e = reader.FirstSheet.GetEnumerator();
             Assert.True(e.MoveNext());
             RowAssert(e.Current, ["Name", "Age", "Score"]);
 
@@ -562,7 +561,7 @@ namespace ExcelReader.Tests.Reader.Xls
                 sheets: [("S1", [[12.5, 42, new XlsRkInt(123), -7.25]])]);
             using var reader = Excel.FromXls(ms);
 
-            using var e = reader.GetEnumerator();
+            using var e = reader.FirstSheet.GetEnumerator();
             Assert.True(e.MoveNext());
             var row = e.Current;
 
@@ -592,7 +591,7 @@ namespace ExcelReader.Tests.Reader.Xls
             using var ms = XlsWorkbookBuilder.BuildRawSst(framed, labelSstCount: 2);
             using var reader = Excel.FromXls(ms);
 
-            using var e = reader.GetEnumerator();
+            using var e = reader.FirstSheet.GetEnumerator();
             Assert.True(e.MoveNext());
             Assert.Equal("AB", e.Current[0].GetString());
             Assert.Equal("CDEF", e.Current[1].GetString());
@@ -608,7 +607,7 @@ namespace ExcelReader.Tests.Reader.Xls
             using var ms = XlsWorkbookBuilder.BuildRawSst(framed, labelSstCount: 1);
             using var reader = Excel.FromXls(ms);
 
-            using var e = reader.GetEnumerator();
+            using var e = reader.FirstSheet.GetEnumerator();
             Assert.True(e.MoveNext());
             Assert.Equal("AΩB", e.Current[0].GetString());
         }
@@ -621,7 +620,7 @@ namespace ExcelReader.Tests.Reader.Xls
                 sheets: [("S1", [[new XlsUnicodeString(emoji)]])]);
             using var reader = Excel.FromXls(ms);
 
-            using var e = reader.GetEnumerator();
+            using var e = reader.FirstSheet.GetEnumerator();
             Assert.True(e.MoveNext());
             Assert.Equal(emoji, e.Current[0].GetString());
         }
@@ -655,7 +654,7 @@ namespace ExcelReader.Tests.Reader.Xls
 
             ms.Position = 0;
             using var reader = Excel.FromXls(ms);
-            using var e = reader.GetEnumerator();
+            using var e = reader.FirstSheet.GetEnumerator();
             Assert.True(e.MoveNext());
             Assert.Equal(longCompressed, e.Current[0].GetString());
             Assert.Equal(longWide, e.Current[1].GetString());

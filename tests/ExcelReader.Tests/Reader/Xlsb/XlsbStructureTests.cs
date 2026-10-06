@@ -95,7 +95,7 @@ namespace ExcelReader.Tests.Reader.Xlsb
             AssertRowsCovered(structure);
             using XlsbWorkbook reader = Excel.FromXlsb(new MemoryStream(bytes));
             var values = new List<string>();
-            foreach (var r in reader)
+            foreach (var r in reader.FirstSheet)
             {
                 values.Add(r[0].GetString());
             }

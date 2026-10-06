@@ -40,8 +40,8 @@ namespace ExcelReader.Tests.Reader.Xlsx
         public void A_Failed_Shared_String_Load_Fails_Every_Later_Enumeration()
         {
             using XlsxWorkbook reader = Excel.FromXlsx(BuildXlsx(), new ExcelReaderOptions { MaxSharedStringBytes = 16 });
-            Assert.Throws<ExcelLimitExceededException>(() => reader.GetEnumerator());
-            Assert.Throws<ExcelLimitExceededException>(() => reader.GetEnumerator());
+            Assert.Throws<ExcelLimitExceededException>(() => reader.FirstSheet.GetEnumerator());
+            Assert.Throws<ExcelLimitExceededException>(() => reader.FirstSheet.GetEnumerator());
         }
 
         [Fact]
@@ -51,7 +51,7 @@ namespace ExcelReader.Tests.Reader.Xlsx
                 new MemoryStream(BuildXlsx(), writable: false), leaveOpen: false, new ExcelReaderOptions { MaxSharedStringBytes = 16 });
             for (int attempt = 0; attempt < 2; attempt++)
             {
-                await using XlsxWorkbook.Enumerator e = reader.GetAsyncEnumerator(TestContext.Current.CancellationToken);
+                await using XlsxWorkbook.Enumerator e = reader.FirstSheet.GetAsyncEnumerator(TestContext.Current.CancellationToken);
                 await Assert.ThrowsAsync<ExcelLimitExceededException>(async () => await e.MoveNextAsync());
             }
         }
@@ -60,9 +60,11 @@ namespace ExcelReader.Tests.Reader.Xlsx
         public void GetEnumerator_After_Dispose_Throws()
         {
             XlsxWorkbook reader = Excel.FromXlsx(BuildXlsx());
+            XlsxSheet sheet = reader.FirstSheet;
             reader.Dispose();
-            Assert.Throws<ObjectDisposedException>(() => reader.GetEnumerator());
-            Assert.Throws<ObjectDisposedException>(() => reader.GetAsyncEnumerator(TestContext.Current.CancellationToken));
+            Assert.Throws<ObjectDisposedException>(() => reader.Sheets);
+            Assert.Throws<ObjectDisposedException>(() => sheet.GetEnumerator());
+            Assert.Throws<ObjectDisposedException>(() => sheet.GetAsyncEnumerator(TestContext.Current.CancellationToken));
         }
 
         [Fact]
@@ -72,13 +74,13 @@ namespace ExcelReader.Tests.Reader.Xlsx
             List<string> expected;
             using (XlsxWorkbook reference = Excel.FromXlsx(bytes))
             {
-                using XlsxWorkbook.Enumerator all = reference.GetEnumerator();
+                using XlsxWorkbook.Enumerator all = reference.FirstSheet.GetEnumerator();
                 expected = Drain(all);
             }
 
             TrickleStream stream = new(bytes);
             XlsxWorkbook reader = Excel.FromXlsx(stream, leaveOpen: false);
-            XlsxWorkbook.Enumerator e = reader.GetEnumerator();
+            XlsxWorkbook.Enumerator e = reader.FirstSheet.GetEnumerator();
             Assert.True(e.MoveNext());
 
             reader.Dispose();
@@ -96,7 +98,7 @@ namespace ExcelReader.Tests.Reader.Xlsx
         {
             TrickleStream stream = new(BuildXlsx(rows: 20));
             XlsxWorkbook reader = Excel.FromXlsx(stream, leaveOpen: false);
-            XlsxWorkbook.Enumerator e = reader.GetEnumerator();
+            XlsxWorkbook.Enumerator e = reader.FirstSheet.GetEnumerator();
             e.Dispose();
             e.Dispose();
             Assert.True(stream.CanRead);
@@ -110,7 +112,7 @@ namespace ExcelReader.Tests.Reader.Xlsx
         {
             TrickleStream stream = new(BuildXlsx(rows: 20));
             XlsxWorkbook reader = Excel.FromXlsx(stream, leaveOpen: false, new ExcelReaderOptions { MaxSharedStringBytes = 16 });
-            Assert.Throws<ExcelLimitExceededException>(() => reader.GetEnumerator());
+            Assert.Throws<ExcelLimitExceededException>(() => reader.FirstSheet.GetEnumerator());
             reader.Dispose();
             Assert.False(stream.CanRead);
         }
@@ -120,7 +122,7 @@ namespace ExcelReader.Tests.Reader.Xlsx
         {
             TrickleStream stream = new(BuildXlsx(rows: 20));
             XlsxWorkbook reader = Excel.FromXlsx(stream, leaveOpen: false);
-            XlsxWorkbook.Enumerator e = reader.GetAsyncEnumerator(TestContext.Current.CancellationToken);
+            XlsxWorkbook.Enumerator e = reader.FirstSheet.GetAsyncEnumerator(TestContext.Current.CancellationToken);
             await e.DisposeAsync();
             Task<bool> move = Task.Run(async () => await e.MoveNextAsync(), TestContext.Current.CancellationToken);
             Assert.Same(move, await Task.WhenAny(move, Task.Delay(TimeSpan.FromSeconds(3), TestContext.Current.CancellationToken)));
@@ -136,7 +138,7 @@ namespace ExcelReader.Tests.Reader.Xlsx
             List<string> expected;
             using (XlsxWorkbook reference = Excel.FromXlsx(bytes))
             {
-                using XlsxWorkbook.Enumerator all = reference.GetEnumerator();
+                using XlsxWorkbook.Enumerator all = reference.FirstSheet.GetEnumerator();
                 expected = Drain(all);
             }
 
@@ -159,14 +161,14 @@ namespace ExcelReader.Tests.Reader.Xlsx
                 }
             };
 
-            await using (XlsxWorkbook.Enumerator cancelled = reader.GetAsyncEnumerator(cts.Token))
+            await using (XlsxWorkbook.Enumerator cancelled = reader.FirstSheet.GetAsyncEnumerator(cts.Token))
             {
                 await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await cancelled.MoveNextAsync());
             }
             Assert.InRange(cancelledAt, bodyStart, bodyEnd - 1);
 
             List<string> actual = [];
-            await using (XlsxWorkbook.Enumerator again = reader.GetAsyncEnumerator(TestContext.Current.CancellationToken))
+            await using (XlsxWorkbook.Enumerator again = reader.FirstSheet.GetAsyncEnumerator(TestContext.Current.CancellationToken))
             {
                 while (await again.MoveNextAsync())
                 {

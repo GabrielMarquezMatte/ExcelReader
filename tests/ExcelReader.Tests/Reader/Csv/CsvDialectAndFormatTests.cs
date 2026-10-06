@@ -27,20 +27,10 @@ namespace ExcelReader.Tests.Reader.Csv
             return WriteTemp((encoding ?? new UTF8Encoding(encoderShouldEmitUTF8Identifier: false)).GetBytes(content));
         }
 
-        private static List<string[]> ReadAll(IExcelRowReader reader)
-        {
-            return ReadAll(reader.GetEnumerator());
-        }
-
         private static List<string[]> ReadAll(IExcelSheet sheet)
         {
-            return ReadAll(sheet.GetEnumerator());
-        }
-
-        private static List<string[]> ReadAll(IExcelRowEnumerator enumerator)
-        {
             var rows = new List<string[]>();
-            using IExcelRowEnumerator owned = enumerator;
+            using IExcelRowEnumerator owned = sheet.GetEnumerator();
             while (owned.MoveNext())
             {
                 var cells = new List<string>();
@@ -59,8 +49,8 @@ namespace ExcelReader.Tests.Reader.Csv
             string path = WriteTemp("Name,Age\nAda,36\n");
             try
             {
-                using IExcelRowReader reader = Excel.Open(path, ExcelFileFormat.Csv);
-                List<string[]> rows = ReadAll(reader);
+                using IExcelWorkbook reader = Excel.Open(path, ExcelFileFormat.Csv);
+                List<string[]> rows = ReadAll(reader.FirstSheet);
 
                 Assert.Equal(2, rows.Count);
                 Assert.Equal(["Ada", "36"], rows[1]);
@@ -78,9 +68,9 @@ namespace ExcelReader.Tests.Reader.Csv
             try
             {
                 var options = new ExcelReaderOptions { Csv = CsvReaderOptions.Default with { Delimiter = (byte)';' } };
-                using IExcelRowReader reader = Excel.Open(path, ExcelFileFormat.Csv, options);
+                using IExcelWorkbook reader = Excel.Open(path, ExcelFileFormat.Csv, options);
 
-                Assert.Equal(["Ada", "London", "36"], ReadAll(reader)[1]);
+                Assert.Equal(["Ada", "London", "36"], ReadAll(reader.FirstSheet)[1]);
             }
             finally
             {
@@ -95,12 +85,12 @@ namespace ExcelReader.Tests.Reader.Csv
 
             using (var stream = new MemoryStream(csv, writable: false))
             {
-                using IExcelRowReader fromStream = Excel.Open(stream, ExcelFileFormat.Csv);
-                Assert.Equal(["Ada", "36"], ReadAll(fromStream)[1]);
+                using IExcelWorkbook fromStream = Excel.Open(stream, ExcelFileFormat.Csv);
+                Assert.Equal(["Ada", "36"], ReadAll(fromStream.FirstSheet)[1]);
             }
 
-            using IExcelRowReader fromMemory = Excel.Open(csv.AsMemory(), ExcelFileFormat.Csv);
-            Assert.Equal(["Ada", "36"], ReadAll(fromMemory)[1]);
+            using IExcelWorkbook fromMemory = Excel.Open(csv.AsMemory(), ExcelFileFormat.Csv);
+            Assert.Equal(["Ada", "36"], ReadAll(fromMemory.FirstSheet)[1]);
         }
 
         [Fact]
@@ -109,10 +99,10 @@ namespace ExcelReader.Tests.Reader.Csv
             string path = WriteTemp("Name,Age\nAda,36\n");
             try
             {
-                IExcelRowReader reader = await Excel.OpenAsync(path, ExcelFileFormat.Csv, ct: TestContext.Current.CancellationToken);
+                IExcelWorkbook reader = await Excel.OpenAsync(path, ExcelFileFormat.Csv, ct: TestContext.Current.CancellationToken);
                 using (reader)
                 {
-                    Assert.Equal(["Ada", "36"], ReadAll(reader)[1]);
+                    Assert.Equal(["Ada", "36"], ReadAll(reader.FirstSheet)[1]);
                 }
             }
             finally
@@ -147,7 +137,7 @@ namespace ExcelReader.Tests.Reader.Csv
             {
                 using CsvReader reader = Excel.FromCsvFile(path, CsvReaderOptions.Default with { SniffDialect = true });
 
-                Assert.Equal(["Ada", "London", "36"], ReadAll(reader)[1]);
+                Assert.Equal(["Ada", "London", "36"], ReadAll(reader.FirstSheet)[1]);
             }
             finally
             {
@@ -164,7 +154,7 @@ namespace ExcelReader.Tests.Reader.Csv
                 var options = CsvReaderOptions.Default with { SniffDialect = true, Encoding = Encoding.Latin1 };
                 using CsvReader reader = Excel.FromCsvFile(path, options);
 
-                Assert.Equal(["José", "São Paulo"], ReadAll(reader)[1]);
+                Assert.Equal(["José", "São Paulo"], ReadAll(reader.FirstSheet)[1]);
             }
             finally
             {

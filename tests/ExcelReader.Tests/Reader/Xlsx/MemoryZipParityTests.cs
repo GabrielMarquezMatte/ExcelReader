@@ -56,8 +56,8 @@ namespace ExcelReader.Tests.Reader.Xlsx
         {
             CancellationToken ct = TestContext.Current.CancellationToken;
             byte[] bytes = fixture.Build();
-            using IExcelRowReader reader = fixture.OpenMemory(bytes, ExcelReaderOptions.Default);
-            await using IExcelRowEnumerator e = reader.GetAsyncEnumerator(ct);
+            using IExcelWorkbook reader = fixture.OpenMemory(bytes, ExcelReaderOptions.Default);
+            await using IExcelRowEnumerator e = reader.FirstSheet.GetAsyncEnumerator(ct);
             ValueTask<bool> task = e.MoveNextAsync();
             Assert.True(task.IsCompleted);
             Assert.True(await task);
@@ -79,7 +79,7 @@ namespace ExcelReader.Tests.Reader.Xlsx
 
 
         [Fact]
-        public void MoveToSheetAndTryMoveToSheetWorkOnTheMemoryPath()
+        public void SheetsAndTryGetSheetWorkOnTheMemoryPath()
         {
             using MemoryStream built = WorkbookBuilder.BuildMultiSheet(
                 sheets:
@@ -92,23 +92,22 @@ namespace ExcelReader.Tests.Reader.Xlsx
             using XlsxWorkbook reader = Excel.FromXlsx(bytes.AsMemory());
             Assert.Equal(2, reader.SheetCount);
 
-            reader.MoveToSheet(1);
-            Assert.Equal("Second", reader.SheetName);
-            using (XlsxWorkbook.Enumerator e = reader.GetEnumerator())
+            Assert.Equal("Second", reader.Sheets[1].Name);
+            using (XlsxWorkbook.Enumerator e = reader.Sheets[1].GetEnumerator())
             {
                 Assert.True(e.MoveNext());
                 Assert.Equal("2", e.Current[0].GetString());
             }
 
-            Assert.True(reader.TryMoveToSheet("First"));
-            Assert.Equal("First", reader.SheetName);
-            using (XlsxWorkbook.Enumerator e = reader.GetEnumerator())
+            Assert.True(reader.TryGetSheet("First", out XlsxSheet first));
+            Assert.Equal("First", first.Name);
+            using (XlsxWorkbook.Enumerator e = first.GetEnumerator())
             {
                 Assert.True(e.MoveNext());
                 Assert.Equal("1", e.Current[0].GetString());
             }
 
-            Assert.False(reader.TryMoveToSheet("NoSuchSheet"));
+            Assert.False(reader.TryGetSheet("NoSuchSheet", out _));
         }
 
 
@@ -120,7 +119,7 @@ namespace ExcelReader.Tests.Reader.Xlsx
             var manager = new NonArrayMemoryManager(bytes);
 
             using XlsxWorkbook reader = Excel.FromXlsx(manager.Memory);
-            using XlsxWorkbook.Enumerator e = reader.GetEnumerator();
+            using XlsxWorkbook.Enumerator e = reader.FirstSheet.GetEnumerator();
             Assert.True(e.MoveNext());
             Assert.Equal("42", e.Current[0].GetString());
         }
@@ -131,7 +130,7 @@ namespace ExcelReader.Tests.Reader.Xlsx
         {
             using MemoryStream built = WorkbookBuilder.Build("""<row r="1"><c r="A1"><v>1</v></c></row>""");
             byte[] bytes = built.ToArray();
-            using IExcelRowReader reader = Excel.Open(bytes.AsMemory());
+            using IExcelWorkbook reader = Excel.Open(bytes.AsMemory());
             Assert.IsType<XlsxWorkbook>(reader);
         }
 
@@ -140,7 +139,7 @@ namespace ExcelReader.Tests.Reader.Xlsx
         {
             CancellationToken ct = TestContext.Current.CancellationToken;
             byte[] bytes = await BuildXlsbAsync(ct);
-            using IExcelRowReader reader = Excel.Open(bytes.AsMemory());
+            using IExcelWorkbook reader = Excel.Open(bytes.AsMemory());
             Assert.IsType<XlsbWorkbook>(reader);
         }
 
@@ -149,7 +148,7 @@ namespace ExcelReader.Tests.Reader.Xlsx
         {
             using MemoryStream built = XlsWorkbookBuilder.Build(sheets: [("S1", [["Name", 1, true]])]);
             byte[] bytes = built.ToArray();
-            using IExcelRowReader reader = Excel.Open(bytes.AsMemory());
+            using IExcelWorkbook reader = Excel.Open(bytes.AsMemory());
             Assert.IsType<XlsWorkbook>(reader);
         }
 
@@ -165,8 +164,8 @@ namespace ExcelReader.Tests.Reader.Xlsx
         public void OpenMemoryMatchesOpenStreamForAutoDetection(MemoryFixture fixture)
         {
             byte[] bytes = fixture.Build();
-            using IExcelRowReader streamed = Excel.Open(new MemoryStream(bytes, writable: false));
-            using IExcelRowReader memory = Excel.Open(bytes.AsMemory());
+            using IExcelWorkbook streamed = Excel.Open(new MemoryStream(bytes, writable: false));
+            using IExcelWorkbook memory = Excel.Open(bytes.AsMemory());
             Assert.Equal(streamed.GetType(), memory.GetType());
         }
 
@@ -176,7 +175,7 @@ namespace ExcelReader.Tests.Reader.Xlsx
         public void DoubleDisposeIsSafe(MemoryFixture fixture)
         {
             byte[] bytes = fixture.Build();
-            IExcelRowReader reader = fixture.OpenMemory(bytes, ExcelReaderOptions.Default);
+            IExcelWorkbook reader = fixture.OpenMemory(bytes, ExcelReaderOptions.Default);
             reader.Dispose();
             Assert.Null(Record.Exception(reader.Dispose));
         }
@@ -186,8 +185,8 @@ namespace ExcelReader.Tests.Reader.Xlsx
         public void DoubleDisposingTheEnumeratorIsSafe(MemoryFixture fixture)
         {
             byte[] bytes = fixture.Build();
-            using IExcelRowReader reader = fixture.OpenMemory(bytes, ExcelReaderOptions.Default);
-            using IExcelRowEnumerator e = reader.GetEnumerator();
+            using IExcelWorkbook reader = fixture.OpenMemory(bytes, ExcelReaderOptions.Default);
+            using IExcelRowEnumerator e = reader.FirstSheet.GetEnumerator();
             e.Dispose();
             Assert.Null(Record.Exception(e.Dispose));
         }
@@ -224,12 +223,12 @@ namespace ExcelReader.Tests.Reader.Xlsx
             Assert.Throws<InvalidDataException>(() =>
             {
                 using XlsxWorkbook reader = Excel.FromXlsx(new MemoryStream(withoutSheet));
-                using XlsxWorkbook.Enumerator e = reader.GetEnumerator();
+                using XlsxWorkbook.Enumerator e = reader.FirstSheet.GetEnumerator();
             });
             Assert.Throws<InvalidDataException>(() =>
             {
                 using XlsxWorkbook reader = Excel.FromXlsx(withoutSheet.AsMemory());
-                using XlsxWorkbook.Enumerator e = reader.GetEnumerator();
+                using XlsxWorkbook.Enumerator e = reader.FirstSheet.GetEnumerator();
             });
         }
 
@@ -245,8 +244,8 @@ namespace ExcelReader.Tests.Reader.Xlsx
             int at = corrupted.AsSpan().IndexOf(needle);
             Assert.True(at >= 0);
             corrupted[at] = (byte)'j';
-            Func<Stream, ExcelReaderOptions, IExcelRowReader> openStream = xlsx ? OpenXlsxStream : OpenXlsbStream;
-            Func<byte[], ExcelReaderOptions, IExcelRowReader> openMemory = xlsx ? OpenXlsxMemory : OpenXlsbMemory;
+            Func<Stream, ExcelReaderOptions, IExcelWorkbook> openStream = xlsx ? OpenXlsxStream : OpenXlsbStream;
+            Func<byte[], ExcelReaderOptions, IExcelWorkbook> openMemory = xlsx ? OpenXlsxMemory : OpenXlsbMemory;
 
             string streamed = Outcome(() => ReadViaStream(corrupted, openStream));
             string memory = Outcome(() => ReadViaMemory(corrupted, openMemory));
@@ -332,11 +331,10 @@ namespace ExcelReader.Tests.Reader.Xlsx
 
         private static void OpenAndDrainMemory(byte[] bytes)
         {
-            using IExcelRowReader reader = Excel.Open(bytes.AsMemory());
+            using IExcelWorkbook reader = Excel.Open(bytes.AsMemory());
             for (int s = 0; s < reader.SheetCount; s++)
             {
-                reader.MoveToSheet(s);
-                using IExcelRowEnumerator e = reader.GetEnumerator();
+                using IExcelRowEnumerator e = reader.SheetAt(s).GetEnumerator();
                 while (e.MoveNext())
                 {
                     for (int c = 0; c < e.Current.ColumnCount; c++)
@@ -362,11 +360,11 @@ namespace ExcelReader.Tests.Reader.Xlsx
         }
 
 
-        private static List<CellSnapshot> ReadViaStream(byte[] bytes, Func<Stream, ExcelReaderOptions, IExcelRowReader> open)
+        private static List<CellSnapshot> ReadViaStream(byte[] bytes, Func<Stream, ExcelReaderOptions, IExcelWorkbook> open)
         {
             using MemoryStream stream = new(bytes, writable: false);
-            using IExcelRowReader reader = open(stream, ExcelReaderOptions.Default);
-            using IExcelRowEnumerator e = reader.GetEnumerator();
+            using IExcelWorkbook reader = open(stream, ExcelReaderOptions.Default);
+            using IExcelRowEnumerator e = reader.FirstSheet.GetEnumerator();
             List<CellSnapshot> cells = [];
             int rowIndex = 0;
             while (e.MoveNext())
@@ -377,10 +375,10 @@ namespace ExcelReader.Tests.Reader.Xlsx
         }
 
         private static List<CellSnapshot> ReadViaMemory(
-            byte[] bytes, Func<byte[], ExcelReaderOptions, IExcelRowReader> open, ExcelReaderOptions? options = null)
+            byte[] bytes, Func<byte[], ExcelReaderOptions, IExcelWorkbook> open, ExcelReaderOptions? options = null)
         {
-            using IExcelRowReader reader = open(bytes, options ?? ExcelReaderOptions.Default);
-            using IExcelRowEnumerator e = reader.GetEnumerator();
+            using IExcelWorkbook reader = open(bytes, options ?? ExcelReaderOptions.Default);
+            using IExcelRowEnumerator e = reader.FirstSheet.GetEnumerator();
             List<CellSnapshot> cells = [];
             int rowIndex = 0;
             while (e.MoveNext())
@@ -391,10 +389,10 @@ namespace ExcelReader.Tests.Reader.Xlsx
         }
 
         private static async Task<List<CellSnapshot>> ReadViaMemoryAsync(
-            byte[] bytes, Func<byte[], ExcelReaderOptions, IExcelRowReader> open, CancellationToken ct)
+            byte[] bytes, Func<byte[], ExcelReaderOptions, IExcelWorkbook> open, CancellationToken ct)
         {
-            using IExcelRowReader reader = open(bytes, ExcelReaderOptions.Default);
-            await using IExcelRowEnumerator e = reader.GetAsyncEnumerator(ct);
+            using IExcelWorkbook reader = open(bytes, ExcelReaderOptions.Default);
+            await using IExcelRowEnumerator e = reader.FirstSheet.GetAsyncEnumerator(ct);
             List<CellSnapshot> cells = [];
             int rowIndex = 0;
             while (await e.MoveNextAsync())
@@ -462,26 +460,26 @@ namespace ExcelReader.Tests.Reader.Xlsx
         }
 
 
-        private static IExcelRowReader OpenXlsxStream(Stream stream, ExcelReaderOptions options)
+        private static IExcelWorkbook OpenXlsxStream(Stream stream, ExcelReaderOptions options)
         {
             return Excel.FromXlsx(stream, options: options);
         }
 
-        private static IExcelRowReader OpenXlsxMemory(byte[] bytes, ExcelReaderOptions options)
+        private static IExcelWorkbook OpenXlsxMemory(byte[] bytes, ExcelReaderOptions options)
         {
             return Excel.FromXlsx(bytes.AsMemory(), options);
         }
 
         [SuppressMessage("Performance", "CA1859:Use concrete types when possible for improved performance",
-            Justification = "Must match the Func<Stream, ExcelReaderOptions, IExcelRowReader> delegate shape shared with the XLSX fixture.")]
-        private static IExcelRowReader OpenXlsbStream(Stream stream, ExcelReaderOptions options)
+            Justification = "Must match the Func<Stream, ExcelReaderOptions, IExcelWorkbook> delegate shape shared with the XLSX fixture.")]
+        private static IExcelWorkbook OpenXlsbStream(Stream stream, ExcelReaderOptions options)
         {
             return Excel.FromXlsb(stream, options: options);
         }
 
         [SuppressMessage("Performance", "CA1859:Use concrete types when possible for improved performance",
-            Justification = "Must match the Func<byte[], ExcelReaderOptions, IExcelRowReader> delegate shape shared with the XLSX fixture.")]
-        private static IExcelRowReader OpenXlsbMemory(byte[] bytes, ExcelReaderOptions options)
+            Justification = "Must match the Func<byte[], ExcelReaderOptions, IExcelWorkbook> delegate shape shared with the XLSX fixture.")]
+        private static IExcelWorkbook OpenXlsbMemory(byte[] bytes, ExcelReaderOptions options)
         {
             return Excel.FromXlsb(bytes.AsMemory(), options);
         }
@@ -525,8 +523,8 @@ namespace ExcelReader.Tests.Reader.Xlsx
         public sealed record MemoryFixture(
             string Name,
             Func<byte[]> Build,
-            Func<Stream, ExcelReaderOptions, IExcelRowReader> OpenStream,
-            Func<byte[], ExcelReaderOptions, IExcelRowReader> OpenMemory)
+            Func<Stream, ExcelReaderOptions, IExcelWorkbook> OpenStream,
+            Func<byte[], ExcelReaderOptions, IExcelWorkbook> OpenMemory)
         {
             public override string ToString()
             {

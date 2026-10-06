@@ -69,8 +69,8 @@ namespace ExcelReader.Tests.Reader.Xlsx
             Task work = Task.Run(() =>
             {
                 using MemoryStream stream = new(bytes, writable: false);
-                using IExcelRowReader reader = fixture.OpenSync(stream, options);
-                using IExcelRowEnumerator e = reader.GetEnumerator();
+                using IExcelWorkbook reader = fixture.OpenSync(stream, options);
+                using IExcelRowEnumerator e = reader.FirstSheet.GetEnumerator();
                 Assert.True(e.MoveNext());
             }, ct);
 
@@ -90,8 +90,8 @@ namespace ExcelReader.Tests.Reader.Xlsx
             Task work = Task.Run(async () =>
             {
                 await using MemoryStream stream = new(bytes, writable: false);
-                await using IExcelRowReader reader = await fixture.OpenAsync(stream, options, ct);
-                await using IExcelRowEnumerator e = reader.GetAsyncEnumerator(ct);
+                await using IExcelWorkbook reader = await fixture.OpenAsync(stream, options, ct);
+                await using IExcelRowEnumerator e = reader.FirstSheet.GetAsyncEnumerator(ct);
                 Assert.True(await e.MoveNextAsync());
             }, ct);
 
@@ -140,10 +140,10 @@ namespace ExcelReader.Tests.Reader.Xlsx
         {
             var options = new ExcelReaderOptions { PrefetchDecompression = prefetch };
             using MemoryStream stream = new(bytes, writable: false);
-            using IExcelRowReader reader = Excel.FromXlsx(stream, options: options);
+            using IExcelWorkbook reader = Excel.FromXlsx(stream, options: options);
             Exception ex = Assert.Throws<InvalidDataException>(() =>
             {
-                using IExcelRowEnumerator e = reader.GetEnumerator();
+                using IExcelRowEnumerator e = reader.FirstSheet.GetEnumerator();
                 DrainRows(e);
             });
             return ex.GetType();
@@ -156,7 +156,7 @@ namespace ExcelReader.Tests.Reader.Xlsx
             await using XlsxWorkbook reader = await Excel.FromXlsxAsync(stream, options: options, ct: ct);
             Exception ex = await Assert.ThrowsAsync<InvalidDataException>(async () =>
             {
-                await using XlsxWorkbook.Enumerator e = reader.GetAsyncEnumerator(ct);
+                await using XlsxWorkbook.Enumerator e = reader.FirstSheet.GetAsyncEnumerator(ct);
                 await DrainRowsAsync(e);
             });
             return ex.GetType();
@@ -200,7 +200,7 @@ namespace ExcelReader.Tests.Reader.Xlsx
             using XlsxWorkbook reader = Excel.FromXlsx(ms, options: options);
             ExcelLimitExceededException ex = Assert.Throws<ExcelLimitExceededException>(() =>
             {
-                using XlsxWorkbook.Enumerator e = reader.GetEnumerator();
+                using XlsxWorkbook.Enumerator e = reader.FirstSheet.GetEnumerator();
                 DrainRows(e);
             });
             Assert.Equal(nameof(ExcelReaderOptions.MaxTotalDecompressedBytes), ex.LimitName);
@@ -222,7 +222,7 @@ namespace ExcelReader.Tests.Reader.Xlsx
             await using XlsxWorkbook reader = await Excel.FromXlsxAsync(ms, options: options, ct: ct);
             ExcelLimitExceededException ex = await Assert.ThrowsAsync<ExcelLimitExceededException>(async () =>
             {
-                await using XlsxWorkbook.Enumerator e = reader.GetAsyncEnumerator(ct);
+                await using XlsxWorkbook.Enumerator e = reader.FirstSheet.GetAsyncEnumerator(ct);
                 await DrainRowsAsync(e);
             });
             Assert.Equal(nameof(ExcelReaderOptions.MaxTotalDecompressedBytes), ex.LimitName);
@@ -241,7 +241,7 @@ namespace ExcelReader.Tests.Reader.Xlsx
             await using MemoryStream stream = new(bytes, writable: false);
             await using XlsxWorkbook reader = await Excel.FromXlsxAsync(stream, options: options, ct: openCt);
 
-            await using XlsxWorkbook.Enumerator e = reader.GetAsyncEnumerator(cts.Token);
+            await using XlsxWorkbook.Enumerator e = reader.FirstSheet.GetAsyncEnumerator(cts.Token);
 
             await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await e.MoveNextAsync());
         }
@@ -256,7 +256,7 @@ namespace ExcelReader.Tests.Reader.Xlsx
 
             await using MemoryStream stream = new(bytes, writable: false);
             await using XlsxWorkbook reader = await Excel.FromXlsxAsync(stream, options: options, ct: openCt);
-            await using XlsxWorkbook.Enumerator e = reader.GetAsyncEnumerator(cts.Token);
+            await using XlsxWorkbook.Enumerator e = reader.FirstSheet.GetAsyncEnumerator(cts.Token);
 
             Assert.True(await e.MoveNextAsync());
             cts.Cancel();
@@ -308,12 +308,12 @@ namespace ExcelReader.Tests.Reader.Xlsx
 
         private static List<CellSnapshot> ReadSync(
             byte[] bytes,
-            Func<Stream, ExcelReaderOptions, IExcelRowReader> open,
+            Func<Stream, ExcelReaderOptions, IExcelWorkbook> open,
             ExcelReaderOptions options)
         {
             using MemoryStream stream = new(bytes, writable: false);
-            using IExcelRowReader reader = open(stream, options);
-            using IExcelRowEnumerator e = reader.GetEnumerator();
+            using IExcelWorkbook reader = open(stream, options);
+            using IExcelRowEnumerator e = reader.FirstSheet.GetEnumerator();
             List<CellSnapshot> cells = [];
             int rowIndex = 0;
             while (e.MoveNext())
@@ -325,13 +325,13 @@ namespace ExcelReader.Tests.Reader.Xlsx
 
         private static async Task<List<CellSnapshot>> ReadAsync(
             byte[] bytes,
-            Func<Stream, ExcelReaderOptions, CancellationToken, ValueTask<IExcelRowReader>> open,
+            Func<Stream, ExcelReaderOptions, CancellationToken, ValueTask<IExcelWorkbook>> open,
             ExcelReaderOptions options,
             CancellationToken ct)
         {
             await using MemoryStream stream = new(bytes, writable: false);
-            await using IExcelRowReader reader = await open(stream, options, ct);
-            await using IExcelRowEnumerator e = reader.GetAsyncEnumerator(ct);
+            await using IExcelWorkbook reader = await open(stream, options, ct);
+            await using IExcelRowEnumerator e = reader.FirstSheet.GetAsyncEnumerator(ct);
             List<CellSnapshot> cells = [];
             int rowIndex = 0;
             while (await e.MoveNextAsync())
@@ -412,12 +412,12 @@ namespace ExcelReader.Tests.Reader.Xlsx
             return Excel.FromXlsb(stream, options: options);
         }
 
-        private static async ValueTask<IExcelRowReader> OpenXlsxAsync(Stream stream, ExcelReaderOptions options, CancellationToken ct)
+        private static async ValueTask<IExcelWorkbook> OpenXlsxAsync(Stream stream, ExcelReaderOptions options, CancellationToken ct)
         {
             return await Excel.FromXlsxAsync(stream, options: options, ct: ct);
         }
 
-        private static async ValueTask<IExcelRowReader> OpenXlsbAsync(Stream stream, ExcelReaderOptions options, CancellationToken ct)
+        private static async ValueTask<IExcelWorkbook> OpenXlsbAsync(Stream stream, ExcelReaderOptions options, CancellationToken ct)
         {
             return await Excel.FromXlsbAsync(stream, options: options, ct: ct);
         }
@@ -467,8 +467,8 @@ namespace ExcelReader.Tests.Reader.Xlsx
         public sealed record PrefetchFixture(
             string Name,
             Func<byte[]> Build,
-            Func<Stream, ExcelReaderOptions, IExcelRowReader> OpenSync,
-            Func<Stream, ExcelReaderOptions, CancellationToken, ValueTask<IExcelRowReader>> OpenAsync)
+            Func<Stream, ExcelReaderOptions, IExcelWorkbook> OpenSync,
+            Func<Stream, ExcelReaderOptions, CancellationToken, ValueTask<IExcelWorkbook>> OpenAsync)
         {
             public override string ToString()
             {

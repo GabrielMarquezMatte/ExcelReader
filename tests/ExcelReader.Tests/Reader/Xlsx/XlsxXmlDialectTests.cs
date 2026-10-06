@@ -12,7 +12,7 @@ namespace ExcelReader.Tests.Reader.Xlsx
                 """<row r="1"><c r='C1' t='s'><v>0</v></c></row>""",
                 sharedStrings: "<si><t>single quoted</t></si>");
             using XlsxWorkbook reader = Excel.FromXlsx(ms);
-            using XlsxWorkbook.Enumerator e = reader.GetEnumerator();
+            using XlsxWorkbook.Enumerator e = reader.FirstSheet.GetEnumerator();
 
             Assert.True(e.MoveNext());
             Assert.Equal("single quoted", e.Current[2].GetString());
@@ -32,7 +32,7 @@ namespace ExcelReader.Tests.Reader.Xlsx
                 $"""<row r="1">{cells}</row>""",
                 sharedStrings: "<si><t>hit</t></si>");
             using XlsxWorkbook reader = Excel.FromXlsx(ms);
-            using XlsxWorkbook.Enumerator e = reader.GetEnumerator();
+            using XlsxWorkbook.Enumerator e = reader.FirstSheet.GetEnumerator();
 
             Assert.True(e.MoveNext());
             Cell cell = e.Current[27];
@@ -53,7 +53,7 @@ namespace ExcelReader.Tests.Reader.Xlsx
                 $"""<row r="1"><c r="A1" t="s"><v>{index}</v></c><c r="B1"><v>7</v></c></row>""",
                 sharedStrings: "<si><t>first</t></si><si><t>second</t></si>");
             using XlsxWorkbook reader = Excel.FromXlsx(ms);
-            using XlsxWorkbook.Enumerator e = reader.GetEnumerator();
+            using XlsxWorkbook.Enumerator e = reader.FirstSheet.GetEnumerator();
 
             Assert.True(e.MoveNext());
             Assert.Equal(expected, e.Current[0].GetString());
@@ -76,7 +76,7 @@ namespace ExcelReader.Tests.Reader.Xlsx
                     + "<si><t><![CDATA[cdata &amp;]]></t></si>"
                     + "<si><t>last</t></si>");
             using XlsxWorkbook reader = Excel.FromXlsx(ms);
-            using XlsxWorkbook.Enumerator e = reader.GetEnumerator();
+            using XlsxWorkbook.Enumerator e = reader.FirstSheet.GetEnumerator();
 
             Assert.True(e.MoveNext());
             for (int i = 0; i < expected.Length; i++)
@@ -91,7 +91,7 @@ namespace ExcelReader.Tests.Reader.Xlsx
             using MemoryStream ms = WorkbookBuilder.Build(
                 """<row r="1"><c r="A1"><v>1</v></c></row><!-- a > b --><row r="2"><c r="A2"><v>2</v></c></row>""");
             using XlsxWorkbook reader = Excel.FromXlsx(ms);
-            using XlsxWorkbook.Enumerator e = reader.GetEnumerator();
+            using XlsxWorkbook.Enumerator e = reader.FirstSheet.GetEnumerator();
 
             Assert.True(e.MoveNext());
             Assert.Equal("1", e.Current[0].GetString());
@@ -106,7 +106,7 @@ namespace ExcelReader.Tests.Reader.Xlsx
             await using MemoryStream ms = WorkbookBuilder.Build(
                 """<row r="1"><c r="A1"><v>1</v></c></row><!-- a > b --><row r="2"><c r="A2"><v>2</v></c></row>""");
             await using XlsxWorkbook reader = await Excel.FromXlsxAsync(ms, ct: TestContext.Current.CancellationToken);
-            await using XlsxWorkbook.Enumerator e = reader.GetAsyncEnumerator(TestContext.Current.CancellationToken);
+            await using XlsxWorkbook.Enumerator e = reader.FirstSheet.GetAsyncEnumerator(TestContext.Current.CancellationToken);
 
             Assert.True(await e.MoveNextAsync());
             Assert.Equal("1", e.Current[0].GetString());
@@ -121,7 +121,7 @@ namespace ExcelReader.Tests.Reader.Xlsx
             using MemoryStream ms = WorkbookBuilder.Build(
                 """<row r="1"><c r="A1" t="inlineStr"><is><t><![CDATA[raw &amp; <tag>]]></t></is></c></row>""");
             using XlsxWorkbook reader = Excel.FromXlsx(ms);
-            using XlsxWorkbook.Enumerator e = reader.GetEnumerator();
+            using XlsxWorkbook.Enumerator e = reader.FirstSheet.GetEnumerator();
 
             Assert.True(e.MoveNext());
             Assert.Equal("raw &amp; <tag>", e.Current[0].GetString());
@@ -134,7 +134,7 @@ namespace ExcelReader.Tests.Reader.Xlsx
                 """<row r="1"><c r="A1" t="s"><v>0</v></c></row>""",
                 sharedStrings: "<si><t><![CDATA[shared &amp; <tag>]]></t></si>");
             using XlsxWorkbook reader = Excel.FromXlsx(ms);
-            using XlsxWorkbook.Enumerator e = reader.GetEnumerator();
+            using XlsxWorkbook.Enumerator e = reader.FirstSheet.GetEnumerator();
 
             Assert.True(e.MoveNext());
             Assert.Equal("shared &amp; <tag>", e.Current[0].GetString());

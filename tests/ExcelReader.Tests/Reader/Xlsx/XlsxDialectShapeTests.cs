@@ -126,7 +126,7 @@ namespace ExcelReader.Tests.Reader.Xlsx
             using XlsxWorkbook reader = Excel.FromXlsx(ms);
 
             Assert.NotEmpty(fixture.Expected);
-            AssertExpected(reader.GetEnumerator(), fixture.Expected);
+            AssertExpected(reader.FirstSheet.GetEnumerator(), fixture.Expected);
         }
 
         [Theory]
@@ -136,7 +136,7 @@ namespace ExcelReader.Tests.Reader.Xlsx
             CancellationToken ct = TestContext.Current.CancellationToken;
             await using MemoryStream ms = WorkbookBuilder.Build(fixture.Rows, fixture.SharedStrings);
             await using XlsxWorkbook reader = await Excel.FromXlsxAsync(ms, ct: ct);
-            await using XlsxWorkbook.Enumerator rows = reader.GetAsyncEnumerator(ct);
+            await using XlsxWorkbook.Enumerator rows = reader.FirstSheet.GetAsyncEnumerator(ct);
 
             Assert.NotEmpty(fixture.Expected);
             await AssertExpectedAsync(rows, fixture.Expected);

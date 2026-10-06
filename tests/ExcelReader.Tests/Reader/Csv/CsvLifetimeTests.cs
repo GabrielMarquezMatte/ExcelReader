@@ -45,7 +45,7 @@ namespace ExcelReader.Tests.Reader.Csv
         private static List<string> Expected()
         {
             using CsvReader reference = Excel.FromCsv(BuildCsv());
-            using CsvReader.Enumerator all = reference.GetEnumerator();
+            using CsvReader.Enumerator all = reference.FirstSheet.GetEnumerator();
             return Drain(all);
         }
 
@@ -54,8 +54,8 @@ namespace ExcelReader.Tests.Reader.Csv
         {
             List<string> expected = Expected();
             using CsvReader reader = Excel.FromCsv(new TrickleStream(BuildCsv()), leaveOpen: false);
-            using CsvReader.Enumerator first = reader.GetEnumerator();
-            using CsvReader.Enumerator second = reader.GetEnumerator();
+            using CsvReader.Enumerator first = reader.FirstSheet.GetEnumerator();
+            using CsvReader.Enumerator second = reader.FirstSheet.GetEnumerator();
 
             List<string> a = [];
             List<string> b = [];
@@ -93,7 +93,7 @@ namespace ExcelReader.Tests.Reader.Csv
             CsvReader.Enumerator[] enumerators = new CsvReader.Enumerator[Threads];
             for (int t = 0; t < Threads; t++)
             {
-                enumerators[t] = reader.GetEnumerator();
+                enumerators[t] = reader.FirstSheet.GetEnumerator();
             }
             List<string>[] actual = new List<string>[Threads];
             Parallel.For(0, Threads, new ParallelOptions { MaxDegreeOfParallelism = Threads }, t =>
@@ -128,8 +128,8 @@ namespace ExcelReader.Tests.Reader.Csv
             using CsvReader reader = Excel.FromCsv(
                 new TrickleStream(BuildCsv(Encoding.Unicode)), leaveOpen: false,
                 new CsvReaderOptions { Encoding = Encoding.Unicode, DetectEncodingFromByteOrderMark = false });
-            using CsvReader.Enumerator first = reader.GetEnumerator();
-            using CsvReader.Enumerator second = reader.GetEnumerator();
+            using CsvReader.Enumerator first = reader.FirstSheet.GetEnumerator();
+            using CsvReader.Enumerator second = reader.FirstSheet.GetEnumerator();
             Assert.Equal(expected, Drain(first), StringComparer.Ordinal);
             Assert.Equal(expected, Drain(second), StringComparer.Ordinal);
         }
@@ -144,8 +144,8 @@ namespace ExcelReader.Tests.Reader.Csv
             stream.Position = prefix.Length;
 
             using CsvReader reader = Excel.FromCsv(stream, leaveOpen: false);
-            using CsvReader.Enumerator first = reader.GetEnumerator();
-            using CsvReader.Enumerator second = reader.GetEnumerator();
+            using CsvReader.Enumerator first = reader.FirstSheet.GetEnumerator();
+            using CsvReader.Enumerator second = reader.FirstSheet.GetEnumerator();
             Assert.Equal(expected, Drain(first), StringComparer.Ordinal);
             Assert.Equal(expected, Drain(second), StringComparer.Ordinal);
         }
@@ -163,7 +163,7 @@ namespace ExcelReader.Tests.Reader.Csv
             {
                 try
                 {
-                    taken[t] = reader.GetEnumerator();
+                    taken[t] = reader.FirstSheet.GetEnumerator();
                     Interlocked.Increment(ref granted);
                 }
                 catch (InvalidOperationException)
@@ -184,7 +184,7 @@ namespace ExcelReader.Tests.Reader.Csv
             List<string> expected = Expected();
             TrickleStream stream = new(BuildCsv());
             CsvReader reader = Excel.FromCsv(stream, leaveOpen: false);
-            CsvReader.Enumerator e = reader.GetEnumerator();
+            CsvReader.Enumerator e = reader.FirstSheet.GetEnumerator();
             Assert.True(e.MoveNext());
 
             reader.Dispose();
@@ -199,9 +199,11 @@ namespace ExcelReader.Tests.Reader.Csv
         public void GetEnumerator_After_Dispose_Throws()
         {
             CsvReader reader = Excel.FromCsv(new TrickleStream(BuildCsv()), leaveOpen: false);
+            CsvSheet sheet = reader.FirstSheet;
             reader.Dispose();
-            Assert.Throws<ObjectDisposedException>(() => reader.GetEnumerator());
-            Assert.Throws<ObjectDisposedException>(() => reader.GetAsyncEnumerator(TestContext.Current.CancellationToken));
+            Assert.Throws<ObjectDisposedException>(() => reader.Sheets);
+            Assert.Throws<ObjectDisposedException>(() => sheet.GetEnumerator());
+            Assert.Throws<ObjectDisposedException>(() => sheet.GetAsyncEnumerator(TestContext.Current.CancellationToken));
         }
 
         [Fact]
@@ -224,7 +226,7 @@ namespace ExcelReader.Tests.Reader.Csv
             TrickleStream stream = new(BuildCsv());
             using (CsvReader reader = Excel.FromCsv(stream, leaveOpen: true))
             {
-                using CsvReader.Enumerator e = reader.GetEnumerator();
+                using CsvReader.Enumerator e = reader.FirstSheet.GetEnumerator();
                 Assert.True(e.MoveNext());
             }
             Assert.True(stream.CanRead);
