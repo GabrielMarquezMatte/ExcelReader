@@ -246,8 +246,8 @@ namespace ExcelReader.Tests.Writer.Csv
             }
             ms.Position = 0;
 
-            using IExcelRowReader reader = Excel.FromCsv(ms, options: new CsvReaderOptions { Quote = (byte)'5' });
-            using IExcelRowEnumerator e = reader.GetEnumerator();
+            using IExcelWorkbook reader = Excel.FromCsv(ms, options: new CsvReaderOptions { Quote = (byte)'5' });
+            using IExcelRowEnumerator e = reader.FirstSheet.GetEnumerator();
             Assert.True(e.MoveNext());
             Assert.Equal("155", e.Current[0].GetString());
         }
@@ -328,8 +328,8 @@ namespace ExcelReader.Tests.Writer.Csv
             }
             ms.Position = 0;
 
-            using IExcelRowReader reader = Excel.FromCsv(ms);
-            using IExcelRowEnumerator e = reader.GetEnumerator();
+            using IExcelWorkbook reader = Excel.FromCsv(ms);
+            using IExcelRowEnumerator e = reader.FirstSheet.GetEnumerator();
 
             Assert.True(e.MoveNext());
             var header = e.Current;
@@ -375,7 +375,7 @@ namespace ExcelReader.Tests.Writer.Csv
             ms.Position = 0;
 
             using var reader = Excel.FromCsv(ms);
-            var parsed = ExcelParser.FromAttributes<CsvPerson>().Parse(reader).ToList();
+            var parsed = ExcelParser.FromAttributes<CsvPerson>().Parse(reader.FirstSheet).ToList();
 
             Assert.Equal(2, parsed.Count);
             Assert.Equal("has, comma", parsed[0].Name);

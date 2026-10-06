@@ -74,10 +74,10 @@ namespace ExcelReader.Tests.Writer
             }
 
             ms.Position = 0;
-            using IExcelRowReader reader = Excel.Open(ms, format);
+            using IExcelWorkbook reader = Excel.Open(ms, format);
             TextFallbackModel actual = generated
-                ? ExcelParser.Generated<TextFallbackModel>().Parse(reader).Single()
-                : ExcelParser.FromAttributes<TextFallbackModel>().Parse(reader).Single();
+                ? ExcelParser.Generated<TextFallbackModel>().Parse(reader.FirstSheet).Single()
+                : ExcelParser.FromAttributes<TextFallbackModel>().Parse(reader.FirstSheet).Single();
 
             Assert.Equal(expected.Ratio, actual.Ratio);
             Assert.Equal(expected.RatioN, actual.RatioN);

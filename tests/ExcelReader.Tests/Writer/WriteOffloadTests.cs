@@ -21,7 +21,7 @@ namespace ExcelReader.Tests.Writer
 
             using MemoryStream ms = new(bytes, writable: false);
             using XlsxWorkbook reader = Excel.FromXlsx(ms);
-            using XlsxWorkbook.Enumerator e = reader.GetEnumerator();
+            using XlsxWorkbook.Enumerator e = reader.FirstSheet.GetEnumerator();
             int rowIndex = 0;
             while (e.MoveNext())
             {
@@ -41,7 +41,7 @@ namespace ExcelReader.Tests.Writer
 
             using MemoryStream ms = new(bytes, writable: false);
             using XlsbWorkbook reader = Excel.FromXlsb(ms);
-            using XlsbWorkbook.Enumerator e = reader.GetEnumerator();
+            using XlsbWorkbook.Enumerator e = reader.FirstSheet.GetEnumerator();
             int rowIndex = 0;
             while (e.MoveNext())
             {
@@ -73,7 +73,7 @@ namespace ExcelReader.Tests.Writer
 
             ms.Position = 0;
             using XlsxWorkbook reader = Excel.FromXlsx(ms);
-            using XlsxWorkbook.Enumerator e = reader.GetEnumerator();
+            using XlsxWorkbook.Enumerator e = reader.FirstSheet.GetEnumerator();
             int rowIndex = 0;
             while (e.MoveNext())
             {
@@ -103,7 +103,7 @@ namespace ExcelReader.Tests.Writer
 
             ms.Position = 0;
             using XlsbWorkbook reader = Excel.FromXlsb(ms);
-            using XlsbWorkbook.Enumerator e = reader.GetEnumerator();
+            using XlsbWorkbook.Enumerator e = reader.FirstSheet.GetEnumerator();
             int rowIndex = 0;
             while (e.MoveNext())
             {

@@ -1,5 +1,6 @@
 using System.Globalization;
 using ExcelReader.Core.Reader;
+using ExcelReader.Core.Reader.Xls;
 using ExcelReader.Core.Writer.Xls;
 
 namespace ExcelReader.Tests.Writer.Xls
@@ -40,7 +41,7 @@ namespace ExcelReader.Tests.Writer.Xls
             }, ct: ct);
 
             using var reader = Excel.FromXls(new MemoryStream(bytes));
-            using var e = reader.GetEnumerator();
+            using var e = reader.FirstSheet.GetEnumerator();
             Assert.True(e.MoveNext());
             Assert.Equal("João", e.Current[0].GetString());
             Assert.True(e.Current[1].TryParse(Inv, out int age));
@@ -78,7 +79,7 @@ namespace ExcelReader.Tests.Writer.Xls
             }, ct: ct);
 
             using var reader = Excel.FromXls(new MemoryStream(bytes));
-            using var e = reader.GetEnumerator();
+            using var e = reader.FirstSheet.GetEnumerator();
             Assert.True(e.MoveNext());
             Assert.True(e.Current[0].TryParse(Inv, out int intValue));
             Assert.Equal(123, intValue);
@@ -125,7 +126,7 @@ namespace ExcelReader.Tests.Writer.Xls
             }, ct: ct);
 
             using var reader = Excel.FromXls(new MemoryStream(bytes));
-            using var e = reader.GetEnumerator();
+            using var e = reader.FirstSheet.GetEnumerator();
             Assert.True(e.MoveNext());
             Assert.Equal(CellType.Boolean, e.Current[0].Type);
             Assert.Equal(CellType.Empty, e.Current[1].Type);
@@ -163,7 +164,7 @@ namespace ExcelReader.Tests.Writer.Xls
             }, ct: ct);
 
             using var reader = Excel.FromXls(new MemoryStream(bytes));
-            using var e = reader.GetEnumerator();
+            using var e = reader.FirstSheet.GetEnumerator();
             Assert.True(e.MoveNext());
             Assert.Equal("A", e.Current[0].GetString());
             Assert.Equal(CellType.Empty, e.Current[1].Type);
@@ -189,12 +190,11 @@ namespace ExcelReader.Tests.Writer.Xls
             using var reader = Excel.FromXls(new MemoryStream(bytes));
             Assert.Equal(2, reader.SheetCount);
 
-            reader.MoveToSheet(0);
-            Assert.Equal("First", reader.SheetName);
-            using (var e = reader.GetEnumerator()) { Assert.True(e.MoveNext()); Assert.Equal("one", e.Current[0].GetString()); }
+            Assert.Equal("First", reader.Sheets[0].Name);
+            using (var e = reader.Sheets[0].GetEnumerator()) { Assert.True(e.MoveNext()); Assert.Equal("one", e.Current[0].GetString()); }
 
-            Assert.True(reader.TryMoveToSheet("Ωmega"));
-            using (var e = reader.GetEnumerator()) { Assert.True(e.MoveNext()); Assert.Equal("two", e.Current[0].GetString()); }
+            Assert.True(reader.TryGetSheet("Ωmega", out XlsSheet omega));
+            using (var e = omega.GetEnumerator()) { Assert.True(e.MoveNext()); Assert.Equal("two", e.Current[0].GetString()); }
         }
 
         [Fact]
@@ -217,7 +217,7 @@ namespace ExcelReader.Tests.Writer.Xls
 
             Assert.True(bytes.Length > 512 * 4, "workbook should span several OLE sectors");
             using var reader = Excel.FromXls(new MemoryStream(bytes));
-            using var e = reader.GetEnumerator();
+            using var e = reader.FirstSheet.GetEnumerator();
             int read = 0;
             while (e.MoveNext())
             {
@@ -245,7 +245,7 @@ namespace ExcelReader.Tests.Writer.Xls
 
             using var reader = Excel.FromXls(new MemoryStream(bytes));
             Assert.True(reader.IsDate1904);
-            using var e = reader.GetEnumerator();
+            using var e = reader.FirstSheet.GetEnumerator();
             Assert.True(e.MoveNext());
             Assert.True(e.Current[0].TryGetDateTime(reader.IsDate1904, out DateTime parsed));
             Assert.Equal(date, parsed);
@@ -351,7 +351,7 @@ namespace ExcelReader.Tests.Writer.Xls
             Assert.True(bytes.Length > 7 * 1024 * 1024, "workbook must exceed the DIFAT threshold");
 
             using var reader = Excel.FromXls(new MemoryStream(bytes));
-            using var e = reader.GetEnumerator();
+            using var e = reader.FirstSheet.GetEnumerator();
             int read = 0;
             while (e.MoveNext())
             {
@@ -389,8 +389,7 @@ namespace ExcelReader.Tests.Writer.Xls
             int totalRows = 0;
             for (int sheet = 0; sheet < reader.SheetCount; sheet++)
             {
-                reader.MoveToSheet(sheet);
-                using var e = reader.GetEnumerator();
+                using var e = reader.Sheets[sheet].GetEnumerator();
                 while (e.MoveNext())
                 {
                     totalRows++;

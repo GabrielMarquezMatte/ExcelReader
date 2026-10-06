@@ -177,7 +177,7 @@ namespace ExcelReader.Tests.Native
         {
             using (FileStream file = File.OpenRead(path))
             using (XlsxWorkbook reader = Excel.FromXlsx(file))
-            using (XlsxWorkbook.Enumerator rows = reader.GetEnumerator())
+            using (XlsxWorkbook.Enumerator rows = reader.FirstSheet.GetEnumerator())
             {
                 Assert.True(rows.MoveNext());
                 Assert.True(rows.MoveNext());
@@ -197,7 +197,7 @@ namespace ExcelReader.Tests.Native
         {
             using FileStream file = File.OpenRead(path);
             using XlsbWorkbook reader = Excel.FromXlsb(file);
-            using XlsbWorkbook.Enumerator rows = reader.GetEnumerator();
+            using XlsbWorkbook.Enumerator rows = reader.FirstSheet.GetEnumerator();
 
             Assert.True(rows.MoveNext());
             Assert.True(rows.MoveNext());

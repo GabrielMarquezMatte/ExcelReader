@@ -321,11 +321,11 @@ namespace ExcelReader.Tests.Native
 
                 Assert.Equal(NativeStatus.Ok, status);
 
-                using IExcelRowReader plain = Excel.Open(plainPath);
-                using IExcelRowReader roundTripped = Excel.Open(
+                using IExcelWorkbook plain = Excel.Open(plainPath);
+                using IExcelWorkbook roundTripped = Excel.Open(
                     encryptedPath, new ExcelReaderOptions { Password = EncryptedFixtures.Password });
-                using IExcelRowEnumerator plainRows = plain.GetEnumerator();
-                using IExcelRowEnumerator roundTrippedRows = roundTripped.GetEnumerator();
+                using IExcelRowEnumerator plainRows = plain.FirstSheet.GetEnumerator();
+                using IExcelRowEnumerator roundTrippedRows = roundTripped.FirstSheet.GetEnumerator();
 
                 Assert.True(plainRows.MoveNext());
                 Assert.True(roundTrippedRows.MoveNext());
@@ -378,11 +378,11 @@ namespace ExcelReader.Tests.Native
 
             Assert.Equal(NativeStatus.Ok, status);
             Assert.NotNull(encrypted);
-            using IExcelRowReader plain = Excel.Open(plainPath);
-            using IExcelRowReader roundTripped = Excel.Open(
+            using IExcelWorkbook plain = Excel.Open(plainPath);
+            using IExcelWorkbook roundTripped = Excel.Open(
                 encrypted, new ExcelReaderOptions { Password = EncryptedFixtures.Password });
-            using IExcelRowEnumerator plainRows = plain.GetEnumerator();
-            using IExcelRowEnumerator roundTrippedRows = roundTripped.GetEnumerator();
+            using IExcelRowEnumerator plainRows = plain.FirstSheet.GetEnumerator();
+            using IExcelRowEnumerator roundTrippedRows = roundTripped.FirstSheet.GetEnumerator();
             Assert.True(plainRows.MoveNext());
             Assert.True(roundTrippedRows.MoveNext());
             Assert.Equal(plainRows.Current[0].GetString(), roundTrippedRows.Current[0].GetString());

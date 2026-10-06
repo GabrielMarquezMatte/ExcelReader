@@ -77,7 +77,7 @@ namespace ExcelReader.Tests.Writer
                 await sheet.EndAsync(TestContext.Current.CancellationToken);
             });
             using var reader = Excel.FromXlsx(ms);
-            using var e = reader.GetEnumerator();
+            using var e = reader.FirstSheet.GetEnumerator();
             Assert.True(e.MoveNext());
             Assert.Equal(1, e.Current[0].StyleIndex);
         }
@@ -99,7 +99,7 @@ namespace ExcelReader.Tests.Writer
             }
             ms.Position = 0;
             await using var reader = Excel.FromXlsb(ms);
-            using var e = reader.GetEnumerator();
+            using var e = reader.FirstSheet.GetEnumerator();
             Assert.True(e.MoveNext());
             Assert.Equal(1, e.Current[0].StyleIndex);
         }
@@ -121,7 +121,7 @@ namespace ExcelReader.Tests.Writer
             }
             ms.Position = 0;
             using var reader = Excel.FromXls(ms);
-            using var e = reader.GetEnumerator();
+            using var e = reader.FirstSheet.GetEnumerator();
             Assert.True(e.MoveNext());
             Assert.Equal(XlsGlobals.DateXf, e.Current[0].StyleIndex);
         }
@@ -190,7 +190,7 @@ namespace ExcelReader.Tests.Writer
                 await sheet.EndAsync(TestContext.Current.CancellationToken);
             });
             using var reader = Excel.FromXlsx(ms);
-            using var e = reader.GetEnumerator();
+            using var e = reader.FirstSheet.GetEnumerator();
             Assert.True(e.MoveNext());
             Assert.Equal(2, e.Current[0].StyleIndex);
         }
@@ -214,7 +214,7 @@ namespace ExcelReader.Tests.Writer
             }
             ms.Position = 0;
             await using var reader = Excel.FromXlsb(ms);
-            using var e = reader.GetEnumerator();
+            using var e = reader.FirstSheet.GetEnumerator();
             Assert.True(e.MoveNext());
             Assert.Equal(styleId, e.Current[0].StyleIndex);
         }
@@ -238,7 +238,7 @@ namespace ExcelReader.Tests.Writer
             }
             ms.Position = 0;
             using var reader = Excel.FromXls(ms);
-            using var e = reader.GetEnumerator();
+            using var e = reader.FirstSheet.GetEnumerator();
             Assert.True(e.MoveNext());
             Assert.Equal(XlsGlobals.CustomXf(styleId), e.Current[0].StyleIndex);
         }
@@ -274,7 +274,7 @@ namespace ExcelReader.Tests.Writer
                 await sheet.EndAsync(TestContext.Current.CancellationToken);
             });
             using var reader = Excel.FromXlsx(ms);
-            using var e = reader.GetEnumerator();
+            using var e = reader.FirstSheet.GetEnumerator();
             Assert.True(e.MoveNext());
             Assert.Equal(2, e.Current[0].StyleIndex);
         }
@@ -297,7 +297,7 @@ namespace ExcelReader.Tests.Writer
             }
             ms.Position = 0;
             await using var reader = Excel.FromXlsb(ms);
-            using var e = reader.GetEnumerator();
+            using var e = reader.FirstSheet.GetEnumerator();
             Assert.True(e.MoveNext());
             Assert.Equal(styleId, e.Current[0].StyleIndex);
         }
@@ -320,7 +320,7 @@ namespace ExcelReader.Tests.Writer
             }
             ms.Position = 0;
             using var reader = Excel.FromXls(ms);
-            using var e = reader.GetEnumerator();
+            using var e = reader.FirstSheet.GetEnumerator();
             Assert.True(e.MoveNext());
             Assert.Equal(XlsGlobals.CustomXf(styleId), e.Current[0].StyleIndex);
         }

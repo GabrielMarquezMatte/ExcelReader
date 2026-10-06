@@ -430,7 +430,7 @@ namespace ExcelReader.Tests.Generator
                         writeStream.Position = 0;
                         await using XlsxWorkbook reader = await Excel.FromXlsxAsync(writeStream);
                         var results = new List<Model>();
-                        foreach (Model m in ExcelParser.Generated<Model>().Parse(reader))
+                        foreach (Model m in ExcelParser.Generated<Model>().Parse(reader.FirstSheet))
                         {
                             results.Add(m);
                         }
@@ -761,7 +761,7 @@ namespace ExcelReader.Tests.Generator
                         try
                         {
                             var results = new List<string>();
-                            foreach (T model in ExcelParser.Generated<T>(config).Parse(reader))
+                            foreach (T model in ExcelParser.Generated<T>(config).Parse(reader.FirstSheet))
                             {
                                 results.Add(describe(model));
                             }

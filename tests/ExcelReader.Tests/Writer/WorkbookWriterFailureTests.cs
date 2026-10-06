@@ -161,8 +161,8 @@ namespace ExcelReader.Tests.Writer
             {
                 Assert.Equal(1, EndOfCentralDirectoryCount(stream));
             }
-            using IExcelRowReader reader = Excel.Open(stream.ToArray().AsMemory());
-            Assert.Equal("S1", reader.SheetNameAt(0));
+            using IExcelWorkbook reader = Excel.Open(stream.ToArray().AsMemory());
+            Assert.Equal("S1", reader.FirstSheet.Name);
             Assert.Equal(leaveOpen ? 0 : 1, stream.DisposeCount);
             pool.AssertEveryBufferReturnedOnce();
         }
@@ -292,8 +292,8 @@ namespace ExcelReader.Tests.Writer
             await Assert.ThrowsAnyAsync<OperationCanceledException>(() => workbook.EndAsync(new CancellationToken(canceled: true)).AsTask());
             await workbook.DisposeAsync();
 
-            using IExcelRowReader reader = Excel.Open(stream.ToArray().AsMemory());
-            Assert.Equal("S1", reader.SheetNameAt(0));
+            using IExcelWorkbook reader = Excel.Open(stream.ToArray().AsMemory());
+            Assert.Equal("S1", reader.FirstSheet.Name);
             Assert.Equal(!leaveOpen, stream.Disposed);
         }
 
@@ -326,9 +326,9 @@ namespace ExcelReader.Tests.Writer
             }
             await workbook.DisposeAsync();
 
-            using IExcelRowReader reader = Excel.Open(stream.ToArray().AsMemory());
+            using IExcelWorkbook reader = Excel.Open(stream.ToArray().AsMemory());
             Assert.Equal(1, reader.SheetCount);
-            Assert.Equal("Only", reader.SheetNameAt(0));
+            Assert.Equal("Only", reader.FirstSheet.Name);
         }
     }
 }
