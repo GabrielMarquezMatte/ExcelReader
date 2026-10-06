@@ -205,6 +205,20 @@ namespace ExcelReader.Tests.Reader.Csv
         }
 
         [Fact]
+        public void A_Transcoded_File_Offers_No_Raw_Chunk_Source()
+        {
+            string path = Path.Combine(Path.GetTempPath(), "excelreader-csv-" + Guid.NewGuid().ToString("N") + ".csv");
+            File.WriteAllBytes(path, BuildCsv(Encoding.Unicode));
+            _paths.Add(path);
+
+            using CsvReader utf16 = Excel.FromCsvFile(path, new CsvReaderOptions { Encoding = Encoding.Unicode, DetectEncodingFromByteOrderMark = false });
+            Assert.False(utf16.TryGetChunkSource(out _));
+
+            using CsvReader utf8 = Excel.FromCsvFile(path);
+            Assert.True(utf8.TryGetChunkSource(out _));
+        }
+
+        [Fact]
         public void A_Borrowed_Stream_Is_Left_Open()
         {
             TrickleStream stream = new(BuildCsv());
