@@ -97,7 +97,7 @@ namespace ExcelReader.Tests.Parser
             TypeMapInfo<MapBuilderTestModel> info = builder.Build();
 
             await using XlsxWorkbook mappedReader = await Excel.FromXlsxAsync(mappedStream, ct: TestContext.Current.CancellationToken);
-            var mappedEnumerable = new ExcelEnumerable<MapBuilderTestModel>(mappedReader, new ExcelParserConfig(), info);
+            var mappedEnumerable = new ExcelEnumerable<MapBuilderTestModel, XlsxSheet, XlsxWorkbook.Enumerator>(mappedReader.FirstSheet, new ExcelParserConfig(), info);
             ExcelParseException mappedEx = Assert.Throws<ExcelParseException>(() => mappedEnumerable.ToList());
 
             await using MemoryStream reflectedStream = await TypedWorkbook.BuildAsync(["Name"], ["Alice"]);
