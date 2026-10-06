@@ -212,6 +212,30 @@ namespace ExcelReader.Tests.Reader.Zip
                 () => ZipIndex.Create(Open(kind, []), ExcelReaderOptions.Default));
         }
 
+        [Theory]
+        [MemberData(nameof(Kinds))]
+        public void A_Stored_Entry_Whose_Sizes_Disagree_Is_Invalid_Data(Kind kind)
+        {
+            byte[] zipBytes = BuildZip(dataDescriptors: false, scale: 20);
+            byte[] name = System.Text.Encoding.UTF8.GetBytes(Names[1]);
+            int record = -1;
+            for (int i = 0; i + 46 + name.Length <= zipBytes.Length; i++)
+            {
+                if (zipBytes.AsSpan(i, 4).SequenceEqual<byte>([0x50, 0x4B, 0x01, 0x02]) && zipBytes.AsSpan(i + 46, name.Length).SequenceEqual(name))
+                {
+                    record = i;
+                    break;
+                }
+            }
+            Assert.True(record >= 0, "central directory record not found");
+            zipBytes.AsSpan(record + 24, 4).Clear();
+
+            using ZipIndex index = ZipIndex.Create(Open(kind, zipBytes), ExcelReaderOptions.Default);
+            Assert.True(index.TryGetEntry(name, out ZipEntryRef entry));
+            Assert.Throws<InvalidDataException>(() => index.OpenPart(entry, Counter()).Dispose());
+            Assert.Throws<InvalidDataException>(() => index.OpenEntryStream(entry, Counter(), ExcelReaderOptions.Default).Dispose());
+        }
+
         [Fact]
         public void A_Failed_Create_Disposes_The_Source()
         {
