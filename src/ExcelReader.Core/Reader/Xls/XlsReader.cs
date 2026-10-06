@@ -18,6 +18,8 @@ namespace ExcelReader.Core.Reader.Xls
         private string?[]? _sharedStringCache;
         private int _current;
 
+        internal ReaderLifetime Lifetime { get; }
+
         internal XlsReader(Stream stream, bool leaveOpen, ExcelReaderOptions? options = null)
             : this(XlsCompoundFile.OpenWorkbook(stream, leaveOpen, options), options)
         {
@@ -30,6 +32,7 @@ namespace ExcelReader.Core.Reader.Xls
 
         private XlsReader(WorkbookStream workbook, ExcelReaderOptions? options = null)
         {
+            Lifetime = new ReaderLifetime(ReleaseResources);
             _workbook = workbook;
             _options = options ?? ExcelReaderOptions.Default;
             using (BiffCursor cursor = workbook.OpenCursor())
@@ -123,7 +126,16 @@ namespace ExcelReader.Core.Reader.Xls
         /// <inheritdoc/>
         public Enumerator GetEnumerator()
         {
-            return new Enumerator(this, _sheets[_current].Offset);
+            Lifetime.Acquire(this);
+            try
+            {
+                return new Enumerator(this, _sheets[_current].Offset);
+            }
+            catch
+            {
+                Lifetime.Release();
+                throw;
+            }
         }
 
         IExcelRowEnumerator IExcelRowReader<IExcelRowEnumerator>.GetEnumerator()
@@ -136,7 +148,16 @@ namespace ExcelReader.Core.Reader.Xls
         public Enumerator GetAsyncEnumerator(CancellationToken ct = default)
         {
             ct.ThrowIfCancellationRequested();
-            return new Enumerator(this, _sheets[_current].Offset, ct);
+            Lifetime.Acquire(this);
+            try
+            {
+                return new Enumerator(this, _sheets[_current].Offset, ct);
+            }
+            catch
+            {
+                Lifetime.Release();
+                throw;
+            }
         }
 
         IExcelRowEnumerator IExcelRowReader<IExcelRowEnumerator>.GetAsyncEnumerator(CancellationToken ct)
@@ -147,17 +168,22 @@ namespace ExcelReader.Core.Reader.Xls
         /// <inheritdoc/>
         public void Dispose()
         {
-            _workbook.Dispose();
-            _sharedFlat = [];
-            _sharedOffsets = [0];
-            _sharedStringCache = null;
+            Lifetime.Close();
         }
 
         /// <inheritdoc/>
         public ValueTask DisposeAsync()
         {
-            Dispose();
+            Lifetime.Close();
             return ValueTask.CompletedTask;
+        }
+
+        private void ReleaseResources()
+        {
+            _workbook.Dispose();
+            _sharedFlat = [];
+            _sharedOffsets = [0];
+            _sharedStringCache = null;
         }
 
         private static void ParseWorkbookGlobals(
