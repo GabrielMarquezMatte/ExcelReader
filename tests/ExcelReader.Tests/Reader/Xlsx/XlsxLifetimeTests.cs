@@ -128,5 +128,55 @@ namespace ExcelReader.Tests.Reader.Xlsx
             reader.Dispose();
             Assert.False(stream.CanRead);
         }
+
+        [Fact]
+        public async Task A_Cancelled_Shared_String_Load_Is_Undone_And_Loads_Again()
+        {
+            byte[] bytes = BuildXlsx();
+            List<string> expected;
+            using (XlsxReader reference = Excel.FromXlsx(bytes))
+            {
+                using XlsxReader.Enumerator all = reference.GetEnumerator();
+                expected = Drain(all);
+            }
+
+            ReadOnlySpan<byte> entryName = "xl/sharedStrings.xml"u8;
+            int header = bytes.AsSpan().IndexOf(entryName) - 30;
+            long bodyStart = header + 30 + entryName.Length + BitConverter.ToUInt16(bytes, header + 28);
+            long bodyEnd = bodyStart + BitConverter.ToUInt32(bytes, header + 18);
+
+            using CancellationTokenSource cts = new();
+            int reads = 0;
+            long cancelledAt = -1;
+            TrickleStream stream = new(bytes);
+            XlsxReader reader = Excel.FromXlsx(stream, leaveOpen: false);
+            stream.OnRead = () =>
+            {
+                if (++reads == 20)
+                {
+                    cancelledAt = stream.Position;
+                    cts.Cancel();
+                }
+            };
+
+            await using (XlsxReader.Enumerator cancelled = reader.GetAsyncEnumerator(cts.Token))
+            {
+                await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await cancelled.MoveNextAsync());
+            }
+            Assert.InRange(cancelledAt, bodyStart, bodyEnd - 1);
+
+            List<string> actual = [];
+            await using (XlsxReader.Enumerator again = reader.GetAsyncEnumerator(TestContext.Current.CancellationToken))
+            {
+                while (await again.MoveNextAsync())
+                {
+                    actual.Add(again.Current[0].GetString());
+                }
+            }
+            Assert.Equal(expected, actual, StringComparer.Ordinal);
+
+            reader.Dispose();
+            Assert.False(stream.CanRead);
+        }
     }
 }
