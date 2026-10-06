@@ -32,7 +32,7 @@ namespace ExcelReader.Benchmarks
             using var ms = new MemoryStream(_csv, writable: false);
             using var reader = Excel.FromCsv(ms);
             long acc = 0;
-            foreach (var row in reader)
+            foreach (var row in reader.FirstSheet)
             {
                 acc += AccumulateRow(row);
             }
@@ -45,7 +45,7 @@ namespace ExcelReader.Benchmarks
             using var ms = new MemoryStream(_csvWide, writable: false);
             using var reader = Excel.FromCsv(ms);
             long acc = 0;
-            foreach (var row in reader)
+            foreach (var row in reader.FirstSheet)
             {
                 for (int i = 0; i < row.ColumnCount; i++)
                 {
@@ -60,7 +60,7 @@ namespace ExcelReader.Benchmarks
         {
             await using var ms = new MemoryStream(_csv, writable: false);
             await using var reader = Excel.FromCsv(ms);
-            await using var e = reader.GetAsyncEnumerator();
+            await using var e = reader.FirstSheet.GetAsyncEnumerator();
             long acc = 0;
             while (await e.MoveNextAsync())
             {

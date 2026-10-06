@@ -80,7 +80,7 @@ namespace ExcelReader.Benchmarks
             using MemoryStream ms = new(_xlsx, writable: false);
             using XlsxWorkbook reader = Excel.FromXlsx(ms);
             long acc = 0;
-            foreach (FullRow row in ExcelParser.FromAttributes<FullRow>().Parse(reader))
+            foreach (FullRow row in ExcelParser.FromAttributes<FullRow>().Parse(reader.FirstSheet))
             {
                 acc += Accumulate(row);
             }
@@ -93,7 +93,7 @@ namespace ExcelReader.Benchmarks
             using MemoryStream ms = new(_xlsb, writable: false);
             using XlsbWorkbook reader = Excel.FromXlsb(ms);
             long acc = 0;
-            foreach (FullRow row in ExcelParser.FromAttributes<FullRow>().Parse(reader))
+            foreach (FullRow row in ExcelParser.FromAttributes<FullRow>().Parse(reader.FirstSheet))
             {
                 acc += Accumulate(row);
             }

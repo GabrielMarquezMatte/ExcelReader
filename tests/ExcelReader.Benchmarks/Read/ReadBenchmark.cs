@@ -28,7 +28,7 @@ namespace ExcelReader.Benchmarks
             using var ms = new MemoryStream(_workbook, writable: false);
             using var reader = Excel.FromXlsx(ms);
             long acc = 0;
-            foreach (Row row in reader) { acc += AccumulateRow(row); }
+            foreach (Row row in reader.FirstSheet) { acc += AccumulateRow(row); }
             return acc;
         }
 
@@ -37,7 +37,7 @@ namespace ExcelReader.Benchmarks
         {
             await using var ms = new MemoryStream(_workbook, writable: false);
             await using var reader = await Excel.FromXlsxAsync(ms);
-            await using var e = reader.GetAsyncEnumerator();
+            await using var e = reader.FirstSheet.GetAsyncEnumerator();
             long acc = 0;
             while (await e.MoveNextAsync()) { acc += AccumulateRow(e.Current); }
             return acc;
@@ -49,7 +49,7 @@ namespace ExcelReader.Benchmarks
             using var ms = new MemoryStream(_xlsbWorkbook, writable: false);
             using var reader = Excel.FromXlsb(ms);
             long acc = 0;
-            foreach (Row row in reader) { acc += AccumulateRow(row); }
+            foreach (Row row in reader.FirstSheet) { acc += AccumulateRow(row); }
             return acc;
         }
 
@@ -58,7 +58,7 @@ namespace ExcelReader.Benchmarks
         {
             await using var ms = new MemoryStream(_xlsbWorkbook, writable: false);
             await using var reader = await Excel.FromXlsbAsync(ms);
-            await using var e = reader.GetAsyncEnumerator();
+            await using var e = reader.FirstSheet.GetAsyncEnumerator();
             long acc = 0;
             while (await e.MoveNextAsync()) { acc += AccumulateRow(e.Current); }
             return acc;
@@ -70,7 +70,7 @@ namespace ExcelReader.Benchmarks
             using var ms = new MemoryStream(_workbook, writable: false);
             using var reader = Excel.FromXlsx(ms);
             long acc = 0;
-            foreach (Row row in reader) { acc += AccumulateRowMaterialized(row); }
+            foreach (Row row in reader.FirstSheet) { acc += AccumulateRowMaterialized(row); }
             return acc;
         }
 

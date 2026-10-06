@@ -48,7 +48,7 @@ namespace ExcelReader.Benchmarks
             using MemoryStream ms = Open(_xlsx, nameof(Xlsx_ExcelReader));
             using XlsxWorkbook reader = Excel.FromXlsx(ms);
             long acc = 0;
-            foreach (Row row in reader) { acc += AccumulateRow(row); }
+            foreach (Row row in reader.FirstSheet) { acc += AccumulateRow(row); }
             return acc;
         }
 
@@ -58,7 +58,7 @@ namespace ExcelReader.Benchmarks
             using MemoryStream ms = Open(_xlsx, nameof(Xlsx_ExcelReader_Prefetch));
             using XlsxWorkbook reader = Excel.FromXlsx(ms, options: _prefetchOptions);
             long acc = 0;
-            foreach (Row row in reader) { acc += AccumulateRow(row); }
+            foreach (Row row in reader.FirstSheet) { acc += AccumulateRow(row); }
             return acc;
         }
 
@@ -76,7 +76,7 @@ namespace ExcelReader.Benchmarks
             using MemoryStream ms = Open(_xlsx, nameof(Xlsx_ExcelReader_Materialized));
             using XlsxWorkbook reader = Excel.FromXlsx(ms);
             long acc = 0;
-            foreach (Row row in reader) { acc += AccumulateRowMaterialized(row); }
+            foreach (Row row in reader.FirstSheet) { acc += AccumulateRowMaterialized(row); }
             return acc;
         }
 
@@ -86,7 +86,7 @@ namespace ExcelReader.Benchmarks
             using MemoryStream ms = Open(_xlsx, nameof(Xlsx_ExcelReader_Materialized_Interned));
             using XlsxWorkbook reader = Excel.FromXlsx(ms, options: _internOptions);
             long acc = 0;
-            foreach (Row row in reader) { acc += AccumulateRowMaterialized(row); }
+            foreach (Row row in reader.FirstSheet) { acc += AccumulateRowMaterialized(row); }
             return acc;
         }
 
@@ -97,7 +97,7 @@ namespace ExcelReader.Benchmarks
             using MemoryStream ms = Open(_xlsb, nameof(Xlsb_ExcelReader));
             using XlsbWorkbook reader = Excel.FromXlsb(ms);
             long acc = 0;
-            foreach (Row row in reader) { acc += AccumulateRow(row); }
+            foreach (Row row in reader.FirstSheet) { acc += AccumulateRow(row); }
             return acc;
         }
 
@@ -107,7 +107,7 @@ namespace ExcelReader.Benchmarks
             using MemoryStream ms = Open(_xlsb, nameof(Xlsb_ExcelReader_Prefetch));
             using XlsbWorkbook reader = Excel.FromXlsb(ms, options: _prefetchOptions);
             long acc = 0;
-            foreach (Row row in reader) { acc += AccumulateRow(row); }
+            foreach (Row row in reader.FirstSheet) { acc += AccumulateRow(row); }
             return acc;
         }
 
@@ -125,7 +125,7 @@ namespace ExcelReader.Benchmarks
             using MemoryStream ms = Open(_xlsb, nameof(Xlsb_ExcelReader_Materialized));
             using XlsbWorkbook reader = Excel.FromXlsb(ms);
             long acc = 0;
-            foreach (Row row in reader) { acc += AccumulateRowMaterialized(row); }
+            foreach (Row row in reader.FirstSheet) { acc += AccumulateRowMaterialized(row); }
             return acc;
         }
 
@@ -135,7 +135,7 @@ namespace ExcelReader.Benchmarks
             using MemoryStream ms = Open(_xlsb, nameof(Xlsb_ExcelReader_Materialized_Interned));
             using XlsbWorkbook reader = Excel.FromXlsb(ms, options: _internOptions);
             long acc = 0;
-            foreach (Row row in reader) { acc += AccumulateRowMaterialized(row); }
+            foreach (Row row in reader.FirstSheet) { acc += AccumulateRowMaterialized(row); }
             return acc;
         }
 
@@ -148,7 +148,7 @@ namespace ExcelReader.Benchmarks
             }
             using XlsbWorkbook reader = Excel.FromXlsb(new ReadOnlyMemory<byte>(_xlsb));
             long acc = 0;
-            foreach (Row row in reader) { acc += AccumulateRow(row); }
+            foreach (Row row in reader.FirstSheet) { acc += AccumulateRow(row); }
             return acc;
         }
     }

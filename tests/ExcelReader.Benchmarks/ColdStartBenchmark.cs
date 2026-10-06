@@ -57,7 +57,7 @@ namespace ExcelReader.Benchmarks
             using var ms = new MemoryStream(_workbook, writable: false);
             using var reader = Excel.FromXlsx(ms);
             long acc = 0;
-            foreach (Record rec in ExcelParser.FromAttributes<Record>().Parse(reader))
+            foreach (Record rec in ExcelParser.FromAttributes<Record>().Parse(reader.FirstSheet))
             {
                 acc += rec.Id;
             }
@@ -90,7 +90,7 @@ namespace ExcelReader.Benchmarks
                 .Property(["Date"], ExcelCellReaders.DateTimeSerial, static (ref r, v) => r.Date = v)
                 .Property(["Value"], ExcelCellReaders.Parsable, static (ref Record r, double v) => r.Value = v));
             long acc = 0;
-            foreach (Record rec in parser.Parse(reader))
+            foreach (Record rec in parser.Parse(reader.FirstSheet))
             {
                 acc += rec.Id;
             }
@@ -105,7 +105,7 @@ namespace ExcelReader.Benchmarks
             ExcelParser<Record> parser = ExcelParser.BuildWithAttributeFallback<Record>(static builder => builder
                 .Property(["Id"], ExcelCellReaders.Parsable, static (ref Record r, int v) => r.Id = v));
             long acc = 0;
-            foreach (Record rec in parser.Parse(reader))
+            foreach (Record rec in parser.Parse(reader.FirstSheet))
             {
                 acc += rec.Id;
             }

@@ -33,7 +33,7 @@ namespace ExcelReader.Benchmarks
             };
         }
 
-        private static long ReadAll(IExcelRowReader reader)
+        private static long ReadAll(IExcelSheet reader)
         {
             long acc = 0;
             using IExcelRowEnumerator rows = reader.GetEnumerator();
@@ -49,38 +49,38 @@ namespace ExcelReader.Benchmarks
         public long Plain_Stream()
         {
             using var fs = new FileStream(_plain, FileMode.Open, FileAccess.Read);
-            using IExcelRowReader reader = Excel.Open(fs, leaveOpen: true);
-            return ReadAll(reader);
+            using IExcelWorkbook reader = Excel.Open(fs, leaveOpen: true);
+            return ReadAll(reader.FirstSheet);
         }
 
         [Benchmark]
         public long Encrypted_Stream()
         {
             using var fs = new FileStream(_encrypted, FileMode.Open, FileAccess.Read);
-            using IExcelRowReader reader = Excel.Open(fs, leaveOpen: true, Options());
-            return ReadAll(reader);
+            using IExcelWorkbook reader = Excel.Open(fs, leaveOpen: true, Options());
+            return ReadAll(reader.FirstSheet);
         }
 
         [Benchmark]
         public long Encrypted_Stream_VerifyIntegrity()
         {
             using var fs = new FileStream(_encrypted, FileMode.Open, FileAccess.Read);
-            using IExcelRowReader reader = Excel.Open(fs, leaveOpen: true, Options(verifyIntegrity: true));
-            return ReadAll(reader);
+            using IExcelWorkbook reader = Excel.Open(fs, leaveOpen: true, Options(verifyIntegrity: true));
+            return ReadAll(reader.FirstSheet);
         }
 
         [Benchmark]
         public long Encrypted_Memory()
         {
-            using IExcelRowReader reader = Excel.Open(_encryptedBytes.AsMemory(), Options());
-            return ReadAll(reader);
+            using IExcelWorkbook reader = Excel.Open(_encryptedBytes.AsMemory(), Options());
+            return ReadAll(reader.FirstSheet);
         }
 
         [Benchmark]
         public int Encrypted_OpenOnly()
         {
             using var ms = new MemoryStream(_encryptedBytes, writable: false);
-            using IExcelRowReader reader = Excel.Open(ms, leaveOpen: true, Options());
+            using IExcelWorkbook reader = Excel.Open(ms, leaveOpen: true, Options());
             return reader.SheetCount;
         }
         private const string GeneratedPassword = "hunter2";
@@ -108,24 +108,24 @@ namespace ExcelReader.Benchmarks
         public long Large_Plain_Stream()
         {
             using var ms = new MemoryStream(_largePlainBytes, writable: false);
-            using IExcelRowReader reader = Excel.Open(ms, leaveOpen: true);
-            return ReadAll(reader);
+            using IExcelWorkbook reader = Excel.Open(ms, leaveOpen: true);
+            return ReadAll(reader.FirstSheet);
         }
 
         [Benchmark]
         public long Large_Encrypted_Stream()
         {
             using var ms = new MemoryStream(_largeEncryptedBytes, writable: false);
-            using IExcelRowReader reader = Excel.Open(ms, leaveOpen: true,
+            using IExcelWorkbook reader = Excel.Open(ms, leaveOpen: true,
                 new ExcelReaderOptions { Password = new ExcelPassword(GeneratedPassword) });
-            return ReadAll(reader);
+            return ReadAll(reader.FirstSheet);
         }
 
         [Benchmark]
         public int Large_Encrypted_OpenOnly()
         {
             using var ms = new MemoryStream(_largeEncryptedBytes, writable: false);
-            using IExcelRowReader reader = Excel.Open(ms, leaveOpen: true,
+            using IExcelWorkbook reader = Excel.Open(ms, leaveOpen: true,
                 new ExcelReaderOptions { Password = new(GeneratedPassword) });
             return reader.SheetCount;
         }

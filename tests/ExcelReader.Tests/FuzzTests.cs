@@ -149,11 +149,10 @@ namespace ExcelReader.Tests
         private static void OpenAndDrain(byte[] bytes)
         {
             using var ms = new MemoryStream(bytes);
-            using IExcelRowReader reader = Excel.Open(ms);
+            using IExcelWorkbook reader = Excel.Open(ms);
             for (int s = 0; s < reader.SheetCount; s++)
             {
-                reader.MoveToSheet(s);
-                using IExcelRowEnumerator e = reader.GetEnumerator();
+                using IExcelRowEnumerator e = reader.SheetAt(s).GetEnumerator();
                 while (e.MoveNext())
                 {
                     for (int c = 0; c < e.Current.ColumnCount; c++)

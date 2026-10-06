@@ -14,14 +14,14 @@ namespace ExcelReader.AotSanity
         {
             await using MemoryStream xlsx = await BuildSampleXlsxAsync();
             await using XlsxWorkbook reader = await Excel.FromXlsxAsync(xlsx);
-            var rows = ExcelParser.Generated<AotModel>().Parse(reader).ToList();
+            var rows = ExcelParser.Generated<AotModel>().Parse(reader.FirstSheet).ToList();
             if (rows.Count != 1 || !string.Equals(rows[0].Name, "Alice", StringComparison.Ordinal) || rows[0].Age != 30 || !rows[0].Active)
             {
                 Console.Error.WriteLine("Mapped XLSX parse produced an unexpected result.");
                 return 1;
             }
 
-            var generatedRows = ExcelParser.Generated<GeneratedAotModel>().Parse(reader).ToList();
+            var generatedRows = ExcelParser.Generated<GeneratedAotModel>().Parse(reader.FirstSheet).ToList();
             if (generatedRows.Count != 1 || !string.Equals(generatedRows[0].Name, "Alice", StringComparison.Ordinal)
                 || generatedRows[0].Age != 30 || !generatedRows[0].Active)
             {
@@ -38,7 +38,7 @@ namespace ExcelReader.AotSanity
             }
             writtenStream.Position = 0;
             await using XlsxWorkbook writtenReader = await Excel.FromXlsxAsync(writtenStream);
-            var writtenRows = ExcelParser.Generated<GeneratedAotModel>().Parse(writtenReader).ToList();
+            var writtenRows = ExcelParser.Generated<GeneratedAotModel>().Parse(writtenReader.FirstSheet).ToList();
             if (writtenRows.Count != 1 || !string.Equals(writtenRows[0].Name, "Zoe", StringComparison.Ordinal) || writtenRows[0].Age != 8 || !writtenRows[0].Active)
             {
                 Console.Error.WriteLine("Source-generated XLSX write+read round trip produced an unexpected result.");
@@ -47,7 +47,7 @@ namespace ExcelReader.AotSanity
 
             ReadOnlyMemory<byte> csv = Encoding.UTF8.GetBytes("Name,Age\r\nBob,42\r\n");
             CsvReader csvReader = Excel.FromCsv(csv);
-            CsvReader.Enumerator csvRows = csvReader.GetEnumerator();
+            CsvReader.Enumerator csvRows = csvReader.FirstSheet.GetEnumerator();
             if (!csvRows.MoveNext())
             {
                 Console.Error.WriteLine("Raw CSV reader produced no header row.");
@@ -72,9 +72,9 @@ namespace ExcelReader.AotSanity
         {
             string encrypted = Path.Combine(AppContext.BaseDirectory, "data", "encrypted", "agile-aes256-sha512.xlsx");
             var options = new ExcelReaderOptions { Password = "hunter2" };
-            using IExcelRowReader encryptedReader = Excel.Open(encrypted, options);
+            using IExcelWorkbook encryptedReader = Excel.Open(encrypted, options);
             int encryptedRowCount = 0;
-            foreach (Row encryptedRow in encryptedReader)
+            foreach (Row encryptedRow in encryptedReader.FirstSheet)
             {
                 encryptedRowCount++;
             }

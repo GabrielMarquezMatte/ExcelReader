@@ -42,7 +42,7 @@ namespace ExcelReader.Benchmarks
             using MemoryStream ms = new(_xlsx, writable: false);
             using XlsxWorkbook reader = Excel.FromXlsx(ms);
             long acc = 0;
-            foreach (Row row in reader) { acc += AccumulateRow(row); }
+            foreach (Row row in reader.FirstSheet) { acc += AccumulateRow(row); }
             return acc;
         }
 
@@ -60,7 +60,7 @@ namespace ExcelReader.Benchmarks
             using MemoryStream ms = new(_xlsx, writable: false);
             using XlsxWorkbook reader = Excel.FromXlsx(ms);
             long acc = 0;
-            foreach (Row row in reader) { acc += AccumulateRowMaterialized(row); }
+            foreach (Row row in reader.FirstSheet) { acc += AccumulateRowMaterialized(row); }
             return acc;
         }
 
@@ -70,7 +70,7 @@ namespace ExcelReader.Benchmarks
             using MemoryStream ms = new(_xlsx, writable: false);
             using XlsxWorkbook reader = Excel.FromXlsx(ms, options: _prefetchOptions);
             long acc = 0;
-            foreach (Row row in reader) { acc += AccumulateRow(row); }
+            foreach (Row row in reader.FirstSheet) { acc += AccumulateRow(row); }
             return acc;
         }
 
@@ -79,7 +79,7 @@ namespace ExcelReader.Benchmarks
         {
             using XlsxWorkbook reader = Excel.FromXlsx(_xlsx.AsMemory());
             long acc = 0;
-            foreach (Row row in reader) { acc += AccumulateRow(row); }
+            foreach (Row row in reader.FirstSheet) { acc += AccumulateRow(row); }
             return acc;
         }
 
@@ -88,7 +88,7 @@ namespace ExcelReader.Benchmarks
         {
             using XlsxWorkbook reader = Excel.FromXlsx(_xlsx.AsMemory(), options: _prefetchOptions);
             long acc = 0;
-            foreach (Row row in reader) { acc += AccumulateRow(row); }
+            foreach (Row row in reader.FirstSheet) { acc += AccumulateRow(row); }
             return acc;
         }
 
@@ -99,7 +99,7 @@ namespace ExcelReader.Benchmarks
             using MemoryStream ms = new(_xlsm, writable: false);
             using XlsxWorkbook reader = Excel.FromXlsx(ms);
             long acc = 0;
-            foreach (Row row in reader) { acc += AccumulateRow(row); }
+            foreach (Row row in reader.FirstSheet) { acc += AccumulateRow(row); }
             return acc;
         }
 
@@ -117,7 +117,7 @@ namespace ExcelReader.Benchmarks
             using MemoryStream ms = new(_xlsm, writable: false);
             using XlsxWorkbook reader = Excel.FromXlsx(ms);
             long acc = 0;
-            foreach (Row row in reader) { acc += AccumulateRowMaterialized(row); }
+            foreach (Row row in reader.FirstSheet) { acc += AccumulateRowMaterialized(row); }
             return acc;
         }
 
@@ -127,7 +127,7 @@ namespace ExcelReader.Benchmarks
             using MemoryStream ms = new(_xlsm, writable: false);
             using XlsxWorkbook reader = Excel.FromXlsx(ms, options: _prefetchOptions);
             long acc = 0;
-            foreach (Row row in reader) { acc += AccumulateRow(row); }
+            foreach (Row row in reader.FirstSheet) { acc += AccumulateRow(row); }
             return acc;
         }
 
@@ -136,7 +136,7 @@ namespace ExcelReader.Benchmarks
         {
             using XlsxWorkbook reader = Excel.FromXlsx(_xlsm.AsMemory());
             long acc = 0;
-            foreach (Row row in reader) { acc += AccumulateRow(row); }
+            foreach (Row row in reader.FirstSheet) { acc += AccumulateRow(row); }
             return acc;
         }
 
@@ -145,7 +145,7 @@ namespace ExcelReader.Benchmarks
         {
             using XlsxWorkbook reader = Excel.FromXlsx(_xlsm.AsMemory(), options: _prefetchOptions);
             long acc = 0;
-            foreach (Row row in reader) { acc += AccumulateRow(row); }
+            foreach (Row row in reader.FirstSheet) { acc += AccumulateRow(row); }
             return acc;
         }
 
@@ -156,7 +156,7 @@ namespace ExcelReader.Benchmarks
             using MemoryStream ms = new(_xlsb, writable: false);
             using XlsbWorkbook reader = Excel.FromXlsb(ms);
             long acc = 0;
-            foreach (Row row in reader) { acc += AccumulateRow(row); }
+            foreach (Row row in reader.FirstSheet) { acc += AccumulateRow(row); }
             return acc;
         }
 
@@ -174,7 +174,7 @@ namespace ExcelReader.Benchmarks
             using MemoryStream ms = new(_xlsb, writable: false);
             using XlsbWorkbook reader = Excel.FromXlsb(ms);
             long acc = 0;
-            foreach (Row row in reader) { acc += AccumulateRowMaterialized(row); }
+            foreach (Row row in reader.FirstSheet) { acc += AccumulateRowMaterialized(row); }
             return acc;
         }
 
@@ -184,7 +184,7 @@ namespace ExcelReader.Benchmarks
             using MemoryStream ms = new(_xlsb, writable: false);
             using XlsbWorkbook reader = Excel.FromXlsb(ms, options: _prefetchOptions);
             long acc = 0;
-            foreach (Row row in reader) { acc += AccumulateRow(row); }
+            foreach (Row row in reader.FirstSheet) { acc += AccumulateRow(row); }
             return acc;
         }
 
@@ -193,7 +193,7 @@ namespace ExcelReader.Benchmarks
         {
             using XlsbWorkbook reader = Excel.FromXlsb(_xlsb.AsMemory());
             long acc = 0;
-            foreach (Row row in reader) { acc += AccumulateRow(row); }
+            foreach (Row row in reader.FirstSheet) { acc += AccumulateRow(row); }
             return acc;
         }
 
@@ -202,7 +202,7 @@ namespace ExcelReader.Benchmarks
         {
             using XlsbWorkbook reader = Excel.FromXlsb(_xlsb.AsMemory(), options: _prefetchOptions);
             long acc = 0;
-            foreach (Row row in reader) { acc += AccumulateRow(row); }
+            foreach (Row row in reader.FirstSheet) { acc += AccumulateRow(row); }
             return acc;
         }
 
@@ -213,7 +213,7 @@ namespace ExcelReader.Benchmarks
             using MemoryStream ms = new(_xls, writable: false);
             using XlsWorkbook reader = Excel.FromXls(ms);
             long acc = 0;
-            foreach (Row row in reader) { acc += AccumulateRow(row); }
+            foreach (Row row in reader.FirstSheet) { acc += AccumulateRow(row); }
             return acc;
         }
 
@@ -231,7 +231,7 @@ namespace ExcelReader.Benchmarks
             using MemoryStream ms = new(_xls, writable: false);
             using XlsWorkbook reader = Excel.FromXls(ms);
             long acc = 0;
-            foreach (Row row in reader) { acc += AccumulateRowMaterialized(row); }
+            foreach (Row row in reader.FirstSheet) { acc += AccumulateRowMaterialized(row); }
             return acc;
         }
 
@@ -240,7 +240,7 @@ namespace ExcelReader.Benchmarks
         {
             using XlsWorkbook reader = Excel.FromXls(_xls.AsMemory());
             long acc = 0;
-            foreach (Row row in reader) { acc += AccumulateRow(row); }
+            foreach (Row row in reader.FirstSheet) { acc += AccumulateRow(row); }
             return acc;
         }
 
@@ -251,7 +251,7 @@ namespace ExcelReader.Benchmarks
             using MemoryStream ms = new(_csv, writable: false);
             using CsvReader reader = Excel.FromCsv(ms);
             long acc = 0;
-            foreach (Row row in reader)
+            foreach (Row row in reader.FirstSheet)
             {
                 foreach (RowCell rowCell in row.Cells)
                 {
@@ -285,7 +285,7 @@ namespace ExcelReader.Benchmarks
             using MemoryStream ms = new(_csv, writable: false);
             using CsvReader reader = Excel.FromCsv(ms);
             long acc = 0;
-            foreach (Row row in reader)
+            foreach (Row row in reader.FirstSheet)
             {
                 foreach (RowCell rowCell in row.Cells)
                 {
@@ -300,7 +300,7 @@ namespace ExcelReader.Benchmarks
         {
             using CsvReader reader = Excel.FromCsv(_csv.AsMemory());
             long acc = 0;
-            foreach (Row row in reader)
+            foreach (Row row in reader.FirstSheet)
             {
                 foreach (RowCell rowCell in row.Cells)
                 {
