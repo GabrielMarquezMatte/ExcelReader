@@ -17,12 +17,12 @@ namespace ExcelReader.Cli
         {
             return Execute(() =>
             {
-                using IExcelRowReader reader = Open(path, sheet: null, password);
-                for (int i = 0; i < reader.SheetCount; i++)
+                using IExcelWorkbook workbook = Open(path, sheet: null, out _, password);
+                for (int i = 0; i < workbook.SheetCount; i++)
                 {
                     stdout.Write(i.ToString(CultureInfo.InvariantCulture));
                     stdout.Write('\t');
-                    stdout.WriteLine(reader.SheetNameAt(i));
+                    stdout.WriteLine(workbook.SheetAt(i).Name);
                 }
                 return 0;
             }, stderr);
@@ -36,7 +36,7 @@ namespace ExcelReader.Cli
             {
                 string resolvedFormat = ResolveFormat(format, output);
                 ThrowIfOutputIsADirectory(output);
-                using IExcelRowReader reader = Open(path, sheet, password, inputDelimiter);
+                using IExcelWorkbook workbook = Open(path, sheet, out IExcelSheet selected, password, inputDelimiter);
 
                 bool leaveOpen = output is null;
                 Stream target = leaveOpen
@@ -47,16 +47,16 @@ namespace ExcelReader.Cli
                     switch (resolvedFormat)
                     {
                         case "csv":
-                            WriteCsv(reader, target, leaveOpen, delimiter, onProgress);
+                            WriteCsv(selected, target, leaveOpen, delimiter, onProgress);
                             break;
                         case "xlsx":
-                            WriteXlsx(reader, target, leaveOpen, onProgress);
+                            WriteXlsx(selected, target, leaveOpen, onProgress);
                             break;
                         case "xlsb":
-                            WriteXlsb(reader, target, leaveOpen, onProgress);
+                            WriteXlsb(selected, target, leaveOpen, onProgress);
                             break;
                         case "xls":
-                            WriteXls(reader, target, leaveOpen, onProgress);
+                            WriteXls(selected, target, leaveOpen, onProgress);
                             break;
                         default:
                             throw new UnreachableException($"unresolved format '{resolvedFormat}'.");
@@ -112,41 +112,41 @@ namespace ExcelReader.Cli
             }
         }
 
-        private static void WriteCsv(IExcelRowReader reader, Stream target, bool leaveOpen, char delimiter, Action<int>? onProgress)
+        private static void WriteCsv(IExcelSheet sheet, Stream target, bool leaveOpen, char delimiter, Action<int>? onProgress)
         {
             using CsvWorkbookWriter workbook = CsvWorkbookWriter.Create(target, leaveOpen, new CsvWriterOptions { Delimiter = AsciiByte(delimiter, "delimiter") });
-            WriteRows<CsvWorkbookWriter, CsvSheetWriter, CsvRowWriter>(workbook, reader, onProgress);
+            WriteRows<CsvWorkbookWriter, CsvSheetWriter, CsvRowWriter>(workbook, sheet, onProgress);
         }
 
-        private static void WriteXlsx(IExcelRowReader reader, Stream target, bool leaveOpen, Action<int>? onProgress)
+        private static void WriteXlsx(IExcelSheet sheet, Stream target, bool leaveOpen, Action<int>? onProgress)
         {
             using XlsxWorkbookWriter workbook = XlsxWorkbookWriter.Create(target, leaveOpen);
-            WriteRows<XlsxWorkbookWriter, XlsxSheetWriter, XlsxRowWriter>(workbook, reader, onProgress);
+            WriteRows<XlsxWorkbookWriter, XlsxSheetWriter, XlsxRowWriter>(workbook, sheet, onProgress);
         }
 
-        private static void WriteXlsb(IExcelRowReader reader, Stream target, bool leaveOpen, Action<int>? onProgress)
+        private static void WriteXlsb(IExcelSheet sheet, Stream target, bool leaveOpen, Action<int>? onProgress)
         {
-            using XlsbWorkbookWriter workbook = XlsbWorkbookWriter.Create(target, leaveOpen, new XlsbWriterOptions { Date1904 = reader.IsDate1904 });
-            WriteRows<XlsbWorkbookWriter, XlsbSheetWriter, XlsbRowWriter>(workbook, reader, onProgress);
+            using XlsbWorkbookWriter workbook = XlsbWorkbookWriter.Create(target, leaveOpen, new XlsbWriterOptions { Date1904 = sheet.IsDate1904 });
+            WriteRows<XlsbWorkbookWriter, XlsbSheetWriter, XlsbRowWriter>(workbook, sheet, onProgress);
         }
 
-        private static void WriteXls(IExcelRowReader reader, Stream target, bool leaveOpen, Action<int>? onProgress)
+        private static void WriteXls(IExcelSheet sheet, Stream target, bool leaveOpen, Action<int>? onProgress)
         {
-            using XlsWorkbookWriter workbook = XlsWorkbookWriter.Create(target, leaveOpen, date1904: reader.IsDate1904);
-            WriteRows<XlsWorkbookWriter, XlsSheetWriter, XlsRowWriter>(workbook, reader, onProgress);
+            using XlsWorkbookWriter workbook = XlsWorkbookWriter.Create(target, leaveOpen, date1904: sheet.IsDate1904);
+            WriteRows<XlsWorkbookWriter, XlsSheetWriter, XlsRowWriter>(workbook, sheet, onProgress);
         }
 
         private const int ProgressInterval = 500;
 
-        private static void WriteRows<TWorkbook, TSheet, TRow>(TWorkbook workbook, IExcelRowReader reader, Action<int>? onProgress)
+        private static void WriteRows<TWorkbook, TSheet, TRow>(TWorkbook workbook, IExcelSheet sheet, Action<int>? onProgress)
             where TWorkbook : IWorkbookWriter<TSheet>
             where TSheet : ISheetWriter<TRow>
             where TRow : IRowWriter
         {
-            using TSheet sheetWriter = workbook.AddSheet(reader.SheetName);
+            using TSheet sheetWriter = workbook.AddSheet(sheet.Name);
 
             int rowCount = 0;
-            using IExcelRowEnumerator rows = reader.GetEnumerator();
+            using IExcelRowEnumerator rows = sheet.GetEnumerator();
             while (rows.MoveNext())
             {
                 using TRow row = sheetWriter.StartRow();
@@ -193,9 +193,9 @@ namespace ExcelReader.Cli
         {
             return Execute(() =>
             {
-                using IExcelRowReader reader = Open(path, sheet, password, inputDelimiter);
+                using IExcelWorkbook workbook = Open(path, sheet, out IExcelSheet selected, password, inputDelimiter);
 
-                foreach (ExcelColumnSchema column in Excel.InferSchema(reader, headerRow, sampleSize))
+                foreach (ExcelColumnSchema column in Excel.InferSchema(selected, headerRow, sampleSize))
                 {
                     stdout.Write(column.Index.ToString(CultureInfo.InvariantCulture));
                     stdout.Write('\t');
@@ -236,7 +236,7 @@ namespace ExcelReader.Cli
             return (byte)value;
         }
 
-        internal static IExcelRowReader Open(string path, string? sheet, string? password = null, char? inputDelimiter = null)
+        internal static IExcelWorkbook Open(string path, string? sheet, out IExcelSheet selected, string? password = null, char? inputDelimiter = null)
         {
             bool isCsv = string.Equals(Path.GetExtension(path), ".csv", StringComparison.OrdinalIgnoreCase);
             CsvReaderOptions csv = inputDelimiter is char delimiter
@@ -247,31 +247,34 @@ namespace ExcelReader.Cli
             {
                 options = options with { Password = password };
             }
-            IExcelRowReader reader = Excel.Open(path, isCsv ? ExcelFileFormat.Csv : ExcelFileFormat.Unknown, options);
-
-            if (sheet is null)
-            {
-                return reader;
-            }
-
+            IExcelWorkbook workbook = Excel.Open(path, isCsv ? ExcelFileFormat.Csv : ExcelFileFormat.Unknown, options);
             try
             {
-                if (reader.TryMoveToSheet(sheet))
-                {
-                    return reader;
-                }
-                if (int.TryParse(sheet, CultureInfo.InvariantCulture, out int index))
-                {
-                    reader.MoveToSheet(index);
-                    return reader;
-                }
-                throw new ArgumentException($"no sheet named '{sheet}' in {path}.", nameof(sheet));
+                selected = SelectSheet(workbook, sheet, path);
+                return workbook;
             }
             catch
             {
-                reader.Dispose();
+                workbook.Dispose();
                 throw;
             }
+        }
+
+        private static IExcelSheet SelectSheet(IExcelWorkbook workbook, string? sheet, string path)
+        {
+            if (sheet is null)
+            {
+                return workbook.SheetAt(0);
+            }
+            if (workbook.TryGetSheet(sheet, out IExcelSheet? named))
+            {
+                return named;
+            }
+            if (int.TryParse(sheet, CultureInfo.InvariantCulture, out int index))
+            {
+                return workbook.SheetAt(index);
+            }
+            throw new ArgumentException($"no sheet named '{sheet}' in {path}.", nameof(sheet));
         }
     }
 }

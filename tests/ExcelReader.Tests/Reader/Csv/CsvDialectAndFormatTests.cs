@@ -29,12 +29,22 @@ namespace ExcelReader.Tests.Reader.Csv
 
         private static List<string[]> ReadAll(IExcelRowReader reader)
         {
+            return ReadAll(reader.GetEnumerator());
+        }
+
+        private static List<string[]> ReadAll(IExcelSheet sheet)
+        {
+            return ReadAll(sheet.GetEnumerator());
+        }
+
+        private static List<string[]> ReadAll(IExcelRowEnumerator enumerator)
+        {
             var rows = new List<string[]>();
-            using IExcelRowEnumerator enumerator = reader.GetEnumerator();
-            while (enumerator.MoveNext())
+            using IExcelRowEnumerator owned = enumerator;
+            while (owned.MoveNext())
             {
                 var cells = new List<string>();
-                foreach (RowCell cell in enumerator.Current.Cells)
+                foreach (RowCell cell in owned.Current.Cells)
                 {
                     cells.Add(cell.Value.GetString());
                 }
@@ -201,9 +211,9 @@ namespace ExcelReader.Tests.Reader.Csv
             string path = WriteTemp("Name;City;Age\nAda;London;36\n");
             try
             {
-                using IExcelRowReader reader = CliCommands.Open(path, sheet: null);
+                using IExcelWorkbook reader = CliCommands.Open(path, sheet: null, out IExcelSheet selected);
 
-                Assert.Equal(["Ada", "London", "36"], ReadAll(reader)[1]);
+                Assert.Equal(["Ada", "London", "36"], ReadAll(selected)[1]);
             }
             finally
             {
@@ -217,9 +227,9 @@ namespace ExcelReader.Tests.Reader.Csv
             string path = WriteTemp("Name;City;Age\nAda;London;36\n");
             try
             {
-                using IExcelRowReader reader = CliCommands.Open(path, sheet: null, password: null, inputDelimiter: ',');
+                using IExcelWorkbook reader = CliCommands.Open(path, sheet: null, out IExcelSheet selected, password: null, inputDelimiter: ',');
 
-                Assert.Equal(["Ada;London;36"], ReadAll(reader)[1]);
+                Assert.Equal(["Ada;London;36"], ReadAll(selected)[1]);
             }
             finally
             {
@@ -233,7 +243,7 @@ namespace ExcelReader.Tests.Reader.Csv
             string path = WriteTemp("Name;Age\n");
             try
             {
-                Assert.Throws<ArgumentException>(() => CliCommands.Open(path, sheet: null, password: null, inputDelimiter: 'ç'));
+                Assert.Throws<ArgumentException>(() => CliCommands.Open(path, sheet: null, out _, password: null, inputDelimiter: 'ç'));
             }
             finally
             {
