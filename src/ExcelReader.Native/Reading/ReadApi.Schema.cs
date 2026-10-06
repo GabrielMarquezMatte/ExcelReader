@@ -42,8 +42,8 @@ namespace ExcelReader.Native.Reading
             try
             {
                 handle.FaultLiveSession("xl_infer_schema");
-                rows = handle.Reader.GetEnumerator();
-                schema = BuildSchema(SchemaInference.Infer(rows, handle.Reader.IsDate1904, headerRow, sampleSize, (flags & InferParseText) != 0));
+                rows = handle.Sheet.GetEnumerator();
+                schema = BuildSchema(SchemaInference.Infer(rows, handle.Workbook.IsDate1904, headerRow, sampleSize, (flags & InferParseText) != 0));
                 return NativeStatus.Ok;
             }
             catch (ArgumentException exception)

@@ -50,7 +50,7 @@ namespace ExcelReader.Native.Reading
                 if (!handle.HasPending)
                 {
                     handle.FaultLiveSession("xl_next_row");
-                    handle.Rows ??= handle.Reader.GetEnumerator();
+                    handle.Rows ??= handle.Sheet.GetEnumerator();
                     if (!handle.Rows.MoveNext())
                     {
                         return NativeStatus.Eof;
@@ -100,7 +100,7 @@ namespace ExcelReader.Native.Reading
                 }
 
                 handle.FaultLiveSession("xl_next_row_view");
-                handle.Rows ??= handle.Reader.GetEnumerator();
+                handle.Rows ??= handle.Sheet.GetEnumerator();
                 if (!handle.Rows.MoveNext())
                 {
                     return NativeStatus.Eof;

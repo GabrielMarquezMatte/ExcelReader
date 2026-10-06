@@ -6,13 +6,25 @@ namespace ExcelReader.Native
 {
     internal sealed class NativeHandle : IDisposable
     {
-        internal NativeHandle(IExcelRowReader reader)
+        internal NativeHandle(IExcelWorkbook workbook)
         {
-            Reader = reader;
+            Workbook = workbook;
             Scratch = new byte[4096];
         }
 
-        internal IExcelRowReader Reader { get; }
+        internal IExcelWorkbook Workbook { get; }
+
+        internal int CurrentSheet { get; private set; }
+
+        internal IExcelSheet Sheet => Workbook.SheetAt(CurrentSheet);
+
+        internal void MoveToSheet(int index)
+        {
+            _ = Workbook.SheetAt(index);
+            CurrentSheet = index;
+            ResetRows();
+            FaultLiveSession("xl_move_to_sheet");
+        }
 
         internal IExcelRowEnumerator? Rows { get; set; }
 
@@ -66,7 +78,7 @@ namespace ExcelReader.Native
             FaultLiveSession("xl_close");
             ResetRows();
             View?.Dispose();
-            Reader.Dispose();
+            Workbook.Dispose();
         }
     }
 }

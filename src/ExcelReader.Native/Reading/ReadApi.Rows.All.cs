@@ -58,7 +58,7 @@ namespace ExcelReader.Native.Reading
 
             byte[] rowScratch = [];
             handle.FaultLiveSession("xl_read_all_blob");
-            handle.Rows ??= handle.Reader.GetEnumerator();
+            handle.Rows ??= handle.Sheet.GetEnumerator();
             while (handle.Rows.MoveNext())
             {
                 Row row = handle.Rows.Current;
