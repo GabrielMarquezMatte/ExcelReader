@@ -1,4 +1,3 @@
-using System.IO.Compression;
 using System.Runtime.CompilerServices;
 using System.Text;
 using ExcelReader.Core.Reader.Zip;
@@ -66,14 +65,8 @@ namespace ExcelReader.Core.Reader.Internal
             return (sharedOffsets[index], sharedOffsets[index + 1] - sharedOffsets[index], index);
         }
 
-        internal static ZipArchiveEntry GetWorksheetEntry(ZipArchive zip, string path)
-        {
-            return zip.GetEntry(path)
-                ?? throw new InvalidDataException($"Worksheet part not found: {path}");
-        }
-
         [SkipLocalsInit]
-        internal static ZipEntryRef GetWorksheetEntry(ZipMemoryIndex memZip, string path)
+        internal static ZipEntryRef GetWorksheetEntry(ZipIndex memZip, string path)
         {
             Span<byte> stackBuffer = stackalloc byte[256];
             ReadOnlySpan<byte> utf8Path = Encoding.UTF8.GetByteCount(path) <= stackBuffer.Length
@@ -82,21 +75,6 @@ namespace ExcelReader.Core.Reader.Internal
             return memZip.TryGetEntry(utf8Path, out ZipEntryRef entry)
                 ? entry
                 : throw new InvalidDataException($"Worksheet part not found: {path}");
-        }
-
-        internal static LimitedReadStream OpenEntryStream(
-            ZipArchiveEntry entry, DecompressedByteCounter counter, ExcelReaderOptions options,
-            string entryLimitName = "", long entryLimit = 0)
-        {
-            return Wrap(entry.Open(), counter, options, entryLimitName, entryLimit, entry.Length);
-        }
-
-        internal static async ValueTask<LimitedReadStream> OpenEntryStreamAsync(
-            ZipArchiveEntry entry, DecompressedByteCounter counter, ExcelReaderOptions options,
-            CancellationToken ct, string entryLimitName = "", long entryLimit = 0)
-        {
-            Stream opened = await entry.OpenAsync(ct).ConfigureAwait(false);
-            return Wrap(opened, counter, options, entryLimitName, entryLimit, entry.Length);
         }
 
         private const long PrefetchMinUncompressedSize = 256 * 1024;

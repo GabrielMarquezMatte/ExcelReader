@@ -1,8 +1,8 @@
 using System.Diagnostics.CodeAnalysis;
-using System.IO.Compression;
 using System.Runtime.CompilerServices;
 using System.Text;
 using ExcelReader.Core.Reader.Internal;
+using ExcelReader.Core.Reader.Zip;
 
 namespace ExcelReader.Core.Reader.Xlsb
 {
@@ -24,7 +24,7 @@ namespace ExcelReader.Core.Reader.Xlsb
             private readonly bool[] _styleIsDate;
             private readonly int[] _sharedOffsets;
             private readonly Utf8StringCache? _contentCache;
-            private readonly ZipArchiveEntry? _entry;
+            private readonly ZipEntryRef _entry;
             private bool _ended;
             private bool _pendingRowHdr;
 
@@ -35,26 +35,28 @@ namespace ExcelReader.Core.Reader.Xlsb
                 _styleIsDate = reader._styleIsDate;
                 _sharedOffsets = reader._sharedOffsets;
                 _contentCache = reader._options.InternStrings ? new Utf8StringCache() : null;
+                _lease = reader.Lifetime;
             }
 
-            internal Enumerator(XlsbReader reader, ZipArchiveEntry entry, CancellationToken ct)
-                : base(reader._options.MaxCellBytes, nameof(ExcelReaderOptions.MaxCellBytes), WorkbookLookups.InitialBufferCapacity(entry.Length), ct)
+            internal Enumerator(XlsbReader reader, ZipEntryRef entry, CancellationToken ct)
+                : base(reader._options.MaxCellBytes, nameof(ExcelReaderOptions.MaxCellBytes), WorkbookLookups.InitialBufferCapacity(entry.UncompressedSize), ct)
             {
                 _reader = reader;
                 _styleIsDate = reader._styleIsDate;
                 _sharedOffsets = reader._sharedOffsets;
                 _contentCache = reader._options.InternStrings ? new Utf8StringCache() : null;
                 _entry = entry;
+                _lease = reader.Lifetime;
             }
 
             private protected override Stream OpenSource()
             {
-                return WorkbookLookups.OpenEntryStream(_entry!, _reader._decompressedBytes, _reader._options);
+                return _reader._zip!.OpenEntryStream(_entry, _reader._decompressedBytes, _reader._options);
             }
 
             private protected override async ValueTask<Stream> OpenSourceAsync()
             {
-                return await WorkbookLookups.OpenEntryStreamAsync(_entry!, _reader._decompressedBytes, _reader._options, _ct).ConfigureAwait(false);
+                return await _reader._zip!.OpenEntryStreamAsync(_entry, _reader._decompressedBytes, _reader._options, _ct).ConfigureAwait(false);
             }
 
             /// <inheritdoc/>
@@ -76,36 +78,25 @@ namespace ExcelReader.Core.Reader.Xlsb
                 {
                     return new ValueTask<bool>(false);
                 }
-                while (true)
+                ResetRow();
+                if (!_pendingRowHdr)
                 {
-                    ResetRow();
-                    if (!_pendingRowHdr)
-                    {
-                        int seek = SeekRowHdrFromBuffer();
-                        if (seek == 0)
-                        {
-                            return new ValueTask<bool>(false);
-                        }
-                        if (seek == 2)
-                        {
-                            return MoveNextRowAsync(seekDone: false);
-                        }
-                    }
-                    _pendingRowHdr = false;
-                    int collect = CollectCellsFromBuffer();
-                    if (collect == 2)
-                    {
-                        return MoveNextRowAsync(seekDone: true);
-                    }
-                    if (_acc.Count > 0)
-                    {
-                        return new ValueTask<bool>(true);
-                    }
-                    if (!_pendingRowHdr)
+                    int seek = SeekRowHdrFromBuffer();
+                    if (seek == 0)
                     {
                         return new ValueTask<bool>(false);
                     }
+                    if (seek == 2)
+                    {
+                        return MoveNextRowAsync(seekDone: false);
+                    }
                 }
+                _pendingRowHdr = false;
+                if (CollectCellsFromBuffer() == 2)
+                {
+                    return MoveNextRowAsync(seekDone: true);
+                }
+                return new ValueTask<bool>(true);
             }
 
             private async ValueTask<bool> MoveNextRowAsync(bool seekDone)
@@ -116,24 +107,7 @@ namespace ExcelReader.Core.Reader.Xlsb
                 }
                 _pendingRowHdr = false;
                 await CollectCellsAsync().ConfigureAwait(false);
-                while (true)
-                {
-                    if (_acc.Count > 0)
-                    {
-                        return true;
-                    }
-                    if (!_pendingRowHdr)
-                    {
-                        return false;
-                    }
-                    ResetRow();
-                    if (!await SeekRowHdrAsync().ConfigureAwait(false))
-                    {
-                        return false;
-                    }
-                    _pendingRowHdr = false;
-                    await CollectCellsAsync().ConfigureAwait(false);
-                }
+                return true;
             }
 
             private bool MoveNextCore()
@@ -142,24 +116,14 @@ namespace ExcelReader.Core.Reader.Xlsb
                 {
                     return false;
                 }
-                while (true)
+                ResetRow();
+                if (!_pendingRowHdr && !SkipToRowHdr())
                 {
-                    ResetRow();
-                    if (!_pendingRowHdr && !SkipToRowHdr())
-                    {
-                        return false;
-                    }
-                    _pendingRowHdr = false;
-                    CollectCells();
-                    if (_acc.Count > 0)
-                    {
-                        return true;
-                    }
-                    if (!_pendingRowHdr)
-                    {
-                        return false;
-                    }
+                    return false;
                 }
+                _pendingRowHdr = false;
+                CollectCells();
+                return true;
             }
 
             private bool SkipToRowHdr()

@@ -1,5 +1,4 @@
 using System.Buffers;
-using System.IO.Compression;
 using System.Text;
 using ExcelReader.Core.Reader.Internal;
 using ExcelReader.Core.Reader.Zip;
@@ -71,41 +70,56 @@ namespace ExcelReader.Core.Reader.Xlsx
 
         private void EnsureSharedLoaded()
         {
-            if (_sharedLoaded)
+            if (_sharedGate.IsDone)
             {
                 return;
             }
-            _sharedLoaded = true;
-            ZipArchiveEntry? entry = _zip!.GetEntry("xl/sharedStrings.xml");
-            if (entry is null)
-            {
-                return;
-            }
-            WorkbookLookups.ThrowIfSharedEntryTooLarge(entry.Length, _decompressedBytes, _options);
-            using LimitedReadStream stream = WorkbookLookups.OpenEntryStream(entry, _decompressedBytes, _options,
-                nameof(ExcelReaderOptions.MaxSharedStringBytes), _options.MaxSharedStringBytes);
-            ParseSharedStreaming(stream, entry.Length);
+            _sharedGate.Run(this, static reader => reader.LoadShared(), static reader => reader.ReturnSharedTable());
         }
 
-        private async ValueTask EnsureSharedLoadedAsync(CancellationToken ct)
+        private ValueTask EnsureSharedLoadedAsync(CancellationToken ct)
         {
-            if (_sharedLoaded)
+            if (_sharedGate.IsDone)
+            {
+                return ValueTask.CompletedTask;
+            }
+            return _sharedGate.RunAsync(
+                this, static (reader, token) => reader.LoadSharedAsync(token), static reader => reader.ReturnSharedTable(), ct);
+        }
+
+        private void LoadShared()
+        {
+            if (!_zip.TryGetEntry("xl/sharedStrings.xml"u8, out ZipEntryRef entry))
             {
                 return;
             }
-            _sharedLoaded = true;
-            ZipArchiveEntry? entry = _zip!.GetEntry("xl/sharedStrings.xml");
-            if (entry is null)
+            WorkbookLookups.ThrowIfSharedEntryTooLarge(entry.UncompressedSize, _decompressedBytes, _options);
+            if (_zip.HasMemory)
             {
+                using ZipPart part = _zip.OpenPart(entry, _decompressedBytes,
+                    nameof(ExcelReaderOptions.MaxSharedStringBytes), _options.MaxSharedStringBytes);
+                ParseSharedFromMemory(part.Memory, entry.UncompressedSize);
                 return;
             }
-            WorkbookLookups.ThrowIfSharedEntryTooLarge(entry.Length, _decompressedBytes, _options);
-            LimitedReadStream stream = await WorkbookLookups.OpenEntryStreamAsync(
+            using LimitedReadStream stream = _zip.OpenEntryStream(entry, _decompressedBytes, _options,
+                nameof(ExcelReaderOptions.MaxSharedStringBytes), _options.MaxSharedStringBytes);
+            ParseSharedStreaming(stream, entry.UncompressedSize);
+        }
+
+        private async ValueTask LoadSharedAsync(CancellationToken ct)
+        {
+            if (_zip.HasMemory || !_zip.TryGetEntry("xl/sharedStrings.xml"u8, out ZipEntryRef entry))
+            {
+                LoadShared();
+                return;
+            }
+            WorkbookLookups.ThrowIfSharedEntryTooLarge(entry.UncompressedSize, _decompressedBytes, _options);
+            LimitedReadStream stream = await _zip.OpenEntryStreamAsync(
                 entry, _decompressedBytes, _options, ct,
                 nameof(ExcelReaderOptions.MaxSharedStringBytes), _options.MaxSharedStringBytes).ConfigureAwait(false);
             await using (stream.ConfigureAwait(false))
             {
-                await ParseSharedStreamingAsync(stream, entry.Length, ct).ConfigureAwait(false);
+                await ParseSharedStreamingAsync(stream, entry.UncompressedSize, ct).ConfigureAwait(false);
             }
         }
 

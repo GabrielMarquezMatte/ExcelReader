@@ -354,8 +354,14 @@ namespace ExcelReader.Core.Reader
             }
             if (_sharedCache is not null && !Value.IsEmpty && (uint)_sharedIndex < (uint)_sharedCache.Length)
             {
-                ref string? cached = ref _sharedCache[_sharedIndex];
-                return cached ??= Encoding.UTF8.GetString(Value);
+                ref string? slot = ref _sharedCache[_sharedIndex];
+                string? cached = Volatile.Read(ref slot);
+                if (cached is not null)
+                {
+                    return cached;
+                }
+                string created = Encoding.UTF8.GetString(Value);
+                return Interlocked.CompareExchange(ref slot, created, null) ?? created;
             }
             if (_contentCache is not null && !Value.IsEmpty)
             {

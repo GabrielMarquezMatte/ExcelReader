@@ -1,5 +1,8 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Text;
 using ExcelReader.Core.Parser.ParallelCsv;
+using ExcelReader.Core.Reader.Internal;
+using ExcelReader.Core.Reader.Sources;
 using ExcelReader.Core.Reader.Xls;
 using Microsoft.Win32.SafeHandles;
 
@@ -12,22 +15,37 @@ namespace ExcelReader.Core.Reader.Csv
     /// <remarks>Unlike the XLSX/XLSB/XLS readers, there are no styles or shared strings to resolve.</remarks>
     public sealed partial class CsvReader : IExcelRowReader, IExcelRowReader<CsvReader.Enumerator>
     {
+        [SuppressMessage("Usage", "CA2213:Disposable fields should be disposed", Justification = "Disposed by ReleaseResources, which the lifetime runs after the last enumerator.")]
+        private readonly ByteSource? _source;
+        private readonly long _sourceStart;
+        [SuppressMessage("Usage", "CA2213:Disposable fields should be disposed", Justification = "An alias of the stream the ByteSource owns; ReleaseResources disposes the source.")]
+        private readonly FileStream? _file;
+        [SuppressMessage("Usage", "CA2213:Disposable fields should be disposed", Justification = "Disposed by ReleaseResources, which the lifetime runs after the last enumerator.")]
         private readonly Stream? _stream;
         private readonly bool _leaveOpen;
         private readonly CsvReaderOptions _options;
         private readonly ReadOnlyMemory<byte> _memory;
-        private readonly long _startPosition = -1;
-        private bool _enumeratedOnce;
+        private int _enumeratedOnce;
         private SafeFileHandle? _chunkHandle;
+
+        internal ReaderLifetime Lifetime { get; }
 
         internal CsvReader(Stream stream, bool leaveOpen, CsvReaderOptions? options = null)
         {
             ArgumentNullException.ThrowIfNull(stream);
             _options = options ?? CsvReaderOptions.Default;
             ValidateOptions(_options);
-            if (_options.Encoding is not null && _options.Encoding.CodePage != Encoding.UTF8.CodePage)
+            Lifetime = new ReaderLifetime(ReleaseResources);
+            if (stream.CanSeek)
             {
-                _stream = Encoding.CreateTranscodingStream(stream, _options.Encoding, Encoding.UTF8, leaveOpen);
+                _sourceStart = stream.Position;
+                _file = stream as FileStream;
+                _source = ByteSource.FromStream(stream, leaveOpen);
+                _leaveOpen = true;
+            }
+            else if (NeedsTranscoding(_options.Encoding))
+            {
+                _stream = Encoding.CreateTranscodingStream(stream, _options.Encoding!, Encoding.UTF8, leaveOpen);
                 _leaveOpen = false;
             }
             else
@@ -35,17 +53,18 @@ namespace ExcelReader.Core.Reader.Csv
                 _stream = stream;
                 _leaveOpen = leaveOpen;
             }
-            if (_stream.CanSeek)
-            {
-                _startPosition = _stream.Position;
-            }
-            _memory = default;
+        }
+
+        private static bool NeedsTranscoding(Encoding? encoding)
+        {
+            return encoding is not null && encoding.CodePage != Encoding.UTF8.CodePage;
         }
 
         internal CsvReader(ReadOnlyMemory<byte> data, CsvReaderOptions? options = null)
         {
             _options = options ?? CsvReaderOptions.Default;
             ValidateOptions(_options);
+            Lifetime = new ReaderLifetime(ReleaseResources);
             _stream = null;
             _leaveOpen = true;
             _memory = Transcode(data, _options.Encoding);
@@ -61,15 +80,15 @@ namespace ExcelReader.Core.Reader.Csv
 
         internal bool TryGetChunkSource(out CsvChunkSource source)
         {
-            if (_stream is null)
+            if (_source is null && _stream is null)
             {
                 source = new CsvChunkSource(_memory);
                 return true;
             }
-            if (_stream is FileStream file && _startPosition >= 0)
+            if (_file is not null && !NeedsTranscoding(_options.Encoding))
             {
-                SafeFileHandle handle = ChunkHandle(file);
-                source = new CsvChunkSource(handle, RandomAccess.GetLength(handle), _startPosition);
+                SafeFileHandle handle = ChunkHandle(_file);
+                source = new CsvChunkSource(handle, RandomAccess.GetLength(handle), _sourceStart);
                 return true;
             }
             source = default;
@@ -98,12 +117,12 @@ namespace ExcelReader.Core.Reader.Csv
 
         private static ReadOnlyMemory<byte> Transcode(ReadOnlyMemory<byte> data, Encoding? encoding)
         {
-            if (encoding is null || encoding.CodePage == Encoding.UTF8.CodePage)
+            if (!NeedsTranscoding(encoding))
             {
                 return data;
             }
             using MemoryStream source = XlsCompoundFile.AsStream(data);
-            using Stream transcoding = Encoding.CreateTranscodingStream(source, encoding, Encoding.UTF8, leaveOpen: true);
+            using Stream transcoding = Encoding.CreateTranscodingStream(source, encoding!, Encoding.UTF8, leaveOpen: true);
             using MemoryStream target = new(data.Length);
             transcoding.CopyTo(target);
             return target.GetBuffer().AsMemory(0, (int)target.Length);
@@ -181,14 +200,11 @@ namespace ExcelReader.Core.Reader.Csv
         }
 
         /// <summary>Gets an enumerator that reads records synchronously from the start of the source.</summary>
+        /// <exception cref="ObjectDisposedException">The reader was disposed.</exception>
+        /// <exception cref="InvalidOperationException">The source is a non-seekable stream that was already enumerated.</exception>
         public Enumerator GetEnumerator()
         {
-            ResetToStart();
-            if (_stream is null)
-            {
-                return new Enumerator(_memory, _options);
-            }
-            return new Enumerator(_stream, _options);
+            return OpenSheet();
         }
 
         IExcelRowEnumerator IExcelRowReader<IExcelRowEnumerator>.GetEnumerator()
@@ -198,15 +214,12 @@ namespace ExcelReader.Core.Reader.Csv
 
         /// <summary>Gets an enumerator that reads records asynchronously from the start of the source.</summary>
         /// <param name="ct">A token observed by every <c>MoveNextAsync</c> call.</param>
+        /// <exception cref="ObjectDisposedException">The reader was disposed.</exception>
+        /// <exception cref="InvalidOperationException">The source is a non-seekable stream that was already enumerated.</exception>
         public Enumerator GetAsyncEnumerator(CancellationToken ct = default)
         {
             ct.ThrowIfCancellationRequested();
-            ResetToStart();
-            if (_stream is null)
-            {
-                return new Enumerator(_memory, _options, ct);
-            }
-            return new Enumerator(_stream, _options, ct);
+            return OpenSheet(ct);
         }
 
         IExcelRowEnumerator IExcelRowReader<IExcelRowEnumerator>.GetAsyncEnumerator(CancellationToken ct)
@@ -214,44 +227,63 @@ namespace ExcelReader.Core.Reader.Csv
             return GetAsyncEnumerator(ct);
         }
 
-        private void ResetToStart()
+        internal Enumerator OpenSheet(CancellationToken ct = default)
         {
-            if (_stream is null)
+            Lifetime.Acquire(this);
+            try
             {
-                return;
+                if (_source is not null)
+                {
+                    return new Enumerator(OpenSourceStream(_source), _options, ownsSource: true, Lifetime, ct);
+                }
+                if (_stream is null)
+                {
+                    return new Enumerator(_memory, _options, Lifetime, ct);
+                }
+                if (Interlocked.Exchange(ref _enumeratedOnce, 1) != 0)
+                {
+                    throw new InvalidOperationException(
+                        "This CsvReader is over a non-seekable stream and can only be enumerated once.");
+                }
+                return new Enumerator(_stream, _options, ownsSource: false, Lifetime, ct);
             }
-            if (_startPosition >= 0)
+            catch
             {
-                _stream.Position = _startPosition;
-                return;
+                Lifetime.Release();
+                throw;
             }
-            if (_enumeratedOnce)
-            {
-                throw new InvalidOperationException(
-                    "This CsvReader is over a non-seekable stream and can only be enumerated once.");
-            }
-            _enumeratedOnce = true;
+        }
+
+        private Stream OpenSourceStream(ByteSource source)
+        {
+            bool transcode = NeedsTranscoding(_options.Encoding);
+            ByteSourceStream raw = new(source, _sourceStart, source.Length - _sourceStart, buffered: transcode);
+            return transcode
+                ? Encoding.CreateTranscodingStream(raw, _options.Encoding!, Encoding.UTF8, leaveOpen: false)
+                : raw;
         }
 
         /// <inheritdoc/>
         public void Dispose()
         {
-            _chunkHandle?.Dispose();
-            if (!_leaveOpen && _stream is not null)
-            {
-                _stream.Dispose();
-            }
+            Lifetime.Close();
         }
 
         /// <inheritdoc/>
         public ValueTask DisposeAsync()
         {
+            Lifetime.Close();
+            return ValueTask.CompletedTask;
+        }
+
+        private void ReleaseResources()
+        {
             _chunkHandle?.Dispose();
-            if (_leaveOpen || _stream is null)
+            _source?.Dispose();
+            if (!_leaveOpen)
             {
-                return ValueTask.CompletedTask;
+                _stream?.Dispose();
             }
-            return _stream.DisposeAsync();
         }
     }
 }

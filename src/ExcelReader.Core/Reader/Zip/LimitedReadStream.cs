@@ -18,15 +18,14 @@ namespace ExcelReader.Core.Reader.Zip
             {
                 return;
             }
-            long total = checked(_total + bytes);
-            if (total > _limit)
+            long total = Interlocked.Add(ref _total, bytes);
+            if (total > _limit || total < 0)
             {
-                throw new ExcelLimitExceededException(_limitName, _limit, total);
+                throw new ExcelLimitExceededException(_limitName, _limit, total < 0 ? long.MaxValue : total);
             }
-            _total = total;
         }
 
-        internal long Remaining => _limit <= 0 ? long.MaxValue : _limit - _total;
+        internal long Remaining => _limit <= 0 ? long.MaxValue : _limit - Interlocked.Read(ref _total);
     }
 
     internal sealed class LimitedReadStream : Stream
