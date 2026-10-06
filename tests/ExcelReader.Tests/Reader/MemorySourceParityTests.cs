@@ -41,8 +41,8 @@ namespace ExcelReader.Tests.Reader
         {
             byte[] bytes = XlsWorkbookBuilder.Build(sheets: [("S1", [["Name", 1, true]])]).ToArray();
 
-            using XlsReader streamReader = Excel.FromXls(new MemoryStream(bytes, writable: false));
-            using XlsReader memoryReader = Excel.FromXls(bytes.AsMemory());
+            using XlsWorkbook streamReader = Excel.FromXls(new MemoryStream(bytes, writable: false));
+            using XlsWorkbook memoryReader = Excel.FromXls(bytes.AsMemory());
 
             AssertRowsEqual(streamReader, memoryReader);
         }
@@ -55,9 +55,9 @@ namespace ExcelReader.Tests.Reader
             ReadOnlyMemory<byte> sliced = prefixed.AsMemory(3, bytes.Length);
             var manager = new NonArrayMemoryManager(bytes);
 
-            using XlsReader streamReader = Excel.FromXls(new MemoryStream(sliced.ToArray(), writable: false));
-            using XlsReader memoryReader = Excel.FromXls(sliced);
-            using XlsReader managerReader = Excel.FromXls(manager.Memory);
+            using XlsWorkbook streamReader = Excel.FromXls(new MemoryStream(sliced.ToArray(), writable: false));
+            using XlsWorkbook memoryReader = Excel.FromXls(sliced);
+            using XlsWorkbook managerReader = Excel.FromXls(manager.Memory);
 
             AssertRowsEqual(streamReader, memoryReader);
             AssertRowsEqual(streamReader, managerReader);

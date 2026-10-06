@@ -6,7 +6,7 @@ using static ExcelReader.Core.Reader.Xlsb.Biff12;
 namespace ExcelReader.Core.Reader.Xls
 {
     /// <summary>Reads rows from a legacy BIFF8 (.xls) workbook, exposing each worksheet through synchronous and asynchronous enumeration.</summary>
-    public sealed partial class XlsReader : IExcelRowReader, IExcelRowReader<XlsReader.Enumerator>
+    public sealed partial class XlsWorkbook : IExcelRowReader, IExcelRowReader<XlsWorkbook.Enumerator>
     {
         private readonly WorkbookStream _workbook;
         private readonly ExcelReaderOptions _options;
@@ -20,17 +20,17 @@ namespace ExcelReader.Core.Reader.Xls
 
         internal ReaderLifetime Lifetime { get; }
 
-        internal XlsReader(Stream stream, bool leaveOpen, ExcelReaderOptions? options = null)
+        internal XlsWorkbook(Stream stream, bool leaveOpen, ExcelReaderOptions? options = null)
             : this(XlsCompoundFile.OpenWorkbook(stream, leaveOpen, options), options)
         {
         }
 
-        internal XlsReader(ReadOnlyMemory<byte> data, ExcelReaderOptions? options = null)
+        internal XlsWorkbook(ReadOnlyMemory<byte> data, ExcelReaderOptions? options = null)
             : this(XlsCompoundFile.OpenWorkbook(data, options), options)
         {
         }
 
-        private XlsReader(WorkbookStream workbook, ExcelReaderOptions? options = null)
+        private XlsWorkbook(WorkbookStream workbook, ExcelReaderOptions? options = null)
         {
             Lifetime = new ReaderLifetime(ReleaseResources);
             _workbook = workbook;
@@ -46,10 +46,10 @@ namespace ExcelReader.Core.Reader.Xls
             }
         }
 
-        internal static async ValueTask<XlsReader> CreateAsync(Stream stream, bool leaveOpen, ExcelReaderOptions? options = null, CancellationToken ct = default)
+        internal static async ValueTask<XlsWorkbook> CreateAsync(Stream stream, bool leaveOpen, ExcelReaderOptions? options = null, CancellationToken ct = default)
         {
             WorkbookStream workbook = await XlsCompoundFile.OpenWorkbookAsync(stream, leaveOpen, options, ct).ConfigureAwait(false);
-            return new XlsReader(workbook, options);
+            return new XlsWorkbook(workbook, options);
         }
 
         internal BiffCursor OpenCursor(int offset)
@@ -144,7 +144,7 @@ namespace ExcelReader.Core.Reader.Xls
         }
 
         /// <inheritdoc/>
-        /// <remarks>XlsReader is fully in-memory, so nothing is deferred; <paramref name="ct"/> is checked here and on each move.</remarks>
+        /// <remarks>XlsWorkbook is fully in-memory, so nothing is deferred; <paramref name="ct"/> is checked here and on each move.</remarks>
         public Enumerator GetAsyncEnumerator(CancellationToken ct = default)
         {
             ct.ThrowIfCancellationRequested();

@@ -176,8 +176,8 @@ namespace ExcelReader.Tests.Native
         private static void AssertTemporalColumnsCarryANumberFormat(string path)
         {
             using (FileStream file = File.OpenRead(path))
-            using (XlsxReader reader = Excel.FromXlsx(file))
-            using (XlsxReader.Enumerator rows = reader.GetEnumerator())
+            using (XlsxWorkbook reader = Excel.FromXlsx(file))
+            using (XlsxWorkbook.Enumerator rows = reader.GetEnumerator())
             {
                 Assert.True(rows.MoveNext());
                 Assert.True(rows.MoveNext());
@@ -196,8 +196,8 @@ namespace ExcelReader.Tests.Native
         private static double ReadFirstDataSerial(string path)
         {
             using FileStream file = File.OpenRead(path);
-            using XlsbReader reader = Excel.FromXlsb(file);
-            using XlsbReader.Enumerator rows = reader.GetEnumerator();
+            using XlsbWorkbook reader = Excel.FromXlsb(file);
+            using XlsbWorkbook.Enumerator rows = reader.GetEnumerator();
 
             Assert.True(rows.MoveNext());
             Assert.True(rows.MoveNext());

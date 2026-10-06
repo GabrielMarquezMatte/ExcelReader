@@ -40,7 +40,7 @@ namespace ExcelReader.Tests.Reader
         private static ExcelColumnSchema[] InferFromXlsx(string sheetRows, int headerRow = 1, int sampleSize = 100, bool parseText = false)
         {
             using MemoryStream ms = WorkbookBuilder.Build(sheetRows);
-            using XlsxReader reader = Excel.FromXlsx(ms.ToArray());
+            using XlsxWorkbook reader = Excel.FromXlsx(ms.ToArray());
             using var rows = reader.GetEnumerator();
             return SchemaInference.Infer(rows, isDate1904: false, headerRow, sampleSize, parseText);
         }

@@ -30,7 +30,7 @@ namespace ExcelReader.Core.Reader
     /// This is the generic <see cref="IExcelRowReader{TEnumerator}"/> specialized to <see cref="IExcelRowEnumerator"/>,
     /// plus a sheet-navigation surface and dispose; unifying them lets the typed parser drive a format-agnostic
     /// reader (<see cref="Excel.Open(string, ExcelReaderOptions?)"/>) and lets callers walk every sheet without
-    /// downcasting to the concrete <c>XlsxReader</c>/<c>XlsbReader</c>/<c>XlsReader</c> type.
+    /// downcasting to the concrete <c>XlsxWorkbook</c>/<c>XlsbWorkbook</c>/<c>XlsWorkbook</c> type.
     /// <para>
     /// <b>Thread safety:</b> enumerators obtained from one reader may be consumed on different threads,
     /// each by one thread at a time, including two enumerators over the same sheet. The reader's own

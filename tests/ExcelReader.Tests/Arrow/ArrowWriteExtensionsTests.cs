@@ -116,7 +116,7 @@ namespace ExcelReader.Tests.Arrow
             }
             ms.Position = 0;
 
-            using XlsxReader reader = Excel.FromXlsx(ms.ToArray());
+            using XlsxWorkbook reader = Excel.FromXlsx(ms.ToArray());
             RecordBatch roundTripped = reader.ToArrowRecordBatch(ReadBackSchema());
 
             AssertRoundTrips(roundTripped);
@@ -206,8 +206,8 @@ namespace ExcelReader.Tests.Arrow
             }
             ms.Position = 0;
 
-            using XlsxReader reader = Excel.FromXlsx(ms.ToArray());
-            using XlsxReader.Enumerator e = reader.GetEnumerator();
+            using XlsxWorkbook reader = Excel.FromXlsx(ms.ToArray());
+            using XlsxWorkbook.Enumerator e = reader.GetEnumerator();
             Assert.True(e.MoveNext());
             Assert.True(e.Current[0].TryParse(null, out long value));
             Assert.Equal(3L, value);
@@ -331,7 +331,7 @@ namespace ExcelReader.Tests.Arrow
                 workbook.WriteRecordBatch(BuildWideBatch());
             }
 
-            using XlsxReader reader = Excel.FromXlsx(ms.ToArray());
+            using XlsxWorkbook reader = Excel.FromXlsx(ms.ToArray());
             AssertWideRoundTrips(reader);
         }
 
@@ -374,7 +374,7 @@ namespace ExcelReader.Tests.Arrow
             }
             ms.Position = 0;
 
-            using XlsxReader reader = Excel.FromXlsx(ms.ToArray());
+            using XlsxWorkbook reader = Excel.FromXlsx(ms.ToArray());
             RecordBatch roundTripped = reader.ToArrowRecordBatch(ReadBackSchema());
 
             AssertRoundTrips(roundTripped);

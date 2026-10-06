@@ -315,7 +315,7 @@ namespace ExcelReader.Tests.Parser.ParallelCsv
             }
 
             stream.Position = 0;
-            await using XlsxReader reader = await Excel.FromXlsxAsync(stream, ct: ct);
+            await using XlsxWorkbook reader = await Excel.FromXlsxAsync(stream, ct: ct);
             Assert.Equal(["Ada Lovelace|7|first"], ReadPeople(reader));
         }
 
@@ -324,7 +324,7 @@ namespace ExcelReader.Tests.Parser.ParallelCsv
             builder.WriteRow(row, new Person { Name = "Ada Lovelace"u8, Id = 7, Note = "first" });
         }
 
-        private static List<string> ReadPeople(XlsxReader reader)
+        private static List<string> ReadPeople(XlsxWorkbook reader)
         {
             var rows = new List<string>();
             foreach (Person person in ExcelParser.FromAttributes<Person>().Parse(reader))

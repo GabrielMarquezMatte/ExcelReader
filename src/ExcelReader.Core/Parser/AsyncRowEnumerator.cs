@@ -15,7 +15,7 @@ namespace ExcelReader.Core.Parser
     /// whenever the row-enumerator call and the projection both resolve synchronously (the common
     /// case), only falling to an awaiting continuation on a genuine buffer miss — this avoids paying
     /// for a second state machine on top of the row-enumerator's own (e.g.
-    /// <c>XlsxReader.Enumerator.MoveNextAsync</c> / <c>CsvReader.Enumerator.MoveNextAsync</c>).
+    /// <c>XlsxWorkbook.Enumerator.MoveNextAsync</c> / <c>CsvReader.Enumerator.MoveNextAsync</c>).
     /// </remarks>
     [EditorBrowsable(EditorBrowsableState.Never)]
     public abstract class AsyncRowEnumerator<T, TReader, TRows> : IAsyncEnumerator<T>

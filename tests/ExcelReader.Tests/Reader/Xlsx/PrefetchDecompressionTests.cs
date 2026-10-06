@@ -153,10 +153,10 @@ namespace ExcelReader.Tests.Reader.Xlsx
         {
             var options = new ExcelReaderOptions { PrefetchDecompression = prefetch };
             await using MemoryStream stream = new(bytes, writable: false);
-            await using XlsxReader reader = await Excel.FromXlsxAsync(stream, options: options, ct: ct);
+            await using XlsxWorkbook reader = await Excel.FromXlsxAsync(stream, options: options, ct: ct);
             Exception ex = await Assert.ThrowsAsync<InvalidDataException>(async () =>
             {
-                await using XlsxReader.Enumerator e = reader.GetAsyncEnumerator(ct);
+                await using XlsxWorkbook.Enumerator e = reader.GetAsyncEnumerator(ct);
                 await DrainRowsAsync(e);
             });
             return ex.GetType();
@@ -173,7 +173,7 @@ namespace ExcelReader.Tests.Reader.Xlsx
             }
         }
 
-        private static async Task DrainRowsAsync(XlsxReader.Enumerator e)
+        private static async Task DrainRowsAsync(XlsxWorkbook.Enumerator e)
         {
             while (await e.MoveNextAsync())
             {
@@ -197,10 +197,10 @@ namespace ExcelReader.Tests.Reader.Xlsx
                 PrefetchDecompression = true,
             };
 
-            using XlsxReader reader = Excel.FromXlsx(ms, options: options);
+            using XlsxWorkbook reader = Excel.FromXlsx(ms, options: options);
             ExcelLimitExceededException ex = Assert.Throws<ExcelLimitExceededException>(() =>
             {
-                using XlsxReader.Enumerator e = reader.GetEnumerator();
+                using XlsxWorkbook.Enumerator e = reader.GetEnumerator();
                 DrainRows(e);
             });
             Assert.Equal(nameof(ExcelReaderOptions.MaxTotalDecompressedBytes), ex.LimitName);
@@ -219,10 +219,10 @@ namespace ExcelReader.Tests.Reader.Xlsx
                 PrefetchDecompression = true,
             };
 
-            await using XlsxReader reader = await Excel.FromXlsxAsync(ms, options: options, ct: ct);
+            await using XlsxWorkbook reader = await Excel.FromXlsxAsync(ms, options: options, ct: ct);
             ExcelLimitExceededException ex = await Assert.ThrowsAsync<ExcelLimitExceededException>(async () =>
             {
-                await using XlsxReader.Enumerator e = reader.GetAsyncEnumerator(ct);
+                await using XlsxWorkbook.Enumerator e = reader.GetAsyncEnumerator(ct);
                 await DrainRowsAsync(e);
             });
             Assert.Equal(nameof(ExcelReaderOptions.MaxTotalDecompressedBytes), ex.LimitName);
@@ -239,9 +239,9 @@ namespace ExcelReader.Tests.Reader.Xlsx
             cts.Cancel();
 
             await using MemoryStream stream = new(bytes, writable: false);
-            await using XlsxReader reader = await Excel.FromXlsxAsync(stream, options: options, ct: openCt);
+            await using XlsxWorkbook reader = await Excel.FromXlsxAsync(stream, options: options, ct: openCt);
 
-            await using XlsxReader.Enumerator e = reader.GetAsyncEnumerator(cts.Token);
+            await using XlsxWorkbook.Enumerator e = reader.GetAsyncEnumerator(cts.Token);
 
             await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await e.MoveNextAsync());
         }
@@ -255,8 +255,8 @@ namespace ExcelReader.Tests.Reader.Xlsx
             using CancellationTokenSource cts = new();
 
             await using MemoryStream stream = new(bytes, writable: false);
-            await using XlsxReader reader = await Excel.FromXlsxAsync(stream, options: options, ct: openCt);
-            await using XlsxReader.Enumerator e = reader.GetAsyncEnumerator(cts.Token);
+            await using XlsxWorkbook reader = await Excel.FromXlsxAsync(stream, options: options, ct: openCt);
+            await using XlsxWorkbook.Enumerator e = reader.GetAsyncEnumerator(cts.Token);
 
             Assert.True(await e.MoveNextAsync());
             cts.Cancel();
@@ -402,12 +402,12 @@ namespace ExcelReader.Tests.Reader.Xlsx
         }
 
 
-        private static XlsxReader OpenXlsx(Stream stream, ExcelReaderOptions options)
+        private static XlsxWorkbook OpenXlsx(Stream stream, ExcelReaderOptions options)
         {
             return Excel.FromXlsx(stream, options: options);
         }
 
-        private static XlsbReader OpenXlsb(Stream stream, ExcelReaderOptions options)
+        private static XlsbWorkbook OpenXlsb(Stream stream, ExcelReaderOptions options)
         {
             return Excel.FromXlsb(stream, options: options);
         }

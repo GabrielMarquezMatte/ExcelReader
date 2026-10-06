@@ -74,10 +74,10 @@ namespace ExcelReader.Tests.Reader
             }
             ms.Position = 0;
 
-            using XlsxReader reader = Excel.FromXlsx(ms);
+            using XlsxWorkbook reader = Excel.FromXlsx(ms);
             Assert.Equal("Data", reader.SheetName);
             Assert.True(reader.IsDate1904);
-            using XlsxReader.Enumerator e = reader.GetEnumerator();
+            using XlsxWorkbook.Enumerator e = reader.GetEnumerator();
             Assert.True(e.MoveNext());
             Assert.Equal("1", e.Current[0].GetString());
         }
@@ -88,8 +88,8 @@ namespace ExcelReader.Tests.Reader
             using MemoryStream ms = WorkbookBuilder.Build(
                 """<row r="1"><c r="A1" s="0"><v>45658</v></c></row>""",
                 styles: "<styleSheet><numFmts count='1'><numFmt numFmtId='164' formatCode='yyyy-mm-dd'/></numFmts><cellXfs count='1'><xf numFmtId='164'/></cellXfs></styleSheet>");
-            using XlsxReader reader = Excel.FromXlsx(ms);
-            using XlsxReader.Enumerator e = reader.GetEnumerator();
+            using XlsxWorkbook reader = Excel.FromXlsx(ms);
+            using XlsxWorkbook.Enumerator e = reader.GetEnumerator();
 
             Assert.True(e.MoveNext());
             Assert.Equal(CellType.Date, e.Current[0].Type);
@@ -102,8 +102,8 @@ namespace ExcelReader.Tests.Reader
             using MemoryStream ms = WorkbookBuilder.Build(
                 """<row r="1"><c r="A1" t="s"><v>x</v></c><c r="B1" t="s"><v>0</v></c></row>""",
                 sharedStrings: "<si><t>first</t></si><si><t>second</t></si>");
-            using XlsxReader reader = Excel.FromXlsx(ms);
-            using XlsxReader.Enumerator e = reader.GetEnumerator();
+            using XlsxWorkbook reader = Excel.FromXlsx(ms);
+            using XlsxWorkbook.Enumerator e = reader.GetEnumerator();
 
             Assert.True(e.MoveNext());
             Assert.Equal("", e.Current[0].GetString());
@@ -116,8 +116,8 @@ namespace ExcelReader.Tests.Reader
             using MemoryStream ms = WorkbookBuilder.Build(
                 """<row r="1"><c r="A1" t="s"><v></v></c></row>""",
                 sharedStrings: "<si><t>first</t></si>");
-            using XlsxReader reader = Excel.FromXlsx(ms);
-            using XlsxReader.Enumerator e = reader.GetEnumerator();
+            using XlsxWorkbook reader = Excel.FromXlsx(ms);
+            using XlsxWorkbook.Enumerator e = reader.GetEnumerator();
 
             Assert.True(e.MoveNext());
             Assert.Equal("", e.Current[0].GetString());
@@ -128,8 +128,8 @@ namespace ExcelReader.Tests.Reader
         public void TruncatedXlsbStreamThrows()
         {
             byte[] sheet = TruncatedSheet();
-            using XlsbReader reader = new(sharedFlat: [], sharedOffsets: [0], styleIsDate: [], date1904: false);
-            using XlsbReader.Enumerator e = new(reader, new MemoryStream(sheet));
+            using XlsbWorkbook reader = new(sharedFlat: [], sharedOffsets: [0], styleIsDate: [], date1904: false);
+            using XlsbWorkbook.Enumerator e = new(reader, new MemoryStream(sheet));
 
             Assert.Throws<InvalidDataException>(() =>
             {
@@ -143,8 +143,8 @@ namespace ExcelReader.Tests.Reader
         public async Task TruncatedXlsbStreamThrowsAsync()
         {
             byte[] sheet = TruncatedSheet();
-            await using XlsbReader reader = new(sharedFlat: [], sharedOffsets: [0], styleIsDate: [], date1904: false);
-            await using XlsbReader.Enumerator e = new(reader, new MemoryStream(sheet));
+            await using XlsbWorkbook reader = new(sharedFlat: [], sharedOffsets: [0], styleIsDate: [], date1904: false);
+            await using XlsbWorkbook.Enumerator e = new(reader, new MemoryStream(sheet));
 
             await Assert.ThrowsAsync<InvalidDataException>(async () =>
             {
@@ -162,8 +162,8 @@ namespace ExcelReader.Tests.Reader
                 .. B.Record(Brt.RowHdr),
                 .. B.Record(Brt.CellReal, B.CellReal(0, 0, 3.14)),
             ];
-            using XlsbReader reader = new(sharedFlat: [], sharedOffsets: [0], styleIsDate: [], date1904: false);
-            using XlsbReader.Enumerator e = new(reader, new MemoryStream(sheet));
+            using XlsbWorkbook reader = new(sharedFlat: [], sharedOffsets: [0], styleIsDate: [], date1904: false);
+            using XlsbWorkbook.Enumerator e = new(reader, new MemoryStream(sheet));
 
             Assert.True(e.MoveNext());
             Assert.Equal(3.14, Read(e.Current[0]));

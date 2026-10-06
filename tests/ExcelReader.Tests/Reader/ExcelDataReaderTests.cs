@@ -205,7 +205,7 @@ namespace ExcelReader.Tests.Reader
             }
 
             ms.Position = 0;
-            using XlsbReader reader = Excel.FromXlsb(ms);
+            using XlsbWorkbook reader = Excel.FromXlsb(ms);
             using var data = new ExcelDataReader(reader);
             Assert.True(data.Read());
 
@@ -350,7 +350,7 @@ namespace ExcelReader.Tests.Reader
             }
 
             TrickleStream stream = new(buffer.ToArray());
-            XlsxReader reader = Excel.FromXlsx(stream, leaveOpen: false, new ExcelReaderOptions { MaxCellBytes = 64 });
+            XlsxWorkbook reader = Excel.FromXlsx(stream, leaveOpen: false, new ExcelReaderOptions { MaxCellBytes = 64 });
             Assert.Throws<ExcelLimitExceededException>(() =>
             {
                 using ExcelDataReader data = new(reader);

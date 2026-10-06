@@ -2,7 +2,7 @@ using ExcelReader.Core.Reader.Internal;
 
 namespace ExcelReader.Core.Reader.Xlsx
 {
-    public sealed partial class XlsxReader
+    public sealed partial class XlsxWorkbook
     {
         private static bool[] ParseStyleDateFlags(ReadOnlySpan<byte> src)
         {

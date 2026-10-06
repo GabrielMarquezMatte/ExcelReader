@@ -24,7 +24,7 @@ namespace ExcelReader.Core.Reader
         /// <summary>Opens an XLSX workbook from a file path, taking ownership of the file stream.</summary>
         /// <param name="path">The path to the XLSX file.</param>
         /// <param name="options">Resource limits and behavior toggles; <see cref="ExcelReaderOptions.Default"/> when <see langword="null"/>.</param>
-        public static XlsxReader FromXlsxFile(string path, ExcelReaderOptions? options = null)
+        public static XlsxWorkbook FromXlsxFile(string path, ExcelReaderOptions? options = null)
         {
             return FromXlsx(File.OpenRead(path), leaveOpen: false, options);
         }
@@ -33,13 +33,13 @@ namespace ExcelReader.Core.Reader
         /// <param name="stream">The stream containing the XLSX data.</param>
         /// <param name="leaveOpen">When <see langword="true"/> (the default), <paramref name="stream"/> is not disposed when the reader is disposed.</param>
         /// <param name="options">Resource limits and behavior toggles; <see cref="ExcelReaderOptions.Default"/> when <see langword="null"/>.</param>
-        public static XlsxReader FromXlsx(Stream stream, bool leaveOpen = true, ExcelReaderOptions? options = null)
+        public static XlsxWorkbook FromXlsx(Stream stream, bool leaveOpen = true, ExcelReaderOptions? options = null)
         {
             if (TryDecryptCfbStream(stream, leaveOpen, options, out Stream decrypted))
             {
-                return new XlsxReader(decrypted, leaveOpen: false, options);
+                return new XlsxWorkbook(decrypted, leaveOpen: false, options);
             }
-            return new XlsxReader(stream, leaveOpen, options);
+            return new XlsxWorkbook(stream, leaveOpen, options);
         }
 
         /// <summary>
@@ -50,46 +50,46 @@ namespace ExcelReader.Core.Reader
         /// </summary>
         /// <param name="data">The whole XLSX file's bytes. Must outlive the returned reader.</param>
         /// <param name="options">Resource limits and behavior toggles; <see cref="ExcelReaderOptions.Default"/> when <see langword="null"/>. <see cref="ExcelReaderOptions.PrefetchDecompression"/> is ignored on this path — there is nothing left to overlap.</param>
-        public static XlsxReader FromXlsx(ReadOnlyMemory<byte> data, ExcelReaderOptions? options = null)
+        public static XlsxWorkbook FromXlsx(ReadOnlyMemory<byte> data, ExcelReaderOptions? options = null)
         {
             ExcelReaderOptions effective = options ?? ExcelReaderOptions.Default;
             if (data.Span.StartsWith(XlsCompoundFile.Signature) && EncryptedPackageOpener.IsEncryptedMemory(data, effective))
             {
                 ReadOnlyMemory<byte> plain = EncryptedPackageOpener.DecryptToMemory(data, effective);
-                return XlsxReader.CreateFromMemory(plain, effective);
+                return XlsxWorkbook.CreateFromMemory(plain, effective);
             }
-            return XlsxReader.CreateFromMemory(data, effective);
+            return XlsxWorkbook.CreateFromMemory(data, effective);
         }
 
         /// <summary>Opens a legacy binary (XLS) workbook from a file path, taking ownership of the file stream.</summary>
         /// <param name="path">The path to the XLS file.</param>
         /// <param name="options">Resource limits and behavior toggles; <see cref="ExcelReaderOptions.Default"/> when <see langword="null"/>.</param>
-        public static XlsReader FromXlsFile(string path, ExcelReaderOptions? options = null)
+        public static XlsWorkbook FromXlsFile(string path, ExcelReaderOptions? options = null)
         {
-            return new XlsReader(File.OpenRead(path), leaveOpen: false, options);
+            return new XlsWorkbook(File.OpenRead(path), leaveOpen: false, options);
         }
 
         /// <summary>Opens a legacy binary (XLS) workbook from an existing stream.</summary>
         /// <param name="stream">The stream containing the XLS data.</param>
         /// <param name="leaveOpen">When <see langword="true"/> (the default), <paramref name="stream"/> is not disposed when the reader is disposed.</param>
         /// <param name="options">Resource limits and behavior toggles; <see cref="ExcelReaderOptions.Default"/> when <see langword="null"/>.</param>
-        public static XlsReader FromXls(Stream stream, bool leaveOpen = true, ExcelReaderOptions? options = null)
+        public static XlsWorkbook FromXls(Stream stream, bool leaveOpen = true, ExcelReaderOptions? options = null)
         {
-            return new XlsReader(stream, leaveOpen, options);
+            return new XlsWorkbook(stream, leaveOpen, options);
         }
 
         /// <summary>Opens a legacy binary (XLS) workbook directly from an in-memory buffer.</summary>
         /// <param name="data">The whole XLS file's bytes. Must outlive the returned reader and must not be mutated while it is in use.</param>
         /// <param name="options">Resource limits and behavior toggles; <see cref="ExcelReaderOptions.Default"/> when <see langword="null"/>.</param>
-        public static XlsReader FromXls(ReadOnlyMemory<byte> data, ExcelReaderOptions? options = null)
+        public static XlsWorkbook FromXls(ReadOnlyMemory<byte> data, ExcelReaderOptions? options = null)
         {
-            return new XlsReader(data, options);
+            return new XlsWorkbook(data, options);
         }
 
         /// <summary>Opens an XLSB (Excel binary) workbook from a file path, taking ownership of the file stream.</summary>
         /// <param name="path">The path to the XLSB file.</param>
         /// <param name="options">Resource limits and behavior toggles; <see cref="ExcelReaderOptions.Default"/> when <see langword="null"/>.</param>
-        public static XlsbReader FromXlsbFile(string path, ExcelReaderOptions? options = null)
+        public static XlsbWorkbook FromXlsbFile(string path, ExcelReaderOptions? options = null)
         {
             return FromXlsb(File.OpenRead(path), leaveOpen: false, options);
         }
@@ -98,13 +98,13 @@ namespace ExcelReader.Core.Reader
         /// <param name="stream">The stream containing the XLSB data.</param>
         /// <param name="leaveOpen">When <see langword="true"/> (the default), <paramref name="stream"/> is not disposed when the reader is disposed.</param>
         /// <param name="options">Resource limits and behavior toggles; <see cref="ExcelReaderOptions.Default"/> when <see langword="null"/>.</param>
-        public static XlsbReader FromXlsb(Stream stream, bool leaveOpen = true, ExcelReaderOptions? options = null)
+        public static XlsbWorkbook FromXlsb(Stream stream, bool leaveOpen = true, ExcelReaderOptions? options = null)
         {
             if (TryDecryptCfbStream(stream, leaveOpen, options, out Stream decrypted))
             {
-                return new XlsbReader(decrypted, leaveOpen: false, options);
+                return new XlsbWorkbook(decrypted, leaveOpen: false, options);
             }
-            return new XlsbReader(stream, leaveOpen, options);
+            return new XlsbWorkbook(stream, leaveOpen, options);
         }
 
         /// <summary>
@@ -115,22 +115,22 @@ namespace ExcelReader.Core.Reader
         /// </summary>
         /// <param name="data">The whole XLSB file's bytes. Must outlive the returned reader.</param>
         /// <param name="options">Resource limits and behavior toggles; <see cref="ExcelReaderOptions.Default"/> when <see langword="null"/>. <see cref="ExcelReaderOptions.PrefetchDecompression"/> is ignored on this path — there is nothing left to overlap.</param>
-        public static XlsbReader FromXlsb(ReadOnlyMemory<byte> data, ExcelReaderOptions? options = null)
+        public static XlsbWorkbook FromXlsb(ReadOnlyMemory<byte> data, ExcelReaderOptions? options = null)
         {
             ExcelReaderOptions effective = options ?? ExcelReaderOptions.Default;
             if (data.Span.StartsWith(XlsCompoundFile.Signature) && EncryptedPackageOpener.IsEncryptedMemory(data, effective))
             {
                 ReadOnlyMemory<byte> plain = EncryptedPackageOpener.DecryptToMemory(data, effective);
-                return XlsbReader.CreateFromMemory(plain, effective);
+                return XlsbWorkbook.CreateFromMemory(plain, effective);
             }
-            return XlsbReader.CreateFromMemory(data, effective);
+            return XlsbWorkbook.CreateFromMemory(data, effective);
         }
 
         /// <summary>Asynchronously opens an XLSX workbook from a file path, taking ownership of the file stream.</summary>
         /// <param name="path">The path to the XLSX file.</param>
         /// <param name="options">Resource limits and behavior toggles; <see cref="ExcelReaderOptions.Default"/> when <see langword="null"/>.</param>
         /// <param name="ct">A token to cancel the open operation.</param>
-        public static ValueTask<XlsxReader> FromXlsxFileAsync(string path, ExcelReaderOptions? options = null, CancellationToken ct = default)
+        public static ValueTask<XlsxWorkbook> FromXlsxFileAsync(string path, ExcelReaderOptions? options = null, CancellationToken ct = default)
         {
             FileStream stream = OpenAsyncFile(path);
             return FromXlsxAsync(stream, leaveOpen: false, options, ct);
@@ -141,23 +141,23 @@ namespace ExcelReader.Core.Reader
         /// <param name="leaveOpen">When <see langword="true"/> (the default), <paramref name="stream"/> is not disposed when the reader is disposed.</param>
         /// <param name="options">Resource limits and behavior toggles; <see cref="ExcelReaderOptions.Default"/> when <see langword="null"/>.</param>
         /// <param name="ct">A token to cancel the open operation.</param>
-        public static ValueTask<XlsxReader> FromXlsxAsync(Stream stream, bool leaveOpen = true, ExcelReaderOptions? options = null, CancellationToken ct = default)
+        public static ValueTask<XlsxWorkbook> FromXlsxAsync(Stream stream, bool leaveOpen = true, ExcelReaderOptions? options = null, CancellationToken ct = default)
         {
             if (TryDecryptCfbStream(stream, leaveOpen, options, out Stream decrypted))
             {
-                return XlsxReader.CreateAsync(decrypted, leaveOpen: false, options, ct);
+                return XlsxWorkbook.CreateAsync(decrypted, leaveOpen: false, options, ct);
             }
-            return XlsxReader.CreateAsync(stream, leaveOpen, options, ct);
+            return XlsxWorkbook.CreateAsync(stream, leaveOpen, options, ct);
         }
 
         /// <summary>Asynchronously opens a legacy binary (XLS) workbook from a file path, taking ownership of the file stream.</summary>
         /// <param name="path">The path to the XLS file.</param>
         /// <param name="options">Resource limits and behavior toggles; <see cref="ExcelReaderOptions.Default"/> when <see langword="null"/>.</param>
         /// <param name="ct">A token to cancel the open operation.</param>
-        public static ValueTask<XlsReader> FromXlsFileAsync(string path, ExcelReaderOptions? options = null, CancellationToken ct = default)
+        public static ValueTask<XlsWorkbook> FromXlsFileAsync(string path, ExcelReaderOptions? options = null, CancellationToken ct = default)
         {
             FileStream stream = OpenAsyncFile(path);
-            return XlsReader.CreateAsync(stream, leaveOpen: false, options, ct);
+            return XlsWorkbook.CreateAsync(stream, leaveOpen: false, options, ct);
         }
 
         /// <summary>Asynchronously opens a legacy binary (XLS) workbook from an existing stream.</summary>
@@ -165,16 +165,16 @@ namespace ExcelReader.Core.Reader
         /// <param name="leaveOpen">When <see langword="true"/> (the default), <paramref name="stream"/> is not disposed when the reader is disposed.</param>
         /// <param name="options">Resource limits and behavior toggles; <see cref="ExcelReaderOptions.Default"/> when <see langword="null"/>.</param>
         /// <param name="ct">A token to cancel the open operation.</param>
-        public static ValueTask<XlsReader> FromXlsAsync(Stream stream, bool leaveOpen = true, ExcelReaderOptions? options = null, CancellationToken ct = default)
+        public static ValueTask<XlsWorkbook> FromXlsAsync(Stream stream, bool leaveOpen = true, ExcelReaderOptions? options = null, CancellationToken ct = default)
         {
-            return XlsReader.CreateAsync(stream, leaveOpen, options, ct);
+            return XlsWorkbook.CreateAsync(stream, leaveOpen, options, ct);
         }
 
         /// <summary>Asynchronously opens an XLSB (Excel binary) workbook from a file path, taking ownership of the file stream.</summary>
         /// <param name="path">The path to the XLSB file.</param>
         /// <param name="options">Resource limits and behavior toggles; <see cref="ExcelReaderOptions.Default"/> when <see langword="null"/>.</param>
         /// <param name="ct">A token to cancel the open operation.</param>
-        public static ValueTask<XlsbReader> FromXlsbFileAsync(string path, ExcelReaderOptions? options = null, CancellationToken ct = default)
+        public static ValueTask<XlsbWorkbook> FromXlsbFileAsync(string path, ExcelReaderOptions? options = null, CancellationToken ct = default)
         {
             FileStream stream = OpenAsyncFile(path);
             return FromXlsbAsync(stream, leaveOpen: false, options, ct);
@@ -185,13 +185,13 @@ namespace ExcelReader.Core.Reader
         /// <param name="leaveOpen">When <see langword="true"/> (the default), <paramref name="stream"/> is not disposed when the reader is disposed.</param>
         /// <param name="options">Resource limits and behavior toggles; <see cref="ExcelReaderOptions.Default"/> when <see langword="null"/>.</param>
         /// <param name="ct">A token to cancel the open operation.</param>
-        public static ValueTask<XlsbReader> FromXlsbAsync(Stream stream, bool leaveOpen = true, ExcelReaderOptions? options = null, CancellationToken ct = default)
+        public static ValueTask<XlsbWorkbook> FromXlsbAsync(Stream stream, bool leaveOpen = true, ExcelReaderOptions? options = null, CancellationToken ct = default)
         {
             if (TryDecryptCfbStream(stream, leaveOpen, options, out Stream decrypted))
             {
-                return XlsbReader.CreateAsync(decrypted, leaveOpen: false, options, ct);
+                return XlsbWorkbook.CreateAsync(decrypted, leaveOpen: false, options, ct);
             }
-            return XlsbReader.CreateAsync(stream, leaveOpen, options, ct);
+            return XlsbWorkbook.CreateAsync(stream, leaveOpen, options, ct);
         }
 
         /// <summary>Opens a CSV (or other delimited-text) source from a file path, taking ownership of the file stream.</summary>
@@ -320,7 +320,7 @@ namespace ExcelReader.Core.Reader
         /// Opens a workbook from a file path, auto-detecting its format (XLSX/XLSB/XLS) from the file's signature
         /// and taking ownership of the file stream.
         /// </summary>
-        /// <remarks>Pattern-match on the returned reader against its concrete type (<see cref="XlsxReader"/> / <see cref="XlsReader"/> / <see cref="XlsbReader"/>) to access format-specific members.</remarks>
+        /// <remarks>Pattern-match on the returned reader against its concrete type (<see cref="XlsxWorkbook"/> / <see cref="XlsWorkbook"/> / <see cref="XlsbWorkbook"/>) to access format-specific members.</remarks>
         /// <param name="path">The path to the workbook file.</param>
         /// <param name="options">Resource limits and behavior toggles; <see cref="ExcelReaderOptions.Default"/> when <see langword="null"/>.</param>
         /// <returns>A format-agnostic <see cref="IExcelRowReader"/> backed by the concrete reader that matches the detected format.</returns>
@@ -375,9 +375,9 @@ namespace ExcelReader.Core.Reader
             }
             return format switch
             {
-                ExcelFileFormat.Xls => new XlsReader(data, effective),
-                ExcelFileFormat.Xlsb => XlsbReader.CreateFromIndex(memZip!, effective),
-                ExcelFileFormat.Xlsx => XlsxReader.CreateFromIndex(memZip!, effective),
+                ExcelFileFormat.Xls => new XlsWorkbook(data, effective),
+                ExcelFileFormat.Xlsb => XlsbWorkbook.CreateFromIndex(memZip!, effective),
+                ExcelFileFormat.Xlsx => XlsxWorkbook.CreateFromIndex(memZip!, effective),
                 _ => throw new System.Diagnostics.UnreachableException(),
             };
         }
@@ -392,8 +392,8 @@ namespace ExcelReader.Core.Reader
             }
             return format switch
             {
-                ExcelFileFormat.Xlsb => XlsbReader.CreateFromIndex(memZip!, options),
-                ExcelFileFormat.Xlsx => XlsxReader.CreateFromIndex(memZip!, options),
+                ExcelFileFormat.Xlsb => XlsbWorkbook.CreateFromIndex(memZip!, options),
+                ExcelFileFormat.Xlsx => XlsxWorkbook.CreateFromIndex(memZip!, options),
                 _ => throw new System.Diagnostics.UnreachableException(),
             };
         }
@@ -684,9 +684,9 @@ namespace ExcelReader.Core.Reader
             }
             return format switch
             {
-                ExcelFileFormat.Xls => new XlsReader(stream, leaveOpen, options),
-                ExcelFileFormat.Xlsb => XlsbReader.CreateFromIndex(zip!, effective),
-                ExcelFileFormat.Xlsx => XlsxReader.CreateFromIndex(zip!, effective),
+                ExcelFileFormat.Xls => new XlsWorkbook(stream, leaveOpen, options),
+                ExcelFileFormat.Xlsb => XlsbWorkbook.CreateFromIndex(zip!, effective),
+                ExcelFileFormat.Xlsx => XlsxWorkbook.CreateFromIndex(zip!, effective),
                 _ => throw new System.Diagnostics.UnreachableException(),
             };
         }
@@ -695,8 +695,8 @@ namespace ExcelReader.Core.Reader
         {
             ZipIndex zip = ZipIndex.Create(ByteSource.FromStream(decrypted, leaveOpen: false), options);
             return ClassifyZip(zip) is ExcelFileFormat.Xlsb
-                ? XlsbReader.CreateFromIndex(zip, options)
-                : XlsxReader.CreateFromIndex(zip, options);
+                ? XlsbWorkbook.CreateFromIndex(zip, options)
+                : XlsxWorkbook.CreateFromIndex(zip, options);
         }
 
         private static async ValueTask<IExcelRowReader> OpenSeekableAsync(Stream stream, bool leaveOpen, ExcelReaderOptions? options, CancellationToken ct)
@@ -725,9 +725,9 @@ namespace ExcelReader.Core.Reader
             }
             return format switch
             {
-                ExcelFileFormat.Xls => await XlsReader.CreateAsync(stream, leaveOpen, options, ct).ConfigureAwait(false),
-                ExcelFileFormat.Xlsb => await XlsbReader.CreateFromIndexAsync(zip!, effective, ct).ConfigureAwait(false),
-                ExcelFileFormat.Xlsx => await XlsxReader.CreateFromIndexAsync(zip!, effective, ct).ConfigureAwait(false),
+                ExcelFileFormat.Xls => await XlsWorkbook.CreateAsync(stream, leaveOpen, options, ct).ConfigureAwait(false),
+                ExcelFileFormat.Xlsb => await XlsbWorkbook.CreateFromIndexAsync(zip!, effective, ct).ConfigureAwait(false),
+                ExcelFileFormat.Xlsx => await XlsxWorkbook.CreateFromIndexAsync(zip!, effective, ct).ConfigureAwait(false),
                 _ => throw new System.Diagnostics.UnreachableException(),
             };
         }
@@ -737,8 +737,8 @@ namespace ExcelReader.Core.Reader
             ByteSource source = await ByteSource.FromStreamAsync(decrypted, leaveOpen: false, ct).ConfigureAwait(false);
             ZipIndex zip = await ZipIndex.CreateAsync(source, options, ct).ConfigureAwait(false);
             return ClassifyZip(zip) is ExcelFileFormat.Xlsb
-                ? await XlsbReader.CreateFromIndexAsync(zip, options, ct).ConfigureAwait(false)
-                : await XlsxReader.CreateFromIndexAsync(zip, options, ct).ConfigureAwait(false);
+                ? await XlsbWorkbook.CreateFromIndexAsync(zip, options, ct).ConfigureAwait(false)
+                : await XlsxWorkbook.CreateFromIndexAsync(zip, options, ct).ConfigureAwait(false);
         }
 
         private static void DisposeOnFailure(Stream stream, bool leaveOpen)

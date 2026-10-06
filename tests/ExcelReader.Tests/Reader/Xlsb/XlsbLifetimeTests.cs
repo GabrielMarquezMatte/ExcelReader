@@ -26,7 +26,7 @@ namespace ExcelReader.Tests.Reader.Xlsb
             return buffer.ToArray();
         }
 
-        private static List<string> Drain(XlsbReader.Enumerator e)
+        private static List<string> Drain(XlsbWorkbook.Enumerator e)
         {
             List<string> values = [];
             while (e.MoveNext())
@@ -39,7 +39,7 @@ namespace ExcelReader.Tests.Reader.Xlsb
         [Fact]
         public void GetEnumerator_After_Dispose_Throws()
         {
-            XlsbReader reader = Excel.FromXlsb(BuildXlsb());
+            XlsbWorkbook reader = Excel.FromXlsb(BuildXlsb());
             reader.Dispose();
             Assert.Throws<ObjectDisposedException>(() => reader.GetEnumerator());
             Assert.Throws<ObjectDisposedException>(() => reader.GetAsyncEnumerator(TestContext.Current.CancellationToken));
@@ -50,15 +50,15 @@ namespace ExcelReader.Tests.Reader.Xlsb
         {
             byte[] bytes = BuildXlsb();
             List<string> expected;
-            using (XlsbReader reference = Excel.FromXlsb(bytes))
+            using (XlsbWorkbook reference = Excel.FromXlsb(bytes))
             {
-                using XlsbReader.Enumerator all = reference.GetEnumerator();
+                using XlsbWorkbook.Enumerator all = reference.GetEnumerator();
                 expected = Drain(all);
             }
 
             TrickleStream stream = new(bytes);
-            XlsbReader reader = Excel.FromXlsb(stream, leaveOpen: false);
-            XlsbReader.Enumerator e = reader.GetEnumerator();
+            XlsbWorkbook reader = Excel.FromXlsb(stream, leaveOpen: false);
+            XlsbWorkbook.Enumerator e = reader.GetEnumerator();
             Assert.True(e.MoveNext());
 
             reader.Dispose();
@@ -75,8 +75,8 @@ namespace ExcelReader.Tests.Reader.Xlsb
         public void Disposing_Reader_And_Enumerator_Twice_Is_Harmless()
         {
             TrickleStream stream = new(BuildXlsb(rows: 20));
-            XlsbReader reader = Excel.FromXlsb(stream, leaveOpen: false);
-            XlsbReader.Enumerator e = reader.GetEnumerator();
+            XlsbWorkbook reader = Excel.FromXlsb(stream, leaveOpen: false);
+            XlsbWorkbook.Enumerator e = reader.GetEnumerator();
             e.Dispose();
             e.Dispose();
             Assert.True(stream.CanRead);

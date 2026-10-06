@@ -89,8 +89,8 @@ namespace ExcelReader.Tests.Writer
             }
 
             workbook.Position = 0;
-            await using XlsxReader reader = Excel.FromXlsx(workbook);
-            using XlsxReader.Enumerator rows = reader.GetEnumerator();
+            await using XlsxWorkbook reader = Excel.FromXlsx(workbook);
+            using XlsxWorkbook.Enumerator rows = reader.GetEnumerator();
             Assert.True(rows.MoveNext());
             Assert.Equal("repeat", rows.Current[0].GetString());
             Assert.Equal("repeat", rows.Current[1].GetString());
@@ -98,7 +98,7 @@ namespace ExcelReader.Tests.Writer
             Assert.False(rows.MoveNext());
 
             reader.MoveToSheet(1);
-            using XlsxReader.Enumerator secondRows = reader.GetEnumerator();
+            using XlsxWorkbook.Enumerator secondRows = reader.GetEnumerator();
             Assert.True(secondRows.MoveNext());
             Assert.Equal("repeat", secondRows.Current[0].GetString());
         }
@@ -201,8 +201,8 @@ namespace ExcelReader.Tests.Writer
             }
 
             workbook.Position = 0;
-            await using XlsbReader reader = Excel.FromXlsb(workbook);
-            using XlsbReader.Enumerator rows = reader.GetEnumerator();
+            await using XlsbWorkbook reader = Excel.FromXlsb(workbook);
+            using XlsbWorkbook.Enumerator rows = reader.GetEnumerator();
             Assert.True(rows.MoveNext());
             Assert.Equal(CellType.ExcelString, rows.Current[0].Type);
             Assert.Equal("repeat", rows.Current[0].GetString());

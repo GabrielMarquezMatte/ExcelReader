@@ -248,7 +248,7 @@ namespace ExcelReader.Tests.Writer
             ms.Position = 0;
 
             await using var reader = Excel.FromXlsx(ms);
-            using XlsxReader.Enumerator e = reader.GetEnumerator();
+            using XlsxWorkbook.Enumerator e = reader.GetEnumerator();
             Assert.True(e.MoveNext());
             Assert.Equal("Name", e.Current[0].GetString());
             Assert.False(e.MoveNext());
@@ -298,7 +298,7 @@ namespace ExcelReader.Tests.Writer
             ms.Position = 0;
 
             await using var reader = Excel.FromXlsx(ms);
-            using XlsxReader.Enumerator e = reader.GetEnumerator();
+            using XlsxWorkbook.Enumerator e = reader.GetEnumerator();
             Assert.True(e.MoveNext());
             Assert.Equal("Name", e.Current[0].GetString());
             Assert.Equal(CellType.Empty, e.Current[1].Type);
@@ -607,7 +607,7 @@ namespace ExcelReader.Tests.Writer
             }).ConfigureAwait(true);
 
             await using var reader = Excel.FromXlsx(ms);
-            using XlsxReader.Enumerator e = reader.GetEnumerator();
+            using XlsxWorkbook.Enumerator e = reader.GetEnumerator();
             Assert.True(e.MoveNext());
             Assert.Equal("1234567890123", e.Current[0].GetString());
             Assert.Equal(CellType.Empty, e.Current[1].Type);
@@ -996,7 +996,7 @@ namespace ExcelReader.Tests.Writer
             }).ConfigureAwait(true);
 
             await using var reader = Excel.FromXlsx(ms);
-            using XlsxReader.Enumerator e = reader.GetEnumerator();
+            using XlsxWorkbook.Enumerator e = reader.GetEnumerator();
             for (int expected = 1; expected <= 4; expected++)
             {
                 Assert.True(e.MoveNext());

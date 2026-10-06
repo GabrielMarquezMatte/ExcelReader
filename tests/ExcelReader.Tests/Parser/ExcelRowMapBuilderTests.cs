@@ -70,11 +70,11 @@ namespace ExcelReader.Tests.Parser
                 ["Name", "Age", "BirthDate", "Active", "Kind"],
                 ["Alice", 30, SampleBirthDate, true, "Beta"]);
 
-            await using XlsxReader mappedReader = await Excel.FromXlsxAsync(ms, leaveOpen: true, ct: TestContext.Current.CancellationToken);
+            await using XlsxWorkbook mappedReader = await Excel.FromXlsxAsync(ms, leaveOpen: true, ct: TestContext.Current.CancellationToken);
             List<MapBuilderTestModel> mapped = ExcelParser.Generated<MapBuilderTestModel>().Parse(mappedReader).ToList();
 
             ms.Position = 0;
-            await using XlsxReader reflectionReader = await Excel.FromXlsxAsync(ms, ct: TestContext.Current.CancellationToken);
+            await using XlsxWorkbook reflectionReader = await Excel.FromXlsxAsync(ms, ct: TestContext.Current.CancellationToken);
             List<ReflectionTestModel> reflected = ExcelParser.FromAttributes<ReflectionTestModel>().Parse(reflectionReader).ToList();
 
             Assert.Single(mapped);
@@ -96,12 +96,12 @@ namespace ExcelReader.Tests.Parser
                 .Property(["Age"], ExcelCellReaders.Parsable, static (ref MapBuilderTestModel m, int v) => m.Age = v, isRequired: true);
             TypeMapInfo<MapBuilderTestModel> info = builder.Build();
 
-            await using XlsxReader mappedReader = await Excel.FromXlsxAsync(mappedStream, ct: TestContext.Current.CancellationToken);
+            await using XlsxWorkbook mappedReader = await Excel.FromXlsxAsync(mappedStream, ct: TestContext.Current.CancellationToken);
             var mappedEnumerable = new ExcelEnumerable<MapBuilderTestModel>(mappedReader, new ExcelParserConfig(), info);
             ExcelParseException mappedEx = Assert.Throws<ExcelParseException>(() => mappedEnumerable.ToList());
 
             await using MemoryStream reflectedStream = await TypedWorkbook.BuildAsync(["Name"], ["Alice"]);
-            await using XlsxReader reflectedReader = await Excel.FromXlsxAsync(reflectedStream, ct: TestContext.Current.CancellationToken);
+            await using XlsxWorkbook reflectedReader = await Excel.FromXlsxAsync(reflectedStream, ct: TestContext.Current.CancellationToken);
             ExcelParseException reflectedEx = Assert.Throws<ExcelParseException>(
                 () => ExcelParser.FromAttributes<RequiredAgeRow>().Parse(reflectedReader).ToList());
 
@@ -144,8 +144,8 @@ namespace ExcelReader.Tests.Parser
 
             mappedStream.Position = 0;
             reflectedStream.Position = 0;
-            await using XlsxReader mappedReader = await Excel.FromXlsxAsync(mappedStream, ct: TestContext.Current.CancellationToken);
-            await using XlsxReader reflectedReader = await Excel.FromXlsxAsync(reflectedStream, ct: TestContext.Current.CancellationToken);
+            await using XlsxWorkbook mappedReader = await Excel.FromXlsxAsync(mappedStream, ct: TestContext.Current.CancellationToken);
+            await using XlsxWorkbook reflectedReader = await Excel.FromXlsxAsync(reflectedStream, ct: TestContext.Current.CancellationToken);
             List<ReflectionTestModel> mapped = ExcelParser.FromAttributes<ReflectionTestModel>().Parse(mappedReader).ToList();
             List<ReflectionTestModel> reflected = ExcelParser.FromAttributes<ReflectionTestModel>().Parse(reflectedReader).ToList();
 
@@ -191,7 +191,7 @@ namespace ExcelReader.Tests.Parser
             }
 
             stream.Position = 0;
-            await using XlsxReader reader = await Excel.FromXlsxAsync(stream, ct: ct);
+            await using XlsxWorkbook reader = await Excel.FromXlsxAsync(stream, ct: ct);
             List<MapBuilderTestModel> results = ExcelParser.Generated<MapBuilderTestModel>().Parse(reader).ToList();
 
             Assert.Single(results);
@@ -214,7 +214,7 @@ namespace ExcelReader.Tests.Parser
             }
 
             stream.Position = 0;
-            await using XlsbReader reader = await Excel.FromXlsbAsync(stream, leaveOpen: false, ct: ct);
+            await using XlsbWorkbook reader = await Excel.FromXlsbAsync(stream, leaveOpen: false, ct: ct);
             List<MapBuilderTestModel> results = ExcelParser.Generated<MapBuilderTestModel>().Parse(reader).ToList();
 
             Assert.Single(results);
@@ -237,7 +237,7 @@ namespace ExcelReader.Tests.Parser
             }
 
             stream.Position = 0;
-            await using XlsReader reader = Excel.FromXls(stream, leaveOpen: false);
+            await using XlsWorkbook reader = Excel.FromXls(stream, leaveOpen: false);
             List<MapBuilderTestModel> results = ExcelParser.Generated<MapBuilderTestModel>().Parse(reader).ToList();
 
             Assert.Single(results);

@@ -58,7 +58,7 @@ namespace ExcelReader.Tests.Reader
             byte[] xlsx = BuildXlsx(null, "hidden", "veryHidden");
 
             using var stream = new MemoryStream(xlsx, writable: false);
-            using XlsxReader reader = Excel.FromXlsx(stream);
+            using XlsxWorkbook reader = Excel.FromXlsx(stream);
 
             Assert.Equal(ExcelSheetVisibility.Visible, reader.SheetVisibilityAt(0));
             Assert.Equal(ExcelSheetVisibility.Hidden, reader.SheetVisibilityAt(1));
@@ -83,7 +83,7 @@ namespace ExcelReader.Tests.Reader
         {
             byte[] xlsx = BuildXlsx(null, "veryHidden");
 
-            using XlsxReader reader = Excel.FromXlsx(xlsx.AsMemory());
+            using XlsxWorkbook reader = Excel.FromXlsx(xlsx.AsMemory());
 
             Assert.Equal(ExcelSheetVisibility.Visible, reader.SheetVisibilityAt(0));
             Assert.Equal(ExcelSheetVisibility.VeryHidden, reader.SheetVisibilityAt(1));
@@ -94,7 +94,7 @@ namespace ExcelReader.Tests.Reader
         {
             byte[] xlsx = BuildXlsx("", "somethingElse", "VERYHIDDEN");
 
-            using XlsxReader reader = Excel.FromXlsx(xlsx.AsMemory());
+            using XlsxWorkbook reader = Excel.FromXlsx(xlsx.AsMemory());
 
             Assert.Equal(ExcelSheetVisibility.Visible, reader.SheetVisibilityAt(0));
             Assert.Equal(ExcelSheetVisibility.Visible, reader.SheetVisibilityAt(1));
@@ -131,7 +131,7 @@ namespace ExcelReader.Tests.Reader
             byte[] rels = Encoding.UTF8.GetBytes(
                 """<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.bin"/></Relationships>""");
 
-            var sheets = XlsbWorkbook.ParseSheets(workbook, rels);
+            var sheets = XlsbWorkbookParts.ParseSheets(workbook, rels);
 
             Assert.Equal(expected, Assert.Single(sheets).Visibility);
         }
@@ -143,7 +143,7 @@ namespace ExcelReader.Tests.Reader
                 sheetStates: [0, 1, 2],
                 sheets: [("S1", [["A"]]), ("S2", [["B"]]), ("S3", [["C"]])]);
 
-            using XlsReader reader = Excel.FromXls(xls);
+            using XlsWorkbook reader = Excel.FromXls(xls);
 
             Assert.Equal(ExcelSheetVisibility.Visible, reader.SheetVisibilityAt(0));
             Assert.Equal(ExcelSheetVisibility.Hidden, reader.SheetVisibilityAt(1));
@@ -337,7 +337,7 @@ namespace ExcelReader.Tests.Reader
         [Fact]
         public void Should_Reject_When_TheSheetIndexIsOutOfRange()
         {
-            using XlsxReader reader = Excel.FromXlsx(BuildXlsx([null]).AsMemory());
+            using XlsxWorkbook reader = Excel.FromXlsx(BuildXlsx([null]).AsMemory());
 
             Assert.Throws<ArgumentOutOfRangeException>(() => reader.SheetVisibilityAt(-1));
             Assert.Throws<ArgumentOutOfRangeException>(() => reader.SheetVisibilityAt(1));

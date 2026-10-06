@@ -93,7 +93,7 @@ namespace ExcelReader.Tests.Reader.Xlsb
             Assert.Equal([(0, 1023), (1024, 2047)], structure.Rows[0].Spans);
             Assert.Equal([(0, 0)], structure.Rows[1].Spans);
             AssertRowsCovered(structure);
-            using XlsbReader reader = Excel.FromXlsb(new MemoryStream(bytes));
+            using XlsbWorkbook reader = Excel.FromXlsb(new MemoryStream(bytes));
             var values = new List<string>();
             foreach (var r in reader)
             {

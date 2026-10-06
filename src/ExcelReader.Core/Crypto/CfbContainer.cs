@@ -9,7 +9,7 @@ using static ExcelReader.Core.Reader.Xlsb.Biff12;
 
 namespace ExcelReader.Core.Crypto
 {
-    [ExcludeFromCodeCoverage(Justification = "Covered through XlsReader integration tests; most uncovered paths are corrupt-OLE guard rails.")]
+    [ExcludeFromCodeCoverage(Justification = "Covered through XlsWorkbook integration tests; most uncovered paths are corrupt-OLE guard rails.")]
     internal sealed class CfbContainer : IDisposable
     {
         private const int HeaderSize = 512;

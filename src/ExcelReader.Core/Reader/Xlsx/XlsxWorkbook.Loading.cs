@@ -5,7 +5,7 @@ using ExcelReader.Core.Reader.Zip;
 
 namespace ExcelReader.Core.Reader.Xlsx
 {
-    public sealed partial class XlsxReader
+    public sealed partial class XlsxWorkbook
     {
         private static (string Name, string Path, ExcelSheetVisibility Visibility)[] ParseSheets(ReadOnlySpan<byte> wbBytes, ReadOnlySpan<byte> relsBytes)
         {

@@ -4,7 +4,7 @@ using System.Text;
 
 namespace ExcelReader.Core.Reader.Xls
 {
-    public sealed partial class XlsReader
+    public sealed partial class XlsWorkbook
     {
         private const string _cp1252 = "\u20AC\u0081\u201A\u0192\u201E\u2026\u2020\u2021" +
                                         "\u02C6\u2030\u0160\u2039\u0152\u008D\u017D\u008F" +
