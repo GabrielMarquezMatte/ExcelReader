@@ -6,8 +6,9 @@ using ExcelReader.Core.Reader.Zip;
 
 namespace ExcelReader.Core.Reader.Xlsx
 {
-    /// <summary>Reads rows from an Office Open XML (.xlsx) workbook, streaming each sheet's cells without loading the whole file into memory.</summary>
-    public sealed partial class XlsxWorkbook : IExcelRowReader, IExcelRowReader<XlsxWorkbook.Enumerator>
+    /// <summary>An open Office Open XML (.xlsx) workbook. Its sheets are read independently, each streaming its cells without loading the whole file into memory.</summary>
+    /// <remarks>See <see cref="IExcelWorkbook"/> for the threading and lifetime contract.</remarks>
+    public sealed partial class XlsxWorkbook : IExcelWorkbook
     {
         private readonly ZipIndex _zip;
         private readonly ExcelReaderOptions _options;
@@ -15,7 +16,6 @@ namespace ExcelReader.Core.Reader.Xlsx
         private readonly (string Name, string Path, ExcelSheetVisibility Visibility)[] _sheets;
         private readonly bool[] _styleIsDate;
         private readonly ExcelSheetList<XlsxSheet> _sheetList;
-        private int _current;
 
         [SuppressMessage("Usage", "CA2213:Disposable fields should be disposed", Justification = "Disposed by ReleaseResources, which the lifetime runs after the last enumerator.")]
         private readonly OnceGate _sharedGate = new();
@@ -115,47 +115,13 @@ namespace ExcelReader.Core.Reader.Xlsx
         }
 
         /// <inheritdoc/>
-        public string SheetName => _sheets[_current].Name;
-        /// <inheritdoc/>
         public int SheetCount => _sheets.Length;
-        /// <inheritdoc/>
-        public string SheetNameAt(int index)
-        {
-            WorkbookLookups.ValidateSheetIndex(index, _sheets.Length);
-            return _sheets[index].Name;
-        }
-        /// <inheritdoc/>
-        public ExcelSheetVisibility SheetVisibility => _sheets[_current].Visibility;
-        /// <inheritdoc/>
-        public ExcelSheetVisibility SheetVisibilityAt(int index)
-        {
-            WorkbookLookups.ValidateSheetIndex(index, _sheets.Length);
-            return _sheets[index].Visibility;
-        }
         /// <inheritdoc/>
         public bool IsDate1904 { get; }
 
         internal bool IsDateStyle(int style)
         {
             return WorkbookLookups.IsDateStyle(_styleIsDate, style);
-        }
-
-        /// <inheritdoc/>
-        public bool TryMoveToSheet(ReadOnlySpan<char> name)
-        {
-            if (!WorkbookLookups.TryFindSheetIndex(_sheets, name, static s => s.Name, out int index))
-            {
-                return false;
-            }
-            _current = index;
-            return true;
-        }
-
-        /// <inheritdoc/>
-        public void MoveToSheet(int index)
-        {
-            WorkbookLookups.ValidateSheetIndex(index, _sheets.Length);
-            _current = index;
         }
 
         private ExcelSheetList<XlsxSheet> CreateSheetList()
@@ -247,28 +213,6 @@ namespace ExcelReader.Core.Reader.Xlsx
         public XlsxSheet FirstSheet => Sheets[0];
 
         IExcelSheet IExcelWorkbook.FirstSheet => FirstSheet;
-
-        /// <inheritdoc/>
-        public Enumerator GetEnumerator()
-        {
-            return OpenSheet(_current);
-        }
-
-        IExcelRowEnumerator IExcelSheet<IExcelRowEnumerator>.GetEnumerator()
-        {
-            return GetEnumerator();
-        }
-
-        /// <inheritdoc/>
-        public Enumerator GetAsyncEnumerator(CancellationToken ct = default)
-        {
-            return OpenSheetAsync(_current, ct);
-        }
-
-        IExcelRowEnumerator IExcelSheet<IExcelRowEnumerator>.GetAsyncEnumerator(CancellationToken ct)
-        {
-            return GetAsyncEnumerator(ct);
-        }
 
         internal ReadOnlySpan<byte> SharedSpan => _sharedFlat;
 

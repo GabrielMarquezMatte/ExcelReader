@@ -2,7 +2,7 @@ namespace ExcelReader.Core.Reader.Schema
 {
     /// <summary>
     /// One column's guessed shape, as returned by
-    /// <see cref="Excel.InferSchema(IExcelRowReader, int, int)"/>.
+    /// <see cref="Excel.InferSchema(IExcelSheet, int, int)"/>.
     /// </summary>
     /// <remarks>
     /// This is a guess over a bounded sample, not a guarantee about the whole sheet — verify it fits

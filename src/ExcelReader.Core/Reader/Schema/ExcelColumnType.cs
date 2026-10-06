@@ -2,7 +2,7 @@ namespace ExcelReader.Core.Reader.Schema
 {
     /// <summary>
     /// A column's inferred or declared value type, as produced by
-    /// <see cref="Reader.Excel.InferSchema(Reader.IExcelRowReader, int, int)"/>.
+    /// <see cref="Reader.Excel.InferSchema(Reader.IExcelSheet, int, int)"/>.
     /// </summary>
     /// <remarks>
     /// The underlying values are fixed: they are the XL_T_* constants of the native C ABI

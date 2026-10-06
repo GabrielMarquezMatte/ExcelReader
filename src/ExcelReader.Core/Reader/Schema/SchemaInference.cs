@@ -9,7 +9,7 @@ namespace ExcelReader.Core.Reader.Schema
 {
     /// <summary>
     /// Guesses a column schema by sampling a sheet's rows. Backs
-    /// <see cref="Excel.InferSchema(IExcelRowReader, int, int)"/> and the native <c>xl_infer_schema</c>
+    /// <see cref="Excel.InferSchema(IExcelSheet, int, int)"/> and the native <c>xl_infer_schema</c>
     /// export, so both answer identically by construction.
     /// </summary>
     internal static class SchemaInference

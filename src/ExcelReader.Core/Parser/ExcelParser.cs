@@ -9,7 +9,7 @@ using ExcelReader.Core.Reader.Xlsx;
 namespace ExcelReader.Core.Parser
 {
     /// <summary>
-    /// Parses rows from an Excel or CSV reader into instances of <typeparamref name="T"/>. Create one with
+    /// Parses rows from an Excel or CSV sheet into instances of <typeparamref name="T"/>. Create one with
     /// <see cref="ExcelParser"/>: <see cref="ExcelParser.FromAttributes{T}"/> reflects over
     /// <c>[ExcelColumn]</c>/<c>[ExcelRequired]</c>/<c>[ExcelConverter]</c> attributes,
     /// <see cref="ExcelParser.Generated{T}"/> uses the <c>[ExcelSerializable]</c> source-generated map, and
@@ -38,68 +38,12 @@ namespace ExcelReader.Core.Parser
 
         internal TypeMapInfo<T> CsvInfo => _csvInfo();
 
-        /// <summary>Parses the rows of an XLSX reader into <typeparamref name="T"/> instances, lazily as the result is enumerated.</summary>
-        /// <param name="reader">The XLSX reader to pull rows from.</param>
-        /// <returns>An enumerable that yields one <typeparamref name="T"/> per data row.</returns>
-        /// <exception cref="ArgumentNullException"><paramref name="reader"/> is <see langword="null"/>.</exception>
-        public ExcelEnumerable<T> Parse(XlsxWorkbook reader)
-        {
-            ArgumentNullException.ThrowIfNull(reader);
-            return new ExcelEnumerable<T>(reader, _config, _info());
-        }
-
-        /// <summary>Parses the rows of an XLS reader into <typeparamref name="T"/> instances, lazily as the result is enumerated.</summary>
-        /// <param name="reader">The XLS reader to pull rows from.</param>
-        /// <returns>An enumerable that yields one <typeparamref name="T"/> per data row.</returns>
-        /// <exception cref="ArgumentNullException"><paramref name="reader"/> is <see langword="null"/>.</exception>
-        public ExcelEnumerable<T, XlsWorkbook, XlsWorkbook.Enumerator> Parse(XlsWorkbook reader)
-        {
-            ArgumentNullException.ThrowIfNull(reader);
-            return new ExcelEnumerable<T, XlsWorkbook, XlsWorkbook.Enumerator>(reader, _config, _info());
-        }
-
-        /// <summary>Parses the rows of an XLSB reader into <typeparamref name="T"/> instances, lazily as the result is enumerated.</summary>
-        /// <param name="reader">The XLSB reader to pull rows from.</param>
-        /// <returns>An enumerable that yields one <typeparamref name="T"/> per data row.</returns>
-        /// <exception cref="ArgumentNullException"><paramref name="reader"/> is <see langword="null"/>.</exception>
-        public ExcelEnumerable<T, XlsbWorkbook, XlsbWorkbook.Enumerator> Parse(XlsbWorkbook reader)
-        {
-            ArgumentNullException.ThrowIfNull(reader);
-            return new ExcelEnumerable<T, XlsbWorkbook, XlsbWorkbook.Enumerator>(reader, _config, _info());
-        }
-
-        /// <summary>Parses the rows of a format-agnostic reader (e.g. one returned by <c>Excel.Open</c>) into <typeparamref name="T"/> instances, lazily as the result is enumerated. Lets callers avoid pattern-matching the concrete reader type; dispatches through the interface enumerator.</summary>
-        /// <param name="reader">The reader to pull rows from.</param>
-        /// <returns>An enumerable that yields one <typeparamref name="T"/> per data row.</returns>
-        /// <exception cref="ArgumentNullException"><paramref name="reader"/> is <see langword="null"/>.</exception>
-        public ExcelEnumerable<T, IExcelRowReader, IExcelRowEnumerator> Parse(IExcelRowReader reader)
-        {
-            ArgumentNullException.ThrowIfNull(reader);
-            return new ExcelEnumerable<T, IExcelRowReader, IExcelRowEnumerator>(reader, _config, _info());
-        }
-
-        /// <summary>Parses the rows of a CSV reader into <typeparamref name="T"/> instances, lazily as the result is enumerated.</summary>
-        /// <param name="reader">The CSV reader to pull rows from.</param>
-        /// <returns>An enumerable that yields one <typeparamref name="T"/> per data row.</returns>
-        /// <exception cref="ArgumentNullException"><paramref name="reader"/> is <see langword="null"/>.</exception>
-        /// <remarks>
-        /// Uses a specialized enumerable (dense field binding, single-pass projection) rather than the
-        /// generic <see cref="ExcelEnumerable{T}"/>, since CSV rows have no gaps or styles. Prefer this
-        /// concrete overload over <see cref="Parse(IExcelRowReader)"/> for CSV — holding the reader as
-        /// <see cref="IExcelRowReader"/> instead routes through the generic path.
-        /// </remarks>
-        public CsvEnumerable<T> Parse(CsvReader reader)
-        {
-            ArgumentNullException.ThrowIfNull(reader);
-            return new CsvEnumerable<T>(reader.Sheets[0], _config, _csvInfo());
-        }
-
         /// <summary>Parses the rows of an XLSX sheet into <typeparamref name="T"/> instances, lazily as the result is enumerated.</summary>
         /// <param name="sheet">The sheet to pull rows from. Each enumeration of the result starts a new read of it.</param>
         /// <returns>An enumerable that yields one <typeparamref name="T"/> per data row.</returns>
-        public ExcelEnumerable<T, XlsxSheet, XlsxWorkbook.Enumerator> Parse(XlsxSheet sheet)
+        public ExcelEnumerable<T> Parse(XlsxSheet sheet)
         {
-            return new ExcelEnumerable<T, XlsxSheet, XlsxWorkbook.Enumerator>(sheet, _config, _info());
+            return new ExcelEnumerable<T>(sheet, _config, _info());
         }
 
         /// <summary>Parses the rows of an XLS sheet into <typeparamref name="T"/> instances, lazily as the result is enumerated.</summary>
