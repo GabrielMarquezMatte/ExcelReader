@@ -193,16 +193,19 @@ namespace ExcelReader.Tests.Reader.Sources
         {
             public override int Read(byte[] buffer, int offset, int count)
             {
-                return Read(buffer.AsSpan(offset, count));
+                int read = base.Read(buffer, offset, count);
+                for (int i = 0; i < read; i++)
+                {
+                    buffer[offset + i] ^= 0xFF;
+                }
+                return read;
             }
 
             public override int Read(Span<byte> buffer)
             {
-                int read = base.Read(buffer);
-                for (int i = 0; i < read; i++)
-                {
-                    buffer[i] ^= 0xFF;
-                }
+                byte[] scratch = new byte[buffer.Length];
+                int read = Read(scratch, 0, scratch.Length);
+                scratch.AsSpan(0, read).CopyTo(buffer);
                 return read;
             }
         }
