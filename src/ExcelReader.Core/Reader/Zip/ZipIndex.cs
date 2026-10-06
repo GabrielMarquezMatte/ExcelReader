@@ -3,6 +3,7 @@ using System.Buffers.Binary;
 using System.IO.Compression;
 using System.Runtime.InteropServices;
 using ExcelReader.Core.Reader.Internal;
+using ExcelReader.Core.Reader.Sources;
 
 namespace ExcelReader.Core.Reader.Zip
 {
@@ -57,50 +58,192 @@ namespace ExcelReader.Core.Reader.Zip
 
         private static ReadOnlySpan<byte> EocdSignatureBytes => [0x50, 0x4B, 0x05, 0x06];
 
+        private const int TailWindowSize = 65535 + EocdFixedSize + Zip64LocatorSize;
+
+        private readonly ByteSource _source;
         private readonly ReadOnlyMemory<byte> _file;
         private readonly ReadOnlyMemory<byte> _directory;
+        private readonly byte[]? _directoryRented;
         private readonly ZipEntryRef[] _entries;
-        private bool _disposed;
+        private int _disposed;
 
-        private ZipIndex(ReadOnlyMemory<byte> file, ReadOnlyMemory<byte> directory, ZipEntryRef[] entries, int count)
+        private ZipIndex(ByteSource source, ReadOnlyMemory<byte> directory, byte[]? directoryRented, ZipEntryRef[] entries, int count)
         {
-            _file = file;
+            _source = source;
+            HasMemory = source.TryGetMemory(out _file);
             _directory = directory;
+            _directoryRented = directoryRented;
             _entries = entries;
             Count = count;
         }
 
         internal int Count { get; }
 
+        internal bool HasMemory { get; }
+
         internal static ZipIndex Create(ReadOnlyMemory<byte> file, ExcelReaderOptions options)
         {
-            ReadOnlySpan<byte> span = file.Span;
-            long eocdOffset = FindEocd(span);
-            (long cdOffset, long cdSize, long declaredCount) = ReadEocdRecord(span, eocdOffset, out long zip64EocdOffset);
-            if (zip64EocdOffset >= 0)
+            return Create(ByteSource.FromMemory(file), options);
+        }
+
+        internal static ZipIndex Create(ByteSource source, ExcelReaderOptions options)
+        {
+            byte[]? directoryRented = null;
+            try
             {
-                (cdOffset, cdSize, declaredCount) = ReadZip64Eocd(span, zip64EocdOffset);
+                long length = source.Length;
+                int tailSize = (int)Math.Min(length, TailWindowSize);
+                long cdOffset;
+                long cdSize;
+                long declaredCount;
+                long zip64EocdOffset;
+                if (source.TryGetMemory(out ReadOnlyMemory<byte> file))
+                {
+                    (cdOffset, cdSize, declaredCount, zip64EocdOffset) = ParseTail(file.Span[(file.Length - tailSize)..]);
+                }
+                else
+                {
+                    byte[] tail = ArrayPool<byte>.Shared.Rent(Math.Max(1, tailSize));
+                    try
+                    {
+                        source.ReadExactly(length - tailSize, tail.AsSpan(0, tailSize));
+                        (cdOffset, cdSize, declaredCount, zip64EocdOffset) = ParseTail(tail.AsSpan(0, tailSize));
+                    }
+                    finally
+                    {
+                        ArrayPool<byte>.Shared.Return(tail);
+                    }
+                }
+                if (zip64EocdOffset >= 0)
+                {
+                    ThrowIfZip64RecordOutOfRange(zip64EocdOffset, length);
+                    Span<byte> record = stackalloc byte[Zip64EocdFixedSize];
+                    source.ReadExactly(zip64EocdOffset, record);
+                    (cdOffset, cdSize, declaredCount) = ReadZip64Eocd(record, 0);
+                }
+                ThrowIfDirectoryOutOfRange(cdOffset, cdSize, length);
+
+                ReadOnlyMemory<byte> directory;
+                if (source.TryGetMemory(out file))
+                {
+                    directory = file.Slice((int)cdOffset, (int)cdSize);
+                }
+                else
+                {
+                    directoryRented = ArrayPool<byte>.Shared.Rent(Math.Max(1, (int)cdSize));
+                    source.ReadExactly(cdOffset, directoryRented.AsSpan(0, (int)cdSize));
+                    directory = directoryRented.AsMemory(0, (int)cdSize);
+                }
+                return Build(source, directory, directoryRented, declaredCount, options);
             }
-            if (cdOffset < 0 || cdSize < 0 || cdOffset > span.Length - cdSize)
+            catch
+            {
+                if (directoryRented is not null)
+                {
+                    ArrayPool<byte>.Shared.Return(directoryRented);
+                }
+                source.Dispose();
+                throw;
+            }
+        }
+
+        internal static async ValueTask<ZipIndex> CreateAsync(ByteSource source, ExcelReaderOptions options, CancellationToken ct)
+        {
+            if (source.TryGetMemory(out _))
+            {
+                return Create(source, options);
+            }
+            byte[]? directoryRented = null;
+            try
+            {
+                long length = source.Length;
+                int tailSize = (int)Math.Min(length, TailWindowSize);
+                long cdOffset;
+                long cdSize;
+                long declaredCount;
+                long zip64EocdOffset;
+                byte[] tail = ArrayPool<byte>.Shared.Rent(Math.Max(1, tailSize));
+                try
+                {
+                    await source.ReadExactlyAsync(length - tailSize, tail.AsMemory(0, tailSize), ct).ConfigureAwait(false);
+                    (cdOffset, cdSize, declaredCount, zip64EocdOffset) = ParseTail(tail.AsSpan(0, tailSize));
+                }
+                finally
+                {
+                    ArrayPool<byte>.Shared.Return(tail);
+                }
+                if (zip64EocdOffset >= 0)
+                {
+                    ThrowIfZip64RecordOutOfRange(zip64EocdOffset, length);
+                    byte[] record = ArrayPool<byte>.Shared.Rent(Zip64EocdFixedSize);
+                    try
+                    {
+                        await source.ReadExactlyAsync(zip64EocdOffset, record.AsMemory(0, Zip64EocdFixedSize), ct).ConfigureAwait(false);
+                        (cdOffset, cdSize, declaredCount) = ReadZip64Eocd(record.AsSpan(0, Zip64EocdFixedSize), 0);
+                    }
+                    finally
+                    {
+                        ArrayPool<byte>.Shared.Return(record);
+                    }
+                }
+                ThrowIfDirectoryOutOfRange(cdOffset, cdSize, length);
+                directoryRented = ArrayPool<byte>.Shared.Rent(Math.Max(1, (int)cdSize));
+                await source.ReadExactlyAsync(cdOffset, directoryRented.AsMemory(0, (int)cdSize), ct).ConfigureAwait(false);
+                return Build(source, directoryRented.AsMemory(0, (int)cdSize), directoryRented, declaredCount, options);
+            }
+            catch
+            {
+                if (directoryRented is not null)
+                {
+                    ArrayPool<byte>.Shared.Return(directoryRented);
+                }
+                source.Dispose();
+                throw;
+            }
+        }
+
+        private static (long CdOffset, long CdSize, long Count, long Zip64EocdOffset) ParseTail(ReadOnlySpan<byte> tail)
+        {
+            long eocdOffset = FindEocd(tail);
+            (long cdOffset, long cdSize, long declaredCount) = ReadEocdRecord(tail, eocdOffset, out long zip64EocdOffset);
+            return (cdOffset, cdSize, declaredCount, zip64EocdOffset);
+        }
+
+        private static void ThrowIfZip64RecordOutOfRange(long offset, long length)
+        {
+            if (offset < 0 || offset > length - Zip64EocdFixedSize)
+            {
+                throw new InvalidDataException("The ZIP64 end of central directory record is out of range.");
+            }
+        }
+
+        private static void ThrowIfDirectoryOutOfRange(long cdOffset, long cdSize, long length)
+        {
+            if (cdOffset < 0 || cdSize < 0 || cdOffset > length - cdSize)
             {
                 throw new InvalidDataException("The ZIP central directory is out of range.");
             }
-            ReadOnlyMemory<byte> directory = file.Slice((int)cdOffset, (int)cdSize);
+            if (cdSize > Array.MaxLength)
+            {
+                throw new ExcelLimitExceededException("ArrayMaxLength", Array.MaxLength, cdSize);
+            }
+        }
 
+        private static ZipIndex Build(ByteSource source, ReadOnlyMemory<byte> directory, byte[]? directoryRented, long declaredCount, ExcelReaderOptions options)
+        {
             long maxHint = Math.Max(16, options.MaxZipEntries > 0 ? options.MaxZipEntries : 65_536);
             ZipEntryRef[] entries = ArrayPool<ZipEntryRef>.Shared.Rent((int)Math.Clamp(declaredCount, 16, maxHint));
-            int count;
             try
             {
-                count = WalkCentralDirectory(directory.Span, ref entries, options);
+                int count = WalkCentralDirectory(directory.Span, ref entries, options);
                 ThrowIfDuplicateEntryNames(directory, entries, count);
+                return new ZipIndex(source, directory, directoryRented, entries, count);
             }
             catch
             {
                 ArrayPool<ZipEntryRef>.Shared.Return(entries);
                 throw;
             }
-            return new ZipIndex(file, directory, entries, count);
         }
 
         private static void ThrowIfDuplicateEntryNames(ReadOnlyMemory<byte> directory, ZipEntryRef[] entries, int count)
@@ -158,6 +301,110 @@ namespace ExcelReader.Core.Reader.Zip
 
         internal ZipPart OpenPart(in ZipEntryRef entry, DecompressedByteCounter counter, string entryLimitName = "", long entryLimit = 0)
         {
+            ThrowIfPartTooLarge(entry, counter, entryLimitName, entryLimit);
+            long dataOffset = ResolveDataOffset(entry);
+            ThrowIfDataOutOfRange(dataOffset, entry.CompressedSize);
+            ZipPart part;
+            if (HasMemory)
+            {
+                ReadOnlyMemory<byte> compressed = CompressedSlice(dataOffset, entry.CompressedSize);
+                part = entry.Method switch
+                {
+                    0 => new ZipPart(compressed, rented: null),
+                    8 => InflateToPart(compressed, entry.UncompressedSize),
+                    _ => throw new NotSupportedException($"Unsupported ZIP compression method: {entry.Method}."),
+                };
+            }
+            else
+            {
+                ThrowIfMethodUnsupported(entry.Method);
+                part = ReadPart(dataOffset, entry);
+            }
+            counter.Add(entry.UncompressedSize);
+            return part;
+        }
+
+        internal async ValueTask<ZipPart> OpenPartAsync(
+            ZipEntryRef entry, DecompressedByteCounter counter, CancellationToken ct, string entryLimitName = "", long entryLimit = 0)
+        {
+            if (HasMemory)
+            {
+                return OpenPart(entry, counter, entryLimitName, entryLimit);
+            }
+            ThrowIfPartTooLarge(entry, counter, entryLimitName, entryLimit);
+            long dataOffset = await ResolveDataOffsetAsync(entry, ct).ConfigureAwait(false);
+            ThrowIfDataOutOfRange(dataOffset, entry.CompressedSize);
+            ThrowIfMethodUnsupported(entry.Method);
+            int size = PartLength(entry);
+            byte[] rented = ArrayPool<byte>.Shared.Rent(Math.Max(1, size));
+            try
+            {
+                ByteSourceStream raw = new(_source, dataOffset, entry.CompressedSize);
+                Stream content = entry.Method == 0 ? raw : new DeflateStream(raw, CompressionMode.Decompress);
+                await using (content.ConfigureAwait(false))
+                {
+                    try
+                    {
+                        await content.ReadExactlyAsync(rented.AsMemory(0, size), ct).ConfigureAwait(false);
+                    }
+                    catch (EndOfStreamException ex)
+                    {
+                        throw new InvalidDataException("The ZIP entry produced less data than its declared uncompressed size.", ex);
+                    }
+                    if (await content.ReadAsync(new byte[1], ct).ConfigureAwait(false) != 0)
+                    {
+                        throw new InvalidDataException("The ZIP entry produced more data than its declared uncompressed size.");
+                    }
+                }
+            }
+            catch
+            {
+                ArrayPool<byte>.Shared.Return(rented);
+                throw;
+            }
+            counter.Add(entry.UncompressedSize);
+            return new ZipPart(rented.AsMemory(0, size), rented);
+        }
+
+        internal ValueTask<ZipPart> OpenPartOrDefaultAsync(ReadOnlySpan<byte> utf8Name, DecompressedByteCounter counter, CancellationToken ct)
+        {
+            return TryGetEntry(utf8Name, out ZipEntryRef entry) ? OpenPartAsync(entry, counter, ct) : new ValueTask<ZipPart>(default(ZipPart));
+        }
+
+        internal ZipPart OpenPartOrDefault(ReadOnlySpan<byte> utf8Name, DecompressedByteCounter counter)
+        {
+            return TryGetEntry(utf8Name, out ZipEntryRef entry) ? OpenPart(entry, counter) : default;
+        }
+
+        internal LimitedReadStream OpenEntryStream(
+            in ZipEntryRef entry, DecompressedByteCounter counter, ExcelReaderOptions options, string entryLimitName = "", long entryLimit = 0)
+        {
+            long dataOffset = ResolveDataOffset(entry);
+            return WrapEntryStream(entry, dataOffset, counter, options, entryLimitName, entryLimit);
+        }
+
+        internal async ValueTask<LimitedReadStream> OpenEntryStreamAsync(
+            ZipEntryRef entry, DecompressedByteCounter counter, ExcelReaderOptions options, CancellationToken ct,
+            string entryLimitName = "", long entryLimit = 0)
+        {
+            long dataOffset = HasMemory ? ResolveDataOffset(entry) : await ResolveDataOffsetAsync(entry, ct).ConfigureAwait(false);
+            return WrapEntryStream(entry, dataOffset, counter, options, entryLimitName, entryLimit);
+        }
+
+        private LimitedReadStream WrapEntryStream(
+            in ZipEntryRef entry, long dataOffset, DecompressedByteCounter counter, ExcelReaderOptions options, string entryLimitName, long entryLimit)
+        {
+            ThrowIfDataOutOfRange(dataOffset, entry.CompressedSize);
+            ThrowIfMethodUnsupported(entry.Method);
+            Stream raw = HasMemory
+                ? ToReadableMemoryStream(CompressedSlice(dataOffset, entry.CompressedSize))
+                : new ByteSourceStream(_source, dataOffset, entry.CompressedSize);
+            Stream opened = entry.Method == 0 ? raw : new DeflateStream(raw, CompressionMode.Decompress);
+            return WorkbookLookups.Wrap(opened, counter, options, entryLimitName, entryLimit, entry.UncompressedSize);
+        }
+
+        private static void ThrowIfPartTooLarge(in ZipEntryRef entry, DecompressedByteCounter counter, string entryLimitName, long entryLimit)
+        {
             LimitChecks.ThrowIfEntryLengthExceeds(entry.UncompressedSize, counter.Remaining, nameof(ExcelReaderOptions.MaxTotalDecompressedBytes));
             if (entryLimit > 0)
             {
@@ -167,61 +414,161 @@ namespace ExcelReader.Core.Reader.Zip
             {
                 throw new ExcelLimitExceededException("ArrayMaxLength", Array.MaxLength, entry.UncompressedSize);
             }
+        }
 
-            ReadOnlyMemory<byte> compressed = ResolveCompressedSlice(entry);
-            ZipPart part = entry.Method switch
+        private static void ThrowIfMethodUnsupported(ushort method)
+        {
+            if (method is not (0 or 8))
             {
-                0 => new ZipPart(compressed, rented: null),
-                8 => InflateToPart(compressed, entry.UncompressedSize),
-                _ => throw new NotSupportedException($"Unsupported ZIP compression method: {entry.Method}."),
-            };
-            counter.Add(entry.UncompressedSize);
-            return part;
+                throw new NotSupportedException($"Unsupported ZIP compression method: {method}.");
+            }
         }
 
-        internal ZipPart OpenPartOrDefault(ReadOnlySpan<byte> utf8Name, DecompressedByteCounter counter)
+        private void ThrowIfDataOutOfRange(long dataOffset, long compressedSize)
         {
-            return TryGetEntry(utf8Name, out ZipEntryRef entry) ? OpenPart(entry, counter) : default;
-        }
-
-        internal Stream OpenEntryStream(in ZipEntryRef entry, DecompressedByteCounter counter, ExcelReaderOptions options, string entryLimitName = "", long entryLimit = 0)
-        {
-            ReadOnlyMemory<byte> compressed = ResolveCompressedSlice(entry);
-            Stream opened = entry.Method switch
-            {
-                0 => ToReadableMemoryStream(compressed),
-                8 => new DeflateStream(ToReadableMemoryStream(compressed), CompressionMode.Decompress),
-                _ => throw new NotSupportedException($"Unsupported ZIP compression method: {entry.Method}."),
-            };
-            return WorkbookLookups.Wrap(opened, counter, options, entryLimitName, entryLimit, entry.UncompressedSize);
-        }
-
-        private ReadOnlyMemory<byte> ResolveCompressedSlice(in ZipEntryRef entry)
-        {
-            long dataOffset = ResolveDataOffset(entry);
-            long fileLength = _file.Length;
-            if (dataOffset < 0 || dataOffset > fileLength || entry.CompressedSize < 0 || entry.CompressedSize > fileLength - dataOffset)
+            long length = _source.Length;
+            if (dataOffset < 0 || dataOffset > length || compressedSize < 0 || compressedSize > length - dataOffset)
             {
                 throw new InvalidDataException("The ZIP entry data runs past the end of the file.");
             }
-            if (entry.CompressedSize > Array.MaxLength)
+        }
+
+        private ReadOnlyMemory<byte> CompressedSlice(long dataOffset, long compressedSize)
+        {
+            if (compressedSize > Array.MaxLength)
             {
-                throw new ExcelLimitExceededException("ArrayMaxLength", Array.MaxLength, entry.CompressedSize);
+                throw new ExcelLimitExceededException("ArrayMaxLength", Array.MaxLength, compressedSize);
             }
-            return _file.Slice((int)dataOffset, (int)entry.CompressedSize);
+            return _file.Slice((int)dataOffset, (int)compressedSize);
+        }
+
+        private static int PartLength(in ZipEntryRef entry)
+        {
+            long length = entry.Method == 0 ? entry.CompressedSize : entry.UncompressedSize;
+            if (length > Array.MaxLength)
+            {
+                throw new ExcelLimitExceededException("ArrayMaxLength", Array.MaxLength, length);
+            }
+            return (int)length;
+        }
+
+        private ZipPart ReadPart(long dataOffset, in ZipEntryRef entry)
+        {
+            int size = PartLength(entry);
+            byte[] rented = ArrayPool<byte>.Shared.Rent(Math.Max(1, size));
+            try
+            {
+                ByteSourceStream raw = new(_source, dataOffset, entry.CompressedSize);
+                using Stream content = entry.Method == 0 ? raw : new DeflateStream(raw, CompressionMode.Decompress);
+                try
+                {
+                    content.ReadExactly(rented.AsSpan(0, size));
+                }
+                catch (EndOfStreamException ex)
+                {
+                    throw new InvalidDataException("The ZIP entry produced less data than its declared uncompressed size.", ex);
+                }
+                if (content.ReadByte() != -1)
+                {
+                    throw new InvalidDataException("The ZIP entry produced more data than its declared uncompressed size.");
+                }
+                return new ZipPart(rented.AsMemory(0, size), rented);
+            }
+            catch
+            {
+                ArrayPool<byte>.Shared.Return(rented);
+                throw;
+            }
+        }
+
+        private long ResolveDataOffset(in ZipEntryRef entry)
+        {
+            ThrowIfLocalHeaderOutOfRange(entry.LocalHeaderOffset);
+            Span<byte> header = stackalloc byte[LocalHeaderFixedSize];
+            _source.ReadExactly(entry.LocalHeaderOffset, header);
+            long nameStart = ParseLocalHeader(header, entry, out int nameLength, out int extraLength);
+            byte[] name = ArrayPool<byte>.Shared.Rent(Math.Max(1, nameLength));
+            try
+            {
+                _source.ReadExactly(nameStart, name.AsSpan(0, nameLength));
+                ThrowIfNameMismatch(name.AsSpan(0, nameLength), entry);
+            }
+            finally
+            {
+                ArrayPool<byte>.Shared.Return(name);
+            }
+            return nameStart + nameLength + extraLength;
+        }
+
+        private async ValueTask<long> ResolveDataOffsetAsync(ZipEntryRef entry, CancellationToken ct)
+        {
+            ThrowIfLocalHeaderOutOfRange(entry.LocalHeaderOffset);
+            byte[] buffer = ArrayPool<byte>.Shared.Rent(LocalHeaderFixedSize + ushort.MaxValue);
+            try
+            {
+                await _source.ReadExactlyAsync(entry.LocalHeaderOffset, buffer.AsMemory(0, LocalHeaderFixedSize), ct).ConfigureAwait(false);
+                long nameStart = ParseLocalHeader(buffer.AsSpan(0, LocalHeaderFixedSize), entry, out int nameLength, out int extraLength);
+                await _source.ReadExactlyAsync(nameStart, buffer.AsMemory(LocalHeaderFixedSize, nameLength), ct).ConfigureAwait(false);
+                ThrowIfNameMismatch(buffer.AsSpan(LocalHeaderFixedSize, nameLength), entry);
+                return nameStart + nameLength + extraLength;
+            }
+            finally
+            {
+                ArrayPool<byte>.Shared.Return(buffer);
+            }
+        }
+
+        private void ThrowIfLocalHeaderOutOfRange(long headerOffset)
+        {
+            if (headerOffset < 0 || headerOffset > _source.Length - LocalHeaderFixedSize)
+            {
+                throw new InvalidDataException("The ZIP local file header is out of range.");
+            }
+        }
+
+        private long ParseLocalHeader(ReadOnlySpan<byte> header, in ZipEntryRef entry, out int nameLength, out int extraLength)
+        {
+            if (BinaryPrimitives.ReadInt32LittleEndian(header) != LocalFileHeaderSignature)
+            {
+                throw new InvalidDataException("Invalid ZIP local file header signature.");
+            }
+            nameLength = BinaryPrimitives.ReadUInt16LittleEndian(header[26..]);
+            extraLength = BinaryPrimitives.ReadUInt16LittleEndian(header[28..]);
+            long nameStart = entry.LocalHeaderOffset + LocalHeaderFixedSize;
+            if (nameLength > _source.Length - nameStart)
+            {
+                throw new InvalidDataException("The ZIP local file header name runs past the end of the file.");
+            }
+            if (nameLength != entry.NameLength)
+            {
+                throw new InvalidDataException("The ZIP local file header name does not match the central directory.");
+            }
+            return nameStart;
+        }
+
+        private void ThrowIfNameMismatch(ReadOnlySpan<byte> localName, in ZipEntryRef entry)
+        {
+            if (!localName.SequenceEqual(_directory.Span.Slice(entry.NameStart, entry.NameLength)))
+            {
+                throw new InvalidDataException("The ZIP local file header name does not match the central directory.");
+            }
         }
 
         public void Dispose()
         {
-            if (_disposed)
+            if (Interlocked.Exchange(ref _disposed, 1) != 0)
             {
                 return;
             }
-            _disposed = true;
             if (_entries.Length > 0)
             {
                 ArrayPool<ZipEntryRef>.Shared.Return(_entries);
             }
+            if (_directoryRented is not null)
+            {
+                ArrayPool<byte>.Shared.Return(_directoryRented);
+            }
+            _source.Dispose();
         }
 
         private static long FindEocd(ReadOnlySpan<byte> span)
@@ -447,34 +794,6 @@ namespace ExcelReader.Core.Reader.Zip
             entries.AsSpan(0, count).CopyTo(bigger);
             ArrayPool<ZipEntryRef>.Shared.Return(entries);
             entries = bigger;
-        }
-
-        private long ResolveDataOffset(in ZipEntryRef entry)
-        {
-            ReadOnlySpan<byte> fileSpan = _file.Span;
-            long headerOffset = entry.LocalHeaderOffset;
-            if (headerOffset < 0 || headerOffset > fileSpan.Length - LocalHeaderFixedSize)
-            {
-                throw new InvalidDataException("The ZIP local file header is out of range.");
-            }
-            ReadOnlySpan<byte> header = fileSpan.Slice((int)headerOffset, LocalHeaderFixedSize);
-            if (BinaryPrimitives.ReadInt32LittleEndian(header) != LocalFileHeaderSignature)
-            {
-                throw new InvalidDataException("Invalid ZIP local file header signature.");
-            }
-            ushort nameLength = BinaryPrimitives.ReadUInt16LittleEndian(header[26..]);
-            ushort extraLength = BinaryPrimitives.ReadUInt16LittleEndian(header[28..]);
-            long nameStart = headerOffset + LocalHeaderFixedSize;
-            if (nameLength > fileSpan.Length - nameStart)
-            {
-                throw new InvalidDataException("The ZIP local file header name runs past the end of the file.");
-            }
-            if (nameLength != entry.NameLength ||
-                !fileSpan.Slice((int)nameStart, nameLength).SequenceEqual(_directory.Span.Slice(entry.NameStart, entry.NameLength)))
-            {
-                throw new InvalidDataException("The ZIP local file header name does not match the central directory.");
-            }
-            return nameStart + nameLength + extraLength;
         }
 
         private static ZipPart InflateToPart(ReadOnlyMemory<byte> compressed, long uncompressedSize)
