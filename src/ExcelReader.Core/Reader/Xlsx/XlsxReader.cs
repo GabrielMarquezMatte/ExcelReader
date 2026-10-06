@@ -1,4 +1,5 @@
 using System.Buffers;
+using System.Diagnostics.CodeAnalysis;
 using ExcelReader.Core.Reader.Internal;
 using ExcelReader.Core.Reader.Sources;
 using ExcelReader.Core.Reader.Zip;
@@ -15,10 +16,13 @@ namespace ExcelReader.Core.Reader.Xlsx
         private readonly bool[] _styleIsDate;
         private int _current;
 
+        [SuppressMessage("Usage", "CA2213:Disposable fields should be disposed", Justification = "Disposed by ReleaseResources, which the lifetime runs after the last enumerator.")]
+        private readonly OnceGate _sharedGate = new();
         private byte[] _sharedFlat = [];
         private int[] _sharedOffsets = [0];
-        private bool _sharedLoaded;
         private string?[]? _sharedStringCache;
+
+        internal ReaderLifetime Lifetime { get; }
 
         internal XlsxReader(Stream stream, bool leaveOpen, ExcelReaderOptions? options = null)
             : this(ZipIndex.Create(ByteSource.FromStream(stream, leaveOpen), options ?? ExcelReaderOptions.Default), options ?? ExcelReaderOptions.Default)
@@ -27,6 +31,7 @@ namespace ExcelReader.Core.Reader.Xlsx
 
         private XlsxReader(ZipIndex zip, ExcelReaderOptions options)
         {
+            Lifetime = new ReaderLifetime(ReleaseResources);
             _zip = zip;
             _options = options;
             _decompressedBytes = new DecompressedByteCounter(options.MaxTotalDecompressedBytes);
@@ -54,6 +59,7 @@ namespace ExcelReader.Core.Reader.Xlsx
             (string Name, string Path, ExcelSheetVisibility Visibility)[] sheets, bool[] styleIsDate, bool date1904,
             ExcelReaderOptions options, DecompressedByteCounter decompressedBytes)
         {
+            Lifetime = new ReaderLifetime(ReleaseResources);
             _zip = zip;
             _options = options;
             _decompressedBytes = decompressedBytes;
@@ -152,9 +158,18 @@ namespace ExcelReader.Core.Reader.Xlsx
         /// <inheritdoc/>
         public Enumerator GetEnumerator()
         {
-            EnsureSharedLoaded();
-            ZipEntryRef entry = WorkbookLookups.GetWorksheetEntry(_zip, _sheets[_current].Path);
-            return new Enumerator(this, _zip.OpenEntryStream(entry, _decompressedBytes, _options), entry.UncompressedSize);
+            Lifetime.Acquire(this);
+            try
+            {
+                EnsureSharedLoaded();
+                ZipEntryRef entry = WorkbookLookups.GetWorksheetEntry(_zip, _sheets[_current].Path);
+                return new Enumerator(this, _zip.OpenEntryStream(entry, _decompressedBytes, _options), entry.UncompressedSize);
+            }
+            catch
+            {
+                Lifetime.Release();
+                throw;
+            }
         }
 
         IExcelRowEnumerator IExcelRowReader<IExcelRowEnumerator>.GetEnumerator()
@@ -169,7 +184,16 @@ namespace ExcelReader.Core.Reader.Xlsx
             {
                 return GetEnumerator();
             }
-            return new Enumerator(this, WorkbookLookups.GetWorksheetEntry(_zip, _sheets[_current].Path), ct);
+            Lifetime.Acquire(this);
+            try
+            {
+                return new Enumerator(this, WorkbookLookups.GetWorksheetEntry(_zip, _sheets[_current].Path), ct);
+            }
+            catch
+            {
+                Lifetime.Release();
+                throw;
+            }
         }
 
         IExcelRowEnumerator IExcelRowReader<IExcelRowEnumerator>.GetAsyncEnumerator(CancellationToken ct)
@@ -190,19 +214,31 @@ namespace ExcelReader.Core.Reader.Xlsx
         /// <inheritdoc/>
         public void Dispose()
         {
-            if (_sharedFlat.Length > 0)
-            {
-                ArrayPool<byte>.Shared.Return(_sharedFlat);
-                _sharedFlat = [];
-            }
-            _zip.Dispose();
+            Lifetime.Close();
         }
 
         /// <inheritdoc/>
         public ValueTask DisposeAsync()
         {
-            Dispose();
+            Lifetime.Close();
             return ValueTask.CompletedTask;
+        }
+
+        private void ReleaseResources()
+        {
+            ReturnSharedTable();
+            _sharedGate.Dispose();
+            _zip.Dispose();
+        }
+
+        private void ReturnSharedTable()
+        {
+            if (_sharedFlat.Length > 0)
+            {
+                ArrayPool<byte>.Shared.Return(_sharedFlat);
+            }
+            _sharedFlat = [];
+            _sharedOffsets = [0];
         }
     }
 }

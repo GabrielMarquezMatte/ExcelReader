@@ -70,11 +70,25 @@ namespace ExcelReader.Core.Reader.Xlsx
 
         private void EnsureSharedLoaded()
         {
-            if (_sharedLoaded)
+            if (_sharedGate.IsDone)
             {
                 return;
             }
-            _sharedLoaded = true;
+            _sharedGate.Run(this, static reader => reader.LoadShared(), static reader => reader.ReturnSharedTable());
+        }
+
+        private ValueTask EnsureSharedLoadedAsync(CancellationToken ct)
+        {
+            if (_sharedGate.IsDone)
+            {
+                return ValueTask.CompletedTask;
+            }
+            return _sharedGate.RunAsync(
+                this, static (reader, token) => reader.LoadSharedAsync(token), static reader => reader.ReturnSharedTable(), ct);
+        }
+
+        private void LoadShared()
+        {
             if (!_zip.TryGetEntry("xl/sharedStrings.xml"u8, out ZipEntryRef entry))
             {
                 return;
@@ -92,20 +106,11 @@ namespace ExcelReader.Core.Reader.Xlsx
             ParseSharedStreaming(stream, entry.UncompressedSize);
         }
 
-        private async ValueTask EnsureSharedLoadedAsync(CancellationToken ct)
+        private async ValueTask LoadSharedAsync(CancellationToken ct)
         {
-            if (_sharedLoaded)
+            if (_zip.HasMemory || !_zip.TryGetEntry("xl/sharedStrings.xml"u8, out ZipEntryRef entry))
             {
-                return;
-            }
-            if (_zip.HasMemory)
-            {
-                EnsureSharedLoaded();
-                return;
-            }
-            _sharedLoaded = true;
-            if (!_zip.TryGetEntry("xl/sharedStrings.xml"u8, out ZipEntryRef entry))
-            {
+                LoadShared();
                 return;
             }
             WorkbookLookups.ThrowIfSharedEntryTooLarge(entry.UncompressedSize, _decompressedBytes, _options);

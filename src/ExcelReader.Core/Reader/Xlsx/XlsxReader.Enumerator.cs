@@ -38,6 +38,7 @@ namespace ExcelReader.Core.Reader.Xlsx
                 _styleIsDate = reader._styleIsDate;
                 _sharedOffsets = reader._sharedOffsets;
                 _contentCache = reader._options.InternStrings ? new Utf8StringCache() : null;
+                _lease = reader.Lifetime;
             }
 
             internal Enumerator(XlsxReader reader, ZipEntryRef entry, CancellationToken ct)
@@ -48,6 +49,7 @@ namespace ExcelReader.Core.Reader.Xlsx
                 _sharedOffsets = reader._sharedOffsets;
                 _contentCache = reader._options.InternStrings ? new Utf8StringCache() : null;
                 _entry = entry;
+                _lease = reader.Lifetime;
             }
 
             private protected override Stream OpenSource()
