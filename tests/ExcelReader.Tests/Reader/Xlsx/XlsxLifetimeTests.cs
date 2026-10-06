@@ -114,5 +114,19 @@ namespace ExcelReader.Tests.Reader.Xlsx
             reader.Dispose();
             Assert.False(stream.CanRead);
         }
+
+        [Fact]
+        public async Task A_Disposed_Deferred_Enumerator_Does_Not_Reopen_Its_Sheet()
+        {
+            TrickleStream stream = new(BuildXlsx(rows: 20));
+            XlsxReader reader = Excel.FromXlsx(stream, leaveOpen: false);
+            XlsxReader.Enumerator e = reader.GetAsyncEnumerator(TestContext.Current.CancellationToken);
+            await e.DisposeAsync();
+            Task<bool> move = Task.Run(async () => await e.MoveNextAsync(), TestContext.Current.CancellationToken);
+            Assert.Same(move, await Task.WhenAny(move, Task.Delay(TimeSpan.FromSeconds(3), TestContext.Current.CancellationToken)));
+            Assert.False(await move);
+            reader.Dispose();
+            Assert.False(stream.CanRead);
+        }
     }
 }
