@@ -21,8 +21,8 @@ dotnet add package ExcelReader.NET
 ```csharp
 using ExcelReader.Core.Reader;
 
-using IExcelRowReader reader = Excel.Open("book.xlsx");
-foreach (Row row in reader)
+using IExcelWorkbook workbook = Excel.Open("book.xlsx");
+foreach (Row row in workbook.FirstSheet)
 {
     foreach (RowCell cell in row.Cells)
     {
@@ -40,6 +40,7 @@ foreach (Row row in reader)
 - [Writing workbooks](docs/guide/writing.md) — XLSX, XLSB (BIFF12) and XLS (BIFF8) writers, cell styles, typed records, and prefetch compression.
 - [CSV](docs/guide/csv.md) — reading, dialect sniffing, parallel parsing, and writing delimited text.
 - [Encrypted workbooks](docs/guide/encryption.md) — opening password-protected packages and encrypting written ones.
+- [Migrating to v6](docs/guide/migrating-to-v6.md) — porting v5 reader code to workbooks and sheets, and reading sheets in parallel.
 - [Benchmarks](docs/performance/benchmarks.md) — throughput and allocation against Sep, Sylvan, OfficeIMO and SpreadCheetah. [Live results](https://gabrielmarquezmatte.github.io/ExcelReader/dev/bench/).
 
 ## Command line
@@ -73,8 +74,9 @@ errors to stderr, so `convert` is safe to pipe.
 
 - Reads `.xlsx`, `.xlsb` (BIFF12), `.xls` (BIFF8), and `.csv`; writes `.xlsx`, `.xlsb`, `.xls`, and `.csv`.
 - `Excel.Open`/`OpenAsync` auto-detect XLSX/XLSB/XLS from the file signature. CSV has none, so pass `ExcelFileFormat.Csv` to open delimited text through the same entry point; `ExcelReaderOptions.Csv` carries the dialect, and `CsvReaderOptions.SniffDialect` infers it from the source.
-- Reads one sheet at a time (XLSX/XLSB/XLS); use `MoveToSheet(index)` or `TryMoveToSheet(name)` to switch sheets. CSV has no sheets.
-- `SheetVisibility`/`SheetVisibilityAt(index)` report whether a sheet is hidden (`Visible`, `Hidden`, `VeryHidden`). Hidden sheets still enumerate their rows — filter on the value if you want them skipped. The writers take the same value via `AddSheet(name, visibility)`, and reject a workbook whose sheets would all be hidden.
+- A workbook hands out its sheets: `FirstSheet`, `Sheets[index]` or `SheetAt(index)`, and `TryGetSheet(name)`. CSV is a workbook with one unnamed sheet. Coming from v5? See [Migrating to v6](docs/guide/migrating-to-v6.md).
+- Sheets of one workbook can be read in parallel, one enumerator per thread.
+- `sheet.Visibility` reports whether a sheet is hidden (`Visible`, `Hidden`, `VeryHidden`). Hidden sheets still enumerate their rows — filter on the value if you want them skipped. The writers take the same value via `AddSheet(name, visibility)`, and reject a workbook whose sheets would all be hidden.
 - Missing cells in sparse rows are exposed as empty cells.
 - String conversion allocates only when you call `GetString()`.
 - The XLSX scanner accepts the SpreadsheetML shapes commonly emitted by non-Excel producers, including single-quoted attributes, comments in `sheetData`, and CDATA text runs.
