@@ -79,6 +79,7 @@ namespace ExcelReader.Core.Reader
                 _source?.Dispose();
             }
             _source = null;
+            _deferred = false;
             ReturnBuffers();
             Interlocked.Exchange(ref _lease, null)?.Release();
         }
@@ -91,6 +92,7 @@ namespace ExcelReader.Core.Reader
                 await _source.DisposeAsync().ConfigureAwait(false);
             }
             _source = null;
+            _deferred = false;
             ReturnBuffers();
             Interlocked.Exchange(ref _lease, null)?.Release();
         }
