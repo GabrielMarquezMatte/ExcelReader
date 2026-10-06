@@ -58,21 +58,29 @@ namespace ExcelReader.Core.Reader
             _sheetName = reader.SheetName;
             _rows = reader.GetEnumerator();
             _pendingConsumed = true;
-            if (headerRow > 0 && SchemaInference.TrySkipToHeaderRow(_rows, headerRow, out _))
+            try
             {
-                _names = ReadHeaderNames(_rows.Current);
+                if (headerRow > 0 && SchemaInference.TrySkipToHeaderRow(_rows, headerRow, out _))
+                {
+                    _names = ReadHeaderNames(_rows.Current);
+                }
+                else if (headerRow > 0)
+                {
+                    _names = [];
+                }
+                else
+                {
+                    _hasPendingRow = _rows.MoveNext();
+                    _pendingConsumed = false;
+                    _names = _hasPendingRow ? new string?[_rows.Current.ColumnCount] : [];
+                }
+                _ordinals = BuildOrdinals(_names);
             }
-            else if (headerRow > 0)
+            catch
             {
-                _names = [];
+                _rows.Dispose();
+                throw;
             }
-            else
-            {
-                _hasPendingRow = _rows.MoveNext();
-                _pendingConsumed = false;
-                _names = _hasPendingRow ? new string?[_rows.Current.ColumnCount] : [];
-            }
-            _ordinals = BuildOrdinals(_names);
         }
 
         private static string?[] ReadHeaderNames(Row header)

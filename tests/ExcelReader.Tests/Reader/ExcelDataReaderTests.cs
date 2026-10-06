@@ -3,7 +3,9 @@ using System.Globalization;
 using System.Text;
 using ExcelReader.Core.Reader;
 using ExcelReader.Core.Reader.Xlsb;
+using ExcelReader.Core.Reader.Xlsx;
 using ExcelReader.Core.Writer.Xlsb;
+using ExcelReader.Core.Writer.Xlsx;
 
 namespace ExcelReader.Tests.Reader
 {
@@ -326,6 +328,35 @@ namespace ExcelReader.Tests.Reader
             Assert.Equal("alice", table.Rows[0]["Name"]);
             Assert.Equal(2.0, Convert.ToDouble(table.Rows[1]["Id"], CultureInfo.InvariantCulture));
             Assert.Equal("bob", table.Rows[1]["Name"]);
+        }
+
+        [Fact]
+        public void AFailedConstructorDoesNotKeepTheReaderAlive()
+        {
+            using MemoryStream buffer = new();
+            using (XlsxWorkbookWriter workbook = XlsxWorkbookWriter.Create(buffer, leaveOpen: true))
+            {
+                XlsxSheetWriter sheet = workbook.AddSheet("s");
+                using (XlsxRowWriter row = sheet.StartRow())
+                {
+                    for (int c = 0; c < 200; c++)
+                    {
+                        row.Write(c);
+                    }
+                }
+                sheet.End();
+                sheet.Dispose();
+                workbook.End();
+            }
+
+            TrickleStream stream = new(buffer.ToArray());
+            XlsxReader reader = Excel.FromXlsx(stream, leaveOpen: false, new ExcelReaderOptions { MaxCellBytes = 64 });
+            Assert.Throws<ExcelLimitExceededException>(() =>
+            {
+                using ExcelDataReader data = new(reader);
+            });
+            reader.Dispose();
+            Assert.False(stream.CanRead);
         }
     }
 }
