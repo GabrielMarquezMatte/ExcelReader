@@ -9,15 +9,15 @@ namespace ExcelReader.Core.Reader.Xlsx
         internal static XlsxReader CreateFromMemory(ReadOnlyMemory<byte> data, ExcelReaderOptions? options = null)
         {
             ExcelReaderOptions effectiveOptions = options ?? ExcelReaderOptions.Default;
-            return CreateFromMemory(ZipMemoryIndex.Create(data, effectiveOptions), effectiveOptions);
+            return CreateFromMemory(ZipIndex.Create(data, effectiveOptions), effectiveOptions);
         }
 
-        internal static XlsxReader CreateFromMemory(ZipMemoryIndex memZip, ExcelReaderOptions effectiveOptions)
+        internal static XlsxReader CreateFromMemory(ZipIndex memZip, ExcelReaderOptions effectiveOptions)
         {
             return ZipReaderOpen.FromMemory(memZip, zip => BuildFromMemory(zip, effectiveOptions));
         }
 
-        private static XlsxReader BuildFromMemory(ZipMemoryIndex memZip, ExcelReaderOptions effectiveOptions)
+        private static XlsxReader BuildFromMemory(ZipIndex memZip, ExcelReaderOptions effectiveOptions)
         {
             DecompressedByteCounter decompressedBytes = new(effectiveOptions.MaxTotalDecompressedBytes);
             using ZipPart wbPart = memZip.OpenPartOrDefault("xl/workbook.xml"u8, decompressedBytes);

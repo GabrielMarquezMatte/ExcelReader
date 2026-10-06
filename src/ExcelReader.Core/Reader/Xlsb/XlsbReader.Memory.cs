@@ -8,15 +8,15 @@ namespace ExcelReader.Core.Reader.Xlsb
         internal static XlsbReader CreateFromMemory(ReadOnlyMemory<byte> data, ExcelReaderOptions? options = null)
         {
             ExcelReaderOptions effectiveOptions = options ?? ExcelReaderOptions.Default;
-            return CreateFromMemory(ZipMemoryIndex.Create(data, effectiveOptions), effectiveOptions);
+            return CreateFromMemory(ZipIndex.Create(data, effectiveOptions), effectiveOptions);
         }
 
-        internal static XlsbReader CreateFromMemory(ZipMemoryIndex memZip, ExcelReaderOptions effectiveOptions)
+        internal static XlsbReader CreateFromMemory(ZipIndex memZip, ExcelReaderOptions effectiveOptions)
         {
             return ZipReaderOpen.FromMemory(memZip, zip => BuildFromMemory(zip, effectiveOptions));
         }
 
-        private static XlsbReader BuildFromMemory(ZipMemoryIndex memZip, ExcelReaderOptions effectiveOptions)
+        private static XlsbReader BuildFromMemory(ZipIndex memZip, ExcelReaderOptions effectiveOptions)
         {
             DecompressedByteCounter decompressedBytes = new(effectiveOptions.MaxTotalDecompressedBytes);
             using ZipPart wbPart = memZip.OpenPartOrDefault("xl/workbook.bin"u8, decompressedBytes);
@@ -34,7 +34,7 @@ namespace ExcelReader.Core.Reader.Xlsb
         }
 
         private static (byte[] Flat, int[] Offsets) LoadSharedStringsFromMemory(
-            ZipMemoryIndex memZip, DecompressedByteCounter decompressedBytes, ExcelReaderOptions options)
+            ZipIndex memZip, DecompressedByteCounter decompressedBytes, ExcelReaderOptions options)
         {
             if (!memZip.TryGetEntry("xl/sharedStrings.bin"u8, out ZipEntryRef entry))
             {

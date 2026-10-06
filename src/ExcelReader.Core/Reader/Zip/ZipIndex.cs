@@ -40,7 +40,7 @@ namespace ExcelReader.Core.Reader.Zip
         }
     }
 
-    internal sealed class ZipMemoryIndex : IDisposable
+    internal sealed class ZipIndex : IDisposable
     {
         private const int EocdFixedSize = 22;
         private const int Zip64LocatorSize = 20;
@@ -58,19 +58,21 @@ namespace ExcelReader.Core.Reader.Zip
         private static ReadOnlySpan<byte> EocdSignatureBytes => [0x50, 0x4B, 0x05, 0x06];
 
         private readonly ReadOnlyMemory<byte> _file;
+        private readonly ReadOnlyMemory<byte> _directory;
         private readonly ZipEntryRef[] _entries;
         private bool _disposed;
 
-        private ZipMemoryIndex(ReadOnlyMemory<byte> file, ZipEntryRef[] entries, int count)
+        private ZipIndex(ReadOnlyMemory<byte> file, ReadOnlyMemory<byte> directory, ZipEntryRef[] entries, int count)
         {
             _file = file;
+            _directory = directory;
             _entries = entries;
             Count = count;
         }
 
         internal int Count { get; }
 
-        internal static ZipMemoryIndex Create(ReadOnlyMemory<byte> file, ExcelReaderOptions options)
+        internal static ZipIndex Create(ReadOnlyMemory<byte> file, ExcelReaderOptions options)
         {
             ReadOnlySpan<byte> span = file.Span;
             long eocdOffset = FindEocd(span);
@@ -83,24 +85,25 @@ namespace ExcelReader.Core.Reader.Zip
             {
                 throw new InvalidDataException("The ZIP central directory is out of range.");
             }
+            ReadOnlyMemory<byte> directory = file.Slice((int)cdOffset, (int)cdSize);
 
             long maxHint = Math.Max(16, options.MaxZipEntries > 0 ? options.MaxZipEntries : 65_536);
             ZipEntryRef[] entries = ArrayPool<ZipEntryRef>.Shared.Rent((int)Math.Clamp(declaredCount, 16, maxHint));
             int count;
             try
             {
-                count = WalkCentralDirectory(span, cdOffset, cdSize, ref entries, options);
-                ThrowIfDuplicateEntryNames(file, entries, count);
+                count = WalkCentralDirectory(directory.Span, ref entries, options);
+                ThrowIfDuplicateEntryNames(directory, entries, count);
             }
             catch
             {
                 ArrayPool<ZipEntryRef>.Shared.Return(entries);
                 throw;
             }
-            return new ZipMemoryIndex(file, entries, count);
+            return new ZipIndex(file, directory, entries, count);
         }
 
-        private static void ThrowIfDuplicateEntryNames(ReadOnlyMemory<byte> file, ZipEntryRef[] entries, int count)
+        private static void ThrowIfDuplicateEntryNames(ReadOnlyMemory<byte> directory, ZipEntryRef[] entries, int count)
         {
             if (count <= 1)
             {
@@ -115,18 +118,18 @@ namespace ExcelReader.Core.Reader.Zip
                 }
                 Array.Sort(order, 0, count, Comparer<int>.Create((a, b) =>
                 {
-                    ReadOnlySpan<byte> span = file.Span;
+                    ReadOnlySpan<byte> span = directory.Span;
                     ref readonly ZipEntryRef ea = ref entries[a];
                     ref readonly ZipEntryRef eb = ref entries[b];
                     return span.Slice(ea.NameStart, ea.NameLength).SequenceCompareTo(span.Slice(eb.NameStart, eb.NameLength));
                 }));
-                ReadOnlySpan<byte> fileSpan = file.Span;
+                ReadOnlySpan<byte> directorySpan = directory.Span;
                 for (int i = 1; i < count; i++)
                 {
                     ref readonly ZipEntryRef prev = ref entries[order[i - 1]];
                     ref readonly ZipEntryRef curr = ref entries[order[i]];
                     if (prev.NameLength == curr.NameLength &&
-                        fileSpan.Slice(prev.NameStart, prev.NameLength).SequenceEqual(fileSpan.Slice(curr.NameStart, curr.NameLength)))
+                        directorySpan.Slice(prev.NameStart, prev.NameLength).SequenceEqual(directorySpan.Slice(curr.NameStart, curr.NameLength)))
                     {
                         throw new InvalidDataException("The ZIP central directory contains a duplicate entry name.");
                     }
@@ -140,10 +143,10 @@ namespace ExcelReader.Core.Reader.Zip
 
         internal bool TryGetEntry(ReadOnlySpan<byte> utf8Name, out ZipEntryRef entry)
         {
-            ReadOnlySpan<byte> fileSpan = _file.Span;
+            ReadOnlySpan<byte> directory = _directory.Span;
             foreach (ref readonly ZipEntryRef candidate in _entries.AsSpan(0, Count))
             {
-                if (fileSpan.Slice(candidate.NameStart, candidate.NameLength).SequenceEqual(utf8Name))
+                if (directory.Slice(candidate.NameStart, candidate.NameLength).SequenceEqual(utf8Name))
                 {
                     entry = candidate;
                     return true;
@@ -298,11 +301,10 @@ namespace ExcelReader.Core.Reader.Zip
             return (cdOffset, cdSize, count);
         }
 
-        private static int WalkCentralDirectory(ReadOnlySpan<byte> span, long cdOffset, long cdSize, ref ZipEntryRef[] entries, ExcelReaderOptions options)
+        private static int WalkCentralDirectory(ReadOnlySpan<byte> directory, ref ZipEntryRef[] entries, ExcelReaderOptions options)
         {
-            // Create has checked cdOffset <= span.Length - cdSize, so end <= span.Length and cannot overflow.
-            long end = cdOffset + cdSize;
-            long pos = cdOffset;
+            int end = directory.Length;
+            int pos = 0;
             int count = 0;
             while (pos < end)
             {
@@ -310,7 +312,7 @@ namespace ExcelReader.Core.Reader.Zip
                 {
                     throw new InvalidDataException("The ZIP central directory is truncated.");
                 }
-                ReadOnlySpan<byte> record = span.Slice((int)pos, CentralDirectoryFixedSize);
+                ReadOnlySpan<byte> record = directory.Slice(pos, CentralDirectoryFixedSize);
                 if (BinaryPrimitives.ReadInt32LittleEndian(record) != CentralDirectorySignature)
                 {
                     throw new InvalidDataException("Invalid ZIP central directory record signature.");
@@ -321,21 +323,20 @@ namespace ExcelReader.Core.Reader.Zip
                     throw new NotSupportedException("Encrypted ZIP entries are not supported.");
                 }
 
-                long nameStart = pos + CentralDirectoryFixedSize;
+                int nameStart = pos + CentralDirectoryFixedSize;
                 int variableLength = fields.NameLength + fields.ExtraLength + fields.CommentLength;
                 if (variableLength > end - nameStart)
                 {
                     throw new InvalidDataException("The ZIP central directory is truncated.");
                 }
-                long recordEnd = nameStart + variableLength;
 
                 (long compressed, long uncompressed, long localOffset) = ResolveZip64Sizes(
-                    span, (int)(nameStart + fields.NameLength), fields.ExtraLength, fields);
+                    directory, nameStart + fields.NameLength, fields.ExtraLength, fields);
 
                 EnsureCapacity(ref entries, count);
                 entries[count] = new ZipEntryRef
                 {
-                    NameStart = (int)nameStart,
+                    NameStart = nameStart,
                     NameLength = fields.NameLength,
                     LocalHeaderOffset = localOffset,
                     CompressedSize = compressed,
@@ -345,7 +346,7 @@ namespace ExcelReader.Core.Reader.Zip
                 };
                 count++;
                 LimitChecks.ThrowIfTooManyEntries(count, options);
-                pos = recordEnd;
+                pos = nameStart + variableLength;
             }
             return count;
         }
@@ -469,7 +470,7 @@ namespace ExcelReader.Core.Reader.Zip
                 throw new InvalidDataException("The ZIP local file header name runs past the end of the file.");
             }
             if (nameLength != entry.NameLength ||
-                !fileSpan.Slice((int)nameStart, nameLength).SequenceEqual(fileSpan.Slice(entry.NameStart, entry.NameLength)))
+                !fileSpan.Slice((int)nameStart, nameLength).SequenceEqual(_directory.Span.Slice(entry.NameStart, entry.NameLength)))
             {
                 throw new InvalidDataException("The ZIP local file header name does not match the central directory.");
             }

@@ -11,7 +11,7 @@ namespace ExcelReader.Core.Reader.Xlsx
         private readonly Stream? _stream;
         private readonly bool _leaveOpen;
         private readonly ZipArchive? _zip;
-        private readonly ZipMemoryIndex? _memZip;
+        private readonly ZipIndex? _memZip;
         private readonly ExcelReaderOptions _options;
         private readonly DecompressedByteCounter _decompressedBytes;
         private readonly (string Name, string Path, ExcelSheetVisibility Visibility)[] _sheets;
@@ -74,7 +74,7 @@ namespace ExcelReader.Core.Reader.Xlsx
             IsDate1904 = date1904;
         }
 
-        private XlsxReader(ZipMemoryIndex memZip,
+        private XlsxReader(ZipIndex memZip,
             (string Name, string Path, ExcelSheetVisibility Visibility)[] sheets, bool[] styleIsDate, bool date1904,
             ExcelReaderOptions options, DecompressedByteCounter decompressedBytes)
         {

@@ -65,7 +65,7 @@ namespace ExcelReader.Core.Reader.Zip
             }
         }
 
-        internal static TResult FromMemory<TResult>(ZipMemoryIndex memZip, Func<ZipMemoryIndex, TResult> build)
+        internal static TResult FromMemory<TResult>(ZipIndex memZip, Func<ZipIndex, TResult> build)
         {
             try
             {
