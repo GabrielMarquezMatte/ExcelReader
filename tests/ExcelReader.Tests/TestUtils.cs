@@ -158,6 +158,8 @@ namespace ExcelReader.Tests
             _bytes = bytes;
         }
 
+        internal Action? OnRead { get; set; }
+
         public override bool CanRead => !_disposed;
 
         public override bool CanSeek => !_disposed;
@@ -180,6 +182,7 @@ namespace ExcelReader.Tests
         public override int Read(Span<byte> buffer)
         {
             ObjectDisposedException.ThrowIf(_disposed, this);
+            OnRead?.Invoke();
             int available = (int)Math.Max(0, Math.Min(_bytes.Length - _position, Math.Min(buffer.Length, MaxPerRead)));
             _bytes.AsSpan((int)_position, available).CopyTo(buffer);
             _position += available;
