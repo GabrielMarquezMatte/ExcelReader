@@ -93,13 +93,12 @@ namespace ExcelReader.Tests.Reader
             }
         }
 
-        private static List<string> Dump(IExcelRowReader reader)
+        private static List<string> Dump(IExcelWorkbook reader)
         {
             List<string> lines = [];
             for (int s = 0; s < reader.SheetCount; s++)
             {
-                reader.MoveToSheet(s);
-                using IExcelRowEnumerator e = reader.GetEnumerator();
+                using IExcelRowEnumerator e = reader.SheetAt(s).GetEnumerator();
                 while (e.MoveNext())
                 {
                     lines.Add(Line(s, e.Current));
@@ -108,13 +107,12 @@ namespace ExcelReader.Tests.Reader
             return lines;
         }
 
-        private static async Task<List<string>> DumpAsync(IExcelRowReader reader)
+        private static async Task<List<string>> DumpAsync(IExcelWorkbook reader)
         {
             List<string> lines = [];
             for (int s = 0; s < reader.SheetCount; s++)
             {
-                reader.MoveToSheet(s);
-                await using IExcelRowEnumerator e = reader.GetAsyncEnumerator(TestContext.Current.CancellationToken);
+                await using IExcelRowEnumerator e = reader.SheetAt(s).GetAsyncEnumerator(TestContext.Current.CancellationToken);
                 while (await e.MoveNextAsync())
                 {
                     lines.Add(Line(s, e.Current));
@@ -138,8 +136,8 @@ namespace ExcelReader.Tests.Reader
         public void Xlsx_Reads_The_Same_Rows_From_Every_Source(Kind kind)
         {
             byte[] bytes = BuildXlsx();
-            using IExcelRowReader expected = Excel.FromXlsx(bytes);
-            using IExcelRowReader actual = OpenXlsx(kind, bytes);
+            using IExcelWorkbook expected = Excel.FromXlsx(bytes);
+            using IExcelWorkbook actual = OpenXlsx(kind, bytes);
             Assert.Equal(Dump(expected), Dump(actual));
         }
 
@@ -148,8 +146,8 @@ namespace ExcelReader.Tests.Reader
         public async Task Xlsx_Reads_The_Same_Rows_Asynchronously_From_Every_Source(Kind kind)
         {
             byte[] bytes = BuildXlsx();
-            using IExcelRowReader expected = Excel.FromXlsx(bytes);
-            using IExcelRowReader actual = OpenXlsx(kind, bytes);
+            using IExcelWorkbook expected = Excel.FromXlsx(bytes);
+            using IExcelWorkbook actual = OpenXlsx(kind, bytes);
             Assert.Equal(Dump(expected), await DumpAsync(actual));
         }
 
@@ -158,11 +156,9 @@ namespace ExcelReader.Tests.Reader
         public void Xlsx_Interleaved_Enumerators_Keep_Their_Own_Position(Kind kind)
         {
             byte[] bytes = BuildXlsx();
-            using IExcelRowReader reader = OpenXlsx(kind, bytes);
-            reader.MoveToSheet(0);
-            using IExcelRowEnumerator first = reader.GetEnumerator();
-            reader.MoveToSheet(1);
-            using IExcelRowEnumerator second = reader.GetEnumerator();
+            using IExcelWorkbook reader = OpenXlsx(kind, bytes);
+            using IExcelRowEnumerator first = reader.SheetAt(0).GetEnumerator();
+            using IExcelRowEnumerator second = reader.SheetAt(1).GetEnumerator();
             for (int r = 0; r < 400; r++)
             {
                 Assert.True(first.MoveNext());
@@ -178,7 +174,7 @@ namespace ExcelReader.Tests.Reader
         public void Xlsx_File_Can_Be_Deleted_After_Dispose()
         {
             string path = WriteTemp(BuildXlsx(), ".xlsx");
-            using (IExcelRowReader reader = Excel.FromXlsxFile(path))
+            using (IExcelWorkbook reader = Excel.FromXlsxFile(path))
             {
                 Assert.NotEmpty(Dump(reader));
             }
@@ -191,7 +187,7 @@ namespace ExcelReader.Tests.Reader
         {
             byte[] bytes = BuildXlsx();
             using TrickleStream stream = new(bytes);
-            using (IExcelRowReader reader = Excel.FromXlsx(stream, leaveOpen: true))
+            using (IExcelWorkbook reader = Excel.FromXlsx(stream, leaveOpen: true))
             {
                 Assert.NotEmpty(Dump(reader));
             }
@@ -258,8 +254,8 @@ namespace ExcelReader.Tests.Reader
         public void Xls_Reads_The_Same_Rows_From_Every_Source(Kind kind)
         {
             byte[] bytes = BuildXls();
-            using IExcelRowReader expected = Excel.FromXls(bytes);
-            using IExcelRowReader actual = OpenXls(kind, bytes);
+            using IExcelWorkbook expected = Excel.FromXls(bytes);
+            using IExcelWorkbook actual = OpenXls(kind, bytes);
             Assert.Equal(Dump(expected), Dump(actual));
         }
 
@@ -268,11 +264,9 @@ namespace ExcelReader.Tests.Reader
         public void Xls_Interleaved_Enumerators_Keep_Their_Own_Position(Kind kind)
         {
             byte[] bytes = BuildXls();
-            using IExcelRowReader reader = OpenXls(kind, bytes);
-            reader.MoveToSheet(0);
-            using IExcelRowEnumerator first = reader.GetEnumerator();
-            reader.MoveToSheet(1);
-            using IExcelRowEnumerator second = reader.GetEnumerator();
+            using IExcelWorkbook reader = OpenXls(kind, bytes);
+            using IExcelRowEnumerator first = reader.SheetAt(0).GetEnumerator();
+            using IExcelRowEnumerator second = reader.SheetAt(1).GetEnumerator();
             for (int r = 0; r < 400; r++)
             {
                 Assert.True(first.MoveNext());
@@ -288,7 +282,7 @@ namespace ExcelReader.Tests.Reader
         public void Xls_File_Can_Be_Deleted_After_Dispose()
         {
             string path = WriteTemp(BuildXls(), ".xls");
-            using (IExcelRowReader reader = Excel.FromXlsFile(path))
+            using (IExcelWorkbook reader = Excel.FromXlsFile(path))
             {
                 Assert.NotEmpty(Dump(reader));
             }
@@ -348,8 +342,8 @@ namespace ExcelReader.Tests.Reader
         public void Xlsb_Reads_The_Same_Rows_From_Every_Source(Kind kind)
         {
             byte[] bytes = BuildXlsb();
-            using IExcelRowReader expected = Excel.FromXlsb(bytes);
-            using IExcelRowReader actual = OpenXlsb(kind, bytes);
+            using IExcelWorkbook expected = Excel.FromXlsb(bytes);
+            using IExcelWorkbook actual = OpenXlsb(kind, bytes);
             Assert.Equal(Dump(expected), Dump(actual));
         }
 
@@ -358,8 +352,8 @@ namespace ExcelReader.Tests.Reader
         public async Task Xlsb_Reads_The_Same_Rows_Asynchronously_From_Every_Source(Kind kind)
         {
             byte[] bytes = BuildXlsb();
-            using IExcelRowReader expected = Excel.FromXlsb(bytes);
-            using IExcelRowReader actual = OpenXlsb(kind, bytes);
+            using IExcelWorkbook expected = Excel.FromXlsb(bytes);
+            using IExcelWorkbook actual = OpenXlsb(kind, bytes);
             Assert.Equal(Dump(expected), await DumpAsync(actual));
         }
 
@@ -367,7 +361,7 @@ namespace ExcelReader.Tests.Reader
         public void Xlsb_File_Can_Be_Deleted_After_Dispose()
         {
             string path = WriteTemp(BuildXlsb(), ".xlsb");
-            using (IExcelRowReader reader = Excel.FromXlsbFile(path))
+            using (IExcelWorkbook reader = Excel.FromXlsbFile(path))
             {
                 Assert.NotEmpty(Dump(reader));
             }
@@ -436,13 +430,13 @@ namespace ExcelReader.Tests.Reader
         public void Open_Detects_And_Reads_Both_Zip_Formats(Kind kind)
         {
             byte[] xlsx = BuildXlsx();
-            using IExcelRowReader expectedXlsx = Excel.FromXlsx(xlsx);
-            using IExcelRowReader actualXlsx = Excel.Open(OpenRawStream(kind, xlsx), leaveOpen: false);
+            using IExcelWorkbook expectedXlsx = Excel.FromXlsx(xlsx);
+            using IExcelWorkbook actualXlsx = Excel.Open(OpenRawStream(kind, xlsx), leaveOpen: false);
             Assert.Equal(Dump(expectedXlsx), Dump(actualXlsx));
 
             byte[] xlsb = BuildXlsb();
-            using IExcelRowReader expectedXlsb = Excel.FromXlsb(xlsb);
-            using IExcelRowReader actualXlsb = Excel.Open(OpenRawStream(kind, xlsb), leaveOpen: false);
+            using IExcelWorkbook expectedXlsb = Excel.FromXlsb(xlsb);
+            using IExcelWorkbook actualXlsb = Excel.Open(OpenRawStream(kind, xlsb), leaveOpen: false);
             Assert.Equal(Dump(expectedXlsb), Dump(actualXlsb));
         }
 
@@ -452,13 +446,13 @@ namespace ExcelReader.Tests.Reader
         {
             CancellationToken ct = TestContext.Current.CancellationToken;
             byte[] xlsx = BuildXlsx();
-            using IExcelRowReader expectedXlsx = Excel.FromXlsx(xlsx);
-            using IExcelRowReader actualXlsx = await Excel.OpenAsync(OpenRawStream(kind, xlsx), leaveOpen: false, ct: ct);
+            using IExcelWorkbook expectedXlsx = Excel.FromXlsx(xlsx);
+            using IExcelWorkbook actualXlsx = await Excel.OpenAsync(OpenRawStream(kind, xlsx), leaveOpen: false, ct: ct);
             Assert.Equal(Dump(expectedXlsx), await DumpAsync(actualXlsx));
 
             byte[] xlsb = BuildXlsb();
-            using IExcelRowReader expectedXlsb = Excel.FromXlsb(xlsb);
-            using IExcelRowReader actualXlsb = await Excel.OpenAsync(OpenRawStream(kind, xlsb), leaveOpen: false, ct: ct);
+            using IExcelWorkbook expectedXlsb = Excel.FromXlsb(xlsb);
+            using IExcelWorkbook actualXlsb = await Excel.OpenAsync(OpenRawStream(kind, xlsb), leaveOpen: false, ct: ct);
             Assert.Equal(Dump(expectedXlsb), await DumpAsync(actualXlsb));
         }
 

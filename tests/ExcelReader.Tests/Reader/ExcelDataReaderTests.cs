@@ -17,8 +17,8 @@ namespace ExcelReader.Tests.Reader
             await using var ms = await TypedWorkbook.BuildAsync(
                 ["Id", "Name"],
                 [1, "alice"]);
-            await using IExcelRowReader reader = await Excel.OpenAsync(ms, ct: TestContext.Current.CancellationToken);
-            using var data = new ExcelDataReader(reader);
+            await using IExcelWorkbook reader = await Excel.OpenAsync(ms, ct: TestContext.Current.CancellationToken);
+            using var data = new ExcelDataReader(reader.FirstSheet);
 
             Assert.Equal(2, data.FieldCount);
             Assert.Equal("Id", data.GetName(0));
@@ -35,8 +35,8 @@ namespace ExcelReader.Tests.Reader
                 [1],
                 [2],
                 [3]);
-            await using IExcelRowReader reader = await Excel.OpenAsync(ms, ct: TestContext.Current.CancellationToken);
-            using var data = new ExcelDataReader(reader);
+            await using IExcelWorkbook reader = await Excel.OpenAsync(ms, ct: TestContext.Current.CancellationToken);
+            using var data = new ExcelDataReader(reader.FirstSheet);
 
             var seen = new List<int>();
             while (data.Read())
@@ -52,8 +52,8 @@ namespace ExcelReader.Tests.Reader
             await using var ms = await TypedWorkbook.BuildAsync(
                 ["Text", "Number", "Flag", "When", "Blank"],
                 ["hi", 42, true, new DateTime(2024, 1, 1), null]);
-            await using IExcelRowReader reader = await Excel.OpenAsync(ms, ct: TestContext.Current.CancellationToken);
-            using var data = new ExcelDataReader(reader);
+            await using IExcelWorkbook reader = await Excel.OpenAsync(ms, ct: TestContext.Current.CancellationToken);
+            using var data = new ExcelDataReader(reader.FirstSheet);
 
             Assert.True(data.Read());
             Assert.Equal("hi", data.GetValue(0));
@@ -68,8 +68,8 @@ namespace ExcelReader.Tests.Reader
         public async Task NoHeaderSynthesizesColumnNamesFromFirstRowWidth()
         {
             await using var ms = await TypedWorkbook.BuildAsync([1, 2, 3]);
-            await using IExcelRowReader reader = await Excel.OpenAsync(ms, ct: TestContext.Current.CancellationToken);
-            using var data = new ExcelDataReader(reader, headerRow: 0);
+            await using IExcelWorkbook reader = await Excel.OpenAsync(ms, ct: TestContext.Current.CancellationToken);
+            using var data = new ExcelDataReader(reader.FirstSheet, headerRow: 0);
 
             Assert.Equal(3, data.FieldCount);
             Assert.Equal("Column0", data.GetName(0));
@@ -82,8 +82,8 @@ namespace ExcelReader.Tests.Reader
         public async Task HeaderRowBeyondSheetSizeIsAnEmptyResultSet()
         {
             await using var ms = await TypedWorkbook.BuildAsync(["Id"]);
-            await using IExcelRowReader reader = await Excel.OpenAsync(ms, ct: TestContext.Current.CancellationToken);
-            using var data = new ExcelDataReader(reader, headerRow: 5);
+            await using IExcelWorkbook reader = await Excel.OpenAsync(ms, ct: TestContext.Current.CancellationToken);
+            using var data = new ExcelDataReader(reader.FirstSheet, headerRow: 5);
 
             Assert.Equal(0, data.FieldCount);
             Assert.False(data.Read());
@@ -93,8 +93,8 @@ namespace ExcelReader.Tests.Reader
         public async Task GetOrdinalForUnknownNameThrows()
         {
             await using var ms = await TypedWorkbook.BuildAsync(["Id"], [1]);
-            await using IExcelRowReader reader = await Excel.OpenAsync(ms, ct: TestContext.Current.CancellationToken);
-            using var data = new ExcelDataReader(reader);
+            await using IExcelWorkbook reader = await Excel.OpenAsync(ms, ct: TestContext.Current.CancellationToken);
+            using var data = new ExcelDataReader(reader.FirstSheet);
 
             Assert.Throws<KeyNotFoundException>(() => data.GetOrdinal("DoesNotExist"));
         }
@@ -103,8 +103,8 @@ namespace ExcelReader.Tests.Reader
         public async Task GetValueBeforeReadThrows()
         {
             await using var ms = await TypedWorkbook.BuildAsync(["Id"], [1]);
-            await using IExcelRowReader reader = await Excel.OpenAsync(ms, ct: TestContext.Current.CancellationToken);
-            using var data = new ExcelDataReader(reader);
+            await using IExcelWorkbook reader = await Excel.OpenAsync(ms, ct: TestContext.Current.CancellationToken);
+            using var data = new ExcelDataReader(reader.FirstSheet);
 
             Assert.Throws<InvalidOperationException>(() => data.GetValue(0));
         }
@@ -115,8 +115,8 @@ namespace ExcelReader.Tests.Reader
             await using var ms = await TypedWorkbook.BuildMultiSheetAsync(
                 ("A", [[1]]),
                 ("B", [[2]]));
-            await using IExcelRowReader reader = await Excel.OpenAsync(ms, ct: TestContext.Current.CancellationToken);
-            using var data = new ExcelDataReader(reader);
+            await using IExcelWorkbook reader = await Excel.OpenAsync(ms, ct: TestContext.Current.CancellationToken);
+            using var data = new ExcelDataReader(reader.FirstSheet);
 
             Assert.False(data.NextResult());
         }
@@ -125,8 +125,8 @@ namespace ExcelReader.Tests.Reader
         public async Task GetBytesReturnsTheCellsUtf8BytesWindowedByOffsetAndLength()
         {
             await using var ms = await TypedWorkbook.BuildAsync(["Text"], ["héllo"]);
-            await using IExcelRowReader reader = await Excel.OpenAsync(ms, ct: TestContext.Current.CancellationToken);
-            using var data = new ExcelDataReader(reader);
+            await using IExcelWorkbook reader = await Excel.OpenAsync(ms, ct: TestContext.Current.CancellationToken);
+            using var data = new ExcelDataReader(reader.FirstSheet);
             Assert.True(data.Read());
 
             byte[] expected = Encoding.UTF8.GetBytes("héllo");
@@ -147,8 +147,8 @@ namespace ExcelReader.Tests.Reader
         public async Task GetBytesFormatsANumericCellInsteadOfReturningNothing()
         {
             await using var ms = await TypedWorkbook.BuildAsync(["Number"], [42]);
-            await using IExcelRowReader reader = await Excel.OpenAsync(ms, ct: TestContext.Current.CancellationToken);
-            using var data = new ExcelDataReader(reader);
+            await using IExcelWorkbook reader = await Excel.OpenAsync(ms, ct: TestContext.Current.CancellationToken);
+            using var data = new ExcelDataReader(reader.FirstSheet);
             Assert.True(data.Read());
 
             byte[] buffer = new byte[8];
@@ -160,8 +160,8 @@ namespace ExcelReader.Tests.Reader
         public async Task GetBytesOnADbNullCellReturnsZero()
         {
             await using var ms = await TypedWorkbook.BuildAsync(["Blank"], [null]);
-            await using IExcelRowReader reader = await Excel.OpenAsync(ms, ct: TestContext.Current.CancellationToken);
-            using var data = new ExcelDataReader(reader);
+            await using IExcelWorkbook reader = await Excel.OpenAsync(ms, ct: TestContext.Current.CancellationToken);
+            using var data = new ExcelDataReader(reader.FirstSheet);
             Assert.True(data.Read());
 
             Assert.Equal(0, data.GetBytes(0, 0, null, 0, 0));
@@ -173,8 +173,8 @@ namespace ExcelReader.Tests.Reader
         public async Task GetCharsReturnsTheCellsTextWindowedByOffsetAndLength()
         {
             await using var ms = await TypedWorkbook.BuildAsync(["Text"], ["hello world"]);
-            await using IExcelRowReader reader = await Excel.OpenAsync(ms, ct: TestContext.Current.CancellationToken);
-            using var data = new ExcelDataReader(reader);
+            await using IExcelWorkbook reader = await Excel.OpenAsync(ms, ct: TestContext.Current.CancellationToken);
+            using var data = new ExcelDataReader(reader.FirstSheet);
             Assert.True(data.Read());
 
             Assert.Equal(11, data.GetChars(0, 0, null, 0, 0));
@@ -206,7 +206,7 @@ namespace ExcelReader.Tests.Reader
 
             ms.Position = 0;
             using XlsbWorkbook reader = Excel.FromXlsb(ms);
-            using var data = new ExcelDataReader(reader);
+            using var data = new ExcelDataReader(reader.FirstSheet);
             Assert.True(data.Read());
 
             byte[] buffer = new byte[8];
@@ -218,8 +218,8 @@ namespace ExcelReader.Tests.Reader
         public async Task TypedGettersParseANumericCellIntoEveryIntegralAndFloatingType()
         {
             await using var ms = await TypedWorkbook.BuildAsync(["Number"], [42]);
-            await using IExcelRowReader reader = await Excel.OpenAsync(ms, ct: TestContext.Current.CancellationToken);
-            using var data = new ExcelDataReader(reader);
+            await using IExcelWorkbook reader = await Excel.OpenAsync(ms, ct: TestContext.Current.CancellationToken);
+            using var data = new ExcelDataReader(reader.FirstSheet);
             Assert.True(data.Read());
 
             Assert.Equal((byte)42, data.GetByte(0));
@@ -237,8 +237,8 @@ namespace ExcelReader.Tests.Reader
             await using var ms = await TypedWorkbook.BuildAsync(
                 ["Flag", "When", "Text"],
                 [true, new DateTime(2024, 3, 7), "nope"]);
-            await using IExcelRowReader reader = await Excel.OpenAsync(ms, ct: TestContext.Current.CancellationToken);
-            using var data = new ExcelDataReader(reader);
+            await using IExcelWorkbook reader = await Excel.OpenAsync(ms, ct: TestContext.Current.CancellationToken);
+            using var data = new ExcelDataReader(reader.FirstSheet);
             Assert.True(data.Read());
 
             Assert.True(data.GetBoolean(0));
@@ -254,8 +254,8 @@ namespace ExcelReader.Tests.Reader
             await using var ms = await TypedWorkbook.BuildAsync(
                 ["Id", "Text"],
                 [guid.ToString(), "nope"]);
-            await using IExcelRowReader reader = await Excel.OpenAsync(ms, ct: TestContext.Current.CancellationToken);
-            using var data = new ExcelDataReader(reader);
+            await using IExcelWorkbook reader = await Excel.OpenAsync(ms, ct: TestContext.Current.CancellationToken);
+            using var data = new ExcelDataReader(reader.FirstSheet);
             Assert.True(data.Read());
 
             Assert.Equal(guid, data.GetGuid(0));
@@ -268,8 +268,8 @@ namespace ExcelReader.Tests.Reader
             await using var ms = await TypedWorkbook.BuildAsync(
                 ["Text", "Blank"],
                 ["hello", null]);
-            await using IExcelRowReader reader = await Excel.OpenAsync(ms, ct: TestContext.Current.CancellationToken);
-            using var data = new ExcelDataReader(reader);
+            await using IExcelWorkbook reader = await Excel.OpenAsync(ms, ct: TestContext.Current.CancellationToken);
+            using var data = new ExcelDataReader(reader.FirstSheet);
             Assert.True(data.Read());
 
             Assert.Equal('h', data.GetChar(0));
@@ -282,8 +282,8 @@ namespace ExcelReader.Tests.Reader
             await using var ms = await TypedWorkbook.BuildAsync(
                 ["Text", "Number", "Flag", "When", "Blank"],
                 ["hi", 42, true, new DateTime(2024, 1, 1), null]);
-            await using IExcelRowReader reader = await Excel.OpenAsync(ms, ct: TestContext.Current.CancellationToken);
-            using var data = new ExcelDataReader(reader);
+            await using IExcelWorkbook reader = await Excel.OpenAsync(ms, ct: TestContext.Current.CancellationToken);
+            using var data = new ExcelDataReader(reader.FirstSheet);
             Assert.True(data.Read());
 
             Assert.Equal(typeof(string), data.GetFieldType(0));
@@ -298,8 +298,8 @@ namespace ExcelReader.Tests.Reader
         public async Task IndexersAndTheFixedAdoMembersReportTheDocumentedValues()
         {
             await using var ms = await TypedWorkbook.BuildAsync(["Id", "Name"], [1, "alice"]);
-            await using IExcelRowReader reader = await Excel.OpenAsync(ms, ct: TestContext.Current.CancellationToken);
-            using var data = new ExcelDataReader(reader);
+            await using IExcelWorkbook reader = await Excel.OpenAsync(ms, ct: TestContext.Current.CancellationToken);
+            using var data = new ExcelDataReader(reader.FirstSheet);
             Assert.True(data.Read());
 
             Assert.Equal(1.0, data[0]);
@@ -316,8 +316,8 @@ namespace ExcelReader.Tests.Reader
                 ["Id", "Name"],
                 [1, "alice"],
                 [2, "bob"]);
-            await using IExcelRowReader reader = await Excel.OpenAsync(ms, ct: TestContext.Current.CancellationToken);
-            using var data = new ExcelDataReader(reader);
+            await using IExcelWorkbook reader = await Excel.OpenAsync(ms, ct: TestContext.Current.CancellationToken);
+            using var data = new ExcelDataReader(reader.FirstSheet);
 
             var table = new DataTable();
             table.Load(data);
@@ -353,7 +353,7 @@ namespace ExcelReader.Tests.Reader
             XlsxWorkbook reader = Excel.FromXlsx(stream, leaveOpen: false, new ExcelReaderOptions { MaxCellBytes = 64 });
             Assert.Throws<ExcelLimitExceededException>(() =>
             {
-                using ExcelDataReader data = new(reader);
+                using ExcelDataReader data = new(reader.FirstSheet);
             });
             reader.Dispose();
             Assert.False(stream.CanRead);

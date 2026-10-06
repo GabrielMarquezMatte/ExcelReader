@@ -17,7 +17,7 @@ namespace ExcelReader.Tests.Reader
             using var reader = Excel.Open(ms);
 
             XlsxWorkbook xlsx = Assert.IsType<XlsxWorkbook>(reader);
-            using XlsxWorkbook.Enumerator e = xlsx.GetEnumerator();
+            using XlsxWorkbook.Enumerator e = xlsx.FirstSheet.GetEnumerator();
             Assert.True(e.MoveNext());
             Assert.Equal("Hello", e.Current[0].GetString());
         }
@@ -29,7 +29,7 @@ namespace ExcelReader.Tests.Reader
             using var reader = Excel.Open(ms);
 
             XlsWorkbook xls = Assert.IsType<XlsWorkbook>(reader);
-            using XlsWorkbook.Enumerator e = xls.GetEnumerator();
+            using XlsWorkbook.Enumerator e = xls.FirstSheet.GetEnumerator();
             Assert.True(e.MoveNext());
             Assert.Equal("A", e.Current[0].GetString());
         }
@@ -121,7 +121,7 @@ namespace ExcelReader.Tests.Reader
             using MemoryStream ms = WorkbookBuilder.Build("""<row r="1"><c r="A1"><v>7</v></c></row>""");
             ms.Position = 0;
             using var reader = Excel.Open(ms, leaveOpen: true);
-            using XlsxWorkbook.Enumerator e = ((XlsxWorkbook)reader).GetEnumerator();
+            using XlsxWorkbook.Enumerator e = ((XlsxWorkbook)reader).FirstSheet.GetEnumerator();
             Assert.True(e.MoveNext());
             Assert.Equal("7", e.Current[0].GetString());
         }
@@ -313,7 +313,7 @@ namespace ExcelReader.Tests.Reader
             using NonSeekableStream stream = new(bytes);
             using XlsWorkbook reader = Excel.FromXls(stream, leaveOpen: false);
 
-            using XlsWorkbook.Enumerator e = reader.GetEnumerator();
+            using XlsWorkbook.Enumerator e = reader.FirstSheet.GetEnumerator();
             Assert.True(e.MoveNext());
             Assert.Equal("Name", e.Current[0].GetString());
             Assert.True(e.MoveNext());
@@ -328,7 +328,7 @@ namespace ExcelReader.Tests.Reader
             await using XlsWorkbook reader = await Excel.FromXlsAsync(
                 stream, leaveOpen: false, ct: TestContext.Current.CancellationToken);
 
-            using XlsWorkbook.Enumerator e = reader.GetEnumerator();
+            using XlsWorkbook.Enumerator e = reader.FirstSheet.GetEnumerator();
             Assert.True(e.MoveNext());
             Assert.Equal("Async", e.Current[0].GetString());
         }
@@ -341,7 +341,7 @@ namespace ExcelReader.Tests.Reader
             try
             {
                 using XlsxWorkbook reader = Excel.FromXlsxFile(path);
-                using XlsxWorkbook.Enumerator e = reader.GetEnumerator();
+                using XlsxWorkbook.Enumerator e = reader.FirstSheet.GetEnumerator();
                 Assert.True(e.MoveNext());
                 Assert.Equal("1", e.Current[0].GetString());
             }
@@ -356,12 +356,12 @@ namespace ExcelReader.Tests.Reader
         {
             using MemoryStream ms = WorkbookBuilder.Build("""<row r="1"><c r="A1"><v>7</v></c></row>""");
             using XlsxWorkbook streamReader = Excel.FromXlsx(ms, leaveOpen: true);
-            using XlsxWorkbook.Enumerator se = streamReader.GetEnumerator();
+            using XlsxWorkbook.Enumerator se = streamReader.FirstSheet.GetEnumerator();
             Assert.True(se.MoveNext());
             Assert.Equal("7", se.Current[0].GetString());
 
             using XlsxWorkbook memoryReader = Excel.FromXlsx(ms.ToArray().AsMemory());
-            using XlsxWorkbook.Enumerator me = memoryReader.GetEnumerator();
+            using XlsxWorkbook.Enumerator me = memoryReader.FirstSheet.GetEnumerator();
             Assert.True(me.MoveNext());
             Assert.Equal("7", me.Current[0].GetString());
         }
@@ -374,7 +374,7 @@ namespace ExcelReader.Tests.Reader
             try
             {
                 await using XlsxWorkbook fileReader = await Excel.FromXlsxFileAsync(path, ct: ct);
-                await using XlsxWorkbook.Enumerator fe = fileReader.GetEnumerator();
+                await using XlsxWorkbook.Enumerator fe = fileReader.FirstSheet.GetEnumerator();
                 Assert.True(fe.MoveNext());
                 Assert.Equal("9", fe.Current[0].GetString());
             }
@@ -385,7 +385,7 @@ namespace ExcelReader.Tests.Reader
 
             await using MemoryStream ms = WorkbookBuilder.Build("""<row r="1"><c r="A1"><v>3</v></c></row>""");
             await using XlsxWorkbook streamReader = await Excel.FromXlsxAsync(ms, ct: ct);
-            await using XlsxWorkbook.Enumerator se = streamReader.GetEnumerator();
+            await using XlsxWorkbook.Enumerator se = streamReader.FirstSheet.GetEnumerator();
             Assert.True(se.MoveNext());
             Assert.Equal("3", se.Current[0].GetString());
         }

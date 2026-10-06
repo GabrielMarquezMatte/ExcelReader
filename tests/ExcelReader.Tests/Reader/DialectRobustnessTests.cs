@@ -75,9 +75,9 @@ namespace ExcelReader.Tests.Reader
             ms.Position = 0;
 
             using XlsxWorkbook reader = Excel.FromXlsx(ms);
-            Assert.Equal("Data", reader.SheetName);
+            Assert.Equal("Data", reader.FirstSheet.Name);
             Assert.True(reader.IsDate1904);
-            using XlsxWorkbook.Enumerator e = reader.GetEnumerator();
+            using XlsxWorkbook.Enumerator e = reader.FirstSheet.GetEnumerator();
             Assert.True(e.MoveNext());
             Assert.Equal("1", e.Current[0].GetString());
         }
@@ -89,7 +89,7 @@ namespace ExcelReader.Tests.Reader
                 """<row r="1"><c r="A1" s="0"><v>45658</v></c></row>""",
                 styles: "<styleSheet><numFmts count='1'><numFmt numFmtId='164' formatCode='yyyy-mm-dd'/></numFmts><cellXfs count='1'><xf numFmtId='164'/></cellXfs></styleSheet>");
             using XlsxWorkbook reader = Excel.FromXlsx(ms);
-            using XlsxWorkbook.Enumerator e = reader.GetEnumerator();
+            using XlsxWorkbook.Enumerator e = reader.FirstSheet.GetEnumerator();
 
             Assert.True(e.MoveNext());
             Assert.Equal(CellType.Date, e.Current[0].Type);
@@ -103,7 +103,7 @@ namespace ExcelReader.Tests.Reader
                 """<row r="1"><c r="A1" t="s"><v>x</v></c><c r="B1" t="s"><v>0</v></c></row>""",
                 sharedStrings: "<si><t>first</t></si><si><t>second</t></si>");
             using XlsxWorkbook reader = Excel.FromXlsx(ms);
-            using XlsxWorkbook.Enumerator e = reader.GetEnumerator();
+            using XlsxWorkbook.Enumerator e = reader.FirstSheet.GetEnumerator();
 
             Assert.True(e.MoveNext());
             Assert.Equal("", e.Current[0].GetString());
@@ -117,7 +117,7 @@ namespace ExcelReader.Tests.Reader
                 """<row r="1"><c r="A1" t="s"><v></v></c></row>""",
                 sharedStrings: "<si><t>first</t></si>");
             using XlsxWorkbook reader = Excel.FromXlsx(ms);
-            using XlsxWorkbook.Enumerator e = reader.GetEnumerator();
+            using XlsxWorkbook.Enumerator e = reader.FirstSheet.GetEnumerator();
 
             Assert.True(e.MoveNext());
             Assert.Equal("", e.Current[0].GetString());
