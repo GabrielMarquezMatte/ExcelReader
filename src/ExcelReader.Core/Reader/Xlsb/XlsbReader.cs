@@ -24,10 +24,11 @@ namespace ExcelReader.Core.Reader.Xlsb
         private readonly ZipIndex? _zip;
         private readonly (string Name, string Path, ExcelSheetVisibility Visibility)[]? _sheets;
         private int _current;
-        private int _disposed;
+        internal ReaderLifetime Lifetime { get; }
 
         internal XlsbReader(byte[] sharedFlat, int[] sharedOffsets, bool[] styleIsDate, bool date1904)
         {
+            Lifetime = new ReaderLifetime(ReleaseResources);
             _options = ExcelReaderOptions.Default;
             _decompressedBytes = new DecompressedByteCounter(_options.MaxTotalDecompressedBytes);
             _sharedFlat = sharedFlat;
@@ -43,6 +44,7 @@ namespace ExcelReader.Core.Reader.Xlsb
 
         private XlsbReader(ZipIndex zip, ExcelReaderOptions options)
         {
+            Lifetime = new ReaderLifetime(ReleaseResources);
             _zip = zip;
             _options = options;
             _decompressedBytes = new DecompressedByteCounter(options.MaxTotalDecompressedBytes);
@@ -71,6 +73,7 @@ namespace ExcelReader.Core.Reader.Xlsb
             (string Name, string Path, ExcelSheetVisibility Visibility)[] sheets, bool[] styleIsDate, bool date1904,
             byte[] sharedFlat, int[] sharedOffsets, bool pooledSharedFlat, ExcelReaderOptions options, DecompressedByteCounter decompressedBytes)
         {
+            Lifetime = new ReaderLifetime(ReleaseResources);
             _zip = zip;
             _options = options;
             _decompressedBytes = decompressedBytes;
@@ -223,8 +226,17 @@ namespace ExcelReader.Core.Reader.Xlsb
         /// <inheritdoc/>
         public Enumerator GetEnumerator()
         {
-            ZipEntryRef entry = WorkbookLookups.GetWorksheetEntry(_zip!, _sheets![_current].Path);
-            return new Enumerator(this, _zip!.OpenEntryStream(entry, _decompressedBytes, _options), entry.UncompressedSize);
+            Lifetime.Acquire(this);
+            try
+            {
+                ZipEntryRef entry = WorkbookLookups.GetWorksheetEntry(_zip!, _sheets![_current].Path);
+                return new Enumerator(this, _zip!.OpenEntryStream(entry, _decompressedBytes, _options), entry.UncompressedSize);
+            }
+            catch
+            {
+                Lifetime.Release();
+                throw;
+            }
         }
 
         IExcelRowEnumerator IExcelRowReader<IExcelRowEnumerator>.GetEnumerator()
@@ -239,7 +251,16 @@ namespace ExcelReader.Core.Reader.Xlsb
             {
                 return GetEnumerator();
             }
-            return new Enumerator(this, WorkbookLookups.GetWorksheetEntry(_zip, _sheets![_current].Path), ct);
+            Lifetime.Acquire(this);
+            try
+            {
+                return new Enumerator(this, WorkbookLookups.GetWorksheetEntry(_zip, _sheets![_current].Path), ct);
+            }
+            catch
+            {
+                Lifetime.Release();
+                throw;
+            }
         }
 
         IExcelRowEnumerator IExcelRowReader<IExcelRowEnumerator>.GetAsyncEnumerator(CancellationToken ct)
@@ -251,22 +272,23 @@ namespace ExcelReader.Core.Reader.Xlsb
         /// <inheritdoc/>
         public void Dispose()
         {
-            if (Interlocked.Exchange(ref _disposed, 1) != 0)
-            {
-                return;
-            }
-            if (_pooledSharedFlat)
-            {
-                ArrayPool<byte>.Shared.Return(_sharedFlat);
-            }
-            _zip?.Dispose();
+            Lifetime.Close();
         }
 
         /// <inheritdoc/>
         public ValueTask DisposeAsync()
         {
-            Dispose();
+            Lifetime.Close();
             return ValueTask.CompletedTask;
+        }
+
+        private void ReleaseResources()
+        {
+            if (_pooledSharedFlat)
+            {
+                ArrayPool<byte>.Shared.Return(_sharedFlat);
+            }
+            _zip?.Dispose();
         }
 
     }

@@ -35,6 +35,7 @@ namespace ExcelReader.Core.Reader.Xlsb
                 _styleIsDate = reader._styleIsDate;
                 _sharedOffsets = reader._sharedOffsets;
                 _contentCache = reader._options.InternStrings ? new Utf8StringCache() : null;
+                _lease = reader.Lifetime;
             }
 
             internal Enumerator(XlsbReader reader, ZipEntryRef entry, CancellationToken ct)
@@ -45,6 +46,7 @@ namespace ExcelReader.Core.Reader.Xlsb
                 _sharedOffsets = reader._sharedOffsets;
                 _contentCache = reader._options.InternStrings ? new Utf8StringCache() : null;
                 _entry = entry;
+                _lease = reader.Lifetime;
             }
 
             private protected override Stream OpenSource()
