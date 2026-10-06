@@ -89,12 +89,12 @@ namespace ExcelReader.Tests.Reader.Xlsx
                 ]);
             byte[] bytes = built.ToArray();
 
-            using XlsxReader reader = Excel.FromXlsx(bytes.AsMemory());
+            using XlsxWorkbook reader = Excel.FromXlsx(bytes.AsMemory());
             Assert.Equal(2, reader.SheetCount);
 
             reader.MoveToSheet(1);
             Assert.Equal("Second", reader.SheetName);
-            using (XlsxReader.Enumerator e = reader.GetEnumerator())
+            using (XlsxWorkbook.Enumerator e = reader.GetEnumerator())
             {
                 Assert.True(e.MoveNext());
                 Assert.Equal("2", e.Current[0].GetString());
@@ -102,7 +102,7 @@ namespace ExcelReader.Tests.Reader.Xlsx
 
             Assert.True(reader.TryMoveToSheet("First"));
             Assert.Equal("First", reader.SheetName);
-            using (XlsxReader.Enumerator e = reader.GetEnumerator())
+            using (XlsxWorkbook.Enumerator e = reader.GetEnumerator())
             {
                 Assert.True(e.MoveNext());
                 Assert.Equal("1", e.Current[0].GetString());
@@ -119,8 +119,8 @@ namespace ExcelReader.Tests.Reader.Xlsx
             byte[] bytes = built.ToArray();
             var manager = new NonArrayMemoryManager(bytes);
 
-            using XlsxReader reader = Excel.FromXlsx(manager.Memory);
-            using XlsxReader.Enumerator e = reader.GetEnumerator();
+            using XlsxWorkbook reader = Excel.FromXlsx(manager.Memory);
+            using XlsxWorkbook.Enumerator e = reader.GetEnumerator();
             Assert.True(e.MoveNext());
             Assert.Equal("42", e.Current[0].GetString());
         }
@@ -132,7 +132,7 @@ namespace ExcelReader.Tests.Reader.Xlsx
             using MemoryStream built = WorkbookBuilder.Build("""<row r="1"><c r="A1"><v>1</v></c></row>""");
             byte[] bytes = built.ToArray();
             using IExcelRowReader reader = Excel.Open(bytes.AsMemory());
-            Assert.IsType<XlsxReader>(reader);
+            Assert.IsType<XlsxWorkbook>(reader);
         }
 
         [Fact]
@@ -141,7 +141,7 @@ namespace ExcelReader.Tests.Reader.Xlsx
             CancellationToken ct = TestContext.Current.CancellationToken;
             byte[] bytes = await BuildXlsbAsync(ct);
             using IExcelRowReader reader = Excel.Open(bytes.AsMemory());
-            Assert.IsType<XlsbReader>(reader);
+            Assert.IsType<XlsbWorkbook>(reader);
         }
 
         [Fact]
@@ -150,7 +150,7 @@ namespace ExcelReader.Tests.Reader.Xlsx
             using MemoryStream built = XlsWorkbookBuilder.Build(sheets: [("S1", [["Name", 1, true]])]);
             byte[] bytes = built.ToArray();
             using IExcelRowReader reader = Excel.Open(bytes.AsMemory());
-            Assert.IsType<XlsReader>(reader);
+            Assert.IsType<XlsWorkbook>(reader);
         }
 
         [Fact]
@@ -205,11 +205,11 @@ namespace ExcelReader.Tests.Reader.Xlsx
 
             ExcelLimitExceededException streamedEx = Assert.Throws<ExcelLimitExceededException>(() =>
             {
-                using XlsxReader reader = Excel.FromXlsx(new MemoryStream(bytes), options: options);
+                using XlsxWorkbook reader = Excel.FromXlsx(new MemoryStream(bytes), options: options);
             });
             ExcelLimitExceededException memoryEx = Assert.Throws<ExcelLimitExceededException>(() =>
             {
-                using XlsxReader reader = Excel.FromXlsx(bytes.AsMemory(), options);
+                using XlsxWorkbook reader = Excel.FromXlsx(bytes.AsMemory(), options);
             });
             Assert.Equal(streamedEx.LimitName, memoryEx.LimitName);
         }
@@ -223,13 +223,13 @@ namespace ExcelReader.Tests.Reader.Xlsx
 
             Assert.Throws<InvalidDataException>(() =>
             {
-                using XlsxReader reader = Excel.FromXlsx(new MemoryStream(withoutSheet));
-                using XlsxReader.Enumerator e = reader.GetEnumerator();
+                using XlsxWorkbook reader = Excel.FromXlsx(new MemoryStream(withoutSheet));
+                using XlsxWorkbook.Enumerator e = reader.GetEnumerator();
             });
             Assert.Throws<InvalidDataException>(() =>
             {
-                using XlsxReader reader = Excel.FromXlsx(withoutSheet.AsMemory());
-                using XlsxReader.Enumerator e = reader.GetEnumerator();
+                using XlsxWorkbook reader = Excel.FromXlsx(withoutSheet.AsMemory());
+                using XlsxWorkbook.Enumerator e = reader.GetEnumerator();
             });
         }
 

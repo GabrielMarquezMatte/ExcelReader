@@ -5,7 +5,7 @@ using ExcelReader.Core.Writer.Xls;
 
 namespace ExcelReader.Tests.Reader.Xls
 {
-    public class XlsReaderTests
+    public class XlsWorkbookTests
     {
         private sealed class PersonRow
         {
@@ -264,7 +264,7 @@ namespace ExcelReader.Tests.Reader.Xls
         }
 
         [Fact]
-        public void TypedParserUsesXlsReaderAndAttributeAliases()
+        public void TypedParserUsesXlsWorkbookAndAttributeAliases()
         {
             using var ms = XlsWorkbookBuilder.Build(
                 sheets: [("S1", [["Name", "Age", "Active"], ["Ana", 31, false]])]);

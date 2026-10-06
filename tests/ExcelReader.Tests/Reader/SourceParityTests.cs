@@ -69,7 +69,7 @@ namespace ExcelReader.Tests.Reader
             return path;
         }
 
-        private XlsxReader OpenXlsx(Kind kind, byte[] bytes)
+        private XlsxWorkbook OpenXlsx(Kind kind, byte[] bytes)
         {
             switch (kind)
             {
@@ -229,7 +229,7 @@ namespace ExcelReader.Tests.Reader
             return buffer.ToArray();
         }
 
-        private XlsReader OpenXls(Kind kind, byte[] bytes)
+        private XlsWorkbook OpenXls(Kind kind, byte[] bytes)
         {
             switch (kind)
             {
@@ -319,7 +319,7 @@ namespace ExcelReader.Tests.Reader
             return buffer.ToArray();
         }
 
-        private XlsbReader OpenXlsb(Kind kind, byte[] bytes)
+        private XlsbWorkbook OpenXlsb(Kind kind, byte[] bytes)
         {
             switch (kind)
             {

@@ -24,10 +24,10 @@ namespace ExcelReader.Tests.Reader.Internal
             return buffer.ToArray();
         }
 
-        private static List<string> FirstColumn(XlsxReader reader)
+        private static List<string> FirstColumn(XlsxWorkbook reader)
         {
             List<string> values = [];
-            using XlsxReader.Enumerator e = reader.GetEnumerator();
+            using XlsxWorkbook.Enumerator e = reader.GetEnumerator();
             while (e.MoveNext())
             {
                 values.Add(e.Current[0].GetString());
@@ -38,7 +38,7 @@ namespace ExcelReader.Tests.Reader.Internal
         [Fact]
         public void A_Shared_String_Is_Materialized_Once_Per_Reader()
         {
-            using XlsxReader reader = Excel.FromXlsx(BuildXlsx());
+            using XlsxWorkbook reader = Excel.FromXlsx(BuildXlsx());
             List<string> first = FirstColumn(reader);
             List<string> second = FirstColumn(reader);
 
@@ -53,7 +53,7 @@ namespace ExcelReader.Tests.Reader.Internal
         [Fact]
         public void The_Cache_Array_Is_One_Instance()
         {
-            using XlsxReader reader = Excel.FromXlsx(BuildXlsx());
+            using XlsxWorkbook reader = Excel.FromXlsx(BuildXlsx());
             _ = FirstColumn(reader);
             string?[] seen = reader.SharedStringCache;
             Parallel.For(0, 32, _ => Assert.Same(seen, reader.SharedStringCache));

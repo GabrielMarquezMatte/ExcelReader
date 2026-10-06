@@ -71,7 +71,7 @@ namespace ExcelReader.Tests.Reader.Xlsb
             byte[] rels = Encoding.UTF8.GetBytes(
                 """<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.bin"/><Relationship Id="rId2" Target="/xl/worksheets/sheet2.bin"/></Relationships>""");
 
-            var sheets = XlsbWorkbook.ParseSheets(workbook, rels);
+            var sheets = XlsbWorkbookParts.ParseSheets(workbook, rels);
 
             Assert.Equal(2, sheets.Length);
             Assert.Equal(("Plan1", "xl/worksheets/sheet1.bin", ExcelSheetVisibility.Visible), sheets[0]);
@@ -81,9 +81,9 @@ namespace ExcelReader.Tests.Reader.Xlsb
         [Fact]
         public void ParsesDate1904Flag()
         {
-            Assert.True(XlsbWorkbook.ParseDate1904(WorkbookBin(0x01)));
-            Assert.False(XlsbWorkbook.ParseDate1904(WorkbookBin(0x00)));
-            Assert.False(XlsbWorkbook.ParseDate1904([]));
+            Assert.True(XlsbWorkbookParts.ParseDate1904(WorkbookBin(0x01)));
+            Assert.False(XlsbWorkbookParts.ParseDate1904(WorkbookBin(0x00)));
+            Assert.False(XlsbWorkbookParts.ParseDate1904([]));
         }
 
 

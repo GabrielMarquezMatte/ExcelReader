@@ -5,14 +5,14 @@ using static ExcelReader.Core.Reader.Xlsb.Biff12;
 
 namespace ExcelReader.Core.Reader.Xls
 {
-    public sealed partial class XlsReader
+    public sealed partial class XlsWorkbook
     {
-        /// <summary>Enumerates the rows of a single worksheet in an <see cref="XlsReader"/>, supporting both synchronous and asynchronous iteration.</summary>
+        /// <summary>Enumerates the rows of a single worksheet in an <see cref="XlsWorkbook"/>, supporting both synchronous and asynchronous iteration.</summary>
         [SuppressMessage("Design", "CA1034:Nested types should not be visible",
             Justification = "Public nested enumerator is the standard foreach pattern.")]
         public sealed class Enumerator : IExcelRowEnumerator
         {
-            private readonly XlsReader _reader;
+            private readonly XlsWorkbook _reader;
             private readonly CancellationToken _ct;
             private readonly BiffCursor _cursor;
             private readonly CellAccumulator _acc;
@@ -24,7 +24,7 @@ namespace ExcelReader.Core.Reader.Xls
             private int _rowFloor = -1;
             private ReaderLifetime? _lease;
 
-            internal Enumerator(XlsReader reader, int sheetOffset, CancellationToken ct = default)
+            internal Enumerator(XlsWorkbook reader, int sheetOffset, CancellationToken ct = default)
             {
                 _reader = reader;
                 _ct = ct;

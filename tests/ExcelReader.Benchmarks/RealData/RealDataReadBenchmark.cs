@@ -40,7 +40,7 @@ namespace ExcelReader.Benchmarks
         public long Xlsx_ExcelReader()
         {
             using MemoryStream ms = new(_xlsx, writable: false);
-            using XlsxReader reader = Excel.FromXlsx(ms);
+            using XlsxWorkbook reader = Excel.FromXlsx(ms);
             long acc = 0;
             foreach (Row row in reader) { acc += AccumulateRow(row); }
             return acc;
@@ -58,7 +58,7 @@ namespace ExcelReader.Benchmarks
         public long Xlsx_ExcelReader_Materialized()
         {
             using MemoryStream ms = new(_xlsx, writable: false);
-            using XlsxReader reader = Excel.FromXlsx(ms);
+            using XlsxWorkbook reader = Excel.FromXlsx(ms);
             long acc = 0;
             foreach (Row row in reader) { acc += AccumulateRowMaterialized(row); }
             return acc;
@@ -68,7 +68,7 @@ namespace ExcelReader.Benchmarks
         public long Xlsx_ExcelReader_Prefetch()
         {
             using MemoryStream ms = new(_xlsx, writable: false);
-            using XlsxReader reader = Excel.FromXlsx(ms, options: _prefetchOptions);
+            using XlsxWorkbook reader = Excel.FromXlsx(ms, options: _prefetchOptions);
             long acc = 0;
             foreach (Row row in reader) { acc += AccumulateRow(row); }
             return acc;
@@ -77,7 +77,7 @@ namespace ExcelReader.Benchmarks
         [Benchmark]
         public long Xlsx_ExcelReader_Memory()
         {
-            using XlsxReader reader = Excel.FromXlsx(_xlsx.AsMemory());
+            using XlsxWorkbook reader = Excel.FromXlsx(_xlsx.AsMemory());
             long acc = 0;
             foreach (Row row in reader) { acc += AccumulateRow(row); }
             return acc;
@@ -86,7 +86,7 @@ namespace ExcelReader.Benchmarks
         [Benchmark]
         public long Xlsx_ExcelReader_Memory_Prefetch()
         {
-            using XlsxReader reader = Excel.FromXlsx(_xlsx.AsMemory(), options: _prefetchOptions);
+            using XlsxWorkbook reader = Excel.FromXlsx(_xlsx.AsMemory(), options: _prefetchOptions);
             long acc = 0;
             foreach (Row row in reader) { acc += AccumulateRow(row); }
             return acc;
@@ -97,7 +97,7 @@ namespace ExcelReader.Benchmarks
         public long Xlsm_ExcelReader()
         {
             using MemoryStream ms = new(_xlsm, writable: false);
-            using XlsxReader reader = Excel.FromXlsx(ms);
+            using XlsxWorkbook reader = Excel.FromXlsx(ms);
             long acc = 0;
             foreach (Row row in reader) { acc += AccumulateRow(row); }
             return acc;
@@ -115,7 +115,7 @@ namespace ExcelReader.Benchmarks
         public long Xlsm_ExcelReader_Materialized()
         {
             using MemoryStream ms = new(_xlsm, writable: false);
-            using XlsxReader reader = Excel.FromXlsx(ms);
+            using XlsxWorkbook reader = Excel.FromXlsx(ms);
             long acc = 0;
             foreach (Row row in reader) { acc += AccumulateRowMaterialized(row); }
             return acc;
@@ -125,7 +125,7 @@ namespace ExcelReader.Benchmarks
         public long Xlsm_ExcelReader_Prefetch()
         {
             using MemoryStream ms = new(_xlsm, writable: false);
-            using XlsxReader reader = Excel.FromXlsx(ms, options: _prefetchOptions);
+            using XlsxWorkbook reader = Excel.FromXlsx(ms, options: _prefetchOptions);
             long acc = 0;
             foreach (Row row in reader) { acc += AccumulateRow(row); }
             return acc;
@@ -134,7 +134,7 @@ namespace ExcelReader.Benchmarks
         [Benchmark]
         public long Xlsm_ExcelReader_Memory()
         {
-            using XlsxReader reader = Excel.FromXlsx(_xlsm.AsMemory());
+            using XlsxWorkbook reader = Excel.FromXlsx(_xlsm.AsMemory());
             long acc = 0;
             foreach (Row row in reader) { acc += AccumulateRow(row); }
             return acc;
@@ -143,7 +143,7 @@ namespace ExcelReader.Benchmarks
         [Benchmark]
         public long Xlsm_ExcelReader_Memory_Prefetch()
         {
-            using XlsxReader reader = Excel.FromXlsx(_xlsm.AsMemory(), options: _prefetchOptions);
+            using XlsxWorkbook reader = Excel.FromXlsx(_xlsm.AsMemory(), options: _prefetchOptions);
             long acc = 0;
             foreach (Row row in reader) { acc += AccumulateRow(row); }
             return acc;
@@ -154,7 +154,7 @@ namespace ExcelReader.Benchmarks
         public long Xlsb_ExcelReader()
         {
             using MemoryStream ms = new(_xlsb, writable: false);
-            using XlsbReader reader = Excel.FromXlsb(ms);
+            using XlsbWorkbook reader = Excel.FromXlsb(ms);
             long acc = 0;
             foreach (Row row in reader) { acc += AccumulateRow(row); }
             return acc;
@@ -172,7 +172,7 @@ namespace ExcelReader.Benchmarks
         public long Xlsb_ExcelReader_Materialized()
         {
             using MemoryStream ms = new(_xlsb, writable: false);
-            using XlsbReader reader = Excel.FromXlsb(ms);
+            using XlsbWorkbook reader = Excel.FromXlsb(ms);
             long acc = 0;
             foreach (Row row in reader) { acc += AccumulateRowMaterialized(row); }
             return acc;
@@ -182,7 +182,7 @@ namespace ExcelReader.Benchmarks
         public long Xlsb_ExcelReader_Prefetch()
         {
             using MemoryStream ms = new(_xlsb, writable: false);
-            using XlsbReader reader = Excel.FromXlsb(ms, options: _prefetchOptions);
+            using XlsbWorkbook reader = Excel.FromXlsb(ms, options: _prefetchOptions);
             long acc = 0;
             foreach (Row row in reader) { acc += AccumulateRow(row); }
             return acc;
@@ -191,7 +191,7 @@ namespace ExcelReader.Benchmarks
         [Benchmark]
         public long Xlsb_ExcelReader_Memory()
         {
-            using XlsbReader reader = Excel.FromXlsb(_xlsb.AsMemory());
+            using XlsbWorkbook reader = Excel.FromXlsb(_xlsb.AsMemory());
             long acc = 0;
             foreach (Row row in reader) { acc += AccumulateRow(row); }
             return acc;
@@ -200,7 +200,7 @@ namespace ExcelReader.Benchmarks
         [Benchmark]
         public long Xlsb_ExcelReader_Memory_Prefetch()
         {
-            using XlsbReader reader = Excel.FromXlsb(_xlsb.AsMemory(), options: _prefetchOptions);
+            using XlsbWorkbook reader = Excel.FromXlsb(_xlsb.AsMemory(), options: _prefetchOptions);
             long acc = 0;
             foreach (Row row in reader) { acc += AccumulateRow(row); }
             return acc;
@@ -211,7 +211,7 @@ namespace ExcelReader.Benchmarks
         public long Xls_ExcelReader()
         {
             using MemoryStream ms = new(_xls, writable: false);
-            using XlsReader reader = Excel.FromXls(ms);
+            using XlsWorkbook reader = Excel.FromXls(ms);
             long acc = 0;
             foreach (Row row in reader) { acc += AccumulateRow(row); }
             return acc;
@@ -229,7 +229,7 @@ namespace ExcelReader.Benchmarks
         public long Xls_ExcelReader_Materialized()
         {
             using MemoryStream ms = new(_xls, writable: false);
-            using XlsReader reader = Excel.FromXls(ms);
+            using XlsWorkbook reader = Excel.FromXls(ms);
             long acc = 0;
             foreach (Row row in reader) { acc += AccumulateRowMaterialized(row); }
             return acc;
@@ -238,7 +238,7 @@ namespace ExcelReader.Benchmarks
         [Benchmark]
         public long Xls_ExcelReader_Memory()
         {
-            using XlsReader reader = Excel.FromXls(_xls.AsMemory());
+            using XlsWorkbook reader = Excel.FromXls(_xls.AsMemory());
             long acc = 0;
             foreach (Row row in reader) { acc += AccumulateRow(row); }
             return acc;

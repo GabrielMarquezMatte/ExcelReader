@@ -40,7 +40,7 @@ namespace ExcelReader.Fuzz
             FuzzOracle.Guard(() =>
             {
                 using var ms = new MemoryStream(bytes, writable: false);
-                using XlsxReader reader = Excel.FromXlsx(ms, leaveOpen: true, Limits);
+                using XlsxWorkbook reader = Excel.FromXlsx(ms, leaveOpen: true, Limits);
                 DrainAllSheets(reader);
             });
         }
@@ -50,7 +50,7 @@ namespace ExcelReader.Fuzz
             byte[] bytes = data.ToArray();
             FuzzOracle.Guard(() =>
             {
-                using XlsxReader reader = Excel.FromXlsx(new ReadOnlyMemory<byte>(bytes), Limits);
+                using XlsxWorkbook reader = Excel.FromXlsx(new ReadOnlyMemory<byte>(bytes), Limits);
                 DrainAllSheets(reader);
             });
         }
@@ -61,7 +61,7 @@ namespace ExcelReader.Fuzz
             FuzzOracle.Guard(() =>
             {
                 using var ms = new MemoryStream(bytes, writable: false);
-                using XlsbReader reader = Excel.FromXlsb(ms, leaveOpen: true, Limits);
+                using XlsbWorkbook reader = Excel.FromXlsb(ms, leaveOpen: true, Limits);
                 DrainAllSheets(reader);
             });
         }
@@ -71,7 +71,7 @@ namespace ExcelReader.Fuzz
             byte[] bytes = data.ToArray();
             FuzzOracle.Guard(() =>
             {
-                using XlsbReader reader = Excel.FromXlsb(new ReadOnlyMemory<byte>(bytes), Limits);
+                using XlsbWorkbook reader = Excel.FromXlsb(new ReadOnlyMemory<byte>(bytes), Limits);
                 DrainAllSheets(reader);
             });
         }
@@ -104,7 +104,7 @@ namespace ExcelReader.Fuzz
             FuzzOracle.Guard(() =>
             {
                 using var ms = new MemoryStream(bytes, writable: false);
-                using XlsReader reader = Excel.FromXls(ms, leaveOpen: true, Limits);
+                using XlsWorkbook reader = Excel.FromXls(ms, leaveOpen: true, Limits);
                 DrainAllSheets(reader);
             });
         }

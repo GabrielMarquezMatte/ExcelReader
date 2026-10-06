@@ -55,7 +55,7 @@ namespace ExcelReader.Benchmarks
         private static long ReadAll(byte[] workbook, ExcelReaderOptions? options)
         {
             using var ms = new MemoryStream(workbook, writable: false);
-            using XlsxReader reader = Excel.FromXlsx(ms, options: options);
+            using XlsxWorkbook reader = Excel.FromXlsx(ms, options: options);
             long acc = 0;
             foreach (Row row in reader) { acc += AccumulateRow(row); }
             return acc;
@@ -64,8 +64,8 @@ namespace ExcelReader.Benchmarks
         private static bool Prologue(byte[] workbook)
         {
             using var ms = new MemoryStream(workbook, writable: false);
-            using XlsxReader reader = Excel.FromXlsx(ms);
-            using XlsxReader.Enumerator rows = reader.GetEnumerator();
+            using XlsxWorkbook reader = Excel.FromXlsx(ms);
+            using XlsxWorkbook.Enumerator rows = reader.GetEnumerator();
             return rows.MoveNext();
         }
 

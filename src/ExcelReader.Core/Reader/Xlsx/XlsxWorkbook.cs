@@ -7,7 +7,7 @@ using ExcelReader.Core.Reader.Zip;
 namespace ExcelReader.Core.Reader.Xlsx
 {
     /// <summary>Reads rows from an Office Open XML (.xlsx) workbook, streaming each sheet's cells without loading the whole file into memory.</summary>
-    public sealed partial class XlsxReader : IExcelRowReader, IExcelRowReader<XlsxReader.Enumerator>
+    public sealed partial class XlsxWorkbook : IExcelRowReader, IExcelRowReader<XlsxWorkbook.Enumerator>
     {
         private readonly ZipIndex _zip;
         private readonly ExcelReaderOptions _options;
@@ -24,12 +24,12 @@ namespace ExcelReader.Core.Reader.Xlsx
 
         internal ReaderLifetime Lifetime { get; }
 
-        internal XlsxReader(Stream stream, bool leaveOpen, ExcelReaderOptions? options = null)
+        internal XlsxWorkbook(Stream stream, bool leaveOpen, ExcelReaderOptions? options = null)
             : this(ZipIndex.Create(ByteSource.FromStream(stream, leaveOpen), options ?? ExcelReaderOptions.Default), options ?? ExcelReaderOptions.Default)
         {
         }
 
-        private XlsxReader(ZipIndex zip, ExcelReaderOptions options)
+        private XlsxWorkbook(ZipIndex zip, ExcelReaderOptions options)
         {
             Lifetime = new ReaderLifetime(ReleaseResources);
             _zip = zip;
@@ -55,7 +55,7 @@ namespace ExcelReader.Core.Reader.Xlsx
             }
         }
 
-        private XlsxReader(ZipIndex zip,
+        private XlsxWorkbook(ZipIndex zip,
             (string Name, string Path, ExcelSheetVisibility Visibility)[] sheets, bool[] styleIsDate, bool date1904,
             ExcelReaderOptions options, DecompressedByteCounter decompressedBytes)
         {
@@ -68,18 +68,18 @@ namespace ExcelReader.Core.Reader.Xlsx
             IsDate1904 = date1904;
         }
 
-        internal static XlsxReader CreateFromMemory(ReadOnlyMemory<byte> data, ExcelReaderOptions? options = null)
+        internal static XlsxWorkbook CreateFromMemory(ReadOnlyMemory<byte> data, ExcelReaderOptions? options = null)
         {
             ExcelReaderOptions effectiveOptions = options ?? ExcelReaderOptions.Default;
-            return new XlsxReader(ZipIndex.Create(data, effectiveOptions), effectiveOptions);
+            return new XlsxWorkbook(ZipIndex.Create(data, effectiveOptions), effectiveOptions);
         }
 
-        internal static XlsxReader CreateFromIndex(ZipIndex zip, ExcelReaderOptions options)
+        internal static XlsxWorkbook CreateFromIndex(ZipIndex zip, ExcelReaderOptions options)
         {
-            return new XlsxReader(zip, options);
+            return new XlsxWorkbook(zip, options);
         }
 
-        internal static async ValueTask<XlsxReader> CreateAsync(Stream stream, bool leaveOpen, ExcelReaderOptions? options = null, CancellationToken ct = default)
+        internal static async ValueTask<XlsxWorkbook> CreateAsync(Stream stream, bool leaveOpen, ExcelReaderOptions? options = null, CancellationToken ct = default)
         {
             ExcelReaderOptions effectiveOptions = options ?? ExcelReaderOptions.Default;
             ByteSource source = await ByteSource.FromStreamAsync(stream, leaveOpen, ct).ConfigureAwait(false);
@@ -87,7 +87,7 @@ namespace ExcelReader.Core.Reader.Xlsx
             return await CreateFromIndexAsync(zip, effectiveOptions, ct).ConfigureAwait(false);
         }
 
-        internal static async ValueTask<XlsxReader> CreateFromIndexAsync(ZipIndex zip, ExcelReaderOptions options, CancellationToken ct)
+        internal static async ValueTask<XlsxWorkbook> CreateFromIndexAsync(ZipIndex zip, ExcelReaderOptions options, CancellationToken ct)
         {
             try
             {
@@ -102,7 +102,7 @@ namespace ExcelReader.Core.Reader.Xlsx
                 using ZipPart stylesPart = await zip.OpenPartOrDefaultAsync("xl/styles.xml"u8, decompressedBytes, ct).ConfigureAwait(false);
                 bool[] styleIsDate = ParseStyleDateFlags(stylesPart.Memory.Span);
                 bool date1904 = ParseDate1904(wbPart.Memory.Span);
-                return new XlsxReader(zip, sheets, styleIsDate, date1904, options, decompressedBytes);
+                return new XlsxWorkbook(zip, sheets, styleIsDate, date1904, options, decompressedBytes);
             }
             catch
             {

@@ -10,8 +10,8 @@ namespace ExcelReader.Tests.Reader.Xlsx
         public void ReadsSheetJsGeneratedWorkbook()
         {
             string path = Path.Combine(AppContext.BaseDirectory, "data", "sheetjs-sample.xlsx");
-            using XlsxReader reader = Excel.FromXlsxFile(path);
-            using XlsxReader.Enumerator e = reader.GetEnumerator();
+            using XlsxWorkbook reader = Excel.FromXlsxFile(path);
+            using XlsxWorkbook.Enumerator e = reader.GetEnumerator();
 
             Assert.True(e.MoveNext());
             Assert.Equal("name", e.Current[0].GetString());

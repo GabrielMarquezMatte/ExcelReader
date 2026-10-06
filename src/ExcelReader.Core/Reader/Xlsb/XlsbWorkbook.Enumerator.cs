@@ -6,9 +6,9 @@ using ExcelReader.Core.Reader.Zip;
 
 namespace ExcelReader.Core.Reader.Xlsb
 {
-    public sealed partial class XlsbReader
+    public sealed partial class XlsbWorkbook
     {
-        /// <summary>Forward-only enumerator over an <see cref="XlsbReader"/> sheet's rows.</summary>
+        /// <summary>Forward-only enumerator over an <see cref="XlsbWorkbook"/> sheet's rows.</summary>
         /// <remarks>
         /// Streams the underlying binary <c>sheetN.bin</c> entry through a refillable pooled buffer;
         /// <c>Biff12RecordReader</c> framing guarantees that a partial record at the buffer boundary
@@ -19,8 +19,8 @@ namespace ExcelReader.Core.Reader.Xlsb
         public sealed class Enumerator : PooledStreamRowEnumerator, IExcelRowEnumerator
         {
             [SuppressMessage("Usage", "CA2213:Disposable fields should be disposed",
-                Justification = "XlsbReader is borrowed; its lifetime is managed by the caller, not this enumerator.")]
-            private readonly XlsbReader _reader;
+                Justification = "XlsbWorkbook is borrowed; its lifetime is managed by the caller, not this enumerator.")]
+            private readonly XlsbWorkbook _reader;
             private readonly bool[] _styleIsDate;
             private readonly int[] _sharedOffsets;
             private readonly Utf8StringCache? _contentCache;
@@ -28,7 +28,7 @@ namespace ExcelReader.Core.Reader.Xlsb
             private bool _ended;
             private bool _pendingRowHdr;
 
-            internal Enumerator(XlsbReader reader, Stream sheet, long entryLength = 0, CancellationToken ct = default)
+            internal Enumerator(XlsbWorkbook reader, Stream sheet, long entryLength = 0, CancellationToken ct = default)
                 : base(sheet, reader._options.MaxCellBytes, nameof(ExcelReaderOptions.MaxCellBytes), WorkbookLookups.InitialBufferCapacity(entryLength), ownsSource: true, ct)
             {
                 _reader = reader;
@@ -38,7 +38,7 @@ namespace ExcelReader.Core.Reader.Xlsb
                 _lease = reader.Lifetime;
             }
 
-            internal Enumerator(XlsbReader reader, ZipEntryRef entry, CancellationToken ct)
+            internal Enumerator(XlsbWorkbook reader, ZipEntryRef entry, CancellationToken ct)
                 : base(reader._options.MaxCellBytes, nameof(ExcelReaderOptions.MaxCellBytes), WorkbookLookups.InitialBufferCapacity(entry.UncompressedSize), ct)
             {
                 _reader = reader;

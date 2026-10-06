@@ -42,7 +42,7 @@ namespace ExcelReader.Core.Parser
         /// <param name="reader">The XLSX reader to pull rows from.</param>
         /// <returns>An enumerable that yields one <typeparamref name="T"/> per data row.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="reader"/> is <see langword="null"/>.</exception>
-        public ExcelEnumerable<T> Parse(XlsxReader reader)
+        public ExcelEnumerable<T> Parse(XlsxWorkbook reader)
         {
             ArgumentNullException.ThrowIfNull(reader);
             return new ExcelEnumerable<T>(reader, _config, _info());
@@ -52,20 +52,20 @@ namespace ExcelReader.Core.Parser
         /// <param name="reader">The XLS reader to pull rows from.</param>
         /// <returns>An enumerable that yields one <typeparamref name="T"/> per data row.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="reader"/> is <see langword="null"/>.</exception>
-        public ExcelEnumerable<T, XlsReader, XlsReader.Enumerator> Parse(XlsReader reader)
+        public ExcelEnumerable<T, XlsWorkbook, XlsWorkbook.Enumerator> Parse(XlsWorkbook reader)
         {
             ArgumentNullException.ThrowIfNull(reader);
-            return new ExcelEnumerable<T, XlsReader, XlsReader.Enumerator>(reader, _config, _info());
+            return new ExcelEnumerable<T, XlsWorkbook, XlsWorkbook.Enumerator>(reader, _config, _info());
         }
 
         /// <summary>Parses the rows of an XLSB reader into <typeparamref name="T"/> instances, lazily as the result is enumerated.</summary>
         /// <param name="reader">The XLSB reader to pull rows from.</param>
         /// <returns>An enumerable that yields one <typeparamref name="T"/> per data row.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="reader"/> is <see langword="null"/>.</exception>
-        public ExcelEnumerable<T, XlsbReader, XlsbReader.Enumerator> Parse(XlsbReader reader)
+        public ExcelEnumerable<T, XlsbWorkbook, XlsbWorkbook.Enumerator> Parse(XlsbWorkbook reader)
         {
             ArgumentNullException.ThrowIfNull(reader);
-            return new ExcelEnumerable<T, XlsbReader, XlsbReader.Enumerator>(reader, _config, _info());
+            return new ExcelEnumerable<T, XlsbWorkbook, XlsbWorkbook.Enumerator>(reader, _config, _info());
         }
 
         /// <summary>Parses the rows of a format-agnostic reader (e.g. one returned by <c>Excel.Open</c>) into <typeparamref name="T"/> instances, lazily as the result is enumerated. Lets callers avoid pattern-matching the concrete reader type; dispatches through the interface enumerator.</summary>
