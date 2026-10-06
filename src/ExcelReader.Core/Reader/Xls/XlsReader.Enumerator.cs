@@ -22,6 +22,7 @@ namespace ExcelReader.Core.Reader.Xls
             private bool _emptyRow;
             private int _row;
             private int _rowFloor = -1;
+            private ReaderLifetime? _lease;
 
             internal Enumerator(XlsReader reader, int sheetOffset, CancellationToken ct = default)
             {
@@ -31,6 +32,7 @@ namespace ExcelReader.Core.Reader.Xls
                 _row = -1;
                 _acc = new CellAccumulator(reader._options.MaxCellBytes, nameof(ExcelReaderOptions.MaxCellBytes));
                 _contentCache = reader._options.InternStrings ? new Utf8StringCache() : null;
+                _lease = reader.Lifetime;
             }
 
             /// <inheritdoc/>
@@ -332,6 +334,7 @@ namespace ExcelReader.Core.Reader.Xls
             {
                 _cursor.Dispose();
                 _acc.Return();
+                Interlocked.Exchange(ref _lease, null)?.Release();
             }
         }
     }
