@@ -1,7 +1,9 @@
 using System.Globalization;
 using ExcelReader.Core.Reader;
+using ExcelReader.Core.Reader.Xls;
 using ExcelReader.Core.Reader.Xlsb;
 using ExcelReader.Core.Reader.Xlsx;
+using ExcelReader.Core.Writer.Xls;
 using ExcelReader.Core.Writer.Xlsb;
 using ExcelReader.Core.Writer.Xlsx;
 
@@ -202,6 +204,96 @@ namespace ExcelReader.Tests.Reader
             byte[] bytes = BuildXlsx();
             string path = WriteTemp(bytes[..(bytes.Length / 2)], ".xlsx");
             Assert.Throws<InvalidDataException>(() => Excel.FromXlsxFile(path));
+        }
+
+        private static byte[] BuildXls()
+        {
+            using MemoryStream buffer = new();
+            using (XlsWorkbookWriter workbook = XlsWorkbookWriter.Create(buffer, leaveOpen: true))
+            {
+                for (int s = 0; s < 3; s++)
+                {
+                    XlsSheetWriter sheet = workbook.AddSheet("sheet" + s);
+                    for (int r = 0; r < 400; r++)
+                    {
+                        using XlsRowWriter row = sheet.StartRow();
+                        row.Write("name-" + ((s * 1000) + (r % 50)).ToString(CultureInfo.InvariantCulture));
+                        row.Write((s * 100000) + r);
+                        row.Write(r % 2 == 0);
+                    }
+                    sheet.End();
+                    sheet.Dispose();
+                }
+                workbook.End();
+            }
+            return buffer.ToArray();
+        }
+
+        private XlsReader OpenXls(Kind kind, byte[] bytes)
+        {
+            switch (kind)
+            {
+                case Kind.Memory:
+                    return Excel.FromXls(bytes);
+                case Kind.ExposedMemoryStream:
+                    MemoryStream exposed = new();
+                    exposed.Write(bytes);
+                    exposed.Position = 0;
+                    return Excel.FromXls(exposed, leaveOpen: false);
+                case Kind.OpaqueMemoryStream:
+                    return Excel.FromXls(new MemoryStream(bytes, writable: false), leaveOpen: false);
+                case Kind.Trickle:
+                    return Excel.FromXls(new TrickleStream(bytes), leaveOpen: false);
+                case Kind.FileStream:
+                    return Excel.FromXls(File.OpenRead(WriteTemp(bytes, ".xls")), leaveOpen: false);
+                case Kind.FilePath:
+                    return Excel.FromXlsFile(WriteTemp(bytes, ".xls"));
+                default:
+                    return Excel.FromXls(new NonSeekableStream(bytes), leaveOpen: false);
+            }
+        }
+
+        [Theory]
+        [MemberData(nameof(Kinds))]
+        public void Xls_Reads_The_Same_Rows_From_Every_Source(Kind kind)
+        {
+            byte[] bytes = BuildXls();
+            using IExcelRowReader expected = Excel.FromXls(bytes);
+            using IExcelRowReader actual = OpenXls(kind, bytes);
+            Assert.Equal(Dump(expected), Dump(actual));
+        }
+
+        [Theory]
+        [MemberData(nameof(Kinds))]
+        public void Xls_Interleaved_Enumerators_Keep_Their_Own_Position(Kind kind)
+        {
+            byte[] bytes = BuildXls();
+            using IExcelRowReader reader = OpenXls(kind, bytes);
+            reader.MoveToSheet(0);
+            using IExcelRowEnumerator first = reader.GetEnumerator();
+            reader.MoveToSheet(1);
+            using IExcelRowEnumerator second = reader.GetEnumerator();
+            for (int r = 0; r < 400; r++)
+            {
+                Assert.True(first.MoveNext());
+                Assert.True(second.MoveNext());
+                Assert.Equal("name-" + (r % 50).ToString(CultureInfo.InvariantCulture), first.Current[0].GetString());
+                Assert.Equal("name-" + (1000 + (r % 50)).ToString(CultureInfo.InvariantCulture), second.Current[0].GetString());
+            }
+            Assert.False(first.MoveNext());
+            Assert.False(second.MoveNext());
+        }
+
+        [Fact]
+        public void Xls_File_Can_Be_Deleted_After_Dispose()
+        {
+            string path = WriteTemp(BuildXls(), ".xls");
+            using (IExcelRowReader reader = Excel.FromXlsFile(path))
+            {
+                Assert.NotEmpty(Dump(reader));
+            }
+            File.Delete(path);
+            Assert.False(File.Exists(path));
         }
 
         private static byte[] BuildXlsb()

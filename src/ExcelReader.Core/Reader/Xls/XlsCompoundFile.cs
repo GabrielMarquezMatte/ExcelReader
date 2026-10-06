@@ -2,6 +2,7 @@ using System.Diagnostics.CodeAnalysis;
 using System.Runtime.InteropServices;
 using ExcelReader.Core.Crypto;
 using ExcelReader.Core.Reader.Internal;
+using ExcelReader.Core.Reader.Sources;
 
 namespace ExcelReader.Core.Reader.Xls
 {
@@ -138,7 +139,7 @@ namespace ExcelReader.Core.Reader.Xls
                 {
                     return WorkbookStream.Chained(memory, chain, chainCount, cfb.SectorSize, workbook.Size);
                 }
-                return WorkbookStream.Streamed(source, ownsSource, chain, chainCount, cfb.SectorSize, workbook.Size);
+                return WorkbookStream.Streamed(ByteSource.FromStream(source, leaveOpen: !ownsSource), chain, chainCount, cfb.SectorSize, workbook.Size);
             }
             finally
             {
