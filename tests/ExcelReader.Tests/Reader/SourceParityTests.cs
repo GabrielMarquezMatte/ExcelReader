@@ -290,5 +290,84 @@ namespace ExcelReader.Tests.Reader
             string path = WriteTemp(bytes[..(bytes.Length / 2)], ".xlsb");
             Assert.Throws<InvalidDataException>(() => Excel.FromXlsbFile(path));
         }
+
+        public static TheoryData<Kind> SeekableStreamKinds =>
+        [
+            Kind.ExposedMemoryStream, Kind.OpaqueMemoryStream, Kind.Trickle, Kind.FileStream,
+        ];
+
+        private Stream OpenRawStream(Kind kind, byte[] bytes)
+        {
+            switch (kind)
+            {
+                case Kind.ExposedMemoryStream:
+                    MemoryStream exposed = new();
+                    exposed.Write(bytes);
+                    exposed.Position = 0;
+                    return exposed;
+                case Kind.OpaqueMemoryStream:
+                    return new MemoryStream(bytes, writable: false);
+                case Kind.Trickle:
+                    return new TrickleStream(bytes);
+                default:
+                    return File.OpenRead(WriteTemp(bytes, ".bin"));
+            }
+        }
+
+        [Theory]
+        [MemberData(nameof(SeekableStreamKinds))]
+        public void DetectFileFormat_Leaves_The_Stream_Open_At_Its_Position(Kind kind)
+        {
+            using Stream xlsx = OpenRawStream(kind, BuildXlsx());
+            Assert.Equal(ExcelFileFormat.Xlsx, Excel.DetectFileFormat(xlsx));
+            Assert.Equal(0, xlsx.Position);
+            Assert.True(xlsx.CanRead);
+
+            using Stream xlsb = OpenRawStream(kind, BuildXlsb());
+            Assert.Equal(ExcelFileFormat.Xlsb, Excel.DetectFileFormat(xlsb));
+            Assert.Equal(0, xlsb.Position);
+            Assert.True(xlsb.CanRead);
+        }
+
+        [Theory]
+        [MemberData(nameof(SeekableStreamKinds))]
+        public async Task DetectFileFormatAsync_Leaves_The_Stream_Open_At_Its_Position(Kind kind)
+        {
+            using Stream xlsx = OpenRawStream(kind, BuildXlsx());
+            Assert.Equal(ExcelFileFormat.Xlsx, await Excel.DetectFileFormatAsync(xlsx, TestContext.Current.CancellationToken));
+            Assert.Equal(0, xlsx.Position);
+            Assert.True(xlsx.CanRead);
+        }
+
+        [Theory]
+        [MemberData(nameof(SeekableStreamKinds))]
+        public void Open_Detects_And_Reads_Both_Zip_Formats(Kind kind)
+        {
+            byte[] xlsx = BuildXlsx();
+            using IExcelRowReader expectedXlsx = Excel.FromXlsx(xlsx);
+            using IExcelRowReader actualXlsx = Excel.Open(OpenRawStream(kind, xlsx), leaveOpen: false);
+            Assert.Equal(Dump(expectedXlsx), Dump(actualXlsx));
+
+            byte[] xlsb = BuildXlsb();
+            using IExcelRowReader expectedXlsb = Excel.FromXlsb(xlsb);
+            using IExcelRowReader actualXlsb = Excel.Open(OpenRawStream(kind, xlsb), leaveOpen: false);
+            Assert.Equal(Dump(expectedXlsb), Dump(actualXlsb));
+        }
+
+        [Theory]
+        [MemberData(nameof(SeekableStreamKinds))]
+        public async Task OpenAsync_Detects_And_Reads_Both_Zip_Formats(Kind kind)
+        {
+            CancellationToken ct = TestContext.Current.CancellationToken;
+            byte[] xlsx = BuildXlsx();
+            using IExcelRowReader expectedXlsx = Excel.FromXlsx(xlsx);
+            using IExcelRowReader actualXlsx = await Excel.OpenAsync(OpenRawStream(kind, xlsx), leaveOpen: false, ct: ct);
+            Assert.Equal(Dump(expectedXlsx), await DumpAsync(actualXlsx));
+
+            byte[] xlsb = BuildXlsb();
+            using IExcelRowReader expectedXlsb = Excel.FromXlsb(xlsb);
+            using IExcelRowReader actualXlsb = await Excel.OpenAsync(OpenRawStream(kind, xlsb), leaveOpen: false, ct: ct);
+            Assert.Equal(Dump(expectedXlsb), await DumpAsync(actualXlsb));
+        }
     }
 }

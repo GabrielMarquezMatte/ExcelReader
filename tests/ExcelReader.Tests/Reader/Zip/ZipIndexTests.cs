@@ -589,21 +589,6 @@ namespace ExcelReader.Tests.Reader.Zip
         }
 
         [Fact]
-        public void ZipEntryBytesReadThrowsInvalidDataWhenEntryUnderDelivers()
-        {
-            using MemoryStream built = WorkbookBuilder.Build("""<row r="1"><c r="A1"><v>1</v></c></row>""");
-            byte[] zipBytes = built.ToArray();
-            uint realLength = ReadDeclaredUncompressedSize(zipBytes, "xl/workbook.xml");
-            PatchCentralDirectoryUInt32(zipBytes, "xl/workbook.xml", fieldOffset: 24, realLength + 64);
-
-            using var ms = new MemoryStream(zipBytes);
-            using var zip = new ZipArchive(ms, ZipArchiveMode.Read);
-            InvalidDataException ex = Assert.Throws<InvalidDataException>(
-                () => ZipEntryBytes.Read(zip, "xl/workbook.xml", new DecompressedByteCounter(0)));
-            Assert.Contains("less data", ex.Message, StringComparison.OrdinalIgnoreCase);
-        }
-
-        [Fact]
         public void ZipArchiveEntryOpenSilentlyTruncatesAtDeclaredLengthUnderOverDelivery()
         {
             using MemoryStream built = WorkbookBuilder.Build("""<row r="1"><c r="A1"><v>1</v></c></row>""");
@@ -631,8 +616,10 @@ namespace ExcelReader.Tests.Reader.Zip
         {
             using var ms = new MemoryStream(zipBytes);
             using var zip = new ZipArchive(ms, ZipArchiveMode.Read);
-            using ZipPart part = ZipEntryBytes.Read(zip, entryName, new DecompressedByteCounter(0));
-            return part.Memory.ToArray();
+            using Stream entry = zip.GetEntry(entryName)!.Open();
+            using var copy = new MemoryStream();
+            entry.CopyTo(copy);
+            return copy.ToArray();
         }
 
         private static byte[] BuildZipWithOneEntry(string entryName, byte[] payload, CompressionLevel level)
