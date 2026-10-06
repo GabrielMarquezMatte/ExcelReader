@@ -266,11 +266,52 @@ namespace ExcelReader.Tests.Reader.Zip
             Assert.False(stream.CanRead);
         }
 
-        private static string Outcome(Func<ByteSource> open)
+        private enum Access
+        {
+            Part,
+            Stream,
+            AsyncPart,
+            AsyncStream,
+        }
+
+        private static async Task<byte[]> ReadEntryAsync(ZipIndex index, ZipEntryRef entry, Access access, CancellationToken ct)
+        {
+            switch (access)
+            {
+                case Access.Part:
+                    using (ZipPart part = index.OpenPart(entry, Counter()))
+                    {
+                        return part.Memory.ToArray();
+                    }
+                case Access.AsyncPart:
+                    using (ZipPart part = await index.OpenPartAsync(entry, Counter(), ct))
+                    {
+                        return part.Memory.ToArray();
+                    }
+                case Access.Stream:
+                    using (Stream stream = index.OpenEntryStream(entry, Counter(), ExcelReaderOptions.Default))
+                    {
+                        using MemoryStream copy = new();
+                        stream.CopyTo(copy);
+                        return copy.ToArray();
+                    }
+                default:
+                    await using (Stream stream = await index.OpenEntryStreamAsync(entry, Counter(), ExcelReaderOptions.Default, ct))
+                    {
+                        using MemoryStream copy = new();
+                        await stream.CopyToAsync(copy, ct);
+                        return copy.ToArray();
+                    }
+            }
+        }
+
+        private static async Task<string> OutcomeAsync(Func<ByteSource> open, Access access, CancellationToken ct)
         {
             try
             {
-                using ZipIndex index = ZipIndex.Create(open(), ExcelReaderOptions.Default);
+                using ZipIndex index = access is Access.AsyncPart or Access.AsyncStream
+                    ? await ZipIndex.CreateAsync(open(), ExcelReaderOptions.Default, ct)
+                    : ZipIndex.Create(open(), ExcelReaderOptions.Default);
                 System.Text.StringBuilder text = new();
                 foreach (string name in Names)
                 {
@@ -281,8 +322,8 @@ namespace ExcelReader.Tests.Reader.Zip
                     }
                     try
                     {
-                        using ZipPart part = index.OpenPart(entry, Counter());
-                        text.Append(Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(part.Memory.Span))).Append(';');
+                        byte[] bytes = await ReadEntryAsync(index, entry, access, ct);
+                        text.Append(Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(bytes))).Append(';');
                     }
                     catch (Exception ex) when (ex is InvalidDataException or NotSupportedException or ExcelLimitExceededException)
                     {
@@ -298,8 +339,9 @@ namespace ExcelReader.Tests.Reader.Zip
         }
 
         [Fact]
-        public void Mutated_Bytes_Give_The_Same_Outcome_From_Memory_And_From_A_Stream()
+        public async Task Mutated_Bytes_Give_The_Same_Outcome_From_Memory_And_From_A_Stream()
         {
+            CancellationToken ct = TestContext.Current.CancellationToken;
             byte[] pristine = BuildZip(dataDescriptors: false, scale: 1000);
             uint state = 2024;
             for (int i = 0; i < 3000; i++)
@@ -310,10 +352,58 @@ namespace ExcelReader.Tests.Reader.Zip
                 state = (state * 1664525) + 1013904223;
                 mutated[position] = (byte)(state >> 24);
 
-                string fromMemory = Outcome(() => ByteSource.FromMemory(mutated));
-                string fromStream = Outcome(() => ByteSource.FromStream(new MemoryStream(mutated, writable: false), leaveOpen: false));
-                Assert.True(string.Equals(fromMemory, fromStream, StringComparison.Ordinal),$"mutation {i} at byte {position}: memory={fromMemory} stream={fromStream}");
+                foreach (Access access in Enum.GetValues<Access>())
+                {
+                    Access reference = access is Access.Part or Access.AsyncPart ? Access.Part : Access.Stream;
+                    string fromMemory = await OutcomeAsync(() => ByteSource.FromMemory(mutated), reference, ct);
+                    string fromStream = await OutcomeAsync(
+                        () => ByteSource.FromStream(new MemoryStream(mutated, writable: false), leaveOpen: false), access, ct);
+                    Assert.True(string.Equals(fromMemory, fromStream, StringComparison.Ordinal), $"mutation {i} at byte {position}, {access}: memory={fromMemory} stream={fromStream}");
+                }
             }
+        }
+
+        private static int CentralRecordOffset(byte[] zipBytes, string entryName)
+        {
+            byte[] name = System.Text.Encoding.UTF8.GetBytes(entryName);
+            for (int i = 0; i + 46 + name.Length <= zipBytes.Length; i++)
+            {
+                if (zipBytes.AsSpan(i, 4).SequenceEqual<byte>([0x50, 0x4B, 0x01, 0x02]) && zipBytes.AsSpan(i + 46, name.Length).SequenceEqual(name))
+                {
+                    return i;
+                }
+            }
+            throw new InvalidOperationException("central directory record not found");
+        }
+
+        private static byte[] ZipDeclaringTooMuchData()
+        {
+            byte[] zipBytes = BuildZip(dataDescriptors: false, scale: 20);
+            int record = CentralRecordOffset(zipBytes, Names[0]);
+            System.Buffers.Binary.BinaryPrimitives.WriteUInt32LittleEndian(zipBytes.AsSpan(record + 24), (uint)(Sizes[0] / 20) + 64);
+            return zipBytes;
+        }
+
+        [Theory]
+        [MemberData(nameof(Kinds))]
+        public void A_Deflated_Entry_Shorter_Than_Declared_Is_Invalid_Data(Kind kind)
+        {
+            using ZipIndex index = ZipIndex.Create(Open(kind, ZipDeclaringTooMuchData()), ExcelReaderOptions.Default);
+            Assert.True(index.TryGetEntry(System.Text.Encoding.UTF8.GetBytes(Names[0]), out ZipEntryRef entry));
+            InvalidDataException ex = Assert.Throws<InvalidDataException>(() => index.OpenPart(entry, Counter()).Dispose());
+            Assert.Contains("less data", ex.Message, StringComparison.Ordinal);
+        }
+
+        [Theory]
+        [MemberData(nameof(Kinds))]
+        public async Task A_Deflated_Entry_Shorter_Than_Declared_Is_Invalid_Data_Asynchronously(Kind kind)
+        {
+            CancellationToken ct = TestContext.Current.CancellationToken;
+            using ZipIndex index = await ZipIndex.CreateAsync(Open(kind, ZipDeclaringTooMuchData()), ExcelReaderOptions.Default, ct);
+            Assert.True(index.TryGetEntry(System.Text.Encoding.UTF8.GetBytes(Names[0]), out ZipEntryRef entry));
+            InvalidDataException ex = await Assert.ThrowsAsync<InvalidDataException>(
+                async () => (await index.OpenPartAsync(entry, Counter(), ct)).Dispose());
+            Assert.Contains("less data", ex.Message, StringComparison.Ordinal);
         }
 
         [Fact]
