@@ -188,5 +188,36 @@ namespace ExcelReader.Tests.Reader.Sources
             Assert.True(source.TryGetMemory(out ReadOnlyMemory<byte> memory));
             Assert.True(memory.Span.SequenceEqual(Payload));
         }
+
+        private sealed class InvertingMemoryStream(byte[] bytes) : MemoryStream(bytes, 0, bytes.Length, writable: false, publiclyVisible: true)
+        {
+            public override int Read(byte[] buffer, int offset, int count)
+            {
+                return Read(buffer.AsSpan(offset, count));
+            }
+
+            public override int Read(Span<byte> buffer)
+            {
+                int read = base.Read(buffer);
+                for (int i = 0; i < read; i++)
+                {
+                    buffer[i] ^= 0xFF;
+                }
+                return read;
+            }
+        }
+
+        [Fact]
+        public void A_MemoryStream_Subclass_Is_Read_Through_Its_Own_Read()
+        {
+            using ByteSource source = ByteSource.FromStream(new InvertingMemoryStream(Payload), leaveOpen: false);
+            Assert.False(source.TryGetMemory(out _));
+            byte[] read = new byte[64];
+            source.ReadExactly(100, read);
+            for (int i = 0; i < read.Length; i++)
+            {
+                Assert.Equal((byte)(Payload[100 + i] ^ 0xFF), read[i]);
+            }
+        }
     }
 }

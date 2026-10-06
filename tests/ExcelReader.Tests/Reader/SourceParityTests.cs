@@ -515,5 +515,23 @@ namespace ExcelReader.Tests.Reader
             Assert.Throws<InvalidDataException>(() => Excel.FromXlsx(stream, leaveOpen: false));
             Assert.False(stream.CanRead);
         }
+
+        [Fact]
+        public void A_Failed_Detection_Restores_The_Stream_Position()
+        {
+            TrickleStream stream = new(CorruptZip());
+            Assert.Throws<InvalidDataException>(() => Excel.DetectFileFormat(stream));
+            Assert.Equal(0, stream.Position);
+            Assert.True(stream.CanRead);
+        }
+
+        [Fact]
+        public async Task A_Failed_Asynchronous_Detection_Restores_The_Stream_Position()
+        {
+            TrickleStream stream = new(CorruptZip());
+            await Assert.ThrowsAsync<InvalidDataException>(async () => await Excel.DetectFileFormatAsync(stream, TestContext.Current.CancellationToken));
+            Assert.Equal(0, stream.Position);
+            Assert.True(stream.CanRead);
+        }
     }
 }

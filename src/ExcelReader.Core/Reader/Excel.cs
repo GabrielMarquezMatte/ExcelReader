@@ -803,8 +803,17 @@ namespace ExcelReader.Core.Reader
                     ? ExcelFileFormat.EncryptedOoxml
                     : ExcelFileFormat.Xls;
             }
-            zip = ZipIndex.Create(ByteSource.FromStream(stream, leaveOpen), options);
-            stream.Position = start;
+            try
+            {
+                zip = ZipIndex.Create(ByteSource.FromStream(stream, leaveOpen), options);
+            }
+            finally
+            {
+                if (stream.CanSeek)
+                {
+                    stream.Position = start;
+                }
+            }
             return ClassifyZip(zip);
         }
 
@@ -839,8 +848,18 @@ namespace ExcelReader.Core.Reader
                 return (cfbFormat, null);
             }
             ByteSource source = await ByteSource.FromStreamAsync(stream, leaveOpen, ct).ConfigureAwait(false);
-            ZipIndex zip = await ZipIndex.CreateAsync(source, options, ct).ConfigureAwait(false);
-            stream.Position = start;
+            ZipIndex zip;
+            try
+            {
+                zip = await ZipIndex.CreateAsync(source, options, ct).ConfigureAwait(false);
+            }
+            finally
+            {
+                if (stream.CanSeek)
+                {
+                    stream.Position = start;
+                }
+            }
             return (ClassifyZip(zip), zip);
         }
 

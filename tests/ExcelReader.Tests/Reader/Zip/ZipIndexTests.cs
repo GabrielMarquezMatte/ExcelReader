@@ -166,7 +166,7 @@ namespace ExcelReader.Tests.Reader.Zip
         }
 
         [Fact]
-        public void MutatedZipBytesNeverCrashTheMemoryIndex()
+        public void MutatedZipBytesNeverCrashTheIndex()
         {
             using MemoryStream built = WorkbookBuilder.BuildMultiSheet(
                 sheets:
