@@ -90,15 +90,14 @@ namespace ExcelReader.Tests.Writer
 
             workbook.Position = 0;
             await using XlsxWorkbook reader = Excel.FromXlsx(workbook);
-            using XlsxWorkbook.Enumerator rows = reader.GetEnumerator();
+            using XlsxWorkbook.Enumerator rows = reader.FirstSheet.GetEnumerator();
             Assert.True(rows.MoveNext());
             Assert.Equal("repeat", rows.Current[0].GetString());
             Assert.Equal("repeat", rows.Current[1].GetString());
             Assert.Equal(" spaced ", rows.Current[2].GetString());
             Assert.False(rows.MoveNext());
 
-            reader.MoveToSheet(1);
-            using XlsxWorkbook.Enumerator secondRows = reader.GetEnumerator();
+            using XlsxWorkbook.Enumerator secondRows = reader.Sheets[1].GetEnumerator();
             Assert.True(secondRows.MoveNext());
             Assert.Equal("repeat", secondRows.Current[0].GetString());
         }
@@ -202,7 +201,7 @@ namespace ExcelReader.Tests.Writer
 
             workbook.Position = 0;
             await using XlsbWorkbook reader = Excel.FromXlsb(workbook);
-            using XlsbWorkbook.Enumerator rows = reader.GetEnumerator();
+            using XlsbWorkbook.Enumerator rows = reader.FirstSheet.GetEnumerator();
             Assert.True(rows.MoveNext());
             Assert.Equal(CellType.ExcelString, rows.Current[0].Type);
             Assert.Equal("repeat", rows.Current[0].GetString());

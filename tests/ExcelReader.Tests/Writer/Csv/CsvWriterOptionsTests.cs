@@ -81,7 +81,7 @@ namespace ExcelReader.Tests.Writer.Csv
 
             var options = CsvReaderOptions.Default with { Delimiter = (byte)';', Encoding = Encoding.Latin1 };
             using CsvReader reader = Excel.FromCsv(written.AsMemory(), options);
-            using CsvReader.Enumerator rows = reader.GetEnumerator();
+            using CsvReader.Enumerator rows = reader.FirstSheet.GetEnumerator();
 
             Assert.True(rows.MoveNext());
             Assert.True(rows.MoveNext());

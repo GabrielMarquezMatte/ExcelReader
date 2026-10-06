@@ -8,10 +8,10 @@ namespace ExcelReader.Tests.Crypto
         private static ExcelReaderOptions WithPassword =>
             ExcelReaderOptions.Default with { Password = EncryptedFixtures.Password };
 
-        private static int CountRows(IExcelRowReader reader)
+        private static int CountRows(IExcelWorkbook reader)
         {
             int n = 0;
-            foreach (Row _ in reader)
+            foreach (Row _ in reader.FirstSheet)
             {
                 n++;
             }
@@ -50,7 +50,7 @@ namespace ExcelReader.Tests.Crypto
         {
             Assert.False(ExcelReaderOptions.Default.VerifyEncryptedIntegrity);
             using FileStream fs = File.OpenRead(EncryptedFixtures.Path_("agile-aes256-sha512.xlsx"));
-            using IExcelRowReader reader = Excel.Open(fs, leaveOpen: true, WithPassword);
+            using IExcelWorkbook reader = Excel.Open(fs, leaveOpen: true, WithPassword);
             Assert.True(CountRows(reader) > 0);
         }
 
@@ -59,7 +59,7 @@ namespace ExcelReader.Tests.Crypto
         {
             var opted = WithPassword with { VerifyEncryptedIntegrity = true };
             using FileStream fs = File.OpenRead(EncryptedFixtures.Path_("agile-aes256-sha512.xlsx"));
-            using IExcelRowReader reader = Excel.Open(fs, leaveOpen: true, opted);
+            using IExcelWorkbook reader = Excel.Open(fs, leaveOpen: true, opted);
             Assert.True(CountRows(reader) > 0);
         }
 
@@ -95,7 +95,7 @@ namespace ExcelReader.Tests.Crypto
             try
             {
                 var opted = WithPassword with { VerifyEncryptedIntegrity = true };
-                using IExcelRowReader reader = Excel.Open(temp, opted);
+                using IExcelWorkbook reader = Excel.Open(temp, opted);
                 Assert.True(CountRows(reader) > 0);
             }
             finally

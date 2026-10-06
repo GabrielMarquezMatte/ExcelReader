@@ -117,7 +117,7 @@ namespace ExcelReader.Tests.Arrow
             ms.Position = 0;
 
             using XlsxWorkbook reader = Excel.FromXlsx(ms.ToArray());
-            RecordBatch roundTripped = reader.ToArrowRecordBatch(ReadBackSchema());
+            RecordBatch roundTripped = reader.FirstSheet.ToArrowRecordBatch(ReadBackSchema());
 
             AssertRoundTrips(roundTripped);
         }
@@ -133,7 +133,7 @@ namespace ExcelReader.Tests.Arrow
             ms.Position = 0;
 
             using var reader = Excel.FromXlsb(ms.ToArray());
-            RecordBatch roundTripped = reader.ToArrowRecordBatch(ReadBackSchema());
+            RecordBatch roundTripped = reader.FirstSheet.ToArrowRecordBatch(ReadBackSchema());
 
             AssertRoundTrips(roundTripped);
         }
@@ -159,7 +159,7 @@ namespace ExcelReader.Tests.Arrow
             ms.Position = 0;
 
             using var reader = Excel.FromXls(ms.ToArray());
-            RecordBatch roundTripped = reader.ToArrowRecordBatch();
+            RecordBatch roundTripped = reader.FirstSheet.ToArrowRecordBatch();
 
             var nameCol = Assert.IsType<StringArray>(roundTripped.Column(0));
             Assert.Equal("alice", nameCol.GetString(0));
@@ -207,7 +207,7 @@ namespace ExcelReader.Tests.Arrow
             ms.Position = 0;
 
             using XlsxWorkbook reader = Excel.FromXlsx(ms.ToArray());
-            using XlsxWorkbook.Enumerator e = reader.GetEnumerator();
+            using XlsxWorkbook.Enumerator e = reader.FirstSheet.GetEnumerator();
             Assert.True(e.MoveNext());
             Assert.True(e.Current[0].TryParse(null, out long value));
             Assert.Equal(3L, value);
@@ -285,7 +285,7 @@ namespace ExcelReader.Tests.Arrow
                 2);
         }
 
-        private static void AssertWideRoundTrips(IExcelRowReader reader)
+        private static void AssertWideRoundTrips(IExcelSheet sheet)
         {
             ExcelColumnType[] types =
             [
@@ -300,7 +300,7 @@ namespace ExcelReader.Tests.Arrow
             {
                 schema[i] = new() { Index = i, Name = "c" + i, Type = types[i], IsNullable = true };
             }
-            RecordBatch batch = reader.ToArrowRecordBatch(schema);
+            RecordBatch batch = sheet.ToArrowRecordBatch(schema);
 
             Assert.Equal(2, batch.Length);
             long[] integers = [-8, -16, -32, 8, 16, 32, 64];
@@ -332,7 +332,7 @@ namespace ExcelReader.Tests.Arrow
             }
 
             using XlsxWorkbook reader = Excel.FromXlsx(ms.ToArray());
-            AssertWideRoundTrips(reader);
+            AssertWideRoundTrips(reader.FirstSheet);
         }
 
         [Fact]
@@ -345,7 +345,7 @@ namespace ExcelReader.Tests.Arrow
             }
 
             using var reader = Excel.FromXlsb(ms.ToArray());
-            AssertWideRoundTrips(reader);
+            AssertWideRoundTrips(reader.FirstSheet);
         }
 
         [Fact]
@@ -375,7 +375,7 @@ namespace ExcelReader.Tests.Arrow
             ms.Position = 0;
 
             using XlsxWorkbook reader = Excel.FromXlsx(ms.ToArray());
-            RecordBatch roundTripped = reader.ToArrowRecordBatch(ReadBackSchema());
+            RecordBatch roundTripped = reader.FirstSheet.ToArrowRecordBatch(ReadBackSchema());
 
             AssertRoundTrips(roundTripped);
         }
