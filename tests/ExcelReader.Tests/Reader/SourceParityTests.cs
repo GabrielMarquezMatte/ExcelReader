@@ -1,6 +1,8 @@
 using System.Globalization;
 using ExcelReader.Core.Reader;
+using ExcelReader.Core.Reader.Xlsb;
 using ExcelReader.Core.Reader.Xlsx;
+using ExcelReader.Core.Writer.Xlsb;
 using ExcelReader.Core.Writer.Xlsx;
 
 namespace ExcelReader.Tests.Reader
@@ -200,6 +202,93 @@ namespace ExcelReader.Tests.Reader
             byte[] bytes = BuildXlsx();
             string path = WriteTemp(bytes[..(bytes.Length / 2)], ".xlsx");
             Assert.Throws<InvalidDataException>(() => Excel.FromXlsxFile(path));
+        }
+
+        private static byte[] BuildXlsb()
+        {
+            using MemoryStream buffer = new();
+            using (XlsbWorkbookWriter workbook = XlsbWorkbookWriter.Create(buffer, leaveOpen: true, new XlsbWriterOptions { UseSharedStrings = true }))
+            {
+                for (int s = 0; s < 3; s++)
+                {
+                    XlsbSheetWriter sheet = workbook.AddSheet("sheet" + s);
+                    for (int r = 0; r < 400; r++)
+                    {
+                        using XlsbRowWriter row = sheet.StartRow();
+                        row.Write("name-" + ((s * 1000) + (r % 50)).ToString(CultureInfo.InvariantCulture));
+                        row.Write((s * 100000) + r);
+                        row.Write(r % 2 == 0);
+                    }
+                    sheet.End();
+                    sheet.Dispose();
+                }
+                workbook.End();
+            }
+            return buffer.ToArray();
+        }
+
+        private XlsbReader OpenXlsb(Kind kind, byte[] bytes)
+        {
+            switch (kind)
+            {
+                case Kind.Memory:
+                    return Excel.FromXlsb(bytes);
+                case Kind.ExposedMemoryStream:
+                    MemoryStream exposed = new();
+                    exposed.Write(bytes);
+                    exposed.Position = 0;
+                    return Excel.FromXlsb(exposed, leaveOpen: false);
+                case Kind.OpaqueMemoryStream:
+                    return Excel.FromXlsb(new MemoryStream(bytes, writable: false), leaveOpen: false);
+                case Kind.Trickle:
+                    return Excel.FromXlsb(new TrickleStream(bytes), leaveOpen: false);
+                case Kind.FileStream:
+                    return Excel.FromXlsb(File.OpenRead(WriteTemp(bytes, ".xlsb")), leaveOpen: false);
+                case Kind.FilePath:
+                    return Excel.FromXlsbFile(WriteTemp(bytes, ".xlsb"));
+                default:
+                    return Excel.FromXlsb(new NonSeekableStream(bytes), leaveOpen: false);
+            }
+        }
+
+        [Theory]
+        [MemberData(nameof(Kinds))]
+        public void Xlsb_Reads_The_Same_Rows_From_Every_Source(Kind kind)
+        {
+            byte[] bytes = BuildXlsb();
+            using IExcelRowReader expected = Excel.FromXlsb(bytes);
+            using IExcelRowReader actual = OpenXlsb(kind, bytes);
+            Assert.Equal(Dump(expected), Dump(actual));
+        }
+
+        [Theory]
+        [MemberData(nameof(Kinds))]
+        public async Task Xlsb_Reads_The_Same_Rows_Asynchronously_From_Every_Source(Kind kind)
+        {
+            byte[] bytes = BuildXlsb();
+            using IExcelRowReader expected = Excel.FromXlsb(bytes);
+            using IExcelRowReader actual = OpenXlsb(kind, bytes);
+            Assert.Equal(Dump(expected), await DumpAsync(actual));
+        }
+
+        [Fact]
+        public void Xlsb_File_Can_Be_Deleted_After_Dispose()
+        {
+            string path = WriteTemp(BuildXlsb(), ".xlsb");
+            using (IExcelRowReader reader = Excel.FromXlsbFile(path))
+            {
+                Assert.NotEmpty(Dump(reader));
+            }
+            File.Delete(path);
+            Assert.False(File.Exists(path));
+        }
+
+        [Fact]
+        public void Xlsb_Cut_Short_Is_Invalid_Data()
+        {
+            byte[] bytes = BuildXlsb();
+            string path = WriteTemp(bytes[..(bytes.Length / 2)], ".xlsb");
+            Assert.Throws<InvalidDataException>(() => Excel.FromXlsbFile(path));
         }
     }
 }

@@ -1,8 +1,8 @@
 using System.Diagnostics.CodeAnalysis;
-using System.IO.Compression;
 using System.Runtime.CompilerServices;
 using System.Text;
 using ExcelReader.Core.Reader.Internal;
+using ExcelReader.Core.Reader.Zip;
 
 namespace ExcelReader.Core.Reader.Xlsb
 {
@@ -24,7 +24,7 @@ namespace ExcelReader.Core.Reader.Xlsb
             private readonly bool[] _styleIsDate;
             private readonly int[] _sharedOffsets;
             private readonly Utf8StringCache? _contentCache;
-            private readonly ZipArchiveEntry? _entry;
+            private readonly ZipEntryRef _entry;
             private bool _ended;
             private bool _pendingRowHdr;
 
@@ -37,8 +37,8 @@ namespace ExcelReader.Core.Reader.Xlsb
                 _contentCache = reader._options.InternStrings ? new Utf8StringCache() : null;
             }
 
-            internal Enumerator(XlsbReader reader, ZipArchiveEntry entry, CancellationToken ct)
-                : base(reader._options.MaxCellBytes, nameof(ExcelReaderOptions.MaxCellBytes), WorkbookLookups.InitialBufferCapacity(entry.Length), ct)
+            internal Enumerator(XlsbReader reader, ZipEntryRef entry, CancellationToken ct)
+                : base(reader._options.MaxCellBytes, nameof(ExcelReaderOptions.MaxCellBytes), WorkbookLookups.InitialBufferCapacity(entry.UncompressedSize), ct)
             {
                 _reader = reader;
                 _styleIsDate = reader._styleIsDate;
@@ -49,12 +49,12 @@ namespace ExcelReader.Core.Reader.Xlsb
 
             private protected override Stream OpenSource()
             {
-                return WorkbookLookups.OpenEntryStream(_entry!, _reader._decompressedBytes, _reader._options);
+                return _reader._zip!.OpenEntryStream(_entry, _reader._decompressedBytes, _reader._options);
             }
 
             private protected override async ValueTask<Stream> OpenSourceAsync()
             {
-                return await WorkbookLookups.OpenEntryStreamAsync(_entry!, _reader._decompressedBytes, _reader._options, _ct).ConfigureAwait(false);
+                return await _reader._zip!.OpenEntryStreamAsync(_entry, _reader._decompressedBytes, _reader._options, _ct).ConfigureAwait(false);
             }
 
             /// <inheritdoc/>
