@@ -256,8 +256,9 @@ namespace ExcelReader.Core.Reader.Csv
 
         private Stream OpenSourceStream(ByteSource source)
         {
-            ByteSourceStream raw = new(source, _sourceStart, source.Length - _sourceStart);
-            return NeedsTranscoding(_options.Encoding)
+            bool transcode = NeedsTranscoding(_options.Encoding);
+            ByteSourceStream raw = new(source, _sourceStart, source.Length - _sourceStart, buffered: transcode);
+            return transcode
                 ? Encoding.CreateTranscodingStream(raw, _options.Encoding!, Encoding.UTF8, leaveOpen: false)
                 : raw;
         }

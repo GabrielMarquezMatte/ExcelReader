@@ -9,15 +9,17 @@ namespace ExcelReader.Core.Reader.Sources
 
         private readonly ByteSource _source;
         private readonly long _end;
+        private readonly bool _buffered;
         private long _next;
         private byte[]? _buffer;
         private int _bufferPos;
         private int _bufferLen;
         private bool _disposed;
 
-        internal ByteSourceStream(ByteSource source, long offset, long length)
+        internal ByteSourceStream(ByteSource source, long offset, long length, bool buffered = true)
         {
             _source = source;
+            _buffered = buffered;
             _next = offset;
             _end = offset + length;
         }
@@ -55,7 +57,7 @@ namespace ExcelReader.Core.Reader.Sources
                 {
                     return 0;
                 }
-                if (destination.Length >= BufferSize)
+                if (!_buffered || destination.Length >= BufferSize)
                 {
                     int direct = _source.Read(_next, destination[..(int)Math.Min(destination.Length, remaining)]);
                     _next += direct;
@@ -87,7 +89,7 @@ namespace ExcelReader.Core.Reader.Sources
                 {
                     return 0;
                 }
-                if (destination.Length >= BufferSize)
+                if (!_buffered || destination.Length >= BufferSize)
                 {
                     int direct = await _source.ReadAsync(
                         _next, destination[..(int)Math.Min(destination.Length, remaining)], cancellationToken).ConfigureAwait(false);

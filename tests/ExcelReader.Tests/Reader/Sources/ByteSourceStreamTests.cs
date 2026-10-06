@@ -141,5 +141,22 @@ namespace ExcelReader.Tests.Reader.Sources
             Assert.Equal(1, source.Reads);
             Assert.True(big.AsSpan().SequenceEqual(bytes));
         }
+
+        [Fact]
+        public void An_Unbuffered_Stream_Reads_Straight_Into_The_Caller()
+        {
+            byte[] bytes = Payload(1000);
+            using CountingSource source = new(bytes);
+            using ByteSourceStream stream = new(source, 100, 800, buffered: false);
+            byte[] read = new byte[800];
+
+            Assert.Equal(10, stream.Read(read.AsSpan(0, 10)));
+            Assert.Equal(10, stream.Read(read.AsSpan(10, 10)));
+            Assert.Equal(2, source.Reads);
+
+            stream.ReadExactly(read.AsSpan(20));
+            Assert.True(read.AsSpan().SequenceEqual(bytes.AsSpan(100, 800)));
+            Assert.Equal(0, stream.Read(new byte[10]));
+        }
     }
 }
