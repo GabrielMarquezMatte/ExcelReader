@@ -9,8 +9,8 @@ goes on the options, so every overload supports it:
 
 ```csharp
 var options = new ExcelReaderOptions { Password = "hunter2" };
-using IExcelRowReader reader = Excel.Open("protected.xlsx", options);
-foreach (Row row in reader) { /* ... */ }
+using IExcelWorkbook workbook = Excel.Open("protected.xlsx", options);
+foreach (Row row in workbook.FirstSheet) { /* ... */ }
 ```
 
 `ExcelEncryptionException.Reason` tells you what to do about a failure — only `PasswordRequired` and
@@ -19,7 +19,7 @@ foreach (Row row in reader) { /* ... */ }
 ```csharp
 try
 {
-    using IExcelRowReader reader = Excel.Open(path, options);
+    using IExcelWorkbook workbook = Excel.Open(path, options);
 }
 catch (ExcelEncryptionException ex) when (ex.Reason is ExcelEncryptionReason.PasswordIncorrect)
 {

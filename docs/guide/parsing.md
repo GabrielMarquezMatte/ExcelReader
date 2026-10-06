@@ -20,10 +20,10 @@ public sealed class ChangeRow
     public int LinesAdded { get; set; }
 }
 
-using var reader = Excel.FromXlsxFile("changes.xlsx");
+using var workbook = Excel.FromXlsxFile("changes.xlsx");
 var parser = ExcelParser.FromAttributes<ChangeRow>();
 
-foreach (var item in parser.Parse(reader))
+foreach (var item in parser.Parse(workbook.FirstSheet))
 {
     Console.WriteLine($"{item.File}: +{item.LinesAdded}");
 }
@@ -31,11 +31,11 @@ foreach (var item in parser.Parse(reader))
 
 Built-in property types: `string`, `bool`, `DateTime`, `DateOnly`, `TimeOnly`, `TimeSpan`, `DateTimeOffset`, `Guid`, `char`, every integral and floating type plus `decimal`, and `enum`s (matched by member name or numeric value). Each also works as a `Nullable<T>`. Empty cells leave the property at its default; an unparseable cell is skipped (keeps the default) unless the column is required. `T` needs no parameterless-constructor constraint, so models with `required` members are supported.
 
-`Parse` also accepts the `IExcelRowReader` from `Excel.Open`, so you can parse without knowing the concrete format:
+`Parse` also accepts the `IExcelSheet` of the `IExcelWorkbook` from `Excel.Open`, so you can parse without knowing the concrete format:
 
 ```csharp
-using IExcelRowReader reader = Excel.Open("changes.xlsx"); // or .xlsb / .xls
-foreach (var item in ExcelParser.FromAttributes<ChangeRow>().Parse(reader)) { /* ... */ }
+using IExcelWorkbook workbook = Excel.Open("changes.xlsx"); // or .xlsb / .xls
+foreach (var item in ExcelParser.FromAttributes<ChangeRow>().Parse(workbook.FirstSheet)) { /* ... */ }
 ```
 
 ## Generate typed maps at compile time (Native AOT / trimming)
@@ -58,8 +58,8 @@ public partial class ChangeRow
     public int LinesAdded { get; set; }
 }
 
-using var reader = Excel.FromXlsxFile("changes.xlsx");
-foreach (var item in ExcelParser.Generated<ChangeRow>().Parse(reader))
+using var workbook = Excel.FromXlsxFile("changes.xlsx");
+foreach (var item in ExcelParser.Generated<ChangeRow>().Parse(workbook.FirstSheet))
 {
     Console.WriteLine($"{item.File}: +{item.LinesAdded}");
 }
@@ -100,8 +100,8 @@ var parser = ExcelParser.Build<ChangeRow>(builder => builder
     .Property(["file"], ExcelCellReaders.String, (ref ChangeRow r, string v) => r.File = v)
     .Property(["lines_added"], ExcelCellReaders.Parsable, (ref ChangeRow r, int v) => r.LinesAdded = v));
 
-using var reader = Excel.FromXlsxFile("changes.xlsx");
-foreach (var item in parser.Parse(reader))
+using var workbook = Excel.FromXlsxFile("changes.xlsx");
+foreach (var item in parser.Parse(workbook.FirstSheet))
 {
     Console.WriteLine($"{item.File}: +{item.LinesAdded}");
 }
@@ -213,9 +213,9 @@ public readonly ref struct ChangeRowRef
     public int LinesAdded { get; init; }
 }
 
-using var reader = Excel.FromXlsxFile("changes.xlsx");
+using var workbook = Excel.FromXlsxFile("changes.xlsx");
 
-foreach (ChangeRowRef item in ExcelParser.FromAttributes<ChangeRowRef>().Parse(reader))
+foreach (ChangeRowRef item in ExcelParser.FromAttributes<ChangeRowRef>().Parse(workbook.FirstSheet))
 {
     Console.WriteLine($"{Encoding.UTF8.GetString(item.File)}: +{item.LinesAdded}");
 }
@@ -224,9 +224,9 @@ foreach (ChangeRowRef item in ExcelParser.FromAttributes<ChangeRowRef>().Parse(r
 The result of `Parse` supports `await foreach` (add `.WithCancellation(ct)` to pass a token), so a `ref struct` model can be parsed asynchronously — the rows are streamed via `MoveNextAsync` while the model stays a zero-copy `ref struct`:
 
 ```csharp
-await using var reader = await Excel.FromXlsxFileAsync("changes.xlsx");
+await using var workbook = await Excel.FromXlsxFileAsync("changes.xlsx");
 
-await foreach (ChangeRowRef item in ExcelParser.FromAttributes<ChangeRowRef>().Parse(reader))
+await foreach (ChangeRowRef item in ExcelParser.FromAttributes<ChangeRowRef>().Parse(workbook.FirstSheet))
 {
     Console.WriteLine($"{Encoding.UTF8.GetString(item.File)}: +{item.LinesAdded}");
 }

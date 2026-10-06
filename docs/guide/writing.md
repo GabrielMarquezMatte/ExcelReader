@@ -41,7 +41,7 @@ await using var workbook = XlsxWorkbookWriter.Create(stream, options: new XlsxWr
 
 ## Hidden sheets
 
-Every `IWorkbookWriter<TSheet>` takes an optional `ExcelSheetVisibility` alongside the sheet name, written to whatever the format uses for it — XLSX's `state` attribute, XLSB's `BrtBundleSh.hsState`, XLS's `BoundSheet8.hsState` — so it reads back through [`SheetVisibility`](reading.md#open-by-auto-detecting-the-format):
+Every `IWorkbookWriter<TSheet>` takes an optional `ExcelSheetVisibility` alongside the sheet name, written to whatever the format uses for it — XLSX's `state` attribute, XLSB's `BrtBundleSh.hsState`, XLS's `BoundSheet8.hsState` — so it reads back through [`IExcelSheet.Visibility`](reading.md#open-by-auto-detecting-the-format):
 
 ```csharp
 using ExcelReader.Core; // ExcelSheetVisibility, shared by the readers and writers
