@@ -461,5 +461,59 @@ namespace ExcelReader.Tests.Reader
             using IExcelRowReader actualXlsb = await Excel.OpenAsync(OpenRawStream(kind, xlsb), leaveOpen: false, ct: ct);
             Assert.Equal(Dump(expectedXlsb), await DumpAsync(actualXlsb));
         }
+
+        private static byte[] CorruptZip()
+        {
+            byte[] bytes = new byte[200];
+            bytes.AsSpan().Fill(0x41);
+            bytes[0] = 0x50;
+            bytes[1] = 0x4B;
+            bytes[2] = 0x03;
+            bytes[3] = 0x04;
+            return bytes;
+        }
+
+        private static byte[] ZipWithoutWorkbook()
+        {
+            using MemoryStream buffer = new();
+            using (System.IO.Compression.ZipArchive zip = new(buffer, System.IO.Compression.ZipArchiveMode.Create, leaveOpen: true))
+            {
+                using StreamWriter writer = new(zip.CreateEntry("hello.txt").Open());
+                writer.Write("hello");
+            }
+            return buffer.ToArray();
+        }
+
+        [Theory]
+        [InlineData(true)]
+        [InlineData(false)]
+        public async Task A_Corrupt_Zip_Opened_Through_Every_Entry_Point_Honours_LeaveOpen(bool leaveOpen)
+        {
+            CancellationToken ct = TestContext.Current.CancellationToken;
+            byte[] bytes = CorruptZip();
+            TrickleStream open = new(bytes);
+            Assert.Throws<InvalidDataException>(() => Excel.Open(open, leaveOpen));
+            Assert.Equal(leaveOpen, open.CanRead);
+
+            TrickleStream openAsync = new(bytes);
+            await Assert.ThrowsAsync<InvalidDataException>(async () => await Excel.OpenAsync(openAsync, leaveOpen, ct: ct));
+            Assert.Equal(leaveOpen, openAsync.CanRead);
+
+            TrickleStream xlsx = new(bytes);
+            Assert.Throws<InvalidDataException>(() => Excel.FromXlsx(xlsx, leaveOpen));
+            Assert.Equal(leaveOpen, xlsx.CanRead);
+
+            TrickleStream xlsb = new(bytes);
+            Assert.Throws<InvalidDataException>(() => Excel.FromXlsb(xlsb, leaveOpen));
+            Assert.Equal(leaveOpen, xlsb.CanRead);
+        }
+
+        [Fact]
+        public void A_Zip_Without_A_Workbook_Closes_The_Stream()
+        {
+            TrickleStream stream = new(ZipWithoutWorkbook());
+            Assert.Throws<InvalidDataException>(() => Excel.FromXlsx(stream, leaveOpen: false));
+            Assert.False(stream.CanRead);
+        }
     }
 }

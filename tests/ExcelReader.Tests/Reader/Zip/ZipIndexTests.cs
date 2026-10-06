@@ -4,6 +4,7 @@ using System.IO.Compression;
 using System.Runtime.InteropServices;
 using System.Text;
 using ExcelReader.Core.Reader;
+using ExcelReader.Core.Reader.Sources;
 using ExcelReader.Core.Reader.Zip;
 
 namespace ExcelReader.Tests.Reader.Zip
@@ -503,6 +504,258 @@ namespace ExcelReader.Tests.Reader.Zip
             InvalidDataException ex = Assert.Throws<InvalidDataException>(
                 () => index.OpenPart(entry, new DecompressedByteCounter(0)));
             Assert.Contains("past the end", ex.Message, StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static readonly bool[] Modes = [false, true];
+
+        private static async Task<ZipIndex> CreatePositionalAsync(byte[] bytes, bool useAsync, CancellationToken ct)
+        {
+            ByteSource source = ByteSource.FromStream(new MemoryStream(bytes, writable: false), leaveOpen: false);
+            return useAsync
+                ? await ZipIndex.CreateAsync(source, ExcelReaderOptions.Default, ct)
+                : ZipIndex.Create(source, ExcelReaderOptions.Default);
+        }
+
+        private static async Task<InvalidDataException> CreateFailsAsync(byte[] bytes, bool useAsync, CancellationToken ct)
+        {
+            return await Assert.ThrowsAsync<InvalidDataException>(async () => (await CreatePositionalAsync(bytes, useAsync, ct)).Dispose());
+        }
+
+        private static async Task<ZipPart> OpenPartPositionalAsync(ZipIndex index, ZipEntryRef entry, bool useAsync, CancellationToken ct)
+        {
+            DecompressedByteCounter counter = new(0);
+            return useAsync ? await index.OpenPartAsync(entry, counter, ct) : index.OpenPart(entry, counter);
+        }
+
+        private static async Task<InvalidDataException> OpenPartFailsAsync(ZipIndex index, ZipEntryRef entry, bool useAsync, CancellationToken ct)
+        {
+            return await Assert.ThrowsAsync<InvalidDataException>(async () => (await OpenPartPositionalAsync(index, entry, useAsync, ct)).Dispose());
+        }
+
+        [Fact]
+        public async Task PositionalValidZip64ArchiveOpensTheStoredEntry()
+        {
+            CancellationToken ct = TestContext.Current.CancellationToken;
+            foreach (bool useAsync in Modes)
+            {
+                Zip64Layout zip = BuildStoredZip64(Zip64Payload);
+                using ZipIndex index = await CreatePositionalAsync(zip.Bytes, useAsync, ct);
+                Assert.False(index.HasMemory);
+                Assert.True(index.TryGetEntry("a.txt"u8, out ZipEntryRef entry));
+                Assert.Equal(0, entry.LocalHeaderOffset);
+                Assert.Equal(Zip64Payload.Length, entry.CompressedSize);
+                Assert.Equal(Zip64Payload.Length, entry.UncompressedSize);
+                using ZipPart part = await OpenPartPositionalAsync(index, entry, useAsync, ct);
+                Assert.Equal(Zip64Payload, part.Memory.ToArray());
+            }
+        }
+
+        [Fact]
+        public async Task PositionalHugeZip64EocdLocatorOffsetThrowsInsteadOfWrapping()
+        {
+            CancellationToken ct = TestContext.Current.CancellationToken;
+            foreach (bool useAsync in Modes)
+            {
+                byte[] bytes = new byte[42];
+                WriteZip64Locator(bytes, 0, zip64EocdOffset: long.MaxValue - 2);
+                WriteEocd(bytes, 20, declaredCount: 0xFFFF, cdSize: Zip64SentinelU32, cdOffset: Zip64SentinelU32);
+
+                InvalidDataException ex = await CreateFailsAsync(bytes, useAsync, ct);
+                Assert.Contains("ZIP64", ex.Message, StringComparison.Ordinal);
+            }
+        }
+
+        [Fact]
+        public async Task PositionalHugeZip64CentralDirectorySizeThrowsInsteadOfWrapping()
+        {
+            CancellationToken ct = TestContext.Current.CancellationToken;
+            foreach (bool useAsync in Modes)
+            {
+                byte[] bytes = new byte[98];
+                BinaryPrimitives.WriteInt32LittleEndian(bytes.AsSpan(0), 0x06064b50);
+                BinaryPrimitives.WriteInt64LittleEndian(bytes.AsSpan(32), 1);
+                BinaryPrimitives.WriteInt64LittleEndian(bytes.AsSpan(40), long.MaxValue - 2);
+                BinaryPrimitives.WriteInt64LittleEndian(bytes.AsSpan(48), 5);
+                WriteZip64Locator(bytes, 56, zip64EocdOffset: 0);
+                WriteEocd(bytes, 76, declaredCount: 0xFFFF, cdSize: Zip64SentinelU32, cdOffset: Zip64SentinelU32);
+
+                InvalidDataException ex = await CreateFailsAsync(bytes, useAsync, ct);
+                Assert.Contains("central directory", ex.Message, StringComparison.OrdinalIgnoreCase);
+            }
+        }
+
+        [Fact]
+        public async Task PositionalNegativeZip64SizesThrowInvalidDataException()
+        {
+            CancellationToken ct = TestContext.Current.CancellationToken;
+            foreach (bool useAsync in Modes)
+            {
+                byte[] uncompressed = BuildCdWithZip64Field(compressedSize: 5, uncompressedSize: Zip64SentinelU32, zip64Value: -1);
+                Assert.Contains("negative", (await CreateFailsAsync(uncompressed, useAsync, ct)).Message, StringComparison.OrdinalIgnoreCase);
+
+                byte[] compressed = BuildCdWithZip64Field(compressedSize: Zip64SentinelU32, uncompressedSize: 5, zip64Value: -1);
+                Assert.Contains("negative", (await CreateFailsAsync(compressed, useAsync, ct)).Message, StringComparison.OrdinalIgnoreCase);
+            }
+        }
+
+        [Theory]
+        [InlineData(long.MaxValue)]
+        [InlineData(long.MaxValue - 29)]
+        [InlineData(long.MaxValue - 30)]
+        [InlineData((long)int.MaxValue + 1)]
+        [InlineData(int.MaxValue)]
+        public async Task PositionalHugeZip64LocalHeaderOffsetThrowsInvalidDataOnOpen(long localOffset)
+        {
+            CancellationToken ct = TestContext.Current.CancellationToken;
+            foreach (bool useAsync in Modes)
+            {
+                Zip64Layout zip = BuildStoredZip64(Zip64Payload, localOffset: localOffset);
+
+                using ZipIndex index = await CreatePositionalAsync(zip.Bytes, useAsync, ct);
+                Assert.True(index.TryGetEntry("a.txt"u8, out ZipEntryRef entry));
+                Assert.Equal(localOffset, entry.LocalHeaderOffset);
+                InvalidDataException ex = await OpenPartFailsAsync(index, entry, useAsync, ct);
+                Assert.Contains("local file header", ex.Message, StringComparison.OrdinalIgnoreCase);
+            }
+        }
+
+        [Fact]
+        public async Task PositionalLocalHeaderOffsetJustInsideTheFileEndThrowsInvalidDataOnOpen()
+        {
+            CancellationToken ct = TestContext.Current.CancellationToken;
+            foreach (bool useAsync in Modes)
+            {
+                Zip64Layout probe = BuildStoredZip64(Zip64Payload);
+                Zip64Layout zip = BuildStoredZip64(Zip64Payload, localOffset: probe.Bytes.Length - 29);
+
+                using ZipIndex index = await CreatePositionalAsync(zip.Bytes, useAsync, ct);
+                Assert.True(index.TryGetEntry("a.txt"u8, out ZipEntryRef entry));
+                InvalidDataException ex = await OpenPartFailsAsync(index, entry, useAsync, ct);
+                Assert.Contains("out of range", ex.Message, StringComparison.OrdinalIgnoreCase);
+            }
+        }
+
+        [Theory]
+        [InlineData(long.MaxValue)]
+        [InlineData(long.MaxValue - 50)]
+        [InlineData((long)int.MaxValue + 1)]
+        [InlineData(int.MaxValue)]
+        public async Task PositionalHugeZip64CompressedSizeThrowsInvalidDataOnOpen(long compressedSize)
+        {
+            CancellationToken ct = TestContext.Current.CancellationToken;
+            foreach (bool useAsync in Modes)
+            {
+                Zip64Layout zip = BuildStoredZip64(Zip64Payload, compressedSize: compressedSize);
+
+                using ZipIndex index = await CreatePositionalAsync(zip.Bytes, useAsync, ct);
+                Assert.True(index.TryGetEntry("a.txt"u8, out ZipEntryRef entry));
+                Assert.Equal(compressedSize, entry.CompressedSize);
+                InvalidDataException ex = await OpenPartFailsAsync(index, entry, useAsync, ct);
+                Assert.Contains("past the end", ex.Message, StringComparison.OrdinalIgnoreCase);
+                if (useAsync)
+                {
+                    await Assert.ThrowsAsync<InvalidDataException>(
+                        async () => (await index.OpenEntryStreamAsync(entry, new DecompressedByteCounter(0), ExcelReaderOptions.Default, ct)).Dispose());
+                }
+                else
+                {
+                    Assert.Throws<InvalidDataException>(
+                        () => index.OpenEntryStream(entry, new DecompressedByteCounter(0), ExcelReaderOptions.Default));
+                }
+            }
+        }
+
+        [Fact]
+        public async Task PositionalCompressedSizeEndingExactlyAtTheFileEndIsAcceptedAndOneMoreIsRejected()
+        {
+            CancellationToken ct = TestContext.Current.CancellationToken;
+            foreach (bool useAsync in Modes)
+            {
+                Zip64Layout probe = BuildStoredZip64(Zip64Payload);
+                long exact = probe.Bytes.Length - probe.DataOffset;
+
+                Zip64Layout fits = BuildStoredZip64(Zip64Payload, compressedSize: exact, uncompressedSize: exact);
+                using (ZipIndex index = await CreatePositionalAsync(fits.Bytes, useAsync, ct))
+                {
+                    Assert.True(index.TryGetEntry("a.txt"u8, out ZipEntryRef entry));
+                    using ZipPart part = await OpenPartPositionalAsync(index, entry, useAsync, ct);
+                    Assert.Equal(exact, part.Memory.Length);
+                }
+
+                Zip64Layout overruns = BuildStoredZip64(Zip64Payload, compressedSize: exact + 1);
+                using (ZipIndex index = await CreatePositionalAsync(overruns.Bytes, useAsync, ct))
+                {
+                    Assert.True(index.TryGetEntry("a.txt"u8, out ZipEntryRef entry));
+                    await OpenPartFailsAsync(index, entry, useAsync, ct);
+                }
+            }
+        }
+
+        [Theory]
+        [InlineData(0x8000000000000000UL)]
+        [InlineData(ulong.MaxValue)]
+        public async Task PositionalZip64LocalHeaderOffsetAboveLongMaxIsRejectedAsNegative(ulong localOffset)
+        {
+            CancellationToken ct = TestContext.Current.CancellationToken;
+            foreach (bool useAsync in Modes)
+            {
+                Zip64Layout zip = BuildStoredZip64(Zip64Payload, localOffset: unchecked((long)localOffset));
+
+                InvalidDataException ex = await CreateFailsAsync(zip.Bytes, useAsync, ct);
+                Assert.Contains("negative", ex.Message, StringComparison.OrdinalIgnoreCase);
+            }
+        }
+
+        [Theory]
+        [InlineData(0x8000000000000000UL)]
+        [InlineData(ulong.MaxValue)]
+        public async Task PositionalZip64LocatorOffsetAboveLongMaxIsRejectedNotIgnored(ulong zip64EocdOffset)
+        {
+            CancellationToken ct = TestContext.Current.CancellationToken;
+            foreach (bool useAsync in Modes)
+            {
+                Zip64Layout zip = BuildStoredZip64(Zip64Payload);
+                BinaryPrimitives.WriteUInt64LittleEndian(zip.Bytes.AsSpan(zip.LocatorOffset + 8), zip64EocdOffset);
+
+                InvalidDataException ex = await CreateFailsAsync(zip.Bytes, useAsync, ct);
+                Assert.Contains("ZIP64", ex.Message, StringComparison.Ordinal);
+            }
+        }
+
+        [Theory]
+        [InlineData(long.MaxValue, 1UL)]
+        [InlineData(long.MaxValue, (ulong)long.MaxValue)]
+        [InlineData(1L, (ulong)long.MaxValue)]
+        [InlineData(0L, ulong.MaxValue)]
+        [InlineData(-1L, 0UL)]
+        [InlineData(long.MinValue, 100UL)]
+        [InlineData(0L, 0x8000000000000000UL)]
+        public async Task PositionalZip64CentralDirectoryBoundsThatWouldOverflowAreRejected(long cdOffset, ulong cdSize)
+        {
+            CancellationToken ct = TestContext.Current.CancellationToken;
+            foreach (bool useAsync in Modes)
+            {
+                Zip64Layout zip = BuildStoredZip64(Zip64Payload);
+                BinaryPrimitives.WriteUInt64LittleEndian(zip.Bytes.AsSpan(zip.Zip64EocdOffset + 40), cdSize);
+                BinaryPrimitives.WriteInt64LittleEndian(zip.Bytes.AsSpan(zip.Zip64EocdOffset + 48), cdOffset);
+
+                InvalidDataException ex = await CreateFailsAsync(zip.Bytes, useAsync, ct);
+                Assert.Contains("central directory", ex.Message, StringComparison.OrdinalIgnoreCase);
+            }
+        }
+
+        [Fact]
+        public async Task PositionalZip64CentralDirectorySizeOneByteLongerThanItsRecordsIsRejected()
+        {
+            CancellationToken ct = TestContext.Current.CancellationToken;
+            foreach (bool useAsync in Modes)
+            {
+                Zip64Layout zip = BuildStoredZip64(Zip64Payload);
+                long cdSize = BinaryPrimitives.ReadInt64LittleEndian(zip.Bytes.AsSpan(zip.Zip64EocdOffset + 40));
+                BinaryPrimitives.WriteInt64LittleEndian(zip.Bytes.AsSpan(zip.Zip64EocdOffset + 40), cdSize + 1);
+
+                await CreateFailsAsync(zip.Bytes, useAsync, ct);
+            }
         }
 
         private readonly record struct Zip64Layout(byte[] Bytes, int DataOffset, int Zip64EocdOffset, int LocatorOffset);
