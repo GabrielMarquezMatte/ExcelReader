@@ -222,5 +222,51 @@ namespace ExcelReader.Tests.Reader.Sources
                 Assert.Equal((byte)(Payload[100 + i] ^ 0xFF), read[i]);
             }
         }
+
+        [Theory]
+        [MemberData(nameof(Kinds))]
+        public void A_Negative_Offset_Is_Rejected(Kind kind)
+        {
+            using ByteSource source = Open(kind);
+            Assert.Throws<ArgumentOutOfRangeException>(() => source.Read(-1, new byte[4]));
+        }
+
+        [Theory]
+        [MemberData(nameof(Kinds))]
+        public async Task ReadAsync_At_The_End_Returns_Zero(Kind kind)
+        {
+            using ByteSource source = Open(kind);
+            Assert.Equal(0, await source.ReadAsync(Payload.Length, new byte[16], TestContext.Current.CancellationToken));
+        }
+
+        [Fact]
+        public async Task A_Cancelled_Token_Stops_A_Stream_Read()
+        {
+            using ByteSource source = ByteSource.FromStream(new TrickleStream(Payload), leaveOpen: false);
+            using CancellationTokenSource cancelled = new();
+            await cancelled.CancelAsync();
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(
+                async () => await source.ReadAsync(0, new byte[16], cancelled.Token));
+        }
+
+        [Fact]
+        public void An_Exposed_MemoryStream_With_A_Buffer_Offset_Reads_From_Its_Origin()
+        {
+            byte[] backing = new byte[Payload.Length + 100];
+            Payload.CopyTo(backing, 100);
+            using ByteSource source = ByteSource.FromStream(
+                new MemoryStream(backing, 100, Payload.Length, writable: false, publiclyVisible: true), leaveOpen: false);
+            byte[] read = new byte[64];
+            source.ReadExactly(10, read);
+            Assert.True(read.AsSpan().SequenceEqual(Payload.AsSpan(10, 64)));
+        }
+
+        [Fact]
+        public async Task FromStreamAsync_Leaves_A_Borrowed_NonSeekable_Stream_Open()
+        {
+            using NonSeekableStream stream = new(Payload);
+            using ByteSource source = await ByteSource.FromStreamAsync(stream, leaveOpen: true, TestContext.Current.CancellationToken);
+            Assert.Equal(-1, stream.ReadByte());
+        }
     }
 }

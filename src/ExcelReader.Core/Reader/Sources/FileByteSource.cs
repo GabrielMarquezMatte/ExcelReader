@@ -18,11 +18,13 @@ namespace ExcelReader.Core.Reader.Sources
 
         internal override int Read(long offset, Span<byte> destination)
         {
+            ArgumentOutOfRangeException.ThrowIfNegative(offset);
             return offset >= Length ? 0 : RandomAccess.Read(_handle, destination, offset);
         }
 
         internal override ValueTask<int> ReadAsync(long offset, Memory<byte> destination, CancellationToken ct)
         {
+            ArgumentOutOfRangeException.ThrowIfNegative(offset);
             return offset >= Length ? new ValueTask<int>(0) : RandomAccess.ReadAsync(_handle, destination, offset, ct);
         }
 

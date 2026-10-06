@@ -13,6 +13,7 @@ namespace ExcelReader.Core.Reader.Sources
         private byte[]? _buffer;
         private int _bufferPos;
         private int _bufferLen;
+        private bool _disposed;
 
         internal ByteSourceStream(ByteSource source, long offset, long length)
         {
@@ -42,6 +43,7 @@ namespace ExcelReader.Core.Reader.Sources
 
         public override int Read(Span<byte> destination)
         {
+            ObjectDisposedException.ThrowIf(_disposed, this);
             if (destination.IsEmpty)
             {
                 return 0;
@@ -73,6 +75,7 @@ namespace ExcelReader.Core.Reader.Sources
 
         public override async ValueTask<int> ReadAsync(Memory<byte> destination, CancellationToken cancellationToken = default)
         {
+            ObjectDisposedException.ThrowIf(_disposed, this);
             if (destination.IsEmpty)
             {
                 return 0;
@@ -138,6 +141,7 @@ namespace ExcelReader.Core.Reader.Sources
 
         protected override void Dispose(bool disposing)
         {
+            _disposed = true;
             byte[]? buffer = Interlocked.Exchange(ref _buffer, null);
             if (buffer is not null)
             {
