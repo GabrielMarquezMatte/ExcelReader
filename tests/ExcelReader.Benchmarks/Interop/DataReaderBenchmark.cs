@@ -8,7 +8,7 @@ namespace ExcelReader.Benchmarks
     [MemoryDiagnoser]
     [SuppressMessage("Performance", "CA1859:Use concrete types when possible for improved performance",
         Justification = "The interface dispatch is the thing being measured: SqlBulkCopy, DataTable.Load and " +
-            "Dapper all hold an IDataReader over an IExcelRowReader, so binding these to the concrete types " +
+            "Dapper all hold an IDataReader over an IExcelSheet, so binding these to the concrete types " +
             "would devirtualize calls a real consumer pays for and report a cost nobody actually sees.")]
     public class DataReaderBenchmark
     {
@@ -24,7 +24,7 @@ namespace ExcelReader.Benchmarks
             _xlsx = await WorkbookGenerator.BuildTypedAsync(Rows).ConfigureAwait(false);
         }
 
-        private IExcelRowReader OpenReader()
+        private IExcelWorkbook OpenReader()
         {
             return Excel.FromXlsx(new MemoryStream(_xlsx, writable: false), leaveOpen: false);
         }
@@ -32,9 +32,9 @@ namespace ExcelReader.Benchmarks
         [Benchmark(Baseline = true)]
         public long Baseline_RawRows()
         {
-            using IExcelRowReader reader = OpenReader();
+            using IExcelWorkbook reader = OpenReader();
             long acc = 0;
-            foreach (Row row in reader)
+            foreach (Row row in reader.FirstSheet)
             {
                 for (int i = 0; i < row.ColumnCount; i++)
                 {
@@ -47,8 +47,8 @@ namespace ExcelReader.Benchmarks
         [Benchmark]
         public long DataReader_GetValue()
         {
-            using IExcelRowReader reader = OpenReader();
-            using IDataReader data = new ExcelDataReader(reader);
+            using IExcelWorkbook reader = OpenReader();
+            using IDataReader data = new ExcelDataReader(reader.FirstSheet);
             long acc = 0;
             while (data.Read())
             {
@@ -63,8 +63,8 @@ namespace ExcelReader.Benchmarks
         [Benchmark]
         public long DataReader_TypedGetters()
         {
-            using IExcelRowReader reader = OpenReader();
-            using IDataReader data = new ExcelDataReader(reader);
+            using IExcelWorkbook reader = OpenReader();
+            using IDataReader data = new ExcelDataReader(reader.FirstSheet);
             long acc = 0;
             while (data.Read())
             {
@@ -79,8 +79,8 @@ namespace ExcelReader.Benchmarks
         [Benchmark]
         public long DataReader_GetBytes()
         {
-            using IExcelRowReader reader = OpenReader();
-            using IDataReader data = new ExcelDataReader(reader);
+            using IExcelWorkbook reader = OpenReader();
+            using IDataReader data = new ExcelDataReader(reader.FirstSheet);
             long acc = 0;
             while (data.Read())
             {
@@ -92,8 +92,8 @@ namespace ExcelReader.Benchmarks
         [Benchmark]
         public int DataTable_Load()
         {
-            using IExcelRowReader reader = OpenReader();
-            using IDataReader data = new ExcelDataReader(reader);
+            using IExcelWorkbook reader = OpenReader();
+            using IDataReader data = new ExcelDataReader(reader.FirstSheet);
             var table = new DataTable();
             table.Load(data);
             return table.Rows.Count;

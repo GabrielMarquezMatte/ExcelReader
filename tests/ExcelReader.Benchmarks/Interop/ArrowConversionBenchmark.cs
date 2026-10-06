@@ -48,7 +48,7 @@ namespace ExcelReader.Benchmarks
         public long CsvAllString()
         {
             using var reader = Excel.FromCsv(_csvAllString);
-            using RecordBatch batch = reader.ToArrowRecordBatch(AllStringSchema, headerRow: 0);
+            using RecordBatch batch = reader.FirstSheet.ToArrowRecordBatch(AllStringSchema, headerRow: 0);
             return batch.Length;
         }
 
@@ -56,7 +56,7 @@ namespace ExcelReader.Benchmarks
         public long CsvTyped()
         {
             using var reader = Excel.FromCsv(_csvTyped);
-            using RecordBatch batch = reader.ToArrowRecordBatch(TypedSchema);
+            using RecordBatch batch = reader.FirstSheet.ToArrowRecordBatch(TypedSchema);
             return batch.Length;
         }
 
@@ -65,7 +65,7 @@ namespace ExcelReader.Benchmarks
         {
             using var ms = new MemoryStream(_xlsbTyped, writable: false);
             using var reader = Excel.FromXlsb(ms);
-            using RecordBatch batch = reader.ToArrowRecordBatch(TypedSchema);
+            using RecordBatch batch = reader.FirstSheet.ToArrowRecordBatch(TypedSchema);
             return batch.Length;
         }
 
@@ -73,7 +73,7 @@ namespace ExcelReader.Benchmarks
         public long CsvTypedWithInference()
         {
             using var reader = Excel.FromCsv(_csvTyped);
-            using RecordBatch batch = reader.ToArrowRecordBatch();
+            using RecordBatch batch = reader.FirstSheet.ToArrowRecordBatch();
             return batch.Length;
         }
     }
