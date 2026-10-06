@@ -236,6 +236,27 @@ namespace ExcelReader.Tests.Reader.Zip
             Assert.Throws<InvalidDataException>(() => index.OpenEntryStream(entry, Counter(), ExcelReaderOptions.Default).Dispose());
         }
 
+        [Theory]
+        [MemberData(nameof(Kinds))]
+        public void Bytes_After_The_End_Of_Central_Directory_Are_Ignored(Kind kind)
+        {
+            byte[] zipBytes = BuildZip(dataDescriptors: false);
+            foreach (int extra in (int[])[1, 100])
+            {
+                byte[] padded = new byte[zipBytes.Length + extra];
+                zipBytes.CopyTo(padded, 0);
+                padded.AsSpan(zipBytes.Length).Fill(0xAB);
+
+                using ZipIndex index = ZipIndex.Create(Open(kind, padded), ExcelReaderOptions.Default);
+                for (int i = 0; i < Names.Length; i++)
+                {
+                    Assert.True(index.TryGetEntry(System.Text.Encoding.UTF8.GetBytes(Names[i]), out ZipEntryRef entry));
+                    using ZipPart part = index.OpenPart(entry, Counter());
+                    Assert.True(part.Memory.Span.SequenceEqual(Content(i)));
+                }
+            }
+        }
+
         [Fact]
         public void A_Failed_Create_Disposes_The_Source()
         {
