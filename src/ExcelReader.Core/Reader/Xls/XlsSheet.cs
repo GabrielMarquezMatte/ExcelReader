@@ -34,7 +34,10 @@ namespace ExcelReader.Core.Reader.Xls
             return Workbook.OpenSheet(Index);
         }
 
-        /// <inheritdoc/>
+        /// <summary>Gets a new enumerator that reads the sheet's rows asynchronously from the start.</summary>
+        /// <remarks>XlsWorkbook is fully in-memory, so nothing is deferred; <paramref name="ct"/> is checked here and on each move.</remarks>
+        /// <param name="ct">A token checked by this call and by every <see cref="IExcelRowEnumerator.MoveNextAsync"/> call.</param>
+        /// <exception cref="ObjectDisposedException">The sheet's workbook was disposed.</exception>
         public XlsWorkbook.Enumerator GetAsyncEnumerator(CancellationToken ct = default)
         {
             return Workbook.OpenSheetAsync(Index, ct);

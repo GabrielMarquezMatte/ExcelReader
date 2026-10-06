@@ -10,9 +10,17 @@ namespace ExcelReader.Arrow
         /// <summary>Converts one sheet into an Arrow <see cref="RecordBatch"/>.</summary>
         /// <param name="sheet">The sheet to convert.</param>
         /// <param name="schema">The column schema to use; inferred from the sheet with <see cref="Excel.InferSchema(IExcelSheet, int, int, bool)"/> when <see langword="null"/>.</param>
-        /// <param name="headerRow">1-based row number holding the column names.</param>
+        /// <param name="headerRow">
+        /// 1-based header row, reused both for schema inference (when <paramref name="schema"/> is
+        /// <see langword="null"/>) and to skip the header line during the data pass. 0 means no header row.
+        /// </param>
         /// <returns>A record batch with one column per schema entry and one row per data row.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="sheet"/> is <see langword="null"/>.</exception>
+        /// <exception cref="InvalidOperationException">
+        /// A cell failed to convert to its column's declared type on a non-nullable column.
+        /// </exception>
+        /// <exception cref="ArgumentException">The sheet has fewer rows than <paramref name="headerRow"/>.</exception>
+        /// <exception cref="NotSupportedException"><paramref name="schema"/> names an unrecognized <see cref="ExcelColumnType"/>.</exception>
         public static RecordBatch ToArrowRecordBatch(this IExcelSheet sheet, ExcelColumnSchema[]? schema = null, int headerRow = 1)
         {
             ArgumentNullException.ThrowIfNull(sheet);

@@ -31,7 +31,7 @@ namespace ExcelReader.Core.Reader
 
         /// <summary>Opens an XLSX workbook from an existing stream.</summary>
         /// <param name="stream">The stream containing the XLSX data.</param>
-        /// <param name="leaveOpen">When <see langword="true"/> (the default), <paramref name="stream"/> is not disposed when the reader is disposed.</param>
+        /// <param name="leaveOpen">When <see langword="true"/> (the default), <paramref name="stream"/> is not disposed when the workbook is disposed.</param>
         /// <param name="options">Resource limits and behavior toggles; <see cref="ExcelReaderOptions.Default"/> when <see langword="null"/>.</param>
         public static XlsxWorkbook FromXlsx(Stream stream, bool leaveOpen = true, ExcelReaderOptions? options = null)
         {
@@ -71,7 +71,7 @@ namespace ExcelReader.Core.Reader
 
         /// <summary>Opens a legacy binary (XLS) workbook from an existing stream.</summary>
         /// <param name="stream">The stream containing the XLS data.</param>
-        /// <param name="leaveOpen">When <see langword="true"/> (the default), <paramref name="stream"/> is not disposed when the reader is disposed.</param>
+        /// <param name="leaveOpen">When <see langword="true"/> (the default), <paramref name="stream"/> is not disposed when the workbook is disposed.</param>
         /// <param name="options">Resource limits and behavior toggles; <see cref="ExcelReaderOptions.Default"/> when <see langword="null"/>.</param>
         public static XlsWorkbook FromXls(Stream stream, bool leaveOpen = true, ExcelReaderOptions? options = null)
         {
@@ -96,7 +96,7 @@ namespace ExcelReader.Core.Reader
 
         /// <summary>Opens an XLSB (Excel binary) workbook from an existing stream.</summary>
         /// <param name="stream">The stream containing the XLSB data.</param>
-        /// <param name="leaveOpen">When <see langword="true"/> (the default), <paramref name="stream"/> is not disposed when the reader is disposed.</param>
+        /// <param name="leaveOpen">When <see langword="true"/> (the default), <paramref name="stream"/> is not disposed when the workbook is disposed.</param>
         /// <param name="options">Resource limits and behavior toggles; <see cref="ExcelReaderOptions.Default"/> when <see langword="null"/>.</param>
         public static XlsbWorkbook FromXlsb(Stream stream, bool leaveOpen = true, ExcelReaderOptions? options = null)
         {
@@ -138,7 +138,7 @@ namespace ExcelReader.Core.Reader
 
         /// <summary>Asynchronously opens an XLSX workbook from an existing stream.</summary>
         /// <param name="stream">The stream containing the XLSX data.</param>
-        /// <param name="leaveOpen">When <see langword="true"/> (the default), <paramref name="stream"/> is not disposed when the reader is disposed.</param>
+        /// <param name="leaveOpen">When <see langword="true"/> (the default), <paramref name="stream"/> is not disposed when the workbook is disposed.</param>
         /// <param name="options">Resource limits and behavior toggles; <see cref="ExcelReaderOptions.Default"/> when <see langword="null"/>.</param>
         /// <param name="ct">A token to cancel the open operation.</param>
         public static ValueTask<XlsxWorkbook> FromXlsxAsync(Stream stream, bool leaveOpen = true, ExcelReaderOptions? options = null, CancellationToken ct = default)
@@ -162,7 +162,7 @@ namespace ExcelReader.Core.Reader
 
         /// <summary>Asynchronously opens a legacy binary (XLS) workbook from an existing stream.</summary>
         /// <param name="stream">The stream containing the XLS data.</param>
-        /// <param name="leaveOpen">When <see langword="true"/> (the default), <paramref name="stream"/> is not disposed when the reader is disposed.</param>
+        /// <param name="leaveOpen">When <see langword="true"/> (the default), <paramref name="stream"/> is not disposed when the workbook is disposed.</param>
         /// <param name="options">Resource limits and behavior toggles; <see cref="ExcelReaderOptions.Default"/> when <see langword="null"/>.</param>
         /// <param name="ct">A token to cancel the open operation.</param>
         public static ValueTask<XlsWorkbook> FromXlsAsync(Stream stream, bool leaveOpen = true, ExcelReaderOptions? options = null, CancellationToken ct = default)
@@ -182,7 +182,7 @@ namespace ExcelReader.Core.Reader
 
         /// <summary>Asynchronously opens an XLSB (Excel binary) workbook from an existing stream.</summary>
         /// <param name="stream">The stream containing the XLSB data.</param>
-        /// <param name="leaveOpen">When <see langword="true"/> (the default), <paramref name="stream"/> is not disposed when the reader is disposed.</param>
+        /// <param name="leaveOpen">When <see langword="true"/> (the default), <paramref name="stream"/> is not disposed when the workbook is disposed.</param>
         /// <param name="options">Resource limits and behavior toggles; <see cref="ExcelReaderOptions.Default"/> when <see langword="null"/>.</param>
         /// <param name="ct">A token to cancel the open operation.</param>
         public static ValueTask<XlsbWorkbook> FromXlsbAsync(Stream stream, bool leaveOpen = true, ExcelReaderOptions? options = null, CancellationToken ct = default)
@@ -213,7 +213,7 @@ namespace ExcelReader.Core.Reader
 
         /// <summary>Opens a CSV (or other delimited-text) source from an existing stream.</summary>
         /// <param name="stream">The stream containing the CSV data.</param>
-        /// <param name="leaveOpen">When <see langword="true"/> (the default), <paramref name="stream"/> is not disposed when the reader is disposed.</param>
+        /// <param name="leaveOpen">When <see langword="true"/> (the default), <paramref name="stream"/> is not disposed when the workbook is disposed.</param>
         /// <param name="options">Delimiter, quote, encoding, and size-limit settings; <see cref="CsvReaderOptions.Default"/> when <see langword="null"/>.</param>
         public static CsvReader FromCsv(Stream stream, bool leaveOpen = true, CsvReaderOptions? options = null)
         {
@@ -252,7 +252,7 @@ namespace ExcelReader.Core.Reader
 
         /// <summary>Asynchronously opens a CSV (or other delimited-text) source from an existing stream.</summary>
         /// <param name="stream">The stream containing the CSV data.</param>
-        /// <param name="leaveOpen">When <see langword="true"/> (the default), <paramref name="stream"/> is not disposed when the reader is disposed.</param>
+        /// <param name="leaveOpen">When <see langword="true"/> (the default), <paramref name="stream"/> is not disposed when the workbook is disposed.</param>
         /// <param name="options">Delimiter, quote, encoding, and size-limit settings; <see cref="CsvReaderOptions.Default"/> when <see langword="null"/>.</param>
         /// <param name="ct">A token to cancel the open operation.</param>
         public static async ValueTask<CsvReader> FromCsvAsync(Stream stream, bool leaveOpen = true, CsvReaderOptions? options = null, CancellationToken ct = default)
@@ -269,8 +269,11 @@ namespace ExcelReader.Core.Reader
         /// <param name="sampleSize">How many rows after the header to inspect.</param>
         /// <returns>One <see cref="ExcelColumnSchema"/> per column, in column order.</returns>
         /// <remarks>
-        /// This is a guess over a bounded sample, not a guarantee about the whole sheet. Verify it fits
-        /// before trusting it, and feed the result into <see cref="ExcelParser.Build{T}"/> to build a real map.
+        /// This is a guess over a bounded sample, not a guarantee about the whole sheet — a column
+        /// whose first <paramref name="sampleSize"/> rows are all integers is reported as
+        /// <see cref="ExcelColumnType.Int64Column"/> even if row 10,000 holds text. Verify it fits
+        /// before trusting it, and feed the result into <see cref="ExcelParser.Build{T}"/> to
+        /// build a real map.
         /// </remarks>
         /// <exception cref="ArgumentNullException"><paramref name="sheet"/> is <see langword="null"/>.</exception>
         /// <exception cref="ArgumentOutOfRangeException"><paramref name="headerRow"/> is negative, or
@@ -295,6 +298,8 @@ namespace ExcelReader.Core.Reader
         /// notation (<c>12E4</c>), padded or culture-formatted numbers, and non-ISO dates stay text. A column only gets a non-text type when
         /// every sampled value converts to it.</param>
         /// <returns>One <see cref="ExcelColumnSchema"/> per column, in column order.</returns>
+        /// <remarks>Still a guess over a bounded sample: a value past the sample can still fail to convert.
+        /// See <see cref="InferSchema(IExcelSheet, int, int)"/>.</remarks>
         /// <exception cref="ArgumentNullException"><paramref name="sheet"/> is <see langword="null"/>.</exception>
         /// <exception cref="ArgumentOutOfRangeException"><paramref name="headerRow"/> is negative, or
         /// <paramref name="sampleSize"/> is not positive.</exception>
@@ -315,7 +320,7 @@ namespace ExcelReader.Core.Reader
         /// <remarks>Pattern-match on the returned workbook against its concrete type (<see cref="XlsxWorkbook"/> / <see cref="XlsWorkbook"/> / <see cref="XlsbWorkbook"/>) to access format-specific members.</remarks>
         /// <param name="path">The path to the workbook file.</param>
         /// <param name="options">Resource limits and behavior toggles; <see cref="ExcelReaderOptions.Default"/> when <see langword="null"/>.</param>
-        /// <returns>A format-agnostic <see cref="IExcelWorkbook"/> backed by the concrete reader that matches the detected format.</returns>
+        /// <returns>A format-agnostic <see cref="IExcelWorkbook"/> backed by the concrete workbook that matches the detected format.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="path"/> is <see langword="null"/>.</exception>
         /// <exception cref="InvalidDataException">The file's signature does not match a supported format.</exception>
         public static IExcelWorkbook Open(string path, ExcelReaderOptions? options = null)
@@ -329,9 +334,9 @@ namespace ExcelReader.Core.Reader
         /// stream's signature.
         /// </summary>
         /// <param name="stream">A seekable stream containing the workbook data.</param>
-        /// <param name="leaveOpen">When <see langword="true"/> (the default), <paramref name="stream"/> is not disposed when the reader is disposed.</param>
+        /// <param name="leaveOpen">When <see langword="true"/> (the default), <paramref name="stream"/> is not disposed when the workbook is disposed.</param>
         /// <param name="options">Resource limits and behavior toggles; <see cref="ExcelReaderOptions.Default"/> when <see langword="null"/>.</param>
-        /// <returns>A format-agnostic <see cref="IExcelWorkbook"/> backed by the concrete reader that matches the detected format.</returns>
+        /// <returns>A format-agnostic <see cref="IExcelWorkbook"/> backed by the concrete workbook that matches the detected format.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="stream"/> is <see langword="null"/>.</exception>
         /// <exception cref="ArgumentException"><paramref name="stream"/> does not support seeking.</exception>
         /// <exception cref="InvalidDataException">The stream's signature does not match a supported format.</exception>
@@ -349,7 +354,7 @@ namespace ExcelReader.Core.Reader
         /// </summary>
         /// <param name="data">The whole workbook file's bytes. Must outlive the returned reader.</param>
         /// <param name="options">Resource limits and behavior toggles; <see cref="ExcelReaderOptions.Default"/> when <see langword="null"/>.</param>
-        /// <returns>A format-agnostic <see cref="IExcelWorkbook"/> backed by the concrete reader that matches the detected format.</returns>
+        /// <returns>A format-agnostic <see cref="IExcelWorkbook"/> backed by the concrete workbook that matches the detected format.</returns>
         /// <exception cref="InvalidDataException">The buffer's signature does not match a supported format.</exception>
         public static IExcelWorkbook Open(ReadOnlyMemory<byte> data, ExcelReaderOptions? options = null)
         {
@@ -416,7 +421,7 @@ namespace ExcelReader.Core.Reader
         /// <param name="path">The path to the workbook file.</param>
         /// <param name="options">Resource limits and behavior toggles; <see cref="ExcelReaderOptions.Default"/> when <see langword="null"/>.</param>
         /// <param name="ct">A token to cancel the open operation.</param>
-        /// <returns>A format-agnostic <see cref="IExcelWorkbook"/> backed by the concrete reader that matches the detected format.</returns>
+        /// <returns>A format-agnostic <see cref="IExcelWorkbook"/> backed by the concrete workbook that matches the detected format.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="path"/> is <see langword="null"/>.</exception>
         /// <exception cref="InvalidDataException">The file's signature does not match a supported format.</exception>
         public static ValueTask<IExcelWorkbook> OpenAsync(string path, ExcelReaderOptions? options = null, CancellationToken ct = default)
@@ -431,10 +436,10 @@ namespace ExcelReader.Core.Reader
         /// (XLSX/XLSB/XLS) from the stream's signature.
         /// </summary>
         /// <param name="stream">A seekable stream containing the workbook data.</param>
-        /// <param name="leaveOpen">When <see langword="true"/> (the default), <paramref name="stream"/> is not disposed when the reader is disposed.</param>
+        /// <param name="leaveOpen">When <see langword="true"/> (the default), <paramref name="stream"/> is not disposed when the workbook is disposed.</param>
         /// <param name="options">Resource limits and behavior toggles; <see cref="ExcelReaderOptions.Default"/> when <see langword="null"/>.</param>
         /// <param name="ct">A token to cancel the open operation.</param>
-        /// <returns>A format-agnostic <see cref="IExcelWorkbook"/> backed by the concrete reader that matches the detected format.</returns>
+        /// <returns>A format-agnostic <see cref="IExcelWorkbook"/> backed by the concrete workbook that matches the detected format.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="stream"/> is <see langword="null"/>.</exception>
         /// <exception cref="ArgumentException"><paramref name="stream"/> does not support seeking.</exception>
         /// <exception cref="InvalidDataException">The stream's signature does not match a supported format.</exception>
@@ -480,7 +485,7 @@ namespace ExcelReader.Core.Reader
         /// <paramref name="format"/> is <see cref="ExcelFileFormat.Unknown"/>.</param>
         /// <param name="format">The format to read <paramref name="stream"/> as. <see cref="ExcelFileFormat.Unknown"/>
         /// auto-detects XLSX/XLSB/XLS from the signature.</param>
-        /// <param name="leaveOpen">When <see langword="true"/> (the default), <paramref name="stream"/> is not disposed when the reader is disposed.</param>
+        /// <param name="leaveOpen">When <see langword="true"/> (the default), <paramref name="stream"/> is not disposed when the workbook is disposed.</param>
         /// <param name="options">Resource limits and behavior toggles; <see cref="ExcelReaderOptions.Default"/> when
         /// <see langword="null"/>. <see cref="ExcelReaderOptions.Csv"/> supplies the dialect when
         /// <paramref name="format"/> is <see cref="ExcelFileFormat.Csv"/>.</param>
@@ -563,7 +568,7 @@ namespace ExcelReader.Core.Reader
         /// <paramref name="format"/> is <see cref="ExcelFileFormat.Unknown"/>.</param>
         /// <param name="format">The format to read <paramref name="stream"/> as. <see cref="ExcelFileFormat.Unknown"/>
         /// auto-detects XLSX/XLSB/XLS from the signature.</param>
-        /// <param name="leaveOpen">When <see langword="true"/> (the default), <paramref name="stream"/> is not disposed when the reader is disposed.</param>
+        /// <param name="leaveOpen">When <see langword="true"/> (the default), <paramref name="stream"/> is not disposed when the workbook is disposed.</param>
         /// <param name="options">Resource limits and behavior toggles; <see cref="ExcelReaderOptions.Default"/> when
         /// <see langword="null"/>. <see cref="ExcelReaderOptions.Csv"/> supplies the dialect when
         /// <paramref name="format"/> is <see cref="ExcelFileFormat.Csv"/>.</param>
