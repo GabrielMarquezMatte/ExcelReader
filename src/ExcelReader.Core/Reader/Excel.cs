@@ -376,7 +376,7 @@ namespace ExcelReader.Core.Reader
             return format switch
             {
                 ExcelFileFormat.Xls => new XlsReader(data, effective),
-                ExcelFileFormat.Xlsb => XlsbReader.CreateFromMemory(memZip!, effective),
+                ExcelFileFormat.Xlsb => XlsbReader.CreateFromIndex(memZip!, effective),
                 ExcelFileFormat.Xlsx => XlsxReader.CreateFromIndex(memZip!, effective),
                 _ => throw new System.Diagnostics.UnreachableException(),
             };
@@ -392,7 +392,7 @@ namespace ExcelReader.Core.Reader
             }
             return format switch
             {
-                ExcelFileFormat.Xlsb => XlsbReader.CreateFromMemory(memZip!, options),
+                ExcelFileFormat.Xlsb => XlsbReader.CreateFromIndex(memZip!, options),
                 ExcelFileFormat.Xlsx => XlsxReader.CreateFromIndex(memZip!, options),
                 _ => throw new System.Diagnostics.UnreachableException(),
             };
@@ -689,7 +689,7 @@ namespace ExcelReader.Core.Reader
             return format switch
             {
                 ExcelFileFormat.Xls => new XlsReader(stream, leaveOpen, options),
-                ExcelFileFormat.Xlsb => new XlsbReader(stream, leaveOpen, zip!, options),
+                ExcelFileFormat.Xlsb => ReopenXlsb(stream, leaveOpen, zip!, options),
                 ExcelFileFormat.Xlsx => ReopenXlsx(stream, leaveOpen, zip!, options),
                 _ => throw new System.Diagnostics.UnreachableException(),
             };
@@ -704,7 +704,7 @@ namespace ExcelReader.Core.Reader
                 zip = zipPeek;
                 return zipFormat switch
                 {
-                    ExcelFileFormat.Xlsb => new XlsbReader(decrypted, leaveOpen: false, zip, options),
+                    ExcelFileFormat.Xlsb => ReopenXlsb(decrypted, leaveOpen: false, zip, options),
                     ExcelFileFormat.Xlsx => ReopenXlsx(decrypted, leaveOpen: false, zip, options),
                     _ => throw new System.Diagnostics.UnreachableException(),
                 };
@@ -748,7 +748,7 @@ namespace ExcelReader.Core.Reader
             return format switch
             {
                 ExcelFileFormat.Xls => await XlsReader.CreateAsync(stream, leaveOpen, options, ct).ConfigureAwait(false),
-                ExcelFileFormat.Xlsb => await XlsbReader.CreateFromOpenZipAsync(stream, leaveOpen, zip!, options, ct).ConfigureAwait(false),
+                ExcelFileFormat.Xlsb => await ReopenXlsbAsync(stream, leaveOpen, zip!, options, ct).ConfigureAwait(false),
                 ExcelFileFormat.Xlsx => await ReopenXlsxAsync(stream, leaveOpen, zip!, options, ct).ConfigureAwait(false),
                 _ => throw new System.Diagnostics.UnreachableException(),
             };
@@ -763,7 +763,7 @@ namespace ExcelReader.Core.Reader
                 zip = zipPeek;
                 return zipFormat switch
                 {
-                    ExcelFileFormat.Xlsb => await XlsbReader.CreateFromOpenZipAsync(decrypted, leaveOpen: false, zip, options, ct).ConfigureAwait(false),
+                    ExcelFileFormat.Xlsb => await ReopenXlsbAsync(decrypted, leaveOpen: false, zip, options, ct).ConfigureAwait(false),
                     ExcelFileFormat.Xlsx => await ReopenXlsxAsync(decrypted, leaveOpen: false, zip, options, ct).ConfigureAwait(false),
                     _ => throw new System.Diagnostics.UnreachableException(),
                 };
@@ -827,6 +827,19 @@ namespace ExcelReader.Core.Reader
         {
             await peeked.DisposeAsync().ConfigureAwait(false);
             return await XlsxReader.CreateAsync(stream, leaveOpen, options, ct).ConfigureAwait(false);
+        }
+
+        private static XlsbReader ReopenXlsb(Stream stream, bool leaveOpen, ZipArchive peeked, ExcelReaderOptions? options)
+        {
+            peeked.Dispose();
+            return new XlsbReader(stream, leaveOpen, options);
+        }
+
+        private static async ValueTask<XlsbReader> ReopenXlsbAsync(
+            Stream stream, bool leaveOpen, ZipArchive peeked, ExcelReaderOptions? options, CancellationToken ct)
+        {
+            await peeked.DisposeAsync().ConfigureAwait(false);
+            return await XlsbReader.CreateAsync(stream, leaveOpen, options, ct).ConfigureAwait(false);
         }
 
         private static ExcelFileFormat ClassifyZipStream(Stream stream, long start, out ZipArchive zip)
