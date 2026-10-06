@@ -437,5 +437,38 @@ namespace ExcelReader.Tests.Reader.Zip
             }
             Assert.True(checkedFiles > 0, "no ZIP-based workbook found under " + dataDirectory);
         }
+
+        [Theory]
+        [MemberData(nameof(Kinds))]
+        public void A_Disposed_Index_Refuses_Every_Open(Kind kind)
+        {
+            ZipIndex index = ZipIndex.Create(Open(kind, BuildZip(dataDescriptors: false, scale: 20)), ExcelReaderOptions.Default);
+            Assert.True(index.TryGetEntry(System.Text.Encoding.UTF8.GetBytes(Names[0]), out ZipEntryRef entry));
+            index.Dispose();
+
+            Assert.Throws<ObjectDisposedException>(() => index.TryGetEntry(System.Text.Encoding.UTF8.GetBytes(Names[0]), out _));
+            Assert.Throws<ObjectDisposedException>(() => index.OpenPart(entry, Counter()));
+            Assert.Throws<ObjectDisposedException>(() => index.OpenEntryStream(entry, Counter(), ExcelReaderOptions.Default));
+        }
+
+        [Fact]
+        public async Task A_Failed_CreateAsync_Disposes_The_Source()
+        {
+            TrickleStream stream = new(new byte[100]);
+            await Assert.ThrowsAsync<InvalidDataException>(async () => await ZipIndex.CreateAsync(
+                ByteSource.FromStream(stream, leaveOpen: false), ExcelReaderOptions.Default, TestContext.Current.CancellationToken));
+            Assert.False(stream.CanRead);
+        }
+
+        [Fact]
+        public async Task A_Cancelled_CreateAsync_Disposes_The_Source()
+        {
+            TrickleStream stream = new(BuildZip(dataDescriptors: false, scale: 20));
+            using CancellationTokenSource cancelled = new();
+            await cancelled.CancelAsync();
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await ZipIndex.CreateAsync(
+                ByteSource.FromStream(stream, leaveOpen: false), ExcelReaderOptions.Default, cancelled.Token));
+            Assert.False(stream.CanRead);
+        }
     }
 }

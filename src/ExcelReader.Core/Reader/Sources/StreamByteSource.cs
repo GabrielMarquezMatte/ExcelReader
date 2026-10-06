@@ -21,6 +21,7 @@ namespace ExcelReader.Core.Reader.Sources
 
         internal override int Read(long offset, Span<byte> destination)
         {
+            ArgumentOutOfRangeException.ThrowIfNegative(offset);
             if (offset >= Length)
             {
                 return 0;
@@ -39,6 +40,7 @@ namespace ExcelReader.Core.Reader.Sources
 
         internal override async ValueTask<int> ReadAsync(long offset, Memory<byte> destination, CancellationToken ct)
         {
+            ArgumentOutOfRangeException.ThrowIfNegative(offset);
             if (offset >= Length)
             {
                 return 0;

@@ -284,8 +284,14 @@ namespace ExcelReader.Core.Reader.Zip
             }
         }
 
+        private void ThrowIfDisposed()
+        {
+            ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
+        }
+
         internal bool TryGetEntry(ReadOnlySpan<byte> utf8Name, out ZipEntryRef entry)
         {
+            ThrowIfDisposed();
             ReadOnlySpan<byte> directory = _directory.Span;
             foreach (ref readonly ZipEntryRef candidate in _entries.AsSpan(0, Count))
             {
@@ -301,6 +307,7 @@ namespace ExcelReader.Core.Reader.Zip
 
         internal ZipPart OpenPart(in ZipEntryRef entry, DecompressedByteCounter counter, string entryLimitName = "", long entryLimit = 0)
         {
+            ThrowIfDisposed();
             ThrowIfPartTooLarge(entry, counter, entryLimitName, entryLimit);
             long dataOffset = ResolveDataOffset(entry);
             ThrowIfEntryDataInvalid(dataOffset, entry);
@@ -321,6 +328,7 @@ namespace ExcelReader.Core.Reader.Zip
         internal async ValueTask<ZipPart> OpenPartAsync(
             ZipEntryRef entry, DecompressedByteCounter counter, CancellationToken ct, string entryLimitName = "", long entryLimit = 0)
         {
+            ThrowIfDisposed();
             if (HasMemory)
             {
                 return OpenPart(entry, counter, entryLimitName, entryLimit);
@@ -372,6 +380,7 @@ namespace ExcelReader.Core.Reader.Zip
         internal LimitedReadStream OpenEntryStream(
             in ZipEntryRef entry, DecompressedByteCounter counter, ExcelReaderOptions options, string entryLimitName = "", long entryLimit = 0)
         {
+            ThrowIfDisposed();
             long dataOffset = ResolveDataOffset(entry);
             return WrapEntryStream(entry, dataOffset, counter, options, entryLimitName, entryLimit);
         }
@@ -380,6 +389,7 @@ namespace ExcelReader.Core.Reader.Zip
             ZipEntryRef entry, DecompressedByteCounter counter, ExcelReaderOptions options, CancellationToken ct,
             string entryLimitName = "", long entryLimit = 0)
         {
+            ThrowIfDisposed();
             long dataOffset = HasMemory ? ResolveDataOffset(entry) : await ResolveDataOffsetAsync(entry, ct).ConfigureAwait(false);
             return WrapEntryStream(entry, dataOffset, counter, options, entryLimitName, entryLimit);
         }

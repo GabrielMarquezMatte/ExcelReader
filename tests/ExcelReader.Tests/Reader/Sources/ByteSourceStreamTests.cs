@@ -109,5 +109,37 @@ namespace ExcelReader.Tests.Reader.Sources
             new ByteSourceStream(source, 0, 10).Dispose();
             Assert.False(source.Disposed);
         }
+
+        [Fact]
+        public void Read_After_Dispose_Throws()
+        {
+            using CountingSource source = new(Payload(1000));
+            ByteSourceStream stream = new(source, 0, 1000);
+            Assert.Equal(10, stream.Read(new byte[10]));
+            stream.Dispose();
+            Assert.Throws<ObjectDisposedException>(() => stream.Read(new byte[10]));
+        }
+
+        [Fact]
+        public async Task ReadAsync_After_Dispose_Throws()
+        {
+            using CountingSource source = new(Payload(1000));
+            ByteSourceStream stream = new(source, 0, 1000);
+            await stream.DisposeAsync();
+            await Assert.ThrowsAsync<ObjectDisposedException>(
+                async () => await stream.ReadAsync(new byte[10], TestContext.Current.CancellationToken));
+        }
+
+        [Fact]
+        public async Task A_Large_Async_Read_Bypasses_The_Buffer()
+        {
+            byte[] bytes = Payload(300_000);
+            using CountingSource source = new(bytes);
+            await using ByteSourceStream stream = new(source, 0, 300_000);
+            byte[] big = new byte[300_000];
+            Assert.Equal(300_000, await stream.ReadAsync(big, TestContext.Current.CancellationToken));
+            Assert.Equal(1, source.Reads);
+            Assert.True(big.AsSpan().SequenceEqual(bytes));
+        }
     }
 }
