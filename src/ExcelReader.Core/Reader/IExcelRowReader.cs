@@ -32,11 +32,11 @@ namespace ExcelReader.Core.Reader
     /// reader (<see cref="Excel.Open(string, ExcelReaderOptions?)"/>) and lets callers walk every sheet without
     /// downcasting to the concrete <c>XlsxReader</c>/<c>XlsbReader</c>/<c>XlsReader</c> type.
     /// <para>
-    /// <b>Thread safety:</b> no implementation is thread-safe. A reader instance carries mutable enumeration
-    /// state (current sheet, buffer positions, shared-string cache) with no synchronization; concurrent calls
-    /// from multiple threads — including two enumerators obtained from the same reader used concurrently —
-    /// produce undefined behavior. Use one reader instance per thread, or fully consume/dispose one enumerator
-    /// before starting another.
+    /// <b>Thread safety:</b> enumerators obtained from one reader may be consumed on different threads,
+    /// each by one thread at a time, including two enumerators over the same sheet. The reader's own
+    /// members are not synchronized: select sheets and create enumerators from one thread at a time. A
+    /// CSV reader over a non-seekable stream serves a single enumerator. Disposing the reader closes it
+    /// to new enumerators; its file or stream is released when the last enumerator is disposed.
     /// </para>
     /// </remarks>
     public interface IExcelRowReader : IExcelRowReader<IExcelRowEnumerator>, IDisposable, IAsyncDisposable

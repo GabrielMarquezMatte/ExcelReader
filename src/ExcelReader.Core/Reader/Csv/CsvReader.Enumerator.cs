@@ -74,7 +74,12 @@ namespace ExcelReader.Core.Reader.Csv
             }
 
             internal Enumerator(Stream stream, CsvReaderOptions options, CancellationToken ct = default)
-                : base(stream, options.MaxCellBytes, nameof(CsvReaderOptions.MaxCellBytes), 64 * 1024, ownsSource: false, ct)
+                : this(stream, options, ownsSource: false, lease: null, ct)
+            {
+            }
+
+            internal Enumerator(Stream stream, CsvReaderOptions options, bool ownsSource, ReaderLifetime? lease, CancellationToken ct)
+                : base(stream, options.MaxCellBytes, nameof(CsvReaderOptions.MaxCellBytes), 64 * 1024, ownsSource, ct)
             {
                 _delimiter = options.Delimiter;
                 _quote = options.Quote;
@@ -82,9 +87,15 @@ namespace ExcelReader.Core.Reader.Csv
                 _contentCache = options.InternStrings ? new Utf8StringCache() : null;
                 _scanner = new CsvStructuralScanner(_delimiter, _quote);
                 _scannerSupported = CsvStructuralScanner.Supports(_delimiter, _quote);
+                _lease = lease;
             }
 
             internal Enumerator(ReadOnlyMemory<byte> content, CsvReaderOptions options, CancellationToken ct = default)
+                : this(content, options, lease: null, ct)
+            {
+            }
+
+            internal Enumerator(ReadOnlyMemory<byte> content, CsvReaderOptions options, ReaderLifetime? lease, CancellationToken ct)
                 : base(content, options.MaxCellBytes, nameof(CsvReaderOptions.MaxCellBytes), ct)
             {
                 _delimiter = options.Delimiter;
@@ -93,6 +104,7 @@ namespace ExcelReader.Core.Reader.Csv
                 _contentCache = options.InternStrings ? new Utf8StringCache() : null;
                 _scanner = new CsvStructuralScanner(_delimiter, _quote);
                 _scannerSupported = CsvStructuralScanner.Supports(_delimiter, _quote);
+                _lease = lease;
             }
 
             /// <inheritdoc/>
