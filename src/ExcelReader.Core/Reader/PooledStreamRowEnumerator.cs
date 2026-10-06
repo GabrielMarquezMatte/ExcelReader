@@ -14,6 +14,7 @@ namespace ExcelReader.Core.Reader
         private protected readonly BufferedStreamCursor _io;
         private protected readonly CellAccumulator _acc;
         private readonly bool _ownsSource;
+        private protected ReaderLifetime? _lease;
         private bool _deferred;
         private protected byte[] _buf => _io.Buf;
         private protected int _pos { get => _io.Pos; set => _io.Pos = value; }
@@ -78,7 +79,9 @@ namespace ExcelReader.Core.Reader
                 _source?.Dispose();
             }
             _source = null;
+            _deferred = false;
             ReturnBuffers();
+            Interlocked.Exchange(ref _lease, null)?.Release();
         }
 
         /// <summary>Asynchronous counterpart to <see cref="Dispose"/>.</summary>
@@ -89,7 +92,9 @@ namespace ExcelReader.Core.Reader
                 await _source.DisposeAsync().ConfigureAwait(false);
             }
             _source = null;
+            _deferred = false;
             ReturnBuffers();
+            Interlocked.Exchange(ref _lease, null)?.Release();
         }
 
         private protected void Fill()

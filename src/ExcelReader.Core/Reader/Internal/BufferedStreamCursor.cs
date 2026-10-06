@@ -140,6 +140,7 @@ namespace ExcelReader.Core.Reader.Internal
                 ArrayPool<byte>.Shared.Return(Buf);
             }
             Buf = [];
+            Eof = true;
         }
     }
 }

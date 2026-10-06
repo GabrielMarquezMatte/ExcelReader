@@ -1,6 +1,7 @@
 using System.Buffers;
 using System.Diagnostics.CodeAnalysis;
 using System.Runtime.InteropServices;
+using ExcelReader.Core.Reader.Sources;
 
 namespace ExcelReader.Core.Reader.Xls
 {
@@ -9,8 +10,7 @@ namespace ExcelReader.Core.Reader.Xls
     {
         private const int HeaderSize = 512;
 
-        private readonly Stream? _source;
-        private readonly bool _ownsSource;
+        private readonly ByteSource? _source;
         private readonly int[] _chain;
         private readonly int _chainLength;
         private bool _chainReturned;
@@ -29,10 +29,9 @@ namespace ExcelReader.Core.Reader.Xls
 
         internal SourceKind Kind { get; }
 
-        private WorkbookStream(Stream? source, bool ownsSource, int[] chain, int chainLength, ReadOnlyMemory<byte> memory, int sectorSize, long length, SourceKind kind)
+        private WorkbookStream(ByteSource? source, int[] chain, int chainLength, ReadOnlyMemory<byte> memory, int sectorSize, long length, SourceKind kind)
         {
             _source = source;
-            _ownsSource = ownsSource;
             _chain = chain;
             _chainLength = chainLength;
             SectorSize = sectorSize;
@@ -54,19 +53,19 @@ namespace ExcelReader.Core.Reader.Xls
             _fileLength = Buffer.Length;
         }
 
-        internal static WorkbookStream Streamed(Stream source, bool ownsSource, int[] chain, int chainLength, int sectorSize, long length)
+        internal static WorkbookStream Streamed(ByteSource source, int[] chain, int chainLength, int sectorSize, long length)
         {
-            return new WorkbookStream(source, ownsSource, chain, chainLength, default, sectorSize, length, SourceKind.Streamed);
+            return new WorkbookStream(source, chain, chainLength, default, sectorSize, length, SourceKind.Streamed);
         }
 
         internal static WorkbookStream InMemory(ReadOnlyMemory<byte> data)
         {
-            return new WorkbookStream(null, ownsSource: false, [], 0, data, sectorSize: 1, data.Length, SourceKind.Contiguous);
+            return new WorkbookStream(null, [], 0, data, sectorSize: 1, data.Length, SourceKind.Contiguous);
         }
 
         internal static WorkbookStream Chained(ReadOnlyMemory<byte> data, int[] chain, int chainLength, int sectorSize, long length)
         {
-            return new WorkbookStream(null, ownsSource: false, chain, chainLength, data, sectorSize, length, SourceKind.Chained);
+            return new WorkbookStream(null, chain, chainLength, data, sectorSize, length, SourceKind.Chained);
         }
 
         internal BiffCursor OpenCursor()
@@ -156,17 +155,13 @@ namespace ExcelReader.Core.Reader.Xls
                 count++;
             }
             long offset = HeaderSize + ((long)_chain[chainIndex] * SectorSize);
-            _source!.Seek(offset, SeekOrigin.Begin);
-            _source.ReadExactly(dest[..(count * SectorSize)]);
+            _source!.ReadExactly(offset, dest[..(count * SectorSize)]);
             return count;
         }
 
         public void Dispose()
         {
-            if (_ownsSource)
-            {
-                _source?.Dispose();
-            }
+            _source?.Dispose();
             if (_chainLength > 0 && !_chainReturned)
             {
                 _chainReturned = true;

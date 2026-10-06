@@ -145,6 +145,82 @@ namespace ExcelReader.Tests
         }
     }
 
+    internal sealed class TrickleStream : Stream
+    {
+        private const int MaxPerRead = 7;
+
+        private readonly byte[] _bytes;
+        private long _position;
+        private bool _disposed;
+
+        internal TrickleStream(byte[] bytes)
+        {
+            _bytes = bytes;
+        }
+
+        internal Action? OnRead { get; set; }
+
+        public override bool CanRead => !_disposed;
+
+        public override bool CanSeek => !_disposed;
+
+        public override bool CanWrite => false;
+
+        public override long Length => _bytes.Length;
+
+        public override long Position
+        {
+            get => _position;
+            set => _position = value;
+        }
+
+        public override int Read(byte[] buffer, int offset, int count)
+        {
+            return Read(buffer.AsSpan(offset, count));
+        }
+
+        public override int Read(Span<byte> buffer)
+        {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+            OnRead?.Invoke();
+            int available = (int)Math.Max(0, Math.Min(_bytes.Length - _position, Math.Min(buffer.Length, MaxPerRead)));
+            _bytes.AsSpan((int)_position, available).CopyTo(buffer);
+            _position += available;
+            return available;
+        }
+
+        public override long Seek(long offset, SeekOrigin origin)
+        {
+            _position = origin switch
+            {
+                SeekOrigin.Begin => offset,
+                SeekOrigin.Current => _position + offset,
+                _ => _bytes.Length + offset,
+            };
+            return _position;
+        }
+
+        public override void Flush()
+        {
+        }
+
+        public override void SetLength(long value)
+        {
+            throw new NotSupportedException();
+        }
+
+        public override void Write(byte[] buffer, int offset, int count)
+        {
+            throw new NotSupportedException();
+        }
+
+        protected override void Dispose(bool disposing)
+        {
+            _disposed = true;
+            base.Dispose(disposing);
+        }
+    }
+
     internal sealed class TrackingStream : MemoryStream
     {
         internal TrackingStream()

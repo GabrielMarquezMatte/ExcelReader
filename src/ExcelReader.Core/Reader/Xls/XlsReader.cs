@@ -18,6 +18,8 @@ namespace ExcelReader.Core.Reader.Xls
         private string?[]? _sharedStringCache;
         private int _current;
 
+        internal ReaderLifetime Lifetime { get; }
+
         internal XlsReader(Stream stream, bool leaveOpen, ExcelReaderOptions? options = null)
             : this(XlsCompoundFile.OpenWorkbook(stream, leaveOpen, options), options)
         {
@@ -30,6 +32,7 @@ namespace ExcelReader.Core.Reader.Xls
 
         private XlsReader(WorkbookStream workbook, ExcelReaderOptions? options = null)
         {
+            Lifetime = new ReaderLifetime(ReleaseResources);
             _workbook = workbook;
             _options = options ?? ExcelReaderOptions.Default;
             using (BiffCursor cursor = workbook.OpenCursor())
@@ -84,7 +87,13 @@ namespace ExcelReader.Core.Reader.Xls
 
         internal ReadOnlySpan<byte> SharedSpan => _sharedFlat;
 
-        internal string?[] SharedStringCache => _sharedStringCache ??= WorkbookLookups.CreateSharedStringCache(_sharedOffsets);
+        internal string?[] SharedStringCache => Volatile.Read(ref _sharedStringCache) ?? CreateSharedStringCache();
+
+        private string?[] CreateSharedStringCache()
+        {
+            string?[] created = WorkbookLookups.CreateSharedStringCache(_sharedOffsets);
+            return Interlocked.CompareExchange(ref _sharedStringCache, created, null) ?? created;
+        }
 
         internal bool IsDateStyle(int style)
         {
@@ -117,7 +126,16 @@ namespace ExcelReader.Core.Reader.Xls
         /// <inheritdoc/>
         public Enumerator GetEnumerator()
         {
-            return new Enumerator(this, _sheets[_current].Offset);
+            Lifetime.Acquire(this);
+            try
+            {
+                return new Enumerator(this, _sheets[_current].Offset);
+            }
+            catch
+            {
+                Lifetime.Release();
+                throw;
+            }
         }
 
         IExcelRowEnumerator IExcelRowReader<IExcelRowEnumerator>.GetEnumerator()
@@ -130,7 +148,16 @@ namespace ExcelReader.Core.Reader.Xls
         public Enumerator GetAsyncEnumerator(CancellationToken ct = default)
         {
             ct.ThrowIfCancellationRequested();
-            return new Enumerator(this, _sheets[_current].Offset, ct);
+            Lifetime.Acquire(this);
+            try
+            {
+                return new Enumerator(this, _sheets[_current].Offset, ct);
+            }
+            catch
+            {
+                Lifetime.Release();
+                throw;
+            }
         }
 
         IExcelRowEnumerator IExcelRowReader<IExcelRowEnumerator>.GetAsyncEnumerator(CancellationToken ct)
@@ -141,17 +168,22 @@ namespace ExcelReader.Core.Reader.Xls
         /// <inheritdoc/>
         public void Dispose()
         {
-            _workbook.Dispose();
-            _sharedFlat = [];
-            _sharedOffsets = [0];
-            _sharedStringCache = null;
+            Lifetime.Close();
         }
 
         /// <inheritdoc/>
         public ValueTask DisposeAsync()
         {
-            Dispose();
+            Lifetime.Close();
             return ValueTask.CompletedTask;
+        }
+
+        private void ReleaseResources()
+        {
+            _workbook.Dispose();
+            _sharedFlat = [];
+            _sharedOffsets = [0];
+            _sharedStringCache = null;
         }
 
         private static void ParseWorkbookGlobals(
@@ -428,6 +460,7 @@ namespace ExcelReader.Core.Reader.Xls
             internal const int MulRk = 0x00BD;
             internal const int BoolErr = 0x0205;
             internal const int Formula = 0x0006;
+            internal const int Row = 0x0208;
             internal const int Blank = 0x0201;
             internal const int MulBlank = 0x00BE;
             internal const int StringRec = 0x0207;

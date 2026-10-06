@@ -17,8 +17,12 @@ namespace ExcelReader.Core.Reader.Xls
             private readonly BiffCursor _cursor;
             private readonly CellAccumulator _acc;
             private readonly Utf8StringCache? _contentCache;
+            private readonly Queue<int> _declaredRows = new();
             private bool _ended;
+            private bool _emptyRow;
             private int _row;
+            private int _rowFloor = -1;
+            private ReaderLifetime? _lease;
 
             internal Enumerator(XlsReader reader, int sheetOffset, CancellationToken ct = default)
             {
@@ -28,6 +32,7 @@ namespace ExcelReader.Core.Reader.Xls
                 _row = -1;
                 _acc = new CellAccumulator(reader._options.MaxCellBytes, nameof(ExcelReaderOptions.MaxCellBytes));
                 _contentCache = reader._options.InternStrings ? new Utf8StringCache() : null;
+                _lease = reader.Lifetime;
             }
 
             /// <inheritdoc/>
@@ -72,7 +77,8 @@ namespace ExcelReader.Core.Reader.Xls
                         return true;
                     }
                 }
-                return false;
+                ResetRow();
+                return _declaredRows.TryDequeue(out _);
             }
 
             private bool ReadRecord(BiffCursor cursor, long recordStart, int id, ReadOnlySpan<byte> data)
@@ -96,6 +102,9 @@ namespace ExcelReader.Core.Reader.Xls
                 }
                 switch (id)
                 {
+                    case Rec.Row:
+                        DeclareRow(ReadU16(data, 0));
+                        return true;
                     case Rec.Label:
                         if (!AdvanceRow(cursor, recordStart, ReadU16(data, 0))) { return false; }
                         ParseLabel(data);
@@ -144,11 +153,32 @@ namespace ExcelReader.Core.Reader.Xls
                 }
             }
 
+            /// <summary>Queues a ROW record's row so it is yielded, empty, if no cell record claims it.</summary>
+            private void DeclareRow(int row)
+            {
+                if (row > _rowFloor)
+                {
+                    _rowFloor = row;
+                    _declaredRows.Enqueue(row);
+                }
+            }
+
             private bool AdvanceRow(BiffCursor cursor, long recordStart, int row)
             {
                 if (_row < 0)
                 {
+                    if (_declaredRows.TryPeek(out int declared) && declared <= row)
+                    {
+                        _declaredRows.Dequeue();
+                        if (declared < row)
+                        {
+                            cursor.Position = recordStart;
+                            _emptyRow = true;
+                            return false;
+                        }
+                    }
                     _row = row;
+                    _rowFloor = Math.Max(_rowFloor, row);
                     return true;
                 }
                 if (row != _row)
@@ -162,13 +192,14 @@ namespace ExcelReader.Core.Reader.Xls
             private bool FinishRow()
             {
                 _acc.SortByColumn();
-                return _acc.Count > 0;
+                return _row >= 0 || _emptyRow;
             }
 
             private void ResetRow()
             {
                 _acc.Reset();
                 _row = -1;
+                _emptyRow = false;
             }
 
             private void ParseLabel(ReadOnlySpan<byte> data)
@@ -303,6 +334,7 @@ namespace ExcelReader.Core.Reader.Xls
             {
                 _cursor.Dispose();
                 _acc.Return();
+                Interlocked.Exchange(ref _lease, null)?.Release();
             }
         }
     }
