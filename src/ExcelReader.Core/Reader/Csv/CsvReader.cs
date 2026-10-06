@@ -25,6 +25,7 @@ namespace ExcelReader.Core.Reader.Csv
         private readonly bool _leaveOpen;
         private readonly CsvReaderOptions _options;
         private readonly ReadOnlyMemory<byte> _memory;
+        private readonly ExcelSheetList<CsvSheet> _sheetList;
         private int _enumeratedOnce;
         private SafeFileHandle? _chunkHandle;
 
@@ -53,6 +54,7 @@ namespace ExcelReader.Core.Reader.Csv
                 _stream = stream;
                 _leaveOpen = leaveOpen;
             }
+            _sheetList = new ExcelSheetList<CsvSheet>([new CsvSheet(this)]);
         }
 
         private static bool NeedsTranscoding(Encoding? encoding)
@@ -68,6 +70,7 @@ namespace ExcelReader.Core.Reader.Csv
             _stream = null;
             _leaveOpen = true;
             _memory = Transcode(data, _options.Encoding);
+            _sheetList = new ExcelSheetList<CsvSheet>([new CsvSheet(this)]);
         }
 
         internal CsvReaderOptions Options
@@ -199,6 +202,48 @@ namespace ExcelReader.Core.Reader.Csv
             ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(index, SheetCount);
         }
 
+        /// <summary>Gets the source's sheets: always exactly one, unnamed. Reading the list opens nothing.</summary>
+        /// <exception cref="ObjectDisposedException">The reader was disposed.</exception>
+        public ExcelSheetList<CsvSheet> Sheets
+        {
+            get
+            {
+                Lifetime.ThrowIfClosed(this);
+                return _sheetList;
+            }
+        }
+
+        /// <summary>Checks whether <paramref name="name"/> is the (empty) name of the CSV sheet, ignoring case.</summary>
+        /// <param name="name">The sheet name to look for.</param>
+        /// <param name="sheet">The CSV sheet, when <paramref name="name"/> is empty.</param>
+        /// <returns><see langword="true"/> if <paramref name="name"/> is empty; otherwise <see langword="false"/>.</returns>
+        /// <exception cref="ObjectDisposedException">The reader was disposed.</exception>
+        public bool TryGetSheet(ReadOnlySpan<char> name, out CsvSheet sheet)
+        {
+            Lifetime.ThrowIfClosed(this);
+            bool found = name.IsEmpty;
+            sheet = found ? _sheetList[0] : default;
+            return found;
+        }
+
+        IExcelSheet IExcelWorkbook.SheetAt(int index)
+        {
+            return Sheets[index];
+        }
+
+        bool IExcelWorkbook.TryGetSheet(ReadOnlySpan<char> name, [MaybeNullWhen(false)] out IExcelSheet sheet)
+        {
+            bool found = TryGetSheet(name, out CsvSheet typed);
+            sheet = found ? typed : null;
+            return found;
+        }
+
+        /// <summary>Gets the source's only sheet.</summary>
+        /// <exception cref="ObjectDisposedException">The workbook was disposed.</exception>
+        public CsvSheet FirstSheet => Sheets[0];
+
+        IExcelSheet IExcelWorkbook.FirstSheet => FirstSheet;
+
         /// <summary>Gets an enumerator that reads records synchronously from the start of the source.</summary>
         /// <exception cref="ObjectDisposedException">The reader was disposed.</exception>
         /// <exception cref="InvalidOperationException">The source is a non-seekable stream that was already enumerated.</exception>
@@ -207,7 +252,7 @@ namespace ExcelReader.Core.Reader.Csv
             return OpenSheet();
         }
 
-        IExcelRowEnumerator IExcelRowReader<IExcelRowEnumerator>.GetEnumerator()
+        IExcelRowEnumerator IExcelSheet<IExcelRowEnumerator>.GetEnumerator()
         {
             return GetEnumerator();
         }
@@ -222,7 +267,7 @@ namespace ExcelReader.Core.Reader.Csv
             return OpenSheet(ct);
         }
 
-        IExcelRowEnumerator IExcelRowReader<IExcelRowEnumerator>.GetAsyncEnumerator(CancellationToken ct)
+        IExcelRowEnumerator IExcelSheet<IExcelRowEnumerator>.GetAsyncEnumerator(CancellationToken ct)
         {
             return GetAsyncEnumerator(ct);
         }

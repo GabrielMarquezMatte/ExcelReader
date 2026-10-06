@@ -1,4 +1,5 @@
 using System.Buffers;
+using System.Diagnostics.CodeAnalysis;
 using System.Runtime.InteropServices;
 using ExcelReader.Core.Reader.Internal;
 using static ExcelReader.Core.Reader.Xlsb.Biff12;
@@ -16,6 +17,7 @@ namespace ExcelReader.Core.Reader.Xls
         private byte[] _sharedFlat;
         private int[] _sharedOffsets;
         private string?[]? _sharedStringCache;
+        private readonly ExcelSheetList<XlsSheet> _sheetList;
         private int _current;
 
         internal ReaderLifetime Lifetime { get; }
@@ -44,6 +46,7 @@ namespace ExcelReader.Core.Reader.Xls
                 workbook.Dispose();
                 throw new InvalidDataException("The workbook contains no sheets.");
             }
+            _sheetList = CreateSheetList();
         }
 
         internal static async ValueTask<XlsWorkbook> CreateAsync(Stream stream, bool leaveOpen, ExcelReaderOptions? options = null, CancellationToken ct = default)
@@ -123,13 +126,62 @@ namespace ExcelReader.Core.Reader.Xls
             _current = index;
         }
 
-        /// <inheritdoc/>
-        public Enumerator GetEnumerator()
+        private ExcelSheetList<XlsSheet> CreateSheetList()
+        {
+            XlsSheet[] sheets = new XlsSheet[_sheets.Length];
+            for (int i = 0; i < sheets.Length; i++)
+            {
+                sheets[i] = new XlsSheet(this, i, _sheets[i].Name, _sheets[i].Visibility);
+            }
+            return new ExcelSheetList<XlsSheet>(sheets);
+        }
+
+        /// <summary>Gets the workbook's sheets, in workbook order. Reading the list opens nothing.</summary>
+        /// <exception cref="ObjectDisposedException">The workbook was disposed.</exception>
+        public ExcelSheetList<XlsSheet> Sheets
+        {
+            get
+            {
+                Lifetime.ThrowIfClosed(this);
+                return _sheetList;
+            }
+        }
+
+        /// <summary>Finds a sheet by name, ignoring case. Opens nothing.</summary>
+        /// <param name="name">The sheet name to look for.</param>
+        /// <param name="sheet">The matching sheet, when one is found.</param>
+        /// <returns><see langword="true"/> if a sheet with that name exists; otherwise <see langword="false"/>.</returns>
+        /// <exception cref="ObjectDisposedException">The workbook was disposed.</exception>
+        public bool TryGetSheet(ReadOnlySpan<char> name, out XlsSheet sheet)
+        {
+            Lifetime.ThrowIfClosed(this);
+            if (WorkbookLookups.TryFindSheetIndex(_sheets, name, static s => s.Name, out int index))
+            {
+                sheet = _sheetList[index];
+                return true;
+            }
+            sheet = default;
+            return false;
+        }
+
+        IExcelSheet IExcelWorkbook.SheetAt(int index)
+        {
+            return Sheets[index];
+        }
+
+        bool IExcelWorkbook.TryGetSheet(ReadOnlySpan<char> name, [MaybeNullWhen(false)] out IExcelSheet sheet)
+        {
+            bool found = TryGetSheet(name, out XlsSheet typed);
+            sheet = found ? typed : null;
+            return found;
+        }
+
+        internal Enumerator OpenSheet(int index)
         {
             Lifetime.Acquire(this);
             try
             {
-                return new Enumerator(this, _sheets[_current].Offset);
+                return new Enumerator(this, _sheets[index].Offset);
             }
             catch
             {
@@ -138,7 +190,34 @@ namespace ExcelReader.Core.Reader.Xls
             }
         }
 
-        IExcelRowEnumerator IExcelRowReader<IExcelRowEnumerator>.GetEnumerator()
+        internal Enumerator OpenSheetAsync(int index, CancellationToken ct)
+        {
+            ct.ThrowIfCancellationRequested();
+            Lifetime.Acquire(this);
+            try
+            {
+                return new Enumerator(this, _sheets[index].Offset, ct);
+            }
+            catch
+            {
+                Lifetime.Release();
+                throw;
+            }
+        }
+
+        /// <summary>Gets the workbook's first sheet: the same sheet as <c>Sheets[0]</c>. Opens nothing.</summary>
+        /// <exception cref="ObjectDisposedException">The workbook was disposed.</exception>
+        public XlsSheet FirstSheet => Sheets[0];
+
+        IExcelSheet IExcelWorkbook.FirstSheet => FirstSheet;
+
+        /// <inheritdoc/>
+        public Enumerator GetEnumerator()
+        {
+            return OpenSheet(_current);
+        }
+
+        IExcelRowEnumerator IExcelSheet<IExcelRowEnumerator>.GetEnumerator()
         {
             return GetEnumerator();
         }
@@ -147,20 +226,10 @@ namespace ExcelReader.Core.Reader.Xls
         /// <remarks>XlsWorkbook is fully in-memory, so nothing is deferred; <paramref name="ct"/> is checked here and on each move.</remarks>
         public Enumerator GetAsyncEnumerator(CancellationToken ct = default)
         {
-            ct.ThrowIfCancellationRequested();
-            Lifetime.Acquire(this);
-            try
-            {
-                return new Enumerator(this, _sheets[_current].Offset, ct);
-            }
-            catch
-            {
-                Lifetime.Release();
-                throw;
-            }
+            return OpenSheetAsync(_current, ct);
         }
 
-        IExcelRowEnumerator IExcelRowReader<IExcelRowEnumerator>.GetAsyncEnumerator(CancellationToken ct)
+        IExcelRowEnumerator IExcelSheet<IExcelRowEnumerator>.GetAsyncEnumerator(CancellationToken ct)
         {
             return GetAsyncEnumerator(ct);
         }
