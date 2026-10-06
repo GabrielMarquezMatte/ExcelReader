@@ -351,7 +351,7 @@ namespace ExcelReader.Core.Reader
 
         /// <summary>
         /// Opens a workbook from an in-memory buffer, auto-detecting its format (XLSX/XLSB/XLS) from its
-        /// signature. XLSX/XLSB route through <see cref="ZipMemoryIndex"/> instead of
+        /// signature. XLSX/XLSB route through <see cref="ZipIndex"/> instead of
         /// a <see cref="ZipArchive"/>/<see cref="Stream"/>, so the returned reader never
         /// suspends, even under <c>await foreach</c>.
         /// </summary>
@@ -367,7 +367,7 @@ namespace ExcelReader.Core.Reader
                 ReadOnlyMemory<byte> plain = EncryptedPackageOpener.DecryptToMemory(data, effective);
                 return OpenFromPlainMemory(plain, effective);
             }
-            ExcelFileFormat format = ClassifyMemory(data, effective, out ZipMemoryIndex? memZip);
+            ExcelFileFormat format = ClassifyMemory(data, effective, out ZipIndex? memZip);
             if (format is ExcelFileFormat.Unknown)
             {
                 memZip?.Dispose();
@@ -384,7 +384,7 @@ namespace ExcelReader.Core.Reader
 
         private static IExcelRowReader OpenFromPlainMemory(ReadOnlyMemory<byte> plain, ExcelReaderOptions options)
         {
-            ExcelFileFormat format = ClassifyMemory(plain, options, out ZipMemoryIndex? memZip);
+            ExcelFileFormat format = ClassifyMemory(plain, options, out ZipIndex? memZip);
             if (format is not (ExcelFileFormat.Xlsb or ExcelFileFormat.Xlsx))
             {
                 memZip?.Dispose();
@@ -398,7 +398,7 @@ namespace ExcelReader.Core.Reader
             };
         }
 
-        private static ExcelFileFormat ClassifyMemory(ReadOnlyMemory<byte> data, ExcelReaderOptions options, out ZipMemoryIndex? memZip)
+        private static ExcelFileFormat ClassifyMemory(ReadOnlyMemory<byte> data, ExcelReaderOptions options, out ZipIndex? memZip)
         {
             memZip = null;
             ReadOnlySpan<byte> span = data.Span;
@@ -413,7 +413,7 @@ namespace ExcelReader.Core.Reader
                     ? ExcelFileFormat.EncryptedOoxml
                     : ExcelFileFormat.Xls;
             }
-            memZip = ZipMemoryIndex.Create(data, options);
+            memZip = ZipIndex.Create(data, options);
             return memZip.TryGetEntry("xl/workbook.bin"u8, out _) ? ExcelFileFormat.Xlsb : ExcelFileFormat.Xlsx;
         }
 
@@ -640,7 +640,7 @@ namespace ExcelReader.Core.Reader
         /// <returns>The detected <see cref="ExcelFileFormat"/>, or <see cref="ExcelFileFormat.Unknown"/> if the signature matches no supported format.</returns>
         public static ExcelFileFormat DetectFileFormat(ReadOnlyMemory<byte> data)
         {
-            var format = ClassifyMemory(data, ExcelReaderOptions.Default, out ZipMemoryIndex? memZip);
+            var format = ClassifyMemory(data, ExcelReaderOptions.Default, out ZipIndex? memZip);
             memZip?.Dispose();
             return format;
         }

@@ -73,7 +73,7 @@ namespace ExcelReader.Core.Reader.Internal
         }
 
         [SkipLocalsInit]
-        internal static ZipEntryRef GetWorksheetEntry(ZipMemoryIndex memZip, string path)
+        internal static ZipEntryRef GetWorksheetEntry(ZipIndex memZip, string path)
         {
             Span<byte> stackBuffer = stackalloc byte[256];
             ReadOnlySpan<byte> utf8Path = Encoding.UTF8.GetByteCount(path) <= stackBuffer.Length

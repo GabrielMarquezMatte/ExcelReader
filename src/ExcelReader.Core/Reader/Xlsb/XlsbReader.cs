@@ -22,7 +22,7 @@ namespace ExcelReader.Core.Reader.Xlsb
         private readonly DecompressedByteCounter _decompressedBytes;
 
         private readonly ZipArchive? _zip;
-        private readonly ZipMemoryIndex? _memZip;
+        private readonly ZipIndex? _memZip;
         private readonly Stream? _stream;
         private readonly bool _leaveOpen;
         private readonly (string Name, string Path, ExcelSheetVisibility Visibility)[]? _sheets;
@@ -95,7 +95,7 @@ namespace ExcelReader.Core.Reader.Xlsb
             _pooledSharedFlat = sharedFlat.Length != 0;
         }
 
-        private XlsbReader(ZipMemoryIndex memZip,
+        private XlsbReader(ZipIndex memZip,
             (string Name, string Path, ExcelSheetVisibility Visibility)[] sheets, bool[] styleIsDate, bool date1904,
             byte[] sharedFlat, int[] sharedOffsets, ExcelReaderOptions options, DecompressedByteCounter decompressedBytes)
         {

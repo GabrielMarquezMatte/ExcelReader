@@ -6,9 +6,9 @@ using System.Text;
 using ExcelReader.Core.Reader;
 using ExcelReader.Core.Reader.Zip;
 
-namespace ExcelReader.Tests.Reader.Xlsx
+namespace ExcelReader.Tests.Reader.Zip
 {
-    public class ZipMemoryIndexTests
+    public class ZipIndexTests
     {
         [Fact]
         public void OpenPartOnDeflatedEntryMatchesStreamedRead()
@@ -17,7 +17,7 @@ namespace ExcelReader.Tests.Reader.Xlsx
             byte[] zipBytes = built.ToArray();
             byte[] expected = ReadViaZipArchive(zipBytes, "xl/workbook.xml");
 
-            using ZipMemoryIndex index = ZipMemoryIndex.Create(zipBytes, ExcelReaderOptions.Default);
+            using ZipIndex index = ZipIndex.Create(zipBytes, ExcelReaderOptions.Default);
             Assert.True(index.TryGetEntry("xl/workbook.xml"u8, out ZipEntryRef entry));
             Assert.Equal((ushort)8, entry.Method);
 
@@ -31,7 +31,7 @@ namespace ExcelReader.Tests.Reader.Xlsx
             byte[] payload = Encoding.UTF8.GetBytes("hello world, stored and not deflated");
             byte[] zipBytes = BuildZipWithOneEntry("hello.txt", payload, CompressionLevel.NoCompression);
 
-            using ZipMemoryIndex index = ZipMemoryIndex.Create(zipBytes, ExcelReaderOptions.Default);
+            using ZipIndex index = ZipIndex.Create(zipBytes, ExcelReaderOptions.Default);
             Assert.True(index.TryGetEntry("hello.txt"u8, out ZipEntryRef entry));
             Assert.Equal((ushort)0, entry.Method);
 
@@ -47,7 +47,7 @@ namespace ExcelReader.Tests.Reader.Xlsx
             using MemoryStream built = WorkbookBuilder.Build("""<row r="1"><c r="A1"><v>1</v></c></row>""");
             byte[] zipBytes = built.ToArray();
 
-            using ZipMemoryIndex index = ZipMemoryIndex.Create(zipBytes, ExcelReaderOptions.Default);
+            using ZipIndex index = ZipIndex.Create(zipBytes, ExcelReaderOptions.Default);
             Assert.False(index.TryGetEntry("xl/doesNotExist.xml"u8, out _));
         }
 
@@ -69,7 +69,7 @@ namespace ExcelReader.Tests.Reader.Xlsx
             byte[] zipBytes = ms.ToArray();
 
             InvalidDataException ex = Assert.Throws<InvalidDataException>(
-                () => ZipMemoryIndex.Create(zipBytes, ExcelReaderOptions.Default));
+                () => ZipIndex.Create(zipBytes, ExcelReaderOptions.Default));
             Assert.Contains("duplicate", ex.Message, StringComparison.OrdinalIgnoreCase);
         }
 
@@ -80,7 +80,7 @@ namespace ExcelReader.Tests.Reader.Xlsx
             byte[] zipBytes = BuildZipWithOneEntry("hello.txt", payload, CompressionLevel.NoCompression);
 
             long localHeaderOffset;
-            using (ZipMemoryIndex index = ZipMemoryIndex.Create(zipBytes, ExcelReaderOptions.Default))
+            using (ZipIndex index = ZipIndex.Create(zipBytes, ExcelReaderOptions.Default))
             {
                 Assert.True(index.TryGetEntry("hello.txt"u8, out ZipEntryRef entry));
                 localHeaderOffset = entry.LocalHeaderOffset;
@@ -90,7 +90,7 @@ namespace ExcelReader.Tests.Reader.Xlsx
             Assert.Equal((byte)'h', zipBytes[nameOffset]);
             zipBytes[nameOffset] = (byte)'j';
 
-            using ZipMemoryIndex mutatedIndex = ZipMemoryIndex.Create(zipBytes, ExcelReaderOptions.Default);
+            using ZipIndex mutatedIndex = ZipIndex.Create(zipBytes, ExcelReaderOptions.Default);
             Assert.True(mutatedIndex.TryGetEntry("hello.txt"u8, out ZipEntryRef mutatedEntry));
             InvalidDataException ex = Assert.Throws<InvalidDataException>(
                 () => mutatedIndex.OpenPart(mutatedEntry, new DecompressedByteCounter(0)));
@@ -104,7 +104,7 @@ namespace ExcelReader.Tests.Reader.Xlsx
             byte[] zipBytes = built.ToArray();
             PatchCentralDirectoryUInt32(zipBytes, "xl/workbook.xml", fieldOffset: 24, 50_000_000);
 
-            using ZipMemoryIndex index = ZipMemoryIndex.Create(zipBytes, ExcelReaderOptions.Default);
+            using ZipIndex index = ZipIndex.Create(zipBytes, ExcelReaderOptions.Default);
             Assert.True(index.TryGetEntry("xl/workbook.xml"u8, out ZipEntryRef entry));
             var counter = new DecompressedByteCounter(4096, nameof(ExcelReaderOptions.MaxTotalDecompressedBytes));
 
@@ -131,7 +131,7 @@ namespace ExcelReader.Tests.Reader.Xlsx
             var options = new ExcelReaderOptions { MaxZipEntries = 10 };
 
             ExcelLimitExceededException ex = Assert.Throws<ExcelLimitExceededException>(
-                () => ZipMemoryIndex.Create(zipBytes, options));
+                () => ZipIndex.Create(zipBytes, options));
             Assert.Equal(nameof(ExcelReaderOptions.MaxZipEntries), ex.LimitName);
         }
 
@@ -142,7 +142,7 @@ namespace ExcelReader.Tests.Reader.Xlsx
             byte[] zipBytes = built.ToArray();
             PatchCentralDirectoryUInt16(zipBytes, "xl/workbook.xml", fieldOffset: 8, 0x0001);
 
-            Assert.Throws<NotSupportedException>(() => ZipMemoryIndex.Create(zipBytes, ExcelReaderOptions.Default));
+            Assert.Throws<NotSupportedException>(() => ZipIndex.Create(zipBytes, ExcelReaderOptions.Default));
         }
 
         [Fact]
@@ -152,7 +152,7 @@ namespace ExcelReader.Tests.Reader.Xlsx
             byte[] zipBytes = built.ToArray();
             PatchCentralDirectoryUInt16(zipBytes, "xl/workbook.xml", fieldOffset: 10, 12);
 
-            using ZipMemoryIndex index = ZipMemoryIndex.Create(zipBytes, ExcelReaderOptions.Default);
+            using ZipIndex index = ZipIndex.Create(zipBytes, ExcelReaderOptions.Default);
             Assert.True(index.TryGetEntry("xl/workbook.xml"u8, out ZipEntryRef entry));
             Assert.Throws<NotSupportedException>(() => index.OpenPart(entry, new DecompressedByteCounter(0)));
         }
@@ -161,7 +161,7 @@ namespace ExcelReader.Tests.Reader.Xlsx
         public void CreateThrowsWhenNoEndOfCentralDirectoryRecordExists()
         {
             byte[] notAZip = Encoding.UTF8.GetBytes("this is not a zip file at all");
-            Assert.Throws<InvalidDataException>(() => ZipMemoryIndex.Create(notAZip, ExcelReaderOptions.Default));
+            Assert.Throws<InvalidDataException>(() => ZipIndex.Create(notAZip, ExcelReaderOptions.Default));
         }
 
         [Fact]
@@ -205,7 +205,7 @@ namespace ExcelReader.Tests.Reader.Xlsx
 
         private static void OpenAllPartsAndDrain(byte[] bytes)
         {
-            using ZipMemoryIndex index = ZipMemoryIndex.Create(bytes, ExcelReaderOptions.Default);
+            using ZipIndex index = ZipIndex.Create(bytes, ExcelReaderOptions.Default);
             var counter = new DecompressedByteCounter(ExcelReaderOptions.Default.MaxTotalDecompressedBytes);
             foreach (string name in (string[])["xl/workbook.xml", "xl/sharedStrings.xml", "xl/styles.xml", "xl/worksheets/sheet1.xml"])
             {
@@ -243,7 +243,7 @@ namespace ExcelReader.Tests.Reader.Xlsx
             WriteEocd(bytes, 20, declaredCount: 0xFFFF, cdSize: Zip64SentinelU32, cdOffset: Zip64SentinelU32);
 
             InvalidDataException ex = Assert.Throws<InvalidDataException>(
-                () => ZipMemoryIndex.Create(bytes, ExcelReaderOptions.Default));
+                () => ZipIndex.Create(bytes, ExcelReaderOptions.Default));
             Assert.Contains("ZIP64", ex.Message, StringComparison.Ordinal);
         }
 
@@ -259,7 +259,7 @@ namespace ExcelReader.Tests.Reader.Xlsx
             WriteEocd(bytes, 76, declaredCount: 0xFFFF, cdSize: Zip64SentinelU32, cdOffset: Zip64SentinelU32);
 
             InvalidDataException ex = Assert.Throws<InvalidDataException>(
-                () => ZipMemoryIndex.Create(bytes, ExcelReaderOptions.Default));
+                () => ZipIndex.Create(bytes, ExcelReaderOptions.Default));
             Assert.Contains("central directory", ex.Message, StringComparison.OrdinalIgnoreCase);
         }
 
@@ -297,7 +297,7 @@ namespace ExcelReader.Tests.Reader.Xlsx
             byte[] bytes = BuildCdWithZip64Field(compressedSize: 5, uncompressedSize: Zip64SentinelU32, zip64Value: -1);
 
             InvalidDataException ex = Assert.Throws<InvalidDataException>(
-                () => ZipMemoryIndex.Create(bytes, ExcelReaderOptions.Default));
+                () => ZipIndex.Create(bytes, ExcelReaderOptions.Default));
             Assert.Contains("negative", ex.Message, StringComparison.OrdinalIgnoreCase);
         }
 
@@ -307,7 +307,7 @@ namespace ExcelReader.Tests.Reader.Xlsx
             byte[] bytes = BuildCdWithZip64Field(compressedSize: Zip64SentinelU32, uncompressedSize: 5, zip64Value: -1);
 
             InvalidDataException ex = Assert.Throws<InvalidDataException>(
-                () => ZipMemoryIndex.Create(bytes, ExcelReaderOptions.Default));
+                () => ZipIndex.Create(bytes, ExcelReaderOptions.Default));
             Assert.Contains("negative", ex.Message, StringComparison.OrdinalIgnoreCase);
         }
 
@@ -318,7 +318,7 @@ namespace ExcelReader.Tests.Reader.Xlsx
         {
             Zip64Layout zip = BuildStoredZip64(Zip64Payload);
 
-            using ZipMemoryIndex index = ZipMemoryIndex.Create(zip.Bytes, ExcelReaderOptions.Default);
+            using ZipIndex index = ZipIndex.Create(zip.Bytes, ExcelReaderOptions.Default);
             Assert.True(index.TryGetEntry("a.txt"u8, out ZipEntryRef entry));
             Assert.Equal(0, entry.LocalHeaderOffset);
             Assert.Equal(Zip64Payload.Length, entry.CompressedSize);
@@ -344,7 +344,7 @@ namespace ExcelReader.Tests.Reader.Xlsx
         {
             Zip64Layout zip = BuildStoredZip64(Zip64Payload, localOffset: localOffset);
 
-            using ZipMemoryIndex index = ZipMemoryIndex.Create(zip.Bytes, ExcelReaderOptions.Default);
+            using ZipIndex index = ZipIndex.Create(zip.Bytes, ExcelReaderOptions.Default);
             Assert.True(index.TryGetEntry("a.txt"u8, out ZipEntryRef entry));
             Assert.Equal(localOffset, entry.LocalHeaderOffset);
             InvalidDataException ex = Assert.Throws<InvalidDataException>(
@@ -358,7 +358,7 @@ namespace ExcelReader.Tests.Reader.Xlsx
             Zip64Layout probe = BuildStoredZip64(Zip64Payload);
             Zip64Layout zip = BuildStoredZip64(Zip64Payload, localOffset: probe.Bytes.Length - 29);
 
-            using ZipMemoryIndex index = ZipMemoryIndex.Create(zip.Bytes, ExcelReaderOptions.Default);
+            using ZipIndex index = ZipIndex.Create(zip.Bytes, ExcelReaderOptions.Default);
             Assert.True(index.TryGetEntry("a.txt"u8, out ZipEntryRef entry));
             InvalidDataException ex = Assert.Throws<InvalidDataException>(
                 () => index.OpenPart(entry, new DecompressedByteCounter(0)));
@@ -374,7 +374,7 @@ namespace ExcelReader.Tests.Reader.Xlsx
         {
             Zip64Layout zip = BuildStoredZip64(Zip64Payload, compressedSize: compressedSize);
 
-            using ZipMemoryIndex index = ZipMemoryIndex.Create(zip.Bytes, ExcelReaderOptions.Default);
+            using ZipIndex index = ZipIndex.Create(zip.Bytes, ExcelReaderOptions.Default);
             Assert.True(index.TryGetEntry("a.txt"u8, out ZipEntryRef entry));
             Assert.Equal(compressedSize, entry.CompressedSize);
             InvalidDataException ex = Assert.Throws<InvalidDataException>(
@@ -391,7 +391,7 @@ namespace ExcelReader.Tests.Reader.Xlsx
             long exact = probe.Bytes.Length - probe.DataOffset;
 
             Zip64Layout fits = BuildStoredZip64(Zip64Payload, compressedSize: exact);
-            using (ZipMemoryIndex index = ZipMemoryIndex.Create(fits.Bytes, ExcelReaderOptions.Default))
+            using (ZipIndex index = ZipIndex.Create(fits.Bytes, ExcelReaderOptions.Default))
             {
                 Assert.True(index.TryGetEntry("a.txt"u8, out ZipEntryRef entry));
                 using ZipPart part = index.OpenPart(entry, new DecompressedByteCounter(0));
@@ -399,7 +399,7 @@ namespace ExcelReader.Tests.Reader.Xlsx
             }
 
             Zip64Layout overruns = BuildStoredZip64(Zip64Payload, compressedSize: exact + 1);
-            using (ZipMemoryIndex index = ZipMemoryIndex.Create(overruns.Bytes, ExcelReaderOptions.Default))
+            using (ZipIndex index = ZipIndex.Create(overruns.Bytes, ExcelReaderOptions.Default))
             {
                 Assert.True(index.TryGetEntry("a.txt"u8, out ZipEntryRef entry));
                 Assert.Throws<InvalidDataException>(() => index.OpenPart(entry, new DecompressedByteCounter(0)));
@@ -414,7 +414,7 @@ namespace ExcelReader.Tests.Reader.Xlsx
             Zip64Layout zip = BuildStoredZip64(Zip64Payload, localOffset: unchecked((long)localOffset));
 
             InvalidDataException ex = Assert.Throws<InvalidDataException>(
-                () => ZipMemoryIndex.Create(zip.Bytes, ExcelReaderOptions.Default));
+                () => ZipIndex.Create(zip.Bytes, ExcelReaderOptions.Default));
             Assert.Contains("negative", ex.Message, StringComparison.OrdinalIgnoreCase);
         }
 
@@ -427,7 +427,7 @@ namespace ExcelReader.Tests.Reader.Xlsx
             BinaryPrimitives.WriteUInt64LittleEndian(zip.Bytes.AsSpan(zip.LocatorOffset + 8), zip64EocdOffset);
 
             InvalidDataException ex = Assert.Throws<InvalidDataException>(
-                () => ZipMemoryIndex.Create(zip.Bytes, ExcelReaderOptions.Default));
+                () => ZipIndex.Create(zip.Bytes, ExcelReaderOptions.Default));
             Assert.Contains("ZIP64", ex.Message, StringComparison.Ordinal);
         }
 
@@ -446,7 +446,7 @@ namespace ExcelReader.Tests.Reader.Xlsx
             BinaryPrimitives.WriteInt64LittleEndian(zip.Bytes.AsSpan(zip.Zip64EocdOffset + 48), cdOffset);
 
             InvalidDataException ex = Assert.Throws<InvalidDataException>(
-                () => ZipMemoryIndex.Create(zip.Bytes, ExcelReaderOptions.Default));
+                () => ZipIndex.Create(zip.Bytes, ExcelReaderOptions.Default));
             Assert.Contains("central directory", ex.Message, StringComparison.OrdinalIgnoreCase);
         }
 
@@ -459,7 +459,7 @@ namespace ExcelReader.Tests.Reader.Xlsx
             Assert.Equal(zip.Zip64EocdOffset, cdOffset + cdSize);
 
             BinaryPrimitives.WriteInt64LittleEndian(zip.Bytes.AsSpan(zip.Zip64EocdOffset + 40), cdSize + 1);
-            Assert.Throws<InvalidDataException>(() => ZipMemoryIndex.Create(zip.Bytes, ExcelReaderOptions.Default));
+            Assert.Throws<InvalidDataException>(() => ZipIndex.Create(zip.Bytes, ExcelReaderOptions.Default));
         }
 
         [Theory]
@@ -473,7 +473,7 @@ namespace ExcelReader.Tests.Reader.Xlsx
             PatchCentralDirectoryUInt16(zipBytes, "hello.txt", fieldOffset, value);
 
             InvalidDataException ex = Assert.Throws<InvalidDataException>(
-                () => ZipMemoryIndex.Create(zipBytes, ExcelReaderOptions.Default));
+                () => ZipIndex.Create(zipBytes, ExcelReaderOptions.Default));
             Assert.Contains("truncated", ex.Message, StringComparison.OrdinalIgnoreCase);
         }
 
@@ -488,7 +488,7 @@ namespace ExcelReader.Tests.Reader.Xlsx
             WriteEocd(zipBytes, eocd, declaredCount: 1, cdSize: cdSize, cdOffset: cdOffset);
 
             InvalidDataException ex = Assert.Throws<InvalidDataException>(
-                () => ZipMemoryIndex.Create(zipBytes, ExcelReaderOptions.Default));
+                () => ZipIndex.Create(zipBytes, ExcelReaderOptions.Default));
             Assert.Contains("truncated", ex.Message, StringComparison.OrdinalIgnoreCase);
         }
 
@@ -498,7 +498,7 @@ namespace ExcelReader.Tests.Reader.Xlsx
             byte[] zipBytes = BuildZipWithOneEntry("hello.txt", Zip64Payload, CompressionLevel.NoCompression);
             BinaryPrimitives.WriteUInt16LittleEndian(zipBytes.AsSpan(28), 0xFFFF);
 
-            using ZipMemoryIndex index = ZipMemoryIndex.Create(zipBytes, ExcelReaderOptions.Default);
+            using ZipIndex index = ZipIndex.Create(zipBytes, ExcelReaderOptions.Default);
             Assert.True(index.TryGetEntry("hello.txt"u8, out ZipEntryRef entry));
             InvalidDataException ex = Assert.Throws<InvalidDataException>(
                 () => index.OpenPart(entry, new DecompressedByteCounter(0)));
