@@ -57,28 +57,55 @@ namespace ExcelReader.Core.Reader
             _isDate1904 = reader.IsDate1904;
             _sheetName = reader.SheetName;
             _rows = reader.GetEnumerator();
-            _pendingConsumed = true;
+            (_names, _ordinals, _hasPendingRow, _pendingConsumed) = Initialize(_rows, headerRow);
+        }
+
+        /// <summary>
+        /// Wraps <paramref name="sheet"/>.
+        /// </summary>
+        /// <param name="sheet">The sheet to read. Its workbook stays owned by the caller.</param>
+        /// <param name="headerRow">
+        /// The 1-based row holding column names. Pass 0 for a header-less sheet, whose columns come back
+        /// named <c>"Column0"</c>, <c>"Column1"</c>, ... and whose count is taken from the first data row.
+        /// </param>
+        /// <exception cref="ArgumentNullException"><paramref name="sheet"/> is null.</exception>
+        /// <exception cref="ArgumentOutOfRangeException"><paramref name="headerRow"/> is negative.</exception>
+        public ExcelDataReader(IExcelSheet sheet, int headerRow = 1)
+        {
+            ArgumentNullException.ThrowIfNull(sheet);
+            ArgumentOutOfRangeException.ThrowIfNegative(headerRow);
+            _isDate1904 = sheet.IsDate1904;
+            _sheetName = sheet.Name;
+            _rows = sheet.GetEnumerator();
+            (_names, _ordinals, _hasPendingRow, _pendingConsumed) = Initialize(_rows, headerRow);
+        }
+
+        private static (string?[] Names, Dictionary<string, int> Ordinals, bool HasPendingRow, bool PendingConsumed) Initialize(IExcelRowEnumerator rows, int headerRow)
+        {
             try
             {
-                if (headerRow > 0 && SchemaInference.TrySkipToHeaderRow(_rows, headerRow, out _))
+                string?[] names;
+                bool hasPendingRow = false;
+                bool pendingConsumed = true;
+                if (headerRow > 0 && SchemaInference.TrySkipToHeaderRow(rows, headerRow, out _))
                 {
-                    _names = ReadHeaderNames(_rows.Current);
+                    names = ReadHeaderNames(rows.Current);
                 }
                 else if (headerRow > 0)
                 {
-                    _names = [];
+                    names = [];
                 }
                 else
                 {
-                    _hasPendingRow = _rows.MoveNext();
-                    _pendingConsumed = false;
-                    _names = _hasPendingRow ? new string?[_rows.Current.ColumnCount] : [];
+                    hasPendingRow = rows.MoveNext();
+                    pendingConsumed = false;
+                    names = hasPendingRow ? new string?[rows.Current.ColumnCount] : [];
                 }
-                _ordinals = BuildOrdinals(_names);
+                return (names, BuildOrdinals(names), hasPendingRow, pendingConsumed);
             }
             catch
             {
-                _rows.Dispose();
+                rows.Dispose();
                 throw;
             }
         }

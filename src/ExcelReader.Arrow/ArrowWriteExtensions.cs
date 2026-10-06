@@ -11,7 +11,7 @@ namespace ExcelReader.Arrow
 {
     /// <summary>
     /// Writes an Apache Arrow <see cref="RecordBatch"/> to a workbook as one sheet — the write-side
-    /// mirror of <see cref="ArrowConversionExtensions.ToArrowRecordBatch"/>.
+    /// mirror of <see cref="ArrowConversionExtensions.ToArrowRecordBatch(Core.Reader.IExcelRowReader, Core.Reader.Schema.ExcelColumnSchema[], int)"/>.
     /// </summary>
     public static class ArrowWriteExtensions
     {

@@ -1,1 +1,2 @@
 #nullable enable
+static ExcelReader.Arrow.ArrowConversionExtensions.ToArrowRecordBatch(this ExcelReader.Core.Reader.IExcelSheet! sheet, ExcelReader.Core.Reader.Schema.ExcelColumnSchema[]? schema = null, int headerRow = 1) -> Apache.Arrow.RecordBatch!

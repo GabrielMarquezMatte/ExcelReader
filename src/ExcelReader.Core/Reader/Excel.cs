@@ -314,6 +314,50 @@ namespace ExcelReader.Core.Reader
             return SchemaInference.Infer(rows, reader.IsDate1904, headerRow, sampleSize, parseText);
         }
 
+        /// <summary>Guesses a column schema for <paramref name="sheet"/> by sampling it from the first row.</summary>
+        /// <param name="sheet">The sheet to sample. A new enumerator is opened and disposed; no other read of the sheet is disturbed.</param>
+        /// <param name="headerRow">1-based row number to take column names from; 0 means "no header",
+        /// so every returned schema is addressable only by <see cref="ExcelColumnSchema.Index"/>.</param>
+        /// <param name="sampleSize">How many rows after the header to inspect.</param>
+        /// <returns>One <see cref="ExcelColumnSchema"/> per column, in column order.</returns>
+        /// <remarks>
+        /// This is a guess over a bounded sample, not a guarantee about the whole sheet. Verify it fits
+        /// before trusting it, and feed the result into <see cref="ExcelParser.Build{T}"/> to build a real map.
+        /// </remarks>
+        /// <exception cref="ArgumentNullException"><paramref name="sheet"/> is <see langword="null"/>.</exception>
+        /// <exception cref="ArgumentOutOfRangeException"><paramref name="headerRow"/> is negative, or
+        /// <paramref name="sampleSize"/> is not positive.</exception>
+        /// <exception cref="ArgumentException">The sheet has fewer rows than <paramref name="headerRow"/>.</exception>
+        public static ExcelColumnSchema[] InferSchema(IExcelSheet sheet, int headerRow, int sampleSize)
+        {
+            return InferSchema(sheet, headerRow, sampleSize, parseText: false);
+        }
+
+        /// <summary>
+        /// Guesses a column schema by sampling the sheet's rows, as
+        /// <see cref="InferSchema(IExcelSheet, int, int)"/> does, and can also type cells that hold text.
+        /// </summary>
+        /// <param name="sheet">The sheet to sample. A new enumerator is opened and disposed; no other read of the sheet is disturbed.</param>
+        /// <param name="headerRow">1-based row number to take column names from; 0 means "no header",
+        /// so every returned schema is addressable only by <see cref="ExcelColumnSchema.Index"/>.</param>
+        /// <param name="sampleSize">How many rows after the header to inspect.</param>
+        /// <param name="parseText">When <see langword="true"/>, a text cell (every CSV field, or a number
+        /// stored as text) counts as an integer, a decimal, <c>true</c>/<c>false</c>, or an ISO-8601 date or
+        /// date-time when its text has exactly that shape. Numbers with a leading zero (<c>00123</c>), scientific
+        /// notation (<c>12E4</c>), padded or culture-formatted numbers, and non-ISO dates stay text. A column only gets a non-text type when
+        /// every sampled value converts to it.</param>
+        /// <returns>One <see cref="ExcelColumnSchema"/> per column, in column order.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="sheet"/> is <see langword="null"/>.</exception>
+        /// <exception cref="ArgumentOutOfRangeException"><paramref name="headerRow"/> is negative, or
+        /// <paramref name="sampleSize"/> is not positive.</exception>
+        /// <exception cref="ArgumentException">The sheet has fewer rows than <paramref name="headerRow"/>.</exception>
+        public static ExcelColumnSchema[] InferSchema(IExcelSheet sheet, int headerRow = 1, int sampleSize = 100, bool parseText = false)
+        {
+            ArgumentNullException.ThrowIfNull(sheet);
+            using IExcelRowEnumerator rows = sheet.GetEnumerator();
+            return SchemaInference.Infer(rows, sheet.IsDate1904, headerRow, sampleSize, parseText);
+        }
+
         private static ReadOnlySpan<byte> ZipSignature => [0x50, 0x4B, 0x03, 0x04];
 
         /// <summary>

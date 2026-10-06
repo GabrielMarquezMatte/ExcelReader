@@ -7,7 +7,7 @@ namespace ExcelReader.Core.Parser
 {
     /// <summary>Base class supplying the shared row-advancement loop for an asynchronous, format-specific row enumerator.</summary>
     /// <typeparam name="T">The row model type each derived enumerator yields.</typeparam>
-    /// <typeparam name="TReader">The concrete row reader type used to lazily open the row cursor.</typeparam>
+    /// <typeparam name="TSheet">The sheet type used to lazily open the row cursor.</typeparam>
     /// <typeparam name="TRows">The concrete row enumerator type this instance drives.</typeparam>
     /// <remarks>
     /// Mirrors <see cref="SyncRowEnumerator{T, TRows}"/>, plus lazy <typeparamref name="TRows"/>
@@ -18,18 +18,18 @@ namespace ExcelReader.Core.Parser
     /// <c>XlsxWorkbook.Enumerator.MoveNextAsync</c> / <c>CsvReader.Enumerator.MoveNextAsync</c>).
     /// </remarks>
     [EditorBrowsable(EditorBrowsableState.Never)]
-    public abstract class AsyncRowEnumerator<T, TReader, TRows> : IAsyncEnumerator<T>
+    public abstract class AsyncRowEnumerator<T, TSheet, TRows> : IAsyncEnumerator<T>
         where T : allows ref struct
-        where TReader : IExcelRowReader<TRows>
+        where TSheet : IExcelSheet<TRows>
         where TRows : class, IExcelRowEnumerator
     {
-        private readonly TReader _reader;
+        private readonly TSheet _sheet;
         private readonly CancellationToken _ct;
         private protected TRows? Rows;
 
-        private protected AsyncRowEnumerator(TReader reader, CancellationToken ct)
+        private protected AsyncRowEnumerator(TSheet sheet, CancellationToken ct)
         {
-            _reader = reader;
+            _sheet = sheet;
             _ct = ct;
         }
 
@@ -45,7 +45,7 @@ namespace ExcelReader.Core.Parser
         /// <inheritdoc/>
         public ValueTask<bool> MoveNextAsync()
         {
-            Rows ??= _reader.GetAsyncEnumerator(_ct);
+            Rows ??= _sheet.GetAsyncEnumerator(_ct);
             while (true)
             {
                 ValueTask<bool> moveTask = Rows.MoveNextAsync();
