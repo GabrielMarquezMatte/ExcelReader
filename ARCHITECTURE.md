@@ -10,31 +10,42 @@ memory-footprint measurements, approaches that were tried and rejected. That liv
 
 ## The four format families
 
-Each format has its own `Reader` and a writer implementing `IWorkbookWriter<TSheet>`
+Each format has its own workbook (`CsvReader` for CSV) and a writer implementing `IWorkbookWriter<TSheet>`
 (`src/ExcelReader.Core/Writer/IWorkbookWriter.cs`):
 
-| Format | Reader | Writer | Sheet/row writer |
+| Format | Workbook | Writer | Sheet/row writer |
 |---|---|---|---|
-| XLSX | `XlsxReader` | `XlsxWorkbookWriter` | `XlsxSheetWriter`/`XlsxRowWriter` |
-| XLSB | `XlsbReader` | `XlsbWorkbookWriter` | `XlsbSheetWriter`/`XlsbRowWriter` |
-| XLS  | `XlsReader`  | `XlsWorkbookWriter`  | `XlsSheetWriter`/`XlsRowWriter` |
+| XLSX | `XlsxWorkbook` | `XlsxWorkbookWriter` | `XlsxSheetWriter`/`XlsxRowWriter` |
+| XLSB | `XlsbWorkbook` | `XlsbWorkbookWriter` | `XlsbSheetWriter`/`XlsbRowWriter` |
+| XLS  | `XlsWorkbook` | `XlsWorkbookWriter`  | `XlsSheetWriter`/`XlsRowWriter` |
 | CSV  | `CsvReader`  | `CsvWorkbookWriter`  | `CsvSheetWriter`/`CsvRowWriter` |
 
 CSV has one extra layer: `CsvWriter` is the low-level RFC4180 writer (buffered rows straight to the
 stream, no sheets/styles/shared-strings machinery); `CsvWorkbookWriter` adapts it to the shared
 `IWorkbookWriter<CsvSheetWriter>` contract, exposing exactly one sheet.
 
-All four open through `Excel.Open`/`OpenAsync`, which take an optional `ExcelFileFormat`. The three
-signed formats are detected from the file's first bytes; CSV carries no signature, so it is named
+All four open through `Excel.Open`/`OpenAsync`, which return an `IExcelWorkbook` and take an optional
+`ExcelFileFormat`. The three signed formats are detected from the file's first bytes; CSV carries no signature, so it is named
 rather than detected, and its dialect rides along in `ExcelReaderOptions.Csv`. That one options
 object is what the native ABI's `xl_open_options` maps onto, so `ReadApi.Open` dispatches formats
 rather than reimplementing them.
 
-On top of all four readers sits the typed-parsing layer (`src/ExcelReader.Core/Parser/`):
+A workbook, a sheet and an enumerator are three separate things. The workbook (`XlsxWorkbook` and its
+siblings, `IExcelWorkbook`) owns the shared state: the file or stream, the sheet list, the shared
+strings and styles. A sheet (`XlsxSheet` and its siblings, `IExcelSheet`) is a `readonly struct` of
+workbook plus index; it holds no resources, and `workbook.Sheets`, `FirstSheet`, `SheetAt` and
+`TryGetSheet` hand them out without opening anything. Iterating a sheet creates an enumerator
+(`XlsxWorkbook.Enumerator`), the one place that streams rows and the only mutable part, used by one
+thread at a time. Lifetime is reference counted (`ReaderLifetime`): the workbook holds one reference
+and each live enumerator another, so disposing the workbook closes it to new sheets and enumerators but
+releases the file, stream and pooled buffers only when the last enumerator is disposed. Shared state is
+published lazily and race-safely, which is what lets sheets of one workbook be read in parallel.
+
+On top of all four workbooks sits the typed-parsing layer (`src/ExcelReader.Core/Parser/`):
 `ExcelParser<T>`, built by `ExcelParser.FromAttributes` (reflection), `ExcelParser.Generated` (the
 source-generated map) or `ExcelParser.Build` (a runtime-configured map). Its model may be a class, a struct or a `ref struct`;
 a `ref struct` model binds directly to `Cell.Value` spans — zero allocation for the container and,
-for span-typed columns, for the values too. It consumes `Row`/`Cell` from any reader uniformly.
+for span-typed columns, for the values too. It consumes `Row`/`Cell` from any sheet uniformly.
 
 ## Parallel CSV parsing
 
@@ -166,7 +177,7 @@ turns one back into a stream the ordinary readers consume:
   being materialized. One 4 KiB segment is cached, which is enough because ZIP reads are sequential
   within an entry.
 
-`XlsxReader` and `XlsbReader` are untouched by any of this: they receive a stream that happens to
+`XlsxWorkbook` and `XlsbWorkbook` are untouched by any of this: they receive a stream that happens to
 decrypt. Writing encrypted workbooks is a separate step, `Excel.EncryptPackage`/`EncryptPackageAsync`
 in `PackageEncryptor.cs` — it wraps a plaintext package (written by any of the ordinary writers) in
 an agile-encrypted CFB container, the inverse of `DecryptedPackageStream`. There is still no
@@ -197,28 +208,29 @@ failure in red through `ErrorConsole` on a terminal, or passes it through byte-f
 Both live in `ExcelReader.Cli`, not `CliCommands.cs` - the interactive/plain decision is
 `Console`-shaped state, exactly what that file's tests are built to never touch.
 
-## Why readers are split into partial classes
+## Why workbooks are split into partial classes
 
-`XlsxReader` and `XlsbReader` are large enough that one file would be unwieldy, so each is split by
+`XlsxWorkbook` and `XlsbWorkbook` are large enough that one file would be unwieldy, so each is split by
 concern rather than by size:
 
-- `XlsxReader.cs` / `XlsbReader.cs` — fields, constructors, sheet navigation, dispose.
+- `XlsxWorkbook.cs` / `XlsbWorkbook.cs` — fields, constructors, the sheet list, dispose.
 - `*.Loading.cs` (XLSX only) — one-time workbook-level XML parsing (sheets, shared strings, date1904).
-- `*.Memory.cs` — the in-memory path: constructs directly over `ZipMemoryIndex`/`ZipPart` instead of
-  a `Stream`/`ZipArchive`, so it never suspends even under `await foreach`.
+- `XlsxWorkbook.Memory.cs` (XLSX only) — the shared-string parse over an already-decompressed in-memory
+  part, so it never suspends even under `await foreach`.
 - `*.Styles.cs` (XLSX only) — builds the cellXfs-index → is-date-style table.
 - `*.Enumerator.cs` — the nested `Enumerator`: the actual streaming row/cell parser. By far the
-  largest file in each reader.
+  largest file in each workbook.
 
-All partials of one reader share one field set (C# partial classes are one type), so e.g.
+All partials of one workbook share one field set (C# partial classes are one type), so e.g.
 `.Loading.cs`'s shared-string parse populates fields the nested `Enumerator` in `.Enumerator.cs`
-reads back. `XlsReader` follows a reduced version of the same split (no `.Memory.cs` — the OLE
-compound-file container has no in-memory-ZIP equivalent).
+reads back. `XlsWorkbook` follows a reduced version of the same split (`.Strings.cs` for its string
+tables, no `.Loading.cs`/`.Memory.cs`). The sheet values live in their own small files
+(`XlsxSheet.cs`, `XlsbSheet.cs`, `XlsSheet.cs`, `CsvSheet.cs`).
 
 ## The sync/async twin convention
 
 Hot-path search/refill primitives (e.g. `IndexOf`/`IndexOfAsync`/`IndexOfSlowAsync` in
-`XlsxReader.Enumerator.cs`) come in three tiers, not one generic async method:
+`XlsxWorkbook.Enumerator.cs`) come in three tiers, not one generic async method:
 
 1. A blocking sync loop for the sync caller.
 2. An async method whose common case — the data is already in the buffered window — is a synchronous
