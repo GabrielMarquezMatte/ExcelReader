@@ -15,7 +15,13 @@ namespace ExcelReader.Core.Reader
         }
 
         /// <summary>Gets the number of sheets.</summary>
-        public int Count => _sheets.Length;
+        public int Count
+        {
+            get
+            {
+                return _sheets.Length;
+            }
+        }
 
         /// <summary>Gets the sheet at the given zero-based index.</summary>
         /// <param name="index">The zero-based sheet index. Must be within <c>[0, Count)</c>.</param>

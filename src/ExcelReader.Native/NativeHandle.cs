@@ -16,7 +16,13 @@ namespace ExcelReader.Native
 
         internal int CurrentSheet { get; private set; }
 
-        internal IExcelSheet Sheet => Workbook.SheetAt(CurrentSheet);
+        internal IExcelSheet Sheet
+        {
+            get
+            {
+                return Workbook.SheetAt(CurrentSheet);
+            }
+        }
 
         internal void MoveToSheet(int index)
         {

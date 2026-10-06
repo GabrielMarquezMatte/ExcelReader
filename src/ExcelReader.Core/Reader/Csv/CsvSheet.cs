@@ -11,18 +11,48 @@ namespace ExcelReader.Core.Reader.Csv
         }
 
         /// <inheritdoc/>
-        public int Index => 0;
+        public int Index
+        {
+            get
+            {
+                return 0;
+            }
+        }
 
         /// <summary>Gets the sheet name. Always the empty string, since a CSV source has a single, unnamed sheet.</summary>
-        public string Name => "";
+        public string Name
+        {
+            get
+            {
+                return "";
+            }
+        }
 
         /// <summary>Gets the sheet's visibility. Always <see cref="ExcelSheetVisibility.Visible"/>: delimited text has no tab bar to hide from.</summary>
-        public ExcelSheetVisibility Visibility => ExcelSheetVisibility.Visible;
+        public ExcelSheetVisibility Visibility
+        {
+            get
+            {
+                return ExcelSheetVisibility.Visible;
+            }
+        }
 
         /// <inheritdoc/>
-        public bool IsDate1904 => false;
+        public bool IsDate1904
+        {
+            get
+            {
+                return false;
+            }
+        }
 
-        internal CsvReader Reader => _reader ?? throw new InvalidOperationException("This sheet was not obtained from a workbook.");
+        private CsvReader Reader
+        {
+            get
+            {
+                return _reader ?? throw new InvalidOperationException("This sheet was not obtained from a workbook.");
+            }
+        }
 
         /// <inheritdoc/>
         /// <exception cref="InvalidOperationException">The source is a non-seekable stream that was already enumerated.</exception>

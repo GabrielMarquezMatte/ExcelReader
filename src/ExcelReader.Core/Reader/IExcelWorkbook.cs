@@ -10,9 +10,11 @@ namespace ExcelReader.Core.Reader
     /// <b>Thread safety:</b> once opened, a workbook is safe to use from several threads: reading its
     /// metadata, obtaining sheets and creating enumerators. Each enumerator is used by one thread at a
     /// time; several enumerators of one workbook, including two over the same sheet, may run on
-    /// different threads. Using a single enumerator from two threads at once is undefined behaviour
-    /// and is not checked. A stream passed to a workbook must not be used by the caller while the
-    /// workbook is open.
+    /// different threads. The exception is a CSV over a non-seekable stream, which serves a single
+    /// enumerator: a second one throws <see cref="InvalidOperationException"/>. Using a single
+    /// enumerator from two threads at once is undefined behaviour and is not checked. A stream or
+    /// buffer passed to a workbook must not be used, modified or disposed by the caller until the
+    /// workbook and every enumerator obtained from it are disposed.
     /// <para>
     /// Disposing the workbook closes it to new sheets and enumerators. Its file, stream and pooled
     /// buffers are released when the last enumerator obtained from it is disposed.
@@ -58,12 +60,14 @@ namespace ExcelReader.Core.Reader
 
         /// <summary>Gets a new enumerator that reads the sheet's rows synchronously from the start.</summary>
         /// <exception cref="ObjectDisposedException">The sheet's workbook was disposed.</exception>
+        /// <exception cref="InvalidOperationException">The source is a CSV over a non-seekable stream that was already enumerated.</exception>
         TEnumerator GetEnumerator();
 
         /// <summary>Gets a new enumerator that reads the sheet's rows asynchronously from the start.</summary>
         /// <remarks>Setup that needs I/O, such as opening the sheet part or loading shared strings, runs on the first <see cref="IExcelRowEnumerator.MoveNextAsync"/>, so this call does not block.</remarks>
         /// <param name="ct">A token observed by that deferred setup and by every <see cref="IExcelRowEnumerator.MoveNextAsync"/> call.</param>
         /// <exception cref="ObjectDisposedException">The sheet's workbook was disposed.</exception>
+        /// <exception cref="InvalidOperationException">The source is a CSV over a non-seekable stream that was already enumerated.</exception>
         TEnumerator GetAsyncEnumerator(CancellationToken ct = default);
     }
 

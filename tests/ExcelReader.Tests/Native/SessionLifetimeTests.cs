@@ -11,7 +11,7 @@ namespace ExcelReader.Tests.Native
     /// <summary>
     /// The one-live-session rule, from the outside. A <c>xl_typed_reader</c>/Arrow stream is the only
     /// thing in this ABI that holds an <c>IExcelRowEnumerator</c> open ACROSS calls, and
-    /// <see cref="Core.Reader.IExcelWorkbook"/> serves one usable enumerator at a time — so every
+    /// the native handle serves one row cursor at a time — so every
     /// other read on the same workbook either has to be refused up front or has to invalidate the
     /// live session loudly. These tests pin both halves; without the interlock they fail by returning
     /// XL_OK/XL_EOF with silently truncated data.
