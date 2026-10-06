@@ -46,7 +46,7 @@ namespace ExcelReader.Tests.Parser.ParallelCsv
         {
             using CsvReader sequentialReader = Excel.FromCsv(csv);
             ExcelParseException expected = Assert.Throws<ExcelParseException>(
-                () => ExcelParser.FromAttributes<TRow>(config).Parse(sequentialReader).ToList());
+                () => ExcelParser.FromAttributes<TRow>(config).Parse(sequentialReader.FirstSheet).ToList());
 
             ExcelParseException actual = await Assert.ThrowsAsync<ExcelParseException>(async () =>
             {

@@ -215,8 +215,8 @@ namespace ExcelReader.Tests.Parser
                 ["BaseInit", "Settable", "InitOnly", "NullableInit", "ConvertedInit", "GetOnly", "PrivateSet", "Hidden"],
                 ["base", "set", "init", 7, "conv", "x", "y", "z"]);
 
-            SetterShapesModel reflectionResult = await ParseFirstXlsxAsync(ms, static reader => ExcelParser.FromAttributes<SetterShapesModel>().Parse(reader));
-            SetterShapesModel generatedResult = await ParseFirstXlsxAsync(ms, static reader => ExcelParser.Generated<SetterShapesModel>().Parse(reader));
+            SetterShapesModel reflectionResult = await ParseFirstXlsxAsync(ms, static reader => ExcelParser.FromAttributes<SetterShapesModel>().Parse(reader.FirstSheet));
+            SetterShapesModel generatedResult = await ParseFirstXlsxAsync(ms, static reader => ExcelParser.Generated<SetterShapesModel>().Parse(reader.FirstSheet));
 
             foreach (SetterShapesModel result in new[] { reflectionResult, generatedResult })
             {
@@ -236,10 +236,10 @@ namespace ExcelReader.Tests.Parser
         {
             await using var ms = await TypedWorkbook.BuildAsync(["Name", "Age"], ["Alice", 30]);
 
-            InitStructModel reflectionStruct = await ParseFirstXlsxAsync(ms, static reader => ExcelParser.FromAttributes<InitStructModel>().Parse(reader));
-            InitStructModel generatedStruct = await ParseFirstXlsxAsync(ms, static reader => ExcelParser.Generated<InitStructModel>().Parse(reader));
-            InitRecordModel reflectionRecord = await ParseFirstXlsxAsync(ms, static reader => ExcelParser.FromAttributes<InitRecordModel>().Parse(reader));
-            InitRecordModel generatedRecord = await ParseFirstXlsxAsync(ms, static reader => ExcelParser.Generated<InitRecordModel>().Parse(reader));
+            InitStructModel reflectionStruct = await ParseFirstXlsxAsync(ms, static reader => ExcelParser.FromAttributes<InitStructModel>().Parse(reader.FirstSheet));
+            InitStructModel generatedStruct = await ParseFirstXlsxAsync(ms, static reader => ExcelParser.Generated<InitStructModel>().Parse(reader.FirstSheet));
+            InitRecordModel reflectionRecord = await ParseFirstXlsxAsync(ms, static reader => ExcelParser.FromAttributes<InitRecordModel>().Parse(reader.FirstSheet));
+            InitRecordModel generatedRecord = await ParseFirstXlsxAsync(ms, static reader => ExcelParser.Generated<InitRecordModel>().Parse(reader.FirstSheet));
 
             Assert.Equal(new InitStructModel { Name = "Alice", Age = 30 }, reflectionStruct);
             Assert.Equal(reflectionStruct, generatedStruct);
@@ -253,14 +253,14 @@ namespace ExcelReader.Tests.Parser
             await using var ms = await TypedWorkbook.BuildAsync(["Name", "Age"], ["Alice", 30]);
 
             using var reflectionReader = Excel.FromXlsx(ms, leaveOpen: true);
-            var reflectionEnum = ExcelParser.FromAttributes<InitRefStructModel>().Parse(reflectionReader).GetEnumerator();
+            var reflectionEnum = ExcelParser.FromAttributes<InitRefStructModel>().Parse(reflectionReader.FirstSheet).GetEnumerator();
             Assert.True(reflectionEnum.MoveNext());
             InitRefStructModel reflectionRow = reflectionEnum.Current;
             (string Name, int Age) reflectionResult = (System.Text.Encoding.UTF8.GetString(reflectionRow.Name), reflectionRow.Age);
 
             ms.Position = 0;
             using var generatedReader = Excel.FromXlsx(ms, leaveOpen: true);
-            var generatedEnum = ExcelParser.Generated<InitRefStructModel>().Parse(generatedReader).GetEnumerator();
+            var generatedEnum = ExcelParser.Generated<InitRefStructModel>().Parse(generatedReader.FirstSheet).GetEnumerator();
             Assert.True(generatedEnum.MoveNext());
             InitRefStructModel generatedRow = generatedEnum.Current;
             (string Name, int Age) generatedResult = (System.Text.Encoding.UTF8.GetString(generatedRow.Name), generatedRow.Age);
@@ -320,8 +320,8 @@ namespace ExcelReader.Tests.Parser
             ];
             await using var ms = await TypedWorkbook.BuildAsync(header, row);
 
-            EveryTypeModel reflectionResult = await ParseFirstXlsxAsync(ms, static reader => ExcelParser.FromAttributes<EveryTypeModel>().Parse(reader));
-            EveryTypeModel generatedResult = await ParseFirstXlsxAsync(ms, static reader => ExcelParser.Generated<EveryTypeModel>().Parse(reader));
+            EveryTypeModel reflectionResult = await ParseFirstXlsxAsync(ms, static reader => ExcelParser.FromAttributes<EveryTypeModel>().Parse(reader.FirstSheet));
+            EveryTypeModel generatedResult = await ParseFirstXlsxAsync(ms, static reader => ExcelParser.Generated<EveryTypeModel>().Parse(reader.FirstSheet));
 
             Assert.Equal(reflectionResult.Name, generatedResult.Name);
             Assert.Equal(reflectionResult.Active, generatedResult.Active);
@@ -357,8 +357,8 @@ namespace ExcelReader.Tests.Parser
         {
             await using var ms = await TypedWorkbook.BuildAsync(["Name"], ["alice"]);
 
-            ConverterModel reflectionResult = await ParseFirstXlsxAsync(ms, static reader => ExcelParser.FromAttributes<ConverterModel>().Parse(reader));
-            ConverterModel generatedResult = await ParseFirstXlsxAsync(ms, static reader => ExcelParser.Generated<ConverterModel>().Parse(reader));
+            ConverterModel reflectionResult = await ParseFirstXlsxAsync(ms, static reader => ExcelParser.FromAttributes<ConverterModel>().Parse(reader.FirstSheet));
+            ConverterModel generatedResult = await ParseFirstXlsxAsync(ms, static reader => ExcelParser.Generated<ConverterModel>().Parse(reader.FirstSheet));
 
             Assert.Equal("ALICE", reflectionResult.Name);
             Assert.Equal("ALICE", generatedResult.Name);
@@ -369,8 +369,8 @@ namespace ExcelReader.Tests.Parser
         {
             await using var ms = await TypedWorkbook.BuildAsync(["Name"], ["Alice"]);
 
-            AliasModel reflectionResult = await ParseFirstXlsxAsync(ms, static reader => ExcelParser.FromAttributes<AliasModel>().Parse(reader));
-            AliasModel generatedResult = await ParseFirstXlsxAsync(ms, static reader => ExcelParser.Generated<AliasModel>().Parse(reader));
+            AliasModel reflectionResult = await ParseFirstXlsxAsync(ms, static reader => ExcelParser.FromAttributes<AliasModel>().Parse(reader.FirstSheet));
+            AliasModel generatedResult = await ParseFirstXlsxAsync(ms, static reader => ExcelParser.Generated<AliasModel>().Parse(reader.FirstSheet));
 
             Assert.Equal("Alice", reflectionResult.Name);
             Assert.Equal("Alice", generatedResult.Name);
@@ -381,8 +381,8 @@ namespace ExcelReader.Tests.Parser
         {
             await using var ms = await TypedWorkbook.BuildAsync(["Name", "Ignored"], ["Alice", "SHOULD_NOT_BIND"]);
 
-            IgnoreModel reflectionResult = await ParseFirstXlsxAsync(ms, static reader => ExcelParser.FromAttributes<IgnoreModel>().Parse(reader));
-            IgnoreModel generatedResult = await ParseFirstXlsxAsync(ms, static reader => ExcelParser.Generated<IgnoreModel>().Parse(reader));
+            IgnoreModel reflectionResult = await ParseFirstXlsxAsync(ms, static reader => ExcelParser.FromAttributes<IgnoreModel>().Parse(reader.FirstSheet));
+            IgnoreModel generatedResult = await ParseFirstXlsxAsync(ms, static reader => ExcelParser.Generated<IgnoreModel>().Parse(reader.FirstSheet));
 
             Assert.Equal("Alice", reflectionResult.Name);
             Assert.Equal("default", reflectionResult.Ignored);
@@ -395,8 +395,8 @@ namespace ExcelReader.Tests.Parser
         {
             await using var ms = await TypedWorkbook.BuildAsync(["Inherited", "Own"], ["BaseValue", 42]);
 
-            InheritedModel reflectionResult = await ParseFirstXlsxAsync(ms, static reader => ExcelParser.FromAttributes<InheritedModel>().Parse(reader));
-            InheritedModel generatedResult = await ParseFirstXlsxAsync(ms, static reader => ExcelParser.Generated<InheritedModel>().Parse(reader));
+            InheritedModel reflectionResult = await ParseFirstXlsxAsync(ms, static reader => ExcelParser.FromAttributes<InheritedModel>().Parse(reader.FirstSheet));
+            InheritedModel generatedResult = await ParseFirstXlsxAsync(ms, static reader => ExcelParser.Generated<InheritedModel>().Parse(reader.FirstSheet));
 
             Assert.Equal("BaseValue", reflectionResult.Inherited);
             Assert.Equal(42, reflectionResult.Own);
@@ -410,9 +410,9 @@ namespace ExcelReader.Tests.Parser
             await using var ms = await TypedWorkbook.BuildAsync(["Other"], ["x"]);
 
             ExcelParseException reflectionException = await Assert.ThrowsAsync<ExcelParseException>(
-                () => ParseFirstXlsxAsync(ms, static reader => ExcelParser.FromAttributes<RequiredModel>().Parse(reader)));
+                () => ParseFirstXlsxAsync(ms, static reader => ExcelParser.FromAttributes<RequiredModel>().Parse(reader.FirstSheet)));
             ExcelParseException generatedException = await Assert.ThrowsAsync<ExcelParseException>(
-                () => ParseFirstXlsxAsync(ms, static reader => ExcelParser.Generated<RequiredModel>().Parse(reader)));
+                () => ParseFirstXlsxAsync(ms, static reader => ExcelParser.Generated<RequiredModel>().Parse(reader.FirstSheet)));
 
             Assert.Contains("Name", reflectionException.ColumnName, StringComparison.Ordinal);
             Assert.Contains("Name", generatedException.ColumnName, StringComparison.Ordinal);
@@ -438,10 +438,10 @@ namespace ExcelReader.Tests.Parser
             }
             ms.Position = 0;
             await using XlsxWorkbook reflectionReader = await Excel.FromXlsxAsync(ms, ct: TestContext.Current.CancellationToken);
-            CrossFormatModel reflectionResult = ExcelParser.FromAttributes<CrossFormatModel>().Parse(reflectionReader).First();
+            CrossFormatModel reflectionResult = ExcelParser.FromAttributes<CrossFormatModel>().Parse(reflectionReader.FirstSheet).First();
             ms.Position = 0;
             await using XlsxWorkbook generatedReader = await Excel.FromXlsxAsync(ms, ct: TestContext.Current.CancellationToken);
-            CrossFormatModel generatedResult = ExcelParser.Generated<CrossFormatModel>().Parse(generatedReader).First();
+            CrossFormatModel generatedResult = ExcelParser.Generated<CrossFormatModel>().Parse(generatedReader.FirstSheet).First();
 
             AssertCrossFormatEqual(reflectionResult, generatedResult);
         }
@@ -466,10 +466,10 @@ namespace ExcelReader.Tests.Parser
             }
             ms.Position = 0;
             using XlsbWorkbook reflectionReader = Excel.FromXlsb(ms);
-            CrossFormatModel reflectionResult = ExcelParser.FromAttributes<CrossFormatModel>().Parse(reflectionReader).First();
+            CrossFormatModel reflectionResult = ExcelParser.FromAttributes<CrossFormatModel>().Parse(reflectionReader.FirstSheet).First();
             ms.Position = 0;
             using XlsbWorkbook generatedReader = Excel.FromXlsb(ms);
-            CrossFormatModel generatedResult = ExcelParser.Generated<CrossFormatModel>().Parse(generatedReader).First();
+            CrossFormatModel generatedResult = ExcelParser.Generated<CrossFormatModel>().Parse(generatedReader.FirstSheet).First();
 
             AssertCrossFormatEqual(reflectionResult, generatedResult);
         }
@@ -494,10 +494,10 @@ namespace ExcelReader.Tests.Parser
             }
             ms.Position = 0;
             using XlsWorkbook reflectionReader = Excel.FromXls(ms);
-            CrossFormatModel reflectionResult = ExcelParser.FromAttributes<CrossFormatModel>().Parse(reflectionReader).First();
+            CrossFormatModel reflectionResult = ExcelParser.FromAttributes<CrossFormatModel>().Parse(reflectionReader.FirstSheet).First();
             ms.Position = 0;
             using XlsWorkbook generatedReader = Excel.FromXls(ms);
-            CrossFormatModel generatedResult = ExcelParser.Generated<CrossFormatModel>().Parse(generatedReader).First();
+            CrossFormatModel generatedResult = ExcelParser.Generated<CrossFormatModel>().Parse(generatedReader.FirstSheet).First();
 
             AssertCrossFormatEqual(reflectionResult, generatedResult);
         }
@@ -521,10 +521,10 @@ namespace ExcelReader.Tests.Parser
 
             ms.Position = 0;
             CsvReader reflectionReader = Excel.FromCsv(ms);
-            CrossFormatModel reflectionResult = ExcelParser.FromAttributes<CrossFormatModel>().Parse(reflectionReader).First();
+            CrossFormatModel reflectionResult = ExcelParser.FromAttributes<CrossFormatModel>().Parse(reflectionReader.FirstSheet).First();
             ms.Position = 0;
             CsvReader generatedReader = Excel.FromCsv(ms);
-            CrossFormatModel generatedResult = ExcelParser.Generated<CrossFormatModel>().Parse(generatedReader).First();
+            CrossFormatModel generatedResult = ExcelParser.Generated<CrossFormatModel>().Parse(generatedReader.FirstSheet).First();
 
             AssertCrossFormatEqual(reflectionResult, generatedResult);
         }
@@ -633,7 +633,7 @@ namespace ExcelReader.Tests.Parser
 
             reflectionMs.Position = 0;
             using XlsxWorkbook reflectionReader = Excel.FromXlsx(reflectionMs);
-            using XlsxWorkbook.Enumerator reflectionEnum = reflectionReader.GetEnumerator();
+            using XlsxWorkbook.Enumerator reflectionEnum = reflectionReader.FirstSheet.GetEnumerator();
             Assert.True(reflectionEnum.MoveNext());
             string[] reflectionHeaders = ReadRowText(reflectionEnum.Current);
             Assert.True(reflectionEnum.MoveNext());
@@ -641,7 +641,7 @@ namespace ExcelReader.Tests.Parser
 
             generatedMs.Position = 0;
             using XlsxWorkbook generatedReader = Excel.FromXlsx(generatedMs);
-            using XlsxWorkbook.Enumerator generatedEnum = generatedReader.GetEnumerator();
+            using XlsxWorkbook.Enumerator generatedEnum = generatedReader.FirstSheet.GetEnumerator();
             Assert.True(generatedEnum.MoveNext());
             string[] generatedHeaders = ReadRowText(generatedEnum.Current);
             Assert.True(generatedEnum.MoveNext());
@@ -676,7 +676,7 @@ namespace ExcelReader.Tests.Parser
 
             reflectionMs.Position = 0;
             using XlsbWorkbook reflectionReader = Excel.FromXlsb(reflectionMs);
-            using XlsbWorkbook.Enumerator reflectionEnum = reflectionReader.GetEnumerator();
+            using XlsbWorkbook.Enumerator reflectionEnum = reflectionReader.FirstSheet.GetEnumerator();
             Assert.True(reflectionEnum.MoveNext());
             string[] reflectionHeaders = ReadRowText(reflectionEnum.Current);
             Assert.True(reflectionEnum.MoveNext());
@@ -684,7 +684,7 @@ namespace ExcelReader.Tests.Parser
 
             generatedMs.Position = 0;
             using XlsbWorkbook generatedReader = Excel.FromXlsb(generatedMs);
-            using XlsbWorkbook.Enumerator generatedEnum = generatedReader.GetEnumerator();
+            using XlsbWorkbook.Enumerator generatedEnum = generatedReader.FirstSheet.GetEnumerator();
             Assert.True(generatedEnum.MoveNext());
             string[] generatedHeaders = ReadRowText(generatedEnum.Current);
             Assert.True(generatedEnum.MoveNext());
@@ -719,7 +719,7 @@ namespace ExcelReader.Tests.Parser
 
             reflectionMs.Position = 0;
             using XlsWorkbook reflectionReader = Excel.FromXls(reflectionMs);
-            using XlsWorkbook.Enumerator reflectionEnum = reflectionReader.GetEnumerator();
+            using XlsWorkbook.Enumerator reflectionEnum = reflectionReader.FirstSheet.GetEnumerator();
             Assert.True(reflectionEnum.MoveNext());
             string[] reflectionHeaders = ReadRowText(reflectionEnum.Current);
             Assert.True(reflectionEnum.MoveNext());
@@ -727,7 +727,7 @@ namespace ExcelReader.Tests.Parser
 
             generatedMs.Position = 0;
             using XlsWorkbook generatedReader = Excel.FromXls(generatedMs);
-            using XlsWorkbook.Enumerator generatedEnum = generatedReader.GetEnumerator();
+            using XlsWorkbook.Enumerator generatedEnum = generatedReader.FirstSheet.GetEnumerator();
             Assert.True(generatedEnum.MoveNext());
             string[] generatedHeaders = ReadRowText(generatedEnum.Current);
             Assert.True(generatedEnum.MoveNext());
@@ -762,7 +762,7 @@ namespace ExcelReader.Tests.Parser
 
             reflectionMs.Position = 0;
             using CsvReader reflectionReader = Excel.FromCsv(reflectionMs);
-            using CsvReader.Enumerator reflectionEnum = reflectionReader.GetEnumerator();
+            using CsvReader.Enumerator reflectionEnum = reflectionReader.FirstSheet.GetEnumerator();
             Assert.True(reflectionEnum.MoveNext());
             string[] reflectionHeaders = ReadRowText(reflectionEnum.Current);
             Assert.True(reflectionEnum.MoveNext());
@@ -770,7 +770,7 @@ namespace ExcelReader.Tests.Parser
 
             generatedMs.Position = 0;
             using CsvReader generatedReader = Excel.FromCsv(generatedMs);
-            using CsvReader.Enumerator generatedEnum = generatedReader.GetEnumerator();
+            using CsvReader.Enumerator generatedEnum = generatedReader.FirstSheet.GetEnumerator();
             Assert.True(generatedEnum.MoveNext());
             string[] generatedHeaders = ReadRowText(generatedEnum.Current);
             Assert.True(generatedEnum.MoveNext());
@@ -805,7 +805,7 @@ namespace ExcelReader.Tests.Parser
 
             reflectionMs.Position = 0;
             using XlsxWorkbook reflectionReader = Excel.FromXlsx(reflectionMs);
-            using XlsxWorkbook.Enumerator reflectionEnum = reflectionReader.GetEnumerator();
+            using XlsxWorkbook.Enumerator reflectionEnum = reflectionReader.FirstSheet.GetEnumerator();
             Assert.True(reflectionEnum.MoveNext());
             string[] reflectionHeaders = ReadRowText(reflectionEnum.Current);
             Assert.True(reflectionEnum.MoveNext());
@@ -813,7 +813,7 @@ namespace ExcelReader.Tests.Parser
 
             generatedMs.Position = 0;
             using XlsxWorkbook generatedReader = Excel.FromXlsx(generatedMs);
-            using XlsxWorkbook.Enumerator generatedEnum = generatedReader.GetEnumerator();
+            using XlsxWorkbook.Enumerator generatedEnum = generatedReader.FirstSheet.GetEnumerator();
             Assert.True(generatedEnum.MoveNext());
             string[] generatedHeaders = ReadRowText(generatedEnum.Current);
             Assert.True(generatedEnum.MoveNext());

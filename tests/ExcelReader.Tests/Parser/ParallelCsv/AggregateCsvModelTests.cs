@@ -76,7 +76,7 @@ namespace ExcelReader.Tests.Parser.ParallelCsv
         {
             using CsvReader reader = Excel.FromCsv(csv);
             var rows = new List<string>();
-            foreach (Person person in ExcelParser.FromAttributes<Person>(new ExcelParserConfig { HeaderRow = headerRow }).Parse(reader))
+            foreach (Person person in ExcelParser.FromAttributes<Person>(new ExcelParserConfig { HeaderRow = headerRow }).Parse(reader.FirstSheet))
             {
                 rows.Add(Render(person));
             }
@@ -327,7 +327,7 @@ namespace ExcelReader.Tests.Parser.ParallelCsv
         private static List<string> ReadPeople(XlsxWorkbook reader)
         {
             var rows = new List<string>();
-            foreach (Person person in ExcelParser.FromAttributes<Person>().Parse(reader))
+            foreach (Person person in ExcelParser.FromAttributes<Person>().Parse(reader.FirstSheet))
             {
                 rows.Add(Render(person));
             }

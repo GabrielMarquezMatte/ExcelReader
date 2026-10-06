@@ -82,7 +82,7 @@ namespace ExcelReader.Tests.Parser.ParallelCsv
         {
             using CsvReader reader = Excel.FromCsv(csv);
             var rows = new List<string>();
-            foreach (Row row in reader)
+            foreach (Row row in reader.FirstSheet)
             {
                 rows.Add(Render(row));
             }

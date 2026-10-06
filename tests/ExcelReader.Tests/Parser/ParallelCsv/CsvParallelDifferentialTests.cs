@@ -19,7 +19,7 @@ namespace ExcelReader.Tests.Parser.ParallelCsv
         {
             using var reader = Excel.FromCsv(csv);
             var list = new List<string>();
-            foreach (Row row in ExcelParser.FromAttributes<Row>().Parse(reader))
+            foreach (Row row in ExcelParser.FromAttributes<Row>().Parse(reader.FirstSheet))
             {
                 list.Add(Render(row));
             }

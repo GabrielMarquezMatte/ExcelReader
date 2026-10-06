@@ -85,7 +85,7 @@ namespace ExcelReader.Tests.Parser
         {
             await using MemoryStream ms = await TypedWorkbook.BuildAsync(header, row);
             await using XlsxWorkbook reader = await Excel.FromXlsxAsync(ms, ct: TestContext.Current.CancellationToken);
-            return [.. parser.Parse(reader)];
+            return [.. parser.Parse(reader.FirstSheet)];
         }
 
         [Fact]
