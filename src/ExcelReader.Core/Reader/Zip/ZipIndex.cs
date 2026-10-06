@@ -303,21 +303,15 @@ namespace ExcelReader.Core.Reader.Zip
         {
             ThrowIfPartTooLarge(entry, counter, entryLimitName, entryLimit);
             long dataOffset = ResolveDataOffset(entry);
-            ThrowIfDataOutOfRange(dataOffset, entry.CompressedSize);
+            ThrowIfEntryDataInvalid(dataOffset, entry);
             ZipPart part;
             if (HasMemory)
             {
                 ReadOnlyMemory<byte> compressed = CompressedSlice(dataOffset, entry.CompressedSize);
-                part = entry.Method switch
-                {
-                    0 => new ZipPart(compressed, rented: null),
-                    8 => InflateToPart(compressed, entry.UncompressedSize),
-                    _ => throw new NotSupportedException($"Unsupported ZIP compression method: {entry.Method}."),
-                };
+                part = entry.Method == 0 ? new ZipPart(compressed, rented: null) : InflateToPart(compressed, entry.UncompressedSize);
             }
             else
             {
-                ThrowIfMethodUnsupported(entry.Method);
                 part = ReadPart(dataOffset, entry);
             }
             counter.Add(entry.UncompressedSize);
@@ -333,9 +327,8 @@ namespace ExcelReader.Core.Reader.Zip
             }
             ThrowIfPartTooLarge(entry, counter, entryLimitName, entryLimit);
             long dataOffset = await ResolveDataOffsetAsync(entry, ct).ConfigureAwait(false);
-            ThrowIfDataOutOfRange(dataOffset, entry.CompressedSize);
-            ThrowIfMethodUnsupported(entry.Method);
-            int size = PartLength(entry);
+            ThrowIfEntryDataInvalid(dataOffset, entry);
+            int size = (int)entry.UncompressedSize;
             byte[] rented = ArrayPool<byte>.Shared.Rent(Math.Max(1, size));
             try
             {
@@ -394,8 +387,7 @@ namespace ExcelReader.Core.Reader.Zip
         private LimitedReadStream WrapEntryStream(
             in ZipEntryRef entry, long dataOffset, DecompressedByteCounter counter, ExcelReaderOptions options, string entryLimitName, long entryLimit)
         {
-            ThrowIfDataOutOfRange(dataOffset, entry.CompressedSize);
-            ThrowIfMethodUnsupported(entry.Method);
+            ThrowIfEntryDataInvalid(dataOffset, entry);
             Stream raw = HasMemory
                 ? ToReadableMemoryStream(CompressedSlice(dataOffset, entry.CompressedSize))
                 : new ByteSourceStream(_source, dataOffset, entry.CompressedSize);
@@ -416,20 +408,20 @@ namespace ExcelReader.Core.Reader.Zip
             }
         }
 
-        private static void ThrowIfMethodUnsupported(ushort method)
-        {
-            if (method is not (0 or 8))
-            {
-                throw new NotSupportedException($"Unsupported ZIP compression method: {method}.");
-            }
-        }
-
-        private void ThrowIfDataOutOfRange(long dataOffset, long compressedSize)
+        private void ThrowIfEntryDataInvalid(long dataOffset, in ZipEntryRef entry)
         {
             long length = _source.Length;
-            if (dataOffset < 0 || dataOffset > length || compressedSize < 0 || compressedSize > length - dataOffset)
+            if (dataOffset < 0 || dataOffset > length || entry.CompressedSize < 0 || entry.CompressedSize > length - dataOffset)
             {
                 throw new InvalidDataException("The ZIP entry data runs past the end of the file.");
+            }
+            if (entry.Method is not (0 or 8))
+            {
+                throw new NotSupportedException($"Unsupported ZIP compression method: {entry.Method}.");
+            }
+            if (entry.Method == 0 && entry.CompressedSize != entry.UncompressedSize)
+            {
+                throw new InvalidDataException("The stored ZIP entry's compressed and uncompressed sizes differ.");
             }
         }
 
@@ -442,19 +434,9 @@ namespace ExcelReader.Core.Reader.Zip
             return _file.Slice((int)dataOffset, (int)compressedSize);
         }
 
-        private static int PartLength(in ZipEntryRef entry)
-        {
-            long length = entry.Method == 0 ? entry.CompressedSize : entry.UncompressedSize;
-            if (length > Array.MaxLength)
-            {
-                throw new ExcelLimitExceededException("ArrayMaxLength", Array.MaxLength, length);
-            }
-            return (int)length;
-        }
-
         private ZipPart ReadPart(long dataOffset, in ZipEntryRef entry)
         {
-            int size = PartLength(entry);
+            int size = (int)entry.UncompressedSize;
             byte[] rented = ArrayPool<byte>.Shared.Rent(Math.Max(1, size));
             try
             {

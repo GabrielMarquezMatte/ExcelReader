@@ -390,7 +390,7 @@ namespace ExcelReader.Tests.Reader.Zip
             Zip64Layout probe = BuildStoredZip64(Zip64Payload);
             long exact = probe.Bytes.Length - probe.DataOffset;
 
-            Zip64Layout fits = BuildStoredZip64(Zip64Payload, compressedSize: exact);
+            Zip64Layout fits = BuildStoredZip64(Zip64Payload, compressedSize: exact, uncompressedSize: exact);
             using (ZipIndex index = ZipIndex.Create(fits.Bytes, ExcelReaderOptions.Default))
             {
                 Assert.True(index.TryGetEntry("a.txt"u8, out ZipEntryRef entry));
@@ -507,7 +507,7 @@ namespace ExcelReader.Tests.Reader.Zip
 
         private readonly record struct Zip64Layout(byte[] Bytes, int DataOffset, int Zip64EocdOffset, int LocatorOffset);
 
-        private static Zip64Layout BuildStoredZip64(byte[] payload, long? localOffset = null, long? compressedSize = null)
+        private static Zip64Layout BuildStoredZip64(byte[] payload, long? localOffset = null, long? compressedSize = null, long? uncompressedSize = null)
         {
             byte[] name = "a.txt"u8.ToArray();
             uint crc = Crc32(payload);
@@ -544,7 +544,7 @@ namespace ExcelReader.Tests.Reader.Zip
             BinaryPrimitives.WriteUInt32LittleEndian(cd[42..], Zip64SentinelU32);
             name.CopyTo(cd[CentralDirectoryFixedSize..]);
             WriteZip64Extra(cd[(CentralDirectoryFixedSize + name.Length)..],
-                payload.Length, compressedSize ?? payload.Length, localOffset ?? 0);
+                uncompressedSize ?? payload.Length, compressedSize ?? payload.Length, localOffset ?? 0);
 
             Span<byte> z64 = s[zip64EocdOffset..];
             BinaryPrimitives.WriteInt32LittleEndian(z64, 0x06064b50);
