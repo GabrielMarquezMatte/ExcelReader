@@ -576,7 +576,7 @@ namespace ExcelReader.Core.Reader.Zip
                     continue;
                 }
                 int commentLength = BinaryPrimitives.ReadUInt16LittleEndian(window.Slice(index + 20, 2));
-                if (index + EocdFixedSize + commentLength == window.Length)
+                if (index + EocdFixedSize + commentLength <= window.Length)
                 {
                     return windowStart + index;
                 }
