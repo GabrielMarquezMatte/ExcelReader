@@ -11,7 +11,7 @@ namespace ExcelReader.Tests.Reader.Xlsx
         {
             string path = Path.Combine(AppContext.BaseDirectory, "data", "sheetjs-sample.xlsx");
             using XlsxWorkbook reader = Excel.FromXlsxFile(path);
-            using XlsxWorkbook.Enumerator e = reader.GetEnumerator();
+            using XlsxWorkbook.Enumerator e = reader.FirstSheet.GetEnumerator();
 
             Assert.True(e.MoveNext());
             Assert.Equal("name", e.Current[0].GetString());

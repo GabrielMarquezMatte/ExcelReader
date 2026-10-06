@@ -178,7 +178,7 @@ namespace ExcelReader.Tests.Reader.Csv
             CsvDialect dialect = CsvSniffer.Detect(data);
             CsvReaderOptions options = CsvReaderOptions.Default.WithDialect(dialect);
             using var reader = Excel.FromCsv(data, options);
-            using CsvReader.Enumerator e = reader.GetEnumerator();
+            using CsvReader.Enumerator e = reader.FirstSheet.GetEnumerator();
 
             Assert.True(e.MoveNext());
             Assert.Equal("nome", e.Current[0].GetString());

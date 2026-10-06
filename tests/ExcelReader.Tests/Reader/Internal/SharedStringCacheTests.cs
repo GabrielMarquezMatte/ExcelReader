@@ -27,7 +27,7 @@ namespace ExcelReader.Tests.Reader.Internal
         private static List<string> FirstColumn(XlsxWorkbook reader)
         {
             List<string> values = [];
-            using XlsxWorkbook.Enumerator e = reader.GetEnumerator();
+            using XlsxWorkbook.Enumerator e = reader.FirstSheet.GetEnumerator();
             while (e.MoveNext())
             {
                 values.Add(e.Current[0].GetString());
