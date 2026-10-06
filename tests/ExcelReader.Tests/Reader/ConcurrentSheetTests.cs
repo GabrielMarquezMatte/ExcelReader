@@ -308,24 +308,37 @@ namespace ExcelReader.Tests.Reader
             }
         }
 
-        [Fact]
-        public void A_Disposed_Workbook_Refuses_New_Enumerators_While_A_Live_One_Reads_To_The_End()
+        [Theory]
+        [InlineData(Source.Memory)]
+        [InlineData(Source.FileStream)]
+        [InlineData(Source.SeekableStream)]
+        public void A_Disposed_Workbook_Refuses_New_Enumerators_While_A_Live_One_Reads_To_The_End(Source source)
         {
             byte[] bytes = Build(Format.Xlsx);
-            IExcelWorkbook workbook = Excel.Open(bytes);
-            IExcelSheet sheet = workbook.FirstSheet;
-            using IExcelRowEnumerator live = sheet.GetEnumerator();
-            Assert.True(live.MoveNext());
-
-            workbook.Dispose();
-
-            Assert.Throws<ObjectDisposedException>(() => sheet.GetEnumerator());
-            int rows = 1;
-            while (live.MoveNext())
+            List<string>[] expected;
+            using (IExcelWorkbook reference = Excel.Open(bytes))
             {
-                rows++;
+                expected = ReadSequentially(reference);
             }
-            Assert.Equal(Rows, rows);
+
+            IExcelWorkbook workbook = Open(Format.Xlsx, source, bytes);
+            IExcelSheet sheet;
+            IExcelRowEnumerator live;
+            try
+            {
+                sheet = workbook.FirstSheet;
+                live = sheet.GetEnumerator();
+            }
+            finally
+            {
+                workbook.Dispose();
+            }
+
+            using (live)
+            {
+                Assert.Throws<ObjectDisposedException>(() => sheet.GetEnumerator());
+                Assert.Equal(expected[0], Drain(live), StringComparer.Ordinal);
+            }
         }
     }
 }
