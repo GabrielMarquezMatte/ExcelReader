@@ -278,9 +278,21 @@ namespace ExcelReader.Core.Reader.Xlsb
 
         /// <summary>Gets the workbook's first sheet: the same sheet as <c>Sheets[0]</c>. Opens nothing.</summary>
         /// <exception cref="ObjectDisposedException">The workbook was disposed.</exception>
-        public XlsbSheet FirstSheet => Sheets[0];
+        public XlsbSheet FirstSheet
+        {
+            get
+            {
+                return Sheets[0];
+            }
+        }
 
-        IExcelSheet IExcelWorkbook.FirstSheet => FirstSheet;
+        IExcelSheet IExcelWorkbook.FirstSheet
+        {
+            get
+            {
+                return FirstSheet;
+            }
+        }
 
 
         /// <inheritdoc/>

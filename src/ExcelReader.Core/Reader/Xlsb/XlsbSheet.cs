@@ -26,7 +26,13 @@ namespace ExcelReader.Core.Reader.Xlsb
         /// <inheritdoc/>
         public bool IsDate1904 { get; }
 
-        private XlsbWorkbook Workbook => _workbook ?? throw new InvalidOperationException("This sheet was not obtained from a workbook.");
+        private XlsbWorkbook Workbook
+        {
+            get
+            {
+                return _workbook ?? throw new InvalidOperationException("This sheet was not obtained from a workbook.");
+            }
+        }
 
         /// <inheritdoc/>
         public XlsbWorkbook.Enumerator GetEnumerator()

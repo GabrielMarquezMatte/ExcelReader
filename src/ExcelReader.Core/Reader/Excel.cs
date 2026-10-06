@@ -31,7 +31,7 @@ namespace ExcelReader.Core.Reader
 
         /// <summary>Opens an XLSX workbook from an existing stream.</summary>
         /// <param name="stream">The stream containing the XLSX data.</param>
-        /// <param name="leaveOpen">When <see langword="true"/> (the default), <paramref name="stream"/> is not disposed when the workbook is disposed.</param>
+        /// <param name="leaveOpen">When <see langword="true"/> (the default), <paramref name="stream"/> is not disposed when the workbook is disposed, but the caller must not use, reposition or dispose it until the workbook and every enumerator obtained from it are disposed.</param>
         /// <param name="options">Resource limits and behavior toggles; <see cref="ExcelReaderOptions.Default"/> when <see langword="null"/>.</param>
         public static XlsxWorkbook FromXlsx(Stream stream, bool leaveOpen = true, ExcelReaderOptions? options = null)
         {
@@ -46,9 +46,9 @@ namespace ExcelReader.Core.Reader
         /// Opens an XLSX workbook directly from an in-memory buffer. Reads the ZIP
         /// central directory and decompresses parts without a <c>ZipArchive</c>
         /// or intermediate <see cref="Stream"/> — every part is fully materialized up front, so the returned
-        /// reader never suspends, even under <c>await foreach</c>.
+        /// workbook never suspends, even under <c>await foreach</c>.
         /// </summary>
-        /// <param name="data">The whole XLSX file's bytes. Must outlive the returned reader.</param>
+        /// <param name="data">The whole XLSX file's bytes. Must stay valid and unmodified until the workbook and every enumerator obtained from it are disposed.</param>
         /// <param name="options">Resource limits and behavior toggles; <see cref="ExcelReaderOptions.Default"/> when <see langword="null"/>. <see cref="ExcelReaderOptions.PrefetchDecompression"/> is ignored on this path — there is nothing left to overlap.</param>
         public static XlsxWorkbook FromXlsx(ReadOnlyMemory<byte> data, ExcelReaderOptions? options = null)
         {
@@ -71,7 +71,7 @@ namespace ExcelReader.Core.Reader
 
         /// <summary>Opens a legacy binary (XLS) workbook from an existing stream.</summary>
         /// <param name="stream">The stream containing the XLS data.</param>
-        /// <param name="leaveOpen">When <see langword="true"/> (the default), <paramref name="stream"/> is not disposed when the workbook is disposed.</param>
+        /// <param name="leaveOpen">When <see langword="true"/> (the default), <paramref name="stream"/> is not disposed when the workbook is disposed, but the caller must not use, reposition or dispose it until the workbook and every enumerator obtained from it are disposed.</param>
         /// <param name="options">Resource limits and behavior toggles; <see cref="ExcelReaderOptions.Default"/> when <see langword="null"/>.</param>
         public static XlsWorkbook FromXls(Stream stream, bool leaveOpen = true, ExcelReaderOptions? options = null)
         {
@@ -79,7 +79,7 @@ namespace ExcelReader.Core.Reader
         }
 
         /// <summary>Opens a legacy binary (XLS) workbook directly from an in-memory buffer.</summary>
-        /// <param name="data">The whole XLS file's bytes. Must outlive the returned reader and must not be mutated while it is in use.</param>
+        /// <param name="data">The whole XLS file's bytes. Must stay valid and unmodified until the workbook and every enumerator obtained from it are disposed.</param>
         /// <param name="options">Resource limits and behavior toggles; <see cref="ExcelReaderOptions.Default"/> when <see langword="null"/>.</param>
         public static XlsWorkbook FromXls(ReadOnlyMemory<byte> data, ExcelReaderOptions? options = null)
         {
@@ -96,7 +96,7 @@ namespace ExcelReader.Core.Reader
 
         /// <summary>Opens an XLSB (Excel binary) workbook from an existing stream.</summary>
         /// <param name="stream">The stream containing the XLSB data.</param>
-        /// <param name="leaveOpen">When <see langword="true"/> (the default), <paramref name="stream"/> is not disposed when the workbook is disposed.</param>
+        /// <param name="leaveOpen">When <see langword="true"/> (the default), <paramref name="stream"/> is not disposed when the workbook is disposed, but the caller must not use, reposition or dispose it until the workbook and every enumerator obtained from it are disposed.</param>
         /// <param name="options">Resource limits and behavior toggles; <see cref="ExcelReaderOptions.Default"/> when <see langword="null"/>.</param>
         public static XlsbWorkbook FromXlsb(Stream stream, bool leaveOpen = true, ExcelReaderOptions? options = null)
         {
@@ -111,9 +111,9 @@ namespace ExcelReader.Core.Reader
         /// Opens an XLSB workbook directly from an in-memory buffer. Reads the ZIP
         /// central directory and decompresses parts without a <c>ZipArchive</c>
         /// or intermediate <see cref="Stream"/> — every part is fully materialized up front, so the returned
-        /// reader never suspends, even under <c>await foreach</c>.
+        /// workbook never suspends, even under <c>await foreach</c>.
         /// </summary>
-        /// <param name="data">The whole XLSB file's bytes. Must outlive the returned reader.</param>
+        /// <param name="data">The whole XLSB file's bytes. Must stay valid and unmodified until the workbook and every enumerator obtained from it are disposed.</param>
         /// <param name="options">Resource limits and behavior toggles; <see cref="ExcelReaderOptions.Default"/> when <see langword="null"/>. <see cref="ExcelReaderOptions.PrefetchDecompression"/> is ignored on this path — there is nothing left to overlap.</param>
         public static XlsbWorkbook FromXlsb(ReadOnlyMemory<byte> data, ExcelReaderOptions? options = null)
         {
@@ -138,7 +138,7 @@ namespace ExcelReader.Core.Reader
 
         /// <summary>Asynchronously opens an XLSX workbook from an existing stream.</summary>
         /// <param name="stream">The stream containing the XLSX data.</param>
-        /// <param name="leaveOpen">When <see langword="true"/> (the default), <paramref name="stream"/> is not disposed when the workbook is disposed.</param>
+        /// <param name="leaveOpen">When <see langword="true"/> (the default), <paramref name="stream"/> is not disposed when the workbook is disposed, but the caller must not use, reposition or dispose it until the workbook and every enumerator obtained from it are disposed.</param>
         /// <param name="options">Resource limits and behavior toggles; <see cref="ExcelReaderOptions.Default"/> when <see langword="null"/>.</param>
         /// <param name="ct">A token to cancel the open operation.</param>
         public static ValueTask<XlsxWorkbook> FromXlsxAsync(Stream stream, bool leaveOpen = true, ExcelReaderOptions? options = null, CancellationToken ct = default)
@@ -162,7 +162,7 @@ namespace ExcelReader.Core.Reader
 
         /// <summary>Asynchronously opens a legacy binary (XLS) workbook from an existing stream.</summary>
         /// <param name="stream">The stream containing the XLS data.</param>
-        /// <param name="leaveOpen">When <see langword="true"/> (the default), <paramref name="stream"/> is not disposed when the workbook is disposed.</param>
+        /// <param name="leaveOpen">When <see langword="true"/> (the default), <paramref name="stream"/> is not disposed when the workbook is disposed, but the caller must not use, reposition or dispose it until the workbook and every enumerator obtained from it are disposed.</param>
         /// <param name="options">Resource limits and behavior toggles; <see cref="ExcelReaderOptions.Default"/> when <see langword="null"/>.</param>
         /// <param name="ct">A token to cancel the open operation.</param>
         public static ValueTask<XlsWorkbook> FromXlsAsync(Stream stream, bool leaveOpen = true, ExcelReaderOptions? options = null, CancellationToken ct = default)
@@ -182,7 +182,7 @@ namespace ExcelReader.Core.Reader
 
         /// <summary>Asynchronously opens an XLSB (Excel binary) workbook from an existing stream.</summary>
         /// <param name="stream">The stream containing the XLSB data.</param>
-        /// <param name="leaveOpen">When <see langword="true"/> (the default), <paramref name="stream"/> is not disposed when the workbook is disposed.</param>
+        /// <param name="leaveOpen">When <see langword="true"/> (the default), <paramref name="stream"/> is not disposed when the workbook is disposed, but the caller must not use, reposition or dispose it until the workbook and every enumerator obtained from it are disposed.</param>
         /// <param name="options">Resource limits and behavior toggles; <see cref="ExcelReaderOptions.Default"/> when <see langword="null"/>.</param>
         /// <param name="ct">A token to cancel the open operation.</param>
         public static ValueTask<XlsbWorkbook> FromXlsbAsync(Stream stream, bool leaveOpen = true, ExcelReaderOptions? options = null, CancellationToken ct = default)
@@ -213,7 +213,7 @@ namespace ExcelReader.Core.Reader
 
         /// <summary>Opens a CSV (or other delimited-text) source from an existing stream.</summary>
         /// <param name="stream">The stream containing the CSV data.</param>
-        /// <param name="leaveOpen">When <see langword="true"/> (the default), <paramref name="stream"/> is not disposed when the workbook is disposed.</param>
+        /// <param name="leaveOpen">When <see langword="true"/> (the default), <paramref name="stream"/> is not disposed when the workbook is disposed, but the caller must not use, reposition or dispose it until the workbook and every enumerator obtained from it are disposed.</param>
         /// <param name="options">Delimiter, quote, encoding, and size-limit settings; <see cref="CsvReaderOptions.Default"/> when <see langword="null"/>.</param>
         public static CsvReader FromCsv(Stream stream, bool leaveOpen = true, CsvReaderOptions? options = null)
         {
@@ -223,7 +223,7 @@ namespace ExcelReader.Core.Reader
         }
 
         /// <summary>Opens a CSV (or other delimited-text) source directly from an in-memory buffer.</summary>
-        /// <param name="data">The whole CSV source's bytes. Must outlive the returned reader and must not be mutated while it is in use.</param>
+        /// <param name="data">The whole CSV source's bytes. Must stay valid and unmodified until the workbook and every enumerator obtained from it are disposed.</param>
         /// <param name="options">Delimiter, quote, encoding, and size-limit settings; <see cref="CsvReaderOptions.Default"/> when <see langword="null"/>.</param>
         public static CsvReader FromCsv(ReadOnlyMemory<byte> data, CsvReaderOptions? options = null)
         {
@@ -252,7 +252,7 @@ namespace ExcelReader.Core.Reader
 
         /// <summary>Asynchronously opens a CSV (or other delimited-text) source from an existing stream.</summary>
         /// <param name="stream">The stream containing the CSV data.</param>
-        /// <param name="leaveOpen">When <see langword="true"/> (the default), <paramref name="stream"/> is not disposed when the workbook is disposed.</param>
+        /// <param name="leaveOpen">When <see langword="true"/> (the default), <paramref name="stream"/> is not disposed when the workbook is disposed, but the caller must not use, reposition or dispose it until the workbook and every enumerator obtained from it are disposed.</param>
         /// <param name="options">Delimiter, quote, encoding, and size-limit settings; <see cref="CsvReaderOptions.Default"/> when <see langword="null"/>.</param>
         /// <param name="ct">A token to cancel the open operation.</param>
         public static async ValueTask<CsvReader> FromCsvAsync(Stream stream, bool leaveOpen = true, CsvReaderOptions? options = null, CancellationToken ct = default)
@@ -334,7 +334,7 @@ namespace ExcelReader.Core.Reader
         /// stream's signature.
         /// </summary>
         /// <param name="stream">A seekable stream containing the workbook data.</param>
-        /// <param name="leaveOpen">When <see langword="true"/> (the default), <paramref name="stream"/> is not disposed when the workbook is disposed.</param>
+        /// <param name="leaveOpen">When <see langword="true"/> (the default), <paramref name="stream"/> is not disposed when the workbook is disposed, but the caller must not use, reposition or dispose it until the workbook and every enumerator obtained from it are disposed.</param>
         /// <param name="options">Resource limits and behavior toggles; <see cref="ExcelReaderOptions.Default"/> when <see langword="null"/>.</param>
         /// <returns>A format-agnostic <see cref="IExcelWorkbook"/> backed by the concrete workbook that matches the detected format.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="stream"/> is <see langword="null"/>.</exception>
@@ -349,10 +349,10 @@ namespace ExcelReader.Core.Reader
         /// <summary>
         /// Opens a workbook from an in-memory buffer, auto-detecting its format (XLSX/XLSB/XLS) from its
         /// signature. XLSX/XLSB route through <see cref="ZipIndex"/> instead of
-        /// a <c>ZipArchive</c>/<see cref="Stream"/>, so the returned reader never
+        /// a <c>ZipArchive</c>/<see cref="Stream"/>, so the returned workbook never
         /// suspends, even under <c>await foreach</c>.
         /// </summary>
-        /// <param name="data">The whole workbook file's bytes. Must outlive the returned reader.</param>
+        /// <param name="data">The whole workbook file's bytes. Must stay valid and unmodified until the workbook and every enumerator obtained from it are disposed.</param>
         /// <param name="options">Resource limits and behavior toggles; <see cref="ExcelReaderOptions.Default"/> when <see langword="null"/>.</param>
         /// <returns>A format-agnostic <see cref="IExcelWorkbook"/> backed by the concrete workbook that matches the detected format.</returns>
         /// <exception cref="InvalidDataException">The buffer's signature does not match a supported format.</exception>
@@ -436,7 +436,7 @@ namespace ExcelReader.Core.Reader
         /// (XLSX/XLSB/XLS) from the stream's signature.
         /// </summary>
         /// <param name="stream">A seekable stream containing the workbook data.</param>
-        /// <param name="leaveOpen">When <see langword="true"/> (the default), <paramref name="stream"/> is not disposed when the workbook is disposed.</param>
+        /// <param name="leaveOpen">When <see langword="true"/> (the default), <paramref name="stream"/> is not disposed when the workbook is disposed, but the caller must not use, reposition or dispose it until the workbook and every enumerator obtained from it are disposed.</param>
         /// <param name="options">Resource limits and behavior toggles; <see cref="ExcelReaderOptions.Default"/> when <see langword="null"/>.</param>
         /// <param name="ct">A token to cancel the open operation.</param>
         /// <returns>A format-agnostic <see cref="IExcelWorkbook"/> backed by the concrete workbook that matches the detected format.</returns>
@@ -485,7 +485,7 @@ namespace ExcelReader.Core.Reader
         /// <paramref name="format"/> is <see cref="ExcelFileFormat.Unknown"/>.</param>
         /// <param name="format">The format to read <paramref name="stream"/> as. <see cref="ExcelFileFormat.Unknown"/>
         /// auto-detects XLSX/XLSB/XLS from the signature.</param>
-        /// <param name="leaveOpen">When <see langword="true"/> (the default), <paramref name="stream"/> is not disposed when the workbook is disposed.</param>
+        /// <param name="leaveOpen">When <see langword="true"/> (the default), <paramref name="stream"/> is not disposed when the workbook is disposed, but the caller must not use, reposition or dispose it until the workbook and every enumerator obtained from it are disposed.</param>
         /// <param name="options">Resource limits and behavior toggles; <see cref="ExcelReaderOptions.Default"/> when
         /// <see langword="null"/>. <see cref="ExcelReaderOptions.Csv"/> supplies the dialect when
         /// <paramref name="format"/> is <see cref="ExcelFileFormat.Csv"/>.</param>
@@ -511,7 +511,7 @@ namespace ExcelReader.Core.Reader
         /// <summary>
         /// Opens a workbook of a known format from an in-memory buffer.
         /// </summary>
-        /// <param name="data">The whole source's bytes. Must outlive the returned reader.</param>
+        /// <param name="data">The whole source's bytes. Must stay valid and unmodified until the workbook and every enumerator obtained from it are disposed.</param>
         /// <param name="format">The format to read <paramref name="data"/> as. <see cref="ExcelFileFormat.Unknown"/>
         /// auto-detects XLSX/XLSB/XLS from the signature.</param>
         /// <param name="options">Resource limits and behavior toggles; <see cref="ExcelReaderOptions.Default"/> when
@@ -568,7 +568,7 @@ namespace ExcelReader.Core.Reader
         /// <paramref name="format"/> is <see cref="ExcelFileFormat.Unknown"/>.</param>
         /// <param name="format">The format to read <paramref name="stream"/> as. <see cref="ExcelFileFormat.Unknown"/>
         /// auto-detects XLSX/XLSB/XLS from the signature.</param>
-        /// <param name="leaveOpen">When <see langword="true"/> (the default), <paramref name="stream"/> is not disposed when the workbook is disposed.</param>
+        /// <param name="leaveOpen">When <see langword="true"/> (the default), <paramref name="stream"/> is not disposed when the workbook is disposed, but the caller must not use, reposition or dispose it until the workbook and every enumerator obtained from it are disposed.</param>
         /// <param name="options">Resource limits and behavior toggles; <see cref="ExcelReaderOptions.Default"/> when
         /// <see langword="null"/>. <see cref="ExcelReaderOptions.Csv"/> supplies the dialect when
         /// <paramref name="format"/> is <see cref="ExcelFileFormat.Csv"/>.</param>

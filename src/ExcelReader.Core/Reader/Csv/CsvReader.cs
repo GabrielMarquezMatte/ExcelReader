@@ -194,9 +194,21 @@ namespace ExcelReader.Core.Reader.Csv
 
         /// <summary>Gets the source's only sheet.</summary>
         /// <exception cref="ObjectDisposedException">The workbook was disposed.</exception>
-        public CsvSheet FirstSheet => Sheets[0];
+        public CsvSheet FirstSheet
+        {
+            get
+            {
+                return Sheets[0];
+            }
+        }
 
-        IExcelSheet IExcelWorkbook.FirstSheet => FirstSheet;
+        IExcelSheet IExcelWorkbook.FirstSheet
+        {
+            get
+            {
+                return FirstSheet;
+            }
+        }
 
         internal Enumerator OpenSheet(CancellationToken ct = default)
         {
