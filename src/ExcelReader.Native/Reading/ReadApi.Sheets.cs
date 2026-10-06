@@ -15,7 +15,7 @@ namespace ExcelReader.Native.Reading
             NativeApi.ClearLastError();
             try
             {
-                count = handle.Reader.SheetCount;
+                count = handle.Workbook.SheetCount;
                 return NativeStatus.Ok;
             }
             catch (Exception exception)
@@ -36,7 +36,7 @@ namespace ExcelReader.Native.Reading
             NativeApi.ClearLastError();
             try
             {
-                return CopyUtf8(handle.Reader.SheetName, buffer, out length);
+                return CopyUtf8(handle.Sheet.Name, buffer, out length);
             }
             catch (Exception exception)
             {
@@ -60,7 +60,7 @@ namespace ExcelReader.Native.Reading
             NativeApi.ClearLastError();
             try
             {
-                return CopyUtf8(handle.Reader.SheetNameAt(index), buffer, out length);
+                return CopyUtf8(handle.Workbook.SheetAt(index).Name, buffer, out length);
             }
             catch (Exception exception)
             {
@@ -92,9 +92,7 @@ namespace ExcelReader.Native.Reading
             NativeApi.ClearLastError();
             try
             {
-                handle.Reader.MoveToSheet(index);
-                handle.ResetRows();
-                handle.FaultLiveSession("xl_move_to_sheet");
+                handle.MoveToSheet(index);
                 return NativeStatus.Ok;
             }
             catch (Exception exception)
@@ -115,7 +113,7 @@ namespace ExcelReader.Native.Reading
             NativeApi.ClearLastError();
             try
             {
-                flag = handle.Reader.IsDate1904 ? 1 : 0;
+                flag = handle.Workbook.IsDate1904 ? 1 : 0;
                 return NativeStatus.Ok;
             }
             catch (Exception exception)

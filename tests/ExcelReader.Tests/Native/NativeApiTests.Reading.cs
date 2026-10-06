@@ -103,64 +103,38 @@ namespace ExcelReader.Tests.Native
             Assert.Equal(nullable, spec.Nullable);
         }
 
-        private static NativeHandle NativeHandle_Create(IExcelRowReader reader)
+        private static NativeHandle NativeHandle_Create(IExcelWorkbook workbook)
         {
-            return new NativeHandle(reader);
+            return new NativeHandle(workbook);
         }
 
         /// <summary>
-        /// Wraps a real <see cref="IExcelRowReader"/>, forwarding everything except row enumeration:
-        /// its enumerator yields <paramref name="failAfter"/> real rows and then throws, simulating a
+        /// Wraps a real <see cref="IExcelWorkbook"/>, forwarding everything except row enumeration:
+        /// its sheets' enumerators yield <paramref name="failAfter"/> real rows and then throw, simulating a
         /// genuine mid-sheet decode failure for <see cref="ReadAllDecoded_Should_Free_Already_Decoded_Rows_When_A_Later_Row_Fails_To_Decode"/>.
         /// </summary>
-        private sealed class FailAfterNRowsReader(IExcelRowReader inner, int failAfter) : IExcelRowReader
+        private sealed class FailAfterNRowsWorkbook(IExcelWorkbook inner, int failAfter) : IExcelWorkbook
         {
             public bool IsDate1904 => inner.IsDate1904;
-            public string SheetName => inner.SheetName;
+
             public int SheetCount => inner.SheetCount;
 
-            public IExcelSheet FirstSheet => inner.FirstSheet;
+            public IExcelSheet FirstSheet => SheetAt(0);
 
             public IExcelSheet SheetAt(int index)
             {
-                return inner.SheetAt(index);
+                return new FailingSheet(inner.SheetAt(index), failAfter);
             }
 
             public bool TryGetSheet(ReadOnlySpan<char> name, [MaybeNullWhen(false)] out IExcelSheet sheet)
             {
-                return inner.TryGetSheet(name, out sheet);
-            }
-
-            public string SheetNameAt(int index)
-            {
-                return inner.SheetNameAt(index);
-            }
-
-            public ExcelSheetVisibility SheetVisibility => inner.SheetVisibility;
-
-            public ExcelSheetVisibility SheetVisibilityAt(int index)
-            {
-                return inner.SheetVisibilityAt(index);
-            }
-
-            public bool TryMoveToSheet(ReadOnlySpan<char> name)
-            {
-                return inner.TryMoveToSheet(name);
-            }
-
-            public void MoveToSheet(int index)
-            {
-                inner.MoveToSheet(index);
-            }
-
-            public IExcelRowEnumerator GetEnumerator()
-            {
-                return new FailAfterNRowsEnumerator(inner.GetEnumerator(), failAfter);
-            }
-
-            public IExcelRowEnumerator GetAsyncEnumerator(CancellationToken ct = default)
-            {
-                return new FailAfterNRowsEnumerator(inner.GetAsyncEnumerator(ct), failAfter);
+                if (inner.TryGetSheet(name, out IExcelSheet? found))
+                {
+                    sheet = new FailingSheet(found, failAfter);
+                    return true;
+                }
+                sheet = null;
+                return false;
             }
 
             public void Dispose()
@@ -171,6 +145,27 @@ namespace ExcelReader.Tests.Native
             public ValueTask DisposeAsync()
             {
                 return inner.DisposeAsync();
+            }
+        }
+
+        private sealed class FailingSheet(IExcelSheet inner, int failAfter) : IExcelSheet
+        {
+            public int Index => inner.Index;
+
+            public string Name => inner.Name;
+
+            public ExcelSheetVisibility Visibility => inner.Visibility;
+
+            public bool IsDate1904 => inner.IsDate1904;
+
+            public IExcelRowEnumerator GetEnumerator()
+            {
+                return new FailAfterNRowsEnumerator(inner.GetEnumerator(), failAfter);
+            }
+
+            public IExcelRowEnumerator GetAsyncEnumerator(CancellationToken ct = default)
+            {
+                return new FailAfterNRowsEnumerator(inner.GetAsyncEnumerator(ct), failAfter);
             }
         }
 
@@ -910,6 +905,68 @@ namespace ExcelReader.Tests.Native
         }
 
         [Fact]
+        public void MovingToASheetChangesWhatSheetNameAndNextRowReport()
+        {
+            using MemoryStream ms = WorkbookBuilder.BuildMultiSheet(
+            [
+                ("First", """<row r="1"><c r="A1"><v>1</v></c></row>"""),
+                ("Second", """<row r="1"><c r="A1"><v>10</v></c></row>"""),
+            ]);
+            Assert.Equal(NativeStatus.Ok, ReadApi.OpenMemory(ms.ToArray(), NativeFormat.Xlsx, out NativeHandle? handle));
+            try
+            {
+                Span<byte> name = stackalloc byte[64];
+                byte[] row = new byte[4096];
+                Assert.Equal(NativeStatus.Ok, ReadApi.SheetName(handle, name, out int firstLength));
+                Assert.Equal("First", Encoding.UTF8.GetString(name[..firstLength]));
+
+                Assert.Equal(NativeStatus.Ok, ReadApi.MoveToSheet(handle, 1));
+                Assert.Equal(NativeStatus.Ok, ReadApi.SheetName(handle, name, out int secondLength));
+                Assert.Equal("Second", Encoding.UTF8.GetString(name[..secondLength]));
+                Assert.Equal(NativeStatus.Ok, ReadApi.NextRow(handle, row, out int written));
+                Assert.Equal("10", DecodeRow(row.AsSpan(0, written))[0].Value);
+
+                Assert.Equal(NativeStatus.Ok, ReadApi.SheetNameAt(handle, 0, name, out int atLength));
+                Assert.Equal("First", Encoding.UTF8.GetString(name[..atLength]));
+
+                Assert.Equal(NativeStatus.Ok, ReadApi.MoveToSheet(handle, 0));
+                Assert.Equal(NativeStatus.Ok, ReadApi.SheetName(handle, name, out int backLength));
+                Assert.Equal("First", Encoding.UTF8.GetString(name[..backLength]));
+                Assert.Equal(NativeStatus.Ok, ReadApi.NextRow(handle, row, out written));
+                Assert.Equal("1", DecodeRow(row.AsSpan(0, written))[0].Value);
+            }
+            finally
+            {
+                ReadApi.Close(handle);
+            }
+        }
+
+        [Fact]
+        public void MovingToASheetOutOfRangeFailsAndKeepsTheCurrentSheet()
+        {
+            using MemoryStream ms = WorkbookBuilder.BuildMultiSheet(
+            [
+                ("First", """<row r="1"><c r="A1"><v>1</v></c></row>"""),
+                ("Second", """<row r="1"><c r="A1"><v>10</v></c></row>"""),
+            ]);
+            Assert.Equal(NativeStatus.Ok, ReadApi.OpenMemory(ms.ToArray(), NativeFormat.Xlsx, out NativeHandle? handle));
+            try
+            {
+                Span<byte> name = stackalloc byte[64];
+                Assert.Equal(NativeStatus.Ok, ReadApi.MoveToSheet(handle, 1));
+
+                Assert.Equal(NativeStatus.Error, ReadApi.MoveToSheet(handle, 99));
+                Assert.Equal(NativeStatus.Error, ReadApi.MoveToSheet(handle, -1));
+                Assert.Equal(NativeStatus.Ok, ReadApi.SheetName(handle, name, out int length));
+                Assert.Equal("Second", Encoding.UTF8.GetString(name[..length]));
+            }
+            finally
+            {
+                ReadApi.Close(handle);
+            }
+        }
+
+        [Fact]
         public void NextRow_Should_Restart_After_MoveToSheet()
         {
             Assert.Equal(NativeStatus.Ok, OpenPath(XlsxFixture, NativeFormat.Auto, out NativeHandle? handle));
@@ -1044,8 +1101,8 @@ namespace ExcelReader.Tests.Native
             {
                 using (FileStream stream = File.OpenRead(path))
                 {
-                    var reader = new FailAfterNRowsReader(Excel.FromCsv(stream, leaveOpen: true), failAfter: 2);
-                    NativeHandle handle = NativeHandle_Create(reader);
+                    var workbook = new FailAfterNRowsWorkbook(Excel.FromCsv(stream, leaveOpen: true), failAfter: 2);
+                    NativeHandle handle = NativeHandle_Create(workbook);
                     try
                     {
                         int status = ReadApi.ReadAllDecoded(handle, out NativeRows rows);

@@ -24,7 +24,7 @@ namespace ExcelReader.Native.Typed
                 return NativeStatus.InvalidArgument;
             }
             int dop = ParallelCsvFactory.Normalize(degreeOfParallelism);
-            if (dop > 1 && handle.Reader is CsvReader csv && csv.TryGetChunkSource(out CsvChunkSource source)
+            if (dop > 1 && handle.Workbook is CsvReader csv && csv.TryGetChunkSource(out CsvChunkSource source)
                 && ParallelCsvFactory.CanPartition(dop, source.Length, csv.Options))
             {
                 LastParseRanInParallel = true;
@@ -48,7 +48,7 @@ namespace ExcelReader.Native.Typed
             {
                 int[] columnIndices = new int[specs.Length];
                 using (CsvReader headerReader = source.OpenReader(reader))
-                using (IExcelRowEnumerator rows = ((IExcelRowReader)headerReader).GetEnumerator())
+                using (IExcelRowEnumerator rows = headerReader.OpenSheet())
                 {
                     if (!TryResolveColumns(rows, specs, headerRow, columnIndices, out string? resolveError))
                     {
@@ -57,7 +57,7 @@ namespace ExcelReader.Native.Typed
                     }
                 }
 
-                bool isDate1904 = handle.Reader.IsDate1904;
+                bool isDate1904 = handle.Workbook.IsDate1904;
                 CsvAggregation<PartitionTable> aggregation = new()
                 {
                     Seed = () => new PartitionTable(specs),

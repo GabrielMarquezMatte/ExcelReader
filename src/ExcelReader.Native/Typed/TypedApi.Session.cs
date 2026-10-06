@@ -85,7 +85,7 @@ namespace ExcelReader.Native.Typed
                 IExcelRowEnumerator? rows = null;
                 try
                 {
-                    rows = handle.Reader.GetEnumerator();
+                    rows = handle.Sheet.GetEnumerator();
                     int[] columnIndices = new int[specs.Length];
                     if (!TryResolveColumns(rows, specs, headerRow, columnIndices, out string? resolveError))
                     {
@@ -95,7 +95,7 @@ namespace ExcelReader.Native.Typed
                     }
 
                     session = new TypedParseSession(handle, specs, columnIndices, maxRows,
-                        handle.Reader.IsDate1904, rows);
+                        handle.Workbook.IsDate1904, rows);
                     return NativeStatus.Ok;
                 }
                 catch (Exception exception)
