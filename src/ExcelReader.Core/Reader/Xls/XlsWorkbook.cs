@@ -6,8 +6,9 @@ using static ExcelReader.Core.Reader.Xlsb.Biff12;
 
 namespace ExcelReader.Core.Reader.Xls
 {
-    /// <summary>Reads rows from a legacy BIFF8 (.xls) workbook, exposing each worksheet through synchronous and asynchronous enumeration.</summary>
-    public sealed partial class XlsWorkbook : IExcelRowReader, IExcelRowReader<XlsWorkbook.Enumerator>
+    /// <summary>An open legacy BIFF8 (.xls) workbook. Its sheets are read independently, each through synchronous and asynchronous enumeration.</summary>
+    /// <remarks>See <see cref="IExcelWorkbook"/> for the threading and lifetime contract.</remarks>
+    public sealed partial class XlsWorkbook : IExcelWorkbook
     {
         private readonly WorkbookStream _workbook;
         private readonly ExcelReaderOptions _options;
@@ -18,7 +19,6 @@ namespace ExcelReader.Core.Reader.Xls
         private int[] _sharedOffsets;
         private string?[]? _sharedStringCache;
         private readonly ExcelSheetList<XlsSheet> _sheetList;
-        private int _current;
 
         internal ReaderLifetime Lifetime { get; }
 
@@ -63,27 +63,7 @@ namespace ExcelReader.Core.Reader.Xls
         }
 
         /// <inheritdoc/>
-        public string SheetName => _sheets[_current].Name;
-
-        /// <inheritdoc/>
         public int SheetCount => _sheets.Length;
-
-        /// <inheritdoc/>
-        public string SheetNameAt(int index)
-        {
-            WorkbookLookups.ValidateSheetIndex(index, _sheets.Length);
-            return _sheets[index].Name;
-        }
-
-        /// <inheritdoc/>
-        public ExcelSheetVisibility SheetVisibility => _sheets[_current].Visibility;
-
-        /// <inheritdoc/>
-        public ExcelSheetVisibility SheetVisibilityAt(int index)
-        {
-            WorkbookLookups.ValidateSheetIndex(index, _sheets.Length);
-            return _sheets[index].Visibility;
-        }
 
         /// <inheritdoc/>
         public bool IsDate1904 => _date1904;
@@ -106,24 +86,6 @@ namespace ExcelReader.Core.Reader.Xls
         internal (int Start, int Length, int ValidIndex) SharedAt(int index)
         {
             return WorkbookLookups.SharedAt(_sharedOffsets, index);
-        }
-
-        /// <inheritdoc/>
-        public bool TryMoveToSheet(ReadOnlySpan<char> name)
-        {
-            if (!WorkbookLookups.TryFindSheetIndex(_sheets, name, static s => s.Name, out int index))
-            {
-                return false;
-            }
-            _current = index;
-            return true;
-        }
-
-        /// <inheritdoc/>
-        public void MoveToSheet(int index)
-        {
-            WorkbookLookups.ValidateSheetIndex(index, _sheets.Length);
-            _current = index;
         }
 
         private ExcelSheetList<XlsSheet> CreateSheetList()
@@ -210,29 +172,6 @@ namespace ExcelReader.Core.Reader.Xls
         public XlsSheet FirstSheet => Sheets[0];
 
         IExcelSheet IExcelWorkbook.FirstSheet => FirstSheet;
-
-        /// <inheritdoc/>
-        public Enumerator GetEnumerator()
-        {
-            return OpenSheet(_current);
-        }
-
-        IExcelRowEnumerator IExcelSheet<IExcelRowEnumerator>.GetEnumerator()
-        {
-            return GetEnumerator();
-        }
-
-        /// <inheritdoc/>
-        /// <remarks>XlsWorkbook is fully in-memory, so nothing is deferred; <paramref name="ct"/> is checked here and on each move.</remarks>
-        public Enumerator GetAsyncEnumerator(CancellationToken ct = default)
-        {
-            return OpenSheetAsync(_current, ct);
-        }
-
-        IExcelRowEnumerator IExcelSheet<IExcelRowEnumerator>.GetAsyncEnumerator(CancellationToken ct)
-        {
-            return GetAsyncEnumerator(ct);
-        }
 
         /// <inheritdoc/>
         public void Dispose()

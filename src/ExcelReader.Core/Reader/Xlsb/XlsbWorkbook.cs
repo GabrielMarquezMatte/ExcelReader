@@ -6,13 +6,13 @@ using ExcelReader.Core.Reader.Zip;
 
 namespace ExcelReader.Core.Reader.Xlsb
 {
-    /// <summary>Reads rows from a binary Excel (.xlsb / BIFF12) workbook, streaming each sheet's cells without loading the whole file into memory.</summary>
+    /// <summary>An open binary Excel (.xlsb / BIFF12) workbook. Its sheets are read independently, each streaming its cells without loading the whole file into memory.</summary>
     /// <remarks>
     /// Uses the same ZIP/OPC container as .xlsx, but worksheet parts are binary BIFF12 records. The workbook,
     /// styles, and shared-string parts are read once at open time (they're small); worksheets are streamed on
-    /// demand by the enumerator.
+    /// demand by the enumerator. See <see cref="IExcelWorkbook"/> for the threading and lifetime contract.
     /// </remarks>
-    public sealed partial class XlsbWorkbook : IExcelRowReader, IExcelRowReader<XlsbWorkbook.Enumerator>
+    public sealed partial class XlsbWorkbook : IExcelWorkbook
     {
         private readonly byte[] _sharedFlat = [];
         private readonly int[] _sharedOffsets = [0];
@@ -25,7 +25,6 @@ namespace ExcelReader.Core.Reader.Xlsb
         private readonly ZipIndex? _zip;
         private readonly (string Name, string Path, ExcelSheetVisibility Visibility)[]? _sheets;
         private readonly ExcelSheetList<XlsbSheet> _sheetList;
-        private int _current;
         internal ReaderLifetime Lifetime { get; }
 
         internal XlsbWorkbook(byte[] sharedFlat, int[] sharedOffsets, bool[] styleIsDate, bool date1904)
@@ -176,42 +175,7 @@ namespace ExcelReader.Core.Reader.Xlsb
         /// <inheritdoc/>
         public bool IsDate1904 { get; }
         /// <inheritdoc/>
-        public string SheetName => _sheets![_current].Name;
-        /// <inheritdoc/>
         public int SheetCount => _sheets!.Length;
-        /// <inheritdoc/>
-        public string SheetNameAt(int index)
-        {
-            WorkbookLookups.ValidateSheetIndex(index, _sheets!.Length);
-            return _sheets[index].Name;
-        }
-        /// <inheritdoc/>
-        public ExcelSheetVisibility SheetVisibility => _sheets![_current].Visibility;
-        /// <inheritdoc/>
-        public ExcelSheetVisibility SheetVisibilityAt(int index)
-        {
-            WorkbookLookups.ValidateSheetIndex(index, _sheets!.Length);
-            return _sheets[index].Visibility;
-        }
-
-        /// <inheritdoc/>
-        public bool TryMoveToSheet(ReadOnlySpan<char> name)
-        {
-            if (!WorkbookLookups.TryFindSheetIndex(_sheets!, name, static s => s.Name, out int index))
-            {
-                return false;
-            }
-            _current = index;
-            return true;
-        }
-
-        /// <inheritdoc/>
-        public void MoveToSheet(int index)
-        {
-            WorkbookLookups.ValidateSheetIndex(index, _sheets!.Length);
-            _current = index;
-        }
-
 
         internal ReadOnlySpan<byte> SharedSpan => _sharedFlat;
 
@@ -317,28 +281,6 @@ namespace ExcelReader.Core.Reader.Xlsb
         public XlsbSheet FirstSheet => Sheets[0];
 
         IExcelSheet IExcelWorkbook.FirstSheet => FirstSheet;
-
-        /// <inheritdoc/>
-        public Enumerator GetEnumerator()
-        {
-            return OpenSheet(_current);
-        }
-
-        IExcelRowEnumerator IExcelSheet<IExcelRowEnumerator>.GetEnumerator()
-        {
-            return GetEnumerator();
-        }
-
-        /// <inheritdoc/>
-        public Enumerator GetAsyncEnumerator(CancellationToken ct = default)
-        {
-            return OpenSheetAsync(_current, ct);
-        }
-
-        IExcelRowEnumerator IExcelSheet<IExcelRowEnumerator>.GetAsyncEnumerator(CancellationToken ct)
-        {
-            return GetAsyncEnumerator(ct);
-        }
 
 
         /// <inheritdoc/>

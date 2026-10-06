@@ -9,11 +9,11 @@ namespace ExcelReader.Core.Parser
 {
     /// <summary>Lazily projects XLSX rows into <typeparamref name="T"/> instances, for both synchronous and asynchronous enumeration.</summary>
     /// <typeparam name="T">The row model type to bind each row to.</typeparam>
-    public sealed class ExcelEnumerable<T> : ExcelEnumerable<T, XlsxWorkbook, XlsxWorkbook.Enumerator>
+    public sealed class ExcelEnumerable<T> : ExcelEnumerable<T, XlsxSheet, XlsxWorkbook.Enumerator>
         where T : allows ref struct
     {
-        internal ExcelEnumerable(XlsxWorkbook reader, ExcelParserConfig config, TypeMapInfo<T> explicitInfo)
-            : base(reader, config, explicitInfo)
+        internal ExcelEnumerable(XlsxSheet sheet, ExcelParserConfig config, TypeMapInfo<T> explicitInfo)
+            : base(sheet, config, explicitInfo)
         {
         }
     }
