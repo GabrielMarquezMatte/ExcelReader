@@ -85,7 +85,7 @@ namespace ExcelReader.Core.Reader.Csv
                 source = new CsvChunkSource(_memory);
                 return true;
             }
-            if (_file is not null)
+            if (_file is not null && !NeedsTranscoding(_options.Encoding))
             {
                 SafeFileHandle handle = ChunkHandle(_file);
                 source = new CsvChunkSource(handle, RandomAccess.GetLength(handle), _sourceStart);
