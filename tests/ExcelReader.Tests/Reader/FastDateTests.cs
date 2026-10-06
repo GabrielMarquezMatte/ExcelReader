@@ -139,7 +139,7 @@ namespace ExcelReader.Tests.Reader
             using CsvReader reader = Excel.FromCsv(ms);
 
             var dates = new List<DateTime>();
-            foreach (Row row in reader)
+            foreach (Row row in reader.FirstSheet)
             {
                 int col = 0;
                 foreach (RowCell rowCell in row.Cells)
@@ -163,7 +163,7 @@ namespace ExcelReader.Tests.Reader
             using var ms = new MemoryStream(csv, writable: false);
             using CsvReader reader = Excel.FromCsv(ms);
 
-            foreach (Row row in reader)
+            foreach (Row row in reader.FirstSheet)
             {
                 Assert.True(row[1].TryGetDateTime(out DateTime d));
                 Assert.Equal(new DateTime(2024, 3, 15), d);

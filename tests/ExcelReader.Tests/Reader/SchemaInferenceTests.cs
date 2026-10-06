@@ -33,7 +33,7 @@ namespace ExcelReader.Tests.Reader
         private static ExcelColumnSchema[] InferFromCsv(string csv, int headerRow = 1, int sampleSize = 100, bool parseText = false)
         {
             using CsvReader reader = Excel.FromCsv(System.Text.Encoding.UTF8.GetBytes(csv));
-            using var rows = reader.GetEnumerator();
+            using var rows = reader.FirstSheet.GetEnumerator();
             return SchemaInference.Infer(rows, isDate1904: false, headerRow, sampleSize, parseText);
         }
 
@@ -41,7 +41,7 @@ namespace ExcelReader.Tests.Reader
         {
             using MemoryStream ms = WorkbookBuilder.Build(sheetRows);
             using XlsxWorkbook reader = Excel.FromXlsx(ms.ToArray());
-            using var rows = reader.GetEnumerator();
+            using var rows = reader.FirstSheet.GetEnumerator();
             return SchemaInference.Infer(rows, isDate1904: false, headerRow, sampleSize, parseText);
         }
 
@@ -67,7 +67,7 @@ namespace ExcelReader.Tests.Reader
         {
             using CsvReader reader = Excel.FromCsvFile(FixtureCsv());
 
-            ExcelColumnSchema[] schema = Excel.InferSchema(reader, parseText: true);
+            ExcelColumnSchema[] schema = Excel.InferSchema(reader.FirstSheet, parseText: true);
 
             ExcelColumnType s = ExcelColumnType.StringColumn, d = ExcelColumnType.DateColumn,
                 i = ExcelColumnType.Int64Column, f = ExcelColumnType.Float64Column;
@@ -80,7 +80,7 @@ namespace ExcelReader.Tests.Reader
         {
             using CsvReader reader = Excel.FromCsvFile(FixtureCsv());
 
-            Assert.All(Excel.InferSchema(reader), column => Assert.Equal(ExcelColumnType.StringColumn, column.Type));
+            Assert.All(Excel.InferSchema(reader.FirstSheet), column => Assert.Equal(ExcelColumnType.StringColumn, column.Type));
         }
 
         [Fact]
@@ -291,8 +291,8 @@ namespace ExcelReader.Tests.Reader
         [Fact]
         public void Should_InferAcrossEveryFormat_When_CalledThroughTheExcelFacade()
         {
-            using IExcelRowReader reader = Excel.Open(Path.Combine("data", "RealExcel.xlsb"));
-            ExcelColumnSchema[] schema = Excel.InferSchema(reader);
+            using IExcelWorkbook reader = Excel.Open(Path.Combine("data", "RealExcel.xlsb"));
+            ExcelColumnSchema[] schema = Excel.InferSchema(reader.FirstSheet);
 
             Assert.NotEmpty(schema);
             Assert.All(schema, column => Assert.True(column.Index >= 0));
@@ -305,10 +305,10 @@ namespace ExcelReader.Tests.Reader
         [Fact]
         public void Should_NotDisturbTheReader_When_InferSchemaRunsBeforeEnumeration()
         {
-            using IExcelRowReader reader = Excel.FromCsv(System.Text.Encoding.UTF8.GetBytes("Id\n1\n2\n"));
-            _ = Excel.InferSchema(reader);
+            using IExcelWorkbook reader = Excel.FromCsv(System.Text.Encoding.UTF8.GetBytes("Id\n1\n2\n"));
+            _ = Excel.InferSchema(reader.FirstSheet);
 
-            using IExcelRowEnumerator rows = reader.GetEnumerator();
+            using IExcelRowEnumerator rows = reader.FirstSheet.GetEnumerator();
             Assert.True(rows.MoveNext());
             Assert.Equal("Id", rows.Current[0].GetString());
         }
@@ -316,7 +316,7 @@ namespace ExcelReader.Tests.Reader
         [Fact]
         public void Should_Throw_When_ReaderIsNull()
         {
-            Assert.Throws<ArgumentNullException>(() => Excel.InferSchema((IExcelRowReader)null!));
+            Assert.Throws<ArgumentNullException>(() => Excel.InferSchema((IExcelSheet)null!));
         }
     }
 }

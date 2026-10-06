@@ -99,7 +99,7 @@ namespace ExcelReader.Tests.Reader
             return buffer.ToArray();
         }
 
-        private IExcelRowReader Open(Format format, Source source, byte[] bytes)
+        private IExcelWorkbook Open(Format format, Source source, byte[] bytes)
         {
             if (source == Source.Memory)
             {
@@ -126,13 +126,12 @@ namespace ExcelReader.Tests.Reader
             return lines;
         }
 
-        private static List<string>[] ReadSequentially(IExcelRowReader reader)
+        private static List<string>[] ReadSequentially(IExcelWorkbook reader)
         {
             List<string>[] sheets = new List<string>[reader.SheetCount];
             for (int s = 0; s < sheets.Length; s++)
             {
-                reader.MoveToSheet(s);
-                using IExcelRowEnumerator e = reader.GetEnumerator();
+                using IExcelRowEnumerator e = reader.SheetAt(s).GetEnumerator();
                 sheets[s] = Drain(e);
             }
             return sheets;
@@ -144,19 +143,18 @@ namespace ExcelReader.Tests.Reader
         {
             byte[] bytes = Build(format);
             List<string>[] expected;
-            using (IExcelRowReader reference = Excel.Open(bytes))
+            using (IExcelWorkbook reference = Excel.Open(bytes))
             {
                 expected = ReadSequentially(reference);
             }
             Assert.Equal(Sheets, expected.Length);
             Assert.All(expected, sheet => Assert.Equal(Rows, sheet.Count));
 
-            using IExcelRowReader reader = Open(format, source, bytes);
+            using IExcelWorkbook reader = Open(format, source, bytes);
             IExcelRowEnumerator[] enumerators = new IExcelRowEnumerator[Sheets];
             for (int s = 0; s < Sheets; s++)
             {
-                reader.MoveToSheet(s);
-                enumerators[s] = reader.GetEnumerator();
+                enumerators[s] = reader.SheetAt(s).GetEnumerator();
             }
 
             List<string>[] actual = new List<string>[Sheets];
@@ -179,17 +177,16 @@ namespace ExcelReader.Tests.Reader
             CancellationToken ct = TestContext.Current.CancellationToken;
             byte[] bytes = Build(format);
             List<string>[] expected;
-            using (IExcelRowReader reference = Excel.Open(bytes))
+            using (IExcelWorkbook reference = Excel.Open(bytes))
             {
                 expected = ReadSequentially(reference);
             }
 
-            using IExcelRowReader reader = Open(format, source, bytes);
+            using IExcelWorkbook reader = Open(format, source, bytes);
             IExcelRowEnumerator[] enumerators = new IExcelRowEnumerator[Sheets];
             for (int s = 0; s < Sheets; s++)
             {
-                reader.MoveToSheet(s);
-                enumerators[s] = reader.GetAsyncEnumerator(ct);
+                enumerators[s] = reader.SheetAt(s).GetAsyncEnumerator(ct);
             }
 
             Task<List<string>>[] tasks = new Task<List<string>>[Sheets];
@@ -225,14 +222,14 @@ namespace ExcelReader.Tests.Reader
         public void Threads_Reading_One_Sheet_Get_The_Same_String_Instances(Format format, Source source)
         {
             byte[] bytes = Build(format);
-            using IExcelRowReader reader = Open(format, source, bytes);
-            reader.MoveToSheet(0);
+            using IExcelWorkbook reader = Open(format, source, bytes);
+            IExcelSheet sheet = reader.FirstSheet;
 
             const int Threads = 8;
             IExcelRowEnumerator[] enumerators = new IExcelRowEnumerator[Threads];
             for (int t = 0; t < Threads; t++)
             {
-                enumerators[t] = reader.GetEnumerator();
+                enumerators[t] = sheet.GetEnumerator();
             }
 
             string[][] thirdColumn = new string[Threads][];

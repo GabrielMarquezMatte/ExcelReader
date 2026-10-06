@@ -20,7 +20,7 @@ namespace ExcelReader.Tests.Reader
 
             await using MemoryStream ms = new(bytes, writable: false);
             await using XlsxWorkbook reader = await Excel.FromXlsxAsync(ms, ct: outer);
-            await using XlsxWorkbook.Enumerator e = reader.GetAsyncEnumerator(cts.Token);
+            await using XlsxWorkbook.Enumerator e = reader.FirstSheet.GetAsyncEnumerator(cts.Token);
 
             for (int i = 0; i < 5; i++)
             {
@@ -46,7 +46,7 @@ namespace ExcelReader.Tests.Reader
 
             await using MemoryStream ms = new(bytes, writable: false);
             await using CsvReader reader = await Excel.FromCsvAsync(ms, ct: outer);
-            await using CsvReader.Enumerator e = reader.GetAsyncEnumerator(cts.Token);
+            await using CsvReader.Enumerator e = reader.FirstSheet.GetAsyncEnumerator(cts.Token);
 
             for (int i = 0; i < 5; i++)
             {
@@ -71,7 +71,7 @@ namespace ExcelReader.Tests.Reader
             using CancellationTokenSource cts = new();
 
             await using XlsWorkbook reader = await Excel.FromXlsAsync(ms, ct: outer);
-            await using XlsWorkbook.Enumerator e = reader.GetAsyncEnumerator(cts.Token);
+            await using XlsWorkbook.Enumerator e = reader.FirstSheet.GetAsyncEnumerator(cts.Token);
 
             Assert.True(await e.MoveNextAsync());
             cts.Cancel();
@@ -88,7 +88,7 @@ namespace ExcelReader.Tests.Reader
 
             await using MemoryStream ms = new(bytes, writable: false);
             await using XlsbWorkbook reader = await Excel.FromXlsbAsync(ms, ct: outer);
-            await using XlsbWorkbook.Enumerator e = reader.GetAsyncEnumerator(cts.Token);
+            await using XlsbWorkbook.Enumerator e = reader.FirstSheet.GetAsyncEnumerator(cts.Token);
 
             Assert.True(await e.MoveNextAsync());
             cts.Cancel();

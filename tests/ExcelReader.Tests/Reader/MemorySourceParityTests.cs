@@ -77,8 +77,8 @@ namespace ExcelReader.Tests.Reader
         {
             var options = ExcelReaderOptions.Default with { Password = EncryptedFixtures.PasswordFor(fixture) };
 
-            using IExcelRowReader streamReader = Excel.Open(EncryptedFixtures.Path_(fixture), options);
-            using IExcelRowReader memoryReader = Excel.Open(EncryptedFixtures.Bytes(fixture), options);
+            using IExcelWorkbook streamReader = Excel.Open(EncryptedFixtures.Path_(fixture), options);
+            using IExcelWorkbook memoryReader = Excel.Open(EncryptedFixtures.Bytes(fixture), options);
 
             AssertRowsEqual(streamReader, memoryReader);
         }
@@ -93,18 +93,22 @@ namespace ExcelReader.Tests.Reader
             return data;
         }
 
-        private static void AssertRowsEqual(IExcelRowReader expected, IExcelRowReader actual)
+        private static void AssertRowsEqual(IExcelWorkbook expected, IExcelWorkbook actual)
         {
-            string[] expectedValues = ReadRows(expected);
-            string[] actualValues = ReadRows(actual);
+            Assert.Equal(expected.SheetCount, actual.SheetCount);
+            for (int n = 0; n < expected.SheetCount; n++)
+            {
+                string[] expectedValues = ReadRows(expected.SheetAt(n));
+                string[] actualValues = ReadRows(actual.SheetAt(n));
 
-            Assert.Equal(expectedValues, actualValues);
+                Assert.Equal(expectedValues, actualValues);
+            }
         }
 
-        private static string[] ReadRows(IExcelRowReader reader)
+        private static string[] ReadRows(IExcelSheet sheet)
         {
             List<string> values = [];
-            foreach (Row row in reader)
+            foreach (Row row in sheet)
             {
                 StringBuilder sb = new();
                 foreach (var cell in row.Cells)

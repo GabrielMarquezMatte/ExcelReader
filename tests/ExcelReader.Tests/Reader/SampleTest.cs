@@ -11,7 +11,7 @@ namespace ExcelReader.Tests.Reader
             using var reader = Excel.FromXlsxFile(path);
 
             int r = 0;
-            foreach (var row in reader)
+            foreach (var row in reader.FirstSheet)
             {
                 if (r == 0)
                 {
@@ -42,7 +42,7 @@ namespace ExcelReader.Tests.Reader
                 $$"""<row r="1"><c r="A1"><v>10</v></c><c r="C1"><v>30</v></c></row><row r="2"><c r="A2" t="inlineStr"><is><t>{{big}}</t></is></c></row>""");
 
             await using var reader = await Excel.FromXlsxAsync(ms, ct: TestContext.Current.CancellationToken);
-            await using var enumerator = reader.GetAsyncEnumerator(TestContext.Current.CancellationToken);
+            await using var enumerator = reader.FirstSheet.GetAsyncEnumerator(TestContext.Current.CancellationToken);
             int r = 0;
             while (await enumerator.MoveNextAsync())
             {
@@ -71,7 +71,7 @@ namespace ExcelReader.Tests.Reader
                 """<row r="1"><c r="A1"><v>10</v></c><c r="AA1"><v>30</v></c></row>""");
 
             using var reader = Excel.FromXlsx(ms);
-            using var e = reader.GetEnumerator();
+            using var e = reader.FirstSheet.GetEnumerator();
             Assert.True(e.MoveNext());
 
             var row = e.Current;
@@ -98,7 +98,7 @@ namespace ExcelReader.Tests.Reader
                 sharedStrings: "<si><t>a &amp; b &lt;tag&gt; &#65;</t></si>");
 
             using var reader = Excel.FromXlsx(ms);
-            using var enumerator = reader.GetEnumerator();
+            using var enumerator = reader.FirstSheet.GetEnumerator();
             Assert.True(enumerator.MoveNext(), "Expected at least one row");
             var row = enumerator.Current;
             Assert.Equal("a & b <tag> A", row[0].GetString());
@@ -112,7 +112,7 @@ namespace ExcelReader.Tests.Reader
                 sharedStrings: "<si><t>a&b</t></si><si><t>x&foo;y</t></si>");
 
             using var reader = Excel.FromXlsx(ms);
-            using var e = reader.GetEnumerator();
+            using var e = reader.FirstSheet.GetEnumerator();
             Assert.True(e.MoveNext());
             var row = e.Current;
             Assert.Equal("a&b", row[0].GetString());
@@ -130,7 +130,7 @@ namespace ExcelReader.Tests.Reader
                 styles: styles);
 
             using var reader = Excel.FromXlsx(ms);
-            using var e = reader.GetEnumerator();
+            using var e = reader.FirstSheet.GetEnumerator();
             Assert.True(e.MoveNext());
             var row = e.Current;
 
@@ -151,7 +151,7 @@ namespace ExcelReader.Tests.Reader
             var ct = TestContext.Current.CancellationToken;
             string path = Path.Combine(AppContext.BaseDirectory, "data", "sample.xlsx");
             await using var reader = await Excel.FromXlsxFileAsync(path, ct: ct);
-            await using var e = reader.GetAsyncEnumerator(ct);
+            await using var e = reader.FirstSheet.GetAsyncEnumerator(ct);
 
             int r = 0;
             while (await e.MoveNextAsync())
@@ -184,7 +184,7 @@ namespace ExcelReader.Tests.Reader
                 styles: styles);
 
             await using var reader = await Excel.FromXlsxAsync(ms, ct: ct);
-            await using var e = reader.GetAsyncEnumerator(ct);
+            await using var e = reader.FirstSheet.GetAsyncEnumerator(ct);
 
             Assert.True(await e.MoveNextAsync());
             Assert.Equal(CellType.Date, e.Current[0].Type);
