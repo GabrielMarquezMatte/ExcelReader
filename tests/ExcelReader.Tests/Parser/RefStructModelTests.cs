@@ -61,7 +61,7 @@ namespace ExcelReader.Tests.Parser
                 ["Alice", 999, "hello"]);
 
             using var reader = Excel.FromXlsx(ms, leaveOpen: true);
-            var enumerator = ExcelParser.FromAttributes<AttributeRef>().Parse(reader).GetEnumerator();
+            var enumerator = ExcelParser.FromAttributes<AttributeRef>().Parse(reader.FirstSheet).GetEnumerator();
             Assert.True(enumerator.MoveNext());
             AttributeRef a = enumerator.Current;
             Assert.Equal("Alice", a.FirstName);
@@ -77,7 +77,7 @@ namespace ExcelReader.Tests.Parser
                 ["Alice", 1]);
 
             using var reader = Excel.FromXlsx(ms, leaveOpen: true);
-            var enumerator = ExcelParser.FromAttributes<SaleSpanRef>().Parse(reader).GetEnumerator();
+            var enumerator = ExcelParser.FromAttributes<SaleSpanRef>().Parse(reader.FirstSheet).GetEnumerator();
             Assert.True(enumerator.MoveNext());
             SaleSpanRef s = enumerator.Current;
             Assert.Equal("Alice", Encoding.UTF8.GetString(s.Name));
@@ -94,14 +94,14 @@ namespace ExcelReader.Tests.Parser
 
             using var namedReader = Excel.FromXlsx(ms, leaveOpen: true);
             var namedResults = new List<(string? Name, int Id, double Value, DateTime Date)>();
-            foreach (SaleNamedRef s in ExcelParser.FromAttributes<SaleNamedRef>().Parse(namedReader))
+            foreach (SaleNamedRef s in ExcelParser.FromAttributes<SaleNamedRef>().Parse(namedReader.FirstSheet))
             {
                 namedResults.Add((s.Name, s.Id, s.Value, s.Date));
             }
 
             ms.Position = 0;
             using var classReader = Excel.FromXlsx(ms, leaveOpen: true);
-            List<SaleClass> classResults = ExcelParser.FromAttributes<SaleClass>().Parse(classReader).ToList();
+            List<SaleClass> classResults = ExcelParser.FromAttributes<SaleClass>().Parse(classReader.FirstSheet).ToList();
 
             Assert.Equal(2, namedResults.Count);
             Assert.Equal(classResults.Count, namedResults.Count);
@@ -122,7 +122,7 @@ namespace ExcelReader.Tests.Parser
                 [SampleDate, 10.5, "Alice", 1]);
 
             using var reader = Excel.FromXlsx(ms, leaveOpen: true);
-            var enumerator = ExcelParser.FromAttributes<SaleNamedRef>().Parse(reader).GetEnumerator();
+            var enumerator = ExcelParser.FromAttributes<SaleNamedRef>().Parse(reader.FirstSheet).GetEnumerator();
             Assert.True(enumerator.MoveNext());
             SaleNamedRef s = enumerator.Current;
             Assert.Equal("Alice", s.Name);
@@ -139,7 +139,7 @@ namespace ExcelReader.Tests.Parser
                 ["Alice", 10.5, SampleDate]);
 
             using var reader = Excel.FromXlsx(ms, leaveOpen: true);
-            var enumerable = ExcelParser.FromAttributes<SaleNamedRef>().Parse(reader);
+            var enumerable = ExcelParser.FromAttributes<SaleNamedRef>().Parse(reader.FirstSheet);
             Assert.Throws<ExcelParseException>(() =>
             {
                 var enumerator = enumerable.GetEnumerator();
@@ -155,7 +155,7 @@ namespace ExcelReader.Tests.Parser
                 ["Alice", 1, new Gap(), SampleDate]);
 
             using var reader = Excel.FromXlsx(ms, leaveOpen: true);
-            var enumerator = ExcelParser.FromAttributes<SaleNamedRef>().Parse(reader).GetEnumerator();
+            var enumerator = ExcelParser.FromAttributes<SaleNamedRef>().Parse(reader.FirstSheet).GetEnumerator();
             Assert.True(enumerator.MoveNext());
             Assert.Equal(0.0, enumerator.Current.Value);
         }
@@ -168,7 +168,7 @@ namespace ExcelReader.Tests.Parser
                 ["Alice", "oops", 10.5, SampleDate]);
 
             using var reader = Excel.FromXlsx(ms, leaveOpen: true);
-            var enumerator = ExcelParser.FromAttributes<SaleNamedRef>().Parse(reader).GetEnumerator();
+            var enumerator = ExcelParser.FromAttributes<SaleNamedRef>().Parse(reader.FirstSheet).GetEnumerator();
             Assert.True(enumerator.MoveNext());
             Assert.Throws<ExcelParseException>(() => { _ = enumerator.Current; });
         }
@@ -182,7 +182,7 @@ namespace ExcelReader.Tests.Parser
             var config = new ExcelParserConfig { ThrowOnParseFailure = true };
 
             using var reader = Excel.FromXlsx(ms, leaveOpen: true);
-            var enumerator = ExcelParser.FromAttributes<SaleNamedRef>(config).Parse(reader).GetEnumerator();
+            var enumerator = ExcelParser.FromAttributes<SaleNamedRef>(config).Parse(reader.FirstSheet).GetEnumerator();
             Assert.True(enumerator.MoveNext());
             ExcelParseException ex = Assert.Throws<ExcelParseException>(() => { _ = enumerator.Current; });
             Assert.Equal("Id", ex.ColumnName);
@@ -199,14 +199,14 @@ namespace ExcelReader.Tests.Parser
             using var ms1900 = WorkbookBuilder.Build(sheetRows, date1904: false);
             using var reader1900 = Excel.FromXlsx(ms1900, leaveOpen: true);
             Assert.False(reader1900.IsDate1904);
-            var e1900 = ExcelParser.FromAttributes<SaleNamedRef>().Parse(reader1900).GetEnumerator();
+            var e1900 = ExcelParser.FromAttributes<SaleNamedRef>().Parse(reader1900.FirstSheet).GetEnumerator();
             Assert.True(e1900.MoveNext());
             DateTime date1900 = e1900.Current.Date;
 
             using var ms1904 = WorkbookBuilder.Build(sheetRows, date1904: true);
             using var reader1904 = Excel.FromXlsx(ms1904, leaveOpen: true);
             Assert.True(reader1904.IsDate1904);
-            var e1904 = ExcelParser.FromAttributes<SaleNamedRef>().Parse(reader1904).GetEnumerator();
+            var e1904 = ExcelParser.FromAttributes<SaleNamedRef>().Parse(reader1904.FirstSheet).GetEnumerator();
             Assert.True(e1904.MoveNext());
             DateTime date1904Result = e1904.Current.Date;
 
@@ -223,7 +223,7 @@ namespace ExcelReader.Tests.Parser
 
             using var reader = Excel.FromXlsx(ms, leaveOpen: true);
             var results = new List<(string? Name, int Id)>();
-            await foreach (SaleNamedRef s in ExcelParser.FromAttributes<SaleNamedRef>().Parse(reader))
+            await foreach (SaleNamedRef s in ExcelParser.FromAttributes<SaleNamedRef>().Parse(reader.FirstSheet))
             {
                 results.Add((s.Name, s.Id));
             }
@@ -241,7 +241,7 @@ namespace ExcelReader.Tests.Parser
                 ["Alice", 1, 10.5, SampleDate]);
             using var reader = Excel.FromXlsx(ms, leaveOpen: true);
 
-            IEnumerable<SaleNamedRef> enumerable = ExcelParser.FromAttributes<SaleNamedRef>().Parse(reader);
+            IEnumerable<SaleNamedRef> enumerable = ExcelParser.FromAttributes<SaleNamedRef>().Parse(reader.FirstSheet);
             using IEnumerator<SaleNamedRef> generic = enumerable.GetEnumerator();
             Assert.True(generic.MoveNext());
             Assert.Equal("Alice", generic.Current.Name);

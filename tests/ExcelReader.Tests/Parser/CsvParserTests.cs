@@ -89,7 +89,7 @@ namespace ExcelReader.Tests.Parser
             using var ms = Csv("Name,Age,Score,Active,Balance\nAlice,42,95.5,true,12345.67\n");
             using var reader = Excel.FromCsv(ms);
 
-            PersonRow row = ExcelParser.FromAttributes<PersonRow>().Parse(reader).Single();
+            PersonRow row = ExcelParser.FromAttributes<PersonRow>().Parse(reader.FirstSheet).Single();
 
             Assert.Equal("Alice", row.Name);
             Assert.Equal(42, row.Age);
@@ -104,7 +104,7 @@ namespace ExcelReader.Tests.Parser
             using var ms = Csv("First Name\nBob\n");
             using var reader = Excel.FromCsv(ms);
 
-            AliasRow row = ExcelParser.FromAttributes<AliasRow>().Parse(reader).Single();
+            AliasRow row = ExcelParser.FromAttributes<AliasRow>().Parse(reader.FirstSheet).Single();
 
             Assert.Equal("Bob", row.FirstName);
         }
@@ -115,7 +115,7 @@ namespace ExcelReader.Tests.Parser
             using var ms = Csv("Legacy Name,Preferred Name\nOld,New\n");
             using var reader = Excel.FromCsv(ms);
 
-            MultiAliasRow row = ExcelParser.FromAttributes<MultiAliasRow>().Parse(reader).Single();
+            MultiAliasRow row = ExcelParser.FromAttributes<MultiAliasRow>().Parse(reader.FirstSheet).Single();
 
             Assert.Equal("New", row.Name);
         }
@@ -127,7 +127,7 @@ namespace ExcelReader.Tests.Parser
             using var reader = Excel.FromCsv(ms);
             var config = new ExcelParserConfig { Culture = CultureInfo.GetCultureInfo("pt-BR") };
 
-            MoneyRow row = ExcelParser.FromAttributes<MoneyRow>(config).Parse(reader).Single();
+            MoneyRow row = ExcelParser.FromAttributes<MoneyRow>(config).Parse(reader.FirstSheet).Single();
 
             Assert.Equal(1234.56m, row.Amount);
         }
@@ -139,7 +139,7 @@ namespace ExcelReader.Tests.Parser
             using var ms = Csv($"Status,Id,Quantity\nActive,{id},7\n");
             using var reader = Excel.FromCsv(ms);
 
-            TypedRow row = ExcelParser.FromAttributes<TypedRow>().Parse(reader).Single();
+            TypedRow row = ExcelParser.FromAttributes<TypedRow>().Parse(reader.FirstSheet).Single();
 
             Assert.Equal(Status.Active, row.Status);
             Assert.Equal(id, row.Id);
@@ -153,7 +153,7 @@ namespace ExcelReader.Tests.Parser
             using var ms = Csv($"Status,Id,Quantity\n2,{id},7\n");
             using var reader = Excel.FromCsv(ms);
 
-            TypedRow row = ExcelParser.FromAttributes<TypedRow>().Parse(reader).Single();
+            TypedRow row = ExcelParser.FromAttributes<TypedRow>().Parse(reader.FirstSheet).Single();
 
             Assert.Equal(Status.Closed, row.Status);
         }
@@ -164,7 +164,7 @@ namespace ExcelReader.Tests.Parser
             using var ms = Csv("Status,Id,Quantity\nActive,,\n");
             using var reader = Excel.FromCsv(ms);
 
-            TypedRow row = ExcelParser.FromAttributes<TypedRow>().Parse(reader).Single();
+            TypedRow row = ExcelParser.FromAttributes<TypedRow>().Parse(reader.FirstSheet).Single();
 
             Assert.Null(row.Quantity);
             Assert.Equal(Guid.Empty, row.Id);
@@ -176,7 +176,7 @@ namespace ExcelReader.Tests.Parser
             using var ms = Csv("ignore me\nName,Age,Score,Active,Balance\nAlice,42,95.5,true,12345.67\n");
             var config = new ExcelParserConfig { HeaderRow = 2 };
 
-            PersonRow row = ExcelParser.FromAttributes<PersonRow>(config).Parse(Excel.FromCsv(ms)).Single();
+            PersonRow row = ExcelParser.FromAttributes<PersonRow>(config).Parse(Excel.FromCsv(ms).FirstSheet).Single();
 
             Assert.Equal("Alice", row.Name);
         }
@@ -187,7 +187,7 @@ namespace ExcelReader.Tests.Parser
             using var ms = Csv("Note\nhi\n");
             using var reader = Excel.FromCsv(ms);
 
-            Assert.Throws<ExcelParseException>(() => ExcelParser.FromAttributes<RequiredRow>().Parse(reader).ToList());
+            Assert.Throws<ExcelParseException>(() => ExcelParser.FromAttributes<RequiredRow>().Parse(reader.FirstSheet).ToList());
         }
 
         [Fact]
@@ -196,7 +196,7 @@ namespace ExcelReader.Tests.Parser
             using var ms = Csv("Id,Note\n,hi\n");
             using var reader = Excel.FromCsv(ms);
 
-            Assert.Throws<ExcelParseException>(() => ExcelParser.FromAttributes<RequiredRow>().Parse(reader).ToList());
+            Assert.Throws<ExcelParseException>(() => ExcelParser.FromAttributes<RequiredRow>().Parse(reader.FirstSheet).ToList());
         }
 
         [Fact]
@@ -206,7 +206,7 @@ namespace ExcelReader.Tests.Parser
             using var reader = Excel.FromCsv(ms);
 
             ExcelParseException ex = Assert.Throws<ExcelParseException>(
-                () => ExcelParser.FromAttributes<RequiredRow>().Parse(reader).ToList());
+                () => ExcelParser.FromAttributes<RequiredRow>().Parse(reader.FirstSheet).ToList());
             Assert.Contains("Id", ex.Message, StringComparison.Ordinal);
         }
 
@@ -218,7 +218,7 @@ namespace ExcelReader.Tests.Parser
             var config = new ExcelParserConfig { ThrowOnParseFailure = true };
 
             ExcelParseException ex = Assert.Throws<ExcelParseException>(
-                () => ExcelParser.FromAttributes<MoneyRow>(config).Parse(reader).ToList());
+                () => ExcelParser.FromAttributes<MoneyRow>(config).Parse(reader.FirstSheet).ToList());
             Assert.Equal("Amount", ex.ColumnName);
             Assert.Equal("not-a-number", ex.RawValue);
         }
@@ -249,7 +249,7 @@ namespace ExcelReader.Tests.Parser
             using var ms = Csv($"At,Day\n{text},{text[..Math.Min(10, text.Length)]}\n");
             using var reader = Excel.FromCsv(ms);
 
-            StampRow row = Assert.Single(ExcelParser.FromAttributes<StampRow>().Parse(reader).ToList());
+            StampRow row = Assert.Single(ExcelParser.FromAttributes<StampRow>().Parse(reader.FirstSheet).ToList());
 
             Assert.Equal(DateTime.Parse(text, CultureInfo.InvariantCulture, DateTimeStyles.None), row.At);
             Assert.Equal(DateOnly.Parse(text[..Math.Min(10, text.Length)], CultureInfo.InvariantCulture, DateTimeStyles.None), row.Day);
@@ -266,7 +266,7 @@ namespace ExcelReader.Tests.Parser
             var config = new ExcelParserConfig { ThrowOnParseFailure = true };
 
             ExcelParseException ex = Assert.Throws<ExcelParseException>(
-                () => ExcelParser.FromAttributes<ShiftRow>(config).Parse(reader).ToList());
+                () => ExcelParser.FromAttributes<ShiftRow>(config).Parse(reader.FirstSheet).ToList());
             Assert.Equal("Start", ex.ColumnName);
         }
 
@@ -276,7 +276,7 @@ namespace ExcelReader.Tests.Parser
             using var ms = Csv("Id,Note\n7,valid\n\n");
             using var reader = Excel.FromCsv(ms);
 
-            RequiredRow row = Assert.Single(ExcelParser.FromAttributes<RequiredRow>().Parse(reader).ToList());
+            RequiredRow row = Assert.Single(ExcelParser.FromAttributes<RequiredRow>().Parse(reader.FirstSheet).ToList());
 
             Assert.Equal(7, row.Id);
             Assert.Equal("valid", row.Note);
@@ -288,7 +288,7 @@ namespace ExcelReader.Tests.Parser
             using var ms = Csv("Created,Day\n2026-07-02T08:30:00,2026-07-02\n");
             using var reader = Excel.FromCsv(ms);
 
-            DateRow row = ExcelParser.FromAttributes<DateRow>().Parse(reader).Single();
+            DateRow row = ExcelParser.FromAttributes<DateRow>().Parse(reader.FirstSheet).Single();
 
             Assert.Equal(new DateTime(2026, 7, 2, 8, 30, 0, DateTimeKind.Unspecified), row.Created);
             Assert.Equal(new DateOnly(2026, 7, 2), row.Day);
@@ -300,7 +300,7 @@ namespace ExcelReader.Tests.Parser
             using var ms = Csv("Created,Day\nnot-a-date,\n");
             using var reader = Excel.FromCsv(ms);
 
-            DateRow row = ExcelParser.FromAttributes<DateRow>().Parse(reader).Single();
+            DateRow row = ExcelParser.FromAttributes<DateRow>().Parse(reader.FirstSheet).Single();
 
             Assert.Equal(default, row.Created);
             Assert.Null(row.Day);
@@ -313,7 +313,7 @@ namespace ExcelReader.Tests.Parser
             using var reader = Excel.FromCsv(ms);
             var config = new ExcelParserConfig { Culture = CultureInfo.GetCultureInfo("pt-BR") };
 
-            DateRow row = ExcelParser.FromAttributes<DateRow>(config).Parse(reader).Single();
+            DateRow row = ExcelParser.FromAttributes<DateRow>(config).Parse(reader.FirstSheet).Single();
 
             Assert.Equal(new DateTime(2026, 7, 2, 0, 0, 0, DateTimeKind.Unspecified), row.Created);
             Assert.Equal(new DateOnly(2026, 7, 2), row.Day);
@@ -325,7 +325,7 @@ namespace ExcelReader.Tests.Parser
             using var ms = Csv("Created\n2026-07-02\n");
             using var reader = Excel.FromCsv(ms);
 
-            ConvertedDateRow row = ExcelParser.FromAttributes<ConvertedDateRow>().Parse(reader).Single();
+            ConvertedDateRow row = ExcelParser.FromAttributes<ConvertedDateRow>().Parse(reader.FirstSheet).Single();
 
             Assert.Equal(new DateTime(2026, 7, 2, 0, 0, 0, DateTimeKind.Unspecified), row.Created);
         }
@@ -337,7 +337,7 @@ namespace ExcelReader.Tests.Parser
             using var reader = Excel.FromCsv(ms);
 
             var rows = new List<PersonRow>();
-            await foreach (PersonRow row in ExcelParser.FromAttributes<PersonRow>().Parse(reader).WithCancellation(TestContext.Current.CancellationToken))
+            await foreach (PersonRow row in ExcelParser.FromAttributes<PersonRow>().Parse(reader.FirstSheet).WithCancellation(TestContext.Current.CancellationToken))
             {
                 rows.Add(row);
             }
@@ -352,7 +352,7 @@ namespace ExcelReader.Tests.Parser
         {
             using var ms = Csv("Name\nAlice\n");
             using var reader = Excel.FromCsv(ms);
-            IEnumerable enumerable = ExcelParser.FromAttributes<PersonRow>().Parse(reader);
+            IEnumerable enumerable = ExcelParser.FromAttributes<PersonRow>().Parse(reader.FirstSheet);
 
             IEnumerator e = enumerable.GetEnumerator();
 
@@ -365,7 +365,7 @@ namespace ExcelReader.Tests.Parser
         {
             using var ms = Csv("Name\nAlice\n");
             using var reader = Excel.FromCsv(ms);
-            using var e = ExcelParser.FromAttributes<PersonRow>().Parse(reader).GetEnumerator();
+            using var e = ExcelParser.FromAttributes<PersonRow>().Parse(reader.FirstSheet).GetEnumerator();
 
             Assert.Throws<NotSupportedException>(e.Reset);
         }

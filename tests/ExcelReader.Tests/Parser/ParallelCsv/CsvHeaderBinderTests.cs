@@ -47,7 +47,7 @@ namespace ExcelReader.Tests.Parser.ParallelCsv
                 out long dataStart);
 
             using var dataReader = Excel.FromCsv(all.AsMemory((int)dataStart));
-            using CsvReader.Enumerator rows = dataReader.GetEnumerator();
+            using CsvReader.Enumerator rows = dataReader.FirstSheet.GetEnumerator();
             var projector = new CsvRowProjector<Person>(
                 TypeMapper<Person>.GetCsvInfo(),
                 map,
@@ -85,7 +85,7 @@ namespace ExcelReader.Tests.Parser.ParallelCsv
             Parallel.For(0, 8, i =>
             {
                 using var dataReader = Excel.FromCsv(all.AsMemory((int)dataStart));
-                using CsvReader.Enumerator rows = dataReader.GetEnumerator();
+                using CsvReader.Enumerator rows = dataReader.FirstSheet.GetEnumerator();
                 var projector = new CsvRowProjector<Person>(
                     TypeMapper<Person>.GetCsvInfo(), map, CultureInfo.InvariantCulture, throwOnParseFailure: false);
                 var local = new List<Person>();

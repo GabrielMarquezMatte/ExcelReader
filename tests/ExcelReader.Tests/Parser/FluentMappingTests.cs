@@ -43,7 +43,7 @@ namespace ExcelReader.Tests.Parser
                 .Property(["Name"], ExcelCellReaders.String, static (ref m, v) => m.Name = v)
                 .Property(["Age"], ExcelCellReaders.Parsable, static (ref SharedModel m, int v) => m.Age = v));
             await using XlsxWorkbook readerA = await Excel.FromXlsxAsync(ms, leaveOpen: true, ct: ct);
-            List<SharedModel> resultA = parserA.Parse(readerA).ToList();
+            List<SharedModel> resultA = parserA.Parse(readerA.FirstSheet).ToList();
 
             ms.Position = 0;
             var parserB = ExcelParser.Build<SharedModel>(static b => b
@@ -51,7 +51,7 @@ namespace ExcelReader.Tests.Parser
                 .Property(["Name"], ExcelCellReaders.String, static (ref m, v) => m.Name = v.ToUpperInvariant())
                 .Property(["Age"], ExcelCellReaders.Parsable, static (ref SharedModel m, int v) => m.Age = v * 2));
             await using XlsxWorkbook readerB = await Excel.FromXlsxAsync(ms, ct: ct);
-            List<SharedModel> resultB = parserB.Parse(readerB).ToList();
+            List<SharedModel> resultB = parserB.Parse(readerB.FirstSheet).ToList();
 
             Assert.Equal("Alice", resultA[0].Name);
             Assert.Equal(30, resultA[0].Age);
@@ -70,7 +70,7 @@ namespace ExcelReader.Tests.Parser
                 .Property(["Name"], ExcelCellReaders.String, static (ref m, v) => m.Name = v)
                 .Property(["Age"], ExcelCellReaders.Parsable, static (ref SharedModel m, int v) => m.Age = v));
             await using XlsxWorkbook reader = await Excel.FromXlsxAsync(ms, ct: ct);
-            List<SharedModel> results = parser.Parse(reader).ToList();
+            List<SharedModel> results = parser.Parse(reader.FirstSheet).ToList();
 
             Assert.Single(results);
             Assert.Equal("Bob", results[0].Name);
@@ -88,7 +88,7 @@ namespace ExcelReader.Tests.Parser
                 .PropertyAt(0, ExcelCellReaders.String, static (ref m, v) => m.Name = v)
                 .PropertyAt(1, ExcelCellReaders.Parsable, static (ref SharedModel m, int v) => m.Age = v));
             await using XlsxWorkbook reader = await Excel.FromXlsxAsync(ms, ct: ct);
-            List<SharedModel> results = parser.Parse(reader).ToList();
+            List<SharedModel> results = parser.Parse(reader.FirstSheet).ToList();
 
             Assert.Single(results);
             Assert.Equal("Carol", results[0].Name);
@@ -107,7 +107,7 @@ namespace ExcelReader.Tests.Parser
                 .PropertyAt(1, ExcelCellReaders.Parsable, static (ref SharedModel m, int v) => m.Age = v, requireValue: true));
             await using XlsxWorkbook reader = await Excel.FromXlsxAsync(ms, ct: ct);
 
-            Assert.Throws<ExcelParseException>(() => parser.Parse(reader).ToList());
+            Assert.Throws<ExcelParseException>(() => parser.Parse(reader.FirstSheet).ToList());
         }
 
         [Fact]
@@ -119,7 +119,7 @@ namespace ExcelReader.Tests.Parser
             ExcelParser<AttributedModel> parser = ExcelParser.BuildWithAttributeFallback<AttributedModel>(static b => b
                 .Property(["Name"], ExcelCellReaders.String, static (ref m, v) => m.Name = v.ToUpperInvariant()));
             await using XlsxWorkbook reader = await Excel.FromXlsxAsync(ms, ct: ct);
-            List<AttributedModel> results = parser.Parse(reader).ToList();
+            List<AttributedModel> results = parser.Parse(reader.FirstSheet).ToList();
 
             Assert.Single(results);
             Assert.Equal("ERIN", results[0].Name);
@@ -134,7 +134,7 @@ namespace ExcelReader.Tests.Parser
             ExcelParser<AttributedModel> parser = ExcelParser.BuildWithAttributeFallback<AttributedModel>(static b => b
                 .Property(["Name"], ExcelCellReaders.String, static (ref m, v) => m.Name = v.ToUpperInvariant()));
             await using XlsxWorkbook reader = await Excel.FromXlsxAsync(ms, ct: ct);
-            List<AttributedModel> results = parser.Parse(reader).ToList();
+            List<AttributedModel> results = parser.Parse(reader.FirstSheet).ToList();
 
             Assert.Single(results);
             Assert.Equal(19, results[0].Age);
@@ -151,11 +151,11 @@ namespace ExcelReader.Tests.Parser
                 .Property(["Name"], ExcelCellReaders.String, static (ref m, v) => m.Name = v)
                 .Property(["Age"], ExcelCellReaders.Parsable, static (ref AttributedModel m, int v) => m.Age = v));
             await using XlsxWorkbook fluentReader = await Excel.FromXlsxAsync(ms, leaveOpen: true, ct: ct);
-            List<AttributedModel> fluentResults = fluentParser.Parse(fluentReader).ToList();
+            List<AttributedModel> fluentResults = fluentParser.Parse(fluentReader.FirstSheet).ToList();
 
             ms.Position = 0;
             await using XlsxWorkbook reflectedReader = await Excel.FromXlsxAsync(ms, ct: ct);
-            List<AttributedModel> reflectedResults = ExcelParser.FromAttributes<AttributedModel>().Parse(reflectedReader).ToList();
+            List<AttributedModel> reflectedResults = ExcelParser.FromAttributes<AttributedModel>().Parse(reflectedReader.FirstSheet).ToList();
 
             Assert.Single(fluentResults);
             Assert.Single(reflectedResults);
@@ -183,7 +183,7 @@ namespace ExcelReader.Tests.Parser
             }
             xlsxStream.Position = 0;
             await using XlsxWorkbook xlsxReader = await Excel.FromXlsxAsync(xlsxStream, ct: ct);
-            AssertMatches(record, ExcelParser.Build(configure).Parse(xlsxReader).Single());
+            AssertMatches(record, ExcelParser.Build(configure).Parse(xlsxReader.FirstSheet).Single());
 
             await using var xlsbStream = new MemoryStream();
             await using (XlsbWorkbookWriter writer = XlsbWorkbookWriter.Create(xlsbStream, leaveOpen: true))
@@ -195,7 +195,7 @@ namespace ExcelReader.Tests.Parser
             }
             xlsbStream.Position = 0;
             await using XlsbWorkbook xlsbReader = await Excel.FromXlsbAsync(xlsbStream, leaveOpen: false, ct: ct);
-            AssertMatches(record, ExcelParser.Build(configure).Parse(xlsbReader).Single());
+            AssertMatches(record, ExcelParser.Build(configure).Parse(xlsbReader.FirstSheet).Single());
 
             await using var xlsStream = new MemoryStream();
             await using (XlsWorkbookWriter writer = XlsWorkbookWriter.Create(xlsStream, leaveOpen: true))
@@ -207,7 +207,7 @@ namespace ExcelReader.Tests.Parser
             }
             xlsStream.Position = 0;
             using XlsWorkbook xlsReader = Excel.FromXls(xlsStream, leaveOpen: false);
-            AssertMatches(record, ExcelParser.Build(configure).Parse(xlsReader).Single());
+            AssertMatches(record, ExcelParser.Build(configure).Parse(xlsReader.FirstSheet).Single());
 
             await using var csvStream = new MemoryStream();
             await using (CsvWorkbookWriter writer = CsvWorkbookWriter.Create(csvStream, leaveOpen: true))
@@ -219,7 +219,7 @@ namespace ExcelReader.Tests.Parser
             }
             csvStream.Position = 0;
             using CsvReader csvReader = Excel.FromCsv(csvStream, leaveOpen: false);
-            AssertMatches(record, ExcelParser.Build(configure).Parse(csvReader).Single());
+            AssertMatches(record, ExcelParser.Build(configure).Parse(csvReader.FirstSheet).Single());
         }
 
         [Fact]
@@ -231,7 +231,7 @@ namespace ExcelReader.Tests.Parser
             ExcelParser<AliasedModel> parser = ExcelParser.BuildWithAttributeFallback<AliasedModel>(static b => b
                 .Property(["arquivo"], ExcelCellReaders.String, static (ref m, v) => m.Name = v));
             await using XlsxWorkbook reader = await Excel.FromXlsxAsync(ms, ct: ct);
-            List<AliasedModel> results = parser.Parse(reader).ToList();
+            List<AliasedModel> results = parser.Parse(reader.FirstSheet).ToList();
 
             Assert.Single(results);
             Assert.Equal("FromFluent", results[0].Name);
@@ -266,7 +266,7 @@ namespace ExcelReader.Tests.Parser
             var parser = ExcelParser.Build<StructModel>(static b => b
                 .Property(["Age"], ExcelCellReaders.Parsable, static (ref StructModel m, int v) => m.Age = v));
             await using XlsxWorkbook reader = await Excel.FromXlsxAsync(ms, ct: ct);
-            List<StructModel> results = parser.Parse(reader).ToList();
+            List<StructModel> results = parser.Parse(reader.FirstSheet).ToList();
 
             Assert.Single(results);
             Assert.Equal(42, results[0].Age);
