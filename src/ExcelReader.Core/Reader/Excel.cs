@@ -1,11 +1,11 @@
 using System.Buffers;
 using System.Diagnostics.CodeAnalysis;
-using System.IO.Compression;
 using System.Runtime.CompilerServices;
 using ExcelReader.Core.Crypto;
 using ExcelReader.Core.Parser;
 using ExcelReader.Core.Reader.Csv;
 using ExcelReader.Core.Reader.Schema;
+using ExcelReader.Core.Reader.Sources;
 using ExcelReader.Core.Reader.Xls;
 using ExcelReader.Core.Reader.Xlsb;
 using ExcelReader.Core.Reader.Xlsx;
@@ -44,7 +44,7 @@ namespace ExcelReader.Core.Reader
 
         /// <summary>
         /// Opens an XLSX workbook directly from an in-memory buffer. Reads the ZIP
-        /// central directory and decompresses parts without a <see cref="ZipArchive"/>
+        /// central directory and decompresses parts without a <c>ZipArchive</c>
         /// or intermediate <see cref="Stream"/> — every part is fully materialized up front, so the returned
         /// reader never suspends, even under <c>await foreach</c>.
         /// </summary>
@@ -109,7 +109,7 @@ namespace ExcelReader.Core.Reader
 
         /// <summary>
         /// Opens an XLSB workbook directly from an in-memory buffer. Reads the ZIP
-        /// central directory and decompresses parts without a <see cref="ZipArchive"/>
+        /// central directory and decompresses parts without a <c>ZipArchive</c>
         /// or intermediate <see cref="Stream"/> — every part is fully materialized up front, so the returned
         /// reader never suspends, even under <c>await foreach</c>.
         /// </summary>
@@ -352,7 +352,7 @@ namespace ExcelReader.Core.Reader
         /// <summary>
         /// Opens a workbook from an in-memory buffer, auto-detecting its format (XLSX/XLSB/XLS) from its
         /// signature. XLSX/XLSB route through <see cref="ZipIndex"/> instead of
-        /// a <see cref="ZipArchive"/>/<see cref="Stream"/>, so the returned reader never
+        /// a <c>ZipArchive</c>/<see cref="Stream"/>, so the returned reader never
         /// suspends, even under <c>await foreach</c>.
         /// </summary>
         /// <param name="data">The whole workbook file's bytes. Must outlive the returned reader.</param>
@@ -414,7 +414,7 @@ namespace ExcelReader.Core.Reader
                     : ExcelFileFormat.Xls;
             }
             memZip = ZipIndex.Create(data, options);
-            return memZip.TryGetEntry("xl/workbook.bin"u8, out _) ? ExcelFileFormat.Xlsb : ExcelFileFormat.Xlsx;
+            return ClassifyZip(memZip);
         }
 
         /// <summary>
@@ -629,7 +629,7 @@ namespace ExcelReader.Core.Reader
         public static ExcelFileFormat DetectFileFormat(Stream stream)
         {
             ArgumentNullException.ThrowIfNull(stream);
-            ExcelFileFormat format = DetectSeekable(stream, out ZipArchive? zip);
+            ExcelFileFormat format = DetectSeekable(stream, leaveOpen: true, ExcelReaderOptions.Default, out ZipIndex? zip);
             zip?.Dispose();
             return format;
         }
@@ -654,25 +654,22 @@ namespace ExcelReader.Core.Reader
         public static async ValueTask<ExcelFileFormat> DetectFileFormatAsync(Stream stream, CancellationToken ct = default)
         {
             ArgumentNullException.ThrowIfNull(stream);
-            (ExcelFileFormat format, ZipArchive? zip) = await DetectSeekableAsync(stream, ct).ConfigureAwait(false);
-            if (zip is not null)
-            {
-                await zip.DisposeAsync().ConfigureAwait(false);
-            }
+            (ExcelFileFormat format, ZipIndex? zip) = await DetectSeekableAsync(stream, leaveOpen: true, ExcelReaderOptions.Default, ct).ConfigureAwait(false);
+            zip?.Dispose();
             return format;
         }
 
         private static IExcelRowReader OpenSeekable(Stream stream, bool leaveOpen, ExcelReaderOptions? options)
         {
+            ExcelReaderOptions effective = options ?? ExcelReaderOptions.Default;
             ExcelFileFormat format;
-            ZipArchive? zip = null;
+            ZipIndex? zip;
             try
             {
-                format = DetectSeekable(stream, out zip);
+                format = DetectSeekable(stream, leaveOpen, effective, out zip);
             }
             catch
             {
-                zip?.Dispose();
                 DisposeOnFailure(stream, leaveOpen);
                 throw;
             }
@@ -682,55 +679,37 @@ namespace ExcelReader.Core.Reader
             }
             if (format is ExcelFileFormat.EncryptedOoxml)
             {
-                ExcelReaderOptions effective = options ?? ExcelReaderOptions.Default;
                 Stream decrypted = EncryptedPackageOpener.Decrypt(stream, leaveOpen, effective);
                 return OpenDecryptedZip(decrypted, effective);
             }
             return format switch
             {
                 ExcelFileFormat.Xls => new XlsReader(stream, leaveOpen, options),
-                ExcelFileFormat.Xlsb => ReopenXlsb(stream, leaveOpen, zip!, options),
-                ExcelFileFormat.Xlsx => ReopenXlsx(stream, leaveOpen, zip!, options),
+                ExcelFileFormat.Xlsb => XlsbReader.CreateFromIndex(zip!, effective),
+                ExcelFileFormat.Xlsx => XlsxReader.CreateFromIndex(zip!, effective),
                 _ => throw new System.Diagnostics.UnreachableException(),
             };
         }
 
         private static IExcelRowReader OpenDecryptedZip(Stream decrypted, ExcelReaderOptions options)
         {
-            ZipArchive? zip = null;
-            try
-            {
-                ExcelFileFormat zipFormat = ClassifyZipStream(decrypted, start: 0, out ZipArchive zipPeek);
-                zip = zipPeek;
-                return zipFormat switch
-                {
-                    ExcelFileFormat.Xlsb => ReopenXlsb(decrypted, leaveOpen: false, zip, options),
-                    ExcelFileFormat.Xlsx => ReopenXlsx(decrypted, leaveOpen: false, zip, options),
-                    _ => throw new System.Diagnostics.UnreachableException(),
-                };
-            }
-            catch
-            {
-                zip?.Dispose();
-                decrypted.Dispose();
-                throw;
-            }
+            ZipIndex zip = ZipIndex.Create(ByteSource.FromStream(decrypted, leaveOpen: false), options);
+            return ClassifyZip(zip) is ExcelFileFormat.Xlsb
+                ? XlsbReader.CreateFromIndex(zip, options)
+                : XlsxReader.CreateFromIndex(zip, options);
         }
 
         private static async ValueTask<IExcelRowReader> OpenSeekableAsync(Stream stream, bool leaveOpen, ExcelReaderOptions? options, CancellationToken ct)
         {
+            ExcelReaderOptions effective = options ?? ExcelReaderOptions.Default;
             ExcelFileFormat format;
-            ZipArchive? zip = null;
+            ZipIndex? zip;
             try
             {
-                (format, zip) = await DetectSeekableAsync(stream, ct).ConfigureAwait(false);
+                (format, zip) = await DetectSeekableAsync(stream, leaveOpen, effective, ct).ConfigureAwait(false);
             }
             catch
             {
-                if (zip is not null)
-                {
-                    await zip.DisposeAsync().ConfigureAwait(false);
-                }
                 await DisposeOnFailureAsync(stream, leaveOpen).ConfigureAwait(false);
                 throw;
             }
@@ -741,42 +720,25 @@ namespace ExcelReader.Core.Reader
             }
             if (format is ExcelFileFormat.EncryptedOoxml)
             {
-                ExcelReaderOptions effective = options ?? ExcelReaderOptions.Default;
                 Stream decrypted = EncryptedPackageOpener.Decrypt(stream, leaveOpen, effective);
                 return await OpenDecryptedZipAsync(decrypted, effective, ct).ConfigureAwait(false);
             }
             return format switch
             {
                 ExcelFileFormat.Xls => await XlsReader.CreateAsync(stream, leaveOpen, options, ct).ConfigureAwait(false),
-                ExcelFileFormat.Xlsb => await ReopenXlsbAsync(stream, leaveOpen, zip!, options, ct).ConfigureAwait(false),
-                ExcelFileFormat.Xlsx => await ReopenXlsxAsync(stream, leaveOpen, zip!, options, ct).ConfigureAwait(false),
+                ExcelFileFormat.Xlsb => await XlsbReader.CreateFromIndexAsync(zip!, effective, ct).ConfigureAwait(false),
+                ExcelFileFormat.Xlsx => await XlsxReader.CreateFromIndexAsync(zip!, effective, ct).ConfigureAwait(false),
                 _ => throw new System.Diagnostics.UnreachableException(),
             };
         }
 
         private static async ValueTask<IExcelRowReader> OpenDecryptedZipAsync(Stream decrypted, ExcelReaderOptions options, CancellationToken ct)
         {
-            ZipArchive? zip = null;
-            try
-            {
-                ExcelFileFormat zipFormat = ClassifyZipStream(decrypted, start: 0, out ZipArchive zipPeek);
-                zip = zipPeek;
-                return zipFormat switch
-                {
-                    ExcelFileFormat.Xlsb => await ReopenXlsbAsync(decrypted, leaveOpen: false, zip, options, ct).ConfigureAwait(false),
-                    ExcelFileFormat.Xlsx => await ReopenXlsxAsync(decrypted, leaveOpen: false, zip, options, ct).ConfigureAwait(false),
-                    _ => throw new System.Diagnostics.UnreachableException(),
-                };
-            }
-            catch
-            {
-                if (zip is not null)
-                {
-                    await zip.DisposeAsync().ConfigureAwait(false);
-                }
-                await decrypted.DisposeAsync().ConfigureAwait(false);
-                throw;
-            }
+            ByteSource source = await ByteSource.FromStreamAsync(decrypted, leaveOpen: false, ct).ConfigureAwait(false);
+            ZipIndex zip = await ZipIndex.CreateAsync(source, options, ct).ConfigureAwait(false);
+            return ClassifyZip(zip) is ExcelFileFormat.Xlsb
+                ? await XlsbReader.CreateFromIndexAsync(zip, options, ct).ConfigureAwait(false)
+                : await XlsxReader.CreateFromIndexAsync(zip, options, ct).ConfigureAwait(false);
         }
 
         private static void DisposeOnFailure(Stream stream, bool leaveOpen)
@@ -816,43 +778,13 @@ namespace ExcelReader.Core.Reader
             return true;
         }
 
-        private static XlsxReader ReopenXlsx(Stream stream, bool leaveOpen, ZipArchive peeked, ExcelReaderOptions? options)
+        private static ExcelFileFormat ClassifyZip(ZipIndex zip)
         {
-            peeked.Dispose();
-            return new XlsxReader(stream, leaveOpen, options);
-        }
-
-        private static async ValueTask<XlsxReader> ReopenXlsxAsync(
-            Stream stream, bool leaveOpen, ZipArchive peeked, ExcelReaderOptions? options, CancellationToken ct)
-        {
-            await peeked.DisposeAsync().ConfigureAwait(false);
-            return await XlsxReader.CreateAsync(stream, leaveOpen, options, ct).ConfigureAwait(false);
-        }
-
-        private static XlsbReader ReopenXlsb(Stream stream, bool leaveOpen, ZipArchive peeked, ExcelReaderOptions? options)
-        {
-            peeked.Dispose();
-            return new XlsbReader(stream, leaveOpen, options);
-        }
-
-        private static async ValueTask<XlsbReader> ReopenXlsbAsync(
-            Stream stream, bool leaveOpen, ZipArchive peeked, ExcelReaderOptions? options, CancellationToken ct)
-        {
-            await peeked.DisposeAsync().ConfigureAwait(false);
-            return await XlsbReader.CreateAsync(stream, leaveOpen, options, ct).ConfigureAwait(false);
-        }
-
-        private static ExcelFileFormat ClassifyZipStream(Stream stream, long start, out ZipArchive zip)
-        {
-            var zipPeek = new ZipArchive(stream, ZipArchiveMode.Read, leaveOpen: true);
-            zip = zipPeek;
-            bool isXlsb = zipPeek.GetEntry("xl/workbook.bin") is not null;
-            stream.Position = start;
-            return isXlsb ? ExcelFileFormat.Xlsb : ExcelFileFormat.Xlsx;
+            return zip.TryGetEntry("xl/workbook.bin"u8, out _) ? ExcelFileFormat.Xlsb : ExcelFileFormat.Xlsx;
         }
 
         [SkipLocalsInit]
-        private static ExcelFileFormat DetectSeekable(Stream stream, out ZipArchive? zip)
+        private static ExcelFileFormat DetectSeekable(Stream stream, bool leaveOpen, ExcelReaderOptions options, out ZipIndex? zip)
         {
             zip = null;
             RequireSeekable(stream);
@@ -871,12 +803,13 @@ namespace ExcelReader.Core.Reader
                     ? ExcelFileFormat.EncryptedOoxml
                     : ExcelFileFormat.Xls;
             }
-            ExcelFileFormat zipFormat = ClassifyZipStream(stream, start, out ZipArchive zipPeek);
-            zip = zipPeek;
-            return zipFormat;
+            zip = ZipIndex.Create(ByteSource.FromStream(stream, leaveOpen), options);
+            stream.Position = start;
+            return ClassifyZip(zip);
         }
 
-        private static async ValueTask<(ExcelFileFormat Format, ZipArchive? Zip)> DetectSeekableAsync(Stream stream, CancellationToken ct)
+        private static async ValueTask<(ExcelFileFormat Format, ZipIndex? Zip)> DetectSeekableAsync(
+            Stream stream, bool leaveOpen, ExcelReaderOptions options, CancellationToken ct)
         {
             RequireSeekable(stream);
             long start = stream.Position;
@@ -905,8 +838,10 @@ namespace ExcelReader.Core.Reader
                     : ExcelFileFormat.Xls;
                 return (cfbFormat, null);
             }
-            ExcelFileFormat zipFormat = ClassifyZipStream(stream, start, out ZipArchive zip);
-            return (zipFormat, zip);
+            ByteSource source = await ByteSource.FromStreamAsync(stream, leaveOpen, ct).ConfigureAwait(false);
+            ZipIndex zip = await ZipIndex.CreateAsync(source, options, ct).ConfigureAwait(false);
+            stream.Position = start;
+            return (ClassifyZip(zip), zip);
         }
 
         private static bool TryDecryptCfbStream(Stream stream, bool leaveOpen, ExcelReaderOptions? options, out Stream decrypted)
